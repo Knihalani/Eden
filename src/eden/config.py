@@ -57,6 +57,19 @@ def _build_settings_class():
         app_version: str = "0.1.0"
         debug: bool = False
 
+        # Production readiness (Phase 1 backend foundation)
+        # ``eden_production`` enables fail-closed startup checks and
+        # stricter KB init. ``run_background_workers`` gates whether the
+        # API process hosts in-process background loops (off when a
+        # dedicated ``eden-worker`` job is deployed).
+        eden_production: bool = False
+        run_background_workers: bool = True
+        strict_startup_checks: bool = False
+        eden_upload_dir: str = "/tmp/eden-uploads"
+        avatar_storage_backend: str = "local"  # "local" | "s3"
+        avatar_s3_bucket: str = ""
+        avatar_public_base_url: str = ""
+
         # Server
         host: str = "0.0.0.0"
         port: int = 8000
@@ -282,12 +295,6 @@ def _build_settings_class():
         minimax_base_url: str = "https://api.minimax.io/v1"
         minimax_model: str = "MiniMax-M3"
 
-        # Model configuration
-        model_reasoning: str = "anthropic/claude-sonnet-4.6"
-        model_code: str = "qwen/qwen3-coder:free"
-        model_fast: str = "xiaomi/mimo-v2.5"
-        model_fallback: str = "meta-llama/llama-3.3-70b-instruct"
-
         # Token budgets per agent
         max_tokens_planner: int = 50000
         max_tokens_critic: int = 30000
@@ -476,7 +483,7 @@ def _build_settings_class():
         eden_storage_access_key: str = ""
         eden_storage_secret_key: str = ""
         # When True, the production monitor's hallucination judge uses
-        # the configured LLM (model_reasoning) as a tiebreaker when
+        # the ModelRouter T3 tier primary model as a tiebreaker when
         # the heuristic is inconclusive. Off by default — the
         # heuristic + judge_scores table is the primary signal.
         production_monitor_use_llm_judge: bool = False
@@ -800,6 +807,9 @@ def get_settings() -> "Settings":  # noqa: F821
     import os
 
     settings = _build_settings_class()()
+    # Phase 1: production mode implies strict startup unless overridden.
+    if settings.eden_production and not settings.strict_startup_checks:
+        settings = settings.model_copy(update={"strict_startup_checks": True})
     placeholder = "change-me-in-production"
     if settings.jwt_secret == placeholder:
         testing = os.environ.get("EDEN_TESTING", "").lower() in (

@@ -4,7 +4,7 @@ import logging
 import os
 import time
 from collections import OrderedDict, defaultdict, deque
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum
 from functools import lru_cache
 from typing import Any
@@ -58,16 +58,6 @@ class CircuitState(Enum):
     CLOSED = "closed"
     OPEN = "open"
     HALF_OPEN = "half_open"
-
-
-@dataclass
-class ModelSlot:
-    """Model configuration for a task type."""
-
-    primary: str
-    fallback: list[str] = field(default_factory=list)
-    max_tokens: int = 4096
-    supports_caching: bool = True
 
 
 @dataclass
@@ -240,36 +230,39 @@ class OpenRouterClient:
         # so the observability dashboard can break them out by provider.
         self._provider_errors: dict[str, int] = {}
         self._provider_calls: dict[str, int] = {}
-        self.MODEL_SLOTS: dict[str, ModelSlot] = {
-            "reasoning": ModelSlot(
-                primary=self.settings.model_reasoning,
-                fallback=[self.settings.model_fallback],
-                max_tokens=self.settings.max_tokens_planner,
-            ),
-            "code": ModelSlot(
-                primary=self.settings.model_code,
-                fallback=[self.settings.model_fallback],
-                max_tokens=self.settings.max_tokens_executor,
-            ),
-            "fast": ModelSlot(
-                primary=self.settings.model_fast,
-                fallback=[self.settings.model_fallback],
-                max_tokens=self.settings.max_tokens_critic,
-            ),
-            "extraction": ModelSlot(
-                # ``extraction`` runs fact-checking + structured output
-                # over already-fetched content — the cheap, fast model
-                # is sufficient and 10× cheaper than Sonnet.
-                primary=self.settings.model_fast,
-                fallback=[self.settings.model_fallback],
-                max_tokens=self.settings.max_tokens_fact_checker,
-            ),
-        }
+
+    # Slot → tier mapping mirrors TaskClassifier heuristics in
+    # ``eden.optimization.model_router`` so direct ``call``/``acall``
+    # paths pick the same model chains as ModelRouter.
+    _SLOT_TO_TIER: dict[str, str] = {
+        "fast": "t1",
+        "extraction": "t1",
+        "code": "t2",
+        "reasoning": "t2",
+    }
+
+    _SLOT_MAX_TOKENS_ATTR: dict[str, str] = {
+        "reasoning": "max_tokens_planner",
+        "code": "max_tokens_executor",
+        "fast": "max_tokens_critic",
+        "extraction": "max_tokens_fact_checker",
+    }
+
+    def _models_and_tokens_for_slot(self, slot: str) -> tuple[list[str], int]:
+        """Resolve model chain and max_tokens for a slot via ModelRouter tiers."""
+        from eden.optimization.model_router import TIER_MODELS, ModelTier
+
+        tier_key = self._SLOT_TO_TIER.get(slot, "t2")
+        tier = ModelTier(tier_key)
+        models = list(TIER_MODELS.get(tier, TIER_MODELS[ModelTier.T2]))
+        attr = self._SLOT_MAX_TOKENS_ATTR.get(slot, "max_tokens_planner")
+        max_tokens = getattr(self.settings, attr, 4096)
+        return models, max_tokens
 
     def get_model_for_slot(self, slot: str) -> str:
-        """Get the primary model for a slot from config."""
-        config = self.MODEL_SLOTS.get(slot, self.MODEL_SLOTS["reasoning"])
-        return config.primary
+        """Get the primary model for a slot from the tier router."""
+        models, _ = self._models_and_tokens_for_slot(slot)
+        return models[0]
 
     @staticmethod
     def _clamp_max_tokens(max_tokens: int | None) -> int:
@@ -378,22 +371,16 @@ class OpenRouterClient:
             # → ``_cache_key``) so a ``None`` would hash
             # differently from a real number and silently
             # bypass every existing cache entry built before
-            # the model override. Pick from the slot's config
-            # so ``acall(slot="reasoning", model="anthropic/...")``
+            # the model override. Pick from the slot's tier
+            # config so ``acall(slot="reasoning", model="anthropic/...")``
             # and ``call(slot="reasoning", max_tokens=4096)``
             # both hash to the same cache slot.
             if max_tokens is None:
-                slot_config = self.MODEL_SLOTS.get(
-                    slot, self.MODEL_SLOTS["reasoning"],
-                )
-                max_tokens = slot_config.max_tokens
+                _, max_tokens = self._models_and_tokens_for_slot(slot)
         else:
-            model_config = self.MODEL_SLOTS.get(
-                slot, self.MODEL_SLOTS["reasoning"]
-            )
-            all_models = [model_config.primary] + model_config.fallback
+            all_models, slot_max_tokens = self._models_and_tokens_for_slot(slot)
             if max_tokens is None:
-                max_tokens = model_config.max_tokens
+                max_tokens = slot_max_tokens
 
         max_tokens = self._clamp_max_tokens(max_tokens)
 

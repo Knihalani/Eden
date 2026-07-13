@@ -126,9 +126,6 @@ def test_call_records_provider_error_for_anthropic_models():
     c = client_module.OpenRouterClient(
         api_key="test", base_url="https://example.com", max_retries=1
     )
-    c.MODEL_SLOTS["reasoning"] = client_module.ModelSlot(
-        primary="anthropic/claude-sonnet-4", fallback=[], max_tokens=100
-    )
 
     def _raise_5xx(*a, **kw):
         raise _MockAPIError(status_code=500, message="unavailable")
@@ -136,7 +133,12 @@ def test_call_records_provider_error_for_anthropic_models():
     c._make_request = _raise_5xx
 
     with pytest.raises(client_module.MaxRetriesExceededError):
-        c.call(slot="reasoning", agent="planner", prompt="hi")
+        c.call(
+            slot="reasoning",
+            agent="planner",
+            prompt="hi",
+            model="anthropic/claude-sonnet-4",
+        )
 
     assert c._provider_errors["anthropic.error"] >= 1
     assert "openai.error" not in c._provider_errors
@@ -147,14 +149,7 @@ def test_call_records_success_on_first_try():
     c = client_module.OpenRouterClient(
         api_key="test", base_url="https://example.com", max_retries=1
     )
-    # Override the reasoning slot to use an openai-prefixed model so
-    # the provider classifier routes the counter to "openai", matching
-    # the test's assertion.
-    c.MODEL_SLOTS["reasoning"] = client_module.ModelSlot(
-        primary="openai/gpt-4o", fallback=[], max_tokens=100
-    )
 
-    # Make _make_request return a fake LLMResponse
     fake_response = client_module.LLMResponse(
         content="ok",
         usage=client_module.UsageStats(prompt_tokens=1, completion_tokens=1, total_tokens=2),
@@ -164,7 +159,12 @@ def test_call_records_success_on_first_try():
     )
     c._make_request = lambda *a, **kw: fake_response
 
-    resp = c.call(slot="reasoning", agent="planner", prompt="hi")
+    resp = c.call(
+        slot="reasoning",
+        agent="planner",
+        prompt="hi",
+        model="openai/gpt-4o",
+    )
     assert resp.content == "ok"
     assert c._provider_errors["openai.ok"] >= 1
     assert c._provider_calls["openai"] >= 1
@@ -177,18 +177,19 @@ def test_call_skips_4xx_with_status_code_400():
     c = client_module.OpenRouterClient(
         api_key="test", base_url="https://example.com", max_retries=3
     )
-    # Same as above — pin the model so the assertion targets the right counter.
-    c.MODEL_SLOTS["reasoning"] = client_module.ModelSlot(
-        primary="openai/gpt-4o", fallback=[], max_tokens=100
-    )
-
+    # Pin the model so the assertion targets the right provider counter.
     def _raise_400(*a, **kw):
         raise _MockAPIError(status_code=400, message="bad request")
 
     c._make_request = _raise_400
 
     with pytest.raises(client_module.APIError):
-        c.call(slot="reasoning", agent="planner", prompt="hi")
+        c.call(
+            slot="reasoning",
+            agent="planner",
+            prompt="hi",
+            model="openai/gpt-4o",
+        )
 
     # The counter should still be bumped (early raise still records).
     assert c._provider_errors.get("openai.error", 0) >= 1

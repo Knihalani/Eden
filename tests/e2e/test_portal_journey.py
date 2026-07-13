@@ -57,6 +57,60 @@ def portal_page(page: Page):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Marketing & legal pages (no auth required)
+# ─────────────────────────────────────────────────────────────────────────────
+
+class TestMarketingPages:
+    def test_privacy_page_loads(self, portal_page: Page):
+        portal_page.goto(f"{BASE_URL}/privacy")
+        expect(portal_page.locator("text=Privacy")).to_be_visible()
+
+    def test_security_page_loads(self, portal_page: Page):
+        portal_page.goto(f"{BASE_URL}/security")
+        expect(portal_page.locator("text=Security")).to_be_visible()
+
+    def test_terms_page_loads(self, portal_page: Page):
+        portal_page.goto(f"{BASE_URL}/terms")
+        expect(portal_page.locator("text=Terms")).to_be_visible()
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# API connectivity (optional — skips when backend is down)
+# ─────────────────────────────────────────────────────────────────────────────
+
+class TestApiConnectivity:
+    def test_backend_health_when_running(self, portal_page: Page):
+        """Smoke the API /health endpoint when the backend is up."""
+        import urllib.error
+        import urllib.request
+
+        try:
+            with urllib.request.urlopen(f"{API_BASE_URL}/health", timeout=3) as resp:
+                assert resp.status == 200
+                body = resp.read().decode("utf-8")
+                assert "status" in body
+        except (urllib.error.URLError, TimeoutError):
+            pytest.skip("FastAPI backend not running on localhost:8000")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Protected route redirects
+# ─────────────────────────────────────────────────────────────────────────────
+
+class TestProtectedRoutes:
+    def test_dashboard_redirects_unauthenticated(self, portal_page: Page):
+        """Unauthenticated users are sent to sign-in."""
+        portal_page.goto(f"{BASE_URL}/dashboard")
+        portal_page.wait_for_load_state("networkidle")
+        assert "/login" in portal_page.url or "/sign-in" in portal_page.url
+
+    def test_sign_in_page_renders(self, portal_page: Page):
+        """Clerk sign-in route is reachable."""
+        portal_page.goto(f"{BASE_URL}/sign-in")
+        expect(portal_page.locator("text=Sign in")).to_be_visible()
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Landing Page
 # ─────────────────────────────────────────────────────────────────────────────
 

@@ -35,7 +35,7 @@ set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 MANIFEST="$REPO_ROOT/northflank.yml"
-PROJECT="eden-staging"
+PROJECT="eden-staging-us-central"
 FOLLOW_LOGS=true
 
 for arg in "$@"; do

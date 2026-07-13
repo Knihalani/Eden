@@ -56,6 +56,7 @@ DEFAULT_PUBLIC_PREFIXES: tuple[str, ...] = (
     "/health",
     "/docs",
     "/openapi.json",
+    "/openapi/v1/public.json",
     "/redoc",
     "/scalar",
     # Public auth flow

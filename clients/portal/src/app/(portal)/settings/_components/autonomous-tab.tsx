@@ -23,6 +23,7 @@ import { api, codeChangePolicyApi, type CodeChangePolicy, type OptimizationSched
 import { useOrg } from "@/hooks/use-org";
 import { usePermissions } from "@/hooks/use-permissions";
 import { useToast } from "@/components/ui/toast";
+import { IntegrationStatusBanners } from "@/components/integration-status-banners";
 
 type Flags = {
   intelligence_gap_v0: boolean;
@@ -229,6 +230,8 @@ export default function AutonomousTab() {
 
   return (
     <div className="space-y-6">
+      <IntegrationStatusBanners integration="github" orgId={currentOrg.id} />
+
       <div className="rounded-xl border border-[var(--border-default)] bg-[var(--bg-secondary)]/40 p-5 flex items-start gap-4">
         <div className="rounded-lg bg-[var(--accent-faint)] p-2 shrink-0">
           <Bot className="w-5 h-5 text-[var(--accent)]" />
