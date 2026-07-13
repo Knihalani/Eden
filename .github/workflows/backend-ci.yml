@@ -142,13 +142,20 @@ jobs:
       - name: Apply migrations
         run: uv run alembic upgrade head
       - name: Run tests
-        run: uv run pytest -q --tb=short -x --ignore=tests/e2e --ignore=supplementaries/phase_4_guardrails
+        run: >-
+          uv run pytest -q --tb=short -x
+          --ignore=tests/e2e
+          --ignore=supplementaries/phase_4_guardrails
+          --cov=eden
+          --cov-report=term-missing:skip-covered
+          --cov-fail-under=55
         # tests/e2e requires the `playwright` Python package and the
         # playwright browser binary, neither of which is installed in
         # this CI image. The e2e suite is exercised on a separate
         # cron-scheduled workflow instead.
-        # The 663-test full suite takes ~12 minutes; -x fails fast on
-        # the first error so a broken PR is caught in under a minute.
+        # Coverage gate (55%) is set ~2pp below the 2026-07 baseline
+        # (57%) so refactors don't fail CI on rounding; raise the
+        # floor as coverage improves.
 
   build:
     name: docker build (Northflank shape)
