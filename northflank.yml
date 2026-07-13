@@ -9,7 +9,8 @@
 #   • 1 BYOC cluster allowed (we don't use it on the free tier)
 #
 # Stack fit:
-#   • eden-api       → service   (FastAPI, port 8000, /health)
+#   • eden-migrate   → job       (one-shot Alembic upgrade before API)
+#   • eden-api       → service   (FastAPI, port 8000, /live + /ready)
 #   • eden-worker    → job       (background work: judges, sim, drift, RCA)
 #   • eden-cron      → job       (scheduled jobs, on Northflank cron trigger)
 #   • eden-postgres  → addon     (managed Postgres 16)
@@ -124,7 +125,7 @@ spec:
       type: http
   healthCheck:
     type: http
-    httpPath: /health
+    httpPath: /ready
     intervalSeconds: 30
     timeoutSeconds: 5
     failureThreshold: 3
@@ -147,6 +148,12 @@ spec:
       value: INFO
     - name: LOG_JSON
       value: "true"
+    - name: EDEN_PRODUCTION
+      value: "true"
+    - name: SKIP_MIGRATIONS
+      value: "1"
+    - name: EDEN_RUN_BACKGROUND_WORKERS
+      value: "0"
     - name: SENTRY_ENVIRONMENT
       value: northflank-staging
     - name: SENTRY_TRACES_SAMPLE_RATE
@@ -225,14 +232,13 @@ spec:
       value: "5"
     - name: SANDBOX_MAX_CONCURRENT
       value: "10"
-    # ── Typesense (full-text search) — required by the live-tail
-    # query DSL (Cat 19) and the retrieval service (Cat 4) ──────
-    - name: TYPESENSE_HOST
-      value: localhost
-    - name: TYPESENSE_PORT
-      value: "8108"
-    - name: TYPESENSE_API_KEY
-      valueFrom: { secretKeyRef: { group: eden-required, key: TYPESENSE_API_KEY } }
+    # ── Typesense (full-text search) — NOT deployed on the free-tier
+    # sandbox. Cat 19 live-tail + Cat 4 retrieval degrade gracefully
+    # when Typesense is disabled. Do NOT point at localhost in prod —
+    # that silently fails every search request. Enable only when you
+    # provision a managed Typesense cluster and set TYPESENSE_HOST.
+    - name: TYPESENSE_ENABLED
+      value: "false"
     # ── Pipeline / observability defaults ───────────────────────
     - name: PIPELINE_TIMEOUT_SECONDS
       value: "300"
@@ -373,6 +379,55 @@ spec:
       value: eden-observability
 
 # ─────────────────────────────────────────────────────────────────────
+# Job 0: eden-migrate (one-shot Alembic upgrade before API rollout)
+# ─────────────────────────────────────────────────────────────────────
+---
+apiVersion: workloads/v1
+kind: Job
+metadata:
+  name: eden-migrate
+spec:
+  compute:
+    name: nf-compute-20
+  build:
+    type: dockerfile
+    dockerfilePath: ./Dockerfile
+    dockerBuildContext: .
+  # Run once per deploy before the API accepts traffic. The API sets
+  # SKIP_MIGRATIONS=1 and relies on this job to advance schema.
+  command:
+    - bash
+    - -lc
+    - |
+      cd /app
+      exec python -c "from eden.db_migrations.runner import run_alembic_upgrade_head; run_alembic_upgrade_head()"
+  env:
+    - name: APP_NAME
+      value: Eden
+    - name: DEBUG
+      value: "false"
+    - name: LOG_LEVEL
+      value: INFO
+    - name: LOG_JSON
+      value: "true"
+    - name: POSTGRES_HOST
+      valueFrom: { secretKeyRef: { group: eden-required, key: POSTGRES_HOST } }
+    - name: POSTGRES_PORT
+      valueFrom: { secretKeyRef: { group: eden-required, key: POSTGRES_PORT } }
+    - name: POSTGRES_DB
+      valueFrom: { secretKeyRef: { group: eden-required, key: POSTGRES_DB } }
+    - name: POSTGRES_USER
+      valueFrom: { secretKeyRef: { group: eden-required, key: POSTGRES_USER } }
+    - name: POSTGRES_PASSWORD
+      valueFrom: { secretKeyRef: { group: eden-required, key: POSTGRES_PASSWORD } }
+    - name: POSTGRES_SSLMODE
+      valueFrom: { secretKeyRef: { group: eden-required, key: POSTGRES_SSLMODE } }
+    - name: POSTGRES_CHANNEL_BINDING
+      valueFrom: { secretKeyRef: { group: eden-required, key: POSTGRES_CHANNEL_BINDING } }
+    - name: POSTGRES_ENDPOINT_ID
+      valueFrom: { secretKeyRef: { group: eden-required, key: POSTGRES_ENDPOINT_ID } }
+
+# ─────────────────────────────────────────────────────────────────────
 # Job 1/2: eden-worker (long-running background work)
 # ─────────────────────────────────────────────────────────────────────
 ---
@@ -394,7 +449,7 @@ spec:
     dockerfilePath: ./Dockerfile
     dockerBuildContext: .
   # The worker is a long-running service that never accepts HTTP.
-  # Set SKIP_MIGRATIONS=1 — the API service runs alembic on first boot.
+  # SKIP_MIGRATIONS=1 — schema is advanced by the eden-migrate job.
   # Override the default CMD via the start command. We exec into the
   # same image with a different command that runs the worker loop.
   command:
