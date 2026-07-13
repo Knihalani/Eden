@@ -15,6 +15,8 @@ and refers to the same object as the canonical ``eden_sdk`` import.
 
 from __future__ import annotations
 
+import pytest
+
 import eden  # noqa: F401  — module-level so all tests below can reach the public namespace
 
 
@@ -161,6 +163,7 @@ def test_detect_installed_frameworks_returns_full_map() -> None:
         "crewai",
         "autogen",
         "mastra",
+        "pydantic_ai",
     }
     assert set(result.keys()) == expected
     # All values must be booleans.
@@ -239,7 +242,11 @@ def test_eden_instrument_specific_framework_does_not_trigger_others() -> None:
     fast (~milliseconds, not seconds). If anyone breaks the lazy
     loading this test fails.
     """
+    import importlib.util
     import sys
+
+    if importlib.util.find_spec("openai") is None:
+        pytest.skip("openai not installed in this environment")
     # Start clean.
     for k in list(sys.modules):
         if k.startswith(("openai", "anthropic", "langchain", "llama_index",

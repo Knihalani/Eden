@@ -57,6 +57,7 @@ export interface TranscriptCitation {
 export interface TranscriptRow {
   span_id: string;
   parent_span_id?: string | null;
+  agent_id?: string | null;
   name: string;
   event_type?: string;
   timestamp: string;

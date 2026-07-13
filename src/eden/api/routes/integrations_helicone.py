@@ -29,7 +29,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(
     prefix="/integrations/helicone",
     tags=["integrations"],
-    dependencies=[Depends(require_feature_flag("enable_eval_pipeline"))],
+    dependencies=[Depends(require_feature_flag("experiments_v1"))],
 )
 
 

@@ -22,7 +22,7 @@
  */
 
 import * as React from "react";
-import { ChevronRight, ChevronDown, Wrench, Bot, MessageSquare, Brain, Image as ImageIcon, AlertCircle, CheckCircle2, Clock } from "lucide-react";
+import { ChevronRight, ChevronDown, Wrench, Bot, MessageSquare, Brain, Image as ImageIcon, AlertCircle, CheckCircle2, Clock, Copy } from "lucide-react";
 import { isInternalFrameworkSpan } from "@/lib/observability/elide";
 import { cn } from "@/lib/utils";
 import type { TranscriptRow as TR, TranscriptMessage, TranscriptToolCall, TranscriptToolResult } from "@/lib/observability/types";
@@ -42,7 +42,7 @@ export interface TranscriptViewProps {
 }
 
 export function TranscriptView({
-  
+  traceId,
   rows,
   totalDurationMs,
   totalCost,
@@ -79,6 +79,41 @@ export function TranscriptView({
     [visibleRows, selectedSpanId]
   );
 
+  const flatSpanIds = React.useMemo(() => flattenSpanIds(visibleRows), [visibleRows]);
+
+  React.useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
+      if (flatSpanIds.length === 0) return;
+      e.preventDefault();
+      const idx = selectedSpanId ? flatSpanIds.indexOf(selectedSpanId) : -1;
+      const next =
+        e.key === "ArrowDown"
+          ? flatSpanIds[Math.min(idx + 1, flatSpanIds.length - 1)]
+          : flatSpanIds[Math.max(idx - 1, 0)];
+      if (next) setSelectedSpanId(next);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [flatSpanIds, selectedSpanId]);
+
+  const copyTraceSummary = React.useCallback(async () => {
+    const summary = [
+      `trace=${traceId}`,
+      `spans=${spanCount}`,
+      `duration_ms=${totalDurationMs}`,
+      outcome ? `outcome=${outcome}` : null,
+      model ? `model=${model}` : null,
+    ]
+      .filter(Boolean)
+      .join(" ");
+    try {
+      await navigator.clipboard.writeText(summary);
+    } catch {
+      // ignore
+    }
+  }, [traceId, spanCount, totalDurationMs, outcome, model]);
+
   return (
     <div className="flex h-full min-h-0 flex-col">
       {/* ── Summary card ── */}
@@ -92,19 +127,32 @@ export function TranscriptView({
       />
 
       {/* ── Toolbar ── */}
-      {internalCount > 0 && (
-        <div className="flex items-center justify-between border-b border-[var(--border-default)] bg-[var(--bg-secondary)] px-4 py-2 text-xs">
-          <span className="text-[var(--text-muted)]">
-            {internalCount} framework-internal span{internalCount === 1 ? "" : "s"} hidden
-          </span>
+      <div className="flex items-center justify-between border-b border-[var(--border-default)] bg-[var(--bg-secondary)] px-4 py-2 text-xs gap-2">
+        <span className="text-[var(--text-muted)]">
+          {visibleRows.length} step{visibleRows.length === 1 ? "" : "s"}
+          {internalCount > 0
+            ? ` · ${internalCount} internal hidden`
+            : ""}
+        </span>
+        <div className="flex items-center gap-3">
+          {internalCount > 0 && (
+            <button
+              onClick={() => setShowInternal((v) => !v)}
+              className="text-[var(--accent)] hover:underline min-h-[44px] px-1"
+            >
+              {showInternal ? "Hide internal" : "Show internal"}
+            </button>
+          )}
           <button
-            onClick={() => setShowInternal((v) => !v)}
-            className="text-[var(--accent)] hover:underline"
+            type="button"
+            onClick={() => void copyTraceSummary()}
+            className="inline-flex items-center gap-1 text-[var(--accent)] hover:underline min-h-[44px] px-1"
+            title="Copy trace summary"
           >
-            {showInternal ? "Hide" : "Show"}
+            <Copy className="h-3 w-3" /> Copy summary
           </button>
         </div>
-      )}
+      </div>
 
       {/* ── Body: transcript + sidebar ── */}
       <div className="flex min-h-0 flex-1">
@@ -122,6 +170,7 @@ export function TranscriptView({
                   selected={selectedSpanId === row.span_id}
                   onSelect={setSelectedSpanId}
                   orgId={orgId}
+                  traceId={traceId}
                   depth={0}
                 />
               ))}
@@ -221,11 +270,13 @@ function TranscriptRowItem({
   selected,
   onSelect,
   orgId,
+  traceId,
   depth }: {
   row: TR;
   selected: boolean;
   onSelect: (id: string) => void;
   orgId?: string;
+  traceId: string;
   depth: number;
 }) {
   const [expanded, setExpanded] = React.useState(true);
@@ -333,7 +384,13 @@ function TranscriptRowItem({
               | JSX.Element``, all of which are valid
               ``ReactNode``s. */}
           {row.tool_calls && row.tool_calls.length > 0 && (
-            <ToolCallsList toolCalls={row.tool_calls} />
+            <ToolCallsList
+              toolCalls={row.tool_calls}
+              orgId={orgId}
+              traceId={traceId}
+              spanId={row.span_id}
+              agentId={row.agent_id ?? undefined}
+            />
           )}
 
           {/* Tool results */}
@@ -379,6 +436,7 @@ function TranscriptRowItem({
               selected={selected}
               onSelect={onSelect}
               orgId={orgId}
+              traceId={traceId}
               depth={depth + 1}
             />
           ))}
@@ -471,12 +529,46 @@ function roleColor(role: string): React.CSSProperties {
   }
 }
 
-function __ToolCallsSection({ calls }: { calls: TranscriptToolCall[] | null | undefined }): React.ReactElement | null {
-  if (!calls || calls.length === 0) return null;
-  return <ToolCallsList toolCalls={calls} />;
-}
+function ToolCallsList({
+  toolCalls,
+  orgId,
+  traceId,
+  spanId,
+  agentId,
+}: {
+  toolCalls: TranscriptToolCall[] | null | undefined;
+  orgId?: string;
+  traceId: string;
+  spanId: string;
+  agentId?: string;
+}): React.ReactElement | null {
+  const [labelState, setLabelState] = React.useState<string | null>(null);
+  const [busy, setBusy] = React.useState(false);
 
-function ToolCallsList({ toolCalls }: { toolCalls: TranscriptToolCall[] | null | undefined }): React.ReactElement | null {
+  const submitLabel = React.useCallback(
+    async (toolName: string, label: "good" | "bad", args: unknown) => {
+      if (!orgId) return;
+      setBusy(true);
+      try {
+        const { api } = await import("@/lib/api");
+        await api.labelToolCall(orgId, spanId, {
+          trace_id: traceId,
+          tool_name: toolName,
+          label,
+          agent_id: agentId,
+          args_summary:
+            typeof args === "string" ? args : JSON.stringify(args ?? "").slice(0, 500),
+        });
+        setLabelState(label);
+      } catch {
+        setLabelState("error");
+      } finally {
+        setBusy(false);
+      }
+    },
+    [orgId, spanId, traceId, agentId],
+  );
+
   if (!toolCalls || toolCalls.length === 0) return null;
   return (
     <div>
@@ -488,7 +580,33 @@ function ToolCallsList({ toolCalls }: { toolCalls: TranscriptToolCall[] | null |
               <Wrench className="h-3 w-3 text-[var(--warning)]" />
               <span className="font-mono">{tc.name}</span>
               {tc.id && <span className="text-[10px] text-[var(--text-muted)]">{tc.id.slice(0, 12)}…</span>}
+              {orgId && (
+                <span className="ml-auto flex items-center gap-1">
+                  <button
+                    type="button"
+                    disabled={busy}
+                    className="rounded px-1.5 py-0.5 text-[10px] border border-[var(--terminal)] text-[var(--terminal)] hover:bg-[var(--terminal)]/10 disabled:opacity-50"
+                    onClick={() => void submitLabel(tc.name, "good", tc.arguments)}
+                  >
+                    ✓
+                  </button>
+                  <button
+                    type="button"
+                    disabled={busy}
+                    className="rounded px-1.5 py-0.5 text-[10px] border border-[var(--error)] text-[var(--error)] hover:bg-[var(--error)]/10 disabled:opacity-50"
+                    onClick={() => void submitLabel(tc.name, "bad", tc.arguments)}
+                  >
+                    ✗
+                  </button>
+                </span>
+              )}
             </div>
+            {labelState && labelState !== "error" && (
+              <p className="text-[10px] text-[var(--text-muted)]">Labeled {labelState}</p>
+            )}
+            {labelState === "error" && (
+              <p className="text-[10px] text-[var(--error)]">Label failed</p>
+            )}
             {tc.arguments !== undefined && (
               <pre className="overflow-x-auto whitespace-pre-wrap font-mono text-[10px] text-[var(--text-secondary)]">
                 {typeof tc.arguments === "string" ? tc.arguments : JSON.stringify(tc.arguments ?? null, null, 2)}
@@ -697,6 +815,18 @@ function findRowBySpanId(rows: TR[], id: string | null): TR | null {
     }
   }
   return null;
+}
+
+function flattenSpanIds(rows: TR[]): string[] {
+  const out: string[] = [];
+  const walk = (rs: TR[]) => {
+    for (const r of rs) {
+      if (r.span_id) out.push(r.span_id);
+      if (r.children?.length) walk(r.children);
+    }
+  };
+  walk(rows);
+  return out;
 }
 
 function formatDuration(ms: number): string {

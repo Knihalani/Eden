@@ -6,7 +6,7 @@
 | **Slug** | `slack-block-kit-alerts` |
 | **Priority** | P0 |
 | **Effort** | M |
-| **Eden status** | **MISSING** |
+| **Eden status** | **SHIPPED (v0)** — `integrations/slack/alerts.py` outbound webhooks |
 | **Competitive source** | Raindrop, Laminar |
 | **Closes gap** | 3.3, 5.3 |
 | **Dependencies** | F29 (issues), N08 (StatGate P0), F04 (deep links) |

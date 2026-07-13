@@ -16,7 +16,7 @@
  * component and reused here.
  */
 
-import { useCallback, useEffect, useState , Suspense} from "react";
+import { useCallback, useEffect, useMemo, useState , Suspense} from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { Layers } from "lucide-react";
 import { PageHeader } from "@/components/layout/page-header";
@@ -28,7 +28,8 @@ import { TracesTab } from "../observability/_components/TracesTab";
 import { AnnotateTraceDialog } from "../observability/_components/AnnotateTraceDialog";
 import type { TraceFilter, TraceItem } from "../observability/_lib/types";
 import { useOrg } from "@/hooks/use-org";
-import { api } from "@/lib/api";
+import { api, agentSessionsApi } from "@/lib/api";
+import { SessionTimeline, type AgentSessionTimelineItem } from "@/components/observability/SessionTimeline";
 import { TraceExportModal } from "../observability/_components/TraceExportModal";
 import { TraceShareModal } from "../observability/_components/TraceShareModal";
 import { LiveTailPanel } from "./_components/LiveTailPanel";
@@ -43,6 +44,7 @@ function TracesPageInner() {
   const initialTraceId = searchParams.get("trace_id") || undefined;
 
   const [traces, setTraces] = useState<TraceItem[]>([]);
+  const [sessions, setSessions] = useState<AgentSessionTimelineItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<TraceFilter>({ realm: "", outcome: "", agent_id: "" });
   const [_, setSelectedTraceId] = useState<string>(initialTraceId ?? "");
@@ -89,19 +91,58 @@ function TracesPageInner() {
     if (!currentOrg) return;
     setLoading(true);
     try {
-      const data = await api.listObservabilityTraces(currentOrg.id, {
-        ...(filter.realm ? { realm: filter.realm } : {}),
-        ...(filter.outcome ? { outcome: filter.outcome } : {}),
-        ...(filter.agent_id ? { agent_id: filter.agent_id } : {}),
-        limit: 50 });
+      const [data, sessionRes] = await Promise.all([
+        api.listObservabilityTraces(currentOrg.id, {
+          ...(filter.realm ? { realm: filter.realm } : {}),
+          ...(filter.outcome ? { outcome: filter.outcome } : {}),
+          ...(filter.agent_id ? { agent_id: filter.agent_id } : {}),
+          limit: 50,
+        }),
+        agentSessionsApi.list(currentOrg.id, {
+          ...(filter.agent_id ? { agent_id: filter.agent_id } : {}),
+          limit: 50,
+        }).catch(() => ({ data: { sessions: [], count: 0 } })),
+      ]);
       setTraces(data.traces as TraceItem[]);
+      setSessions(sessionRes.data?.sessions ?? []);
     } catch (e) {
       console.error("Traces load failed:", e);
       toast.error(e instanceof Error ? e.message : "Failed to load traces");
     } finally {
       setLoading(false);
     }
-  }, [currentOrg, filter]);
+  }, [currentOrg, filter, toast]);
+
+  const sessionTimeline = useMemo(() => {
+    const byId = new Map<string, AgentSessionTimelineItem>();
+    for (const s of sessions) {
+      byId.set(s.id, { ...s, trace_ids: [...(s.trace_ids ?? [])] });
+    }
+    for (const t of traces) {
+      const sid = t.agent_session_id ?? t.session_id;
+      if (!sid) continue;
+      const existing = byId.get(sid);
+      if (existing) {
+        const ids = new Set(existing.trace_ids ?? []);
+        ids.add(t.trace_id);
+        existing.trace_ids = Array.from(ids);
+        if (!existing.agent_id && t.agent_id) existing.agent_id = t.agent_id;
+        if (!existing.started_at && t.started_at) existing.started_at = t.started_at;
+      } else {
+        byId.set(sid, {
+          id: sid,
+          agent_id: t.agent_id ?? null,
+          trace_ids: [t.trace_id],
+          started_at: t.started_at ?? undefined,
+        });
+      }
+    }
+    return Array.from(byId.values()).sort((a, b) => {
+      const ta = a.started_at ? Date.parse(a.started_at) : 0;
+      const tb = b.started_at ? Date.parse(b.started_at) : 0;
+      return tb - ta;
+    });
+  }, [sessions, traces]);
 
   useEffect(() => {
     if (currentOrg) loadTraces();
@@ -125,6 +166,16 @@ function TracesPageInner() {
       />
       <div className="grid gap-4 lg:grid-cols-[1fr_18rem]">
         <div className="space-y-4 min-w-0">
+          <section aria-label="Agent sessions">
+            <h2 className="text-sm font-semibold text-[var(--text-primary)] mb-2">
+              Agent sessions
+            </h2>
+            <SessionTimeline
+              sessions={sessionTimeline}
+              orgId={currentOrg.id}
+              className="mb-2"
+            />
+          </section>
           <SpanSearchBar orgId={currentOrg.id} onSelectTrace={handleSelectTrace} />
           <TracesTab
               traces={traces}

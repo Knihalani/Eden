@@ -5,7 +5,7 @@
 | **Feature ID** | F29 |
 | **Priority** | P0 |
 | **Effort** | L |
-| **Eden status** | MISSING |
+| **Eden status** | **SHIPPED (v0)** — `agent_issues` API + portal `/issues` |
 | **Competitive source** | Raindrop 2.0 (Issues), Sentry |
 | **Dependencies** | F28 (stumbles) |
 

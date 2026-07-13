@@ -514,7 +514,7 @@ Run: `pytest tests/intelligence/ -q` after each wave.
 - F41 `evidence_gate.py` full implementation — stub gate that returns `needs_evidence=True` is OK for v1
 - F39 runtime nudges in gateway — separate feature; triage may *suggest* nudge
 - N17 full improvement cockpit — minimal issue list is sufficient
-- LangGraph env-gen pipeline (retired per ground truth)
+- Retired LangGraph env-gen pipeline (N07 removed — use D6/D7 instead)
 - Cross-pod Redis dedup for HookBus — in-process dedup is acceptable v1
 - Auto-merge PRs — default human merge per N22
 

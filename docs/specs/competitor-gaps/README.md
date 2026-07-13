@@ -2,7 +2,7 @@
 
 > **⚠️ Superseded by feature-by-feature specs:**  
 > **Master:** [`../FEATURE-GAP-MASTER.md`](../FEATURE-GAP-MASTER.md)  
-> **Canonical specs:** [`../features/`](../features/) — 48 files, one per feature
+> **Canonical specs:** [`../features/`](../features/) — 45 files, one per feature (N07 removed)
 
 This directory contains the earlier **competitor-organized** specs (Laminar, Sentrial, Raindrop, BentoLabs). Use [`../features/`](../features/) for implementation.
 

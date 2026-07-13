@@ -126,6 +126,9 @@ class Issue:
     affected_user_ids: list[str] = field(default_factory=list)
     example_stumble_ids: list[str] = field(default_factory=list)
     triage_result: dict[str, Any] | None = None
+    experiment_id: str | None = None
+    experiment_result: dict[str, Any] | None = None
+    regression_case_id: str | None = None
     first_seen: datetime | None = None
     last_seen: datetime | None = None
     was_created: bool = False

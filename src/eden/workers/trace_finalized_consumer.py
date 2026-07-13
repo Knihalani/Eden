@@ -87,7 +87,7 @@ class TraceFinalizedConsumer:
                 org_id = data.get("org_id")
                 trace_id = data.get("trace_id")
                 if org_id and trace_id:
-                    await self._scanner.scan(
+                    scan_results = await self._scanner.scan(
                         org_id,
                         trace_id,
                         agent_id=data.get("agent_id") or None,
@@ -95,11 +95,44 @@ class TraceFinalizedConsumer:
                         user_id=data.get("user_id") or None,
                         detection_profile=_resolve_profile(org_id),
                     )
+                    # D1 — StatGate P0 rail before orchestrator LLM triage.
+                    try:
+                        from eden.issues.statgate_p0_rail import (
+                            apply_statgate_p0_rail,
+                            collect_issue_ids_from_scan,
+                        )
+
+                        issue_ids = collect_issue_ids_from_scan(scan_results)
+                        if issue_ids:
+                            await apply_statgate_p0_rail(org_id, issue_ids)
+                    except Exception as rail_exc:
+                        logger.debug(
+                            "trace_finalized: statgate_p0_rail: %s", rail_exc
+                        )
+                    await _run_signal_investigator(org_id, trace_id)
+                    await self._maybe_prod_eval(
+                        org_id,
+                        trace_id,
+                        agent_id=data.get("agent_id") or None,
+                    )
             except Exception as exc:
                 logger.warning("trace_finalized: scan failed: %s", exc)
             finally:
                 with contextlib.suppress(Exception):
                     await redis.xack(TRACE_FINALIZED_STREAM, _GROUP, message_id)
+
+    async def _maybe_prod_eval(
+        self, org_id: str, trace_id: str, *, agent_id: str | None
+    ) -> None:
+        try:
+            from eden.evaluation.production.sampler import ProductionEvalSampler
+
+            sampler = ProductionEvalSampler()
+            await sampler.maybe_score_trace(
+                org_id, trace_id, agent_id=agent_id, is_stumble=False
+            )
+        except Exception as exc:
+            logger.debug("trace_finalized: prod_eval skipped: %s", exc)
 
 
 def _decode(fields: Any) -> dict[str, str]:
@@ -117,6 +150,23 @@ def _resolve_profile(org_id: str) -> str:
     """Resolve an org's detection profile (F20). v1 defaults to
     ``standard``; a per-org override table can slot in here later."""
     return "standard"
+
+
+async def _run_signal_investigator(org_id: str, trace_id: str) -> None:
+    """F06 — per-trace signal investigator (best-effort)."""
+    try:
+        from eden.config import get_settings
+
+        if not getattr(get_settings(), "per_trace_signals_v1", True):
+            return
+    except Exception:
+        pass
+    try:
+        from eden.signals.investigator import investigate_trace
+
+        await investigate_trace(org_id, trace_id)
+    except Exception as exc:
+        logger.debug("trace_finalized: signal investigator failed: %s", exc)
 
 
 async def start_consumer() -> None:

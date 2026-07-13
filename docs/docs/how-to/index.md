@@ -44,6 +44,30 @@ If you want to **learn** something, see
 <div class="eden-grid eden-grid--compact">
 
   <div class="eden-card eden-card--small">
+    <h4>Connect any agent</h4>
+    <p>Three-tier guide: native wrap, HTTP capture, or manual tracing.</p>
+    <a href="/how-to/connect-any-agent">Read →</a>
+  </div>
+
+  <div class="eden-card eden-card--small">
+    <h4>MCP in Cursor</h4>
+    <p>Wire Eden MCP for trace search, triage, and autofix from your IDE.</p>
+    <a href="/how-to/mcp-cursor">Read →</a>
+  </div>
+
+  <div class="eden-card eden-card--small">
+    <h4>Agent sessions</h4>
+    <p>Session-first SDK: begin, trace turns, complete_session.</p>
+    <a href="/how-to/agent-sessions">Read →</a>
+  </div>
+
+  <div class="eden-card eden-card--small">
+    <h4>Failure fixtures</h4>
+    <p>Export redacted trace bundles for local replay and regression.</p>
+    <a href="/how-to/failure-fixtures">Read →</a>
+  </div>
+
+  <div class="eden-card eden-card--small">
     <h4>Auto-instrument an existing repo</h4>
     <p>Open a PR that wires the SDK into a detected framework.</p>
     <a href="/how-to/auto-instrument">Read →</a>

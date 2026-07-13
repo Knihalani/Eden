@@ -6,7 +6,7 @@
 | **Slug** | `statgate-incident-delegation-trust` |
 | **Priority** | P1 |
 | **Effort** | L |
-| **Eden status** | **PARTIAL** (StatGate in trace quality; not incident-integrated) |
+| **Eden status** | **SHIPPED (v0)** — StatGate on trace quality; incident integration stretch deferred |
 | **Market hypothesis** | Multi-agent systems need **non-LLM trust signals** — buyers skeptical of pure LLM-judge for incident severity |
 | **Dependencies** | ETEC/StatGate, F28, F29, F30, Cat 22 delegation |
 

@@ -76,6 +76,28 @@ async def _run_weekly(now: datetime, *, dry_run: bool) -> dict[str, object]:
         return {"errors": [str(exc)]}
 
 
+async def _run_mcp_rollup(*, dry_run: bool) -> dict[str, object]:
+    if dry_run:
+        return {"skipped": True}
+    try:
+        from eden.services.observability import get_mcp_service
+
+        return await get_mcp_service().rollup_registry()
+    except Exception as exc:
+        logger.exception("[cron_tick] mcp_rollup failed: %s", exc)
+        return {"errors": [str(exc)]}
+
+
+async def _run_classifier_retrain() -> dict[str, object]:
+    try:
+        from eden.signals.classifier_pipeline import ClassifierTrainingPipeline
+
+        return await ClassifierTrainingPipeline().retrain_due_orgs()
+    except Exception as exc:
+        logger.exception("[cron_tick] classifier_retrain failed: %s", exc)
+        return {"errors": [str(exc)]}
+
+
 async def _run_scheduled_optimization(
     now: datetime, *, dry_run: bool
 ) -> dict[str, object]:
@@ -203,6 +225,12 @@ async def _tick(*, dry_run: bool) -> dict[str, object]:
     # 2. Daily @ 03:00 UTC: stale_pending_sweep + retention_cron.
     if now.hour == 3 and now.minute < 10:
         out["daily"] = await _run_daily(now, dry_run=dry_run)
+
+    # 2b. Every 15 min: MCP registry rollup + classifier retrain (WS1).
+    if now.minute % 15 < 5:
+        out["mcp_rollup"] = await _run_mcp_rollup(dry_run=dry_run)
+        if not dry_run:
+            out["classifier_retrain"] = await _run_classifier_retrain()
 
     # 3. Weekly Monday @ 09:00 UTC: weekly_digest.
     if now.weekday() == 0 and now.hour == 9 and now.minute < 10:

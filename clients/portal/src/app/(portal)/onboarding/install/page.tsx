@@ -59,7 +59,7 @@ configure({
   baseUrl: process.env.EDEN_BASE_URL ?? "https://api.edenobservability.com",
 });
 
-instrument(); // patches OpenAI, Anthropic, Vercel AI, LangChain
+instrument(); // HTTP capture + wrap* helpers
 
 class Greeter {
   @traceAgent({ name: "hello-world", tags: ["quickstart"] })

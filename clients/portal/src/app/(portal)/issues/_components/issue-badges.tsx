@@ -52,3 +52,21 @@ export function RepeatBadge({ count }: { count: number }) {
     </span>
   );
 }
+
+export function RegressionBadge({
+  regressionCaseId,
+  status,
+}: {
+  regressionCaseId?: string | null;
+  status?: string;
+}) {
+  if (!regressionCaseId && status !== "regressed") return null;
+  return (
+    <span
+      title={regressionCaseId ? `Regression case ${regressionCaseId}` : "Issue regressed after fix"}
+      className="inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded border bg-[var(--warning)]/15 text-[var(--warning)] border-[var(--warning)]/30"
+    >
+      Regression
+    </span>
+  );
+}

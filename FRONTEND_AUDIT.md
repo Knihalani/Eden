@@ -1,30 +1,51 @@
-# Eden Frontend Audit — 2026-07-05
+# Eden Frontend Audit — 2026-07-13 (WS7 IA pass)
 
 **Repo:** `clients/portal/`
 **Stack:** Next.js 16 (App Router) + React 19 + Tailwind v4 + Radix UI + Clerk + Framer Motion + Recharts
 **Method:** Static read-through of every `page.tsx` and major component, plus grep-based pattern checks across the surface.
-**Author of fix pass:** Codex brief `frontendtask.md` (passed in 2026-07-05)
+**Prior pass:** Codex brief `frontendtask.md` (2026-07-05 polish)
+**This pass:** Workstream 7 — market-critical IA promotion, dead-route cleanup, empty-state CTAs, Issues↔Incidents clarity
 **Scope:** Frontend-only. No backend / API / infra / PR-system changes.
 
 ---
 
 ## Executive Summary
 
-Eden's portal is a mature, well-engineered Next.js 16 / React 19 codebase with a thoughtful design system already in place. The June 2026 polish pass (referenced in many file headers) has already fixed the bulk of "smoke level" issues — tokenized design system, semantic borders/colors with WCAG AA contrast, consistent page wrappers, dedicated loading/error/empty states, accessible dialogs, mobile bottom nav, sticky sidebar, command palette, sidebar pinning, etc.
-
-What remains is **systemic polish across all surfaces**, not page-by-page fixes. The fixes below were prioritized by *blast radius* (one component fix that touches many surfaces) rather than per-page.
+The July 2026 WS7 pass promotes **Agent Issues**, **Improve**, and **Debugger** to core navigation (no Advanced toggle required). **Fleet** (`/fleet`) is added as a stub pending N05. Predictive cost/capacity/risk tabs remain hidden (501 backends). E2E audit dead routes (`/marketplace`, `/multi-agent`, `/builder`) removed; core loop routes (`/issues`, `/improve`, `/fleet`) added.
 
 | Metric | Value |
 |---|---|
-| Pages inventoried | 75 (`app/**/page.tsx`) |
+| Pages inventoried | 79 (`app/**/page.tsx`) |
 | Shared UI components | 35 (`components/ui/*`) |
 | Layout components | 3 (`components/layout/*`) |
-| Total `use client` pages | 70 |
-| Sidebar groups | 5 (Build / Observe / Optimize / Automate / Admin) |
-| Audit issues identified | **30** |
-| Issues fixed | **30** |
-| P0 / P1 issues remaining after fix | **0** |
-| P2 / P3 issues remaining after fix | **0** |
+| Total `use client` pages | ~72 |
+| Sidebar groups | 5 (Build / Observe / Optimize / Automate / Workspace) |
+| Core Observe nav (no Advanced) | Traces, Agent Issues, Fleet, Observability hub, Incidents, Alerts |
+| Core Automate nav | Improve (first), then Advanced-only items |
+| P0 issues (WS7) | **2 open** (see below) |
+| P1 issues (WS7) | **4 open** |
+
+---
+
+## WS7 — Information Architecture Changes (2026-07-13)
+
+| Change | Before | After |
+|--------|--------|-------|
+| **Agent Issues** | Automate group, `category: "advanced"` | Observe group, core (visible without Advanced toggle) |
+| **Improve** | Automate group, core but buried below Advanced mental model | Automate group, first item, core |
+| **Debugger** | Observability hub child, `category: "advanced"` | Observability hub child, core |
+| **Fleet** | Missing | Observe group, core — stub at `/fleet` (N05 pending) |
+| **Predictive tabs** | cost/capacity/risk returned 501 | Hidden — quality + drift only |
+| **E2E audit routes** | Included `/marketplace`, `/multi-agent`, `/builder` | Removed; added `/issues`, `/improve`, `/fleet` |
+| **Issues vs Incidents** | Competing failure feeds | Cross-linked in subtitles and empty states |
+
+### Issues vs Incidents (user mental model)
+
+| Surface | Route | Purpose |
+|---------|-------|---------|
+| **Agent Issues** | `/issues` | Sentry-style grouped agent failures — **primary loop** |
+| **Incidents** | `/incidents` | RCA clusters / anomaly groupings — **secondary, systemic** |
+| **Improve** | `/improve` | Unified action queue from detected issues |
 
 ---
 
@@ -39,7 +60,6 @@ What remains is **systemic polish across all surfaces**, not page-by-page fixes.
 | `/security` | ✅ |
 | `/terms` | ✅ |
 | `/dpa` | ✅ |
-| `/docs` | ✅ |
 
 ### A.2 Auth routes
 
@@ -55,35 +75,96 @@ What remains is **systemic polish across all surfaces**, not page-by-page fixes.
 
 ### A.3 Portal — Build group
 
-`/dashboard`, `/agents`, `/agents/[id]`, `/agents/[id]/test-runs`, `/agents/[id]/test-runs/[run_id]`, `/agents/[id]/sim-runs`, `/agents/[id]/sim-runs/[run_id]`, `/agents/connect`, `/builder`, `/marketplace`, `/multi-agent`
+`/dashboard`, `/agents`, `/agents/[id]`, `/agents/connect`, `/datasets`, `/datasets/[id]`, `/labeling`, `/prompts`
 
-### A.4 Portal — Observe group
+### A.4 Portal — Observe group (core + advanced)
 
-`/traces`, `/replay`, `/observability`, `/observability/apm`, `/observability/cohorts`, `/observability/decisions`, `/observability/eval`, `/observability/memory`, `/observability/query`, `/observability/retrieval`, `/observability/time-travel`, `/tools`, `/insights`, `/inspector`, `/incidents`, `/incidents/[cluster_id]`, `/alerts`, `/llmops`, `/analytics`
+**Core (always visible):** `/traces`, `/issues`, `/issues/[id]`, `/fleet`, `/observability`, `/incidents`, `/incidents/[cluster_id]`, `/alerts`
+
+**Observability hub children (Debugger core; rest advanced):** `/observability/apm`, `/observability/cohorts`, `/observability/decisions`, `/observability/eval`, `/observability/memory`, `/observability/query`, `/observability/retrieval`, `/observability/time-travel`, `/debugger`, `/synthetic`
+
+**Advanced:** `/replay`, `/tools`, `/insights`, `/signals`, `/users`, `/inspector`, `/llmops`, `/analytics`
 
 ### A.5 Portal — Optimize group
 
-`/optimization`, `/optimization/outcomes`, `/optimization/predict`, `/optimization/budget`, `/studio`, `/guardrails`
+`/optimization`, `/optimization/outcomes`, `/optimization/predict` (quality + drift only), `/optimization/budget`, `/optimization/model-advisor`, `/studio`, `/guardrails`, `/redteam`
 
 ### A.6 Portal — Automate group
 
-`/autonomous`, `/closed-loop`, `/pr-suggestions`, `/pr-suggestions/[id]`
+**Core:** `/improve`
 
-### A.7 Portal — Admin group
+**Advanced:** `/autonomous`, `/closed-loop`, `/pr-suggestions`, `/pr-suggestions/[id]`
 
-`/settings`, `/users`, `/billing`, `/profile`
+### A.7 Portal — Workspace group
+
+`/settings`, `/settings/*` tabs, `/billing`, `/profile`
 
 ### A.8 Portal — Onboarding
 
-`/onboarding`, `/onboarding/connect`, `/onboarding/tour`, `/onboarding/autonomous`, `/onboarding/wait`, `/onboarding/done`, `/onboarding/install`, `/onboarding/org`
+`/onboarding`, `/onboarding/connect`, `/onboarding/install`, `/onboarding/org`, `/onboarding/tour`, `/onboarding/autonomous`, `/onboarding/wait`, `/onboarding/done`
 
-### A.9 Stub / 404 cases
+### A.9 Removed / redirect-only routes (not in E2E audit)
 
-No 404s observed. All nav links resolve. No blank pages.
+`/marketplace`, `/multi-agent`, `/builder` — redirect stubs in `next.config.ts`; excluded from `portal-audit.mjs`
+
+### A.10 Stub pages
+
+| Route | Status |
+|-------|--------|
+| `/fleet` | Stub with empty state + links to Issues / SDK install (N05 pending) |
 
 ---
 
-## SECTION B — Interaction Audit (systemic patterns)
+## P0 — Market-Ready Blockers (WS7, open)
+
+| # | Page/Component | Issue | Status |
+|---|---|---|---|
+| P0-1 | `/fleet` | Stub only — N05 fleet health API not wired | **Open** (expected until WS4) |
+| P0-2 | `onboarding/install` | TS SDK `instrument()` snippet may not match real exports (WS6) | **Open** (WS6 dependency) |
+
+## P1 — High Priority (WS7, open)
+
+| # | Page/Component | Issue |
+|---|---|---|
+| P1-1 | `/issues/[id]/fix` | Fix tab polish incomplete per WS3 |
+| P1-2 | `/observability/mcp` | MCP SRE dashboard (N02) not built |
+| P1-3 | Mobile touch targets | Issues list, fix chat, transcript — verify ≥44px (frontendtask §F) |
+| P1-4 | `(marketing)/page.tsx` | Hero still references improvement loop inconsistently with env-gen removal |
+
+## P0/P1 — Closed in WS7
+
+| # | Fix |
+|---|---|
+| WS7-1 | Agent Issues / Improve / Debugger promoted to core nav |
+| WS7-2 | Predictive 501 tabs hidden |
+| WS7-3 | E2E audit dead routes removed |
+| WS7-4 | Issues + Improve empty states have onboarding CTAs |
+| WS7-5 | Issues ↔ Incidents cross-linked in copy |
+| WS7-6 | Legacy env-gen HTML archived with README |
+
+---
+
+## Prior audit (2026-07-05) — resolved polish items
+
+The July 5 pass identified 30 interaction/visual issues (P1–P3); all marked fixed in that pass. See git history for `FRONTEND_AUDIT.md` prior revision for full F1–F20 fix list.
+
+---
+
+## Verification
+
+| Check | Command | WS7 status |
+|-------|---------|------------|
+| Typecheck | `cd clients/portal && bun run typecheck` | ✅ Pass (2026-07-13) |
+| E2E audit | `node clients/portal/e2e/portal-audit.mjs` | Routes updated |
+| IA | Issues visible without Advanced toggle | ✅ |
+
+
+---
+
+## Historical — July 2025 polish pass (Sections B–E)
+
+Sections B–E below document systemic interaction/visual patterns from the July 5 polish pass. The **Findings List** at the end lists P1–P3 items from that pass (all marked fixed). WS7 P0/P1 blockers are listed at the top of this document.
+
 
 ### B.1 Click handlers
 
@@ -237,7 +318,9 @@ No known browser-specific rendering bugs.
 
 ---
 
-## Findings List
+## Findings List (July 2025 pass — all fixed)
+
+Historical record from the July 5 polish pass. Superseded for market-ready tracking by WS7 P0/P1 above.
 
 ### P0 — Broken (Fix First)
 
@@ -245,9 +328,7 @@ No known browser-specific rendering bugs.
 |---|---|---|
 | — | none | — |
 
-No P0 issues found. Every page renders, every interaction that was triggered fires a meaningful handler, every form has a submission path, every async operation has at least one loading/empty/error fallback.
-
-### P1 — Functionally Wrong
+### P1 — Functionally Wrong (fixed)
 
 | # | Page/Component | Issue | Fix |
 |---|---|---|---|

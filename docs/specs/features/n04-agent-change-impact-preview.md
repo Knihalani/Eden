@@ -157,7 +157,8 @@ N22.may(run_impact_preview) == allow
 Combines **unique** Eden capabilities in one flow:
 - Cached-prefix rerun (F01) — cheap production replay
 - StatGate trajectory quality (not just LLM-judge)
-- Environment generation (N07) — optional synthetic edge cases from failures
+- D6 failure fixture export — redacted trace bundle for local replay (replaces N07)
+- D7 regression memory (N01) — permanent eval cases from resolved failures
 - Evidence-gated promotion (F41)
 - Graded autonomy (N22) — same report gates human and auto-merge
 

@@ -183,8 +183,12 @@ spec:
     - name: POSTGRES_STATEMENT_TIMEOUT_MS
       value: "30000"
     # ── Qdrant (external — Qdrant Cloud free tier) ──────────────
+    # Hostname only — NOT a full URL. qdrant.py builds https://{host}:{port}
+    # when QDRANT_HTTPS=true (required for Qdrant Cloud).
     - name: QDRANT_HOST
-      value: https://58384b79-0261-480e-b61f-d86bbf1c0dad.us-east4-0.gcp.cloud.qdrant.io
+      value: 58384b79-0261-480e-b61f-d86bbf1c0dad.us-east4-0.gcp.cloud.qdrant.io
+    - name: QDRANT_HTTPS
+      value: "true"
     - name: QDRANT_PORT
       value: "6333"
     - name: QDRANT_COLLECTION_PREFIX
@@ -434,7 +438,9 @@ spec:
     - name: POSTGRES_MIN_POOL_SIZE
       value: "1"
     - name: QDRANT_HOST
-      value: https://58384b79-0261-480e-b61f-d86bbf1c0dad.us-east4-0.gcp.cloud.qdrant.io
+      value: 58384b79-0261-480e-b61f-d86bbf1c0dad.us-east4-0.gcp.cloud.qdrant.io
+    - name: QDRANT_HTTPS
+      value: "true"
     - name: QDRANT_PORT
       value: "6333"
     - name: QDRANT_API_KEY

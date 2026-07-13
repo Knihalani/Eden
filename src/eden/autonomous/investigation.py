@@ -678,7 +678,39 @@ class SelfHealer:
             "action_type": action_type,
             "executed": False,
             "approved_by": approved_by_user_id,
+            "org_id": org_id,
         }
+
+        # N21 hardening: policy + daily rollback cap before destructive work.
+        blocked = await _heal_precheck(org_id, action_type or "")
+        if blocked:
+            after_state["error"] = blocked
+            await _upsert_self_heal(
+                org_id,
+                action_id,
+                action_type=action_type or "unknown",
+                status="failed",
+                before_state_json=_json_dumps(before_state.get("before_state")),
+                after_state_json=_json_dumps(after_state),
+            )
+            await _audit_heal(
+                org_id,
+                action_id,
+                action_type,
+                after_state,
+                actor_id=approved_by_user_id,
+            )
+            return _ok_envelope(
+                self.name,
+                {
+                    "action_id": action_id,
+                    "action_type": action_type,
+                    "status": "failed",
+                    "before_state": before_state.get("before_state"),
+                    "after_state": after_state,
+                    "message": blocked,
+                },
+            )
 
         try:
             if action_type == "rollback":
@@ -706,6 +738,9 @@ class SelfHealer:
             status="executed" if after_state.get("executed") else "failed",
             before_state_json=_json_dumps(before_state.get("before_state")),
             after_state_json=_json_dumps(after_state),
+        )
+        await _audit_heal(
+            org_id, action_id, action_type, after_state, actor_id=approved_by_user_id
         )
 
         return _ok_envelope(
@@ -779,6 +814,11 @@ class SelfHealer:
 
 def _heal_action_from_triage(triage_result: dict[str, Any]) -> str | None:
     """Extract a valid heal action_type from a triage result."""
+    from eden.closed_loop.playbooks import resolve_playbook
+
+    playbook = resolve_playbook(None, triage_result)
+    if playbook:
+        return playbook
     sh = triage_result.get("suggested_heal")
     if isinstance(sh, str) and sh in VALID_HEAL_ACTION_TYPES:
         return sh
@@ -1080,6 +1120,66 @@ async def _capture_before_state(
     except Exception as exc:
         logger.debug("autonomous: capture_before_state failed: %s", exc)
     return out
+
+
+async def _heal_precheck(org_id: str, action_type: str) -> str | None:
+    """N21 guardrails — policy deny + daily rollback cap."""
+    try:
+        from eden.closed_loop.autonomy_policy import decide, resolve
+
+        policy = await resolve(org_id, None)
+        verdict, reason, _tier = decide(policy, action_type or "heal")
+        if verdict == "deny":
+            return reason or "heal denied by autonomy policy"
+        if action_type == "rollback":
+            from eden.config import get_settings
+
+            cap = int(getattr(get_settings(), "max_auto_rollbacks_per_day", 3))
+            from eden.storage.postgres import get_postgres_client
+
+            client = await get_postgres_client()
+            if client is not None:
+                row = await client.fetchrow(
+                    "SELECT COUNT(*) AS n FROM self_heal_actions "
+                    "WHERE org_id = $1 AND action_type = 'rollback' "
+                    "AND status = 'executed' "
+                    "AND created_at > date_trunc('day', NOW())",
+                    org_id,
+                )
+                if row and int(row["n"]) >= cap:
+                    return f"daily rollback cap ({cap}) reached"
+    except Exception as exc:
+        logger.debug("heal_precheck failed: %s", exc)
+    return None
+
+
+async def _audit_heal(
+    org_id: str,
+    action_id: str,
+    action_type: str | None,
+    after_state: dict[str, Any],
+    *,
+    actor_id: str | None,
+) -> None:
+    try:
+        from eden.governance.compliance_pack import AgentAuditLedgerWriter
+
+        await AgentAuditLedgerWriter().write(
+            org_id,
+            "autonomous",
+            event_subtype="self_heal_execute",
+            actor_id=actor_id,
+            actor_type="system" if actor_id == "orchestrator" else "user",
+            payload={
+                "action_id": action_id,
+                "action_type": action_type,
+                "executed": after_state.get("executed"),
+                "error": after_state.get("error"),
+            },
+            compliance_tags=["soc2"],
+        )
+    except Exception as exc:
+        logger.debug("heal audit write failed: %s", exc)
 
 
 __all__ = [

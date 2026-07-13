@@ -1,9 +1,9 @@
-"""Integration tests for the eval-pipeline feature flag.
+"""Integration tests for the experiments_v1 feature flag.
 
 These tests verify that:
-- When ENABLE_EVAL_PIPELINE=false (default), the legacy pipeline routes
+- When EXPERIMENTS_V1=false (default), the legacy experiments routes
   return HTTP 404 (not 403 — pretend the route does not exist).
-- When ENABLE_EVAL_PIPELINE=true, the same routes respond normally and
+- When EXPERIMENTS_V1=true, the same routes respond normally and
   the `/feature-flags` endpoint reports the flag as enabled.
 - The `/feature-flags` endpoint is unauthenticated and always reachable
   (the portal needs it before sign-in to know which nav to render).
@@ -56,12 +56,12 @@ _feature_flags_module = _load_route("feature_flags")
 
 
 def _gate() -> "Depends":
-    """A single router-level dependency for the eval-pipeline flag.
+    """A single router-level dependency for the experiments_v1 flag.
 
     This is exactly what the production routers do:
-        dependencies=[Depends(require_feature_flag("enable_eval_pipeline"))]
+        dependencies=[Depends(require_feature_flag("experiments_v1"))]
     """
-    return Depends(require_feature_flag("enable_eval_pipeline"))
+    return Depends(require_feature_flag("experiments_v1"))
 
 
 # Resolve the routes directory at import time.
@@ -96,7 +96,7 @@ _feature_flags_module = _load_route("feature_flags")
 def _build_test_app() -> FastAPI:
     """Build a minimal FastAPI app with the gated route stubs.
 
-    Each route uses `require_feature_flag("enable_eval_pipeline")` as a
+    Each route uses `require_feature_flag("experiments_v1")` as a
     router-level dep — exactly mirroring how the real production routers
     are wired. This is the thing under test.
     """
@@ -189,11 +189,11 @@ def client(test_app):
 
 
 def test_feature_flags_default_off(client):
-    """/feature-flags must be reachable without auth and report enable_eval_pipeline=false by default."""
+    """/feature-flags must be reachable without auth and report experiments_v1=false by default."""
     res = client.get("/feature-flags")
     assert res.status_code == 200, res.text
     body = res.json()
-    assert body == {"enable_eval_pipeline": False}
+    assert body == {"experiments_v1": False}
 
 
 def test_feature_flags_endpoint_unauthenticated(client):
@@ -285,13 +285,13 @@ def test_health_endpoint_unaffected(client):
 
 
 def test_flag_toggle_roundtrip(monkeypatch, test_app):
-    """When ENABLE_EVAL_PIPELINE=true, the gated routes no longer 404."""
+    """When EXPERIMENTS_V1=true, the gated routes no longer 404."""
     get_settings.cache_clear()
-    monkeypatch.setenv("ENABLE_EVAL_PIPELINE", "true")
+    monkeypatch.setenv("EXPERIMENTS_V1", "true")
     try:
         # Force re-read of settings.
         s = get_settings()
-        assert s.enable_eval_pipeline is True
+        assert s.experiments_v1 is True
 
         # Build a fresh client so the new settings are read.
         client = TestClient(test_app, raise_server_exceptions=False)
@@ -299,7 +299,7 @@ def test_flag_toggle_roundtrip(monkeypatch, test_app):
         # /feature-flags now reports the flag as enabled.
         res = client.get("/feature-flags")
         assert res.status_code == 200
-        assert res.json() == {"enable_eval_pipeline": True}
+        assert res.json() == {"experiments_v1": True}
 
         # The gated routes are no longer 404'd by the feature-flag dep.
         # (They may still 401/403/500 because they are stubs without real
@@ -314,5 +314,5 @@ def test_flag_toggle_roundtrip(monkeypatch, test_app):
         res = client.post("/benchmark/create", json={})
         assert res.status_code != 404, res.text
     finally:
-        monkeypatch.delenv("ENABLE_EVAL_PIPELINE", raising=False)
+        monkeypatch.delenv("EXPERIMENTS_V1", raising=False)
         get_settings.cache_clear()

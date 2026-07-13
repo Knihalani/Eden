@@ -22,11 +22,17 @@ from eden.services.governance_intel import (
     RightToBeForgottenService,
     SecurityScanner,
 )
+from eden.governance.compliance_pack import (
+    AgentAuditLedgerWriter,
+    CompliancePackGenerator,
+)
 
 __all__ = [
     "ApprovalWorkflowService",
     "ComplianceDashboardService",
     "ComplianceEvidenceGenerator",
+    "CompliancePackGenerator",
+    "AgentAuditLedgerWriter",
     "DataLineageService",
     "RightToBeForgottenService",
     "SecurityScanner",

@@ -16,13 +16,14 @@ import {
 } from "../src/index.js";
 
 describe("autoInstrument", () => {
-  test("returns a status dict with all four keys", () => {
+  test("returns a status dict with all five keys", () => {
     const status = autoInstrument();
     expect(typeof status).toBe("object");
     expect(status).toHaveProperty("openai");
     expect(status).toHaveProperty("anthropic");
     expect(status).toHaveProperty("vercelAi");
     expect(status).toHaveProperty("langchain");
+    expect(status).toHaveProperty("mastra");
   });
 
   test("never throws when optional deps are missing", () => {

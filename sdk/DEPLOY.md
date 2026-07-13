@@ -21,7 +21,7 @@ python3 -m build --wheel --sdist --no-isolation
 python3 -m twine check dist/*                          # → PASSED
 python3 -m twine upload --repository testpypi dist/*   # Test PyPI
 python3 -m twine upload dist/*                         # Production PyPI
-git tag -a sdk-python-v0.2.0 -m "Release eden-sdk 0.2.0" && git push origin sdk-python-v0.2.0
+git tag -a sdk-python-v0.3.0 -m "Release eden-sdk 0.3.0" && git push origin sdk-python-v0.3.0
 ```
 
 ### TypeScript (`@eden-ai/sdk`)
@@ -34,7 +34,7 @@ bun test                                               # → 106 pass, 0 fail
 npm run build                                          # → builds dist/ + subpaths
 npm publish --dry-run --cache /tmp/npm-cache          # Dry-run validation
 npm publish --access public                            # Production npm
-git tag -a sdk-ts-v0.2.0 -m "Release @eden-ai/sdk 0.2.0" && git push origin sdk-ts-v0.2.0
+git tag -a sdk-ts-v0.3.0 -m "Release @eden-ai/sdk 0.3.0" && git push origin sdk-ts-v0.3.0
 ```
 
 ## Pre-flight checklist
@@ -42,30 +42,49 @@ git tag -a sdk-ts-v0.2.0 -m "Release @eden-ai/sdk 0.2.0" && git push origin sdk-
 Before tagging a release, verify the following end-to-end:
 
 ### Python
-- [ ] `python -m pytest ./tests/` → 131 passed in < 5 s
+- [ ] `python -m pytest ./tests/` → all passed
 - [ ] `python -m ruff check ./eden ./eden_sdk ./tests` → no errors
 - [ ] `python -m build --wheel --sdist --no-isolation` produces both artifacts
 - [ ] `python -m twine check dist/*` → PASSED for both
+- [ ] `python -m eden_sdk.doctor` → green (API key, org, connectivity, test event)
 - [ ] Top-level `import eden` exposes all names in `eden.__all__`
 - [ ] `eden-sdk==<version>` installs cleanly into a fresh venv
 - [ ] `@eden.trace_agent` decorator runs end-to-end with `dry_run=True` and `client.sent >= 1`
+- [ ] Pydantic AI instrumentation smoke (`examples/09_pydantic_ai.py`) passes
 
 ### TypeScript
 - [ ] `bun run typecheck` → no output (clean)
-- [ ] `bun test` → 106 pass, 0 fail, 252 expect() calls
+- [ ] `bun test` → all pass
 - [ ] `npm run build` produces all `dist/instrumentations/*.js + *.d.ts` files
+- [ ] `npx @eden-ai/sdk doctor` → green
 - [ ] `npm pack --dry-run` shows the package.json `files` are included
 - [ ] Deep imports via `@eden-ai/sdk/instrumentations/openai` etc. resolve from a fresh `npm install`
 - [ ] Both ESM (`import`) and CJS (`require`) entry points work
 - [ ] `wrapOpenAI` etc. are idempotent (double-wrap returns the same shape)
+- [ ] Mastra `wrapMastra` smoke passes
 
 ## Release checklist
 
 1. Bump the version:
-   - `sdk/python/pyproject.toml`: `version = "0.1.0"` → `"0.2.0"`
-   - `sdk/ts-ai/package.json`: `"version": "0.1.0"` → `"0.1.1"`
+   - `sdk/python/pyproject.toml`: `version = "0.3.0"`
+   - `sdk/ts-ai/package.json`: `"version": "0.3.0"`
 2. Update the release notes (in this repo's root `CHANGELOG.md`, if present).
 3. Run the pre-flight checklist above for the SDKs you are publishing.
+
+### What changed in 0.3.0
+
+- **Python**: Pydantic AI native instrumentation (`eden.instrument("pydantic-ai")`);
+  universal HTTP capture (`eden_sdk.http_capture`); OTel bridge
+  (`eden_sdk.otel`); logging forwarder (`eden_sdk.logging_forwarder`);
+  session-first API (`eden.session.begin` / `complete_session`);
+  `python -m eden_sdk.doctor` CLI; `ToolSpan` helper.
+- **TypeScript**: Mastra `wrapMastra`; HTTP capture module
+  (`@eden-ai/sdk/http-capture`); `detectInstalledFrameworks` /
+  `autoInstrument` (detection only — use `wrap*` for instrumentation);
+  session API (`session.begin` / `completeSession`); `toolSpan` helper;
+  `npx @eden-ai/sdk doctor` CLI.
+- **Docs**: [Connect any agent](/how-to/connect-any-agent) three-tier
+  guide; quickstart TS fix (`wrapOpenAI` not `instrument()`).
 
 ### What changed in 0.2.0
 

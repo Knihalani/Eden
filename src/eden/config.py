@@ -39,7 +39,7 @@ def _build_settings_class():
     global _settings_class
     if _settings_class is not None:
         return _settings_class
-    from pydantic import AliasChoices, Field  # noqa: F401
+    from pydantic import AliasChoices, Field, field_validator  # noqa: F401
     from pydantic_settings import BaseSettings, SettingsConfigDict
 
     class Settings(BaseSettings):
@@ -127,6 +127,17 @@ def _build_settings_class():
         qdrant_https: bool = False
         qdrant_api_key: str = ""
 
+        @field_validator("qdrant_host", mode="before")
+        @classmethod
+        def _normalize_qdrant_host(cls, v: object) -> object:
+            """Strip accidental https:// prefix from QDRANT_HOST."""
+            if isinstance(v, str):
+                for prefix in ("https://", "http://"):
+                    if v.startswith(prefix):
+                        v = v[len(prefix) :]
+                return v.rstrip("/")
+            return v
+
         # Typesense — full-text search across spans (Phase B).
         # TYPESENSE_API_KEY is required and must match docker-compose.yml.
         # If the host is unreachable at startup the search layer falls back
@@ -155,7 +166,7 @@ def _build_settings_class():
         # reachable; the human-approval gate is what actually
         # blocks the side-effect.
         autonomous_actions_v0: bool = True
-        enable_eval_pipeline: bool = False
+        experiments_v1: bool = False
 
         # Cat 23 Code-Change two-stage opt-in (see eden/code_change/approvals).
         # ``code_change_enabled`` is the master switch — the patch propose
@@ -517,10 +528,9 @@ def _build_settings_class():
         judges_async_tailer_max_keys: int = 50
 
         # Feature flags
-        # Default OFF: the legacy multi-stage environment-generation pipeline
-        # (Planner→Critic→Refiner→Fact-checker→Executor→Code-quality→Verifier→Tester→Archivist)
-        # is being hard-cut. Set ENABLE_EVAL_PIPELINE=true to re-enable.
-        enable_eval_pipeline: bool = False  # Environment: ENABLE_EVAL_PIPELINE
+        # Default OFF: legacy experiments / eval-harness routes (chain, experiments,
+        # Helicone integration). Set EXPERIMENTS_V1=true to enable.
+        experiments_v1: bool = False  # Environment: EXPERIMENTS_V1
 
         # Paths
         project_root: Path = Path(__file__).parent.parent.parent
@@ -666,7 +676,15 @@ def _build_settings_class():
         # can be rolled out per deployment.
         agent_issues_v0: bool = True
         auto_issue_detection_v1: bool = True
+        per_trace_signals_v1: bool = True
+        tool_call_label_learning_v1: bool = True
+        signal_classifiers_v1: bool = True
         closed_loop_orchestrator_v1: bool = True
+        # WS3 fix/prove surface (F22, N04, F23)
+        issue_fix_chat_v1: bool = True
+        issue_fix_auto_verify_v1: bool = True
+        change_impact_preview_v1: bool = True
+        agent_sessions_v1: bool = True
         # Triage budget (F30) — optional max LLM spend per org per day.
         # ``<=0`` / unset = unlimited; orgs may override via
         # ``code_change_policy.max_triage_cost_usd_per_day``.
@@ -700,6 +718,12 @@ def _build_settings_class():
         verify_quiet_window_minutes: int = 30
         verify_poll_interval_seconds: int = 60
         verify_max_attempts: int = 3
+
+        # ── WS4 enterprise feature flags ────────────────────────────────
+        production_eval_sampling_v1: bool = True
+        fleet_health_v1: bool = True
+        compliance_pack_export_v1: bool = True
+        issue_experiments_v1: bool = True
 
         # ── Issue alerting (F47 Wave 7) ─────────────────────────────────
         # Slack Block Kit alerts for P0/P1 issue creation, verify

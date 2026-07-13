@@ -172,6 +172,27 @@ class EvalToGuardrailLink:
             org_id, judge_name=judge_name, threshold=threshold,
         )
 
+        # 5. N15 — hot-reload live guardrail filter on gateway.
+        try:
+            from eden.llmops.filters.guardrail import get_guardrail_filter
+            from eden.llmops.learn_wiring import install_learn_filters
+
+            install_learn_filters()
+            filt = get_guardrail_filter()
+            existing = filt._policies.get(org_id, [])
+            existing.append(
+                {
+                    "judge_id": policy_id,
+                    "judge_name": judge_name,
+                    "threshold": threshold,
+                    "enforcement_level": "block",
+                    "keyword": judge_name,
+                }
+            )
+            filt.load_policies(org_id, existing)
+        except Exception as hook_exc:
+            logger.debug("eval_to_guardrail: gateway filter reload failed: %s", hook_exc)
+
         return _ok_envelope(
             self.name,
             {

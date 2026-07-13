@@ -5,7 +5,7 @@ import dynamic from "next/dynamic";
 import { useOrganizationList } from "@clerk/nextjs";
 import { useOrg } from "@/hooks/use-org";
 import { useAuth } from "@/hooks/use-auth";
-import { Building2, Users, Code, Key, FileText, Shield, ShieldCheck, CreditCard, KeyRound, Lock, BarChart2, Server, EyeOff, Database, FileArchive, Settings2, Bot } from "lucide-react";
+import { Building2, Users, Code, Key, FileText, Shield, ShieldCheck, CreditCard, KeyRound, Lock, BarChart2, Server, EyeOff, Database, FileArchive, Settings2, Bot, Terminal } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 // Heavy tabs — code-split via next/dynamic so the initial settings bundle
@@ -84,6 +84,12 @@ const SidebarSettingsTab = dynamic(() => import("./_components/sidebar-settings-
   ssr: false,
   loading: () => <Skeleton className="h-64 w-full" />
 });
+const McpTab = dynamic(() => import("./_components/mcp-tab").then(m => ({
+  default: m.McpTab
+})), {
+  ssr: false,
+  loading: () => <Skeleton className="h-64 w-full" />
+});
 import { OrgTab } from "./_components/org-tab";
 import { MembersTab } from "./_components/members-tab";
 import { ReferencesTab } from "./_components/references-tab";
@@ -97,7 +103,7 @@ import { Card } from "@/components/ui/card";
 import { PageHeader } from "@/components/layout/page-header";
 import { PageContent } from "@/components/layout/page-content";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-type Tab = "org" | "members" | "references" | "api-keys" | "security" | "scim" | "sso" | "audit-log" | "analytics" | "billing" | "gateway" | "pii" | "retention" | "exports" | "sidebar" | "autonomous" | "roles";
+type Tab = "org" | "members" | "references" | "api-keys" | "mcp" | "security" | "scim" | "sso" | "audit-log" | "analytics" | "billing" | "gateway" | "pii" | "retention" | "exports" | "sidebar" | "autonomous" | "roles";
 type SettingsCategory = "Org" | "Members" | "Security" | "Compliance" | "Billing" | "Advanced";
 const TABS: ReadonlyArray<{
   id: Tab;
@@ -128,6 +134,11 @@ const TABS: ReadonlyArray<{
   id: "api-keys",
   label: "API Keys",
   icon: Key,
+  category: "Security"
+}, {
+  id: "mcp",
+  label: "MCP",
+  icon: Terminal,
   category: "Security"
 }, {
   id: "security",
@@ -344,6 +355,7 @@ function SettingsPageInner() {
             {activeTab === "roles" && <RolesTab />}
             {activeTab === "references" && <ReferencesTab org={currentOrg} />}
             {activeTab === "api-keys" && <ApiKeysTab org={currentOrg} />}
+            {activeTab === "mcp" && <McpTab org={currentOrg} />}
             {activeTab === "security" && <SecurityTab />}
             {activeTab === "scim" && <ScimTab org={currentOrg} />}
             {activeTab === "sso" && <SSOTab orgId={currentOrg?.id || ""} />}

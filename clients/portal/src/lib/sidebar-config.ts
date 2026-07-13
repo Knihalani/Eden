@@ -116,9 +116,9 @@ export interface SidebarGroup {
 // so the IA reads top-to-bottom as: build → observe → optimize →
 // automate → workspace, and the user only needs to scan 5 group labels.
 //
-// Observe defaults: 4 core (Traces, Observability, Incidents, Alerts).
-// Replay / Insights / Tools / Inspector / User Intel / LLMOps /
-// Analytics sit behind Advanced (≥40% hidden by default).
+// Observe defaults: core = Traces, Agent Issues, Fleet, Observability hub,
+// Incidents, Alerts. Replay / Insights / Tools / Inspector / User Intel /
+// LLMOps / Analytics sit behind Advanced (≥40% hidden by default).
 export const DEFAULT_SIDEBAR: SidebarGroup[] = [
   {
     id: "build",
@@ -141,6 +141,8 @@ export const DEFAULT_SIDEBAR: SidebarGroup[] = [
       // "Trace Explorer" implied a debugger that was different from the
       // top-level /observability hub, which was confusing.
       { id: "traces",   href: "/traces",   label: "Traces",  icon: TraceIcon },
+      { id: "issues",   href: "/issues",   label: "Agent Issues", icon: ShieldAlert, description: "Grouped agent failures (stumbles) with auto-triage, heal, and verify lifecycle."},
+      { id: "fleet",    href: "/fleet",    label: "Fleet",   icon: Network, description: "Fleet health, delegation graph, and multi-agent blast-radius scoring."},
       { id: "replay",   href: "/replay",   label: "Replay",  icon: PlayCircle , category: "advanced", description: "Step through a recorded session to see exactly what the agent saw and did."},
       {
         id: "observability",
@@ -149,11 +151,12 @@ export const DEFAULT_SIDEBAR: SidebarGroup[] = [
         icon: Activity,
         children: [
           { id: "obs-apm",         href: "/observability/apm",         label: "APM Tracing",     icon: GitBranch, category: "advanced" , description: "Application-performance tracing across services and AI calls."},
+          { id: "obs-mcp",         href: "/observability/mcp",         label: "MCP SRE",         icon: Radio, description: "MCP server auth failures and toolchain health."},
           { id: "obs-cohorts",     href: "/observability/cohorts",     label: "Columnar Engine", icon: Database, category: "advanced" , description: "Run fast columnar analytics over spans, traces, and decisions."},
           { id: "obs-decisions",   href: "/observability/decisions",   label: "Decisions",       icon: DecisionsIcon, category: "advanced" , description: "Inspect what an agent decided and why, with policy and prompt context."},
           { id: "obs-eval",        href: "/observability/eval",        label: "Eval",            icon: EvalIcon, category: "advanced" , description: "Score traces against evals to measure quality and regressions."},
           { id: "obs-synthetic",   href: "/synthetic",                 label: "Synthetic Q/A",   icon: FlaskConical, category: "advanced", description: "Generate synthetic Q/A pairs to expand your eval datasets."},
-          { id: "obs-debugger",    href: "/debugger",                  label: "Debugger",        icon: Bug, category: "advanced", description: "Inspect agent checkpoints and re-run from an earlier step."},
+          { id: "obs-debugger",    href: "/debugger",                  label: "Debugger",        icon: Bug, description: "Inspect agent checkpoints and re-run from an earlier step."},
           { id: "obs-memory",      href: "/observability/memory",      label: "Memory",          icon: MemoryIcon, category: "advanced" , description: "Inspect the memory store an agent reads from and writes to."},
           { id: "obs-query",       href: "/observability/query",       label: "Query",           icon: QueryIcon, category: "advanced" , description: "Ad-hoc query the trace corpus with natural language or SQL."},
           { id: "obs-retrieval",   href: "/observability/retrieval",   label: "Retrieval",       icon: Network, category: "advanced" , description: "Debug retrieval-augmented generation: chunks, scores, and grounding."},
@@ -163,11 +166,11 @@ export const DEFAULT_SIDEBAR: SidebarGroup[] = [
       { id: "tools",     href: "/tools",     label: "Tools",     icon: Wrench, category: "advanced" , description: "See which tools your agents call most, compare success rates, and get recommendations."},
       { id: "insights",  href: "/insights",  label: "Insights",  icon: InsightsIcon , category: "advanced", description: "AI-generated summaries of trends, anomalies, and what to look at next."},
       // LP-13: GET /signals fail-opens (empty list / 503) when nl_signals
-      // missing — safe to show in Advanced nav again.
-      { id: "signals",   href: "/signals",   label: "Signals",   icon: Radio, category: "advanced", description: "Compile behavioural signals from traces into reusable detectors."},
+      // missing — re-enabled after backend contract stabilization (F48).
+      { id: "signals",   href: "/signals",   label: "Signals",   icon: Radio, category: "advanced", description: "Compile behavioural signals from traces into reusable detectors." },
       { id: "user-intelligence", href: "/users", label: "User Intelligence", icon: Users, category: "advanced", description: "Session aggregation, satisfaction scoring, and behavioural cohorts."},
       { id: "inspector", href: "/inspector", label: "Inspector", icon: InspectorIcon, category: "advanced" , description: "Deep-dive into a single trace to debug behaviour, token usage, and tool I/O."},
-      { id: "incidents", href: "/incidents", label: "Incidents", icon: IncidentIcon , description: "Clustered failures and anomalies grouped by root cause."},
+      { id: "incidents", href: "/incidents", label: "Incidents", icon: IncidentIcon , description: "Systemic RCA clusters — patterns across many failures. For individual grouped failures, see Agent Issues."},
       { id: "alerts",    href: "/alerts",    label: "Alerts",    icon: AlertNavIcon , description: "Configure notifications when traces, costs, or quality cross a threshold."},
       { id: "llmops",    href: "/llmops",    label: "LLMOps",    icon: Cog, category: "advanced" , description: "Operational controls for LLM providers, rate limits, and fallbacks."},
       { id: "analytics", href: "/analytics", label: "Analytics", icon: BarChart3, category: "advanced" , description: "Cross-cutting analytics: usage, cost, latency, and quality over time."},
@@ -197,9 +200,8 @@ export const DEFAULT_SIDEBAR: SidebarGroup[] = [
     id: "automate",
     label: "Automate",
     items: [
-      { id: "improve",        href: "/improve",        label: "Improve",        icon: ListTodo, description: "Unified maintenance queue — issues, patches, nudges, and Eden autonomous work."},
+      { id: "improve",        href: "/improve",        label: "Improve",        icon: ListTodo, description: "Unified action queue — triage, patches, nudges, and promotions from detected issues."},
       { id: "autonomous",     href: "/autonomous",     label: "Autonomous",     icon: Wand2, category: "advanced", description: "Run investigations and remediations on demand."},
-      { id: "issues",         href: "/issues",         label: "Agent Issues",   icon: ShieldAlert, category: "advanced", description: "Grouped agent failures (stumbles) with auto-triage, heal, and verify lifecycle."},
       { id: "closed-loop",    href: "/closed-loop",    label: "Closed-Loop",    icon: Inbox, category: "advanced" , description: "Closed-loop improvements — events flow from detection back to deploy."},
       { id: "pr-suggestions", href: "/pr-suggestions", label: "PR Suggestions", icon: PatchIcon, badge: "new", category: "advanced" , description: "Auto-generated PRs that fix issues Eden finds in your repo (new)."},
     ],

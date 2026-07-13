@@ -24,7 +24,7 @@ router = APIRouter(prefix="/feature-flags", tags=["feature-flags"])
 class FeatureFlagsResponse(BaseModel):
     """Public boolean feature flags exposed to the portal."""
 
-    enable_eval_pipeline: bool
+    experiments_v1: bool
 
 
 @router.get("", response_model=FeatureFlagsResponse)
@@ -32,15 +32,14 @@ async def get_feature_flags() -> FeatureFlagsResponse:
     """Return boolean feature flags.
 
     Currently exposes a single flag:
-    - `enable_eval_pipeline`: when true, the legacy multi-stage
-      environment-generation pipeline is enabled. When false (default),
-      the corresponding routes return 404 and the portal hides the
-      "Eval Harnesses" navigation entry.
+    - `experiments_v1`: when true, legacy experiments / eval-harness
+      routes are enabled. When false (default), the corresponding routes
+      return 404 and the portal hides the "Eval Harnesses" navigation entry.
 
     Settings are read at request time (not at module load time) so that
-    tests can monkeypatch ENABLE_EVAL_PIPELINE between requests.
+    tests can monkeypatch EXPERIMENTS_V1 between requests.
     """
     settings = get_settings()
     return FeatureFlagsResponse(
-        enable_eval_pipeline=bool(settings.enable_eval_pipeline),
+        experiments_v1=bool(settings.experiments_v1),
     )

@@ -54,6 +54,12 @@ class _FakeClient:
             "agent_id": agent_id,
         }
 
+    async def export_fixture(self, org_id: str, issue_id: str) -> dict[str, Any]:
+        return {
+            "status": "ok",
+            "fixture": {"format": "eden-failure-fixture-v1", "issue": {"id": issue_id}},
+        }
+
 
 def test_list_tools_covers_core_catalog() -> None:
     names = {t["name"] for t in list_tools()}
@@ -67,6 +73,7 @@ def test_list_tools_covers_core_catalog() -> None:
         "triage_issue",
         "run_autofix",
         "get_improvement_queue",
+        "export_fixture",
     }
     assert required <= names
     assert len(TOOL_CATALOG) >= len(required)

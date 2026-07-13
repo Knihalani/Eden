@@ -19,6 +19,7 @@ from eden.api.routes.auth import get_current_user
 from eden.debugger.checkpoints import (
     Checkpoint,
     CheckpointStore,
+    LivePrefixEngine,
     ReRunEngine,
     discover_entrypoint,
 )
@@ -64,6 +65,10 @@ class RerunRequest(BaseModel):
     prompt_override: str | None = Field(
         default=None,
         description="Optional system-prompt override for the first replayed step.",
+    )
+    live_prefix: bool = Field(
+        default=False,
+        description="When true, use cached-prefix + live tail mode (F01).",
     )
 
 
@@ -152,6 +157,27 @@ async def rerun(
 ) -> RerunResponse:
     pg = await get_postgres_client()
     store = CheckpointStore(pg)
+    if body.live_prefix:
+        engine = LivePrefixEngine(store)
+        result = await engine.rerun_live_prefix(
+            body.trace_id,
+            live_from_step=body.from_step,
+            prompt_override=body.prompt_override,
+        )
+        return {
+            "source_trace_id": result.source_trace_id,
+            "from_step": result.live_from_step,
+            "to_step": result.live_from_step + result.live_tail_steps - 1
+            if result.live_tail_steps
+            else result.live_from_step - 1,
+            "prompt_override": body.prompt_override,
+            "checkpoints": [
+                _checkpoint_to_response(c) for c in result.prefix_checkpoints
+            ],
+            "diff": result.diff,
+            "mode": result.mode,
+            "live_tail_steps": result.live_tail_steps,
+        }
     engine = ReRunEngine(store)
     result = await engine.rerun(
         body.trace_id,

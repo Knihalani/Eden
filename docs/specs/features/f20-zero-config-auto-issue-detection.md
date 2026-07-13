@@ -5,7 +5,7 @@
 | **Feature ID** | F20 |
 | **Priority** | P0 |
 | **Effort** | L |
-| **Eden status** | MISSING |
+| **Eden status** | **SHIPPED (v0)** — `trace_finalized` consumer + 7 detectors on lifespan |
 | **Competitive source** | Sentrial, Raindrop, BentoLabs |
 | **Dependencies** | F28 (stumbles), F29 (issues promotion) |
 

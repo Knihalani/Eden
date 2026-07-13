@@ -149,3 +149,104 @@ async def record_auth_failure(
         "live": True,
         "data": {"id": failure_id},
     }
+
+
+# ── N02 fleet dashboard ────────────────────────────────────────────
+
+
+_fleet_router = APIRouter(
+    prefix="/orgs/{org_id}/observability/mcp",
+    tags=["observability-mcp-fleet"],
+    dependencies=[
+        Depends(require_feature_flag("intelligence_gap_v0")),
+        Depends(get_current_user),
+    ],
+)
+
+
+@_fleet_router.get("/servers")
+async def list_mcp_servers(
+    org_id: str = Path(...),
+    _member: dict = Depends(require_org_member),
+) -> dict[str, Any]:
+    svc = get_mcp_service()
+    rows = await svc.list_server_registry(org_id)
+    return {
+        "status": "ok",
+        "feature": "mcp_fleet",
+        "live": True,
+        "data": rows,
+        "count": len(rows),
+    }
+
+
+@_fleet_router.get("/servers/{server_name}/tools")
+async def list_mcp_server_tools(
+    org_id: str = Path(...),
+    server_name: str = Path(...),
+    _member: dict = Depends(require_org_member),
+) -> dict[str, Any]:
+    svc = get_mcp_service()
+    rows = await svc.list_tool_stats(org_id, server_name)
+    return {
+        "status": "ok",
+        "feature": "mcp_tool_stats",
+        "live": True,
+        "data": rows,
+        "count": len(rows),
+    }
+
+
+@_fleet_router.get("/graph")
+async def mcp_agent_graph(
+    org_id: str = Path(...),
+    _member: dict = Depends(require_org_member),
+) -> dict[str, Any]:
+    svc = get_mcp_service()
+    edges = await svc.agent_server_graph(org_id)
+    return {
+        "status": "ok",
+        "feature": "mcp_graph",
+        "live": True,
+        "data": edges,
+        "count": len(edges),
+    }
+
+
+@_fleet_router.get("/auth-failures")
+async def fleet_auth_failures(
+    org_id: str = Path(...),
+    server_name: str | None = Query(None),
+    limit: int = Query(100, ge=1, le=1000),
+    _member: dict = Depends(require_org_member),
+) -> dict[str, Any]:
+    svc = get_mcp_service()
+    rows = await svc.list_auth_failures(
+        org_id, server_name=server_name, resolved=False, limit=limit
+    )
+    return {
+        "status": "ok",
+        "feature": "mcp_auth_failures",
+        "live": True,
+        "data": rows,
+        "count": len(rows),
+    }
+
+
+@_fleet_router.get("/sre")
+async def mcp_sre_summary(
+    org_id: str = Path(...),
+    _member: dict = Depends(require_org_member),
+) -> dict[str, Any]:
+    """D4 — MCP boundary SRE dashboard summary."""
+    svc = get_mcp_service()
+    summary = await svc.sre_summary(org_id)
+    return {
+        "status": "ok",
+        "feature": "mcp_sre",
+        "live": True,
+        "data": summary,
+    }
+
+
+router.include_router(_fleet_router)

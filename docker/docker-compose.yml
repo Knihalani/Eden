@@ -106,7 +106,7 @@ services:
     container_name: eden_typesense
     environment:
       TYPESENSE_DATA_DIR: /data
-      TYPESENSE_API_KEY: ${TYPESENSE_API_KEY:?TYPESENSE_API_KEY must be set in .env (use: openssl rand -hex 32)}
+      TYPESENSE_API_KEY: "${TYPESENSE_API_KEY:?TYPESENSE_API_KEY must be set in .env}"
       TYPESENSE_ENABLE_API_ADMIN: 1
     ports:
       - "8108:8108"
@@ -114,7 +114,7 @@ services:
       - typesense_data:/data
     command:
       - --data-dir=/data
-      - --api-key=${TYPESENSE_API_KEY:?TYPESENSE_API_KEY must be set in .env (use: openssl rand -hex 32)}
+      - --api-key=${TYPESENSE_API_KEY:?TYPESENSE_API_KEY must be set in .env}
       - --enable-cors
     healthcheck:
       test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:8108/health || exit 1"]

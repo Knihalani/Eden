@@ -472,6 +472,14 @@ class AIGateway:
         pii = PIIFilter(PIIFilterConfig())
         self._filters.register(pii)
         self._default_filters[pii.name] = pii
+        try:
+            from eden.llmops.filters.trajectory import get_trajectory_filter
+
+            traj = get_trajectory_filter()
+            self._filters.register(traj)
+            self._default_filters[traj.name] = traj
+        except Exception as exc:
+            logger.debug("gateway: trajectory filter unavailable: %s", exc)
 
     def register_filter(self, f: GatewayFilter) -> None:
         """Add a custom filter to the chain.

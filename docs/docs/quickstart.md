@@ -38,6 +38,31 @@ pip install eden-sdk
 npm install @eden-ai/sdk
 ```
 
+### Validate your setup
+
+```bash
+# Python
+python -m eden_sdk.doctor
+
+# TypeScript
+npx @eden-ai/sdk doctor
+```
+
+Doctor checks API key, org id, gateway connectivity, and emits a
+test event you can find in **Traces**.
+
+Validate connectivity before sending traces:
+
+```bash
+# Python
+python -m eden_sdk.doctor
+
+# TypeScript
+npx @eden-ai/sdk doctor
+```
+
+Doctor checks your API key, org id, base URL, and emits a test event.
+
 ## 3. Send your first trace
 
 ### Python
@@ -72,7 +97,12 @@ if __name__ == "__main__":
 ### TypeScript
 
 ```ts
-import { configure, instrument, traceAgent } from "@eden-ai/sdk";
+import {
+  configure,
+  detectInstalledFrameworks,
+  wrapOpenAI,
+  traceAgent,
+} from "@eden-ai/sdk";
 
 configure({
   apiKey: process.env.EDEN_API_KEY!,
@@ -80,13 +110,18 @@ configure({
   baseUrl: process.env.EDEN_BASE_URL,
 });
 
-instrument(); // patches OpenAI, Anthropic, Vercel AI, LangChain
+// Wrap client instances for installed frameworks (not global monkey-patching).
+const installed = detectInstalledFrameworks();
+if (installed.openai) {
+  const { default: OpenAI } = await import("openai");
+  wrapOpenAI(new OpenAI());
+}
 
 class Greeter {
   @traceAgent({ name: "hello-world", tags: ["quickstart"] })
   async greet(question: string) {
-    const openai = (await import("openai")).default;
-    const client = new openai();
+    const { default: OpenAI } = await import("openai");
+    const client = new OpenAI();
     const resp = await client.chat.completions.create({
       model: "gpt-4o-mini",
       messages: [{ role: "user", content: question }],
@@ -95,8 +130,11 @@ class Greeter {
   }
 }
 
-new Greeter().greet("Say hello in five languages");
+await new Greeter().greet("Say hello in five languages");
 ```
+
+> **Custom framework?** See [Connect any agent](/how-to/connect-any-agent)
+> for HTTP capture (Tier 2) or manual `@traceAgent` (Tier 3).
 
 ## 4. See it in the portal
 
@@ -110,6 +148,8 @@ prompt, and response.
 
 ## What's next
 
+- [Connect any agent](/how-to/connect-any-agent) — native, HTTP, or manual tiers
+- [MCP in Cursor](/how-to/mcp-cursor) — debug from your IDE
 - [Tutorial: auto-instrument a real OpenAI app](/tutorials/auto-instrument-openai)
 - [Tutorial: trace a multi-agent run](/tutorials/trace-multi-agent)
 - [Tutorial: judge a model output](/tutorials/judge-model-output)

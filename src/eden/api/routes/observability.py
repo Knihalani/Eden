@@ -150,6 +150,7 @@ class TraceListItem(BaseModel):
     tags: list[str] = Field(default_factory=list)
     # N12 — explicit session id when SDK/attrs carry one.
     session_id: str | None = None
+    agent_session_id: str | None = None
 
 
 class TraceListResponse(BaseModel):
@@ -312,6 +313,16 @@ async def list_traces(
                    max(attributes->>'model') AS model,
                    max(attributes->>'provider') AS provider,
                    max(attributes->>'session_id') AS session_id,
+                   coalesce(
+                       max(attributes->>'agent_session_id'),
+                       max(
+                           CASE
+                               WHEN tag LIKE 'agent_session_id:%'
+                               THEN split_part(tag, ':', 2)
+                               ELSE NULL
+                           END
+                       )
+                   ) AS agent_session_id,
                    max(outcome) AS outcome,
                    max(error) AS error,
                    sum((payload->>'input_tokens')::int) AS input_tokens,
@@ -357,6 +368,7 @@ async def list_traces(
             streaming_metrics=None,
             tags=list(r["tags"] or []),
             session_id=r["session_id"] if r.get("session_id") else None,
+            agent_session_id=r["agent_session_id"] if r.get("agent_session_id") else None,
         )
         for r in rows
     ]

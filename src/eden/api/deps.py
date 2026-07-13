@@ -1345,7 +1345,7 @@ def require_feature_flag(flag_name: str):
     information about the existence of the feature to un-flagged callers.
 
     Settings are read at request time (not at decorator/build time) so that
-    tests can monkeypatch ENABLE_EVAL_PIPELINE between requests.
+    tests can monkeypatch EXPERIMENTS_V1 between requests.
 
     Usage:
         @router.get("/experiments", dependencies=[Depends(require_feature_flag("enable_experiment_v2"))])

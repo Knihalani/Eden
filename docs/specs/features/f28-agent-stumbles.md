@@ -6,7 +6,7 @@
 | **Slug** | `agent-stumbles` |
 | **Priority** | P0 |
 | **Effort** | M |
-| **Eden status** | **MISSING** |
+| **Eden status** | **SHIPPED (v0)** — `src/eden/issues/` stumble layer |
 | **Competitive source** | Raindrop 2.0 (Stumbles) |
 | **Closes gap** | 3.1 |
 | **Dependencies** | F20 (auto-detection), F29 (promotion) |

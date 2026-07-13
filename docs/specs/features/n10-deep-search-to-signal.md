@@ -6,7 +6,7 @@
 | **Slug** | `deep-search-to-signal` |
 | **Priority** | P1 |
 | **Effort** | M |
-| **Eden status** | **MISSING** |
+| **Eden status** | **PARTIAL** — F12 search shipped; save-as-signal UX stretch deferred |
 | **Restores** | Deleted F36 (deep search → classifier) |
 | **Market hypothesis** | Raindrop's NL search → persistent detector is high-conversion maintenance UX |
 | **Dependencies** | F12 search, F06 signals, F34 classifiers, F28, N22, F04 |

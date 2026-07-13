@@ -16,7 +16,7 @@ def check(name, cond, detail=""):
 # ── 1. Public surface ─────────────────────────────────────────────────
 import eden
 check("import eden", eden is not None)
-check("eden.__version__", hasattr(eden, "__version__") and eden.__version__ == "0.1.0", eden.__version__)
+check("eden.__version__", hasattr(eden, "__version__") and eden.__version__ == "0.3.0", eden.__version__)
 check("eden.__all__", isinstance(eden.__all__, list) and "configure" in eden.__all__ and "trace" in eden.__all__,
       f"{len(eden.__all__)} exports")
 for must_have in ["EdenConfig", "EdenClient", "configure", "get_config", "trace",
@@ -69,6 +69,7 @@ from eden import ModelAdvisor
 
 class _MockResp:
     status_code = 200
+    content = b'{"recommended_provider":"anthropic"}'
     def json(self):
         return {
             "recommended_provider": "anthropic",

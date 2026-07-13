@@ -5,9 +5,10 @@
  */
 
 import { useEffect, useState } from "react";
-import { Search, Loader2 } from "lucide-react";
+import { Search, Loader2, BookmarkPlus } from "lucide-react";
 import { api } from "@/lib/api";
 import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 
 interface SpanSearchBarProps {
   orgId: string;
@@ -17,6 +18,8 @@ interface SpanSearchBarProps {
 export function SpanSearchBar({ orgId, onSelectTrace }: SpanSearchBarProps) {
   const [q, setQ] = useState("");
   const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saveMsg, setSaveMsg] = useState<string | null>(null);
   const [hits, setHits] = useState<
     Array<{ trace_id: string; span_id?: string; snippet?: string; score?: number }>
   >([]);
@@ -61,6 +64,27 @@ export function SpanSearchBar({ orgId, onSelectTrace }: SpanSearchBarProps) {
     };
   }, [orgId, q]);
 
+  const traceIds = Array.from(new Set(hits.map((h) => h.trace_id)));
+
+  const saveAsSignal = async () => {
+    const term = q.trim();
+    if (!term || traceIds.length === 0) return;
+    setSaving(true);
+    setSaveMsg(null);
+    try {
+      const res = await api.saveSearchAsSignal(orgId, {
+        search_query: term,
+        trace_ids: traceIds,
+        mode: traceIds.length >= 50 ? "classifier" : "investigator",
+      });
+      setSaveMsg(`Signal created (${res.data.signal_id.slice(0, 8)}…)`);
+    } catch (e: unknown) {
+      setSaveMsg(e instanceof Error ? e.message : "Save failed");
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
     <div className="relative space-y-2">
       <div className="relative">
@@ -78,6 +102,31 @@ export function SpanSearchBar({ orgId, onSelectTrace }: SpanSearchBarProps) {
       </div>
       {error && (
         <p className="text-[11px] text-[var(--error)]">{error}</p>
+      )}
+      {hits.length > 0 && q.trim().length >= 2 && (
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-[10px] text-[var(--text-muted)]">
+            {traceIds.length} trace{traceIds.length === 1 ? "" : "s"} in results
+          </p>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="h-7 text-[11px]"
+            disabled={saving}
+            onClick={() => void saveAsSignal()}
+          >
+            {saving ? (
+              <Loader2 className="h-3 w-3 animate-spin" />
+            ) : (
+              <BookmarkPlus className="h-3 w-3" />
+            )}
+            <span className="ml-1">Save as signal</span>
+          </Button>
+        </div>
+      )}
+      {saveMsg && (
+        <p className="text-[11px] text-[var(--text-muted)]">{saveMsg}</p>
       )}
       {hits.length > 0 && (
         <ul

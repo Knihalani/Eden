@@ -1,17 +1,18 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import { useCallback, useEffect, useState } from "react";
 import { useOrg } from "@/hooks/use-org";
 import { agentIssuesApi, type AgentIssue } from "@/lib/api";
 import { EmptyState } from "@/components/ui/empty-state";
 import { NoOrgState } from "@/components/ui/no-org-state";
 import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { AlertCircle, Loader2, ShieldAlert } from "lucide-react";
 import { PageHeader } from "@/components/layout/page-header";
 import { PageContent } from "@/components/layout/page-content";
-import { RepeatBadge, SeverityBadge, StatusBadge } from "./_components/issue-badges";
+import { RepeatBadge, RegressionBadge, SeverityBadge, StatusBadge } from "./_components/issue-badges";
 
 const STATUS_FILTERS = [
   "all",
@@ -65,7 +66,7 @@ export default function IssuesPage() {
     <PageContent size="default">
       <PageHeader
         title="Agent Issues"
-        subtitle="Grouped agent failures (stumbles) with auto-triage, self-heal, and verify lifecycle."
+        subtitle="Grouped agent failures (stumbles) with auto-triage, self-heal, and verify lifecycle. For systemic RCA clusters across many failures, see Incidents."
         icon={ShieldAlert}
       />
 
@@ -111,8 +112,21 @@ export default function IssuesPage() {
         <Card padding="lg">
           <EmptyState
             icon={ShieldAlert}
-            title="No issues in this view"
-            description="Issues appear automatically as Eden detects agent failures in finalized traces."
+            title="No issues yet"
+            description="Issues appear automatically when Eden detects agent failures in finalized traces — usually within 60 seconds of a failed run."
+            action={
+              <div className="flex flex-wrap items-center justify-center gap-2">
+                <Link href="/onboarding/install">
+                  <Button>
+                    <ShieldAlert className="h-4 w-4" />
+                    Install SDK
+                  </Button>
+                </Link>
+                <Link href="/incidents">
+                  <Button variant="outline">View Incidents</Button>
+                </Link>
+              </div>
+            }
           />
         </Card>
       ) : (
@@ -132,6 +146,7 @@ export default function IssuesPage() {
                       {i.kind}
                     </span>
                     {i.repetition_count > 1 && <RepeatBadge count={i.repetition_count} />}
+                    <RegressionBadge regressionCaseId={i.regression_case_id} status={i.status} />
                   </div>
                   <p className="mt-2 text-sm font-medium text-[var(--text-primary)] truncate">{i.title}</p>
                   <p className="mt-1 text-xs text-[var(--text-muted)]">

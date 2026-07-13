@@ -43,6 +43,13 @@ reliability targets, security model, compliance, and on-call playbooks.
   </div>
 
   <div class="eden-card">
+    <div class="eden-card__icon">🚀</div>
+    <h3>Launch checklist</h3>
+    <p>Pre-launch security, compliance, and SLA verification gate.</p>
+    <a href="/operations/security-launch-checklist">Read →</a>
+  </div>
+
+  <div class="eden-card">
     <div class="eden-card__icon">📟</div>
     <h3>Runbooks</h3>
     <p>On-call rotation, incident response, disaster recovery, KB audit, security training.</p>

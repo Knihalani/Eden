@@ -33,6 +33,9 @@ export interface TraceItem {
   cost_cents?: number | null;
   model?: string | null;
   started_at?: string | null;
+  agent_id?: string | null;
+  agent_session_id?: string | null;
+  session_id?: string | null;
 }
 
 export interface TraceTreeData {

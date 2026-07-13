@@ -147,7 +147,7 @@ export default function IncidentsPage() {
     <PageContent size="wide">
       <PageHeader
         title="Incidents"
-        subtitle="Cluster-level RCA summaries of recurring failures — catch the same bug biting 50 users before it bites 5,000"
+        subtitle="Systemic RCA clusters — recurring failure patterns across many traces. For individual grouped agent failures, see Agent Issues."
         icon={AlertOctagon}
         actions={
           <div className="flex items-center gap-2">
@@ -200,7 +200,7 @@ export default function IncidentsPage() {
         loading={loading && incidents.length === 0}
         defaultSort={{ key: "last_seen", direction: "desc" }}
         emptyTitle="No incidents yet"
-        emptyDescription="Run clustering to detect recurring failures"
+        emptyDescription="Run clustering to detect systemic failure patterns. For individual agent failures, see Agent Issues."
         emptyIcon={AlertOctagon}
         emptyAction={
           <button

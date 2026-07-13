@@ -34,6 +34,11 @@ def _row_to_issue(row: dict[str, Any]) -> Issue:
         affected_user_ids=list(row.get("affected_user_ids") or []),
         example_stumble_ids=[str(x) for x in (row.get("example_stumble_ids") or [])],
         triage_result=_maybe_json(row.get("triage_result")),
+        experiment_id=(
+            str(row["experiment_id"]) if row.get("experiment_id") else None
+        ),
+        experiment_result=_maybe_json(row.get("experiment_result")),
+        regression_case_id=row.get("regression_case_id"),
         first_seen=row.get("first_seen"),
         last_seen=row.get("last_seen"),
     )

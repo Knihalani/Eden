@@ -250,6 +250,21 @@ export default function AgentDetailPage() {
           />
         </div>
       </Card>
+
+      <div className="mt-4 flex flex-wrap gap-3">
+        <Link
+          href={`/agents/${encodeURIComponent(agentId)}/book`}
+          className="text-sm text-[var(--accent)] hover:underline"
+        >
+          Agent Book →
+        </Link>
+        <Link
+          href={`/agents/${encodeURIComponent(agentId)}/drift`}
+          className="text-sm text-[var(--accent)] hover:underline"
+        >
+          Drift report →
+        </Link>
+      </div>
     </PageContent>
   );
 }

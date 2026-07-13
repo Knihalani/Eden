@@ -11,6 +11,7 @@ from fastapi import APIRouter, Body, Depends, Path, Query
 from pydantic import BaseModel, Field
 
 from eden.api.deps import get_current_user
+from eden.api.utils.redact import redact_all
 from eden.improvement.cockpit_aggregator import (
     ImprovementCockpitAggregator,
     snooze_item,
@@ -133,7 +134,7 @@ async def autofix(
             if isinstance(triage_env, dict):
                 triage = triage_env.get("data") or triage_env.get("triage_result") or triage_env
         except Exception as exc:
-            logger.debug("autofix triage failed: %s", exc)
+            logger.debug("autofix triage failed: %s", redact_all(str(exc)))
             triage = {"error": str(exc)}
 
     if body.dry_run:
