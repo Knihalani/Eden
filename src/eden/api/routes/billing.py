@@ -542,44 +542,69 @@ async def stripe_webhook(
     org_id: str,
     request: Request,
 ):
-    """Handle Stripe webhook events."""
+    """Handle Stripe webhook events.
+
+    Signature verification always runs first and rejects invalid
+    payloads with 400 — even when paid plans are disabled (those
+    endpoints return 503 separately via ``_require_paid_plans_enabled``).
+    Never falls back to unverified ``json.loads(payload)``.
+    """
+    payload = await request.body()
+    sig_header = request.headers.get("stripe-signature")
+
+    if not sig_header:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Missing Stripe signature",
+        )
+
+    webhook_secret = getattr(settings, "stripe_webhook_secret", "") or ""
+    if not webhook_secret:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Stripe webhook secret is not configured.",
+        )
+
+    try:
+        import stripe
+    except ImportError:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Stripe SDK not installed.",
+        ) from None
+
+    # Always verify — never parse unverified JSON on failure.
+    try:
+        event = stripe.Webhook.construct_event(
+            payload,
+            sig_header,
+            webhook_secret,
+        )
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid webhook payload",
+        ) from None
+    except Exception as e:
+        logger.warning("Stripe webhook signature verification failed: %s", e)
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid Stripe signature",
+        ) from None
+
+    # Paid actions (subscribe / cancel) stay 503 until enabled; the
+    # webhook itself only processes events when paid plans + Stripe
+    # keys are live.
     _require_paid_plans_enabled()
     stripe_api_key = getattr(settings, "stripe_secret_key", None) or ""
-    if not stripe_api_key or stripe_api_key == "":
+    if not stripe_api_key:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Stripe is not configured.",
         )
 
     try:
-        import stripe
         stripe.api_key = stripe_api_key
-
-        payload = await request.body()
-        sig_header = request.headers.get("stripe-signature")
-
-        if not sig_header:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Missing Stripe signature",
-            )
-
-        # Verify webhook signature
-        try:
-            event = stripe.Webhook.construct_event(
-                payload,
-                sig_header,
-                getattr(settings, "stripe_webhook_secret", ""),
-            )
-        except ValueError:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Invalid webhook payload",
-            ) from None
-        except Exception as e:
-            # If no webhook secret configured, just parse
-            logger.warning(f"Stripe webhook verification failed: {e}")
-            event = json.loads(payload)
 
         event_type = event.get("type", "")
         event_id = event.get("id", "")
@@ -603,11 +628,6 @@ async def stripe_webhook(
 
         return {"received": True}
 
-    except ImportError:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Stripe SDK not installed.",
-        ) from None
     except HTTPException:
         raise
     except Exception as e:

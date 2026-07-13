@@ -6,9 +6,9 @@
  * Renders a sticky right-rail summary for a single trace. Used on
  * /observability when the user navigates here from /traces with
  * `?trace_id=<id>` (via the "View Trace Tree" action). Shows
- * trace_id, status, duration, token counts, cost, and a placeholder
- * for eval scores (the API hook is wired but currently returns null
- * — the placeholder still helps the user know the column exists).
+ * trace_id, status, duration, token counts, cost, and the latest
+ * judge / eval score from ``listJudgeScores`` (falls back to "—"
+ * when none exist yet).
  *
  * Curl-up feature: clicking close clears the URL param and the card
  * disappears, returning the user to the full landing view.
@@ -48,6 +48,8 @@ export function SelectedTraceCard({ traceId }: SelectedTraceCardProps) {
   const [trace, setTrace] = useState<ObservabilityTrace | null>(null);
   const [loading, setLoading] = useState(true);
   const [shareOpen, setShareOpen] = useState(false);
+  const [evalScore, setEvalScore] = useState<number | null>(null);
+  const [evalJudge, setEvalJudge] = useState<string | null>(null);
 
   useEffect(() => {
     if (!currentOrg || !traceId) {
@@ -56,6 +58,8 @@ export function SelectedTraceCard({ traceId }: SelectedTraceCardProps) {
     }
     let cancelled = false;
     setLoading(true);
+    setEvalScore(null);
+    setEvalJudge(null);
 
     // The backend's `trace_id` exact-match filter (June 2026 fix)
     // resolves deep links directly instead of scanning the last 50
@@ -75,6 +79,31 @@ export function SelectedTraceCard({ traceId }: SelectedTraceCardProps) {
       .finally(() => {
         if (cancelled) return;
         setLoading(false);
+      });
+
+    // Latest judge score for this trace (most recent scored_at).
+    api
+      .listJudgeScores(currentOrg.id, { trace_id: traceId, limit: 20 })
+      .then((res) => {
+        if (cancelled) return;
+        const scores = res.scores ?? [];
+        if (scores.length === 0) {
+          setEvalScore(null);
+          setEvalJudge(null);
+          return;
+        }
+        const latest = [...scores].sort((a, b) => {
+          const ta = Date.parse(a.scored_at) || 0;
+          const tb = Date.parse(b.scored_at) || 0;
+          return tb - ta;
+        })[0];
+        setEvalScore(typeof latest.score === "number" ? latest.score : null);
+        setEvalJudge(latest.judge_name ?? null);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setEvalScore(null);
+        setEvalJudge(null);
       });
 
     return () => {
@@ -163,10 +192,21 @@ export function SelectedTraceCard({ traceId }: SelectedTraceCardProps) {
           />
           <Row label="Realm" value={trace.realm} />
           <Row label="Model" value={trace.model ?? "—"} />
-          {/* Eval scores placeholder — the API doesn't surface per-trace
-              scores yet. When /observability/eval/coverage ships, this
-              will become a 0-100 numeric or "—" badge. */}
-          <Row label="Eval score" value="—" hint="Wires to /observability/eval/coverage when shipped." />
+          <Row
+            label="Eval score"
+            value={
+              evalScore != null
+                ? evalScore.toFixed(evalScore >= 10 || evalScore % 1 === 0 ? 0 : 2)
+                : "—"
+            }
+            hint={
+              evalScore != null
+                ? evalJudge
+                  ? `Latest judge: ${evalJudge}`
+                  : "Latest judge score for this trace"
+                : "No judge scores yet for this trace"
+            }
+          />
         </dl>
       )}
 
