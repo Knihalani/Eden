@@ -349,7 +349,12 @@ async def _claim_redis_dedup(
             await _increment_repetition(str(existing))
         return None
     except Exception as exc:
-        logger.debug("hook_bus: redis dedup claim failed (%s); local emit", exc)
+        from eden.api.utils.redact import redact_all
+
+        logger.debug(
+            "hook_bus: redis dedup claim failed (%s); local emit",
+            redact_all(str(exc)),
+        )
         return hook_id
 
 
