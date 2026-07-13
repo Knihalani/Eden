@@ -168,7 +168,7 @@ async function ensureAuth(browser) {
   const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
   const page = await ctx.newPage();
   await setupClerkTestingToken({ page });
-  await page.goto(`${BASE}/sign-in`, { waitUntil: "domcontentloaded" });
+  await page.goto(`${BASE}/login`, { waitUntil: "domcontentloaded" });
 
   let signedIn = false;
   for (let i = 0; i < 20; i++) {
