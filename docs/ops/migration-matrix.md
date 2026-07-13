@@ -122,6 +122,8 @@
 | 088 | org_members.last_writer_source | yes | forever | none | medium | Port migrations/039 last_writer_source | Autopilot |
 | 089 | trace_sampling_summaries + span_content_blobs | yes | forever | none | low | N16/N09 cost platform | Autopilot |
 | 090 | nl_signals | yes | forever | none | low | F35 plain-English signals (created_by matches users.id type) | Autopilot |
+| 092 | market_ready_consolidated (WS1–WS4) | yes | forever | none | high | prod readiness (detect, learn, fix, enterprise) | Phase prod |
+| 093 | redteam_findings (org-scoped) | yes | forever | none | low | red-team findings persistence | Phase prod |
 
 ## Critical-path migrations (downgrade risk = `hard`)
 

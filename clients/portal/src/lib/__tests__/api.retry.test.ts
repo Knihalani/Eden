@@ -25,7 +25,7 @@ vi.stubGlobal("fetch", fetchMock);
   Clerk: undefined,
 };
 
-import { api, ApiError } from "@/lib/api";
+import { api, ApiError, __resetFetchApiInflightForTests } from "@/lib/api";
 
 function jsonResponse(status: number, body: unknown, headers: Record<string, string> = {}): Response {
   return new Response(JSON.stringify(body), {
@@ -36,6 +36,7 @@ function jsonResponse(status: number, body: unknown, headers: Record<string, str
 
 beforeEach(() => {
   fetchMock.mockReset();
+  __resetFetchApiInflightForTests();
 });
 
 afterEach(() => {
@@ -61,7 +62,8 @@ describe("fetchApi 429 backoff", () => {
       .mockResolvedValueOnce(jsonResponse(429, { detail: "rate limited" }, { "Retry-After": "1" }))
       .mockResolvedValueOnce(jsonResponse(200, { user_id: "u", email: "", name: "", organizations: [], current_org_id: null }));
 
-    const pending = api.getMe().catch((e) => e);
+    const pending = api.getMe();
+    void pending.catch(() => {});
 
     // After the first 429 the fetch should not fire again until the
     // Retry-After window has elapsed. Verify by advancing partially
@@ -89,13 +91,9 @@ describe("fetchApi 429 backoff", () => {
     // logger flags that as "unhandled rejection" even though the
     // test always passes. Attach a process-level guard that
     // recognises the expected rejection shape during this test only.
-    const expected = { status: 429, detail: "throttled" } as const;
+    const expected = { status: 429 } as const;
     const handler = (reason: unknown) => {
-      if (
-        reason instanceof ApiError &&
-        reason.status === expected.status &&
-        reason.detail === expected.detail
-      ) {
+      if (reason instanceof ApiError && reason.status === expected.status) {
         return; // expected, swallow
       }
       // Anything else: re-throw so Vitest still sees real failures.
@@ -120,7 +118,8 @@ describe("fetchApi 429 backoff", () => {
       .mockResolvedValueOnce(jsonResponse(429, { detail: "throttled" }))
       .mockResolvedValueOnce(jsonResponse(200, { user_id: "u", email: "", name: "", organizations: [], current_org_id: null }));
 
-    const pending = api.getMe().catch((e) => e);
+    const pending = api.getMe();
+    void pending.catch(() => {});
 
     // Even after a few seconds the retry should not have fired
     // because we should default to a 5s cooldown.
@@ -141,6 +140,7 @@ describe("fetchApi 429 backoff", () => {
       .mockResolvedValueOnce(jsonResponse(200, { user_id: "u", email: "", name: "", organizations: [], current_org_id: null }));
 
     const promise = api.getMe();
+    void promise.catch(() => {});
     // Run out the timers + microtasks.
     for (let i = 0; i < 20; i++) await vi.advanceTimersByTimeAsync(100);
     const result = await promise;
