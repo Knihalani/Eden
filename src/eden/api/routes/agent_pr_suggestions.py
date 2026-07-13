@@ -23,10 +23,11 @@ open-pr path is gated by the same ``intelligence_gap_v0``
 umbrella flag as the Cat 23 surface so the rollout is
 controlled.
 
-The suggester / provider instances are module-level
-singletons (lazy initialised on the first request) so
-the route file doesn't pay the LLM import cost at
-startup.
+The suggester / provider instances are resolved per-request via
+:func:`eden.providers.factory.get_pr_provider_for_org` /
+:func:`eden.providers.factory.get_repo_provider_for_org` so
+installation tokens stay tenant-scoped. Org membership is
+enforced via ``require_org_member``.
 """
 
 from __future__ import annotations
@@ -38,14 +39,16 @@ from fastapi import APIRouter, Body, Depends, Path
 from pydantic import BaseModel, Field
 
 from eden.agent import PRSuggester
-from eden.api.deps import get_current_user, require_feature_flag
+from eden.api.deps import get_current_user, require_feature_flag, require_org_member
 from eden.api.utils.redact import redact_all
 from eden.providers import (
     PRCreateRequest,
     PRProvider,
     RepoProvider,
-    get_default_pr_provider,
-    get_default_repo_provider,
+)
+from eden.providers.factory import (
+    get_pr_provider_for_org,
+    get_repo_provider_for_org,
 )
 from eden.providers.repo import FileEntry
 
@@ -57,40 +60,27 @@ router = APIRouter(
     dependencies=[
         Depends(require_feature_flag("intelligence_gap_v0")),
         Depends(get_current_user),
+        Depends(require_org_member),
     ],
 )
 
 
-# ── Provider / suggester singletons ─────────────────────────────
+# ── Provider / suggester helpers (per-org, not process singletons) ─
 
 
-_suggester: PRSuggester | None = None
-_repo_provider: RepoProvider | None = None
-_pr_provider: PRProvider | None = None
+async def _get_repo_provider(org_id: str) -> RepoProvider:
+    """Resolve a :class:`RepoProvider` scoped to ``org_id``."""
+    return await get_repo_provider_for_org(org_id)
 
 
-def _get_suggester() -> PRSuggester:
-    """Lazily build the :class:`PRSuggester` (1 per process)."""
-    global _suggester
-    if _suggester is None:
-        _suggester = PRSuggester(repo_provider=_get_repo_provider())
-    return _suggester
+async def _get_pr_provider(org_id: str) -> PRProvider:
+    """Resolve a :class:`PRProvider` scoped to ``org_id``."""
+    return await get_pr_provider_for_org(org_id)
 
 
-def _get_repo_provider() -> RepoProvider:
-    """Lazily build the :class:`RepoProvider` (1 per process)."""
-    global _repo_provider
-    if _repo_provider is None:
-        _repo_provider = get_default_repo_provider()
-    return _repo_provider
-
-
-def _get_pr_provider() -> PRProvider:
-    """Lazily build the :class:`PRProvider` (1 per process)."""
-    global _pr_provider
-    if _pr_provider is None:
-        _pr_provider = get_default_pr_provider()
-    return _pr_provider
+async def _get_suggester(org_id: str) -> PRSuggester:
+    """Build a :class:`PRSuggester` with the org's repo provider."""
+    return PRSuggester(repo_provider=await _get_repo_provider(org_id))
 
 
 # ── Pydantic bodies (per the plan's API contract) ────────────────
@@ -147,7 +137,7 @@ async def list_suggestions(
     limit: int = 50,
 ) -> dict[str, Any]:
     """List the org's PR suggestions, newest first."""
-    suggester = _get_suggester()
+    suggester = await _get_suggester(org_id)
     rows = await suggester.list_suggestions(
         org_id, status=status, trigger=trigger, since=since, limit=limit,
     )
@@ -179,7 +169,7 @@ async def create_suggestion(
     the per-trigger JSON payload (the ``affected_files`` +
     ``description`` are extracted by the suggester).
     """
-    suggester = _get_suggester()
+    suggester = await _get_suggester(org_id)
     suggestion = await suggester.suggest(
         org_id,
         trigger=body.trigger,
@@ -203,7 +193,7 @@ async def get_suggestion(
     suggestion_id: str = Path(...),
 ) -> dict[str, Any]:
     """Read a single suggestion (detail view)."""
-    suggester = _get_suggester()
+    suggester = await _get_suggester(org_id)
     suggestion = await suggester.get_suggestion(org_id, suggestion_id)
     if suggestion is None:
         return {
@@ -237,7 +227,7 @@ async def open_pr(
     marks the suggestion as ``"opened"``, and returns
     the new :class:`PullRequestInfo`.
     """
-    suggester = _get_suggester()
+    suggester = await _get_suggester(org_id)
     suggestion = await suggester.get_suggestion(org_id, suggestion_id)
     if suggestion is None:
         return {
@@ -249,7 +239,7 @@ async def open_pr(
                 "message": "Suggestion not found.",
             },
         }
-    pr_provider = _get_pr_provider()
+    pr_provider = await _get_pr_provider(org_id)
     pr_req = PRCreateRequest(
         title=body.pr_title or suggestion.pr_title,
         body=body.pr_body or suggestion.pr_body,
@@ -385,7 +375,7 @@ async def bulk_regenerate_suggestions(
     FastAPI matches ``bulk`` as a ``suggestion_id``
     and routes the request to ``/{suggestion_id}/regenerate``.
     """
-    suggester = _get_suggester()
+    suggester = await _get_suggester(org_id)
     result = await suggester.bulk_regenerate(
         org_id, body.suggestion_ids,
     )
@@ -417,7 +407,7 @@ async def get_suggestion_file(
     matches the portal's "show me the current file"
     use case for the diff preview.
     """
-    suggester = _get_suggester()
+    suggester = await _get_suggester(org_id)
     data = await suggester.get_file_content(
         org_id, suggestion_id, file_path,
     )
@@ -457,7 +447,7 @@ async def update_suggestion_status(
     existing rows in the JSONL log are preserved) so
     the audit trail keeps the suggestion's history.
     """
-    suggester = _get_suggester()
+    suggester = await _get_suggester(org_id)
     updated = await suggester.mark_status(
         org_id, suggestion_id, body.status,
     )
@@ -497,7 +487,7 @@ async def regenerate_suggestion(
     place; ``status`` is reset to ``"pending"`` so the
     human can re-review.
     """
-    suggester = _get_suggester()
+    suggester = await _get_suggester(org_id)
     updated = await suggester.regenerate(org_id, suggestion_id)
     if updated is None:
         return {
