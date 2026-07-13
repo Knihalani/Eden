@@ -32,6 +32,12 @@ spec:
               value: {{ include "eden.redisUrl" . }}
             - name: EDEN_QDRANT_URL
               value: {{ include "eden.qdrantUrl" . }}
+            - name: SKIP_MIGRATIONS
+              value: "1"
+            - name: EDEN_RUN_BACKGROUND_WORKERS
+              value: "0"
+            - name: EDEN_PRODUCTION
+              value: "true"
             - name: EDEN_SSO_OIDC_ISSUER
               value: {{ .Values.sso.oidcIssuer | quote }}
             - name: EDEN_SSO_SAML_METADATA_URL
@@ -50,11 +56,11 @@ spec:
             - name: EDEN_PROMETHEUS_REMOTE_WRITE_URL
               value: {{ .Values.monitoring.prometheus.remoteWriteUrl | quote }}
           livenessProbe:
-            httpGet: { path: /health, port: http }
+            httpGet: { path: /live, port: http }
             initialDelaySeconds: 30
             periodSeconds: 10
           readinessProbe:
-            httpGet: { path: /health, port: http }
+            httpGet: { path: /ready, port: http }
             initialDelaySeconds: 5
             periodSeconds: 5
           resources:

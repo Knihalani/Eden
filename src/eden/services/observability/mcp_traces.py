@@ -376,6 +376,44 @@ class McpTraceService:
             "recent_auth_failures": auth_failures[:10],
         }
 
+    async def call_trends(
+        self, org_id: str, *, days: int = 7
+    ) -> list[dict[str, Any]]:
+        """Daily MCP call + auth-failure buckets for the fleet dashboard."""
+        days = max(1, min(days, 90))
+        client = await _get_client()
+        if client is None:
+            return []
+        try:
+            rows = await client.fetch(
+                """
+                SELECT date_trunc('day', created_at)::date AS day,
+                       COUNT(*)::bigint AS call_count,
+                       COUNT(*) FILTER (
+                           WHERE attributes->'mcp'->>'auth_failure' = 'true'
+                       )::bigint AS auth_failure_count
+                FROM telemetry_events
+                WHERE tenant_id = $1
+                  AND attributes ? 'mcp'
+                  AND created_at > NOW() - make_interval(days => $2)
+                GROUP BY 1
+                ORDER BY 1 ASC
+                """,
+                org_id,
+                days,
+            )
+        except Exception as exc:
+            logger.debug("mcp.call_trends failed: %s", exc)
+            return []
+        return [
+            {
+                "day": str(row["day"]),
+                "call_count": int(row["call_count"] or 0),
+                "auth_failure_count": int(row["auth_failure_count"] or 0),
+            }
+            for row in rows
+        ]
+
 
 _singleton: McpTraceService | None = None
 

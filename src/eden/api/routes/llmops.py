@@ -594,7 +594,7 @@ async def gateway_complete(
     # provider call lives in ``eden.api.routes.gateway`` (mounted
     # under ``/gateway/v1``). Surface a 501 so callers route there.
     raise HTTPException(
-        status_code=501,
+        status_code=410,
         detail=(
             "Legacy /llmops/gateway/complete stub retired 2026-07-04; "
             "use /gateway/v1/chat/completions instead."

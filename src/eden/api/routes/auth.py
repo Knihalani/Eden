@@ -1819,22 +1819,12 @@ async def upload_my_avatar(
             detail="Avatar content does not match a supported image format",
         )
 
-    upload_root = Path(os.environ.get("EDEN_UPLOAD_DIR", "/tmp/eden-uploads"))
-    avatars_dir = upload_root / "avatars"
-    avatars_dir.mkdir(parents=True, exist_ok=True)
-    # Cryptographic random name so users can't enumerate each other's
-    # avatars by id. Keep the original extension so the browser
-    # serves the right Content-Type.
-    ext_map = {
-        "image/png": ".png", "image/jpeg": ".jpg",
-        "image/webp": ".webp", "image/gif": ".gif",
-    }
-    filename = f"{secrets.token_urlsafe(16)}{ext_map[detected]}"
-    (avatars_dir / filename).write_bytes(blob)
-    avatar_url = f"/uploads/avatars/{filename}"
+    from eden.storage.avatars import store_avatar
+
+    user_id = user["user_id"]
+    avatar_url = await store_avatar(user_id, blob, detected)
 
     client = await get_postgres_client()
-    user_id = user["user_id"]
     await client.execute(
         "UPDATE users SET avatar_url = $1 WHERE id = $2",
         avatar_url,

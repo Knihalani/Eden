@@ -109,9 +109,9 @@ USER eden
 # Expose the API port
 EXPOSE 8000
 
-# Health check — lightweight ping against /health
+# Health check — liveness via /live; use /ready for dependency probes
 HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
-    CMD curl -fsS http://localhost:8000/health | grep -q '"status"' || exit 1
+    CMD curl -fsS http://localhost:8000/live | grep -q '"status"' || exit 1
 
 # Run uvicorn with a single worker per container (scale via replicas).
 # Use the system Python (python:3.12-slim puts it at

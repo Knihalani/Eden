@@ -3,13 +3,17 @@
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
-import { ArrowLeft, Loader2, Send, Wrench } from "lucide-react";
+import { ArrowLeft, Loader2, RefreshCw, Send, Wrench } from "lucide-react";
 import { useOrg } from "@/hooks/use-org";
 import { agentIssuesApi } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { PageContent } from "@/components/layout/page-content";
+import { ErrorState } from "@/components/ui/error-state";
+import { Skeleton, SkeletonCard } from "@/components/ui/skeleton";
 import { useToast } from "@/components/ui/toast";
+
+const TOUCH_MIN = "min-h-[44px] min-w-[44px]";
 
 export default function IssueFixPage() {
   const { currentOrg } = useOrg();
@@ -22,11 +26,15 @@ export default function IssueFixPage() {
   const [patch, setPatch] = useState<string | null>(null);
   const [chatLog, setChatLog] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
+  const [sessionLoading, setSessionLoading] = useState(true);
   const [sessionStatus, setSessionStatus] = useState<string | null>(null);
+  const [streamError, setStreamError] = useState<string | null>(null);
+  const [lastMessage, setLastMessage] = useState<string | null>(null);
   const logRef = useRef<HTMLPreElement>(null);
 
   const loadSession = useCallback(async () => {
     if (!currentOrg || !issueId) return;
+    setSessionLoading(true);
     try {
       const [sessionRes, issueRes] = await Promise.all([
         agentIssuesApi.fixSession(currentOrg.id, issueId),
@@ -56,6 +64,8 @@ export default function IssueFixPage() {
       }
     } catch {
       // no session yet
+    } finally {
+      setSessionLoading(false);
     }
   }, [currentOrg, issueId, repo]);
 
@@ -63,18 +73,19 @@ export default function IssueFixPage() {
     void loadSession();
   }, [loadSession]);
 
-  const onSend = async () => {
-    if (!currentOrg || !issueId || !message.trim() || !repo.trim()) {
+  const runChatStream = async (outbound: string) => {
+    if (!currentOrg || !issueId || !outbound.trim() || !repo.trim()) {
       toast.error("Enter a message and repo (org/repo)");
       return;
     }
     setBusy(true);
-    setChatLog((prev) => [...prev, `You: ${message}`]);
+    setStreamError(null);
+    setChatLog((prev) => [...prev, `You: ${outbound}`]);
     try {
       const stream = await agentIssuesApi.fixChatStream(
         currentOrg.id,
         issueId,
-        { message, repo_full_name: repo },
+        { message: outbound, repo_full_name: repo },
       );
       const reader = stream.getReader();
       const decoder = new TextDecoder();
@@ -115,13 +126,19 @@ export default function IssueFixPage() {
           }
         }
       }
+      setLastMessage(null);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Chat failed");
+      const msg = err instanceof Error ? err.message : "Chat failed";
+      setStreamError(msg);
+      setLastMessage(outbound);
+      toast.error(msg);
     } finally {
       setBusy(false);
       setMessage("");
     }
   };
+
+  const onSend = () => void runChatStream(message);
 
   const onApply = async () => {
     if (!currentOrg || !issueId) return;
@@ -155,17 +172,33 @@ export default function IssueFixPage() {
 
   if (!currentOrg) return null;
 
+  if (sessionLoading) {
+    return (
+      <PageContent size="wide">
+        <Skeleton className="h-4 w-32 mb-4" />
+        <div className="flex items-center gap-2 mb-4">
+          <Skeleton className="h-5 w-5 rounded" />
+          <Skeleton className="h-6 w-40" />
+        </div>
+        <div className="grid gap-4 lg:grid-cols-2">
+          <SkeletonCard />
+          <SkeletonCard />
+        </div>
+      </PageContent>
+    );
+  }
+
   return (
     <PageContent size="wide">
       <Link
         href={`/issues/${issueId}`}
-        className="inline-flex items-center gap-1 text-sm text-[var(--text-muted)] hover:text-[var(--text-primary)] mb-4"
+        className={`inline-flex items-center gap-1 text-sm text-[var(--text-muted)] hover:text-[var(--text-primary)] mb-4 ${TOUCH_MIN}`}
       >
-        <ArrowLeft className="h-4 w-4" /> Back to issue
+        <ArrowLeft className="h-4 w-4" aria-hidden /> Back to issue
       </Link>
 
       <div className="flex items-center gap-2 mb-4">
-        <Wrench className="h-5 w-5 text-[var(--accent)]" />
+        <Wrench className="h-5 w-5 text-[var(--accent)]" aria-hidden />
         <h1 className="text-lg font-semibold">Fix in code</h1>
         {sessionStatus && (
           <span className="text-xs px-2 py-0.5 rounded bg-[var(--bg-tertiary)] text-[var(--text-muted)]">
@@ -176,9 +209,12 @@ export default function IssueFixPage() {
 
       <div className="grid gap-4 lg:grid-cols-2 min-h-[480px]">
         <Card padding="md" className="flex flex-col min-h-[420px]">
-          <label className="text-xs text-[var(--text-muted)] mb-1">Repository (org/repo)</label>
+          <label htmlFor="fix-repo" className="text-xs text-[var(--text-muted)] mb-1">
+            Repository (org/repo)
+          </label>
           <input
-            className="mb-3 w-full rounded border border-[var(--border-default)] bg-[var(--bg-base)] px-2 py-2 text-sm min-h-[44px]"
+            id="fix-repo"
+            className={`mb-3 w-full rounded border border-[var(--border-default)] bg-[var(--bg-base)] px-3 py-2 text-sm ${TOUCH_MIN}`}
             value={repo}
             onChange={(e) => setRepo(e.target.value)}
             placeholder="acme/checkout-agent"
@@ -186,19 +222,56 @@ export default function IssueFixPage() {
           <pre
             ref={logRef}
             className="flex-1 overflow-auto rounded bg-[var(--bg-tertiary)] p-3 text-xs font-mono text-[var(--text-secondary)] mb-3 min-h-[200px]"
+            aria-live="polite"
+            aria-busy={busy}
           >
             {chatLog.length === 0 ? "Describe the fix you want…" : chatLog.join("")}
           </pre>
+
+          {streamError && (
+            <div className="mb-3">
+              <ErrorState
+                size="sm"
+                title="Chat stream failed"
+                message={streamError}
+                action={
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className={TOUCH_MIN}
+                    disabled={busy || !lastMessage}
+                    onClick={() => lastMessage && void runChatStream(lastMessage)}
+                  >
+                    <RefreshCw className="h-4 w-4 mr-1.5" aria-hidden />
+                    Retry stream
+                  </Button>
+                }
+              />
+            </div>
+          )}
+
           <div className="flex gap-2">
             <input
-              className="flex-1 rounded border border-[var(--border-default)] bg-[var(--bg-base)] px-2 py-2 text-sm min-h-[44px]"
+              className={`flex-1 rounded border border-[var(--border-default)] bg-[var(--bg-base)] px-3 py-2 text-sm ${TOUCH_MIN}`}
               value={message}
               onChange={(e) => setMessage(e.target.value)}
               placeholder="Fix the loop in checkout prompt…"
               onKeyDown={(e) => e.key === "Enter" && !busy && void onSend()}
+              aria-label="Fix instruction"
             />
-            <Button size="sm" disabled={busy} onClick={() => void onSend()} className="min-h-[44px] min-w-[44px]">
-              {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+            <Button
+              size="sm"
+              disabled={busy}
+              onClick={() => void onSend()}
+              className={TOUCH_MIN}
+              aria-label="Send fix instruction"
+            >
+              {busy ? (
+                <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+              ) : (
+                <Send className="h-4 w-4" aria-hidden />
+              )}
             </Button>
           </div>
         </Card>
@@ -209,7 +282,7 @@ export default function IssueFixPage() {
             {patch ?? "No patch proposed yet."}
           </pre>
           <Button
-            className="mt-3 min-h-[44px]"
+            className={`mt-3 ${TOUCH_MIN}`}
             disabled={busy || !patch}
             onClick={() => void onApply()}
           >

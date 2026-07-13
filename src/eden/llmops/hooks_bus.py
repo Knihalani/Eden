@@ -20,6 +20,7 @@ UI working without an Alembic migration today).
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import time
@@ -225,7 +226,14 @@ class HookBus:
             await _increment_repetition(dedup_hit_id)
             return None
 
-        hook_id = str(uuid.uuid4())
+        # Cross-pod dedup via Redis SETNX (eden:dedup:*). In-process
+        # dedup above still runs first; Redis extends the window across
+        # workers when REDIS_URL is configured.
+        redis_hook_id = await _claim_redis_dedup(key, event.dedup_window_seconds)
+        if redis_hook_id is None:
+            return None
+
+        hook_id = redis_hook_id
         self._events[hook_id] = event
         self._dedup[key] = (hook_id, now + event.dedup_window_seconds)
         self._cascade_depth[hook_id] = depth
@@ -285,6 +293,69 @@ class HookBus:
 
 
 # ─── Helpers ──────────────────────────────────────────────────────
+
+
+def _dedup_redis_key(key: _DedupKey) -> str:
+    """Stable Redis key for cross-pod HookBus dedup."""
+    material = ":".join(
+        (
+            key.reason,
+            key.org_id,
+            key.primary_entity_id,
+            key.cascade_parent or "",
+        )
+    )
+    digest = hashlib.sha256(material.encode()).hexdigest()[:32]
+    return f"eden:dedup:{digest}"
+
+
+async def _claim_redis_dedup(
+    key: _DedupKey,
+    window_seconds: int,
+) -> str | None:
+    """Claim a dedup slot in Redis.
+
+    Returns a new ``hook_id`` when this pod wins the SETNX race.
+    Returns ``None`` when Redis reports a dedup hit (or when the
+    in-memory path already decided — caller handles that). When Redis
+    is unavailable, mints a local UUID so single-node dev keeps working.
+    """
+    try:
+        from eden.storage.redis import get_redis_client
+    except Exception:
+        return str(uuid.uuid4())
+
+    try:
+        client = await get_redis_client()
+    except Exception:
+        return str(uuid.uuid4())
+
+    if client is None:
+        return str(uuid.uuid4())
+
+    redis_key = _dedup_redis_key(key)
+    hook_id = str(uuid.uuid4())
+    try:
+        claimed = await client.set(
+            redis_key,
+            hook_id,
+            nx=True,
+            ex=max(1, int(window_seconds)),
+        )
+        if claimed:
+            return hook_id
+        existing = await client.get(redis_key)
+        if existing:
+            await _increment_repetition(str(existing))
+        return None
+    except Exception as exc:
+        from eden.api.utils.redact import redact_all
+
+        logger.debug(
+            "hook_bus: redis dedup claim failed (%s); local emit",
+            redact_all(str(exc)),
+        )
+        return hook_id
 
 
 def _extract_primary_entity(event: HookEvent) -> str:

@@ -198,11 +198,7 @@ def mock_llm_client(mock_llm_response: LLMResponse) -> MagicMock:
     client.acall = AsyncMock(return_value=mock_llm_response)
     client.get_total_usage = MagicMock(return_value=UsageStats())
     client.get_circuit_status = MagicMock(return_value={"state": "closed"})
-    client.MODEL_SLOTS = {
-        "reasoning": MagicMock(primary="test-reasoning", fallback=[], max_tokens=50000),
-        "code": MagicMock(primary="test-code", fallback=[], max_tokens=15000),
-        "fast": MagicMock(primary="test-fast", fallback=[], max_tokens=30000),
-    }
+    client.get_model_for_slot = MagicMock(return_value="test-reasoning")
     return client
 
 

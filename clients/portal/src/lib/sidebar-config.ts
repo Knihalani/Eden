@@ -167,7 +167,7 @@ export const DEFAULT_SIDEBAR: SidebarGroup[] = [
       { id: "insights",  href: "/insights",  label: "Insights",  icon: InsightsIcon , category: "advanced", description: "AI-generated summaries of trends, anomalies, and what to look at next."},
       // LP-13: GET /signals fail-opens (empty list / 503) when nl_signals
       // missing — re-enabled after backend contract stabilization (F48).
-      { id: "signals",   href: "/signals",   label: "Signals",   icon: Radio, category: "advanced", description: "Compile behavioural signals from traces into reusable detectors." },
+      // { id: "signals",   href: "/signals",   label: "Signals",   icon: Radio, category: "advanced", description: "Compile behavioural signals from traces into reusable detectors." },
       { id: "user-intelligence", href: "/users", label: "User Intelligence", icon: Users, category: "advanced", description: "Session aggregation, satisfaction scoring, and behavioural cohorts."},
       { id: "inspector", href: "/inspector", label: "Inspector", icon: InspectorIcon, category: "advanced" , description: "Deep-dive into a single trace to debug behaviour, token usage, and tool I/O."},
       { id: "incidents", href: "/incidents", label: "Incidents", icon: IncidentIcon , description: "Systemic RCA clusters — patterns across many failures. For individual grouped failures, see Agent Issues."},

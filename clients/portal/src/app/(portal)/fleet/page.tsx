@@ -9,10 +9,15 @@ import { NoOrgState } from "@/components/ui/no-org-state";
 import { PageContent } from "@/components/layout/page-content";
 import { PageHeader } from "@/components/layout/page-header";
 import { Loader2, Network, ShieldAlert } from "lucide-react";
+import { cn } from "@/lib/utils";
+
+type FleetTab = "agents" | "heatmap" | "delegation";
 
 export default function FleetPage() {
   const { currentOrg } = useOrg();
+  const [tab, setTab] = useState<FleetTab>("agents");
   const [agents, setAgents] = useState<FleetAgentCard[]>([]);
+  const [heatmap, setHeatmap] = useState<Array<{ agent_id: string; stumble_kind: string; count: number }>>([]);
   const [edges, setEdges] = useState<Array<{ source: string; target: string; call_count_7d: number }>>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -22,11 +27,13 @@ export default function FleetPage() {
     setLoading(true);
     setError(null);
     try {
-      const [summary, delegation] = await Promise.all([
+      const [summary, heat, delegation] = await Promise.all([
         fleetApi.summary(currentOrg.id),
+        fleetApi.heatmap(currentOrg.id),
         fleetApi.delegation(currentOrg.id),
       ]);
       setAgents(summary.data?.agents ?? []);
+      setHeatmap(heat.data?.cells ?? []);
       setEdges(delegation.data?.edges ?? []);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load fleet health");
@@ -49,13 +56,50 @@ export default function FleetPage() {
     );
   }
 
+  const heatmapAgents = [...new Set(heatmap.map((c) => c.agent_id))];
+  const heatmapKinds = [...new Set(heatmap.map((c) => c.stumble_kind))];
+  const heatmapMax = Math.max(1, ...heatmap.map((c) => c.count));
+  const heatmapLookup = new Map(
+    heatmap.map((c) => [`${c.agent_id}:${c.stumble_kind}`, c.count]),
+  );
+
   return (
     <PageContent size="default">
       <PageHeader
         title="Fleet Health"
-        subtitle="Agent health cards, SLO breaches, and delegation graph for your multi-agent platform."
+        subtitle="Agent health cards, stumble heatmap, and delegation graph for your multi-agent platform."
         icon={Network}
       />
+
+      <div
+        role="tablist"
+        aria-label="Fleet views"
+        className="inline-flex rounded-lg border border-[var(--border-default)] p-1 mb-6"
+      >
+        {(
+          [
+            ["agents", "Agents"],
+            ["heatmap", "Heatmap"],
+            ["delegation", "Delegation"],
+          ] as const
+        ).map(([id, label]) => (
+          <button
+            key={id}
+            type="button"
+            role="tab"
+            aria-selected={tab === id}
+            onClick={() => setTab(id)}
+            className={cn(
+              "min-h-[44px] rounded-md px-4 text-sm font-medium transition-colors",
+              tab === id
+                ? "bg-[var(--bg-primary)] text-[var(--text-primary)]"
+                : "text-[var(--text-muted)] hover:text-[var(--text-primary)]",
+            )}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
 
       {loading ? (
         <div className="flex items-center justify-center p-12 text-sm text-[var(--text-muted)]">
@@ -65,14 +109,14 @@ export default function FleetPage() {
         <Card padding="lg">
           <p className="text-sm text-[var(--error)]">{error}</p>
         </Card>
-      ) : agents.length === 0 ? (
-        <Card padding="lg">
-          <p className="text-sm text-[var(--text-muted)]">
-            No agents discovered yet. Agents appear here after their first trace or stumble.
-          </p>
-        </Card>
-      ) : (
-        <div className="space-y-6">
+      ) : tab === "agents" ? (
+        agents.length === 0 ? (
+          <Card padding="lg">
+            <p className="text-sm text-[var(--text-muted)]">
+              No agents discovered yet. Agents appear here after their first trace or stumble.
+            </p>
+          </Card>
+        ) : (
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
             {agents.map((a) => (
               <div
@@ -115,26 +159,72 @@ export default function FleetPage() {
                 )}
                 <Link
                   href={`/issues?agent=${encodeURIComponent(a.agent_id)}`}
-                  className="mt-3 inline-block text-xs text-[var(--accent)] hover:underline"
+                  className="mt-3 inline-block text-xs text-[var(--accent)] hover:underline min-h-[44px] leading-[44px]"
                 >
                   View issues →
                 </Link>
               </div>
             ))}
           </div>
-
-          {edges.length > 0 && (
-            <div className="rounded-lg border border-[var(--border-default)] bg-[var(--bg-primary)] p-4">
-              <h2 className="text-sm font-semibold text-[var(--text-primary)] mb-3">Delegation graph (7d)</h2>
-              <ul className="space-y-1 text-xs font-mono text-[var(--text-secondary)]">
-                {edges.slice(0, 30).map((e) => (
-                  <li key={`${e.source}-${e.target}`}>
-                    {e.source} → {e.target} ({e.call_count_7d} calls)
-                  </li>
+        )
+      ) : tab === "heatmap" ? (
+        heatmap.length === 0 ? (
+          <Card padding="lg">
+            <p className="text-sm text-[var(--text-muted)]">No stumble heatmap data for the last 7 days.</p>
+          </Card>
+        ) : (
+          <div className="overflow-x-auto rounded-lg border border-[var(--border-default)] bg-[var(--bg-primary)] p-4">
+            <table className="w-full text-xs">
+              <thead>
+                <tr>
+                  <th className="text-left p-2 text-[var(--text-muted)]">Agent</th>
+                  {heatmapKinds.map((kind) => (
+                    <th key={kind} className="p-2 text-[var(--text-muted)] font-mono">{kind}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {heatmapAgents.map((agentId) => (
+                  <tr key={agentId} className="border-t border-[var(--border-subtle)]">
+                    <td className="p-2 font-mono">{agentId}</td>
+                    {heatmapKinds.map((kind) => {
+                      const count = heatmapLookup.get(`${agentId}:${kind}`) ?? 0;
+                      const intensity = count / heatmapMax;
+                      return (
+                        <td key={kind} className="p-2 text-center">
+                          <span
+                            className="inline-block min-w-[2rem] rounded px-1 py-0.5 font-mono tabular-nums"
+                            style={{
+                              backgroundColor: count
+                                ? `color-mix(in srgb, var(--error) ${Math.round(intensity * 70)}%, transparent)`
+                                : undefined,
+                            }}
+                          >
+                            {count || "—"}
+                          </span>
+                        </td>
+                      );
+                    })}
+                  </tr>
                 ))}
-              </ul>
-            </div>
-          )}
+              </tbody>
+            </table>
+          </div>
+        )
+      ) : edges.length === 0 ? (
+        <Card padding="lg">
+          <p className="text-sm text-[var(--text-muted)]">No delegation edges in the last 7 days.</p>
+        </Card>
+      ) : (
+        <div className="rounded-lg border border-[var(--border-default)] bg-[var(--bg-primary)] p-4">
+          <h2 className="text-sm font-semibold text-[var(--text-primary)] mb-3">Delegation graph (7d)</h2>
+          <ul className="space-y-1 text-xs font-mono text-[var(--text-secondary)]">
+            {edges.slice(0, 30).map((e) => (
+              <li key={`${e.source}-${e.target}`}>
+                {e.source} → {e.target} ({e.call_count_7d} calls)
+              </li>
+            ))}
+          </ul>
         </div>
       )}
     </PageContent>

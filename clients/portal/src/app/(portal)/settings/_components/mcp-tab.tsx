@@ -12,6 +12,7 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { Check, Copy, ExternalLink, Key, Terminal } from "lucide-react";
 import { SettingsCard } from "@/components/settings/settings-card";
+import { IntegrationStatusBanner } from "@/components/settings/integration-status-banner";
 import { DOCS_URL } from "@/lib/constants";
 
 const DEFAULT_API_BASE = "https://api.edenobservability.com";
@@ -118,6 +119,7 @@ export function McpTab({ org }: McpTabProps) {
 
   return (
     <div className="space-y-4">
+      <IntegrationStatusBanner orgId={org.id} watch={["github_action"]} />
       <SettingsCard>
         <div className="space-y-4">
           <div className="flex items-start gap-3">
