@@ -32,6 +32,7 @@ from .._common import (
     _insert_row,
     _new_id,
     _ok_envelope,
+    _select_one,
     _update_row,
 )
 
@@ -283,12 +284,8 @@ class PRReviewService:
             return pr_result
 
         if action == "revert":
-            # Mark the patch as reverted and record the audit row.
-            # The actual revert-PR creation is delegated to
-            # :class:`AutoRevertEngine` which is a Gate-4b feature.
-            # Until then, ``revert`` records the operator's intent
-            # and flips the status — the operator still has to open
-            # the revert PR manually via the GitHub UI.
+            # Gate 4b: record the audit row, flip status, then
+            # delegate the actual revert-PR to AutoRevertEngine.
             approval_id = _new_id("approval")
             await _insert_row(
                 org_id,
@@ -302,6 +299,30 @@ class PRReviewService:
                     "revert", comment or "",
                 ],
             )
+            # Best-effort audit row for the deferred
+            # patch_review_actions table (migration 098).
+            try:
+                await _insert_row(
+                    org_id,
+                    "patch_review_actions",
+                    [
+                        "id", "patch_id", "action",
+                        "actor_user_id", "comment", "reason",
+                    ],
+                    [
+                        _new_id("pra"),
+                        patch_id,
+                        "revert",
+                        actor_user_id,
+                        comment or "",
+                        "inbox_revert",
+                    ],
+                )
+            except Exception as pra_exc:
+                logger.debug(
+                    "pr_review: patch_review_actions insert failed: %s",
+                    pra_exc,
+                )
             await _update_row(
                 org_id,
                 "proposed_patches",
@@ -310,6 +331,60 @@ class PRReviewService:
                 set_col="status",
                 set_val="reverted",
             )
+
+            revert_pr_url = None
+            revert_result: dict[str, Any] | None = None
+            try:
+                from ..revert_engine import AutoRevertEngine
+
+                # Prefer an associated pull_requests row when present;
+                # otherwise fall back to patch_id as the pr_id key.
+                pr_id = patch_id
+                pr_state = "merged"
+                try:
+                    pr_row = await _select_one(
+                        org_id,
+                        "pull_requests",
+                        where="patch_id = $2",
+                        params=(patch_id,),
+                    )
+                    if pr_row and pr_row.get("id"):
+                        pr_id = str(pr_row["id"])
+                        pr_state = str(pr_row.get("state") or "merged")
+                except Exception as lookup_exc:
+                    logger.debug(
+                        "pr_review: pull_requests lookup failed: %s",
+                        lookup_exc,
+                    )
+
+                engine = AutoRevertEngine()
+                revert_result = await engine.revert(
+                    org_id=org_id,
+                    pr_id=pr_id,
+                    policy=policy,
+                    pr_state=pr_state,
+                    history_is_linear=True,
+                    regression_evidence={
+                        "source": "inbox_revert",
+                        "patch_id": patch_id,
+                        "actor_user_id": actor_user_id,
+                        "comment": comment or "",
+                    },
+                )
+                if isinstance(revert_result, dict):
+                    revert_pr_url = (
+                        (revert_result.get("data") or {}).get("revert_pr_url")
+                    )
+            except Exception as revert_exc:
+                logger.warning(
+                    "pr_review: AutoRevertEngine failed for %s: %s",
+                    patch_id, revert_exc,
+                )
+                revert_result = {
+                    "status": "error",
+                    "message": str(revert_exc),
+                }
+
             return _ok_envelope(
                 self.name,
                 {
@@ -318,12 +393,8 @@ class PRReviewService:
                     "approval_id": approval_id,
                     "actor_user_id": actor_user_id,
                     "new_status": "reverted",
-                    "revert_pr_url": None,
-                    "note": (
-                        "AutoRevertEngine is a Gate-4b feature. The "
-                        "operator must open the revert PR manually "
-                        "until then."
-                    ),
+                    "revert_pr_url": revert_pr_url,
+                    "revert": revert_result,
                 },
             )
 
