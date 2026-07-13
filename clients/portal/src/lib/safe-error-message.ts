@@ -36,6 +36,9 @@ export function toUserFacingError(
   if (status === 404) {
     return "We couldn't find what you're looking for.";
   }
+  if (status === 422) {
+    return "Invalid request — refresh the page and try connecting GitHub again.";
+  }
   if (status === 429) {
     return "Too many requests — please wait a moment and try again.";
   }

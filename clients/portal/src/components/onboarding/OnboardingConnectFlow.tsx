@@ -25,6 +25,7 @@ import Link from "next/link";
 import { useOrg } from "@/hooks/use-org";
 import { usePermissions } from "@/hooks/use-permissions";
 import { githubApi, type GitHubInstallation, type GitHubRepo, type OnboardingPRRun } from "@/lib/api";
+import { clearStoredInstallationId } from "@/lib/github-install";
 import { useToast } from "@/components/ui/toast";
 import {
   AlertCircle,
@@ -56,6 +57,14 @@ function Github(props: React.SVGProps<SVGSVGElement>) {
     </svg>
   );
 }
+
+type ConnectPhase =
+  | "checking"
+  | "claiming"
+  | "loading-repos"
+  | "integrating"
+  | "pick-repo"
+  | "install-app";
 
 interface Props {
   /** Called once the integration PR has been opened. */
@@ -101,6 +110,7 @@ export function OnboardingConnectFlow({
   const [loadingRepos, setLoadingRepos] = useState(false);
   const [authorizing, setAuthorizing] = useState(false);
   const [integrating, setIntegrating] = useState(false);
+  const [phase, setPhase] = useState<ConnectPhase>("checking");
   const [error, setError] = useState<string | null>(null);
   const autoIntegrateAttempted = useRef(false);
 
@@ -115,15 +125,15 @@ export function OnboardingConnectFlow({
   // Once configured + admin, fetch installations + their repos.
   const loadRepos = useCallback(async () => {
     if (!currentOrg?.id || !canIntegrate || configured !== true) return;
+    setPhase("loading-repos");
     setLoadingRepos(true);
     setError(null);
     try {
       const insts = await githubApi.listInstallations(currentOrg.id);
       setInstallations(insts.filter((i) => !i.suspended));
       if (insts.length === 0) {
-        // No installations — that's fine; the user clicks "Connect GitHub"
-        // to install the App. Don't surface as an error.
         setRepos([]);
+        setPhase("install-app");
         return;
       }
       const rs = await githubApi.listRepos(currentOrg.id);
@@ -135,8 +145,10 @@ export function OnboardingConnectFlow({
         const first = rs.find((r) => r.installation_id === preselectedInstallationId);
         if (first) setSelectedRepo(first);
       }
+      setPhase(rs.length > 0 ? "pick-repo" : "install-app");
     } catch (err) {
       setError(errorFromCaught(err, "Could not load repos"));
+      setPhase("install-app");
     } finally {
       setLoadingRepos(false);
     }
@@ -144,21 +156,22 @@ export function OnboardingConnectFlow({
 
   useEffect(() => {
     async function boot() {
-      if (
-        preselectedInstallationId &&
-        currentOrg?.id &&
-        configured === true &&
-        canIntegrate
-      ) {
+      if (!currentOrg?.id || configured !== true || !canIntegrate) {
+        if (configured === false) setPhase("install-app");
+        return;
+      }
+      if (preselectedInstallationId) {
+        setPhase("claiming");
         try {
           await githubApi.claimInstallation(
             currentOrg.id,
             preselectedInstallationId,
           );
+          clearStoredInstallationId();
         } catch (err) {
-          setError(
-            errorFromCaught(err, "Could not register GitHub installation"),
-          );
+          // Claim may fail if webhook already registered — still load repos.
+          const msg = errorFromCaught(err, "Could not register GitHub installation");
+          setError(msg);
         }
       }
       await loadRepos();
@@ -185,6 +198,7 @@ export function OnboardingConnectFlow({
       if (!currentOrg?.id) return;
       setSelectedRepo(repo);
       setIntegrating(true);
+      setPhase("integrating");
       try {
         const run = await githubApi.integrate(currentOrg.id, {
           installation_id: repo.installation_id,
@@ -192,6 +206,7 @@ export function OnboardingConnectFlow({
           agent_id: agentId || undefined,
           agent_name: agentName || repo.name || undefined,
         });
+        clearStoredInstallationId();
         toast.success(
           run.pr_url
             ? "Pull request opened — review it on GitHub"
@@ -200,6 +215,7 @@ export function OnboardingConnectFlow({
         onIntegrated?.(run);
       } catch (err) {
         toast.error(err instanceof Error ? err.message : "Integration failed");
+        setPhase("pick-repo");
       } finally {
         setIntegrating(false);
       }
@@ -243,14 +259,12 @@ export function OnboardingConnectFlow({
 
   // ── Gate 0: still checking GitHub App config ───────────────────
 
-  if (configured === null) {
+  if (configured === null || phase === "checking") {
     return (
-      <div className="flex flex-col items-center justify-center gap-3 py-16 text-center">
-        <Loader2 className="h-8 w-8 animate-spin text-[var(--accent)]" />
-        <p className="text-sm text-[var(--text-secondary)]">
-          Checking GitHub integration…
-        </p>
-      </div>
+      <ConnectStatusPanel
+        title="Checking GitHub integration"
+        detail="Verifying the Eden GitHub App is configured for this workspace."
+      />
     );
   }
 
@@ -283,71 +297,61 @@ export function OnboardingConnectFlow({
 
   // ── Gate 3: no installations yet — render "Connect GitHub" ────
 
-  if (configured === true && canIntegrate && installations.length === 0 && !loadingRepos) {
+  if (configured === true && canIntegrate && installations.length === 0 && !loadingRepos && phase === "install-app") {
     return (
-      <div className="space-y-6">
-        <div>
-          <h2 className="text-2xl font-bold tracking-tight">Connect GitHub</h2>
-          <p className="mt-2 text-[var(--text-secondary)]">
-            Eden opens a pull request that wires the SDK into your
-            agent. You pick which repo(s) to grant access to.
+      <div className="space-y-8">
+        <ConnectHero />
+        {error && <ErrorBanner message={error} />}
+        <div className="rounded-xl border border-[var(--border-default)] bg-[var(--bg-secondary)] p-6">
+          <h3 className="text-base font-semibold text-[var(--text-primary)]">
+            Install the Eden GitHub App
+          </h3>
+          <p className="mt-2 text-sm leading-relaxed text-[var(--text-secondary)]">
+            Pick which repositories Eden can access. We only request{" "}
+            <code className="font-mono text-xs">contents</code> and{" "}
+            <code className="font-mono text-xs">pull_requests</code> so we can
+            open an SDK integration PR — nothing else.
           </p>
+          <button
+            onClick={startInstall}
+            disabled={authorizing}
+            className="mt-5 inline-flex items-center gap-2 rounded-lg bg-[var(--accent)] px-5 py-2.5 text-sm font-medium text-[var(--bg-primary)] hover:opacity-90 disabled:opacity-50"
+          >
+            {authorizing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Github className="h-4 w-4" />}
+            Connect GitHub
+            <ArrowRight className="h-4 w-4" />
+          </button>
         </div>
-        <button
-          onClick={startInstall}
-          disabled={authorizing}
-          className="inline-flex items-center gap-2 rounded-lg bg-[var(--accent)] px-4 py-2 text-sm font-medium text-[var(--bg-primary)] hover:opacity-90 disabled:opacity-50"
-        >
-          {authorizing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Github className="h-4 w-4" />}
-          Install the Eden GitHub App
-          <ArrowRight className="h-4 w-4" />
-        </button>
-        <p className="text-xs text-[var(--text-muted)]">
-          You&apos;ll be redirected to GitHub to pick which repos to grant
-          access to. Eden requests <code className="font-mono">contents</code>
-          {" + "}<code className="font-mono">pull_requests</code> permissions,
-          nothing else.
-        </p>
       </div>
     );
   }
 
-  // ── Main: installed + has repos ───────────────────────────────
-
-  if (inWizard && integrating) {
-    return (
-      <div className="flex flex-col items-center justify-center gap-3 py-16 text-center">
-        <Loader2 className="h-8 w-8 animate-spin text-[var(--accent)]" />
-        <h2 className="text-lg font-semibold text-[var(--text-primary)]">
-          Opening integration PR…
-        </h2>
-        <p className="max-w-sm text-sm text-[var(--text-secondary)]">
-          Eden is detecting your framework and opening a pull request with
-          the SDK wiring. You&apos;ll land on the wait step when the PR is open.
-        </p>
-      </div>
-    );
+  if (phase === "claiming" || phase === "loading-repos" || (inWizard && integrating)) {
+    const copy =
+      phase === "claiming"
+        ? {
+            title: "Registering GitHub App",
+            detail: "Saving your installation to this workspace…",
+          }
+        : phase === "loading-repos"
+          ? {
+              title: "Loading repositories",
+              detail: "Fetching repos granted to the Eden GitHub App…",
+            }
+          : {
+              title: "Opening integration PR",
+              detail:
+                "Eden is detecting your framework and opening a pull request with SDK wiring.",
+            };
+    return <ConnectStatusPanel title={copy.title} detail={copy.detail} />;
   }
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-2xl font-bold tracking-tight">Pick a repo to integrate</h2>
-        <p className="mt-2 text-[var(--text-secondary)]">
-          Eden detects the framework + opens an SDK-integration PR.
-          You merge the PR; the agent starts emitting traces.
-        </p>
-      </div>
+      <ConnectHero />
+      {error && <ErrorBanner message={error} />}
 
-      {error && (
-        <div className="rounded-lg border border-[var(--error)]/40 bg-[var(--error)]/10 p-3 text-sm text-[var(--error)]">
-          <AlertCircle className="mr-1 inline h-4 w-4" />
-          {error}
-        </div>
-      )}
-
-      {/* Repo picker */}
-      <div className="rounded-lg border border-[var(--border-default)] bg-[var(--bg-secondary)]">
+      <div className="rounded-xl border border-[var(--border-default)] bg-[var(--bg-secondary)]">
         <div className="flex items-center justify-between border-b border-[var(--border-default)] px-4 py-2">
           <span className="text-sm font-medium">
             Repositories
@@ -479,6 +483,64 @@ export function OnboardingConnectFlow({
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+function ConnectHero() {
+  return (
+    <div className="space-y-3">
+      <p className="text-[10px] font-mono font-semibold uppercase tracking-[0.18em] text-[var(--accent)]">
+        Step 2 · Connect repo
+      </p>
+      <h2 className="text-2xl font-bold tracking-tight text-[var(--text-primary)]">
+        Wire Eden into your agent repo
+      </h2>
+      <p className="max-w-xl text-sm leading-relaxed text-[var(--text-secondary)]">
+        Eden detects your framework, opens an integration PR, and you merge it
+        to start emitting traces. Usually under two minutes.
+      </p>
+      <ol className="mt-4 grid gap-2 sm:grid-cols-3 text-xs text-[var(--text-muted)]">
+        <li className="rounded-lg border border-[var(--border-default)] bg-[var(--bg-secondary)] px-3 py-2">
+          <span className="font-medium text-[var(--text-primary)]">1. Install app</span>
+          <div className="mt-0.5">Grant repo access on GitHub</div>
+        </li>
+        <li className="rounded-lg border border-[var(--border-default)] bg-[var(--bg-secondary)] px-3 py-2">
+          <span className="font-medium text-[var(--text-primary)]">2. Detect stack</span>
+          <div className="mt-0.5">LangChain, OpenAI, Mastra, …</div>
+        </li>
+        <li className="rounded-lg border border-[var(--border-default)] bg-[var(--bg-secondary)] px-3 py-2">
+          <span className="font-medium text-[var(--text-primary)]">3. Open PR</span>
+          <div className="mt-0.5">Review + merge on GitHub</div>
+        </li>
+      </ol>
+    </div>
+  );
+}
+
+function ConnectStatusPanel({
+  title,
+  detail,
+}: {
+  title: string;
+  detail: string;
+}) {
+  return (
+    <div className="flex flex-col items-center justify-center gap-4 py-20 text-center">
+      <Loader2 className="h-9 w-9 animate-spin text-[var(--accent)]" />
+      <div>
+        <h2 className="text-lg font-semibold text-[var(--text-primary)]">{title}</h2>
+        <p className="mx-auto mt-2 max-w-md text-sm text-[var(--text-secondary)]">{detail}</p>
+      </div>
+    </div>
+  );
+}
+
+function ErrorBanner({ message }: { message: string }) {
+  return (
+    <div className="rounded-xl border border-[var(--error)]/40 bg-[var(--error)]/10 p-4 text-sm text-[var(--error)]">
+      <AlertCircle className="mr-1.5 inline h-4 w-4" />
+      {message}
     </div>
   );
 }
