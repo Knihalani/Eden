@@ -15,6 +15,7 @@ from fastapi import APIRouter, Depends, Path
 from pydantic import BaseModel
 
 from eden.api.deps import get_current_user, require_org_member
+from eden.api.utils.redact import redact_all
 from eden.integrations import INTEGRATION_API_VERSION, SUPPORTED_INTEGRATIONS
 from eden.integrations.github import is_configured as github_is_configured
 from eden.storage.postgres import get_postgres_client
@@ -91,7 +92,7 @@ async def _org_github_connected(org_id: str) -> bool:
         )
         return row is not None
     except Exception as exc:
-        logger.debug("integrations_status github lookup failed: %s", exc)
+        logger.debug("integrations_status github lookup failed: %s", redact_all(str(exc)))
         return False
 
 
@@ -110,7 +111,7 @@ async def _org_export_destinations(org_id: str) -> int:
         )
         return int(row["n"]) if row else 0
     except Exception as exc:
-        logger.debug("integrations_status export lookup failed: %s", exc)
+        logger.debug("integrations_status export lookup failed: %s", redact_all(str(exc)))
         return 0
 
 
@@ -129,7 +130,7 @@ async def _org_gateway_models(org_id: str) -> int:
         )
         return int(row["n"]) if row else 0
     except Exception as exc:
-        logger.debug("integrations_status gateway lookup failed: %s", exc)
+        logger.debug("integrations_status gateway lookup failed: %s", redact_all(str(exc)))
         return 0
 
 

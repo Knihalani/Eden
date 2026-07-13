@@ -41,21 +41,30 @@ def test_settings_have_trace_quality_fields() -> None:
 
 
 def test_app_lifespan_calls_install_all_and_workers() -> None:
-    """G1 — lifespan source must wire N14 activation + F46 hooks."""
+    """G1 — lifespan delegates N14 activation to background workers."""
     from pathlib import Path
 
-    src = (
+    app_src = (
         Path(__file__).resolve().parents[2]
         / "src"
         / "eden"
         / "api"
         / "app.py"
     ).read_text(encoding="utf-8")
-    assert "install_all()" in src
-    assert "start_worker()" in src
-    assert "register_all_hooks()" in src
-    assert "start_judge_tailer" in src
-    assert "stop_judge_tailer" in src
+    worker_src = (
+        Path(__file__).resolve().parents[2]
+        / "src"
+        / "eden"
+        / "workers"
+        / "background.py"
+    ).read_text(encoding="utf-8")
+    assert "start_background_workers" in app_src
+    assert "run_background_workers" in app_src
+    assert "install_all()" in worker_src
+    assert "start_worker()" in worker_src
+    assert "register_all_hooks()" in worker_src
+    assert "start_judge_tailer" in worker_src
+    assert "stop_judge_tailer" in worker_src
 
 
 @pytest.mark.asyncio

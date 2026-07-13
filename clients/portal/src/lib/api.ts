@@ -2998,26 +2998,31 @@ export const agentIssuesApi = {
     data: { message: string; repo_full_name: string },
   ) => {
     const url = `/api/proxy/orgs/${orgId}/agent-issues/${issueId}/fix/chat`;
-    const payload = JSON.stringify(data);
-    let attempt = 0;
-    while (attempt < 2) {
-      const res = await fetch(url, {
+    const doFetch = () =>
+      fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: payload,
+        body: JSON.stringify(data),
         credentials: "include",
       });
-      if (res.ok && res.body) return res.body;
-      if (res.status === 429 && attempt === 0) {
-        const retryAfter = res.headers.get("Retry-After");
-        const waitMs = retryAfter ? Number(retryAfter) * 1000 : 1500;
-        await new Promise((r) => setTimeout(r, Number.isFinite(waitMs) ? waitMs : 1500));
-        attempt += 1;
-        continue;
-      }
-      throw new Error(`Fix chat failed (${res.status})`);
+
+    let res = await doFetch();
+    if (res.status === 429) {
+      const wait = retryAfterMs(res) ?? RETRY_AFTER_DEFAULT_MS;
+      await new Promise((r) => setTimeout(r, wait));
+      res = await doFetch();
     }
-    throw new Error("Fix chat failed (rate limited)");
+    if (!res.ok || !res.body) {
+      let detail = `Fix chat failed (${res.status})`;
+      try {
+        const body = (await res.json()) as { detail?: string };
+        if (body.detail) detail = body.detail;
+      } catch {
+        /* ignore */
+      }
+      throw new Error(detail);
+    }
+    return res.body;
   },
   createRegressionCases: (
     orgId: string,

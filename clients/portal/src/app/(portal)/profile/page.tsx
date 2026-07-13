@@ -13,6 +13,7 @@ import { useConfirm } from "@/hooks/use-confirm";
 import { TwoFASetupDialog } from "../settings/_components/2fa-setup-dialog";
 import { Card } from "@/components/ui/card";
 import { errorFromCaught } from "@/lib/safe-error-message";
+import { IntegrationStatusBanners } from "@/components/integration-status-banners";
 export default function ProfilePage() {
   const {
     user,
@@ -165,6 +166,8 @@ export default function ProfilePage() {
   if (!user) return null;
   return <PageContent size="narrow">
       <PageHeader eyebrow="Account" title="Profile" subtitle="Manage your account settings, security, and authentication." icon={User} />
+
+      <IntegrationStatusBanners integration="storage" className="mb-6" />
 
       {/* User Info Section */}
       <div className="bg-[var(--bg-primary)] rounded-lg border border-[var(--border)] p-6 mb-6">
