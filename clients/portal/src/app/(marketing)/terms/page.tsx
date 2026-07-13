@@ -112,6 +112,7 @@ export default function TermsPage() {
       title="Terms of Service"
       description="These terms govern your use of Eden. The free tier is offered under these terms as-is. Paid plans add the SLA + DPA in your order form."
       size="narrow"
+      draft
     >
       <div className="space-y-12">
         {SECTIONS.map((s) => (

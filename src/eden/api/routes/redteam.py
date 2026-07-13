@@ -17,6 +17,7 @@ from fastapi import APIRouter, Depends, HTTPException, Path, Query
 from pydantic import BaseModel, Field
 
 from eden.api.routes.auth import get_current_user
+from eden.redteam.findings_store import FindingsStore
 from eden.redteam.probes import (
     PROBE_CATALOGUE,
     AgentInvoker,
@@ -148,7 +149,7 @@ def _resolve_invoker(req: Any) -> AgentInvoker:
             import httpx
         except ImportError as exc:
             raise HTTPException(
-                status_code=501,
+                status_code=503,
                 detail={
                     "error": "missing_dependency",
                     "detail": f"httpx is required for target_endpoint: {exc}",
@@ -224,10 +225,17 @@ async def run_probe_route(
         )
     probe = PROBE_CATALOGUE[body.probe_name]
     invoker = _resolve_invoker(body)
-    runner = ProbeRunner()  # no pg / no hook; route is read-only
+    from eden.storage.postgres import get_postgres_client
+
+    pg = await get_postgres_client()
+    store = FindingsStore(pg) if pg is not None else None
+    runner = ProbeRunner()
     result = await runner.run_probe(
         probe, target=invoker, target_label=body.target_label,
     )
+    if store is not None:
+        for finding in result.findings:
+            await store.insert(org_id, finding)
     return _result_to_response(result)
 
 
@@ -242,6 +250,10 @@ async def run_scan_route(
     user: dict = Depends(get_current_user),
 ) -> ScanResponse:
     invoker = _resolve_invoker(body)
+    from eden.storage.postgres import get_postgres_client
+
+    pg = await get_postgres_client()
+    store = FindingsStore(pg) if pg is not None else None
     runner = ProbeRunner()
     if body.probe_names:
         probes = [PROBE_CATALOGUE[n] for n in body.probe_names if n in PROBE_CATALOGUE]
@@ -255,6 +267,10 @@ async def run_scan_route(
     results = await runner.run_suite(
         probes, target=invoker, target_label=body.target_label,
     )
+    if store is not None:
+        for run in results:
+            for finding in run.findings:
+                await store.insert(org_id, finding)
     return ScanResponse(runs=[_result_to_response(r) for r in results])
 
 
@@ -272,13 +288,25 @@ async def list_findings_route(
     probe_name: str | None = Query(default=None),
     user: dict = Depends(get_current_user),
 ) -> FindingsListResponse:
-    """Read-side helper. The 501 stub for now; the persistence
-    layer is wired in ``redteam.findings_router`` (a future
-    PR). For now we return an empty list so the route
-    compiles and the dashboard can render an "empty state"."""
-    # The actual lookup is wired in via a follow-up PR that
-    # adds a real persistence helper; for now, the route
-    # returns an empty list.
+    from eden.storage.postgres import get_postgres_client
+
+    pg = await get_postgres_client()
+    if pg is None:
+        return FindingsListResponse(
+            findings=[], total=0, limit=limit, offset=offset,
+        )
+    store = FindingsStore(pg)
+    rows, total = await store.list_for_org(
+        org_id,
+        limit=limit,
+        offset=offset,
+        only_failures=only_failures,
+        severity=severity,
+        probe_name=probe_name,
+    )
     return FindingsListResponse(
-        findings=[], total=0, limit=limit, offset=offset,
+        findings=[FindingResponse(**row) for row in rows],
+        total=total,
+        limit=limit,
+        offset=offset,
     )

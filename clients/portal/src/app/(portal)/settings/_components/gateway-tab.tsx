@@ -6,6 +6,7 @@ import { useToast } from "@/components/ui/toast";
 import { useConfirm } from "@/hooks/use-confirm";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { IntegrationStatusBanner } from "@/components/settings/integration-status-banner";
 import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 import { Card } from "@/components/ui/card";
 interface GatewayModel {
@@ -244,6 +245,7 @@ export function GatewayTab({
           </div> : null
   }];
   return <div className="space-y-4">
+      <IntegrationStatusBanner orgId={org?.id} watch={["gateway"]} />
       <Card padding="md">
         <div className="flex items-start justify-between gap-3">
           <div>

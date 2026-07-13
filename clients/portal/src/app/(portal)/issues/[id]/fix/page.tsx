@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { PageContent } from "@/components/layout/page-content";
 import { useToast } from "@/components/ui/toast";
+import { Skeleton } from "@/components/ui/skeleton";
 
 export default function IssueFixPage() {
   const { currentOrg } = useOrg();
@@ -22,11 +23,13 @@ export default function IssueFixPage() {
   const [patch, setPatch] = useState<string | null>(null);
   const [chatLog, setChatLog] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
+  const [sessionLoading, setSessionLoading] = useState(true);
   const [sessionStatus, setSessionStatus] = useState<string | null>(null);
   const logRef = useRef<HTMLPreElement>(null);
 
   const loadSession = useCallback(async () => {
     if (!currentOrg || !issueId) return;
+    setSessionLoading(true);
     try {
       const [sessionRes, issueRes] = await Promise.all([
         agentIssuesApi.fixSession(currentOrg.id, issueId),
@@ -56,6 +59,8 @@ export default function IssueFixPage() {
       }
     } catch {
       // no session yet
+    } finally {
+      setSessionLoading(false);
     }
   }, [currentOrg, issueId, repo]);
 
@@ -155,11 +160,24 @@ export default function IssueFixPage() {
 
   if (!currentOrg) return null;
 
+  if (sessionLoading) {
+    return (
+      <PageContent size="wide">
+        <Skeleton className="h-4 w-32 mb-4" />
+        <Skeleton className="h-8 w-48 mb-6" />
+        <div className="grid gap-4 lg:grid-cols-2">
+          <Skeleton className="h-[420px] rounded-xl" />
+          <Skeleton className="h-[420px] rounded-xl" />
+        </div>
+      </PageContent>
+    );
+  }
+
   return (
     <PageContent size="wide">
       <Link
         href={`/issues/${issueId}`}
-        className="inline-flex items-center gap-1 text-sm text-[var(--text-muted)] hover:text-[var(--text-primary)] mb-4"
+        className="inline-flex items-center gap-1 text-sm text-[var(--text-muted)] hover:text-[var(--text-primary)] mb-4 min-h-[44px]"
       >
         <ArrowLeft className="h-4 w-4" /> Back to issue
       </Link>
@@ -178,7 +196,7 @@ export default function IssueFixPage() {
         <Card padding="md" className="flex flex-col min-h-[420px]">
           <label className="text-xs text-[var(--text-muted)] mb-1">Repository (org/repo)</label>
           <input
-            className="mb-3 w-full rounded border border-[var(--border-default)] bg-[var(--bg-base)] px-2 py-2 text-sm min-h-[44px]"
+            className="mb-3 w-full rounded border border-[var(--border-default)] bg-[var(--bg-base)] px-3 py-2.5 text-sm min-h-[44px]"
             value={repo}
             onChange={(e) => setRepo(e.target.value)}
             placeholder="acme/checkout-agent"
@@ -191,7 +209,7 @@ export default function IssueFixPage() {
           </pre>
           <div className="flex gap-2">
             <input
-              className="flex-1 rounded border border-[var(--border-default)] bg-[var(--bg-base)] px-2 py-2 text-sm min-h-[44px]"
+              className="flex-1 rounded border border-[var(--border-default)] bg-[var(--bg-base)] px-3 py-2.5 text-sm min-h-[44px]"
               value={message}
               onChange={(e) => setMessage(e.target.value)}
               placeholder="Fix the loop in checkout prompt…"
