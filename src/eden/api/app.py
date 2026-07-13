@@ -534,6 +534,16 @@ app.add_middleware(
 if getattr(settings, "quota_enforcement_enabled", True):
     app.add_middleware(QuotaEnforcementMiddleware)
 
+# IdempotencyMiddleware — optional ``Idempotency-Key`` dedupe for
+# mutating ``/v1/*`` requests. Mounted behind
+# ``idempotency_middleware_enabled`` (default True). Requests without
+# the header pass through; with the header, Redis + Postgres cache
+# the first successful response for 24h.
+if getattr(settings, "idempotency_middleware_enabled", True):
+    from eden.api.middleware.idempotency import IdempotencyMiddleware
+
+    app.add_middleware(IdempotencyMiddleware)
+
 # Internal-only middleware gates the ``/v1/internal/*`` namespace to
 # the IP allow-list (default: loopback). Operators set
 # ``INTERNAL_ALLOWED_IPS`` to a comma-separated list when deploying

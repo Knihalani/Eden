@@ -6,11 +6,11 @@ AgentMetricsCollector) is real and continues to work — see
 :mod:`eden.apm_depth.metrics`.
 
 ponytail: per upgradespec §D.1 (Phase 1 cut), the v1.4.1
-add-on routes (tail-sampling, K8s enrichment, Pyroscope) are
-removed and return 501 with a pointer to the OTel Collector
-config. The OTel Collector ``tail_sampling`` +
-``k8sattributes`` processors are the replacement; see
-``deploy/otel-collector-config.yaml`` for the config.
+in-process sampling / K8s / Pyroscope code was removed. The
+tail-sampling + K8s attribute *routes* now expose the live
+OTel Collector configuration from
+``deploy/otel-collector-config.yaml`` (parsed or static
+mirror). Pyroscope profile link routes remain deferred.
 
 Mounted at ``/orgs/{org_id}/intelligence/apm-depth`` — same
 prefix the previous v1.4 surface used so any deep-linked
@@ -132,16 +132,14 @@ async def agent_metrics(
     return await _metrics.aggregate(org_id, window_hours=window_hours)
 
 
-# ─── Routes (v1.4.1 — removed per §D.1) ──────────────────────────
+# ─── Routes (v1.4.1 — live OTel Collector configuration surface) ─
 
 
 def _deferred(message: str) -> dict[str, Any]:
-    """Stable 501-shape envelope for endpoints cut per upgradespec §D.1.
+    """Stable 501-shape envelope for endpoints still deferred (profiles).
 
-    Mirrors the ``_not_implemented_envelope`` pattern used by the
-    Cat 23 STUB surface so the portal renders a uniform "deferred"
-    badge. The ``config_hint`` field names the OTel Collector
-    config the customer should install.
+    Pyroscope / Phlare correlation remains out of process; sampling
+    and K8s enrichment now expose the deployed collector config.
     """
     return {
         "status": "not_implemented",
@@ -150,44 +148,122 @@ def _deferred(message: str) -> dict[str, Any]:
         "message": message,
         "data": {
             "config_hint": (
-                "Deploy the OTel Collector with the tail_sampling + "
-                "k8sattributes processors (see "
-                "deploy/otel-collector-config.yaml). The in-process "
-                "sampling/k8s/profiling stack was removed per "
-                "upgradespec §D.1."
+                "Use Grafana Phlare / Pyroscope directly for continuous "
+                "profiling. Tail sampling + K8s attributes are live via "
+                "deploy/otel-collector-config.yaml (see /sampling/* and "
+                "/k8s/* routes)."
             ),
         },
     }
 
 
+class SamplingEvaluateRequest(BaseModel):
+    attributes: dict[str, Any] = {}
+
+
 @router.post("/sampling/evaluate")
-async def sampling_evaluate(org_id: str = Path(...)) -> dict[str, Any]:
-    """Removed per §D.1 — see OTel Collector ``tail_sampling`` processor."""
-    return _deferred("Tail-sampling preview removed; use OTel Collector.")
+async def sampling_evaluate(
+    org_id: str = Path(...),
+    body: SamplingEvaluateRequest | None = Body(None),
+) -> dict[str, Any]:
+    """Preview which OTel Collector ``tail_sampling`` policy would keep a span.
+
+    Live configuration surface — decisions are enforced by the
+    collector; this endpoint returns the deployed policy set plus a
+    best-effort match preview for the supplied attributes.
+    """
+    from eden.apm_depth.otel_collector_config import evaluate_sampling_preview
+
+    attrs = (body.attributes if body is not None else {}) or {}
+    result = evaluate_sampling_preview(attributes=attrs)
+    result["data"]["org_id"] = org_id
+    return result
 
 
 @router.get("/sampling/stats")
 async def sampling_stats() -> dict[str, Any]:
-    """Removed per §D.1 — read drop-rate from the OTel Collector metrics."""
-    return _deferred("Sampling stats removed; OTel Collector exports these.")
+    """Return the deployed OTel Collector ``tail_sampling`` configuration."""
+    from eden.apm_depth.otel_collector_config import tail_sampling_config
+
+    result = tail_sampling_config()
+    policies = list((result["data"]["config"] or {}).get("policies") or [])
+    probabilistic = next(
+        (
+            p for p in policies
+            if str(p.get("type") or "") == "probabilistic"
+        ),
+        None,
+    )
+    result["data"]["stats"] = {
+        "policy_count": len(policies),
+        "keep_policy_names": [
+            p.get("name") for p in policies
+            if str(p.get("type") or "") != "probabilistic"
+        ],
+        "fallback_sampling_percentage": (
+            (probabilistic or {}).get("probabilistic") or {}
+        ).get("sampling_percentage", 15),
+        "note": (
+            "Drop-rate metrics are exported by the OTel Collector; "
+            "this endpoint surfaces the live policy configuration."
+        ),
+    }
+    return result
 
 
 @router.post("/k8s/enrich")
-async def k8s_enrich(org_id: str = Path(...)) -> dict[str, Any]:
-    """Removed per §D.1 — see OTel Collector ``k8sattributes`` processor."""
-    return _deferred("In-process K8s enricher removed; use OTel Collector.")
+async def k8s_enrich(
+    org_id: str = Path(...),
+    body: EnrichRequest | None = Body(None),
+) -> dict[str, Any]:
+    """Return the deployed ``k8sattributes`` processor configuration.
+
+    In-process enrichment was removed per §D.1; this is the live
+    configuration surface reflecting ``deploy/otel-collector-config.yaml``.
+    """
+    from eden.apm_depth.otel_collector_config import k8s_attributes_config
+
+    result = k8s_attributes_config()
+    result["data"]["org_id"] = org_id
+    if body is not None:
+        result["data"]["input_attributes"] = body.attributes
+        result["data"]["note"] = (
+            "Attributes are enriched by the OTel Collector "
+            "k8sattributes processor at collect time; this endpoint "
+            "does not mutate spans in-process."
+        )
+    return result
 
 
 @router.post("/k8s/enrich-batch")
-async def k8s_enrich_batch(org_id: str = Path(...)) -> dict[str, Any]:
-    """Removed per §D.1."""
-    return _deferred("In-process K8s enricher removed; use OTel Collector.")
+async def k8s_enrich_batch(
+    org_id: str = Path(...),
+    body: EnrichBatchRequest | None = Body(None),
+) -> dict[str, Any]:
+    """Batch variant of ``/k8s/enrich`` — returns live collector config."""
+    from eden.apm_depth.otel_collector_config import k8s_attributes_config
+
+    result = k8s_attributes_config()
+    result["data"]["org_id"] = org_id
+    result["data"]["span_count"] = len(body.spans) if body is not None else 0
+    return result
 
 
 @router.get("/k8s/detect")
 async def k8s_detect() -> dict[str, Any]:
-    """Removed per §D.1 — OTel Collector handles K8s detection natively."""
-    return _deferred("K8s detect removed; OTel Collector handles this.")
+    """Describe how the collector detects K8s metadata."""
+    from eden.apm_depth.otel_collector_config import k8s_attributes_config
+
+    result = k8s_attributes_config()
+    cfg = result["data"]["config"] or {}
+    result["data"]["detection"] = {
+        "auth_type": cfg.get("auth_type", "serviceAccount"),
+        "passthrough": cfg.get("passthrough", False),
+        "metadata": (cfg.get("extract") or {}).get("metadata", []),
+        "env_fallbacks": cfg.get("extract_from_env", []),
+        "detector": "otel_collector_k8sattributes",
+    }
+    return result
 
 
 @router.get("/profiles/{trace_id}")
