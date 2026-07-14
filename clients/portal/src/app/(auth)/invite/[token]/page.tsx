@@ -10,7 +10,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { SignedIn, SignedOut, SignInButton, SignUpButton, useAuth } from "@clerk/nextjs";
+import { SignInButton, SignUpButton, useAuth } from "@clerk/nextjs";
 import { api } from "@/lib/api";
 import {
   Loader2,
@@ -132,38 +132,39 @@ export default function InvitePage() {
             </div>
           </div>
 
-          <SignedOut>
-            <p className="text-sm text-[var(--text-secondary)]">
-              Sign in or create an account with <strong>{inviteData.email}</strong>, then
-              accept this invitation.
-            </p>
-            <div className="flex flex-col sm:flex-row gap-2">
-              <SignUpButton mode="modal">
-                <Button className="w-full">Create account</Button>
-              </SignUpButton>
-              <SignInButton mode="modal">
-                <Button variant="outline" className="w-full">
-                  Sign in
-                </Button>
-              </SignInButton>
-            </div>
-          </SignedOut>
-
-          <SignedIn>
-            {acceptError && (
-              <p role="alert" className="text-sm text-[var(--error)]">
-                {acceptError}
+          {!isSignedIn ? (
+            <>
+              <p className="text-sm text-[var(--text-secondary)]">
+                Sign in or create an account with <strong>{inviteData.email}</strong>, then
+                accept this invitation.
               </p>
-            )}
-            <Button
-              className="w-full"
-              loading={accepting}
-              onClick={() => void handleAccept()}
-              disabled={!isSignedIn}
-            >
-              Accept invitation
-            </Button>
-          </SignedIn>
+              <div className="flex flex-col sm:flex-row gap-2">
+                <SignUpButton mode="modal">
+                  <Button className="w-full">Create account</Button>
+                </SignUpButton>
+                <SignInButton mode="modal">
+                  <Button variant="outline" className="w-full">
+                    Sign in
+                  </Button>
+                </SignInButton>
+              </div>
+            </>
+          ) : (
+            <>
+              {acceptError && (
+                <p role="alert" className="text-sm text-[var(--error)]">
+                  {acceptError}
+                </p>
+              )}
+              <Button
+                className="w-full"
+                loading={accepting}
+                onClick={() => void handleAccept()}
+              >
+                Accept invitation
+              </Button>
+            </>
+          )}
         </div>
       </AuthFormCard>
     </AuthSplitLayout>
