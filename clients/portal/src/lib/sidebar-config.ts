@@ -201,6 +201,7 @@ export const DEFAULT_SIDEBAR: SidebarGroup[] = [
     label: "Automate",
     items: [
       { id: "improve",        href: "/improve",        label: "Improve",        icon: ListTodo, description: "Unified action queue — triage, patches, nudges, and promotions from detected issues."},
+      { id: "pr-inbox",       href: "/agents/eden/inbox", label: "PR Inbox", icon: Inbox, badge: "new", description: "Review Eden-proposed patches — approve, deny, comment, or open a PR."},
       { id: "autonomous",     href: "/autonomous",     label: "Autonomous",     icon: Wand2, category: "advanced", description: "Run investigations and remediations on demand."},
       { id: "closed-loop",    href: "/closed-loop",    label: "Closed-Loop",    icon: Inbox, category: "advanced" , description: "Closed-loop improvements — events flow from detection back to deploy."},
       { id: "pr-suggestions", href: "/pr-suggestions", label: "PR Suggestions", icon: PatchIcon, badge: "new", category: "advanced" , description: "Auto-generated PRs that fix issues Eden finds in your repo (new)."},

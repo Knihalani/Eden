@@ -65,8 +65,14 @@ class IdempotencyMiddleware(BaseHTTPMiddleware):
     - Subsequent occurrence (same key + method + path + body + identity): return cached
       response with ``Idempotency-Replay: true`` header.
 
-    If a mutating request is missing the header, a 400 error is returned.
+    If a mutating request is missing the header, the request proceeds
+    unchanged (header is optional). Pass ``require_key=True`` to reject
+    missing keys with 400 (used by F69 unit tests / strict tenants).
     """
+
+    def __init__(self, app, require_key: bool = False) -> None:
+        super().__init__(app)
+        self.require_key = require_key
 
     async def dispatch(self, request: Request, call_next) -> Response:
         method = request.method.upper()
@@ -77,16 +83,17 @@ class IdempotencyMiddleware(BaseHTTPMiddleware):
 
         idempotency_key = request.headers.get(_IDEMPOTENCY_HEADER)
         if not idempotency_key:
-            # Require idempotency key for all mutating v1 requests
-            return JSONResponse(
-                status_code=400,
-                content={
-                    "detail": f"Idempotency-Key header is required for {method} requests",
-                    "hint": "Include a unique Idempotency-Key header (UUIDv4 recommended) to safely retry this request",
-                },
-                # F69 — apply OWASP security headers to the 400 envelope.
-                headers=apply_security_headers(),
-            )
+            if self.require_key:
+                return JSONResponse(
+                    status_code=400,
+                    content={
+                        "detail": f"Idempotency-Key header is required for {method} requests",
+                        "hint": "Include a unique Idempotency-Key header (UUIDv4 recommended) to safely retry this request",
+                    },
+                    # F69 — apply OWASP security headers to the 400 envelope.
+                    headers=apply_security_headers(),
+                )
+            return await call_next(request)
 
         # Sanitize key
         key_raw = idempotency_key.strip()

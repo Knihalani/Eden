@@ -48,8 +48,10 @@ from typing import TYPE_CHECKING, Any
 
 from ._common import (
     _check_auto_judge_policy,
+    _error_envelope,
     _json_dumps,
     _ok_envelope,
+    _validation_envelope,
 )
 
 if TYPE_CHECKING:
@@ -366,8 +368,278 @@ class JudgeFactory:
             },
         )
 
+    async def execute(
+        self,
+        org_id: str,
+        *,
+        metric_id: str,
+        input_text: str | None = None,
+        output_text: str | None = None,
+        trace_id: str | None = None,
+        bypass_opt_in: bool = True,
+    ) -> dict[str, Any]:
+        """Manually run a registered custom metric and persist the score.
+
+        This is the per-call / portal "Score now" path. Manual
+        triggers bypass the auto-judge opt-in gate by default
+        (``bypass_opt_in=True``) — the gate only applies to the
+        TelemetryEvent stream. Results are always written to
+        ``custom_metric_runs`` with ``status="scored"``.
+        """
+        if not metric_id:
+            return _validation_envelope(
+                self.name, "metric_id is required"
+            )
+        if not (input_text or output_text or trace_id):
+            return _validation_envelope(
+                self.name,
+                "provide input_text/output_text or trace_id",
+            )
+
+        metric = await _load_metric(org_id, metric_id)
+        if metric is None:
+            return _error_envelope(
+                self.name,
+                f"metric_id={metric_id!r} not found",
+                error_code="metric_not_found",
+            )
+
+        rubric_prompt = metric.get("rubric_prompt")
+        if not rubric_prompt:
+            rubric_id = metric.get("rubric_id")
+            if rubric_id:
+                from .synthesiser import _fetch_rubric_row
+
+                rubric_prompt, _, _ = await _fetch_rubric_row(
+                    org_id, rubric_id
+                )
+        if not rubric_prompt:
+            return _error_envelope(
+                self.name,
+                f"no rubric prompt available for metric_id={metric_id!r}",
+                error_code="rubric_missing",
+            )
+
+        if not bypass_opt_in:
+            allowed, reason = await _check_auto_judge_policy(
+                org_id, metric_id
+            )
+            if not allowed:
+                await _write_score_audit_log(
+                    org_id=org_id,
+                    metric_id=metric_id,
+                    judge_name=metric.get("judge_id") or f"custom_{metric_id}",
+                    trace_id=trace_id or "",
+                    score=None,
+                    threshold=None,
+                    passed=None,
+                    result={
+                        "scored": False,
+                        "reason": reason,
+                        "metric_id": metric_id,
+                    },
+                )
+                return _ok_envelope(
+                    self.name,
+                    {
+                        "scored": False,
+                        "reason": reason,
+                        "metric_id": metric_id,
+                    },
+                )
+
+        # Resolve input/output — prefer explicit fields; else
+        # pull the latest telemetry event for the trace.
+        text = (output_text or "").strip()
+        spec = (input_text or "").strip()
+        resolved_trace = trace_id or f"manual_{uuid.uuid4().hex[:12]}"
+        if not text and not spec and trace_id:
+            text, spec = await _load_trace_io(org_id, trace_id)
+
+        score, rationale, model, latency_ms, err = await _score_rubric(
+            rubric_prompt=rubric_prompt,
+            input_text=spec,
+            output_text=text,
+            judge_name=metric.get("judge_id") or f"custom_{metric_id}",
+        )
+        if err:
+            await _write_score_audit_log(
+                org_id=org_id,
+                metric_id=metric_id,
+                judge_name=metric.get("judge_id") or f"custom_{metric_id}",
+                trace_id=resolved_trace,
+                score=None,
+                threshold=None,
+                passed=None,
+                result={"scored": False, "reason": err, "metric_id": metric_id},
+            )
+            return _error_envelope(
+                self.name,
+                f"judge execution failed: {err}",
+                error_code="judge_execution_failed",
+                data={"metric_id": metric_id, "trace_id": resolved_trace},
+            )
+
+        await _write_score_audit_log(
+            org_id=org_id,
+            metric_id=metric_id,
+            judge_name=metric.get("judge_id") or f"custom_{metric_id}",
+            trace_id=resolved_trace,
+            score=score,
+            threshold=None,
+            passed=None,
+            result={
+                "scored": True,
+                "score": score,
+                "rationale": rationale,
+                "model": model,
+                "latency_ms": latency_ms,
+                "manual": True,
+            },
+        )
+        return _ok_envelope(
+            self.name,
+            {
+                "scored": True,
+                "metric_id": metric_id,
+                "trace_id": resolved_trace,
+                "score": score,
+                "rationale": rationale,
+                "model": model,
+                "latency_ms": latency_ms,
+            },
+        )
+
 
 # ── Internal helpers (module-private) ───────────────────────────────
+
+
+async def _load_metric(
+    org_id: str, metric_id: str
+) -> dict[str, Any] | None:
+    """Load one metric entry from the org custom-metrics store."""
+    try:
+        from ._common import _load_org_custom_metrics
+
+        metrics = await _load_org_custom_metrics(org_id)
+    except Exception as exc:  # pragma: no cover - defensive
+        logger.debug("metric_studio.judge_factory: load metrics failed: %s", exc)
+        return None
+    for m in metrics:
+        if m.get("metric_id") == metric_id:
+            return m
+    return None
+
+
+async def _load_trace_io(
+    org_id: str, trace_id: str
+) -> tuple[str, str]:
+    """Best-effort (output, input/spec) from telemetry_events."""
+    try:
+        from eden.storage.postgres import get_postgres_client
+
+        client = await get_postgres_client()
+        if client is None:
+            return "", ""
+        row = await client.fetchrow(
+            """
+            SELECT payload
+            FROM telemetry_events
+            WHERE tenant_id = $1 AND trace_id = $2
+            ORDER BY timestamp DESC
+            LIMIT 1
+            """,
+            org_id,
+            trace_id,
+        )
+    except Exception as exc:
+        logger.debug(
+            "metric_studio.judge_factory: load_trace_io failed: %s", exc
+        )
+        return "", ""
+    if not row:
+        return "", ""
+    payload = row.get("payload") or {}
+    if isinstance(payload, str):
+        try:
+            payload = json.loads(payload)
+        except (ValueError, TypeError):
+            payload = {}
+    text = ""
+    spec = ""
+    if isinstance(payload, dict):
+        for provider in (
+            "openai",
+            "anthropic",
+            "gemini",
+            "langfuse",
+            "helicone",
+            "bedrock",
+            "otel",
+        ):
+            sub = payload.get(provider)
+            if isinstance(sub, dict):
+                for k in (
+                    "response_text",
+                    "output",
+                    "first_message_content",
+                    "content_text",
+                    "first_text",
+                ):
+                    v = sub.get(k)
+                    if isinstance(v, str) and v:
+                        text = v
+                        break
+            if text:
+                break
+        spec = str(payload.get("task") or payload.get("spec") or "")
+    return text, spec
+
+
+async def _score_rubric(
+    *,
+    rubric_prompt: str,
+    input_text: str,
+    output_text: str,
+    judge_name: str,
+) -> tuple[float | None, str, str, float, str | None]:
+    """Call the LLM against the rubric; return score tuple or err."""
+    input_block = (
+        f"Task / spec (may be empty):\n"
+        f"{input_text[:400] if input_text else '(no spec)'}"
+    )
+    output_block = (
+        f"Response to evaluate:\n"
+        f"{output_text[:1200] if output_text else '(no response)'}"
+    )
+    prompt = _RUBRIC_JUDGE_PROMPT.format(
+        rubric=rubric_prompt[: (4 * 1500)],
+        input_block=input_block,
+        output_block=output_block,
+    )
+    try:
+        from eden.llm.client import get_llm_client
+
+        client = get_llm_client()
+    except Exception as exc:
+        return None, "", "n/a", 0.0, f"llm_unavailable:{type(exc).__name__}"
+    t0 = time.monotonic()
+    try:
+        resp = client.call(
+            agent=f"judge_{judge_name}",
+            prompt=prompt,
+            slot="fast",
+            max_tokens=120,
+        )
+    except Exception as exc:
+        return None, "", "n/a", 0.0, f"llm_error:{type(exc).__name__}"
+    latency_ms = (time.monotonic() - t0) * 1000.0
+    content = getattr(resp, "content", "") or ""
+    if not content.strip():
+        return None, "", "n/a", latency_ms, "empty_judge_response"
+    score, rationale = _parse_rubric_response(content)
+    model = getattr(resp, "model", "") or "unknown"
+    return score, rationale, model, latency_ms, None
 
 
 def _low_confidence(

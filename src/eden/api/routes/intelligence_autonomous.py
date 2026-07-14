@@ -1,19 +1,15 @@
 """Intelligence Gap — Autonomous + NL Interface (Cat 14) routes.
 
-ponytail: per upgradespec §D.4 (Phase 1 cut), the Cat 14
-ship surface is:
+Ship surface:
 
 * ``InvestigationAgent`` — single-shot RCA + remediation
   proposal (with folded ``report()`` + ``recommend()``
-  methods per §D.4)
+  methods)
 * ``SelfHealer`` — destructive surface (gated by
   ``require_org_admin`` + ``autonomous_actions_v0``)
+* ``NLQueryEngine`` — NL → Postgres query (heuristic fallback)
+* ``AutoDashboardBuilder`` — NL → dashboard spec
 * ``NLReportGenerator`` — NL → report
-
-The removed services (``ReportGenerator``,
-``RecommendationEngine``, ``NLQueryEngine``,
-``AutoDashboardBuilder``) return a stable 501 envelope
-so deep-linked portal pages resolve gracefully.
 
 The destructive ``/heal`` route remains gated by
 ``require_org_admin`` AND the ``autonomous_actions_v0``
@@ -38,7 +34,9 @@ from eden.api.deps import (
 )
 from eden.api.utils.redact import redact_all
 from eden.autonomous import (
+    AutoDashboardBuilder,
     InvestigationAgent,
+    NLQueryEngine,
     NLReportGenerator,
     SelfHealer,
 )
@@ -66,7 +64,9 @@ _investigator = InvestigationAgent()
 # Destructive — guarded per-route below.
 _healer = SelfHealer()
 
-# Surviving NL Interface service.
+# NL Interface services.
+_nl_query = NLQueryEngine()
+_nl_dash = AutoDashboardBuilder()
 _nl_report = NLReportGenerator()
 
 
@@ -197,7 +197,7 @@ async def recommendations(org_id: str = Path(...)) -> dict[str, Any]:
     # The heal endpoint is the only destructive route in
     # Cat 14. We override the router-level ``get_current_user``
     # dependency with ``require_org_admin`` so a non-admin
-    # member can hit the other 6 routes but not this one.
+    # member can hit the other routes but not this one.
     # The destructive-flag check happens inside the service
     # itself (so the test suite can exercise the queue path
     # without the flag).
@@ -279,17 +279,7 @@ async def nl_query(
     org_id: str = Path(...),
     body: NLQueryRequest = Body(...),
 ) -> dict[str, Any]:
-    # ponytail: NLQueryEngine removed per upgradespec §D.4.
-    return {
-        "status": "not_implemented",
-        "feature": "nl_query",
-        "live": False,
-        "message": (
-            "NLQueryEngine removed per upgradespec §D.4. "
-            "Use the EQL DSL (Cat 19) for read-only trace queries."
-        ),
-        "data": {"redirect": "/orgs/{org_id}/intelligence/dsl/eql"},
-    }
+    return await _nl_query.query(org_id, question=body.question)
 
 
 @router.post("/nl/dashboard")
@@ -297,17 +287,7 @@ async def nl_dashboard(
     org_id: str = Path(...),
     body: DashboardRequest = Body(...),
 ) -> dict[str, Any]:
-    # ponytail: AutoDashboardBuilder removed per upgradespec §D.4.
-    return {
-        "status": "not_implemented",
-        "feature": "auto_dashboard",
-        "live": False,
-        "message": (
-            "AutoDashboardBuilder removed per upgradespec §D.4. "
-            "Build dashboards from saved queries."
-        ),
-        "data": {"redirect": "/orgs/{org_id}/observability/dashboards"},
-    }
+    return await _nl_dash.build(org_id, description=body.description)
 
 
 @router.post("/nl/report")

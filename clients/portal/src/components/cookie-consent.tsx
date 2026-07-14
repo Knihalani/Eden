@@ -47,10 +47,14 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import {
+  applyAnalyticsConsent,
+  bootAnalyticsFromStoredConsent,
+  COOKIE_CONSENT_KEY,
+  type ConsentValue,
+} from "@/lib/analytics";
 
-type ConsentValue = "accepted" | "declined";
-
-const STORAGE_KEY = "eden_cookie_consent";
+const STORAGE_KEY = COOKIE_CONSENT_KEY;
 // Pill (collapsed) reserves a slim strip so the bottom edge of the
 // document isn't flush against the pill.
 const PILL_OFFSET_PX = 56;
@@ -154,6 +158,8 @@ export function CookieConsent() {
         p.startsWith("/reset-password") ||
         p.startsWith("/invite")
       ) {
+        // Still boot analytics if they previously consented on another route.
+        bootAnalyticsFromStoredConsent();
         return;
       }
     }
@@ -165,6 +171,8 @@ export function CookieConsent() {
         const t = window.setTimeout(() => setVisible(true), 600);
         return () => window.clearTimeout(t);
       }
+      // Prior choice — hydrate analytics if they accepted.
+      bootAnalyticsFromStoredConsent();
     } catch {
       // localStorage blocked (private mode, etc.) → don't show
       // the banner (we can't persist the choice either way).
@@ -177,6 +185,7 @@ export function CookieConsent() {
     } catch {
       // ignored
     }
+    applyAnalyticsConsent(value);
     setVisible(false);
   };
 

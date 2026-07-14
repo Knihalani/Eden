@@ -304,6 +304,88 @@ class ColumnarCompactor:
             "ClickHouse unavailable; using Postgres size estimate",
         )
 
+    async def compact_due(
+        self, *, max_age_hours: int = 24, limit: int = 50
+    ) -> dict[str, Any]:
+        """Cron hook: compact partitions past the max-age window.
+
+        Selects ``columnar_partitions`` where
+        ``last_compaction_at`` is NULL or older than
+        ``max_age_hours``, then runs :meth:`compact_segments`
+        for each. Called from :mod:`eden.workers.cron_tick`.
+        """
+        from eden.storage.postgres import get_postgres_client
+
+        client = await get_postgres_client()
+        rows = await client.fetch(
+            """
+            SELECT org_id, partition_id, clickhouse_partition,
+                   last_compaction_at
+            FROM columnar_partitions
+            WHERE last_compaction_at IS NULL
+               OR last_compaction_at < NOW() - make_interval(hours => $1)
+            ORDER BY last_compaction_at ASC NULLS FIRST
+            LIMIT $2
+            """,
+            max_age_hours,
+            limit,
+        )
+        results: list[dict[str, Any]] = []
+        n_ok = 0
+        n_failed = 0
+        for r in rows:
+            org_id = r["org_id"]
+            # Prefer the ClickHouse partition name when present;
+            # fall back to the internal partition_id.
+            partition_id = (
+                r.get("clickhouse_partition") or r["partition_id"]
+            )
+            try:
+                out = await self.compact_segments(
+                    org_id, partition_id=partition_id
+                )
+                results.append(
+                    {
+                        "org_id": org_id,
+                        "partition_id": partition_id,
+                        "status": (out.get("data") or {}).get("status")
+                        or out.get("status"),
+                        "data_source": (out.get("data") or {}).get(
+                            "data_source"
+                        ),
+                    }
+                )
+                if out.get("status") == "ok":
+                    n_ok += 1
+                else:
+                    n_failed += 1
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(
+                    "compact_due failed org=%s partition=%s: %s",
+                    org_id,
+                    partition_id,
+                    exc,
+                )
+                n_failed += 1
+                results.append(
+                    {
+                        "org_id": org_id,
+                        "partition_id": partition_id,
+                        "status": "failed",
+                        "error": str(exc),
+                    }
+                )
+        return _ok_envelope(
+            "ColumnarCompactor",
+            {
+                "n_due": len(rows),
+                "n_ok": n_ok,
+                "n_failed": n_failed,
+                "max_age_hours": max_age_hours,
+                "results": results,
+            },
+        )
+
     async def _ch_size(
         self, *, partition_id: str
     ) -> tuple[int, int]:
@@ -368,14 +450,24 @@ class ColumnarCompactor:
         from eden.storage.postgres import get_postgres_client
 
         client = await get_postgres_client()
-        row = await client.fetchrow(
-            """
-            SELECT count(*)::bigint AS n
-            FROM telemetry_events
-            WHERE org_id = $1
-            """,
-            org_id,
-        )
+        try:
+            row = await client.fetchrow(
+                """
+                SELECT count(*)::bigint AS n
+                FROM telemetry_events
+                WHERE tenant_id = $1
+                """,
+                org_id,
+            )
+        except Exception:  # noqa: BLE001 - try usage_events fallback
+            row = await client.fetchrow(
+                """
+                SELECT count(*)::bigint AS n
+                FROM usage_events
+                WHERE org_id = $1
+                """,
+                org_id,
+            )
         n = int(row["n"]) if row else 0
         # Postgres doesn't expose a per-row size; estimate
         # at 256 bytes/row (matches the existing

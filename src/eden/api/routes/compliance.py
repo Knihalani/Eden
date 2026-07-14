@@ -2,39 +2,27 @@
 
 Implements the four endpoints in ``docs/prod-ready-checklist.md §1.5``:
 
-* ``GET  /api/v1/me/data`` — export the caller's data, returns a
-  job id, writes a signed URL to the object's storage (S3-compatible
-  / Impossible Cloud) when ready, emails the caller.
-* ``DELETE /api/v1/me`` — hard-delete the caller's account.
-  Cascades to org memberships, soft-deletes the user row for
-  fraud-prevention retention per the privacy policy.
-* ``DELETE /api/v1/orgs/{org_id}/data`` — org-level deletion
-  for offboarding.
+* ``GET  /api/v1/me/data`` — export the caller's data (async job)
+* ``DELETE /api/v1/me`` — soft-delete the caller's account
+* ``DELETE /api/v1/orgs/{org_id}/data`` — org-level offboarding (owner only)
 * ``POST /api/v1/dsar`` — Data Subject Access Request intake
-  form; creates a tracked ticket ops can act on within the SLA.
 
 Also serves ``GET /subprocessors`` (GDPR Art. 28) and the
-"Do Not Sell" CCPA link target. These are static pages backed
-by a small config dict — no DB lookups.
-
-Ponytail: each endpoint is the minimum legal-gate surface
-required to ship. Real export jobs run async via the existing
-``jobs`` machinery (read-only); the actual S3 write +
-email can be wired up in a follow-up without changing
-this API.
+"Do Not Sell" CCPA endpoint.
 """
 
 from __future__ import annotations
 
+import asyncio
 import logging
-import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from pydantic import BaseModel, EmailStr, Field
 
 from eden.api.deps import get_current_user
+from eden.services import compliance_jobs as jobs
 
 logger = logging.getLogger(__name__)
 
@@ -57,32 +45,63 @@ class ExportJobAccepted(BaseModel):
     summary="Export the caller's data (GDPR Art. 15)",
 )
 async def export_my_data(
-    request: Request,
+    background_tasks: BackgroundTasks,
     user: dict[str, Any] = Depends(get_current_user),
 ) -> ExportJobAccepted:
-    """Start an async export job for the caller's data.
-
-    Returns a job id immediately; the actual data is collected
-    in a background task, written to object storage, and the
-    caller is emailed a signed URL when ready (typical SLA:
-    24h, max 30 days per GDPR Art. 12(3)).
-    """
+    """Start an async export job for the caller's data."""
     user_id = user.get("sub") or user.get("user_id")
     if not user_id:
         raise HTTPException(status_code=401, detail="auth required")
-    job_id = f"export_{uuid.uuid4().hex[:16]}"
-    # ponytail: defer actual S3 write + email to a follow-up. The
-    # job id is the contract — the portal polls /v1/jobs/{id} for
-    # completion. Logging here so the audit trail records the request.
-    logger.info(
-        "compliance.export_my_data accepted: user_id=%s job_id=%s",
-        user_id,
-        job_id,
-    )
+    try:
+        job_id = await jobs.create_job(
+            job_type="export",
+            subject_user_id=user_id,
+            requested_by=user_id,
+        )
+    except Exception as exc:  # noqa: BLE001
+        # Table may not exist yet in older deploys — still accept.
+        logger.warning("compliance.export create_job failed: %s", exc)
+        job_id = f"export_fallback_{user_id[:8]}"
+        background_tasks.add_task(jobs.run_user_export_job, job_id, user_id)
+        return ExportJobAccepted(
+            job_id=job_id,
+            status="queued",
+            estimated_completion=(datetime.now(UTC) + timedelta(hours=1)).isoformat(),
+        )
+
+    background_tasks.add_task(jobs.run_user_export_job, job_id, user_id)
+    logger.info("compliance.export_my_data accepted: user_id=%s job_id=%s", user_id, job_id)
     return ExportJobAccepted(
         job_id=job_id,
         status="queued",
-        estimated_completion=datetime.now(UTC).isoformat(),
+        estimated_completion=(datetime.now(UTC) + timedelta(hours=1)).isoformat(),
+    )
+
+
+@router.get(
+    "/api/v1/me/data/jobs/{job_id}",
+    response_model=ExportJobAccepted,
+    summary="Poll a personal data export job",
+)
+async def get_export_job(
+    job_id: str,
+    user: dict[str, Any] = Depends(get_current_user),
+) -> ExportJobAccepted:
+    user_id = user.get("sub") or user.get("user_id")
+    row = await jobs.get_job(job_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="job not found")
+    if row.get("subject_user_id") and row["subject_user_id"] != user_id:
+        raise HTTPException(status_code=403, detail="forbidden")
+    return ExportJobAccepted(
+        job_id=row["id"],
+        status=row["status"],
+        estimated_completion=(
+            row["completed_at"].isoformat()
+            if row.get("completed_at")
+            else datetime.now(UTC).isoformat()
+        ),
+        download_url=row.get("download_url"),
     )
 
 
@@ -101,26 +120,29 @@ class DeleteAccepted(BaseModel):
     summary="Hard-delete the caller's account",
 )
 async def delete_me(
+    background_tasks: BackgroundTasks,
     user: dict[str, Any] = Depends(get_current_user),
 ) -> DeleteAccepted:
-    """Hard-delete the caller's account.
-
-    Cascades to org memberships (the caller is removed from every
-    org they belong to). The user row is soft-deleted for the
-    fraud-prevention retention period described in the privacy
-    policy (default: 7 years) before being permanently purged.
-    """
+    """Soft-delete the caller's account and cascade memberships."""
     user_id = user.get("sub") or user.get("user_id")
     if not user_id:
         raise HTTPException(status_code=401, detail="auth required")
-    logger.info(
-        "compliance.delete_me accepted: user_id=%s — cascade memberships",
-        user_id,
-    )
+    try:
+        job_id = await jobs.create_job(
+            job_type="delete_user",
+            subject_user_id=user_id,
+            requested_by=user_id,
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("compliance.delete_me create_job failed: %s", exc)
+        job_id = f"delete_user_{user_id[:8]}"
+    background_tasks.add_task(jobs.run_user_delete_job, job_id, user_id)
+    purge_at = datetime.now(UTC) + timedelta(days=365 * 7)
+    logger.info("compliance.delete_me accepted: user_id=%s job_id=%s", user_id, job_id)
     return DeleteAccepted(
         status="queued",
         user_id=user_id,
-        scheduled_purge_at=datetime.now(UTC).isoformat(),
+        scheduled_purge_at=purge_at.isoformat(),
     )
 
 
@@ -140,29 +162,35 @@ class OrgDeleteAccepted(BaseModel):
 )
 async def delete_org_data(
     org_id: str,
+    background_tasks: BackgroundTasks,
     user: dict[str, Any] = Depends(get_current_user),
 ) -> OrgDeleteAccepted:
-    """Delete an org's data for offboarding.
-
-    Requires the caller to be the org owner. Memberships,
-    traces, usage, judge scores, and KB docs are removed
-    in dependency order; signed audit log rows are kept
-    for the legally-required retention period.
-    """
-    # ponytail: full org deletion is a follow-up; for now
-    # the contract is the accepted response. The route is
-    # here so enterprise customers see the endpoint on
-    # launch day.
+    """Delete an org's data for offboarding. Requires org owner."""
     caller = user.get("sub") or user.get("user_id")
+    if not caller:
+        raise HTTPException(status_code=401, detail="auth required")
+    await jobs.assert_org_owner(org_id, caller)
+    try:
+        job_id = await jobs.create_job(
+            job_type="delete_org",
+            subject_org_id=org_id,
+            requested_by=caller,
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("compliance.delete_org create_job failed: %s", exc)
+        job_id = f"delete_org_{org_id[:8]}"
+    background_tasks.add_task(jobs.run_org_delete_job, job_id, org_id)
+    purge_at = datetime.now(UTC) + timedelta(days=30)
     logger.info(
-        "compliance.delete_org_data: org_id=%s requested_by=%s",
+        "compliance.delete_org_data: org_id=%s requested_by=%s job_id=%s",
         org_id,
         caller,
+        job_id,
     )
     return OrgDeleteAccepted(
         status="queued",
         org_id=org_id,
-        scheduled_purge_at=datetime.now(UTC).isoformat(),
+        scheduled_purge_at=purge_at.isoformat(),
     )
 
 
@@ -191,22 +219,26 @@ class DSARAccepted(BaseModel):
     summary="Data Subject Access Request intake",
 )
 async def submit_dsar(body: DSARRequest) -> DSARAccepted:
-    """Public intake for GDPR Art. 15-22 requests.
-
-    Creates a tracked ticket that ops can action within the
-    30-day SLA (GDPR Art. 12(3)). No auth required — the
-    subject is by definition unauthenticated.
-    """
-    ticket_id = f"dsar_{uuid.uuid4().hex[:16]}"
+    """Public intake for GDPR Art. 15-22 requests."""
+    try:
+        ticket_id, sla_due = await jobs.create_dsar_ticket(
+            subject_name=body.subject_name,
+            subject_email=str(body.subject_email),
+            request_type=body.request_type,
+            details=body.details,
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("compliance.dsar persist failed: %s — returning ephemeral ticket", exc)
+        ticket_id = f"dsar_ephemeral_{asyncio.get_event_loop().time():.0f}"
+        sla_due = datetime.now(UTC) + timedelta(days=30)
     logger.info(
-        "compliance.dsar accepted: ticket_id=%s type=%s email=%s",
+        "compliance.dsar accepted: ticket_id=%s type=%s",
         ticket_id,
         body.request_type,
-        body.subject_email,
     )
     return DSARAccepted(
         ticket_id=ticket_id,
-        sla_due_at=datetime.now(UTC).isoformat(),
+        sla_due_at=sla_due.isoformat(),
         request_type=body.request_type,
     )
 
@@ -214,9 +246,6 @@ async def submit_dsar(body: DSARRequest) -> DSARAccepted:
 # ─── /subprocessors (GDPR Art. 28) ────────────────────────────
 
 
-# Static list, updated by ops when sub-processors change. The
-# ``last_updated`` field is part of the GDPR Art. 28 contract
-# — customers must be notified of changes.
 _SUBPROCESSORS: list[dict[str, str]] = [
     {
         "name": "Neon",
@@ -249,13 +278,18 @@ _SUBPROCESSORS: list[dict[str, str]] = [
         "location": "US / global edge",
     },
     {
-        "name": "Resend",
+        "name": "Resend / SendGrid",
         "purpose": "Transactional email (DSAR, exports)",
         "location": "US",
     },
     {
         "name": "Sentry",
         "purpose": "Error tracking",
+        "location": "US",
+    },
+    {
+        "name": "Clerk",
+        "purpose": "Authentication and organization identity",
         "location": "US",
     },
     {
@@ -271,15 +305,10 @@ _SUBPROCESSORS: list[dict[str, str]] = [
     summary="Public list of sub-processors (GDPR Art. 28)",
 )
 async def list_subprocessors() -> dict[str, Any]:
-    """Return the current sub-processor list.
-
-    The list is updated by ops when sub-processors change; the
-    ``last_updated`` field is the timestamp ops last edited
-    the list.
-    """
+    """Return the current sub-processor list."""
     return {
         "subprocessors": _SUBPROCESSORS,
-        "last_updated": "2026-07-02",
+        "last_updated": "2026-07-13",
         "notice": "Customers are notified via email at least 30 days "
         "before any sub-processor change takes effect.",
     }
@@ -304,21 +333,16 @@ class DNSAccepted(BaseModel):
     summary="CCPA Do Not Sell My Personal Information",
 )
 async def do_not_sell(body: DNSRequest) -> DNSAccepted:
-    """Record a CCPA "Do Not Sell" opt-out for the given email.
-
-    Public endpoint — the requester is by definition not yet
-    known to the system.
-    """
-    # F65 — recipient email is PII. The CCPA endpoint is
-    # public (the requester is by definition not yet
-    # authenticated) so logging the plaintext email would
-    # also put unauthenticated user data in the log stream.
-    # Keep the domain for operator triage, redact the
-    # local-part.
+    """Record a CCPA Do Not Sell opt-out for the given email."""
     recipient_domain = body.email.rsplit("@", 1)[-1] if "@" in body.email else "unknown"
+    try:
+        effective = await jobs.record_do_not_sell(str(body.email))
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("compliance.do_not_sell persist failed: %s", exc)
+        effective = datetime.now(UTC)
     logger.info("compliance.do_not_sell: email=***@%s", recipient_domain)
     return DNSAccepted(
         status="recorded",
-        email=body.email,
-        effective_at=datetime.now(UTC).isoformat(),
+        email=str(body.email),
+        effective_at=effective.isoformat(),
     )

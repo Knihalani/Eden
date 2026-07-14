@@ -93,6 +93,25 @@ class ApproveMetricRequest(BaseModel):
     approved_by: str = Field(..., description="The email / id of the approving admin")
 
 
+class RunMetricRequest(BaseModel):
+    """Manual runtime judge execution (bypasses auto-judge opt-in)."""
+
+    input_text: str | None = Field(
+        None, description="Task / input text to evaluate"
+    )
+    output_text: str | None = Field(
+        None, description="Model output to score against the rubric"
+    )
+    trace_id: str | None = Field(
+        None,
+        description="Optional trace_id — used when input/output are omitted",
+    )
+    bypass_opt_in: bool = Field(
+        True,
+        description="Manual runs bypass the auto-judge opt-in gate by default",
+    )
+
+
 # ─── Routes ─────────────────────────────────────────────────────────
 
 
@@ -197,6 +216,29 @@ async def get_metric(
     from eden.metric_studio import CustomMetricRegistry
 
     return await CustomMetricRegistry().get(org_id, metric_id)
+
+
+@router.post("/metrics/{metric_id}/run")
+async def run_metric(
+    org_id: str = Path(...),
+    metric_id: str = Path(...),
+    body: RunMetricRequest = Body(...),
+) -> dict[str, Any]:
+    """Manually execute a custom metric judge and persist the score.
+
+    Writes one ``custom_metric_runs`` row with ``status="scored"``.
+    Manual triggers bypass the auto-judge opt-in gate by default.
+    """
+    from eden.metric_studio import JudgeFactory
+
+    return await JudgeFactory().execute(
+        org_id,
+        metric_id=metric_id,
+        input_text=body.input_text,
+        output_text=body.output_text,
+        trace_id=body.trace_id,
+        bypass_opt_in=body.bypass_opt_in,
+    )
 
 
 @router.post("/metrics/{metric_id}/approve")

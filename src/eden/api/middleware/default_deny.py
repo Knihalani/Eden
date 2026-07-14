@@ -90,6 +90,13 @@ DEFAULT_PUBLIC_PREFIXES: tuple[str, ...] = (
     # visit it before signing up. The audit was missing this
     # exemption (F77 audit, 2026-07-08).
     "/subprocessors",
+    # Public compliance intake (GDPR DSAR + CCPA Do Not Sell).
+    # Subjects are unauthenticated by definition. Auth-gated
+    # siblings (/api/v1/me/data, DELETE /api/v1/me) stay private.
+    "/api/v1/dsar",
+    "/api/v1/me/do-not-sell",
+    # Portal pre-login feature flags (experiments_v1, etc.)
+    "/feature-flags",
 )
 
 

@@ -69,8 +69,9 @@ def test_investigation_all_only_exports_existing_names() -> None:
 
 
 def test_query_all_only_exports_existing_names() -> None:
-    """Audit 2026-07-05: removed ``NLQueryEngine`` and
-    ``AutoDashboardBuilder`` from ``__all__`` — never defined here."""
+    """``NLQueryEngine``, ``AutoDashboardBuilder``, and
+    ``NLReportGenerator`` must all be defined when listed in
+    ``__all__``."""
     import eden.autonomous.nl_interface.query as mod
     module_attrs = set(dir(mod))
     for name in mod.__all__:

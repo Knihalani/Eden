@@ -59,6 +59,7 @@ Risks / known limitations:
 from __future__ import annotations
 
 import contextlib
+import hashlib
 import logging
 import time
 import uuid
@@ -332,11 +333,12 @@ async def _emit_gateway_telemetry(
 
         request_body = _scrub_request_body(request_body)  # Audit 2026-07-02 S-17
 
+        trace_id = f"gw_{org_id}_{int(time.time() * 1_000_000)}"
         event = TelemetryEvent(
             event_id=f"gw_{endpoint}_{int(time.time() * 1_000_000)}_{uuid.uuid4().hex[:6]}",
             tenant_id=org_id,
             project_id="default",
-            trace_id=f"gw_{org_id}_{int(time.time() * 1_000_000)}",
+            trace_id=trace_id,
             realm="production",
             event_type="llm_completion",
             timestamp=datetime.now(UTC).isoformat(),
@@ -366,8 +368,82 @@ async def _emit_gateway_telemetry(
         )
         collector = await get_telemetry_collector()
         await collector.ingest_batch([event])
+        # Cat 20 — best-effort TraceRecorder hook on successful
+        # completions. Feature-flagged; never breaks the response.
+        if outcome == "success":
+            await _maybe_record_time_travel_from_gateway(
+                org_id=org_id,
+                trace_id=trace_id,
+                model=model,
+                request_body=request_body,
+                response_body=response_body,
+                metrics=metrics,
+            )
     except Exception as exc:  # noqa: BLE001
         logger.debug(f"gateway telemetry emit failed: {exc}")
+
+
+async def _maybe_record_time_travel_from_gateway(
+    *,
+    org_id: str,
+    trace_id: str,
+    model: str,
+    request_body: dict[str, Any],
+    response_body: dict[str, Any] | None,
+    metrics: dict[str, float] | None,
+) -> None:
+    """Wire TraceRecorder into the OpenAI-compatible gateway route."""
+    try:
+        from eden.config import get_settings
+
+        settings = get_settings()
+        if not getattr(settings, "time_travel_recording_enabled", True):
+            return
+        from eden.time_travel import TraceRecorder
+
+        temperature = request_body.get("temperature")
+        try:
+            temperature_f = float(temperature) if temperature is not None else None
+        except (TypeError, ValueError):
+            temperature_f = None
+        seed = request_body.get("seed")
+        try:
+            seed_i = int(seed) if seed is not None else None
+        except (TypeError, ValueError):
+            seed_i = None
+        text = ""
+        if isinstance(response_body, dict):
+            choices = response_body.get("choices") or []
+            if choices and isinstance(choices[0], dict):
+                msg = choices[0].get("message") or {}
+                text = str(msg.get("content") or choices[0].get("text") or "")
+        response_hash = hashlib.sha256(
+            text.encode("utf-8", errors="replace")
+        ).hexdigest()[:32] if text else ""
+        await TraceRecorder().record_step(
+            org_id,
+            trace_id=trace_id,
+            step_index=0,
+            request={
+                "model": model,
+                "endpoint": "gateway",
+                "temperature": temperature_f,
+            },
+            response={
+                "response_hash": response_hash,
+                "tokens_used": int(
+                    (metrics or {}).get("tokens", 0)
+                    or (metrics or {}).get("total_tokens", 0)
+                    or 0
+                ),
+                "cost_usd": float((metrics or {}).get("cost_usd", 0.0) or 0.0),
+            },
+            temperature=temperature_f,
+            seed=seed_i,
+            cache_mode=request_body.get("cache_mode"),
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("gateway: time-travel record_step failed: %s", exc)
 
 
 # ─────────────────────────────────────────────────────────────────────

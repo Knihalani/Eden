@@ -130,11 +130,11 @@ spawning the subprocess. The provider does not enforce this — it
 assumes the worker has already done it. If the worker forgets, the
 subprocess can modify the customer repo.
 
-**Follow-up:** the next iteration of `eden.sandbox.runner` should
-mount the customer checkout via `mount -o ro,bind` (Linux) /
-`mount -rd` (macOS dev) before spawning. The provider can verify the
-mount flag at runtime via `/proc/self/mountinfo` (Linux) — a future
-v2 audit check.
+**Follow-up:** `eden.sandbox.runner` (Gate 3 substitute) now
+rejects path traversal and runs allowlisted commands under a
+wall-clock timeout. Full Firecracker / read-only bind-mount
+isolation remains a future enhancement — the substitute is the
+practical ship for Cat 23 closed-loop 2C.
 
 **Status:** open. **Does not block Gate 3** because the Isolated
 path's `--mount` namespace already prevents the subprocess from
@@ -168,14 +168,15 @@ engineer with security expertise can resolve it in 1-2 weeks.
 
 * `docs/docs/observability/23-autonomous-code-modification.md` —
   Cat 23 design doc (the "Gate 3: sandbox safety" section)
-* `src/eden/providers/sandbox_isolated.py` — the implementation
+* `src/eden/sandbox/runner.py` — Gate 3 substitute (subprocess
+  allowlist + wall-clock timeout; Firecracker isolation is future)
 * `docs/runbooks/cat23-policy-rollout.md` — the opt-in policy
   rollout runbook
-* `tests/unit/code_change/test_isolated_sandbox.py` — the unit
-  tests (26 tests, 5 Linux-only skipped on macOS)
+* `tests/unit/sandbox/test_runner.py` — unit coverage for the
+  substitute runner (path traversal + allowlist + timeout)
 * `tests/unit/code_change/test_redteam_probe.py` — the
-  self-administered red-team probe (11 runtime + 6 Linux-only
-  design-contract checks)
+  self-administered red-team probe (legacy IsolatedSandbox probes;
+  re-point as the substitute hardens)
 
 ## When to use
 
@@ -356,10 +357,11 @@ Gate 3 is considered passed when:
 
 * `docs/docs/observability/23-autonomous-code-modification.md` —
   Cat 23 design doc (the "Gate 3: sandbox safety" section)
-* `src/eden/providers/sandbox_isolated.py` — the implementation
+* `src/eden/sandbox/runner.py` — Gate 3 substitute (subprocess
+  allowlist + wall-clock timeout; Firecracker isolation is future)
 * `docs/runbooks/cat23-policy-rollout.md` — the opt-in policy
   rollout runbook
-* `tests/unit/code_change/test_isolated_sandbox.py` — the unit
-  tests (26 tests, 5 Linux-only skipped on macOS)
+* `tests/unit/sandbox/test_runner.py` — unit coverage for the
+  substitute runner
 * `docs/runbooks/incident-sandbox-escape.md` — TBD; ships with
   the red-team report

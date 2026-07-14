@@ -114,11 +114,15 @@ async def test_resolve_codeowners_flattens_and_dedupes() -> None:
         connector = MockConnector.return_value
         connector.owners_for_files = AsyncMock(return_value=fake_resp)
         result = await creator.resolve_codeowners_reviewers(
+            "test-org",
             ["src/foo.py", "src/bar.py"],
         )
     assert set(result) == {"@alice", "@bob", "@carol"}
     # Bob appears once despite being on both files.
     assert result.count("@bob") == 1
+    connector.owners_for_files.assert_awaited_once_with(
+        "test-org", ["src/foo.py", "src/bar.py"],
+    )
 
 
 @pytest.mark.asyncio
@@ -132,7 +136,9 @@ async def test_resolve_codeowners_returns_empty_on_connector_failure() -> None:
         connector.owners_for_files = AsyncMock(
             side_effect=RuntimeError("connector down"),
         )
-        result = await creator.resolve_codeowners_reviewers(["src/foo.py"])
+        result = await creator.resolve_codeowners_reviewers(
+            "test-org", ["src/foo.py"],
+        )
     assert result == []
 
 
@@ -140,7 +146,7 @@ async def test_resolve_codeowners_returns_empty_on_connector_failure() -> None:
 async def test_resolve_codeowners_returns_empty_for_empty_input() -> None:
     """Empty file_paths → empty result."""
     creator = PRCreator()
-    result = await creator.resolve_codeowners_reviewers([])
+    result = await creator.resolve_codeowners_reviewers("test-org", [])
     assert result == []
 
 
