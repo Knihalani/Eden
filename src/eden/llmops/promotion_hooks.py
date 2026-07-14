@@ -1271,8 +1271,10 @@ class CodeChangeHook:
         # signal carrier.
         try:
             from eden.code_change.revert_engine import AutoRevertEngine
-            from eden.providers import get_default_pr_provider
-            engine = AutoRevertEngine(provider=get_default_pr_provider())
+            from eden.providers.factory import get_pr_provider_for_org
+            engine = AutoRevertEngine(
+                provider=await get_pr_provider_for_org(org_id),
+            )
             revert_result = await engine.revert(
                 org_id=org_id,
                 pr_id=pr_id,

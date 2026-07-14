@@ -514,6 +514,17 @@ async def _fire_compaction_drift_hook(
 # ─── Postgres fallback query helpers ─────────────────────────
 
 
+# Per-source-table Postgres column mapping. telemetry_events and
+# judge_scores use ``tenant_id`` + ``timestamp``; usage_events uses
+# ``org_id`` + ``created_at``. The fallback path must pick the
+# right pair or every CH-down request returns 0 / errors.
+_PG_TABLE_COLUMNS: dict[str, tuple[str, str]] = {
+    "telemetry_events": ("tenant_id", "timestamp"),
+    "usage_events": ("org_id", "created_at"),
+    "judge_scores": ("tenant_id", "scored_at"),
+}
+
+
 async def _postgres_count_rows(
     *, org_id: str, source_table: str
 ) -> int:
@@ -528,20 +539,33 @@ async def _postgres_count_rows(
     """
     if source_table not in _VALID_SOURCE_TABLES:
         return 0
+    tenant_col, _ = _PG_TABLE_COLUMNS.get(
+        source_table, ("org_id", "created_at")
+    )
     from eden.storage.postgres import get_postgres_client
 
     client = await get_postgres_client()
     quoted = f'"{source_table}"'  # tables are pre-vetted, but quote anyway
-    row = await client.fetchrow(
-        f"SELECT count(*)::bigint AS n FROM {quoted} WHERE org_id = $1",
-        org_id,
-    )
+    try:
+        row = await client.fetchrow(
+            f"SELECT count(*)::bigint AS n FROM {quoted} "
+            f"WHERE {tenant_col} = $1",
+            org_id,
+        )
+    except Exception as exc:  # noqa: BLE001 - fallback returns 0
+        logger.debug(
+            "columnar._postgres_count_rows failed table=%s: %s",
+            source_table,
+            exc,
+        )
+        return 0
     return int(row["n"]) if row else 0
 
 
 __all__ = [
     "_VALID_GRANULARITIES",
     "_VALID_SOURCE_TABLES",
+    "_PG_TABLE_COLUMNS",
     "_check_ch_available",
     "_compaction_id_for",
     "_delete_then_insert_rollup",

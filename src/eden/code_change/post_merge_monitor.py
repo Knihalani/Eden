@@ -211,3 +211,121 @@ class PostMergeMonitor:
                 ),
             },
         )
+
+    async def tick_due(self, *, dry_run: bool = False) -> dict[str, Any]:
+        """Cron entrypoint: start watching recently merged PRs.
+
+        Scans orgs with an active repo connection, finds
+        ``pull_requests`` rows in ``state='merged'`` that do not
+        yet have ``post_merge_windows`` rows, and calls
+        :meth:`start_watching` for each (skipped when
+        ``dry_run``). Safe to call on every cron tick — the
+        per-PR window insert is idempotent enough that duplicate
+        rows are acceptable noise vs missing a regression.
+        """
+        from eden.code_change.scheduler import (
+            _get_org_policy,
+            _list_active_orgs,
+        )
+        from eden.code_change._common import _select_rows
+        from eden.storage.postgres import get_postgres_client
+
+        summary: dict[str, Any] = {
+            "orgs_scanned": 0,
+            "prs_due": 0,
+            "prs_watched": 0,
+            "dry_run": dry_run,
+            "results": [],
+        }
+        try:
+            orgs = await _list_active_orgs()
+        except Exception as exc:
+            logger.debug("post_merge_monitor.tick_due: list orgs failed: %s", exc)
+            return {**summary, "errors": [str(exc)]}
+
+        summary["orgs_scanned"] = len(orgs)
+        client = None
+        try:
+            client = await get_postgres_client()
+        except Exception:
+            client = None
+
+        for org_id in orgs:
+            try:
+                policy = await _get_org_policy(org_id)
+                if not policy.get("code_change_enabled", False):
+                    continue
+                merged: list[dict[str, Any]] = []
+                if client is not None:
+                    try:
+                        async with client.acquire() as conn:
+                            rows = await conn.fetch(
+                                "SELECT id, patch_id FROM pull_requests "
+                                "WHERE org_id = $1 AND state = 'merged' "
+                                "AND merged_at > NOW() - INTERVAL '14 days' "
+                                "ORDER BY merged_at DESC LIMIT 50",
+                                org_id,
+                            )
+                        merged = [dict(r) for r in rows]
+                    except Exception as fetch_exc:
+                        logger.debug(
+                            "post_merge_monitor.tick_due: fetch failed: %s",
+                            fetch_exc,
+                        )
+                        merged = await _select_rows(
+                            org_id,
+                            "pull_requests",
+                            where="state = 'merged'",
+                            limit=50,
+                        )
+                else:
+                    merged = await _select_rows(
+                        org_id,
+                        "pull_requests",
+                        where="state = 'merged'",
+                        limit=50,
+                    )
+
+                for pr in merged:
+                    pr_id = str(pr.get("id") or "")
+                    patch_id = str(pr.get("patch_id") or "")
+                    if not pr_id:
+                        continue
+                    # Skip PRs that already have window rows.
+                    existing = await _select_rows(
+                        org_id,
+                        "post_merge_windows",
+                        where="pr_id = $2",
+                        params=(pr_id,),
+                        limit=1,
+                    )
+                    if existing:
+                        continue
+                    summary["prs_due"] = int(summary["prs_due"]) + 1
+                    if dry_run:
+                        summary["results"].append(
+                            {"org_id": org_id, "pr_id": pr_id, "dry_run": True}
+                        )
+                        continue
+                    watched = await self.start_watching(
+                        org_id=org_id,
+                        pr_id=pr_id,
+                        patch_id=patch_id or pr_id,
+                    )
+                    summary["prs_watched"] = int(summary["prs_watched"]) + 1
+                    summary["results"].append(
+                        {
+                            "org_id": org_id,
+                            "pr_id": pr_id,
+                            "status": watched.get("status"),
+                        }
+                    )
+            except Exception as org_exc:
+                logger.debug(
+                    "post_merge_monitor.tick_due org=%s failed: %s",
+                    org_id, org_exc,
+                )
+                summary["results"].append(
+                    {"org_id": org_id, "error": str(org_exc)}
+                )
+        return summary

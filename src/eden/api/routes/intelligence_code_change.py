@@ -21,8 +21,9 @@ Gates:
   per the v1.6 rollout controls section.
 * Org scoping via ``{org_id}`` path param.
 * ``get_current_user`` for auth.
-* ``require_org_admin`` for the destructive auto-mode routes
-  (``POST /patches/{id}/pr`` with ``auto_pr_enabled=true``,
+* ``require_org_admin`` for the destructive routes
+  (``POST /patches/{id}/pr`` — admin manual open via
+  ``manual_open_pr``, only ``code_change_enabled`` required;
   ``POST /prs/{id}/revert`` with ``auto_revert_enabled=true``).
 
 The 19 routes:
@@ -36,7 +37,8 @@ The 19 routes:
 7. ``POST /patches`` — propose a new patch (Gate 4a blocked)
 8. ``GET /patches/{patch_id}`` — get a single patch
 9. ``POST /patches/{patch_id}/test`` — run the test plan (Gate 3 blocked)
-10. ``POST /patches/{patch_id}/pr`` — open a PR (Gate 4a blocked + opt-in)
+10. ``POST /patches/{patch_id}/pr`` — admin manual open PR
+    (``manual_open_pr``; ``code_change_enabled`` only)
 11. ``GET /inbox`` — list the PR Inbox
 12. ``GET /inbox/{patch_id}`` — get a single inbox item
 13. ``GET /inbox/{patch_id}/diff`` — get the raw diff
@@ -236,6 +238,10 @@ class RevertRequest(BaseModel):
 
 class TestPatchRequest(BaseModel):
     patch_id: str
+    policy: dict[str, Any] | None = None
+    files: list[dict[str, Any]] | None = None
+    command: list[str] | None = None
+    model_config = {"extra": "ignore"}
 
 
 class OpenPRRequest(BaseModel):
@@ -363,7 +369,13 @@ async def test_patch(
     patch_id: str = Path(...),
     body: TestPatchRequest = Body(...),
 ) -> dict[str, Any]:
-    return await _test_runner.run(org_id, patch_id=body.patch_id)
+    return await _test_runner.run(
+        org_id,
+        patch_id=body.patch_id,
+        policy=body.policy,
+        files=body.files,
+        command=body.command,
+    )
 
 
 @router.post("/patches/{patch_id}/pr")
@@ -373,8 +385,17 @@ async def open_pr(
     body: OpenPRRequest = Body(...),
     _admin: dict = Depends(require_org_admin),
 ) -> dict[str, Any]:
+    """Admin manual Open PR — does NOT require ``auto_pr_enabled``.
+
+    Automated/auto-mode callers must pass ``action_kind="open_pr"``
+    through the service layer (not this route) so the
+    ``auto_pr_enabled`` gate still applies.
+    """
     return await _pr_creator.create(
-        org_id, patch_id=patch_id, policy=body.policy
+        org_id,
+        patch_id=patch_id,
+        policy=body.policy,
+        action_kind="manual_open_pr",
     )
 
 

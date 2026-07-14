@@ -26,10 +26,11 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Path, Query
+from fastapi import APIRouter, Body, Depends, Path, Query
 from pydantic import BaseModel, Field
 
 from eden.api.deps import get_current_user, require_feature_flag
+from eden.time_travel._common import _json_dumps, _upsert_fork_branch
 
 router = APIRouter(
     prefix="/orgs/{org_id}/intelligence/time-travel",
@@ -69,7 +70,7 @@ class RecordSnapshotRequest(BaseModel):
 
     Records a snapshot of ``trace_id`` so a later ``POST /fork`` can
     branch from it. The snapshot is stored in the same
-    ``time_travel_forks`` table as a synthetic fork with
+    ``trace_fork_branches`` table as a synthetic fork with
     ``fork_at_step = -1`` (sentinel for "record only, no replay yet").
     """
     trace_id: str = Field(..., min_length=1, max_length=128)
@@ -102,7 +103,7 @@ async def record_snapshot(
 ) -> dict[str, Any]:
     """Record a snapshot of ``trace_id`` so it can be replayed later.
 
-    Stores a row in ``time_travel_forks`` with ``fork_at_step = -1``
+    Stores a row in ``trace_fork_branches`` with ``fork_at_step = -1``
     (sentinel meaning "recording only, not yet replayed"). The portal's
     ``timeTravelApi.record`` method calls this — before this endpoint
     existed, the "Record snapshot" button on /inspector was a no-op.
@@ -112,31 +113,27 @@ async def record_snapshot(
     ``parent_fork_id`` to branch from.
     """
     import uuid as _uuid
+    from datetime import UTC, datetime
 
-    from eden.storage.postgres import get_postgres_client
-
-    client = await get_postgres_client()
     snapshot_id = f"ttrec_{_uuid.uuid4().hex[:16]}"
-    row = await client.fetchrow(
-        """
-        INSERT INTO time_travel_forks
-            (id, org_id, parent_trace_id, fork_at_step, name, created_at)
-        VALUES ($1, $2, $3, -1, $4, NOW())
-        RETURNING id, created_at
-        """,
-        snapshot_id, org_id, body.trace_id, body.label,
+    label = body.label or f"snapshot:{body.trace_id}"
+    await _upsert_fork_branch(
+        org_id=org_id,
+        fork_id=snapshot_id,
+        parent_trace_id=body.trace_id,
+        parent_fork_id=body.parent_fork_id,
+        fork_at_step=-1,
+        name=label,
+        edits_json=_json_dumps(body.edits or {}),
     )
-    if row is None:
-        raise HTTPException(
-            status_code=500,
-            detail="Failed to create time-travel snapshot",
-        )
-    created_at = row["created_at"]
+    created_at = datetime.now(UTC)
     return {
-        "snapshot_id": str(row["id"]),
+        "snapshot_id": snapshot_id,
         "trace_id": body.trace_id,
         "label": body.label,
-        "created_at": created_at.isoformat() if hasattr(created_at, "isoformat") else str(created_at),
+        "created_at": created_at.isoformat(),
+        "status": "ok",
+        "live": True,
     }
 
 

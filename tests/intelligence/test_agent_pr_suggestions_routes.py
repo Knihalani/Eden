@@ -65,12 +65,6 @@ def temp_git_repo(monkeypatch):
         monkeypatch.setenv("EDEN_LOCAL_REPO_PATH", tmpdir)
         monkeypatch.setenv("EDEN_REPO_PROVIDER", "local")
         monkeypatch.setenv("EDEN_PR_PROVIDER", "local")
-        # Reset the module-level provider singletons so
-        # they pick up the new env.
-        from eden.api.routes import agent_pr_suggestions as mod
-        mod._suggester = None
-        mod._repo_provider = None
-        mod._pr_provider = None
         yield tmpdir
 
 

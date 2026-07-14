@@ -387,7 +387,12 @@ class TestTwoStageOptin:
         assert "code_change_enabled is false" in result["data"]["message"]
 
     @pytest.mark.asyncio
-    async def test_pr_creator_blocked_when_auto_pr_off(self) -> None:
+    async def test_pr_creator_manual_open_when_auto_pr_off(self) -> None:
+        """Admin manual open only needs ``code_change_enabled``.
+
+        ``auto_pr_enabled`` gates automated ``open_pr`` paths, not
+        the human/admin ``manual_open_pr`` default on PRCreator.
+        """
         from eden.code_change import PRCreator
 
         result = await PRCreator().create(
@@ -397,6 +402,24 @@ class TestTwoStageOptin:
                 "code_change_enabled": True,
                 "auto_pr_enabled": False,
             },
+        )
+        # Past the opt-in gate; patch row missing → patch_not_found.
+        assert result["status"] == "error"
+        assert result.get("error_code") == "patch_not_found"
+
+    @pytest.mark.asyncio
+    async def test_pr_creator_auto_mode_blocked_when_auto_pr_off(self) -> None:
+        """Automated ``action_kind=open_pr`` still requires auto_pr."""
+        from eden.code_change import PRCreator
+
+        result = await PRCreator().create(
+            "org_test",
+            patch_id="patch_x",
+            policy={
+                "code_change_enabled": True,
+                "auto_pr_enabled": False,
+            },
+            action_kind="open_pr",
         )
         assert result["status"] == "not_implemented"
         assert result["data"]["gate"] == "auto_mode_blocked"

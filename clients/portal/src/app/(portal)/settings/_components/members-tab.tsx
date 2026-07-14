@@ -47,6 +47,7 @@ export function MembersTab({ org }: MembersTabProps) {
   const loading = membersQuery.isLoading;
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState("member");
+  const [lastInviteUrl, setLastInviteUrl] = useState<string | null>(null);
 
   // P9: client-side email validation. The backend rejects bad
   // addresses with a 422, but the user wouldn't see the error
@@ -74,11 +75,28 @@ export function MembersTab({ org }: MembersTabProps) {
   const handleInvite = async () => {
     if (!org || !inviteEmail.trim()) return;
     try {
-      await api.inviteOrgMember(org.id, inviteEmail, inviteRole);
+      const res = await api.inviteOrgMember(org.id, inviteEmail, inviteRole);
       setInviteEmail("");
+      setLastInviteUrl(res.invite_url ?? null);
       await membersQuery.refetch();
+      if (res.invite_url) {
+        toast.success("Invitation created", "Copy the invite link below to share.");
+      } else {
+        toast.success("Invitation sent");
+      }
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : "Failed to send invitation");
+    }
+  };
+
+  const handleRoleChange = async (userId: string, role: string) => {
+    if (!org) return;
+    try {
+      await api.updateOrgMemberRole(org.id, userId, role);
+      await membersQuery.refetch();
+      toast.success("Role updated");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Failed to update role");
     }
   };
 
@@ -118,20 +136,32 @@ export function MembersTab({ org }: MembersTabProps) {
       key: "role",
       header: "Role",
       sortable: true,
-      cell: (m) => (
-        <span
-          className={cn(
-            "px-2 py-1 rounded-md text-sm font-medium",
-            m.role === "owner"
-              ? "bg-[var(--warning-bg)] text-[var(--warning)]"
-              : m.role === "admin"
-              ? "bg-[var(--accent-faint)] text-[var(--accent)]"
-              : "bg-[var(--bg-tertiary)] text-[var(--text-secondary)]",
-          )}
-        >
-          {m.role}
-        </span>
-      ),
+      cell: (m) =>
+        m.role === "owner" || !hasPermission("members:invite") ? (
+          <span
+            className={cn(
+              "px-2 py-1 rounded-md text-sm font-medium",
+              m.role === "owner"
+                ? "bg-[var(--warning-bg)] text-[var(--warning)]"
+                : m.role === "admin"
+                ? "bg-[var(--accent-faint)] text-[var(--accent)]"
+                : "bg-[var(--bg-tertiary)] text-[var(--text-secondary)]",
+            )}
+          >
+            {m.role}
+          </span>
+        ) : (
+          <select
+            aria-label={`Change role for ${m.name}`}
+            value={m.role}
+            onChange={(e) => void handleRoleChange(m.user_id, e.target.value)}
+            className="rounded-md border border-[var(--border)] bg-[var(--bg-primary)] px-2 py-1 text-sm"
+          >
+            <option value="admin">admin</option>
+            <option value="member">member</option>
+            <option value="viewer">viewer</option>
+          </select>
+        ),
     },
     // P11: 2FA status column. Shown as a shield icon + accessible
     // label so admins can see who's protected when the org has
@@ -241,6 +271,35 @@ export function MembersTab({ org }: MembersTabProps) {
               >
                 Enter a valid email address (e.g. user@example.com).
               </p>
+            )}
+            {lastInviteUrl && (
+              <div className="rounded-lg border border-[var(--border-default)] bg-[var(--bg-secondary)] p-3 space-y-2">
+                <p className="text-xs text-[var(--text-muted)]">
+                  Share this invite link (shown when email delivery is unavailable or as a backup):
+                </p>
+                <div className="flex gap-2">
+                  <input
+                    readOnly
+                    value={lastInviteUrl}
+                    className="flex-1 px-2 py-1.5 rounded-md border border-[var(--border)] bg-[var(--bg-primary)] text-xs font-mono text-[var(--text-primary)]"
+                    aria-label="Invite URL"
+                  />
+                  <button
+                    type="button"
+                    className="px-3 py-1.5 text-xs rounded-md bg-[var(--accent)] text-[var(--accent-foreground)]"
+                    onClick={async () => {
+                      try {
+                        await navigator.clipboard.writeText(lastInviteUrl);
+                        toast.success("Invite link copied");
+                      } catch {
+                        toast.error("Could not copy link");
+                      }
+                    }}
+                  >
+                    Copy
+                  </button>
+                </div>
+              </div>
             )}
           </div>
         </SettingsCard>

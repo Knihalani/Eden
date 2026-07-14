@@ -145,10 +145,37 @@ class AutoRevertEngine:
         revert_id = _new_id("rev")
         evidence = regression_evidence or {}
 
-        # Manual-trigger path: no provider configured. The
-        # caller (typically the portal) gets the strategy
-        # + can dispatch the actual revert itself.
+        # Manual-trigger path: no provider configured and the
+        # org has no resolvable GitHub connection / env token.
+        # The factory's silent Local fallback must NOT auto-execute
+        # reverts — that would turn every unconfigured org into
+        # a write path. Only resolve via the factory when the org
+        # has an active ``repo_connections`` row or env GitHub
+        # credentials are present.
         provider = self._provider
+        if provider is None:
+            try:
+                import os
+
+                from eden.providers.factory import (
+                    active_repo_connection,
+                    get_pr_provider_for_org,
+                )
+                conn = await active_repo_connection(org_id)
+                token = os.environ.get("EDEN_GITHUB_TOKEN", "").strip()
+                repo = os.environ.get("EDEN_GITHUB_REPO", "").strip()
+                force_local = (
+                    os.environ.get("EDEN_PR_PROVIDER", "").strip().lower()
+                    == "local"
+                )
+                if conn is not None or (token and repo and not force_local):
+                    provider = await get_pr_provider_for_org(org_id)
+            except Exception as exc:
+                logger.debug(
+                    "AutoRevertEngine: get_pr_provider_for_org(%s) failed: %s",
+                    org_id, exc,
+                )
+                provider = None
         if provider is None:
             return _ok_envelope(
                 self.name,

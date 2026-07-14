@@ -8,8 +8,9 @@ v1.6 STUB checklist:
 * ``POST /inbox/{patch_id}/edit`` — RBAC: ``editor``+.
 * ``POST /inbox/{patch_id}/request-changes`` — RBAC: ``reviewer``+.
 * ``POST /inbox/{patch_id}/comment`` — RBAC: ``commenter``+.
-* ``POST /inbox/{patch_id}/pr`` — RBAC: ``editor``+ AND
-  ``auto_pr_enabled=true`` if creating auto-mode.
+* ``POST /inbox/{patch_id}/pr`` — RBAC: ``editor``+.
+  Human open uses ``manual_open_pr`` (``code_change_enabled``
+  only). Automated open_pr still requires ``auto_pr_enabled``.
 * ``POST /inbox/{patch_id}/revert`` — RBAC: ``admin``+ AND
   ``auto_revert_enabled=true`` if creating auto-mode.
 * ``POST /inbox/{patch_id}/bulk`` — bulk action; RBAC: ``admin``+.
@@ -31,6 +32,7 @@ from .._common import (
     _insert_row,
     _new_id,
     _ok_envelope,
+    _select_one,
     _update_row,
 )
 
@@ -67,13 +69,17 @@ INBOX_ACTION_RBAC: dict[str, str] = {
 }
 
 # Map inbox action → ``_check_two_stage_optin`` action kind.
+# Human inbox actions use kinds that only need
+# ``code_change_enabled``. Auto-mode kinds (``open_pr``,
+# ``auto_approve``, ``revert_pr``) stay available for
+# automated callers that pass them explicitly.
 INBOX_ACTION_KIND: dict[str, str] = {
-    "approve": "auto_approve",
+    "approve": "create_patch",  # human approve — not auto-approve
     "deny": "create_patch",  # no auto-mode opt-in needed
     "edit": "create_patch",
     "request-changes": "create_patch",
     "comment": "create_patch",
-    "pr": "open_pr",
+    "pr": "manual_open_pr",  # human Open PR — not auto_pr gate
     "revert": "revert_pr",
     "bulk": "create_patch",
 }
@@ -203,9 +209,9 @@ class PRReviewService:
         #
         # Each one writes an audit row to ``closed_loop_actions``
         # and updates the corresponding patch state. The
-        # opt-in check above already gated them on
-        # ``code_change_enabled`` + ``auto_pr_enabled`` /
-        # ``auto_revert_enabled``.
+        # opt-in check above already gated them
+        # (``manual_open_pr`` / ``create_patch`` for human
+        # actions; ``revert_pr`` still needs auto_revert).
         if action == "edit":
             if not edited_diff:
                 return _error_envelope(
@@ -260,9 +266,9 @@ class PRReviewService:
 
         if action == "pr":
             # Delegate to PRCreator so the inbox action reuses the
-            # same gate / provider / diff-parsing path. PRCreator
-            # requires ``code_change_enabled`` + ``auto_pr_enabled``
-            # — the opt-in check above already enforced those.
+            # same gate / provider / diff-parsing path. Human
+            # inbox Open PR uses ``manual_open_pr`` (master
+            # opt-in only) — matching POST /patches/{id}/pr.
             from ..pr_creator import PRCreator
 
             creator = PRCreator()
@@ -273,16 +279,13 @@ class PRReviewService:
             pr_result = await creator.create(
                 org_id, patch_id, policy,
                 pr_patterns=None,
+                action_kind="manual_open_pr",
             )
             return pr_result
 
         if action == "revert":
-            # Mark the patch as reverted and record the audit row.
-            # The actual revert-PR creation is delegated to
-            # :class:`AutoRevertEngine` which is a Gate-4b feature.
-            # Until then, ``revert`` records the operator's intent
-            # and flips the status — the operator still has to open
-            # the revert PR manually via the GitHub UI.
+            # Gate 4b: record the audit row, flip status, then
+            # delegate the actual revert-PR to AutoRevertEngine.
             approval_id = _new_id("approval")
             await _insert_row(
                 org_id,
@@ -296,6 +299,30 @@ class PRReviewService:
                     "revert", comment or "",
                 ],
             )
+            # Best-effort audit row for the deferred
+            # patch_review_actions table (migration 098).
+            try:
+                await _insert_row(
+                    org_id,
+                    "patch_review_actions",
+                    [
+                        "id", "patch_id", "action",
+                        "actor_user_id", "comment", "reason",
+                    ],
+                    [
+                        _new_id("pra"),
+                        patch_id,
+                        "revert",
+                        actor_user_id,
+                        comment or "",
+                        "inbox_revert",
+                    ],
+                )
+            except Exception as pra_exc:
+                logger.debug(
+                    "pr_review: patch_review_actions insert failed: %s",
+                    pra_exc,
+                )
             await _update_row(
                 org_id,
                 "proposed_patches",
@@ -304,6 +331,60 @@ class PRReviewService:
                 set_col="status",
                 set_val="reverted",
             )
+
+            revert_pr_url = None
+            revert_result: dict[str, Any] | None = None
+            try:
+                from ..revert_engine import AutoRevertEngine
+
+                # Prefer an associated pull_requests row when present;
+                # otherwise fall back to patch_id as the pr_id key.
+                pr_id = patch_id
+                pr_state = "merged"
+                try:
+                    pr_row = await _select_one(
+                        org_id,
+                        "pull_requests",
+                        where="patch_id = $2",
+                        params=(patch_id,),
+                    )
+                    if pr_row and pr_row.get("id"):
+                        pr_id = str(pr_row["id"])
+                        pr_state = str(pr_row.get("state") or "merged")
+                except Exception as lookup_exc:
+                    logger.debug(
+                        "pr_review: pull_requests lookup failed: %s",
+                        lookup_exc,
+                    )
+
+                engine = AutoRevertEngine()
+                revert_result = await engine.revert(
+                    org_id=org_id,
+                    pr_id=pr_id,
+                    policy=policy,
+                    pr_state=pr_state,
+                    history_is_linear=True,
+                    regression_evidence={
+                        "source": "inbox_revert",
+                        "patch_id": patch_id,
+                        "actor_user_id": actor_user_id,
+                        "comment": comment or "",
+                    },
+                )
+                if isinstance(revert_result, dict):
+                    revert_pr_url = (
+                        (revert_result.get("data") or {}).get("revert_pr_url")
+                    )
+            except Exception as revert_exc:
+                logger.warning(
+                    "pr_review: AutoRevertEngine failed for %s: %s",
+                    patch_id, revert_exc,
+                )
+                revert_result = {
+                    "status": "error",
+                    "message": str(revert_exc),
+                }
+
             return _ok_envelope(
                 self.name,
                 {
@@ -312,12 +393,8 @@ class PRReviewService:
                     "approval_id": approval_id,
                     "actor_user_id": actor_user_id,
                     "new_status": "reverted",
-                    "revert_pr_url": None,
-                    "note": (
-                        "AutoRevertEngine is a Gate-4b feature. The "
-                        "operator must open the revert PR manually "
-                        "until then."
-                    ),
+                    "revert_pr_url": revert_pr_url,
+                    "revert": revert_result,
                 },
             )
 

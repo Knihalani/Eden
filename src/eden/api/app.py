@@ -20,6 +20,43 @@ from eden.api.middleware.security_headers import (
 )
 from eden.api.middleware.tenant_rate_limit import TenantRateLimitMiddleware
 from eden.api.openapi_public import build_public_openapi_spec
+
+
+def _init_sentry() -> None:
+    """Initialize Sentry when SENTRY_DSN / settings.sentry_dsn is set."""
+    dsn = os.environ.get("SENTRY_DSN", "").strip()
+    if not dsn:
+        try:
+            from eden.config import get_settings
+
+            dsn = (get_settings().sentry_dsn or "").strip()
+        except Exception:  # noqa: BLE001
+            return
+    if not dsn:
+        return
+    try:
+        import sentry_sdk
+        from sentry_sdk.integrations.fastapi import FastApiIntegration
+        from sentry_sdk.integrations.starlette import StarletteIntegration
+    except ImportError:
+        logging.getLogger(__name__).warning(
+            "SENTRY_DSN set but sentry-sdk is not installed"
+        )
+        return
+    sentry_sdk.init(
+        dsn=dsn,
+        environment=os.environ.get("SENTRY_ENVIRONMENT", "development"),
+        traces_sample_rate=float(os.environ.get("SENTRY_TRACES_SAMPLE_RATE", "0") or 0),
+        integrations=[
+            StarletteIntegration(transaction_style="endpoint"),
+            FastApiIntegration(transaction_style="endpoint"),
+        ],
+        send_default_pii=False,
+    )
+
+
+_init_sentry()
+
 from eden.api.routes import (
     agent_issues,
     agent_sessions,
@@ -496,6 +533,16 @@ app.add_middleware(
 # in dev with QUOTA_ENFORCEMENT_ENABLED=false.
 if getattr(settings, "quota_enforcement_enabled", True):
     app.add_middleware(QuotaEnforcementMiddleware)
+
+# IdempotencyMiddleware — optional ``Idempotency-Key`` dedupe for
+# mutating ``/v1/*`` requests. Mounted behind
+# ``idempotency_middleware_enabled`` (default True). Requests without
+# the header pass through; with the header, Redis + Postgres cache
+# the first successful response for 24h.
+if getattr(settings, "idempotency_middleware_enabled", True):
+    from eden.api.middleware.idempotency import IdempotencyMiddleware
+
+    app.add_middleware(IdempotencyMiddleware)
 
 # Internal-only middleware gates the ``/v1/internal/*`` namespace to
 # the IP allow-list (default: loopback). Operators set

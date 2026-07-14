@@ -43,7 +43,6 @@ from eden.providers import (
     FileEntry,
     PRCreateRequest,
     PRProvider,
-    get_default_pr_provider,
 )
 
 from ._common import (
@@ -132,7 +131,17 @@ class PRCreator:
         self,
         provider: PRProvider | None = None,
     ) -> None:
-        self._provider = provider or get_default_pr_provider()
+        # Explicit override (tests / callers). When ``None``,
+        # :meth:`create` resolves a per-org provider via
+        # :func:`eden.providers.factory.get_pr_provider_for_org`.
+        self._provider = provider
+
+    async def _resolve_provider(self, org_id: str) -> PRProvider:
+        """Return the injected provider or an org-scoped factory result."""
+        if self._provider is not None:
+            return self._provider
+        from eden.providers.factory import get_pr_provider_for_org
+        return await get_pr_provider_for_org(org_id)
 
     async def create(
         self,
@@ -142,12 +151,16 @@ class PRCreator:
         *,
         req: PRCreateRequest | None = None,
         pr_patterns: dict[str, Any] | None = None,
+        action_kind: str = "manual_open_pr",
     ) -> dict[str, Any]:
         """Create the branch, commit, and open the PR.
 
         Cat 23 destructive-route path (no ``req``): opt-in
-        check fires FIRST (``code_change_enabled`` +
-        ``auto_pr_enabled``). On success, delegates to the
+        check fires FIRST. Admin manual open (default
+        ``action_kind="manual_open_pr"``) only requires
+        ``code_change_enabled``. Automated callers pass
+        ``action_kind="open_pr"`` to also require
+        ``auto_pr_enabled``. On success, delegates to the
         :class:`PRProvider` and persists the result to
         ``pull_requests``.
 
@@ -160,9 +173,10 @@ class PRCreator:
         + body template + labels from the PRPatternService.
         Without it, defaults are used.
         """
+        provider = await self._resolve_provider(org_id)
         if req is None:
             optin = _check_two_stage_optin(
-                self.name, policy, "open_pr",
+                self.name, policy, action_kind,
             )
             if optin is not None:
                 return optin
@@ -229,7 +243,7 @@ class PRCreator:
                 files=files,
             )
             try:
-                info = await self._provider.create_pr(req)
+                info = await provider.create_pr(req)
             except NotImplementedError as exc:
                 return _error_envelope(
                     self.name,
@@ -239,7 +253,7 @@ class PRCreator:
                     error_code="provider_not_implemented",
                     data={
                         "patch_id": patch_id,
-                        "provider": self._provider.name,
+                        "provider": provider.name,
                     },
                 )
             except Exception as exc:
@@ -275,12 +289,12 @@ class PRCreator:
         if req.files:
             file_paths = [f.path for f in req.files if f.path]
             codeowners = await self.resolve_codeowners_reviewers(
-                file_paths,
+                org_id, file_paths,
             )
             if codeowners:
                 req = self.attach_codeowners_reviewers(req, codeowners)
         try:
-            info = await self._provider.create_pr(req)
+            info = await provider.create_pr(req)
         except NotImplementedError as exc:
             return _error_envelope(
                 self.name,
@@ -290,7 +304,7 @@ class PRCreator:
                 error_code="provider_not_implemented",
                 data={
                     "patch_id": patch_id,
-                    "provider": self._provider.name,
+                    "provider": provider.name,
                 },
             )
         await self._persist_pr(org_id, patch_id, info, req)
@@ -363,16 +377,26 @@ class PRCreator:
 
     @property
     def provider_name(self) -> str:
-        """The provider name (``"local"``, ``"github"``)."""
+        """The provider name (``"local"``, ``"github"``).
+
+        When no provider was injected, returns ``"unresolved"``
+        until :meth:`create` resolves a per-org provider.
+        """
+        if self._provider is None:
+            return "unresolved"
         return self._provider.name
 
     # ── CODEOWNERS reviewer resolution (Gate 4a) ─────────────
 
     async def resolve_codeowners_reviewers(
         self,
+        org_id: str,
         file_paths: list[str],
     ) -> list[str]:
         """Return the CODEOWNERS owners for ``file_paths``.
+
+        ``org_id`` is required so the connector routes to the
+        org's connected repo (multi-tenant isolation).
 
         Best-effort: when the connector fails to read
         CODEOWNERS (no repo connected, no CODEOWNERS file,
@@ -380,10 +404,14 @@ class PRCreator:
         responsible for the fallback (the human or the
         ``required_reviewers`` policy field).
         """
+        if not file_paths:
+            return []
         try:
             from .repo_connector import RepoConnector
             connector = RepoConnector()
-            owners_resp = await connector.owners_for_files(file_paths)
+            owners_resp = await connector.owners_for_files(
+                org_id, file_paths,
+            )
             owners_map = (owners_resp.get("data") or {}).get("owners") or {}
         except Exception as exc:
             logger.debug(

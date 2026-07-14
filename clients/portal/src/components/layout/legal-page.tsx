@@ -126,8 +126,7 @@ export function LegalPage({
             </Link>
             <span className="inline-flex items-baseline gap-1.5 whitespace-nowrap">
               <Link
-                href="/api/v1/me/do-not-sell"
-                prefetch={false}
+                href="/do-not-sell"
                 className="text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors"
               >
                 Do Not Sell My Info

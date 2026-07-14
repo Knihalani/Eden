@@ -46,13 +46,19 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e .
 
-      - name: Apply migrations
+      - name: Apply migrations (Alembic)
         run: |
-          PGPASSWORD=eden_test psql -h localhost -U eden_test -d eden_test -f migrations/001_kb_schema.sql
-          # Apply subsequent migrations idempotently
-          for m in migrations/00*.sql; do
-            PGPASSWORD=eden_test psql -h localhost -U eden_test -d eden_test -f "$m" || true
-          done
+          # Use the same migration path as backend-ci / production boot.
+          python -m alembic upgrade head
+        env:
+          DATABASE_URL: postgresql://eden_test:eden_test@localhost:5432/eden_test
+          POSTGRES_HOST: localhost
+          POSTGRES_PORT: 5432
+          POSTGRES_DB: eden_test
+          POSTGRES_USER: eden_test
+          POSTGRES_PASSWORD: eden_test
+          JWT_SECRET: test-jwt-secret-do-not-use-in-production-ever
+          ENCRYPTION_KEY: test-encryption-key-32chars-minimum!!
 
       - name: Install Playwright browsers (cached)
         uses: actions/cache@v4

@@ -59,16 +59,16 @@
   --border-glow: #5B9EFF;      /* focus / active glow */
 
   /* Text — sharp contrast on dark.
-   * --text-faint bumped from #475569 (2.7:1) → #5A6B85 (3.3:1) so it
-   * passes WCAG AA Large (≥3:1). --text-muted bumped from #64748B
-   * (4.2:1) → #708090 (4.7:1) and again to #7A8A9A (5.46:1 on
-   * --bg-primary, 4.89:1 on --bg-tertiary) to pass AA Normal (≥4.5:1)
-   * on every surface — the 4.27:1 reading on terminal/elevated panels
-   * was below threshold. */
+   * --text-faint bumped from #475569 (2.7:1) → #5A6B85 (3.3:1) →
+   * #6B7C96 (~4.56:1 on --bg-primary) so AA Normal (≥4.5:1) holds
+   * for small helper labels, not just AA Large. --text-muted bumped
+   * from #64748B (4.2:1) → #708090 (4.7:1) and again to #7A8A9A
+   * (5.46:1 on --bg-primary, 4.89:1 on --bg-tertiary) to pass AA
+   * Normal on every surface. */
   --text-primary: #E4ECF7;
   --text-secondary: #94A3B8;
   --text-muted: #7A8A9A;
-  --text-faint: #5A6B85;
+  --text-faint: #6B7C96;
 
   /* Accent (Terminal Blue) — primary action color */
   --accent: #5B9EFF;

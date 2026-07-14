@@ -311,6 +311,13 @@ class ComplianceEvidenceGenerator:
             },
         }
 
+        # HIPAA / ISO27001 packs also attach live org context:
+        # audit rollup, retention settings, PII policy, subprocessors.
+        if canon in ("hipaa", "iso27001"):
+            body["evidence_context"] = await self._evidence_context(
+                client, org_id, start, end, counts,
+            )
+
         # Persist
         if client is not None:
             try:
@@ -338,6 +345,71 @@ class ComplianceEvidenceGenerator:
         )
 
         return _ok_envelope(self.name, body)
+
+    async def _evidence_context(
+        self,
+        client: Any,
+        org_id: str,
+        start: Any,
+        end: Any,
+        counts: dict[str, int],
+    ) -> dict[str, Any]:
+        """Snapshot retention, PII policy, subprocessors + audit rollup."""
+        retention: list[dict[str, Any]] = []
+        pii_policy: dict[str, Any] | None = None
+        if client is not None:
+            try:
+                rows = await client.fetch(
+                    "SELECT table_name, hot_days, warm_days, "
+                    "cold_days, delete_days, pii_scrub_after_days "
+                    "FROM org_retention_policies WHERE "
+                    "tenant_id = $1 "
+                    "ORDER BY table_name ASC LIMIT 100",
+                    org_id,
+                )
+                for r in rows or []:
+                    retention.append(dict(r))
+            except Exception as exc:
+                logger.debug("evidence_context retention: %s", exc)
+            try:
+                row = await client.fetchrow(
+                    "SELECT tenant_id, mode, enabled_categories, "
+                    "disabled_categories, fail_closed_on_credentials, "
+                    "effective_from FROM org_pii_policies "
+                    "WHERE tenant_id = $1 "
+                    "ORDER BY effective_from DESC NULLS LAST LIMIT 1",
+                    org_id,
+                )
+                if row is not None:
+                    try:
+                        pii_policy = dict(row)
+                    except (TypeError, ValueError):
+                        pii_policy = None
+                    if pii_policy is not None:
+                        for k, v in list(pii_policy.items()):
+                            if hasattr(v, "isoformat"):
+                                pii_policy[k] = v.isoformat()
+            except Exception as exc:
+                logger.debug("evidence_context pii_policy: %s", exc)
+
+        try:
+            from eden.api.routes.compliance import _SUBPROCESSORS
+            subprocessors = list(_SUBPROCESSORS)
+        except Exception:
+            subprocessors = []
+
+        return {
+            "audit_log": {
+                "privileged_actions": counts.get("audit_governance", 0),
+                "role_changes": counts.get("audit_role_changes", 0),
+                "change_events": counts.get("audit_changes", 0),
+                "window_start": start.isoformat() if hasattr(start, "isoformat") else str(start),
+                "window_end": end.isoformat() if hasattr(end, "isoformat") else str(end),
+            },
+            "retention_settings": retention,
+            "pii_policy": pii_policy,
+            "subprocessors": subprocessors,
+        }
 
     # ── Convenience aliases (matches the API surface) ─────────────
 

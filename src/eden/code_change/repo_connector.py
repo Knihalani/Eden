@@ -54,10 +54,12 @@ class RepoConnector:
         self,
         provider: RepoProvider | None = None,
     ) -> None:
-        # Default to the platform's :func:`get_default_repo_provider`
-        # so callers can override per-tenant. The local provider
-        # is the dev / CI path; the GitHub provider is the
-        # Cat 23 Gate-1 real-impl.
+        # Explicit override (tests / callers) skips the per-org
+        # factory in :meth:`_provider_for_org`. Otherwise the
+        # platform default is kept for the non-org read helpers
+        # (``list_files`` / ``read_file``) while org-scoped
+        # paths resolve via the factory.
+        self._explicit_provider = provider is not None
         self._provider = provider or get_default_repo_provider()
 
     async def connect(
@@ -450,38 +452,17 @@ class RepoConnector:
     async def _provider_for_org(self, org_id: str):
         """Return a :class:`RepoProvider` scoped to ``org_id``'s active repo.
 
-        Falls back to the default provider when the org has no
-        ``repo_connections`` rows (the pre-multi-repo-isolation
-        behaviour). The lookup is best-effort: a DB error logs
-        at debug and falls back so a transient Postgres outage
-        doesn't break read paths.
+        Prefers an explicitly injected provider (tests). Otherwise
+        delegates to :func:`eden.providers.factory.get_repo_provider_for_org`
+        which mints a per-org GitHub App token from ``repo_connections``.
         """
-        from ._common import _select_rows
+        if self._explicit_provider:
+            return self._provider
+        from eden.providers.factory import get_repo_provider_for_org
         try:
-            rows = await _select_rows(
-                org_id,
-                "repo_connections",
-                where="status = 'active'",
-                order_by="created_at DESC",
-                limit=1,
-            )
+            return await get_repo_provider_for_org(org_id)
         except Exception as exc:
             logger.debug(
                 "RepoConnector._provider_for_org(%s): %s", org_id, exc,
             )
             return self._provider
-        if not rows:
-            return self._provider
-        repo = rows[0]
-        # Local provider: build a fresh one with the repo's
-        # working directory. GitHub provider: rebuild with
-        # the token + repo from env (the env-driven factory
-        # already targets the configured EDEN_GITHUB_REPO).
-        from eden.providers import get_default_repo_provider
-        from eden.providers.repo import LocalRepoProvider
-        provider = get_default_repo_provider()
-        if isinstance(provider, LocalRepoProvider):
-            return LocalRepoProvider(
-                repo_path=repo.get("repo_full_name") or provider.repo_path,
-            )
-        return provider
