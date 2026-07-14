@@ -23,7 +23,16 @@ from eden.api.openapi_public import build_public_openapi_spec
 
 
 def _init_sentry() -> None:
-    """Initialize Sentry when SENTRY_DSN / settings.sentry_dsn is set."""
+    """Initialize Sentry when a usable DSN is configured.
+
+    Never crash the process on a bad/empty DSN. Northflank's
+    ``eden-required`` secret group often has ``SENTRY_DSN`` set to an
+    empty string or a placeholder without a scheme; sentry-sdk then
+    raises ``BadDsn: Unsupported scheme ''`` at import time and the
+    container exit-loops with ``no healthy upstream`` on the ingress
+    (July 2026 production outage).
+    """
+    log = logging.getLogger(__name__)
     dsn = os.environ.get("SENTRY_DSN", "").strip()
     if not dsn:
         try:
@@ -34,25 +43,60 @@ def _init_sentry() -> None:
             return
     if not dsn:
         return
+    # Reject DSNs that cannot possibly work (empty scheme, missing
+    # scheme, placeholder values). sentry-sdk's Dsn() parser raises
+    # BadDsn for these; we short-circuit first so boot stays green.
+    lowered = dsn.lower()
+    if lowered in {"none", "null", "undefined", "your_sentry_dsn_here"}:
+        log.warning("SENTRY_DSN looks like a placeholder (%r) — skipping Sentry init", dsn)
+        return
+    if "://" not in dsn:
+        log.warning(
+            "SENTRY_DSN missing scheme (got %r) — skipping Sentry init. "
+            "Set a full https://…@….ingest.sentry.io/… DSN or leave the secret empty.",
+            dsn[:48],
+        )
+        return
+    scheme = dsn.split("://", 1)[0].strip()
+    if not scheme:
+        # Matches the production crash: BadDsn Unsupported scheme ''.
+        # Northflank secret was set to a value like ``://…`` or otherwise
+        # scheme-less after the separator.
+        log.warning(
+            "SENTRY_DSN has empty scheme (%r) — skipping Sentry init",
+            dsn[:48],
+        )
+        return
     try:
         import sentry_sdk
         from sentry_sdk.integrations.fastapi import FastApiIntegration
         from sentry_sdk.integrations.starlette import StarletteIntegration
+        from sentry_sdk.utils import BadDsn
     except ImportError:
-        logging.getLogger(__name__).warning(
-            "SENTRY_DSN set but sentry-sdk is not installed"
-        )
+        log.warning("SENTRY_DSN set but sentry-sdk is not installed")
         return
-    sentry_sdk.init(
-        dsn=dsn,
-        environment=os.environ.get("SENTRY_ENVIRONMENT", "development"),
-        traces_sample_rate=float(os.environ.get("SENTRY_TRACES_SAMPLE_RATE", "0") or 0),
-        integrations=[
-            StarletteIntegration(transaction_style="endpoint"),
-            FastApiIntegration(transaction_style="endpoint"),
-        ],
-        send_default_pii=False,
-    )
+    try:
+        sentry_sdk.init(
+            dsn=dsn,
+            environment=os.environ.get("SENTRY_ENVIRONMENT", "development"),
+            traces_sample_rate=float(
+                os.environ.get("SENTRY_TRACES_SAMPLE_RATE", "0") or 0
+            ),
+            integrations=[
+                StarletteIntegration(transaction_style="endpoint"),
+                FastApiIntegration(transaction_style="endpoint"),
+            ],
+            send_default_pii=False,
+        )
+    except BadDsn as exc:
+        log.error(
+            "SENTRY_DSN is invalid (%s) — skipping Sentry init so the API can boot. "
+            "Fix or clear the SENTRY_DSN secret in Northflank.",
+            exc,
+        )
+    except Exception as exc:  # noqa: BLE001
+        log.error("Sentry init failed (%s) — continuing without Sentry", exc)
+
 
 
 _init_sentry()
