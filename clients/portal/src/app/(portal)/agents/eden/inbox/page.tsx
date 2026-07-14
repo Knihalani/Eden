@@ -201,7 +201,7 @@ export default function EdenPrInboxPage() {
   if (!orgId) {
     return (
       <PageContent>
-        <NoOrgState />
+        <NoOrgState feature="PR Inbox" />
       </PageContent>
     );
   }
