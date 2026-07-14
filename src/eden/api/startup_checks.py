@@ -1,9 +1,18 @@
 """Fail-closed startup dependency checks for production deploys.
 
-When ``eden_production`` (or ``strict_startup_checks``) is enabled, any
-check failure raises :class:`StartupCheckError` and prevents the API from
-accepting traffic. In dev/test mode the same probes run but only log
-warnings so local workflows stay frictionless.
+When ``eden_production`` (or ``strict_startup_checks``) is enabled,
+**required** check failures raise :class:`StartupCheckError` and prevent
+the API from accepting traffic. Soft dependencies (Redis, Qdrant,
+OpenRouter) are still probed and logged, but they no longer take the
+process out of the load-balancer pool.
+
+Why the split (July 2026): Northflank's ``httpHealthCheck`` hits
+``/ready``. When Redis / Qdrant / OpenRouter blipped, every required
+probe failed the ready gate → ingress returned plain-text
+``no healthy upstream`` → the Vercel portal proxy forwarded 503s for
+``/auth/me`` and ``/notifications`` even though Postgres (the only
+dependency those routes need) was fine. Soft failures now degrade
+``/health`` without black-holing traffic.
 """
 
 from __future__ import annotations
@@ -16,6 +25,12 @@ import httpx
 from eden.config import Settings, get_settings
 
 logger = logging.getLogger(__name__)
+
+# Dependencies that must be up for the process to accept traffic.
+# Everything else is "soft": logged + exposed on /health, but a blip
+# must not remove the pod from the LB (that surfaces as the portal
+# 503 storm: ``no healthy upstream``).
+REQUIRED_FOR_READY: frozenset[str] = frozenset({"postgres"})
 
 
 class StartupCheckError(RuntimeError):
@@ -78,6 +93,20 @@ async def check_openrouter(settings: Settings | None = None) -> str:
     return "ok"
 
 
+def is_ready(checks: dict[str, str] | None) -> bool:
+    """Return True when every *required* dependency reports ``ok``.
+
+    Soft failures (Redis / Qdrant / OpenRouter) do not flip readiness.
+    Missing / empty checks → not ready (safe default for cold start).
+    """
+    if not checks:
+        return False
+    for name in REQUIRED_FOR_READY:
+        if checks.get(name) != "ok":
+            return False
+    return True
+
+
 async def run_startup_checks(
     *,
     settings: Settings | None = None,
@@ -87,8 +116,9 @@ async def run_startup_checks(
 
     Args:
         settings: Optional settings override (tests).
-        strict: When True, raise on any failure. Defaults to
-            ``settings.strict_startup_checks``.
+        strict: When True, raise on any *required* failure. Soft
+            dependency failures are always logged but never raise.
+            Defaults to ``settings.strict_startup_checks``.
     """
     settings = settings or get_settings()
     if strict is None:
@@ -102,7 +132,8 @@ async def run_startup_checks(
     }
 
     results: dict[str, str] = {}
-    failures: list[str] = []
+    required_failures: list[str] = []
+    soft_failures: list[str] = []
 
     for name, probe in probes.items():
         try:
@@ -110,14 +141,30 @@ async def run_startup_checks(
         except Exception as exc:
             results[name] = f"error: {exc}"
         if results[name] != "ok":
-            failures.append(f"{name}={results[name]}")
-            logger.error("startup check failed: %s -> %s", name, results[name])
+            entry = f"{name}={results[name]}"
+            if name in REQUIRED_FOR_READY:
+                required_failures.append(entry)
+                logger.error("startup check failed (required): %s -> %s", name, results[name])
+            else:
+                soft_failures.append(entry)
+                logger.warning(
+                    "startup check failed (soft — traffic still accepted): %s -> %s",
+                    name,
+                    results[name],
+                )
         else:
             logger.info("startup check passed: %s", name)
 
-    if strict and failures:
+    if soft_failures and not required_failures:
+        logger.warning(
+            "Soft dependency degradation at startup: %s. "
+            "/ready stays green so the LB keeps routing; /health reports degraded.",
+            "; ".join(soft_failures),
+        )
+
+    if strict and required_failures:
         raise StartupCheckError(
-            "Startup checks failed (fail-closed): " + "; ".join(failures)
+            "Startup checks failed (fail-closed): " + "; ".join(required_failures)
         )
 
     return results
