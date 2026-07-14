@@ -186,4 +186,44 @@ describe("fetchApi 429 backoff", () => {
       process.off("unhandledRejection", handler);
     }
   });
+
+  it("does NOT retry proxy 503 no healthy upstream / Backend unavailable", async () => {
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse(503, {
+        detail: "Backend unavailable",
+        upstream_down: true,
+        request_id: "r3",
+      }),
+    );
+
+    const handler = (reason: unknown) => {
+      if (reason instanceof ApiError && reason.status === 503) return;
+      throw reason;
+    };
+    process.on("unhandledRejection", handler);
+    try {
+      await expect(api.getMe()).rejects.toBeInstanceOf(ApiError);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    } finally {
+      process.off("unhandledRejection", handler);
+    }
+  });
+
+  it("does NOT retry proxy 503 Backend circuit open", async () => {
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse(503, { detail: "Backend circuit open", request_id: "r4" }),
+    );
+
+    const handler = (reason: unknown) => {
+      if (reason instanceof ApiError && reason.status === 503) return;
+      throw reason;
+    };
+    process.on("unhandledRejection", handler);
+    try {
+      await expect(api.getMe()).rejects.toBeInstanceOf(ApiError);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    } finally {
+      process.off("unhandledRejection", handler);
+    }
+  });
 });

@@ -53,6 +53,12 @@ logger = logging.getLogger(__name__)
 # require auth (e.g. /auth/login to GET the login form).
 DEFAULT_PUBLIC_PREFIXES: tuple[str, ...] = (
     # Health + docs
+    # /live and /ready MUST stay public — Northflank's httpHealthCheck
+    # hits /ready unauthenticated. A 401 here removes every pod from
+    # the ingress pool and the portal sees 503 ``no healthy upstream``
+    # on /auth/me + /notifications (July 2026 outage).
+    "/live",
+    "/ready",
     "/health",
     "/docs",
     "/openapi.json",

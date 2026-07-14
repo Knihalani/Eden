@@ -16,6 +16,7 @@
 import {
   retryAfterMs,
   RETRY_AFTER_DEFAULT_MS,
+  isUpstreamDownDetail,
 } from "@/lib/proxy";
 import { toUserFacingError } from "@/lib/safe-error-message";
 
@@ -244,15 +245,19 @@ async function fetchApi<T>(
     // safe 5s default before trying once more — whichever is longer.
     const isIdempotent = method === "GET" || method === "HEAD" || method === "OPTIONS";
     const generalTransient = (s: number) => s >= 500 || s === 0 || s === 408;
-    /** Proxy 502 from ``forwardToBackend`` when Northflank is down —
-     *  retrying amplifies Vercel isolate load (LP-21). Detect by
-     *  ``detail`` before burning more attempts. */
+    /** Proxy 502/503 from ``forwardToBackend`` when Northflank is
+     *  down or the LB has zero healthy pods — retrying amplifies
+     *  Vercel isolate load (LP-21). Detect by ``detail`` before
+     *  burning more attempts. */
     const isProxyUpstreamDown = async (res: Response): Promise<boolean> => {
-      if (res.status !== 502) return false;
+      if (res.status !== 502 && res.status !== 503) return false;
       try {
-        const body = (await res.clone().json()) as { detail?: unknown };
-        const detail = typeof body?.detail === "string" ? body.detail : "";
-        return /Backend (unreachable|timed out)/i.test(detail);
+        const body = (await res.clone().json()) as {
+          detail?: unknown;
+          upstream_down?: unknown;
+        };
+        if (body?.upstream_down === true) return true;
+        return isUpstreamDownDetail(res.status, body?.detail);
       } catch {
         return false;
       }

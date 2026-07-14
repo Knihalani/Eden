@@ -97,6 +97,31 @@ export const CIRCUIT_FAILURE_THRESHOLD = 5;
 export const CIRCUIT_COOLDOWN_MS = 45_000;
 export const CIRCUIT_RETRY_AFTER_S = 45;
 
+/**
+ * Upstream bodies that mean "the load balancer has zero healthy
+ * pods" (Northflank / Envoy / Fly ingress). The proxy used to
+ * forward these as opaque 503s; the portal then retried them as
+ * generic 5xx and amplified a total outage into a console storm.
+ * Match case-insensitively so we normalise every variant.
+ */
+export const UPSTREAM_DOWN_DETAIL_RE =
+  /no\s*healthy\s*upstream|upstream\s*(unavailable|connect\s*error)|backend\s*(circuit\s*open|unreachable|timed?\s*out|unavailable)/i;
+
+/** True when a status + detail pair means "do not retry / amplify". */
+export function isUpstreamDownDetail(
+  status: number,
+  detail: unknown,
+): boolean {
+  if (status !== 502 && status !== 503) return false;
+  const text =
+    typeof detail === "string"
+      ? detail
+      : detail == null
+        ? ""
+        : JSON.stringify(detail);
+  return UPSTREAM_DOWN_DETAIL_RE.test(text);
+}
+
 let consecutiveFetchFailures = 0;
 let circuitOpenUntilMs = 0;
 
@@ -296,6 +321,25 @@ export async function forwardToBackend(
     }
   }
 
+  // Normalise load-balancer "no healthy upstream" (and friends) into
+  // a stable JSON envelope the client can detect without string-
+  // matching every vendor's wording. July 2026 — production was
+  // returning plain-text ``no healthy upstream`` from the Northflank
+  // ingress when /ready failed; the portal retried those 503s as
+  // generic 5xx and spammed auth/me + notifications.
+  if (
+    response.status === 503 &&
+    parsed !== null &&
+    typeof parsed === "object" &&
+    !Array.isArray(parsed)
+  ) {
+    const detail = (parsed as Record<string, unknown>).detail;
+    if (isUpstreamDownDetail(503, detail)) {
+      (parsed as Record<string, unknown>).detail = "Backend unavailable";
+      (parsed as Record<string, unknown>).upstream_down = true;
+    }
+  }
+
   // Echo request_id on pass-through upstream 5xx so support can
   // correlate browser errors with proxy logs (LP-21). Upstream HTTP
   // errors do NOT trip the circuit — only fetch failures do.
@@ -325,6 +369,18 @@ export async function forwardToBackend(
   nextResponse.headers.set("Vary", "Cookie, Authorization");
   nextResponse.headers.set("Cache-Control", "private, no-store");
   nextResponse.headers.set("X-Request-ID", requestId);
+
+  // When the LB reports zero healthy pods, advertise a Retry-After
+  // so clients back off instead of hammering the dead upstream.
+  if (
+    response.status === 503 &&
+    parsed !== null &&
+    typeof parsed === "object" &&
+    (parsed as Record<string, unknown>).upstream_down === true &&
+    !response.headers.get("Retry-After")
+  ) {
+    nextResponse.headers.set("Retry-After", String(CIRCUIT_RETRY_AFTER_S));
+  }
 
   // Forward throttling / rate-limit headers verbatim (F37 fix). The
   // browser-side ``fetchApi`` (lib/api.ts) reads ``Retry-After`` off
