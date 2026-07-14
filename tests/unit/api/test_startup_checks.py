@@ -91,6 +91,37 @@ async def test_run_startup_checks_strict_raises():
 
 
 @pytest.mark.asyncio
+async def test_run_startup_checks_strict_ignores_soft_failures():
+    """Redis/Qdrant/OpenRouter must not fail-closed the process.
+
+    A soft-dep blip previously marked /ready 503 → Northflank ingress
+    returned ``no healthy upstream`` → portal /auth/me + notifications
+    503 storm even though Postgres was fine.
+    """
+    settings = MagicMock(strict_startup_checks=True, eden_production=True)
+
+    with (
+        patch("eden.api.startup_checks.check_postgres", AsyncMock(return_value="ok")),
+        patch("eden.api.startup_checks.check_redis", AsyncMock(return_value="error: down")),
+        patch("eden.api.startup_checks.check_qdrant", AsyncMock(return_value="error: down")),
+        patch("eden.api.startup_checks.check_openrouter", AsyncMock(return_value="error: down")),
+    ):
+        results = await run_startup_checks(settings=settings, strict=True)
+        assert results["postgres"] == "ok"
+        assert results["redis"].startswith("error:")
+
+
+@pytest.mark.asyncio
+async def test_is_ready_requires_postgres_only():
+    from eden.api.startup_checks import is_ready
+
+    assert is_ready(None) is False
+    assert is_ready({}) is False
+    assert is_ready({"postgres": "ok", "redis": "error: down"}) is True
+    assert is_ready({"postgres": "error: down", "redis": "ok"}) is False
+
+
+@pytest.mark.asyncio
 async def test_run_startup_checks_non_strict_returns_errors():
     settings = MagicMock(strict_startup_checks=False, eden_production=False)
 

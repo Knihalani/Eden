@@ -49,6 +49,10 @@ def _build_app() -> FastAPI:
 def test_public_prefixes_documented():
     """The allow-list must include the minimum expected entries."""
     assert "/health" in DEFAULT_PUBLIC_PREFIXES
+    # Northflank httpHealthCheck uses /ready; /live is the k8s liveness
+    # twin. Both must stay public or the LB returns ``no healthy upstream``.
+    assert "/live" in DEFAULT_PUBLIC_PREFIXES
+    assert "/ready" in DEFAULT_PUBLIC_PREFIXES
     assert "/auth/login" in DEFAULT_PUBLIC_PREFIXES
     assert "/auth/signup" in DEFAULT_PUBLIC_PREFIXES
     assert "/docs" in DEFAULT_PUBLIC_PREFIXES
@@ -58,6 +62,8 @@ def test_is_public_helper():
     """The path classifier recognises the allow-list prefixes."""
     assert _is_public("/health") is True
     assert _is_public("/health/deep") is True
+    assert _is_public("/live") is True
+    assert _is_public("/ready") is True
     assert _is_public("/auth/login") is True
     assert _is_public("/auth/signup-from-invite") is True
     # NOT public:

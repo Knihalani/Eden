@@ -304,8 +304,12 @@ async def lifespan(app: FastAPI):
     from eden.api.startup_checks import StartupCheckError, run_startup_checks
 
     try:
+        from eden.api.startup_checks import is_ready
+
         app.state.startup_checks = await run_startup_checks(settings=settings)
-        app.state.ready = True
+        # Ready when required deps (Postgres) are up — soft failures
+        # (Redis / Qdrant / OpenRouter) must not black-hole the LB.
+        app.state.ready = is_ready(app.state.startup_checks)
     except StartupCheckError:
         app.state.startup_checks = {}
         app.state.ready = False
@@ -926,16 +930,26 @@ async def liveness_probe():
 
 @app.get("/ready")
 async def readiness_probe(request: Request):
-    """Kubernetes readiness probe — dependencies are reachable."""
+    """Load-balancer readiness probe — required deps are reachable.
+
+    July 2026: readiness is gated on Postgres only (see
+    ``REQUIRED_FOR_READY``). Soft deps (Redis / Qdrant / OpenRouter)
+    still appear under ``checks`` so operators can see degradation,
+    but a Redis blip must not pull the pod out of the Northflank
+    pool — that previously surfaced as portal 503s with
+    ``detail: no healthy upstream`` on every ``/auth/me`` call.
+    """
     from fastapi.responses import JSONResponse
 
-    ready = bool(getattr(request.app.state, "ready", False))
+    from eden.api.startup_checks import is_ready, run_startup_checks
+
     checks = getattr(request.app.state, "startup_checks", None)
     if checks is None:
-        from eden.api.startup_checks import run_startup_checks
-
         checks = await run_startup_checks(settings=settings, strict=False)
-        ready = all(v == "ok" for v in checks.values())
+        request.app.state.startup_checks = checks
+        request.app.state.ready = is_ready(checks)
+
+    ready = bool(getattr(request.app.state, "ready", False)) or is_ready(checks)
 
     body = {
         "status": "ready" if ready else "not_ready",

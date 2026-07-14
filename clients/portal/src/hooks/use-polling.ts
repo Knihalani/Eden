@@ -157,6 +157,28 @@ export function usePolling(
       return /429|rate\s*limit|too\s*many\s*requests/i.test(msg);
     };
 
+    /** LB / proxy "upstream is dead" — treat like a long rate-limit
+     *  cooldown instead of the short exponential backoff, so a
+     *  Northflank outage does not keep pinging every few seconds. */
+    const isUpstreamDownError = (err: unknown): boolean => {
+      const status =
+        typeof err === "object" &&
+        err !== null &&
+        "status" in err &&
+        typeof (err as { status?: unknown }).status === "number"
+          ? (err as { status: number }).status
+          : undefined;
+      const msg = err instanceof Error ? err.message : String(err);
+      if (status === 502 || status === 503) {
+        return /no\s*healthy\s*upstream|backend\s*(unavailable|unreachable|timed?\s*out|circuit\s*open)|having\s*trouble\s*reaching/i.test(
+          msg,
+        );
+      }
+      return /no\s*healthy\s*upstream|backend\s*(unavailable|unreachable|timed?\s*out|circuit\s*open)/i.test(
+        msg,
+      );
+    };
+
     const tick = async () => {
       if (paused || authFailed) return;
       // Honour a still-active rate-limit cooldown before doing
@@ -195,6 +217,16 @@ export function usePolling(
           // a banner via the error it catches in `fetch`; this loop
           // just keeps the request cadence polite.
           const fallbackMs = 30_000;
+          rateLimitedUntilMs = Math.max(rateLimitedUntilMs, now + fallbackMs);
+          currentDelay = Math.min(currentDelay * 2, maxBackoffMs);
+          schedule(Math.max(currentDelay, fallbackMs));
+          return;
+        }
+        if (isUpstreamDownError(err)) {
+          // Upstream LB has no healthy pods (or proxy circuit is
+          // open). Use a long cooldown — short backoff just burns
+          // Vercel isolates against a dead Northflank pool.
+          const fallbackMs = 45_000;
           rateLimitedUntilMs = Math.max(rateLimitedUntilMs, now + fallbackMs);
           currentDelay = Math.min(currentDelay * 2, maxBackoffMs);
           schedule(Math.max(currentDelay, fallbackMs));
