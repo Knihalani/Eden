@@ -537,12 +537,28 @@ export const api = {
     }),
 
   inviteOrgMember: (orgId: string, email: string, role?: string) =>
-    fetchApi<{ message: string; invitation_id: string; expires_at: string }>(
+    fetchApi<{
+      message: string;
+      invitation_id: string;
+      expires_at: string;
+      email_status?: string;
+      invite_url?: string;
+    }>(
       `/orgs/${orgId}/invites`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, role: role || "member" }),
+      }
+    ),
+
+  updateOrgMemberRole: (orgId: string, userId: string, role: string) =>
+    fetchApi<{ message: string; user_id: string; role: string }>(
+      `/orgs/${orgId}/members/${userId}`,
+      {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ role }),
       }
     ),
 
@@ -583,6 +599,17 @@ export const api = {
       expires_at: string;
       email: string;
     }>(`/auth/verify-invite-token?token=${encodeURIComponent(token)}`),
+
+  acceptInviteByToken: (token: string) =>
+    fetchApi<{
+      org_id: string;
+      role: string;
+      org_name?: string;
+      message: string;
+      clerk_org_id?: string | null;
+    }>(`/auth/invitations/accept?token=${encodeURIComponent(token)}`, {
+      method: "POST",
+    }),
 
   signupFromInvite: (data: { token: string; password: string; name: string }) =>
     fetchApi<{
