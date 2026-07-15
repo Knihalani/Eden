@@ -93,6 +93,8 @@ export const PAGE_DESCRIPTIONS: Record<string, string> = {
     "Closed-loop improvements — events flow from detection back to deploy.",
   "/pr-suggestions":
     "Auto-generated PRs that fix issues Eden finds in your repo.",
+  "/agents/eden/inbox":
+    "Human review inbox for Eden-proposed patches — approve, deny, comment, or open a PR.",
 
   // Workspace
   "/settings":

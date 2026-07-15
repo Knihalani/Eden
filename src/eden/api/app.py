@@ -20,6 +20,87 @@ from eden.api.middleware.security_headers import (
 )
 from eden.api.middleware.tenant_rate_limit import TenantRateLimitMiddleware
 from eden.api.openapi_public import build_public_openapi_spec
+
+
+def _init_sentry() -> None:
+    """Initialize Sentry when a usable DSN is configured.
+
+    Never crash the process on a bad/empty DSN. Northflank's
+    ``eden-required`` secret group often has ``SENTRY_DSN`` set to an
+    empty string or a placeholder without a scheme; sentry-sdk then
+    raises ``BadDsn: Unsupported scheme ''`` at import time and the
+    container exit-loops with ``no healthy upstream`` on the ingress
+    (July 2026 production outage).
+    """
+    log = logging.getLogger(__name__)
+    dsn = os.environ.get("SENTRY_DSN", "").strip()
+    if not dsn:
+        try:
+            from eden.config import get_settings
+
+            dsn = (get_settings().sentry_dsn or "").strip()
+        except Exception:  # noqa: BLE001
+            return
+    if not dsn:
+        return
+    # Reject DSNs that cannot possibly work (empty scheme, missing
+    # scheme, placeholder values). sentry-sdk's Dsn() parser raises
+    # BadDsn for these; we short-circuit first so boot stays green.
+    lowered = dsn.lower()
+    if lowered in {"none", "null", "undefined", "your_sentry_dsn_here"}:
+        log.warning("SENTRY_DSN looks like a placeholder (%r) — skipping Sentry init", dsn)
+        return
+    if "://" not in dsn:
+        log.warning(
+            "SENTRY_DSN missing scheme (got %r) — skipping Sentry init. "
+            "Set a full https://…@….ingest.sentry.io/… DSN or leave the secret empty.",
+            dsn[:48],
+        )
+        return
+    scheme = dsn.split("://", 1)[0].strip()
+    if not scheme:
+        # Matches the production crash: BadDsn Unsupported scheme ''.
+        # Northflank secret was set to a value like ``://…`` or otherwise
+        # scheme-less after the separator.
+        log.warning(
+            "SENTRY_DSN has empty scheme (%r) — skipping Sentry init",
+            dsn[:48],
+        )
+        return
+    try:
+        import sentry_sdk
+        from sentry_sdk.integrations.fastapi import FastApiIntegration
+        from sentry_sdk.integrations.starlette import StarletteIntegration
+        from sentry_sdk.utils import BadDsn
+    except ImportError:
+        log.warning("SENTRY_DSN set but sentry-sdk is not installed")
+        return
+    try:
+        sentry_sdk.init(
+            dsn=dsn,
+            environment=os.environ.get("SENTRY_ENVIRONMENT", "development"),
+            traces_sample_rate=float(
+                os.environ.get("SENTRY_TRACES_SAMPLE_RATE", "0") or 0
+            ),
+            integrations=[
+                StarletteIntegration(transaction_style="endpoint"),
+                FastApiIntegration(transaction_style="endpoint"),
+            ],
+            send_default_pii=False,
+        )
+    except BadDsn as exc:
+        log.error(
+            "SENTRY_DSN is invalid (%s) — skipping Sentry init so the API can boot. "
+            "Fix or clear the SENTRY_DSN secret in Northflank.",
+            exc,
+        )
+    except Exception as exc:  # noqa: BLE001
+        log.error("Sentry init failed (%s) — continuing without Sentry", exc)
+
+
+
+_init_sentry()
+
 from eden.api.routes import (
     agent_issues,
     agent_sessions,
@@ -259,8 +340,12 @@ async def lifespan(app: FastAPI):
     from eden.api.startup_checks import StartupCheckError, run_startup_checks
 
     try:
+        from eden.api.startup_checks import is_ready
+
         app.state.startup_checks = await run_startup_checks(settings=settings)
-        app.state.ready = True
+        # Ready when required deps (Postgres) are up — soft failures
+        # (Redis / Qdrant / OpenRouter) must not black-hole the LB.
+        app.state.ready = is_ready(app.state.startup_checks)
     except StartupCheckError:
         app.state.startup_checks = {}
         app.state.ready = False
@@ -488,6 +573,16 @@ app.add_middleware(
 # in dev with QUOTA_ENFORCEMENT_ENABLED=false.
 if getattr(settings, "quota_enforcement_enabled", True):
     app.add_middleware(QuotaEnforcementMiddleware)
+
+# IdempotencyMiddleware — optional ``Idempotency-Key`` dedupe for
+# mutating ``/v1/*`` requests. Mounted behind
+# ``idempotency_middleware_enabled`` (default True). Requests without
+# the header pass through; with the header, Redis + Postgres cache
+# the first successful response for 24h.
+if getattr(settings, "idempotency_middleware_enabled", True):
+    from eden.api.middleware.idempotency import IdempotencyMiddleware
+
+    app.add_middleware(IdempotencyMiddleware)
 
 # Internal-only middleware gates the ``/v1/internal/*`` namespace to
 # the IP allow-list (default: loopback). Operators set
@@ -891,16 +986,26 @@ async def liveness_probe():
 
 @app.get("/ready")
 async def readiness_probe(request: Request):
-    """Kubernetes readiness probe — dependencies are reachable."""
+    """Load-balancer readiness probe — required deps are reachable.
+
+    July 2026: readiness is gated on Postgres only (see
+    ``REQUIRED_FOR_READY``). Soft deps (Redis / Qdrant / OpenRouter)
+    still appear under ``checks`` so operators can see degradation,
+    but a Redis blip must not pull the pod out of the Northflank
+    pool — that previously surfaced as portal 503s with
+    ``detail: no healthy upstream`` on every ``/auth/me`` call.
+    """
     from fastapi.responses import JSONResponse
 
-    ready = bool(getattr(request.app.state, "ready", False))
+    from eden.api.startup_checks import is_ready, run_startup_checks
+
     checks = getattr(request.app.state, "startup_checks", None)
     if checks is None:
-        from eden.api.startup_checks import run_startup_checks
-
         checks = await run_startup_checks(settings=settings, strict=False)
-        ready = all(v == "ok" for v in checks.values())
+        request.app.state.startup_checks = checks
+        request.app.state.ready = is_ready(checks)
+
+    ready = bool(getattr(request.app.state, "ready", False)) or is_ready(checks)
 
     body = {
         "status": "ready" if ready else "not_ready",

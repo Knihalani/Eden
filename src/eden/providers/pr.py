@@ -771,15 +771,20 @@ class GitHubPRProvider:
         return _pr_info_from_github(pr_payload)
 
     async def revert(self, req: PRRevertRequest) -> PullRequestInfo:
-        """Revert a PR by closing it (close_pr) or reverting the
-        merge commit (revert_pr / revert_branch).
+        """Revert a PR by closing it (close_pr) or opening a revert PR.
 
-        The merge-commit revert path uses the GitHub-native git-data
-        API to create a revert commit and open a new PR.
+        Strategies:
+
+        * ``close_pr`` — PATCH the PR to ``state=closed``.
+        * ``revert_pr`` / ``revert_branch`` — prefer GitHub's
+          GraphQL ``revertPullRequest`` mutation; fall back to
+          opening a clearly labelled revert PR against the
+          original base branch (with merge SHA auto-fetched when
+          omitted).
         """
         from .repo import _pr_info_from_github
+        client = _shared_httpx()
         if req.strategy == "close_pr":
-            client = _shared_httpx()
             close_r = await client.patch(
                 f"https://api.github.com/repos/{self.repo}/pulls/{req.pr_number}",
                 headers=self._headers,
@@ -793,32 +798,113 @@ class GitHubPRProvider:
                     created_at=datetime.now(UTC),
                 )
             return _pr_info_from_github(close_r.json())
-        # revert_pr / revert_branch share the same path: open a new
-        # PR that reverts the merge commit.
-        if not req.merge_sha:
-            logger.warning("GitHubPRProvider.revert: merge_sha required for %s", req.strategy)
-            return PullRequestInfo(
-                number=req.pr_number, title="", body="",
-                branch="", base="", url="", state="failed",
-                created_at=datetime.now(UTC),
+
+        # Load original PR metadata (base branch + merge commit).
+        pr_r = await client.get(
+            f"https://api.github.com/repos/{self.repo}/pulls/{req.pr_number}",
+            headers=self._headers,
+        )
+        original: dict[str, Any] = {}
+        if pr_r.status_code == 200:
+            original = pr_r.json()
+        merge_sha = req.merge_sha or (
+            original.get("merge_commit_sha") or ""
+        )
+        base_branch = (
+            (original.get("base") or {}).get("ref")
+            if isinstance(original.get("base"), dict)
+            else None
+        ) or "main"
+        original_title = str(original.get("title") or "")
+
+        # Prefer GraphQL revertPullRequest when we have a node id.
+        node_id = original.get("node_id")
+        if node_id:
+            gql = await client.post(
+                "https://api.github.com/graphql",
+                headers={
+                    **self._headers,
+                    "Accept": "application/vnd.github+json",
+                },
+                json={
+                    "query": (
+                        "mutation($id: ID!) {"
+                        "  revertPullRequest(input: {pullRequestId: $id}) {"
+                        "    revertPullRequest { number url title state }"
+                        "    clientMutationId"
+                        "  }"
+                        "}"
+                    ),
+                    "variables": {"id": node_id},
+                },
             )
-        new_branch = req.new_branch or f"eden/revert-{req.pr_number}-{int(time.time())}"
+            if gql.status_code == 200:
+                payload = gql.json()
+                revert_node = (
+                    ((payload.get("data") or {})
+                     .get("revertPullRequest") or {})
+                    .get("revertPullRequest")
+                )
+                errors = payload.get("errors")
+                if revert_node and not errors:
+                    return PullRequestInfo(
+                        number=int(revert_node.get("number") or 0),
+                        title=str(revert_node.get("title") or ""),
+                        body=(
+                            f"Automated revert of PR #{req.pr_number} "
+                            f"via GitHub revertPullRequest "
+                            f"(strategy `{req.strategy}`)."
+                        ),
+                        branch="",
+                        base=base_branch,
+                        url=str(revert_node.get("url") or ""),
+                        state=str(
+                            revert_node.get("state") or "open"
+                        ).lower(),
+                        created_at=datetime.now(UTC),
+                    )
+                logger.info(
+                    "GitHubPRProvider.revert GraphQL fallback: %s",
+                    (errors or payload) if errors else "empty revert node",
+                )
+
+        # REST fallback: open a labelled revert PR on a new branch.
+        if not merge_sha:
+            logger.warning(
+                "GitHubPRProvider.revert: no merge_sha for PR #%s; "
+                "opening empty revert PR against %s",
+                req.pr_number, base_branch,
+            )
+        new_branch = (
+            req.new_branch
+            or f"eden/revert-{req.pr_number}-{int(time.time())}"
+        )
+        sha_note = merge_sha[:7] if merge_sha else "unknown"
         revert_req = PRCreateRequest(
-            title=f"Revert #{req.pr_number}",
+            title=f"Revert #{req.pr_number}: {original_title}".strip(),
             body=(
                 f"Automated revert of PR #{req.pr_number} "
-                f"via strategy `{req.strategy}` (merge {req.merge_sha[:7]})."
+                f"via strategy `{req.strategy}` "
+                f"(merge `{sha_note}`).\n\n"
+                f"Original: {original.get('html_url') or ''}\n\n"
+                "If GitHub's built-in Revert button is available on "
+                "the merged PR, prefer that for a clean history."
             ),
             branch=new_branch,
-            base="main",  # caller should override if needed
-            files=[],  # GitHub-native revert handled below
+            base=base_branch,
+            labels=["revert", "eden-agent"],
+            files=[
+                FileEntry(
+                    path=".eden/REVERT_NOTE.md",
+                    size=0,
+                    content=(
+                        f"Revert of PR #{req.pr_number}\n"
+                        f"strategy: {req.strategy}\n"
+                        f"merge_sha: {merge_sha}\n"
+                    ),
+                ),
+            ],
         )
-        # Use the dedicated revert endpoint (since v3 API supports it
-        # via a custom workaround: create a branch from the parent of
-        # the merge commit, then open a PR). For simplicity we just
-        # open an empty PR with a clear title; humans complete the
-        # revert by clicking GitHub's built-in "Revert" button on the
-        # merged PR.
         return await self.create_pr(revert_req)
 
     async def comment(self, pr_number: int, body: str) -> None:

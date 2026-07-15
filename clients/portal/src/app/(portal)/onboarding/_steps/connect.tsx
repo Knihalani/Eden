@@ -120,7 +120,7 @@ export function ConnectStep() {
           {callbackNotice}
           <span className="mt-2 block text-xs text-[var(--text-muted)]">
             <Link href="/onboarding/install" className="text-[var(--accent)] hover:underline">
-              Skip to SDK install
+              Skip / continue with SDK only
             </Link>
             {" "}if you prefer to wire up manually.
           </span>

@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   GitPullRequestArrow,
@@ -785,6 +786,9 @@ export default function PRSuggestionsPage() {
         icon={GitPullRequestArrow}
         actions={
           <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" asChild>
+              <Link href="/agents/eden/inbox">PR Inbox</Link>
+            </Button>
             <Button
               variant="outline"
               onClick={() => loadSuggestions(limit)}

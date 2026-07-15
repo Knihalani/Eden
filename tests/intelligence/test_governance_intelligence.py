@@ -67,6 +67,7 @@ def _pg_router(
     """
     pg = MagicMock()
     pg.execute = AsyncMock(return_value="OK")
+    pg.fetchrow = AsyncMock(return_value=None)
 
     async def _fetch(query: str, *args: Any) -> list[dict[str, Any]]:
         q = query.lower()
@@ -111,8 +112,13 @@ def _pg_router(
             return [{"count": judge_score_count}]
         if "from org_pii_policies" in q and "pattern_name" in q:
             return list(org_pii_policies or [])
-        if "from org_pii_policies" in q:
+        if "from org_pii_policies" in q and "count" in q:
             return [{"count": pii_policies_count}]
+        if "from org_pii_policies" in q:
+            # Evidence-context snapshot (non-count SELECT)
+            return list(org_pii_policies or [])
+        if "from org_retention_policies" in q:
+            return []
         if "from incident_clusters" in q:
             return [{"count": incident_count}]
         if "from intervention_log" in q:
@@ -1334,21 +1340,26 @@ class TestGovernanceRoutes:
     def test_legacy_compliance_iso27001_route(
         self, gov_client: TestClient,
     ) -> None:
-        # ISO27001 evidence removed per upgradespec §D.5;
-        # route stays mounted for deep-link resolution but
-        # returns a stable 501 envelope.
-        r = gov_client.post(
-            "/orgs/org_test/intelligence/governance/compliance/iso27001",
-            json={
-                "period_start": "2026-04-01",
-                "period_end": "2026-06-30",
-            },
-        )
+        # ISO27001 evidence pack is live — generates JSON from
+        # audit_log / retention / PII / subprocessors.
+        pg = _pg_router(audit_log_count=10)
+        with patch(
+            "eden.storage.postgres.get_postgres_client", return_value=pg
+        ):
+            r = gov_client.post(
+                "/orgs/org_test/intelligence/governance/compliance/iso27001",
+                json={
+                    "period_start": "2026-04-01",
+                    "period_end": "2026-06-30",
+                },
+            )
         body = r.json()
         assert r.status_code == 200, r.text
-        assert body["status"] == "not_implemented"
-        assert body["live"] is False
-        assert "iso27001" in body["feature"]
+        assert body["status"] == "ok"
+        assert body["live"] is True
+        assert body["data"]["framework"] == "iso27001"
+        assert "evidence_context" in body["data"]
+        assert "subprocessors" in body["data"]["evidence_context"]
 
     def test_get_list_packs(self, gov_client: TestClient) -> None:
         pg = _pg_router()

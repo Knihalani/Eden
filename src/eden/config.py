@@ -173,6 +173,11 @@ def _build_settings_class():
         # out per-org via the Settings page (or per-deploy by
         # setting the env var to "false" in the Northflank env).
         intelligence_gap_v0: bool = True
+        # Cat 20 — best-effort TraceRecorder hooks on the AI gateway
+        # hot path. When True, ``AIGateway.complete`` +
+        # ``/gateway/v1/*`` record cacheability metadata for
+        # fork-and-replay. Failures never break the LLM response.
+        time_travel_recording_enabled: bool = True
         # Cat 14 (autonomous) destructive-action flag. The
         # ``/heal``, ``/heal/{id}/approve``, ``/heal/{id}/deny`` routes
         # require this + the per-action two-stage opt-in. Default
@@ -420,8 +425,14 @@ def _build_settings_class():
         )
 
         # Encryption (Fernet key for sensitive at-rest fields).
-        # If empty, falls back to deriving a key from JWT_SECRET.
+        # Required when eden_production=True. Dev may leave empty
+        # (falls back to deriving a key from JWT_SECRET).
         encryption_key: str = ""
+
+        # Sentry error tracking (optional — no-op when DSN empty).
+        sentry_dsn: str = ""
+        sentry_environment: str = "development"
+        sentry_traces_sample_rate: float = 0.0
 
         # Stripe
         stripe_secret_key: str = ""
@@ -572,7 +583,6 @@ def _build_settings_class():
         # per 60s window. Backed by Redis (REDIS_URL) when available; falls
         # back to in-memory TokenBucket for single-node dev. The middleware
         # also sets standard X-RateLimit-* headers on every response.
-        rate_limit_enabled: bool = True
         # Default-deny auth middleware (security 26). Every request must
         # carry an auth context; the middleware short-circuits to 401
         # before the route runs unless the path is on the public allow-
@@ -586,6 +596,12 @@ def _build_settings_class():
         rate_limit_enabled: bool = True
         rate_limit_default_per_window: int = 60
         rate_limit_window_seconds: int = 60
+        # IdempotencyMiddleware — when enabled, mutating ``/v1/*``
+        # requests that carry an ``Idempotency-Key`` header are
+        # deduped (Redis + Postgres). Requests without the header
+        # pass through unchanged. Disable with
+        # ``IDEMPOTENCY_MIDDLEWARE_ENABLED=false``.
+        idempotency_middleware_enabled: bool = True
 
         # ClickHouse — used by data_platform.clickhouse_sink + the columnar
         # engine (Cat 18). HTTP interface only; see
@@ -849,5 +865,15 @@ def get_settings() -> "Settings":  # noqa: F821
         raise RuntimeError(
             "jwt_secret must be at least 32 characters. Generate one "
             "with: python -c 'import secrets; print(secrets.token_urlsafe(32))'"
+        )
+    # Production must use a dedicated ENCRYPTION_KEY — never the
+    # JWT_SECRET-derived fallback (rotation of either secret would
+    # break the other).
+    if settings.eden_production and not (settings.encryption_key or "").strip():
+        raise RuntimeError(
+            "encryption_key is required when eden_production=True. "
+            "Set ENCRYPTION_KEY to a Fernet key "
+            "(python -c 'from cryptography.fernet import Fernet; "
+            "print(Fernet.generate_key().decode())')."
         )
     return settings

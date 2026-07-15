@@ -208,3 +208,58 @@ async def list_alerts(
         org_id,
         enabled_only=enabled_only,
     )
+
+
+@router.post("/alerts/{alert_id}/evaluate")
+async def evaluate_alert(
+    org_id: str = Path(...),
+    alert_id: str = Path(...),
+    force: bool = Query(
+        True,
+        description="Evaluate even if next_fire_at is in the future",
+    ),
+) -> dict[str, Any]:
+    """On-demand alert-as-code evaluation.
+
+    Runs the compiled SQL, persists a firing (or miss) to
+    ``eql_alert_firings``, and advances ``next_fire_at``.
+    """
+    from eden.dsl import AlertAsCode
+
+    return await AlertAsCode().evaluate(
+        org_id,
+        alert_id=alert_id,
+        force=force,
+    )
+
+
+@router.post("/alerts/fire-due")
+async def fire_due_alerts(
+    org_id: str = Path(...),
+) -> dict[str, Any]:
+    """Evaluate every due alert for this org (manual watchdog tick).
+
+    The global cron watchdog in ``eden.workers.cron_tick``
+    covers all orgs; this endpoint scopes to ``org_id`` by
+    filtering the fire_due results.
+    """
+    from eden.dsl import AlertAsCode
+
+    result = await AlertAsCode().fire_due()
+    # Scope the response to the path org when present.
+    data = result.get("data") or {}
+    scoped = [
+        r
+        for r in (data.get("results") or [])
+        if r.get("org_id") == org_id
+    ]
+    return {
+        **result,
+        "data": {
+            **data,
+            "results": scoped,
+            "n_due": len(scoped),
+            "n_fired": sum(1 for r in scoped if r.get("fired")),
+            "org_id": org_id,
+        },
+    }

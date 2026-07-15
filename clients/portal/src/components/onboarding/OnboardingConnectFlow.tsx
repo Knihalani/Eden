@@ -316,15 +316,35 @@ export function OnboardingConnectFlow({
             <code className="font-mono text-xs">pull_requests</code> so we can
             open an SDK integration PR — nothing else.
           </p>
-          <button
-            onClick={startInstall}
-            disabled={authorizing}
-            className="mt-5 inline-flex items-center gap-2 rounded-lg bg-[var(--accent)] px-5 py-2.5 text-sm font-medium text-[var(--bg-primary)] hover:opacity-90 disabled:opacity-50"
-          >
-            {authorizing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Github className="h-4 w-4" />}
-            Connect GitHub
-            <ArrowRight className="h-4 w-4" />
-          </button>
+          <div className="mt-5 flex flex-wrap items-center gap-3">
+            <button
+              onClick={startInstall}
+              disabled={authorizing}
+              className="inline-flex items-center gap-2 rounded-lg bg-[var(--accent)] px-5 py-2.5 text-sm font-medium text-[var(--bg-primary)] hover:opacity-90 disabled:opacity-50"
+            >
+              {authorizing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Github className="h-4 w-4" />}
+              Connect GitHub
+              <ArrowRight className="h-4 w-4" />
+            </button>
+            {inWizard && (
+              <Link
+                href="/onboarding/install"
+                onClick={() => {
+                  if (typeof window !== "undefined") {
+                    window.localStorage.setItem("eden:onboarding:skipRepo", "1");
+                  }
+                }}
+                className="inline-flex items-center gap-2 rounded-lg border border-[var(--border-default)] bg-[var(--bg-primary)] px-4 py-2.5 text-sm font-medium text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)] hover:text-[var(--text-primary)]"
+              >
+                Skip / continue with SDK only
+              </Link>
+            )}
+          </div>
+          {inWizard && (
+            <p className="mt-3 text-xs text-[var(--text-muted)]">
+              GitHub is optional — install the SDK manually and start sending traces without connecting a repo.
+            </p>
+          )}
         </div>
       </div>
     );
@@ -464,9 +484,14 @@ export function OnboardingConnectFlow({
           {inWizard && (
             <Link
               href="/onboarding/install"
+              onClick={() => {
+                if (typeof window !== "undefined") {
+                  window.localStorage.setItem("eden:onboarding:skipRepo", "1");
+                }
+              }}
               className="inline-flex items-center gap-1 rounded border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-2 text-sm text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)]"
             >
-              Skip for now
+              Skip / continue with SDK only
             </Link>
           )}
           <button
@@ -567,9 +592,14 @@ function PanelWarning({
       </div>
       <Link
         href={skipHref}
+        onClick={() => {
+          if (inWizard && typeof window !== "undefined") {
+            window.localStorage.setItem("eden:onboarding:skipRepo", "1");
+          }
+        }}
         className="inline-flex items-center gap-2 rounded-lg bg-[var(--accent)] px-4 py-2 text-sm font-medium text-[var(--bg-primary)] hover:opacity-90"
       >
-        {inWizard ? "Skip — install SDK manually" : "Skip — I'll integrate manually"}
+        {inWizard ? "Skip / continue with SDK only" : "Skip — I'll integrate manually"}
         <ArrowRight className="h-4 w-4" />
       </Link>
     </div>
@@ -610,7 +640,7 @@ function PanelLocked({ role, inWizard = false }: { role: string; inWizard?: bool
         onClick={continueToInstall}
         className="inline-flex items-center gap-2 rounded-lg bg-[var(--accent)] px-4 py-2 text-sm font-medium text-[var(--bg-primary)] hover:opacity-90"
       >
-        Continue to SDK install
+        Continue to SDK install / skip GitHub
         <ArrowRight className="h-4 w-4" />
       </button>
     </div>

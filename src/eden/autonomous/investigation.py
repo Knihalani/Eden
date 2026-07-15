@@ -28,6 +28,7 @@ from typing import Any
 
 from ._common import (
     DEFAULT_LLM_SLOT,
+    KNOWN_TRIGGER_TYPES,
     RECOMMENDATION_STATUS_OPEN,
     SELF_HEAL_DEFAULT_STATUS,
     VALID_HEAL_ACTION_TYPES,
@@ -35,6 +36,7 @@ from ._common import (
     _iso,
     _json_dumps,
     _load_top_signals,
+    _not_found_envelope,
     _not_implemented_envelope,
     _ok_envelope,
     _resolve_trigger_context,
@@ -86,10 +88,8 @@ class InvestigationAgent:
                 self.name,
                 "trigger is required and must be non-empty",
             )
-        # 1. Resolve the trigger context. Returns None on
-        #    unknown prefix or missing row.
-        ctx = await _resolve_trigger_context(org_id, trigger)
-        if ctx is None:
+        # Validation: unknown prefix / malformed trigger string.
+        if ":" not in trigger:
             return _not_implemented_envelope(
                 self.name,
                 (
@@ -97,8 +97,36 @@ class InvestigationAgent:
                     f"expected one of drift_alert:<id>, "
                     f"incident:<cluster_id>, "
                     f"judge_regression:<judge_name>, "
-                    f"guardrail_breach:<scanner>"
+                    f"guardrail_breach:<scanner>, "
+                    f"issue:<uuid>"
                 ),
+            )
+        prefix, _, _ = trigger.partition(":")
+        if prefix not in KNOWN_TRIGGER_TYPES:
+            return _not_implemented_envelope(
+                self.name,
+                (
+                    f"trigger {trigger!r} is not recognised — "
+                    f"expected one of drift_alert:<id>, "
+                    f"incident:<cluster_id>, "
+                    f"judge_regression:<judge_name>, "
+                    f"guardrail_breach:<scanner>, "
+                    f"issue:<uuid>"
+                ),
+            )
+
+        # 1. Resolve the trigger context. Returns None when the
+        #    underlying row is missing (or Postgres is down).
+        ctx = await _resolve_trigger_context(org_id, trigger)
+        if ctx is None:
+            return _not_found_envelope(
+                self.name,
+                f"trigger {trigger!r} not found",
+                data={
+                    "trigger": trigger,
+                    "findings": [],
+                    "proposed_remediations": [],
+                },
             )
 
         # 2. Render the prompt. We include the context dict
@@ -511,9 +539,10 @@ class SelfHealer:
             org_id, action_id,
         )
         if before_state is None:
-            return _not_implemented_envelope(
+            return _not_found_envelope(
                 self.name,
                 f"action {action_id!r} not found",
+                data={"action_id": action_id},
             )
         if before_state.get("status") != "pending_approval":
             return _ok_envelope(
@@ -582,9 +611,10 @@ class SelfHealer:
         """Deny a pending heal action. No state mutation."""
         before_state = await _load_self_heal_action(org_id, action_id)
         if before_state is None:
-            return _not_implemented_envelope(
+            return _not_found_envelope(
                 self.name,
                 f"action {action_id!r} not found",
+                data={"action_id": action_id},
             )
         if before_state.get("status") != "pending_approval":
             return _ok_envelope(
@@ -645,9 +675,10 @@ class SelfHealer:
         if before_state is None:
             before_state = await _load_self_heal_action(org_id, action_id)
             if before_state is None:
-                return _not_implemented_envelope(
+                return _not_found_envelope(
                     self.name,
                     f"action {action_id!r} not found",
+                    data={"action_id": action_id},
                 )
             # Allow execute only from "approved". Already-executed
             # is a no-op (idempotent). Anything else (pending_approval,
@@ -776,8 +807,10 @@ class SelfHealer:
 
         issue = await IssuesRepo().get_issue(org_id, issue_id)
         if issue is None:
-            return _not_implemented_envelope(
-                self.name, f"issue {issue_id!r} not found"
+            return _not_found_envelope(
+                self.name,
+                f"issue {issue_id!r} not found",
+                data={"issue_id": issue_id},
             )
         action_type = _heal_action_from_triage(issue.triage_result or {})
         if action_type is None:

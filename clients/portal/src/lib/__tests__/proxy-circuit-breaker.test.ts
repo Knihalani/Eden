@@ -93,4 +93,23 @@ describe("forwardToBackend circuit breaker (LP-21)", () => {
     expect(body.request_id).toBe("req-test-123");
     expect(body.detail).toBe("boom");
   });
+
+  it("normalises plain-text 'no healthy upstream' 503 into Backend unavailable", async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response("no healthy upstream", {
+        status: 503,
+        headers: { "Content-Type": "text/plain" },
+      }),
+    );
+    const res = await forwardToBackend("/auth/me", {
+      method: "GET",
+      requestId: "req-upstream-down",
+    });
+    expect(res.status).toBe(503);
+    expect(res.headers.get("Retry-After")).toBe(String(CIRCUIT_RETRY_AFTER_S));
+    const body = await res.json();
+    expect(body.detail).toBe("Backend unavailable");
+    expect(body.upstream_down).toBe(true);
+    expect(body.request_id).toBe("req-upstream-down");
+  });
 });

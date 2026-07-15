@@ -571,6 +571,87 @@ async def _update_cluster_summary(
         logger.debug("rca._common: cluster summary update failed: %s", exc)
 
 
+async def _ensure_incident_resolve_columns(conn: Any) -> None:
+    """Idempotent ADD COLUMN for resolve status fields.
+
+    Soft-launch: avoid a blocking migration for a single status
+    mutation. Postgres ``IF NOT EXISTS`` keeps this safe to call
+    on every resolve.
+    """
+    await conn.execute(
+        """
+        ALTER TABLE incident_clusters
+            ADD COLUMN IF NOT EXISTS status VARCHAR(16) NOT NULL DEFAULT 'open'
+        """
+    )
+    await conn.execute(
+        """
+        ALTER TABLE incident_clusters
+            ADD COLUMN IF NOT EXISTS resolved_at TIMESTAMPTZ
+        """
+    )
+    await conn.execute(
+        """
+        ALTER TABLE incident_clusters
+            ADD COLUMN IF NOT EXISTS resolution_note TEXT
+        """
+    )
+
+
+async def _resolve_incident_cluster(
+    org_id: str,
+    cluster_id: str,
+    *,
+    note: str = "",
+) -> dict[str, Any] | None:
+    """Mark an incident cluster as resolved.
+
+    Returns ``{cluster_id, status, resolved_at}`` on success, or
+    ``None`` when the cluster is missing / postgres unavailable.
+    """
+    try:
+        from eden.storage.postgres import get_postgres_client
+    except Exception as exc:  # pragma: no cover - defensive
+        logger.debug("rca._common: postgres import failed: %s", exc)
+        return None
+
+    client = await get_postgres_client()
+    if client is None:
+        return None
+    try:
+        async with client.acquire() as conn:
+            await _ensure_incident_resolve_columns(conn)
+            row = await conn.fetchrow(
+                """
+                UPDATE incident_clusters
+                SET status = 'resolved',
+                    resolved_at = NOW(),
+                    resolution_note = $3
+                WHERE id = $1 AND org_id = $2
+                RETURNING id, status, resolved_at, resolution_note
+                """,
+                cluster_id,
+                org_id,
+                note or "",
+            )
+    except Exception as exc:
+        logger.debug("rca._common: resolve incident failed: %s", exc)
+        return None
+    if row is None:
+        return None
+    resolved_at = row["resolved_at"]
+    return {
+        "cluster_id": str(row["id"]),
+        "status": row["status"],
+        "resolved_at": (
+            resolved_at.isoformat()
+            if hasattr(resolved_at, "isoformat")
+            else resolved_at
+        ),
+        "resolution_note": row["resolution_note"] or "",
+    }
+
+
 async def _fetch_incident_clusters(
     org_id: str, *, limit: int, severity: str | None
 ) -> list[dict[str, Any]]:

@@ -7,7 +7,7 @@ import secrets
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr, Field
 
 from eden.api.deps import (
     _try_resolve_token_payload,
@@ -22,7 +22,7 @@ from eden.api.deps import (
     resolve_eden_org_id,
     resolve_eden_user_id,
 )
-from eden.api.routes.billing import check_limit
+from eden.api.routes.billing import check_limit, sync_plan_usage
 from eden.api.utils.redact import redact_all
 from eden.config import get_settings
 from eden.services.invitation_service import (
@@ -38,6 +38,15 @@ logger = logging.getLogger(__name__)
 settings = get_settings()
 
 router = APIRouter(prefix="/orgs", tags=["organizations"])
+
+
+class InviteMemberRequest(BaseModel):
+    email: EmailStr
+    role: str = Field(default="member", pattern="^(owner|admin|member|viewer)$")
+
+
+class UpdateMemberRoleRequest(BaseModel):
+    role: str = Field(..., pattern="^(admin|member|viewer)$")
 
 
 def slugify(name: str) -> str:
@@ -236,6 +245,39 @@ async def create_org(
         user_id,
     )
 
+    # Sync creator into Clerk org immediately so setActive / switcher work
+    # without waiting on the membership webhook race.
+    if clerk_org_id:
+        try:
+            from eden.api.utils.clerk_client import (
+                ClerkAPIError,
+                create_membership as clerk_create_membership,
+            )
+
+            clerk_user_row = await client.fetchrow(
+                "SELECT clerk_id FROM users WHERE id = $1",
+                user_id,
+            )
+            clerk_user_id = (
+                str(clerk_user_row["clerk_id"])
+                if clerk_user_row and clerk_user_row.get("clerk_id")
+                else None
+            )
+            if clerk_user_id:
+                await clerk_create_membership(clerk_org_id, clerk_user_id, "owner")
+        except ClerkAPIError as exc:
+            logger.warning(
+                "Clerk membership create for org creator failed org=%s: %s",
+                org_id,
+                redact_all(str(exc)),
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "Unexpected Clerk membership error for org creator org=%s: %s",
+                org_id,
+                redact_all(str(exc)),
+            )
+
     # Free-only mode: every new org starts on ``org_free`` (3 seats, $3/mo
     # cost cap, tight tokens/storage/sandbox). ``ON CONFLICT DO NOTHING``
     # (no target) makes the inserts idempotent against the composite
@@ -394,12 +436,19 @@ async def get_org(org_id: str, user: dict = Depends(get_current_user)):
 @router.post("/{org_id}/invites", response_model=dict)
 async def send_invite(
     org_id: str,
-    email: str,
-    role: str = "member",
+    body: InviteMemberRequest,
     user: dict = Depends(get_current_user),
         _check_members_invite: dict = Depends(require_org_permission_dep('members:invite')),
 ):
     """Send an email invitation to a user to join the organization."""
+    email = str(body.email).strip().lower()
+    role = body.role
+
+    # Refresh seat usage before inviting.
+    try:
+        await sync_plan_usage(org_id)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("sync_plan_usage before invite failed: %s", redact_all(str(exc)))
 
     # Check seat limit before inviting
     if await check_limit(org_id, "seats"):
@@ -466,15 +515,15 @@ async def send_invite(
         metadata={"invitee_email": email, "role": role},
     )
 
-    response: dict[str, str] = {
+    return {
         "message": f"Invitation sent to {email}",
         "invitation_id": invitation["id"],
         "expires_at": invitation["expires_at"],
         "email_status": email_result.status,
+        # Always return invite_url so admins can copy/share when email
+        # is unconfigured or the invitee never received the message.
+        "invite_url": invite_url,
     }
-    if email_result.status == "not_configured":
-        response["invite_url"] = invite_url
-    return response
 
 
 @router.get("/{org_id}/invites", response_model=list[dict])
@@ -602,6 +651,34 @@ async def remove_member(
         user_id,
     )
 
+    # Best-effort Clerk membership delete so the switcher stays in sync.
+    try:
+        from eden.api.utils.clerk_client import (
+            ClerkAPIError,
+            delete_membership,
+            resolve_clerk_org_id,
+        )
+
+        clerk_org_id = await resolve_clerk_org_id(client, org_id)
+        member_row = await client.fetchrow(
+            "SELECT clerk_id FROM users WHERE id = $1",
+            user_id,
+        )
+        clerk_user_id = (
+            str(member_row["clerk_id"])
+            if member_row and member_row.get("clerk_id")
+            else None
+        )
+        if clerk_org_id and clerk_user_id:
+            await delete_membership(clerk_org_id, clerk_user_id)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(
+            "Clerk membership delete failed org=%s user=%s: %s",
+            org_id,
+            user_id,
+            redact_all(str(exc)),
+        )
+
     # Audit log
     await log_audit_event(
         client=client,
@@ -614,6 +691,74 @@ async def remove_member(
     )
 
     return {"message": "Member removed"}
+
+
+@router.patch("/{org_id}/members/{user_id}", response_model=dict)
+async def update_member_role(
+    org_id: str,
+    user_id: str,
+    body: UpdateMemberRoleRequest,
+    user: dict = Depends(get_current_user),
+    _check_members_invite: dict = Depends(require_org_permission_dep("members:invite")),
+):
+    """Update a member's role (admin/member/viewer). Owner cannot be demoted here."""
+    client = await get_postgres_client()
+    org_data = await client.fetchrow("SELECT owner_id FROM organizations WHERE id = $1", org_id)
+    if org_data and str(org_data["owner_id"]) == user_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot change the organization owner's role; transfer ownership instead",
+        )
+    row = await client.fetchrow(
+        """
+        UPDATE org_members
+        SET role = $3, last_writer_source = 'local'
+        WHERE org_id = $1 AND user_id = $2
+        RETURNING user_id
+        """,
+        org_id,
+        user_id,
+        body.role,
+    )
+    if not row:
+        raise HTTPException(status_code=404, detail="Member not found")
+
+    try:
+        from eden.api.utils.clerk_client import (
+            resolve_clerk_org_id,
+            update_membership,
+        )
+
+        clerk_org_id = await resolve_clerk_org_id(client, org_id)
+        member_row = await client.fetchrow(
+            "SELECT clerk_id FROM users WHERE id = $1",
+            user_id,
+        )
+        clerk_user_id = (
+            str(member_row["clerk_id"])
+            if member_row and member_row.get("clerk_id")
+            else None
+        )
+        if clerk_org_id and clerk_user_id:
+            await update_membership(clerk_org_id, clerk_user_id, body.role)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(
+            "Clerk role sync failed org=%s user=%s: %s",
+            org_id,
+            user_id,
+            redact_all(str(exc)),
+        )
+
+    await log_audit_event(
+        client=client,
+        org_id=org_id,
+        user_id=user["user_id"],
+        action="member.role_updated",
+        target_type="user",
+        target_id=user_id,
+        metadata={"role": body.role},
+    )
+    return {"message": "Role updated", "user_id": user_id, "role": body.role}
 
 
 @router.get("/{org_id}/members", response_model=list[dict])
