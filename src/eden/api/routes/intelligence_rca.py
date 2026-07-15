@@ -23,11 +23,12 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from fastapi import APIRouter, Body, Depends, Path, Query
+from fastapi import APIRouter, Body, Depends, HTTPException, Path, Query
 from pydantic import BaseModel
 
-from eden.api.deps import get_current_user, require_feature_flag
+from eden.api.deps import get_current_user, require_feature_flag, require_org_admin
 from eden.insights.incidents.clusterer import IncidentClusterer, IncidentStore
+from eden.insights.rca._common import _fetch_cluster_row, _update_cluster_summary
 from eden.insights.rca.analyzer import RootCauseAnalyzer
 
 logger = logging.getLogger(__name__)
@@ -52,6 +53,10 @@ _store = IncidentStore()
 class ClusterRequest(BaseModel):
     window: str = "24h"
     min_cluster_size: int = 3
+
+
+class ResolveIncidentRequest(BaseModel):
+    note: str | None = None
 
 
 @router.post("/{trace_id}/analyze")
@@ -97,3 +102,52 @@ async def list_incidents(
     severity: str | None = None,
 ) -> dict[str, Any]:
     return await _store.list(org_id, limit=limit, severity=severity)
+
+
+@router.post("/incidents/{cluster_id}/resolve")
+async def resolve_incident(
+    org_id: str = Path(...),
+    cluster_id: str = Path(...),
+    body: ResolveIncidentRequest = Body(default_factory=ResolveIncidentRequest),
+    _admin: dict = Depends(require_org_admin),
+) -> dict[str, Any]:
+    """Mark an incident cluster resolved (portal + autonomous parity)."""
+    row = await _fetch_cluster_row(org_id, cluster_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="cluster_not_found")
+
+    note = (body.note or "").strip() or "Marked resolved via portal"
+    prior = (row.get("summary") or "").strip()
+    marker = f"[Resolved] {note}"
+    if marker in prior:
+        new_summary = prior
+    else:
+        new_summary = f"{prior}\n\n{marker}".strip() if prior else marker
+
+    await _update_cluster_summary(org_id, cluster_id, new_summary)
+
+    try:
+        from eden.storage.postgres import get_postgres_client
+
+        client = await get_postgres_client()
+        if client is not None:
+            await client.execute(
+                """
+                UPDATE incidents
+                SET status = 'resolved',
+                    resolved_at = NOW(),
+                    resolution_note = $3
+                WHERE org_id = $1 AND cluster_id = $2
+                """,
+                org_id,
+                cluster_id,
+                note,
+            )
+    except Exception as exc:
+        logger.debug("resolve_incident: incidents table update skipped: %s", exc)
+
+    return {
+        "cluster_id": cluster_id,
+        "status": "resolved",
+        "summary": new_summary,
+    }

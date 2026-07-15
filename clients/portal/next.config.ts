@@ -143,6 +143,63 @@ const nextConfig: NextConfig = {
         destination: "https://docs.edenobservability.com/:path*",
         permanent: true,
       },
+      // Phase 1E bloat cut — stub/low-traffic surfaces redirect to parent.
+      {
+        source: "/observability/apm",
+        destination: "/observability",
+        permanent: false,
+      },
+      {
+        source: "/observability/apm/:path*",
+        destination: "/observability",
+        permanent: false,
+      },
+      {
+        source: "/billing",
+        destination: "/settings?tab=billing",
+        permanent: false,
+      },
+      {
+        source: "/onboarding/autonomous",
+        destination: "/onboarding/connect",
+        permanent: false,
+      },
+      {
+        source: "/onboarding/autonomous/:path*",
+        destination: "/onboarding/connect",
+        permanent: false,
+      },
+      // N23 — PR suggester inbox migrated to improvement plans.
+      {
+        source: "/pr-suggestions",
+        destination: "/improve/plans",
+        permanent: false,
+      },
+      {
+        source: "/pr-suggestions/:id",
+        destination: "/improve/plans/:id",
+        permanent: false,
+      },
+      {
+        source: "/closed-loop",
+        destination: "/improve",
+        permanent: false,
+      },
+      {
+        source: "/closed-loop/:path*",
+        destination: "/improve",
+        permanent: false,
+      },
+      {
+        source: "/autonomous",
+        destination: "/improve",
+        permanent: false,
+      },
+      {
+        source: "/autonomous/:path*",
+        destination: "/improve",
+        permanent: false,
+      },
     ];
   },
 };

@@ -20,6 +20,10 @@ What's covered:
     no facets, recency sort.
   * :func:`_excerpt` — query hit centering, ellipses, fallback when
     the query is missing.
+  * :class:`TestTypesenseFallback` — when Typesense is down, Postgres
+    ILIKE fallback returns rows and sets ``fallback=True``.
+  * :class:`TestPIIRedaction` — PII (email, credit card, SSN) is not
+    present in indexed doc fields after ``build_span_doc``.
 
 The end-to-end "Typesense running in Docker, ingest → search" path
 is covered by ``tests/intelligence/observability/test_search_e2e.py``
@@ -564,3 +568,183 @@ def test_get_search_service_singleton():
     s1 = get_search_service()
     s2 = get_search_service()
     assert s1 is s2
+
+
+# ── Typesense fallback (PG ILIKE) ─────────────────────────────────
+
+
+class _FakePGClient:
+    """Minimal asyncpg-compatible fake for Postgres fallback tests."""
+
+    def __init__(self, rows: list[dict[str, Any]]) -> None:
+        self._rows = rows
+
+    async def fetch(self, sql: str, *args: Any) -> list[dict[str, Any]]:
+        return self._rows
+
+
+class TestTypesenseFallback:
+    """When Typesense is unavailable, SearchService falls back to PG ILIKE."""
+
+    @pytest.mark.asyncio
+    async def test_fallback_when_client_is_none(self, monkeypatch):
+        """client=None (Typesense disabled) → PG fallback with fallback=True."""
+        pg_rows = [
+            {
+                "event_id": "e-fallback",
+                "trace_id": "tr-fallback",
+                "span_id": "sp-1",
+                "agent_id": "agent-1",
+                "name": "tool.bash",
+                "event_type": "tool.call",
+                "outcome": "success",
+                "duration_ms": 50.0,
+                "created_at": 1_747_000_000,
+            }
+        ]
+        fake_pg = _FakePGClient(pg_rows)
+        monkeypatch.setattr(
+            "eden.observability.search_service.get_typesense_client",
+            lambda: None,
+        )
+        monkeypatch.setattr(
+            "eden.storage.postgres.get_postgres_client",
+            lambda: fake_pg,
+        )
+        # Flag on so we don't short-circuit before client check
+        service = SearchService(client=None)
+        # Bypass the flag guard by forcing _flag_on to pick up None client
+        import eden.observability.search_service as _mod
+        monkeypatch.setattr(_mod, "get_typesense_client", lambda: None)
+
+        resp = await service._pg_fallback_search(
+            tenant_id="org-1",
+            query="bash",
+        )
+        assert resp.fallback is True
+        assert len(resp.hits) == 1
+        assert resp.hits[0].trace_id == "tr-fallback"
+        assert resp.hits[0].event_id == "e-fallback"
+
+    @pytest.mark.asyncio
+    async def test_fallback_when_typesense_returns_non_200(self, monkeypatch):
+        """Non-200 Typesense response → PG fallback invoked."""
+        pg_rows = [
+            {
+                "event_id": "e-pg",
+                "trace_id": "tr-pg",
+                "span_id": "sp-2",
+                "agent_id": "agent-2",
+                "name": "tool.read",
+                "event_type": "tool.call",
+                "outcome": "success",
+                "duration_ms": 20.0,
+                "created_at": 1_747_100_000,
+            }
+        ]
+        fake_pg = _FakePGClient(pg_rows)
+        monkeypatch.setattr(
+            "eden.storage.postgres.get_postgres_client",
+            lambda: fake_pg,
+        )
+        # Typesense returns a server error
+        error_client = _FakeTypesenseClient(search_response=(503, None))
+        service = SearchService(client=error_client)
+        resp = await service.search(tenant_id="org-1", query="read")
+        assert resp.fallback is True
+        # PG fallback returned at least one row
+        assert len(resp.hits) >= 1
+
+    @pytest.mark.asyncio
+    async def test_fallback_response_has_expected_shape(self, monkeypatch):
+        """Fallback SpanHit must have the same fields as a Typesense hit."""
+        pg_rows = [
+            {
+                "event_id": "ev-shape",
+                "trace_id": "tr-shape",
+                "span_id": "sp-shape",
+                "agent_id": "agent-shape",
+                "name": "llm.call",
+                "event_type": "llm.completion",
+                "outcome": "success",
+                "duration_ms": 123.4,
+                "created_at": 1_748_000_000,
+            }
+        ]
+        fake_pg = _FakePGClient(pg_rows)
+        monkeypatch.setattr(
+            "eden.storage.postgres.get_postgres_client",
+            lambda: fake_pg,
+        )
+        service = SearchService(client=None)
+        resp = await service._pg_fallback_search(
+            tenant_id="org-x",
+            query="llm",
+        )
+        hit = resp.hits[0]
+        d = hit.to_dict()
+        for key in ("event_id", "trace_id", "span_id", "agent_id",
+                    "name", "event_type", "outcome", "created_at",
+                    "duration_ms", "tool_names", "highlight"):
+            assert key in d, f"missing key {key!r} in fallback SpanHit.to_dict()"
+
+
+# ── PII redaction before Typesense index ──────────────────────────
+
+
+class TestPIIRedaction:
+    """PII must be masked in build_span_doc output before indexing."""
+
+    def test_email_not_in_input_text(self):
+        """An email address in the request body must not appear raw in input_text."""
+        ev = _make_event(
+            request_body={
+                "messages": [
+                    {"role": "user", "content": "Contact me at alice@example.com"},
+                ]
+            }
+        )
+        doc = build_span_doc(ev)
+        assert "alice@example.com" not in doc["input_text"], (
+            "email should be redacted from indexed input_text"
+        )
+
+    def test_credit_card_not_in_output_text(self):
+        """A credit card number must not appear raw in output_text."""
+        # Visa-format number that passes Luhn
+        card = "4111111111111111"
+        ev = _make_event(
+            response_body={
+                "choices": [
+                    {"message": {"role": "assistant", "content": f"Your card {card} is valid"}}
+                ]
+            }
+        )
+        doc = build_span_doc(ev)
+        assert card not in doc["output_text"], (
+            "credit card number should be redacted from indexed output_text"
+        )
+
+    def test_plain_text_preserved(self):
+        """Non-PII text must still be indexed (not blanked by the masker)."""
+        ev = _make_event(
+            request_body={"messages": [{"role": "user", "content": "List top Python libraries"}]}
+        )
+        doc = build_span_doc(ev)
+        assert "Python" in doc["input_text"], (
+            "non-PII content should remain in input_text after masking"
+        )
+
+    def test_ssn_not_in_input_text(self):
+        """An SSN must not appear raw in input_text."""
+        ev = _make_event(
+            request_body={
+                "messages": [
+                    {"role": "user", "content": "My SSN is 123-45-6789"},
+                ]
+            }
+        )
+        doc = build_span_doc(ev)
+        assert "123-45-6789" not in doc["input_text"], (
+            "SSN should be redacted from indexed input_text"
+        )

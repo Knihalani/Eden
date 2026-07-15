@@ -450,37 +450,16 @@ async def sso_callback(
     state: str | None = None,
     org_id: str = Query(..., alias="org_id"),
 ):
-    """Handle SSO callback from IdP. Exchanges code for tokens and creates/links user.
-
-    Audit 2026-07-02 S-3 — verifies and consumes the state nonce before any
-    token exchange or user provisioning.
-    """
-    # Validate the CSRF state nonce FIRST, before any token exchange.
+    """SSO callback — not implemented until IdP token exchange ships."""
     await _consume_sso_state(state or "", provider_id, org_id)
-
-    client = await get_postgres_client()
-
-    provider = await client.fetchrow(
-        """
-        SELECT id, provider_type, config, org_id
-        FROM org_sso_providers
-        WHERE id = $1 AND org_id = $2 AND enabled = TRUE
-        """,
-        provider_id, org_id
+    raise HTTPException(
+        status_code=501,
+        detail={
+            "status": "not_implemented",
+            "message": (
+                "SSO callback token exchange is not implemented. "
+                "See docs/how-to/sso-setup.md for the roadmap."
+            ),
+            "docs": "docs/how-to/sso-setup.md",
+        },
     )
-    if not provider:
-        raise HTTPException(status_code=404, detail="SSO provider not found or disabled")
-
-    # In a real implementation, this would:
-    # 1. Exchange authorization code for access token (for OIDC/OAuth)
-    # 2. Validate SAML response (for SAML)
-    # 3. Fetch user info from IdP
-    # 4. Create or link user account
-    # 5. Create session
-
-    # For now, return a placeholder - actual implementation requires
-    # provider-specific token exchange logic
-    return {
-        "message": "SSO callback received. Token exchange and user provisioning requires additional IdP configuration.",
-        "provider_type": provider["provider_type"]
-    }

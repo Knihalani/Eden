@@ -41,6 +41,8 @@ class EdenApiClient(Protocol):
         trace_id: str,
         from_step: int = 0,
         prompt_override: str | None = None,
+        rerun_mode: str | None = None,
+        live_prefix: bool | None = None,
     ) -> dict[str, Any]: ...
 
     async def search_issues(
@@ -53,6 +55,15 @@ class EdenApiClient(Protocol):
     ) -> dict[str, Any]: ...
 
     async def get_issue(self, org_id: str, issue_id: str) -> dict[str, Any]: ...
+
+    async def get_trace_stumbles(
+        self,
+        org_id: str,
+        trace_id: str,
+        *,
+        kind: str | None = None,
+        limit: int = 50,
+    ) -> dict[str, Any]: ...
 
     async def triage_issue(
         self, org_id: str, issue_id: str, *, force: bool = False
@@ -68,6 +79,26 @@ class EdenApiClient(Protocol):
 
     async def get_improvement_queue(
         self, org_id: str, *, agent_id: str | None = None
+    ) -> dict[str, Any]: ...
+
+    async def list_improvement_plans(
+        self,
+        org_id: str,
+        *,
+        status: str | None = None,
+        limit: int = 50,
+    ) -> dict[str, Any]: ...
+
+    async def get_improvement_plan(
+        self, org_id: str, plan_id: str
+    ) -> dict[str, Any]: ...
+
+    async def approve_improvement_plan(
+        self,
+        org_id: str,
+        plan_id: str,
+        *,
+        applied_by: str | None = None,
     ) -> dict[str, Any]: ...
 
     async def create_regression_case(
@@ -178,10 +209,16 @@ class HttpEdenClient:
         trace_id: str,
         from_step: int = 0,
         prompt_override: str | None = None,
+        rerun_mode: str | None = None,
+        live_prefix: bool | None = None,
     ) -> dict[str, Any]:
         body: dict[str, Any] = {"trace_id": trace_id, "from_step": from_step}
         if prompt_override is not None:
             body["prompt_override"] = prompt_override
+        if rerun_mode is not None:
+            body["rerun_mode"] = rerun_mode
+        if live_prefix is not None:
+            body["live_prefix"] = live_prefix
         return await self._request(
             "POST", f"/orgs/{org_id}/debugger/rerun", json_body=body
         )
@@ -206,6 +243,21 @@ class HttpEdenClient:
     async def get_issue(self, org_id: str, issue_id: str) -> dict[str, Any]:
         return await self._request(
             "GET", f"/orgs/{org_id}/agent-issues/{issue_id}"
+        )
+
+    async def get_trace_stumbles(
+        self,
+        org_id: str,
+        trace_id: str,
+        *,
+        kind: str | None = None,
+        limit: int = 50,
+    ) -> dict[str, Any]:
+        params: dict[str, Any] = {"trace_id": trace_id, "limit": limit}
+        if kind:
+            params["kind"] = kind
+        return await self._request(
+            "GET", f"/orgs/{org_id}/stumbles", params=params
         )
 
     async def triage_issue(
@@ -238,6 +290,41 @@ class HttpEdenClient:
             params["agent_id"] = agent_id
         return await self._request(
             "GET", f"/orgs/{org_id}/improve/queue", params=params or None
+        )
+
+    async def list_improvement_plans(
+        self,
+        org_id: str,
+        *,
+        status: str | None = None,
+        limit: int = 50,
+    ) -> dict[str, Any]:
+        params: dict[str, Any] = {"limit": limit}
+        if status:
+            params["status"] = status
+        return await self._request(
+            "GET", f"/orgs/{org_id}/improve/plans", params=params
+        )
+
+    async def get_improvement_plan(
+        self, org_id: str, plan_id: str
+    ) -> dict[str, Any]:
+        return await self._request(
+            "GET", f"/orgs/{org_id}/improve/plans/{plan_id}"
+        )
+
+    async def approve_improvement_plan(
+        self,
+        org_id: str,
+        plan_id: str,
+        *,
+        applied_by: str | None = None,
+    ) -> dict[str, Any]:
+        params = {"applied_by": applied_by} if applied_by else None
+        return await self._request(
+            "POST",
+            f"/orgs/{org_id}/improve/plans/{plan_id}/approve",
+            params=params,
         )
 
     async def create_regression_case(

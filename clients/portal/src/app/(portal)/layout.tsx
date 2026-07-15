@@ -727,7 +727,7 @@ function PortalLayoutContent({ children }: { children: React.ReactNode }) {
                 Settings
               </Link>
               <Link
-                href="/billing"
+                href="/settings?tab=billing"
                 className="user-dropdown-item"
                 onClick={() => setUserDropdownOpen(false)}
               >

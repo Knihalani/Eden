@@ -137,15 +137,15 @@ async def run_judges(
         judges = registry.all()
 
     if not body.sync:
-        # The async path is the Redis tailer's responsibility. For
-        # the v1 we return a job id placeholder; the real queueing
-        # is a Phase 3 follow-up (the tailer polls Postgres for
-        # unjudged events instead of accepting pushed jobs).
-        return JudgeRunResponse(
-            judge_runs=[],
-            count=0,
-            queued=True,
-            job_id=f"judge-queue-{body.trace_id}",
+        raise HTTPException(
+            status_code=501,
+            detail={
+                "status": "not_implemented",
+                "message": (
+                    "Async judge runs are not implemented. "
+                    "Retry with sync=true until the judge tailer ships."
+                ),
+            },
         )
 
     events = await _fetch_events_for_trace(org_id, body.trace_id)

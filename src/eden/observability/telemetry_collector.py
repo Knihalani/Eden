@@ -906,8 +906,16 @@ class TelemetryCollector:
                     and not event.tool_calls_full
                     and not event.name):
                 return
+            import time as _time
+            _index_start = _time.perf_counter()
             doc = build_span_doc(event)
             await client.index_span(doc)
+            # Record index lag (event creation → indexed). Best-effort.
+            try:
+                from eden.observability.search_service import record_index_lag
+                record_index_lag(_time.perf_counter() - _index_start)
+            except Exception:
+                pass
         except Exception as exc:
             logger.debug(f"Typesense route failed (non-fatal): {exc}")
 

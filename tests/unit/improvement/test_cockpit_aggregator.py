@@ -54,25 +54,18 @@ async def test_list_queue_merges_sources() -> None:
     mock_exec.list_pending = AsyncMock(return_value=cl_envelope)
 
     mock_pg = MagicMock()
-    mock_pg.fetch = AsyncMock(
-        side_effect=[
-            # proposed_patches
-            [
-                {
-                    "id": "patch_1",
-                    "repo_id": "agent_a",
-                    "trace_id": "trc_1",
-                    "rca_id": "iss_i1",
-                    "description": "Fix loop in handler",
-                    "status": "proposed",
-                    "created_at": datetime.now(UTC),
-                }
-            ],
-            # nudges
-            [],
-            # promotions handled by EvidenceGate mock
-        ]
-    )
+    mock_pg.fetch = AsyncMock(return_value=[])
+
+    mock_plans = [
+        {
+            "id": "plan_1",
+            "agent_id": "agent_a",
+            "title": "Fix loop in handler",
+            "status": "draft",
+            "plan_kind": "code_patch",
+            "source_ref": "issue:i1",
+        }
+    ]
 
     mock_gate = MagicMock()
     mock_gate.list_queue = AsyncMock(return_value=[])
@@ -82,6 +75,10 @@ async def test_list_queue_merges_sources() -> None:
         patch(
             "eden.llmops.closed_loop_executor.ClosedLoopExecutor",
             return_value=mock_exec,
+        ),
+        patch(
+            "eden.improvement.plans_repo.list_plans",
+            new=AsyncMock(return_value=mock_plans),
         ),
         patch(
             "eden.storage.postgres.get_postgres_client",

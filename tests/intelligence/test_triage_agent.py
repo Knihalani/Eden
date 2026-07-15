@@ -344,7 +344,7 @@ async def test_resolve_budget_cap_prefers_org_policy_null() -> None:
 
     agent = TriageAgent(repo=MagicMock())
     with patch(
-        "eden.code_change.policy.get_org_code_change_policy",
+        "eden.patches.policy.get_org_code_change_policy",
         AsyncMock(return_value={"max_triage_cost_usd_per_day": None}),
     ):
         assert await agent._resolve_budget_cap("org_test") is None
@@ -356,7 +356,7 @@ async def test_resolve_budget_cap_uses_org_positive() -> None:
 
     agent = TriageAgent(repo=MagicMock())
     with patch(
-        "eden.code_change.policy.get_org_code_change_policy",
+        "eden.patches.policy.get_org_code_change_policy",
         AsyncMock(return_value={"max_triage_cost_usd_per_day": 12.5}),
     ):
         assert await agent._resolve_budget_cap("org_test") == 12.5
@@ -376,6 +376,96 @@ async def test_map_remediations_normalizes_to_f46_types() -> None:
     types = [a["type"] for a in mapped]
     assert types == ["propose_patch", "escalate", "reweight"]
     assert all(a["type"] == a["action_type"] for a in mapped)
+
+
+@pytest.mark.asyncio
+async def test_triage_llm_timeout_returns_partial() -> None:
+    """F30 AC: LLM investigation exceeding 90s → partial source=timeout."""
+    import asyncio
+
+    from eden.issues.triage_agent import TriageAgent
+
+    repo = MagicMock()
+    repo.get_issue = AsyncMock(
+        return_value=_issue(kind="tool_error", severity="p2", stumble_count=1)
+    )
+    repo.list_stumbles = AsyncMock(
+        return_value=[{"kind": "tool_error", "detail": {}, "span_id": "sp1"}]
+    )
+    repo.set_triage_result = AsyncMock(return_value=True)
+
+    async def _never(*a: Any, **k: Any) -> Any:
+        await asyncio.sleep(3600)
+
+    inv_instance = MagicMock()
+    inv_instance.investigate = _never
+
+    agent = TriageAgent(repo=repo)
+    with patch(
+        "eden.issues.triage_agent.TriageAgent._budget_ok", AsyncMock(return_value=True)
+    ), patch(
+        "eden.issues.triage_agent._LLM_TIMEOUT_S", 0.05
+    ), patch("eden.autonomous.InvestigationAgent", return_value=inv_instance):
+        res = await agent.triage("org_test", "iss-1")
+
+    assert res["status"] == "timeout"
+    tr = res["data"]["triage_result"]
+    assert tr["source"] == "timeout"
+    assert tr["evidence_span_ids"] == ["sp1"]
+    repo.set_triage_result.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_manual_triage_rate_limited() -> None:
+    """F30 AC: >10 manual triages/hr/org → rate_limited."""
+    from eden.issues.triage_agent import TriageAgent
+
+    repo = MagicMock()
+    repo.get_issue = AsyncMock(
+        return_value=_issue(triage_result={"source": "llm"})
+    )
+    agent = TriageAgent(repo=repo)
+    with patch(
+        "eden.issues.triage_agent.TriageAgent._manual_rate_ok",
+        AsyncMock(return_value=False),
+    ):
+        res = await agent.triage("org_test", "iss-1", force=True)
+    assert res["status"] == "rate_limited"
+    assert res["data"]["rate_limited"] is True
+
+
+@pytest.mark.asyncio
+async def test_manual_rate_limit_counter() -> None:
+    from eden.issues.triage_agent import TriageAgent, _MANUAL_TRIAGE_PER_HOUR
+
+    counter = {"n": 0}
+
+    class _R:
+        async def incr(self, key: str) -> int:
+            counter["n"] += 1
+            return counter["n"]
+
+        async def expire(self, key: str, ttl: int) -> None:
+            return None
+
+    agent = TriageAgent(repo=MagicMock())
+    with patch("eden.storage.redis.get_redis_client", AsyncMock(return_value=_R())):
+        oks = [await agent._manual_rate_ok("org") for _ in range(_MANUAL_TRIAGE_PER_HOUR + 2)]
+    assert oks[:_MANUAL_TRIAGE_PER_HOUR] == [True] * _MANUAL_TRIAGE_PER_HOUR
+    assert oks[_MANUAL_TRIAGE_PER_HOUR:] == [False, False]
+
+
+def test_mcp_handoff_action_types_allowed() -> None:
+    from eden.issues.triage_agent import _map_remediations
+
+    mapped = _map_remediations(
+        [
+            {"action": "prompt", "summary": "tune the system prompt"},
+            {"action": "nudge", "summary": "add a runtime nudge"},
+            {"action": "handoff", "summary": "hand off to Cursor"},
+        ]
+    )
+    assert [a["type"] for a in mapped] == ["prompt_fix", "nudge", "mcp_handoff"]
 
 
 @pytest.mark.asyncio

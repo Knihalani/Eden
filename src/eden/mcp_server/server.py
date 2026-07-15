@@ -8,6 +8,7 @@ stdio loop (``tools/list``, ``tools/call``) for IDE wiring.
 from __future__ import annotations
 
 import logging
+import time
 from collections.abc import Awaitable, Callable
 from typing import Any
 
@@ -16,6 +17,30 @@ from eden.mcp_server.client import EdenApiClient, HttpEdenClient
 from eden.mcp_server import tools as tool_fns
 
 logger = logging.getLogger(__name__)
+
+_MCP_SERVER_NAME = "eden-mcp-server"
+
+
+def _emit_tool_telemetry(
+    tool_name: str,
+    org_id: str | None,
+    status: str,
+    duration_ms: float,
+) -> None:
+    """Emit a structured log event with SEP-414 MCP attrs.  Best-effort; never raises."""
+    try:
+        logger.info(
+            "mcp.tool_call",
+            extra={
+                "mcp.server_name": _MCP_SERVER_NAME,
+                "mcp.tool_name": tool_name,
+                "eden.mcp_server.org_id": org_id or "",
+                "eden.mcp_server.status": status,
+                "eden.mcp_server.duration_ms": round(duration_ms, 2),
+            },
+        )
+    except Exception:  # noqa: BLE001
+        pass
 
 ToolHandler = Callable[..., Awaitable[dict[str, Any]]]
 
@@ -77,7 +102,12 @@ TOOL_CATALOG: list[dict[str, Any]] = [
     },
     {
         "name": "rerun_debugger",
-        "description": "Rerun a trace from a checkpoint step.",
+        "description": (
+            "Rerun a trace from a checkpoint step using the prefix cache populated by F03. "
+            "Returns cache_hits and populated_steps when the debugger_llm_cache has data for this trace. "
+            "Note: new_trace_id is not returned until the F01 live gateway ships (Wave 7). "
+            "rerun_mode='cached_live' uses the prefix cache; 'replay' replays without LLM calls."
+        ),
         "scope": "mcp:debug",
         "inputSchema": {
             "type": "object",
@@ -86,6 +116,15 @@ TOOL_CATALOG: list[dict[str, Any]] = [
                 "trace_id": {"type": "string"},
                 "from_step": {"type": "integer"},
                 "prompt_override": {"type": "string"},
+                "rerun_mode": {
+                    "type": "string",
+                    "enum": ["cached_live", "replay"],
+                    "description": "cached_live uses prefix cache; replay replays without LLM calls.",
+                },
+                "live_prefix": {
+                    "type": "boolean",
+                    "description": "When true, prefer live prefix cache rows from debugger_llm_cache.",
+                },
             },
             "required": ["org_id", "trace_id"],
         },
@@ -116,6 +155,21 @@ TOOL_CATALOG: list[dict[str, Any]] = [
                 "issue_id": {"type": "string"},
             },
             "required": ["org_id", "issue_id"],
+        },
+    },
+    {
+        "name": "get_trace_stumbles",
+        "description": "List detected stumbles for a trace (F28).",
+        "scope": "mcp:read",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "org_id": {"type": "string"},
+                "trace_id": {"type": "string"},
+                "kind": {"type": "string"},
+                "limit": {"type": "integer"},
+            },
+            "required": ["org_id", "trace_id"],
         },
     },
     {
@@ -157,6 +211,47 @@ TOOL_CATALOG: list[dict[str, Any]] = [
                 "agent_id": {"type": "string"},
             },
             "required": ["org_id"],
+        },
+    },
+    {
+        "name": "list_improvement_plans",
+        "description": "N23 improvement plan inbox.",
+        "scope": "mcp:read",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "org_id": {"type": "string"},
+                "status": {"type": "string"},
+                "limit": {"type": "integer"},
+            },
+            "required": ["org_id"],
+        },
+    },
+    {
+        "name": "get_improvement_plan",
+        "description": "N23 improvement plan detail + diff.",
+        "scope": "mcp:read",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "org_id": {"type": "string"},
+                "plan_id": {"type": "string"},
+            },
+            "required": ["org_id", "plan_id"],
+        },
+    },
+    {
+        "name": "approve_improvement_plan",
+        "description": "Approve plan and open GitHub PR (code_patch).",
+        "scope": "mcp:fix",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "org_id": {"type": "string"},
+                "plan_id": {"type": "string"},
+                "applied_by": {"type": "string"},
+            },
+            "required": ["org_id", "plan_id"],
         },
     },
     {
@@ -211,9 +306,13 @@ _HANDLERS: dict[str, ToolHandler] = {
     "rerun_debugger": tool_fns.rerun_debugger,
     "search_issues": tool_fns.search_issues,
     "get_issue": tool_fns.get_issue,
+    "get_trace_stumbles": tool_fns.get_trace_stumbles,
     "triage_issue": tool_fns.triage_issue,
     "run_autofix": tool_fns.run_autofix,
     "get_improvement_queue": tool_fns.get_improvement_queue,
+    "list_improvement_plans": tool_fns.list_improvement_plans,
+    "get_improvement_plan": tool_fns.get_improvement_plan,
+    "approve_improvement_plan": tool_fns.approve_improvement_plan,
     "export_fixture": tool_fns.export_fixture,
     "create_regression_case": tool_fns.create_regression_case,
     "preview_change_impact": tool_fns.preview_change_impact,
@@ -271,11 +370,18 @@ async def call_tool(
         return {"status": "error", "error": "org_id required"}
 
     api = client or HttpEdenClient(ctx)
+    t0 = time.monotonic()
+    status = "ok"
     try:
         result = await handler(api, org_id, **args)
     except TypeError as exc:
+        status = "error"
+        _emit_tool_telemetry(name, org_id, status, (time.monotonic() - t0) * 1000)
         return {"status": "error", "error": f"bad arguments: {exc}"}
     except Exception as exc:
+        status = "error"
         logger.debug("mcp tool %s failed: %s", name, exc)
+        _emit_tool_telemetry(name, org_id, status, (time.monotonic() - t0) * 1000)
         return {"status": "error", "error": str(exc)}
+    _emit_tool_telemetry(name, org_id, status, (time.monotonic() - t0) * 1000)
     return {"status": "ok", "tool": name, "result": result}

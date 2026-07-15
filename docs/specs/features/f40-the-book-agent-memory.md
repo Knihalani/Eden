@@ -6,8 +6,9 @@
 | **Slug** | `the-book-agent-memory` |
 | **Priority** | P1 |
 | **Effort** | L |
-| **Eden status** | **MISSING** |
+| **Eden status** | **PARTIAL (v0)** — generator/portal/injection landed; missing LLM synthesis, diffs, nightly cron |
 | **Competitive source** | BentoLabs |
+| **UI spec** | [U05 Book & Drift](../ui/u05-book-and-drift.md) |
 | **Closes gap** | 4.2 |
 | **Dependencies** | F29, F39, KB procedural layer, N19, F33, N22 |
 

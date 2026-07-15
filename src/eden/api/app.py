@@ -27,7 +27,6 @@ from eden.api.routes import (
     agents,
     ai_agent,
     ai_insights,
-    alerts,
     analytics,
     analytics_v2,
     api_keys,
@@ -37,7 +36,6 @@ from eden.api.routes import (
     autonomy,
     billing,
     budgets,
-    chain,
     change_impact,
     clerk_webhooks,
     compliance,
@@ -47,7 +45,6 @@ from eden.api.routes import (
     data_platform,
     datasets_spreadsheet,
     debugger,
-    experiments,
     export,
     export_destinations,
     feature_flags,
@@ -56,7 +53,6 @@ from eden.api.routes import (
     improve,
     insights,
     learn,
-    integrations_helicone,
     integrations_langfuse,
     integrations_langsmith,
     integrations_runloop,
@@ -66,7 +62,6 @@ from eden.api.routes import (
     intelligence_apm_depth,
     intelligence_autonomous,
     intelligence_closed_loop,
-    intelligence_code_change,
     intelligence_columnar,
     intelligence_cost,
     intelligence_dsl,
@@ -94,12 +89,8 @@ from eden.api.routes import (
     notifications,
     observability,
     observability_a2a,
-    observability_computer_use,
-    observability_fine_tune,
     observability_mcp,
-    observability_provider_routing,
     observability_stream,
-    observability_voice,
     onboarding,
     optimization,
     orgs,
@@ -134,6 +125,7 @@ from eden.api.routes import (
 from eden.api.routes import (
     github as github_routes,
 )
+from eden.alerts import routes as nl_alerts_routes
 from eden.config import get_settings
 from eden.kb import health_check as kb_health_check
 from eden.kb import initialize_kb
@@ -710,17 +702,11 @@ app.include_router(llmops.router)  # /orgs/{org_id}/llmops/{artifacts,prompts,ab
 app.include_router(trace_quality.router)  # /v1/traces/{trace_id}/{loops,quality,intervention,...} (Cat 22 trace quality)
 app.include_router(observability_mcp.router)  # /v1/traces/{id}/mcp + /v1/mcp/{org}/auth_failures (D.12.1)
 app.include_router(observability_a2a.router)  # /v1/traces/{id}/a2a + /v1/a2a/{org}/links + invocation graph (D.12.2)
-app.include_router(observability_computer_use.router)  # /v1/traces/{id}/computer_use + step + screenshot tombstone (D.12.3)
-app.include_router(observability_voice.router)  # /v1/voice_sessions/* + /v1/traces/{id}/voice_sessions + barge_in spike (D.12.4)
-app.include_router(observability_fine_tune.router)  # /v1/fine_tuning_runs/* + /v1/webhooks/openai/fine_tuning (D.12.5)
-app.include_router(observability_provider_routing.router)  # /v1/provider_routing/* + /v1/traces/{id}/provider_routing (D.12.6)
 app.include_router(internal_health.router)  # /v1/internal/health/* — ops dashboard (Phase 4 B3 §9.6)
 app.include_router(optimization.router)  # /orgs/{org_id}/optimization/{overview,costs,savings,cache,budget,}
-app.include_router(alerts.router)  # /alerts (global alert feed + per-rule ack)
 app.include_router(app_events.router)  # /orgs/{org_id}/ingest/app (Phase A1 app/site events)
 app.include_router(scim.router)  # /orgs/{org_id}/scim/v2
 app.include_router(sso.router)  # /sso
-app.include_router(chain.router)  # /chain
 app.include_router(ai_insights.router)  # /orgs/{org_id}/ai-insights
 app.include_router(sidebar_prefs.router)  # /orgs/{org_id}/sidebar-prefs (per-user UI prefs)
 app.include_router(ai_agent.router)  # /orgs/{org_id}/ai (Phase C unified agent)
@@ -737,6 +723,7 @@ app.include_router(qa_generator.router)  # /orgs/{org_id}/synthetic (Phase J syn
 app.include_router(redteam.router)  # /orgs/{org_id}/redteam (Phase L red-team probes)
 app.include_router(labeling.router)  # /orgs/{org_id}/labeling (Phase D labeling queue)
 app.include_router(signals.router)  # /orgs/{org_id}/signals (Phase Q plain-English signals)
+app.include_router(nl_alerts_routes.router)  # F81 NL alerts compile + rules
 app.include_router(debugger.router)  # /orgs/{org_id}/debugger (Phase P agent debugger)
 app.include_router(datasets_spreadsheet.router)  # /orgs/{org_id}/datasets/{dataset_id} (Phase S spreadsheet)
 app.include_router(prompts.router)  # /orgs/{org_id}/prompts (Phase I prompt management + playground)
@@ -744,11 +731,8 @@ app.include_router(prompts_v2.router)  # /orgs/{org_id}/prompts/* (D.9 versionin
 app.include_router(pii_policy.router)  # /orgs/{org_id}/pii-policy
 app.include_router(cost_overrides.router)  # /orgs/{org_id}/cost-overrides (per-tenant contract rates)  # /orgs/{org_id}/retention-policy
 app.include_router(region.router)  # /orgs/{org_id}/region
-app.include_router(experiments.router)  # /experiments (gated)
 app.include_router(notifications.router)  # /notifications (user-scoped feed; June 2026 Cat 5 mount fix)
 app.include_router(model_compare.router)  # /orgs/{org_id}/models/{compare,recommend,project} (Phase 7.6)
-app.include_router(integrations_helicone.router)  # /integrations/helicone (gated)
-app.include_router(intelligence_code_change.router)  # /orgs/{org_id}/intelligence/code-change (Cat 23, gated by intelligence_gap_v0)
 # Intelligence gap surface — Cat 4/5/6/8/9/10/11/12/13/14/18/19/20/22
 # All self-gate on `intelligence_gap_v0` via the per-router `dependencies=`
 # list; this just makes them reachable when the flag is on.
@@ -854,6 +838,34 @@ from eden.api.routes import gateway, gateway_models
 
 app.include_router(gateway.router)  # /gateway/v1 (OpenAI-compatible surface)
 app.include_router(gateway_models.router)
+
+
+# ============================================================================
+# Retired Cat 23 routes (N23 replacement)
+# ============================================================================
+
+_CODE_CHANGE_GONE_DETAIL = (
+    "Cat 23 `/orgs/{org_id}/intelligence/code-change/*` retired 2026-07-15; "
+    "use `/orgs/{org_id}/improve/plans` (N23 recurring improvement agent)."
+)
+
+
+@app.api_route(
+    "/orgs/{org_id}/intelligence/code-change",
+    methods=["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"],
+    include_in_schema=False,
+)
+@app.api_route(
+    "/orgs/{org_id}/intelligence/code-change/{path:path}",
+    methods=["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"],
+    include_in_schema=False,
+)
+async def intelligence_code_change_gone(org_id: str, path: str = "") -> JSONResponse:
+    """Return 410 Gone for removed Cat 23 intelligence/code-change surface."""
+    return JSONResponse(
+        status_code=410,
+        content={"detail": _CODE_CHANGE_GONE_DETAIL.format(org_id=org_id)},
+    )
 
 
 # ============================================================================

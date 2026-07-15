@@ -36,6 +36,7 @@ import { TraceExportModal } from "../observability/_components/TraceExportModal"
 import { TraceShareModal } from "../observability/_components/TraceShareModal";
 import { LiveTailPanel } from "./_components/LiveTailPanel";
 import { SpanSearchBar } from "./_components/SpanSearchBar";
+import { SelectedTraceRail } from "../observability/_components/SelectedTraceCard";
 
 const PAGE_SIZE = 50;
 
@@ -106,10 +107,7 @@ function TracesPageInner() {
   const handleSelectTrace = useCallback(
     (id: string) => {
       setSelectedTraceId(id);
-      // Open the observability landing page with the trace
-      // right-rail active (Pattern 4.4). The landing reads
-      // ?trace_id=… and renders <SelectedTraceRail>.
-      router.push(`/observability?trace_id=${encodeURIComponent(id)}`);
+      router.push(`/traces?trace_id=${encodeURIComponent(id)}`);
     },
     [router],
   );
@@ -131,6 +129,17 @@ function TracesPageInner() {
     setAnnotateTraceId(id);
     setAnnotateOpen(true);
   }, []);
+
+  const handleCreateAlertFromFilters = useCallback(
+    (f: TraceFilter) => {
+      const params = new URLSearchParams({ tab: "rules" });
+      if (f.realm) params.set("realm", f.realm);
+      if (f.outcome) params.set("outcome", f.outcome);
+      if (f.agent_id) params.set("agent_id", f.agent_id);
+      router.push(`/alerts?${params.toString()}`);
+    },
+    [router],
+  );
 
   const handleLoadMore = useCallback(() => {
     setLimit((l) => l + PAGE_SIZE);
@@ -198,7 +207,8 @@ function TracesPageInner() {
           }
         />
       )}
-      <div className="grid gap-4 lg:grid-cols-[1fr_18rem]">
+      <div className="flex flex-col lg:flex-row gap-6">
+        <div className="grid gap-4 lg:grid-cols-[1fr_18rem] flex-1 min-w-0">
         <div className="space-y-4 min-w-0">
           <section aria-label="Agent sessions">
             <h2 className="text-sm font-semibold text-[var(--text-primary)] mb-2">
@@ -220,6 +230,7 @@ function TracesPageInner() {
               onViewTimeline={handleViewTimeline}
               onExport={handleExport}
               onAnnotate={handleAnnotate}
+              onCreateAlertFromFilters={handleCreateAlertFromFilters}
               initialTraceId={initialTraceId}
             />
           {!loading && !errorMessage && tracesTotal > traces.length && (
@@ -231,6 +242,8 @@ function TracesPageInner() {
           )}
         </div>
         <LiveTailPanel orgId={currentOrg.id} onSelectTrace={handleSelectTrace} />
+        </div>
+        <SelectedTraceRail />
       </div>
       <TraceExportModal
         open={exportOpen}

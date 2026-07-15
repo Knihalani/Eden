@@ -191,6 +191,8 @@ class IssuePromoter:
                 severity=issue.severity,
                 title=issue.title,
                 regressed=issue.was_regressed,
+                user_count=issue.user_count,
+                stumble_count=issue.stumble_count,
             )
         except Exception as exc:  # pragma: no cover - hook optional
             logger.debug("issue_promoter: on_issue_created failed: %s", exc)

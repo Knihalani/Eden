@@ -38,6 +38,35 @@ from eden.observability.typesense_client import (
 
 logger = logging.getLogger(__name__)
 
+# ── In-process metrics (Prometheus-compatible naming) ───────────────
+# Simple accumulators exposed via get_search_stats() and rendered
+# by metrics_endpoint.py. No external dependency required.
+_search_stats: dict[str, float] = {
+    "duration_sum_s": 0.0,
+    "duration_count": 0.0,
+    "fallback_total": 0.0,
+    "index_lag_sum_s": 0.0,
+    "index_lag_count": 0.0,
+}
+
+
+def get_search_stats() -> dict[str, float]:
+    """Return a snapshot of in-process search metrics."""
+    return dict(_search_stats)
+
+
+def _record_search(duration_s: float, *, fallback: bool) -> None:
+    _search_stats["duration_sum_s"] += duration_s
+    _search_stats["duration_count"] += 1.0
+    if fallback:
+        _search_stats["fallback_total"] += 1.0
+
+
+def record_index_lag(lag_s: float) -> None:
+    """Record how many seconds elapsed between event creation and Typesense index."""
+    _search_stats["index_lag_sum_s"] += lag_s
+    _search_stats["index_lag_count"] += 1.0
+
 
 @dataclass
 class SpanHit:
@@ -86,6 +115,7 @@ class SearchResponse:
     facet_counts: dict[str, list[dict[str, Any]]] = field(default_factory=dict)
     took_ms: float = 0.0
     query: str = ""
+    fallback: bool = False
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -94,6 +124,7 @@ class SearchResponse:
             "facet_counts": self.facet_counts,
             "took_ms": round(self.took_ms, 2),
             "query": self.query,
+            "fallback": self.fallback,
         }
 
 
@@ -183,6 +214,115 @@ class SearchService:
             return self._client
         return get_typesense_client()
 
+    # ── Postgres ILIKE fallback ────────────────────────────────────
+
+    async def _pg_fallback_search(
+        self,
+        *,
+        tenant_id: str,
+        query: str = "",
+        agent_id: str | None = None,
+        outcome: str | None = None,
+        event_type: str | None = None,
+        from_ts: int | None = None,
+        to_ts: int | None = None,
+        per_page: int = 20,
+        page: int = 1,
+    ) -> SearchResponse:
+        """ILIKE full-text fallback against ``telemetry_events`` in Postgres.
+
+        Used when Typesense is unavailable. Matches the same filter
+        shape as the Typesense path so callers see the same response
+        structure. Returns an empty response (not an error) if the
+        Postgres client is unavailable.
+        """
+        start = time.perf_counter()
+        try:
+            from eden.storage.postgres import get_postgres_client
+            pg = get_postgres_client()
+        except Exception as exc:
+            logger.debug("PG fallback: postgres unavailable: %s", exc)
+            return SearchResponse(query=query, fallback=True)
+
+        pattern = f"%{query.strip()}%" if query.strip() else "%"
+        conditions: list[str] = ["tenant_id = $1"]
+        params: list[Any] = [tenant_id]
+        idx = 2
+
+        if query.strip():
+            conditions.append(
+                f"(name ILIKE ${idx}"
+                f" OR COALESCE(agent_id, '') ILIKE ${idx}"
+                f" OR COALESCE(outcome, '') ILIKE ${idx}"
+                f" OR COALESCE(event_type, '') ILIKE ${idx})"
+            )
+            params.append(pattern)
+            idx += 1
+        if agent_id:
+            conditions.append(f"agent_id = ${idx}")
+            params.append(agent_id)
+            idx += 1
+        if outcome:
+            conditions.append(f"outcome = ${idx}")
+            params.append(outcome)
+            idx += 1
+        if event_type:
+            conditions.append(f"event_type = ${idx}")
+            params.append(event_type)
+            idx += 1
+        if from_ts is not None:
+            conditions.append(f"EXTRACT(EPOCH FROM timestamp) >= ${idx}")
+            params.append(float(from_ts))
+            idx += 1
+        if to_ts is not None:
+            conditions.append(f"EXTRACT(EPOCH FROM timestamp) <= ${idx}")
+            params.append(float(to_ts))
+            idx += 1
+
+        limit = max(1, min(per_page, 100))
+        offset = max(0, (max(1, page) - 1) * limit)
+        where = " AND ".join(conditions)
+        sql = f"""
+            SELECT event_id, trace_id, span_id, agent_id, name,
+                   event_type, outcome, duration_ms,
+                   EXTRACT(EPOCH FROM timestamp)::bigint AS created_at
+            FROM telemetry_events
+            WHERE {where}
+            ORDER BY timestamp DESC
+            LIMIT {limit} OFFSET {offset}
+        """
+
+        try:
+            rows = await pg.fetch(sql, *params)
+        except Exception as exc:
+            logger.debug("PG fallback search failed: %s", exc)
+            elapsed_ms = (time.perf_counter() - start) * 1000
+            return SearchResponse(query=query, took_ms=elapsed_ms, fallback=True)
+
+        hits: list[SpanHit] = []
+        for r in rows:
+            hits.append(SpanHit(
+                event_id=str(r["event_id"] or ""),
+                trace_id=str(r["trace_id"] or ""),
+                span_id=str(r["span_id"] or ""),
+                agent_id=str(r["agent_id"] or ""),
+                name=str(r["name"] or ""),
+                event_type=str(r["event_type"] or ""),
+                outcome=str(r["outcome"] or ""),
+                input_text_excerpt=_excerpt(str(r["name"] or ""), query),
+                created_at=int(r["created_at"] or 0),
+                duration_ms=float(r["duration_ms"] or 0.0),
+            ))
+
+        elapsed_ms = (time.perf_counter() - start) * 1000
+        return SearchResponse(
+            hits=hits,
+            total=len(hits),
+            took_ms=elapsed_ms,
+            query=query,
+            fallback=True,
+        )
+
     # ── Core search ───────────────────────────────────────────────
 
     async def search(
@@ -213,9 +353,30 @@ class SearchService:
         fallback.
         """
         start = time.perf_counter()
-        client = self.client
+
+        # Guard on feature flag — when typesense_search_v1 is off, skip
+        # Typesense entirely and serve Postgres results directly.
+        try:
+            from eden.config import get_settings
+            _flag_on = getattr(get_settings(), "typesense_search_v1", True)
+        except Exception:
+            _flag_on = True
+
+        client = self.client if _flag_on else None
         if client is None:
-            return SearchResponse(query=query)
+            resp = await self._pg_fallback_search(
+                tenant_id=tenant_id,
+                query=query,
+                agent_id=agent_id,
+                outcome=outcome,
+                event_type=event_type,
+                from_ts=from_ts,
+                to_ts=to_ts,
+                per_page=per_page,
+                page=page,
+            )
+            _record_search((time.perf_counter() - start), fallback=True)
+            return resp
 
         # Ensure schema exists before first search (best-effort,
         # also called by index_span — idempotent).
@@ -269,8 +430,20 @@ class SearchService:
         elapsed_ms = (time.perf_counter() - start) * 1000
 
         if status != 200 or not isinstance(body, dict):
-            logger.debug(f"SearchService.search: typesense returned {status}")
-            return SearchResponse(query=query, took_ms=elapsed_ms)
+            logger.debug(f"SearchService.search: typesense returned {status}; using PG fallback")
+            fb = await self._pg_fallback_search(
+                tenant_id=tenant_id,
+                query=query,
+                agent_id=agent_id,
+                outcome=outcome,
+                event_type=event_type,
+                from_ts=from_ts,
+                to_ts=to_ts,
+                per_page=per_page,
+                page=page,
+            )
+            _record_search((time.perf_counter() - start), fallback=True)
+            return fb
 
         hits_raw = body.get("hits") or []
         hits: list[SpanHit] = []
@@ -303,6 +476,7 @@ class SearchService:
                 },
             ))
 
+        _record_search((time.perf_counter() - start), fallback=False)
         return SearchResponse(
             hits=hits,
             total=int(body.get("found", 0) or 0),

@@ -8,6 +8,7 @@
 | **Effort** | M |
 | **Eden status** | **PARTIAL** |
 | **Competitive source** | BentoLabs |
+| **UI spec** | [U05 Book & Drift](../ui/u05-book-and-drift.md) |
 | **Closes gap** | 4.4 |
 | **Dependencies** | Cat 13 PSI, N03, N05, DriftAlertHook, N21, F47 |
 

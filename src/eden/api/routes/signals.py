@@ -107,6 +107,26 @@ class SeedDefaultsResponse(BaseModel):
     signal_ids: list[str] = Field(default_factory=list)
 
 
+class LibraryToggleRequest(BaseModel):
+    enabled: bool = Field(..., description="Enable or disable the template.")
+
+
+class LibraryToggleResponse(BaseModel):
+    template_id: str
+    enabled: bool
+    updated: int
+    backfill_estimate: int = Field(
+        0,
+        description="Approx. finalized traces (7d) that a backfill would "
+        "re-investigate for this template.",
+    )
+
+
+class BackfillEstimateResponse(BaseModel):
+    backfill_estimate: int
+    window_days: int
+
+
 # ── Helpers ───────────────────────────────────────────────────────
 
 
@@ -154,6 +174,49 @@ def _signal_to_response(s: NLSignal, *, match_count: int = 0) -> SignalResponse:
 
 def _json_dumps(obj: Any) -> str:
     return json.dumps(obj, default=str, separators=(",", ":"))
+
+
+_BACKFILL_WINDOW_DAYS = 7
+
+
+def _rows_affected(result: Any) -> int:
+    """Parse an asyncpg command tag (``UPDATE 3``) into a row count."""
+    if isinstance(result, int):
+        return result
+    try:
+        return int(str(result).strip().split()[-1])
+    except (ValueError, IndexError):
+        return 0
+
+
+async def _estimate_backfill(pg: Any, org_id: str) -> int:
+    """Approx. finalized traces in the backfill window (best-effort, $0).
+
+    Uses distinct ``signal_events.trace_id`` over the window as a proxy for
+    "traces a re-investigation backfill would touch". Returns 0 on any
+    error / missing relation.
+    """
+    try:
+        row = await pg.fetchrow(
+            """
+            SELECT COUNT(DISTINCT trace_id) AS n
+            FROM signal_events
+            WHERE org_id = $1
+              AND detected_at >= NOW() - ($2 || ' days')::interval
+            """,
+            org_id,
+            str(_BACKFILL_WINDOW_DAYS),
+        )
+    except Exception as exc:
+        logger.debug("backfill estimate failed org_id=%s: %s", org_id, exc)
+        return 0
+    if row is None:
+        return 0
+    n = row.get("n") if hasattr(row, "get") else row["n"]
+    try:
+        return int(n or 0)
+    except (TypeError, ValueError):
+        return 0
 
 
 def _ts(value: Any) -> str:
@@ -387,6 +450,89 @@ async def list_signals(
                 "list_signals skipping malformed row org_id=%s", org_id,
             )
     return SignalListResponse(signals=signals)
+
+
+@router.get(
+    "/library/backfill-estimate",
+    response_model=BackfillEstimateResponse,
+    summary="Estimate traces a library backfill would re-investigate",
+)
+async def library_backfill_estimate(
+    org_id: str = Path(...),
+    user: dict = Depends(get_current_user),
+) -> BackfillEstimateResponse:
+    _ = user
+    try:
+        pg = await get_postgres_client()
+        estimate = await _estimate_backfill(pg, org_id)
+    except Exception as exc:
+        logger.exception("library_backfill_estimate failed org_id=%s", org_id)
+        if _is_missing_relation(exc):
+            return BackfillEstimateResponse(
+                backfill_estimate=0, window_days=_BACKFILL_WINDOW_DAYS
+            )
+        raise HTTPException(
+            status_code=503,
+            detail=safe_detail(exc, fallback="Signals unavailable"),
+        ) from None
+    return BackfillEstimateResponse(
+        backfill_estimate=estimate, window_days=_BACKFILL_WINDOW_DAYS
+    )
+
+
+@router.patch(
+    "/library/{template_id}",
+    response_model=LibraryToggleResponse,
+    summary="Enable/disable a default-library signal template",
+)
+async def toggle_library_signal(
+    body: LibraryToggleRequest,
+    org_id: str = Path(...),
+    template_id: str = Path(...),
+    user: dict = Depends(get_current_user),
+) -> LibraryToggleResponse:
+    """Toggle a library template in ``signal_definitions`` (F35).
+
+    Flips ``enabled`` on the ``(org_id, template_id)`` row the F06
+    investigator reads, and returns a backfill estimate so the UI can warn
+    before a re-investigation sweep.
+    """
+    _ = user
+    try:
+        pg = await get_postgres_client()
+        result = await pg.execute(
+            """
+            UPDATE signal_definitions
+            SET enabled = $3
+            WHERE org_id = $1 AND template_id = $2
+            """,
+            org_id,
+            template_id,
+            body.enabled,
+        )
+        estimate = await _estimate_backfill(pg, org_id) if body.enabled else 0
+    except Exception as exc:
+        logger.exception(
+            "toggle_library_signal failed org_id=%s template=%s",
+            org_id,
+            template_id,
+        )
+        raise HTTPException(
+            status_code=503,
+            detail=safe_detail(exc, fallback="Signals unavailable"),
+        ) from None
+
+    updated = _rows_affected(result)
+    if updated == 0:
+        raise HTTPException(
+            status_code=404, detail="library template not seeded for this org"
+        )
+    return LibraryToggleResponse(
+        template_id=template_id,
+        enabled=body.enabled,
+        updated=updated,
+        backfill_estimate=estimate,
+    )
 
 
 @router.post(

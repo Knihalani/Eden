@@ -167,11 +167,11 @@ eden_slack_alert_latency_seconds
 
 ## 11. Acceptance criteria
 
-- [ ] P0 issue → Slack message <60s with user_count
-- [ ] Block Kit validates against Slack API linter
-- [ ] Alert storm deduped (15min window)
-- [ ] Failed Slack never fails issue write
-- [ ] Cursor deep link documented in button URL
+- [x] P0 issue → Slack message <60s with user_count
+- [x] Block Kit validates against Slack API linter
+- [x] Alert storm deduped (15min window)
+- [x] Failed Slack never fails issue write
+- [x] Cursor deep link documented in button URL
 
 ---
 

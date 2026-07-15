@@ -14,9 +14,29 @@ issues, rerun the debugger, and open fix PRs — without leaving your IDE.
 
 1. An Eden org with at least one ingested trace.
 2. An org API key (`Settings → API Keys` in the portal).
-3. The Eden platform package installed so
-   `python -m eden.mcp_server` runs (monorepo checkout or
-   self-hosted API image).
+3. The Eden platform package installed (see **Installation** below).
+
+## Installation
+
+Three supported paths — all use the same `eden-mcp` binary:
+
+**a) Monorepo checkout (preferred)**
+
+```bash
+pip install -e .
+eden-mcp --help   # verify
+```
+
+**b) Module invocation (no install needed)**
+
+```bash
+python -m eden.mcp_server
+```
+
+**c) Docker / self-hosted API image**
+
+`eden-mcp` is on `PATH` in the Eden API Docker image. Set the env vars
+and point Cursor at the container's exec.
 
 ## Environment variables
 
@@ -29,6 +49,25 @@ issues, rerun the debugger, and open fix PRs — without leaving your IDE.
 ## Cursor
 
 Create `.cursor/mcp.json` in your project root:
+
+```json
+{
+  "mcpServers": {
+    "eden": {
+      "command": "eden-mcp",
+      "args": [],
+      "env": {
+        "EDEN_API_KEY": "sk_eden_…",
+        "EDEN_ORG_ID": "org_…",
+        "EDEN_BASE_URL": "https://api.edenobservability.com"
+      }
+    }
+  }
+}
+```
+
+If `eden-mcp` is not on your `PATH` (e.g. inside a virtualenv), use
+the module form instead:
 
 ```json
 {
@@ -53,16 +92,15 @@ You can also copy a pre-filled config from **Portal → Settings → MCP**.
 
 ## Claude Code
 
-Create `.claude/mcp.json` with the same `command` / `args` / `env` block.
-Claude Code expects an explicit `"type": "stdio"` on each server:
+Create `.claude/mcp.json`. Claude Code expects an explicit `"type": "stdio"`:
 
 ```json
 {
   "mcpServers": {
     "eden": {
       "type": "stdio",
-      "command": "python",
-      "args": ["-m", "eden.mcp_server"],
+      "command": "eden-mcp",
+      "args": [],
       "env": {
         "EDEN_API_KEY": "sk_eden_…",
         "EDEN_ORG_ID": "org_…",
@@ -81,7 +119,7 @@ Claude Code expects an explicit `"type": "stdio"` on each server:
 | `get_trace` | read | Trace metadata and span tree |
 | `get_transcript` | read | Step-by-step messages and tool calls |
 | `list_checkpoints` | read | Debugger checkpoints for a trace |
-| `rerun_debugger` | debug | Live-prefix rerun from a step |
+| `rerun_debugger` | debug | Rerun from a checkpoint step (returns cache hit stats when F03 prefix cache is populated; `new_trace_id` deferred until F01 live gateway ships) |
 | `search_issues` | read | List agent issues |
 | `get_issue` | read | Full issue + example stumbles |
 | `triage_issue` | debug | Root-cause triage for an issue |
@@ -111,7 +149,7 @@ Try these in Cursor's agent chat after MCP connects:
 
 If the server fails to start, check:
 
-- `python -m eden.mcp_server` runs in a terminal with the same env vars.
+- `eden-mcp` (or `python -m eden.mcp_server`) runs in a terminal with the same env vars.
 - `EDEN_BASE_URL` points at your API (not the portal URL).
 - Firewall allows HTTPS to the Eden API.
 

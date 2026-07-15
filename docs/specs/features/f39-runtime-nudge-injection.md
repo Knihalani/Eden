@@ -5,8 +5,9 @@
 | **Feature ID** | F39 |
 | **Priority** | P0 |
 | **Effort** | XL |
-| **Eden status** | MISSING |
+| **Eden status** | PARTIAL (v0) — engine/gateway/DB landed; missing author-from-issue, demotion, dedicated UI, YAML export |
 | **Competitive source** | BentoLabs AI (core moat) |
+| **UI spec** | [U02 Artifacts](../ui/u02-artifacts.md) |
 | **Dependencies** | F29 (issues), F41 (evotion gate), F28–F20 (detection) |
 
 ---

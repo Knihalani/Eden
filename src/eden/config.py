@@ -161,6 +161,7 @@ def _build_settings_class():
         typesense_protocol: str = "http"
         typesense_collection: str = "eden_spans"
         typesense_enabled: bool = True
+        typesense_search_v1: bool = True
 
         # Feature flags — gates the per-Cat intelligence surface.
         # The Cat 1-23 wiring tests flip these via monkeypatch; see
@@ -181,6 +182,17 @@ def _build_settings_class():
         autonomous_actions_v0: bool = True
         experiments_v1: bool = False
 
+        # F03 — checkpoint ingest + prefix cache.
+        # ``debugger_checkpoint_ingest_v1``: default True so new orgs
+        # populate debugger_llm_cache automatically. Set to false to
+        # disable the prefix-cache upsert path without touching the
+        # CheckpointStore audit trail (which is always written).
+        # ``debugger_checkpoint_backfill_v1``: default False — gates the
+        # scripts/backfill_checkpoints.py one-shot script. Enable
+        # explicitly before running the backfill job.
+        debugger_checkpoint_ingest_v1: bool = True
+        debugger_checkpoint_backfill_v1: bool = False
+
         # Cat 23 Code-Change two-stage opt-in (see eden/code_change/approvals).
         # ``code_change_enabled`` is the master switch — the patch propose
         # route refuses every request when this is false. ``auto_pr_enabled``
@@ -191,10 +203,13 @@ def _build_settings_class():
         auto_pr_enabled: bool = False
         auto_revert_enabled: bool = False
 
+        # N23 — recurring improvement agent (replaces Cat 23 inbox).
+        improvement_agent_v1: bool = False
+        improvement_schedule_enabled: bool = False
+
         # ── Cat 23 Phase 3b: quality gates (scheduler, critic, cost cap) ─
-        # These knobs are read by ``eden.code_change.scheduler`` (the 15-min
-        # cron tick that pulls low-judge-score clusters + generates patches)
-        # and by ``PatchGenerator.generate`` (critic loop + size validation).
+        # These knobs are read by ``eden.patches.patch_generator.PatchGenerator``
+        # (critic loop + size validation) and the N23 improvement sweep.
         # The per-org overrides live on
         # ``organizations.features->'code_change_policy'``; these env-level
         # values are the global defaults that the policy service falls back

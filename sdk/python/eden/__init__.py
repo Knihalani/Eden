@@ -39,6 +39,7 @@ from eden_sdk import (  # noqa: F401,F403
 from eden_sdk._tokens import extract_usage, normalize_model_name  # noqa: F401
 from eden_sdk.filters import FilterConfig, PIIConfig, redact_payload  # noqa: F401
 from eden_sdk.gateway_session import chat_completion, openai_client  # noqa: F401
+from eden_sdk.stumbles import record_stumble  # noqa: F401
 from eden_sdk.model_advisor import (  # noqa: F401
     ModelAdvisor,
     ModelAdvisorError,
@@ -86,6 +87,8 @@ __all__ = [
     # High-level gateway helpers (mirrors TypeScript SDK)
     "openai_client",
     "chat_completion",
+    # Self-reported stumbles (F28)
+    "record_stumble",
     # Model comparison + recommendation (mirrors TypeScript SDK)
     "ModelAdvisor",
     "ModelAdvisorError",

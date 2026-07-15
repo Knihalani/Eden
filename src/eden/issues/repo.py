@@ -10,9 +10,12 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 import uuid
+from datetime import datetime
 from typing import Any
 
+from eden.issues.metrics import record_issue_list
 from eden.issues.models import Issue, StumbleCreate
 
 logger = logging.getLogger(__name__)
@@ -123,6 +126,9 @@ class IssuesRepo:
         *,
         fingerprint: str | None = None,
         trace_id: str | None = None,
+        kind: str | None = None,
+        agent_id: str | None = None,
+        since: datetime | None = None,
         limit: int = 50,
     ) -> list[dict[str, Any]]:
         client = await self._client()
@@ -136,6 +142,15 @@ class IssuesRepo:
         if trace_id:
             args.append(trace_id)
             clauses.append(f"trace_id = ${len(args)}")
+        if kind:
+            args.append(kind)
+            clauses.append(f"kind = ${len(args)}")
+        if agent_id:
+            args.append(agent_id)
+            clauses.append(f"agent_id = ${len(args)}")
+        if since is not None:
+            args.append(since)
+            clauses.append(f"detected_at >= ${len(args)}")
         args.append(int(limit))
         sql = (
             "SELECT * FROM agent_stumbles WHERE "
@@ -148,6 +163,24 @@ class IssuesRepo:
             logger.debug("issues.repo: list_stumbles failed: %s", exc)
             return []
         return [dict(r) for r in rows]
+
+    async def get_stumble(
+        self, org_id: str, stumble_id: str
+    ) -> dict[str, Any] | None:
+        client = await self._client()
+        if client is None:
+            return None
+        try:
+            row = await client.fetchrow(
+                "SELECT * FROM agent_stumbles "
+                "WHERE org_id = $1 AND id = $2::uuid",
+                org_id,
+                stumble_id,
+            )
+        except Exception as exc:
+            logger.debug("issues.repo: get_stumble failed: %s", exc)
+            return None
+        return dict(row) if row else None
 
     async def count_recent_stumbles(
         self, org_id: str, fingerprint: str, *, minutes: int = 30
@@ -237,11 +270,13 @@ class IssuesRepo:
             + " AND ".join(clauses)
             + f" ORDER BY last_seen DESC LIMIT ${limit_pos} OFFSET ${offset_pos}"
         )
+        started = time.perf_counter()
         try:
             rows = await client.fetch(sql, *args)
         except Exception as exc:
             logger.debug("issues.repo: list_issues failed: %s", exc)
             return []
+        record_issue_list(time.perf_counter() - started)
         return [_row_to_issue(dict(r)) for r in rows]
 
     async def set_status(

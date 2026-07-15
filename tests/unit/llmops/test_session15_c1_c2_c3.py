@@ -362,7 +362,6 @@ class TestC2JudgesApiRequiresOrgMember:
 
 _INTEL_ROUTERS = [
     "intelligence_user",
-    "intelligence_code_change",
     "intelligence_governance",
     "intelligence_cost",
     "intelligence_eval",

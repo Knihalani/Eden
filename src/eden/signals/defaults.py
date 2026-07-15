@@ -201,9 +201,79 @@ async def seed_org_signals(
         existing_desc.add(tmpl.description)
         existing_cluster.add(cluster_id)
 
+    # F35 bridge: also upsert into ``signal_definitions`` so the F06
+    # per-trace investigator (which reads ``signal_definitions``) sees the
+    # library. Idempotent on (org_id, template_id). Best-effort.
+    await upsert_signal_definitions(org_id, templates, pg=pg)
+
     return SeedResult(
         count=created,
         skipped=skipped,
         profile=profile,
         signal_ids=ids,
     )
+
+
+async def upsert_signal_definitions(
+    org_id: str,
+    templates: list[SignalTemplate],
+    *,
+    pg: Any | None = None,
+    enabled_override: bool | None = None,
+) -> int:
+    """Upsert default-library templates into ``signal_definitions``.
+
+    Keyed on the partial-unique ``(org_id, template_id)`` index (migration
+    097). Returns the number of rows upserted. Never raises — a missing
+    relation or column just logs and returns 0.
+    """
+    import json
+
+    if pg is None:
+        from eden.storage.postgres import get_postgres_client
+
+        pg = await get_postgres_client()
+    if pg is None:
+        return 0
+
+    upserted = 0
+    for tmpl in templates:
+        enabled = (
+            enabled_override
+            if enabled_override is not None
+            else tmpl.default_enabled
+        )
+        try:
+            await pg.execute(
+                """
+                INSERT INTO signal_definitions
+                    (org_id, name, description, output_schema, enabled,
+                     template_id, statgate_rule, investigator_prompt)
+                VALUES ($1, $2, $3, $4::jsonb, $5, $6, $7, $8)
+                ON CONFLICT (org_id, template_id)
+                    WHERE template_id IS NOT NULL
+                DO UPDATE SET
+                    name = EXCLUDED.name,
+                    description = EXCLUDED.description,
+                    output_schema = EXCLUDED.output_schema,
+                    statgate_rule = EXCLUDED.statgate_rule,
+                    investigator_prompt = EXCLUDED.investigator_prompt
+                """,
+                org_id,
+                tmpl.name,
+                tmpl.description,
+                json.dumps(tmpl.output_schema, default=str),
+                enabled,
+                tmpl.id,
+                tmpl.statgate_rule,
+                tmpl.investigator_prompt,
+            )
+            upserted += 1
+        except Exception as exc:
+            logger.info(
+                "upsert_signal_definitions: skip org=%s tmpl=%s: %s",
+                org_id,
+                tmpl.id,
+                exc,
+            )
+    return upserted

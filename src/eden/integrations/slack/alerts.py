@@ -168,6 +168,25 @@ async def _pass_storm_caps(
     return True
 
 
+def _portal_issue_url(org_id: str, issue_id: str) -> str:
+    from eden.config import get_settings
+
+    base = str(getattr(get_settings(), "portal_base_url", "") or "").rstrip("/")
+    if not base:
+        base = "https://portal.example.com"
+    return f"{base}/issues/{issue_id}?org={org_id}"
+
+
+def cursor_deep_link(org_id: str, issue_id: str) -> str:
+    """Return the documented Cursor deep link for triaging an issue.
+
+    Format (F04): ``cursor://eden.triage/issue?org=<org>&issue=<id>``. Opening
+    the link launches Cursor and hands the issue id to the Eden MCP server's
+    ``triage_issue`` tool so an engineer can pick up the investigation in-IDE.
+    """
+    return f"cursor://eden.triage/issue?org={org_id}&issue={issue_id}"
+
+
 def _build_blocks(
     org_id: str,
     *,
@@ -190,6 +209,20 @@ def _build_blocks(
         {"type": "mrkdwn", "text": f"*Severity:*\n{severity.upper()}"},
         {"type": "mrkdwn", "text": f"*Kind:*\n{kind}"},
     ]
+    # F29/F47 AC: P0 alerts carry the blast-radius (user_count) + volume.
+    user_count = payload.get("user_count")
+    if user_count is not None:
+        fields.append(
+            {"type": "mrkdwn", "text": f"*Users affected:*\n{user_count}"}
+        )
+    stumble_count = payload.get("stumble_count")
+    if stumble_count is not None:
+        fields.append(
+            {"type": "mrkdwn", "text": f"*Stumbles:*\n{stumble_count}"}
+        )
+    agent_id = payload.get("agent_id")
+    if agent_id:
+        fields.append({"type": "mrkdwn", "text": f"*Agent:*\n{agent_id}"})
     src = triage_result.get("source")
     if src:
         fields.append({"type": "mrkdwn", "text": f"*Triage:*\n{src}"})
@@ -209,7 +242,7 @@ def _build_blocks(
         {
             "type": "section",
             "text": {"type": "mrkdwn", "text": f"*{str(title)[:280]}*"},
-            "fields": fields,
+            "fields": fields[:10],  # Slack caps section fields at 10.
         },
     ]
     if reason:
@@ -219,6 +252,33 @@ def _build_blocks(
                 "text": {"type": "mrkdwn", "text": f"_Reason:_ {str(reason)[:280]}"},
             }
         )
+    # Action buttons: portal deep link + Cursor deep link (F04).
+    blocks.append(
+        {
+            "type": "actions",
+            "elements": [
+                {
+                    "type": "button",
+                    "text": {
+                        "type": "plain_text",
+                        "text": "View Issue",
+                        "emoji": True,
+                    },
+                    "url": _portal_issue_url(org_id, issue_id),
+                    "style": "primary",
+                },
+                {
+                    "type": "button",
+                    "text": {
+                        "type": "plain_text",
+                        "text": "Triage in Cursor",
+                        "emoji": True,
+                    },
+                    "url": cursor_deep_link(org_id, issue_id),
+                },
+            ],
+        }
+    )
     blocks.append(
         {
             "type": "context",
@@ -226,6 +286,71 @@ def _build_blocks(
         }
     )
     return blocks
+
+
+# Block types Slack Block Kit accepts at the top level of a message.
+_VALID_BLOCK_TYPES = {
+    "header",
+    "section",
+    "actions",
+    "context",
+    "divider",
+    "image",
+}
+
+
+def validate_blocks(blocks: list[dict[str, Any]]) -> list[str]:
+    """Structural Block Kit validation (CI linter surrogate).
+
+    Returns a list of human-readable errors (empty = valid). Enforces the
+    subset of Slack's Block Kit constraints we rely on: ≤50 blocks, known
+    block types, header ``plain_text`` ≤150 chars, ≤10 section fields, and
+    well-formed action button ``url`` elements.
+    """
+    errors: list[str] = []
+    if not isinstance(blocks, list):
+        return ["blocks must be a list"]
+    if len(blocks) > 50:
+        errors.append(f"too many blocks: {len(blocks)} > 50")
+    for i, b in enumerate(blocks):
+        if not isinstance(b, dict):
+            errors.append(f"block[{i}] is not an object")
+            continue
+        btype = b.get("type")
+        if btype not in _VALID_BLOCK_TYPES:
+            errors.append(f"block[{i}] invalid type {btype!r}")
+            continue
+        if btype == "header":
+            txt = (b.get("text") or {})
+            if txt.get("type") != "plain_text":
+                errors.append(f"block[{i}] header text must be plain_text")
+            if len(str(txt.get("text", ""))) > 150:
+                errors.append(f"block[{i}] header text >150 chars")
+        if btype == "section":
+            flds = b.get("fields")
+            if flds is not None:
+                if not isinstance(flds, list):
+                    errors.append(f"block[{i}] section fields must be a list")
+                elif len(flds) > 10:
+                    errors.append(f"block[{i}] section has >10 fields")
+            if "text" not in b and not b.get("fields"):
+                errors.append(f"block[{i}] section needs text or fields")
+        if btype == "actions":
+            elements = b.get("elements") or []
+            if not isinstance(elements, list) or not elements:
+                errors.append(f"block[{i}] actions needs elements")
+            elif len(elements) > 25:
+                errors.append(f"block[{i}] actions has >25 elements")
+            else:
+                for j, el in enumerate(elements):
+                    if el.get("type") != "button":
+                        continue
+                    if "url" in el and not str(el["url"]).strip():
+                        errors.append(f"block[{i}].element[{j}] empty url")
+                    text = (el.get("text") or {}).get("text")
+                    if not text:
+                        errors.append(f"block[{i}].element[{j}] missing button text")
+    return errors
 
 
 async def _post(
@@ -286,3 +411,56 @@ async def _redis() -> Any | None:
         return await get_redis_client()
     except Exception:
         return None
+
+
+async def alert_nl_event(
+    org_id: str,
+    *,
+    alert_event_id: str,
+    rule_name: str,
+    verdict: dict[str, Any],
+    payload: dict[str, Any] | None = None,
+) -> bool:
+    """Post a Slack alert for a triaged NL alert event (F81).
+
+  Only ``real_incident`` verdicts page on-call. Returns True when delivered.
+    """
+    if verdict.get("verdict") != "real_incident":
+        return False
+    try:
+        from eden.config import get_settings
+
+        settings = get_settings()
+        if not getattr(settings, "issue_alerts_enabled", True):
+            return False
+        webhook = await _resolve_webhook(org_id, settings)
+        if not webhook:
+            return False
+        payload = payload or {}
+        title = payload.get("title") or rule_name
+        reason = verdict.get("reason") or "NL alert fired"
+        blocks = [
+            {
+                "type": "header",
+                "text": {"type": "plain_text", "text": f":rotating_light: {title}"},
+            },
+            {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": (
+                        f"*Rule:* {rule_name}\n"
+                        f"*Verdict:* real_incident\n"
+                        f"*Reason:* {reason}\n"
+                        f"*Event:* `{alert_event_id}`"
+                    ),
+                },
+            },
+        ]
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.post(webhook, json={"blocks": blocks})
+            resp.raise_for_status()
+        return True
+    except Exception as exc:  # pragma: no cover - defensive
+        logger.debug("slack alerts: alert_nl_event failed: %s", exc)
+        return False

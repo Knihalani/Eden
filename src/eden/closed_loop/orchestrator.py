@@ -312,9 +312,7 @@ class ClosedLoopOrchestrator:
         )
         try:
             from eden.closed_loop.efficiency import AgentEfficiencyController
-            from eden.code_change.issue_patch_trigger import (
-                propose_patch_for_issue,
-            )
+            from eden.improvement.agent import request_sweep
 
             allowed, reason = await AgentEfficiencyController().should_run_patch(
                 event.org_id, event.issue_id
@@ -326,9 +324,13 @@ class ClosedLoopOrchestrator:
                     reason,
                 )
                 return
-            await propose_patch_for_issue(event.org_id, event.issue_id)
+            await request_sweep(
+                event.org_id,
+                agent_id=event.payload.get("agent_id"),
+                issue_id=event.issue_id,
+            )
         except Exception as exc:
-            logger.debug("orchestrator: patch trigger unavailable: %s", exc)
+            logger.debug("orchestrator: improvement sweep unavailable: %s", exc)
 
     async def _schedule_verify(self, event: LoopEvent) -> None:
         try:
@@ -410,6 +412,8 @@ class ClosedLoopOrchestrator:
             severity: str,
             title: str,
             regressed: bool = False,
+            user_count: int | None = None,
+            stumble_count: int | None = None,
         ) -> Any:
             action_id = await original(
                 org_id,
@@ -419,6 +423,8 @@ class ClosedLoopOrchestrator:
                 severity=severity,
                 title=title,
                 regressed=regressed,
+                user_count=user_count,
+                stumble_count=stumble_count,
             )
             try:
                 await orch.emit(
@@ -433,6 +439,8 @@ class ClosedLoopOrchestrator:
                             "title": title,
                             "regressed": regressed,
                             "action_id": action_id,
+                            "user_count": user_count,
+                            "stumble_count": stumble_count,
                         },
                     )
                 )

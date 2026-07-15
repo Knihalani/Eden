@@ -1,6 +1,9 @@
 # Feature Implementation Specs
 
 > **Master:** [`../FEATURE-GAP-MASTER.md`](../FEATURE-GAP-MASTER.md)  
+> **⭐ Execution roadmap:** [`../EDEN-MASTER-ROADMAP.md`](../EDEN-MASTER-ROADMAP.md)  
+> **UI specs:** [`../ui/README.md`](../ui/README.md)  
+> **Competitor research:** [`../COMPETITOR-UI-RESEARCH.md`](../COMPETITOR-UI-RESEARCH.md)  
 > **Autonomous model:** [`../AUTONOMOUS-MAINTENANCE.md`](../AUTONOMOUS-MAINTENANCE.md)  
 > **Performance SLAs:** [`../PERFORMANCE-COST-STANDARDS.md`](../PERFORMANCE-COST-STANDARDS.md)  
 > **Market thesis:** [`../MARKET-HYPOTHESES.md`](../MARKET-HYPOTHESES.md)
@@ -9,11 +12,12 @@
 
 | Category | Count |
 |---|---|
-| F-features (parity) | 24 |
+| F-features (parity + eval/portal + optim) | **61** (F01–F85 present; historical gaps deleted) |
 | N-features (differentiation + platform + autonomous) | 21 |
-| **Total** | **45** |
+| UI specs (portal interaction) | **21** (U00–U20) |
+| **Total** | **103** |
 
-## Mandatory in every spec
+## Mandatory in every feature spec
 
 - Latency budgets (p50/p95)
 - Cost model ($/1k ops or $0 deterministic)
@@ -23,63 +27,33 @@
 
 ## P0 ship list
 
-**N14** (blocker), **N22** (autonomy gate), F48, F28, F29, F20, N08, N16, F04, N17, F30, F22, F39, F41, N15, N01, N20, D6, D7, D12
+**Maintenance moat:** N14, N22, F48, F28, F29, F20, N08, N16, F04, N17, F30, F22, F39, F41, N15, N01, N20, D6, D7, D12, F46, N21
 
-**Autonomous agent maintenance:** F46 orchestrates detect → diagnose → fix → verify. N21 fixes runtime outages; N20 fixes code. N22 sets safety bounds.
+**Portal / eval parity (new):** F58, F49, F50, F51, F52, F53, F81 + UI U00, U01, U02, U03, U04, U05, U08, U12
 
-| ID | Role |
-|---|---|
-| F46 | Orchestrator — runs the maintenance loop |
-| N21 | Runtime fix — rollback, cache bust, reweight |
-| N20 | Code fix — autonomous patch PR from diagnosis |
-| N22 | Safety bounds — how far Eden may auto-fix |
+**Portal programs:** U18 (overhaul), U19 (improvement), U20 (polish) — Waves 11–13
 
-See [`../AUTONOMOUS-MAINTENANCE.md`](../AUTONOMOUS-MAINTENANCE.md).
+**Final optim/debug:** F82, F83, F84, F85 — Wave 14
 
-## Production maintenance stand-outs (N14–N19)
+## Eval / LLMOps parity (F49–F81)
 
-| ID | Why it matters |
-|---|---|
-| N14 | Activates ETEC/StatGate/worker — **unblocks moats** |
-| N15 | Evals become live gateway guardrails (shipped EvalToGuardrailLink) |
-| N16 | 80% cost cut, keep all failures |
-| N17 | Single improvement queue (operator + autonomous columns) |
-| N18 | Auto prompt evolution + canary (shipped evolver) |
-| N19 | KB compounding with safe two-speed promotion |
-
-See [`../PRODUCTION-MAINTENANCE-STANDOUT.md`](../PRODUCTION-MAINTENANCE-STANDOUT.md).
-
-## Restored high-value (N09–N13)
-
-| ID | Was | Why |
+| Band | IDs | Theme |
 |---|---|---|
-| N09 | F11 | Storage cost at scale |
-| N10 | F36 | Search → signal conversion |
-| N11 | F10 | Live trace tail |
-| N12 | F17 | Session timeline |
-| N13 | F38 | Transcript polish |
+| P0 | F49–F53, F58, F81 | Playground, queues, experiments, online rules, datasets, views, NL alerts |
+| P1 | F54–F57, F60–F61, F65–F66, F68, F71, F73–F76, F79 | Code evals, dashboards, topics, prompts/env, Slack, PII, debugger sessions, SQL export, span scores |
+| P2 | F59, F62–F64, F67, F69–F70, F72, F77–F78, F80 | Templates, SLM judges, jury, sandboxes, copilot, data planes, finetune, multimodal, workshop |
 
-## Spec depth (third pass — July 2026)
+## Portal UI (see `../ui/`)
 
-All **45** specs expanded with implementation detail + performance/cost sections.
-
-**Fully deepened:** F01, F03, F04, F06, F09, F20, F21, F28–F30, F22, F33–F35, F39–F42, F44, F46–F48, N01–N06, N08–N22.
-
-## Autopilot status refresh (2026-07-12)
-
-Honest SHIPPED (v0) after Full Autopilot core loop + cost/MCP waves (see `.omc/autopilot/phase-validate-gate.md`):
-
-| ID | Status |
+| Band | IDs |
 |---|---|
-| F30 | **SHIPPED (v0)** — TriageAgent anti-spam |
-| F46 | **SHIPPED (v0)** — closed_loop orchestrator |
-| N20 | **SHIPPED (v0)** — issue-scoped patch + weekly schedule; auto_pr opt-in |
-| N22 | **SHIPPED (v0)** — autonomy policy |
-| F04 | **SHIPPED (v0)** — MCP server |
-| N17 | **SHIPPED (v0)** — improve cockpit |
-| N16 / N09 | **SHIPPED (core)** — sampling + content-addressed blobs |
-| F03, F12, F20, F28, F29, F35, F47, F48, N08, N14 | **SHIPPED (v0)** — see per-spec headers |
-| Wave 7 (N10–N13, F44/…) | **PARTIAL** — save-as-signal / session UI stretch |
+| P0 | U00, U01, U02, U03, U04, U05, U08, U12 |
+| P1 | U06, U07, U09, U10, U13, U14, U17 |
+| P2 | U11, U15, U16 |
+
+## Build waves 8–12 (portal parity)
+
+See FEATURE-GAP-MASTER §4 — Portal OS → Bento UI → Eval loop → Online/dashboards → Signals/Topics/Debugger.
 
 ## Generator
 

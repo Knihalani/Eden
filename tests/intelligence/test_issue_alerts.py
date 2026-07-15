@@ -134,6 +134,70 @@ async def test_rate_cap_suppresses_after_max() -> None:
 
 
 @pytest.mark.asyncio
+async def test_p0_block_kit_includes_user_count_and_actions() -> None:
+    """F29/F47 AC: P0 alert carries user_count + Cursor deep link button."""
+    posted: dict[str, Any] = {}
+
+    async def _post(webhook: str, blocks: list[dict], event: str, severity: str) -> bool:
+        posted["blocks"] = blocks
+        return True
+
+    with patch("eden.config.get_settings", return_value=_settings()), patch.object(
+        alerts, "_redis", new=AsyncMock(return_value=_Redis())
+    ), patch.object(alerts, "_resolve_webhook", new=AsyncMock(return_value="https://x")), patch.object(
+        alerts, "_post", new=_post
+    ):
+        ok = await alerts.alert_issue_event(
+            "org_test",
+            issue_id="iss-42",
+            payload={
+                "severity": "p0",
+                "kind": "tool_error",
+                "title": "checkout bash loop",
+                "user_count": 12,
+                "stumble_count": 47,
+                "agent_id": "checkout-v2",
+            },
+        )
+
+    assert ok is True
+    blocks = posted["blocks"]
+    # Block Kit structurally valid.
+    assert alerts.validate_blocks(blocks) == []
+    # user_count rendered.
+    field_texts = [
+        f["text"]
+        for b in blocks
+        if b["type"] == "section"
+        for f in b.get("fields", [])
+    ]
+    assert any("Users affected" in t and "12" in t for t in field_texts)
+    # actions block with a cursor:// deep link.
+    actions = [b for b in blocks if b["type"] == "actions"]
+    assert actions
+    urls = [e.get("url", "") for e in actions[0]["elements"]]
+    assert any(u.startswith("cursor://") for u in urls)
+    assert any("/issues/iss-42" in u for u in urls)
+
+
+def test_validate_blocks_flags_bad_structure() -> None:
+    bad = [
+        {"type": "header", "text": {"type": "mrkdwn", "text": "x"}},  # header must be plain_text
+        {"type": "bogus"},
+        {"type": "actions", "elements": []},
+    ]
+    errors = alerts.validate_blocks(bad)
+    assert errors
+    assert any("header" in e for e in errors)
+    assert any("invalid type" in e for e in errors)
+
+
+def test_cursor_deep_link_format() -> None:
+    link = alerts.cursor_deep_link("org1", "iss-9")
+    assert link == "cursor://eden.triage/issue?org=org1&issue=iss-9"
+
+
+@pytest.mark.asyncio
 async def test_no_webhook_noops() -> None:
     with patch("eden.config.get_settings", return_value=_settings(webhook="")), patch.object(
         alerts, "_resolve_webhook", new=AsyncMock(return_value="")

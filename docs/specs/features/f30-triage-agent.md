@@ -191,11 +191,11 @@ eden_triage_timeout_total
 
 ## 11. Acceptance criteria
 
-- [ ] Triage completes p95 <60s for standard issue
-- [ ] StatGate P0 skips LLM (verified in test)
-- [ ] triage_result persisted on issue
-- [ ] Portal Triage tab renders evidence links
-- [ ] Daily cost stays under org budget with rate limits
+- [x] Triage completes p95 <60s for standard issue
+- [x] StatGate P0 skips LLM (verified in test)
+- [x] triage_result persisted on issue
+- [x] Portal Triage tab renders evidence links
+- [x] Daily cost stays under org budget with rate limits
 
 ---
 

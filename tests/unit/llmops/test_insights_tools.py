@@ -38,6 +38,8 @@ class TestRegistry:
             "get_insights",
             "list_agent_issues",
             "list_proposed_patches",
+            "preview_nl_alert",
+            "create_alert_rule",
         ):
             assert required in names
 
@@ -209,3 +211,21 @@ def test_system_prompt_mentions_pillars() -> None:
     assert "Improve" in prompt
     assert "list_traces" in prompt
     assert "list_jobs" not in prompt
+
+
+@pytest.mark.asyncio
+async def test_preview_nl_alert_tool_dispatch() -> None:
+    with patch(
+        "eden.alerts.compiler.EQLParser.parse",
+        AsyncMock(return_value={"status": "ok", "data": {"warnings": []}}),
+    ):
+        result = await tools.dispatch_tool_call(
+            ORG,
+            "preview_nl_alert",
+            {"nl_text": "cost per call above $0.30 for 15 minutes"},
+        )
+    assert result["status"] == "ok"
+    output = result["output"]
+    assert output["approval_required"] is True
+    assert output["eql"]
+    assert output["alerts_url"] == "/alerts"

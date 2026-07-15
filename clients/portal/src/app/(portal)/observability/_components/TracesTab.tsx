@@ -13,7 +13,7 @@
  * provides the four callbacks. We also accept `initialTraceId` so a
  * deep link like `/traces?trace_id=abc-123` can pre-select a row.
  */
-import { Filter, TreePine, Clock, PlayCircle, Download, Layers, Tag } from "lucide-react";
+import { Filter, TreePine, Clock, PlayCircle, Download, Layers, Tag, Bell } from "lucide-react";
 import Link from "next/link";
 import { SkeletonTableRow } from "@/components/ui/skeleton";
 import { TraceOutcomeBadge } from "@/components/ui/status-badge";
@@ -36,6 +36,8 @@ interface TracesTabProps {
    *  action is clicked. The parent owns the dialog state because the
    *  dialog must mount at the page level (Radix portals to body). */
   onAnnotate?: (id: string) => void;
+  /** U04 — create NL alert from current filter chips. */
+  onCreateAlertFromFilters?: (filter: TraceFilter) => void;
 }
 const OUTCOMES = ["success", "failure", "partial", "timeout", "crash"] as const;
 
@@ -68,7 +70,8 @@ export function TracesTab({
   onExport,
   initialTraceId,
   showReplayLink = true,
-  onAnnotate
+  onAnnotate,
+  onCreateAlertFromFilters,
 }: TracesTabProps) {
   // Pattern 5.1 (Langfuse): Only render token / cost columns when
   // at least one trace actually has that data. Avoids adding three
@@ -202,6 +205,16 @@ export function TracesTab({
         ...filter,
         agent_id: e.target.value
       })} className="px-3 py-1.5 bg-[var(--bg-secondary)] border border-[var(--border-default)] rounded-lg text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)]" />
+        {onCreateAlertFromFilters && (
+          <button
+            type="button"
+            onClick={() => onCreateAlertFromFilters(filter)}
+            className="ml-auto flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-[var(--border-default)] text-[var(--accent)] hover:bg-[var(--accent-faint)] transition-colors"
+          >
+            <Bell className="w-3.5 h-3.5" />
+            Create alert from filters
+          </button>
+        )}
       </Card>
 
       {loading && traces.length === 0 ? <Card padding="lg" className="overflow-hidden" role="status" aria-live="polite" aria-label="Loading traces">

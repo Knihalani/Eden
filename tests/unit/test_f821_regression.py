@@ -29,7 +29,6 @@ _REGRESSION_TARGETS: list[tuple[str, str]] = [
     ("eden.api.deps", "get_ingestion_auth"),  # had dead `return _dependency`
     ("eden.api.routes.sso", "router"),  # used status without import
     ("eden.api.routes.auth", "router"),  # dead code referencing access_token
-    ("eden.code_change.auto_approval.dry_run", "AUTO_APPROVAL_DEFAULTS"),
     ("eden.data_platform.clickhouse_sink", "ClickHouseSink"),
     ("eden.llmops.production_monitor", "logger"),
     ("eden.optimization.cache", "ExactMatchCache"),
@@ -142,47 +141,3 @@ def test_dsn_module_no_dangling_block_after_return() -> None:
             break
     else:
         pytest.fail("_translate_sslmode_to_asyncpg_ssl not found")
-
-
-def test_dry_run_no_string_policy_guard() -> None:
-    """Audit 2026-07-05: replaced the nonsensical
-    ``{**AUTO_APPROVAL_DEFAULTS, **policy} if 'policy' in dir() else AUTO_APPROVAL_DEFAULTS``
-    with a direct ``AUTO_APPROVAL_DEFAULTS`` reference. The runtime
-    was always using defaults (the local ``policy`` variable never
-    existed), so this is a no-op behavior change but a real code
-    clarity win."""
-    import ast
-    from pathlib import Path
-    src = Path("src/eden/code_change/auto_approval/dry_run.py").read_text()
-    # The old string-comparison hack should be gone.
-    assert '"policy" in dir()' not in src, (
-        "dry_run.py still contains the unreachable 'policy' in dir() "
-        "guard — F821 regressed"
-    )
-
-
-def test_test_runner_no_undefined_sandboxspec_type() -> None:
-    """Audit 2026-07-05: changed ``spec: SandboxSpec | None = None``
-    in :meth:`TestPlanRunner.run` to ``spec: Any | None = None``
-    because ``SandboxSpec`` was never imported (the sandbox
-    subsystem was retired 2026-07-04)."""
-    import ast
-    from pathlib import Path
-    src = Path("src/eden/code_change/test_runner.py").read_text()
-    tree = ast.parse(src)
-    for node in ast.walk(tree):
-        if (
-            isinstance(node, ast.arg)
-            and node.arg == "spec"
-        ):
-            ann = node.annotation
-            if (
-                isinstance(ann, ast.BinOp)
-                and isinstance(ann.left, ast.Name)
-                and ann.left.id == "SandboxSpec"
-            ):
-                pytest.fail(
-                    "TestPlanRunner.run still types `spec` as "
-                    "SandboxSpec | None — SandboxSpec was removed "
-                    "when the sandbox subsystem retired"
-                )

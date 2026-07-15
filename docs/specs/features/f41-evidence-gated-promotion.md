@@ -8,6 +8,7 @@
 | **Effort** | L |
 | **Eden status** | **PARTIAL** |
 | **Competitive source** | BentoLabs |
+| **UI spec** | [U02 Artifacts](../ui/u02-artifacts.md) (promotion evidence panel) |
 | **Closes gap** | 4.3, 5.1 |
 | **Dependencies** | StatGate, F39 (nudges), F22/Cat23 (PRs), N01 (regression) |
 

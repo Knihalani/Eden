@@ -6,7 +6,7 @@
 | **Slug** | `eden-mcp-server` |
 | **Priority** | P0 |
 | **Effort** | L |
-| **Eden status** | **SHIPPED (v0)** — `src/eden/mcp_server/` (traces, issues, debugger, fix, improve queue). Full tool surface stretch deferred. |
+| **Eden status** | **SHIPPED (Wave 1)** — `src/eden/mcp_server/` (traces, issues, debugger, fix, improve queue); `eden-mcp` console script; self-telemetry (SEP-414); `rerun_mode`/cache-stats honesty; 15 unit tests. Stretch deferred: eql/sql/eval tools, `/v1/mcp/keys` CRUD, Streamable HTTP, separate PyPI package. |
 | **Competitive source** | Laminar MCP, Raindrop Workshop/MCP autofix |
 | **Replaces** | F05 CLI debug, F10 local dev server, F26 session inspection, F37 run_autofix (absorbed into MCP tools) |
 | **Dependencies** | F48 (portal fix), F29 (issues), F01 (debugger rerun), F30 (triage) |
@@ -330,9 +330,9 @@ Rollout: design partners → beta (read-only tools) → GA (full loop).
 - [ ] `search_traces` + `get_transcript` work against staging with real API key
 - [ ] `rerun_debugger(cached_live)` returns new trace + cache stats when F01 shipped
 - [ ] `triage_issue` returns structured root cause when F30 shipped
-- [ ] `run_autofix(dry_run=true)` returns patch summary without side effects
-- [ ] All tool calls logged as Eden spans with SEP-414 attributes
-- [ ] Docs: 5-minute quickstart for Cursor and Claude Code
+- [x] `run_autofix(dry_run=true)` returns patch summary without side effects
+- [x] All tool calls logged as Eden spans with SEP-414 attributes
+- [x] Docs: 5-minute quickstart for Cursor and Claude Code
 - [ ] Deleted F05/F10/F26/F37 explicitly documented as absorbed (see DELETED-FEATURES.md)
 
 ---

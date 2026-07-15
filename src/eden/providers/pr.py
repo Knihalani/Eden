@@ -113,8 +113,8 @@ class PRCreateRequest:
 class PRRevertRequest:
     """The arguments for :meth:`PRProvider.revert`.
 
-    Mirrors the 3-strategy surface from
-    :class:`eden.code_change.revert_engine.AutoRevertEngine`:
+    Mirrors the 3-strategy revert surface (Cat 23 retired; advisory-only
+    in N23):
 
     * ``"close_pr"`` — close the PR without a git action.
     * ``"revert_pr"`` — ``gh pr revert <n>`` (or the local

@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 import { useOrg } from "@/hooks/use-org";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -14,11 +15,12 @@ import { debuggerApi, type Checkpoint, type RerunResult } from "@/lib/api";
 
 export default function DebuggerPage() {
   const { currentOrg } = useOrg();
+  const searchParams = useSearchParams();
   const toast = useToast();
   const [checkpoints, setCheckpoints] = useState<Checkpoint[]>([]);
   const [loading, setLoading] = useState(false);
   const [filter, setFilter] = useState("");
-  const [traceId, setTraceId] = useState("");
+  const [traceId, setTraceId] = useState(searchParams.get("trace_id") ?? "");
   const [promptOverride, setPromptOverride] = useState("");
   const [lastDiff, setLastDiff] = useState<RerunResult["diff"]>([]);
 
@@ -42,6 +44,15 @@ export default function DebuggerPage() {
       setLoading(false);
     }
   }, [currentOrg?.id, toast, traceId]);
+
+  // Auto-load checkpoints when trace_id is provided via ?trace_id= deep-link.
+  useEffect(() => {
+    if (traceId.trim() && currentOrg?.id) {
+      void load();
+    }
+    // Only run on mount / when org first becomes available.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentOrg?.id]);
 
   if (!currentOrg) return <NoOrgState feature="Debugger" />;
 

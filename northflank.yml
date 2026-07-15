@@ -376,6 +376,11 @@ spec:
     # also defaults to eden-observability when unset.
     - name: GITHUB_APP_SLUG
       value: eden-observability
+    # ── N23 recurring improvement agent (July 2026 bloat-cut ship) ──
+    - name: IMPROVEMENT_AGENT_V1
+      value: "true"
+    - name: IMPROVEMENT_SCHEDULE_ENABLED
+      value: "true"
 
 # ─────────────────────────────────────────────────────────────────────
 # Job 1/2: eden-worker (long-running background work)
@@ -581,6 +586,10 @@ spec:
     # Without these the cron logs ImportError on every tick.
     - name: OPENROUTER_BASE_URL
       value: https://openrouter.ai/api/v1
+    - name: IMPROVEMENT_AGENT_V1
+      value: "true"
+    - name: IMPROVEMENT_SCHEDULE_ENABLED
+      value: "true"
 
 # ─────────────────────────────────────────────────────────────────────
 # No Postgres addon — the database lives on Neon Scale

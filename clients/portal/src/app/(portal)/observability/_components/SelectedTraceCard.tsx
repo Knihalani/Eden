@@ -20,9 +20,10 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { X, ExternalLink, Clock, DollarSign, Hash, Activity, Link2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useOrg } from "@/hooks/use-org";
-import { api } from "@/lib/api";
-import type { ObservabilityTrace } from "@/lib/api";
+import { api, agentIssuesApi } from "@/lib/api";
+import type { ObservabilityTrace, AgentStumble } from "@/lib/api";
 import { TraceShareModal } from "./TraceShareModal";
+import { ScoresTab } from "../ScoresTab";
 
 /** Wrapper that reads `?trace_id=` from the URL and renders the rail
  *  iff a trace is selected. Uses Suspense so Next 15 doesn't bail the
@@ -101,7 +102,14 @@ export function SelectedTraceCard({ traceId }: SelectedTraceCardProps) {
           </p>
         </div>
         <button
-          onClick={() => router.replace("/observability")}
+          onClick={() => {
+            const params = new URLSearchParams(window.location.search);
+            params.delete("trace_id");
+            params.delete("trace");
+            const qs = params.toString();
+            const base = window.location.pathname;
+            router.replace(qs ? `${base}?${qs}` : base);
+          }}
           className="p-1 rounded text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)] transition-colors shrink-0"
           aria-label="Clear selected trace"
           title="Clear selected trace"
@@ -163,11 +171,15 @@ export function SelectedTraceCard({ traceId }: SelectedTraceCardProps) {
           />
           <Row label="Realm" value={trace.realm} />
           <Row label="Model" value={trace.model ?? "—"} />
-          {/* Eval scores placeholder — the API doesn't surface per-trace
-              scores yet. When /observability/eval/coverage ships, this
-              will become a 0-100 numeric or "—" badge. */}
-          <Row label="Eval score" value="—" hint="Wires to /observability/eval/coverage when shipped." />
         </dl>
+      )}
+
+      <TraceStumbleBadges traceId={traceId} />
+
+      {currentOrg && (
+        <div className="border-t border-[var(--border-default)] pt-3 -mx-1 max-h-80 overflow-y-auto overflow-x-auto">
+          <ScoresTab orgId={currentOrg.id} traceId={traceId} />
+        </div>
       )}
 
       <div className="flex items-center gap-3">
@@ -187,6 +199,70 @@ export function SelectedTraceCard({ traceId }: SelectedTraceCardProps) {
       </div>
       <TraceShareModal open={shareOpen} onOpenChange={setShareOpen} traceId={traceId} />
     </aside>
+  );
+}
+
+/** Kind → short label + color token for the trace stumble badges. */
+const STUMBLE_KIND_STYLE: Record<string, { label: string; className: string }> = {
+  tool_error: { label: "Tool error", className: "bg-[var(--error-dim)] text-[var(--error)]" },
+  loop: { label: "Loop", className: "bg-[var(--warning-bg)] text-[var(--warning)]" },
+  hallucination: { label: "Hallucination", className: "bg-[var(--error-dim)] text-[var(--error)]" },
+  task_failure: { label: "Task failure", className: "bg-[var(--error-dim)] text-[var(--error)]" },
+  user_frustration: { label: "Frustration", className: "bg-[var(--warning-bg)] text-[var(--warning)]" },
+  timeout: { label: "Timeout", className: "bg-[var(--warning-bg)] text-[var(--warning)]" },
+  self_diagnostic: { label: "Self-report", className: "bg-[var(--bg-tertiary)] text-[var(--text-muted)]" },
+  mcp_auth_failure: { label: "MCP auth", className: "bg-[var(--error-dim)] text-[var(--error)]" },
+  statgate_p0: { label: "StatGate P0", className: "bg-[var(--error-dim)] text-[var(--error)]" },
+  custom: { label: "Signal", className: "bg-[var(--bg-tertiary)] text-[var(--text-muted)]" },
+};
+
+/** Fetch + render the stumbles detected on this trace as small badges.
+ *  Renders nothing while loading or when the trace has no stumbles. */
+function TraceStumbleBadges({ traceId }: { traceId: string }) {
+  const { currentOrg } = useOrg();
+  const [stumbles, setStumbles] = useState<AgentStumble[]>([]);
+
+  useEffect(() => {
+    if (!currentOrg || !traceId) return;
+    let cancelled = false;
+    agentIssuesApi
+      .stumbles(currentOrg.id, { trace_id: traceId, limit: 20 })
+      .then((res) => {
+        if (!cancelled) setStumbles(res.data?.stumbles ?? []);
+      })
+      .catch(() => {
+        if (!cancelled) setStumbles([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [currentOrg, traceId]);
+
+  if (stumbles.length === 0) return null;
+
+  return (
+    <div className="space-y-1.5 border-t border-[var(--border-default)] pt-3">
+      <p className="text-[10px] uppercase tracking-wider text-[var(--text-muted)] font-medium">
+        Stumbles ({stumbles.length})
+      </p>
+      <div className="flex flex-wrap gap-1.5">
+        {stumbles.map((s) => {
+          const style = STUMBLE_KIND_STYLE[s.kind] ?? STUMBLE_KIND_STYLE.custom;
+          return (
+            <span
+              key={s.id}
+              className={cn(
+                "px-1.5 py-0.5 rounded text-[10px] font-semibold",
+                style.className,
+              )}
+              title={`${s.title}${s.severity ? ` · ${s.severity}` : ""}`}
+            >
+              {style.label}
+            </span>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 

@@ -45,6 +45,9 @@ export const queryKeys = {
     list: (orgId: string | null | undefined, filters?: Record<string, unknown>) =>
       ["alerts", "list", orgId, filters ?? {}] as const,
     rules: (orgId: string | null | undefined) => ["alerts", "rules", orgId] as const,
+    nlRules: (orgId: string | null | undefined) => ["alerts", "nl-rules", orgId] as const,
+    events: (orgId: string | null | undefined, filters?: Record<string, unknown>) =>
+      ["alerts", "events", orgId, filters ?? {}] as const,
   },
   cost: {
     all: ["cost"] as const,
@@ -100,6 +103,12 @@ export const queryKeys = {
     all: ["improve"] as const,
     queue: (orgId: string | null | undefined, filters?: Record<string, unknown>) =>
       ["improve", "queue", orgId, filters ?? {}] as const,
+    plans: (orgId: string | null | undefined, filters?: Record<string, unknown>) =>
+      ["improve", "plans", orgId, filters ?? {}] as const,
+    plan: (orgId: string | null | undefined, planId: string | null | undefined) =>
+      ["improve", "plan", orgId, planId] as const,
+    runs: (orgId: string | null | undefined) => ["improve", "runs", orgId] as const,
+    schedule: (orgId: string | null | undefined) => ["improve", "schedule", orgId] as const,
   },
   settings: {
     all: ["settings"] as const,

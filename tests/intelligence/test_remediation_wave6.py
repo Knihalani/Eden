@@ -89,19 +89,18 @@ async def test_reweight_fires_hook_without_context_kwarg() -> None:
 async def test_scheduler_emit_drift_uses_instance_call() -> None:
     # G7: _emit_drift must instantiate the hook (class-level call left
     # self unbound) and must not pass payload= to on_drift_alert.
-    import eden.code_change.scheduler as sched
+    # Cat 23 scheduler removed — drift hooks are exercised via promotion_hooks.
+    from eden.llmops import promotion_hooks as ph
 
     hook = MagicMock()
     hook.on_drift_alert = AsyncMock(return_value="a1")
-    sched._tick_drift_count = 0
     with patch(
         "eden.llmops.promotion_hooks.PromotionHook", return_value=hook
     ):
-        await sched._emit_drift(
+        await ph.PromotionHook().on_drift_alert(
             org_id="org_test",
             drift_type="cat23_test",
             severity="low",
-            payload={"x": 1},
         )
     hook.on_drift_alert.assert_awaited_once()
     _args, kwargs = hook.on_drift_alert.call_args
@@ -179,16 +178,16 @@ def test_heal_action_from_triage_prefers_suggested_heal() -> None:
 
 @pytest.mark.asyncio
 async def test_patch_trigger_disabled_when_flag_off() -> None:
-    from eden.code_change import issue_patch_trigger as ipt
+    from eden.improvement import issue_patch_trigger as ipt
 
-    with patch.object(ipt, "_code_change_enabled", return_value=False):
+    with patch.object(ipt, "_improvement_enabled", return_value=False):
         res = await ipt.propose_patch_for_issue("org_test", "iss-1")
     assert res["status"] == "disabled"
 
 
 @pytest.mark.asyncio
 async def test_patch_trigger_generates_when_enabled() -> None:
-    from eden.code_change import issue_patch_trigger as ipt
+    from eden.improvement import issue_patch_trigger as ipt
 
     issue = _issue(agent_id="agent-a")
     repo = MagicMock()
@@ -196,7 +195,13 @@ async def test_patch_trigger_generates_when_enabled() -> None:
     repo.list_stumbles = AsyncMock(return_value=[])
     gen = MagicMock()
     gen.generate = AsyncMock(
-        return_value={"data": {"patch_id": "patch-9", "status": "proposed"}}
+        return_value={
+            "data": {
+                "patch_id": "patch-9",
+                "status": "proposed",
+                "diff": "+++ b/src/foo.py\n@@\n",
+            }
+        }
     )
     linker = MagicMock()
     linker.link = AsyncMock(
@@ -208,17 +213,20 @@ async def test_patch_trigger_generates_when_enabled() -> None:
         }
     )
 
-    with patch.object(ipt, "_code_change_enabled", return_value=True), patch(
+    with patch.object(ipt, "_improvement_enabled", return_value=True), patch(
         "eden.issues.repo.IssuesRepo", return_value=repo
     ), patch(
-        "eden.code_change.patch_generator.PatchGenerator", return_value=gen
+        "eden.patches.patch_generator.PatchGenerator", return_value=gen
     ), patch(
-        "eden.code_change.rca_linker.CodeRootCauseLinker", return_value=linker
+        "eden.patches.rca_linker.CodeRootCauseLinker", return_value=linker
     ), patch(
         "eden.closed_loop.efficiency.AgentEfficiencyController.should_run_patch",
         AsyncMock(return_value=(True, "ok")),
     ), patch.object(
-        ipt, "_find_open_patch", AsyncMock(return_value=None)
+        ipt, "_find_open_plan", AsyncMock(return_value=None)
+    ), patch(
+        "eden.improvement.plans_repo.create_plan",
+        AsyncMock(return_value={"id": "plan-9"}),
     ):
         res = await ipt.propose_patch_for_issue("org_test", "iss-1")
 
@@ -226,35 +234,34 @@ async def test_patch_trigger_generates_when_enabled() -> None:
     _args, kwargs = gen.generate.call_args
     assert kwargs["rca_id"] == "iss_iss-1"
     assert kwargs["repo_id"] == "agent-a"
+    assert kwargs["persist"] is False
     assert kwargs["linked_files"]
     assert kwargs["linked_files"][0]["path"] == "src/foo.py"
     assert res["status"] == "proposed"
-    assert res["patch_id"] == "patch-9"
+    assert res["plan_id"] == "plan-9"
+    assert res["patch_id"] == "plan-9"
 
 
 @pytest.mark.asyncio
 async def test_patch_trigger_suppresses_duplicate_open() -> None:
-    from eden.code_change import issue_patch_trigger as ipt
+    from eden.improvement import issue_patch_trigger as ipt
 
     issue = _issue(agent_id="agent-a")
     repo = MagicMock()
     repo.get_issue = AsyncMock(return_value=issue)
 
-    with patch.object(ipt, "_code_change_enabled", return_value=True), patch(
+    with patch.object(ipt, "_improvement_enabled", return_value=True), patch(
         "eden.issues.repo.IssuesRepo", return_value=repo
-    ), patch(
-        "eden.closed_loop.efficiency.AgentEfficiencyController.should_run_patch",
-        AsyncMock(return_value=(False, "duplicate_open_patch")),
     ), patch.object(
         ipt,
-        "_find_open_patch",
-        AsyncMock(return_value={"id": "patch_existing"}),
+        "_find_open_plan",
+        AsyncMock(return_value={"id": "plan_existing"}),
     ):
         res = await ipt.propose_patch_for_issue("org_test", "iss-1")
 
     assert res["status"] == "suppressed"
-    assert res["reason"] == "duplicate_open_patch"
-    assert res["patch_id"] == "patch_existing"
+    assert res["reason"] == "duplicate_open_plan"
+    assert res["plan_id"] == "plan_existing"
 
 
 # ── verify loop ─────────────────────────────────────────────────────

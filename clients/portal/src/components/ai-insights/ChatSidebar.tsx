@@ -38,6 +38,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ToolCallCard } from "./ToolCallCard";
+import { ApprovalCard } from "./ApprovalCard";
 import { useOrg } from "@/hooks/use-org";
 import { useToast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils";
@@ -730,10 +731,11 @@ export function ChatSidebar() {
             {messages.length === 0 && (
               <div className="rounded-md border border-dashed border-[var(--border-subtle)] p-3 text-xs text-[var(--text-muted)]">
                 Capture. Analyse. Improve. Ask about traces, cost,
-                evals, issues, or proposed patches.
+                evals, issues, proposed patches, or alerts.
                 <ul className="mt-2 list-disc space-y-1 pl-4">
                   <li>Show recent traces</li>
                   <li>What&apos;s our p95 latency this week?</li>
+                  <li>Alert me if cost exceeds $0.30/hr for 15 minutes</li>
                   <li>Any open agent issues or pending patches?</li>
                 </ul>
               </div>
@@ -831,15 +833,25 @@ function MessageBlock({ message }: { message: Message }) {
     return (
       <div className="flex justify-start">
         <div className="max-w-[90%] space-y-2 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-secondary)] px-3 py-2 text-sm text-[var(--text-primary)]">
-          {message.toolCalls?.map((tc) => (
-            <ToolCallCard
-              key={tc.id}
-              id={tc.id}
-              name={tc.name}
-              input={tc.input}
-              result={tc.result}
-            />
-          ))}
+          {message.toolCalls?.map((tc) =>
+            tc.name === "preview_nl_alert" ? (
+              <ApprovalCard
+                key={tc.id}
+                id={tc.id}
+                name={tc.name}
+                input={tc.input}
+                result={tc.result}
+              />
+            ) : (
+              <ToolCallCard
+                key={tc.id}
+                id={tc.id}
+                name={tc.name}
+                input={tc.input}
+                result={tc.result}
+              />
+            ),
+          )}
           {message.text && (
             <div className="whitespace-pre-wrap break-words">
               {message.text}

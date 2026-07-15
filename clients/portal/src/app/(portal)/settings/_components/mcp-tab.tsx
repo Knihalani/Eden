@@ -28,8 +28,8 @@ function buildCursorConfig(orgId: string, apiBase: string) {
     {
       mcpServers: {
         eden: {
-          command: "python",
-          args: ["-m", "eden.mcp_server"],
+          command: "eden-mcp",
+          args: [],
           env: {
             EDEN_API_KEY: "<your-api-key>",
             EDEN_ORG_ID: orgId,
@@ -49,8 +49,8 @@ function buildClaudeConfig(orgId: string, apiBase: string) {
       mcpServers: {
         eden: {
           type: "stdio",
-          command: "python",
-          args: ["-m", "eden.mcp_server"],
+          command: "eden-mcp",
+          args: [],
           env: {
             EDEN_API_KEY: "<your-api-key>",
             EDEN_ORG_ID: orgId,
@@ -176,10 +176,13 @@ export function McpTab({ org }: McpTabProps) {
 
           <p className="text-xs text-[var(--text-muted)]">
             Requires the Eden platform package so{" "}
-            <code className="font-mono">python -m eden.mcp_server</code> is on
-            your PATH (monorepo checkout or self-hosted API install). Replace{" "}
+            <code className="font-mono">eden-mcp</code> is on your PATH (
+            <code className="font-mono">pip install -e .</code> in a monorepo
+            checkout, or the self-hosted API image). Replace{" "}
             <code className="font-mono">&lt;your-api-key&gt;</code> with an org
-            API key.
+            API key. Alternatively use{" "}
+            <code className="font-mono">python -m eden.mcp_server</code> if the
+            console script is not on your PATH.
           </p>
         </div>
       </SettingsCard>
@@ -194,12 +197,8 @@ export function McpTab({ org }: McpTabProps) {
             <p className="text-sm text-[var(--text-secondary)]">
               MCP uses your org API key via{" "}
               <code className="font-mono text-xs">EDEN_API_KEY</code>. Dedicated
-              MCP-scoped keys (<code className="font-mono text-xs">mcp:read</code>
-              , <code className="font-mono text-xs">mcp:debug</code>,{" "}
-              <code className="font-mono text-xs">mcp:fix</code>) ship when the{" "}
-              <code className="font-mono text-xs">eden_mcp_server_v1</code> flag
-              enables <code className="font-mono text-xs">POST /v1/mcp/keys</code>
-              .
+              MCP-scoped keys are not available yet — use a standard org API key
+              from Settings → API Keys.
             </p>
             <Link
               href="/settings?tab=api-keys"

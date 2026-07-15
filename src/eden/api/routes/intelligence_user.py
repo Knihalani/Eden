@@ -138,32 +138,10 @@ class EditDistanceRequest(BaseModel):
     final_text: str = Field(..., min_length=0, max_length=16384)
 
 
-class ReturnRequest(BaseModel):
-    trace_id: str = Field(..., min_length=1, max_length=128)
-    user_id: str = Field(..., min_length=1, max_length=128)
-    returned: bool | None = None
-
-
 class AbandonmentRequest(BaseModel):
     trace_id: str = Field(..., min_length=1, max_length=128)
     user_id: str = Field(..., min_length=1, max_length=128)
     abandoned: bool = True
-
-
-class CopyPasteRequest(BaseModel):
-    trace_id: str = Field(..., min_length=1, max_length=128)
-    user_id: str = Field(..., min_length=1, max_length=128)
-    copied: bool = True
-    redacted_snippet: str | None = Field(
-        default=None, max_length=200
-    )
-
-
-class RetryRequest(BaseModel):
-    trace_id: str = Field(..., min_length=1, max_length=128)
-    user_id: str = Field(..., min_length=1, max_length=128)
-    retried: bool = True
-    similarity: float | None = Field(default=None, ge=0.0, le=1.0)
 
 
 # ── v0 routes ────────────────────────────────────────────────────────
@@ -343,21 +321,6 @@ async def signal_edit_distance(
     )
 
 
-@router.post("/signals/return")
-async def signal_return(
-    org_id: str = Path(...),
-    body: ReturnRequest = Body(...),
-    user: dict = Depends(get_current_user),
-) -> dict[str, Any]:
-    # ponytail: ReturnToFeatureTracker removed per upgradespec §D.2
-    return {
-        "status": "not_implemented",
-        "feature": "user_signal_return",
-        "live": False,
-        "message": "ReturnToFeatureTracker removed per upgradespec §D.2.",
-    }
-
-
 @router.post("/signals/abandonment")
 async def signal_abandonment(
     org_id: str = Path(...),
@@ -370,36 +333,6 @@ async def signal_abandonment(
         user_id=user["user_id"],
         abandoned=body.abandoned,
     )
-
-
-@router.post("/signals/copy-paste")
-async def signal_copy_paste(
-    org_id: str = Path(...),
-    body: CopyPasteRequest = Body(...),
-    user: dict = Depends(get_current_user),
-) -> dict[str, Any]:
-    # ponytail: CopyPasteTracker removed per upgradespec §D.2
-    return {
-        "status": "not_implemented",
-        "feature": "user_signal_copy_paste",
-        "live": False,
-        "message": "CopyPasteTracker removed per upgradespec §D.2.",
-    }
-
-
-@router.post("/signals/retry")
-async def signal_retry(
-    org_id: str = Path(...),
-    body: RetryRequest = Body(...),
-    user: dict = Depends(get_current_user),
-) -> dict[str, Any]:
-    # ponytail: RetryRephraseTracker removed per upgradespec §D.2
-    return {
-        "status": "not_implemented",
-        "feature": "user_signal_retry",
-        "live": False,
-        "message": "RetryRephraseTracker removed per upgradespec §D.2.",
-    }
 
 
 # ── v2 dashboard / corrector routes (read paths) ─────────────────────

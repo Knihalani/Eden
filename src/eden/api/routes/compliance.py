@@ -79,10 +79,16 @@ async def export_my_data(
         user_id,
         job_id,
     )
-    return ExportJobAccepted(
-        job_id=job_id,
-        status="queued",
-        estimated_completion=datetime.now(UTC).isoformat(),
+    raise HTTPException(
+        status_code=501,
+        detail={
+            "status": "not_implemented",
+            "message": (
+                "Data export worker is not implemented. "
+                "Request logged; ops will fulfill manually per GDPR SLA."
+            ),
+            "job_id": job_id,
+        },
     )
 
 
@@ -117,10 +123,13 @@ async def delete_me(
         "compliance.delete_me accepted: user_id=%s — cascade memberships",
         user_id,
     )
-    return DeleteAccepted(
-        status="queued",
-        user_id=user_id,
-        scheduled_purge_at=datetime.now(UTC).isoformat(),
+    raise HTTPException(
+        status_code=501,
+        detail={
+            "status": "not_implemented",
+            "message": "Account deletion worker is not implemented.",
+            "user_id": user_id,
+        },
     )
 
 
@@ -159,10 +168,13 @@ async def delete_org_data(
         org_id,
         caller,
     )
-    return OrgDeleteAccepted(
-        status="queued",
-        org_id=org_id,
-        scheduled_purge_at=datetime.now(UTC).isoformat(),
+    raise HTTPException(
+        status_code=501,
+        detail={
+            "status": "not_implemented",
+            "message": "Org data deletion worker is not implemented.",
+            "org_id": org_id,
+        },
     )
 
 

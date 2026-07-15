@@ -246,6 +246,18 @@ export const PR_STATUSES: Record<string, StatusDescriptor> = {
   rejected: { label: "Rejected",       className: "bg-[var(--bg-tertiary)] text-[var(--text-muted)] border-[var(--border-default)]",   icon: XCircle },
 };
 
+// N23 improvement plan lifecycle
+export const IMPROVEMENT_PLAN_STATUSES: Record<string, StatusDescriptor> = {
+  draft:           { label: "Draft",           className: "bg-[var(--bg-tertiary)] text-[var(--text-secondary)] border-[var(--border-default)]", icon: Clock },
+  pending_review:  { label: "Pending review",  className: "bg-[var(--warning-bg)] text-[var(--warning)] border-[var(--warning)]/20",            icon: Clock },
+  approved:        { label: "Approved",        className: "bg-[var(--accent-faint)] text-[var(--accent)] border-[var(--accent)]/20",            icon: CheckCircle2 },
+  pr_opened:       { label: "PR opened",       className: "bg-[var(--accent-faint)] text-[var(--accent)] border-[var(--accent)]/20",            icon: GitPullRequest },
+  merged:          { label: "Merged",          className: "bg-[var(--terminal-faint)] text-[var(--terminal)] border-[var(--terminal)]/20",     icon: CheckCircle2 },
+  rejected:        { label: "Rejected",        className: "bg-[var(--bg-tertiary)] text-[var(--text-muted)] border-[var(--border-default)]",   icon: XCircle },
+  snoozed:         { label: "Snoozed",         className: "bg-[var(--bg-tertiary)] text-[var(--text-muted)] border-[var(--border-default)]",   icon: Ban },
+  superseded:      { label: "Superseded",      className: "bg-[var(--bg-tertiary)] text-[var(--text-muted)] border-[var(--border-default)]",   icon: CircleSlash },
+};
+
 export interface OrgAnalytics {
   job_counts_by_day: Array<{ date: string; count: number }>;
   reference_uploads_by_day: Array<{ date: string; count: number }>;

@@ -174,6 +174,36 @@ class AgentSessionService:
             session.agent_id,
             session.failure_reason,
         )
+        # F20 task_failure path: a session ending unsuccessfully is a
+        # first-class stumble so the ``task_failure`` detector is not dead
+        # for orgs that report session outcomes out-of-band (no
+        # ``session_success`` attr on the trace). Best-effort; a failure
+        # here never breaks session completion.
+        trace_id = session.trace_ids[0] if session.trace_ids else session.id
+        try:
+            from eden.issues.models import StumbleCreate
+            from eden.issues.stumble_writer import StumbleWriter
+
+            await StumbleWriter().create(
+                StumbleCreate(
+                    org_id=org_id,
+                    trace_id=trace_id,
+                    kind="task_failure",
+                    title="Agent session failed",
+                    detail={
+                        "failure_reason": session.failure_reason
+                        or "session marked unsuccessful",
+                        "session_id": session.id,
+                        "source": "agent_session_end",
+                    },
+                    detected_by="agent_session",
+                    agent_id=session.agent_id,
+                    session_id=session.id,
+                    user_id=session.user_id,
+                )
+            )
+        except Exception as exc:  # pragma: no cover - best-effort
+            logger.debug("agent_session: task_failure stumble failed: %s", exc)
 
     async def _persist(self, session: AgentSession) -> None:
         self._memory[f"{session.org_id}:{session.id}"] = session

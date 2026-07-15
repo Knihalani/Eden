@@ -165,12 +165,12 @@ Requires N14 quality worker for F06 execution.
 
 ## 11. Acceptance criteria
 
-- [ ] New org has 6+ signals enabled without user action
-- [ ] Frustration fires on fixture trace
-- [ ] Multi-schema investigator ≤1 LLM call per trace
-- [ ] Disable signal stops worker immediately
-- [ ] looping/cost_spike use StatGate ($0)
-- [ ] Enable shows backfill cost estimate
+- [x] New org has 6+ signals enabled without user action
+- [x] Frustration fires on fixture trace
+- [x] Multi-schema investigator ≤1 LLM call per trace
+- [x] Disable signal stops worker immediately
+- [x] looping/cost_spike use StatGate ($0)
+- [x] Enable shows backfill cost estimate
 
 ---
 

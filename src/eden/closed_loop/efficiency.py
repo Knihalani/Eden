@@ -106,7 +106,7 @@ class AgentEfficiencyController:
         if not policy.get("code_change_enabled"):
             return False, "code_change_enabled=false"
 
-        from eden.code_change.schedule_due import is_optimization_due
+        from eden.patches.schedule_due import is_optimization_due
 
         if not is_optimization_due(policy, now=now or datetime.now(UTC)):
             return False, "not_due"
@@ -123,7 +123,7 @@ class AgentEfficiencyController:
         self, org_id: str, rca_id: str
     ) -> dict[str, Any] | None:
         try:
-            from eden.code_change._common import _select_rows
+            from eden.patches._common import _select_rows
 
             # status IN (...) — literal statuses (no user input).
             statuses = ", ".join(f"'{s}'" for s in _OPEN_PATCH_STATUSES)

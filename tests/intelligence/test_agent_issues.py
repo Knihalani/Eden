@@ -79,6 +79,12 @@ class _FakePG:
         if "FROM agent_issues" in s and "fingerprint = $2" in s:
             org, fp = args
             return self.issues.get((org, fp))
+        if "FROM agent_stumbles" in s and "id = $2" in s:
+            org, sid = args
+            for r in self.stumbles.values():
+                if str(r["id"]) == str(sid) and r["org_id"] == org:
+                    return r
+            return None
         return None
 
     async def fetch(self, sql: str, *args: Any) -> list[dict[str, Any]]:
@@ -238,6 +244,81 @@ async def test_resolve_then_new_stumble_regresses() -> None:
     assert hook.on_issue_created.await_count == 2
 
 
+@pytest.mark.asyncio
+async def test_rescan_same_trace_does_not_bump_stumble_count() -> None:
+    """WP0: re-scanning the same trace (ON CONFLICT dedup) must not
+    promote again — the issue's stumble_count stays put."""
+    from eden.issues.stumble_writer import StumbleWriter
+
+    pg = _FakePG()
+    with patch("eden.storage.postgres.get_postgres_client", return_value=pg), patch(
+        "eden.llmops.promotion_hooks.get_issue_hook"
+    ) as hook_factory:
+        hook = hook_factory.return_value
+        hook.on_issue_created = AsyncMock(return_value="a1")
+        writer = StumbleWriter()
+        r1 = await writer.create(_sc("trace-1"))
+        # Re-scan the exact same trace/kind/fingerprint N times.
+        for _ in range(4):
+            await writer.create(_sc("trace-1"))
+
+    assert len(pg.issues) == 1
+    assert r1["issue"].stumble_count == 1
+    # The single issue row was never bumped past the initial insert.
+    only_issue = next(iter(pg.issues.values()))
+    assert only_issue["stumble_count"] == 1
+    # Hook fired exactly once (initial create), never on the dedups.
+    assert hook.on_issue_created.await_count == 1
+
+
+@pytest.mark.asyncio
+async def test_five_stumbles_three_users_aggregates() -> None:
+    """WP0/F29: 5 distinct-trace stumbles → 1 issue, count=5, users=3."""
+    from eden.issues.stumble_writer import StumbleWriter
+
+    pg = _FakePG()
+    users = ["u1", "u2", "u3", "u1", "u2"]
+    with patch("eden.storage.postgres.get_postgres_client", return_value=pg), patch(
+        "eden.llmops.promotion_hooks.get_issue_hook"
+    ) as hook_factory:
+        hook = hook_factory.return_value
+        hook.on_issue_created = AsyncMock(return_value="a1")
+        writer = StumbleWriter()
+        last = None
+        for i, uid in enumerate(users):
+            last = await writer.create(_sc(f"trace-{i}", user_id=uid))
+
+    assert len(pg.issues) == 1
+    assert last["issue"].stumble_count == 5
+    assert last["issue"].user_count == 3
+    # Only the first create fired the issue hook.
+    assert hook.on_issue_created.await_count == 1
+
+
+@pytest.mark.asyncio
+async def test_dedup_returns_no_issue_and_records_metric() -> None:
+    """WP0: a deduped write returns issue=None and increments the
+    deduped metric (not the created metric)."""
+    from eden.issues import metrics
+    from eden.issues.stumble_writer import StumbleWriter
+
+    before = metrics.get_stumble_stats()
+    pg = _FakePG()
+    with patch("eden.storage.postgres.get_postgres_client", return_value=pg), patch(
+        "eden.llmops.promotion_hooks.get_issue_hook"
+    ) as hook_factory:
+        hook_factory.return_value.on_issue_created = AsyncMock(return_value="a")
+        writer = StumbleWriter()
+        await writer.create(_sc("trace-1"))
+        r2 = await writer.create(_sc("trace-1"))
+
+    assert r2["inserted"] is False
+    assert r2["issue"] is None
+    after = metrics.get_stumble_stats()
+    assert after["created_total"] >= before["created_total"] + 1
+    assert after["deduped_total"] >= before["deduped_total"] + 1
+
+
 # ── Route smoke tests ───────────────────────────────────────────────
 
 
@@ -299,3 +380,82 @@ def test_list_and_get_issue_routes() -> None:
         )
         assert r3.status_code == 200
         assert r3.json()["data"]["status"] == "resolved"
+
+
+# ── WP1: stumble surface (SDK create path, read routes, bench) ───────
+
+
+def test_stumble_read_and_create_routes() -> None:
+    """F28: POST /stumbles (SDK path), GET /stumbles (filters), GET /{id}."""
+    pg = _FakePG()
+
+    with patch("eden.storage.postgres.get_postgres_client", return_value=pg), patch(
+        "eden.llmops.promotion_hooks.get_issue_hook"
+    ) as hook_factory:
+        hook_factory.return_value.on_issue_created = AsyncMock(return_value="a")
+        client = _client(pg)
+
+        # SDK self-diagnostic create.
+        created = client.post(
+            "/orgs/org_test/stumbles",
+            json={
+                "trace_id": "trace-sdk",
+                "kind": "self_diagnostic",
+                "title": "low confidence answer",
+                "detail": {"confidence": 0.2},
+                "agent_id": "agent-a",
+            },
+        )
+        assert created.status_code == 200
+        assert created.json()["data"]["inserted"] is True
+
+        # List filtered by trace_id + kind.
+        listed = client.get(
+            "/orgs/org_test/stumbles",
+            params={"trace_id": "trace-sdk", "kind": "self_diagnostic"},
+        )
+        assert listed.status_code == 200
+        stumbles = listed.json()["data"]["stumbles"]
+        assert len(stumbles) == 1
+        assert stumbles[0]["kind"] == "self_diagnostic"
+        stumble_id = stumbles[0]["id"]
+
+        # Get by id.
+        got = client.get(f"/orgs/org_test/stumbles/{stumble_id}")
+        assert got.status_code == 200
+        assert got.json()["data"]["stumble"]["id"] == stumble_id
+
+        # Unknown id → not_found envelope.
+        missing = client.get(f"/orgs/org_test/stumbles/{uuid.uuid4()}")
+        assert missing.status_code == 200
+        assert missing.json()["status"] == "not_found"
+
+
+@pytest.mark.asyncio
+async def test_stumble_write_p95_under_budget() -> None:
+    """F28 AC: write p95 < 30ms across 100 concurrent creates (mock DB)."""
+    import asyncio
+    import time
+
+    from eden.issues.stumble_writer import StumbleWriter
+
+    pg = _FakePG()
+    with patch("eden.storage.postgres.get_postgres_client", return_value=pg), patch(
+        "eden.llmops.promotion_hooks.get_issue_hook"
+    ) as hook_factory:
+        hook_factory.return_value.on_issue_created = AsyncMock(return_value="a")
+        writer = StumbleWriter()
+
+        latencies: list[float] = []
+
+        async def _one(i: int) -> None:
+            t0 = time.perf_counter()
+            await writer.create(_sc(f"bench-trace-{i}"))
+            latencies.append((time.perf_counter() - t0) * 1000.0)
+
+        await asyncio.gather(*(_one(i) for i in range(100)))
+
+    latencies.sort()
+    p95 = latencies[int(0.95 * (len(latencies) - 1))]
+    assert len(latencies) == 100
+    assert p95 < 30.0, f"p95={p95:.2f}ms exceeds 30ms budget"
