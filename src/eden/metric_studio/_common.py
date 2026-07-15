@@ -81,12 +81,25 @@ def _ok_envelope(feature: str, data: dict[str, Any]) -> dict[str, Any]:
 def _not_implemented_envelope(
     feature: str, message: str, *, data: dict[str, Any] | None = None
 ) -> dict[str, Any]:
-    """Live envelope returned when a service is registered but a
-    sub-capability is not yet implemented (e.g. the v1.4 SLM
-    fine-tuner). Distinct from the stub
-    :func:`eden.intelligence_envelope.not_implemented` helper —
-    we still want ``live=True`` because the surface IS live;
-    it's the sub-feature that isn't.
+    """Deprecated alias for :func:`_validation_envelope`.
+
+    Kept so older call sites and tests that patch the name
+    keep working. Prefer :func:`_validation_envelope` for
+    input errors and :func:`_error_envelope` for runtime
+    failures (LLM missing, etc.).
+    """
+    return _validation_envelope(feature, message, data=data)
+
+
+def _validation_envelope(
+    feature: str, message: str, *, data: dict[str, Any] | None = None
+) -> dict[str, Any]:
+    """Clear validation-error envelope (live surface, bad input).
+
+    ``status="ok"`` because the route is live and reachable;
+    the ``message`` + ``error_code="validation_error"`` tell
+    the portal to render an inline form error rather than a
+    stub badge.
     """
     return {
         "status": "ok",
@@ -96,6 +109,32 @@ def _not_implemented_envelope(
         "timestamp": datetime.now(UTC).isoformat(),
         "data": data or {},
         "message": message,
+        "error_code": "validation_error",
+    }
+
+
+def _error_envelope(
+    feature: str,
+    message: str,
+    *,
+    error_code: str,
+    data: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Structured runtime-error envelope (LLM missing, I/O fail).
+
+    Distinct from validation and from the intelligence-gap
+    stub ``not_implemented`` — the feature IS implemented;
+    this specific call could not be fulfilled.
+    """
+    return {
+        "status": "error",
+        "feature": feature,
+        "live": True,
+        "trace_id": _new_trace_id(),
+        "timestamp": datetime.now(UTC).isoformat(),
+        "data": data or {},
+        "message": message,
+        "error_code": error_code,
     }
 
 

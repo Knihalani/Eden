@@ -115,6 +115,9 @@ dependencies = [
     # head` against the eden_test DB, and the Dockerfile entrypoint
     # script invokes `alembic` at container start.
     "alembic>=1.13.0,<2.0.0",
+
+    # Error tracking — initialized when SENTRY_DSN is set (Northflank).
+    "sentry-sdk[fastapi]>=2.0.0,<3.0.0",
 ]
 
 [project.optional-dependencies]

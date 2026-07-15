@@ -62,6 +62,10 @@ spec:
         - name: TINYBIRD_ADMIN_TOKEN
         - name: TINYBIRD_BRANCH_TOKEN
         - name: SENTRY_DSN
+        # Optional. An empty / malformed value used to crash the API at
+        # import time (BadDsn: Unsupported scheme ''). ``_init_sentry``
+        # now skips invalid DSNs so the pod can boot; leave empty or set
+        # a full https://…@….ingest.sentry.io/… DSN.
         - name: GITHUB_APP_ID
         - name: GITHUB_APP_CLIENT_ID
         - name: GITHUB_APP_CLIENT_SECRET

@@ -112,12 +112,14 @@ def _not_implemented_envelope(
     *,
     data: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Live envelope returned when a service is registered but a
-    sub-capability is not yet implemented (e.g. a future admin
-    tool). Distinct from the stub
+    """Live envelope for **validation-only** failures (empty /
+    invalid inputs). Distinct from the stub
     :func:`eden.intelligence_envelope.not_implemented` helper —
     we still want ``live=True`` because the surface IS live;
-    it's the sub-feature that isn't.
+    it's the request that failed validation.
+
+    Do **not** use this for missing rows / not-found happy-path
+    miss cases — use :func:`_not_found_envelope` instead.
     """
     return {
         "status": "ok",
@@ -126,6 +128,29 @@ def _not_implemented_envelope(
         "trace_id": _new_trace_id(),
         "timestamp": _now_iso(),
         "data": data or {},
+        "message": message,
+    }
+
+
+def _not_found_envelope(
+    feature: str,
+    message: str,
+    *,
+    data: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Live envelope when a lookup misses (trigger / action /
+    issue not found). Keeps ``live=True`` and ``status="ok"`` so
+    the portal renders a graceful empty state rather than a 501.
+    """
+    payload = dict(data or {})
+    payload.setdefault("status", "not_found")
+    return {
+        "status": "ok",
+        "feature": feature,
+        "live": True,
+        "trace_id": _new_trace_id(),
+        "timestamp": _now_iso(),
+        "data": payload,
         "message": message,
     }
 
@@ -766,6 +791,7 @@ __all__ = [
     "RECOMMENDATION_STATUS_APPLIED",
     "RECOMMENDATION_STATUS_DISMISSED",
     "_ok_envelope",
+    "_not_found_envelope",
     "_not_implemented_envelope",
     "_json_dumps",
     "_json_loads",

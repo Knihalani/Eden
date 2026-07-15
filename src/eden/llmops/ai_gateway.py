@@ -252,6 +252,11 @@ class ModelRequest:
     """Tokens written into cache (Anthropic cache writes, OpenAI
     prompt-cache writes). Used by the cost engine to apply the
     cache-write rate."""
+    # Cat 20 time-travel recording hooks (optional; best-effort).
+    trace_id: str = ""
+    step_index: int = 0
+    seed: int | None = None
+    cache_mode: str | None = None
 
     @property
     def prompt_hash(self) -> str:
@@ -677,7 +682,59 @@ class AIGateway:
             except Exception as exc:
                 logger.debug("ai_gateway: record_usage failed: %s", exc)
 
+        # 10. Cat 20 — best-effort time-travel step recording. Never
+        # breaks the hot path; gated by ``time_travel_recording_enabled``.
+        await self._maybe_record_time_travel_step(request, response)
+
         return response
+
+    async def _maybe_record_time_travel_step(
+        self,
+        request: ModelRequest,
+        response: ModelResponse,
+    ) -> None:
+        """Feature-flagged TraceRecorder hook (Cat 20). Fail-open."""
+        try:
+            settings = _get_settings()
+            if not getattr(settings, "time_travel_recording_enabled", True):
+                return
+            if not request.tenant_id:
+                return
+            from eden.time_travel import TraceRecorder
+
+            trace_id = (
+                request.trace_id
+                or request.job_id
+                or f"gw_{request.tenant_id}_{request.prompt_hash[:12]}"
+            )
+            response_hash = hashlib.sha256(
+                (response.text or "").encode("utf-8", errors="replace")
+            ).hexdigest()[:32]
+            await TraceRecorder().record_step(
+                request.tenant_id,
+                trace_id=trace_id,
+                step_index=int(request.step_index or 0),
+                request={
+                    "model": request.model_version,
+                    "prompt_hash": request.prompt_hash,
+                    "temperature": request.temperature,
+                },
+                response={
+                    "response_hash": response_hash,
+                    "provider": response.provider,
+                    "model": response.model,
+                    "tokens_used": int(
+                        (response.input_tokens or 0)
+                        + (response.output_tokens or 0)
+                    ),
+                    "cost_usd": float(response.cost_usd or 0.0),
+                },
+                temperature=request.temperature,
+                seed=request.seed,
+                cache_mode=request.cache_mode,
+            )
+        except Exception as exc:  # noqa: BLE001 — never break hot path
+            logger.debug("ai_gateway: time-travel record_step failed: %s", exc)
 
     async def _check_exact_cache(self, request: ModelRequest) -> ModelResponse | None:
         if not self.exact_cache:

@@ -8,7 +8,35 @@ Bring the Eden backend (FastAPI on Northflank) back when the API is returning 5x
 
 * `/health` returns `status != "healthy"` for >2 min
 * Northflank dashboard shows the `eden-api` deployment in a crash-loop
-* Customers report 502 / 504 from the portal
+* Customers report 502 / 503 / 504 from the portal
+* Portal console shows `ApiError: Eden is having trouble reaching the server` on
+  `/api/proxy/auth/me` or `/api/proxy/notifications` with body
+  `{"detail":"no healthy upstream"}` or `{"detail":"Backend unavailable"}`
+
+## Symptom: portal 503 `no healthy upstream`
+
+This is the Northflank / Envoy ingress saying **zero healthy pods**, not an
+application 503 from FastAPI itself. The Vercel `/api/proxy` route forwards it.
+
+1. Hit the API readiness probe directly (use the `API_INTERNAL_URL` value from
+   Vercel → Settings → Environment Variables, **not** `api.edenobservability.com`
+   unless that CNAME points at Northflank):
+   ```bash
+   curl -i "$API_INTERNAL_URL/ready"
+   curl -i "$API_INTERNAL_URL/live"
+   ```
+2. `/live` 200 + `/ready` 503 → required dependency (Postgres) is down, or the
+   process is still booting. Soft deps (Redis / Qdrant / OpenRouter) no longer
+   gate `/ready` (July 2026); check `/health` for degraded components.
+3. `/live` or `/ready` returns **401** → DefaultDenyAuthMiddleware is missing
+   those paths from `DEFAULT_PUBLIC_PREFIXES`. Northflank's probe is
+   unauthenticated; a 401 makes every replica "unhealthy" and the ingress
+   returns `no healthy upstream`. Fix: ensure `/live` and `/ready` are public,
+   redeploy the API.
+4. Both fail / connection refused → pod crash-loop. Jump to step 2 under
+   "First 60 seconds".
+5. Portal still 503 after backend is green → confirm Vercel `API_INTERNAL_URL`
+   matches the live Northflank ingress URL, then redeploy the portal.
 
 ## First 60 seconds — triage
 

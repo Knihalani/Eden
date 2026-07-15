@@ -1533,8 +1533,7 @@ export default function LandingPage() {
                  * so it doesn't compete with the link itself. */}
                 <span className="inline-flex items-baseline gap-1.5 text-sm whitespace-nowrap">
                   <Link
-                    href="/api/v1/me/do-not-sell"
-                    prefetch={false}
+                    href="/do-not-sell"
                     className="text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
                   >
                     Do Not Sell My Info

@@ -3,13 +3,13 @@
 Wired into the Northflank ``eden-cron`` scheduled job
 (northflank.yml ``*/5 * * * *``). Every tick:
 
-1. Cheap due-check for MCP rollup + classifier retrain (every 15 min).
-2. If the UTC hour matches one of the heavier scheduled jobs,
+1. EQL alert watchdog + columnar compaction (hourly window).
+2. MCP rollup + classifier retrain (every 15 min).
+3. N23 improvement sweeps when org schedule is due.
+4. If the UTC hour matches one of the heavier scheduled jobs,
    runs that as well:
 
-   * **03:00 UTC** — the daily
-     :func:`eden.data_platform.retention_cron.run` (Neon cost
-     pass, partition manager, cold archive) + Typesense TTL cleanup.
+   * **03:00 UTC** — retention cron + Typesense TTL cleanup.
 
 The hourly cadence is intentionally simple: every tick is
 cheap, and only the daily jobs cost real money. The Northflank job
@@ -39,16 +39,14 @@ logger = logging.getLogger("eden.workers.cron_tick")
 
 
 async def _run_typesense_ttl_cleanup(*, dry_run: bool) -> dict[str, object]:
-    """Delete Typesense span docs older than 90 days.
-
-    Runs inside the daily 03:00 UTC job. Best-effort: a Typesense
-    failure is logged and reported but never fails the cron tick.
-    """
+    """Delete Typesense span docs older than 90 days."""
     if dry_run:
         return {"skipped": True, "reason": "dry_run"}
     try:
         import time as _time
+
         from eden.observability.typesense_client import get_typesense_client
+
         client = get_typesense_client()
         if client is None:
             return {"skipped": True, "reason": "typesense_disabled"}
@@ -74,7 +72,9 @@ async def _run_daily(now: datetime, *, dry_run: bool) -> dict[str, object]:
         logger.exception("[cron_tick] retention_cron failed: %s", exc)
         out["retention_cron"] = {"errors": [str(exc)]}
     try:
-        out["typesense_ttl_cleanup"] = await _run_typesense_ttl_cleanup(dry_run=dry_run)
+        out["typesense_ttl_cleanup"] = await _run_typesense_ttl_cleanup(
+            dry_run=dry_run
+        )
     except Exception as exc:
         logger.exception("[cron_tick] typesense_ttl_cleanup failed: %s", exc)
         out["typesense_ttl_cleanup"] = {"errors": [str(exc)]}
@@ -103,22 +103,62 @@ async def _run_classifier_retrain() -> dict[str, object]:
         return {"errors": [str(exc)]}
 
 
+async def _run_columnar_compaction(*, dry_run: bool) -> dict[str, object]:
+    """Hourly Cat 18 compaction watchdog."""
+    if dry_run:
+        return {"skipped": True, "reason": "dry_run"}
+    try:
+        from eden.columnar import ColumnarCompactor
+
+        return await ColumnarCompactor().compact_due()
+    except Exception as exc:
+        logger.exception("[cron_tick] columnar_compaction failed: %s", exc)
+        return {"errors": [str(exc)]}
+
+
+async def _run_eql_alert_watchdog(*, dry_run: bool) -> dict[str, object]:
+    """Cat 19 alert-as-code watchdog — evaluate due rules."""
+    if dry_run:
+        return {"skipped": True, "reason": "dry_run"}
+    try:
+        from eden.dsl import AlertAsCode
+
+        return await AlertAsCode().fire_due()
+    except Exception as exc:
+        logger.exception("[cron_tick] eql_alert_watchdog failed: %s", exc)
+        return {"errors": [str(exc)]}
+
+
 async def _tick(*, dry_run: bool) -> dict[str, object]:
     """A single cron tick."""
     now = datetime.now(UTC)
     out: dict[str, object] = {"tick_at": now.isoformat(), "dry_run": dry_run}
 
-    # Daily @ 03:00 UTC: retention_cron + Typesense TTL.
+    try:
+        out["eql_alert_watchdog"] = await _run_eql_alert_watchdog(
+            dry_run=dry_run
+        )
+    except Exception as exc:
+        logger.exception("[cron_tick] eql_alert_watchdog failed: %s", exc)
+        out["eql_alert_watchdog"] = {"errors": [str(exc)]}
+
+    if now.minute < 10:
+        try:
+            out["columnar_compaction"] = await _run_columnar_compaction(
+                dry_run=dry_run
+            )
+        except Exception as exc:
+            logger.exception("[cron_tick] columnar_compaction failed: %s", exc)
+            out["columnar_compaction"] = {"errors": [str(exc)]}
+
     if now.hour == 3 and now.minute < 10:
         out["daily"] = await _run_daily(now, dry_run=dry_run)
 
-    # Every 15 min: MCP registry rollup + classifier retrain (WS1).
     if now.minute % 15 < 5:
         out["mcp_rollup"] = await _run_mcp_rollup(dry_run=dry_run)
         if not dry_run:
             out["classifier_retrain"] = await _run_classifier_retrain()
 
-    # N23: per-org improvement sweep when schedule is due.
     try:
         from eden.improvement.schedule import run_due_sweeps
 
@@ -149,15 +189,13 @@ def main() -> int:
         action="store_true",
         default=True,
         help="Run one tick and exit (default — the Northflank job "
-             "restarts the container every tick).",
+        "restarts the container every tick).",
     )
     parser.add_argument(
         "--loop-seconds",
         type=int,
         default=0,
-        help="If > 0, loop on this interval (for local dev). The "
-             "production deploy uses the Northflank scheduler, not "
-             "this in-process loop.",
+        help="If > 0, loop on this interval (for local dev).",
     )
     args = parser.parse_args()
 
@@ -172,7 +210,7 @@ def main() -> int:
                 try:
                     result = await _tick(dry_run=args.dry_run)
                     logger.info("[cron_tick] %s", result)
-                except Exception as exc:  # pragma: no cover - defensive
+                except Exception as exc:  # pragma: no cover
                     logger.exception("[cron_tick] tick failed: %s", exc)
                 await asyncio.sleep(args.loop_seconds)
         else:

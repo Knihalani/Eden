@@ -27,9 +27,10 @@ STUB mode contract (per the v1.6 STUB checklist):
   (``status="not_implemented"``, ``live=False``) with a
   ``gate=<N>_blocked`` marker so the portal can show
   "this requires Gate N (real ship)".
-* **TestPlanRunner.run** is the canonical example: it returns
-  ``gate=3_blocked`` because the sandbox worker (Gate 3) is
-  intentionally not yet wired.
+* **TestPlanRunner.run** is the canonical example: without
+  ``code_change_enabled`` it returns ``gate=3_blocked``; with
+  the opt-in it delegates to :mod:`eden.sandbox.runner`
+  (subprocess allowlist + timeout substitute for Firecracker).
 
 The helpers are intentionally local to the package — Cat 23 is a
 self-contained unit and the package boundary is the right place to
@@ -221,19 +222,27 @@ DEFAULT_POLICY: dict[str, Any] = {
 }
 
 
-# The 3 modes a STUB-mode endpoint can be in. The destructive
-# routes (POST /patches, POST /patches/{id}/pr, POST /prs/{id}/revert)
-# are all gated by ``code_change_enabled`` first, and only the
-# auto-mode routes are additionally gated by ``auto_pr_enabled``
-# and ``auto_revert_enabled``.
+# Destructive routes are gated by ``code_change_enabled`` first.
+# Auto-mode actions additionally require ``auto_pr_enabled`` /
+# ``auto_revert_enabled``. Admin manual open (``manual_open_pr``)
+# only needs the master opt-in — humans clicking "Open PR" are
+# the consent, not the auto-mode flag.
 ACTION_KINDS = frozenset(
-    {"create_patch", "open_pr", "revert_pr", "auto_approve", "run_tests"}
+    {
+        "create_patch",
+        "open_pr",
+        "manual_open_pr",
+        "revert_pr",
+        "auto_approve",
+        "run_tests",
+    }
 )
 
 
 # Map: which action requires which auto-mode opt-in. Used by
 # ``_check_two_stage_optin`` to short-circuit with a clear error
-# if the opt-in is missing.
+# if the opt-in is missing. ``manual_open_pr`` is intentionally
+# absent — admin/human PR open only needs ``code_change_enabled``.
 _AUTO_OPTIN_REQUIRED: dict[str, str] = {
     "open_pr": "auto_pr_enabled",
     "revert_pr": "auto_revert_enabled",
@@ -278,6 +287,8 @@ def _check_two_stage_optin(
 
         >>> p = dict(DEFAULT_POLICY, code_change_enabled=True)
         >>> _check_two_stage_optin("code_change", p, "create_patch") is None
+        True
+        >>> _check_two_stage_optin("code_change", p, "manual_open_pr") is None
         True
         >>> blocked = _check_two_stage_optin("code_change", p, "open_pr")
         >>> blocked["data"]["gate"]

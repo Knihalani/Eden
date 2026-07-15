@@ -40,10 +40,13 @@ __all__ = [
     "RepoProvider",
     "get_default_pr_provider",
     "get_default_repo_provider",
+    "get_pr_provider_for_org",
+    "get_repo_provider_for_org",
 ]
 
 
 if TYPE_CHECKING:  # pragma: no cover - import only
+    from .factory import get_pr_provider_for_org, get_repo_provider_for_org
     from .pr import (
         GitHubPRProvider,
         LocalPRProvider,
@@ -77,6 +80,8 @@ _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
     "PullRequestInfo": (".repo", "PullRequestInfo"),
     "RepoProvider": (".repo", "RepoProvider"),
     "get_default_repo_provider": (".repo", "get_default_repo_provider"),
+    "get_pr_provider_for_org": (".factory", "get_pr_provider_for_org"),
+    "get_repo_provider_for_org": (".factory", "get_repo_provider_for_org"),
 }
 
 

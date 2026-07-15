@@ -16,8 +16,8 @@
     "language": "Sprache"
   },
   "hero": {
-    "title": "Eden — KI-Umgebungsgenerierung",
-    "subtitle": "Observability und Verbesserung für KI-Agenten und LLM-Apps.",
+    "title": "Eden — Observability und Verbesserung für KI-Agenten",
+    "subtitle": "Tracing, Evaluation und überprüfbare PR-Vorschläge für LLM-Apps und Agenten.",
     "cta": "Loslegen"
   },
   "common": {

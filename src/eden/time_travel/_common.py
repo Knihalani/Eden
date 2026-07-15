@@ -468,13 +468,16 @@ async def _get_parent_steps(
     from eden.storage.postgres import get_postgres_client
 
     client = await get_postgres_client()
+    # ``telemetry_events`` is keyed by ``tenant_id`` (not
+    # ``org_id``). ``response_hash`` lives in attributes /
+    # payload rather than a dedicated column.
     rows = await client.fetch(
         """
         SELECT event_id, trace_id, span_id, name, payload, attributes,
-               response_hash, duration_ms, timestamp
+               duration_ms, timestamp
         FROM telemetry_events
         WHERE trace_id = $1
-          AND org_id = $2
+          AND tenant_id = $2
           AND event_type = 'agent.step'
         ORDER BY timestamp ASC
         """,
@@ -487,6 +490,24 @@ async def _get_parent_steps(
         for k, v in d.items():
             if hasattr(v, "isoformat"):
                 d[k] = v.isoformat()
+        # Normalize JSONB that may arrive as a string.
+        for jk in ("payload", "attributes"):
+            val = d.get(jk)
+            if isinstance(val, str):
+                try:
+                    d[jk] = json.loads(val)
+                except (ValueError, TypeError):
+                    pass
+        attrs = d.get("attributes") if isinstance(d.get("attributes"), dict) else {}
+        payload = d.get("payload") if isinstance(d.get("payload"), dict) else {}
+        response = payload.get("response") if isinstance(payload.get("response"), dict) else {}
+        d["response_hash"] = (
+            d.get("response_hash")
+            or attrs.get("response_hash")
+            or response.get("response_hash")
+            or payload.get("response_hash")
+            or ""
+        )
         out.append(d)
     return out
 

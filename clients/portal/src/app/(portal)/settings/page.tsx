@@ -72,12 +72,6 @@ const SecurityTab = dynamic(() => import("./_components/security-tab").then(m =>
   ssr: false,
   loading: () => <Skeleton className="h-64 w-full" />
 });
-const SSOTab = dynamic(() => import("./_components/sso-tab").then(m => ({
-  default: m.SSOTab
-})), {
-  ssr: false,
-  loading: () => <Skeleton className="h-64 w-full" />
-});
 const SidebarSettingsTab = dynamic(() => import("./_components/sidebar-settings-tab").then(m => ({
   default: m.SidebarSettingsTab
 })), {
@@ -110,6 +104,7 @@ const TABS: ReadonlyArray<{
   label: string;
   icon: typeof Building2;
   category: SettingsCategory;
+  hidden?: boolean;
 }> = [{
   id: "org",
   label: "Organization",
@@ -124,7 +119,9 @@ const TABS: ReadonlyArray<{
   id: "roles",
   label: "Custom Roles",
   icon: ShieldCheck,
-  category: "Members"
+  category: "Members",
+  // Soft-launch: custom roles CRUD exists but is not enforced on routes.
+  hidden: true,
 }, {
   id: "references",
   label: "Code References",
@@ -151,10 +148,13 @@ const TABS: ReadonlyArray<{
   icon: KeyRound,
   category: "Security"
 }, {
+  // Soft-launch: SSO deferred (requires Clerk Enterprise or Eden-native
+  // SAML SP). Tab kept out of the rail; deep-link ?tab=sso shows a notice.
   id: "sso",
   label: "SSO",
   icon: Lock,
-  category: "Security"
+  category: "Security",
+  hidden: true,
 }, {
   id: "gateway",
   label: "AI Gateway",
@@ -246,7 +246,9 @@ function SettingsPageInner() {
   // insensitive). When a query is set, hide empty category groups
   // so the rail doesn't render blanks.
   const normalisedQuery = searchQuery.trim().toLowerCase();
-  const visibleTabs = normalisedQuery ? TABS.filter(t => t.label.toLowerCase().includes(normalisedQuery)) : TABS;
+  const visibleTabs = (normalisedQuery
+    ? TABS.filter((t) => !t.hidden && t.label.toLowerCase().includes(normalisedQuery))
+    : TABS.filter((t) => !t.hidden));
   const tabsByCategory: Record<SettingsCategory, typeof TABS[number][]> = {
     Org: [],
     Members: [],
@@ -358,7 +360,16 @@ function SettingsPageInner() {
             {activeTab === "mcp" && <McpTab org={currentOrg} />}
             {activeTab === "security" && <SecurityTab />}
             {activeTab === "scim" && <ScimTab org={currentOrg} />}
-            {activeTab === "sso" && <SSOTab orgId={currentOrg?.id || ""} />}
+            {activeTab === "sso" && (
+              <div className="rounded-lg border border-[var(--border-default)] bg-[var(--bg-secondary)] p-6 text-sm text-[var(--text-secondary)]">
+                <p className="font-medium text-[var(--text-primary)] mb-2">SSO deferred for soft launch</p>
+                <p>
+                  Enterprise SSO requires Clerk Enterprise Connections or a completed
+                  Eden-native SAML/OIDC callback. Use SCIM for automated membership
+                  provisioning in the meantime.
+                </p>
+              </div>
+            )}
             {activeTab === "gateway" && <GatewayTab org={currentOrg} />}
             {activeTab === "pii" && <PiiPolicyTab />}
             {activeTab === "retention" && <RetentionPolicyTab />}

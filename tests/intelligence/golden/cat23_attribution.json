@@ -1,0 +1,30 @@
+{
+  "name": "cat23_attribution",
+  "version": 1,
+  "description": "Golden-set stub for Cat 23 Gate 5 attribution accuracy. Soft floor (≥0) until the 100-trace set lands.",
+  "metric": "top1_attribution_accuracy",
+  "soft_assert_min": 0.0,
+  "cases": [
+    {
+      "id": "attr_001",
+      "rca_summary": "rate limiter returns stale quota after deploy",
+      "stack_trace": "File \"src/rate_limiter.py\", line 42, in check_quota",
+      "expected_primary_path": "src/rate_limiter.py",
+      "expected_min_confidence": 0.5
+    },
+    {
+      "id": "attr_002",
+      "rca_summary": "timeout on checkout payment webhook",
+      "stack_trace": "File \"src/payments/webhook.py\", line 88, in handle",
+      "expected_primary_path": "src/payments/webhook.py",
+      "expected_min_confidence": 0.5
+    },
+    {
+      "id": "attr_003",
+      "rca_summary": "null deref in session cache get",
+      "stack_trace": "File \"src/cache/session.py\", line 15, in get",
+      "expected_primary_path": "src/cache/session.py",
+      "expected_min_confidence": 0.5
+    }
+  ]
+}

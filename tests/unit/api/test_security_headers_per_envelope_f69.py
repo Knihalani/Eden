@@ -117,7 +117,8 @@ class TestF69Idempotency400:
         # IdempotencyMiddleware is BaseHTTPMiddleware; wrap the
         # outer app with it. We don't add the security middleware
         # here — this tests the defense-in-depth path.
-        app.add_middleware(IdempotencyMiddleware)
+        # require_key=True exercises the 400 missing-key envelope.
+        app.add_middleware(IdempotencyMiddleware, require_key=True)
 
         @app.post("/v1/mutate")
         async def mutate() -> dict[str, str]:
