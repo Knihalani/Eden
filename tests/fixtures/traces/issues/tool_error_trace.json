@@ -1,0 +1,25 @@
+{
+  "org_id": "org_fixture",
+  "trace_id": "trace-fixture-tool-error",
+  "agent_id": "agent-fixture",
+  "events": [
+    {
+      "event_type": "tool.call",
+      "name": "search_kb",
+      "outcome": "failure",
+      "error": "Timeout after 30s",
+      "span_id": "span-1",
+      "agent_id": "agent-fixture",
+      "attributes": {},
+      "duration_ms": 30100
+    },
+    {
+      "event_type": "llm.completion",
+      "outcome": "success",
+      "span_id": "span-2",
+      "agent_id": "agent-fixture",
+      "attributes": {},
+      "duration_ms": 400
+    }
+  ]
+}

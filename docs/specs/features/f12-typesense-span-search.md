@@ -6,7 +6,7 @@
 | **Slug** | `typesense-span-search` |
 | **Priority** | P1 |
 | **Effort** | M |
-| **Eden status** | **SHIPPED (v0)** — self-hosted Typesense + EQL fallback |
+| **Eden status** | **SHIPPED (Wave 1)** — Typesense client + ingest; EQL/Postgres fallback; PII redacted at index; `typesense_search_v1` flag; `eden_search_*` metrics; 90d TTL cron; portal fallback banner; 49 tests. Stretch: 10M-span p95 <200ms load bench (measure in staging before GA). |
 | **Competitive source** | Laminar |
 | **Closes gap** | 1.6 |
 | **Dependencies** | Ingest pipeline, N09 (optional blob refs) |
@@ -136,9 +136,9 @@ eden_search_fallback_total
 
 - [ ] 10M span index search p95 <200ms
 - [ ] Ingest index lag p95 <60s
-- [ ] Portal search bar uses API
-- [ ] EQL fallback works when Typesense unavailable
-- [ ] PII redacted before index (Cat 10)
+- [x] Portal search bar uses API
+- [x] EQL fallback works when Typesense unavailable
+- [x] PII redacted before index (Cat 10)
 
 ---
 

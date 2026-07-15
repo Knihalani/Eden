@@ -20,7 +20,9 @@ import {
   Plus,
   History,
   ChevronDown,
-  ChevronRight } from "lucide-react";
+  ChevronRight,
+  ArrowLeftRight,
+} from "lucide-react";
 
 interface PromptEntry {
   id: string;
@@ -50,8 +52,8 @@ interface VersionEntry {
  * ponytail: per upgradespec §D.9, customers get a per-org
  * prompt registry with a version timeline + auto-eval on
  * save. The page renders the registry list + a per-prompt
- * version timeline with a diff column (next to be added in
- * a follow-up).
+ * version timeline with a diff column comparing each version
+ * to its predecessor.
  */
 export default function PromptsPage() {
   const { currentOrg } = useOrg();
@@ -64,6 +66,7 @@ export default function PromptsPage() {
   const [newPromptName, setNewPromptName] = useState("");
   const [newPromptDesc, setNewPromptDesc] = useState("");
   const [newPromptAutoEval, setNewPromptAutoEval] = useState(false);
+  const [expandedDiff, setExpandedDiff] = useState<string | null>(null);
 
   const promptsQuery = useOrgQuery(
     queryKeys.prompts.list(orgId),
@@ -276,13 +279,20 @@ export default function PromptsPage() {
                         </div>
                       ) : (
                         <div className="space-y-2">
-                          {v.map((ver) => (
+                          {v.map((ver, idx) => {
+                            const prev = idx < v.length - 1 ? v[idx + 1] : null;
+                            const diffKey = `${p.name}:v${ver.version}`;
+                            const diffStats = prev
+                              ? summarizeTemplateDiff(prev.template, ver.template)
+                              : null;
+                            const showDiff = expandedDiff === diffKey;
+                            return (
                             <div
                               key={ver.id}
                               className="rounded-md border border-[var(--border-default)] bg-[var(--bg-elev-1)] p-3"
                             >
-                              <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-2">
+                              <div className="flex items-center justify-between gap-3">
+                                <div className="flex items-center gap-2 flex-wrap">
                                   <GitBranch className="h-3 w-3 text-[var(--text-secondary)]" />
                                   <span className="text-sm font-medium text-[var(--text-primary)]">
                                     v{ver.version}
@@ -294,10 +304,54 @@ export default function PromptsPage() {
                                     {ver.template_hash.slice(0, 12)}
                                   </code>
                                 </div>
-                                <div className="text-xs text-[var(--text-secondary)]">
-                                  {new Date(ver.created_at).toLocaleString()}
+                                <div className="flex items-center gap-3">
+                                  {diffStats && (
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        setExpandedDiff(showDiff ? null : diffKey)
+                                      }
+                                      className="inline-flex items-center gap-1.5 text-xs text-[var(--accent)] hover:underline"
+                                      aria-expanded={showDiff}
+                                    >
+                                      <ArrowLeftRight className="h-3 w-3" />
+                                      {diffStats.added > 0 && (
+                                        <span className="text-[var(--terminal)]">+{diffStats.added}</span>
+                                      )}
+                                      {diffStats.removed > 0 && (
+                                        <span className="text-[var(--error)]">-{diffStats.removed}</span>
+                                      )}
+                                      {diffStats.added === 0 && diffStats.removed === 0 && (
+                                        <span className="text-[var(--text-muted)]">no changes</span>
+                                      )}
+                                    </button>
+                                  )}
+                                  <div className="text-xs text-[var(--text-secondary)]">
+                                    {new Date(ver.created_at).toLocaleString()}
+                                  </div>
                                 </div>
                               </div>
+                              {showDiff && prev && (
+                                <div className="mt-3 rounded-md border border-[var(--border-default)] overflow-hidden font-mono text-xs">
+                                  {buildTemplateDiff(prev.template, ver.template).map((line, li) => (
+                                    <div
+                                      key={li}
+                                      className={
+                                        line.type === "added"
+                                          ? "bg-[var(--terminal)]/5 text-[var(--terminal)] px-3 py-0.5"
+                                          : line.type === "removed"
+                                            ? "bg-[var(--error)]/5 text-[var(--error)] px-3 py-0.5"
+                                            : "text-[var(--text-muted)] px-3 py-0.5"
+                                      }
+                                    >
+                                      <span className="select-none w-4 inline-block">
+                                        {line.type === "added" ? "+" : line.type === "removed" ? "-" : " "}
+                                      </span>
+                                      {line.content || " "}
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
                               <pre className="mt-2 max-h-32 overflow-auto rounded bg-[var(--bg-elev-2)] p-2 text-xs text-[var(--text-primary)]">
                                 {ver.template}
                               </pre>
@@ -307,7 +361,8 @@ export default function PromptsPage() {
                                 </div>
                               )}
                             </div>
-                          ))}
+                          );
+                          })}
                         </div>
                       )}
                     </div>
@@ -320,4 +375,82 @@ export default function PromptsPage() {
       )}
     </PageContent>
   );
+}
+
+type DiffLineType = "added" | "removed" | "unchanged";
+
+function summarizeTemplateDiff(oldText: string, newText: string) {
+  const lines = buildTemplateDiff(oldText, newText);
+  return {
+    added: lines.filter((l) => l.type === "added").length,
+    removed: lines.filter((l) => l.type === "removed").length,
+  };
+}
+
+function buildTemplateDiff(
+  oldText: string,
+  newText: string,
+): Array<{ type: DiffLineType; content: string }> {
+  const oldLines = oldText.split("\n");
+  const newLines = newText.split("\n");
+  const lcs = longestCommonSubsequence(oldLines, newLines);
+  const out: Array<{ type: DiffLineType; content: string }> = [];
+  let oldIdx = 0;
+  let newIdx = 0;
+
+  for (const common of lcs) {
+    while (oldIdx < common.oldIdx) {
+      out.push({ type: "removed", content: oldLines[oldIdx] });
+      oldIdx++;
+    }
+    while (newIdx < common.newIdx) {
+      out.push({ type: "added", content: newLines[newIdx] });
+      newIdx++;
+    }
+    out.push({ type: "unchanged", content: common.line });
+    oldIdx++;
+    newIdx++;
+  }
+  while (oldIdx < oldLines.length) {
+    out.push({ type: "removed", content: oldLines[oldIdx] });
+    oldIdx++;
+  }
+  while (newIdx < newLines.length) {
+    out.push({ type: "added", content: newLines[newIdx] });
+    newIdx++;
+  }
+  return out;
+}
+
+function longestCommonSubsequence(
+  oldLines: string[],
+  newLines: string[],
+): Array<{ oldIdx: number; newIdx: number; line: string }> {
+  const m = oldLines.length;
+  const n = newLines.length;
+  const dp: number[][] = Array.from({ length: m + 1 }, () => new Array(n + 1).fill(0));
+  for (let i = 1; i <= m; i++) {
+    for (let j = 1; j <= n; j++) {
+      if (oldLines[i - 1] === newLines[j - 1]) {
+        dp[i][j] = dp[i - 1][j - 1] + 1;
+      } else {
+        dp[i][j] = Math.max(dp[i - 1][j], dp[i][j - 1]);
+      }
+    }
+  }
+  const lcs: Array<{ oldIdx: number; newIdx: number; line: string }> = [];
+  let i = m;
+  let j = n;
+  while (i > 0 && j > 0) {
+    if (oldLines[i - 1] === newLines[j - 1]) {
+      lcs.unshift({ oldIdx: i - 1, newIdx: j - 1, line: oldLines[i - 1] });
+      i--;
+      j--;
+    } else if (dp[i - 1][j] > dp[i][j - 1]) {
+      i--;
+    } else {
+      j--;
+    }
+  }
+  return lcs;
 }

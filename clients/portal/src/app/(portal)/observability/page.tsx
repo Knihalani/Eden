@@ -6,9 +6,8 @@
  * Hub for every "Observe"-group surface. The page is data-light on
  * purpose: it shows live status tiles so the user knows whether
  * anything needs attention, then routes them to the dedicated sub-
- * routes via cards. The extracted tab components (TraceTreeTab,
- * TimelineTab, HeatmapTab) live in _components/ and are
- * reused by future sub-routes.
+ * routes via cards. When `?trace_id=` is present, the right-rail
+ * shows trace summary and judge scores via SelectedTraceRail.
  *
  * B2B pattern roles applied:
  *   • Pattern 6.3 (Helicone): 6 categorized KPI tiles with deltas
@@ -16,7 +15,7 @@
  */
 import Link from "next/link";
 import { useEffect, useMemo, useRef } from "react";
-import { Activity, BarChart3, Brain, Compass, Database, History, Network, Sparkles, ArrowRight, TrendingUp, Zap, DollarSign, AlertOctagon, Bot, LineChart, RefreshCw, Radio } from "lucide-react";
+import { Activity, BarChart3, Brain, Compass, History, Network, Sparkles, ArrowRight, TrendingUp, Zap, DollarSign, AlertOctagon, Bot, LineChart, RefreshCw, Radio } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { motion } from "framer-motion";
 import { PageHeader } from "@/components/layout/page-header";
@@ -44,11 +43,6 @@ const SUBPAGES: SubPage[] = [{
   title: "MCP SRE",
   description: "MCP server auth failures, toolchain health, and fleet graph",
   icon: Radio
-}, {
-  href: "/observability/cohorts",
-  title: "Columnar Engine",
-  description: "Materialised rollups over usage_events with hourly/daily/weekly tiers",
-  icon: Database
 }, {
   href: "/observability/decisions",
   title: "Decisions",
@@ -211,7 +205,7 @@ export default function ObservabilityLanding() {
     delta: deltaPct(costTodayCents, costYesterdayCents),
     good: "down" as const,
     format: (v: number | string) => `$${(Number(v) / 100).toFixed(2)}`,
-    href: "/billing",
+    href: "/optimization",
     tone: "neutral" as const
   }, {
     key: "error",

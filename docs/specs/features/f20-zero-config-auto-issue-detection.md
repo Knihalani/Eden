@@ -144,10 +144,10 @@ Fixtures in `tests/fixtures/traces/issues/`:
 
 ## 10. Acceptance criteria
 
-- [ ] Ingest failing fixture trace → stumble visible <60s without user config
-- [ ] No detectors run when `detection_profile=minimal`
-- [ ] Duplicate detector hits on same trace dedupe to one stumble per kind+fingerprint
-- [ ] Prometheus metrics exported
+- [x] Ingest failing fixture trace → stumble visible <60s without user config
+- [x] No detectors run when `detection_profile=minimal`
+- [x] Duplicate detector hits on same trace dedupe to one stumble per kind+fingerprint
+- [x] Prometheus metrics exported
 
 ---
 

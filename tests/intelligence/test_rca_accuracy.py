@@ -208,7 +208,7 @@ async def _run_link_with_trace(
     — patch the postgres client to return nothing (the
     linker tolerates a None client gracefully).
     """
-    from eden.code_change.rca_linker import CodeRootCauseLinker
+    from eden.patches.rca_linker import CodeRootCauseLinker
 
     linker = CodeRootCauseLinker(repo_connector=repo_connector)
     mock_pg = AsyncMock()
@@ -226,7 +226,7 @@ async def _run_link_with_trace(
         "eden.storage.postgres.get_postgres_client",
         AsyncMock(return_value=mock_pg),
     ), patch(
-        "eden.code_change.rca_linker._delete_then_insert",
+        "eden.patches.rca_linker._delete_then_insert",
         AsyncMock(return_value=None),
     ):
         return await linker.link(

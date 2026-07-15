@@ -13,7 +13,7 @@ import { ErrorState } from "@/components/ui/error-state";
 import { PageHeader } from "@/components/layout/page-header";
 import { PageContent } from "@/components/layout/page-content";
 import { useToast } from "@/components/ui/toast";
-import { ArrowLeft, Database, RefreshCw, Plus, Sparkles } from "lucide-react";
+import { ArrowLeft, Database, RefreshCw, Plus } from "lucide-react";
 import { datasetsApi, type DatasetRow, type DatasetColumn } from "@/lib/api";
 
 interface DatasetDetail {
@@ -33,8 +33,6 @@ export default function DatasetDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [newRow, setNewRow] = useState("");
   const [submitting, setSubmitting] = useState(false);
-  const [aiColName, setAiColName] = useState("");
-  const [aiColPrompt, setAiColPrompt] = useState("");
 
   const load = useCallback(async () => {
     if (!currentOrg?.id || !id) return;
@@ -75,22 +73,6 @@ export default function DatasetDetailPage() {
     }
   };
 
-  const generateColumn = async () => {
-    if (!aiColName.trim() || !aiColPrompt.trim() || !currentOrg?.id || !id) return;
-    setSubmitting(true);
-    try {
-      await datasetsApi.generateColumn(currentOrg.id, id, { name: aiColName.trim(), kind: "ai_fill", description: aiColPrompt.trim() });
-      toast.success("AI column generated");
-      setAiColName("");
-      setAiColPrompt("");
-      load();
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Failed to generate column");
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
   const colKeys = data?.columns.map((c) => c.id) ?? [];
 
   return (
@@ -98,7 +80,7 @@ export default function DatasetDetailPage() {
       <PageHeader
         eyebrow="Data · Dataset"
         title={data?.name || "Dataset"}
-        subtitle={data?.description || (loading ? "Loading…" : "Spreadsheet view of rows and AI-fill columns.")}
+        subtitle={data?.description || (loading ? "Loading…" : "Spreadsheet view of dataset rows.")}
         icon={Database}
         actions={
           <>
@@ -154,35 +136,6 @@ export default function DatasetDetailPage() {
                 loading={submitting}
               >
                 <Plus className="h-3.5 w-3.5" /> Add
-              </Button>
-            </div>
-          </Card>
-
-          <Card className="p-4 space-y-3">
-            <div className="text-xs font-medium uppercase tracking-wide text-[var(--text-muted)]">AI-fill column</div>
-            <div className="flex flex-col sm:flex-row gap-2">
-              <Input
-                placeholder="Column name"
-                value={aiColName}
-                onChange={(e) => setAiColName(e.target.value)}
-                className="w-40"
-                aria-label="AI column name"
-                disabled={submitting}
-              />
-              <Input
-                placeholder="What should this column contain?"
-                value={aiColPrompt}
-                onChange={(e) => setAiColPrompt(e.target.value)}
-                className="flex-1"
-                aria-label="AI column prompt"
-                disabled={submitting}
-              />
-              <Button
-                onClick={generateColumn}
-                disabled={!aiColName.trim() || !aiColPrompt.trim() || submitting}
-                loading={submitting}
-              >
-                <Sparkles className="h-3.5 w-3.5" /> Generate
               </Button>
             </div>
           </Card>

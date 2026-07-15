@@ -98,7 +98,7 @@ class ImprovementCockpitAggregator:
         issues_t, actions_t, patches_t, nudges_t, promotions_t = await asyncio.gather(
             self._from_issues(org_id, agent_id),
             self._from_closed_loop(org_id),
-            self._from_proposed_patches(org_id, agent_id),
+            self._from_improvement_plans(org_id, agent_id),
             self._from_nudges(org_id, agent_id),
             self._from_promotions(org_id),
             return_exceptions=True,
@@ -219,6 +219,53 @@ class ImprovementCockpitAggregator:
                     autonomy_tier_required=tier,
                     blocked_reason=blocked_reason,
                     source="closed_loop",
+                )
+            )
+        return out
+
+    async def _from_improvement_plans(
+        self, org_id: str, agent_id: str | None
+    ) -> list[ImprovementItem]:
+        try:
+            from eden.improvement import plans_repo
+
+            rows = await plans_repo.list_plans(
+                org_id,
+                status=None,
+                agent_id=agent_id,
+                limit=50,
+            )
+        except Exception as exc:
+            logger.debug("cockpit improvement_plans: %s", exc)
+            return []
+        out: list[ImprovementItem] = []
+        for r in rows:
+            status = str(r.get("status") or "draft")
+            if status in ("rejected", "snoozed", "superseded", "merged"):
+                continue
+            pid = str(r["id"])
+            title = (r.get("title") or "Improvement plan")[:160]
+            column = COLUMN_PROPOSED
+            if status == "pr_opened":
+                column = COLUMN_VERIFY
+            elif status == "draft":
+                column = COLUMN_NEEDS_YOU
+            out.append(
+                ImprovementItem(
+                    ref=f"improvement_plan:{pid}",
+                    item_type="proposed_patch",
+                    title=title,
+                    column=column,
+                    severity="medium",
+                    agent_id=r.get("agent_id"),
+                    status=status,
+                    href=f"/improve/plans/{pid}",
+                    payload={
+                        "plan_id": pid,
+                        "plan_kind": r.get("plan_kind"),
+                        "source_ref": r.get("source_ref"),
+                    },
+                    source="improvement_plans",
                 )
             )
         return out

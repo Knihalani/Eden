@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useMemo, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import { useOrg } from "@/hooks/use-org";
 import { useToast } from "@/components/ui/toast";
-import { api } from "@/lib/api";
+import { api, nlAlertsApi, integrationsApi } from "@/lib/api";
 import { useOrgQuery, useOrgMutation } from "@/hooks/use-api-query";
 import { queryKeys } from "@/lib/query-keys";
 import { cn } from "@/lib/utils";
@@ -30,7 +31,7 @@ import {
   Clock,
   RefreshCw } from "lucide-react";
 
-const CHANNEL_CONFIGURED: Record<string, boolean> = {
+const BASE_CHANNEL_CONFIGURED: Record<string, boolean> = {
   in_app: true,
   websocket: true,
   webhook: Boolean(process.env.NEXT_PUBLIC_ALERT_WEBHOOK_CONFIGURED),
@@ -63,6 +64,14 @@ interface __AlertListResponse {
 }
 
 type SeverityFilter = "all" | "critical" | "high" | "warning" | "info" | "debug";
+type VerdictFilter = "all" | "real_incident" | "benign" | "duplicate" | "pending";
+
+const VERDICT_CONFIG: Record<string, { label: string; color: string; bg: string }> = {
+  real_incident: { label: "Real", color: "text-[var(--error)]", bg: "bg-[var(--error)]/10" },
+  benign: { label: "Benign", color: "text-[var(--text-muted)]", bg: "bg-[var(--bg-tertiary)]" },
+  duplicate: { label: "Duplicate", color: "text-[var(--accent)]", bg: "bg-[var(--accent-faint)]" },
+  pending: { label: "Pending", color: "text-[var(--warning)]", bg: "bg-[var(--warning-bg)]" },
+};
 
 const SEVERITY_CONFIG: Record<string, { icon: typeof AlertCircle; color: string; bg: string; label: string }> = {
   critical: { icon: ShieldAlert, color: "text-[var(--error)]", bg: "bg-[var(--error)]/10", label: "Critical" },
@@ -76,16 +85,51 @@ function getSeverityConfig(severity: string) {
 }
 
 export default function AlertsPage() {
+  return (
+    <Suspense fallback={null}>
+      <AlertsPageInner />
+    </Suspense>
+  );
+}
+
+function AlertsPageInner() {
+  const searchParams = useSearchParams();
   const { currentOrg } = useOrg();
   const orgId = currentOrg?.id ?? null;
   const toast = useToast();
   const [severityFilter, setSeverityFilter] = useState<SeverityFilter>("all");
+  const [verdictFilter, setVerdictFilter] = useState<VerdictFilter>("all");
   const [acknowledgedFilter, setAcknowledgedFilter] = useState<boolean | null>(null);
   const [selectedAlerts, setSelectedAlerts] = useState<Set<string>>(new Set());
   const [expandedAlert, setExpandedAlert] = useState<string | null>(null);
   const [offset, setOffset] = useState(0);
-  const [rulesOpen, setRulesOpen] = useState(false);
+  const [rulesOpen, setRulesOpen] = useState(
+    searchParams.get("tab") === "rules",
+  );
+  const [channelConfigured, setChannelConfigured] = useState(BASE_CHANNEL_CONFIGURED);
   const limit = 50;
+
+  useEffect(() => {
+    if (!orgId) return;
+    let cancelled = false;
+    integrationsApi
+      .getSlackSettings(orgId)
+      .then((slack) => {
+        if (cancelled) return;
+        setChannelConfigured((prev) => ({
+          ...prev,
+          slack: Boolean(slack.configured && slack.enabled),
+        }));
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setChannelConfigured(BASE_CHANNEL_CONFIGURED);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [orgId]);
 
   const alertsParams: { severity?: string; acknowledged?: boolean; limit: number; offset: number } = {
     limit,
@@ -127,6 +171,22 @@ export default function AlertsPage() {
     channels: [],
     metadata: a.metadata,
   }));
+
+  const eventsParams = useMemo(
+    () => ({
+      ...(verdictFilter !== "all" ? { verdict: verdictFilter } : {}),
+      limit,
+      offset,
+    }),
+    [verdictFilter, limit, offset],
+  );
+  const eventsQuery = useOrgQuery(
+    queryKeys.alerts.events(orgId, eventsParams),
+    orgId,
+    () => api.listAlertEvents(orgId!, eventsParams),
+    { refetchInterval: 15_000 },
+  );
+  const triageEvents = eventsQuery.data?.events ?? [];
 
   const fetchAlerts = () => void alertsQuery.refetch();
 
@@ -301,6 +361,28 @@ export default function AlertsPage() {
           Rules
           {rulesOpen ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
         </button>
+
+        <div className="h-4 w-px bg-[var(--border-default)]" />
+
+        <div className="flex items-center gap-1 bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-lg p-1">
+          {(["all", "real_incident", "benign", "duplicate", "pending"] as const).map((v) => (
+            <button
+              key={v}
+              onClick={() => {
+                setVerdictFilter(v);
+                setOffset(0);
+              }}
+              className={cn(
+                "px-3 py-1.5 text-xs font-medium rounded-md transition-colors",
+                verdictFilter === v
+                  ? "bg-[var(--accent)] text-[var(--bg-base)]"
+                  : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+              )}
+            >
+              {v === "all" ? "All verdicts" : VERDICT_CONFIG[v]?.label ?? v}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Alert Rules Panel */}
@@ -313,7 +395,14 @@ export default function AlertsPage() {
             transition={{ duration: 0.2 }}
             className="overflow-hidden mb-4"
           >
-            <AlertRulesPanel orgId={currentOrg?.id} />
+            <AlertRulesPanel
+              orgId={currentOrg?.id}
+              prefillFilters={{
+                realm: searchParams.get("realm") || "",
+                outcome: searchParams.get("outcome") || "",
+                agent_id: searchParams.get("agent_id") || "",
+              }}
+            />
           </motion.div>
         )}
       </AnimatePresence>
@@ -331,6 +420,72 @@ export default function AlertsPage() {
             >
               Retry
             </Button>
+        </div>
+      )}
+
+      {/* Triage events (F81) */}
+      {triageEvents.length > 0 && (
+        <div className="mb-4 space-y-2">
+          <h3 className="text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">
+            Triage feed
+          </h3>
+          {triageEvents.map((ev) => {
+            const verdictCfg = VERDICT_CONFIG[ev.triage_verdict || "pending"] || VERDICT_CONFIG.pending;
+            return (
+              <div
+                key={ev.id}
+                className="rounded-lg border border-[var(--border-default)] bg-[var(--bg-primary)] p-4"
+              >
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="text-sm font-semibold text-[var(--text-primary)]">{ev.title}</span>
+                  <span className={cn("px-1.5 py-0.5 text-[10px] font-bold uppercase rounded", verdictCfg.bg, verdictCfg.color)}>
+                    {verdictCfg.label}
+                  </span>
+                </div>
+                {ev.triage_reason && (
+                  <p className="text-xs text-[var(--text-muted)]">{ev.triage_reason}</p>
+                )}
+                <div className="flex items-center gap-2 mt-2">
+                  {ev.triage_verdict !== "real_incident" && (
+                    <button
+                      type="button"
+                      className="text-[10px] text-[var(--accent)] hover:underline"
+                      onClick={async () => {
+                        if (!orgId) return;
+                        try {
+                          await api.overrideAlertVerdict(orgId, ev.id, "real_incident");
+                          toast.success("Marked as real incident");
+                          void eventsQuery.refetch();
+                        } catch (e) {
+                          toast.error("Override failed", e instanceof Error ? e.message : undefined);
+                        }
+                      }}
+                    >
+                      Override → Real
+                    </button>
+                  )}
+                  {ev.triage_verdict !== "benign" && (
+                    <button
+                      type="button"
+                      className="text-[10px] text-[var(--text-muted)] hover:underline"
+                      onClick={async () => {
+                        if (!orgId) return;
+                        try {
+                          await api.overrideAlertVerdict(orgId, ev.id, "benign");
+                          toast.success("Marked as benign");
+                          void eventsQuery.refetch();
+                        } catch (e) {
+                          toast.error("Override failed", e instanceof Error ? e.message : undefined);
+                        }
+                      }}
+                    >
+                      Mark benign
+                    </button>
+                  )}
+                </div>
+              </div>
+            );
+          })}
         </div>
       )}
 
@@ -445,12 +600,12 @@ export default function AlertsPage() {
                                 key={ch}
                                 className={cn(
                                   "px-1.5 py-0.5 rounded",
-                                  CHANNEL_CONFIGURED[ch]
+                                  channelConfigured[ch]
                                     ? "text-[var(--text-muted)]"
                                     : "text-[var(--text-muted)]/50 line-through bg-[var(--bg-muted)]",
                                 )}
                                 title={
-                                  CHANNEL_CONFIGURED[ch]
+                                  channelConfigured[ch]
                                     ? ch
                                     : `${ch} (not configured)`
                                 }
@@ -557,96 +712,167 @@ function DetailRow({ label, value }: { label: string; value: string }) {
   );
 }
 
-function AlertRulesPanel({ orgId }: { orgId?: string }) {
+function AlertRulesPanel({
+  orgId,
+  prefillFilters,
+}: {
+  orgId?: string;
+  prefillFilters?: { realm: string; outcome: string; agent_id: string };
+}) {
+  const toast = useToast();
+  const [nlText, setNlText] = useState("");
+  const [ruleName, setRuleName] = useState("");
+  const [compiledEql, setCompiledEql] = useState("");
+  const [warnings, setWarnings] = useState<string[]>([]);
+  const [compiling, setCompiling] = useState(false);
+  const [saving, setSaving] = useState(false);
+
   const rulesQuery = useOrgQuery(
-    queryKeys.alerts.rules(orgId),
+    queryKeys.alerts.nlRules(orgId),
     orgId,
-    () => api.getAlertRules(orgId!),
+    () => api.listNlAlertRules(orgId!),
   );
-  // Surfaced at the top-level error banner via alertsQuery; swallow
-  // here to avoid double-toasting.
-  const rules = rulesQuery.data?.rules ?? [];
+  const nlRules = rulesQuery.data?.rules ?? [];
   const loading = rulesQuery.isLoading;
 
-  if (loading) {
-    return (
-      <div className="p-4 bg-[var(--bg-primary)] rounded-lg border border-[var(--border-default)]">
-        <Loader2 className="w-4 h-4 animate-spin text-[var(--text-muted)]" />
-      </div>
-    );
-  }
+  useEffect(() => {
+    if (!prefillFilters) return;
+    const parts: string[] = [];
+    if (prefillFilters.outcome) parts.push(`outcome is ${prefillFilters.outcome}`);
+    if (prefillFilters.realm) parts.push(`realm is ${prefillFilters.realm}`);
+    if (prefillFilters.agent_id) parts.push(`agent_id is ${prefillFilters.agent_id}`);
+    if (parts.length > 0) {
+      setNlText(`Alert me when traces match ${parts.join(" and ")} and error rate exceeds 5%`);
+    }
+  }, [prefillFilters]);
 
-  if (rules.length === 0) {
-    return (
-      <div className="bg-[var(--bg-primary)] rounded-lg border border-[var(--border-default)] p-4">
-        <h3 className="text-sm font-semibold text-[var(--text-primary)] mb-2 flex items-center gap-2">
-          <Megaphone className="w-4 h-4 text-[var(--accent)]" />
-          Active Alert Rules
-        </h3>
-        <p className="text-xs text-[var(--text-muted)]">
-          No alert rules configured yet. Configure rules in your backend to start surfacing custom alerts here.
-        </p>
-      </div>
-    );
-  }
+  const handleCompile = async () => {
+    if (!orgId || !nlText.trim()) return;
+    setCompiling(true);
+    try {
+      const ctx: Record<string, unknown> = {};
+      if (prefillFilters) {
+        const filters: Record<string, string> = {};
+        if (prefillFilters.realm) filters.realm = prefillFilters.realm;
+        if (prefillFilters.outcome) filters.outcome = prefillFilters.outcome;
+        if (prefillFilters.agent_id) filters.agent_id = prefillFilters.agent_id;
+        if (Object.keys(filters).length) ctx.filters = filters;
+      }
+      const result = await api.compileNlAlert(orgId, { nl_text: nlText, context: ctx });
+      setCompiledEql(result.eql);
+      setWarnings(result.warnings);
+      if (!ruleName) setRuleName(result.suggested_name);
+      toast.success("Compiled to EQL");
+    } catch (e) {
+      toast.error("Compile failed", e instanceof Error ? e.message : undefined);
+    } finally {
+      setCompiling(false);
+    }
+  };
+
+  const handleSave = async () => {
+    if (!orgId || !compiledEql.trim() || !ruleName.trim()) return;
+    setSaving(true);
+    try {
+      await nlAlertsApi.createRule(orgId, {
+        name: ruleName,
+        nl_text: nlText,
+        compiled_eql: compiledEql,
+        triage_enabled: true,
+      });
+      toast.success("Alert rule saved");
+      setNlText("");
+      setCompiledEql("");
+      setRuleName("");
+      setWarnings([]);
+      void rulesQuery.refetch();
+    } catch (e) {
+      toast.error("Save failed", e instanceof Error ? e.message : undefined);
+    } finally {
+      setSaving(false);
+    }
+  };
 
   return (
-    <div className="bg-[var(--bg-primary)] rounded-lg border border-[var(--border-default)] p-4">
-      <h3 className="text-sm font-semibold text-[var(--text-primary)] mb-3 flex items-center gap-2">
+    <div className="bg-[var(--bg-primary)] rounded-lg border border-[var(--border-default)] p-4 space-y-4">
+      <h3 className="text-sm font-semibold text-[var(--text-primary)] flex items-center gap-2">
         <Megaphone className="w-4 h-4 text-[var(--accent)]" />
-        Active Alert Rules
+        NL Alert Rules
       </h3>
+
       <div className="space-y-2">
-        {rules.map((rule) => {
-          const sevConfig = getSeverityConfig(rule.severity_threshold);
-          return (
-            <div
-              key={rule.rule_id}
-              className="flex items-start gap-3 p-3 rounded-lg bg-[var(--bg-tertiary)]/50"
-            >
-              <div className={cn("p-1.5 rounded-md flex-shrink-0", sevConfig.bg)}>
-                <sevConfig.icon className={cn("w-3.5 h-3.5", sevConfig.color)} />
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
-                  <span className="text-sm font-medium text-[var(--text-primary)]">{rule.name}</span>
-                  <span className={cn("px-1.5 py-0.5 text-[10px] font-bold uppercase rounded", sevConfig.bg, sevConfig.color)}>
-                    {sevConfig.label}
-                  </span>
-                  {!rule.enabled && (
-                    <span className="px-1.5 py-0.5 text-[10px] font-medium bg-[var(--bg-muted)] text-[var(--text-muted)] rounded">
-                      Disabled
-                    </span>
-                  )}
-                </div>
-                <p className="text-xs text-[var(--text-muted)] mt-0.5">{rule.description}</p>
-                <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-                  {rule.event_types.map((et) => (
-                    <span key={et} className="px-1.5 py-0.5 text-[10px] bg-[var(--bg-muted)] text-[var(--text-secondary)] rounded">
-                      {et}
-                    </span>
-                  ))}
-                  <span className="text-[10px] text-[var(--text-muted)] flex flex-wrap gap-1">
-                    {rule.channels.map((ch) => (
-                      <span
-                        key={ch}
-                        className={cn(
-                          "px-1.5 py-0.5 rounded",
-                          CHANNEL_CONFIGURED[ch]
-                            ? "bg-[var(--bg-muted)] text-[var(--text-secondary)]"
-                            : "bg-[var(--bg-muted)]/50 text-[var(--text-muted)]/50 line-through",
-                        )}
-                      >
-                        {ch}
-                      </span>
-                    ))}
-                  </span>
-                </div>
-              </div>
-            </div>
-          );
-        })}
+        <label className="text-[10px] uppercase tracking-wider text-[var(--text-muted)]">
+          English
+        </label>
+        <textarea
+          value={nlText}
+          onChange={(e) => setNlText(e.target.value)}
+          rows={3}
+          placeholder="Wake me if support agent cost per run exceeds $0.30 for 15 minutes"
+          className="w-full rounded-lg border border-[var(--border-default)] bg-[var(--bg-secondary)] px-3 py-2 text-sm text-[var(--text-primary)]"
+        />
+        <div className="flex gap-2">
+          <Button size="sm" onClick={() => void handleCompile()} disabled={compiling || !nlText.trim()}>
+            {compiling ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "Compile"}
+          </Button>
+        </div>
       </div>
+
+      {compiledEql && (
+        <div className="space-y-2">
+          <label className="text-[10px] uppercase tracking-wider text-[var(--text-muted)]">
+            EQL preview (editable)
+          </label>
+          <input
+            value={ruleName}
+            onChange={(e) => setRuleName(e.target.value)}
+            placeholder="Rule name"
+            className="w-full rounded-lg border border-[var(--border-default)] bg-[var(--bg-secondary)] px-3 py-1.5 text-sm"
+          />
+          <textarea
+            value={compiledEql}
+            onChange={(e) => setCompiledEql(e.target.value)}
+            rows={4}
+            className="w-full font-mono text-xs rounded-lg border border-[var(--border-default)] bg-[var(--bg-secondary)] px-3 py-2"
+          />
+          {warnings.length > 0 && (
+            <ul className="text-[10px] text-[var(--warning)] list-disc pl-4">
+              {warnings.map((w, i) => (
+                <li key={i}>{w}</li>
+              ))}
+            </ul>
+          )}
+          <Button size="sm" onClick={() => void handleSave()} disabled={saving}>
+            {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "Save rule"}
+          </Button>
+        </div>
+      )}
+
+      {loading ? (
+        <Loader2 className="w-4 h-4 animate-spin text-[var(--text-muted)]" />
+      ) : nlRules.length === 0 ? (
+        <p className="text-xs text-[var(--text-muted)]">No NL rules yet. Compile and save above.</p>
+      ) : (
+        <div className="space-y-2 border-t border-[var(--border-default)] pt-3">
+          <p className="text-[10px] uppercase tracking-wider text-[var(--text-muted)]">Saved rules</p>
+          {nlRules.map((rule) => (
+            <div key={rule.id} className="p-3 rounded-lg bg-[var(--bg-tertiary)]/50">
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-medium text-[var(--text-primary)]">{rule.name}</span>
+                {!rule.enabled && (
+                  <span className="px-1.5 py-0.5 text-[10px] bg-[var(--bg-muted)] text-[var(--text-muted)] rounded">
+                    Disabled
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-[var(--text-muted)] mt-0.5">{rule.nl_text}</p>
+              <pre className="mt-1 text-[10px] font-mono text-[var(--text-secondary)] line-clamp-2">
+                {rule.compiled_eql}
+              </pre>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

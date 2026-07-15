@@ -103,14 +103,6 @@ class HealExecuteRequest(BaseModel):
     approved_by_user_id: str
 
 
-class NLQueryRequest(BaseModel):
-    question: str
-
-
-class DashboardRequest(BaseModel):
-    description: str
-
-
 class NLReportRequest(BaseModel):
     request: str
 
@@ -272,42 +264,6 @@ async def heal_execute(
         org_id, action_id,
         approved_by_user_id=body.approved_by_user_id,
     )
-
-
-@router.post("/nl/query")
-async def nl_query(
-    org_id: str = Path(...),
-    body: NLQueryRequest = Body(...),
-) -> dict[str, Any]:
-    # ponytail: NLQueryEngine removed per upgradespec §D.4.
-    return {
-        "status": "not_implemented",
-        "feature": "nl_query",
-        "live": False,
-        "message": (
-            "NLQueryEngine removed per upgradespec §D.4. "
-            "Use the EQL DSL (Cat 19) for read-only trace queries."
-        ),
-        "data": {"redirect": "/orgs/{org_id}/intelligence/dsl/eql"},
-    }
-
-
-@router.post("/nl/dashboard")
-async def nl_dashboard(
-    org_id: str = Path(...),
-    body: DashboardRequest = Body(...),
-) -> dict[str, Any]:
-    # ponytail: AutoDashboardBuilder removed per upgradespec §D.4.
-    return {
-        "status": "not_implemented",
-        "feature": "auto_dashboard",
-        "live": False,
-        "message": (
-            "AutoDashboardBuilder removed per upgradespec §D.4. "
-            "Build dashboards from saved queries."
-        ),
-        "data": {"redirect": "/orgs/{org_id}/observability/dashboards"},
-    }
 
 
 @router.post("/nl/report")

@@ -3,7 +3,7 @@
 import * as _React from "react";
 import { cn } from "@/lib/utils";
 import { AlertTriangle, CheckCircle2, Circle, Clock, Info, LucideIcon, XCircle } from "lucide-react";
-import { STATUS, OUTCOMES, PR_STATUSES, type StatusDescriptor, type OutcomeDescriptor } from "@/lib/types";
+import { STATUS, OUTCOMES, PR_STATUSES, IMPROVEMENT_PLAN_STATUSES, type StatusDescriptor, type OutcomeDescriptor } from "@/lib/types";
 
 interface StatusBadgeProps {
   status: string;
@@ -102,6 +102,11 @@ export function StatusBadge({ status, animated = false, className, iconOnly = fa
 /** Convenience wrapper for PR-suggestion statuses. */
 export function PRStatusBadge(props: Omit<StatusBadgeProps, "descriptors">) {
   return <StatusBadge {...props} descriptors={PR_STATUSES} />;
+}
+
+/** N23 improvement plan statuses. */
+export function ImprovePlanStatusBadge(props: Omit<StatusBadgeProps, "descriptors">) {
+  return <StatusBadge {...props} descriptors={IMPROVEMENT_PLAN_STATUSES} />;
 }
 
 /**

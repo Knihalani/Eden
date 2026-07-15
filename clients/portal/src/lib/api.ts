@@ -1870,6 +1870,7 @@ export const api = {
     facet_counts?: Record<string, Array<Record<string, unknown>>>;
     took_ms?: number;
     query?: string;
+    fallback?: boolean;
   }> => {
     const q = new URLSearchParams();
     if (params?.q) q.set("q", params.q);
@@ -2133,6 +2134,68 @@ export const api = {
         enabled: boolean;
       }>;
     }>(`/orgs/${orgId}/alerts/rules`),
+
+  compileNlAlert: (
+    orgId: string,
+    data: { nl_text: string; context?: Record<string, unknown>; eql_override?: string },
+  ) =>
+    fetchApi<{
+      eql: string;
+      warnings: string[];
+      rule: Record<string, unknown>;
+      suggested_name: string;
+    }>(`/orgs/${orgId}/alerts/compile`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+
+  listNlAlertRules: (orgId: string) =>
+    fetchApi<{
+      rules: Array<{
+        id: string;
+        name: string;
+        nl_text: string;
+        compiled_eql: string;
+        triage_enabled: boolean;
+        channels: Record<string, unknown>;
+        enabled: boolean;
+        last_fired_at: string | null;
+        created_at: string;
+      }>;
+      total: number;
+    }>(`/orgs/${orgId}/nl-alert-rules`),
+
+  listAlertEvents: (
+    orgId: string,
+    params?: { verdict?: string; limit?: number; offset?: number },
+  ) => {
+    const q = new URLSearchParams();
+    if (params?.verdict) q.set("verdict", params.verdict);
+    if (params?.limit) q.set("limit", String(params.limit));
+    if (params?.offset) q.set("offset", String(params.offset));
+    const qs = q.toString();
+    return fetchApi<{
+      events: Array<{
+        id: string;
+        title: string;
+        severity: string;
+        triage_verdict: string | null;
+        triage_reason: string | null;
+        triage_confidence: number | null;
+        incident_id: string | null;
+        acknowledged: boolean;
+        created_at: string;
+        payload: Record<string, unknown>;
+      }>;
+      total: number;
+    }>(`/orgs/${orgId}/alert-events${qs ? `?${qs}` : ""}`);
+  },
+
+  overrideAlertVerdict: (orgId: string, alertId: string, verdict: string) =>
+    fetchApi<{ status: string; human_verdict: string }>(
+      `/orgs/${orgId}/alerts/${alertId}/override`,
+      { method: "POST", body: JSON.stringify({ verdict }) },
+    ),
 
   // ── Insights overview (Cat 9 high-level rollup) ────────────────
   getInsightsOverview: (orgId: string) =>
@@ -2686,6 +2749,16 @@ export const rcaApi = {
     fetchApi<{ incidents: Array<Record<string, unknown>>; }>(`/orgs/${orgId}/intelligence/rca/incidents`),
   summarizeIncident: (orgId: string, clusterId: string) =>
     fetchApi<{ cluster_id: string; summary: string; member_count: number; severity: string; first_seen: string; last_seen: string; }>(`/orgs/${orgId}/intelligence/rca/incidents/${clusterId}/summarize`),
+  resolveIncident: (orgId: string, clusterId: string, body?: { note?: string }) =>
+    fetchApi<{ cluster_id: string; status: string; summary: string }>(
+      `/orgs/${orgId}/intelligence/rca/incidents/${clusterId}/resolve`,
+      {
+        method: "POST",
+        headers: { "X-Org-Id": orgId, "Content-Type": "application/json" },
+        body: JSON.stringify(body ?? {}),
+        noDedup: true,
+      },
+    ),
 };
 
 // ── Intelligence: Retrieval (Cat 4) ─────────────────────────────────
@@ -3103,6 +3176,7 @@ export type AgentIssue = {
 export type AgentStumble = {
   id: string;
   trace_id: string;
+  span_id?: string | null;
   kind: string;
   fingerprint: string;
   title: string;
@@ -3130,14 +3204,29 @@ export const agentIssuesApi = {
     fetchApi<IssuesEnvelope<{ issue_id: string; status: string; updated: boolean }>>(`/orgs/${orgId}/agent-issues/${issueId}/resolve`, { method: "POST", body: JSON.stringify(data) }),
   triage: (orgId: string, issueId: string, data: { force?: boolean } = {}) =>
     fetchApi<IssuesEnvelope<{ triage_result?: Record<string, unknown> }>>(`/orgs/${orgId}/agent-issues/${issueId}/triage`, { method: "POST", body: JSON.stringify(data) }),
-  stumbles: (orgId: string, params?: { fingerprint?: string; trace_id?: string; limit?: number }) => {
+  stumbles: (
+    orgId: string,
+    params?: {
+      fingerprint?: string;
+      trace_id?: string;
+      kind?: string;
+      agent_id?: string;
+      since?: string;
+      limit?: number;
+    },
+  ) => {
     const q = new URLSearchParams();
     if (params?.fingerprint) q.set("fingerprint", params.fingerprint);
     if (params?.trace_id) q.set("trace_id", params.trace_id);
+    if (params?.kind) q.set("kind", params.kind);
+    if (params?.agent_id) q.set("agent_id", params.agent_id);
+    if (params?.since) q.set("since", params.since);
     if (params?.limit != null) q.set("limit", String(params.limit));
     const qs = q.toString();
     return fetchApi<IssuesEnvelope<{ stumbles: AgentStumble[]; count: number }>>(`/orgs/${orgId}/stumbles${qs ? `?${qs}` : ""}`);
   },
+  stumble: (orgId: string, stumbleId: string) =>
+    fetchApi<IssuesEnvelope<{ stumble: AgentStumble }>>(`/orgs/${orgId}/stumbles/${stumbleId}`),
   fixSession: (orgId: string, issueId: string) =>
     fetchApi<IssuesEnvelope<{ session: Record<string, unknown> }>>(
       `/orgs/${orgId}/agent-issues/${issueId}/fix/session`,
@@ -3310,6 +3399,173 @@ export const improveApi = {
     fetchApi<IssuesEnvelope<{ item_ref: string; result?: unknown }>>(
       `/orgs/${orgId}/improve/items/${encodeURIComponent(itemRef)}/approve`,
       { method: "POST" },
+    ),
+};
+
+// ── N23 Improvement Plans + Runs ────────────────────────────────────
+
+export type ImprovementPlanKind =
+  | "code_patch"
+  | "prompt_update"
+  | "nudge_promote"
+  | "guardrail_tune"
+  | "config_change";
+
+export type ImprovementPlanStatus =
+  | "draft"
+  | "pending_review"
+  | "approved"
+  | "pr_opened"
+  | "merged"
+  | "rejected"
+  | "snoozed"
+  | "superseded";
+
+export type ImprovementPlan = {
+  id: string;
+  org_id: string;
+  run_id?: string | null;
+  agent_id?: string | null;
+  plan_kind: ImprovementPlanKind;
+  status: ImprovementPlanStatus;
+  title: string;
+  summary?: string | null;
+  source_ref?: string | null;
+  source_fingerprint?: string | null;
+  diff_unified?: string | null;
+  diff_edited?: boolean;
+  files_changed?: Array<{ path: string; size?: number }>;
+  evidence?: Record<string, unknown>;
+  triage_snapshot?: Record<string, unknown> | null;
+  estimated_blast_radius?: string | null;
+  llm_cost_usd?: number;
+  pr_url?: string | null;
+  pr_number?: number | null;
+  github_branch?: string | null;
+  approved_by?: string | null;
+  approved_at?: string | null;
+  rejected_by?: string | null;
+  rejected_at?: string | null;
+  rejection_reason?: string | null;
+  snoozed_until?: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type ImprovementRun = {
+  id: string;
+  org_id: string;
+  agent_id?: string | null;
+  started_at: string;
+  finished_at?: string | null;
+  status: "running" | "completed" | "failed" | "cancelled";
+  last_run_at: string;
+  plans_created: number;
+  plans_skipped_dedup?: number;
+  llm_cost_usd?: number;
+  error?: string | null;
+  metadata?: Record<string, unknown>;
+};
+
+export type ImprovementSchedule = {
+  improvement_schedule_cron: string;
+  improvement_max_plans_per_sweep: number;
+  /** @deprecated Backend field is `improvement_max_plans_per_sweep`. */
+  max_plans_per_sweep?: number;
+  next_run_at?: string | null;
+  last_run_at?: string | null;
+  last_sweep_plans_created?: number | null;
+  last_sweep_llm_cost_usd?: number | null;
+  schedule_enabled?: boolean;
+};
+
+type ImproveFeatureEnvelope<T> = {
+  status: string;
+  feature: string;
+  live?: boolean;
+  data: T;
+};
+
+export const improvePlansApi = {
+  listPlans: (orgId: string, query?: string) =>
+    fetchApi<ImproveFeatureEnvelope<{ plans: ImprovementPlan[]; count: number }>>(
+      `/orgs/${orgId}/improve/plans${query ? `?${query}` : ""}`,
+    ),
+  getPlan: (orgId: string, planId: string) =>
+    fetchApi<ImproveFeatureEnvelope<{ plan: ImprovementPlan }>>(
+      `/orgs/${orgId}/improve/plans/${planId}`,
+    ),
+  patchPlan: (
+    orgId: string,
+    planId: string,
+    body: { diff_unified?: string; title?: string; summary?: string },
+  ) =>
+    fetchApi<ImproveFeatureEnvelope<{ plan: ImprovementPlan }>>(
+      `/orgs/${orgId}/improve/plans/${planId}`,
+      { method: "PATCH", body: JSON.stringify(body) },
+    ),
+  approvePlan: (orgId: string, planId: string) =>
+    fetchApi<
+      ImproveFeatureEnvelope<{
+        plan_id: string;
+        status: string;
+        pr_url?: string;
+        pr_number?: number;
+        branch?: string;
+        verify_job_id?: string;
+      }>
+    >(`/orgs/${orgId}/improve/plans/${planId}/approve`, { method: "POST" }),
+  rejectPlan: (orgId: string, planId: string, reason?: string) =>
+    fetchApi<ImproveFeatureEnvelope<{ plan: ImprovementPlan }>>(
+      `/orgs/${orgId}/improve/plans/${planId}/reject`,
+      { method: "POST", body: JSON.stringify({ reason: reason ?? "" }) },
+    ),
+  snoozePlan: (orgId: string, planId: string, snoozedUntil: string) =>
+    fetchApi<ImproveFeatureEnvelope<{ plan: ImprovementPlan }>>(
+      `/orgs/${orgId}/improve/plans/${planId}/snooze`,
+      { method: "POST", body: JSON.stringify({ snoozed_until: snoozedUntil }) },
+    ),
+};
+
+export const improveRunsApi = {
+  listRuns: (orgId: string, query?: string) =>
+    fetchApi<ImproveFeatureEnvelope<{ runs: ImprovementRun[]; count: number }>>(
+      `/orgs/${orgId}/improve/runs${query ? `?${query}` : ""}`,
+    ),
+  triggerRun: (orgId: string, body?: { agent_id?: string; issue_id?: string }) =>
+    fetchApi<
+      ImproveFeatureEnvelope<{
+        status: string;
+        run_id?: string;
+        plans_created?: number;
+        plans_skipped_dedup?: number;
+        llm_cost_usd?: number;
+        plan_ids?: string[];
+        error?: string;
+        reason?: string;
+      }>
+    >(`/orgs/${orgId}/improve/runs`, {
+      method: "POST",
+      body: JSON.stringify(body ?? {}),
+    }),
+  getRun: (orgId: string, runId: string) =>
+    fetchApi<ImproveFeatureEnvelope<{ run: ImprovementRun }>>(
+      `/orgs/${orgId}/improve/runs/${runId}`,
+    ),
+  getSchedule: (orgId: string) =>
+    fetchApi<ImproveFeatureEnvelope<ImprovementSchedule>>(
+      `/orgs/${orgId}/improve/schedule`,
+    ),
+  updateSchedule: (
+    orgId: string,
+    body: {
+      improvement_schedule_cron: string;
+      improvement_max_plans_per_sweep: number;
+    },
+  ) =>
+    fetchApi<ImproveFeatureEnvelope<ImprovementSchedule>>(
+      `/orgs/${orgId}/improve/schedule`,
+      { method: "PUT", body: JSON.stringify(body) },
     ),
 };
 
@@ -3519,6 +3775,8 @@ export const governanceApi = {
 (api as unknown as Record<string, unknown>).experimentsApi = experimentsApi;
 (api as unknown as Record<string, unknown>).closedLoopApi = closedLoopApi;
 (api as unknown as Record<string, unknown>).improveApi = improveApi;
+(api as unknown as Record<string, unknown>).improvePlansApi = improvePlansApi;
+(api as unknown as Record<string, unknown>).improveRunsApi = improveRunsApi;
 (api as unknown as Record<string, unknown>).evalApi = evalApi;
 (api as unknown as Record<string, unknown>).replayApi = replayApi;
 (api as unknown as Record<string, unknown>).timeTravelApi = timeTravelApi;
@@ -3890,6 +4148,16 @@ export const integrationsApi = {
       integration_version: string;
       integrations: IntegrationStatusItem[];
     }>(`/orgs/${orgId}/integrations/status`, {
+      headers: { "X-Org-Id": orgId },
+    }),
+  getSlackSettings: (orgId: string) =>
+    fetchApi<{
+      provider: string;
+      configured: boolean;
+      enabled: boolean;
+      webhook_url_masked: string | null;
+      min_severity: string;
+    }>(`/orgs/${orgId}/integrations/slack`, {
       headers: { "X-Org-Id": orgId },
     }),
 };
@@ -4705,6 +4973,14 @@ const labelingApi = {
       method: "POST",
       headers: { "X-Org-Id": orgId, "Content-Type": "application/json" },
       body: JSON.stringify(body),
+      noDedup: true,
+    }),
+  skip: (orgId: string, body: { item_id: string; reason?: string }) =>
+    fetchApi<{ skipped: boolean }>(`/orgs/${orgId}/labeling/skip`, {
+      method: "POST",
+      headers: { "X-Org-Id": orgId, "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+      noDedup: true,
     }),
   seedItem: (orgId: string, body: { prompt: string; tags?: string[] }) =>
     fetchApi<LabelingItem>(`/orgs/${orgId}/labeling/items`, {
@@ -5112,4 +5388,39 @@ export const codeChangePolicyApi = {
       method: "POST",
       body: JSON.stringify({ policy }),
     }),
+};
+
+/** F81 NL alert rules API (compile + CRUD). */
+export const nlAlertsApi = {
+  compile: (orgId: string, data: { nl_text: string; context?: Record<string, unknown> }) =>
+    api.compileNlAlert(orgId, data),
+  createRule: (
+    orgId: string,
+    data: {
+      name: string;
+      nl_text: string;
+      compiled_eql: string;
+      triage_enabled?: boolean;
+      channels?: Record<string, unknown>;
+    },
+  ) =>
+    fetchApi<{
+      id: string;
+      name: string;
+      nl_text: string;
+      compiled_eql: string;
+      enabled: boolean;
+    }>(`/orgs/${orgId}/nl-alert-rules`, {
+      method: "POST",
+      body: JSON.stringify({
+        ...data,
+        triage_enabled: data.triage_enabled ?? true,
+        enabled: true,
+      }),
+    }),
+  listRules: (orgId: string) => api.listNlAlertRules(orgId),
+  listEvents: (orgId: string, params?: { verdict?: string }) =>
+    api.listAlertEvents(orgId, params),
+  overrideVerdict: (orgId: string, alertId: string, verdict: string) =>
+    api.overrideAlertVerdict(orgId, alertId, verdict),
 };

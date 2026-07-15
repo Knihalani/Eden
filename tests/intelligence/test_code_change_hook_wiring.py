@@ -114,7 +114,7 @@ async def test_propose_patch_handles_import_failure() -> None:
     hook = get_code_change_hook()
     with patch.dict(
         "sys.modules",
-        {"eden.code_change.rca_linker": None},
+        {"eden.patches.rca_linker": None},
     ):
         result = await hook.propose_patch_from_rca(
             "test-org",
@@ -176,63 +176,20 @@ async def test_post_merge_skipped_below_min_window() -> None:
 
 
 @pytest.mark.asyncio
-async def test_post_merge_handles_revert_failure() -> None:
-    """A revert engine exception is caught + advisory."""
+async def test_post_merge_removed_until_n23() -> None:
+    """Auto-revert engine removed with Cat 23; advisory until N23 ships."""
     from eden.llmops.promotion_hooks import get_code_change_hook
 
     hook = get_code_change_hook()
-    with patch(
-        "eden.code_change.revert_engine.AutoRevertEngine.revert",
-        AsyncMock(side_effect=RuntimeError("engine exploded")),
-    ):
-        result = await hook.post_merge_degraded(
-            "test-org",
-            pr_id="pr_42",
-            regression_evidence={"score": 0.18},
-            window_hours=24,
-            policy={
-                "auto_revert_enabled": True,
-                "min_post_merge_window_hours": 24,
-            },
-        )
-    assert result["executed"] is False
-    assert "revert_failed" in result["skipped_reason"]
-    # ``skipped_reason`` only carries ``type(exc).__name__`` — the
-    # full exception text is logged at WARNING level for ops but
-    # not surfaced to the operator-facing audit payload.
-    assert "RuntimeError" in result["skipped_reason"]
-
-
-@pytest.mark.asyncio
-async def test_post_merge_executes_when_fully_enabled() -> None:
-    """Full opt-in + matching window → engine executes the revert."""
-    from eden.llmops.promotion_hooks import get_code_change_hook
-
-    hook = get_code_change_hook()
-    engine_result = {
-        "status": "ok",
-        "data": {
-            "strategy": "close_pr",
-            "executed": True,
-            "revert_id": "rev_test",
-            "revert_pr_url": "file://./prs/1.json",
-            "revert_pr_number": 1,
+    result = await hook.post_merge_degraded(
+        "test-org",
+        pr_id="pr_42",
+        regression_evidence={"score": 0.18},
+        window_hours=24,
+        policy={
+            "auto_revert_enabled": True,
+            "min_post_merge_window_hours": 24,
         },
-    }
-    with patch(
-        "eden.code_change.revert_engine.AutoRevertEngine.revert",
-        AsyncMock(return_value=engine_result),
-    ):
-        result = await hook.post_merge_degraded(
-            "test-org",
-            pr_id="pr_42_abc",
-            regression_evidence={"score": 0.18},
-            window_hours=24,
-            policy={
-                "auto_revert_enabled": True,
-                "min_post_merge_window_hours": 24,
-            },
-        )
-    assert result["executed"] is True
-    assert result["strategy"] == "close_pr"
-    assert result["revert_pr_url"] == "file://./prs/1.json"
+    )
+    assert result["executed"] is False
+    assert result["skipped_reason"] == "auto_revert_removed"

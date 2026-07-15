@@ -202,6 +202,23 @@ def build_span_doc(event: Any) -> dict[str, Any]:
 
     input_text = _extract_text(event.request_body)
     output_text = _extract_text(event.response_body)
+
+    # PII redaction before index — apply the Cat 10 / org PII masker
+    # synchronously so build_span_doc stays a pure-ish function usable
+    # from sync and async contexts. Fail-open: any masker exception
+    # leaves the text as-is rather than dropping the document.
+    try:
+        from eden.data_platform.pii import PIIMasker, PIIPolicy
+        _masker = PIIMasker(policy=PIIPolicy())
+        if input_text:
+            _masked = _masker.mask(input_text)
+            input_text = _masked if isinstance(_masked, str) else input_text
+        if output_text:
+            _masked = _masker.mask(output_text)
+            output_text = _masked if isinstance(_masked, str) else output_text
+    except Exception as _pii_exc:
+        logger.debug("Typesense PII mask failed (non-fatal): %s", _pii_exc)
+
     attrs = event.attributes if isinstance(event.attributes, dict) else {}
     tool_names = _extract_tool_names(attrs, event.request_body)
     # Also surface tools from the top-level ``tool_calls_full`` field —
@@ -419,6 +436,29 @@ class TypesenseClient:
             "DELETE", f"/collections/{self._collection}/documents/{doc_id}",
         )
         return status in (200, 201, 202)
+
+    async def delete_older_than(self, cutoff_epoch_s: int) -> int:
+        """Delete all docs with ``created_at`` older than ``cutoff_epoch_s``.
+
+        Used by the 90-day TTL cleanup cron job. Returns the number of
+        docs deleted, or 0 on Typesense failure. Best-effort; does not
+        raise.
+        """
+        flt = f"created_at:<={cutoff_epoch_s}"
+        status, body = await self._request(
+            "DELETE",
+            f"/collections/{self._collection}/documents",
+            params={"filter_by": flt},
+        )
+        if status in (200, 201, 202) and isinstance(body, dict):
+            deleted = int(body.get("num_deleted", 0))
+            logger.info(
+                "Typesense TTL cleanup: deleted %d docs older than epoch %d",
+                deleted,
+                cutoff_epoch_s,
+            )
+            return deleted
+        return 0
 
     async def delete_trace(self, tenant_id: str, trace_id: str) -> int:
         """Bulk-delete all spans for a trace via filter expression.

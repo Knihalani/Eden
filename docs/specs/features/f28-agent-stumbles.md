@@ -189,11 +189,11 @@ eden_stumble_deduped_total
 
 ## 12. Acceptance criteria
 
-- [ ] Tool error span → stumble <60s via F20
-- [ ] Dedup works per trace/kind/fingerprint
-- [ ] SDK self_diagnostic creates stumble
-- [ ] Trace detail shows stumble badges
-- [ ] Write p95 <30ms under 100 concurrent scans/org
+- [x] Tool error span → stumble <60s via F20
+- [x] Dedup works per trace/kind/fingerprint
+- [x] SDK self_diagnostic creates stumble
+- [x] Trace detail shows stumble badges
+- [x] Write p95 <30ms under 100 concurrent scans/org
 
 ---
 

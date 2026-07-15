@@ -343,10 +343,19 @@ class LivePrefixEngine:
     Hermetic prefix replay uses recorded checkpoints up to
     ``live_from_step``; steps at or beyond that boundary are counted as
     the live tail (would invoke the gateway in production).
+
+    F03: when a ``PrefixCacheService`` is supplied, steps are loaded
+    from ``debugger_llm_cache`` first (content-addressed, faster lookup).
+    Falls back to ``CheckpointStore`` when no cache rows are found.
     """
 
-    def __init__(self, store: CheckpointStore) -> None:
+    def __init__(
+        self,
+        store: CheckpointStore,
+        cache_svc: Any | None = None,
+    ) -> None:
         self._store = store
+        self._cache_svc = cache_svc
         self._rerun = ReRunEngine(store)
 
     async def rerun_live_prefix(
@@ -355,8 +364,10 @@ class LivePrefixEngine:
         *,
         live_from_step: int = 0,
         prompt_override: str | None = None,
+        org_id: str = "default",
     ) -> LivePrefixResult:
-        all_checkpoints = await self._store.list_for_trace(trace_id)
+        # Prefer debugger_llm_cache when a PrefixCacheService is wired.
+        all_checkpoints = await self._load_checkpoints(trace_id, org_id=org_id)
         prefix = [c for c in all_checkpoints if c.step_number < live_from_step]
         tail = [c for c in all_checkpoints if c.step_number >= live_from_step]
 
@@ -385,6 +396,41 @@ class LivePrefixEngine:
             live_tail_steps=len(tail),
             diff=diff,
         )
+
+    async def _load_checkpoints(
+        self,
+        trace_id: str,
+        org_id: str = "default",
+    ) -> list[Checkpoint]:
+        """Load checkpoints for a trace.
+
+        Prefers ``debugger_llm_cache`` (via ``PrefixCacheService``) when
+        available; falls back to ``CheckpointStore`` audit rows.
+        """
+        if self._cache_svc is not None:
+            try:
+                rows = await self._cache_svc.get_prefix_for_trace(
+                    org_id=org_id,
+                    trace_id=trace_id,
+                )
+                if rows:
+                    return [
+                        Checkpoint(
+                            id=f"cache-{r['step_number']}",
+                            trace_id=trace_id,
+                            step_number=int(r["step_number"]),
+                            input_messages=[],
+                            tool_calls=[],
+                            tool_results=[],
+                            response=dict(r["response"]),
+                            source="live",
+                        )
+                        for r in rows
+                    ]
+            except Exception as exc:  # noqa: BLE001
+                logger.debug("LivePrefixEngine: cache miss, falling back: %s", exc)
+
+        return await self._store.list_for_trace(trace_id, org_id=org_id)
 
 
 # ─- RolloutEntrypoint discovery ──────────────────────────────────

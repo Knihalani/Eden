@@ -163,11 +163,11 @@ Deprecate `/intelligence/rca/incidents` UI links → redirect to `/agent-issues`
 
 ## 8. Acceptance criteria
 
-- [ ] 5 stumbles same fingerprint → 1 issue, stumble_count=5
-- [ ] 3 distinct user_ids → user_count=3
-- [ ] Resolve → new stumble sets status=regressed
-- [ ] P0 issue Slack alert includes user_count (F47)
-- [ ] Issue list p95 load <500ms for 10k issues (indexed)
+- [x] 5 stumbles same fingerprint → 1 issue, stumble_count=5
+- [x] 3 distinct user_ids → user_count=3
+- [x] Resolve → new stumble sets status=regressed
+- [x] P0 issue Slack alert includes user_count (F47)
+- [x] Issue list p95 load <500ms for 10k issues (indexed)
 
 ---
 

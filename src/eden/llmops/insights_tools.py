@@ -1126,6 +1126,119 @@ async def list_proposed_patches(
 
 
 # ============================================================================
+# Tools — Alerts (F81 + F70)
+# ============================================================================
+
+@insights_tool(
+    name="preview_nl_alert",
+    description=(
+        "Compile a natural-language alert rule to EQL without saving. "
+        "Use when the user asks to create or preview an alert in English. "
+        "Returns editable EQL and warnings for an approval card."
+    ),
+    input_schema={
+        "type": "object",
+        "properties": {
+            "nl_text": {
+                "type": "string",
+                "description": "Plain-English alert, e.g. 'cost exceeds $0.30/hr'.",
+            },
+            "context": {
+                "type": "object",
+                "description": "Optional page_context (filters, trace_id).",
+            },
+        },
+        "required": ["nl_text"],
+    },
+)
+async def preview_nl_alert(
+    org_id: str,
+    nl_text: str,
+    context: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    from eden.alerts.compiler import AlertCompiler
+
+    result = await AlertCompiler().compile(org_id, nl_text, context=context)
+    return {
+        "approval_required": True,
+        "nl_text": nl_text,
+        "eql": result.get("eql", ""),
+        "warnings": list(result.get("warnings") or []),
+        "suggested_name": result.get("suggested_name", ""),
+        "rule": result.get("rule", {}),
+        "alerts_url": "/alerts",
+    }
+
+
+@insights_tool(
+    name="create_alert_rule",
+    description=(
+        "Persist an NL alert rule after the user approves the EQL preview. "
+        "Admin-gated write. Requires name and nl_text; optional eql_override."
+    ),
+    input_schema={
+        "type": "object",
+        "properties": {
+            "name": {"type": "string", "description": "Human-readable rule name."},
+            "nl_text": {"type": "string", "description": "Original English rule."},
+            "eql_override": {
+                "type": "string",
+                "description": "Edited EQL from the approval card.",
+            },
+            "triage_enabled": {
+                "type": "boolean",
+                "description": "Run real/benign judge on fire (default true).",
+            },
+        },
+        "required": ["name", "nl_text"],
+    },
+)
+async def create_alert_rule(
+    org_id: str,
+    name: str,
+    nl_text: str,
+    eql_override: str | None = None,
+    triage_enabled: bool = True,
+) -> dict[str, Any]:
+    from eden.alerts.compiler import AlertCompiler
+    from eden.alerts import repo
+    from eden.dsl import AlertAsCode
+
+    compiled = await AlertCompiler().compile(
+        org_id,
+        nl_text,
+        eql_override=eql_override,
+    )
+    eql = (eql_override or compiled.get("eql") or "").strip()
+    if not eql:
+        return {"error": "compiled EQL is empty"}
+    rule = await repo.create_nl_rule(
+        org_id=org_id,
+        name=name,
+        nl_text=nl_text,
+        compiled_eql=eql,
+        triage_enabled=triage_enabled,
+        channels={"in_app": True, "slack": True},
+        enabled=True,
+    )
+    dsl = await AlertAsCode().compile(
+        org_id,
+        name=name,
+        eql_query=eql,
+        interval_seconds=3600,
+        severity="warning",
+    )
+    return {
+        "rule_id": rule["id"],
+        "name": name,
+        "eql": eql,
+        "warnings": compiled.get("warnings", []),
+        "dsl_status": dsl.get("status"),
+        "alerts_url": "/alerts",
+    }
+
+
+# ============================================================================
 # Tool dispatch
 # ============================================================================
 

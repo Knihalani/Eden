@@ -19,7 +19,7 @@ import {
   ShieldOff,
   Wrench,
 } from "lucide-react";
-import { api, codeChangePolicyApi, type CodeChangePolicy, type OptimizationSchedule } from "@/lib/api";
+import { api, codeChangePolicyApi, improveRunsApi, type CodeChangePolicy, type ImprovementSchedule, type OptimizationSchedule } from "@/lib/api";
 import { useOrg } from "@/hooks/use-org";
 import { usePermissions } from "@/hooks/use-permissions";
 import { useToast } from "@/components/ui/toast";
@@ -48,6 +48,22 @@ const SCHEDULE_OPTIONS: { value: OptimizationSchedule; label: string }[] = [
   { value: "monthly", label: "Monthly" },
 ];
 
+const N23_CRON_PRESETS: { id: "daily" | "weekly" | "biweekly"; label: string; cron: string }[] = [
+  { id: "daily", label: "Daily (03:00 UTC)", cron: "0 3 * * *" },
+  { id: "weekly", label: "Weekly — Sunday 03:00 UTC", cron: "0 3 * * 0" },
+  { id: "biweekly", label: "Biweekly — 1st & 15th 03:00 UTC", cron: "0 3 1,15 * *" },
+];
+
+function cronToPreset(cron: string): "daily" | "weekly" | "biweekly" | "custom" {
+  const hit = N23_CRON_PRESETS.find((p) => p.cron === cron);
+  return hit?.id ?? "custom";
+}
+
+const DEFAULT_N23_SCHEDULE: ImprovementSchedule = {
+  improvement_schedule_cron: "0 3 * * 0",
+  improvement_max_plans_per_sweep: 10,
+};
+
 const DEFAULT_SCHEDULE: CodeChangePolicy = {
   optimization_schedule: "weekly",
   optimization_weekday: 0,
@@ -65,12 +81,15 @@ export default function AutonomousTab() {
     autonomous_actions_v0: true,
   });
   const [schedule, setSchedule] = useState<CodeChangePolicy>(DEFAULT_SCHEDULE);
+  const [n23Schedule, setN23Schedule] = useState<ImprovementSchedule>(DEFAULT_N23_SCHEDULE);
+  const [n23Preset, setN23Preset] = useState<"daily" | "weekly" | "biweekly" | "custom">("weekly");
   const [autoPrEnabled, setAutoPrEnabled] = useState(false);
   const [codeChangeEnabled, setCodeChangeEnabled] = useState(false);
   const [busy, setBusy] = useState(false);
   const [scheduleBusy, setScheduleBusy] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [scheduleLoaded, setScheduleLoaded] = useState(false);
+  const [n23ScheduleLoaded, setN23ScheduleLoaded] = useState(false);
 
   // Seed from the org's current settings JSONB.
   useEffect(() => {
@@ -83,7 +102,46 @@ export default function AutonomousTab() {
     setLoaded(true);
   }, [currentOrg]);
 
-  // Load Cat 23 code-change policy (schedule fields).
+  // N23 improvement agent schedule.
+  useEffect(() => {
+    if (!currentOrg) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await improveRunsApi.getSchedule(currentOrg.id);
+        const data = res?.data ?? DEFAULT_N23_SCHEDULE;
+        if (!cancelled) {
+          setN23Schedule({
+            improvement_schedule_cron:
+              data.improvement_schedule_cron ?? DEFAULT_N23_SCHEDULE.improvement_schedule_cron,
+            improvement_max_plans_per_sweep:
+              typeof data.improvement_max_plans_per_sweep === "number"
+                ? data.improvement_max_plans_per_sweep
+                : typeof data.max_plans_per_sweep === "number"
+                  ? data.max_plans_per_sweep
+                  : DEFAULT_N23_SCHEDULE.improvement_max_plans_per_sweep,
+            next_run_at: data.next_run_at ?? null,
+            last_run_at: data.last_run_at ?? null,
+            last_sweep_plans_created: data.last_sweep_plans_created ?? null,
+            last_sweep_llm_cost_usd: data.last_sweep_llm_cost_usd ?? null,
+            schedule_enabled: data.schedule_enabled,
+          });
+          setN23Preset(cronToPreset(data.improvement_schedule_cron ?? ""));
+          setN23ScheduleLoaded(true);
+        }
+      } catch {
+        if (!cancelled) {
+          setN23Schedule(DEFAULT_N23_SCHEDULE);
+          setN23ScheduleLoaded(true);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [currentOrg]);
+
+  // Load Cat 23 code-change policy (legacy schedule fields).
   useEffect(() => {
     if (!currentOrg) return;
     let cancelled = false;
@@ -191,6 +249,40 @@ export default function AutonomousTab() {
           policy.last_optimization_run_at ?? prev.last_optimization_run_at,
       }));
       toast.success("Optimization schedule saved.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : String(err));
+    } finally {
+      setScheduleBusy(false);
+    }
+  }
+
+  async function persistN23Schedule(next: ImprovementSchedule) {
+    if (!currentOrg) return;
+    setScheduleBusy(true);
+    try {
+      const res = await improveRunsApi.updateSchedule(currentOrg.id, {
+        improvement_schedule_cron: next.improvement_schedule_cron,
+        improvement_max_plans_per_sweep: next.improvement_max_plans_per_sweep,
+      });
+      const data = res?.data ?? next;
+      setN23Schedule((prev) => ({
+        ...prev,
+        improvement_schedule_cron:
+          data.improvement_schedule_cron ?? next.improvement_schedule_cron,
+        improvement_max_plans_per_sweep:
+          typeof data.improvement_max_plans_per_sweep === "number"
+            ? data.improvement_max_plans_per_sweep
+            : typeof data.max_plans_per_sweep === "number"
+              ? data.max_plans_per_sweep
+              : next.improvement_max_plans_per_sweep,
+        next_run_at: data.next_run_at ?? prev.next_run_at,
+        last_run_at: data.last_run_at ?? prev.last_run_at,
+        last_sweep_plans_created:
+          data.last_sweep_plans_created ?? prev.last_sweep_plans_created,
+        last_sweep_llm_cost_usd:
+          data.last_sweep_llm_cost_usd ?? prev.last_sweep_llm_cost_usd,
+      }));
+      toast.success("Improvement sweep schedule saved.");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : String(err));
     } finally {
@@ -307,11 +399,112 @@ export default function AutonomousTab() {
             <CalendarClock className="w-5 h-5 text-[var(--accent)]" />
           </div>
           <div className="min-w-0 flex-1">
-            <div className="text-sm font-medium">Optimization schedule</div>
+            <div className="text-sm font-medium">Recurring improvement agent (N23)</div>
             <p className="text-xs text-[var(--text-secondary)] mt-0.5 leading-relaxed">
-              Recurring improvement agent. Default is weekly (Monday 09:00 UTC).
-              Requires code-change to be enabled for the org before PRs are
-              proposed. Cron checks every 5 minutes and only runs when due.
+              Per-org cron sweeps production signals and lands ranked plans in{" "}
+              <a href="/improve/plans" className="text-[var(--accent)] hover:underline">
+                Improvement plans
+              </a>
+              . Approve always opens a GitHub PR.
+            </p>
+          </div>
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-2">
+          <label className="block text-xs space-y-1">
+            <span className="text-[var(--text-secondary)]">Sweep cadence</span>
+            <select
+              className="w-full rounded-md border border-[var(--border-default)] bg-[var(--bg-base)] px-2 py-1.5 text-sm"
+              value={n23Preset === "custom" ? "weekly" : n23Preset}
+              disabled={!isAdmin || scheduleBusy}
+              onChange={(e) => {
+                const preset = e.target.value as "daily" | "weekly" | "biweekly";
+                const match = N23_CRON_PRESETS.find((p) => p.id === preset);
+                if (!match) return;
+                setN23Preset(preset);
+                const next = {
+                  ...n23Schedule,
+                  improvement_schedule_cron: match.cron,
+                };
+                setN23Schedule(next);
+                void persistN23Schedule(next);
+              }}
+            >
+              {N23_CRON_PRESETS.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.label}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="block text-xs space-y-1 sm:col-span-2">
+            <span className="text-[var(--text-secondary)]">
+              Max plans per sweep: {n23Schedule.improvement_max_plans_per_sweep}
+            </span>
+            <input
+              type="range"
+              min={1}
+              max={25}
+              step={1}
+              value={n23Schedule.improvement_max_plans_per_sweep}
+              disabled={!isAdmin || scheduleBusy}
+              onChange={(e) => {
+                setN23Schedule((prev) => ({
+                  ...prev,
+                  improvement_max_plans_per_sweep: Number(e.target.value),
+                }));
+              }}
+              onMouseUp={(e) => {
+                const val = Number((e.target as HTMLInputElement).value);
+                void persistN23Schedule({
+                  ...n23Schedule,
+                  improvement_max_plans_per_sweep: val,
+                });
+              }}
+              onTouchEnd={(e) => {
+                const val = Number((e.target as HTMLInputElement).value);
+                void persistN23Schedule({
+                  ...n23Schedule,
+                  improvement_max_plans_per_sweep: val,
+                });
+              }}
+              className="w-full"
+              aria-label="Max plans per sweep"
+            />
+          </label>
+        </div>
+
+        {n23ScheduleLoaded && (
+          <div className="text-[11px] text-[var(--text-muted)] space-y-1">
+            {n23Schedule.last_run_at && (
+              <p>Last sweep: {new Date(n23Schedule.last_run_at).toLocaleString()}</p>
+            )}
+            {n23Schedule.last_sweep_plans_created != null && (
+              <p>Plans created (last sweep): {n23Schedule.last_sweep_plans_created}</p>
+            )}
+            {n23Schedule.last_sweep_llm_cost_usd != null && (
+              <p>LLM cost (last sweep): ${n23Schedule.last_sweep_llm_cost_usd.toFixed(4)}</p>
+            )}
+            {n23Schedule.next_run_at && (
+              <p>Next run: {new Date(n23Schedule.next_run_at).toLocaleString()}</p>
+            )}
+            <p className="font-mono text-[10px] opacity-70">
+              cron: {n23Schedule.improvement_schedule_cron}
+            </p>
+          </div>
+        )}
+      </div>
+
+      <div className="rounded-xl border border-[var(--border-default)] bg-[var(--bg-secondary)]/30 p-4 space-y-4 opacity-80">
+        <div className="flex items-start gap-4">
+          <div className="rounded-lg bg-[var(--accent-faint)] p-2 shrink-0">
+            <CalendarClock className="w-5 h-5 text-[var(--accent)]" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="text-sm font-medium">Legacy optimization schedule (Cat 23)</div>
+            <p className="text-xs text-[var(--text-secondary)] mt-0.5 leading-relaxed">
+              Deprecated — superseded by N23 above. Kept for orgs still on code-change policy.
             </p>
           </div>
         </div>

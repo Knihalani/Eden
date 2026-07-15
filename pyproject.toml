@@ -151,6 +151,14 @@ dev = [
 # list members, change role, archive org) are all reachable through
 # the portal's Settings surface — no separate CLI needed.
 
+[project.scripts]
+# F04: eden-mcp starts the MCP stdio server after `pip install -e .`
+# Three supported launch paths:
+#   (a) monorepo: pip install -e . → eden-mcp
+#   (b) module:   python -m eden.mcp_server
+#   (c) Docker/API image: eden-mcp is on PATH (same entry point)
+eden-mcp = "eden.mcp_server.__main__:main"
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"

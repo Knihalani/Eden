@@ -136,5 +136,90 @@ async def metrics() -> Response:
     except Exception as exc:  # noqa: BLE001
         logger.debug("metrics: failed to render latency histogram: %s", exc)
 
+    # Search metrics (eden_search_*)
+    try:
+        from eden.observability.search_service import get_search_stats
+        stats = get_search_stats()
+        dur_count = stats.get("duration_count", 0)
+        dur_sum = stats.get("duration_sum_s", 0.0)
+        fallback_total = stats.get("fallback_total", 0.0)
+        lag_count = stats.get("index_lag_count", 0)
+        lag_sum = stats.get("index_lag_sum_s", 0.0)
+        lines.append(
+            f"# HELP eden_search_duration_seconds Search request duration in seconds.\n"
+            f"# TYPE eden_search_duration_seconds summary\n"
+            f"eden_search_duration_seconds_sum {dur_sum}\n"
+            f"eden_search_duration_seconds_count {int(dur_count)}\n"
+        )
+        lines.append(
+            f"# HELP eden_search_fallback_total Searches served by Postgres fallback.\n"
+            f"# TYPE eden_search_fallback_total counter\n"
+            f"eden_search_fallback_total {int(fallback_total)}\n"
+        )
+        if lag_count > 0:
+            lines.append(
+                f"# HELP eden_search_index_lag_seconds Typesense index lag (event to indexed).\n"
+                f"# TYPE eden_search_index_lag_seconds summary\n"
+                f"eden_search_index_lag_seconds_sum {lag_sum}\n"
+                f"eden_search_index_lag_seconds_count {int(lag_count)}\n"
+            )
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("metrics: failed to read search stats: %s", exc)
+
+    # Issues layer metrics (F28 stumble writes / F20 scanner / F29 list).
+    try:
+        from eden.issues.metrics import (
+            get_issue_stats,
+            get_scan_stats,
+            get_stumble_stats,
+        )
+
+        st = get_stumble_stats()
+        lines.append(
+            "# HELP eden_stumble_write_duration_seconds Stumble write path duration in seconds.\n"
+            "# TYPE eden_stumble_write_duration_seconds summary\n"
+            f"eden_stumble_write_duration_seconds_sum {st['write_duration_sum_s']}\n"
+            f"eden_stumble_write_duration_seconds_count {int(st['write_duration_count'])}\n"
+        )
+        lines.append(
+            "# HELP eden_stumble_created_total Stumbles inserted (real inserts).\n"
+            "# TYPE eden_stumble_created_total counter\n"
+            f"eden_stumble_created_total {int(st['created_total'])}\n"
+        )
+        lines.append(
+            "# HELP eden_stumble_deduped_total Stumbles deduped (burst or ON CONFLICT).\n"
+            "# TYPE eden_stumble_deduped_total counter\n"
+            f"eden_stumble_deduped_total {int(st['deduped_total'])}\n"
+        )
+
+        scan = get_scan_stats()
+        lines.append(
+            "# HELP auto_issue_scan_duration_ms Auto-issue scan duration in milliseconds.\n"
+            "# TYPE auto_issue_scan_duration_ms summary\n"
+            f"auto_issue_scan_duration_ms_sum {scan['scan_duration_ms_sum']}\n"
+            f"auto_issue_scan_duration_ms_count {int(scan['scan_duration_ms_count'])}\n"
+        )
+        lines.append(
+            "# HELP auto_issue_queue_lag_seconds Lag from trace.finalized emit to consume.\n"
+            "# TYPE auto_issue_queue_lag_seconds summary\n"
+            f"auto_issue_queue_lag_seconds_sum {scan['queue_lag_seconds_sum']}\n"
+            f"auto_issue_queue_lag_seconds_count {int(scan['queue_lag_seconds_count'])}\n"
+        )
+        hit_lines = ["# HELP auto_issue_detector_hits Detector hits by kind.",
+                     "# TYPE auto_issue_detector_hits counter"]
+        for detector, n in sorted(scan.get("detector_hits", {}).items()):
+            hit_lines.append(f'auto_issue_detector_hits{{detector="{detector}"}} {int(n)}')
+        lines.append("\n".join(hit_lines) + "\n")
+
+        iss = get_issue_stats()
+        lines.append(
+            "# HELP eden_issue_list_duration_seconds Issue list query duration in seconds.\n"
+            "# TYPE eden_issue_list_duration_seconds summary\n"
+            f"eden_issue_list_duration_seconds_sum {iss['list_duration_sum_s']}\n"
+            f"eden_issue_list_duration_seconds_count {int(iss['list_duration_count'])}\n"
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("metrics: failed to read issues stats: %s", exc)
+
     body = "".join(lines)
     return Response(content=body, media_type="text/plain; version=0.0.4; charset=utf-8")

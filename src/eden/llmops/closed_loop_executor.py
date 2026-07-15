@@ -227,7 +227,7 @@ async def _dispatch_side_effect(
 
         if kind in ("propose_patch", "propose_patch_from_rca"):
             try:
-                from eden.code_change.issue_patch_trigger import (
+                from eden.patches.issue_patch_trigger import (
                     propose_patch_for_action,
                 )
 

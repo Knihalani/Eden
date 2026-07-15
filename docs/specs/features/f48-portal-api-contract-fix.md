@@ -5,7 +5,7 @@
 | **Feature ID** | F48 |
 | **Priority** | **P0 — BLOCKER** |
 | **Effort** | S (1–2 engineer-days) |
-| **Eden status** | **SHIPPED (v0)** — portal API contracts aligned with backend routes |
+| **Eden status** | **SHIPPED (Wave 1)** — portal API contracts aligned with backend routes; Signals + Debugger in nav; `/debugger?trace_id=` deep-link; 9 contract tests green. No stretch items. |
 | **Dependencies** | None — ship before all other gap features |
 
 ---
@@ -229,10 +229,10 @@ Already has entries — verify copy matches Phase Q (metric rules, not SQL).
 
 ## 5. Acceptance criteria
 
-- [ ] Zero 404s from debugger/signals pages against running API
-- [ ] TypeScript types match `CheckpointResponse` / signal routes exactly
-- [ ] Sidebar links visible
-- [ ] Remove dead `rewind` and `compile` client methods
+- [x] Zero 404s from debugger/signals pages against running API
+- [x] TypeScript types match `CheckpointResponse` / signal routes exactly
+- [x] Sidebar links visible
+- [x] Remove dead `rewind` and `compile` client methods
 
 ---
 

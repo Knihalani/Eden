@@ -27,7 +27,7 @@ import { PageContent } from "@/components/layout/page-content";
 import { cn } from "@/lib/utils";
 import { RegressionBadge, RepeatBadge, SeverityBadge, StatusBadge } from "../_components/issue-badges";
 
-type Tab = "overview" | "fix" | "experiment";
+type Tab = "overview" | "triage" | "fix" | "experiment";
 
 export default function IssueDetailPage() {
   const { currentOrg } = useOrg();
@@ -184,6 +184,7 @@ export default function IssueDetailPage() {
 
   const tabs: { id: Tab; label: string; href?: string }[] = [
     { id: "overview", label: "Overview" },
+    { id: "triage", label: "Triage" },
     { id: "fix", label: "Fix", href: `/issues/${issueId}/fix` },
     { id: "experiment", label: "Experiment" },
   ];
@@ -297,6 +298,10 @@ export default function IssueDetailPage() {
             </>
           )}
 
+          {tab === "triage" && (
+            <TriagePanel triageResult={issue.triage_result} stumbles={stumbles} />
+          )}
+
           {tab === "fix" && (
             <div className="rounded-lg border border-[var(--border-default)] bg-[var(--bg-primary)] p-4 space-y-3">
               <p className="text-sm text-[var(--text-secondary)]">
@@ -348,6 +353,128 @@ export default function IssueDetailPage() {
         </div>
       )}
     </PageContent>
+  );
+}
+
+function TriagePanel({
+  triageResult,
+  stumbles,
+}: {
+  triageResult?: Record<string, unknown> | null;
+  stumbles: AgentStumble[];
+}) {
+  const tr = (triageResult ?? {}) as Record<string, unknown>;
+  const hasTriage = Object.keys(tr).length > 0;
+  const evidenceSpans = Array.isArray(tr.evidence_span_ids)
+    ? (tr.evidence_span_ids as unknown[]).map(String)
+    : [];
+  const suggestedActions = Array.isArray(tr.suggested_actions)
+    ? (tr.suggested_actions as Record<string, unknown>[])
+    : [];
+  const linkedFiles = Array.isArray(tr.linked_files)
+    ? (tr.linked_files as unknown[]).map(String)
+    : [];
+  // Map a span id → the trace it was seen in (for deep links).
+  const spanToTrace = new Map<string, string>();
+  for (const s of stumbles) {
+    if (s.span_id && s.trace_id) spanToTrace.set(String(s.span_id), String(s.trace_id));
+  }
+
+  if (!hasTriage) {
+    return (
+      <div className="rounded-lg border border-[var(--border-default)] bg-[var(--bg-primary)] p-4">
+        <p className="text-sm text-[var(--text-muted)]">
+          No triage result yet. Run “Re-triage” to investigate the root cause.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="rounded-lg border border-[var(--border-default)] bg-[var(--bg-primary)] p-4 space-y-3">
+        <div className="flex items-center gap-2 flex-wrap">
+          <h2 className="text-sm font-semibold">Root cause</h2>
+          {tr.source ? (
+            <span className="text-[10px] uppercase tracking-wide px-2 py-0.5 rounded bg-[var(--bg-tertiary)] text-[var(--text-muted)]">
+              {String(tr.source)}
+            </span>
+          ) : null}
+          {typeof tr.confidence === "number" ? (
+            <span className="text-[10px] text-[var(--text-muted)]">
+              confidence {(Number(tr.confidence) * 100).toFixed(0)}%
+            </span>
+          ) : null}
+          {tr.auto_escalate ? (
+            <span className="text-[10px] uppercase px-2 py-0.5 rounded bg-[var(--error-bg,#3a1a1a)] text-[var(--error)]">
+              auto-escalate
+            </span>
+          ) : null}
+        </div>
+        <p className="text-sm text-[var(--text-secondary)]">
+          {String(tr.root_cause ?? "—")}
+        </p>
+      </div>
+
+      {suggestedActions.length > 0 && (
+        <div className="rounded-lg border border-[var(--border-default)] bg-[var(--bg-primary)] p-4">
+          <h2 className="text-sm font-semibold mb-2">Suggested actions</h2>
+          <ul className="space-y-2">
+            {suggestedActions.map((a, i) => (
+              <li
+                key={i}
+                className="rounded border border-[var(--border-subtle)] p-2 flex items-center gap-2 flex-wrap"
+              >
+                <span className="text-xs font-mono px-2 py-0.5 rounded bg-[var(--bg-tertiary)] text-[var(--accent)]">
+                  {String(a.type ?? a.action_type ?? "action")}
+                </span>
+                <span className="text-sm text-[var(--text-secondary)]">
+                  {String(a.summary ?? "")}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {evidenceSpans.length > 0 && (
+        <div className="rounded-lg border border-[var(--border-default)] bg-[var(--bg-primary)] p-4">
+          <h2 className="text-sm font-semibold mb-2">Evidence spans</h2>
+          <ul className="flex flex-wrap gap-2">
+            {evidenceSpans.map((span) => {
+              const traceId = spanToTrace.get(span);
+              return traceId ? (
+                <li key={span}>
+                  <Link
+                    href={`/traces/${traceId}?span=${span}`}
+                    className="text-xs font-mono text-[var(--accent)] hover:underline"
+                  >
+                    {span}
+                  </Link>
+                </li>
+              ) : (
+                <li key={span} className="text-xs font-mono text-[var(--text-muted)]">
+                  {span}
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      )}
+
+      {linkedFiles.length > 0 && (
+        <div className="rounded-lg border border-[var(--border-default)] bg-[var(--bg-primary)] p-4">
+          <h2 className="text-sm font-semibold mb-2">Linked files</h2>
+          <ul className="space-y-1">
+            {linkedFiles.map((f) => (
+              <li key={f} className="text-xs font-mono text-[var(--text-secondary)]">
+                {f}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
   );
 }
 

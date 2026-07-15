@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { Check, Clock, Loader2, RefreshCw } from "lucide-react";
+import { Check, Clock, GitPullRequestArrow, Loader2, RefreshCw } from "lucide-react";
 
 import { PageHeader } from "@/components/layout/page-header";
 import { PageContent } from "@/components/layout/page-content";
@@ -20,6 +20,8 @@ import { useOrgMutation, useOrgQuery } from "@/hooks/use-api-query";
 import { queryKeys } from "@/lib/query-keys";
 import { cn } from "@/lib/utils";
 import { errorFromCaught } from "@/lib/safe-error-message";
+import { PlanKindBadge } from "@/components/improve/plan-kind-badge";
+import type { ImprovementPlanKind } from "@/lib/api";
 
 const COLUMNS: Array<{ id: string; label: string; hint: string }> = [
   { id: "urgent", label: "Urgent", hint: "P0 / critical issues" },
@@ -34,6 +36,34 @@ function severityClass(sev: string): string {
   if (s === "critical" || s === "high") return "text-[var(--error)]";
   if (s === "medium") return "text-[var(--warning)]";
   return "text-[var(--text-muted)]";
+}
+
+function planHref(item: ImproveQueueItem): string | null {
+  if (item.item_type === "improvement_plan" || item.ref.startsWith("improvement_plan:")) {
+    const id = item.ref.includes(":") ? item.ref.split(":").slice(1).join(":") : item.ref;
+    return `/improve/plans/${id}`;
+  }
+  if (item.item_type === "proposed_patch" || item.ref.startsWith("proposed_patch:")) {
+    const id = item.ref.split(":")[1];
+    if (id) return `/improve/plans/${id}`;
+  }
+  const payloadPlanId = item.payload?.plan_id ?? item.payload?.patch_id;
+  if (typeof payloadPlanId === "string" && payloadPlanId) {
+    return `/improve/plans/${payloadPlanId}`;
+  }
+  if (item.href?.startsWith("/pr-suggestions")) {
+    return item.href.replace("/pr-suggestions", "/improve/plans");
+  }
+  return item.href ?? null;
+}
+
+function planKindFromItem(item: ImproveQueueItem): ImprovementPlanKind | null {
+  const kind = item.payload?.plan_kind;
+  if (typeof kind === "string" && kind) return kind as ImprovementPlanKind;
+  if (item.item_type === "improvement_plan" || item.item_type === "proposed_patch") {
+    return "code_patch";
+  }
+  return null;
 }
 
 export default function ImprovePage() {
@@ -114,16 +144,24 @@ export default function ImprovePage() {
         title="Improve"
         description="One queue for triage, patches, nudges, and promotions from Agent Issues. When Eden proposes a fix, it lands here."
         actions={
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => void load()}
-            disabled={loading}
-            aria-label="Refresh improvement queue"
-          >
-            <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />
-            Refresh
-          </Button>
+          <div className="flex items-center gap-2">
+            <Link href="/improve/plans">
+              <Button variant="outline" size="sm">
+                <GitPullRequestArrow className="h-4 w-4 mr-1" />
+                All plans
+              </Button>
+            </Link>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => void load()}
+              disabled={loading}
+              aria-label="Refresh improvement queue"
+            >
+              <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />
+              Refresh
+            </Button>
+          </div>
         }
       />
       <PageContent>
@@ -183,16 +221,19 @@ export default function ImprovePage() {
                   <p className="text-xs text-[var(--text-muted)]">{col.hint}</p>
                 </header>
                 <ul className="space-y-2">
-                  {(byColumn[col.id] ?? []).map((item) => (
+                  {(byColumn[col.id] ?? []).map((item) => {
+                    const href = planHref(item);
+                    const kind = planKindFromItem(item);
+                    return (
                     <li
                       key={item.ref}
                       className="rounded-md border border-[var(--border-subtle)] bg-[var(--bg-primary)] p-2.5"
                     >
                       <div className="flex items-start justify-between gap-2">
                         <div className="min-w-0">
-                          {item.href ? (
+                          {href ? (
                             <Link
-                              href={item.href}
+                              href={href}
                               className="block truncate text-sm font-medium text-[var(--text-primary)] hover:underline"
                             >
                               {item.title}
@@ -210,6 +251,11 @@ export default function ImprovePage() {
                             {item.item_type}
                             {item.source ? ` · ${item.source}` : ""}
                           </p>
+                          {kind && (
+                            <div className="mt-1">
+                              <PlanKindBadge kind={kind} />
+                            </div>
+                          )}
                           {item.blocked_reason && (
                             <p className="mt-1 text-[11px] text-[var(--warning)]">
                               Blocked: {item.blocked_reason}
@@ -251,7 +297,8 @@ export default function ImprovePage() {
                         </Button>
                       </div>
                     </li>
-                  ))}
+                    );
+                  })}
                 </ul>
               </section>
             ))}

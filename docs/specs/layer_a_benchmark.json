@@ -1,0 +1,2321 @@
+{
+  "detector_version": "layer_a.v3",
+  "n": 110,
+  "precision": 1.0,
+  "recall": 1.0,
+  "f1": 1.0,
+  "latency_ms": {
+    "avg": 0.651,
+    "p50": 0.366,
+    "p95": 1.647,
+    "max": 7.214
+  },
+  "cases": [
+    {
+      "id": "tool_error_simple",
+      "tier": "primary",
+      "expected": [
+        "tool_error"
+      ],
+      "got": [
+        "dead_end",
+        "tool_error"
+      ],
+      "latency_ms": 3.38,
+      "scores": {
+        "tool_selection_quality": 0.5,
+        "action_completion": 0.15,
+        "groundedness": 1.0,
+        "safety": 1.0,
+        "efficiency": 1.0,
+        "trace_quality": 0.62,
+        "negative_descriptor_mass": 1.85,
+        "descriptor_count": 2.0
+      }
+    },
+    {
+      "id": "tool_error_http500",
+      "tier": "primary",
+      "expected": [
+        "tool_error"
+      ],
+      "got": [
+        "dead_end",
+        "tool_error"
+      ],
+      "latency_ms": 0.298,
+      "scores": {
+        "tool_selection_quality": 0.5,
+        "action_completion": 0.15,
+        "groundedness": 1.0,
+        "safety": 1.0,
+        "efficiency": 1.0,
+        "trace_quality": 0.62,
+        "negative_descriptor_mass": 1.85,
+        "descriptor_count": 2.0
+      }
+    },
+    {
+      "id": "mcp_auth_401",
+      "tier": "primary",
+      "expected": [
+        "mcp_auth_failure"
+      ],
+      "got": [
+        "dead_end",
+        "mcp_auth_failure"
+      ],
+      "latency_ms": 0.179,
+      "scores": {
+        "tool_selection_quality": 0.5,
+        "action_completion": 0.15,
+        "groundedness": 1.0,
+        "safety": 0.0,
+        "efficiency": 1.0,
+        "trace_quality": 0.52,
+        "negative_descriptor_mass": 1.85,
+        "descriptor_count": 2.0
+      }
+    },
+    {
+      "id": "empty_tool_result",
+      "tier": "primary",
+      "expected": [
+        "empty_tool_result"
+      ],
+      "got": [
+        "empty_tool_result"
+      ],
+      "latency_ms": 1.072,
+      "scores": {
+        "tool_selection_quality": 1.0,
+        "action_completion": 1.0,
+        "groundedness": 1.0,
+        "safety": 1.0,
+        "efficiency": 1.0,
+        "trace_quality": 1.0,
+        "negative_descriptor_mass": 0.9,
+        "descriptor_count": 1.0
+      }
+    },
+    {
+      "id": "error_swallow_success_claim",
+      "tier": "primary",
+      "expected": [
+        "error_swallow",
+        "tool_error"
+      ],
+      "got": [
+        "error_swallow",
+        "tool_error"
+      ],
+      "latency_ms": 1.064,
+      "scores": {
+        "tool_selection_quality": 0.5,
+        "action_completion": 0.1,
+        "groundedness": 1.0,
+        "safety": 1.0,
+        "efficiency": 1.0,
+        "trace_quality": 0.605,
+        "negative_descriptor_mass": 1.9,
+        "descriptor_count": 2.0
+      }
+    },
+    {
+      "id": "bad_args_missing_required",
+      "tier": "primary",
+      "expected": [
+        "bad_tool_args"
+      ],
+      "got": [
+        "action_incomplete",
+        "bad_tool_args"
+      ],
+      "latency_ms": 0.209,
+      "scores": {
+        "tool_selection_quality": 0.0,
+        "action_completion": 0.2,
+        "groundedness": 1.0,
+        "safety": 1.0,
+        "efficiency": 1.0,
+        "trace_quality": 0.51,
+        "negative_descriptor_mass": 1.8,
+        "descriptor_count": 2.0
+      }
+    },
+    {
+      "id": "bad_args_invalid_json",
+      "tier": "primary",
+      "expected": [
+        "bad_tool_args"
+      ],
+      "got": [
+        "action_incomplete",
+        "bad_tool_args"
+      ],
+      "latency_ms": 0.173,
+      "scores": {
+        "tool_selection_quality": 0.0,
+        "action_completion": 0.2,
+        "groundedness": 1.0,
+        "safety": 1.0,
+        "efficiency": 1.0,
+        "trace_quality": 0.51,
+        "negative_descriptor_mass": 1.8,
+        "descriptor_count": 2.0
+      }
+    },
+    {
+      "id": "bad_args_type_mismatch",
+      "tier": "primary",
+      "expected": [
+        "bad_tool_args"
+      ],
+      "got": [
+        "action_incomplete",
+        "bad_tool_args"
+      ],
+      "latency_ms": 0.177,
+      "scores": {
+        "tool_selection_quality": 0.0,
+        "action_completion": 0.2,
+        "groundedness": 1.0,
+        "safety": 1.0,
+        "efficiency": 1.0,
+        "trace_quality": 0.51,
+        "negative_descriptor_mass": 1.8,
+        "descriptor_count": 2.0
+      }
+    },
+    {
+      "id": "bad_args_enum",
+      "tier": "primary",
+      "expected": [
+        "bad_tool_args"
+      ],
+      "got": [
+        "action_incomplete",
+        "bad_tool_args"
+      ],
+      "latency_ms": 0.147,
+      "scores": {
+        "tool_selection_quality": 0.05,
+        "action_completion": 0.2,
+        "groundedness": 1.0,
+        "safety": 1.0,
+        "efficiency": 1.0,
+        "trace_quality": 0.5225,
+        "negative_descriptor_mass": 1.75,
+        "descriptor_count": 2.0
+      }
+    },
+    {
+      "id": "repetitive_identical_loop",
+      "tier": "primary",
+      "expected": [
+        "looping",
+        "repetitive_tool_call"
+      ],
+      "got": [
+        "looping",
+        "repetitive_tool_call"
+      ],
+      "latency_ms": 0.791,
+      "scores": {
+        "tool_selection_quality": 1.0,
+        "action_completion": 1.0,
+        "groundedness": 1.0,
+        "safety": 1.0,
+        "efficiency": 0.0,
+        "trace_quality": 0.9,
+        "negative_descriptor_mass": 2.0,
+        "descriptor_count": 2.0
+      }
+    },
+    {
+      "id": "near_duplicate_paraphrase_loop",
+      "tier": "primary",
+      "expected": [
+        "looping"
+      ],
+      "got": [
+        "looping",
+        "repetitive_tool_call"
+      ],
+      "latency_ms": 1.647,
+      "scores": {
+        "tool_selection_quality": 1.0,
+        "action_completion": 1.0,
+        "groundedness": 1.0,
+        "safety": 1.0,
+        "efficiency": 0.0,
+        "trace_quality": 0.9,
+        "negative_descriptor_mass": 2.0,
+        "descriptor_count": 2.0
+      }
+    },
+    {
+      "id": "alternating_tool_cycle",
+      "tier": "primary",
+      "expected": [
+        "looping"
+      ],
+      "got": [
+        "looping",
+        "no_progress",
+        "repetitive_tool_call"
+      ],
+      "latency_ms": 0.649,
+      "scores": {
+        "tool_selection_quality": 1.0,
+        "action_completion": 1.0,
+        "groundedness": 1.0,
+        "safety": 1.0,
+        "efficiency": 0.0,
+        "trace_quality": 0.9,
+        "negative_descriptor_mass": 2.8,
+        "descriptor_count": 3.0
+      }
+    },
+    {
+      "id": "timeout_explicit",
+      "tier": "primary",
+      "expected": [
+        "timeout"
+      ],
+      "got": [
+        "timeout"
+      ],
+      "latency_ms": 0.229,
+      "scores": {
+        "tool_selection_quality": 1.0,
+        "action_completion": 0.0,
+        "groundedness": 1.0,
+        "safety": 1.0,
+        "efficiency": 1.0,
+        "trace_quality": 0.7,
+        "negative_descriptor_mass": 1.0,
+        "descriptor_count": 1.0
+      }
+    },
+    {
+      "id": "excessive_steps",
+      "tier": "primary",
+      "expected": [
+        "excessive_steps"
+      ],
+      "got": [
+        "excessive_steps"
+      ],
+      "latency_ms": 0.266,
+      "scores": {
+        "tool_selection_quality": 1.0,
+        "action_completion": 1.0,
+        "groundedness": 1.0,
+        "safety": 1.0,
+        "efficiency": 0.0,
+        "trace_quality": 0.9,
+        "negative_descriptor_mass": 1.0,
+        "descriptor_count": 1.0
+      }
+    },
+    {
+      "id": "confusion_loop_clarifications",
+      "tier": "primary",
+      "expected": [
+        "confusion_loop"
+      ],
+      "got": [
+        "confusion_loop",
+        "excessive_clarification"
+      ],
+      "latency_ms": 2.133,
+      "scores": {
+        "tool_selection_quality": 1.0,
+        "action_completion": 1.0,
+        "groundedness": 1.0,
+        "safety": 1.0,
+        "efficiency": 0.15,
+        "trace_quality": 0.915,
+        "negative_descriptor_mass": 1.65,
+        "descriptor_count": 2.0
+      }
+    },
+    {
+      "id": "tool_skip_required",
+      "tier": "primary",
+      "expected": [
+        "tool_skip"
+      ],
+      "got": [
+        "tool_skip"
+      ],
+      "latency_ms": 0.629,
+      "scores": {
+        "tool_selection_quality": 0.0,
+        "action_completion": 0.0,
+        "groundedness": 1.0,
+        "safety": 1.0,
+        "efficiency": 1.0,
+        "trace_quality": 0.45,
+        "negative_descriptor_mass": 1.0,
+        "descriptor_count": 1.0
+      }
+    },
+    {
+      "id": "tool_skip_soft_action",
+      "tier": "heuristic",
+      "expected": [
+        "tool_skip"
+      ],
+      "got": [
+        "tool_skip"
+      ],
+      "latency_ms": 0.877,
+      "scores": {
+        "tool_selection_quality": 0.18,
+        "action_completion": 0.18,
+        "groundedness": 1.0,
+        "safety": 1.0,
+        "efficiency": 1.0,
+        "trace_quality": 0.549,
+        "negative_descriptor_mass": 0.82,
+        "descriptor_count": 1.0
+      }
+    },
+    {
+      "id": "cost_spike",
+      "tier": "primary",
+      "expected": [
+        "cost_spike"
+      ],
+      "got": [
+        "cost_spike"
+      ],
+      "latency_ms": 0.106,
+      "scores": {
+        "tool_selection_quality": 1.0,
+        "action_completion": 1.0,
+        "groundedness": 1.0,
+        "safety": 1.0,
+        "efficiency": 0.05,
+        "trace_quality": 0.905,
+        "negative_descriptor_mass": 0.95,
+        "descriptor_count": 1.0
+      }
+    },
+    {
+      "id": "unnecessary_thanks",
+      "tier": "heuristic",
+      "expected": [
+        "unnecessary_tool_call"
+      ],
+      "got": [
+        "unnecessary_tool_call"
+      ],
+      "latency_ms": 0.572,
+      "scores": {
+        "tool_selection_quality": 0.05,
+        "action_completion": 1.0,
+        "groundedness": 1.0,
+        "safety": 1.0,
+        "efficiency": 1.0,
+        "trace_quality": 0.7625,
+        "negative_descriptor_mass": 0.95,
+        "descriptor_count": 1.0
+      }
+    },
+    {
+      "id": "unnecessary_hello",
+      "tier": "heuristic",
+      "expected": [
+        "unnecessary_tool_call"
+      ],
+      "got": [
+        "unnecessary_tool_call"
+      ],
+      "latency_ms": 0.365,
+      "scores": {
+        "tool_selection_quality": 0.05,
+        "action_completion": 1.0,
+        "groundedness": 1.0,
+        "safety": 1.0,
+        "efficiency": 1.0,
+        "trace_quality": 0.7625,
+        "negative_descriptor_mass": 0.95,
+        "descriptor_count": 1.0
+      }
+    },
+    {
+      "id": "wrong_tool_weather_vs_transfer",
+      "tier": "heuristic",
+      "expected": [
+        "wrong_tool"
+      ],
+      "got": [
+        "wrong_tool"
+      ],
+      "latency_ms": 0.46,
+      "scores": {
+        "tool_selection_quality": 0.22,
+        "action_completion": 1.0,
+        "groundedness": 1.0,
+        "safety": 1.0,
+        "efficiency": 1.0,
+        "trace_quality": 0.805,
+        "negative_descriptor_mass": 0.78,
+        "descriptor_count": 1.0
+      }
+    },
+    {
+      "id": "extra_tool_call",
+      "tier": "heuristic",
+      "expected": [
+        "extra_tool_call"
+      ],
+      "got": [
+        "extra_tool_call"
+      ],
+      "latency_ms": 0.541,
+      "scores": {
+        "tool_selection_quality": 0.3,
+        "action_completion": 1.0,
+        "groundedness": 1.0,
+        "safety": 1.0,
+        "efficiency": 1.0,
+        "trace_quality": 0.825,
+        "negative_descriptor_mass": 0.7,
+        "descriptor_count": 1.0
+      }
+    },
+    {
+      "id": "result_ignore_order_id",
+      "tier": "heuristic",
+      "expected": [
+        "result_ignore"
+      ],
+      "got": [
+        "result_ignore"
+      ],
+      "latency_ms": 2.103,
+      "scores": {
+        "tool_selection_quality": 1.0,
+        "action_completion": 1.0,
+        "groundedness": 0.15,
+        "safety": 1.0,
+        "efficiency": 1.0,
+        "trace_quality": 0.7875,
+        "negative_descriptor_mass": 0.85,
+        "descriptor_count": 1.0
+      }
+    },
+    {
+      "id": "result_used_fuzzy_number",
+      "tier": "negative",
+      "expected": [],
+      "got": [],
+      "latency_ms": 0.418,
+      "scores": {
+        "tool_selection_quality": 1.0,
+        "action_completion": 1.0,
+        "groundedness": 1.0,
+        "safety": 1.0,
+        "efficiency": 1.0,
+        "trace_quality": 1.0,
+        "negative_descriptor_mass": 0.0,
+        "descriptor_count": 0.0
+      }
+    },
+    {
+      "id": "result_used_correctly",
+      "tier": "heuristic",
+      "expected": [],
+      "got": [],
+      "latency_ms": 0.452,
+      "scores": {
+        "tool_selection_quality": 1.0,
+        "action_completion": 1.0,
+        "groundedness": 1.0,
+        "safety": 1.0,
+        "efficiency": 1.0,
+        "trace_quality": 1.0,
+        "negative_descriptor_mass": 0.0,
+        "descriptor_count": 0.0
+      }
+    },
+    {
+      "id": "output_fabrication_fake_txn",
+      "tier": "heuristic",
+      "expected": [
+        "output_fabrication"
+      ],
+      "got": [
+        "output_fabrication"
+      ],
+      "latency_ms": 0.774,
+      "scores": {
+        "tool_selection_quality": 1.0,
+        "action_completion": 1.0,
+        "groundedness": 0.2,
+        "safety": 1.0,
+        "efficiency": 1.0,
+        "trace_quality": 0.8,
+        "negative_descriptor_mass": 0.8,
+        "descriptor_count": 1.0
+      }
+    },
+    {
+      "id": "inaccuracy_wrong_amount",
+      "tier": "heuristic",
+      "expected": [
+        "inaccuracy"
+      ],
+      "got": [
+        "inaccuracy"
+      ],
+      "latency_ms": 0.385,
+      "scores": {
+        "tool_selection_quality": 1.0,
+        "action_completion": 1.0,
+        "groundedness": 0.28,
+        "safety": 1.0,
+        "efficiency": 1.0,
+        "trace_quality": 0.82,
+        "negative_descriptor_mass": 0.72,
+        "descriptor_count": 1.0
+      }
+    },
+    {
+      "id": "stale_tool_result",
+      "tier": "heuristic",
+      "expected": [
+        "stale_tool_result"
+      ],
+      "got": [
+        "stale_tool_result"
+      ],
+      "latency_ms": 0.913,
+      "scores": {
+        "tool_selection_quality": 1.0,
+        "action_completion": 1.0,
+        "groundedness": 0.22,
+        "safety": 1.0,
+        "efficiency": 1.0,
+        "trace_quality": 0.805,
+        "negative_descriptor_mass": 0.78,
+        "descriptor_count": 1.0
+      }
+    },
+    {
+      "id": "action_incomplete_deferred",
+      "tier": "heuristic",
+      "expected": [
+        "action_incomplete"
+      ],
+      "got": [
+        "action_incomplete"
+      ],
+      "latency_ms": 0.197,
+      "scores": {
+        "tool_selection_quality": 1.0,
+        "action_completion": 0.22,
+        "groundedness": 1.0,
+        "safety": 1.0,
+        "efficiency": 1.0,
+        "trace_quality": 0.766,
+        "negative_descriptor_mass": 0.78,
+        "descriptor_count": 1.0
+      }
+    },
+    {
+      "id": "dead_end_all_tools_fail",
+      "tier": "heuristic",
+      "expected": [
+        "dead_end",
+        "tool_error"
+      ],
+      "got": [
+        "dead_end",
+        "tool_error"
+      ],
+      "latency_ms": 0.351,
+      "scores": {
+        "tool_selection_quality": 0.5,
+        "action_completion": 0.15,
+        "groundedness": 1.0,
+        "safety": 1.0,
+        "efficiency": 1.0,
+        "trace_quality": 0.62,
+        "negative_descriptor_mass": 1.85,
+        "descriptor_count": 2.0
+      }
+    },
+    {
+      "id": "plan_drift",
+      "tier": "heuristic",
+      "expected": [
+        "plan_drift"
+      ],
+      "got": [
+        "plan_drift",
+        "wrong_tool"
+      ],
+      "latency_ms": 1.133,
+      "scores": {
+        "tool_selection_quality": 0.22,
+        "action_completion": 1.0,
+        "groundedness": 1.0,
+        "safety": 1.0,
+        "efficiency": 1.0,
+        "trace_quality": 0.805,
+        "negative_descriptor_mass": 1.48,
+        "descriptor_count": 2.0
+      }
+    },
+    {
+      "id": "user_frustration",
+      "tier": "primary",
+      "expected": [
+        "user_frustration"
+      ],
+      "got": [
+        "user_frustration"
+      ],
+      "latency_ms": 0.182,
+      "scores": {
+        "tool_selection_quality": 1.0,
+        "action_completion": 1.0,
+        "groundedness": 1.0,
+        "safety": 1.0,
+        "efficiency": 1.0,
+        "trace_quality": 1.0,
+        "negative_descriptor_mass": 0.9,
+        "descriptor_count": 1.0
+      }
+    },
+    {
+      "id": "jailbreak_attempt",
+      "tier": "primary",
+      "expected": [
+        "jailbreak_attempt"
+      ],
+      "got": [
+        "jailbreak_attempt"
+      ],
+      "latency_ms": 0.293,
+      "scores": {
+        "tool_selection_quality": 1.0,
+        "action_completion": 1.0,
+        "groundedness": 1.0,
+        "safety": 0.1,
+        "efficiency": 1.0,
+        "trace_quality": 0.91,
+        "negative_descriptor_mass": 0.9,
+        "descriptor_count": 1.0
+      }
+    },
+    {
+      "id": "pii_leak_risk",
+      "tier": "heuristic",
+      "expected": [
+        "pii_leak_risk"
+      ],
+      "got": [
+        "pii_leak_risk"
+      ],
+      "latency_ms": 0.405,
+      "scores": {
+        "tool_selection_quality": 1.0,
+        "action_completion": 1.0,
+        "groundedness": 1.0,
+        "safety": 0.25,
+        "efficiency": 1.0,
+        "trace_quality": 0.925,
+        "negative_descriptor_mass": 0.75,
+        "descriptor_count": 1.0
+      }
+    },
+    {
+      "id": "refusal_inappropriate",
+      "tier": "heuristic",
+      "expected": [
+        "refusal_inappropriate"
+      ],
+      "got": [
+        "refusal_inappropriate"
+      ],
+      "latency_ms": 0.13,
+      "scores": {
+        "tool_selection_quality": 1.0,
+        "action_completion": 1.0,
+        "groundedness": 1.0,
+        "safety": 1.0,
+        "efficiency": 1.0,
+        "trace_quality": 1.0,
+        "negative_descriptor_mass": 0.7,
+        "descriptor_count": 1.0
+      }
+    },
+    {
+      "id": "healthy_transfer",
+      "tier": "negative",
+      "expected": [],
+      "got": [],
+      "latency_ms": 1.248,
+      "scores": {
+        "tool_selection_quality": 1.0,
+        "action_completion": 1.0,
+        "groundedness": 1.0,
+        "safety": 1.0,
+        "efficiency": 1.0,
+        "trace_quality": 1.0,
+        "negative_descriptor_mass": 0.0,
+        "descriptor_count": 0.0
+      }
+    },
+    {
+      "id": "healthy_two_tools",
+      "tier": "negative",
+      "expected": [],
+      "got": [],
+      "latency_ms": 0.803,
+      "scores": {
+        "tool_selection_quality": 1.0,
+        "action_completion": 1.0,
+        "groundedness": 1.0,
+        "safety": 1.0,
+        "efficiency": 1.0,
+        "trace_quality": 1.0,
+        "negative_descriptor_mass": 0.0,
+        "descriptor_count": 0.0
+      }
+    },
+    {
+      "id": "not_chitchat_real_question",
+      "tier": "negative",
+      "expected": [],
+      "got": [],
+      "latency_ms": 1.286,
+      "scores": {
+        "tool_selection_quality": 1.0,
+        "action_completion": 1.0,
+        "groundedness": 1.0,
+        "safety": 1.0,
+        "efficiency": 1.0,
+        "trace_quality": 1.0,
+        "negative_descriptor_mass": 0.0,
+        "descriptor_count": 0.0
+      }
+    },
+    {
+      "id": "single_tool_call_not_loop",
+      "tier": "negative",
+      "expected": [],
+      "got": [],
+      "latency_ms": 0.289,
+      "scores": {
+        "tool_selection_quality": 1.0,
+        "action_completion": 1.0,
+        "groundedness": 1.0,
+        "safety": 1.0,
+        "efficiency": 1.0,
+        "trace_quality": 1.0,
+        "negative_descriptor_mass": 0.0,
+        "descriptor_count": 0.0
+      }
+    },
+    {
+      "id": "two_identical_not_yet_loop",
+      "tier": "negative",
+      "expected": [],
+      "got": [],
+      "latency_ms": 0.4,
+      "scores": {
+        "tool_selection_quality": 1.0,
+        "action_completion": 1.0,
+        "groundedness": 1.0,
+        "safety": 1.0,
+        "efficiency": 1.0,
+        "trace_quality": 1.0,
+        "negative_descriptor_mass": 0.0,
+        "descriptor_count": 0.0
+      }
+    },
+    {
+      "id": "gen_utu_0",
+      "tier": "heuristic",
+      "expected": [
+        "unnecessary_tool_call"
+      ],
+      "got": [
+        "unnecessary_tool_call"
+      ],
+      "latency_ms": 0.636,
+      "scores": {
+        "tool_selection_quality": 0.05,
+        "action_completion": 1.0,
+        "groundedness": 1.0,
+        "safety": 1.0,
+        "efficiency": 1.0,
+        "trace_quality": 0.7625,
+        "negative_descriptor_mass": 0.95,
+        "descriptor_count": 1.0
+      }
+    },
+    {
+      "id": "gen_utu_1",
+      "tier": "heuristic",
+      "expected": [
+        "unnecessary_tool_call"
+      ],
+      "got": [
+        "unnecessary_tool_call"
+      ],
+      "latency_ms": 0.52,
+      "scores": {
+        "tool_selection_quality": 0.05,
+        "action_completion": 1.0,
+        "groundedness": 1.0,
+        "safety": 1.0,
+        "efficiency": 1.0,
+        "trace_quality": 0.7625,
+        "negative_descriptor_mass": 0.95,
+        "descriptor_count": 1.0
+      }
+    },
+    {
+      "id": "gen_utu_2",
+      "tier": "heuristic",
+      "expected": [
+        "unnecessary_tool_call"
+      ],
+      "got": [
+        "unnecessary_tool_call"
+      ],
+      "latency_ms": 0.262,
+      "scores": {
+        "tool_selection_quality": 0.05,
+        "action_completion": 1.0,
+        "groundedness": 1.0,
+        "safety": 1.0,
+        "efficiency": 1.0,
+        "trace_quality": 0.7625,
+        "negative_descriptor_mass": 0.95,
+        "descriptor_count": 1.0
+      }
+    },
+    {
+      "id": "gen_utu_3",
+      "tier": "heuristic",
+      "expected": [
+        "unnecessary_tool_call"
+      ],
+      "got": [
+        "unnecessary_tool_call"
+      ],
+      "latency_ms": 0.431,
+      "scores": {
+        "tool_selection_quality": 0.05,
+        "action_completion": 1.0,
+        "groundedness": 1.0,
+        "safety": 1.0,
+        "efficiency": 1.0,
+        "trace_quality": 0.7625,
+        "negative_descriptor_mass": 0.95,
+        "descriptor_count": 1.0
+      }
+    },
+    {
+      "id": "gen_utu_4",
+      "tier": "heuristic",
+      "expected": [
+        "unnecessary_tool_call"
+      ],
+      "got": [
+        "unnecessary_tool_call"
+      ],
+      "latency_ms": 0.379,
+      "scores": {
+        "tool_selection_quality": 0.05,
+        "action_completion": 1.0,
+        "groundedness": 1.0,
+        "safety": 1.0,
+        "efficiency": 1.0,
+        "trace_quality": 0.7625,
+        "negative_descriptor_mass": 0.95,
+        "descriptor_count": 1.0
+      }
+    },
+    {
+      "id": "gen_utu_5",
+      "tier": "heuristic",
+      "expected": [
+        "unnecessary_tool_call"
+      ],
+      "got": [
+        "unnecessary_tool_call"
+      ],
+      "latency_ms": 0.331,
+      "scores": {
+        "tool_selection_quality": 0.05,
+        "action_completion": 1.0,
+        "groundedness": 1.0,
+        "safety": 1.0,
+        "efficiency": 1.0,
+        "trace_quality": 0.7625,
+        "negative_descriptor_mass": 0.95,
+        "descriptor_count": 1.0
+      }
+    },
+    {
+      "id": "gen_utu_6",
+      "tier": "heuristic",
+      "expected": [
+        "unnecessary_tool_call"
+      ],
+      "got": [
+        "unnecessary_tool_call"
+      ],
+      "latency_ms": 0.48,
+      "scores": {
+        "tool_selection_quality": 0.05,
+        "action_completion": 1.0,
+        "groundedness": 1.0,
+        "safety": 1.0,
+        "efficiency": 1.0,
+        "trace_quality": 0.7625,
+        "negative_descriptor_mass": 0.95,
+        "descriptor_count": 1.0
+      }
+    },
+    {
+      "id": "gen_utu_7",
+      "tier": "heuristic",
+      "expected": [
+        "unnecessary_tool_call"
+      ],
+      "got": [
+        "unnecessary_tool_call"
+      ],
+      "latency_ms": 0.717,
+      "scores": {
+        "tool_selection_quality": 0.05,
+        "action_completion": 1.0,
+        "groundedness": 1.0,
+        "safety": 1.0,
+        "efficiency": 1.0,
+        "trace_quality": 0.7625,
+        "negative_descriptor_mass": 0.95,
+        "descriptor_count": 1.0
+      }
+    },
+    {
+      "id": "gen_tool_err_0",
+      "tier": "primary",
+      "expected": [
+        "tool_error"
+      ],
+      "got": [
+        "dead_end",
+        "tool_error"
+      ],
+      "latency_ms": 0.254,
+      "scores": {
+        "tool_selection_quality": 0.5,
+        "action_completion": 0.15,
+        "groundedness": 1.0,
+        "safety": 1.0,
+        "efficiency": 1.0,
+        "trace_quality": 0.62,
+        "negative_descriptor_mass": 1.85,
+        "descriptor_count": 2.0
+      }
+    },
+    {
+      "id": "gen_tool_err_1",
+      "tier": "primary",
+      "expected": [
+        "tool_error"
+      ],
+      "got": [
+        "dead_end",
+        "tool_error"
+      ],
+      "latency_ms": 0.158,
+      "scores": {
+        "tool_selection_quality": 0.5,
+        "action_completion": 0.15,
+        "groundedness": 1.0,
+        "safety": 1.0,
+        "efficiency": 1.0,
+        "trace_quality": 0.62,
+        "negative_descriptor_mass": 1.85,
+        "descriptor_count": 2.0
+      }
+    },
+    {
+      "id": "gen_tool_err_2",
+      "tier": "primary",
+      "expected": [
+        "tool_error"
+      ],
+      "got": [
+        "dead_end",
+        "tool_error"
+      ],
+      "latency_ms": 0.151,
+      "scores": {
+        "tool_selection_quality": 0.5,
+        "action_completion": 0.15,
+        "groundedness": 1.0,
+        "safety": 1.0,
+        "efficiency": 1.0,
+        "trace_quality": 0.62,
+        "negative_descriptor_mass": 1.85,
+        "descriptor_count": 2.0
+      }
+    },
+    {
+      "id": "gen_tool_err_3",
+      "tier": "primary",
+      "expected": [
+        "tool_error"
+      ],
+      "got": [
+        "dead_end",
+        "tool_error"
+      ],
+      "latency_ms": 0.146,
+      "scores": {
+        "tool_selection_quality": 0.5,
+        "action_completion": 0.15,
+        "groundedness": 1.0,
+        "safety": 1.0,
+        "efficiency": 1.0,
+        "trace_quality": 0.62,
+        "negative_descriptor_mass": 1.85,
+        "descriptor_count": 2.0
+      }
+    },
+    {
+      "id": "gen_tool_err_4",
+      "tier": "primary",
+      "expected": [
+        "tool_error"
+      ],
+      "got": [
+        "dead_end",
+        "tool_error"
+      ],
+      "latency_ms": 0.228,
+      "scores": {
+        "tool_selection_quality": 0.5,
+        "action_completion": 0.15,
+        "groundedness": 1.0,
+        "safety": 1.0,
+        "efficiency": 1.0,
+        "trace_quality": 0.62,
+        "negative_descriptor_mass": 1.85,
+        "descriptor_count": 2.0
+      }
+    },
+    {
+      "id": "gen_auth_0",
+      "tier": "primary",
+      "expected": [
+        "mcp_auth_failure"
+      ],
+      "got": [
+        "dead_end",
+        "mcp_auth_failure"
+      ],
+      "latency_ms": 0.151,
+      "scores": {
+        "tool_selection_quality": 0.5,
+        "action_completion": 0.15,
+        "groundedness": 1.0,
+        "safety": 0.0,
+        "efficiency": 1.0,
+        "trace_quality": 0.52,
+        "negative_descriptor_mass": 1.85,
+        "descriptor_count": 2.0
+      }
+    },
+    {
+      "id": "gen_auth_1",
+      "tier": "primary",
+      "expected": [
+        "mcp_auth_failure"
+      ],
+      "got": [
+        "dead_end",
+        "mcp_auth_failure"
+      ],
+      "latency_ms": 0.137,
+      "scores": {
+        "tool_selection_quality": 0.5,
+        "action_completion": 0.15,
+        "groundedness": 1.0,
+        "safety": 0.0,
+        "efficiency": 1.0,
+        "trace_quality": 0.52,
+        "negative_descriptor_mass": 1.85,
+        "descriptor_count": 2.0
+      }
+    },
+    {
+      "id": "gen_auth_2",
+      "tier": "primary",
+      "expected": [
+        "mcp_auth_failure"
+      ],
+      "got": [
+        "dead_end",
+        "mcp_auth_failure"
+      ],
+      "latency_ms": 0.134,
+      "scores": {
+        "tool_selection_quality": 0.5,
+        "action_completion": 0.15,
+        "groundedness": 1.0,
+        "safety": 0.0,
+        "efficiency": 1.0,
+        "trace_quality": 0.52,
+        "negative_descriptor_mass": 1.85,
+        "descriptor_count": 2.0
+      }
+    },
+    {
+      "id": "gen_auth_3",
+      "tier": "primary",
+      "expected": [
+        "mcp_auth_failure"
+      ],
+      "got": [
+        "dead_end",
+        "mcp_auth_failure"
+      ],
+      "latency_ms": 0.133,
+      "scores": {
+        "tool_selection_quality": 0.5,
+        "action_completion": 0.15,
+        "groundedness": 1.0,
+        "safety": 0.0,
+        "efficiency": 1.0,
+        "trace_quality": 0.52,
+        "negative_descriptor_mass": 1.85,
+        "descriptor_count": 2.0
+      }
+    },
+    {
+      "id": "gen_bad_args_0",
+      "tier": "primary",
+      "expected": [
+        "bad_tool_args"
+      ],
+      "got": [
+        "action_incomplete",
+        "bad_tool_args"
+      ],
+      "latency_ms": 0.115,
+      "scores": {
+        "tool_selection_quality": 0.0,
+        "action_completion": 0.2,
+        "groundedness": 1.0,
+        "safety": 1.0,
+        "efficiency": 1.0,
+        "trace_quality": 0.51,
+        "negative_descriptor_mass": 1.8,
+        "descriptor_count": 2.0
+      }
+    },
+    {
+      "id": "gen_bad_args_1",
+      "tier": "primary",
+      "expected": [
+        "bad_tool_args"
+      ],
+      "got": [
+        "action_incomplete",
+        "bad_tool_args"
+      ],
+      "latency_ms": 0.13,
+      "scores": {
+        "tool_selection_quality": 0.0,
+        "action_completion": 0.2,
+        "groundedness": 1.0,
+        "safety": 1.0,
+        "efficiency": 1.0,
+        "trace_quality": 0.51,
+        "negative_descriptor_mass": 1.8,
+        "descriptor_count": 2.0
+      }
+    },
+    {
+      "id": "gen_bad_args_2",
+      "tier": "primary",
+      "expected": [
+        "bad_tool_args"
+      ],
+      "got": [
+        "action_incomplete",
+        "bad_tool_args"
+      ],
+      "latency_ms": 0.115,
+      "scores": {
+        "tool_selection_quality": 0.0,
+        "action_completion": 0.2,
+        "groundedness": 1.0,
+        "safety": 1.0,
+        "efficiency": 1.0,
+        "trace_quality": 0.51,
+        "negative_descriptor_mass": 1.8,
+        "descriptor_count": 2.0
+      }
+    },
+    {
+      "id": "gen_loop_0",
+      "tier": "primary",
+      "expected": [
+        "looping",
+        "repetitive_tool_call"
+      ],
+      "got": [
+        "looping",
+        "repetitive_tool_call"
+      ],
+      "latency_ms": 0.412,
+      "scores": {
+        "tool_selection_quality": 1.0,
+        "action_completion": 1.0,
+        "groundedness": 1.0,
+        "safety": 1.0,
+        "efficiency": 0.0,
+        "trace_quality": 0.9,
+        "negative_descriptor_mass": 2.0,
+        "descriptor_count": 2.0
+      }
+    },
+    {
+      "id": "gen_loop_1",
+      "tier": "primary",
+      "expected": [
+        "looping",
+        "repetitive_tool_call"
+      ],
+      "got": [
+        "looping",
+        "repetitive_tool_call"
+      ],
+      "latency_ms": 0.824,
+      "scores": {
+        "tool_selection_quality": 1.0,
+        "action_completion": 1.0,
+        "groundedness": 1.0,
+        "safety": 1.0,
+        "efficiency": 0.0,
+        "trace_quality": 0.9,
+        "negative_descriptor_mass": 2.0,
+        "descriptor_count": 2.0
+      }
+    },
+    {
+      "id": "gen_loop_2",
+      "tier": "primary",
+      "expected": [
+        "looping",
+        "repetitive_tool_call"
+      ],
+      "got": [
+        "looping",
+        "repetitive_tool_call"
+      ],
+      "latency_ms": 0.529,
+      "scores": {
+        "tool_selection_quality": 1.0,
+        "action_completion": 1.0,
+        "groundedness": 1.0,
+        "safety": 1.0,
+        "efficiency": 0.0,
+        "trace_quality": 0.9,
+        "negative_descriptor_mass": 2.0,
+        "descriptor_count": 2.0
+      }
+    },
+    {
+      "id": "gen_loop_3",
+      "tier": "primary",
+      "expected": [
+        "looping",
+        "repetitive_tool_call"
+      ],
+      "got": [
+        "looping",
+        "repetitive_tool_call"
+      ],
+      "latency_ms": 0.307,
+      "scores": {
+        "tool_selection_quality": 1.0,
+        "action_completion": 1.0,
+        "groundedness": 1.0,
+        "safety": 1.0,
+        "efficiency": 0.0,
+        "trace_quality": 0.9,
+        "negative_descriptor_mass": 2.0,
+        "descriptor_count": 2.0
+      }
+    },
+    {
+      "id": "gen_loop_4",
+      "tier": "primary",
+      "expected": [
+        "looping",
+        "repetitive_tool_call"
+      ],
+      "got": [
+        "looping",
+        "repetitive_tool_call"
+      ],
+      "latency_ms": 0.358,
+      "scores": {
+        "tool_selection_quality": 1.0,
+        "action_completion": 1.0,
+        "groundedness": 1.0,
+        "safety": 1.0,
+        "efficiency": 0.0,
+        "trace_quality": 0.9,
+        "negative_descriptor_mass": 2.0,
+        "descriptor_count": 2.0
+      }
+    },
+    {
+      "id": "gen_wrong_tool_0",
+      "tier": "heuristic",
+      "expected": [
+        "wrong_tool"
+      ],
+      "got": [
+        "wrong_tool"
+      ],
+      "latency_ms": 0.479,
+      "scores": {
+        "tool_selection_quality": 0.22,
+        "action_completion": 1.0,
+        "groundedness": 1.0,
+        "safety": 1.0,
+        "efficiency": 1.0,
+        "trace_quality": 0.805,
+        "negative_descriptor_mass": 0.78,
+        "descriptor_count": 1.0
+      }
+    },
+    {
+      "id": "gen_wrong_tool_1",
+      "tier": "heuristic",
+      "expected": [
+        "wrong_tool"
+      ],
+      "got": [
+        "wrong_tool"
+      ],
+      "latency_ms": 0.366,
+      "scores": {
+        "tool_selection_quality": 0.22,
+        "action_completion": 1.0,
+        "groundedness": 1.0,
+        "safety": 1.0,
+        "efficiency": 1.0,
+        "trace_quality": 0.805,
+        "negative_descriptor_mass": 0.78,
+        "descriptor_count": 1.0
+      }
+    },
+    {
+      "id": "gen_wrong_tool_2",
+      "tier": "heuristic",
+      "expected": [
+        "wrong_tool"
+      ],
+      "got": [
+        "wrong_tool"
+      ],
+      "latency_ms": 0.394,
+      "scores": {
+        "tool_selection_quality": 0.22,
+        "action_completion": 1.0,
+        "groundedness": 1.0,
+        "safety": 1.0,
+        "efficiency": 1.0,
+        "trace_quality": 0.805,
+        "negative_descriptor_mass": 0.78,
+        "descriptor_count": 1.0
+      }
+    },
+    {
+      "id": "gen_wrong_tool_3",
+      "tier": "heuristic",
+      "expected": [
+        "wrong_tool"
+      ],
+      "got": [
+        "wrong_tool"
+      ],
+      "latency_ms": 0.348,
+      "scores": {
+        "tool_selection_quality": 0.22,
+        "action_completion": 1.0,
+        "groundedness": 1.0,
+        "safety": 1.0,
+        "efficiency": 1.0,
+        "trace_quality": 0.805,
+        "negative_descriptor_mass": 0.78,
+        "descriptor_count": 1.0
+      }
+    },
+    {
+      "id": "gen_wrong_tool_4",
+      "tier": "heuristic",
+      "expected": [
+        "wrong_tool"
+      ],
+      "got": [
+        "wrong_tool"
+      ],
+      "latency_ms": 0.267,
+      "scores": {
+        "tool_selection_quality": 0.22,
+        "action_completion": 1.0,
+        "groundedness": 1.0,
+        "safety": 1.0,
+        "efficiency": 1.0,
+        "trace_quality": 0.805,
+        "negative_descriptor_mass": 0.78,
+        "descriptor_count": 1.0
+      }
+    },
+    {
+      "id": "gen_result_ignore_0",
+      "tier": "heuristic",
+      "expected": [
+        "result_ignore"
+      ],
+      "got": [
+        "result_ignore"
+      ],
+      "latency_ms": 0.342,
+      "scores": {
+        "tool_selection_quality": 1.0,
+        "action_completion": 1.0,
+        "groundedness": 0.15,
+        "safety": 1.0,
+        "efficiency": 1.0,
+        "trace_quality": 0.7875,
+        "negative_descriptor_mass": 0.85,
+        "descriptor_count": 1.0
+      }
+    },
+    {
+      "id": "gen_result_ignore_1",
+      "tier": "heuristic",
+      "expected": [
+        "result_ignore"
+      ],
+      "got": [
+        "result_ignore"
+      ],
+      "latency_ms": 0.286,
+      "scores": {
+        "tool_selection_quality": 1.0,
+        "action_completion": 1.0,
+        "groundedness": 0.15,
+        "safety": 1.0,
+        "efficiency": 1.0,
+        "trace_quality": 0.7875,
+        "negative_descriptor_mass": 0.85,
+        "descriptor_count": 1.0
+      }
+    },
+    {
+      "id": "gen_result_ignore_2",
+      "tier": "heuristic",
+      "expected": [
+        "result_ignore"
+      ],
+      "got": [
+        "result_ignore"
+      ],
+      "latency_ms": 0.762,
+      "scores": {
+        "tool_selection_quality": 1.0,
+        "action_completion": 1.0,
+        "groundedness": 0.15,
+        "safety": 1.0,
+        "efficiency": 1.0,
+        "trace_quality": 0.7875,
+        "negative_descriptor_mass": 0.85,
+        "descriptor_count": 1.0
+      }
+    },
+    {
+      "id": "gen_result_ignore_3",
+      "tier": "heuristic",
+      "expected": [
+        "result_ignore"
+      ],
+      "got": [
+        "result_ignore"
+      ],
+      "latency_ms": 0.596,
+      "scores": {
+        "tool_selection_quality": 1.0,
+        "action_completion": 1.0,
+        "groundedness": 0.15,
+        "safety": 1.0,
+        "efficiency": 1.0,
+        "trace_quality": 0.7875,
+        "negative_descriptor_mass": 0.85,
+        "descriptor_count": 1.0
+      }
+    },
+    {
+      "id": "gen_fabricate_0",
+      "tier": "heuristic",
+      "expected": [
+        "output_fabrication"
+      ],
+      "got": [
+        "output_fabrication"
+      ],
+      "latency_ms": 0.594,
+      "scores": {
+        "tool_selection_quality": 1.0,
+        "action_completion": 1.0,
+        "groundedness": 0.2,
+        "safety": 1.0,
+        "efficiency": 1.0,
+        "trace_quality": 0.8,
+        "negative_descriptor_mass": 0.8,
+        "descriptor_count": 1.0
+      }
+    },
+    {
+      "id": "gen_fabricate_1",
+      "tier": "heuristic",
+      "expected": [
+        "output_fabrication"
+      ],
+      "got": [
+        "output_fabrication"
+      ],
+      "latency_ms": 0.608,
+      "scores": {
+        "tool_selection_quality": 1.0,
+        "action_completion": 1.0,
+        "groundedness": 0.2,
+        "safety": 1.0,
+        "efficiency": 1.0,
+        "trace_quality": 0.8,
+        "negative_descriptor_mass": 0.8,
+        "descriptor_count": 1.0
+      }
+    },
+    {
+      "id": "gen_fabricate_2",
+      "tier": "heuristic",
+      "expected": [
+        "output_fabrication"
+      ],
+      "got": [
+        "output_fabrication"
+      ],
+      "latency_ms": 0.381,
+      "scores": {
+        "tool_selection_quality": 1.0,
+        "action_completion": 1.0,
+        "groundedness": 0.2,
+        "safety": 1.0,
+        "efficiency": 1.0,
+        "trace_quality": 0.8,
+        "negative_descriptor_mass": 0.8,
+        "descriptor_count": 1.0
+      }
+    },
+    {
+      "id": "gen_healthy_weather_0",
+      "tier": "negative",
+      "expected": [],
+      "got": [],
+      "latency_ms": 0.393,
+      "scores": {
+        "tool_selection_quality": 1.0,
+        "action_completion": 1.0,
+        "groundedness": 1.0,
+        "safety": 1.0,
+        "efficiency": 1.0,
+        "trace_quality": 1.0,
+        "negative_descriptor_mass": 0.0,
+        "descriptor_count": 0.0
+      }
+    },
+    {
+      "id": "gen_healthy_weather_1",
+      "tier": "negative",
+      "expected": [],
+      "got": [],
+      "latency_ms": 0.372,
+      "scores": {
+        "tool_selection_quality": 1.0,
+        "action_completion": 1.0,
+        "groundedness": 1.0,
+        "safety": 1.0,
+        "efficiency": 1.0,
+        "trace_quality": 1.0,
+        "negative_descriptor_mass": 0.0,
+        "descriptor_count": 0.0
+      }
+    },
+    {
+      "id": "gen_healthy_weather_2",
+      "tier": "negative",
+      "expected": [],
+      "got": [],
+      "latency_ms": 0.498,
+      "scores": {
+        "tool_selection_quality": 1.0,
+        "action_completion": 1.0,
+        "groundedness": 1.0,
+        "safety": 1.0,
+        "efficiency": 1.0,
+        "trace_quality": 1.0,
+        "negative_descriptor_mass": 0.0,
+        "descriptor_count": 0.0
+      }
+    },
+    {
+      "id": "gen_healthy_weather_3",
+      "tier": "negative",
+      "expected": [],
+      "got": [],
+      "latency_ms": 0.969,
+      "scores": {
+        "tool_selection_quality": 1.0,
+        "action_completion": 1.0,
+        "groundedness": 1.0,
+        "safety": 1.0,
+        "efficiency": 1.0,
+        "trace_quality": 1.0,
+        "negative_descriptor_mass": 0.0,
+        "descriptor_count": 0.0
+      }
+    },
+    {
+      "id": "gen_healthy_weather_4",
+      "tier": "negative",
+      "expected": [],
+      "got": [],
+      "latency_ms": 0.421,
+      "scores": {
+        "tool_selection_quality": 1.0,
+        "action_completion": 1.0,
+        "groundedness": 1.0,
+        "safety": 1.0,
+        "efficiency": 1.0,
+        "trace_quality": 1.0,
+        "negative_descriptor_mass": 0.0,
+        "descriptor_count": 0.0
+      }
+    },
+    {
+      "id": "gen_soft_skip_0",
+      "tier": "heuristic",
+      "expected": [
+        "tool_skip"
+      ],
+      "got": [
+        "tool_skip"
+      ],
+      "latency_ms": 0.145,
+      "scores": {
+        "tool_selection_quality": 0.18,
+        "action_completion": 0.18,
+        "groundedness": 1.0,
+        "safety": 1.0,
+        "efficiency": 1.0,
+        "trace_quality": 0.549,
+        "negative_descriptor_mass": 0.82,
+        "descriptor_count": 1.0
+      }
+    },
+    {
+      "id": "gen_soft_skip_1",
+      "tier": "heuristic",
+      "expected": [
+        "tool_skip"
+      ],
+      "got": [
+        "tool_skip"
+      ],
+      "latency_ms": 0.106,
+      "scores": {
+        "tool_selection_quality": 0.18,
+        "action_completion": 0.18,
+        "groundedness": 1.0,
+        "safety": 1.0,
+        "efficiency": 1.0,
+        "trace_quality": 0.549,
+        "negative_descriptor_mass": 0.82,
+        "descriptor_count": 1.0
+      }
+    },
+    {
+      "id": "gen_soft_skip_2",
+      "tier": "heuristic",
+      "expected": [
+        "tool_skip"
+      ],
+      "got": [
+        "tool_skip"
+      ],
+      "latency_ms": 0.148,
+      "scores": {
+        "tool_selection_quality": 0.18,
+        "action_completion": 0.18,
+        "groundedness": 1.0,
+        "safety": 1.0,
+        "efficiency": 1.0,
+        "trace_quality": 0.549,
+        "negative_descriptor_mass": 0.82,
+        "descriptor_count": 1.0
+      }
+    },
+    {
+      "id": "gen_soft_skip_3",
+      "tier": "heuristic",
+      "expected": [
+        "tool_skip"
+      ],
+      "got": [
+        "tool_skip"
+      ],
+      "latency_ms": 0.141,
+      "scores": {
+        "tool_selection_quality": 0.18,
+        "action_completion": 0.18,
+        "groundedness": 1.0,
+        "safety": 1.0,
+        "efficiency": 1.0,
+        "trace_quality": 0.549,
+        "negative_descriptor_mass": 0.82,
+        "descriptor_count": 1.0
+      }
+    },
+    {
+      "id": "gen_dead_end_0",
+      "tier": "heuristic",
+      "expected": [
+        "dead_end",
+        "tool_error"
+      ],
+      "got": [
+        "dead_end",
+        "tool_error"
+      ],
+      "latency_ms": 0.315,
+      "scores": {
+        "tool_selection_quality": 0.5,
+        "action_completion": 0.15,
+        "groundedness": 1.0,
+        "safety": 1.0,
+        "efficiency": 1.0,
+        "trace_quality": 0.62,
+        "negative_descriptor_mass": 1.85,
+        "descriptor_count": 2.0
+      }
+    },
+    {
+      "id": "gen_dead_end_1",
+      "tier": "heuristic",
+      "expected": [
+        "dead_end",
+        "tool_error"
+      ],
+      "got": [
+        "dead_end",
+        "tool_error"
+      ],
+      "latency_ms": 0.253,
+      "scores": {
+        "tool_selection_quality": 0.5,
+        "action_completion": 0.15,
+        "groundedness": 1.0,
+        "safety": 1.0,
+        "efficiency": 1.0,
+        "trace_quality": 0.62,
+        "negative_descriptor_mass": 1.85,
+        "descriptor_count": 2.0
+      }
+    },
+    {
+      "id": "gen_dead_end_2",
+      "tier": "heuristic",
+      "expected": [
+        "dead_end",
+        "tool_error"
+      ],
+      "got": [
+        "dead_end",
+        "tool_error"
+      ],
+      "latency_ms": 0.192,
+      "scores": {
+        "tool_selection_quality": 0.5,
+        "action_completion": 0.15,
+        "groundedness": 1.0,
+        "safety": 1.0,
+        "efficiency": 1.0,
+        "trace_quality": 0.62,
+        "negative_descriptor_mass": 1.85,
+        "descriptor_count": 2.0
+      }
+    },
+    {
+      "id": "gen_frust_0",
+      "tier": "primary",
+      "expected": [
+        "user_frustration"
+      ],
+      "got": [
+        "user_frustration"
+      ],
+      "latency_ms": 0.116,
+      "scores": {
+        "tool_selection_quality": 1.0,
+        "action_completion": 1.0,
+        "groundedness": 1.0,
+        "safety": 1.0,
+        "efficiency": 1.0,
+        "trace_quality": 1.0,
+        "negative_descriptor_mass": 0.9,
+        "descriptor_count": 1.0
+      }
+    },
+    {
+      "id": "gen_frust_1",
+      "tier": "primary",
+      "expected": [
+        "user_frustration"
+      ],
+      "got": [
+        "user_frustration"
+      ],
+      "latency_ms": 0.092,
+      "scores": {
+        "tool_selection_quality": 1.0,
+        "action_completion": 1.0,
+        "groundedness": 1.0,
+        "safety": 1.0,
+        "efficiency": 1.0,
+        "trace_quality": 1.0,
+        "negative_descriptor_mass": 0.9,
+        "descriptor_count": 1.0
+      }
+    },
+    {
+      "id": "gen_frust_2",
+      "tier": "primary",
+      "expected": [
+        "user_frustration"
+      ],
+      "got": [
+        "user_frustration"
+      ],
+      "latency_ms": 0.091,
+      "scores": {
+        "tool_selection_quality": 1.0,
+        "action_completion": 1.0,
+        "groundedness": 1.0,
+        "safety": 1.0,
+        "efficiency": 1.0,
+        "trace_quality": 1.0,
+        "negative_descriptor_mass": 0.9,
+        "descriptor_count": 1.0
+      }
+    },
+    {
+      "id": "gen_frust_3",
+      "tier": "primary",
+      "expected": [
+        "user_frustration"
+      ],
+      "got": [
+        "user_frustration"
+      ],
+      "latency_ms": 0.091,
+      "scores": {
+        "tool_selection_quality": 1.0,
+        "action_completion": 1.0,
+        "groundedness": 1.0,
+        "safety": 1.0,
+        "efficiency": 1.0,
+        "trace_quality": 1.0,
+        "negative_descriptor_mass": 0.9,
+        "descriptor_count": 1.0
+      }
+    },
+    {
+      "id": "gen_frust_4",
+      "tier": "primary",
+      "expected": [
+        "user_frustration"
+      ],
+      "got": [
+        "user_frustration"
+      ],
+      "latency_ms": 0.089,
+      "scores": {
+        "tool_selection_quality": 1.0,
+        "action_completion": 1.0,
+        "groundedness": 1.0,
+        "safety": 1.0,
+        "efficiency": 1.0,
+        "trace_quality": 1.0,
+        "negative_descriptor_mass": 0.9,
+        "descriptor_count": 1.0
+      }
+    },
+    {
+      "id": "gen_jb_0",
+      "tier": "primary",
+      "expected": [
+        "jailbreak_attempt"
+      ],
+      "got": [
+        "jailbreak_attempt"
+      ],
+      "latency_ms": 0.098,
+      "scores": {
+        "tool_selection_quality": 1.0,
+        "action_completion": 1.0,
+        "groundedness": 1.0,
+        "safety": 0.1,
+        "efficiency": 1.0,
+        "trace_quality": 0.91,
+        "negative_descriptor_mass": 0.9,
+        "descriptor_count": 1.0
+      }
+    },
+    {
+      "id": "gen_jb_1",
+      "tier": "primary",
+      "expected": [
+        "jailbreak_attempt"
+      ],
+      "got": [
+        "jailbreak_attempt"
+      ],
+      "latency_ms": 0.081,
+      "scores": {
+        "tool_selection_quality": 1.0,
+        "action_completion": 1.0,
+        "groundedness": 1.0,
+        "safety": 0.1,
+        "efficiency": 1.0,
+        "trace_quality": 0.91,
+        "negative_descriptor_mass": 0.9,
+        "descriptor_count": 1.0
+      }
+    },
+    {
+      "id": "gen_jb_2",
+      "tier": "primary",
+      "expected": [
+        "jailbreak_attempt"
+      ],
+      "got": [
+        "jailbreak_attempt"
+      ],
+      "latency_ms": 0.083,
+      "scores": {
+        "tool_selection_quality": 1.0,
+        "action_completion": 1.0,
+        "groundedness": 1.0,
+        "safety": 0.1,
+        "efficiency": 1.0,
+        "trace_quality": 0.91,
+        "negative_descriptor_mass": 0.9,
+        "descriptor_count": 1.0
+      }
+    },
+    {
+      "id": "gen_healthy_misc_0",
+      "tier": "negative",
+      "expected": [],
+      "got": [],
+      "latency_ms": 7.042,
+      "scores": {
+        "tool_selection_quality": 1.0,
+        "action_completion": 1.0,
+        "groundedness": 1.0,
+        "safety": 1.0,
+        "efficiency": 1.0,
+        "trace_quality": 1.0,
+        "negative_descriptor_mass": 0.0,
+        "descriptor_count": 0.0
+      }
+    },
+    {
+      "id": "gen_healthy_misc_1",
+      "tier": "negative",
+      "expected": [],
+      "got": [],
+      "latency_ms": 0.839,
+      "scores": {
+        "tool_selection_quality": 1.0,
+        "action_completion": 1.0,
+        "groundedness": 1.0,
+        "safety": 1.0,
+        "efficiency": 1.0,
+        "trace_quality": 1.0,
+        "negative_descriptor_mass": 0.0,
+        "descriptor_count": 0.0
+      }
+    },
+    {
+      "id": "gen_healthy_misc_2",
+      "tier": "negative",
+      "expected": [],
+      "got": [],
+      "latency_ms": 0.447,
+      "scores": {
+        "tool_selection_quality": 1.0,
+        "action_completion": 1.0,
+        "groundedness": 1.0,
+        "safety": 1.0,
+        "efficiency": 1.0,
+        "trace_quality": 1.0,
+        "negative_descriptor_mass": 0.0,
+        "descriptor_count": 0.0
+      }
+    },
+    {
+      "id": "gen_soft_utu_0",
+      "tier": "heuristic",
+      "expected": [
+        "unnecessary_tool_call"
+      ],
+      "got": [
+        "unnecessary_tool_call"
+      ],
+      "latency_ms": 0.407,
+      "scores": {
+        "tool_selection_quality": 0.12,
+        "action_completion": 1.0,
+        "groundedness": 1.0,
+        "safety": 1.0,
+        "efficiency": 1.0,
+        "trace_quality": 0.78,
+        "negative_descriptor_mass": 0.88,
+        "descriptor_count": 1.0
+      }
+    },
+    {
+      "id": "gen_soft_utu_1",
+      "tier": "heuristic",
+      "expected": [
+        "unnecessary_tool_call"
+      ],
+      "got": [
+        "unnecessary_tool_call"
+      ],
+      "latency_ms": 0.315,
+      "scores": {
+        "tool_selection_quality": 0.12,
+        "action_completion": 1.0,
+        "groundedness": 1.0,
+        "safety": 1.0,
+        "efficiency": 1.0,
+        "trace_quality": 0.78,
+        "negative_descriptor_mass": 0.88,
+        "descriptor_count": 1.0
+      }
+    },
+    {
+      "id": "gen_soft_utu_2",
+      "tier": "heuristic",
+      "expected": [
+        "unnecessary_tool_call"
+      ],
+      "got": [
+        "unnecessary_tool_call"
+      ],
+      "latency_ms": 0.264,
+      "scores": {
+        "tool_selection_quality": 0.12,
+        "action_completion": 1.0,
+        "groundedness": 1.0,
+        "safety": 1.0,
+        "efficiency": 1.0,
+        "trace_quality": 0.78,
+        "negative_descriptor_mass": 0.88,
+        "descriptor_count": 1.0
+      }
+    },
+    {
+      "id": "gen_soft_utu_3",
+      "tier": "heuristic",
+      "expected": [
+        "unnecessary_tool_call"
+      ],
+      "got": [
+        "unnecessary_tool_call"
+      ],
+      "latency_ms": 0.272,
+      "scores": {
+        "tool_selection_quality": 0.12,
+        "action_completion": 1.0,
+        "groundedness": 1.0,
+        "safety": 1.0,
+        "efficiency": 1.0,
+        "trace_quality": 0.78,
+        "negative_descriptor_mass": 0.88,
+        "descriptor_count": 1.0
+      }
+    },
+    {
+      "id": "gen_retry_storm",
+      "tier": "primary",
+      "expected": [
+        "retry_storm",
+        "tool_error"
+      ],
+      "got": [
+        "repetitive_tool_call",
+        "retry_storm",
+        "tool_error"
+      ],
+      "latency_ms": 7.214,
+      "scores": {
+        "tool_selection_quality": 0.5,
+        "action_completion": 1.0,
+        "groundedness": 1.0,
+        "safety": 1.0,
+        "efficiency": 0.0,
+        "trace_quality": 0.775,
+        "negative_descriptor_mass": 2.92,
+        "descriptor_count": 3.0
+      }
+    },
+    {
+      "id": "gen_sliding_window_loop",
+      "tier": "primary",
+      "expected": [
+        "sliding_window_loop"
+      ],
+      "got": [
+        "repetitive_tool_call",
+        "sliding_window_loop"
+      ],
+      "latency_ms": 6.341,
+      "scores": {
+        "tool_selection_quality": 1.0,
+        "action_completion": 1.0,
+        "groundedness": 1.0,
+        "safety": 1.0,
+        "efficiency": 0.0,
+        "trace_quality": 0.9,
+        "negative_descriptor_mass": 1.9,
+        "descriptor_count": 2.0
+      }
+    },
+    {
+      "id": "gen_tool_thrash",
+      "tier": "primary",
+      "expected": [
+        "tool_error",
+        "tool_thrash"
+      ],
+      "got": [
+        "tool_error",
+        "tool_thrash"
+      ],
+      "latency_ms": 0.703,
+      "scores": {
+        "tool_selection_quality": 0.5,
+        "action_completion": 1.0,
+        "groundedness": 1.0,
+        "safety": 1.0,
+        "efficiency": 0.2,
+        "trace_quality": 0.795,
+        "negative_descriptor_mass": 1.8,
+        "descriptor_count": 2.0
+      }
+    },
+    {
+      "id": "gen_assistant_echo",
+      "tier": "primary",
+      "expected": [
+        "assistant_echo_loop"
+      ],
+      "got": [
+        "assistant_echo_loop"
+      ],
+      "latency_ms": 0.532,
+      "scores": {
+        "tool_selection_quality": 1.0,
+        "action_completion": 1.0,
+        "groundedness": 1.0,
+        "safety": 1.0,
+        "efficiency": 0.12,
+        "trace_quality": 0.912,
+        "negative_descriptor_mass": 0.88,
+        "descriptor_count": 1.0
+      }
+    },
+    {
+      "id": "gen_normalized_arg_loop",
+      "tier": "primary",
+      "expected": [
+        "looping",
+        "repetitive_tool_call"
+      ],
+      "got": [
+        "looping",
+        "repetitive_tool_call"
+      ],
+      "latency_ms": 1.009,
+      "scores": {
+        "tool_selection_quality": 1.0,
+        "action_completion": 1.0,
+        "groundedness": 1.0,
+        "safety": 1.0,
+        "efficiency": 0.0,
+        "trace_quality": 0.9,
+        "negative_descriptor_mass": 2.0,
+        "descriptor_count": 2.0
+      }
+    },
+    {
+      "id": "gen_goal_abandoned",
+      "tier": "heuristic",
+      "expected": [
+        "goal_abandoned",
+        "tool_error"
+      ],
+      "got": [
+        "goal_abandoned",
+        "tool_error"
+      ],
+      "latency_ms": 0.351,
+      "scores": {
+        "tool_selection_quality": 0.5,
+        "action_completion": 0.25,
+        "groundedness": 1.0,
+        "safety": 1.0,
+        "efficiency": 1.0,
+        "trace_quality": 0.65,
+        "negative_descriptor_mass": 1.75,
+        "descriptor_count": 2.0
+      }
+    }
+  ]
+}

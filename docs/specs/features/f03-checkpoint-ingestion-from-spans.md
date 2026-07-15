@@ -6,7 +6,7 @@
 | **Slug** | `checkpoint-ingestion-from-spans` |
 | **Priority** | P0 |
 | **Effort** | M |
-| **Eden status** | **SHIPPED (v0)** — checkpoint ingest wired for F01 prefix replay |
+| **Eden status** | **SHIPPED (Wave 1)** — `debugger_llm_cache` migration (096); `PrefixCacheService` + `llm_input_hash` in `cache.py`; `checkpoint_hook` writes audit + cache rows; `LivePrefixEngine` prefers cache; flag + metrics; 16 tests. Stretch: 1k-trace/hr backfill bench, p99 hot-path microbench. |
 | **Competitive source** | Laminar |
 | **Closes gap** | 1.1 |
 | **Dependencies** | F01 (prefix cache consumer) |
@@ -191,10 +191,10 @@ eden_checkpoint_cache_bytes_total{org}
 
 ## 12. Acceptance criteria
 
-- [ ] 50 LLM spans → 50 cache rows within 5s of trace complete
+- [x] 50 LLM spans → 50 cache rows within 5s of trace complete
 - [ ] Hot-path sync overhead p99 ≤5ms
-- [ ] F01 rerun finds cache populated for production trace
-- [ ] Failed cache write does not fail trace ingest
+- [x] F01 rerun finds cache populated for production trace
+- [x] Failed cache write does not fail trace ingest
 - [ ] Backfill job processes 1k traces/hour without ingest impact
 
 ---

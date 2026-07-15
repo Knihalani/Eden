@@ -42,13 +42,12 @@ from pathlib import Path
 # significant -- doctest walks each module independently.
 #
 # Excluded modules with em-dashes (Phase 4 op-debt polish):
-#   * src/eden/code_change/rca_linker.py
-#   * src/eden/code_change/policy.py
-#   * src/eden/code_change/auto_approval/rules.py
-#   * src/eden/code_change/pr_creator.py
+#   * src/eden/patches/rca_linker.py
+#   * src/eden/patches/policy.py
+#   * src/eden/patches/pr_creator.py
 #   * src/eden/llmops/promotion_hooks.py
 DOCTEST_MODULES: tuple[str, ...] = (
-    "src/eden/code_change/_common.py",
+    "src/eden/patches/_common.py",
 )
 
 

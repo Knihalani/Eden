@@ -21,20 +21,16 @@
 import type { ComponentType } from "react";
 import {
   LayoutDashboard,
-  Wand2,
-  Box,
   Network,
   Layers,
   PlayCircle,
   Activity,
   GitBranch,
-  Database,
   BarChart3,
   History,
   Wrench,
   Cog,
   FlaskConical,
-  Inbox,
   ListTodo,
   Settings,
   Users,
@@ -46,6 +42,7 @@ import {
   Bug,
   ShieldAlert,
   Radio,
+  Webhook,
   type LucideIcon,
 } from "lucide-react";
 import {
@@ -150,12 +147,9 @@ export const DEFAULT_SIDEBAR: SidebarGroup[] = [
         label: "Observability hub",
         icon: Activity,
         children: [
-          { id: "obs-apm",         href: "/observability/apm",         label: "APM Tracing",     icon: GitBranch, category: "advanced" , description: "Application-performance tracing across services and AI calls."},
           { id: "obs-mcp",         href: "/observability/mcp",         label: "MCP SRE",         icon: Radio, description: "MCP server auth failures and toolchain health."},
-          { id: "obs-cohorts",     href: "/observability/cohorts",     label: "Columnar Engine", icon: Database, category: "advanced" , description: "Run fast columnar analytics over spans, traces, and decisions."},
           { id: "obs-decisions",   href: "/observability/decisions",   label: "Decisions",       icon: DecisionsIcon, category: "advanced" , description: "Inspect what an agent decided and why, with policy and prompt context."},
           { id: "obs-eval",        href: "/observability/eval",        label: "Eval",            icon: EvalIcon, category: "advanced" , description: "Score traces against evals to measure quality and regressions."},
-          { id: "obs-synthetic",   href: "/synthetic",                 label: "Synthetic Q/A",   icon: FlaskConical, category: "advanced", description: "Generate synthetic Q/A pairs to expand your eval datasets."},
           { id: "obs-debugger",    href: "/debugger",                  label: "Debugger",        icon: Bug, description: "Inspect agent checkpoints and re-run from an earlier step."},
           { id: "obs-memory",      href: "/observability/memory",      label: "Memory",          icon: MemoryIcon, category: "advanced" , description: "Inspect the memory store an agent reads from and writes to."},
           { id: "obs-query",       href: "/observability/query",       label: "Query",           icon: QueryIcon, category: "advanced" , description: "Ad-hoc query the trace corpus with natural language or SQL."},
@@ -165,10 +159,7 @@ export const DEFAULT_SIDEBAR: SidebarGroup[] = [
       },
       { id: "tools",     href: "/tools",     label: "Tools",     icon: Wrench, category: "advanced" , description: "See which tools your agents call most, compare success rates, and get recommendations."},
       { id: "insights",  href: "/insights",  label: "Insights",  icon: InsightsIcon , category: "advanced", description: "AI-generated summaries of trends, anomalies, and what to look at next."},
-      // LP-13: GET /signals fail-opens (empty list / 503) when nl_signals
-      // missing — re-enabled after backend contract stabilization (F48).
-      // { id: "signals",   href: "/signals",   label: "Signals",   icon: Radio, category: "advanced", description: "Compile behavioural signals from traces into reusable detectors." },
-      { id: "user-intelligence", href: "/users", label: "User Intelligence", icon: Users, category: "advanced", description: "Session aggregation, satisfaction scoring, and behavioural cohorts."},
+      { id: "signals",   href: "/signals",   label: "Signals",   icon: Radio, category: "advanced", description: "Compile behavioural signals from traces into reusable detectors." },
       { id: "inspector", href: "/inspector", label: "Inspector", icon: InspectorIcon, category: "advanced" , description: "Deep-dive into a single trace to debug behaviour, token usage, and tool I/O."},
       { id: "incidents", href: "/incidents", label: "Incidents", icon: IncidentIcon , description: "Systemic RCA clusters — patterns across many failures. For individual grouped failures, see Agent Issues."},
       { id: "alerts",    href: "/alerts",    label: "Alerts",    icon: AlertNavIcon , description: "Configure notifications when traces, costs, or quality cross a threshold."},
@@ -186,14 +177,11 @@ export const DEFAULT_SIDEBAR: SidebarGroup[] = [
         label: "Cost",
         icon: CostIcon,
         children: [
-          { id: "opt-outcomes",   href: "/optimization/outcomes",      label: "Outcomes",     icon: Box , category: "advanced", description: "Business-outcome attribution from agent runs to downstream results."},
-          { id: "opt-predict",    href: "/optimization/predict",       label: "Predictive",   icon: BarChart3 , category: "advanced", description: "Judge-score quality forecast and drift detection."},
           { id: "opt-advisor",    href: "/optimization/model-advisor", label: "Model Advisor", icon: Layers, badge: "new" , category: "advanced", description: "Get model-routing suggestions to cut cost without hurting quality (new)."},
         ],
       },
       { id: "studio",     href: "/studio",     label: "Custom Metrics", icon: FlaskConical, category: "advanced" , description: "Define custom metrics and dimensions for traces and runs."},
       { id: "guardrails", href: "/guardrails", label: "Guardrails",     icon: GuardrailIcon , description: "Block unsafe prompts, PII leaks, and policy violations before they ship."},
-      { id: "redteam",    href: "/redteam",    label: "Red team",       icon: ShieldAlert, category: "advanced", description: "Run adversarial probes against your prompts and review findings."},
     ],
   },
   {
@@ -201,18 +189,32 @@ export const DEFAULT_SIDEBAR: SidebarGroup[] = [
     label: "Automate",
     items: [
       { id: "improve",        href: "/improve",        label: "Improve",        icon: ListTodo, description: "Unified action queue — triage, patches, nudges, and promotions from detected issues."},
-      { id: "autonomous",     href: "/autonomous",     label: "Autonomous",     icon: Wand2, category: "advanced", description: "Run investigations and remediations on demand."},
-      { id: "closed-loop",    href: "/closed-loop",    label: "Closed-Loop",    icon: Inbox, category: "advanced" , description: "Closed-loop improvements — events flow from detection back to deploy."},
-      { id: "pr-suggestions", href: "/pr-suggestions", label: "PR Suggestions", icon: PatchIcon, badge: "new", category: "advanced" , description: "Auto-generated PRs that fix issues Eden finds in your repo (new)."},
+      { id: "improve-plans",  href: "/improve/plans",  label: "Improvement plans", icon: PatchIcon, description: "Recurring agent improvement inbox — review diffs and approve PRs."},
+      { id: "improve-runs",   href: "/improve/runs",   label: "Sweep history",  icon: History, category: "advanced", description: "Improvement agent sweep runs and watermarks."},
     ],
   },
   {
     id: "workspace",
     label: "Workspace",
     items: [
-      { id: "settings", href: "/settings", label: "Settings", icon: Settings },
+      {
+        id: "settings",
+        href: "/settings",
+        label: "Settings",
+        icon: Settings,
+        children: [
+          {
+            id: "settings-webhooks-dlq",
+            href: "/settings/webhooks-dlq",
+            label: "Webhook DLQ",
+            icon: Webhook,
+            category: "advanced",
+            description: "Replay terminal-state webhook deliveries that exceeded the retry budget.",
+          },
+        ],
+      },
       { id: "members",  href: "/settings?tab=members", label: "Members",  icon: Users , description: "Invite teammates and manage org members and roles."},
-      { id: "billing",  href: "/billing",  label: "Billing",  icon: CreditCard , description: "Plan, invoices, payment method, and usage-based charges."},
+      { id: "billing",  href: "/settings?tab=billing",  label: "Billing",  icon: CreditCard , description: "Plan, invoices, payment method, and usage-based charges."},
       { id: "docs",     href: DOCS_URL, label: "Docs", icon: FileText , description: "API reference, guides, and code examples for the Eden platform."},
       { id: "profile",  href: "/profile",  label: "Profile",  icon: User , category: "advanced", description: "Your personal account settings, sessions, and API keys."},
     ],

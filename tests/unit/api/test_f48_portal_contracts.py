@@ -99,11 +99,34 @@ def test_backend_agent_issues_routes_are_mounted() -> None:
     assert "/orgs/{org_id}/stumbles" in paths
 
 
-def test_sidebar_keeps_signals_hidden_until_smoke() -> None:
+def test_nl_alerts_portal_paths_match_backend() -> None:
+    src = PORTAL_API.read_text(encoding="utf-8")
+    assert "/alerts/compile" in src
+    assert "/nl-alert-rules" in src
+    assert "/alert-events" in src
+    assert "compileNlAlert" in src
+    assert "listNlAlertRules" in src
+    assert "overrideAlertVerdict" in src
+    assert "nlAlertsApi" in src
+
+
+def test_backend_nl_alert_routes_are_mounted() -> None:
+    from eden.alerts import routes as nl_alerts
+
+    paths = {r.path for r in nl_alerts.router.routes if isinstance(r, APIRoute)}
+    assert "/orgs/{org_id}/alerts/compile" in paths
+    assert "/orgs/{org_id}/nl-alert-rules" in paths
+    assert "/orgs/{org_id}/alert-events" in paths
+    assert "/orgs/{org_id}/alerts/{alert_id}/override" in paths
+
+
+def test_sidebar_signals_nav_is_visible() -> None:
     text = SIDEBAR.read_text(encoding="utf-8")
     signal_lines = [ln for ln in text.splitlines() if 'href: "/signals"' in ln]
-    assert signal_lines, "expected a commented Signals nav entry"
-    assert all(ln.strip().startswith("//") for ln in signal_lines)
+    assert signal_lines, "expected a Signals nav entry with href: \"/signals\""
+    assert not any(ln.strip().startswith("//") for ln in signal_lines), (
+        "Signals nav entry must not be commented out (F48 re-enabled)"
+    )
 
 
 @pytest.mark.asyncio
@@ -126,3 +149,20 @@ async def test_debugger_list_checkpoints_path_form() -> None:
             user={"sub": "u1"},
         )
     assert result.checkpoints == []
+
+
+def test_improve_portal_paths_in_api_ts() -> None:
+    src = PORTAL_API.read_text(encoding="utf-8")
+    assert "/improve/plans" in src or "improveApi" in src or "/improve/" in src
+
+
+def test_backend_improve_routes_are_mounted() -> None:
+    from eden.api.routes import improve
+
+    paths = {r.path for r in improve.router.routes if isinstance(r, APIRoute)}
+    assert "/orgs/{org_id}/improve/plans" in paths
+    assert "/orgs/{org_id}/improve/plans/{plan_id}" in paths
+    assert "/orgs/{org_id}/improve/plans/{plan_id}/approve" in paths
+    assert "/orgs/{org_id}/improve/runs" in paths
+    assert "/orgs/{org_id}/improve/schedule" in paths
+

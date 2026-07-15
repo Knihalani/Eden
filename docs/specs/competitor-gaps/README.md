@@ -2,9 +2,11 @@
 
 > **⚠️ Superseded by feature-by-feature specs:**  
 > **Master:** [`../FEATURE-GAP-MASTER.md`](../FEATURE-GAP-MASTER.md)  
-> **Canonical specs:** [`../features/`](../features/) — 45 files, one per feature (N07 removed)
+> **Canonical specs:** [`../features/`](../features/) — 57 F + 21 N (N07 removed)  
+> **Portal UI specs:** [`../ui/`](../ui/) — U00–U17  
+> **Research digest:** [`../COMPETITOR-UI-RESEARCH.md`](../COMPETITOR-UI-RESEARCH.md)
 
-This directory contains the earlier **competitor-organized** specs (Laminar, Sentrial, Raindrop, BentoLabs). Use [`../features/`](../features/) for implementation.
+This directory contains the earlier **competitor-organized** specs (Laminar, Sentrial, Raindrop, BentoLabs). Use [`../features/`](../features/) + [`../ui/`](../ui/) for implementation.
 
 ## Spec index
 
@@ -45,7 +47,7 @@ This directory contains the earlier **competitor-organized** specs (Laminar, Sen
 | 4.2 | "The Book" agent memory artifact | 🔴 | L | [04-bentolabs.md](./04-bentolabs.md#gap-42) |
 | 4.3 | Evidence-gated promotion pipeline | 🔴 | L | [04-bentolabs.md](./04-bentolabs.md#gap-43) |
 | 4.4 | Behavioral drift pinpointing | 🟠 | M | [04-bentolabs.md](./04-bentolabs.md#gap-44) |
-| 4.5 | NL alerts + real/benign triage | 🟠 | M | [04-bentolabs.md](./04-bentolabs.md#gap-45) |
+| 4.5 | NL alerts + real/benign triage | 🟠 | M | **Canonical:** [f81-nl-alerts-real-benign-triage.md](../features/f81-nl-alerts-real-benign-triage.md) · UI [u04](../ui/u04-alerts-inbox.md) · legacy [04-bentolabs.md](./04-bentolabs.md#gap-45) |
 | 4.6 | Auto-curated production eval datasets | 🟠 | M | [04-bentolabs.md](./04-bentolabs.md#gap-46) |
 | 4.7 | Long-running agent GTM positioning | 🟡 | XS | [04-bentolabs.md](./04-bentolabs.md#gap-47) |
 | 4.8 | Zero-label improvement loop UX | 🟡 | S | [04-bentolabs.md](./04-bentolabs.md#gap-48) |

@@ -19,6 +19,7 @@ the standard envelope shape.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from datetime import UTC, date, datetime
 from typing import Any
@@ -32,6 +33,17 @@ logger = logging.getLogger(__name__)
 # when the provider does not report an exact cost.
 _TRIAGE_COST_ESTIMATE_USD = 0.02
 
+# Hard timeout for the LLM investigation. p95 target is <60s; the 90s
+# ceiling guarantees a bounded response — on timeout we persist a partial
+# ``source="timeout"`` result instead of blocking the loop.
+_LLM_TIMEOUT_S = 90.0
+
+# Manual (force=True) triage rate limit: max N per rolling hour per org.
+_MANUAL_TRIAGE_PER_HOUR = 10
+
+# Max bounded evidence-gathering tool calls (thin ReAct loop).
+_MAX_REACT_CALLS = 8
+
 # Issue statuses that mean remediation is already in flight.
 _REMEDIATING_STATUSES = frozenset({"fix_pending", "verifying"})
 
@@ -40,7 +52,17 @@ _OPEN_PATCH_STATUSES = ("proposed", "approved", "needs_revision")
 
 # F46 ``_decide_remediation`` branches on these action types.
 _ALLOWED_ACTION_TYPES = frozenset(
-    {"rollback", "reweight", "cache_bust", "propose_patch", "escalate"}
+    {
+        "rollback",
+        "reweight",
+        "cache_bust",
+        "propose_patch",
+        "escalate",
+        # F30 ReAct MCP handoff types — surfaced to the IDE/MCP path.
+        "prompt_fix",
+        "nudge",
+        "mcp_handoff",
+    }
 )
 
 _ACTION_ALIASES: dict[str, str] = {
@@ -56,6 +78,15 @@ _ACTION_ALIASES: dict[str, str] = {
     "page": "escalate",
     "alert": "escalate",
     "review": "escalate",
+    # MCP handoff aliases.
+    "prompt": "prompt_fix",
+    "prompt_change": "prompt_fix",
+    "prompt_patch": "prompt_fix",
+    "add_nudge": "nudge",
+    "runtime_nudge": "nudge",
+    "handoff": "mcp_handoff",
+    "mcp": "mcp_handoff",
+    "cursor": "mcp_handoff",
 }
 
 _SEVERITY_RANK: dict[str, int] = {"p0": 0, "p1": 1, "p2": 2, "p3": 3}
@@ -79,6 +110,20 @@ class TriageAgent:
                 "triage",
                 {"issue_id": issue_id, "message": "issue not found"},
                 status="not_found",
+            )
+
+        # ── Manual triage rate limit (10/hr/org) ──
+        if force and not await self._manual_rate_ok(org_id):
+            return _envelope(
+                "triage",
+                {
+                    "issue_id": issue_id,
+                    "triage_result": issue.triage_result or {},
+                    "cached": bool(issue.triage_result),
+                    "rate_limited": True,
+                    "limit_per_hour": _MANUAL_TRIAGE_PER_HOUR,
+                },
+                status="rate_limited",
             )
 
         # ── Active-work suppress (unless manual force) ──
@@ -153,12 +198,53 @@ class TriageAgent:
                 status="budget_exceeded",
             )
 
+        # ── Bounded evidence gathering (thin ReAct loop, ≤8 tool calls) ──
+        evidence = await self._gather_evidence(org_id, issue, stumbles)
+
         # ── LLM triage via InvestigationAgent (issue: trigger) ──
+        # Hard 90s ceiling → partial ``source="timeout"`` on breach.
         try:
             from eden.autonomous import InvestigationAgent
 
-            inv = await InvestigationAgent().investigate(
-                org_id, trigger=f"issue:{issue_id}"
+            inv = await asyncio.wait_for(
+                InvestigationAgent().investigate(
+                    org_id, trigger=f"issue:{issue_id}"
+                ),
+                timeout=_LLM_TIMEOUT_S,
+            )
+        except TimeoutError:
+            logger.warning(
+                "triage_agent: investigation timed out issue=%s (>%ss)",
+                issue_id,
+                _LLM_TIMEOUT_S,
+            )
+            triage_result = {
+                "root_cause": "partial — investigation exceeded time budget",
+                "confidence": 0.0,
+                "source": "timeout",
+                "auto_escalate": False,
+                "p0_checks": [],
+                "suggested_actions": [
+                    {
+                        "type": "escalate",
+                        "action_type": "escalate",
+                        "summary": "Investigation timed out — human review",
+                        "auto": False,
+                    }
+                ],
+                "evidence_span_ids": evidence["span_ids"],
+                "fingerprint": issue.fingerprint,
+                "linked_files": evidence["linked_files"],
+                "react_calls": evidence["react_calls"],
+                "severity_at_triage": issue.severity,
+                "triaged_at": datetime.now(UTC).isoformat(),
+            }
+            triage_result = _enrich_playbook(triage_result, issue)
+            await self._repo.set_triage_result(org_id, issue_id, triage_result)
+            return _envelope(
+                "triage",
+                {"issue_id": issue_id, "triage_result": triage_result},
+                status="timeout",
             )
         except Exception as exc:
             logger.warning("triage_agent: investigate failed: %s", exc)
@@ -177,10 +263,11 @@ class TriageAgent:
             "auto_escalate": False,
             "p0_checks": [],
             "suggested_actions": _map_remediations(remediations),
-            "evidence_span_ids": _evidence_span_ids(stumbles),
+            "evidence_span_ids": evidence["span_ids"] or _evidence_span_ids(stumbles),
             "fingerprint": issue.fingerprint,
-            "linked_files": _linked_files_hints(stumbles, data),
+            "linked_files": _linked_files_hints(stumbles, data) or evidence["linked_files"],
             "investigation_id": data.get("investigation_id"),
+            "react_calls": evidence["react_calls"],
             "severity_at_triage": issue.severity,
             "triaged_at": datetime.now(UTC).isoformat(),
         }
@@ -191,6 +278,63 @@ class TriageAgent:
         return _envelope(
             "triage", {"issue_id": issue_id, "triage_result": triage_result}
         )
+
+    # ── thin ReAct evidence gathering ───────────────────────────────
+
+    async def _gather_evidence(
+        self, org_id: str, issue: Any, seed_stumbles: list[dict[str, Any]]
+    ) -> dict[str, Any]:
+        """Bounded evidence collection over the issue's stumbles.
+
+        Each stumble inspected counts as one "tool call"; capped at
+        ``_MAX_REACT_CALLS`` so the loop is deterministic and cheap. Returns
+        distinct ``span_ids`` + ``linked_files`` gathered from the evidence.
+        """
+        span_ids: list[Any] = []
+        seen_spans: set[str] = set()
+        pool = list(seed_stumbles)
+        # One extra page fetch (a tool call) to widen the evidence set.
+        if len(pool) < _MAX_REACT_CALLS:
+            try:
+                more = await self._repo.list_stumbles(
+                    org_id, fingerprint=issue.fingerprint, limit=_MAX_REACT_CALLS
+                )
+                pool = more or pool
+            except Exception:
+                pass
+
+        calls = 0
+        for s in pool:
+            if calls >= _MAX_REACT_CALLS:
+                break
+            calls += 1
+            sid = s.get("span_id") if isinstance(s, dict) else None
+            if sid and str(sid) not in seen_spans:
+                seen_spans.add(str(sid))
+                span_ids.append(sid)
+
+        linked_files = _linked_files_hints(pool, None)
+        return {
+            "span_ids": span_ids,
+            "linked_files": linked_files,
+            "react_calls": calls,
+        }
+
+    async def _manual_rate_ok(self, org_id: str) -> bool:
+        """Enforce ≤``_MANUAL_TRIAGE_PER_HOUR`` manual triages/hour/org."""
+        try:
+            from eden.storage.redis import get_redis_client
+
+            redis = await get_redis_client()
+            if redis is None:
+                return True
+            key = f"triage_manual:{org_id}:{datetime.now(UTC).strftime('%Y%m%d%H')}"
+            count = await redis.incr(key)
+            if count == 1:
+                await redis.expire(key, 3600)
+            return int(count) <= _MANUAL_TRIAGE_PER_HOUR
+        except Exception:  # pragma: no cover - redis optional
+            return True
 
     # ── active-work helpers ─────────────────────────────────────────
 
@@ -264,7 +408,7 @@ class TriageAgent:
         Otherwise fall back to settings; ``<=0`` means unlimited.
         """
         try:
-            from eden.code_change.policy import get_org_code_change_policy
+            from eden.patches.policy import get_org_code_change_policy
 
             policy = await get_org_code_change_policy(org_id)
             if isinstance(policy, dict) and "max_triage_cost_usd_per_day" in policy:

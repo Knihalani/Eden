@@ -283,28 +283,6 @@ async def soc2(
     )
 
 
-@router.post("/compliance/hipaa")
-async def hipaa(
-    body: CompliancePeriodRequest,
-    org_id: str = Path(...),
-    user: Any = Depends(get_current_user),
-) -> dict[str, Any]:
-    # ponytail: HIPAA removed per upgradespec §D.5 (Phase 1 cut).
-    # The route stays so deep-linked portal pages resolve to a
-    # 501 rather than 404; see docs/eden-governance-roadmap.md
-    # for the deferred roadmap.
-    return {
-        "status": "not_implemented",
-        "feature": "compliance_hipaa",
-        "live": False,
-        "message": (
-            "HIPAA controls were removed per upgradespec §D.5. "
-            "See docs/eden-governance-roadmap.md for the deferred roadmap."
-        ),
-        "data": {"roadmap": "docs/eden-governance-roadmap.md"},
-    }
-
-
 @router.post("/compliance/gdpr")
 async def gdpr(
     body: CompliancePeriodRequest,
@@ -317,25 +295,6 @@ async def gdpr(
         period_end=body.period_end,
         generated_by=_actor_id(user),
     )
-
-
-@router.post("/compliance/iso27001")
-async def iso27001(
-    body: CompliancePeriodRequest,
-    org_id: str = Path(...),
-    user: Any = Depends(get_current_user),
-) -> dict[str, Any]:
-    # ponytail: ISO27001 removed per upgradespec §D.5 (Phase 1 cut).
-    return {
-        "status": "not_implemented",
-        "feature": "compliance_iso27001",
-        "live": False,
-        "message": (
-            "ISO27001 controls were removed per upgradespec §D.5. "
-            "See docs/eden-governance-roadmap.md for the deferred roadmap."
-        ),
-        "data": {"roadmap": "docs/eden-governance-roadmap.md"},
-    }
 
 
 # ────────────────────────────────────────────────────────────────────

@@ -1144,10 +1144,8 @@ class CodeChangeHook:
         # connector (and their package init side-effects)
         # when the hook fires for an advisory-only call.
         try:
-            from eden.code_change.patch_generator import PatchGenerator
-            from eden.code_change.rca_linker import CodeRootCauseLinker
-            from eden.code_change.repo_connector import RepoConnector
-            from eden.optimization.model_router import ModelRouter
+            from eden.patches.patch_generator import PatchGenerator
+            from eden.patches.rca_linker import CodeRootCauseLinker
         except Exception as exc:
             logger.warning(
                 "code_change_hook: imports failed: %s", exc,
@@ -1156,10 +1154,8 @@ class CodeChangeHook:
             return result
 
         try:
-            connector = RepoConnector()
-            router: ModelRouter | None = None  # type: ignore[assignment]
             linker = CodeRootCauseLinker(
-                router=router, repo_connector=connector,
+                router=None, repo_connector=None,
             )
             link_result = await linker.link(
                 org_id=org_id,
@@ -1174,7 +1170,7 @@ class CodeChangeHook:
             linked_files = []
             if primary_path:
                 linked_files.append({"path": primary_path})
-            generator = PatchGenerator(router=router)
+            generator = PatchGenerator(router=None)
             patch_result = await generator.generate(
                 org_id=org_id,
                 rca_id=rca_id,
@@ -1266,39 +1262,9 @@ class CodeChangeHook:
             )
             return result
 
-        # Dispatch the revert via the engine. The engine
-        # decides the strategy; the hook is just the
-        # signal carrier.
-        try:
-            from eden.code_change.revert_engine import AutoRevertEngine
-            from eden.providers import get_default_pr_provider
-            engine = AutoRevertEngine(provider=get_default_pr_provider())
-            revert_result = await engine.revert(
-                org_id=org_id,
-                pr_id=pr_id,
-                policy={
-                    "code_change_enabled": True,
-                    "auto_revert_enabled": True,
-                },
-                pr_state=pr_state,
-                history_is_linear=history_is_linear,
-                regression_evidence=dict(regression_evidence or {}),
-                merge_sha=merge_sha,
-            )
-            data = revert_result.get("data") or {}
-            result["executed"] = bool(data.get("executed", False))
-            result["strategy"] = data.get("strategy")
-            result["revert_pr_url"] = data.get("revert_pr_url")
-            result["revert_id"] = data.get("revert_id")
-            result["engine_status"] = revert_result.get("status")
-            return result
-        except Exception as exc:
-            logger.warning(
-                "code_change_hook.post_merge_degraded: revert failed: %s",
-                exc,
-            )
-            result["skipped_reason"] = f"revert_failed:{type(exc).__name__}"
-            return result
+        # Cat 23 revert engine removed — advisory-only until N23 ships.
+        result["skipped_reason"] = "auto_revert_removed"
+        return result
 
 
 # ─── Process-wide singletons ─────────────────────────────────────
@@ -1539,6 +1505,8 @@ class IssueHook:
         severity: str,
         title: str,
         regressed: bool = False,
+        user_count: int | None = None,
+        stumble_count: int | None = None,
     ) -> str | None:
         # Map p0-p3 → hook severity vocabulary.
         hook_sev = {
@@ -1560,6 +1528,55 @@ class IssueHook:
                 "issue_severity": severity,
                 "title": title,
                 "regressed": regressed,
+                "user_count": user_count,
+                "stumble_count": stumble_count,
+            },
+            severity=hook_sev,
+        )
+
+
+class StumbleHook:
+    """F28 — fires when a *new* agent stumble is inserted (real insert only).
+
+    Records an advisory ``pending_approval`` action so downstream surfaces
+    (F30 triage queue, F47 Slack) have a stumble-level signal in addition
+    to the issue-level ``on_issue_created`` path. Deduped identical stumbles
+    (same trace/kind/fingerprint) MUST NOT fire this hook — the caller
+    (:class:`StumbleWriter`) gates on ``inserted``.
+    """
+
+    name = "stumble"
+
+    async def on_stumble_created(
+        self,
+        org_id: str,
+        *,
+        stumble_id: str,
+        trace_id: str,
+        kind: str,
+        fingerprint: str,
+        severity: str,
+        agent_id: str | None = None,
+    ) -> str | None:
+        hook_sev = {
+            "p0": "critical",
+            "p1": "high",
+            "p2": "medium",
+            "p3": "low",
+        }.get(severity, "low")
+        return await _record_action(
+            org_id,
+            hook_name="on_stumble_created",
+            action_kind="observe",
+            target=stumble_id,
+            payload={
+                "primary_entity_id": f"stumble:{stumble_id}",
+                "stumble_id": stumble_id,
+                "trace_id": trace_id,
+                "kind": kind,
+                "fingerprint": fingerprint,
+                "stumble_severity": severity,
+                "agent_id": agent_id,
             },
             severity=hook_sev,
         )
@@ -1676,6 +1693,7 @@ class RoiHook:
 _budget_hook: BudgetHook | None = None
 _incident_hook: IncidentHook | None = None
 _issue_hook: IssueHook | None = None
+_stumble_hook: StumbleHook | None = None
 _user_satisfaction_hook: UserSatisfactionHook | None = None
 _drift_alert_hook: DriftAlertHook | None = None
 _roi_hook: RoiHook | None = None
@@ -1700,6 +1718,13 @@ def get_issue_hook() -> IssueHook:
     if _issue_hook is None:
         _issue_hook = IssueHook()
     return _issue_hook
+
+
+def get_stumble_hook() -> StumbleHook:
+    global _stumble_hook
+    if _stumble_hook is None:
+        _stumble_hook = StumbleHook()
+    return _stumble_hook
 
 
 def get_user_satisfaction_hook() -> UserSatisfactionHook:

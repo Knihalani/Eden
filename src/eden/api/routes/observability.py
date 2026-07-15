@@ -574,6 +574,7 @@ class SpanSearchResponse(BaseModel):
     facet_counts: dict[str, list[dict[str, Any]]] = {}
     took_ms: float = 0.0
     query: str = ""
+    fallback: bool = False
 
 
 class SpanSuggestResponse(BaseModel):
@@ -622,6 +623,7 @@ async def search_spans_route(
         facet_counts=resp.facet_counts,
         took_ms=resp.took_ms,
         query=resp.query,
+        fallback=resp.fallback,
     )
 
 

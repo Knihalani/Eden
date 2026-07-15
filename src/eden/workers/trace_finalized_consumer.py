@@ -1,7 +1,12 @@
 """trace.finalized consumer (F20).
 
 Reads the global ``trace.finalized`` Redis stream via a consumer group
-and runs :class:`~eden.issues.auto_scanner.AutoIssueScanner` per trace.
+and runs detection tiers per trace:
+
+1. **Layer A** — deterministic descriptor tags + tool-error/loop stumbles.
+2. **AutoIssueScanner** (F20) — remaining stumble detectors.
+3. **Signal investigator** (F06/F35) — only when Layer A has no primary hit.
+
 Follows the module-level start/stop lifecycle used by the quality
 pipeline sidecar so it plugs into the API lifespan.
 
@@ -87,13 +92,21 @@ class TraceFinalizedConsumer:
                 org_id = data.get("org_id")
                 trace_id = data.get("trace_id")
                 if org_id and trace_id:
+                    _record_queue_lag(message_id)
+                    layer_a_report = await self._run_layer_a(
+                        org_id,
+                        trace_id,
+                        agent_id=data.get("agent_id") or None,
+                        session_id=data.get("session_id") or None,
+                        user_id=data.get("user_id") or None,
+                    )
                     scan_results = await self._scanner.scan(
                         org_id,
                         trace_id,
                         agent_id=data.get("agent_id") or None,
                         session_id=data.get("session_id") or None,
                         user_id=data.get("user_id") or None,
-                        detection_profile=_resolve_profile(org_id),
+                        detection_profile=await _resolve_profile(org_id),
                     )
                     # D1 — StatGate P0 rail before orchestrator LLM triage.
                     try:
@@ -109,7 +122,8 @@ class TraceFinalizedConsumer:
                         logger.debug(
                             "trace_finalized: statgate_p0_rail: %s", rail_exc
                         )
-                    await _run_signal_investigator(org_id, trace_id)
+                    if not _layer_a_primary_hit(layer_a_report):
+                        await _run_signal_investigator(org_id, trace_id)
                     await self._maybe_prod_eval(
                         org_id,
                         trace_id,
@@ -120,6 +134,82 @@ class TraceFinalizedConsumer:
             finally:
                 with contextlib.suppress(Exception):
                     await redis.xack(TRACE_FINALIZED_STREAM, _GROUP, message_id)
+
+    async def _run_layer_a(
+        self,
+        org_id: str,
+        trace_id: str,
+        *,
+        agent_id: str | None,
+        session_id: str | None,
+        user_id: str | None,
+    ) -> Any | None:
+        """Run Layer A descriptors, persist tags, promote stumbles."""
+        try:
+            from eden.evaluation.descriptors import DescriptorEngine
+            from eden.evaluation.descriptors.persist import persist_descriptor_tags
+            from eden.evaluation.descriptors.taxonomy import LAYER_A_PRIMARY
+            from eden.insights.rca._common import _fetch_trace_events
+            from eden.issues.models import StumbleCreate
+            from eden.issues.stumble_writer import StumbleWriter
+
+            events = await _fetch_trace_events(org_id, trace_id)
+            if not events:
+                return None
+            report = DescriptorEngine(online=True).describe(events, trace_id=trace_id)
+            if report.descriptors:
+                await persist_descriptor_tags(org_id, trace_id, report)
+                logger.info(
+                    "layer_a: trace=%s descriptors=%s latency_ms=%.2f",
+                    trace_id,
+                    sorted(report.descriptor_ids),
+                    report.latency_ms,
+                )
+                _LAYER_A_STUMBLE_KINDS = {
+                    "tool_error": "tool_error",
+                    "looping": "loop",
+                    "confusion_loop": "loop",
+                    "retry_storm": "loop",
+                    "sliding_window_loop": "loop",
+                    "tool_thrash": "loop",
+                    "assistant_echo_loop": "loop",
+                    "no_progress": "loop",
+                }
+                writer = StumbleWriter()
+                for desc in report.descriptors:
+                    kind = _LAYER_A_STUMBLE_KINDS.get(desc.descriptor_id)
+                    if not kind:
+                        continue
+                    try:
+                        await writer.create(
+                            StumbleCreate(
+                                org_id=org_id,
+                                trace_id=trace_id,
+                                agent_id=agent_id,
+                                session_id=session_id,
+                                user_id=user_id,
+                                kind=kind,
+                                title=desc.display_name,
+                                detail={
+                                    "detector": "layer_a",
+                                    "descriptor_id": desc.descriptor_id,
+                                    "rationale": desc.rationale,
+                                    "evidence": desc.evidence,
+                                },
+                                detected_by="layer_a",
+                            )
+                        )
+                    except Exception as stumble_exc:
+                        logger.debug(
+                            "layer_a stumble write failed: %s", stumble_exc
+                        )
+            report._primary_hit = bool(  # type: ignore[attr-defined]
+                report.descriptor_ids & LAYER_A_PRIMARY
+            )
+            return report
+        except Exception as exc:
+            logger.debug("trace_finalized: layer_a skipped: %s", exc)
+            return None
 
     async def _maybe_prod_eval(
         self, org_id: str, trace_id: str, *, agent_id: str | None
@@ -134,6 +224,19 @@ class TraceFinalizedConsumer:
         except Exception as exc:
             logger.debug("trace_finalized: prod_eval skipped: %s", exc)
 
+def _layer_a_primary_hit(report: Any | None) -> bool:
+    """True when Layer A matched a primary descriptor (skip F06)."""
+    if report is None:
+        return False
+    if getattr(report, "_primary_hit", False):
+        return True
+    try:
+        from eden.evaluation.descriptors.taxonomy import LAYER_A_PRIMARY
+
+        return bool(report.descriptor_ids & LAYER_A_PRIMARY)
+    except Exception:
+        return False
+
 
 def _decode(fields: Any) -> dict[str, str]:
     out: dict[str, str] = {}
@@ -146,10 +249,35 @@ def _decode(fields: Any) -> dict[str, str]:
     return out
 
 
-def _resolve_profile(org_id: str) -> str:
-    """Resolve an org's detection profile (F20). v1 defaults to
-    ``standard``; a per-org override table can slot in here later."""
-    return "standard"
+async def _resolve_profile(org_id: str) -> str:
+    """Resolve an org's detection profile (F20) from per-org settings
+    (``organizations.settings->'detection'``). Falls back to
+    ``standard`` if settings are unavailable."""
+    try:
+        from eden.issues.detection_settings import resolve_profile
+
+        return await resolve_profile(org_id)
+    except Exception as exc:  # pragma: no cover - defensive
+        logger.debug("trace_finalized: resolve_profile failed: %s", exc)
+        return "standard"
+
+
+def _record_queue_lag(message_id: Any) -> None:
+    """Record the lag between the trace.finalized emit and consume.
+
+    Redis stream ids are ``<ms-epoch>-<seq>``; the millisecond prefix is
+    the enqueue time, so ``now - prefix`` is the queue lag."""
+    try:
+        import time
+
+        raw = message_id.decode() if isinstance(message_id, bytes) else str(message_id)
+        enqueued_ms = int(raw.split("-", 1)[0])
+        lag_s = max(0.0, (time.time() * 1000.0 - enqueued_ms) / 1000.0)
+        from eden.issues.metrics import record_queue_lag
+
+        record_queue_lag(lag_s)
+    except Exception:  # pragma: no cover - best-effort metric
+        pass
 
 
 async def _run_signal_investigator(org_id: str, trace_id: str) -> None:

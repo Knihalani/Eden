@@ -2,7 +2,7 @@
 
 import logging
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
 from eden.api.deps import get_current_user
@@ -20,47 +20,33 @@ class KBQueryResponse(BaseModel):
     collection: str
     limit: int
     episodic_results: list[dict]
-    semantic_results: list[dict]
     total_episodic: int
-    total_semantic: int
 
 
 @router.get("/query", response_model=KBQueryResponse)
 async def query_kb(
-    _user: dict = Depends(get_current_user),  # Audit 2026-06-22 B1.4 — require login
+    _user: dict = Depends(get_current_user),
     query: str = Query(..., description="Search query"),
-    collection: str = Query("all", description="Collection to search: all, episodic, skills, exploits, semantic"),
+    collection: str = Query("all", description="Collection to search: all or episodic"),
     limit: int = Query(20, ge=1, le=100),
 ):
-    """Query the Knowledge Base across all layers.
-
-    - episodic: Job records with full pipeline traces
-    - skills: Skill Library code templates
-    - exploits: Exploit Library probes
-    - semantic: Design patterns and best practices
-    """
-    episodic_results = []
-    semantic_results = []
-    total_episodic = 0
-    total_semantic = 0
+    """Query the Knowledge Base episodic layer."""
+    if collection not in ("all", "episodic"):
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Only 'episodic' search is available. "
+                "Semantic/skills/exploits collections were removed."
+            ),
+        )
 
     episodic_client = get_episodic_client()
-
-    if collection in ("all", "episodic"):
-        episodic_results = await episodic_client.search_by_description(query, limit)
-        total_episodic = len(episodic_results)
-
-    if collection in ("all", "semantic", "skills", "exploits"):
-        # Vector search requires embedding - return descriptive query instead
-        # The actual vector search is done internally by agents with proper embedding
-        logger.debug(f"Vector search for collection={collection} query={query}")
+    episodic_results = await episodic_client.search_by_description(query, limit)
 
     return KBQueryResponse(
         query=query,
         collection=collection,
         limit=limit,
         episodic_results=episodic_results,
-        semantic_results=semantic_results,
-        total_episodic=total_episodic,
-        total_semantic=total_semantic,
+        total_episodic=len(episodic_results),
     )

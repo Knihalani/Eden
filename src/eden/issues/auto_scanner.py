@@ -13,8 +13,10 @@ telemetry row shape, so no new ingestion coupling is introduced.
 from __future__ import annotations
 
 import logging
+import time
 from typing import Any
 
+from eden.issues.metrics import record_scan
 from eden.issues.models import StumbleCreate
 from eden.issues.stumble_writer import StumbleWriter
 
@@ -24,25 +26,19 @@ logger = logging.getLogger(__name__)
 # cheapest high-signal detectors; ``standard``/``advanced`` run all seven
 # detectors. Unknown profiles fall back to ``standard``.
 _PROFILE_DETECTORS: dict[str, set[str]] = {
-    "minimal": {"tool_error", "task_failure"},
+    "minimal": {"task_failure"},
     "standard": {
-        "tool_error",
-        "loop",
         "task_failure",
         "slow_trace",
         "hallucination",
         "user_frustration",
-        "confusion_loop",
         "high_cost",
     },
     "advanced": {
-        "tool_error",
-        "loop",
         "task_failure",
         "slow_trace",
         "hallucination",
         "user_frustration",
-        "confusion_loop",
         "high_cost",
     },
 }
@@ -92,6 +88,7 @@ class AutoIssueScanner:
 
         Returns the list of ``StumbleWriter.create`` results (one per
         stumble written)."""
+        started = time.perf_counter()
         enabled = _PROFILE_DETECTORS.get(
             detection_profile, _PROFILE_DETECTORS["standard"]
         )
@@ -142,12 +139,20 @@ class AutoIssueScanner:
                 org_id, trace_id, agent_id, session_id, user_id, events
             )
 
+        detector_hits: dict[str, int] = {}
+        for sc in stumbles:
+            detector_hits[sc.kind] = detector_hits.get(sc.kind, 0) + 1
+
         results: list[dict[str, Any]] = []
         for sc in stumbles:
             try:
                 results.append(await self._writer.create(sc))
             except Exception as exc:  # pragma: no cover - defensive
                 logger.warning("auto_scanner: write failed: %s", exc)
+
+        record_scan(
+            (time.perf_counter() - started) * 1000.0, detector_hits=detector_hits
+        )
         return results
 
     async def _fetch_events(

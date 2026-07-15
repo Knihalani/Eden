@@ -49,12 +49,16 @@ async def rerun_debugger(
     trace_id: str,
     from_step: int = 0,
     prompt_override: str | None = None,
+    rerun_mode: str | None = None,
+    live_prefix: bool | None = None,
 ) -> dict[str, Any]:
     return await client.rerun_debugger(
         org_id,
         trace_id=trace_id,
         from_step=from_step,
         prompt_override=prompt_override,
+        rerun_mode=rerun_mode,
+        live_prefix=live_prefix,
     )
 
 
@@ -75,6 +79,19 @@ async def get_issue(
     client: EdenApiClient, org_id: str, *, issue_id: str
 ) -> dict[str, Any]:
     return await client.get_issue(org_id, issue_id)
+
+
+async def get_trace_stumbles(
+    client: EdenApiClient,
+    org_id: str,
+    *,
+    trace_id: str,
+    kind: str | None = None,
+    limit: int = 50,
+) -> dict[str, Any]:
+    return await client.get_trace_stumbles(
+        org_id, trace_id, kind=kind, limit=limit
+    )
 
 
 async def triage_issue(
@@ -104,6 +121,37 @@ async def get_improvement_queue(
     agent_id: str | None = None,
 ) -> dict[str, Any]:
     return await client.get_improvement_queue(org_id, agent_id=agent_id)
+
+
+async def list_improvement_plans(
+    client: EdenApiClient,
+    org_id: str,
+    *,
+    status: str | None = None,
+    limit: int = 50,
+) -> dict[str, Any]:
+    return await client.list_improvement_plans(org_id, status=status, limit=limit)
+
+
+async def get_improvement_plan(
+    client: EdenApiClient,
+    org_id: str,
+    *,
+    plan_id: str,
+) -> dict[str, Any]:
+    return await client.get_improvement_plan(org_id, plan_id)
+
+
+async def approve_improvement_plan(
+    client: EdenApiClient,
+    org_id: str,
+    *,
+    plan_id: str,
+    applied_by: str | None = None,
+) -> dict[str, Any]:
+    return await client.approve_improvement_plan(
+        org_id, plan_id, applied_by=applied_by
+    )
 
 
 async def export_fixture(

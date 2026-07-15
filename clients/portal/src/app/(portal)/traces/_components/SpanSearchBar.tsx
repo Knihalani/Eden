@@ -24,6 +24,7 @@ export function SpanSearchBar({ orgId, onSelectTrace }: SpanSearchBarProps) {
     Array<{ trace_id: string; span_id?: string; snippet?: string; score?: number }>
   >([]);
   const [error, setError] = useState<string | null>(null);
+  const [isFallback, setIsFallback] = useState(false);
 
   useEffect(() => {
     const term = q.trim();
@@ -47,14 +48,16 @@ export function SpanSearchBar({ orgId, onSelectTrace }: SpanSearchBarProps) {
               score: h.score,
             })),
           );
+          setIsFallback(res.fallback === true);
           setError(null);
         })
         .catch((e: unknown) => {
           if (cancelled) return;
-          setHits([]);
-          setError(e instanceof Error ? e.message : "Search failed");
-        })
-        .finally(() => {
+      setHits([]);
+      setIsFallback(false);
+      setError(e instanceof Error ? e.message : "Search failed");
+    })
+    .finally(() => {
           if (!cancelled) setLoading(false);
         });
     }, 280);
@@ -102,6 +105,11 @@ export function SpanSearchBar({ orgId, onSelectTrace }: SpanSearchBarProps) {
       </div>
       {error && (
         <p className="text-[11px] text-[var(--error)]">{error}</p>
+      )}
+      {isFallback && !error && (
+        <p className="text-[11px] text-[var(--text-muted)] italic">
+          Search index offline — results may be incomplete
+        </p>
       )}
       {hits.length > 0 && q.trim().length >= 2 && (
         <div className="flex items-center justify-between gap-2">
