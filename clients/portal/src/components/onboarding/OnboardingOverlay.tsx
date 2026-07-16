@@ -3,70 +3,33 @@
 /**
  * OnboardingOverlay — skippable product tour across the portal.
  *
- * Opens for incomplete Cat-23 state or `?onboarding=1`. Skip / Esc / X
- * permanently marks onboarding `done`. Finish opens docs quickstart
- * (handled inside ProductTour) and marks done.
+ * Progress lives on the Clerk user (``unsafeMetadata.edenTour``), not
+ * org ``/onboarding/state``. Skip / Esc / X always closes immediately;
+ * persistence is best-effort so a Clerk hiccup never traps the user.
  */
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { ProductTour } from "@/components/onboarding/ProductTour";
-import { useOrg } from "@/hooks/use-org";
 import { useToast } from "@/components/ui/toast";
-import { onboardingApi } from "@/lib/api";
-import {
-  PRODUCT_TOUR_TOTAL,
-  tourIndexFromOnboardingStep,
-  tourStepApiValue,
-} from "@/lib/product-tour";
+import { useTourProgress } from "@/hooks/use-tour-progress";
+import { PRODUCT_TOUR_TOTAL } from "@/lib/product-tour";
 
 export function OnboardingOverlay() {
   const toast = useToast();
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const { currentOrg } = useOrg();
+  const { isLoaded, progress, isComplete, setStatus, setStepIndex } =
+    useTourProgress();
 
   const [open, setOpen] = useState(false);
-  const [stepIndex, setStepIndex] = useState(0);
-  const [loaded, setLoaded] = useState(false);
+  const [stepIndex, setStepIndexLocal] = useState(0);
   const [busy, setBusy] = useState(false);
+  /** After Skip/Finish, ignore effect re-open until URL force flag clears. */
+  const userClosedRef = useRef(false);
 
   const forceOpen = searchParams.get("onboarding") === "1";
-
-  const markDone = useCallback(async () => {
-    const orgId = currentOrg?.id;
-    if (!orgId) return;
-    await onboardingApi.patchState(orgId, { step: "done" });
-  }, [currentOrg?.id]);
-
-  const persistIndex = useCallback(
-    async (index: number) => {
-      const orgId = currentOrg?.id;
-      if (!orgId) return;
-      const apiStep = tourStepApiValue(index);
-      // Cat-23 API accepts known wizard steps; tour:* is stored via
-      // a best-effort patch — fall back to welcome/connect/install/done.
-      const legacy =
-        apiStep === "done"
-          ? "done"
-          : apiStep === "welcome"
-            ? "welcome"
-            : index >= PRODUCT_TOUR_TOTAL - 1
-              ? "done"
-              : index === 0
-                ? "welcome"
-                : "install_sdk";
-      try {
-        await onboardingApi.patchState(orgId, {
-          step: legacy as "welcome" | "connect_github" | "install_sdk" | "done",
-        });
-      } catch {
-        // best-effort
-      }
-    },
-    [currentOrg?.id],
-  );
 
   const clearOnboardingQuery = useCallback(() => {
     if (!forceOpen) return;
@@ -77,78 +40,69 @@ export function OnboardingOverlay() {
   }, [forceOpen, searchParams, router, pathname]);
 
   useEffect(() => {
-    let cancelled = false;
-
-    async function load() {
-      if (!currentOrg?.id) {
-        if (!cancelled) {
-          setLoaded(true);
-          if (forceOpen) {
-            setStepIndex(0);
-            setOpen(true);
-          }
-        }
-        return;
-      }
-      try {
-        const res = await onboardingApi.getState(currentOrg.id);
-        if (cancelled) return;
-        const idx = tourIndexFromOnboardingStep(res.step);
-        const complete = (res.step || "").toLowerCase() === "done";
-        setStepIndex(complete && forceOpen ? 0 : idx);
-        if (forceOpen || !complete) {
-          setOpen(true);
-        }
-      } catch {
-        if (!cancelled && forceOpen) {
-          setStepIndex(0);
-          setOpen(true);
-        }
-      } finally {
-        if (!cancelled) setLoaded(true);
-      }
+    if (!isLoaded) return;
+    if (!forceOpen && userClosedRef.current) {
+      userClosedRef.current = false;
     }
+    if (userClosedRef.current) return;
 
-    void load();
-    return () => {
-      cancelled = true;
-    };
-  }, [currentOrg?.id, forceOpen]);
+    if (forceOpen) {
+      setStepIndexLocal(progress?.status === "active" ? progress.stepIndex : 0);
+      setOpen(true);
+      return;
+    }
+    if (!isComplete) {
+      setStepIndexLocal(progress?.stepIndex ?? 0);
+      setOpen(true);
+      if (!progress) {
+        void setStatus("active", 0).catch(() => {
+          /* first paint still shows tour */
+        });
+      }
+    } else {
+      setOpen(false);
+    }
+  }, [isLoaded, forceOpen, isComplete, progress, setStatus]);
 
   async function handleSkip() {
+    // Close first — never leave the user stuck behind a failing persist.
+    userClosedRef.current = true;
+    setOpen(false);
+    clearOnboardingQuery();
     setBusy(true);
     try {
-      await markDone();
-      setOpen(false);
-      clearOnboardingQuery();
+      await setStatus("skipped", stepIndex);
       toast.success("Tour skipped — resume anytime from the banner");
     } catch {
-      toast.error("Could not save skip — try again");
+      toast.error("Tour closed — progress may not have saved");
     } finally {
       setBusy(false);
     }
   }
 
   async function handleFinish() {
+    userClosedRef.current = true;
+    setOpen(false);
+    clearOnboardingQuery();
     setBusy(true);
     try {
-      await markDone();
-      setOpen(false);
-      clearOnboardingQuery();
+      await setStatus("done", PRODUCT_TOUR_TOTAL - 1);
       toast.success("Tour complete — check the quickstart when you're ready");
     } catch {
-      toast.error("Could not mark tour complete");
+      toast.error("Tour closed — progress may not have saved");
     } finally {
       setBusy(false);
     }
   }
 
   function handleStepChange(index: number) {
-    setStepIndex(index);
-    void persistIndex(index);
+    setStepIndexLocal(index);
+    void setStepIndex(index).catch(() => {
+      /* best-effort */
+    });
   }
 
-  if (!loaded && !forceOpen) return null;
+  if (!isLoaded && !forceOpen) return null;
   if (!open) return null;
 
   return (

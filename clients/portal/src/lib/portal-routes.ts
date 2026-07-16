@@ -32,6 +32,7 @@ export const KNOWN_PORTAL_PREFIXES: readonly string[] = [
   "/signals",
   "/redteam",
   "/profile",
+  "/docs-fill",
 ] as const;
 
 export function isKnownPortalPath(pathname: string | null | undefined): boolean {

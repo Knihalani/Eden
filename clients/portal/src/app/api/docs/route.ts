@@ -113,21 +113,33 @@ async function loadOrgs(
 }
 
 export async function GET(request: NextRequest) {
-  const authorization = await bearer();
-  if (!authorization) {
+  let userId: string | null = null;
+  let authorization: string | undefined;
+  try {
+    const session = await auth();
+    userId = session.userId;
+    const token = await session.getToken();
+    authorization = token ? `Bearer ${token}` : undefined;
+  } catch {
+    return json(request, { loggedIn: false });
+  }
+
+  if (!userId || !authorization) {
     return json(request, { loggedIn: false });
   }
 
   const loaded = await loadOrgs(authorization, request.headers.get("cookie"));
   if (!loaded.ok) {
+    // Still signed in — orgs endpoint may be down; don't claim loggedOut.
     if (loaded.status === 401 || loaded.status === 403) {
       return json(request, { loggedIn: false });
     }
-    return json(
-      request,
-      { loggedIn: false, error: "Could not load organizations" },
-      502,
-    );
+    return json(request, {
+      loggedIn: true,
+      orgId: null,
+      canCreateKeys: false,
+      error: "Could not load organizations",
+    });
   }
 
   const org = pickOrg(loaded.orgs);

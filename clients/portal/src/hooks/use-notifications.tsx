@@ -55,14 +55,15 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       const status = e instanceof ApiError ? e.status : undefined;
-      // 404 = endpoint not deployed yet (pre-launch) — swallow so
-      // polling stays quiet. 5xx must re-throw so ``usePolling``
-      // applies exponential backoff (LP-21); swallowing caused a
-      // steady storm against a broken backend.
-      const isNotFound =
+      // 401/403/404 = missing session or endpoint not deployed —
+      // swallow so the bell stays quiet. 5xx must re-throw so
+      // ``usePolling`` applies exponential backoff (LP-21).
+      const isAuthOrMissing =
+        status === 401 ||
+        status === 403 ||
         status === 404 ||
-        /404|not\s*found/i.test(msg);
-      if (isNotFound) {
+        /401|403|404|unauthorized|not\s*found|forbidden/i.test(msg);
+      if (isAuthOrMissing) {
         setNotifications([]);
         setUnreadCount(0);
         setError(null);
