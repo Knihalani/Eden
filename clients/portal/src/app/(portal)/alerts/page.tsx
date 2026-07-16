@@ -33,7 +33,7 @@ import {
   Clock,
   RefreshCw } from "lucide-react";
 
-const SignalsView = dynamic(() => import("../signals/page"), {
+const SignalsView = dynamic(() => import("@/app/(portal)/signals/page"), {
   ssr: false,
   loading: () => (
     <div className="flex h-48 items-center justify-center">

@@ -33,19 +33,6 @@ import { PageContent } from "@/components/layout/page-content";
 import { EmbeddedSurface } from "@/components/layout/embedded-surface";
 import { useQueryTab } from "@/hooks/use-query-tab";
 import { cn } from "@/lib/utils";
-
-const ANALYTICS_TABS = ["overview", "insights", "tools", "users"] as const;
-const InsightsView = dynamic(() => import("../insights/page"), { ssr: false, loading: () => <TabLoading /> });
-const ToolsView = dynamic(() => import("../tools/page"), { ssr: false, loading: () => <TabLoading /> });
-const UsersView = dynamic(() => import("../users/page"), { ssr: false, loading: () => <TabLoading /> });
-
-function TabLoading() {
-  return (
-    <div className="flex h-48 items-center justify-center">
-      <Loader2 className="h-4 w-4 animate-spin text-[var(--text-muted)]" />
-    </div>
-  );
-}
 import { NoOrgState } from "@/components/ui/no-org-state";
 import { ErrorState } from "@/components/ui/error-state";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -65,6 +52,29 @@ import {
   formatPercent,
   formatTokens,
 } from "../_lib/chart-utils";
+
+const ANALYTICS_TABS = ["overview", "insights", "tools", "users"] as const;
+
+function TabLoading() {
+  return (
+    <div className="flex h-48 items-center justify-center">
+      <Loader2 className="h-4 w-4 animate-spin text-[var(--text-muted)]" />
+    </div>
+  );
+}
+
+const InsightsView = dynamic(() => import("@/app/(portal)/insights/page"), {
+  ssr: false,
+  loading: () => <TabLoading />,
+});
+const ToolsView = dynamic(() => import("@/app/(portal)/tools/page"), {
+  ssr: false,
+  loading: () => <TabLoading />,
+});
+const UsersView = dynamic(() => import("@/app/(portal)/users/page"), {
+  ssr: false,
+  loading: () => <TabLoading />,
+});
 
 /* ------------------------- Synthetic badge ----------------------------- */
 

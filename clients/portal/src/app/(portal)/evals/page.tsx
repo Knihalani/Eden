@@ -15,23 +15,23 @@ import { cn } from "@/lib/utils";
 
 const TABS = ["eval", "datasets", "labeling", "studio", "synthetic"] as const;
 
-const EvalView = dynamic(() => import("../observability/eval/page"), {
+const EvalView = dynamic(() => import("@/app/(portal)/observability/eval/page"), {
   ssr: false,
   loading: () => <TabLoading />,
 });
-const DatasetsView = dynamic(() => import("../datasets/page"), {
+const DatasetsView = dynamic(() => import("@/app/(portal)/datasets/page"), {
   ssr: false,
   loading: () => <TabLoading />,
 });
-const LabelingView = dynamic(() => import("../labeling/page"), {
+const LabelingView = dynamic(() => import("@/app/(portal)/labeling/page"), {
   ssr: false,
   loading: () => <TabLoading />,
 });
-const StudioView = dynamic(() => import("../studio/page"), {
+const StudioView = dynamic(() => import("@/app/(portal)/studio/page"), {
   ssr: false,
   loading: () => <TabLoading />,
 });
-const SyntheticView = dynamic(() => import("../synthetic/page"), {
+const SyntheticView = dynamic(() => import("@/app/(portal)/synthetic/page"), {
   ssr: false,
   loading: () => <TabLoading />,
 });

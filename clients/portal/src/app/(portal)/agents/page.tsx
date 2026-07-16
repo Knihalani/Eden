@@ -32,7 +32,7 @@ import { cn } from "@/lib/utils";
 import { useQueryTab } from "@/hooks/use-query-tab";
 
 const AGENT_TABS = ["agents", "fleet"] as const;
-const FleetView = dynamic(() => import("../fleet/page"), {
+const FleetView = dynamic(() => import("@/app/(portal)/fleet/page"), {
   ssr: false,
   loading: () => (
     <div className="flex h-48 items-center justify-center">
