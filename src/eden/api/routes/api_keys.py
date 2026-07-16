@@ -10,6 +10,7 @@ from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Response, status
+from pydantic import BaseModel, Field
 
 from eden.api.deps import get_current_user, require_org_admin
 from eden.api.utils.redact import redact_all
@@ -26,6 +27,11 @@ VALID_SCOPES = [
     "jobs:read",
     "jobs:write",
 ]
+
+
+class CreateApiKeyBody(BaseModel):
+    name: str = Field(min_length=2, max_length=100)
+    scopes: list[str] = Field(min_length=1)
 
 # B-11 (Session 24): per-(org, user) sliding-window rate limit on
 # ``POST /orgs/{org_id}/api-keys``. Audit 2026-07-03 — distributed
@@ -165,8 +171,7 @@ def get_key_prefix(key: str) -> str:
 @router.post("", response_model=dict)
 async def create_api_key(
     org_id: str,
-    name: str,
-    scopes: list[str],
+    body: CreateApiKeyBody,
     user: dict = Depends(get_current_user),
 ):
     """Create a new API key for an organization.
@@ -191,6 +196,9 @@ async def create_api_key(
                 ),
                 headers={"Retry-After": str(int(wait))},
             )
+
+    name = body.name.strip()
+    scopes = list(body.scopes)
 
     # Validate name
     if not name or len(name) < 2 or len(name) > 100:
@@ -242,7 +250,7 @@ async def create_api_key(
         "key_prefix": key_prefix,
         "scopes": scopes,
         "raw_key": raw_key,  # Only returned once!
-        "created_at": None,  # Will be filled by the client
+        "created_at": datetime.now(UTC).isoformat(),
     }
 
 

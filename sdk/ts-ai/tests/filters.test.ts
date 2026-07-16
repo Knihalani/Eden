@@ -152,7 +152,7 @@ describe("EdenSDK gatewayHeaders", () => {
 describe("resolvedGatewayUrl", () => {
   it("defaults to {baseUrl}/v1 when gatewayUrl is unset", () => {
     const sdk = new EdenSDK({ orgId: "o", apiKey: "k" });
-    expect(sdk.resolvedGatewayUrl()).toBe("http://localhost:8000/v1");
+    expect(sdk.resolvedGatewayUrl()).toBe("https://api.edenobservability.com/v1");
   });
 
   it("honours an explicit gatewayUrl", () => {

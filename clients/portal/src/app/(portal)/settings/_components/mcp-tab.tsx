@@ -178,7 +178,7 @@ export function McpTab({ org }: McpTabProps) {
             Requires the Eden platform package so{" "}
             <code className="font-mono">eden-mcp</code> is on your PATH (
             <code className="font-mono">pip install -e .</code> in a monorepo
-            checkout, or the self-hosted API image). Replace{" "}
+            checkout). Replace{" "}
             <code className="font-mono">&lt;your-api-key&gt;</code> with an org
             API key. Alternatively use{" "}
             <code className="font-mono">python -m eden.mcp_server</code> if the

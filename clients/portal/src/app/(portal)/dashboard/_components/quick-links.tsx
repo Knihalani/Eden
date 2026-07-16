@@ -7,6 +7,7 @@ import {
   BellRing,
   ArrowRight,
   Key,
+  Rocket,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -25,8 +26,15 @@ type QuickLinkItem = {
 
 const QUICK_LINKS: QuickLinkItem[] = [
   {
+    label: "Quickstart",
+    description: "Fill in a key and copy a snippet",
+    href: "/quickstart",
+    icon: Rocket,
+    accent: "key",
+  },
+  {
     label: "API keys",
-    description: "Create a key for the SDK",
+    description: "Manage org keys",
     href: "/settings?tab=api-keys",
     icon: Key,
     accent: "key",
@@ -51,13 +59,6 @@ const QUICK_LINKS: QuickLinkItem[] = [
     href: "/optimization",
     icon: Zap,
     accent: "cost",
-  },
-  {
-    label: "Alerts",
-    description: "Anomaly & threshold rules",
-    href: "/alerts",
-    icon: BellRing,
-    accent: "alert",
   },
 ];
 

@@ -62,7 +62,7 @@ describe("EdenSDK configuration", () => {
     const cfg = sdk.getConfig();
     expect(cfg.orgId).toBe("org_env");
     expect(cfg.apiKey).toBe("key_env");
-    expect(cfg.baseUrl).toBe("http://localhost:8000");
+    expect(cfg.baseUrl).toBe("https://api.edenobservability.com");
     delete process.env.EDEN_ORG_ID;
     delete process.env.EDEN_ORG_API_KEY;
   });
