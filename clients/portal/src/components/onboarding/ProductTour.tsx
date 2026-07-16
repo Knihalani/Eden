@@ -393,6 +393,13 @@ export function ProductTour({
                   {isFinish && step.ctaHref ? (
                     <>
                       <a
+                        href="/settings?tab=api-keys"
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border-default)] px-3 py-1.5 text-xs font-medium text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)]"
+                        onClick={() => onFinish()}
+                      >
+                        Create API key
+                      </a>
+                      <a
                         href={step.ctaHref}
                         target="_blank"
                         rel="noopener noreferrer"
@@ -402,14 +409,6 @@ export function ProductTour({
                         {step.ctaLabel ?? "Open docs"}
                         <ExternalLink className="h-3.5 w-3.5" />
                       </a>
-                      <button
-                        type="button"
-                        disabled={busy}
-                        onClick={() => onFinish()}
-                        className="inline-flex items-center gap-1 rounded-lg border border-[var(--border-default)] px-3 py-1.5 text-xs font-medium text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)]"
-                      >
-                        Done
-                      </button>
                     </>
                   ) : (
                     <button

@@ -41,7 +41,7 @@ export default function PricingPage() {
         </Link>
       </div>
       <p className="mt-8 text-sm text-[var(--text-muted)]">
-        Need a higher volume commitment or self-hosted deployment?{" "}
+        Need a higher volume commitment or enterprise tenancy?{" "}
         <Link href="/contact" className="text-[var(--accent)] hover:underline">
           Contact us
         </Link>

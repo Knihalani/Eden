@@ -7,6 +7,7 @@ import {
   AlertTriangle,
   GitBranch,
   Sparkles,
+  Key,
 } from "lucide-react";
 import { api, ApiError } from "@/lib/api";
 import { useOrg } from "@/hooks/use-org";
@@ -282,26 +283,33 @@ export default function DashboardPage() {
               Get started with observability
             </h2>
             <p className="text-sm text-[var(--text-muted)]">
-              Connect a repo so Eden can instrument your agents automatically, or send a
-              test trace from the SDK to see live throughput, latency, and failures here.
+              Create an API key, install the SDK, and send a test trace. Throughput,
+              latency, and failures show up here once ingestion starts.
             </p>
             <div className="flex flex-wrap gap-3">
-              {canConnect && (
-                <Link
-                  href="/dashboard?onboarding=1"
-                  className="inline-flex items-center gap-1.5 px-3 py-2 bg-[var(--accent)] text-[var(--accent-foreground)] rounded-lg text-sm font-medium hover:bg-[var(--accent-hover)] transition-colors"
-                >
-                  <GitBranch className="w-3.5 h-3.5" />
-                  Connect a repo
-                </Link>
-              )}
+              <Link
+                href="/settings?tab=api-keys"
+                className="inline-flex items-center gap-1.5 px-3 py-2 bg-[var(--accent)] text-[var(--accent-foreground)] rounded-lg text-sm font-medium hover:bg-[var(--accent-hover)] transition-colors"
+              >
+                <Key className="w-3.5 h-3.5" />
+                Get API key
+              </Link>
               <Link
                 href="/dashboard?onboarding=1"
                 className="inline-flex items-center gap-1.5 px-3 py-2 border border-[var(--border)] rounded-lg text-sm font-medium text-[var(--text-primary)] hover:bg-[var(--surface-hover)] transition-colors"
               >
                 <Sparkles className="w-3.5 h-3.5" />
-                Send a test trace
+                Product tour
               </Link>
+              {canConnect && (
+                <Link
+                  href="/agents?tab=fleet"
+                  className="inline-flex items-center gap-1.5 px-3 py-2 border border-[var(--border)] rounded-lg text-sm font-medium text-[var(--text-primary)] hover:bg-[var(--surface-hover)] transition-colors"
+                >
+                  <GitBranch className="w-3.5 h-3.5" />
+                  Connect a repo
+                </Link>
+              )}
             </div>
           </div>
         </Card>

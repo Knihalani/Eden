@@ -1,289 +1,41 @@
 ---
 id: deploy
-title: Deploy self-hosted
-sidebar_label: Deploy self-hosted
+title: Cloud hosting
+sidebar_label: Cloud hosting
 sidebar_position: 4
 ---
 
-# How-to — Deploy self-hosted
+# How-to — Cloud hosting
 
-Three deployment paths: **Docker Compose** (single-node dev or
-small teams), **Kubernetes** (production), **Northflank / Render /
-Fly.io** (managed PaaS).
+Eden is a **managed cloud product**. The control plane (API, portal,
+workers, storage) runs on Eden infrastructure — you do **not** self-host
+Docker Compose, Helm, or Kubernetes for production use.
 
-## 1. Docker Compose
+## What you run
 
-For dev, CI, and small single-node deployments.
+| Component | Where it runs |
+|-----------|----------------|
+| Eden API + portal | Eden cloud (`api.edenobservability.com`, `edenobservability.com`) |
+| Your agents / LLM apps | Your infra — call Eden via the SDK or gateway |
+| Upstream models | Your providers (OpenAI, Anthropic, Bedrock, etc.) |
 
-```bash
-git clone https://github.com/eden/eden.git
-cd eden
-cp .env.example .env
+## Connect your app
 
-# Required env vars
-# POSTGRES_HOST=postgres
-# POSTGRES_PASSWORD=<32+ chars>
-# JWT_SECRET=<32+ chars>
-# ENCRYPTION_KEY=<Fernet key>
-# OPENROUTER_API_KEY=<or one of MINIMAX_*, OPENAI_API_KEY, etc.>
-
-docker compose -f docker/docker-compose.yml up -d
-```
-
-The compose stack ships:
-
-| Service | Port | Notes |
-|---------|------|-------|
-| `postgres` | 5432 | + pgvector extension |
-| `redis` | 6379 | hot-path cache + rate limiter |
-| `qdrant` | 6333 | vector search for retrieval intel |
-| `clickhouse` | 8123 | analytics + dashboard queries |
-| `api` | 8000 | FastAPI |
-| `portal` | 3000 | Next.js (optional) |
-
-Visit `http://localhost:3000/signup` to create your first account.
-
-### Optional profiles
+1. Create an API key in the portal: **Settings → API Keys**.
+2. Point the SDK at the cloud API:
 
 ```bash
-# Streaming (Redpanda + ksqlDB)
-docker compose -f docker/docker-compose.yml --profile streaming up -d
-
-# gRPC server (port 50051)
-docker compose -f docker/docker-compose.yml --profile grpc up -d
-
-# Edge fanout (Ably / Cloudflare)
-docker compose -f docker/docker-compose.yml --profile edge up -d
-```
-
-## 2. Kubernetes (Helm)
-
-For production multi-node deployments.
-
-```bash
-helm repo add eden https://charts.eden.dev
-helm repo update
-
-helm install eden eden/eden \
-  --namespace eden \
-  --create-namespace \
-  --values values.yaml
-```
-
-### Helm smoke test (kind / minikube)
-
-Validate the self-host path before production cutover:
-
-```bash
-# 1. Create a local cluster
-kind create cluster --name eden-smoke
-# or: minikube start
-
-# 2. Install from the repo chart (dev defaults)
-cd /path/to/eden
-helm install eden ./helm/eden \
-  --namespace eden \
-  --create-namespace
-
-# 3. Wait for API pod
-kubectl -n eden rollout status deployment/eden-eden-api --timeout=120s
-
-# 4. Port-forward and health check
-kubectl -n eden port-forward svc/eden-eden-api 8000:8000 &
-curl -sf http://localhost:8000/health | jq .
-# Expect: {"status":"healthy", ...}
-
-# 5. Run migrations (one-shot job)
-kubectl -n eden run eden-migrate --rm -it --restart=Never \
-  --image=eden/api:latest \
-  -- alembic upgrade head
-
-# 6. First ingest smoke (replace org/key from portal signup)
 export EDEN_API_KEY="sk_eden_…"
 export EDEN_ORG_ID="org_…"
-export EDEN_BASE_URL="http://localhost:8000"
-python -m eden_sdk.doctor   # or: pip install eden-sdk && doctor
-
-# 7. Teardown
-helm uninstall eden -n eden
-kind delete cluster --name eden-smoke
+export EDEN_BASE_URL="https://api.edenobservability.com"
 ```
 
-**Pass criteria:**
+3. Follow the [Quickstart](/quickstart).
 
-- `/health` returns `healthy` with postgres + redis connected
-- Alembic migrations complete without error
-- SDK doctor emits a test event visible in Traces
-- External Postgres/Redis/Qdrant URLs work when
-  `externalPostgres` / `externalRedis` / `externalQdrant` are set
-  and in-chart services are disabled (see `helm/eden/README.md`)
+## Status & support
 
-`values.yaml`:
+- Status: [status.edenobservability.com](https://status.edenobservability.com)
+- Support: support@eden.dev
 
-```yaml
-api:
-  replicaCount: 3
-  image: eden/api:1.7.0
-  resources:
-    requests: { cpu: 500m, memory: 512Mi }
-    limits:   { cpu: 2,    memory: 2Gi }
-  env:
-    POSTGRES_HOST: eden-postgres
-    POSTGRES_PASSWORD: <from-secret>
-    JWT_SECRET:        <from-secret>
-    ENCRYPTION_KEY:    <from-secret>
-
-postgres:
-  enabled: true
-  storageClass: gp3
-  size: 100Gi
-  backup:
-    enabled: true
-    schedule: "0 3 * * *"
-    retention: 30
-
-qdrant:
-  enabled: true
-  persistence:
-    size: 50Gi
-
-ingress:
-  enabled: true
-  className: nginx
-  hosts:
-    - host: eden.your-domain.com
-      paths: ["/api"]
-  tls:
-    - secretName: eden-tls
-      hosts: [eden.your-domain.com]
-```
-
-## 3. Managed PaaS
-
-The simplest path is to deploy to Northflank, Render, or Fly.io. The
-repo includes ready-made manifests:
-
-```bash
-# Northflank
-northflank.yml                    # already in the repo root
-
-# Render
-render.yaml                       # already in the repo root
-
-# Fly.io
-fly.toml                          # already in the repo root
-```
-
-### Northflank (recommended)
-
-```bash
-# Install the CLI
-npm install -g @northflank/cli
-
-# Login
-northflank login
-
-# Create the project
-northflank create project eden --region us-central
-
-# Deploy
-northflank deploy --project eden --service eden-api
-```
-
-The `northflank.yml` declares:
-
-- `eden-api` (the FastAPI service)
-- `eden-portal` (the Next.js service)
-- `eden-postgres` (the Postgres addon; if your account can't add
-  addons, swap for Neon / Supabase — cutover runbook lives at
-  `docs/deploy/cutover-checklist.md` in the repo)
-- `eden-jobs-runner` (background worker)
-- `eden-jobs-cron` (scheduled jobs)
-
-## 4. Environment variables
-
-The full list is in [Environment variables](/reference/environment-variables).
-The minimum required set:
-
-```bash
-POSTGRES_HOST=...
-POSTGRES_PORT=5432
-POSTGRES_DB=eden
-POSTGRES_USER=eden
-POSTGRES_PASSWORD=...           # 32+ chars
-
-JWT_SECRET=...                  # 32+ chars
-ENCRYPTION_KEY=...              # Fernet (cryptography.fernet.generate_key)
-
-OPENROUTER_API_KEY=...          # OR one of MINIMAX_*, OPENAI_API_KEY, etc.
-
-APP_BASE_URL=https://your-domain.com
-CORS_ORIGINS=https://your-domain.com
-```
-
-## 5. Migrations
-
-Alembic migrations live in `src/eden/db_migrations/versions/`. Run
-them as a one-shot job (Kubernetes Job, Northflank job, or `docker
-compose run --rm api alembic upgrade head`).
-
-## 6. Backups
-
-`docker/postgres/backup.sh` runs `pg_dump` and uploads to S3. Run
-via cron:
-
-```bash
-# /etc/cron.d/eden-backup
-0 3 * * * root /opt/eden/scripts/backup.sh >> /var/log/eden-backup.log 2>&1
-```
-
-The Helm chart includes a `CronJob` for this — `backup.enabled=true`.
-
-## 7. Disaster recovery drill
-
-Quarterly:
-
-```bash
-scripts/dr_drill.sh
-```
-
-Restores the latest backup into a fresh DB, runs a smoke query
-(`SELECT COUNT(*) FROM telemetry_events`), and writes a JSON
-report. See the runbook for the full checklist.
-
-## 8. Observability
-
-The platform itself emits OpenTelemetry-compatible traces. Point
-your collector at `:4317` (gRPC) or `:4318` (HTTP) to scrape them.
-
-Eden's `/health` endpoint returns:
-
-```json
-{
-  "status": "healthy",
-  "components": {
-    "postgres": "connected",
-    "redis": "connected",
-    "qdrant": "connected",
-    "clickhouse": "connected"
-  },
-  "version": "1.7.0",
-  "uptime_seconds": 12345
-}
-```
-
-Wire this into your load balancer's health check.
-
-## 9. Production checklist
-
-Before flipping DNS:
-
-- [ ] `JWT_SECRET` and `ENCRYPTION_KEY` are unique to this env
-- [ ] Postgres backups are running and tested (`scripts/dr_drill.sh`)
-- [ ] `CORS_ORIGINS` matches the portal's exact origin
-- [ ] `APP_BASE_URL` is the public URL (used in emails)
-- [ ] TLS is terminated at the ingress
-- [ ] `/health` returns `healthy` from outside the cluster
-- [ ] Sentry / Datadog / your APM is wired to the API's OTel endpoint
-- [ ] PagerDuty / Opsgenie has the on-call runbook URL
-- [ ] You can roll back to the previous image tag
+Enterprise VPC / dedicated tenancy may be available under contract —
+contact sales@eden.dev. That is not a self-hosted distribution.

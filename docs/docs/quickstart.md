@@ -7,28 +7,28 @@ sidebar_position: 2
 # Quickstart
 
 Get from zero to a live trace in your dashboard in under five minutes.
+Eden is a **cloud product** — you do not self-host the control plane.
 
-## 1. Sign up & grab a key
+## 1. Sign up & create an API key
 
-1. Sign up at the portal (cloud or self-hosted — see
-   [How-to → Deploy](/how-to/deploy) for the self-host path).
-2. The wizard creates your first org and reveals an API key. Copy
-   it — it's shown once.
+1. Sign up at [edenobservability.com](https://edenobservability.com).
+2. Open **Settings → API Keys** (or finish the product tour — it ends there).
+3. Click **Create API key**. Copy the secret immediately — it is shown once.
+4. Copy your **Organization ID** from the same page.
 
 ```bash
 export EDEN_API_KEY="sk_eden_…"
 export EDEN_ORG_ID="org_…"
-export EDEN_BASE_URL="https://api.edenobservability.com"   # cloud default
+export EDEN_BASE_URL="https://api.edenobservability.com"
 ```
 
-The API key is per-org. You'll issue one per environment
-(`prod`, `staging`, `dev`) and rotate them from the portal's
-Settings → API Keys page.
+Issue one key per environment (`prod`, `staging`, `dev`) and rotate them
+from **Settings → API Keys**.
 
 ## 2. Install the SDK
 
-Pick whichever matches your service. The two production SDKs both
-write to the same ingestion endpoint.
+Pick whichever matches your service. Both write to the same cloud ingestion
+endpoint.
 
 ```bash
 # Python
@@ -50,18 +50,6 @@ npx @eden-ai/sdk doctor
 
 Doctor checks API key, org id, gateway connectivity, and emits a
 test event you can find in **Traces**.
-
-Validate connectivity before sending traces:
-
-```bash
-# Python
-python -m eden_sdk.doctor
-
-# TypeScript
-npx @eden-ai/sdk doctor
-```
-
-Doctor checks your API key, org id, base URL, and emits a test event.
 
 ## 3. Send your first trace
 
@@ -88,78 +76,53 @@ def answer(question: str) -> str:
         model="gpt-4o-mini",
         messages=[{"role": "user", "content": question}],
     )
-    return resp.choices[0].message.content
+    return resp.choices[0].message.content or ""
 
 if __name__ == "__main__":
     print(answer("Say hello in five languages"))
+    eden.get_default_client().flush()
 ```
 
 ### TypeScript
 
 ```ts
-import {
-  configure,
-  detectInstalledFrameworks,
-  wrapOpenAI,
-  traceAgent,
-} from "@eden-ai/sdk";
+import { configure, instrument, trace } from "@eden-ai/sdk";
+import OpenAI from "openai";
 
 configure({
   apiKey: process.env.EDEN_API_KEY!,
   orgId: process.env.EDEN_ORG_ID!,
-  baseUrl: process.env.EDEN_BASE_URL,
+  baseUrl: process.env.EDEN_BASE_URL ?? "https://api.edenobservability.com",
 });
 
-// Wrap client instances for installed frameworks (not global monkey-patching).
-const installed = detectInstalledFrameworks();
-if (installed.openai) {
-  const { default: OpenAI } = await import("openai");
-  wrapOpenAI(new OpenAI());
-}
+instrument();
 
-class Greeter {
-  @traceAgent({ name: "hello-world", tags: ["quickstart"] })
-  async greet(question: string) {
-    const { default: OpenAI } = await import("openai");
+async function greet(question: string) {
+  return trace("hello-world", async (ctx) => {
+    ctx.setTag("quickstart");
+    ctx.setInput({ question });
     const client = new OpenAI();
     const resp = await client.chat.completions.create({
       model: "gpt-4o-mini",
       messages: [{ role: "user", content: question }],
     });
-    return resp.choices[0].message.content;
-  }
+    const answer = resp.choices[0]?.message?.content ?? "";
+    ctx.setOutput({ answer });
+    return answer;
+  });
 }
 
-await new Greeter().greet("Say hello in five languages");
+greet("Say hello in five languages").then(console.log);
 ```
 
-> **Custom framework?** See [Connect any agent](/how-to/connect-any-agent)
-> for HTTP capture (Tier 2) or manual `@traceAgent` (Tier 3).
+## 4. Confirm in the portal
 
-## 4. See it in the portal
+Open **Traces** — you should see `hello-world` within about a minute.
+If nothing appears, re-run doctor and check that `EDEN_BASE_URL` points at
+`https://api.edenobservability.com`.
 
-Open the portal's **Traces** tab. Your trace appears within a second.
-Click into it to see the per-step latency, cost, tokens, model,
-prompt, and response.
+## Next
 
-> **Not appearing?** Check the **Settings → Diagnostics** page — it
-> shows the last 10 ingestion errors for your org. Most are a wrong
-> org id (`X-Org-Id` header) or a typo in the API key.
-
-## What's next
-
-- [Connect any agent](/how-to/connect-any-agent) — native, HTTP, or manual tiers
-- [MCP in Cursor](/how-to/mcp-cursor) — debug from your IDE
-- [Tutorial: auto-instrument a real OpenAI app](/tutorials/auto-instrument-openai)
-- [Tutorial: trace a multi-agent run](/tutorials/trace-multi-agent)
-- [Tutorial: judge a model output](/tutorials/judge-model-output)
-- [How-to: open the dashboard, build your first eval](/how-to/judges)
-
-## Common gotchas
-
-| Error | Cause | Fix |
-|-------|-------|-----|
-| `401 unauthorized` | Missing `X-Org-Id` header (raw `curl`) | SDKs set this automatically; otherwise add `-H "X-Org-Id: $EDEN_ORG_ID"` |
-| `429 too many requests` | Default per-tenant rate limit (60 req/60 s) | Upgrade the plan in Settings → Billing, or batch via the SDK's auto-buffering |
-| Trace truncated at 5 MiB | Ingestion body cap | Chunk the trace, or pre-redact with `eden.redact(body)` |
-| `org_id not found` | API key is for org A but request is scoped to org B | Issue per-env keys from the portal; never share keys across orgs |
+- [Connect any agent](/how-to/connect-any-agent)
+- [Python SDK reference](/reference/sdk-python)
+- [TypeScript SDK reference](/reference/sdk-typescript)

@@ -52,9 +52,9 @@ The platform ships:
 - **22 intelligence surfaces** — trace replay, RCA, evaluation,
   retrieval, memory, agents, cost, user, governance, outcome,
   experimentation, prediction, autonomy, APM depth, and more.
-- **One portal** — Next.js dashboard at `portal.edenobservability.com` (or
-  self-hosted). Observability, evaluators, cost intelligence, judges,
-  incidents, and self-healing controls.
+- **One portal** — Next.js dashboard at `edenobservability.com`.
+  Observability, evaluators, cost intelligence, judges, incidents, and
+  improvement controls.
 
 ---
 

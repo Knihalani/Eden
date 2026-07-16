@@ -121,6 +121,11 @@ const TABS: ReadonlyArray<{
   icon: User,
   category: "Org"
 }, {
+  id: "api-keys",
+  label: "API Keys",
+  icon: Key,
+  category: "Org"
+}, {
   id: "members",
   label: "Members",
   icon: Users,
@@ -137,11 +142,6 @@ const TABS: ReadonlyArray<{
   label: "Code References",
   icon: Code,
   category: "Members"
-}, {
-  id: "api-keys",
-  label: "API Keys",
-  icon: Key,
-  category: "Security"
 }, {
   id: "mcp",
   label: "MCP",
@@ -309,7 +309,7 @@ function SettingsPageInner() {
           <SettingsSearch value={searchQuery} onChange={setSearchQuery} totalLabel={normalisedQuery ? `Showing ${visibleTabs.length} of ${TABS.length} settings` : undefined} />
           <nav className="flex flex-row lg:flex-col gap-3 overflow-x-auto lg:overflow-visible pb-1 lg:pb-0 -mx-1 px-1 lg:mx-0 lg:px-0" role="tablist" aria-label="Settings sections">
             {visibleCategories.map(category => <SettingsCategoryGroup key={category} category={category} count={tabsByCategory[category].length}>
-                {tabsByCategory[category].map(tab => <button key={tab.id} type="button" role="tab" data-tab-id={tab.id} aria-selected={activeTab === tab.id} id={`settings-tab-${tab.id}`} onClick={() => handleTabChange(tab.id)} className={cn("flex-shrink-0 lg:w-full px-3 py-2 rounded-lg text-sm font-medium flex items-center gap-2 lg:gap-3 transition-colors whitespace-nowrap", activeTab === tab.id ? "bg-[var(--accent-faint)] text-[var(--accent)] lg:border-l-2 lg:border-[var(--accent)]" : "text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)]")}>
+                {tabsByCategory[category].map(tab => <button key={tab.id} type="button" role="tab" data-tab-id={tab.id} data-tour-id={tab.id} aria-selected={activeTab === tab.id} id={`settings-tab-${tab.id}`} onClick={() => handleTabChange(tab.id)} className={cn("flex-shrink-0 lg:w-full px-3 py-2 rounded-lg text-sm font-medium flex items-center gap-2 lg:gap-3 transition-colors whitespace-nowrap", activeTab === tab.id ? "bg-[var(--accent-faint)] text-[var(--accent)] lg:border-l-2 lg:border-[var(--accent)]" : "text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)]")}>
                     <tab.icon className="w-4 h-4 flex-shrink-0" aria-hidden />
                     <span>{tab.label}</span>
                   </button>)}

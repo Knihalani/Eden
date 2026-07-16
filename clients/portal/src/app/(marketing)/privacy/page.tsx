@@ -49,8 +49,8 @@ const SECTIONS = [
         </p>
         <p>
           PII redaction is irreversible — the original payload is dropped at the gateway
-          edge and never reaches our storage tier. If you need a &ldquo;redact on store, keep in
-          memory&rdquo; mode, contact us about the self-hosted tier.
+          edge and never reaches our storage tier. For compliance-sensitive workloads,
+          contact us about dedicated tenancy (enterprise).
         </p>
       </>
     ),
@@ -67,9 +67,12 @@ const SECTIONS = [
           do not cross-replicate telemetry data between regions.
         </p>
         <p>
-          For compliance-sensitive workloads, Eden ships as a self-hosted image (Helm chart
-          + docker-compose). The self-hosted tier ships the full control plane — gateway,
-          evaluation pipeline, dashboard — and writes to your own Postgres + ClickHouse.
+          For compliance-sensitive workloads, Eden offers dedicated cloud tenancy under
+          enterprise contracts — contact{" "}
+          <a href="mailto:sales@eden.dev" className="text-[var(--accent)] hover:underline">
+            sales@eden.dev
+          </a>
+          . Eden is not distributed as a self-hosted control plane.
         </p>
       </>
     ),
