@@ -84,7 +84,7 @@ const McpTab = dynamic(() => import("./_components/mcp-tab").then(m => ({
   ssr: false,
   loading: () => <Skeleton className="h-64 w-full" />
 });
-const AccountTab = dynamic(() => import("../profile/page"), {
+const AccountTab = dynamic(() => import("@/app/(portal)/profile/page"), {
   ssr: false,
   loading: () => <Skeleton className="h-64 w-full" />
 });

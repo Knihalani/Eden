@@ -45,10 +45,10 @@ import { cn } from "@/lib/utils";
 const TRACE_VIEWS = ["list", "inspect", "replay", "debug", "query"] as const;
 const TRACE_FACETS = ["", "mcp", "decisions", "memory", "retrieval"] as const;
 
-const InspectView = dynamic(() => import("../inspector/page"), { ssr: false, loading: () => <ViewLoading /> });
-const ReplayView = dynamic(() => import("../replay/page"), { ssr: false, loading: () => <ViewLoading /> });
-const DebugView = dynamic(() => import("../debugger/page"), { ssr: false, loading: () => <ViewLoading /> });
-const QueryView = dynamic(() => import("../observability/query/page"), { ssr: false, loading: () => <ViewLoading /> });
+const InspectView = dynamic(() => import("@/app/(portal)/inspector/page"), { ssr: false, loading: () => <ViewLoading /> });
+const ReplayView = dynamic(() => import("@/app/(portal)/replay/page"), { ssr: false, loading: () => <ViewLoading /> });
+const DebugView = dynamic(() => import("@/app/(portal)/debugger/page"), { ssr: false, loading: () => <ViewLoading /> });
+const QueryView = dynamic(() => import("@/app/(portal)/observability/query/page"), { ssr: false, loading: () => <ViewLoading /> });
 
 function ViewLoading() {
   return (

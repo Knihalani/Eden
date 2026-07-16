@@ -33,7 +33,7 @@ const PAGE_SIZE = 100;
 const MAX_LIMIT = 200;
 const TOP_TABS = ["issues", "incidents"] as const;
 
-const IncidentsView = dynamic(() => import("../incidents/page"), {
+const IncidentsView = dynamic(() => import("@/app/(portal)/incidents/page"), {
   ssr: false,
   loading: () => (
     <div className="flex h-48 items-center justify-center">

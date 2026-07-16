@@ -22,7 +22,7 @@ import { DataTable } from "@/components/ui/data-table";
 import { Card } from "@/components/ui/card";
 import { useQueryTab } from "@/hooks/use-query-tab";
 
-const RedteamView = dynamic(() => import("../redteam/page"), {
+const RedteamView = dynamic(() => import("@/app/(portal)/redteam/page"), {
   ssr: false,
   loading: () => (
     <div className="flex h-48 items-center justify-center">
