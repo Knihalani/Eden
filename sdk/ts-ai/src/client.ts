@@ -23,7 +23,7 @@ import {
 import { type FilterConfig, redactPayload, redactString } from "./filters.js";
 import { optimizationOptOutHeaders } from "./gateway_optimizations.js";
 
-const DEFAULT_BASE_URL = "http://localhost:8000";
+const DEFAULT_BASE_URL = "https://api.edenobservability.com";
 const DEFAULT_REALM = "production";
 const DEFAULT_PROJECT_ID = "default";
 const DEFAULT_MAX_BATCH_SIZE = 50;

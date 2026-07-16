@@ -6,52 +6,42 @@ sidebar_position: 2
 
 # Quickstart
 
-Get from zero to a live trace in your dashboard in under five minutes.
-Eden is a **cloud product** — you do not self-host the control plane.
+Get from zero to a live trace in under five minutes. Eden is **cloud-only** —
+the control plane is not self-hosted.
 
-## 1. Sign up & create an API key
+## Fastest path (recommended)
 
-1. Sign up at [edenobservability.com](https://edenobservability.com).
-2. Open **Settings → API Keys** (or finish the product tour — it ends there).
-3. Click **Create API key**. Copy the secret immediately — it is shown once.
-4. Copy your **Organization ID** from the same page.
+1. Sign in at [edenobservability.com](https://edenobservability.com).
+2. Open **[Quickstart](https://edenobservability.com/quickstart)** in the portal.
+3. Click **Fill in** — Eden creates an API key (if needed) and writes it into the
+   snippet with your org id.
+4. **Copy**, paste into your project, and run.
+5. Open **Traces** — `hello-world` should appear within about a minute.
+
+No `EDEN_BASE_URL` required. The SDKs default to
+`https://api.edenobservability.com`.
+
+## Manual setup
+
+If you prefer env vars:
+
+1. Open **Settings → API Keys** and create a key (secret shown once).
+2. Copy your **Organization ID** from the same page.
 
 ```bash
 export EDEN_API_KEY="sk_eden_…"
 export EDEN_ORG_ID="org_…"
-export EDEN_BASE_URL="https://api.edenobservability.com"
 ```
-
-Issue one key per environment (`prod`, `staging`, `dev`) and rotate them
-from **Settings → API Keys**.
-
-## 2. Install the SDK
-
-Pick whichever matches your service. Both write to the same cloud ingestion
-endpoint.
 
 ```bash
 # Python
 pip install eden-sdk
-
-# TypeScript / Node / Bun
-npm install @eden-ai/sdk
-```
-
-### Validate your setup
-
-```bash
-# Python
 python -m eden_sdk.doctor
 
 # TypeScript
+npm install @eden-ai/sdk
 npx @eden-ai/sdk doctor
 ```
-
-Doctor checks API key, org id, gateway connectivity, and emits a
-test event you can find in **Traces**.
-
-## 3. Send your first trace
 
 ### Python
 
@@ -62,10 +52,8 @@ import eden
 eden.configure(
     api_key=os.environ["EDEN_API_KEY"],
     org_id=os.environ["EDEN_ORG_ID"],
-    base_url=os.environ.get("EDEN_BASE_URL", "https://api.edenobservability.com"),
 )
 
-# One call to auto-instrument every installed framework.
 eden.instrument()
 
 @eden.trace_agent(name="hello-world", tags=["quickstart"])
@@ -92,7 +80,6 @@ import OpenAI from "openai";
 configure({
   apiKey: process.env.EDEN_API_KEY!,
   orgId: process.env.EDEN_ORG_ID!,
-  baseUrl: process.env.EDEN_BASE_URL ?? "https://api.edenobservability.com",
 });
 
 instrument();
@@ -114,12 +101,6 @@ async function greet(question: string) {
 
 greet("Say hello in five languages").then(console.log);
 ```
-
-## 4. Confirm in the portal
-
-Open **Traces** — you should see `hello-world` within about a minute.
-If nothing appears, re-run doctor and check that `EDEN_BASE_URL` points at
-`https://api.edenobservability.com`.
 
 ## Next
 

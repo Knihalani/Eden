@@ -41,7 +41,7 @@ export interface EdenSDKOptions {
 
   /**
    * Gateway base URL. Defaults to `EDEN_BASE_URL` env var or
-   * `http://localhost:8000`. The SDK POSTs to
+   * `https://api.edenobservability.com`. The SDK POSTs to
    * `${baseUrl}/orgs/${orgId}/ingest/...` for telemetry and
    * `${baseUrl}/orgs/${orgId}/ingest/chunks` for streaming chunks.
    */

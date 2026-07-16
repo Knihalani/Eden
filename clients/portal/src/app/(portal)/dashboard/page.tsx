@@ -288,7 +288,7 @@ export default function DashboardPage() {
             </p>
             <div className="flex flex-wrap gap-3">
               <Link
-                href="/settings?tab=api-keys"
+                href="/quickstart"
                 className="inline-flex items-center gap-1.5 px-3 py-2 bg-[var(--accent)] text-[var(--accent-foreground)] rounded-lg text-sm font-medium hover:bg-[var(--accent-hover)] transition-colors"
               >
                 <Key className="w-3.5 h-3.5" />

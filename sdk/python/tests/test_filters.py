@@ -139,7 +139,7 @@ class TestEdenConfigFilters:
 class TestGatewayURL:
     def test_default_base_url_appends_v1(self):
         cfg = EdenConfig(org_id="o", api_key="k")
-        assert cfg.resolved_gateway_url() == "http://localhost:8000/v1"
+        assert cfg.resolved_gateway_url() == "https://api.edenobservability.com/v1"
 
     def test_explicit_gateway_url_wins(self):
         cfg = EdenConfig(

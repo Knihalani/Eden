@@ -7,35 +7,48 @@ sidebar_position: 4
 
 # How-to — Cloud hosting
 
-Eden is a **managed cloud product**. The control plane (API, portal,
-workers, storage) runs on Eden infrastructure — you do **not** self-host
-Docker Compose, Helm, or Kubernetes for production use.
-
-## What you run
-
-| Component | Where it runs |
-|-----------|----------------|
-| Eden API + portal | Eden cloud (`api.edenobservability.com`, `edenobservability.com`) |
-| Your agents / LLM apps | Your infra — call Eden via the SDK or gateway |
-| Upstream models | Your providers (OpenAI, Anthropic, Bedrock, etc.) |
+Eden is a **managed cloud product**. You do not self-host the API, portal,
+or workers. Your agents run on your infra and talk to Eden over HTTPS.
 
 ## Connect your app
 
-1. Create an API key in the portal: **Settings → API Keys**.
-2. Point the SDK at the cloud API:
+1. Open [Quickstart](https://edenobservability.com/quickstart) and click **Fill in**,
+   or create a key under **Settings → API Keys**.
+2. Install an SDK and send a trace — see [Quickstart](/quickstart).
 
-```bash
-export EDEN_API_KEY="sk_eden_…"
-export EDEN_ORG_ID="org_…"
-export EDEN_BASE_URL="https://api.edenobservability.com"
-```
+The SDKs default to `https://api.edenobservability.com`. You do not need
+`EDEN_BASE_URL` unless you are pointed at a staging override by Eden staff.
 
-3. Follow the [Quickstart](/quickstart).
+## Custom domain for the API (`api.edenobservability.com`)
+
+If the API currently serves from a Northflank ingress
+(e.g. `eden-api--….northflank.app`), point your apex subdomain at it:
+
+1. **Northflank** → project → `eden-api` service → **Domains** → **Add domain**
+   → enter `api.edenobservability.com`.
+2. Northflank shows the target (usually a CNAME to `….northflank.app` or
+   their edge). Copy it.
+3. In your DNS provider (Cloudflare, Route53, etc.) create:
+
+   | Type | Name | Value |
+   |------|------|--------|
+   | `CNAME` | `api` | the Northflank target from step 2 |
+
+   If the zone is apex-only and CNAME is disallowed, use the ALIAS/ANAME
+   record Northflank documents for your DNS host.
+4. Wait for DNS + Northflank TLS (often a few minutes). Confirm:
+
+   ```bash
+   curl -sS https://api.edenobservability.com/live
+   ```
+
+5. Ensure portal env `NEXT_PUBLIC_API_URL` (or equivalent) is
+   `https://api.edenobservability.com`, and API `CORS_ORIGINS` includes
+   `https://edenobservability.com`.
 
 ## Status & support
 
 - Status: [status.edenobservability.com](https://status.edenobservability.com)
 - Support: support@eden.dev
 
-Enterprise VPC / dedicated tenancy may be available under contract —
-contact sales@eden.dev. That is not a self-hosted distribution.
+Enterprise dedicated tenancy (not self-host) — contact sales@eden.dev.

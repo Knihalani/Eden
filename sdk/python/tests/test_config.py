@@ -184,7 +184,7 @@ class TestGatewayURLField:
 
         cfg = EdenConfig(org_id="o", api_key="k")
         assert cfg.gateway_url is None
-        assert cfg.resolved_gateway_url() == "http://localhost:8000/v1"
+        assert cfg.resolved_gateway_url() == "https://api.edenobservability.com/v1"
 
     def test_explicit_gateway_url(self):
         from eden_sdk.config import EdenConfig

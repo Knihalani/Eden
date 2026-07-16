@@ -16,6 +16,8 @@ import { SettingsCard } from "@/components/settings/settings-card";
 import { Button } from "@/components/ui/button";
 import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 import { DOCS_QUICKSTART_URL } from "@/lib/constants";
+import { FilledSnippet } from "@/components/quickstart/FilledSnippet";
+import Link from "next/link";
 
 interface ApiKeysTabProps {
   org: { id: string; name: string; role: string } | null;
@@ -204,6 +206,21 @@ export function ApiKeysTab({ org }: ApiKeysTabProps) {
   return (
     <div className="space-y-4">
       <SettingsCard>
+        <div className="mb-4 flex items-center justify-between gap-2">
+          <h3 className="text-sm font-semibold text-[var(--text-primary)]">
+            Ready-to-run snippet
+          </h3>
+          <Link
+            href="/quickstart"
+            className="text-xs text-[var(--accent)] hover:underline"
+          >
+            Open Quickstart →
+          </Link>
+        </div>
+        <FilledSnippet orgId={org.id} canManage={canManage} />
+      </SettingsCard>
+
+      <SettingsCard>
         <div className="space-y-3">
           <div className="flex items-start gap-3">
             <div className="rounded-lg bg-[var(--accent-faint)] p-2">
@@ -217,8 +234,7 @@ export function ApiKeysTab({ org }: ApiKeysTabProps) {
                 Create an API key, then set{" "}
                 <code className="text-xs">EDEN_API_KEY</code> and{" "}
                 <code className="text-xs">EDEN_ORG_ID</code> in your agent.
-                Base URL is{" "}
-                <code className="text-xs">https://api.edenobservability.com</code>.
+                The SDK talks to Eden cloud by default — no base URL needed.
               </p>
               <a
                 href={DOCS_QUICKSTART_URL}

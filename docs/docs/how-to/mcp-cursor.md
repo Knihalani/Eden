@@ -33,10 +33,10 @@ eden-mcp --help   # verify
 python -m eden.mcp_server
 ```
 
-**c) Docker / self-hosted API image**
+**c) Cloud API**
 
-`eden-mcp` is on `PATH` in the Eden API Docker image. Set the env vars
-and point Cursor at the container's exec.
+Point Cursor MCP at the hosted Eden API with your org API key. No
+self-hosted image is required.
 
 ## Environment variables
 
@@ -44,7 +44,6 @@ and point Cursor at the container's exec.
 |----------|----------|---------|
 | `EDEN_API_KEY` | yes | Org API key (`sk_eden_…`) |
 | `EDEN_ORG_ID` | yes | Org id (`org_…`) |
-| `EDEN_BASE_URL` | no | API base (default `https://api.edenobservability.com`) |
 
 ## Cursor
 
@@ -148,16 +147,6 @@ Try these in Cursor's agent chat after MCP connects:
 4. You should see recent traces returned as JSON.
 
 If the server fails to start, check:
-
-- `eden-mcp` (or `python -m eden.mcp_server`) runs in a terminal with the same env vars.
-- `EDEN_BASE_URL` points at your API (not the portal URL).
-- Firewall allows HTTPS to the Eden API.
-
-## Self-hosted
-
-Point `EDEN_BASE_URL` at your API ingress, e.g.
-`https://eden.your-domain.com/api` or `http://localhost:8000` for local
-docker-compose.
 
 ## What's next
 

@@ -107,7 +107,7 @@ class EdenConfig:
 
     org_id: str | None = None
     api_key: str | None = None
-    base_url: str = "http://localhost:8000"
+    base_url: str = "https://api.edenobservability.com"
     # Convenience alias for the OpenAI-compatible gateway. Defaults
     # to ``"{base_url}/v1"`` when not set, so customers can call
     # ``EdenConfig(base_url="https://api.eden.ai")`` and have
@@ -310,7 +310,7 @@ def _from_env() -> EdenConfig:
         api_key=(
             next((v for k in _ENV_API_KEY_CANDIDATES if (v := os.getenv(k))), None)
         ),
-        base_url=os.getenv(_ENV_BASE_URL, "http://localhost:8000"),
+        base_url=os.getenv(_ENV_BASE_URL, "https://api.edenobservability.com"),
         project_id=os.getenv(_ENV_PROJECT, "default"),
         batch_size=int(os.getenv(_ENV_BATCH_SIZE, "32")),
         flush_interval_ms=int(os.getenv(_ENV_FLUSH_INTERVAL_MS, "250")),

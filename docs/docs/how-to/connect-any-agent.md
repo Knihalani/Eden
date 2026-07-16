@@ -51,7 +51,6 @@ import eden
 eden.configure(
     api_key=os.environ["EDEN_API_KEY"],
     org_id=os.environ["EDEN_ORG_ID"],
-    base_url=os.environ.get("EDEN_BASE_URL", "https://api.edenobservability.com"),
 )
 eden.instrument()  # patches every installed framework
 ```
@@ -75,7 +74,6 @@ import {
 configure({
   apiKey: process.env.EDEN_API_KEY!,
   orgId: process.env.EDEN_ORG_ID!,
-  baseUrl: process.env.EDEN_BASE_URL,
 });
 
 const installed = detectInstalledFrameworks();
@@ -173,7 +171,7 @@ If nothing shows after **120 seconds**, check:
 | Check | Fix |
 |-------|-----|
 | Wrong `org_id` | Match the key's org in Settings → API Keys |
-| Wrong `base_url` | Use `https://api.edenobservability.com` |
+| Wrong API URL | Leave `base_url` unset — SDKs use `https://api.edenobservability.com` |
 | Firewall | Allow HTTPS egress to Eden ingest |
 | Doctor red | Re-run `eden doctor` / `npx @eden-ai/sdk doctor` |
 

@@ -13,6 +13,7 @@ import {
   Settings,
   FileText,
   ShieldAlert,
+  Rocket,
   type LucideIcon,
 } from "lucide-react";
 import {
@@ -57,6 +58,13 @@ export const DEFAULT_SIDEBAR: SidebarGroup[] = [
         label: "Dashboard",
         icon: LayoutDashboard,
         description: "One-glance view of agents, traces, costs, and alerts.",
+      },
+      {
+        id: "quickstart",
+        href: "/quickstart",
+        label: "Quickstart",
+        icon: Rocket,
+        description: "Fill in your API key and copy a ready-to-run snippet.",
       },
       {
         id: "agents",

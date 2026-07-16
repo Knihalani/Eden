@@ -91,7 +91,7 @@ async function notifySession(
   try {
     const client = getDefaultClient();
     const cfg = client.getConfig();
-    const base = (cfg.baseUrl ?? "http://localhost:8000").replace(/\/$/, "");
+    const base = (cfg.baseUrl ?? "https://api.edenobservability.com").replace(/\/$/, "");
     const headers: Record<string, string> = { "Content-Type": "application/json" };
     if (cfg.apiKey) headers.Authorization = `Bearer ${cfg.apiKey}`;
     const sid = String(payload.sessionId ?? "");
