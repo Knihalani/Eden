@@ -43,7 +43,7 @@ Crossing a soft limit fires a warning; crossing a hard limit returns
 ### From the API
 
 ```bash
-curl -X PUT https://api.edenobservability.com/v1/orgs/org_abc/budgets \
+curl -X PUT https://api.edenobservability.com/orgs/org_abc/budget \
   -H "Authorization: Bearer sk_eden_admin_..." \
   -H "Content-Type: application/json" \
   -d '{
@@ -59,7 +59,7 @@ curl -X PUT https://api.edenobservability.com/v1/orgs/org_abc/budgets \
 Restrict specific agents:
 
 ```bash
-curl -X POST https://api.edenobservability.com/v1/orgs/org_abc/budgets/agents \
+curl -X POST https://api.edenobservability.com/orgs/org_abc/budget/agents \
   -H "Authorization: Bearer sk_eden_admin_..." \
   -H "Content-Type: application/json" \
   -d '{
@@ -77,7 +77,7 @@ that carry an `agent_id`.
 ## Alerts
 
 ```bash
-curl -X POST https://api.edenobservability.com/v1/budgets/org_abc/alerts \
+curl -X POST https://api.edenobservability.com/orgs/org_abc/budget/alerts \
   -H "Authorization: Bearer sk_eden_admin_..." \
   -H "Content-Type: application/json" \
   -d '{
@@ -118,7 +118,7 @@ The cost intel service runs a daily z-score check on the daily
 total. Configure the sensitivity:
 
 ```bash
-curl -X PUT https://api.edenobservability.com/v1/orgs/org_abc/cost/anomaly-config \
+curl -X PUT https://api.edenobservability.com/orgs/org_abc/cost/anomaly-config \
   -H "Authorization: Bearer sk_eden_admin_..." \
   -H "Content-Type: application/json" \
   -d '{ "z_threshold": 3.0, "lookback_days": 30 }'
@@ -130,7 +130,7 @@ Anomalies appear in the **Cost → Anomalies** tab and fire the
 ## Forecast
 
 ```bash
-curl https://api.edenobservability.com/v1/cost/forecast?days=30 \
+curl https://api.edenobservability.com/orgs/org_abc/cost/forecast?days=30 \
   -H "Authorization: Bearer sk_eden_..." \
   -H "X-Org-Id: org_abc"
 ```

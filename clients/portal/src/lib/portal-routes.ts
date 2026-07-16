@@ -3,7 +3,6 @@
 
 export const KNOWN_PORTAL_PREFIXES: readonly string[] = [
   "/dashboard",
-  "/quickstart",
   "/agents",
   "/traces",
   "/issues",

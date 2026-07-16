@@ -79,7 +79,7 @@ the threshold **or** the daily run-rate projects a month-end breach.
 
 ```bash
 curl -X POST https://api.edenobservability.com/v1/budgets/org_abc/alerts \
-  -H "Authorization: Bearer sk_eden_..." \
+  -H "X-Org-Api-Key: $EDEN_API_KEY" \
   -H "X-Org-Id: org_abc" \
   -H "Content-Type: application/json" \
   -d '{

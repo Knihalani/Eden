@@ -24,7 +24,7 @@ import eden
 eden.configure(
     org_id=os.getenv("EDEN_ORG_ID", "demo-org"),
     api_key=os.getenv("EDEN_API_KEY", "demo-key"),
-    base_url=os.getenv("EDEN_BASE_URL", "http://localhost:8000"),
+    base_url=os.getenv("EDEN_BASE_URL", "https://api.edenobservability.com"),
 )
 # Patches crewai.Crew.step_callback / task_callback.  OpenAI is also
 # wrapped so the LLM calls the agents make show up as ``llm_completion``

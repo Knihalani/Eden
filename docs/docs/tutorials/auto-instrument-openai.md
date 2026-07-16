@@ -30,6 +30,11 @@ export EDEN_ORG_ID="org_..."
 export OPENAI_API_KEY="sk-..."
 ```
 
+:::tip
+Fastest path: use **[Fill in](/quickstart)** on the docs quickstart to
+create a key and inject it into a snippet.
+:::
+
 ## Step 2 — Write the bot (uninstrumented)
 
 ```python

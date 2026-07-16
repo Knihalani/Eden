@@ -16,7 +16,6 @@ import { SettingsCard } from "@/components/settings/settings-card";
 import { Button } from "@/components/ui/button";
 import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 import { DOCS_QUICKSTART_URL } from "@/lib/constants";
-import { FilledSnippet } from "@/components/quickstart/FilledSnippet";
 import Link from "next/link";
 
 interface ApiKeysTabProps {
@@ -206,21 +205,6 @@ export function ApiKeysTab({ org }: ApiKeysTabProps) {
   return (
     <div className="space-y-4">
       <SettingsCard>
-        <div className="mb-4 flex items-center justify-between gap-2">
-          <h3 className="text-sm font-semibold text-[var(--text-primary)]">
-            Ready-to-run snippet
-          </h3>
-          <Link
-            href="/quickstart"
-            className="text-xs text-[var(--accent)] hover:underline"
-          >
-            Open Quickstart →
-          </Link>
-        </div>
-        <FilledSnippet orgId={org.id} canManage={canManage} />
-      </SettingsCard>
-
-      <SettingsCard>
         <div className="space-y-3">
           <div className="flex items-start gap-3">
             <div className="rounded-lg bg-[var(--accent-faint)] p-2">
@@ -231,19 +215,21 @@ export function ApiKeysTab({ org }: ApiKeysTabProps) {
                 SDK credentials
               </h3>
               <p className="mt-1 text-sm text-[var(--text-secondary)] leading-relaxed">
-                Create an API key, then set{" "}
+                Create an API key here, or use{" "}
+                <strong>Fill in</strong> on the{" "}
+                <a
+                  href={DOCS_QUICKSTART_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-[var(--accent)] hover:underline"
+                >
+                  docs quickstart
+                </a>{" "}
+                to inject a key into a ready-to-run snippet. Set{" "}
                 <code className="text-xs">EDEN_API_KEY</code> and{" "}
-                <code className="text-xs">EDEN_ORG_ID</code> in your agent.
-                The SDK talks to Eden cloud by default — no base URL needed.
+                <code className="text-xs">EDEN_ORG_ID</code> — the SDK defaults to{" "}
+                <code className="text-xs">api.edenobservability.com</code>.
               </p>
-              <a
-                href={DOCS_QUICKSTART_URL}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="mt-2 inline-block text-xs font-medium text-[var(--accent)] hover:underline"
-              >
-                Open quickstart docs →
-              </a>
             </div>
           </div>
 

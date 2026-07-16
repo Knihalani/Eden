@@ -105,19 +105,15 @@ middleware — the middleware doesn't reach Stripe on the hot path.
 
 ## Data residency
 
-Cloud deployments are regional:
+The production API is served at:
 
 | Region | Base URL |
 |--------|----------|
-| US (default) | `https://api.edenobservability.com` |
-| EU | `https://api.eu.edenobservability.com` |
-| APAC | `https://api.apac.edenobservability.com` |
+| Production | `https://api.edenobservability.com` |
 
-Each region has its own Postgres + ClickHouse cluster. There is no
-cross-region replication of customer data.
-
-Self-hosted deployments are single-region by default; multi-region
-is supported via the Helm chart's `regional` profile.
+Customer data stays in the region that hosts this deployment.
+Additional regions (if offered) get their own API host and are
+documented when available.
 
 ## Audit
 
@@ -134,12 +130,12 @@ Every org-related action is in `org_audit_log`:
 This is the evidence pack for SOC 2 CC6.1 (logical access) and
 ISO 27001 A.9 (access control).
 
-## Migration to multi-region
+## Migration across regions
 
-If you start in US and need to move to EU:
+If Eden offers another region later and you need to move:
 
-1. Export the org's data (`POST /v1/orgs/{org}/export`).
-2. Create a new org in the EU region.
+1. Export the org's data (`POST /orgs/{org}/export`).
+2. Create a new org in the target region.
 3. Import the data into the new org.
 4. Re-issue API keys for the new region.
 5. Update your services to point at the new base URL.

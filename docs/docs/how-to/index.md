@@ -68,8 +68,8 @@ If you want to **learn** something, see
   </div>
 
   <div class="eden-card eden-card--small">
-    <h4>Auto-instrument an existing repo</h4>
-    <p>Open a PR that wires the SDK into a detected framework.</p>
+    <h4>Instrument an existing repo</h4>
+    <p>Add the SDK by hand — Fill in on the quickstart, then wrap your entrypoint.</p>
     <a href="/how-to/auto-instrument">Read →</a>
   </div>
 
@@ -92,14 +92,14 @@ If you want to **learn** something, see
 <div class="eden-grid eden-grid--compact">
 
   <div class="eden-card eden-card--small">
-    <h4>Cloud hosting</h4>
-    <p>Eden runs as managed cloud — connect your agents via the SDK.</p>
+    <h4>API endpoint</h4>
+    <p>SDKs default to api.edenobservability.com — keys, DNS, and connect tips.</p>
     <a href="/how-to/deploy">Read →</a>
   </div>
 
   <div class="eden-card eden-card--small">
     <h4>Connect GitHub</h4>
-    <p>Wire the GitHub App for the agent registry + auto-instrument PR.</p>
+    <p>Install the GitHub App for repo linkage and agent metadata.</p>
     <a href="/how-to/github">Read →</a>
   </div>
 

@@ -45,6 +45,10 @@ const isPublicRoute = createRouteMatcher([
   "/api/proxy/(.*)",  // explicit / after proxy so the matcher sees
                         // segments, not just a trailing string
   "/api/health",
+  // Docs Fill-in (CORS from docs.edenobservability.com). Auth is
+  // checked inside the handler via Clerk ``auth().getToken()``.
+  "/api/docs",
+  "/api/docs/(.*)",
   // ai-insights routes are pass-through proxies that forward the
   // request cookie + Clerk Bearer to FastAPI, which does its own
   // auth (returns 401 on bad/missing token). Letting Clerk's

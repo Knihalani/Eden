@@ -25,6 +25,7 @@ import {
 import { QuickLinks } from "./_components/quick-links";
 import { Card } from "@/components/ui/card";
 import { NoOrgState } from "@/components/ui/no-org-state";
+import { DOCS_QUICKSTART_URL } from "@/lib/constants";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -288,11 +289,13 @@ export default function DashboardPage() {
             </p>
             <div className="flex flex-wrap gap-3">
               <Link
-                href="/quickstart"
+                href={DOCS_QUICKSTART_URL}
+                target="_blank"
+                rel="noopener noreferrer"
                 className="inline-flex items-center gap-1.5 px-3 py-2 bg-[var(--accent)] text-[var(--accent-foreground)] rounded-lg text-sm font-medium hover:bg-[var(--accent-hover)] transition-colors"
               >
                 <Key className="w-3.5 h-3.5" />
-                Get API key
+                Docs quickstart
               </Link>
               <Link
                 href="/dashboard?onboarding=1"

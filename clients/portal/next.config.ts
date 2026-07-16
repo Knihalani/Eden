@@ -73,6 +73,9 @@ const nextConfig: NextConfig = {
       { source: "/incidents", destination: "/issues?tab=incidents", permanent: true },
       { source: "/redteam", destination: "/guardrails?tab=redteam", permanent: true },
 
+      // Docs Fill-in lives on docs site; old portal quickstart → docs
+      { source: "/quickstart", destination: "https://docs.edenobservability.com/quickstart", permanent: true },
+
       // Onboarding → dashboard overlay
       { source: "/onboarding", destination: "/dashboard?onboarding=1", permanent: true },
       { source: "/onboarding/:path*", destination: "/dashboard?onboarding=1", permanent: true },

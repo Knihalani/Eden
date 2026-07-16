@@ -557,6 +557,9 @@ app.add_middleware(
         "If-None-Match",
         "X-CSRF-Token",
         "X-Requested-With",
+        "X-Org-Id",
+        "X-Org-Api-Key",
+        "Idempotency-Key",
     ],
     # The session cookie is set with ``samesite="lax"`` by the auth
     # routes, so we don't need to expose it here. We do expose ETag

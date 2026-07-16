@@ -1,7 +1,13 @@
+---
+id: security-launch-checklist
+title: Security launch checklist
+sidebar_label: Security launch checklist
+---
+
 # Security launch checklist
 
-> Pre-launch gate for cloud SaaS and self-hosted GA. Complete every
-> item and attach evidence links before flipping production DNS.
+> Pre-launch gate for Eden **cloud** production. Complete every item
+> and attach evidence before flipping production DNS.
 >
 > Related: [Security overview](/operations/security),
 > [SOC 2 control mapping](/operations/soc2-control-mapping)

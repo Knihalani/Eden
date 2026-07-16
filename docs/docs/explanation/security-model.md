@@ -140,7 +140,7 @@ Every mutation lands in `org_audit_log`:
 
 Retention: **7 years** by default (configurable via
 `settings.audit_log_retention_days`). Export via
-`POST /v1/orgs/{org}/export/audit` for long-term archival.
+`POST /orgs/{org}/export/audit` for long-term archival.
 
 ## Compliance evidence packs
 
@@ -159,7 +159,7 @@ renders the evidence inline; export as a PDF for your auditor.
 ## GDPR right-to-be-forgotten
 
 ```bash
-curl -X POST https://api.edenobservability.com/v1/orgs/org_abc/gdpr/erase \
+curl -X POST https://api.edenobservability.com/orgs/org_abc/gdpr/erase \
   -H "Authorization: Bearer sk_eden_admin_..." \
   -d '{ "user_id": "u_abc" }'
 ```

@@ -4,15 +4,15 @@ import Link from "next/link";
 import {
   Activity,
   Zap,
-  BellRing,
   ArrowRight,
   Key,
-  Rocket,
+  BookOpen,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Card } from "@/components/ui/card";
 import { AgentIcon } from "@/components/icons/eden-nav-icons";
+import { DOCS_QUICKSTART_URL } from "@/lib/constants";
 
 type Accent = "trace" | "cost" | "alert" | "agent" | "key";
 
@@ -22,15 +22,17 @@ type QuickLinkItem = {
   href: string;
   icon: LucideIcon | typeof AgentIcon;
   accent: Accent;
+  external?: boolean;
 };
 
 const QUICK_LINKS: QuickLinkItem[] = [
   {
-    label: "Quickstart",
-    description: "Fill in a key and copy a snippet",
-    href: "/quickstart",
-    icon: Rocket,
+    label: "Docs quickstart",
+    description: "Fill in a key and run your first trace",
+    href: DOCS_QUICKSTART_URL,
+    icon: BookOpen,
     accent: "key",
+    external: true,
   },
   {
     label: "API keys",
@@ -72,14 +74,12 @@ const ACCENT_MAP: Record<Accent, string> = {
 
 function LinkTile({ item }: { item: QuickLinkItem }) {
   const Icon = item.icon;
-  return (
-    <Link
-      href={item.href}
-      className={cn(
-        "group flex items-start gap-3 rounded-xl border border-[var(--border-default)]",
-        "bg-[var(--bg-primary)] p-3 transition-colors hover:border-[var(--accent)]/40 hover:bg-[var(--bg-secondary)]",
-      )}
-    >
+  const className = cn(
+    "group flex items-start gap-3 rounded-xl border border-[var(--border-default)]",
+    "bg-[var(--bg-primary)] p-3 transition-colors hover:border-[var(--accent)]/40 hover:bg-[var(--bg-secondary)]",
+  );
+  const body = (
+    <>
       <span
         className={cn(
           "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg",
@@ -97,6 +97,23 @@ function LinkTile({ item }: { item: QuickLinkItem }) {
           {item.description}
         </span>
       </span>
+    </>
+  );
+  if (item.external) {
+    return (
+      <a
+        href={item.href}
+        target="_blank"
+        rel="noopener noreferrer"
+        className={className}
+      >
+        {body}
+      </a>
+    );
+  }
+  return (
+    <Link href={item.href} className={className}>
+      {body}
     </Link>
   );
 }

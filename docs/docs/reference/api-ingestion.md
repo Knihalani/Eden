@@ -17,11 +17,12 @@ Every ingestion POST requires:
 
 | Header | Value |
 |--------|-------|
-| `Authorization` | `Bearer sk_eden_...` |
+| `X-Org-Api-Key` | `sk_eden_...` (org API key) |
 | `X-Org-Id` | `org_...` |
 | `Content-Type` | `application/json` |
 | `Idempotency-Key` | (recommended) UUID for safe retries |
 
+Base URL: `https://api.edenobservability.com`.
 Body cap is **5 MiB**. Larger traces must be chunked.
 
 ## `POST /orgs/{org_id}/ingest/openai`

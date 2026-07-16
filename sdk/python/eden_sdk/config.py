@@ -73,8 +73,8 @@ class EdenConfig:
         Programmatic API key. Sent as ``X-Org-Api-Key`` header.
     base_url
         Gateway or ingestion base URL. The default
-        ``"http://localhost:8000"`` matches the Eden FastAPI dev
-        server (override in production).
+        ``"https://api.edenobservability.com"`` is production.
+        Override with ``EDEN_BASE_URL`` for staging.
     project_id
         Multi-tenant project label. Defaults to ``"default"`` which is
         what the ingestion route uses when ``X-Project-Id`` is missing.
@@ -242,8 +242,9 @@ class EdenConfig:
         """Return the OpenAI-compatible gateway URL.
 
         Falls back to ``"{base_url}/v1"`` when ``gateway_url`` is
-        unset. The default ``base_url`` of ``http://localhost:8000``
-        therefore resolves to ``http://localhost:8000/v1``.
+        unset. The default ``base_url`` of
+        ``https://api.edenobservability.com`` therefore resolves to
+        ``https://api.edenobservability.com/v1``.
         """
         if self.gateway_url:
             return self.gateway_url
