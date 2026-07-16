@@ -4,6 +4,7 @@ import * as React from "react";
 import { Info } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
+import { useEmbeddedSurface } from "@/components/layout/embedded-surface";
 
 export interface PageHeaderProps {
   title: string;
@@ -20,6 +21,11 @@ export interface PageHeaderProps {
    *  and labels that look similar. A hover hint tells the user
    *  which is which without making them navigate in. */
   description?: string;
+  /**
+   * When true (or under EmbeddedSurface), hide title chrome so shell
+   * tab parents do not double-header. Actions still render.
+   */
+  embedded?: boolean;
 }
 
 export function PageHeader({
@@ -31,7 +37,20 @@ export function PageHeader({
   className,
   greeting,
   description,
+  embedded = false,
 }: PageHeaderProps) {
+  const inEmbeddedSurface = useEmbeddedSurface();
+  const hideChrome = embedded || inEmbeddedSurface;
+
+  if (hideChrome) {
+    if (!actions) return null;
+    return (
+      <div className={cn("mb-4 flex flex-wrap items-center justify-end gap-2", className)}>
+        {actions}
+      </div>
+    );
+  }
+
   return (
     // `flex-col sm:flex-row sm:items-start` so the actions slot
     // wraps below the title on narrow viewports instead of

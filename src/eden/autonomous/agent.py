@@ -1171,18 +1171,27 @@ class ChatService:
         self._max_turns = self._settings.ai_agent_max_turns
 
     async def _pick_model(self) -> str:
-        """Pick the T3 tier model. Honor the explicit override in
-        ``ai_agent_t3_model`` if set; otherwise take the first model
-        from :data:`ModelRouter.TIER_MODELS[T3]`."""
+        """Pick the T3 tier model via ModelRouter classification."""
         if self._settings.ai_agent_t3_model:
             return self._settings.ai_agent_t3_model
+        try:
+            from eden.llm.internal_router import resolve_models
+
+            _tier, models = await resolve_models(
+                "chat_service",
+                slot="reasoning",
+                description="Multi-turn observability copilot with tools",
+                output_type="json",
+                requires_novelty=True,
+            )
+            if models:
+                return models[0]
+        except Exception:
+            pass
         try:
             from eden.optimization.model_router import TIER_MODELS, ModelTier
             return TIER_MODELS[ModelTier.T3][0]
         except Exception:
-            # Fall back to the T3 tier primary model. Previously returned
-            # ``claude-opus-4`` which silently billed every global chat
-            # at Opus rates on the rare import-failure path.
             return "x-ai/grok-4.5"
 
     async def _call_llm(

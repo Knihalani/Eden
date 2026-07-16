@@ -2,6 +2,9 @@
 /**
  * Portal E2E audit — visits portal + public routes (excl. /docs).
  * Uses @clerk/testing; persists auth in storageState to avoid re-sign-in.
+ *
+ * Routes follow the July 2026 12-item IA. Cut paths are audited as
+ * redirect smoke checks (Playwright follows to the consolidated target).
  */
 import { chromium } from "playwright";
 import { clerkSetup, clerk, setupClerkTestingToken } from "@clerk/testing/playwright";
@@ -25,22 +28,73 @@ process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY =
   "pk_test_bW9kZXN0LWJ1Zy03LmNsZXJrLmFjY291bnRzLmRldiQ";
 
 const PUBLIC_ROUTES = ["/login", "/signup", "/sign-in", "/sign-up", "/privacy", "/security", "/terms"];
+
+/** Canonical 12-item IA + deep-link survivors used by the portal. */
 const PORTAL_ROUTES = [
-  "/dashboard", "/observability", "/observability/query", "/observability/cohorts",
-  "/observability/decisions", "/observability/memory", "/observability/retrieval",
-  "/observability/apm", "/observability/eval", "/observability/time-travel",
-  "/traces", "/issues", "/fleet", "/improve", "/observability/mcp", "/llmops", "/optimization", "/optimization/budget",
-  "/optimization/model-advisor", "/optimization/outcomes", "/optimization/predict",
-  "/settings", "/settings/sidebar", "/settings/exports", "/settings/gateway",
-  "/settings/pii", "/settings/retention", "/settings/webhooks-dlq",
-  "/onboarding", "/onboarding/org", "/onboarding/connect", "/onboarding/install",
-  "/onboarding/autonomous", "/onboarding/tour", "/onboarding/done", "/onboarding/wait",
-  "/agents", "/agents/connect", "/alerts", "/billing", "/guardrails",
-  "/insights", "/pr-suggestions", "/users", "/tools", "/datasets", "/debugger",
-  "/replay", "/studio", "/synthetic", "/closed-loop",
-  "/incidents", "/signals", "/labeling", "/inspector", "/prompts", "/redteam",
-  "/profile", "/analytics", "/autonomous", "/issues", "/improve", "/fleet",
+  // Core 12
+  "/dashboard",
+  "/dashboard?onboarding=1",
+  "/agents",
+  "/agents?tab=fleet",
+  "/agents/connect",
+  "/traces",
+  "/traces?view=inspect",
+  "/traces?view=replay",
+  "/traces?view=debug",
+  "/traces?view=query",
+  "/issues",
+  "/issues?tab=incidents",
+  "/alerts",
+  "/alerts?tab=signals",
+  "/analytics",
+  "/analytics?tab=insights",
+  "/analytics?tab=tools",
+  "/analytics?tab=users",
+  "/evals",
+  "/evals?tab=datasets",
+  "/evals?tab=labeling",
+  "/evals?tab=studio",
+  "/evals?tab=synthetic",
+  "/improve",
+  "/improve?tab=plans",
+  "/improve?tab=history",
+  "/optimization",
+  "/optimization?tab=budget",
+  "/optimization?tab=outcomes",
+  "/optimization?tab=predict",
+  "/optimization?tab=advisor",
+  "/guardrails",
+  "/guardrails?tab=redteam",
+  "/prompts",
+  "/settings",
+  "/settings?tab=account",
+  "/settings?tab=billing",
   "/runs/test-run-id/lineage",
+  // Redirect smoke (cut / consolidated routes)
+  "/onboarding",
+  "/onboarding/connect",
+  "/inspector",
+  "/replay",
+  "/debugger",
+  "/fleet",
+  "/incidents",
+  "/insights",
+  "/tools",
+  "/users",
+  "/signals",
+  "/datasets",
+  "/labeling",
+  "/studio",
+  "/synthetic",
+  "/closed-loop",
+  "/autonomous",
+  "/pr-suggestions",
+  "/billing",
+  "/profile",
+  "/llmops",
+  "/redteam",
+  "/observability",
+  "/observability/eval",
 ];
 
 const BAD_VISIBLE = [
@@ -84,7 +138,7 @@ async function auditRoute(page, route, authed) {
     const resp = await page.goto(`${BASE}${route}`, { waitUntil: "domcontentloaded", timeout: 60_000 });
     result.status = resp?.status() ?? null;
     const isAuthRoute = /\/(login|sign-in|sign-up|signup)(\/|$)/.test(route);
-    const settleMs = isAuthRoute ? 12_000 : authed && route === "/dashboard" ? 4000 : 1200;
+    const settleMs = isAuthRoute ? 12_000 : authed && route.startsWith("/dashboard") ? 4000 : 1200;
     await sleep(settleMs);
     const text = await visibleText(page);
     let url = page.url();

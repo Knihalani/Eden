@@ -527,7 +527,7 @@ def _build_settings_class():
         evolver_degradation_threshold: float = 0.7
 
         # ── Promotion loop (Phase 7.1b follow-up) ───────────────────────
-        evolution_loop_enabled: bool = True
+        evolution_loop_enabled: bool = False
         evolution_loop_interval_seconds: int = 300
         promotion_loop_enabled: bool = True
         # Used by ``eden.llmops.promotion.PromotionLoop`` to decide
@@ -559,6 +559,12 @@ def _build_settings_class():
         # Judge Redis tailer — off by default to limit LLM cost.
         judges_async_tailer_enabled: bool = False
         judges_async_tailer_max_keys: int = 50
+        # UnifiedJudge LLM — OFF by default. Layer A owns production
+        # float scores; flip on only for shadow calibration / HIL.
+        judges_llm_v1: bool = False
+        # T1 ModelRouter annotator — 100% coverage after Layer A.
+        # Writes eval:llm:* search tags only (never Issues).
+        trace_annotator_v1: bool = True
 
         # Feature flags
         # Default OFF: legacy experiments / eval-harness routes (chain, experiments,
@@ -758,7 +764,10 @@ def _build_settings_class():
         verify_max_attempts: int = 3
 
         # ── WS4 enterprise feature flags ────────────────────────────────
+        # Sampling reuses Layer A judge_scores when present ($0 path).
         production_eval_sampling_v1: bool = True
+        # Signal investigator LLM path removed — StatGate/heuristics only
+        signal_investigator_llm_v1: bool = False
         fleet_health_v1: bool = True
         compliance_pack_export_v1: bool = True
         issue_experiments_v1: bool = True

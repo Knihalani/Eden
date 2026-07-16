@@ -36,12 +36,15 @@ class ProductionEvalSampler:
             return None
         if not is_stumble and not await self._budget_allows(org_id, policy):
             return None
-        score, passed = await self._score_trace(org_id, trace_id, agent_id)
+        score, passed, billed_cost = await self._score_trace(
+            org_id, trace_id, agent_id
+        )
         row_id = await self._persist_score(
-            org_id, trace_id, agent_id, score, passed
+            org_id, trace_id, agent_id, score, passed, cost_usd=billed_cost
         )
         if row_id:
-            await self._bump_spend(org_id, _SCORE_COST_USD)
+            if billed_cost > 0:
+                await self._bump_spend(org_id, billed_cost)
             if agent_id:
                 await self._touch_registry(org_id, agent_id)
         return {
@@ -120,20 +123,20 @@ class ProductionEvalSampler:
 
     async def _score_trace(
         self, org_id: str, trace_id: str, agent_id: str | None
-    ) -> tuple[float, bool]:
-        """Lightweight SLM-tier score — reuse judge_scores when present."""
+    ) -> tuple[float, bool, float]:
+        """Reuse Layer A / judge_scores when present ($0); else pseudo-score."""
         client = await self._client()
         if client is not None:
             try:
                 row = await client.fetchrow(
                     "SELECT AVG(score) AS avg_score FROM judge_scores "
-                    "WHERE org_id = $1 AND trace_id = $2",
+                    "WHERE tenant_id = $1 AND trace_id = $2",
                     org_id,
                     trace_id,
                 )
                 if row and row["avg_score"] is not None:
                     score = float(row["avg_score"])
-                    return score, score >= 0.7
+                    return score, score >= 0.7, 0.0
             except Exception:
                 pass
             try:
@@ -146,13 +149,13 @@ class ProductionEvalSampler:
                 )
                 if row and row.get("quality_score") is not None:
                     score = float(row["quality_score"])
-                    return score, score >= 0.6
+                    return score, score >= 0.6, 0.0
             except Exception:
                 pass
         # Deterministic pseudo-score for traces without judges yet.
         h = int(hashlib.sha256(f"{trace_id}:{agent_id}".encode()).hexdigest()[:6], 16)
         score = 0.55 + (h % 40) / 100.0
-        return score, score >= 0.7
+        return score, score >= 0.7, _SCORE_COST_USD
 
     async def _persist_score(
         self,
@@ -161,6 +164,8 @@ class ProductionEvalSampler:
         agent_id: str | None,
         score: float,
         passed: bool,
+        *,
+        cost_usd: float = _SCORE_COST_USD,
     ) -> str | None:
         client = await self._client()
         if client is None:
@@ -178,7 +183,7 @@ class ProductionEvalSampler:
                 agent_id,
                 score,
                 passed,
-                _SCORE_COST_USD,
+                float(cost_usd),
             )
             return sid
         except Exception as exc:

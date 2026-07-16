@@ -243,7 +243,7 @@ export default function DashboardPage() {
         actions={
           canConnect ? (
             <Link
-              href={isFirstRun ? "/onboarding/connect" : "/agents/connect"}
+              href={isFirstRun ? "/dashboard?onboarding=1" : "/agents/connect"}
               className="inline-flex items-center gap-1.5 px-3 py-2 bg-[var(--accent)] text-[var(--accent-foreground)] rounded-lg text-sm font-medium hover:bg-[var(--accent-hover)] transition-colors"
             >
               <GitBranch className="w-3.5 h-3.5" />
@@ -288,7 +288,7 @@ export default function DashboardPage() {
             <div className="flex flex-wrap gap-3">
               {canConnect && (
                 <Link
-                  href="/onboarding/connect"
+                  href="/dashboard?onboarding=1"
                   className="inline-flex items-center gap-1.5 px-3 py-2 bg-[var(--accent)] text-[var(--accent-foreground)] rounded-lg text-sm font-medium hover:bg-[var(--accent-hover)] transition-colors"
                 >
                   <GitBranch className="w-3.5 h-3.5" />
@@ -296,7 +296,7 @@ export default function DashboardPage() {
                 </Link>
               )}
               <Link
-                href="/onboarding/install"
+                href="/dashboard?onboarding=1"
                 className="inline-flex items-center gap-1.5 px-3 py-2 border border-[var(--border)] rounded-lg text-sm font-medium text-[var(--text-primary)] hover:bg-[var(--surface-hover)] transition-colors"
               >
                 <Sparkles className="w-3.5 h-3.5" />

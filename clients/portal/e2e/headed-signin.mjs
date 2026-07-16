@@ -64,7 +64,7 @@ async function main() {
 
   // Wait for redirect to /dashboard (or any non-sign-in URL).
   try {
-    await page.waitForURL(/\/(dashboard|onboarding)/, { timeout: 45_000 });
+    await page.waitForURL(/\/dashboard/, { timeout: 45_000 });
   } catch (e) {
     console.log("waitForURL failed:", String(e).slice(0, 120));
   }

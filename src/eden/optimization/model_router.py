@@ -101,7 +101,6 @@ class TaskClassifier:
         "critic",
         "archivist",
         "adversarial_tester",
-        "onboarding_integration",
     }
 
     # Code agents that may vary in complexity

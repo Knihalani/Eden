@@ -1,12 +1,10 @@
 "use client";
 
 /**
- * OnboardingBanner — cold-start progress chip (single SoT).
+ * OnboardingBanner — resume chip when setup is incomplete.
  *
- * Progress comes from ``lib/onboarding-progress`` (Cat-23 wizard
- * state via ``onboardingApi``). Hidden on ``/onboarding/*`` so the
- * wizard chrome is the only step counter inside the flow — no dual
- * "1 of 5" / "1 of 3" stacks.
+ * Skip / done comes only from Cat-23 ``onboardingApi`` state.
+ * Opens the product tour via ``?onboarding=1``.
  */
 
 import { useEffect, useState } from "react";
@@ -14,31 +12,24 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ChevronRight, Terminal, X } from "lucide-react";
 import { useOrg } from "@/hooks/use-org";
-import {
-  onboardingApi,
-  onboardingV2Api,
-  type OnboardingState,
-  type OnboardingV2State,
-} from "@/lib/api";
+import { onboardingApi, type OnboardingState } from "@/lib/api";
 import {
   formatOnboardingProgress,
   isOnboardingWizardPath,
-  ONBOARDING_PROGRESS_STEPS,
 } from "@/lib/onboarding-progress";
+import { PRODUCT_TOUR_STEPS } from "@/lib/product-tour";
 import { cn } from "@/lib/utils";
 
-const SESSION_KEY = "eden:onboarding:v2:dismissed";
+const SESSION_KEY = "eden:onboarding:banner-dismissed";
 
 export function OnboardingBanner({
   collapsed = false,
 }: {
-  /** When true (auth error banner visible), render nothing. */
   collapsed?: boolean;
 }) {
   const pathname = usePathname();
   const { currentOrg } = useOrg();
   const [wizardState, setWizardState] = useState<OnboardingState | null>(null);
-  const [v2Meta, setV2Meta] = useState<Pick<OnboardingV2State, "source" | "onboarding_v2_enabled"> | null>(null);
   const [dismissed, setDismissed] = useState(false);
 
   useEffect(() => {
@@ -47,7 +38,6 @@ export function OnboardingBanner({
     }
     if (!currentOrg?.id) {
       setWizardState(null);
-      setV2Meta(null);
       return;
     }
     const orgId = currentOrg.id;
@@ -62,30 +52,14 @@ export function OnboardingBanner({
         if (!cancelled) setWizardState(null);
       });
 
-    // v2 only gates legacy vs new-org banner visibility.
-    onboardingV2Api
-      .getState(orgId)
-      .then((res) => {
-        if (cancelled || !res?.data) return;
-        setV2Meta({
-          source: res.data.source,
-          onboarding_v2_enabled: res.data.onboarding_v2_enabled,
-        });
-      })
-      .catch(() => {
-        if (!cancelled) setV2Meta({ source: "defaults", onboarding_v2_enabled: true });
-      });
-
     return () => {
       cancelled = true;
     };
   }, [currentOrg?.id]);
 
-  // Wizard routes own their progress strip — don't stack a second counter.
   if (isOnboardingWizardPath(pathname)) return null;
   if (collapsed) return null;
   if (!wizardState) return null;
-  if (v2Meta?.source === "legacy" || v2Meta?.onboarding_v2_enabled === false) return null;
   if (dismissed) return null;
 
   const progress = formatOnboardingProgress(wizardState.step);
@@ -118,14 +92,14 @@ export function OnboardingBanner({
         </span>
         <div className="ml-auto flex shrink-0 items-center gap-1.5">
           <Link
-            href={progress.href}
+            href="/dashboard?onboarding=1"
             className={cn(
               "inline-flex items-center gap-0.5 rounded-md border border-[var(--accent)]/40",
               "bg-[var(--accent)]/10 px-2 py-0.5 text-[11px] font-medium text-[var(--accent)]",
               "hover:bg-[var(--accent)]/20",
             )}
           >
-            Resume
+            Resume tour
             <ChevronRight className="h-3 w-3" aria-hidden />
           </Link>
           <button
@@ -142,4 +116,4 @@ export function OnboardingBanner({
   );
 }
 
-export { ONBOARDING_PROGRESS_STEPS as ONBOARDING_V2_STEPS };
+export { PRODUCT_TOUR_STEPS as ONBOARDING_V2_STEPS };

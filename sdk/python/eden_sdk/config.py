@@ -51,6 +51,14 @@ _ENV_DRY_RUN = "EDEN_DRY_RUN"
 _ENV_DEBUG = "EDEN_DEBUG"
 
 
+def _env_opt_bool(name: str, *, default: bool = True) -> bool:
+    """Parse an env var as an optimization on/off switch."""
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() in {"1", "true", "yes", "on"}
+
+
 @dataclass
 class EdenConfig:
     """Holds runtime configuration for the SDK.
@@ -121,6 +129,13 @@ class EdenConfig:
     # (rendered as ``X-PII-Mode`` / ``X-PII-Disabled-Categories``
     # headers).
     filters: FilterConfig | None = None
+    # Gateway optimizations (default on). Set to ``False`` to opt out
+    # of a specific server-side feature; rendered as
+    # ``X-Eden-<Feature>: false`` on gateway calls.
+    exact_cache: bool = True
+    coalesce: bool = True
+    provider_cache_layout: bool = True
+    response_repair: bool = True
     # Optional httpx async transport. When set, the EdenClient
     # built by :func:`configure` uses this transport instead
     # of the default network stack. Used by tests (mock
@@ -211,6 +226,16 @@ class EdenConfig:
         active_filters = filters if filters is not None else self.filters
         if active_filters is not None:
             headers.update(active_filters.to_headers())
+        from eden_sdk.gateway_optimizations import optimization_opt_out_headers
+
+        headers.update(
+            optimization_opt_out_headers(
+                exact_cache=self.exact_cache,
+                coalesce=self.coalesce,
+                provider_cache_layout=self.provider_cache_layout,
+                response_repair=self.response_repair,
+            )
+        )
         return headers
 
     def resolved_gateway_url(self) -> str:
@@ -291,6 +316,10 @@ def _from_env() -> EdenConfig:
         flush_interval_ms=int(os.getenv(_ENV_FLUSH_INTERVAL_MS, "250")),
         disabled=os.getenv(_ENV_DISABLED, "").lower() in {"1", "true", "yes"},
         dry_run=dry_run,
+        exact_cache=_env_opt_bool("EDEN_EXACT_CACHE"),
+        coalesce=_env_opt_bool("EDEN_COALESCE"),
+        provider_cache_layout=_env_opt_bool("EDEN_PROVIDER_CACHE_LAYOUT"),
+        response_repair=_env_opt_bool("EDEN_RESPONSE_REPAIR"),
     )
 
 
@@ -308,6 +337,10 @@ def configure(
     max_queue: int | None = None,
     extra_headers: dict[str, str] | None = None,
     filters: FilterConfig | None = None,
+    exact_cache: bool | None = None,
+    coalesce: bool | None = None,
+    provider_cache_layout: bool | None = None,
+    response_repair: bool | None = None,
     **overrides: object,
 ) -> EdenConfig:
     """Update the global config and return it.
@@ -354,6 +387,14 @@ def configure(
             _config.extra_headers.update(extra_headers)
         if filters is not None:
             _config.filters = filters
+        if exact_cache is not None:
+            _config.exact_cache = exact_cache
+        if coalesce is not None:
+            _config.coalesce = coalesce
+        if provider_cache_layout is not None:
+            _config.provider_cache_layout = provider_cache_layout
+        if response_repair is not None:
+            _config.response_repair = response_repair
         for k, v in overrides.items():
             if hasattr(_config, k) and v is not None:
                 setattr(_config, k, v)

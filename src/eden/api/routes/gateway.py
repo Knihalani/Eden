@@ -127,6 +127,19 @@ from eden.api.utils.safe_error import redact_upstream_error, safe_detail  # noqa
 from eden.config import get_settings  # noqa: E402
 from eden.data_platform.pii import PIIPolicy  # noqa: E402
 from eden.llmops.ai_gateway import AIGateway, ModelRequest  # noqa: E402
+from eden.llmops.gateway_optimizations import (  # noqa: E402
+    OptimizationFlags,
+    cache_key_for_chat,
+    exact_cache_eligible,
+    get_exact_cached_response,
+    get_gateway_coalescer,
+    layout_for_provider_cache,
+    optimization_response_headers,
+    optimization_telemetry_tags,
+    resolve_optimization_flags,
+    set_exact_cached_response,
+)
+from eden.llmops.response_repair import repair_chat_completion_response  # noqa: E402
 from eden.llmops.openai_adapter import (  # noqa: E402
     ChatCompletionRequest,
     CompletionRequest,
@@ -506,7 +519,8 @@ def _resolve_upstream(
         # provider label still need to be computed so production
         # code paths are exercised, but we don't actually use them.
         settings = _settings()
-        provider = (
+        in_provider = request.headers.get("X-Upstream-Provider", "").strip().lower()
+        provider = in_provider or (
             "minimax" if settings.use_minimax
             else _infer_provider_from_base_url(
                 settings.minimax_base_url if settings.use_minimax
@@ -1153,14 +1167,50 @@ async def chat_completions(
     #    falls back to server-configured OpenRouter or MiniMax).
     client, outbound_headers, provider = _resolve_upstream(request)
 
-    # 3. Build upstream kwargs + thread extra_headers so the caller's
+    # 3. Gateway optimizations (default on; per-feature opt-out).
+    opt_flags = resolve_optimization_flags(
+        request.headers,
+        raw_body,
+        extras=body.extras,
+    )
+    optimization_tags: list[str] = []
+    if opt_flags.provider_cache_layout:
+        laid_out, layout_applied = layout_for_provider_cache(
+            body.messages,
+            provider=provider,
+        )
+        if layout_applied:
+            body.messages = laid_out
+            optimization_tags.append("provider_cache_layout:applied")
+
+    cache_key = cache_key_for_chat(
+        org_id=org_id,
+        model=body.model,
+        messages=body.messages,
+        tools=body.tools,
+        tool_choice=body.tool_choice,
+        temperature=body.temperature,
+        max_tokens=body.max_tokens,
+        max_completion_tokens=body.max_completion_tokens,
+        seed=body.seed,
+        top_p=body.top_p,
+        n=body.n,
+        stop=body.stop,
+        response_format=body.response_format,
+        functions=body.functions,
+        function_call=body.function_call,
+        presence_penalty=body.presence_penalty,
+        frequency_penalty=body.frequency_penalty,
+    )
+
+    # 4. Build upstream kwargs + thread extra_headers so the caller's
     #    X-* headers (HTTP-Referer, X-Title, anthropic-version, ...)
     #    land on the outbound HTTP request.
     upstream_kwargs = chat_to_provider_kwargs(body)
     if outbound_headers:
         upstream_kwargs["extra_headers"] = outbound_headers
 
-    # 4. Make the call (streaming or non-streaming)
+    # 5. Make the call (streaming or non-streaming)
     start = time.monotonic()
     if body.stream:
         return await _chat_completions_stream(
@@ -1174,6 +1224,8 @@ async def chat_completions(
             client=client,
             provider=provider,
             pii_findings=pii_findings,
+            opt_flags=opt_flags,
+            optimization_tags=optimization_tags,
         )
     return await _chat_completions_unary(
         org_id=org_id,
@@ -1186,6 +1238,9 @@ async def chat_completions(
         client=client,
         provider=provider,
         pii_findings=pii_findings,
+        opt_flags=opt_flags,
+        cache_key=cache_key,
+        optimization_tags=optimization_tags,
     )
 
 
@@ -1201,17 +1256,92 @@ async def _chat_completions_unary(
     client: AsyncOpenAI | None = None,
     provider: str = "",
     pii_findings: list[str] | None = None,
+    opt_flags: OptimizationFlags | None = None,
+    cache_key: str | None = None,
+    optimization_tags: list[str] | None = None,
 ) -> JSONResponse:
     # ``client`` is injected by chat_completions after per-request
     # upstream resolution. Falls back to the legacy module-level
     # stub for tests that haven't been migrated.
+    flags = opt_flags or OptimizationFlags()
+    tags = list(optimization_tags or [])
+    extra_payload: dict[str, Any] = {
+        "pii_findings": pii_findings or [],
+        "optimization_tags": tags,
+    }
+
+    def _opt_response_headers() -> dict[str, str]:
+        return optimization_response_headers(tags)
+
+    def _provider_tags(provider_label: str) -> list[str] | None:
+        base = [f"provider:{provider_label}"] if provider_label else []
+        opt = optimization_telemetry_tags(tags)
+        return base + opt if (base or opt) else None
+
     if client is None:
         client = get_async_openai_client()
-    try:
+
+    async def _call_upstream() -> dict[str, Any]:
         response = await client.chat.completions.create(
             **upstream_kwargs,
             stream=False,
         )
+        return shape_chat_completion_response(response)
+
+    # Exact response cache (deterministic requests only).
+    if (
+        flags.exact_cache
+        and cache_key
+        and exact_cache_eligible(body.temperature)
+    ):
+        cached = await get_exact_cached_response(cache_key)
+        if cached is not None:
+            tags.append("exact_cache:hit")
+            shaped = cached
+            if flags.response_repair:
+                shaped, repair_count = repair_chat_completion_response(shaped)
+                if repair_count:
+                    tags.append("response_repair:applied")
+                    extra_payload["response_repair_count"] = repair_count
+            duration_ms = (time.monotonic() - start) * 1000
+            extra_payload["optimization_tags"] = tags
+            await _emit_gateway_telemetry(
+                org_id=org_id,
+                auth_ctx=auth_ctx,
+                model=body.model,
+                endpoint="chat.completions",
+                request_body=request_body,
+                response_body=shaped,
+                metrics={
+                    "input_tokens": float(
+                        shaped.get("usage", {}).get("prompt_tokens", 0)
+                    ),
+                    "output_tokens": float(
+                        shaped.get("usage", {}).get("completion_tokens", 0)
+                    ),
+                    "total_tokens": float(
+                        shaped.get("usage", {}).get("total_tokens", 0)
+                    ),
+                    "duration_ms": duration_ms,
+                },
+                outcome="success",
+                duration_ms=duration_ms,
+                user_label=user_label,
+                extra_tags=_provider_tags(provider),
+                extra_payload=extra_payload,
+            )
+            return JSONResponse(content=shaped, headers=_opt_response_headers())
+
+    try:
+        if flags.coalesce and cache_key:
+            shaped, was_coalesced = await get_gateway_coalescer().execute(
+                cache_key,
+                _call_upstream,
+            )
+            if was_coalesced:
+                tags.append("coalesce:hit")
+        else:
+            shaped = await _call_upstream()
     except _get_openai_api_error() as exc:
         await _emit_gateway_telemetry(
             org_id=org_id,
@@ -1220,7 +1350,7 @@ async def _chat_completions_unary(
             endpoint="chat.completions",
             request_body=request_body,
             extra_tags=[f"provider:{provider}"] if provider else None,
-            extra_payload={"pii_findings": pii_findings or []},
+            extra_payload=extra_payload,
             outcome="failure",
             error_type=type(exc).__name__,
             duration_ms=(time.monotonic() - start) * 1000,
@@ -1243,11 +1373,25 @@ async def _chat_completions_unary(
             error_type=type(exc).__name__,
             duration_ms=(time.monotonic() - start) * 1000,
             user_label=user_label,
+            extra_payload=extra_payload,
         )
         raise HTTPException(status_code=502, detail=_redact_upstream_error(exc)) from exc
 
-    shaped = shape_chat_completion_response(response)
+    if flags.response_repair:
+        shaped, repair_count = repair_chat_completion_response(shaped)
+        if repair_count:
+            tags.append("response_repair:applied")
+            extra_payload["response_repair_count"] = repair_count
+
+    if (
+        flags.exact_cache
+        and cache_key
+        and exact_cache_eligible(body.temperature)
+    ):
+        await set_exact_cached_response(cache_key, shaped)
+
     duration_ms = (time.monotonic() - start) * 1000
+    extra_payload["optimization_tags"] = tags
     await _emit_gateway_telemetry(
         org_id=org_id,
         auth_ctx=auth_ctx,
@@ -1264,10 +1408,10 @@ async def _chat_completions_unary(
         outcome="success",
         duration_ms=duration_ms,
         user_label=user_label,
-        extra_tags=[f"provider:{provider}"] if provider else None,
-        extra_payload={"pii_findings": pii_findings or []},
+        extra_tags=_provider_tags(provider),
+        extra_payload=extra_payload,
     )
-    return JSONResponse(content=shaped)
+    return JSONResponse(content=shaped, headers=_opt_response_headers())
 
 
 async def _chat_completions_stream(
@@ -1282,6 +1426,8 @@ async def _chat_completions_stream(
     client: AsyncOpenAI | None = None,
     provider: str = "",
     pii_findings: list[str] | None = None,
+    opt_flags: OptimizationFlags | None = None,
+    optimization_tags: list[str] | None = None,
 ) -> StreamingResponse:
     """Streaming chat completions.
 
@@ -1370,7 +1516,10 @@ async def _chat_completions_stream(
                 duration_ms=duration_ms,
                 user_label=user_label,
                 extra_tags=[f"provider:{provider}"] if provider else None,
-                extra_payload={"pii_findings": pii_findings or []},
+                extra_payload={
+                    "pii_findings": pii_findings or [],
+                    "optimization_tags": list(optimization_tags or []),
+                },
             )
 
     return StreamingResponse(
@@ -1380,6 +1529,7 @@ async def _chat_completions_stream(
             "Cache-Control": "no-cache, no-transform",
             "Connection": "keep-alive",
             "X-Accel-Buffering": "no",
+            **optimization_response_headers(list(optimization_tags or [])),
         },
     )
 

@@ -214,8 +214,29 @@ def mock_auth(api_client: TestClient, mock_collector, monkeypatch):
     monkeypatch.setattr(gateway_module, "_settings", lambda: blank_settings)
     monkeypatch.setattr("eden.config.get_settings", lambda: blank_settings)
 
+    # Isolated in-memory Redis for exact-cache tests so keys never
+    # leak across cases when a real Redis is configured locally.
+    redis_store: dict[str, str] = {}
+
+    class _FakeRedis:
+        async def get(self, key: str):
+            return redis_store.get(key)
+
+        async def set(self, key: str, value: str, ex: int | None = None):
+            redis_store[key] = value
+
+    monkeypatch.setattr(
+        "eden.llmops.gateway_optimizations.get_redis_client",
+        AsyncMock(return_value=_FakeRedis()),
+    )
+
+    # Reset the process-local coalescer singleton between tests.
+    import eden.llmops.gateway_optimizations as _go_mod
+
+    monkeypatch.setattr(_go_mod, "_coalescer", None)
+
     try:
-        yield {"auth": fake_auth, "client": stub_client}
+        yield {"auth": fake_auth, "client": stub_client, "redis_store": redis_store}
     finally:
         app.dependency_overrides.pop(get_ingestion_auth, None)
         get_settings.cache_clear()
@@ -361,6 +382,209 @@ class TestChatCompletionsUnary:
         sent = mock_auth["client"].chat.completions.create.await_args.kwargs
         assert sent["messages"][0]["role"] == "system"
         assert sent["messages"][0]["content"] == "You are terse."
+
+    def test_exact_cache_hit_on_second_request(
+        self, api_client: TestClient, mock_collector, mock_auth
+    ):
+        call_count = 0
+
+        async def _create(**kwargs):
+            nonlocal call_count
+            call_count += 1
+            return _StubChatResponse(content="cached answer")
+
+        mock_auth["client"].chat.completions.create = AsyncMock(side_effect=_create)
+
+        payload = {
+            "model": "openai/gpt-4o-mini",
+            "messages": [{"role": "user", "content": "cache me"}],
+            "temperature": 0,
+        }
+        r1 = api_client.post("/gateway/v1/chat/completions", json=payload)
+        assert r1.status_code == 200
+        assert call_count == 1
+
+        r2 = api_client.post("/gateway/v1/chat/completions", json=payload)
+        assert r2.status_code == 200
+        assert call_count == 1
+        assert r2.json()["choices"][0]["message"]["content"] == "cached answer"
+        assert r2.headers.get("X-Eden-Exact-Cache") == "hit"
+        assert "exact_cache:hit" in (r2.headers.get("X-Eden-Optimizations") or "")
+        events = mock_collector.ingest_batch.await_args_list[-1][0][0]
+        assert "exact_cache:hit" in events[0].payload.get("optimization_tags", [])
+        assert "optimization:exact_cache:hit" in events[0].tags
+
+    def test_exact_cache_opt_out_header(
+        self, api_client: TestClient, mock_collector, mock_auth
+    ):
+        call_count = 0
+
+        async def _create(**kwargs):
+            nonlocal call_count
+            call_count += 1
+            return _StubChatResponse(content="live")
+
+        mock_auth["client"].chat.completions.create = AsyncMock(side_effect=_create)
+
+        payload = {
+            "model": "openai/gpt-4o-mini",
+            "messages": [{"role": "user", "content": "no cache"}],
+            "temperature": 0,
+        }
+        headers = {"X-Eden-Exact-Cache": "false"}
+        api_client.post("/gateway/v1/chat/completions", json=payload, headers=headers)
+        api_client.post("/gateway/v1/chat/completions", json=payload, headers=headers)
+        assert call_count == 2
+
+    def test_response_repair_fixes_malformed_tool_args(
+        self, api_client: TestClient, mock_collector, mock_auth
+    ):
+        async def _create(**kwargs):
+            msg = _StubMessage(
+                content=None,
+                tool_calls=[
+                    _StubToolCall(
+                        function=_StubFunction(
+                            name="get_weather",
+                            arguments='{"city":"SF",}',
+                        )
+                    )
+                ],
+            )
+            return _StubChatResponse(message=msg)
+
+        mock_auth["client"].chat.completions.create = AsyncMock(side_effect=_create)
+
+        r = api_client.post(
+            "/gateway/v1/chat/completions",
+            json={
+                "model": "openai/gpt-4o-mini",
+                "messages": [{"role": "user", "content": "weather?"}],
+            },
+        )
+        assert r.status_code == 200
+        args = r.json()["choices"][0]["message"]["tool_calls"][0]["function"]["arguments"]
+        assert json.loads(args) == {"city": "SF"}
+        assert r.headers.get("X-Eden-Response-Repair") == "applied"
+        events = mock_collector.ingest_batch.await_args[0][0]
+        assert "response_repair:applied" in events[0].payload.get("optimization_tags", [])
+
+    def test_exact_cache_skipped_when_temperature_nonzero(
+        self, api_client: TestClient, mock_collector, mock_auth
+    ):
+        call_count = 0
+
+        async def _create(**kwargs):
+            nonlocal call_count
+            call_count += 1
+            return _StubChatResponse(content="warm")
+
+        mock_auth["client"].chat.completions.create = AsyncMock(side_effect=_create)
+
+        payload = {
+            "model": "openai/gpt-4o-mini",
+            "messages": [{"role": "user", "content": "no cache"}],
+            "temperature": 0.7,
+        }
+        api_client.post("/gateway/v1/chat/completions", json=payload)
+        api_client.post("/gateway/v1/chat/completions", json=payload)
+        assert call_count == 2
+        assert len(mock_auth["redis_store"]) == 0
+
+    def test_exact_cache_miss_when_response_format_differs(
+        self, api_client: TestClient, mock_collector, mock_auth
+    ):
+        responses = iter(["text-mode", "json-mode"])
+
+        async def _create(**kwargs):
+            return _StubChatResponse(content=next(responses))
+
+        mock_auth["client"].chat.completions.create = AsyncMock(side_effect=_create)
+
+        base = {
+            "model": "openai/gpt-4o-mini",
+            "messages": [{"role": "user", "content": "format test"}],
+            "temperature": 0,
+        }
+        r1 = api_client.post(
+            "/gateway/v1/chat/completions",
+            json={**base, "response_format": {"type": "text"}},
+        )
+        r2 = api_client.post(
+            "/gateway/v1/chat/completions",
+            json={**base, "response_format": {"type": "json_object"}},
+        )
+        assert r1.status_code == 200
+        assert r2.status_code == 200
+        assert r1.json()["choices"][0]["message"]["content"] == "text-mode"
+        assert r2.json()["choices"][0]["message"]["content"] == "json-mode"
+        assert mock_auth["client"].chat.completions.create.await_count == 2
+
+    def test_provider_cache_layout_reorders_system_for_anthropic(
+        self, api_client: TestClient, mock_collector, mock_auth
+    ):
+        async def _create(**kwargs):
+            return _StubChatResponse(content="ok")
+
+        mock_auth["client"].chat.completions.create = AsyncMock(side_effect=_create)
+
+        r = api_client.post(
+            "/gateway/v1/chat/completions",
+            json={
+                "model": "openai/gpt-4o-mini",
+                "messages": [
+                    {"role": "user", "content": "ping"},
+                    {"role": "system", "content": "You are terse."},
+                ],
+                "temperature": 0,
+            },
+            headers={"X-Upstream-Provider": "anthropic"},
+        )
+        assert r.status_code == 200
+        sent = mock_auth["client"].chat.completions.create.await_args.kwargs
+        assert sent["messages"][0]["role"] == "system"
+        content = sent["messages"][0]["content"]
+        assert isinstance(content, list)
+        assert content[0]["cache_control"] == {"type": "ephemeral"}
+        events = mock_collector.ingest_batch.await_args[0][0]
+        assert "provider_cache_layout:applied" in events[0].payload.get(
+            "optimization_tags", []
+        )
+
+    def test_response_repair_opt_out(
+        self, api_client: TestClient, mock_collector, mock_auth
+    ):
+        async def _create(**kwargs):
+            msg = _StubMessage(
+                content=None,
+                tool_calls=[
+                    _StubToolCall(
+                        function=_StubFunction(
+                            name="get_weather",
+                            arguments='{"city":"SF",}',
+                        )
+                    )
+                ],
+            )
+            return _StubChatResponse(message=msg)
+
+        mock_auth["client"].chat.completions.create = AsyncMock(side_effect=_create)
+
+        r = api_client.post(
+            "/gateway/v1/chat/completions",
+            json={
+                "model": "openai/gpt-4o-mini",
+                "messages": [{"role": "user", "content": "weather?"}],
+            },
+            headers={"X-Eden-Response-Repair": "false"},
+        )
+        assert r.status_code == 200
+        args = r.json()["choices"][0]["message"]["tool_calls"][0]["function"]["arguments"]
+        assert args == '{"city":"SF",}'
+        events = mock_collector.ingest_batch.await_args[0][0]
+        assert "response_repair:applied" not in events[0].payload.get(
+            "optimization_tags", []
+        )
 
     def test_response_format_passthrough(
         self, api_client: TestClient, mock_collector, mock_auth

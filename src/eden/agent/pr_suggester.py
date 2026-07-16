@@ -178,24 +178,19 @@ class _OpenRouterAdapter:
         model: str | None = None,
         max_tokens: int = 1024,
     ) -> str:
+        from eden.llm.internal_router import route_async
+
         slot = "fast" if max_tokens <= 1024 else "reasoning"
-        if hasattr(self._client, "acall"):
-            resp = await self._client.acall(
-                agent="pr_suggester",
-                prompt=prompt,
-                slot=slot,
-                system_prompt=system or None,
-                max_tokens=max_tokens,
-            )
-            return getattr(resp, "content", "") or ""
-        # Test stub path: the Protocol still works as-is.
-        fn = getattr(self._client, "complete", None)
-        if fn is None:
-            raise RuntimeError(
-                "LLM client lacks both 'acall' and 'complete'; cannot adapt"
-            )
-        out = await fn(prompt=prompt, system=system, max_tokens=max_tokens)
-        return out if isinstance(out, str) else getattr(out, "content", str(out))
+        resp = await route_async(
+            "pr_suggester",
+            prompt,
+            slot=slot,
+            system_prompt=system or None,
+            max_tokens=max_tokens,
+            output_type="text",
+            requires_quality_check=False,
+        )
+        return getattr(resp, "content", "") or ""
 
 
 # ── PRSuggester ─────────────────────────────────────────────────

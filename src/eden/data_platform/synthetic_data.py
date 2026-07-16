@@ -245,8 +245,19 @@ class SyntheticDataEngine:
                 f"but vary the wording, style, and structure:\n\n{text}\n\n"
                 f"Return exactly {count} paraphrases, one per line, prefixed with '- '."
             )
-            response = await llm.generate(prompt, max_tokens=2000, temperature=0.7)
-            raw = response.get("content", "")
+        try:
+            from eden.llm.internal_router import route_async
+
+            response = await route_async(
+                "synthetic_paraphrase",
+                prompt,
+                slot="fast",
+                max_tokens=2000,
+                output_type="text",
+                requires_quality_check=False,
+                description="Paraphrase synthetic training datapoints",
+            )
+            raw = getattr(response, "content", "") or ""
             # Extract lines prefixed with '- '
             lines = [line[2:].strip() for line in raw.split("\n") if line.strip().startswith("- ")]
             return lines[:count] if lines else [text]

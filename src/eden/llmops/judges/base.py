@@ -109,10 +109,12 @@ class Judge(ABC):
     @abstractmethod
     async def score(
         self, event: TelemetryEvent, ctx: JudgeContext
-    ) -> JudgeScore:
-        """Score one event. Must not raise — return a low-confidence
-        JudgeScore instead. The runner logs and skips failures
-        defensively, but a non-raising implementation is the contract.
+    ) -> JudgeScore | list[JudgeScore]:
+        """Score one event. May return one score or a list (multi-axis).
+
+        Must not raise — return a low-confidence JudgeScore instead.
+        The runner logs and skips failures defensively, but a
+        non-raising implementation is the contract.
         """
         ...
 

@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
+import dynamic from "next/dynamic";
 import { useOrg } from "@/hooks/use-org";
 import { useToast } from "@/components/ui/toast";
 import { api, nlAlertsApi, integrationsApi } from "@/lib/api";
@@ -14,6 +15,7 @@ import { Button } from "@/components/ui/button";
 import { NoOrgState } from "@/components/ui/no-org-state";
 import { PageHeader } from "@/components/layout/page-header";
 import { PageContent } from "@/components/layout/page-content";
+import { EmbeddedSurface } from "@/components/layout/embedded-surface";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Bell,
@@ -30,6 +32,15 @@ import {
   ChevronUp,
   Clock,
   RefreshCw } from "lucide-react";
+
+const SignalsView = dynamic(() => import("../signals/page"), {
+  ssr: false,
+  loading: () => (
+    <div className="flex h-48 items-center justify-center">
+      <Loader2 className="h-4 w-4 animate-spin text-[var(--text-muted)]" />
+    </div>
+  ),
+});
 
 const BASE_CHANNEL_CONFIGURED: Record<string, boolean> = {
   in_app: true,
@@ -106,6 +117,7 @@ function AlertsPageInner() {
   const [rulesOpen, setRulesOpen] = useState(
     searchParams.get("tab") === "rules",
   );
+  const showSignals = searchParams.get("tab") === "signals";
   const [channelConfigured, setChannelConfigured] = useState(BASE_CHANNEL_CONFIGURED);
   const limit = 50;
 
@@ -251,14 +263,41 @@ function AlertsPageInner() {
     );
   }
 
+  if (showSignals) {
+    return (
+      <PageContent>
+        <PageHeader
+          title="Alerts"
+          subtitle="Threshold notifications and custom signal rules."
+          icon={Bell}
+        />
+        <div className="mb-4 flex gap-2 text-sm">
+          <a href="/alerts" className="text-[var(--accent)] hover:underline">Feed</a>
+          <span className="text-[var(--text-muted)]">·</span>
+          <span className="font-medium text-[var(--text-primary)]">Signals</span>
+        </div>
+        <EmbeddedSurface>
+          <SignalsView />
+        </EmbeddedSurface>
+      </PageContent>
+    );
+  }
+
   return (
     <PageContent>
       <PageHeader
-        title="Alert Feed"
+        title="Alerts"
         subtitle={loading ? "..." : `${total} alerts · ${unreadCount} unread`}
         icon={Bell}
+        description="Configure notifications when traces, costs, or quality cross a threshold."
         actions={
           <div className="flex items-center gap-2">
+            <a
+              href="/alerts?tab=signals"
+              className="text-xs text-[var(--accent)] hover:underline px-2"
+            >
+              Signals
+            </a>
             <button
               onClick={fetchAlerts}
               disabled={loading || refreshing}

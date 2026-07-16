@@ -110,12 +110,13 @@ DEFAULT_REPLAY_SAMPLE_SIZE: int = 5_000
 #: for the entire production window.
 MAX_REPLAY_SAMPLE_SIZE: int = 50_000
 
-#: Default set of Cat 3 judges the :class:`AutoEvaluator`
-#: runs when the caller doesn't specify one. The seven names
-#: are the Cat 3 ``builtin_v9`` set (the Luna-2 judges).
+#: Default judges when the caller doesn't specify one. Axes are
+#: produced by :class:`UnifiedJudge` (one LLM call) plus
+#: :class:`SatisfactionJudge` (SQL / feedback, no LLM).
 DEFAULT_JUDGES: tuple[str, ...] = (
+    "hallucination",
+    "correctness",
     "groundedness",
-    "relevance",
     "safety",
     "satisfaction",
     "action_completion",
@@ -128,14 +129,14 @@ DEFAULT_JUDGES: tuple[str, ...] = (
 #: hard judge short-circuits the decision tree to
 #: ``dont_ship`` even if the other judges look great.
 HARD_JUDGES: frozenset[str] = frozenset(
-    {"safety", "groundedness", "action_completion"}
+    {"safety", "groundedness", "action_completion", "hallucination"}
 )
 
 #: "Soft" judges — useful signals, but a regression on one
 #: is acceptable if the hard judges pass.
 SOFT_JUDGES: frozenset[str] = frozenset(
     {
-        "relevance",
+        "correctness",
         "satisfaction",
         "tool_selection_quality",
         "reasoning_coherence",
@@ -148,7 +149,8 @@ ALL_JUDGES: tuple[str, ...] = (
     "safety",
     "groundedness",
     "action_completion",
-    "relevance",
+    "hallucination",
+    "correctness",
     "satisfaction",
     "tool_selection_quality",
     "reasoning_coherence",

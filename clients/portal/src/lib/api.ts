@@ -3900,15 +3900,6 @@ export const githubApi = {
       `/orgs/${orgId}/github/repos`,
       { headers: { "X-Org-Id": orgId } },
     ),
-  integrate: (
-    orgId: string,
-    body: { installation_id: number; repo_full_name: string; agent_id?: string; agent_name?: string },
-  ) =>
-    fetchApi<OnboardingPRRun>(`/orgs/${orgId}/github/integrate`, {
-      method: "POST",
-      headers: { "X-Org-Id": orgId },
-      body: JSON.stringify(body),
-    }),
 };
 
 export const onboardingApi = {

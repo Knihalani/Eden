@@ -341,6 +341,10 @@ class OpenRouterClient:
     ) -> LLMResponse:
         """Make an LLM call with retry and circuit breaker.
 
+        **Internal transport only** — feature code should call
+        :mod:`eden.llm.internal_router` (``route_sync`` / ``route_async``)
+        so tier selection goes through :class:`ModelRouter`.
+
         ``model`` is an optional override — when provided, the
         client uses exactly that model (no slot fallback chain).
         The model_router passes ``model`` per tier to pick a

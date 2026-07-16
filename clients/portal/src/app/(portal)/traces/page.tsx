@@ -18,9 +18,11 @@
 
 import { useCallback, useMemo, useState , Suspense} from "react";
 import { useSearchParams, useRouter } from "next/navigation";
-import { Layers, RefreshCw } from "lucide-react";
+import dynamic from "next/dynamic";
+import { Layers, RefreshCw, Loader2 } from "lucide-react";
 import { PageHeader } from "@/components/layout/page-header";
 import { PageContent } from "@/components/layout/page-content";
+import { EmbeddedSurface } from "@/components/layout/embedded-surface";
 import { NoOrgState } from "@/components/ui/no-org-state";
 import { ErrorState } from "@/components/ui/error-state";
 import { Button } from "@/components/ui/button";
@@ -37,6 +39,24 @@ import { TraceShareModal } from "../observability/_components/TraceShareModal";
 import { LiveTailPanel } from "./_components/LiveTailPanel";
 import { SpanSearchBar } from "./_components/SpanSearchBar";
 import { SelectedTraceRail } from "../observability/_components/SelectedTraceCard";
+import { useQueryTab } from "@/hooks/use-query-tab";
+import { cn } from "@/lib/utils";
+
+const TRACE_VIEWS = ["list", "inspect", "replay", "debug", "query"] as const;
+const TRACE_FACETS = ["", "mcp", "decisions", "memory", "retrieval"] as const;
+
+const InspectView = dynamic(() => import("../inspector/page"), { ssr: false, loading: () => <ViewLoading /> });
+const ReplayView = dynamic(() => import("../replay/page"), { ssr: false, loading: () => <ViewLoading /> });
+const DebugView = dynamic(() => import("../debugger/page"), { ssr: false, loading: () => <ViewLoading /> });
+const QueryView = dynamic(() => import("../observability/query/page"), { ssr: false, loading: () => <ViewLoading /> });
+
+function ViewLoading() {
+  return (
+    <div className="flex h-48 items-center justify-center">
+      <Loader2 className="h-4 w-4 animate-spin text-[var(--text-muted)]" />
+    </div>
+  );
+}
 
 const PAGE_SIZE = 50;
 
@@ -46,6 +66,19 @@ function TracesPageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const initialTraceId = searchParams.get("trace_id") || undefined;
+  const [view, setView] = useQueryTab("view", TRACE_VIEWS, "list");
+  const facetRaw = searchParams.get("facet") || "";
+  const facet = TRACE_FACETS.includes(facetRaw as (typeof TRACE_FACETS)[number])
+    ? facetRaw
+    : "";
+
+  const setFacet = (next: string) => {
+    const params = new URLSearchParams(searchParams.toString());
+    if (!next) params.delete("facet");
+    else params.set("facet", next);
+    const q = params.toString();
+    router.replace(q ? `/traces?${q}` : "/traces");
+  };
 
   const [filter, setFilter] = useState<TraceFilter>({ realm: "", outcome: "", agent_id: "" });
   // "Load more" bumps the fetch limit rather than an offset — the
@@ -183,18 +216,78 @@ function TracesPageInner() {
       <PageHeader
         eyebrow="Observe"
         title="Traces"
-        subtitle="Search, filter, and inspect every trace in your system"
+        subtitle="Search, inspect, replay, and debug every agent run."
         icon={Layers}
+        description="List view for exploration; switch views for inspector, replay, debugger, or query."
         actions={
+          view === "list" ? (
           <Button variant="outline" size="default" onClick={refresh} loading={refreshing} aria-label="Refresh traces">
             <RefreshCw className="w-4 h-4" />
             Refresh
           </Button>
+          ) : undefined
         }
       />
-      {/* Persistent inline ErrorState (not toast-only) — a failed
-          fetch used to only surface as a transient toast, which is
-          easy to miss and leaves the page looking merely empty. */}
+
+      <div role="tablist" aria-label="Trace views" className="flex flex-wrap gap-1 border-b border-[var(--border-default)]">
+        {TRACE_VIEWS.map((v) => (
+          <button
+            key={v}
+            type="button"
+            role="tab"
+            aria-selected={view === v}
+            onClick={() => setView(v)}
+            className={cn(
+              "px-3 py-2 text-sm font-medium capitalize border-b-2 -mb-px",
+              view === v
+                ? "border-[var(--accent)] text-[var(--text-primary)]"
+                : "border-transparent text-[var(--text-muted)] hover:text-[var(--text-primary)]",
+            )}
+          >
+            {v === "list" ? "Explorer" : v}
+          </button>
+        ))}
+      </div>
+
+      {view === "inspect" && (
+        <EmbeddedSurface>
+          <InspectView />
+        </EmbeddedSurface>
+      )}
+      {view === "replay" && (
+        <EmbeddedSurface>
+          <ReplayView />
+        </EmbeddedSurface>
+      )}
+      {view === "debug" && (
+        <EmbeddedSurface>
+          <DebugView />
+        </EmbeddedSurface>
+      )}
+      {view === "query" && (
+        <EmbeddedSurface>
+          <QueryView />
+        </EmbeddedSurface>
+      )}
+      {view === "list" && (
+      <>
+      <div className="flex flex-wrap gap-1">
+        {(["mcp", "decisions", "memory", "retrieval"] as const).map((f) => (
+          <button
+            key={f}
+            type="button"
+            onClick={() => setFacet(facet === f ? "" : f)}
+            className={cn(
+              "rounded-md px-2 py-1 text-[11px] font-medium",
+              facet === f
+                ? "bg-[var(--accent)] text-[var(--bg-primary)]"
+                : "bg-[var(--bg-tertiary)] text-[var(--text-muted)] hover:text-[var(--text-primary)]",
+            )}
+          >
+            {f}
+          </button>
+        ))}
+      </div>
       {errorMessage && !loading && (
         <ErrorState
           title="Could not load traces"
@@ -245,6 +338,8 @@ function TracesPageInner() {
         </div>
         <SelectedTraceRail />
       </div>
+      </>
+      )}
       <TraceExportModal
         open={exportOpen}
         onOpenChange={setExportOpen}

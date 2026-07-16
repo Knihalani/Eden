@@ -145,6 +145,12 @@ export interface EdenSDKOptions {
    * the Python SDK.
    */
   filters?: import("./filters.js").FilterConfig;
+
+  /** Gateway optimizations (default on). Set false to opt out. */
+  exactCache?: boolean;
+  coalesce?: boolean;
+  providerCacheLayout?: boolean;
+  responseRepair?: boolean;
 }
 
 // ── Telemetry events ──────────────────────────────────────────────

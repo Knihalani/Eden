@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, Suspense } from "react";
+import dynamic from "next/dynamic";
 import { useOrg } from "@/hooks/use-org";
 import { guardrailsApi } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -8,17 +9,28 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { StatCard } from "@/components/ui/stat-card";
 import { PageHeader } from "@/components/layout/page-header";
 import { PageContent } from "@/components/layout/page-content";
+import { EmbeddedSurface } from "@/components/layout/embedded-surface";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/ui/toast";
 import { NoOrgState } from "@/components/ui/no-org-state";
-import { Shield, ShieldCheck, ShieldAlert, Lock, AlertTriangle, AlertOctagon, CheckCircle2, XCircle, Zap, Loader2, Plus, Sparkles, Eye, FileLock2, ScanLine, Eraser, Activity, TestTube2, Bug, History } from "lucide-react";
+import { Shield, ShieldCheck, ShieldAlert, Lock, AlertTriangle, AlertOctagon, CheckCircle2, XCircle, Zap, Loader2, Plus, Sparkles, Eye, FileLock2, ScanLine, Eraser, Activity, TestTube2, Bug, History, Swords } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { DataTable } from "@/components/ui/data-table";
 import { Card } from "@/components/ui/card";
-type Tab = "test" | "policies" | "injections" | "pii";
+import { useQueryTab } from "@/hooks/use-query-tab";
+
+const RedteamView = dynamic(() => import("../redteam/page"), {
+  ssr: false,
+  loading: () => (
+    <div className="flex h-48 items-center justify-center">
+      <Loader2 className="h-4 w-4 animate-spin text-[var(--text-muted)]" />
+    </div>
+  ),
+});
+type Tab = "test" | "policies" | "injections" | "pii" | "redteam";
 interface Policy {
   policy_id: string;
   name: string;
@@ -110,11 +122,19 @@ const SEVERITY_STYLES: Record<string, {
   }
 };
 export default function GuardrailsPage() {
+  return (
+    <Suspense fallback={<div className="flex h-48 items-center justify-center"><Loader2 className="h-4 w-4 animate-spin" /></div>}>
+      <GuardrailsPageInner />
+    </Suspense>
+  );
+}
+
+function GuardrailsPageInner() {
   const {
     currentOrg
   } = useOrg();
   const toast = useToast();
-  const [activeTab, setActiveTab] = useState<Tab>("test");
+  const [activeTab, setActiveTab] = useQueryTab("tab", ["test", "policies", "injections", "pii", "redteam"] as const, "test");
 
   // Policies state
   const [policies, setPolicies] = useState<Policy[]>([]);
@@ -286,6 +306,10 @@ export default function GuardrailsPage() {
           key: "pii" as Tab,
           label: "PII",
           icon: FileLock2
+        }, {
+          key: "redteam" as Tab,
+          label: "Red team",
+          icon: Swords
         }] as const).map(({ key, label, icon: Icon }) => (
             <TabsTrigger key={key} value={key} className="flex items-center gap-2 data-[state=active]:text-[var(--text-primary)]">
               <Icon className="w-4 h-4" aria-hidden />
@@ -312,6 +336,11 @@ export default function GuardrailsPage() {
           {activeTab === "policies" && <PoliciesTab policies={policies} loading={policiesLoading} error={policiesError} onAddPolicy={() => setShowAddPolicy(true)} onRefresh={loadPolicies} orgId={currentOrg.id} onPolicyCreated={loadPolicies} />}
           {activeTab === "injections" && <InjectionsTab history={injectionHistory} />}
           {activeTab === "pii" && <PiiTab history={piiHistory} />}
+          {activeTab === "redteam" && (
+            <EmbeddedSurface>
+              <RedteamView />
+            </EmbeddedSurface>
+          )}
         </motion.div>
       </AnimatePresence>
 

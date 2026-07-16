@@ -198,60 +198,17 @@ async def _call_llm(
     deterministic impact ladder when the LLM is unavailable).
     """
     try:
-        from eden.llm.client import get_llm_client
+        from eden.llm.internal_router import route_async
 
-        client = get_llm_client()
-    except Exception as exc:  # pragma: no cover - defensive
-        logger.debug("autonomous._common: get_llm_client failed: %s", exc)
-        return None
-    if client is None:
-        return None
-    try:
-        # OpenRouterClient exposes both ``call`` (sync) and
-        # ``acall`` (async). The autonomous services are async,
-        # so we use ``acall`` when available and fall back to
-        # running the sync call in a thread.
-        if hasattr(client, "acall"):
-            try:
-                resp = await client.acall(
-                    agent=agent,
-                    prompt=prompt,
-                    slot=slot,
-                    system_prompt=system_prompt,
-                    max_tokens=max_tokens,
-                )
-            except TypeError:
-                # Older signature without max_tokens kwarg.
-                resp = await client.acall(
-                    agent=agent,
-                    prompt=prompt,
-                    slot=slot,
-                    system_prompt=system_prompt,
-                )
-        else:
-            import asyncio
-            loop = asyncio.get_event_loop()
-            try:
-                resp = await loop.run_in_executor(
-                    None,
-                    lambda: client.call(
-                        agent=agent,
-                        prompt=prompt,
-                        slot=slot,
-                        system_prompt=system_prompt,
-                        max_tokens=max_tokens,
-                    ),
-                )
-            except TypeError:
-                resp = await loop.run_in_executor(
-                    None,
-                    lambda: client.call(
-                        agent=agent,
-                        prompt=prompt,
-                        slot=slot,
-                        system_prompt=system_prompt,
-                    ),
-                )
+        resp = await route_async(
+            agent,
+            prompt,
+            slot=slot,
+            system_prompt=system_prompt,
+            max_tokens=max_tokens,
+            output_type="json",
+            requires_quality_check=False,
+        )
         content = getattr(resp, "content", None) or ""
         if isinstance(content, str):
             return content.strip()

@@ -201,17 +201,33 @@ def test_closed_loop_hooks_register() -> None:
 
 # ─── 7. Intelligence judges are registered on import ──────────────
 def test_intelligence_judges_registered() -> None:
-    """The 7 new Cat 3 judges must be in the JudgeRegistry."""
+    """Defaults: Satisfaction only; UnifiedJudge behind judges_llm_v1."""
+    from eden.llmops.judges import register_default_judges
     from eden.llmops.judges.builtin_v9 import register_intelligence_judges
     from eden.llmops.judges.registry import JudgeRegistry
 
     registry = JudgeRegistry()
-    added = register_intelligence_judges(registry)
-    # 7 distinct judge names — re-registering is idempotent
-    assert added >= 7, f"expected at least 7 new judges, got {added}"
+    register_default_judges(registry)
+    assert register_intelligence_judges(registry) == 0
+    assert registry.get("satisfaction") is not None
+    assert registry.get("unified") is None
+
+
+def test_intelligence_judges_llm_opt_in(monkeypatch) -> None:
+    from eden.llmops.judges import register_default_judges
+    from eden.llmops.judges.registry import JudgeRegistry
+
+    class _S:
+        judges_llm_v1 = True
+
+    monkeypatch.setattr("eden.config.get_settings", lambda: _S())
+    registry = JudgeRegistry()
+    register_default_judges(registry)
     expected_names = {
+        "unified",
+        "hallucination",
+        "correctness",
         "groundedness",
-        "relevance",
         "safety",
         "satisfaction",
         "action_completion",
@@ -220,6 +236,7 @@ def test_intelligence_judges_registered() -> None:
     }
     for name in expected_names:
         assert registry.get(name) is not None, f"judge {name!r} not registered"
+    assert registry.get("unified") is registry.get("action_completion")
 
 
 # ─── 8. Envelope contract ─────────────────────────────────────────

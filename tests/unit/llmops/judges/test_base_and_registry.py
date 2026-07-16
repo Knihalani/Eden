@@ -145,13 +145,32 @@ def test_judge_score_to_dict_round_trip():
 
 
 def test_singleton_registry_seeded_with_defaults():
-    """``get_judge_registry()`` lazily seeds the built-in judge set."""
+    """``get_judge_registry()`` seeds SatisfactionJudge; UnifiedJudge opt-in."""
     reset_judge_registry()
     r = get_judge_registry()
     names = r.list()
-    assert "hallucination" in names
-    assert "correctness" in names
-    assert "tone" in names
+    assert "satisfaction" in names
+    # Layer A owns production scores — UnifiedJudge off by default.
+    assert "unified" not in names
+    assert "hallucination" not in names
+    assert len(r.all()) == 1  # satisfaction only
+
+
+def test_register_default_judges_llm_opt_in(monkeypatch):
+    """``judges_llm_v1`` enables UnifiedJudge + axis aliases."""
+    from eden.llmops.judges import register_default_judges
+    from eden.llmops.judges.registry import JudgeRegistry
+
+    class _S:
+        judges_llm_v1 = True
+
+    monkeypatch.setattr("eden.config.get_settings", lambda: _S())
+    registry = JudgeRegistry()
+    register_default_judges(registry)
+    assert registry.get("unified") is not None
+    assert registry.get("unified") is registry.get("hallucination")
+    assert registry.get("satisfaction") is not None
+    assert registry.get("tone") is None  # dropped as bloat
 
 
 def test_reset_judge_registry_clears_state():

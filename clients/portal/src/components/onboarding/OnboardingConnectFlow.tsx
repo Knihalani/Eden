@@ -1,36 +1,31 @@
 /**
- * OnboardingConnectFlow — the GitHub-repo-link flow.
+ * OnboardingConnectFlow — GitHub App install + repo pick (no auto-PR).
  *
  * Used by both:
- *   /onboarding/connect — within the wizard, advances onboarding_state
+ *   onboarding overlay — optional connect step
  *   /agents/connect     — post-onboarding, "+ Connect new agent"
  *
  * Renders:
  *   1. RBAC gate — if the current user lacks `integrations:write`,
- *      show the "ask your admin" callout and a copy-to-notify button.
+ *      show the "ask your admin" callout.
  *   2. GitHub-App-configured gate — if the instance has no App, show
  *      a skip-with-manual-instructions panel.
  *   3. Install picker — list of repos across all installations for the
- *      org. User picks one + names the agent.
- *   4. Integrate — fires POST /github/integrate, returns a PR-run row.
- *      In the onboarding wizard, auto-runs when exactly one repo is
- *      available (typical right after GitHub App install). Caller
- *      decides what to do next (wizard advances to install; standalone
- *      shows the open PR).
+ *      org. User picks one + names the agent, then continues.
  */
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useOrg } from "@/hooks/use-org";
 import { usePermissions } from "@/hooks/use-permissions";
-import { githubApi, type GitHubInstallation, type GitHubRepo, type OnboardingPRRun } from "@/lib/api";
+import { githubApi, type GitHubInstallation, type GitHubRepo } from "@/lib/api";
 import { clearStoredInstallationId, readStoredInstallationId } from "@/lib/github-install";
 import { useToast } from "@/components/ui/toast";
 import {
   AlertCircle,
   ArrowRight,
-  ExternalLink,
+  Check,
   GitBranch,
   Loader2,
   Lock,
@@ -38,9 +33,6 @@ import {
 } from "lucide-react";
 import { errorFromCaught } from "@/lib/safe-error-message";
 
-// Lucide-react does not ship a Github icon in this version; render an
-// inline SVG matching the GitHub Octicon. Keeps the visual semantics
-// without requiring a separate icon dep.
 function Github(props: React.SVGProps<SVGSVGElement>) {
   return (
     <svg
@@ -62,43 +54,29 @@ type ConnectPhase =
   | "checking"
   | "claiming"
   | "loading-repos"
-  | "integrating"
   | "pick-repo"
-  | "install-app";
+  | "install-app"
+  | "linked";
 
 interface Props {
-  /** Called once the integration PR has been opened. */
-  onIntegrated?: (run: OnboardingPRRun) => void;
-  /** Set true on the wizard route so the back link goes to /install. */
+  /** Called when the user confirms a linked repo (no PR opened). */
+  onLinked?: (repo: GitHubRepo, meta: { agentName: string; agentId: string }) => void;
+  /** Set true in the onboarding overlay so skip/continue copy matches. */
   inWizard?: boolean;
   /** Initial installation_id (set by the OAuth callback). */
   preselectedInstallationId?: number | null;
-}
-
-/** Repo to auto-integrate after GitHub App install (wizard only). */
-function autoIntegrateTarget(
-  repos: GitHubRepo[],
-  preselectedInstallationId: number | null | undefined,
-): GitHubRepo | null {
-  if (repos.length === 1) return repos[0];
-  if (preselectedInstallationId) {
-    const fromInstall = repos.filter(
-      (r) => r.installation_id === preselectedInstallationId,
-    );
-    if (fromInstall.length === 1) return fromInstall[0];
-  }
-  return null;
+  /** Called when the user skips GitHub entirely. */
+  onSkip?: () => void;
 }
 
 export function OnboardingConnectFlow({
-  onIntegrated,
+  onLinked,
   inWizard = false,
   preselectedInstallationId,
+  onSkip,
 }: Props) {
   const toast = useToast();
   const { currentOrg } = useOrg();
-  // Same permission source as dashboard /agents/connect — includes
-  // Clerk org:admin + is_owner fallbacks while Eden role syncs.
   const { hasPermission, role } = usePermissions();
   const canIntegrate = hasPermission("integrations:write");
   const [configured, setConfigured] = useState<boolean | null>(null);
@@ -109,16 +87,13 @@ export function OnboardingConnectFlow({
   const [agentId, setAgentId] = useState("");
   const [loadingRepos, setLoadingRepos] = useState(false);
   const [authorizing, setAuthorizing] = useState(false);
-  const [integrating, setIntegrating] = useState(false);
   const pendingInstallationId =
     preselectedInstallationId ?? readStoredInstallationId();
   const [phase, setPhase] = useState<ConnectPhase>(() =>
     pendingInstallationId ? "claiming" : "checking",
   );
   const [error, setError] = useState<string | null>(null);
-  const autoIntegrateAttempted = useRef(false);
 
-  // Bootstrap — is the instance configured at all?
   useEffect(() => {
     githubApi
       .configured()
@@ -126,7 +101,6 @@ export function OnboardingConnectFlow({
       .catch(() => setConfigured(false));
   }, []);
 
-  // Once configured + admin, fetch installations + their repos.
   const loadRepos = useCallback(async () => {
     if (!currentOrg?.id || !canIntegrate || configured !== true) return;
     setPhase("loading-repos");
@@ -142,12 +116,11 @@ export function OnboardingConnectFlow({
       }
       const rs = await githubApi.listRepos(currentOrg.id);
       setRepos(rs);
-      const autoTarget = autoIntegrateTarget(rs, pendingInstallationId);
-      if (autoTarget) {
-        setSelectedRepo(autoTarget);
-      } else if (pendingInstallationId) {
+      if (pendingInstallationId) {
         const first = rs.find((r) => r.installation_id === pendingInstallationId);
         if (first) setSelectedRepo(first);
+      } else if (rs.length === 1) {
+        setSelectedRepo(rs[0]);
       }
       setPhase(rs.length > 0 ? "pick-repo" : pendingInstallationId ? "claiming" : "install-app");
     } catch (err) {
@@ -173,7 +146,6 @@ export function OnboardingConnectFlow({
           );
           clearStoredInstallationId();
         } catch (err) {
-          // Claim may fail if webhook already registered — still load repos.
           const msg = errorFromCaught(err, "Could not register GitHub installation");
           setError(msg);
         }
@@ -197,71 +169,23 @@ export function OnboardingConnectFlow({
     }
   }
 
-  const runIntegrate = useCallback(
-    async (repo: GitHubRepo) => {
-      if (!currentOrg?.id) return;
-      setSelectedRepo(repo);
-      setIntegrating(true);
-      setPhase("integrating");
-      try {
-        const run = await githubApi.integrate(currentOrg.id, {
-          installation_id: repo.installation_id,
-          repo_full_name: repo.full_name,
-          agent_id: agentId || undefined,
-          agent_name: agentName || repo.name || undefined,
-        });
-        clearStoredInstallationId();
-        toast.success(
-          run.pr_url
-            ? "Pull request opened — review it on GitHub"
-            : "Integration started",
-        );
-        onIntegrated?.(run);
-      } catch (err) {
-        toast.error(err instanceof Error ? err.message : "Integration failed");
-        setPhase("pick-repo");
-      } finally {
-        setIntegrating(false);
-      }
-    },
-    [currentOrg?.id, agentId, agentName, onIntegrated, toast],
-  );
-
-  async function integrate() {
+  function confirmLink() {
     if (!selectedRepo) return;
-    await runIntegrate(selectedRepo);
+    clearStoredInstallationId();
+    setPhase("linked");
+    toast.success(`Linked ${selectedRepo.full_name}`);
+    onLinked?.(selectedRepo, {
+      agentName: agentName || selectedRepo.name,
+      agentId,
+    });
   }
 
-  // Wizard: after GitHub App install, open the integration PR without an
-  // extra click when exactly one repo was granted (or only one total).
-  useEffect(() => {
-    if (
-      !inWizard ||
-      loadingRepos ||
-      integrating ||
-      autoIntegrateAttempted.current ||
-      !canIntegrate ||
-      configured !== true ||
-      repos.length === 0
-    ) {
-      return;
+  function handleSkip() {
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem("eden:onboarding:skipRepo", "1");
     }
-    const target = autoIntegrateTarget(repos, pendingInstallationId);
-    if (!target) return;
-    autoIntegrateAttempted.current = true;
-    void runIntegrate(target);
-  }, [
-    inWizard,
-    loadingRepos,
-    integrating,
-    canIntegrate,
-    configured,
-    repos,
-    pendingInstallationId,
-    runIntegrate,
-  ]);
-
-  // ── Gate 0: still checking GitHub App config ───────────────────
+    onSkip?.();
+  }
 
   if (configured === null || phase === "checking") {
     return (
@@ -272,34 +196,28 @@ export function OnboardingConnectFlow({
     );
   }
 
-  // ── Gate 1: instance not configured ────────────────────────────
-
   if (configured === false) {
     return (
       <PanelWarning
         inWizard={inWizard}
+        onSkip={handleSkip}
         title="GitHub integration not configured"
         body={
           <>
             This Eden instance doesn&apos;t have a GitHub App set up. Ask
             the operator to fill in <code className="font-mono">GITHUB_APP_*</code>
-            {" "}env vars, or skip — you can still install the SDK manually
-            on the next step.
+            {" "}env vars, or skip — you can still install the SDK manually.
           </>
         }
       />
     );
   }
 
-  // ── Gate 2: lacks integrations:write ──────────────────────────
-
   if (currentOrg && !canIntegrate) {
     return (
-      <PanelLocked inWizard={inWizard} role={role ?? ""} />
+      <PanelLocked inWizard={inWizard} role={role ?? ""} onSkip={handleSkip} />
     );
   }
-
-  // ── Gate 3: no installations yet — render "Connect GitHub" ────
 
   if (configured === true && canIntegrate && installations.length === 0 && !loadingRepos && phase === "install-app") {
     return (
@@ -311,10 +229,9 @@ export function OnboardingConnectFlow({
             Install the Eden GitHub App
           </h3>
           <p className="mt-2 text-sm leading-relaxed text-[var(--text-secondary)]">
-            Pick which repositories Eden can access. We only request{" "}
-            <code className="font-mono text-xs">contents</code> and{" "}
-            <code className="font-mono text-xs">pull_requests</code> so we can
-            open an SDK integration PR — nothing else.
+            Pick which repositories Eden can access for listing and future
+            improvement PRs. SDK install is always manual — Eden no longer
+            opens an auto-integration PR.
           </p>
           <div className="mt-5 flex flex-wrap items-center gap-3">
             <button
@@ -326,48 +243,53 @@ export function OnboardingConnectFlow({
               Connect GitHub
               <ArrowRight className="h-4 w-4" />
             </button>
-            {inWizard && (
-              <Link
-                href="/onboarding/install"
-                onClick={() => {
-                  if (typeof window !== "undefined") {
-                    window.localStorage.setItem("eden:onboarding:skipRepo", "1");
-                  }
-                }}
+            {(inWizard || onSkip) && (
+              <button
+                type="button"
+                onClick={handleSkip}
                 className="inline-flex items-center gap-2 rounded-lg border border-[var(--border-default)] bg-[var(--bg-primary)] px-4 py-2.5 text-sm font-medium text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)] hover:text-[var(--text-primary)]"
               >
                 Skip / continue with SDK only
-              </Link>
+              </button>
             )}
           </div>
-          {inWizard && (
-            <p className="mt-3 text-xs text-[var(--text-muted)]">
-              GitHub is optional — install the SDK manually and start sending traces without connecting a repo.
-            </p>
-          )}
         </div>
       </div>
     );
   }
 
-  if (phase === "claiming" || phase === "loading-repos" || (inWizard && integrating)) {
-    const copy =
-      phase === "claiming"
-        ? {
-            title: "Registering GitHub App",
-            detail: "Saving your installation to this workspace…",
-          }
-        : phase === "loading-repos"
-          ? {
-              title: "Loading repositories",
-              detail: "Fetching repos granted to the Eden GitHub App…",
-            }
-          : {
-              title: "Opening integration PR",
-              detail:
-                "Eden is detecting your framework and opening a pull request with SDK wiring.",
-            };
-    return <ConnectStatusPanel title={copy.title} detail={copy.detail} />;
+  if (loadingRepos || phase === "claiming" || phase === "loading-repos") {
+    return (
+      <ConnectStatusPanel
+        title={phase === "claiming" ? "Registering GitHub install" : "Loading repositories"}
+        detail="Fetching repos Eden can see under your GitHub App installations."
+      />
+    );
+  }
+
+  if (phase === "linked" && selectedRepo) {
+    return (
+      <div className="space-y-4 rounded-xl border border-[var(--accent)]/30 bg-[var(--accent)]/5 p-6">
+        <div className="flex items-center gap-2 text-[var(--accent)]">
+          <Check className="h-5 w-5" />
+          <h2 className="text-lg font-semibold">Repo linked</h2>
+        </div>
+        <p className="text-sm text-[var(--text-secondary)]">
+          <span className="font-mono text-[var(--text-primary)]">{selectedRepo.full_name}</span>
+          {" "}is available in Agents. Next: install the SDK so traces start flowing.
+        </p>
+        {(inWizard || onSkip) && (
+          <button
+            type="button"
+            onClick={handleSkip}
+            className="inline-flex items-center gap-2 rounded-lg bg-[var(--accent)] px-4 py-2 text-sm font-medium text-[var(--bg-primary)] hover:opacity-90"
+          >
+            Continue to SDK install
+            <ArrowRight className="h-4 w-4" />
+          </button>
+        )}
+      </div>
+    );
   }
 
   return (
@@ -375,77 +297,46 @@ export function OnboardingConnectFlow({
       <ConnectHero />
       {error && <ErrorBanner message={error} />}
 
-      <div className="rounded-xl border border-[var(--border-default)] bg-[var(--bg-secondary)]">
-        <div className="flex items-center justify-between border-b border-[var(--border-default)] px-4 py-2">
-          <span className="text-sm font-medium">
-            Repositories
-            <span className="ml-2 text-xs text-[var(--text-muted)]">
-              ({repos.length})
-            </span>
-          </span>
-          <button
-            onClick={loadRepos}
-            disabled={loadingRepos}
-            className="flex items-center gap-1 rounded border border-[var(--border-default)] bg-[var(--bg-primary)] px-2 py-1 text-xs text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)]"
-          >
-            <RefreshCw className={`h-3 w-3 ${loadingRepos ? "animate-spin" : ""}`} />
-            Refresh
-          </button>
-        </div>
-        <div className="max-h-[280px] overflow-y-auto">
-          {loadingRepos ? (
-            <div className="flex items-center justify-center gap-2 p-4 text-sm text-[var(--text-muted)]">
-              <Loader2 className="h-4 w-4 animate-spin" />
-              Loading repos…
-            </div>
-          ) : repos.length === 0 ? (
-            <div className="p-4 text-sm text-[var(--text-muted)]">
-              No repos available to this installation.{" "}
-              <button onClick={startInstall} className="underline hover:text-[var(--text-primary)]">
-                Grant access to more
-              </button>
-            </div>
-          ) : (
-            repos.map((r) => {
-              const selected = selectedRepo?.full_name === r.full_name;
-              return (
-                <button
-                  key={r.full_name}
-                  onClick={() => setSelectedRepo(r)}
-                  className={`flex w-full items-start gap-3 border-b border-[var(--border-default)]/50 p-3 text-left transition-colors ${
-                    selected
-                      ? "bg-[var(--accent-faint)]"
-                      : "hover:bg-[var(--bg-tertiary)]"
-                  }`}
-                >
-                  <GitBranch className="mt-0.5 h-4 w-4 shrink-0 text-[var(--text-muted)]" />
-                  <div className="min-w-0 flex-1">
-                    <div className="truncate text-sm font-medium text-[var(--text-primary)]">
-                      {r.full_name}
-                    </div>
-                    {r.description && (
-                      <div className="truncate text-xs text-[var(--text-muted)]">
-                        {r.description}
-                      </div>
-                    )}
-                    <div className="mt-0.5 text-[10px] text-[var(--text-muted)]">
-                      {r.private ? "private" : "public"} · default: {r.default_branch}
-                    </div>
-                  </div>
-                  {selected ? (
-                    <span className="text-xs text-[var(--accent)]">Selected</span>
-                  ) : null}
-                </button>
-              );
-            })
-          )}
-        </div>
+      <div className="flex items-center justify-between gap-2">
+        <h3 className="text-sm font-medium text-[var(--text-primary)]">
+          Select a repository
+        </h3>
+        <button
+          type="button"
+          onClick={() => void loadRepos()}
+          className="inline-flex items-center gap-1 text-xs text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+        >
+          <RefreshCw className="h-3 w-3" />
+          Refresh
+        </button>
       </div>
 
-      {/* Agent metadata */}
+      <div className="max-h-64 space-y-1 overflow-y-auto rounded-lg border border-[var(--border-default)]">
+        {repos.map((repo) => (
+          <button
+            key={`${repo.installation_id}:${repo.full_name}`}
+            type="button"
+            onClick={() => setSelectedRepo(repo)}
+            className={`flex w-full items-center gap-3 px-3 py-2.5 text-left text-sm transition-colors ${
+              selectedRepo?.full_name === repo.full_name
+                ? "bg-[var(--accent)]/10 text-[var(--text-primary)]"
+                : "hover:bg-[var(--bg-tertiary)] text-[var(--text-secondary)]"
+            }`}
+          >
+            <GitBranch className="h-4 w-4 shrink-0" />
+            <span className="min-w-0 truncate font-mono text-xs">{repo.full_name}</span>
+          </button>
+        ))}
+        {repos.length === 0 && (
+          <div className="px-3 py-8 text-center text-sm text-[var(--text-muted)]">
+            No repos found. Grant access on GitHub, then refresh.
+          </div>
+        )}
+      </div>
+
       {selectedRepo && (
-        <div className="space-y-3 rounded-lg border border-[var(--border-default)] bg-[var(--bg-secondary)] p-4">
-          <div className="text-sm font-medium">Agent name (optional)</div>
+        <div className="space-y-3">
+          <div className="text-sm font-medium">Agent name</div>
           <input
             type="text"
             value={agentName}
@@ -466,12 +357,13 @@ export function OnboardingConnectFlow({
 
       <div className="flex items-center justify-between">
         {inWizard ? (
-          <Link
-            href="/onboarding"
+          <button
+            type="button"
+            onClick={handleSkip}
             className="text-sm text-[var(--text-muted)] hover:text-[var(--text-primary)]"
           >
-            ← Back
-          </Link>
+            Skip GitHub
+          </button>
         ) : (
           <Link
             href="/agents"
@@ -481,18 +373,14 @@ export function OnboardingConnectFlow({
           </Link>
         )}
         <div className="flex items-center gap-2">
-          {inWizard && (
-            <Link
-              href="/onboarding/install"
-              onClick={() => {
-                if (typeof window !== "undefined") {
-                  window.localStorage.setItem("eden:onboarding:skipRepo", "1");
-                }
-              }}
+          {(inWizard || onSkip) && (
+            <button
+              type="button"
+              onClick={handleSkip}
               className="inline-flex items-center gap-1 rounded border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-2 text-sm text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)]"
             >
               Skip / continue with SDK only
-            </Link>
+            </button>
           )}
           <button
             onClick={startInstall}
@@ -503,12 +391,12 @@ export function OnboardingConnectFlow({
             Add another GitHub install
           </button>
           <button
-            onClick={integrate}
-            disabled={!selectedRepo || integrating}
+            onClick={confirmLink}
+            disabled={!selectedRepo}
             className="inline-flex items-center gap-2 rounded-lg bg-[var(--accent)] px-4 py-2 text-sm font-medium text-[var(--bg-primary)] hover:opacity-90 disabled:opacity-50"
           >
-            {integrating ? <Loader2 className="h-4 w-4 animate-spin" /> : <ExternalLink className="h-4 w-4" />}
-            Open integration PR
+            <Check className="h-4 w-4" />
+            Link repository
           </button>
         </div>
       </div>
@@ -520,29 +408,15 @@ function ConnectHero() {
   return (
     <div className="space-y-3">
       <p className="text-[10px] font-mono font-semibold uppercase tracking-[0.18em] text-[var(--accent)]">
-        Step 2 · Connect repo
+        Connect repo
       </p>
       <h2 className="text-2xl font-bold tracking-tight text-[var(--text-primary)]">
-        Wire Eden into your agent repo
+        Link a GitHub repository
       </h2>
       <p className="max-w-xl text-sm leading-relaxed text-[var(--text-secondary)]">
-        Eden detects your framework, opens an integration PR, and you merge it
-        to start emitting traces. Usually under two minutes.
+        Optional. Install the Eden GitHub App so Eden can list your repos.
+        Then install the SDK yourself — Eden does not open an auto-integration PR.
       </p>
-      <ol className="mt-4 grid gap-2 sm:grid-cols-3 text-xs text-[var(--text-muted)]">
-        <li className="rounded-lg border border-[var(--border-default)] bg-[var(--bg-secondary)] px-3 py-2">
-          <span className="font-medium text-[var(--text-primary)]">1. Install app</span>
-          <div className="mt-0.5">Grant repo access on GitHub</div>
-        </li>
-        <li className="rounded-lg border border-[var(--border-default)] bg-[var(--bg-secondary)] px-3 py-2">
-          <span className="font-medium text-[var(--text-primary)]">2. Detect stack</span>
-          <div className="mt-0.5">LangChain, OpenAI, Mastra, …</div>
-        </li>
-        <li className="rounded-lg border border-[var(--border-default)] bg-[var(--bg-secondary)] px-3 py-2">
-          <span className="font-medium text-[var(--text-primary)]">3. Open PR</span>
-          <div className="mt-0.5">Review + merge on GitHub</div>
-        </li>
-      </ol>
     </div>
   );
 }
@@ -578,44 +452,40 @@ function PanelWarning({
   title,
   body,
   inWizard = false,
+  onSkip,
 }: {
   title: string;
   body: React.ReactNode;
   inWizard?: boolean;
+  onSkip?: () => void;
 }) {
-  const skipHref = inWizard ? "/onboarding/install" : "/onboarding/done";
   return (
     <div className="space-y-4">
       <div>
         <h2 className="text-2xl font-bold tracking-tight">{title}</h2>
         <p className="mt-2 text-[var(--text-secondary)]">{body}</p>
       </div>
-      <Link
-        href={skipHref}
-        onClick={() => {
-          if (inWizard && typeof window !== "undefined") {
-            window.localStorage.setItem("eden:onboarding:skipRepo", "1");
-          }
-        }}
+      <button
+        type="button"
+        onClick={onSkip}
         className="inline-flex items-center gap-2 rounded-lg bg-[var(--accent)] px-4 py-2 text-sm font-medium text-[var(--bg-primary)] hover:opacity-90"
       >
-        {inWizard ? "Skip / continue with SDK only" : "Skip — I'll integrate manually"}
+        {inWizard ? "Skip / continue with SDK only" : "Skip — I'll install manually"}
         <ArrowRight className="h-4 w-4" />
-      </Link>
+      </button>
     </div>
   );
 }
 
-function PanelLocked({ role, inWizard = false }: { role: string; inWizard?: boolean }) {
-  const continueHref = inWizard ? "/onboarding/install" : "/onboarding/done";
-
-  function continueToInstall() {
-    if (inWizard && typeof window !== "undefined") {
-      window.localStorage.setItem("eden:onboarding:skipRepo", "1");
-    }
-    window.location.assign(continueHref);
-  }
-
+function PanelLocked({
+  role,
+  inWizard = false,
+  onSkip,
+}: {
+  role: string;
+  inWizard?: boolean;
+  onSkip?: () => void;
+}) {
   return (
     <div className="space-y-6">
       <div>
@@ -632,15 +502,15 @@ function PanelLocked({ role, inWizard = false }: { role: string; inWizard?: bool
         <div className="text-sm font-medium">What to do next</div>
         <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-[var(--text-secondary)]">
           <li>Ping an admin in your org — they can connect a repo from <Link href="/agents" className="text-[var(--accent)] underline">/agents</Link>.</li>
-          <li>Install the SDK yourself on the next step — traces work without a connected repo.</li>
+          <li>Install the SDK yourself — traces work without a connected repo.</li>
         </ul>
       </div>
       <button
         type="button"
-        onClick={continueToInstall}
+        onClick={onSkip}
         className="inline-flex items-center gap-2 rounded-lg bg-[var(--accent)] px-4 py-2 text-sm font-medium text-[var(--bg-primary)] hover:opacity-90"
       >
-        Continue to SDK install / skip GitHub
+        {inWizard ? "Continue to SDK install / skip GitHub" : "Continue without GitHub"}
         <ArrowRight className="h-4 w-4" />
       </button>
     </div>
