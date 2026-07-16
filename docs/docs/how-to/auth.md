@@ -1,148 +1,80 @@
 ---
 id: auth
-title: Set up auth
-sidebar_label: Set up auth
+title: Authenticate with Eden
+sidebar_label: Authenticate
 sidebar_position: 2
 ---
 
-# How-to — Set up auth
+# How-to — Authenticate with Eden
 
-Eden accepts three auth modes on every endpoint. Pick the one that
-matches the caller.
+Your app authenticates against `https://api.edenobservability.com`.
 
-## Mode 1 — Clerk session cookie (browsers, the portal)
+## For SDKs (recommended)
 
-The portal is built on Next.js + Clerk. When you log in, Clerk sets
-a session cookie; the Next.js proxy at `/api/proxy/[...path]`
-forwards it as the Clerk `__session` cookie (and attaches a Clerk
-Bearer JWT for service-to-service fallback).
-
-Self-hosted portals need:
+Create an org API key in the portal (**Settings → API Keys**) or use
+**[Fill in](/quickstart)** on the quickstart (appears when you are
+signed in on the portal).
 
 ```bash
-NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY="pk_..."
-CLERK_SECRET_KEY="sk_..."
-CLERK_WEBHOOK_SIGNING_SECRET="whsec_..."
+export EDEN_API_KEY="sk_eden_…"
+export EDEN_ORG_ID="org_…"
 ```
 
-Clerk → Webhooks → add endpoint `https://your-domain/clerk/webhook`,
-subscribe to `user.created`, `user.updated`, `organization.created`,
-`organizationMembership.created`, and copy the signing secret.
+The SDKs send:
 
-## Mode 2 — Eden bearer token (services)
+| Header | Value |
+|--------|-------|
+| `X-Org-Api-Key` | your API key |
+| `X-Org-Id` | your org id |
 
-Issue from the portal:
+You do **not** need `EDEN_BASE_URL` for production.
+
+See [Manage API keys](/how-to/api-keys).
+
+## For raw HTTP (ingestion)
 
 ```bash
-curl -X POST https://api.edenobservability.com/v1/orgs/org_abc/api-keys \
-  -H "Authorization: Bearer sk_eden_admin_..." \
+curl -X POST \
+  "https://api.edenobservability.com/orgs/$EDEN_ORG_ID/ingest/custom" \
+  -H "X-Org-Api-Key: $EDEN_API_KEY" \
+  -H "X-Org-Id: $EDEN_ORG_ID" \
   -H "Content-Type: application/json" \
-  -d '{ "name": "production-east", "scopes": ["ingest", "read"] }'
+  -d '{ "event_type": "hello", "outcome": "success" }'
 ```
 
-The response includes the secret **once**:
+Full shapes: [Ingestion API](/reference/api-ingestion).
 
-```json
-{
-  "data": {
-    "key_id": "ak_abc",
-    "secret": "sk_eden_AbCdEf1234..."
-  }
-}
-```
+## For the portal (browsers)
 
-Store it in your secrets manager and set as
-`EDEN_API_KEY` in the service's env.
-
-### Scopes
-
-| Scope | Allows |
-|-------|--------|
-| `ingest` | POST events, write judge scores |
-| `read` | GET traces, agents, budgets, audit log |
-| `admin` | Manage members, rotate keys, change settings |
-
-A key without an explicit scope is full access. To follow least
-privilege, issue separate keys for ingestion-only and read-only
-consumers.
-
-### Rotation
-
-Issue a new key, deploy the new env var, then revoke the old key:
-
-```bash
-curl -X DELETE https://api.edenobservability.com/v1/orgs/org_abc/api-keys/ak_old \
-  -H "Authorization: Bearer sk_eden_admin_..."
-```
-
-There's no in-place rotation; old keys keep working until you
-revoke them. The audit log records both events.
-
-## Mode 3 — Clerk JWT (custom integrations)
-
-If you already authenticate with Clerk, forward the JWT:
-
-```bash
-curl https://api.edenobservability.com/v1/traces \
-  -H "Authorization: Bearer eyJhbGciOi..." \
-  -H "X-Org-Id: org_..."
-```
-
-The backend accepts Clerk JWTs in either the `Authorization: Bearer
-...` header or the `__session` cookie. The `X-Org-Id` header is
-required for ingestion paths.
+Sign in at [edenobservability.com](https://edenobservability.com).
+The portal uses Clerk session cookies and proxies API calls — you do
+not configure Clerk yourself.
 
 ## Roles
 
-Per-org roles (configured under Settings → Members):
+| Role | Can create API keys | Typical use |
+|------|---------------------|-------------|
+| **owner** / **admin** | Yes | Manage workspace |
+| **member** / **viewer** | No | Read traces, evals |
 
-| Role | Permissions |
-|------|-------------|
-| **owner** | All — including billing, member management, org deletion |
-| **admin** | Members, settings, billing view, audit, integrations, PII |
-| **member** | Read references, run judges |
-| **viewer** | Read references |
+## Rotate / revoke
 
-Custom roles are planned for v2.
+1. Create a new key under **Settings → API Keys**.
+2. Deploy it.
+3. Revoke the old key in the portal.
 
-## Cross-org access
-
-Every request must carry a valid `X-Org-Id`. If the caller is a
-member of multiple orgs, the header selects which org's data is
-in scope. A request that names an org the caller doesn't belong to
-returns `403 cross_org_access`.
-
-## Verifying a request server-side
-
-The backend validates the token and resolves the user. If you need
-to do this from your own service (e.g. for a custom dashboard), use
-the introspection endpoint:
+Validate with:
 
 ```bash
-curl https://api.edenobservability.com/v1/auth/introspect \
-  -H "Authorization: Bearer sk_eden_..."
-```
-
-Response:
-
-```json
-{
-  "data": {
-    "key_id": "ak_abc",
-    "org_id": "org_abc",
-    "scopes": ["ingest", "read"],
-    "expires_at": null
-  }
-}
+python -m eden_sdk.doctor
+# or
+npx @eden-ai/sdk doctor
 ```
 
 ## Troubleshooting
 
-| Symptom | Cause |
-|---------|-------|
-| `401 not_authenticated` | Token missing or expired |
-| `401 invalid_token` | Signature mismatch (often a typo or stale key) |
-| `403 not_org_member` | Caller is not in the org named by `X-Org-Id` |
-| `403 permission_denied` | Role doesn't allow the action (e.g. `member` trying to delete a key) |
-| `403 cross_org_access` | API key is for org A, `X-Org-Id` says org B |
-| `403 org_archived` | Org has been soft-deleted; restore from the portal |
+| Symptom | Likely cause |
+|---------|--------------|
+| `401` / missing key | `EDEN_API_KEY` unset or revoked |
+| `403` / wrong org | `EDEN_ORG_ID` does not match the key's org |
+| No traces appear | Forgot `flush()` / doctor never run; check **Traces** after ~1 min |

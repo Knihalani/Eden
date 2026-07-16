@@ -37,8 +37,13 @@ npm install @eden-ai/sdk
 npx @eden-ai/sdk doctor
 ```
 
-Doctor checks API key, org id, base URL, and emits a test event. Fix any
-red items before continuing.
+:::tip
+Fastest path for first credentials: **[Fill in](/quickstart)** on the
+docs quickstart.
+:::
+
+Doctor checks API key, org id, and connectivity (defaults to
+`https://api.edenobservability.com`). Fix any red items before continuing.
 
 ## Tier 1 — Native instrumentation
 
@@ -190,4 +195,4 @@ If nothing shows after **120 seconds**, check:
 
 - [Quickstart](/quickstart) — five-minute first trace
 - [MCP in Cursor](/how-to/mcp-cursor) — debug from your IDE
-- [Auto-instrument an existing repo](/how-to/auto-instrument) — onboarding PR flow
+- [Instrument an existing repo](/how-to/auto-instrument)

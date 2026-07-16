@@ -127,11 +127,11 @@ The platform ships:
   </div>
 
   <div class="eden-card eden-card--small">
-    <h4>🚢 I need to deploy</h4>
+    <h4>🔌 Integrate</h4>
     <ul>
-      <li><a href="/how-to/deploy">Self-host with Docker / Kubernetes</a></li>
-      <li><a href="/reference/environment-variables">Environment variables</a></li>
-      <li><a href="/reference/configuration">Settings reference</a></li>
+      <li><a href="/how-to/api-keys">API keys</a></li>
+      <li><a href="/how-to/connect-any-agent">Connect any agent</a></li>
+      <li><a href="/how-to/deploy">API endpoint</a></li>
     </ul>
   </div>
 
@@ -139,27 +139,8 @@ The platform ships:
 
 ---
 
-## Open the box
+## SDKs talk to one API
 
-```
-eden/
-├── src/eden/
-│   ├── api/              FastAPI app (auth, ingestion, intel routes)
-│   ├── observability/    Telemetry collector, OTel adapters
-│   ├── kb/               Episodic + semantic KB, memory intel
-│   ├── llm/              AI gateway, prompt registry
-│   ├── evaluation/       Judges, eval runs, golden datasets
-│   ├── cost/             Cost intel, budgeting, forecasting
-│   ├── experiments/      A/B + Bayesian experimentation
-│   ├── autonomous/       NL queries, self-heal (read-only by default)
-│   ├── code_change/      Patch proposals, two-stage opt-in
-│   └── ...               (22 intelligence services in total)
-├── sdk/
-│   ├── python/           pip install eden-sdk
-│   └── ts-ai/            npm install @eden-ai/sdk
-└── clients/portal/       Next.js 16 dashboard
-```
-
-The two SDKs both hit the same ingestion endpoint
-(`POST /orgs/{org_id}/ingest/{format}`); they're equivalent at the
-wire level.
+Both SDKs hit the same ingestion surface
+(`POST /orgs/{org_id}/ingest/{format}`) at
+`https://api.edenobservability.com`.

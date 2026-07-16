@@ -12,64 +12,55 @@ portal — ingestion, traces, evaluations, agents, costs, governance.
 The Next.js portal talks to these endpoints over the same auth the
 public SDKs use.
 
-## Base URLs
+## Base URL
 
 | Environment | Base URL |
 |-------------|----------|
-| Cloud (US) | `https://api.edenobservability.com` |
-| Cloud (EU) | `https://api.eu.edenobservability.com` |
-| Self-hosted | `https://{your-domain}` |
-| Local dev | `http://localhost:8000` |
+| Production | `https://api.edenobservability.com` |
 
-All paths are versioned at `/v1/`. The current version is **v1**;
-breaking changes get a new `/v2/` prefix with a 12-month
-deprecation window.
+SDKs default to this host; set `EDEN_BASE_URL` only
+if Eden staff points you at a staging override.
+
+Most SDK / ingest paths are under `/orgs/{org_id}/…` (not a global
+`/v1` prefix). The OpenAI-compatible **gateway** lives at `/v1`.
 
 ## Authentication
 
-Three auth modes are accepted on every endpoint:
+### 1. Org API key (SDKs + ingestion)
 
-### 1. Clerk session cookie (browser)
-
-Used by the portal. The browser sends the Clerk `__session` cookie;
-the backend verifies it and extracts `user_id`, `org_id`, and the
-Clerk JWT.
-
-### 2. Bearer token (service-to-service)
+Issue from the portal (**Settings → API Keys**) or use
+[Fill in](/quickstart).
 
 ```bash
-curl https://api.edenobservability.com/v1/traces \
-  -H "Authorization: Bearer sk_eden_..." \
-  -H "X-Org-Id: org_..."
+curl -X POST "https://api.edenobservability.com/orgs/$EDEN_ORG_ID/ingest/custom" \
+  -H "X-Org-Api-Key: $EDEN_API_KEY" \
+  -H "X-Org-Id: $EDEN_ORG_ID" \
+  -H "Content-Type: application/json" \
+  -d '{ "event_type": "hello", "outcome": "success" }'
 ```
 
-The API key is per-org. Issue one per environment from the portal
-(Settings → API Keys). Rotate by issuing a new key, deploying the
-new key, and revoking the old one — there's no in-place rotation.
+### 2. Clerk session (portal)
 
-### 3. Clerk JWT (custom integrations)
+Used by [edenobservability.com](https://edenobservability.com). You do
+not configure Clerk yourself.
 
-For services that already authenticate with Clerk:
+### 3. Clerk JWT (custom portal integrations)
 
 ```bash
-curl https://api.edenobservability.com/v1/traces \
-  -H "Authorization: Bearer eyJhbGciOi..." \
-  -H "X-Org-Id: org_..."
+curl "https://api.edenobservability.com/orgs/$EDEN_ORG_ID/…" \
+  -H "Authorization: Bearer eyJhbGciOi…" \
+  -H "X-Org-Id: org_…"
 ```
-
-The backend accepts Clerk JWTs in either the `Authorization: Bearer
-...` header or the `__session` cookie. The `X-Org-Id` header is
-**required** for ingestion paths.
 
 ## Required headers
 
 | Header | Required for | Notes |
 |--------|--------------|-------|
-| `Authorization: Bearer <key>` | Everything except auth endpoints | One of Clerk session, API key, or Clerk JWT |
-| `X-Org-Id: org_...` | Ingestion paths | The org the events belong to |
+| `X-Org-Api-Key` | SDK / ingest | Org API key from Settings → API Keys |
+| `X-Org-Id` | SDK / ingest | Must match the key's org |
+| `Authorization: Bearer …` | Portal / Clerk JWT paths | Session or Clerk JWT |
 | `Content-Type: application/json` | POST/PUT bodies | |
-| `Idempotency-Key: <uuid>` | POST endpoints | Recommended for ingest |
-| `X-Region-Hint: <region>` | Optional | Forwarding hint for multi-region writes |
+| `Idempotency-Key: <uuid>` | POST ingest | Recommended for safe retries |
 
 ## Response envelope
 
@@ -166,7 +157,7 @@ eden.configure(api_key=..., org_id=..., api_version="1.7.0")
 | [Agents](/reference/api-agents) | `GET /orgs/{org}/agents`, `POST /orgs/{org}/agents/register`, `GET /orgs/{org}/agents/{id}` |
 | [Evaluations](/reference/api-eval) | `POST /v1/evals`, `GET /v1/evals/{eval_id}`, `POST /v1/judges`, `POST /v1/datasets` |
 | [Cost](/reference/api-cost) | `GET /v1/budgets`, `POST /v1/budgets/{org}/alerts`, `GET /v1/cost/summary` |
-| [Org](/reference/api-organization) | `GET /v1/orgs/{org}`, `POST /v1/orgs/{org}/members`, `GET /v1/orgs/{org}/api-keys` |
+| [Org](/reference/api-organization) | `GET /orgs/{org}`, `POST /orgs/{org}/members`, `GET /orgs/{org}/api-keys` |
 | [Errors](/reference/api-error-codes) | Standard error codes |
 
 ## Quick example

@@ -32,7 +32,7 @@ Default sample rate: 1.0 (keep everything). For cost reduction,
 tune per org:
 
 ```bash
-curl -X PUT https://api.edenobservability.com/v1/orgs/org_abc/sampling \
+curl -X PUT https://api.edenobservability.com/orgs/org_abc/sampling \
   -H "Authorization: Bearer sk_eden_admin_..." \
   -H "Content-Type: application/json" \
   -d '{
@@ -73,7 +73,7 @@ def run(question: str) -> str:
 ### Per-org policy
 
 ```bash
-curl -X PUT https://api.edenobservability.com/v1/orgs/org_abc/retention \
+curl -X PUT https://api.edenobservability.com/orgs/org_abc/retention \
   -H "Authorization: Bearer sk_eden_admin_..." \
   -H "Content-Type: application/json" \
   -d '{
@@ -113,7 +113,7 @@ After the `full_prompt_response_days` window, `prompt` and
 Postgres. You can re-import them for compliance audits:
 
 ```bash
-curl -X POST https://api.edenobservability.com/v1/orgs/org_abc/cold-storage/restore \
+curl -X POST https://api.edenobservability.com/orgs/org_abc/cold-storage/restore \
   -H "Authorization: Bearer sk_eden_admin_..." \
   -d '{
     "since": "2026-01-01",

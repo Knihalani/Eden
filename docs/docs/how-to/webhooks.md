@@ -28,7 +28,7 @@ The portal sends a test event on save.
 ### From the API
 
 ```bash
-curl -X POST https://api.edenobservability.com/v1/orgs/org_abc/webhooks \
+curl -X POST https://api.edenobservability.com/orgs/org_abc/webhooks \
   -H "Authorization: Bearer sk_eden_admin_..." \
   -H "Content-Type: application/json" \
   -d '{

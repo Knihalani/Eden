@@ -136,6 +136,9 @@ const config = {
             '**/40-dataset-spreadsheet.md',
             '**/41-prompt-management-playground.md',
             '**/eden-agent-cli-roadmap.md',
+            '**/eden-agent-cli-spec.md',
+            '**/aider-fork-strategy.md',
+            'architecture/**',
           ],
         },
         blog: false,
@@ -222,7 +225,7 @@ const config = {
             title: 'How-to',
             items: [
               { label: 'Set up auth', to: '/how-to/auth' },
-              { label: 'Deploy self-hosted', to: '/how-to/deploy' },
+              { label: 'API endpoint', to: '/how-to/deploy' },
               { label: 'Connect GitHub', to: '/how-to/github' },
               { label: 'Set PII policy', to: '/how-to/pii' },
             ],

@@ -26,13 +26,10 @@ Use fixtures to:
 
 ## Export via API
 
-```bash
-curl -X POST \
-  "$EDEN_BASE_URL/v1/orgs/$EDEN_ORG_ID/agent-issues/$ISSUE_ID/export-fixture" \
-  -H "Authorization: Bearer $EDEN_API_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{"include_transcript": true, "include_quality": true}'
-```
+Prefer **Export fixture** in the portal. The HTTP route is session-auth
+(Clerk), same as other agent-issues endpoints:
+
+`POST /orgs/{org_id}/agent-issues/{issue_id}/export-fixture`
 
 Response shape:
 

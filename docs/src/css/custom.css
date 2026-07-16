@@ -894,3 +894,94 @@ html {
 [data-theme='light'] .eden-404__title {
   color: #0A0E14;
 }
+
+/* ── Docs Fill-in snippet ─────────────────────────────────────────── */
+.eden-fillin {
+  margin: 1.25rem 0 1.75rem;
+  border: 1px solid var(--ifm-color-emphasis-300);
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--ifm-background-surface-color);
+}
+.eden-fillin__toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--ifm-color-emphasis-200);
+  background: var(--ifm-color-emphasis-100);
+}
+.eden-fillin__langs {
+  display: flex;
+  gap: 0.25rem;
+  padding: 0.15rem;
+  border-radius: 8px;
+  background: var(--ifm-background-surface-color);
+}
+.eden-fillin__langs button {
+  border: 0;
+  background: transparent;
+  color: var(--ifm-color-content-secondary);
+  font-size: 0.8rem;
+  font-weight: 600;
+  padding: 0.35rem 0.75rem;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.eden-fillin__langs button.is-active {
+  background: var(--ifm-color-primary);
+  color: #fff;
+}
+.eden-fillin__actions {
+  display: flex;
+  gap: 0.5rem;
+}
+.eden-fillin__primary,
+.eden-fillin__secondary {
+  border: 0;
+  border-radius: 8px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  padding: 0.4rem 0.9rem;
+  cursor: pointer;
+}
+.eden-fillin__primary {
+  background: var(--ifm-color-primary);
+  color: #fff;
+}
+.eden-fillin__secondary {
+  background: transparent;
+  color: var(--ifm-color-content);
+  border: 1px solid var(--ifm-color-emphasis-300);
+}
+.eden-fillin__secondary:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.eden-fillin__hint {
+  margin: 0;
+  padding: 0.65rem 1rem 0;
+  font-size: 0.85rem;
+  color: var(--ifm-color-content-secondary);
+}
+.eden-fillin__error {
+  margin: 0.5rem 1rem 0;
+  font-size: 0.85rem;
+  color: var(--ifm-color-danger);
+}
+.eden-fillin__pre {
+  margin: 0.75rem 0 0;
+  padding: 1rem;
+  max-height: 28rem;
+  overflow: auto;
+  font-size: 0.78rem;
+  line-height: 1.55;
+  background: #0b1220;
+  color: #e2e8f0;
+  border-radius: 0;
+}
+[data-theme='light'] .eden-fillin__pre {
+  background: #0f172a;
+}

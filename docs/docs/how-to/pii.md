@@ -52,7 +52,7 @@ If your org handles a specific kind of PII differently, override
 the policy:
 
 ```bash
-curl -X PUT https://api.edenobservability.com/v1/orgs/org_abc/pii-policy \
+curl -X PUT https://api.edenobservability.com/orgs/org_abc/pii-policy \
   -H "Authorization: Bearer sk_eden_admin_..." \
   -H "Content-Type: application/json" \
   -d '{
@@ -82,7 +82,7 @@ match), and a daily aggregate in `pii_redactions_daily`. These are
 visible under **Settings → PII → Audit**.
 
 ```bash
-curl https://api.edenobservability.com/v1/orgs/org_abc/pii/audit?since=2026-06-01 \
+curl https://api.edenobservability.com/orgs/org_abc/pii/audit?since=2026-06-01 \
   -H "Authorization: Bearer sk_eden_admin_..."
 ```
 
@@ -94,7 +94,7 @@ HIPAA, and GDPR.
 When a user invokes RTBF:
 
 ```bash
-curl -X POST https://api.edenobservability.com/v1/orgs/org_abc/gdpr/erase \
+curl -X POST https://api.edenobservability.com/orgs/org_abc/gdpr/erase \
   -H "Authorization: Bearer sk_eden_admin_..." \
   -H "Content-Type: application/json" \
   -d '{ "user_id": "u_abc" }'

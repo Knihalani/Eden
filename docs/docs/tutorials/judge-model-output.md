@@ -86,8 +86,8 @@ from a 4.5 mean to 3.8 — you'll get a Slack ping within an hour.
 ## Step 6 — Inspect scores from the API
 
 ```bash
-curl https://api.edenobservability.com/v1/evals \
-  -H "Authorization: Bearer sk_eden_..." \
+curl https://api.edenobservability.com/orgs/$EDEN_ORG_ID/evals \
+  -H "X-Org-Api-Key: $EDEN_API_KEY" \
   -H "X-Org-Id: org_..." \
   | jq '.data[] | {eval_id, judge_id, stats}'
 ```
@@ -95,8 +95,8 @@ curl https://api.edenobservability.com/v1/evals \
 Or fetch a single run:
 
 ```bash
-curl https://api.edenobservability.com/v1/evals/eval_abc \
-  -H "Authorization: Bearer sk_eden_..." \
+curl https://api.edenobservability.com/orgs/$EDEN_ORG_ID/evals/eval_abc \
+  -H "X-Org-Api-Key: $EDEN_API_KEY" \
   -H "X-Org-Id: org_..." \
   | jq '.data.stats'
 ```

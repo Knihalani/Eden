@@ -36,7 +36,7 @@ python -m eden.mcp_server
 **c) Cloud API**
 
 Point Cursor MCP at the hosted Eden API with your org API key. No
-self-hosted image is required.
+local Eden platform install is required for cloud use.
 
 ## Environment variables
 

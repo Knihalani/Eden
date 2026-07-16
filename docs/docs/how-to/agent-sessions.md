@@ -78,38 +78,17 @@ await session.completeSession(s, {
 
 ## REST API
 
+Paths (feature-flagged `agent_sessions_v1`):
+
 | Method | Path | Purpose |
 |--------|------|---------|
-| `POST` | `/v1/orgs/{org_id}/agent-sessions` | Create session |
-| `POST` | `/v1/orgs/{org_id}/agent-sessions/{id}/end` | Finalize with success/failure |
-| `POST` | `/v1/orgs/{org_id}/agent-sessions/{id}/identify` | Attach user mid-session |
-| `GET` | `/v1/orgs/{org_id}/agent-sessions/{id}` | Metadata + trace list |
+| `POST` | `/orgs/{org_id}/agent-sessions` | Create session |
+| `POST` | `/orgs/{org_id}/agent-sessions/{id}/end` | Finalize with success/failure |
+| `POST` | `/orgs/{org_id}/agent-sessions/{id}/identify` | Attach user mid-session |
+| `GET` | `/orgs/{org_id}/agent-sessions/{id}` | Metadata + trace list |
 
-### Create session
-
-```bash
-curl -X POST "$EDEN_BASE_URL/v1/orgs/$EDEN_ORG_ID/agent-sessions" \
-  -H "Authorization: Bearer $EDEN_API_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "agent_id": "support-bot",
-    "user_id": "u-123",
-    "metadata": {"channel": "web"}
-  }'
-```
-
-### End session
-
-```bash
-curl -X POST "$EDEN_BASE_URL/v1/orgs/$EDEN_ORG_ID/agent-sessions/$SESSION_ID/end" \
-  -H "Authorization: Bearer $EDEN_API_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "success": false,
-    "failure_reason": "tool loop exceeded 10 iterations",
-    "cost_usd": 0.15
-  }'
-```
+Prefer the **SDK session helpers** above. These HTTP routes authenticate
+with a portal / Clerk user session (not the org ingest API key).
 
 Pass `agent_session_id` on ingested spans (or let the SDK set it
 automatically inside `session.trace()`).

@@ -143,7 +143,7 @@ eden/
 ## Deploy
 
 - **Backend** (FastAPI on Northflank): see [`docs/deploy/cutover-checklist.md`](docs/deploy/cutover-checklist.md) and [`docs/deploy/northflank-free-tier.md`](docs/deploy/northflank-free-tier.md). Manifest: [`northflank.yml`](northflank.yml).
-- **Portal** (Next.js on Vercel): `cd clients/portal && vercel --prod`. Env vars: `NEXT_PUBLIC_API_URL=/api/proxy`, `API_INTERNAL_URL=<NF backend URL>`, Clerk keys.
+- **Portal** (Next.js on Vercel): `cd clients/portal && vercel --prod`. Env vars: `NEXT_PUBLIC_API_URL=/api/proxy`, `API_INTERNAL_URL=https://api.edenobservability.com`, Clerk keys.
 - **Spec status**: see [`docs/spec/upgradespec-v2.md`](docs/spec/upgradespec-v2.md) for what shipped vs what's deferred from the original 22-week spec.
 
 ## Configuration

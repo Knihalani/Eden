@@ -8,14 +8,9 @@ slug: /tutorials
 
 # Tutorials
 
-Hands-on, learning-oriented lessons. Each tutorial walks you through
-a complete task from start to finish — by the end, you'll have
-something real working in your dashboard.
-
-Tutorials are different from how-to guides. A tutorial **teaches**
-(you're learning the system), a how-to **does** (you have a goal and
-need steps). Tutorials are also different from reference docs —
-they don't try to be exhaustive.
+Hands-on lessons. Prefer the **[Quickstart](/quickstart)** first —
+**Fill in** creates an API key and a runnable snippet — then pick a
+tutorial below.
 
 ## Pick a tutorial
 
@@ -51,11 +46,10 @@ they don't try to be exhaustive.
 
 You'll need:
 
-- An Eden account (sign up via the portal; the wizard creates an
-  org and gives you an API key)
-- The Python SDK installed (`pip install eden-sdk`)
-- An OpenAI API key (or any other supported provider)
+- An Eden account at [edenobservability.com](https://edenobservability.com)
+- An org API key — use **[Fill in](/quickstart)** or **Settings → API Keys**
+- The Python or TypeScript SDK installed
+- A provider key (e.g. `OPENAI_API_KEY`) for LLM calls
 
-If anything doesn't work, check the
-[Quickstart troubleshooting table](/quickstart#common-gotchas) or
-the **Settings → Diagnostics** page in the portal.
+If anything doesn't work, run `python -m eden_sdk.doctor` /
+`npx @eden-ai/sdk doctor`, or re-check [Authenticate](/how-to/auth).

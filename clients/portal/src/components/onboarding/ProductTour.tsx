@@ -393,11 +393,11 @@ export function ProductTour({
                   {isFinish && step.ctaHref ? (
                     <>
                       <a
-                        href="/quickstart"
+                        href="/settings?tab=api-keys"
                         className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border-default)] px-3 py-1.5 text-xs font-medium text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)]"
                         onClick={() => onFinish()}
                       >
-                        Open Quickstart
+                        Create API key
                       </a>
                       <a
                         href={step.ctaHref}

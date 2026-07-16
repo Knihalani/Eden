@@ -22,7 +22,7 @@ The SDK reads the following env vars by default (all optional in dev — events 
 | --- | --- | --- |
 | `EDEN_ORG_ID` | — | Required for production. Sent in URL path + `X-Org-Id` header. |
 | `EDEN_ORG_API_KEY` | — | API key sent as `X-Org-Api-Key`. |
-| `EDEN_BASE_URL` | `http://localhost:8000` | Gateway base URL. |
+| `EDEN_BASE_URL` | `https://api.edenobservability.com` | Gateway base URL. |
 | `EDEN_PROJECT_ID` | `default` | Sent as `X-Project-Id`. |
 | `EDEN_REALM` | `production` | Realm tag. |
 | `EDEN_DEBUG` | `0` | Set to `1` to log every batch flush. |
@@ -35,7 +35,7 @@ import { configure } from "@eden-ai/sdk";
 configure({
   orgId: "org_abc",
   apiKey: "sk_...",
-  baseUrl: "https://api.eden.dev",
+  baseUrl: "https://api.edenobservability.com",
   tags: ["prod", "checkout-agent"],
   debug: false,
 });

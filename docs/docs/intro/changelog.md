@@ -22,11 +22,11 @@ sidebar_position: 99
 - [MCP in Cursor](/how-to/mcp-cursor) — IDE setup for Eden MCP tools
 - [Agent sessions](/how-to/agent-sessions) — F23 session-first SDK reference
 - [Failure fixtures](/how-to/failure-fixtures) — D6 export + local replay
-- [Security launch checklist](/operations/security-launch-checklist) — pre-launch gate
-- Quickstart TS fix: `detectInstalledFrameworks` + `wrapOpenAI` (not `instrument()`)
+- [Security model](/explanation/security-model) — tenancy, encryption, audit
+- [Quickstart](/quickstart) — **Fill in** creates an API key into a runnable snippet (when signed in)
+- SDKs default to `https://api.edenobservability.com` (no `EDEN_BASE_URL` required)
 - Auto-instrumentation matrix: Pydantic AI, Mastra, HTTP capture tiers
-- Helm smoke test documented in [Deploy](/how-to/deploy)
-
+- [API endpoint](/how-to/deploy) — connect your app; DNS for `api.edenobservability.com`
 ### Portal
 
 - **Settings → MCP** — copy-paste `.cursor/mcp.json` and Claude Code config

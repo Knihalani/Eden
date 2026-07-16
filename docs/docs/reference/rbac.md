@@ -102,7 +102,7 @@ async def register_agent(
 permission-scoped endpoints:
 
 ```python
-@router.post("/v1/orgs/{org}/members")
+@router.post("/orgs/{org}/members")
 async def invite_member(
     org_id: str,
     user: dict = Depends(require_org_permission("members:invite")),
@@ -119,7 +119,7 @@ resource-scoped checks, use `require_resource_permission`.
 Owners can transfer ownership to another member:
 
 ```bash
-curl -X POST https://api.edenobservability.com/v1/orgs/org_abc/transfer \
+curl -X POST https://api.edenobservability.com/orgs/org_abc/transfer \
   -H "Authorization: Bearer sk_eden_owner_..." \
   -d '{ "new_owner_user_id": "u_abc" }'
 ```
@@ -134,6 +134,6 @@ Every role change, invite, removal, and permission grant is in
 `org_audit_log`:
 
 ```bash
-curl "https://api.edenobservability.com/v1/orgs/org_abc/audit-log?action=member.role_change" \
+curl "https://api.edenobservability.com/orgs/org_abc/audit-log?action=member.role_change" \
   -H "Authorization: Bearer sk_eden_owner_..."
 ```

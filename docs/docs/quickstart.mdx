@@ -1,0 +1,61 @@
+---
+title: Quickstart
+description: From signup to your first trace in under five minutes.
+sidebar_position: 2
+---
+
+# Quickstart
+
+Get from zero to a live trace in under five minutes. The SDK defaults to
+`api.edenobservability.com`.
+
+## 1. Fill in your credentials
+
+If you are signed in at [edenobservability.com](https://edenobservability.com),
+**Fill in** appears below. It creates an API key and writes the key + org
+id into the snippet. Then **Copy**, paste, and run.
+
+import FillInSnippet from '@site/src/components/FillInSnippet';
+
+<FillInSnippet />
+
+:::tip
+Prefer managing keys yourself? Open the portal → **Settings → API Keys**,
+create a key, and set `EDEN_API_KEY` + `EDEN_ORG_ID` in your environment.
+:::
+
+## 2. Install (if you haven't)
+
+```bash
+# Python
+pip install eden-sdk
+
+# TypeScript / Node / Bun
+npm install @eden-ai/sdk openai
+```
+
+Validate connectivity:
+
+```bash
+# Python
+python -m eden_sdk.doctor
+
+# TypeScript
+npx @eden-ai/sdk doctor
+```
+
+## 3. Confirm in the portal
+
+Open **[Traces](https://edenobservability.com/traces)** — you should see
+`hello-world` within about a minute.
+
+## What's next
+
+| Goal | Guide |
+|------|--------|
+| Instrument OpenAI / Anthropic / LangChain | [Auto-instrument OpenAI](/tutorials/auto-instrument-openai) |
+| Wire any framework | [Connect any agent](/how-to/connect-any-agent) |
+| Python API | [Python SDK](/reference/sdk-python) |
+| TypeScript API | [TypeScript SDK](/reference/sdk-typescript) |
+| Ingest HTTP shapes | [Ingestion API](/reference/api-ingestion) |
+| Manage keys | [API keys](/how-to/api-keys) |

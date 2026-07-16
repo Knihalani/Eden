@@ -31,8 +31,8 @@ import eden
 
 eden.configure(
     org_id="org_123",
-    api_key="sk-eden-...",
-    base_url="https://api.eden.dev",  # default: http://localhost:8000
+    api_key="sk_eden_...",
+    # base_url optional — defaults to https://api.edenobservability.com
 )
 
 eden.instrument()  # patches every installed framework
@@ -62,7 +62,7 @@ by `eden.configure(...)`:
 |------------------------|---------------------------|------------------------------------------|
 | `EDEN_ORG_ID`          | (required)                | Org the events are attributed to. `EDEN_DEFAULT_ORG` accepted as an alias for parity with the TypeScript SDK. |
 | `EDEN_API_KEY`         | (required)                | Programmatic key (`X-Org-Api-Key`). `EDEN_ORG_API_KEY` accepted as an alias for parity with the TypeScript SDK. |
-| `EDEN_BASE_URL`        | `http://localhost:8000`   | Gateway / ingestion base URL             |
+| `EDEN_BASE_URL`        | `https://api.edenobservability.com`   | Gateway / ingestion base URL             |
 | `EDEN_PROJECT_ID`      | `default`                 | Multi-tenant project label               |
 | `EDEN_BATCH_SIZE`      | `32`                      | Max events per HTTP POST                 |
 | `EDEN_FLUSH_INTERVAL_MS` | `250`                   | Max time to buffer a batch               |

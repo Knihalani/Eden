@@ -16,7 +16,7 @@ async function main(): Promise<void> {
   configure({
     orgId: process.env.EDEN_ORG_ID,
     apiKey: process.env.EDEN_ORG_API_KEY,
-    baseUrl: process.env.EDEN_BASE_URL ?? "http://localhost:8000",
+    baseUrl: process.env.EDEN_BASE_URL ?? "https://api.edenobservability.com",
     debug: true,
     tags: ["example", "vercel-ai"],
   });
