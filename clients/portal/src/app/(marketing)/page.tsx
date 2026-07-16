@@ -59,7 +59,7 @@ const PILLARS = [
     badge: "Capture",
     title: "One proxy. Every model.",
     description:
-      "Drop-in SDKs and an OpenAI-compatible HTTP gateway. Switch one base_url, capture every LLM call — to OpenAI, Anthropic, Bedrock, self-hosted — with PII pre-masked at ingest.",
+      "Drop-in SDKs and an OpenAI-compatible HTTP gateway. Switch one base_url, capture every LLM call — to OpenAI, Anthropic, Bedrock, or any OpenAI-compatible endpoint — with PII pre-masked at ingest.",
     bullets: [
       "OpenAI-compatible gateway — change one line",
       "Native decoders for OpenAI, Anthropic, Gemini, Bedrock, LangChain, LlamaIndex, Vercel AI SDK",

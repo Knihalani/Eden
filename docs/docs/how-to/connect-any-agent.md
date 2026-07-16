@@ -173,7 +173,7 @@ If nothing shows after **120 seconds**, check:
 | Check | Fix |
 |-------|-----|
 | Wrong `org_id` | Match the key's org in Settings → API Keys |
-| Wrong `base_url` | Cloud: `https://api.edenobservability.com`; self-host: your API ingress |
+| Wrong `base_url` | Use `https://api.edenobservability.com` |
 | Firewall | Allow HTTPS egress to Eden ingest |
 | Doctor red | Re-run `eden doctor` / `npx @eden-ai/sdk doctor` |
 

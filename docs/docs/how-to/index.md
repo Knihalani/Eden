@@ -92,8 +92,8 @@ If you want to **learn** something, see
 <div class="eden-grid eden-grid--compact">
 
   <div class="eden-card eden-card--small">
-    <h4>Deploy self-hosted</h4>
-    <p>Docker Compose, Kubernetes, Helm chart, and production checklist.</p>
+    <h4>Cloud hosting</h4>
+    <p>Eden runs as managed cloud — connect your agents via the SDK.</p>
     <a href="/how-to/deploy">Read →</a>
   </div>
 
