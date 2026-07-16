@@ -43,7 +43,9 @@ eden-sandbox/
 supplementaries/
 migrations/
 tests/
-tools/
+# Root CLI/scripts folder only — do NOT use bare `tools/` (that also
+# excludes clients/portal/src/app/(portal)/tools/).
+/tools/
 docker/
 helm/
 var/
