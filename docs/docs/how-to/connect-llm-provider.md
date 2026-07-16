@@ -88,7 +88,7 @@ Once registered, you can route through the gateway:
 
 ```bash
 curl https://api.edenobservability.com/gateway/v1/chat/completions \
-  -H "Authorization: Bearer sk_eden_..." \
+  -H "X-Org-Api-Key: sk_eden_..." \
   -H "X-Org-Id: org_abc" \
   -H "Content-Type: application/json" \
   -d '{
@@ -96,6 +96,11 @@ curl https://api.edenobservability.com/gateway/v1/chat/completions \
     "messages": [{"role": "user", "content": "Hello!"}]
   }'
 ```
+
+Or use the SDK gateway helper — `openai_client()` (Python) or
+`openaiClient()` (TypeScript) — which wires auth headers and optional
+PII filters automatically. See [Python SDK](/reference/sdk-python) and
+[TypeScript SDK](/reference/sdk-typescript).
 
 The gateway:
 

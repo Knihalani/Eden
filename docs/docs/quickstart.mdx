@@ -34,15 +34,23 @@ pip install eden-sdk
 npm install @eden-ai/sdk openai
 ```
 
-Validate connectivity:
+Set credentials (or use **Fill in** above), then validate connectivity:
 
 ```bash
+export EDEN_ORG_ID="org_..."
+export EDEN_API_KEY="sk_eden_..."        # Python
+# export EDEN_ORG_API_KEY="sk_eden_..."  # TypeScript (EDEN_API_KEY also accepted)
+
 # Python
 python -m eden_sdk.doctor
+# or: eden-doctor
 
-# TypeScript
-npx @eden-ai/sdk doctor
+# TypeScript (after npm install)
+npx eden-doctor
 ```
+
+Doctor checks your key, org, API reachability, and emits a test event
+you can find under **Traces**.
 
 ## 3. Confirm in the portal
 

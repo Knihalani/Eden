@@ -219,7 +219,7 @@ adds no more than 5 ms p99 over an uninstrumented baseline.
 
 ## Eden AI gateway (OpenAI-compatible)
 
-Eden ships an OpenAI-compatible proxy at `https://gateway.eden.ai/v1`
+Eden ships an OpenAI-compatible proxy at `https://api.edenobservability.com/gateway/v1`
 that exposes `/chat/completions`, `/completions`, `/embeddings`, and
 `/models`. Point any OpenAI-compatible client at it and Eden applies
 PII redaction, semantic caching, per-tenant budgets, circuit
@@ -229,7 +229,7 @@ breakers, and cost-aware routing in the path.
 from openai import OpenAI
 
 client = OpenAI(
-    base_url="https://gateway.eden.ai/v1",
+    base_url="https://api.edenobservability.com/gateway/v1",
     api_key="<EDEN_API_KEY>",  # your org's Eden API key
     default_headers={
         # Per-request upstream: route to your own OpenAI-compatible

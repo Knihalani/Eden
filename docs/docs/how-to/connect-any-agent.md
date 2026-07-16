@@ -30,11 +30,13 @@ Before picking a tier, validate connectivity:
 ```bash
 # Python
 pip install eden-sdk
-python -m eden_sdk.doctor
+export EDEN_ORG_ID="org_..." EDEN_API_KEY="sk_eden_..."
+python -m eden_sdk.doctor   # or: eden-doctor
 
 # TypeScript
 npm install @eden-ai/sdk
-npx @eden-ai/sdk doctor
+export EDEN_ORG_ID="org_..." EDEN_ORG_API_KEY="sk_eden_..."
+npx eden-doctor
 ```
 
 :::tip
@@ -122,12 +124,12 @@ installHttpCapture();  // patches fetch / undici for OpenAI-compatible URLs
 If your agent already exports OpenTelemetry spans:
 
 ```python
-from eden_sdk.otel import configure_exporter
-
-configure_exporter(
+import eden
+eden.configure_otel_exporter(
     api_key=os.environ["EDEN_API_KEY"],
     org_id=os.environ["EDEN_ORG_ID"],
 )
+# or: from eden_sdk.otel import configure_exporter
 ```
 
 Spans forward to Eden ingest with framework attribution from OTel
@@ -178,7 +180,7 @@ If nothing shows after **120 seconds**, check:
 | Wrong `org_id` | Match the key's org in Settings → API Keys |
 | Wrong API URL | Leave `base_url` unset — SDKs use `https://api.edenobservability.com` |
 | Firewall | Allow HTTPS egress to Eden ingest |
-| Doctor red | Re-run `eden doctor` / `npx @eden-ai/sdk doctor` |
+| Doctor red | Re-run `python -m eden_sdk.doctor` / `npx eden-doctor` |
 
 ## Pick your path (decision tree)
 

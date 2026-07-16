@@ -139,7 +139,7 @@ class TestEdenConfigFilters:
 class TestGatewayURL:
     def test_default_base_url_appends_v1(self):
         cfg = EdenConfig(org_id="o", api_key="k")
-        assert cfg.resolved_gateway_url() == "https://api.edenobservability.com/v1"
+        assert cfg.resolved_gateway_url() == "https://api.edenobservability.com/gateway/v1"
 
     def test_explicit_gateway_url_wins(self):
         cfg = EdenConfig(
@@ -160,7 +160,7 @@ class TestGatewayURL:
             org_id="o", api_key="k",
             base_url="https://api.example.com/",
         )
-        assert cfg.resolved_gateway_url() == "https://api.example.com/v1"
+        assert cfg.resolved_gateway_url() == "https://api.example.com/gateway/v1"
 
 
 # ── Client-side safety-net redactor ────────────────────────────────

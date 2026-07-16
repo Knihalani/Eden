@@ -134,7 +134,7 @@ export interface EdenSDKOptions {
 
   /**
    * Explicit OpenAI-compatible gateway URL. When unset,
-   * `resolvedGatewayUrl()` derives from `baseUrl + "/v1"`.
+   * `resolvedGatewayUrl()` derives from `baseUrl + "/gateway/v1"`.
    * Mirrors `EdenConfig.gateway_url` in the Python SDK.
    */
   gatewayUrl?: string;

@@ -45,7 +45,7 @@ export interface ResolvedConfig {
   baseUrl: string;
   /**
    * Explicit OpenAI-compatible gateway URL. When unset,
-   * `resolvedGatewayUrl()` derives from `baseUrl + "/v1"`.
+   * `resolvedGatewayUrl()` derives from `baseUrl + "/gateway/v1"`.
    */
   gatewayUrl: string | undefined;
   /**
@@ -182,13 +182,13 @@ export function resolveConfig(opts: EdenSDKOptions = {}): ResolvedConfig {
 
 /**
  * Build the canonical gateway URL for OpenAI-compatible calls.
- * Falls back to `\${baseUrl}/v1` when `gatewayUrl` is unset.
+ * Falls back to `\${baseUrl}/gateway/v1` when `gatewayUrl` is unset.
  */
 export function resolvedGatewayUrl(cfg: ResolvedConfig): string {
   if (cfg.gatewayUrl) return cfg.gatewayUrl;
   const base = cfg.baseUrl.replace(/\/+$/, "");
-  if (base.endsWith("/v1")) return base;
-  return `${base}/v1`;
+  if (base.endsWith("/gateway/v1") || base.endsWith("/v1")) return base;
+  return `${base}/gateway/v1`;
 }
 
 
@@ -296,7 +296,7 @@ export class EdenSDK {
 
   /**
    * Resolve the OpenAI-compatible gateway URL. Falls back to
-   * `\${baseUrl}/v1` when `gatewayUrl` is unset. Mirrors
+   * `\${baseUrl}/gateway/v1` when `gatewayUrl` is unset. Mirrors
    * `EdenConfig.resolved_gateway_url()` in the Python SDK.
    */
   resolvedGatewayUrl(): string {

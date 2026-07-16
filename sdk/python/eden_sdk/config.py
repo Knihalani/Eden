@@ -109,10 +109,10 @@ class EdenConfig:
     api_key: str | None = None
     base_url: str = "https://api.edenobservability.com"
     # Convenience alias for the OpenAI-compatible gateway. Defaults
-    # to ``"{base_url}/v1"`` when not set, so customers can call
-    # ``EdenConfig(base_url="https://api.eden.ai")`` and have
-    # :meth:`gateway_headers` + :meth:`openai_client` do the right
-    # thing without a second URL.
+    # to ``"{base_url}/gateway/v1"`` when not set, so customers can
+    # call ``EdenConfig(base_url="https://api.edenobservability.com")``
+    # and have :meth:`gateway_headers` + :meth:`openai_client` do the
+    # right thing without a second URL.
     gateway_url: str | None = None
     project_id: str = "default"
     batch_size: int = 32
@@ -241,17 +241,17 @@ class EdenConfig:
     def resolved_gateway_url(self) -> str:
         """Return the OpenAI-compatible gateway URL.
 
-        Falls back to ``"{base_url}/v1"`` when ``gateway_url`` is
-        unset. The default ``base_url`` of
+        Falls back to ``"{base_url}/gateway/v1"`` when ``gateway_url``
+        is unset. The default ``base_url`` of
         ``https://api.edenobservability.com`` therefore resolves to
-        ``https://api.edenobservability.com/v1``.
+        ``https://api.edenobservability.com/gateway/v1``.
         """
         if self.gateway_url:
             return self.gateway_url
         base = self.base_url.rstrip("/")
-        if base.endswith("/v1"):
+        if base.endswith("/gateway/v1") or base.endswith("/v1"):
             return base
-        return f"{base}/v1"
+        return f"{base}/gateway/v1"
 
     def validate(self) -> None:
         """Raise ``ValueError`` if the config can't ship events.

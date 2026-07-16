@@ -40,9 +40,9 @@ def run(user_input: str) -> str:
 
 ```bash
 pip install eden-sdk openai
-export EDEN_API_KEY="…"
 export EDEN_ORG_ID="…"
-python -m eden_sdk.doctor
+export EDEN_API_KEY="…"
+python -m eden_sdk.doctor   # or: eden-doctor
 ```
 
 ## Minimum TypeScript change
@@ -64,7 +64,12 @@ const reply = await openai.chat.completions.create({
   messages: [{ role: "user", content: "Hello" }],
 });
 
-await getDefaultClient().flush();
+await getDefaultClient().flush();  // or dispose() on shutdown
+```
+
+```bash
+export EDEN_ORG_ID="…" EDEN_ORG_API_KEY="…"
+npx eden-doctor
 ```
 
 ## Framework matrix
