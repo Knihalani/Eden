@@ -134,7 +134,7 @@ const result = await chat.invoke([new HumanMessage("Hello!")]);
 
 ## Talking to the Eden gateway (OpenAI-compatible)
 
-Eden ships an OpenAI-compatible proxy at `https://gateway.eden.ai/v1`
+Eden ships an OpenAI-compatible proxy at `https://api.edenobservability.com/gateway/v1`
 that exposes `/chat/completions`, `/completions`, `/embeddings`, and
 `/models`. Point any OpenAI-compatible client at it and Eden applies
 PII redaction, semantic caching, per-tenant budgets, circuit
@@ -189,7 +189,7 @@ await fetch(`${sdk.resolvedGatewayUrl()}/chat/completions`, {
 });
 ```
 
-`resolvedGatewayUrl()` returns `${baseUrl}/v1` by default and honours
+`resolvedGatewayUrl()` returns `${baseUrl}/gateway/v1` by default and honours
 an explicit `gatewayUrl` option when one is set. The gateway strips
 `X-Upstream-Api-Key`, `X-Org-Api-Key`, and `X-Org-Id` before
 forwarding to the upstream so Eden credentials never leak to a

@@ -1,11 +1,15 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { LegalPage } from "@/components/layout/legal-page";
+import {
+  FREE_TIER_ORG_CAP_USD,
+  FREE_TIER_PERSONAL_CAP_USD,
+  FREE_TIER_TAGLINE,
+} from "@/lib/constants";
 
 export const metadata: Metadata = {
   title: "Pricing · Eden",
-  description:
-    "Eden is free during soft launch — up to 100K trace events per month with 7-day retention. Paid plans coming later.",
+  description: FREE_TIER_TAGLINE,
 };
 
 export default function PricingPage() {
@@ -13,7 +17,7 @@ export default function PricingPage() {
     <LegalPage
       eyebrow="Pricing"
       title="Simple pricing"
-      description="Soft launch is free. Capture traces, run evals, and ship reviewable PR suggestions without a credit card."
+      description="Soft launch is free. Capture traces, run evals, and queue human-reviewed patch suggestions without a credit card."
       size="medium"
     >
       <div className="rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-primary)] p-8">
@@ -27,11 +31,15 @@ export default function PricingPage() {
           Soft launch — paid Team / Pro plans are not available yet.
         </p>
         <ul className="space-y-2 text-sm text-[var(--text-secondary)] mb-8">
-          <li>Up to 100K trace events / month</li>
-          <li>7-day retention</li>
-          <li>Gateway + SDKs (Python, TypeScript, Go, Rust)</li>
+          <li>
+            ${FREE_TIER_PERSONAL_CAP_USD}/mo LLM spend cap (personal workspace, 1 seat)
+          </li>
+          <li>
+            ${FREE_TIER_ORG_CAP_USD}/mo LLM spend cap (org workspace, up to 3 seats)
+          </li>
+          <li>Gateway + SDKs (Python, TypeScript; Go and Rust packages also available)</li>
           <li>Org workspace, invites, and AI assistant sidebar</li>
-          <li>Improve loop + PR suggestions (human-reviewed)</li>
+          <li>Improve loop + patch suggestions (human-reviewed — you open the PR)</li>
         </ul>
         <Link
           href="/sign-up"
@@ -40,7 +48,8 @@ export default function PricingPage() {
           Start free
         </Link>
       </div>
-      <p className="mt-8 text-sm text-[var(--text-muted)]">
+      <p className="mt-6 text-sm text-[var(--text-muted)]">{FREE_TIER_TAGLINE}</p>
+      <p className="mt-4 text-sm text-[var(--text-muted)]">
         Need a higher volume commitment or enterprise tenancy?{" "}
         <Link href="/contact" className="text-[var(--accent)] hover:underline">
           Contact us

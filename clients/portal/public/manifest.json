@@ -1,7 +1,7 @@
 {
-  "name": "Eden — Agent Evaluation & Observability",
+  "name": "Eden — Observability + improvement",
   "short_name": "Eden",
-  "description": "Eden — AI-native agent evaluation and observability platform",
+  "description": "Observability + improvement for AI agents and LLM apps.",
   "start_url": "/dashboard",
   "display": "standalone",
   "background_color": "#0a0a0f",

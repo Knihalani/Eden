@@ -22,6 +22,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useClerk } from "@clerk/nextjs";
 import { AlertTriangle, Mail, ExternalLink } from "lucide-react";
+import { GATEWAY_URL } from "@/lib/constants";
 
 // Fail-closed budget if Clerk never inserts form controls. Healthy
 // mounts usually resolve via MutationObserver well under 1s.
@@ -151,7 +152,7 @@ export function ClerkAuthFallback({ children, formLabel }: ClerkAuthFallbackProp
             <div className="mt-1.5 break-all">
               <span className="text-[var(--accent)]">$</span>{" "}
               <span className="text-[var(--text-primary)]">
-                export OPENAI_BASE_URL=https://api.eden.dev/v1/proxy
+                export OPENAI_BASE_URL={GATEWAY_URL}
               </span>
             </div>
             <div className="mt-3 text-[var(--text-faint)]"># review a PR-suggestion</div>

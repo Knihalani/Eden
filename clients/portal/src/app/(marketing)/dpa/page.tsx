@@ -77,9 +77,10 @@ const SECTIONS = [
       <p>
         Eden implements technical and organisational measures as documented in our{" "}
         <Link href="/security" className="text-[var(--accent)] hover:underline">Security page</Link>,
-        including encryption at rest (AES-256) and in transit (TLS 1.3), per-tenant
-        data isolation, RBAC with audit logging, quarterly access reviews, and
-        annual SOC 2 Type II audits.
+        including encryption in transit (HTTPS/TLS), per-tenant data isolation,
+        RBAC with audit logging where implemented, and the controls described on
+        our Security page. Formal third-party audit reports are not offered during
+        soft launch.
       </p>
     ),
   },

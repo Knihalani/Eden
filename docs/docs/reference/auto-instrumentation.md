@@ -26,15 +26,15 @@ See [Connect any agent](/how-to/connect-any-agent) for the full decision tree.
 
 ### Python (`eden-sdk`)
 
-| Framework | Patched call | Recorded |
-|-----------|--------------|----------|
-| `openai` | `Client.chat.completions.create`, `AsyncClient.chat.completions.create` | model, prompt, response, tokens, latency |
-| `anthropic` | `Client.messages.create`, `AsyncClient.messages.create` | model, system, messages, response, tokens |
-| `langchain` | `ChatModel.invoke`, `ChatModel.ainvoke`, `LLMChain.invoke`, `AgentExecutor.invoke` | chain name, agent name, tool calls, intermediate steps |
-| `llama_index` | `QueryEngine.query`, `ChatEngine.chat` | query, response, retrieved node ids |
-| `crewai` | `Crew.kickoff` | crew name, agent roster, task outcomes |
-| `autogen` | `ConversableAgent.generate_reply` | speaker, recipient, message contents |
-| `pydantic-ai` | `Agent.run`, tool calls | agent name, tools, tokens, `source_format: pydantic-ai` |
+| Framework | Mechanism | Recorded |
+|-----------|-----------|----------|
+| `openai` | Monkey-patch sync/async `chat.completions.create` | model, prompt, response, tokens, latency; streaming TTFT/ITL/TPOT |
+| `anthropic` | Monkey-patch sync/async `messages.create` | model, messages, response, tokens, cache read/write tokens |
+| `langchain` | Global `BaseCallbackHandler` via `langchain_core.callbacks` | chain/agent/tool spans across the execution tree |
+| `llama_index` | `BaseSpanHandler` on `Settings.callback_manager` | span name, query/response, duration |
+| `crewai` | Default `step_callback` + `task_callback` on `Crew` | step thought/tool/result, task name/outcome |
+| `autogen` | Global reply hook on `ConversableAgent` | speaker, recipient, message contents |
+| `pydantic_ai` | Patch `Agent.run` / `run_sync` | agent name, input/output, duration, `source_format: pydantic-ai` |
 | `mastra` | No-op (use TypeScript SDK) | — |
 
 ### Tier 2 — Python universal fallback
@@ -47,20 +47,23 @@ See [Connect any agent](/how-to/connect-any-agent) for the full decision tree.
 
 ### TypeScript (`@eden-ai/sdk`)
 
+The TypeScript SDK wraps **client instances** (Proxy-based), not global
+module exports. Call `wrap*` on the object you already use in production.
+
 | Framework | Wrapper | Recorded |
 |-----------|---------|----------|
-| `openai` | `wrapOpenAI(client)` | model, prompt, response, tokens |
-| `anthropic` | `wrapAnthropic(client)` | model, system, messages, response, tokens |
-| `ai` (Vercel AI) | `wrapVercelAI({ openai })` | model, prompt, response |
-| `langchain` | `wrapLangChain({ ChatOpenAI })` | chain/agent name, intermediate steps |
-| `mastra` | `wrapMastra(mastraInstance)` | workflow name, step outcomes, `source_format: mastra` |
+| `openai` | `wrapOpenAI(client)` | model, prompt, response, tokens; streaming metrics + chunk replay |
+| `anthropic` | `wrapAnthropic(client)` | model, messages, response, tokens, cache tokens |
+| `ai` (Vercel AI) | `wrapVercelAI(aiModule)` — pass `import * as ai from "ai"` | model, prompt/response from `generateText` / `streamText` |
+| `langchain` | `wrapLangChain(chatModelInstance)` | invoke/call/stream/batch on any chat model |
+| `mastra` | `wrapMastra(mastraInstance)` | agent/workflow name, step outcomes, `source_format: mastra` |
 
 ### Tier 2 — TypeScript universal fallback
 
 | Mechanism | Patches | Recorded |
 |-----------|---------|----------|
 | HTTP capture | `fetch` / `undici` for known LLM URLs | model, bodies (truncated), latency |
-| OTel bridge | `@eden-ai/sdk/otel` exporter | spans with framework attribution |
+| OTel bridge | `configureOtelExporter()` from `@eden-ai/sdk` | spans with framework attribution |
 | Logging forwarder | SDK logging shim | `event_type: log` events |
 
 ## What gets recorded, per call
@@ -140,16 +143,20 @@ full schema.
 ## Disabling instrumentation
 
 ```python
-# Python
-eden.uninstrument()        # undo everything
+# Python — reverses monkey-patches
+eden.uninstrument()         # undo everything
 eden.uninstrument("openai") # undo just one framework
+eden.uninstrument("http_capture")  # undo httpx capture
 ```
 
 ```ts
-// TypeScript
-import { uninstrument } from "@eden-ai/sdk";
-uninstrument("openai");
+// TypeScript — create a fresh unwrapped client (no global uninstrument)
+const raw = new OpenAI();
+// do not pass through wrapOpenAI()
+
+// Or disable telemetry entirely:
+configure({ disabled: true });
 ```
 
-Useful for tests that need to assert on the SDK's behaviour without
-the SDK sending real events.
+For tests, combine `configure({ disabled: true })` or
+`EDEN_DISABLED=1` (Python) with unwrapped clients so no events ship.

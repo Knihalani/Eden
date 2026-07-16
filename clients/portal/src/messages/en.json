@@ -16,8 +16,8 @@
     "language": "Language"
   },
   "hero": {
-    "title": "Eden — Observability + improvement for AI agents",
-    "subtitle": "Drop-in tracing, evaluation, and reviewable PR-suggestions for LLM apps and agents.",
+    "title": "Eden — Observability + improvement for AI agents and LLM apps.",
+    "subtitle": "Observability + improvement for AI agents and LLM apps.",
     "cta": "Get started"
   },
   "common": {

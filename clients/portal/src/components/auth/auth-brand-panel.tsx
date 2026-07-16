@@ -11,7 +11,12 @@ import {
 } from "lucide-react";
 import { Logo } from "@/components/brand/logo";
 import { CodeChip } from "@/components/ui/code-chip";
-import { PRODUCT_VERSION, HEALTH_REFRESH_INTERVAL_MS } from "@/lib/constants";
+import {
+  PRODUCT_TAGLINE,
+  PRODUCT_VERSION,
+  HEALTH_REFRESH_INTERVAL_MS,
+  DOCS_URL,
+} from "@/lib/constants";
 
 type HealthState = "ok" | "degraded" | "down" | "unknown";
 
@@ -52,22 +57,14 @@ const FEATURES = [
   },
   {
     icon: GitPullRequest,
-    text: "PR-suggestions turn failing traces into reviewable patches",
+    text: "Human-reviewed patch suggestions — you open the PR",
   },
 ];
 
-// Footer links point at routes that are guaranteed to resolve from
-// an unauthenticated session: the marketing landing page (with
-// in-page anchors) and Clerk's own sign-in flow. We deliberately
-// don't link to /docs, /privacy, /terms, or /status from here
-// because those routes don't exist as public surfaces yet — broken
-// links from the auth page would be worse than omitting them. The
-// marketing landing page has its own footer for those once they
-// land.
 const FOOTER_LINKS = [
-  { label: "Home", href: "/" },
-  { label: "Pillars", href: "/#pillars" },
-  { label: "Improve", href: "/#improve" },
+  { label: "Docs", href: DOCS_URL, external: true },
+  { label: "Privacy", href: "/privacy", external: false },
+  { label: "Terms", href: "/terms", external: false },
 ];
 
 /**
@@ -152,7 +149,7 @@ export function AuthBrandPanel() {
           <div>
             <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-[var(--accent-faint)] text-[var(--accent)] text-[11px] font-medium tracking-wide mb-5 border border-[var(--accent)]/20">
               <Sparkles className="w-3 h-3" />
-              Observability + improvement for AI agents
+              {PRODUCT_TAGLINE}
             </div>
 
             <h1 className="auth-hero-line mb-4">
@@ -245,15 +242,27 @@ export function AuthBrandPanel() {
               © {new Date().getFullYear()} Eden · {PRODUCT_VERSION}
             </p>
             <div className="flex items-center gap-4">
-              {FOOTER_LINKS.map((link) => (
-                <Link
-                  key={link.href}
-                  href={link.href}
-                  className="text-[11px] text-[var(--text-muted)] hover:text-[var(--text-secondary)] transition-colors"
-                >
-                  {link.label}
-                </Link>
-              ))}
+              {FOOTER_LINKS.map((link) =>
+                link.external ? (
+                  <a
+                    key={link.href}
+                    href={link.href}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-[11px] text-[var(--text-muted)] hover:text-[var(--text-secondary)] transition-colors"
+                  >
+                    {link.label}
+                  </a>
+                ) : (
+                  <Link
+                    key={link.href}
+                    href={link.href}
+                    className="text-[11px] text-[var(--text-muted)] hover:text-[var(--text-secondary)] transition-colors"
+                  >
+                    {link.label}
+                  </Link>
+                ),
+              )}
             </div>
           </div>
         </div>

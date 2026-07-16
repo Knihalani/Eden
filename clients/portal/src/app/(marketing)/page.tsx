@@ -19,7 +19,12 @@ import { LocaleSwitcher } from "@/components/i18n/locale-switcher";
 import {
   PRODUCT_VERSION,
   PRODUCT_COPYRIGHT_YEAR,
+  PRODUCT_TAGLINE,
   DOCS_URL,
+  GATEWAY_URL,
+  FREE_TIER_TAGLINE,
+  FREE_TIER_CAP_SHORT,
+  STATUS_PAGE_URL,
 } from "@/lib/constants";
 import { CodeChip } from "@/components/ui";
 import {
@@ -39,15 +44,16 @@ import {
   Search,
   Check,
   Sparkles,
-  Lock,
   Code2,
-  Users,
 } from "lucide-react";
 
 const NAV_LINKS = [
   { label: "Pillars", href: "#pillars" },
   { label: "How it works", href: "#improve" },
+  { label: "Pricing", href: "/pricing" },
+  { label: "Security", href: "/security" },
   { label: "Docs", href: DOCS_URL },
+  { label: "Contact", href: "/contact" },
 ];
 
 // Three pillars — mirrors the architecture pillars, expressed as
@@ -75,7 +81,7 @@ const PILLARS = [
       "Multi-tenant org workspace with trace, cost, latency, and eval visualisations. A persistent AI assistant sidebar lives in every view — answers cited to real trace IDs and eval records, never generic web results.",
     bullets: [
       "Time-series + drill-down for traces, tokens, cost, eval regressions",
-      "Multi-tenant orgs with RBAC, SSO/SAML, SCIM, audit log",
+      "Multi-tenant orgs with RBAC and audit log",
       "Export to JSONL/CSV, scheduled S3/GCS, webhook delivery",
     ],
   },
@@ -85,7 +91,7 @@ const PILLARS = [
     badge: "Improve",
     title: "Reviewable PR suggestions, judges, and alerts.",
     description:
-      "Surface regressions the moment eval scores drift, rank candidate root causes against trace evidence, and ship a human-reviewed PR. Every action stays in your org, behind RBAC, with a full audit trail.",
+      "Surface regressions the moment eval scores drift, rank candidate root causes against trace evidence, and review a human-reviewed patch. Every action stays in your org, behind RBAC, with a full audit trail.",
     bullets: [
       "PR-suggestion inbox — trace-driven patch drafts, you click & open the PR",
       "Deterministic + LLM-as-judge evals, regression alerts, golden-dataset replays",
@@ -101,7 +107,7 @@ const INSTALL_BLOCKS = [
     code: `from openai import OpenAI
 
 client = OpenAI(
-    base_url="https://gateway.eden.example/v1",  # Eden
+    base_url="${GATEWAY_URL}",  # Eden
     api_key=os.environ["EDEN_API_KEY"],
 )
 
@@ -189,7 +195,7 @@ const HERO_METRICS = [
   // Three product-honest anchors. Unit and label share one
   // micro-label line (mono + uppercase + tracking) so the wider
   // strings don't wrap on the 3-col grid at 1440px.
-  { kpi: "100K",   unit: "events/mo",  label: "Free tier" },
+  { kpi: "$1/$3", unit: "spend caps",  label: "Free tier" },
   { kpi: "1-line", unit: "swap",        label: "Drop-in gateway" },
   { kpi: "<5ms",   unit: "p99",         label: "SDK overhead" },
 ];
@@ -487,7 +493,7 @@ export default function LandingPage() {
 
           <div className="hidden md:flex items-center gap-2">
             <a
-              href="https://status.edenobservability.com"
+              href={STATUS_PAGE_URL}
               target="_blank"
               rel="noreferrer"
               className="hidden lg:inline-flex items-center gap-2 px-3 py-1.5 text-xs text-[var(--text-muted)] hover:text-[var(--text-secondary)]"
@@ -611,7 +617,7 @@ export default function LandingPage() {
                   {PRODUCT_VERSION}
                 </span>
                 <span className="text-[var(--text-secondary)]">
-                  Observability + improvement for AI agents
+                  {PRODUCT_TAGLINE}
                 </span>
               </div>
 
@@ -624,7 +630,7 @@ export default function LandingPage() {
               >
                 See every LLM call.
                 <br />
-                <span className="text-[var(--accent)]">Ship every fix.</span>
+                <span className="text-[var(--accent)]">Review every fix.</span>
               </h1>
 
               <p
@@ -660,7 +666,7 @@ export default function LandingPage() {
               <p className="mt-5 text-xs text-[var(--text-muted)]">
                 {signedIn
                   ? "Pick up where you left off."
-                  : "Free up to 100K trace events / month. No credit card."}
+                  : FREE_TIER_TAGLINE}
               </p>
 
               {/* KPI strip — anchors the hero with concrete numbers.
@@ -754,7 +760,7 @@ export default function LandingPage() {
                     <div className="mt-2 pt-3 border-t border-[var(--border-subtle)] flex items-center gap-3 px-1.5">
                       <GitPullRequest className="w-3.5 h-3.5 text-[var(--terminal)]" />
                       <span className="text-[var(--text-primary)] font-semibold">
-                        PR #482 ready for review
+                        Patch queued for review
                       </span>
                       <a
                         href="#improve"
@@ -768,7 +774,7 @@ export default function LandingPage() {
               </div>
               {/* Caption */}
               <p className="mt-3 text-xs text-[var(--text-muted)] text-center font-mono">
-                Real run · ~12s end-to-end
+                Example flow · ~12s end-to-end
               </p>
             </div>
           </div>
@@ -786,7 +792,7 @@ export default function LandingPage() {
          * The new strip is a thin micro-label row that answers
          * "can I trust this is real?" with:
          *   - All systems normal (live status, accent green)
-         *   - SOC 2 Type II in progress (2026 audit)
+         *   - Human-reviewed patches
          *   - Open source SDKs (Apache-2.0)
          * Each item is a small Chip-style pill with a status icon
          * (green dot, lock, code) so it reads as data, not a
@@ -800,18 +806,13 @@ export default function LandingPage() {
               </li>
               <li className="text-[var(--text-faint)]" aria-hidden="true">/</li>
               <li className="inline-flex items-center gap-2 text-[var(--text-secondary)]">
-                <Lock className="w-3 h-3 text-[var(--text-faint)]" />
-                <span>SOC 2 Type II</span>
+                <GitPullRequest className="w-3 h-3 text-[var(--text-faint)]" />
+                <span>Human-reviewed patches</span>
               </li>
               <li className="text-[var(--text-faint)]" aria-hidden="true">/</li>
               <li className="inline-flex items-center gap-2 text-[var(--text-secondary)]">
                 <Code2 className="w-3 h-3 text-[var(--text-faint)]" />
                 <span>Apache-2.0 SDKs</span>
-              </li>
-              <li className="text-[var(--text-faint)]" aria-hidden="true">/</li>
-              <li className="inline-flex items-center gap-2 text-[var(--text-secondary)]">
-                <Users className="w-3 h-3 text-[var(--text-faint)]" />
-                <span>SSO + SCIM</span>
               </li>
             </ul>
           </div>
@@ -1091,7 +1092,7 @@ export default function LandingPage() {
                         { icon: Sparkles, label: "Hypothesised root cause", meta: "prompt brittleness on tool_call.2 — conf 0.78", tone: "accent" },
                         { icon: Workflow, label: "Edited prompts/system.md", meta: "+12 −4", tone: "default" },
                         { icon: Check, label: "Ran eden evals", meta: "smoke ✓ · quality ✓ · regression ✓", tone: "ok" },
-                        { icon: GitBranch, label: "Opened PR", meta: "eden-bot → main · PR #482", tone: "ok" },
+                        { icon: GitBranch, label: "Queued for review", meta: "patch ready — you open the PR", tone: "ok" },
                       ].map((step, idx, arr) => {
                         const Icon = step.icon;
                         const isLast = idx === arr.length - 1;
@@ -1379,7 +1380,7 @@ export default function LandingPage() {
                   <p className="text-sm md:text-base text-[var(--text-secondary)] leading-relaxed">
                     {signedIn
                       ? "Your workspace is ready — jump back into your traces."
-                      : "Free up to 100K trace events / month. No credit card. Five-minute setup."}
+                      : `${FREE_TIER_TAGLINE} Five-minute setup.`}
                   </p>
                   <div className="flex flex-wrap items-center gap-3 mt-auto">
                     <Link
@@ -1444,7 +1445,7 @@ export default function LandingPage() {
                     <span className="text-[var(--text-faint)]">·</span>
                     <span>free tier</span>
                     <span className="text-[var(--text-faint)]">·</span>
-                    <span>100K events / month</span>
+                    <span>{FREE_TIER_CAP_SHORT}</span>
                   </div>
                 </div>
               </div>
@@ -1458,7 +1459,7 @@ export default function LandingPage() {
             <div className="md:col-span-5 flex flex-col gap-3">
               <Logo size="sm" showWordmark href="/" />
               <p className="text-sm text-[var(--text-muted)] max-w-xs leading-relaxed">
-                Observability + improvement for AI agents and LLM apps.
+                {PRODUCT_TAGLINE}
               </p>
               <p className="text-[11px] font-mono text-[var(--text-faint)]">
                 © {PRODUCT_COPYRIGHT_YEAR} Eden · {PRODUCT_VERSION}
@@ -1470,6 +1471,15 @@ export default function LandingPage() {
                 <span className="text-[11px] font-mono uppercase tracking-[0.18em] text-[var(--text-muted)]">
                   Product
                 </span>
+                <Link href="/pricing" className="text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)]">
+                  Pricing
+                </Link>
+                <Link href="/security" className="text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)]">
+                  Security
+                </Link>
+                <Link href="/contact" className="text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)]">
+                  Contact
+                </Link>
                 <a href={DOCS_URL} target="_blank" rel="noopener noreferrer" className="text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)]">
                   Documentation
                 </a>
