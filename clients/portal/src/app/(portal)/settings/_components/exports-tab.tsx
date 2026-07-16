@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { api } from "@/lib/api";
 import { useToast } from "@/components/ui/toast";
 import { useConfirm } from "@/hooks/use-confirm";
-import { Download, Loader2, Plus, Trash2, Cloud, Database, Play, AlertCircle, CheckCircle2, XCircle, Calendar, FileArchive } from "lucide-react";
+import { Download, Loader2, Plus, Trash2, Cloud, Database, Play, CheckCircle2, XCircle, Calendar, FileArchive, RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 
@@ -15,6 +15,10 @@ import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 // ────────────────────────────────────────────────────────────────────
 import { Card } from "@/components/ui/card";
 import { IntegrationStatusBanners } from "@/components/integration-status-banners";
+import { EmptyState } from "@/components/ui/empty-state";
+import { ErrorState } from "@/components/ui/error-state";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Button } from "@/components/ui/button";
 const DATA_TYPES = [{
   id: "traces",
   label: "Traces",
@@ -266,10 +270,18 @@ export function ExportsTab({
         </div>
       </div>
 
-      {error && <div className="p-3 bg-[var(--error-bg)] rounded-lg border border-[var(--error)]/20 text-sm text-[var(--error)] flex items-center gap-2">
-          <AlertCircle className="w-4 h-4 flex-shrink-0" />
-          {error}
-        </div>}
+      {error && (
+        <ErrorState
+          title="Could not load exports"
+          message={error}
+          action={
+            <Button onClick={() => void loadAll()} variant="outline" size="default">
+              <RefreshCw className="w-4 h-4" />
+              Try again
+            </Button>
+          }
+        />
+      )}
 
       {runResult && <div className={cn("p-3 rounded-lg border text-sm flex items-center gap-2", runResult.status === "ok" ? "bg-[var(--success-bg)] border-[var(--success)]/30 text-[var(--success)]" : "bg-[var(--error-bg)] border-[var(--error)]/30 text-[var(--error)]")}>
           {runResult.status === "ok" ? <CheckCircle2 className="w-4 h-4 flex-shrink-0" /> : <XCircle className="w-4 h-4 flex-shrink-0" />}
@@ -294,11 +306,20 @@ export function ExportsTab({
         await loadAll();
       }} onCancel={() => setShowDestForm(false)} />}
 
-        {loadingDest ? <div className="flex justify-center py-8">
-            <Loader2 className="w-5 h-5 animate-spin text-[var(--text-muted)]" />
-          </div> : destinations.length === 0 ? <div className="text-center py-8 text-sm text-[var(--text-muted)] border border-dashed border-[var(--border-default)] rounded-xl">
-            No destinations yet. Add an S3 or GCS bucket to start exporting.
-          </div> : <Card padding="lg" className="overflow-hidden">
+        {loadingDest ? (
+          <div className="space-y-2 py-2" aria-busy="true" aria-live="polite">
+            <Skeleton className="h-10 w-full" />
+            <Skeleton className="h-10 w-full" />
+            <Skeleton className="h-10 w-2/3" />
+          </div>
+        ) : destinations.length === 0 ? (
+          <EmptyState
+            icon={Cloud}
+            title="No destinations yet"
+            description="Add an S3 or GCS bucket to start exporting."
+            size="sm"
+          />
+        ) : <Card padding="lg" className="overflow-hidden">
             <DataTable columns={destColumns} rows={destinations} rowKey={d => d.destination_id} defaultSort={{
           key: "name",
           direction: "asc"
@@ -324,11 +345,20 @@ export function ExportsTab({
         await loadAll();
       }} onCancel={() => setShowSchedForm(false)} />}
 
-        {loadingSched ? <div className="flex justify-center py-8">
-            <Loader2 className="w-5 h-5 animate-spin text-[var(--text-muted)]" />
-          </div> : schedules.length === 0 ? <div className="text-center py-8 text-sm text-[var(--text-muted)] border border-dashed border-[var(--border-default)] rounded-xl">
-            No schedules yet. Recurring or one-shot, you decide.
-          </div> : <Card padding="lg" className="overflow-hidden">
+        {loadingSched ? (
+          <div className="space-y-2 py-2" aria-busy="true" aria-live="polite">
+            <Skeleton className="h-10 w-full" />
+            <Skeleton className="h-10 w-full" />
+            <Skeleton className="h-10 w-2/3" />
+          </div>
+        ) : schedules.length === 0 ? (
+          <EmptyState
+            icon={Calendar}
+            title="No schedules yet"
+            description="Recurring or one-shot, you decide."
+            size="sm"
+          />
+        ) : <Card padding="lg" className="overflow-hidden">
             <DataTable columns={schedColumns} rows={schedules} rowKey={s => s.schedule_id} defaultSort={{
           key: "last_run_at",
           direction: "desc"

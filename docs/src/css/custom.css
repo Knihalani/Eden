@@ -56,28 +56,6 @@
   --docusaurus-highlighted-code-line-bg: rgba(91, 158, 255, 0.12);
 }
 
-/* Light-mode tokens kept as a safety net if Infima ever forces light.
-   colorMode.disableSwitch is true in docusaurus.config.js — Eden is
-   dark-terminal only. Values still use the Eden blue ladder, not
-   Tailwind defaults. */
-[data-theme='light'] {
-  --ifm-background-color: #0A0E14;
-  --ifm-background-surface-color: #0F1419;
-  --ifm-color-primary: #5B9EFF;
-  --ifm-color-primary-dark: #3D7AD4;
-  --ifm-color-primary-darker: #2A5FA8;
-  --ifm-color-primary-darkest: #1E3A5F;
-  --ifm-color-primary-light: #7AB1FF;
-  --ifm-color-primary-lighter: #A8C8FF;
-  --ifm-color-primary-lightest: #C5DBFF;
-
-  --ifm-heading-color: #E4ECF7;
-  --ifm-link-color: #7AB1FF;
-  --ifm-table-head-background: #0F1419;
-  --ifm-table-stripe-background: #060A10;
-  --ifm-hr-border-color: #526384;
-}
-
 /* Body + typography */
 html,
 body {
@@ -109,7 +87,6 @@ body {
   background-color: #0A0E14;
   border-bottom: 1px solid #526384;
   box-shadow: none;
-  backdrop-filter: saturate(180%) blur(8px);
 }
 
 .navbar__brand {
@@ -261,7 +238,6 @@ pre {
 }
 
 /* Code-block file-tab strip (when fenced blocks have a `title=`) */
-.codeBlockTitle_node_modules-\@docusaurus-theme-classic-lib-theme-CodeBlock-Content-styles-module,
 div[class*='codeBlockTitle'] {
   background: #0F1419 !important;
   border: 1px solid #526384 !important;
@@ -745,33 +721,6 @@ td {
   border-color: rgba(251, 191, 36, 0.6);
 }
 
-/* Light mode adjustments */
-[data-theme='light'] .eden-hero {
-  background:
-    radial-gradient(ellipse at top, rgba(91, 158, 255, 0.06), transparent 60%),
-    linear-gradient(180deg, #ffffff 0%, #E8EEF6 100%);
-  border-bottom-color: #E4ECF7;
-}
-
-[data-theme='light'] .eden-card {
-  background: #ffffff;
-  border-color: #E4ECF7;
-}
-
-[data-theme='light'] .eden-card:hover {
-  border-color: #5B9EFF;
-}
-
-[data-theme='light'] .eden-card p,
-[data-theme='light'] .eden-card ul li {
-  color: #5A6B85;
-}
-
-[data-theme='light'] .eden-card h3,
-[data-theme='light'] .eden-card h4 {
-  color: #0A0E14;
-}
-
 /* Smooth scrolling for the in-page TOC */
 html {
   scroll-behavior: smooth;
@@ -881,20 +830,6 @@ html {
   border-bottom-color: #5B9EFF;
 }
 
-[data-theme='light'] .eden-404__hints {
-  background: #ffffff;
-  border-color: #E4ECF7;
-}
-
-[data-theme='light'] .eden-404__subtitle,
-[data-theme='light'] .eden-404__hints ul li a {
-  color: #5A6B85;
-}
-
-[data-theme='light'] .eden-404__title {
-  color: #0A0E14;
-}
-
 /* ── Docs Fill-in snippet ─────────────────────────────────────────── */
 .eden-fillin {
   margin: 1.25rem 0 1.75rem;
@@ -981,7 +916,4 @@ html {
   background: #0b1220;
   color: #e2e8f0;
   border-radius: 0;
-}
-[data-theme='light'] .eden-fillin__pre {
-  background: #0f172a;
 }

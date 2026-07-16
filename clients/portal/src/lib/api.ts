@@ -2639,8 +2639,8 @@ export type ObservabilityTrace = {
   cost_cents?: number | null;
   error?: string | null;
   streaming_metrics?: ObservabilityStreamingMetrics | null;
-  /** Free-form tag dict the BE attaches (e.g. ``realm:env``). */
-  tags?: Record<string, string> | null;
+  /** Free-form tags the BE attaches (e.g. ``mcp:server``, ``facet:retrieval``). */
+  tags?: string[] | null;
   /** N12 — explicit session id when present on span attributes. */
   session_id?: string | null;
   agent_session_id?: string | null;

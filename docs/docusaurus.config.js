@@ -104,6 +104,7 @@ const config = {
 
   onBrokenLinks: 'warn',
   markdown: {
+    mermaid: true,
     hooks: {
       onBrokenMarkdownLinks: 'warn',
     },
@@ -154,10 +155,6 @@ const config = {
   // parse ```mermaid code blocks into the Mermaid code-block
   // node that the theme renders.
   themes: [require.resolve('@docusaurus/theme-mermaid')],
-
-  markdown: {
-    mermaid: true,
-  },
 
   // F68 — Mermaid init script. The theme-mermaid plugin ships
   // a runtime that lazy-loads mermaid on first code-block mount;

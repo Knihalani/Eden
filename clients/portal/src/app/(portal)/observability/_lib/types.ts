@@ -36,6 +36,8 @@ export interface TraceItem {
   agent_id?: string | null;
   agent_session_id?: string | null;
   session_id?: string | null;
+  /** Free-form tags from telemetry_events (e.g. ``mcp:server``, ``facet:retrieval``). */
+  tags?: string[] | null;
 }
 
 export interface TraceTreeData {

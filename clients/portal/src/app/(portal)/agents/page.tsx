@@ -2,7 +2,7 @@
 
 "use client";
 
-import { useEffect, useState, useCallback, useMemo, Suspense } from "react";
+import { useState, useMemo, Suspense } from "react";
 import Link from "next/link";
 import dynamic from "next/dynamic";
 import { useOrg } from "@/hooks/use-org";
@@ -11,12 +11,11 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ErrorState } from "@/components/ui/error-state";
 import { NoOrgState } from "@/components/ui/no-org-state";
+import { QueryState } from "@/components/ui/query-state";
 import { PageHeader } from "@/components/layout/page-header";
 import { PageContent } from "@/components/layout/page-content";
 import { EmbeddedSurface } from "@/components/layout/embedded-surface";
-import { useToast } from "@/components/ui/toast";
 import {
   Bot,
   ExternalLink,
@@ -30,6 +29,8 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useQueryTab } from "@/hooks/use-query-tab";
+import { useOrgQuery } from "@/hooks/use-api-query";
+import { queryKeys } from "@/lib/query-keys";
 
 const AGENT_TABS = ["agents", "fleet"] as const;
 const FleetView = dynamic(() => import("@/app/(portal)/fleet/page"), {
@@ -80,60 +81,22 @@ export default function AgentsPage() {
 
 function AgentsPageInner() {
   const { currentOrg } = useOrg();
-  const toast = useToast();
+  const orgId = currentOrg?.id ?? null;
   const [tab, setTab] = useQueryTab("tab", AGENT_TABS, "agents");
-  const [agents, setAgents] = useState<AgentSummary[]>([]);
-  const [total, setTotal] = useState(0);
-  const [loading, setLoading] = useState(true);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [limit, setLimit] = useState(PAGE_SIZE);
   const [search, setSearch] = useState("");
   const [frameworkFilter, setFrameworkFilter] = useState<string>("");
 
-  const load = useCallback(async () => {
-    if (!currentOrg) return;
-    setLoading(true);
-    setError(null);
-    try {
-      const data = await agentsApi.list(currentOrg.id, { limit: PAGE_SIZE });
-      setAgents(data.agents);
-      setTotal(data.total);
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : "Failed to load agents";
-      setError(msg);
-      toast.error(msg);
-    } finally {
-      setLoading(false);
-    }
-  }, [currentOrg, toast]);
+  const agentsQuery = useOrgQuery(
+    queryKeys.agents.list(orgId, { limit }),
+    orgId,
+    () => agentsApi.list(orgId!, { limit }),
+  );
 
-  // "Load more" pages via `offset` (the agents list endpoint supports
-  // true offset pagination, unlike traces/PR suggestions) and appends
-  // — the registered-agent count is normally small enough that
-  // duplicate/reordering races between a background refresh and a
-  // load-more click aren't a practical concern.
-  const loadMore = useCallback(async () => {
-    if (!currentOrg) return;
-    setLoadingMore(true);
-    try {
-      const data = await agentsApi.list(currentOrg.id, {
-        limit: PAGE_SIZE,
-        offset: agents.length,
-      });
-      setAgents((prev) => [...prev, ...data.agents]);
-      setTotal(data.total);
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : "Failed to load more agents";
-      toast.error(msg);
-    } finally {
-      setLoadingMore(false);
-    }
-  }, [currentOrg, agents.length, toast]);
-
-  useEffect(() => {
-     
-    if (currentOrg) load();
-  }, [currentOrg, load]);
+  const agents = agentsQuery.data?.agents ?? [];
+  const total = agentsQuery.data?.total ?? 0;
+  const loading = agentsQuery.isLoading;
+  const refreshing = agentsQuery.isFetching;
 
   const frameworks = useMemo(() => {
     const set = new Set<string>();
@@ -187,11 +150,11 @@ function AgentsPageInner() {
             </Link>
             {tab === "agents" && (
             <Button
-              onClick={load}
+              onClick={() => void agentsQuery.refetch()}
               variant="outline"
               size="default"
-              disabled={loading}
-              loading={loading}
+              disabled={refreshing}
+              loading={refreshing}
               aria-label="Refresh agents"
             >
               <RefreshCw className="h-4 w-4" /> Refresh
@@ -226,153 +189,138 @@ function AgentsPageInner() {
           <FleetView />
         </EmbeddedSurface>
       ) : (
-      <>
-      {error && !loading && (
-        <ErrorState
-          title="Could not load agents"
-          message={error}
-          action={
-            <Button onClick={load} variant="outline" size="default" disabled={loading} loading={loading}>
-              <RefreshCw className="h-4 w-4" /> Try again
-            </Button>
-          }
-        />
-      )}
-
-      {/* Filters */}
-      {agents.length > 0 && !error && (
-        <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center">
-          <div className="relative flex-1 min-w-0">
-            <Search
-              aria-hidden="true"
-              className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-muted)] pointer-events-none"
-            />
-            <input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search by name, framework, or repo…"
-              aria-label="Search agents by name, framework, or repo"
-              className="w-full pl-9 pr-9 py-2 bg-[var(--bg-secondary)] border border-[var(--border-default)] rounded-lg text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/40"
-            />
-            {search && (
-              <button
-                type="button"
-                onClick={() => setSearch("")}
-                aria-label="Clear search"
-                className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/40"
-              >
-                <X className="w-3.5 h-3.5" />
-              </button>
-            )}
+      <QueryState
+        loading={loading && agents.length === 0}
+        error={agentsQuery.error}
+        data={agentsQuery.data}
+        onRetry={() => void agentsQuery.refetch()}
+        errorTitle="Could not load agents"
+        isEmpty={(d) => (d?.agents.length ?? 0) === 0}
+        loadingSlot={
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <Card key={i} className="p-5 space-y-3">
+                <Skeleton className="h-5 w-32" />
+                <Skeleton className="h-3 w-full" />
+                <Skeleton className="h-3 w-2/3" />
+              </Card>
+            ))}
           </div>
-          {frameworks.length > 1 && (
-            <div className="relative">
-              <Filter
-                aria-hidden="true"
-                className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[var(--text-muted)] pointer-events-none"
-              />
-              <select
-                value={frameworkFilter}
-                onChange={(e) => setFrameworkFilter(e.target.value)}
-                aria-label="Filter agents by framework"
-                className="pl-8 pr-8 py-2 bg-[var(--bg-secondary)] border border-[var(--border-default)] rounded-lg text-sm text-[var(--text-primary)] appearance-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/40"
-              >
-                <option value="">All frameworks</option>
-                {frameworks.map((f) => (
-                  <option key={f} value={f}>
-                    {f}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Loading skeletons */}
-      {loading && agents.length === 0 && (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-          {Array.from({ length: 6 }).map((_, i) => (
-            <Card key={i} className="p-5 space-y-3">
-              <Skeleton className="h-5 w-32" />
-              <Skeleton className="h-3 w-full" />
-              <Skeleton className="h-3 w-2/3" />
-            </Card>
-          ))}
-        </div>
-      )}
-
-      {/* Empty state */}
-      {!loading && !error && agents.length === 0 && (
-        <Card className="p-8">
-          <EmptyState
-            icon={Bot}
-            title="No agents yet"
-            description="Register your first agent via the SDK or CLI."
-            size="lg"
-            action={
-              <div className="flex flex-col items-center gap-2 text-sm">
-                <code className="px-3 py-1.5 rounded bg-[var(--bg-tertiary)] font-mono text-xs text-[var(--text-secondary)]">
-                  eden config discover-agents
-                </code>
-                <span className="text-xs text-[var(--text-muted)]">
-                  or call <code className="font-mono">register_agent()</code> at agent startup.
-                </span>
+        }
+        emptySlot={
+          <Card className="p-8">
+            <EmptyState
+              icon={Bot}
+              title="No agents yet"
+              description="Register your first agent via the SDK or CLI."
+              size="lg"
+              action={
+                <div className="flex flex-col items-center gap-2 text-sm">
+                  <code className="px-3 py-1.5 rounded bg-[var(--bg-tertiary)] font-mono text-xs text-[var(--text-secondary)]">
+                    eden config discover-agents
+                  </code>
+                  <span className="text-xs text-[var(--text-muted)]">
+                    or call <code className="font-mono">register_agent()</code> at agent startup.
+                  </span>
+                </div>
+              }
+            />
+          </Card>
+        }
+      >
+        {() => (
+          <>
+            <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center">
+              <div className="relative flex-1 min-w-0">
+                <Search
+                  aria-hidden="true"
+                  className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-muted)] pointer-events-none"
+                />
+                <input
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Search by name, framework, or repo…"
+                  aria-label="Search agents by name, framework, or repo"
+                  className="w-full pl-9 pr-9 py-2 bg-[var(--bg-secondary)] border border-[var(--border-default)] rounded-lg text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/40"
+                />
+                {search && (
+                  <button
+                    type="button"
+                    onClick={() => setSearch("")}
+                    aria-label="Clear search"
+                    className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/40"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
               </div>
-            }
-          />
-        </Card>
-      )}
+              {frameworks.length > 1 && (
+                <div className="relative">
+                  <Filter
+                    aria-hidden="true"
+                    className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[var(--text-muted)] pointer-events-none"
+                  />
+                  <select
+                    value={frameworkFilter}
+                    onChange={(e) => setFrameworkFilter(e.target.value)}
+                    aria-label="Filter agents by framework"
+                    className="pl-8 pr-8 py-2 bg-[var(--bg-secondary)] border border-[var(--border-default)] rounded-lg text-sm text-[var(--text-primary)] appearance-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/40"
+                  >
+                    <option value="">All frameworks</option>
+                    {frameworks.map((f) => (
+                      <option key={f} value={f}>
+                        {f}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+            </div>
 
-      {/* Filtered-out empty state */}
-      {!loading && !error && agents.length > 0 && filtered.length === 0 && (
-        <Card className="p-8">
-          <EmptyState
-            icon={Search}
-            title="No matches"
-            description="No agents match the current filters."
-            size="sm"
-            action={
-              <button
-                onClick={() => {
-                  setSearch("");
-                  setFrameworkFilter("");
-                }}
-                className="text-xs text-[var(--accent)] hover:underline"
-              >
-                Clear filters
-              </button>
-            }
-          />
-        </Card>
-      )}
+            {filtered.length === 0 ? (
+              <Card className="p-8 mt-3">
+                <EmptyState
+                  icon={Search}
+                  title="No matches"
+                  description="No agents match the current filters."
+                  size="sm"
+                  action={
+                    <button
+                      onClick={() => {
+                        setSearch("");
+                        setFrameworkFilter("");
+                      }}
+                      className="text-xs text-[var(--accent)] hover:underline"
+                    >
+                      Clear filters
+                    </button>
+                  }
+                />
+              </Card>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3 mt-3">
+                {filtered.map((a) => (
+                  <AgentCard key={a.agent_id} agent={a} />
+                ))}
+              </div>
+            )}
 
-      {/* Agent grid */}
-      {!error && filtered.length > 0 && (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-          {filtered.map((a) => (
-            <AgentCard key={a.agent_id} agent={a} />
-          ))}
-        </div>
-      )}
-
-      {/* Load more — only offered on the unfiltered view since a
-          client-side search/framework filter can hide the newly
-          appended page, which would make the button look broken. */}
-      {!loading && !error && !search && !frameworkFilter && agents.length < total && (
-        <div className="flex justify-center pt-2">
-          <Button
-            variant="outline"
-            size="default"
-            onClick={loadMore}
-            loading={loadingMore}
-            disabled={loadingMore}
-          >
-            Load more agents ({total - agents.length} remaining)
-          </Button>
-        </div>
-      )}
-      </>
+            {!search && !frameworkFilter && agents.length < total && (
+              <div className="flex justify-center pt-2">
+                <Button
+                  variant="outline"
+                  size="default"
+                  onClick={() => setLimit((l) => l + PAGE_SIZE)}
+                  loading={refreshing}
+                  disabled={refreshing}
+                >
+                  Load more agents ({total - agents.length} remaining)
+                </Button>
+              </div>
+            )}
+          </>
+        )}
+      </QueryState>
       )}
     </PageContent>
   );

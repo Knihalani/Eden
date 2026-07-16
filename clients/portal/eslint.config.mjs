@@ -15,8 +15,16 @@ const eslintConfig = defineConfig([
     // CLI scripts use CommonJS + require(); eslint-config-next
     // doesn't know what to do with them. June 2026 cleanup.
     "scripts/**",
+    // Playwright harnesses are plain .mjs; eslint-plugin-react 10
+    // crashes on them (getFilename is not a function).
+    "e2e/**",
   ]),
   {
+    settings: {
+      // Pin React version so eslint-plugin-react skips filesystem
+      // detection (broken under ESLint 10: getFilename is not a function).
+      react: { version: "19.2" },
+    },
     rules: {
       // React 19 strict rules we deliberately opt out of (June 2026):
       //

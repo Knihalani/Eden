@@ -10,6 +10,7 @@
  * Cat 23 code-change ``/policy`` API (default weekly).
  */
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import {
   Bot,
   CalendarClock,
@@ -402,9 +403,9 @@ export default function AutonomousTab() {
             <div className="text-sm font-medium">Recurring improvement agent (N23)</div>
             <p className="text-xs text-[var(--text-secondary)] mt-0.5 leading-relaxed">
               Per-org cron sweeps production signals and lands ranked plans in{" "}
-              <a href="/improve/plans" className="text-[var(--accent)] hover:underline">
+              <Link href="/improve/plans" className="text-[var(--accent)] hover:underline">
                 Improvement plans
-              </a>
+              </Link>
               . Approve always opens a GitHub PR.
             </p>
           </div>

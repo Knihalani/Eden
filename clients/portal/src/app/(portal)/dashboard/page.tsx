@@ -299,7 +299,7 @@ export default function DashboardPage() {
               </Link>
               <Link
                 href="/dashboard?onboarding=1"
-                className="inline-flex items-center gap-1.5 px-3 py-2 border border-[var(--border)] rounded-lg text-sm font-medium text-[var(--text-primary)] hover:bg-[var(--surface-hover)] transition-colors"
+                className="inline-flex items-center gap-1.5 px-3 py-2 border border-[var(--border)] rounded-lg text-sm font-medium text-[var(--text-primary)] hover:bg-[var(--bg-secondary)] transition-colors"
               >
                 <Sparkles className="w-3.5 h-3.5" />
                 Product tour
@@ -307,7 +307,7 @@ export default function DashboardPage() {
               {canConnect && (
                 <Link
                   href="/agents?tab=fleet"
-                  className="inline-flex items-center gap-1.5 px-3 py-2 border border-[var(--border)] rounded-lg text-sm font-medium text-[var(--text-primary)] hover:bg-[var(--surface-hover)] transition-colors"
+                  className="inline-flex items-center gap-1.5 px-3 py-2 border border-[var(--border)] rounded-lg text-sm font-medium text-[var(--text-primary)] hover:bg-[var(--bg-secondary)] transition-colors"
                 >
                   <GitBranch className="w-3.5 h-3.5" />
                   Connect a repo

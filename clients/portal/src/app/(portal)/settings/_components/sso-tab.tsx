@@ -127,7 +127,7 @@ export function SSOTab({ orgId }: SSOTabProps) {
         {canManage && (
           <button
             onClick={() => setShowForm(!showForm)}
-            className="px-4 py-2 bg-[var(--accent)] text-white rounded-lg text-sm font-medium hover:opacity-90"
+            className="px-4 py-2 bg-[var(--accent)] text-[var(--accent-foreground)] rounded-lg text-sm font-medium hover:opacity-90"
           >
             {showForm ? "Cancel" : "Add Provider"}
           </button>
@@ -159,14 +159,17 @@ export function SSOTab({ orgId }: SSOTabProps) {
               />
             </div>
           </div>
-          <button type="submit" className="px-4 py-2 bg-[var(--accent)] text-white rounded-lg text-sm">
+          <button type="submit" className="px-4 py-2 bg-[var(--accent)] text-[var(--accent-foreground)] rounded-lg text-sm">
             Create Provider
           </button>
         </form>
       )}
 
       {loading ? (
-        <p className="text-sm text-[var(--text-muted)]">Loading providers…</p>
+        <div className="space-y-3" aria-busy="true" aria-live="polite">
+          <div className="h-16 rounded-lg bg-[var(--bg-tertiary)] animate-pulse" />
+          <div className="h-16 rounded-lg bg-[var(--bg-tertiary)] animate-pulse" />
+        </div>
       ) : providers.length === 0 ? (
         <p className="text-sm text-[var(--text-muted)]">No SSO providers configured.</p>
       ) : (

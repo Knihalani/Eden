@@ -16,6 +16,7 @@ import {
   useState,
 } from "react";
 import { createPortal } from "react-dom";
+import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import { ArrowLeft, ArrowRight, ExternalLink, X } from "lucide-react";
@@ -392,13 +393,13 @@ export function ProductTour({
                   )}
                   {isFinish && step.ctaHref ? (
                     <>
-                      <a
+                      <Link
                         href="/settings?tab=api-keys"
                         className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border-default)] px-3 py-1.5 text-xs font-medium text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)]"
                         onClick={() => onFinish()}
                       >
                         Create API key
-                      </a>
+                      </Link>
                       <a
                         href={step.ctaHref}
                         target="_blank"
