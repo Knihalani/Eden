@@ -71,6 +71,51 @@ def run_doctor(*, emit_test_event: bool = True, timeout_s: float = 5.0) -> Docto
     checks.append(
         DoctorCheck("base_url", True, f"base_url={cfg.base_url}", {"base_url": cfg.base_url})
     )
+    checks.append(
+        DoctorCheck(
+            "gateway_url",
+            True,
+            f"gateway_url={cfg.resolved_gateway_url()}",
+            {"gateway_url": cfg.resolved_gateway_url()},
+        )
+    )
+
+    enabled_opts = [
+        name
+        for name, on in (
+            ("exact_cache", cfg.exact_cache),
+            ("coalesce", cfg.coalesce),
+            ("provider_cache_layout", cfg.provider_cache_layout),
+            ("response_repair", cfg.response_repair),
+        )
+        if on
+    ]
+    disabled_opts = [
+        name
+        for name, on in (
+            ("exact_cache", cfg.exact_cache),
+            ("coalesce", cfg.coalesce),
+            ("provider_cache_layout", cfg.provider_cache_layout),
+            ("response_repair", cfg.response_repair),
+        )
+        if not on
+    ]
+    opt_msg = f"enabled: {', '.join(enabled_opts) or 'none'}"
+    if disabled_opts:
+        opt_msg += f"; disabled: {', '.join(disabled_opts)}"
+    checks.append(
+        DoctorCheck(
+            "gateway_optimizations",
+            True,
+            opt_msg,
+            {
+                "exact_cache": cfg.exact_cache,
+                "coalesce": cfg.coalesce,
+                "provider_cache_layout": cfg.provider_cache_layout,
+                "response_repair": cfg.response_repair,
+            },
+        )
+    )
 
     if cfg.disabled:
         checks.append(DoctorCheck("enabled", False, "SDK is disabled (EDEN_DISABLED=1)"))

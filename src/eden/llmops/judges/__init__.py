@@ -4,22 +4,12 @@ Public surface:
 
 - ``Judge`` / ``JudgeContext`` / ``JudgeScore`` — the abstraction
   every scorer implements. See ``base.py``.
-- ``JudgeRegistry`` — process-wide store of registered judges, with
-  a ``for_event(event)`` filter. Singleton via ``get_judge_registry()``.
-- ``HallucinationJudge`` / ``CorrectnessJudge`` / ``ToneJudge`` —
-  built-in judges shipped here. Custom judges are added via
-  ``registry.register(MyJudge())``.
-- ``JudgeRunner`` — runs judges on an event and persists results to
-  the ``judge_scores`` table. ``run_judges_for_event`` is a
-  convenience wrapper.
-- ``RedisTailer`` — async background worker that tails the
-  ``telemetry:{tenant_id}:{trace_id}:events`` Redis stream and
-  runs judges per event. Started from ``app.py`` lifespan.
-- ``schema`` — Pydantic models for the API surface.
-
-Defaults are registered lazily on first ``get_judge_registry()`` call
-so cold-path cost is low. Tests can call ``reset_judge_registry()``
-to start clean.
+- ``JudgeRegistry`` — process-wide store of registered judges.
+- ``UnifiedJudge`` — opt-in multi-axis LLM judge (``judges_llm_v1``).
+  Production float scores come from Layer A. ``SatisfactionJudge`` is
+  the only always-on built-in (SQL / feedback, no LLM).
+- ``JudgeRunner`` — runs judges on an event and persists results.
+- ``RedisTailer`` — async background worker (opt-in).
 """
 
 from __future__ import annotations
@@ -34,6 +24,7 @@ from .registry import (
     reset_judge_registry,
 )
 from .runner import JudgeRunner, run_judges_for_event
+from .unified import UNIFIED_AXES, UnifiedJudge
 
 __all__ = [
     "Judge",
@@ -48,6 +39,8 @@ __all__ = [
     "start_judge_tailer",
     "stop_judge_tailer",
     "register_default_judges",
+    "UnifiedJudge",
+    "UNIFIED_AXES",
 ]
 
 
@@ -55,22 +48,33 @@ logger = logging.getLogger(__name__)
 
 
 def register_default_judges(registry: JudgeRegistry) -> None:
-    """Register the built-in judge set on a registry.
+    """Register built-in judges.
 
-    Imports are deferred so the cold-path cost is zero for callers
-    that don't need the built-ins. Idempotent — re-registering
-    overwrites existing entries.
+    Production scores come from Layer A ($0 floats). UnifiedJudge is
+    opt-in via ``judges_llm_v1`` for calibration / on-demand re-score.
+    SatisfactionJudge (SQL / feedback, no LLM) always registers.
     """
-    from .correctness import CorrectnessJudge
-    from .hallucination import HallucinationJudge
-    from .tone import ToneJudge
+    from .satisfaction import SatisfactionJudge
 
-    registry.register(HallucinationJudge())
-    registry.register(CorrectnessJudge())
-    registry.register(ToneJudge())
+    registry.register(SatisfactionJudge())
+
+    llm_on = False
+    try:
+        from eden.config import get_settings
+
+        llm_on = bool(getattr(get_settings(), "judges_llm_v1", False))
+    except Exception:
+        llm_on = False
+    if not llm_on:
+        return
+
+    from .unified import UNIFIED_AXES, UnifiedJudge
+
+    unified = UnifiedJudge()
+    registry.register(unified)
+    for axis in UNIFIED_AXES:
+        registry.register_alias(axis, unified)
 
 
-# Module-level alias for the registry's local import. Defined here to
-# avoid a circular import at module load.
 def _register_defaults(registry: JudgeRegistry) -> None:
     register_default_judges(registry)

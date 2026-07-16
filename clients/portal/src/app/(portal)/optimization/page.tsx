@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import dynamic from "next/dynamic";
 import { ArrowRight, Brain, Loader2, TrendingUp, TrendingDown, Sparkles, Target, BarChart3 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -14,12 +14,16 @@ import { ErrorState } from "@/components/ui/error-state";
 import { StatCard } from "@/components/ui/stat-card";
 import { PageHeader } from "@/components/layout/page-header";
 import { PageContent } from "@/components/layout/page-content";
+import { EmbeddedSurface } from "@/components/layout/embedded-surface";
 import { NoOrgState } from "@/components/ui/no-org-state";
 import { useOrg } from "@/hooks/use-org";
 import { costApi } from "@/lib/api";
 import { useOrgQuery } from "@/hooks/use-api-query";
 import { queryKeys } from "@/lib/query-keys";
 import { cn } from "@/lib/utils";
+import { useQueryTab } from "@/hooks/use-query-tab";
+
+const COST_TABS = ["cost", "budget", "outcomes", "predict", "advisor"] as const;
 
 /* ----------------------- Sub-pages (lazy) ----------------------------- */
 
@@ -31,6 +35,20 @@ const OutcomesPage = dynamic(() => import("./outcomes/page"), {
     </div>
   ) });
 const PredictPage = dynamic(() => import("./predict/page"), {
+  ssr: false,
+  loading: () => (
+    <div className="flex h-64 items-center justify-center">
+      <Loader2 className="h-5 w-5 animate-spin text-[var(--text-muted)]" />
+    </div>
+  ) });
+const BudgetPage = dynamic(() => import("./budget/page"), {
+  ssr: false,
+  loading: () => (
+    <div className="flex h-64 items-center justify-center">
+      <Loader2 className="h-5 w-5 animate-spin text-[var(--text-muted)]" />
+    </div>
+  ) });
+const AdvisorPage = dynamic(() => import("./model-advisor/page"), {
   ssr: false,
   loading: () => (
     <div className="flex h-64 items-center justify-center">
@@ -595,9 +613,9 @@ function CostTab() {
 
 /* ----------------------- Page ---------------------------------------- */
 
-export default function OptimizationPage() {
+function OptimizationPageInner() {
   const { currentOrg } = useOrg();
-  const [tab, setTab] = useState<"cost" | "outcomes" | "predict">("cost");
+  const [tab, setTab] = useQueryTab("tab", COST_TABS, "cost");
 
   if (!currentOrg) {
     return <NoOrgState feature="Cost & usage optimization" />;
@@ -607,19 +625,22 @@ export default function OptimizationPage() {
     <PageContent size="wide">
       <PageHeader
         eyebrow="Optimize"
-        title="Cost & usage optimization"
-        subtitle="Where your tokens go, what caching saves, and how the budget is burning."
+        title="Cost"
+        subtitle="Spend, budgets, outcomes, forecasts, and model advice."
         icon={Sparkles}
+        description="Where your tokens go, what caching saves, and how the budget is burning."
       />
 
       <Tabs
         value={tab}
-        onValueChange={(v) => setTab(v as "cost" | "outcomes" | "predict")}
+        onValueChange={(v) => setTab(v as (typeof COST_TABS)[number])}
       >
         <TabsList variant="underline" className="w-full">
           <TabsTrigger value="cost" variant="underline">Cost</TabsTrigger>
+          <TabsTrigger value="budget" variant="underline">Budget</TabsTrigger>
           <TabsTrigger value="outcomes" variant="underline">Outcomes</TabsTrigger>
           <TabsTrigger value="predict" variant="underline">Predict</TabsTrigger>
+          <TabsTrigger value="advisor" variant="underline">Model Advisor</TabsTrigger>
         </TabsList>
 
         <AnimatePresence mode="wait">
@@ -632,38 +653,54 @@ export default function OptimizationPage() {
                 exit={{ opacity: 0, y: -4 }}
                 transition={{ duration: 0.15 }}
               >
-                {tab === "cost" && <CostTab />}
+                <CostTab />
               </motion.div>
+            </TabsContent>
+          )}
+          {tab === "budget" && (
+            <TabsContent value="budget" forceMount>
+              <EmbeddedSurface>
+                <BudgetPage />
+              </EmbeddedSurface>
             </TabsContent>
           )}
           {tab === "outcomes" && (
-            <TabsContent value="outcomes" forceMount={tab === "outcomes" ? true : undefined}>
-              <motion.div
-                key="outcomes"
-                initial={{ opacity: 0, y: 4 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -4 }}
-                transition={{ duration: 0.15 }}
-              >
-                {tab === "outcomes" && <OutcomesPage />}
-              </motion.div>
+            <TabsContent value="outcomes" forceMount>
+              <EmbeddedSurface>
+                <OutcomesPage />
+              </EmbeddedSurface>
             </TabsContent>
           )}
           {tab === "predict" && (
-            <TabsContent value="predict" forceMount={tab === "predict" ? true : undefined}>
-              <motion.div
-                key="predict"
-                initial={{ opacity: 0, y: 4 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -4 }}
-                transition={{ duration: 0.15 }}
-              >
-                {tab === "predict" && <PredictPage />}
-              </motion.div>
+            <TabsContent value="predict" forceMount>
+              <EmbeddedSurface>
+                <PredictPage />
+              </EmbeddedSurface>
+            </TabsContent>
+          )}
+          {tab === "advisor" && (
+            <TabsContent value="advisor" forceMount>
+              <EmbeddedSurface>
+                <AdvisorPage />
+              </EmbeddedSurface>
             </TabsContent>
           )}
         </AnimatePresence>
       </Tabs>
     </PageContent>
+  );
+}
+
+export default function OptimizationPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex h-48 items-center justify-center">
+          <Loader2 className="h-5 w-5 animate-spin text-[var(--text-muted)]" />
+        </div>
+      }
+    >
+      <OptimizationPageInner />
+    </Suspense>
   );
 }

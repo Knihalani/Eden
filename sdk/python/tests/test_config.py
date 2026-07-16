@@ -149,6 +149,30 @@ class TestGatewayHeaders:
         headers = cfg.gateway_headers()
         assert "X-PII-Bypass" not in headers
 
+    def test_optimization_defaults_emit_no_headers(self):
+        from eden_sdk.config import EdenConfig
+
+        cfg = EdenConfig(org_id="org-123", api_key="sk-eden")
+        headers = cfg.gateway_headers()
+        assert "X-Eden-Exact-Cache" not in headers
+        assert "X-Eden-Coalesce" not in headers
+        assert "X-Eden-Provider-Cache-Layout" not in headers
+        assert "X-Eden-Response-Repair" not in headers
+
+    def test_optimization_opt_out_headers(self):
+        from eden_sdk.config import EdenConfig
+
+        cfg = EdenConfig(
+            org_id="org-123",
+            api_key="sk-eden",
+            exact_cache=False,
+            response_repair=False,
+        )
+        headers = cfg.gateway_headers()
+        assert headers["X-Eden-Exact-Cache"] == "false"
+        assert headers["X-Eden-Response-Repair"] == "false"
+        assert "X-Eden-Coalesce" not in headers
+
 
 class TestGatewayURLField:
     """The ``gateway_url`` field on ``EdenConfig`` is the OpenAI-

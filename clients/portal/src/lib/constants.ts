@@ -24,6 +24,9 @@ export const STATUS_PAGE_URL = "https://status.edenobservability.com";
 /** Public Docusaurus docs site (hosted separately from the portal). */
 export const DOCS_URL = "https://docs.edenobservability.com";
 
+/** 5-minute quickstart on the docs site (product tour finish CTA). */
+export const DOCS_QUICKSTART_URL = `${DOCS_URL}/quickstart`;
+
 /** Maximum number of items the command palette tracks in localStorage. */
 export const COMMAND_PALETTE_RECENT_LIMIT = 5;
 

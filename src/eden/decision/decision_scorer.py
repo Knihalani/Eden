@@ -208,12 +208,12 @@ class DecisionScorer:
     # ── Helpers ────────────────────────────────────────────────────
 
     def _get_galileo_judges(self) -> list[Any]:
-        """Fetch the 3 Galileo judges from the global registry.
+        """Return UnifiedJudge (or unique WEIGHTS-axis judges).
 
-        Returns an empty list if the registry isn't available or
-        the judges aren't registered. Order matches
-        :attr:`WEIGHTS` so the same judge always appears in the
-        same slot in the response.
+        Production registers one UnifiedJudge under ``unified`` and
+        every axis alias; ``for_event`` / this helper dedupe by
+        identity so only one LLM call runs. Tests may still inject
+        separate per-axis fakes.
         """
         try:
             from eden.llmops.judges.registry import get_judge_registry
@@ -225,11 +225,20 @@ class DecisionScorer:
         except Exception as exc:
             logger.debug("decision_scorer: get_judge_registry failed: %s", exc)
             return []
+        unified = registry.get("unified")
+        if unified is not None:
+            return [unified]
         out: list[Any] = []
+        seen: set[int] = set()
         for name in self.WEIGHTS:
             j = registry.get(name)
-            if j is not None:
-                out.append(j)
+            if j is None:
+                continue
+            jid = id(j)
+            if jid in seen:
+                continue
+            seen.add(jid)
+            out.append(j)
         return out
 
     def _try_get_llm_client(self) -> Any:
@@ -265,39 +274,33 @@ class DecisionScorer:
         runner: Any,
         trace_id: str,
     ) -> list[Any]:
-        """Run the applicable judges on every event.
+        """Run judges on the last matching LLM event only (1 call/trace)."""
+        from eden.llmops.judges.base import JudgeScore
 
-        Returns a flat list of :class:`JudgeScore` objects across
-        all events. Per-event judge failures are logged and
-        skipped so one bad event doesn't poison the whole trace.
-        """
-        from eden.llmops.judges.base import JudgeScore  # for the return annotation
         all_scores: list[JudgeScore] = []
-        if runner is None:
+        if runner is None or not judges:
             return all_scores
+
+        # Prefer the last applicable event so long agent traces don't
+        # fan out one UnifiedJudge call per span.
+        chosen = None
         for event in events:
-            # The Galileo judges read ``event.tenant_id`` for
-            # ``judge_scores`` persistence. The events were
-            # fetched with ``WHERE tenant_id = $1`` so the
-            # column is always set in production; the ``or ""``
-            # is a defensive default for test fixtures that
-            # construct event dicts without a ``tenant_id`` key.
             ev = _build_light_event(event, tenant_id=event.get("tenant_id") or "")
-            applicable = [j for j in judges if j.matches(ev)]
-            if not applicable:
-                continue
-            try:
-                scores = await runner.run_for_event(
-                    ev, applicable, trace_id=trace_id
-                )
-            except Exception as exc:
-                logger.warning(
-                    "decision_scorer: judge run failed for event %s: %s",
-                    event.get("event_id"),
-                    exc,
-                )
-                continue
+            if any(j.matches(ev) for j in judges):
+                chosen = (ev, event)
+        if chosen is None:
+            return all_scores
+        ev, event = chosen
+        applicable = [j for j in judges if j.matches(ev)]
+        try:
+            scores = await runner.run_for_event(ev, applicable, trace_id=trace_id)
             all_scores.extend(scores)
+        except Exception as exc:
+            logger.warning(
+                "decision_scorer: judge run failed for event %s: %s",
+                event.get("event_id"),
+                exc,
+            )
         return all_scores
 
     def _fire_low_score_hooks(

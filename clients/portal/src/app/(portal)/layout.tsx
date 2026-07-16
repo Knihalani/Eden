@@ -50,6 +50,7 @@ import { buildBreadcrumbs } from "@/lib/breadcrumbs";
 import { PageHelpHint } from "@/components/layout/page-help-hint";
 import { ErrorBoundary } from "@/components/ui/error-boundary";
 import { OnboardingBanner } from "@/components/onboarding-banner";
+import { OnboardingOverlay } from "@/components/onboarding/OnboardingOverlay";
 import { BudgetTicker } from "@/components/budget-ticker";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { isKnownPortalPath } from "@/lib/portal-routes";
@@ -207,6 +208,15 @@ function PortalLayoutContent({ children }: { children: React.ReactNode }) {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [userDropdownOpen]);
 
+  useEffect(() => {
+    function onTourOpen() {
+      setCollapsed(false);
+      setSidebarOpen(true);
+    }
+    window.addEventListener("eden:product-tour", onTourOpen);
+    return () => window.removeEventListener("eden:product-tour", onTourOpen);
+  }, []);
+
   // ponytail: built-in PerformanceObserver for the three Core Web
   // Vitals (LCP, INP, CLS) — no new dep, real-user data without
   // shipping web-vitals. Production builds could forward these via
@@ -319,22 +329,17 @@ function PortalLayoutContent({ children }: { children: React.ReactNode }) {
     }
   }, [user, loading, router]);
 
-  // Authed user with no org: send them through the onboarding wizard
-  // instead of letting them land on /dashboard and stare at a
-  // NoOrgState card. Only redirect on routes that REQUIRE an org —
-  // /onboarding/* and the auth-bound flows (invite, settings/profile)
-  // are valid even for org-less users. The list is intentionally
-  // small: the wizard is the productive path for a brand-new user,
-  // and adding more prefixes dilutes the safety of this gate.
+  // Authed user with no org: stay on dashboard (overlay handles setup)
+  // instead of bouncing to a separate wizard island. Invite / profile
+  // / auth routes remain reachable without an org.
   useEffect(() => {
     if (loading || !user || currentOrg) return;
-    // Clerk may have an active org while Eden syncs — don't bounce
-    // the user away from dashboard during the brief sync window.
     if (orgSyncing) return;
     const path = pathname || "";
     const isOrglessFriendly =
       path === "/" ||
-      path.startsWith("/onboarding") ||
+      path === "/dashboard" ||
+      path.startsWith("/dashboard/") ||
       path.startsWith("/invite") ||
       path.startsWith("/settings/profile") ||
       path.startsWith("/settings/account") ||
@@ -342,7 +347,7 @@ function PortalLayoutContent({ children }: { children: React.ReactNode }) {
       path.startsWith("/sign-in") ||
       path.startsWith("/sign-up");
     if (!isOrglessFriendly) {
-      router.replace("/onboarding");
+      router.replace("/dashboard?onboarding=1");
     }
   }, [loading, user, currentOrg, orgSyncing, pathname, router]);
 
@@ -600,6 +605,7 @@ function PortalLayoutContent({ children }: { children: React.ReactNode }) {
               {pinnedItems.map((item) => (
                 <NavItem
                   key={item.id}
+                  tourId={item.id}
                   href={item.href}
                   icon={item.icon}
                   label={item.label}
@@ -621,6 +627,7 @@ function PortalLayoutContent({ children }: { children: React.ReactNode }) {
                 return (
                   <NavItem
                     key={item.id}
+                    tourId={item.id}
                     href={item.href}
                     icon={item.icon}
                     label={item.label}
@@ -927,6 +934,9 @@ function PortalLayoutContent({ children }: { children: React.ReactNode }) {
               orgs (created before 2026-07-01) or once onboarding is
               complete. Best-effort: an API failure just hides it. */}
           <OnboardingBanner collapsed={!!showAuthBanner} />
+          <Suspense fallback={null}>
+            <OnboardingOverlay />
+          </Suspense>
           {/* ErrorBoundary isolates render-time failures inside the
               page so a single bad component doesn't crash the entire
               portal chrome (sidebar + header stay usable, the user
@@ -972,10 +982,10 @@ function PortalLayoutContent({ children }: { children: React.ReactNode }) {
               </div>
               <div className="flex items-center gap-2 shrink-0">
                 <Link
-                  href="/onboarding"
+                  href="/dashboard?onboarding=1"
                   className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-[var(--accent)] hover:underline"
                 >
-                  Setup wizard
+                  Resume setup
                 </Link>
                 <button
                   onClick={() => void refreshOrgs()}
@@ -1314,6 +1324,7 @@ function NavSubItem({
 }
 
 function NavItem({
+  tourId,
   href,
   icon: Icon,
   label,
@@ -1325,6 +1336,8 @@ function NavItem({
   badge,
   pinned,
   onTogglePin }: {
+  /** Stable id for product-tour spotlight (`data-tour-id`). */
+  tourId?: string;
   href: string;
   icon: React.ComponentType<{ className?: string }>;
   label: string;
@@ -1351,7 +1364,7 @@ function NavItem({
   const hasChildren = !collapsed && children;
 
   return (
-    <div className="group/navitem relative">
+    <div className="group/navitem relative" data-tour-id={tourId || undefined}>
       {(() => {
         const link = (
           <PortalNavLink

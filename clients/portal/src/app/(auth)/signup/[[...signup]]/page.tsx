@@ -39,7 +39,7 @@ export default function SignupPage() {
             // org step; routing them straight to /onboarding gets
             // them to a productive state in one click. Mirrors the
             // /sign-up route so both paths behave identically.
-            fallbackRedirectUrl="/onboarding"
+            fallbackRedirectUrl="/dashboard?onboarding=1"
             signInForceRedirectUrl="/dashboard"
             appearance={clerkAppearance}
           />

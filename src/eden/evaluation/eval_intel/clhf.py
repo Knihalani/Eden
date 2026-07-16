@@ -233,13 +233,18 @@ class CLHFGenerator:
 
         if llm_client is not None:
             try:
+                from eden.llm.internal_router import route_sync
+
                 few_shot = _build_few_shot(examples)
                 prompt = _CLHF_GENERATION_PROMPT.format(few_shot=few_shot)
-                resp = llm_client.call(
-                    agent="clhf_generator",
-                    prompt=prompt,
+                resp = route_sync(
+                    "clhf_generator",
+                    prompt,
                     slot="fast",
                     max_tokens=400,
+                    llm_client=llm_client,
+                    output_type="json",
+                    requires_quality_check=False,
                 )
                 spec = _parse_metric_spec(getattr(resp, "content", ""))
             except Exception as exc:
@@ -261,11 +266,14 @@ class CLHFGenerator:
                             input=str(ex.get("input", ""))[:600],
                             output=str(ex.get("output", ""))[:600],
                         )
-                        eval_resp = llm_client.call(
-                            agent="clhf_reeval",
-                            prompt=eval_prompt,
+                        eval_resp = route_sync(
+                            "clhf_reeval",
+                            eval_prompt,
                             slot="fast",
                             max_tokens=120,
+                            llm_client=llm_client,
+                            output_type="json",
+                            requires_quality_check=False,
                         )
                         gen_score, _ = _parse_judge_response(
                             getattr(eval_resp, "content", ""),

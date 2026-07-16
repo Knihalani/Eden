@@ -161,81 +161,14 @@ async def run_investigator_llm_batch(
     batch: list[dict[str, Any]],
     events: list[dict[str, Any]],
 ) -> dict[str, dict[str, Any]]:
-    """Run **one** LLM completion over all enabled LLM schemas.
-
-    ``batch`` items carry ``{signal_id, name, investigator_prompt,
-    output_schema}``. Returns ``{signal_id: {matched, payload, confidence}}``.
-    Best-effort: on any error (no LLM configured, parse failure) returns an
-    empty dict so the caller falls back to heuristics.
-    """
-    if not batch:
-        return {}
-    try:
-        from eden.llm.client import get_llm_client
-
-        client = get_llm_client()
-    except Exception as exc:
-        logger.debug("signal_investigator: no LLM client: %s", exc)
-        return {}
-
-    schema_lines = []
-    for item in batch:
-        schema_lines.append(
-            f"- id={item['signal_id']} name={item['name']!r}: "
-            f"{item['investigator_prompt']} "
-            f"(schema: {json.dumps(item['output_schema'], default=str)})"
-        )
-    prompt = (
-        "You are an agent-trace signal investigator. For EACH signal below, "
-        "decide if it fired in the trace. Respond with a single JSON object "
-        "mapping each signal id to "
-        '{"matched": bool, "confidence": 0..1, "payload": {..}}.\n\n'
-        "SIGNALS:\n" + "\n".join(schema_lines) + "\n\nTRACE:\n"
-        + compress_trace(events)
-    )
-    try:
-        raw = await _one_completion(client, prompt)
-        parsed = json.loads(_extract_json(raw))
-    except Exception as exc:
-        logger.debug("signal_investigator: LLM batch failed: %s", exc)
-        return {}
-
-    out: dict[str, dict[str, Any]] = {}
-    for item in batch:
-        sig_id = item["signal_id"]
-        res = parsed.get(sig_id) if isinstance(parsed, dict) else None
-        if not isinstance(res, dict):
-            continue
-        payload = res.get("payload") if isinstance(res.get("payload"), dict) else {}
-        payload = {**payload, "method": "llm", "cost_usd": 0.0}
-        out[sig_id] = {
-            "matched": bool(res.get("matched")),
-            "confidence": float(res.get("confidence", 0.5) or 0.5),
-            "payload": payload,
-        }
-    # Attribute the single call's cost to the first signal for accounting.
-    if out:
-        first = next(iter(out.values()))
-        first["payload"]["batch_cost_usd"] = _LLM_BATCH_COST_USD
-    return out
+    """Deprecated — always returns {}. Use StatGate/heuristics instead."""
+    _ = (org_id, batch, events)
+    return {}
 
 
-async def _one_completion(client: Any, prompt: str) -> str:
-    """Issue exactly one chat completion and return its text."""
-    call = getattr(client, "acall", None) or getattr(client, "call", None)
-    if call is None:
-        raise RuntimeError("llm client has no call method")
-    result = call(
-        messages=[{"role": "user", "content": prompt}],
-        temperature=0.0,
-    )
-    if hasattr(result, "__await__"):
-        result = await result
-    if isinstance(result, str):
-        return result
-    if isinstance(result, dict):
-        return _s(result.get("content") or result.get("text") or result)
-    return _s(getattr(result, "content", result))
+async def _one_completion(prompt: str) -> str:
+    """Deprecated stub — signal investigator no longer calls LLMs."""
+    raise RuntimeError("signal investigator LLM path removed")
 
 
 def _extract_json(text: str) -> str:
@@ -297,12 +230,9 @@ async def investigate_trace(
         return []
 
     written: list[dict[str, Any]] = []
-    llm_batch: list[dict[str, Any]] = []
-    row_by_id: dict[str, Any] = {}
 
     for row in rows:
         signal_id = str(row["id"])
-        row_by_id[signal_id] = row
         statgate_rule = _row_get(row, "statgate_rule")
         inv_prompt = _row_get(row, "investigator_prompt")
         description = _s(row["description"])
@@ -319,16 +249,10 @@ async def investigate_trace(
                     org_id, trace_id, row, payload, agent_id=agent_id
                 )
         elif inv_prompt:
-            llm_batch.append(
-                {
-                    "signal_id": signal_id,
-                    "name": _s(row["name"]),
-                    "investigator_prompt": inv_prompt,
-                    "output_schema": _coerce_schema(row["output_schema"]),
-                }
-            )
-        else:
+            # LLM investigator path removed — heuristics only (UnifiedJudge
+            # + Layer A cover semantic detection without per-signal LLM).
             matched, payload, confidence = _heuristic_match(description, events)
+            payload = {**payload, "method": "heuristic_no_llm"}
             written.append(
                 await _write_event(
                     pg, org_id, signal_id, trace_id, matched, payload, confidence
@@ -338,22 +262,8 @@ async def investigate_trace(
                 await _maybe_write_stumble(
                     org_id, trace_id, row, payload, agent_id=agent_id
                 )
-
-    # ── Single LLM call for every enabled LLM schema (multi-schema) ──
-    if llm_batch:
-        llm_results = await run_investigator_llm_batch(org_id, llm_batch, events)
-        for item in llm_batch:
-            signal_id = item["signal_id"]
-            row = row_by_id[signal_id]
-            res = llm_results.get(signal_id)
-            if res is None:
-                matched, payload, confidence = _heuristic_match(
-                    _s(row["description"]), events
-                )
-            else:
-                matched = res["matched"]
-                payload = res["payload"]
-                confidence = res["confidence"]
+        else:
+            matched, payload, confidence = _heuristic_match(description, events)
             written.append(
                 await _write_event(
                     pg, org_id, signal_id, trace_id, matched, payload, confidence

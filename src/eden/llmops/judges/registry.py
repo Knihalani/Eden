@@ -45,17 +45,36 @@ class JudgeRegistry:
     def list(self) -> list[str]:
         return sorted(self._judges.keys())
 
+    def register_alias(self, name: str, judge: Judge) -> None:
+        """Map an extra name to an existing judge (axis aliases)."""
+        if not name:
+            raise ValueError("alias name must be non-empty")
+        self._judges[name] = judge
+
     def all(self) -> list[Judge]:
-        return list(self._judges.values())
+        """Unique judge instances (aliases collapse to one object)."""
+        seen: set[int] = set()
+        out: list[Judge] = []
+        for j in self._judges.values():
+            jid = id(j)
+            if jid in seen:
+                continue
+            seen.add(jid)
+            out.append(j)
+        return out
 
     def for_event(self, event: TelemetryEvent) -> list[Judge]:
-        """Return every registered judge whose ``matches(event)`` is True.
-
-        The runner calls this per event to decide which judges to
-        invoke. Returning a list (not a generator) lets the caller
-        decide the parallelism strategy.
-        """
-        return [j for j in self._judges.values() if j.matches(event)]
+        """Return unique matching judges (dedupe aliases by identity)."""
+        seen: set[int] = set()
+        out: list[Judge] = []
+        for j in self._judges.values():
+            jid = id(j)
+            if jid in seen:
+                continue
+            if j.matches(event):
+                seen.add(jid)
+                out.append(j)
+        return out
 
 
 # ── Singleton accessor ──────────────────────────────────────────────

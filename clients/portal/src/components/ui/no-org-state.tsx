@@ -59,7 +59,7 @@ export function NoOrgState({
         {description}
       </p>
       <Link
-        href="/onboarding"
+        href="/dashboard?onboarding=1"
         className="inline-flex items-center gap-2 px-4 py-2 bg-[var(--accent)] text-[var(--bg-base)] rounded-lg text-sm font-medium hover:bg-[var(--accent-hover)] transition-colors"
       >
         <Building2 className="w-4 h-4" />

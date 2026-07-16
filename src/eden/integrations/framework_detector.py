@@ -12,13 +12,10 @@ imports (``from langchain.*``, ``import openai``, ``from anthropic``,
 etc.). Heuristics are conservative — we never claim "custom" until
 we have looked at a meaningful sample of files.
 
-When heuristics are ambiguous, :mod:`eden.integrations.onboarding_agent`
-refines detection with the T3 model (validated output only).
-
 Originally lived under ``cli/eden/framework_detector.py`` while the
 agent CLI shipped. The CLI was retired in the June 2026 cleanup; this
-module is now imported by ``eden.api.routes.github`` (onboarding flow)
-and the eval harness generator.
+module is used by the SDK integrator / local CLI paths and the eval
+harness generator. Portal auto-integrate PRs were retired July 2026.
 """
 
 from __future__ import annotations

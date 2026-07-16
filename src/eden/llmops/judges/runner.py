@@ -72,31 +72,33 @@ class JudgeRunner:
             trace_id=trace_id or event.trace_id,
         )
 
-        # Run judges concurrently via asyncio.gather so a 4-judge
-        # event scores in ~100ms (one LLM call's worth of latency)
-        # rather than ~400ms (sequential). The per-tenant semaphore
-        # in self._sem (set in __init__) bounds total fan-out so a
-        # noisy tenant can't starve other tenants.
-        async def _score_one(judge: Judge) -> JudgeScore | None:
+        # Judges may return one JudgeScore or a list (UnifiedJudge).
+        # Concurrent gather; semaphore bounds fan-out.
+        async def _score_one(judge: Judge) -> list[JudgeScore]:
             try:
-                score = await judge.score(event, ctx)
+                raw = await judge.score(event, ctx)
             except Exception as exc:
                 logger.debug(
                     f"judge {judge.name} raised unexpectedly: {exc}"
                 )
-                return None
-            await self._persist(score)
-            return score
+                return []
+            scores = raw if isinstance(raw, list) else [raw]
+            for score in scores:
+                if score is not None:
+                    await self._persist(score)
+            return [s for s in scores if s is not None]
 
         if self._sem is not None:
-            async def _guarded(judge: Judge) -> JudgeScore | None:
+            async def _guarded(judge: Judge) -> list[JudgeScore]:
                 async with self._sem:
                     return await _score_one(judge)
             tasks = [_guarded(j) for j in judges]
         else:
             tasks = [_score_one(j) for j in judges]
         scored = await asyncio.gather(*tasks, return_exceptions=False)
-        results: list[JudgeScore] = [s for s in scored if s is not None]
+        results: list[JudgeScore] = []
+        for batch in scored:
+            results.extend(batch)
         return results
 
     async def _persist(self, score: JudgeScore) -> None:

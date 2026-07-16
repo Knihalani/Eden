@@ -1,12 +1,14 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { Suspense, useMemo, useState } from "react";
+import dynamic from "next/dynamic";
 import {
   ArrowDownRight,
   ArrowUpRight,
   BarChart3,
   Clock,
   Coins,
+  Loader2,
   RefreshCw,
   Zap,
 } from "lucide-react";
@@ -28,6 +30,22 @@ import { ChartCard } from "@/components/ui/chart-card";
 import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 import { PageHeader } from "@/components/layout/page-header";
 import { PageContent } from "@/components/layout/page-content";
+import { EmbeddedSurface } from "@/components/layout/embedded-surface";
+import { useQueryTab } from "@/hooks/use-query-tab";
+import { cn } from "@/lib/utils";
+
+const ANALYTICS_TABS = ["overview", "insights", "tools", "users"] as const;
+const InsightsView = dynamic(() => import("../insights/page"), { ssr: false, loading: () => <TabLoading /> });
+const ToolsView = dynamic(() => import("../tools/page"), { ssr: false, loading: () => <TabLoading /> });
+const UsersView = dynamic(() => import("../users/page"), { ssr: false, loading: () => <TabLoading /> });
+
+function TabLoading() {
+  return (
+    <div className="flex h-48 items-center justify-center">
+      <Loader2 className="h-4 w-4 animate-spin text-[var(--text-muted)]" />
+    </div>
+  );
+}
 import { NoOrgState } from "@/components/ui/no-org-state";
 import { ErrorState } from "@/components/ui/error-state";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -36,7 +54,6 @@ import { useOrg } from "@/hooks/use-org";
 import { api } from "@/lib/api";
 import { useOrgQuery } from "@/hooks/use-api-query";
 import { queryKeys } from "@/lib/query-keys";
-import { cn } from "@/lib/utils";
 import {
   AXIS_TICK_PROPS,
   CHART_COLORS,
@@ -439,9 +456,18 @@ const DAY_OPTIONS = [
 ] as const;
 
 export default function AnalyticsPage() {
+  return (
+    <Suspense fallback={<TabLoading />}>
+      <AnalyticsPageInner />
+    </Suspense>
+  );
+}
+
+function AnalyticsPageInner() {
   const { currentOrg } = useOrg();
   const orgId = currentOrg?.id ?? null;
   const [days, setDays] = useState<number>(30);
+  const [tab, setTab] = useQueryTab("tab", ANALYTICS_TABS, "overview");
 
   // Phase B.1: removed fetchWithFallback + makeSynthetic* — the
   // /analytics/* sub-routes (Phase A.1) return real data now.
@@ -514,9 +540,11 @@ export default function AnalyticsPage() {
       <PageHeader
         eyebrow="Observe"
         title="Analytics"
-        subtitle="Token throughput, latency, traffic patterns, and per-agent cost."
+        subtitle="Usage, tools, users, and trend insights."
         icon={BarChart3}
+        description="Cross-cutting analytics: usage, cost, latency, and quality over time."
         actions={
+          tab === "overview" ? (
           <div
             role="group"
             aria-label="Date range"
@@ -539,8 +567,47 @@ export default function AnalyticsPage() {
               </button>
             ))}
           </div>
+          ) : undefined
         }
       />
+
+      <div role="tablist" aria-label="Analytics sections" className="mb-6 flex gap-1 border-b border-[var(--border-default)]">
+        {ANALYTICS_TABS.map((t) => (
+          <button
+            key={t}
+            type="button"
+            role="tab"
+            aria-selected={tab === t}
+            onClick={() => setTab(t)}
+            className={cn(
+              "px-3 py-2 text-sm font-medium capitalize border-b-2 -mb-px",
+              tab === t
+                ? "border-[var(--accent)] text-[var(--text-primary)]"
+                : "border-transparent text-[var(--text-muted)] hover:text-[var(--text-primary)]",
+            )}
+          >
+            {t}
+          </button>
+        ))}
+      </div>
+
+      {tab === "insights" && (
+        <EmbeddedSurface>
+          <InsightsView />
+        </EmbeddedSurface>
+      )}
+      {tab === "tools" && (
+        <EmbeddedSurface>
+          <ToolsView />
+        </EmbeddedSurface>
+      )}
+      {tab === "users" && (
+        <EmbeddedSurface>
+          <UsersView />
+        </EmbeddedSurface>
+      )}
+      {tab === "overview" && (
+      <>
 
       {errorMessage && !loading && (
         <ErrorState
@@ -619,6 +686,8 @@ export default function AnalyticsPage() {
           </>
         )}
       </div>
+      </>
+      )}
     </PageContent>
   );
 }

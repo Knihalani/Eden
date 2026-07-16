@@ -395,26 +395,17 @@ async def _call_synthesis_llm(prompt: str) -> str | None:
     correctly.
     """
     try:
-        from eden.llm.client import get_llm_client
-    except Exception as exc:  # pragma: no cover - defensive
-        logger.debug("metric_studio.synthesiser: llm import failed: %s", exc)
-        return None
+        from eden.llm.internal_router import route_async
 
-    try:
-        client = get_llm_client()
-    except Exception as exc:
-        logger.debug(
-            "metric_studio.synthesiser: get_llm_client failed: %s", exc
-        )
-        return None
-
-    try:
         t0 = time.monotonic()
-        resp = client.call(
-            agent="metric_studio_synthesiser",
-            prompt=prompt,
+        resp = await route_async(
+            "metric_studio_synthesiser",
+            prompt,
             slot=self_slot(),
-            max_tokens=RUBRIC_TOKEN_CAP + 256,  # headroom for prose
+            max_tokens=RUBRIC_TOKEN_CAP + 256,
+            output_type="json",
+            requires_quality_check=False,
+            description="Synthesize custom metric rubric",
         )
         latency_ms = (time.monotonic() - t0) * 1000.0
         content = (getattr(resp, "content", "") or "").strip()

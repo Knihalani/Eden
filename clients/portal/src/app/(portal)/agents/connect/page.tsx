@@ -1,29 +1,24 @@
 /**
  * /agents/connect — post-onboarding "+ Connect new agent" flow.
  *
- * Same OnboardingConnectFlow component as the wizard's step 4, but
- * standalone — no progress bar, lives inside the regular portal
- * layout. After a successful PR open, polls the PR-run status and
- * surfaces it in-page so the user doesn't have to leave for GitHub.
+ * GitHub App install + repo link only. SDK auto-integrate PRs are retired.
  */
 "use client";
 
 import { useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, ExternalLink, GitBranch } from "lucide-react";
+import { ArrowLeft, Check, GitBranch } from "lucide-react";
 import { OnboardingConnectFlow } from "@/components/onboarding/OnboardingConnectFlow";
 import { NoOrgState } from "@/components/ui/no-org-state";
 import { PageHeader } from "@/components/layout/page-header";
 import { PageContent } from "@/components/layout/page-content";
 import { usePermissions } from "@/hooks/use-permissions";
-import type { OnboardingPRRun } from "@/lib/api";
+import type { GitHubRepo } from "@/lib/api";
 
 export default function ConnectAgentPage() {
-  const [lastRun, setLastRun] = useState<OnboardingPRRun | null>(null);
+  const [linked, setLinked] = useState<GitHubRepo | null>(null);
   const { hasPermission } = usePermissions();
 
-  // Gate on integrations:write — usePermissions includes Clerk
-  // org:admin / is_owner fallbacks while Eden role syncs.
   if (!hasPermission("integrations:write")) {
     return (
       <NoOrgState
@@ -44,35 +39,38 @@ export default function ConnectAgentPage() {
       </Link>
 
       <PageHeader
-        eyebrow="Fleet"
-        title="Connect a new agent"
-        subtitle="Wire another repo into Eden. Same flow as the onboarding wizard — pick a repo, Eden opens an SDK-integration PR."
+        eyebrow="Agents"
+        title="Connect a repository"
+        subtitle="Install the Eden GitHub App and link a repo. Then install the SDK manually to start sending traces."
         icon={GitBranch}
+        description="Link a GitHub repository so Eden can list it for agents and improvement plans."
       />
 
-      {lastRun && lastRun.pr_url && (
+      {linked && (
         <div
           role="status"
           aria-live="polite"
           className="mb-6 rounded-lg border border-[var(--accent)]/40 bg-[var(--accent-faint)] p-4"
         >
-          <div className="text-sm font-medium text-[var(--accent)]">
-            PR opened for {lastRun.repo_full_name}
+          <div className="flex items-center gap-2 text-sm font-medium text-[var(--accent)]">
+            <Check className="h-4 w-4" aria-hidden="true" />
+            Linked {linked.full_name}
           </div>
-          <a
-            href={lastRun.pr_url}
-            target="_blank"
-            rel="noreferrer"
-            className="mt-1 inline-flex items-center gap-1 text-xs underline hover:text-[var(--text-primary)]"
+          <p className="mt-1 text-xs text-[var(--text-secondary)]">
+            Next: install the Eden SDK in that repo so traces appear on the dashboard.
+          </p>
+          <Link
+            href="/agents"
+            className="mt-2 inline-block text-xs text-[var(--accent)] underline"
           >
-            View on GitHub
-            <ExternalLink className="h-3 w-3" aria-hidden="true" />
-          </a>
+            Back to agents
+          </Link>
         </div>
       )}
 
-      <OnboardingConnectFlow onIntegrated={setLastRun} />
-    
+      <OnboardingConnectFlow
+        onLinked={(repo) => setLinked(repo)}
+      />
     </PageContent>
   );
 }

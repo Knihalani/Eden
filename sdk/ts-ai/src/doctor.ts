@@ -54,6 +54,43 @@ export async function runDoctor(opts: {
     detail: { baseUrl: cfg.baseUrl },
   });
 
+  checks.push({
+    name: "gatewayUrl",
+    ok: true,
+    message: `gatewayUrl=${client.resolvedGatewayUrl()}`,
+    detail: { gatewayUrl: client.resolvedGatewayUrl() },
+  });
+
+  const enabledOpts = [
+    ["exact_cache", cfg.exactCache],
+    ["coalesce", cfg.coalesce],
+    ["provider_cache_layout", cfg.providerCacheLayout],
+    ["response_repair", cfg.responseRepair],
+  ]
+    .filter(([, on]) => on)
+    .map(([name]) => name);
+  const disabledOpts = [
+    ["exact_cache", cfg.exactCache],
+    ["coalesce", cfg.coalesce],
+    ["provider_cache_layout", cfg.providerCacheLayout],
+    ["response_repair", cfg.responseRepair],
+  ]
+    .filter(([, on]) => !on)
+    .map(([name]) => name);
+  let optMsg = `enabled: ${enabledOpts.join(", ") || "none"}`;
+  if (disabledOpts.length) optMsg += `; disabled: ${disabledOpts.join(", ")}`;
+  checks.push({
+    name: "gatewayOptimizations",
+    ok: true,
+    message: optMsg,
+    detail: {
+      exactCache: cfg.exactCache,
+      coalesce: cfg.coalesce,
+      providerCacheLayout: cfg.providerCacheLayout,
+      responseRepair: cfg.responseRepair,
+    },
+  });
+
   const healthUrl = `${cfg.baseUrl.replace(/\/$/, "")}/health`;
   try {
     const headers: Record<string, string> = {};

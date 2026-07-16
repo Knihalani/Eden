@@ -1,94 +1,47 @@
 /**
- * Onboarding progress — single source of truth for step counters.
- *
- * Cat-23 wizard state (`onboardingApi.step`) drives progress. Display
- * collapses the optional wait-for-PR URL into the install slot so every
- * surface shows the same denominator:
- *
- *   welcome → connect → install → done
- *   (wait / wait_for_pr → install slot, label overridden)
- *
- * Wizard routes may still visit `/onboarding/wait`; progress chrome
- * must not invent a separate "1 of 5" counter.
+ * Onboarding progress — product tour resume chip + legacy Cat-23 mapping.
  */
 
+import {
+  PRODUCT_TOUR_STEPS,
+  PRODUCT_TOUR_TOTAL,
+  tourIndexFromOnboardingStep,
+} from "@/lib/product-tour";
+
 export interface OnboardingProgressStep {
-  id: "welcome" | "connect" | "install" | "done";
+  id: string;
   label: string;
   blurb: string;
   href: string;
 }
 
-/** User-facing steps (done is terminal; excluded from "X of Y" denom). */
-export const ONBOARDING_PROGRESS_STEPS: OnboardingProgressStep[] = [
-  {
-    id: "welcome",
-    label: "Welcome",
-    blurb: "Get started with Eden",
-    href: "/onboarding",
-  },
-  {
-    id: "connect",
-    label: "Connect repo",
-    blurb: "Open an SDK integration PR",
-    href: "/onboarding/connect",
-  },
-  {
-    id: "install",
-    label: "Install SDK",
-    blurb: "Copy the snippet into your agent",
-    href: "/onboarding/install",
-  },
-  {
-    id: "done",
-    label: "Done",
-    blurb: "Explore the dashboard",
-    href: "/onboarding/done",
-  },
-];
+export const ONBOARDING_PROGRESS_STEPS: OnboardingProgressStep[] =
+  PRODUCT_TOUR_STEPS.map((s) => ({
+    id: s.id,
+    label: s.title,
+    blurb: s.body.slice(0, 80) + (s.body.length > 80 ? "…" : ""),
+    href: "/dashboard?onboarding=1",
+  }));
 
-/** Progress denominator — excludes terminal "done". */
-export const ONBOARDING_PROGRESS_TOTAL = ONBOARDING_PROGRESS_STEPS.length - 1;
+export const ONBOARDING_PROGRESS_TOTAL = PRODUCT_TOUR_TOTAL;
 
-/**
- * Map cat-23 / legacy step ids onto the shared progress order.
- * Wait-for-PR collapses into the install slot.
- */
 export function onboardingProgressIndex(
   step: string | null | undefined,
 ): number {
-  const s = (step || "welcome").toLowerCase();
-  if (s === "done") return 3;
-  if (
-    s === "install" ||
-    s === "install_sdk" ||
-    s === "wait" ||
-    s === "wait_for_pr"
-  ) {
-    return 2;
-  }
-  if (s === "connect" || s === "connect_github") return 1;
-  // welcome | org_setup | org | tour | autonomous | unknown
-  return 0;
+  return tourIndexFromOnboardingStep(step);
 }
 
-/** Map a wizard pathname onto the same progress order. */
+/** Legacy path helper — onboarding routes redirect to tour overlay. */
 export function onboardingProgressIndexFromPath(pathname: string): number {
-  const path = (pathname || "").replace(/\/$/, "") || "/onboarding";
-  if (path === "/onboarding/done") return 3;
-  if (
-    path === "/onboarding/install" ||
-    path === "/onboarding/wait"
-  ) {
-    return 2;
-  }
-  if (path === "/onboarding/connect") return 1;
+  const path = (pathname || "").replace(/\/$/, "") || "/dashboard";
+  if (path.includes("install") || path.includes("wait")) return PRODUCT_TOUR_TOTAL - 1;
+  if (path.includes("connect")) return 1;
+  if (path.includes("done")) return PRODUCT_TOUR_TOTAL - 1;
   return 0;
 }
 
-export function isWaitPath(pathname: string): boolean {
-  const path = (pathname || "").replace(/\/$/, "");
-  return path === "/onboarding/wait";
+export function isWaitPath(_pathname: string): boolean {
+  return false;
 }
 
 export function isOnboardingWizardPath(pathname: string | null | undefined): boolean {
@@ -98,7 +51,6 @@ export function isOnboardingWizardPath(pathname: string | null | undefined): boo
 
 export interface OnboardingProgressView {
   index: number;
-  /** 1-based display step (capped at TOTAL). */
   current: number;
   total: number;
   label: string;
@@ -112,25 +64,20 @@ export function formatOnboardingProgress(
   opts?: { fromPath?: boolean },
 ): OnboardingProgressView {
   const index = opts?.fromPath
-    ? onboardingProgressIndexFromPath(stepOrPath || "/onboarding")
+    ? onboardingProgressIndexFromPath(stepOrPath || "/dashboard")
     : onboardingProgressIndex(stepOrPath);
   const step =
-    ONBOARDING_PROGRESS_STEPS[Math.min(index, ONBOARDING_PROGRESS_STEPS.length - 1)] ??
-    ONBOARDING_PROGRESS_STEPS[0];
-  const waiting =
-    opts?.fromPath
-      ? isWaitPath(stepOrPath || "")
-      : ["wait", "wait_for_pr"].includes((stepOrPath || "").toLowerCase());
+    PRODUCT_TOUR_STEPS[Math.min(index, PRODUCT_TOUR_TOTAL - 1)] ??
+    PRODUCT_TOUR_STEPS[0];
+  const done = (stepOrPath || "").toLowerCase() === "done";
 
   return {
     index,
-    current: Math.min(index + 1, ONBOARDING_PROGRESS_TOTAL),
-    total: ONBOARDING_PROGRESS_TOTAL,
-    label: waiting ? "Waiting for PR" : step.label,
-    blurb: waiting
-      ? "Merge the integration PR, then install the SDK"
-      : step.blurb,
-    href: waiting ? "/onboarding/wait" : step.href,
-    isComplete: index >= ONBOARDING_PROGRESS_TOTAL || stepOrPath === "done",
+    current: Math.min(index + 1, PRODUCT_TOUR_TOTAL),
+    total: PRODUCT_TOUR_TOTAL,
+    label: step.title,
+    blurb: step.body.slice(0, 72) + (step.body.length > 72 ? "…" : ""),
+    href: "/dashboard?onboarding=1",
+    isComplete: done,
   };
 }

@@ -192,10 +192,13 @@ class RubricJudge(Judge):
 
         t0 = time.monotonic()
         try:
-            resp = ctx.llm_client.call(
+            from eden.llmops.judges._router import route_judge_call
+            from eden.llmops.judges.base import JudgeContext
+
+            resp = route_judge_call(
+                JudgeContext(event=event, llm_client=ctx.llm_client, model_slot=self.model_slot),
                 agent=f"judge_{self.name}",
                 prompt=prompt,
-                slot=self.model_slot,
                 max_tokens=120,
             )
         except Exception as exc:
@@ -618,18 +621,17 @@ async def _score_rubric(
         output_block=output_block,
     )
     try:
-        from eden.llm.client import get_llm_client
+        from eden.llm.internal_router import route_sync
 
-        client = get_llm_client()
-    except Exception as exc:
-        return None, "", "n/a", 0.0, f"llm_unavailable:{type(exc).__name__}"
-    t0 = time.monotonic()
-    try:
-        resp = client.call(
-            agent=f"judge_{judge_name}",
-            prompt=prompt,
+        t0 = time.monotonic()
+        resp = route_sync(
+            f"judge_{judge_name}",
+            prompt,
             slot="fast",
             max_tokens=120,
+            output_type="json",
+            requires_quality_check=False,
+            description="Metric studio rubric judge test",
         )
     except Exception as exc:
         return None, "", "n/a", 0.0, f"llm_error:{type(exc).__name__}"

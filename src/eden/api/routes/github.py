@@ -22,16 +22,16 @@ Routes:
 * ``GET  /orgs/{org_id}/github/repos``
     Owner/admin — list repos the org's installations have access to.
 * ``POST /orgs/{org_id}/github/integrate``
-    Owner/admin — runs detection + opens the SDK-integration PR.
+    Retired — returns 410. Manual SDK install replaces auto-PR.
 * ``GET  /orgs/{org_id}/onboarding/state``
     Member — fetch the org's wizard state.
 * ``POST /orgs/{org_id}/onboarding/state``
     Member — patch the wizard state (advance, mark agent_setup_choice).
 * ``GET  /orgs/{org_id}/onboarding/pr-runs``
-    Member — list integration PR runs.
+    Member — list historical integration PR runs (read-only).
 
 RBAC: the `integrations:write` permission gates the write-side routes
-(``authorize``, ``integrate``). The repo list + state-read routes are
+(``authorize``, ``claim``). The repo list + state-read routes are
 member-level, but the wizard hides them client-side from
 member/viewer roles so they only see the "ask your admin" callout.
 """
@@ -39,7 +39,6 @@ from __future__ import annotations
 
 import json
 import logging
-import uuid
 from datetime import UTC, datetime
 from typing import Any
 
@@ -56,7 +55,6 @@ from eden.api.deps import (
 )
 from eden.api.utils.redact import redact_all
 from eden.config import get_settings
-from eden.integrations.onboarding_agent import build_integration_for_repo
 from eden.integrations.github import (
     GitHubAPIError,
     GitHubConfigError,
@@ -64,8 +62,6 @@ from eden.integrations.github import (
     is_configured,
     verify_webhook_signature,
 )
-from eden.providers.pr import GitHubPRProvider, PRCreateRequest
-from eden.providers.repo import FileEntry, GitHubRepoProvider
 from eden.storage.postgres import get_postgres_client
 
 logger = logging.getLogger(__name__)
@@ -122,13 +118,6 @@ class RepoOut(BaseModel):
     description: str = ""
     html_url: str
     installation_id: int
-
-
-class IntegrateRequest(BaseModel):
-    installation_id: int
-    repo_full_name: str
-    agent_id: str | None = None
-    agent_name: str | None = None
 
 
 class ClaimInstallationRequest(BaseModel):
@@ -742,127 +731,24 @@ async def list_org_repos(
     return out
 
 
-@org_router.post("/github/integrate", response_model=PRRunOut)
+@org_router.post("/github/integrate")
 async def integrate_repo(
     org_id: str,
-    req: IntegrateRequest,
-    user: dict = Depends(get_current_user),
     org: dict = Depends(require_org_permission_dep("integrations:write")),
-) -> PRRunOut:
-    """Detect the framework + open the integration PR.
+) -> None:
+    """Retired: auto-integration PRs are no longer opened.
 
-    Returns the new ``onboarding_pr_runs`` row. The wizard polls
-    ``GET /orgs/{org_id}/onboarding/pr-runs`` for status changes.
+    Install the SDK manually (onboarding overlay / docs). GitHub App
+    install + repo listing remain available for Agents → Connect.
     """
-    eden_org_id = str(org["org_id"])
-    eden_user_id = await resolve_eden_user_id(user.get("user_id"))
-    pg = await get_postgres_client()
-    # Idempotency: if there's already an OPEN run for this (org, agent,
-    # repo) triple, return it instead of opening a duplicate PR.
-    existing = await pg.fetchrow(
-        """
-        SELECT * FROM onboarding_pr_runs
-        WHERE org_id = $1
-          AND repo_full_name = $2
-          AND COALESCE(agent_id, '') = COALESCE($3, '')
-          AND status IN ('pending', 'opened')
-        ORDER BY created_at DESC
-        LIMIT 1
-        """,
-        eden_org_id, req.repo_full_name, req.agent_id,
+    raise HTTPException(
+        status_code=410,
+        detail=(
+            "GitHub auto-integrate PR is retired. "
+            "Install the Eden SDK manually; use GitHub App install only to "
+            "link repos for listing."
+        ),
     )
-    if existing:
-        return _row_to_pr_run_out(dict(existing))
-    # Insert pending row up-front so the wizard can see "in progress".
-    run_row = await pg.fetchrow(
-        """
-        INSERT INTO onboarding_pr_runs
-            (org_id, agent_id, installation_id, repo_full_name,
-             status, opened_by_user_id)
-        VALUES ($1, $2, $3, $4, 'pending', $5)
-        RETURNING *
-        """,
-        eden_org_id, req.agent_id, int(req.installation_id),
-        req.repo_full_name, eden_user_id,
-    )
-    run_id = str(run_row["id"])
-    # Mint a token + run detection.
-    try:
-        _, token = await _client_for(req.installation_id)
-        repo_provider = GitHubRepoProvider(token=token.token, repo=req.repo_full_name)
-        default_branch = await repo_provider.get_default_branch()
-        detection, plan = await build_integration_for_repo(
-            repo_provider, org_id=eden_org_id,
-        )
-        # Build the file changes for the PR.
-        files = [
-            FileEntry(path=c.path, size=len(c.content), content=c.content)
-            for c in plan.changes
-        ]
-        pr_provider = GitHubPRProvider(token=token.token, repo=req.repo_full_name)
-        agent_label = req.agent_name or req.agent_id or "your agent"
-        branch = f"eden/onboarding-{int(datetime.now(UTC).timestamp())}"
-        pr = await pr_provider.create_pr(PRCreateRequest(
-            title=f"[Eden] Auto-instrument {agent_label}",
-            body=_format_pr_body(detection, plan, agent_label),
-            branch=branch,
-            base=default_branch,
-            files=files,
-            labels=["eden", "onboarding"],
-            commit_message=f"eden: auto-instrument {agent_label}",
-        ))
-        await pg.execute(
-            """
-            UPDATE onboarding_pr_runs
-            SET status = 'opened',
-                framework = $1,
-                language = $2,
-                branch = $3,
-                pr_number = $4,
-                pr_url = $5,
-                detail = $6::jsonb,
-                opened_at = NOW()
-            WHERE id = $7
-            """,
-            detection.framework,
-            detection.language,
-            branch,
-            pr.number,
-            pr.url,
-            json.dumps({
-                "detection": detection.to_dict(),
-                "plan": plan.to_dict(),
-            }),
-            run_id,
-        )
-    except (GitHubAPIError, GitHubConfigError) as exc:
-        logger.warning("integrate_repo GitHub error: %s", redact_all(str(exc)))
-        await pg.execute(
-            """
-            UPDATE onboarding_pr_runs
-            SET status = 'failed',
-                detail = $1::jsonb
-            WHERE id = $2
-            """,
-            json.dumps({"error": str(exc)}),
-            run_id,
-        )
-    except Exception as exc:  # noqa: BLE001 — wide on purpose, last-resort
-        logger.exception("integrate_repo unexpected error: %s", redact_all(str(exc)))
-        await pg.execute(
-            """
-            UPDATE onboarding_pr_runs
-            SET status = 'failed',
-                detail = $1::jsonb
-            WHERE id = $2
-            """,
-            json.dumps({"error": "unexpected", "message": str(exc)}),
-            run_id,
-        )
-    fresh = await pg.fetchrow(
-        "SELECT * FROM onboarding_pr_runs WHERE id = $1", run_id,
-    )
-    return _row_to_pr_run_out(dict(fresh) if fresh else {})
 
 
 @org_router.get("/onboarding/pr-runs", response_model=list[PRRunOut])
@@ -990,93 +876,3 @@ def _row_to_pr_run_out(row: dict[str, Any]) -> PRRunOut:
     )
 
 
-def _format_pr_body(detection: Any, plan: Any, agent_label: str) -> str:
-    """Render a human-friendly PR description."""
-    lines: list[str] = [
-        "## 🌱 Eden auto-instrumentation",
-        "",
-        f"Wires `{agent_label}` into Eden so every run streams traces, "
-        "costs, judge scores, and replay data to your dashboard.",
-        "",
-        f"**Detected framework:** `{detection.framework}` "
-        f"(`{detection.language}`, confidence {detection.confidence:.2f})",
-        "",
-        "### File changes",
-        "",
-    ]
-    for ch in plan.changes:
-        lines.append(f"- **{ch.path}** — {ch.description}")
-    if plan.notes:
-        lines.append("")
-        lines.append("### Notes")
-        for note in plan.notes:
-            lines.append(f"- {note}")
-    lines.extend([
-        "",
-        "### What to do",
-        "",
-        "1. Set `EDEN_API_KEY` + `EDEN_DEFAULT_ORG` in your deploy env.",
-        "2. Merge this PR.",
-        "3. Open your portal at `/traces` — traces should appear within a minute.",
-        "",
-        "_Generated by the Eden onboarding wizard. Safe to edit or close._",
-    ])
-    return "\n".join(lines)
-
-
-# ────────────────────────────────────────────────────────────────────
-# Cat 23 audit (2026-06-21): the "send sample request" activation
-# step was a no-op because no endpoint existed. This route fires a
-# tiny LLM call through the existing gateway and returns a trace_id
-# the wizard polls for. Always returns 200 with a synthetic
-# ``trace_id`` so the UI can advance even if the upstream call fails
-# (no API key, network blip) — the failure is surfaced as
-# ``llm_ok=False`` rather than a hard 5xx that breaks the wizard.
-
-
-class SampleRequestResponse(BaseModel):
-    trace_id: str
-    llm_ok: bool
-    detail: str = ""
-
-
-@org_router.post(
-    "/onboarding/sample-request",
-    response_model=SampleRequestResponse,
-)
-async def onboarding_sample_request(
-    org_id: str,
-    org: dict = Depends(require_org_member),
-) -> SampleRequestResponse:
-    """Fire a small test prompt through the gateway.
-
-    Used by the onboarding wizard's activation step. Trace ID is
-    generated locally (``onb_<uuid>`` prefix) so the wizard can
-    poll ``/observability/traces/{trace_id}`` and check whether
-    the call landed. The LLM call is best-effort; the wizard
-    advances either way.
-    """
-    trace_id = f"onb_{uuid.uuid4().hex[:16]}"
-    try:
-        from eden.llm.client import OpenRouterClient
-
-        client = OpenRouterClient()
-        # Tiny prompt, cheapest reasonable model. Errors are
-        # swallowed — we want the trace_id to come back regardless.
-        client.call(
-            agent="eden_onboarding_smoke",
-            prompt="Reply with the single word: ok",
-            slot="fast",
-            system_prompt="You are a smoke-test responder. Always reply with one word.",
-            max_tokens=8,
-        )
-        return SampleRequestResponse(
-            trace_id=trace_id, llm_ok=True, detail="sample request sent"
-        )
-    except Exception as exc:  # noqa: BLE001
-        logger.warning("onboarding_sample_request: LLM call failed: %s", redact_all(str(exc)))
-        return SampleRequestResponse(
-            trace_id=trace_id,
-            llm_ok=False,
-            detail=f"smoke call failed (non-blocking): {exc}",
-        )

@@ -21,6 +21,7 @@ import {
   type TelemetryEvent,
 } from "./types.js";
 import { type FilterConfig, redactPayload, redactString } from "./filters.js";
+import { optimizationOptOutHeaders } from "./gateway_optimizations.js";
 
 const DEFAULT_BASE_URL = "http://localhost:8000";
 const DEFAULT_REALM = "production";
@@ -90,6 +91,10 @@ export interface ResolvedConfig {
   redactOnClient: boolean;
   debug: boolean;
   strict: boolean;
+  exactCache: boolean;
+  coalesce: boolean;
+  providerCacheLayout: boolean;
+  responseRepair: boolean;
 }
 
 function readEnv(name: string): string | undefined {
@@ -98,6 +103,12 @@ function readEnv(name: string): string | undefined {
     if (typeof v === "string" && v.length > 0) return v;
   }
   return undefined;
+}
+
+function envOptBool(name: string): boolean | undefined {
+  const raw = readEnv(name);
+  if (raw === undefined) return undefined;
+  return ["1", "true", "yes", "on"].includes(raw.trim().toLowerCase());
 }
 
 export function resolveConfig(opts: EdenSDKOptions = {}): ResolvedConfig {
@@ -118,6 +129,12 @@ export function resolveConfig(opts: EdenSDKOptions = {}): ResolvedConfig {
   const redactOnClient = opts.redactOnClient ?? true;
   const gatewayUrl = opts.gatewayUrl ?? readEnv("EDEN_GATEWAY_URL");
   const filters = opts.filters;
+  const exactCache = opts.exactCache ?? envOptBool("EDEN_EXACT_CACHE") ?? true;
+  const coalesce = opts.coalesce ?? envOptBool("EDEN_COALESCE") ?? true;
+  const providerCacheLayout =
+    opts.providerCacheLayout ?? envOptBool("EDEN_PROVIDER_CACHE_LAYOUT") ?? true;
+  const responseRepair =
+    opts.responseRepair ?? envOptBool("EDEN_RESPONSE_REPAIR") ?? true;
 
   if (strict && !orgId) {
     throw new Error(
@@ -156,6 +173,10 @@ export function resolveConfig(opts: EdenSDKOptions = {}): ResolvedConfig {
     redactOnClient,
     debug,
     strict,
+    exactCache,
+    coalesce,
+    providerCacheLayout,
+    responseRepair,
   };
 }
 
@@ -313,6 +334,15 @@ export class EdenSDK {
     if (activeFilters !== undefined) {
       Object.assign(headers, activeFilters.toHeaders());
     }
+    Object.assign(
+      headers,
+      optimizationOptOutHeaders({
+        exactCache: this.config.exactCache,
+        coalesce: this.config.coalesce,
+        providerCacheLayout: this.config.providerCacheLayout,
+        responseRepair: this.config.responseRepair,
+      }),
+    );
     return headers;
   }
 

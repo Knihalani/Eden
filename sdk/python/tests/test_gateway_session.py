@@ -110,6 +110,21 @@ class TestOpenAIClientHelper:
         assert h["X-Upstream-Api-Key"] == "sk-internal"
         assert h["X-Upstream-Provider"] == "openai"
 
+    def test_optimization_opt_out_headers_on_client(self, fake_openai):
+        from eden_sdk.gateway_session import openai_client
+
+        cfg = EdenConfig(
+            org_id="o",
+            api_key="k",
+            exact_cache=False,
+            response_repair=False,
+        )
+        client = openai_client(cfg)
+        h = client.kwargs["default_headers"]
+        assert h["X-Eden-Exact-Cache"] == "false"
+        assert h["X-Eden-Response-Repair"] == "false"
+        assert "X-Eden-Coalesce" not in h
+
     def test_imports_openai_lazily(self, monkeypatch):
         """When the openai package isn't installed, the import
         inside the helper raises a clear RuntimeError instead of

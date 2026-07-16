@@ -2,8 +2,9 @@
 
 "use client";
 
-import { useEffect, useState, useCallback, useMemo } from "react";
+import { useEffect, useState, useCallback, useMemo, Suspense } from "react";
 import Link from "next/link";
+import dynamic from "next/dynamic";
 import { useOrg } from "@/hooks/use-org";
 import { agentsApi, type AgentSummary } from "@/lib/api";
 import { Card } from "@/components/ui/card";
@@ -14,10 +15,12 @@ import { ErrorState } from "@/components/ui/error-state";
 import { NoOrgState } from "@/components/ui/no-org-state";
 import { PageHeader } from "@/components/layout/page-header";
 import { PageContent } from "@/components/layout/page-content";
+import { EmbeddedSurface } from "@/components/layout/embedded-surface";
 import { useToast } from "@/components/ui/toast";
 import {
   Bot,
   ExternalLink,
+  Loader2,
   Plus,
   RefreshCw,
   Search,
@@ -26,6 +29,17 @@ import {
   X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useQueryTab } from "@/hooks/use-query-tab";
+
+const AGENT_TABS = ["agents", "fleet"] as const;
+const FleetView = dynamic(() => import("../fleet/page"), {
+  ssr: false,
+  loading: () => (
+    <div className="flex h-48 items-center justify-center">
+      <Loader2 className="h-4 w-4 animate-spin text-[var(--text-muted)]" />
+    </div>
+  ),
+});
 
 const PAGE_SIZE = 100;
 
@@ -51,8 +65,23 @@ function formatRelative(iso?: string | null): string {
 }
 
 export default function AgentsPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex h-48 items-center justify-center">
+          <Loader2 className="h-4 w-4 animate-spin text-[var(--text-muted)]" />
+        </div>
+      }
+    >
+      <AgentsPageInner />
+    </Suspense>
+  );
+}
+
+function AgentsPageInner() {
   const { currentOrg } = useOrg();
   const toast = useToast();
+  const [tab, setTab] = useQueryTab("tab", AGENT_TABS, "agents");
   const [agents, setAgents] = useState<AgentSummary[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -137,14 +166,15 @@ export default function AgentsPage() {
   return (
     <PageContent size="wide">
       <PageHeader
-        eyebrow="Fleet"
+        eyebrow="Build"
         title="Agents"
         subtitle={
           loading
             ? "Loading…"
-            : `${total} registered · click an agent to upload code, run sims, and inspect results.`
+            : `${total} registered · connect a repo or open fleet health.`
         }
         icon={Bot}
+        description="Manage agents and fleet health. Connect repos from the primary CTA."
         actions={
           <div className="flex items-center gap-2">
             <Link
@@ -155,6 +185,7 @@ export default function AgentsPage() {
               <Plus className="w-4 h-4" />
               Connect new agent
             </Link>
+            {tab === "agents" && (
             <Button
               onClick={load}
               variant="outline"
@@ -165,10 +196,37 @@ export default function AgentsPage() {
             >
               <RefreshCw className="h-4 w-4" /> Refresh
             </Button>
+            )}
           </div>
         }
       />
 
+      <div role="tablist" aria-label="Agents sections" className="mb-4 flex gap-1 border-b border-[var(--border-default)]">
+        {AGENT_TABS.map((t) => (
+          <button
+            key={t}
+            type="button"
+            role="tab"
+            aria-selected={tab === t}
+            onClick={() => setTab(t)}
+            className={cn(
+              "px-3 py-2 text-sm font-medium capitalize border-b-2 -mb-px",
+              tab === t
+                ? "border-[var(--accent)] text-[var(--text-primary)]"
+                : "border-transparent text-[var(--text-muted)] hover:text-[var(--text-primary)]",
+            )}
+          >
+            {t}
+          </button>
+        ))}
+      </div>
+
+      {tab === "fleet" ? (
+        <EmbeddedSurface>
+          <FleetView />
+        </EmbeddedSurface>
+      ) : (
+      <>
       {error && !loading && (
         <ErrorState
           title="Could not load agents"
@@ -313,6 +371,8 @@ export default function AgentsPage() {
             Load more agents ({total - agents.length} remaining)
           </Button>
         </div>
+      )}
+      </>
       )}
     </PageContent>
   );

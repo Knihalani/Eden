@@ -229,9 +229,18 @@ class JudgeScorePromptEvolver(EvolutionComponent):
             "Return only the improved system prompt, no commentary."
         )
         try:
-            response = self.llm.call(prompt)
-            if hasattr(response, "__await__"):
-                response = await response
+            from eden.llm.internal_router import route_sync
+
+            response = route_sync(
+                "judge_prompt_evolver",
+                prompt,
+                slot="reasoning",
+                max_tokens=800,
+                llm_client=self.llm,
+                output_type="text",
+                requires_quality_check=False,
+                description="Evolve agent system prompt from judge scores",
+            )
             content = getattr(response, "content", response) or ""
         except Exception as exc:  # pragma: no cover - defensive
             logger.debug(

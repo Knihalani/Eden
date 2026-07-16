@@ -39,7 +39,7 @@ export default function SignUpPage() {
             signInUrl="/sign-in"
             // Clerk creates a workspace at signup — land on the streamlined
             // onboarding wizard (welcome → install → optional repo).
-            fallbackRedirectUrl="/onboarding"
+            fallbackRedirectUrl="/dashboard?onboarding=1"
             signInForceRedirectUrl="/dashboard"
             appearance={clerkAppearance}
           />

@@ -1,7 +1,51 @@
 # Deleted Feature Specs — Rationale & Merge Map
 
-> **Updated:** July 15, 2026 (bloat-cut pass)  
+> **Updated:** July 16, 2026 (portal consolidate + polish)  
 > **Inventory:** 24 F-features + **14 N-features** (N23 added; Cat 23 retired)
+
+---
+
+## July 2026 portal consolidation
+
+### GitHub auto-integrate PR path (removed)
+
+| Removed | Reason | Replacement |
+|---|---|---|
+| `src/eden/integrations/onboarding_agent.py` | LLM agent that opened SDK integration PRs | Manual SDK install in onboarding overlay |
+| `POST /orgs/{id}/github/integrate` | Auto-PR create | Returns **410 Gone** |
+| `POST /orgs/{id}/onboarding/sample-request` | Unused stub | Removed |
+| `/onboarding/wait` + PR polling UI | Wait-for-merge step | Overlay: Welcome → Connect (optional) → Install SDK → Done |
+| `onboarding_integration` in model router `COMPLEX_AGENTS` | Only used by deleted agent | Dropped |
+
+**Kept:** GitHub App authorize / claim / list-repos for Agents → Connect; heuristic `framework_detector` / `sdk_integrator` for local/CLI.
+
+### Portal IA — ghost routes redirected (12-item nav)
+
+| Route | Redirect |
+|---|---|
+| `/pr-suggestions`, `/agents/eden/inbox` | `/improve?tab=plans` |
+| `/closed-loop`, `/autonomous` | `/improve` |
+| `/observability`, `/observability/apm` | `/traces` |
+| `/inspector` | `/traces?view=inspect` |
+| `/replay` | `/traces?view=replay` |
+| `/debugger`, `/observability/time-travel` | `/traces?view=debug` |
+| `/fleet` | `/agents?tab=fleet` |
+| `/llmops` | `/optimization` |
+| `/profile` | `/settings?tab=account` |
+| `/billing` | `/settings?tab=billing` |
+| `/users` | `/analytics?tab=users` |
+| `/insights`, `/tools` | `/analytics?tab=…` |
+| `/signals` | `/alerts?tab=signals` |
+| `/datasets`, `/labeling`, `/studio`, `/synthetic`, `/observability/eval` | `/evals?tab=…` |
+| `/incidents` | `/issues?tab=incidents` |
+| `/redteam` | `/guardrails?tab=redteam` |
+| `/onboarding/*` | `/dashboard?onboarding=1` (skippable overlay) |
+
+Orphan page trees deleted: onboarding wizard, pr-suggestions, closed-loop, autonomous, llmops, billing list, agents/eden inbox. Tab source pages (insights, tools, …) remain for dynamic import behind redirects.
+
+### Unfinished non-core backends (unchanged)
+
+Leave Phase-1-cut predict endpoints, HIPAA stubs, multimodal `None`, AgentBenchmarkRunner synthetics, spreadsheet AI stub as-is — do not rebuild.
 
 ---
 
@@ -28,33 +72,18 @@
 
 | Route | Action | Redirect / notes |
 |---|---|---|
-| `/observability/apm` | Nav removed | Static OTel install stub; redirect to `/observability` or docs |
-| `/users` (User Intelligence) | Nav removed | Power-user only; route may 301 to `/fleet` |
-| `/observability/cohorts` (Columnar Engine) | Nav removed | SQL console; deep links preserved |
-| `/synthetic` (Synthetic Q/A) | Nav removed | Overlaps datasets eval authoring |
-| `/redteam` | Nav removed | Thin adversarial page |
-| `/billing` | Merged | Redirect to Settings → Billing tab |
-| `/closed-loop` | Nav hidden | Redirect to `/improve` (N17 cockpit) |
-| `/autonomous` | Nav hidden | Redirect to `/improve` |
-| `/pr-suggestions` | Superseded | Redirect to `/improve/plans` (N23) |
-| `/onboarding/autonomous` | Deleted | Legacy redirect removed |
-
-Orphan components removed: `TraceTreeTab.tsx`, `TimelineTab.tsx`, `HeatmapTab.tsx` (never imported).
+| `/observability/apm` | Nav removed | Redirect to `/traces` |
+| `/users` | Nav removed | Tab under Analytics |
+| `/synthetic` | Nav removed | Tab under Evals |
+| `/redteam` | Nav removed | Tab under Guardrails |
+| `/billing` | Merged | Settings → Billing |
+| `/closed-loop`, `/autonomous` | Redirect | `/improve` |
+| `/pr-suggestions` | Superseded | `/improve?tab=plans` |
+| `/onboarding/*` | Deleted | Dashboard overlay |
 
 ### P2 competitor-parity specs — archived
 
-Moved to [`../archive/`](../archive/) (not on execution roadmap):
-
-| ID | Feature |
-|---|---|
-| F59 | Custom render templates |
-| F63 | Judge autotune / CLHF |
-| F67 | LLM jury / composite metrics |
-| F69 | Remote eval sandboxes |
-| F72 | Virtual / customer data planes |
-| F77 | Fine-tune export pipeline |
-| F78 | Multimodal playground inputs |
-| F80 | OSS local workshop |
+Moved to [`../archive/`](../archive/) (not on execution roadmap): F59, F63, F67, F69, F72, F77, F78, F80.
 
 ---
 
@@ -68,21 +97,16 @@ Moved to [`../archive/`](../archive/) (not on execution roadmap):
 | F17 Session timeline UI | **N12** | Sentrial session-first parity |
 | F38 Transcript UI v2 | **N13** | Demo-quality portal UX |
 
-| Deleted | Absorbed into |
-|---|---|
-| F27 Use-with-AI docs | F04 §17 |
-| F02, F05, F07, F08, F26, F37, F45 | F01, F04, F06, F39 |
-
 ## Still deleted (low incremental value)
 
-F13–F16, F18, F19, F24, F25, F31, F32, F43 — see prior rationale. Framework integrations → OTel + F09 examples.
+F13–F16, F18, F19, F24, F25, F31, F32, F43 — see prior rationale.
 
 ---
 
 ## Full inventory
 
 ### F-features (24 active + 8 archived)
-F01, F03, F04, F06, F09, F12, F20, F21, F22, F23, F28, F29, F30, F33, F34, F35, F39, F40, F41, F42, F44, F46, F47, F48 (+ F49–F85 eval/portal band; F59/F63/F67/F69/F72/F77/F78/F80 archived)
+F01, F03, F04, F06, F09, F12, F20, F21, F22, F23, F28, F29, F30, F33, F34, F35, F39, F40, F41, F42, F44, F46, F47, F48 (+ F49–F85 eval/portal band; archived set above)
 
 ### N-features (14)
 N01–N13, N14–N23 (N20 inbox superseded by N23; Cat 23 retired)

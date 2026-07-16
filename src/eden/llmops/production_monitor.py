@@ -390,78 +390,17 @@ class ProductionMonitor:
                 },
             }
 
-        # LLM-judge path. Build a minimal TelemetryEvent-shaped
-        # object that the HallucinationJudge can score.
-        #
-        # Cost note (June 25 audit): the previous behaviour fired
-        # the judge on every telemetry event with one of 7 provider
-        # sub-dicts. At 10k events/min that's $5+/day per tenant.
-        # The judge itself now self-samples at 1% in
-        # ``HallucinationJudge.matches``; this path is only reached
-        # when the toggle is on AND a sampled event arrives, so the
-        # gate here is a no-op for cost.
-        try:
-            from eden.llm.client import OpenRouterClient
-            from eden.llmops.judges.base import JudgeContext
-            from eden.llmops.judges.hallucination import HallucinationJudge
-
-            class _E:
-                __slots__ = (
-                    "event_id", "trace_id", "span_id", "event_type",
-                    "payload", "attributes", "tags", "source_format",
-                    "tenant_id", "agent_id", "environment_id",
-                    "metrics", "duration_ms", "outcome", "name",
-                    "timestamp", "realm", "project_id",
-                    "agent_version", "parent_span_id",
-                )
-            ev = _E()
-            for f in _E.__slots__:
-                setattr(ev, f, None)
-            ev.event_type = "eden.production_monitor.hallucination"
-            ev.event_id = f"pm_hallu_{int(1e9 * 0)}"  # placeholder
-            ev.trace_id = "production_monitor"
-            ev.payload = {
-                "task": spec,
-                "ground_truth": ground_truth,
-                "openai": {"first_message_content": generated_code},
-            }
-
-            llm_client = OpenRouterClient()
-            judge = HallucinationJudge()
-            score_obj = await judge.score(
-                ev, JudgeContext(event=ev, llm_client=llm_client)
-            )
-            llm_score = max(0.0, min(1.0, score_obj.score))
-            return {
-                "hallucination_detected": llm_score < 0.85,
-                "confidence": llm_score,
-                "issues": issues,
-                "rationale": score_obj.rationale,
-                "judge_model": score_obj.model,
-                "categories": {
-                    "api_correctness": round(llm_score, 2),
-                    "logic_correctness": round(llm_score, 2),
-                    "type_safety": round(llm_score, 2),
-                    "dependency_correctness": round(llm_score, 2),
-                },
-                "heuristic_score": round(heuristic_score, 3),
-            }
-        except Exception as exc:
-            # LLM judge path failed (no client, network error, etc).
-            # Fall back to the heuristic result so the pipeline
-            # never blocks.
-            logger.debug(
-                f"production_monitor LLM judge failed; using heuristic: {exc}"
-            )
-            return {
-                "hallucination_detected": heuristic_score < 0.85,
-                "confidence": heuristic_score,
-                "issues": issues,
-                "judge_error": type(exc).__name__,
-                "categories": {
-                    "api_correctness": round(heuristic_score, 2),
-                    "logic_correctness": round(heuristic_score, 2),
-                    "type_safety": round(heuristic_score, 2),
-                    "dependency_correctness": round(heuristic_score, 2),
-                },
-            }
+        # LLM path removed — UnifiedJudge covers production scoring.
+        return {
+            "hallucination_detected": heuristic_score < 0.85,
+            "confidence": heuristic_score,
+            "issues": issues,
+            "categories": {
+                "api_correctness": round(heuristic_score, 2),
+                "logic_correctness": round(heuristic_score, 2),
+                "type_safety": round(heuristic_score, 2),
+                "dependency_correctness": round(heuristic_score, 2),
+            },
+            "heuristic_score": round(heuristic_score, 3),
+            "note": "llm_judge_path_removed",
+        }

@@ -1,11 +1,13 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { Suspense, useMemo, useState } from "react";
 import Link from "next/link";
-import { Check, Clock, GitPullRequestArrow, Loader2, RefreshCw } from "lucide-react";
+import dynamic from "next/dynamic";
+import { Check, Clock, Loader2, RefreshCw } from "lucide-react";
 
 import { PageHeader } from "@/components/layout/page-header";
 import { PageContent } from "@/components/layout/page-content";
+import { EmbeddedSurface } from "@/components/layout/embedded-surface";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorState } from "@/components/ui/error-state";
@@ -22,6 +24,26 @@ import { cn } from "@/lib/utils";
 import { errorFromCaught } from "@/lib/safe-error-message";
 import { PlanKindBadge } from "@/components/improve/plan-kind-badge";
 import type { ImprovementPlanKind } from "@/lib/api";
+import { useQueryTab } from "@/hooks/use-query-tab";
+
+const IMPROVE_TABS = ["queue", "plans", "history"] as const;
+
+const PlansView = dynamic(() => import("./plans/page"), {
+  ssr: false,
+  loading: () => <TabLoading />,
+});
+const HistoryView = dynamic(() => import("./runs/page"), {
+  ssr: false,
+  loading: () => <TabLoading />,
+});
+
+function TabLoading() {
+  return (
+    <div className="flex h-48 items-center justify-center">
+      <Loader2 className="h-4 w-4 animate-spin text-[var(--text-muted)]" />
+    </div>
+  );
+}
 
 const COLUMNS: Array<{ id: string; label: string; hint: string }> = [
   { id: "urgent", label: "Urgent", hint: "P0 / critical issues" },
@@ -67,10 +89,19 @@ function planKindFromItem(item: ImproveQueueItem): ImprovementPlanKind | null {
 }
 
 export default function ImprovePage() {
+  return (
+    <Suspense fallback={<TabLoading />}>
+      <ImprovePageInner />
+    </Suspense>
+  );
+}
+
+function ImprovePageInner() {
   const { currentOrg } = useOrg();
   const toast = useToast();
   const orgId = currentOrg?.id ?? null;
   const [busyRef, setBusyRef] = useState<string | null>(null);
+  const [tab, setTab] = useQueryTab("tab", IMPROVE_TABS, "queue");
 
   const queueQuery = useOrgQuery(
     queryKeys.improve.queue(orgId),
@@ -142,15 +173,10 @@ export default function ImprovePage() {
     <>
       <PageHeader
         title="Improve"
-        description="One queue for triage, patches, nudges, and promotions from Agent Issues. When Eden proposes a fix, it lands here."
+        subtitle="Action queue, improvement plans, and sweep history."
+        description="One queue for triage, patches, nudges, and promotions from Agent Issues."
         actions={
-          <div className="flex items-center gap-2">
-            <Link href="/improve/plans">
-              <Button variant="outline" size="sm">
-                <GitPullRequestArrow className="h-4 w-4 mr-1" />
-                All plans
-              </Button>
-            </Link>
+          tab === "queue" ? (
             <Button
               variant="outline"
               size="sm"
@@ -161,10 +187,42 @@ export default function ImprovePage() {
               <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />
               Refresh
             </Button>
-          </div>
+          ) : undefined
         }
       />
       <PageContent>
+        <div role="tablist" aria-label="Improve sections" className="mb-4 flex gap-1 border-b border-[var(--border-default)]">
+          {IMPROVE_TABS.map((t) => (
+            <button
+              key={t}
+              type="button"
+              role="tab"
+              aria-selected={tab === t}
+              onClick={() => setTab(t)}
+              className={cn(
+                "px-3 py-2 text-sm font-medium capitalize border-b-2 -mb-px",
+                tab === t
+                  ? "border-[var(--accent)] text-[var(--text-primary)]"
+                  : "border-transparent text-[var(--text-muted)] hover:text-[var(--text-primary)]",
+              )}
+            >
+              {t === "queue" ? "Queue" : t === "plans" ? "Plans" : "History"}
+            </button>
+          ))}
+        </div>
+
+        {tab === "plans" && (
+          <EmbeddedSurface>
+            <PlansView />
+          </EmbeddedSurface>
+        )}
+        {tab === "history" && (
+          <EmbeddedSurface>
+            <HistoryView />
+          </EmbeddedSurface>
+        )}
+        {tab === "queue" && (
+          <>
         {error && (
           <ErrorState
             className="mb-4"
@@ -194,11 +252,11 @@ export default function ImprovePage() {
             description="When Eden detects issues or proposes patches and nudges, they show up here — operator and autonomous columns."
             action={
               <div className="flex flex-wrap items-center justify-center gap-2">
-                <Link href="/onboarding/install">
+                <Link href="/dashboard?onboarding=1">
                   <Button>Install SDK</Button>
                 </Link>
                 <Link href="/issues">
-                  <Button variant="outline">View Agent Issues</Button>
+                  <Button variant="outline">View Issues</Button>
                 </Link>
               </div>
             }
@@ -303,6 +361,8 @@ export default function ImprovePage() {
               </section>
             ))}
           </div>
+        )}
+          </>
         )}
       </PageContent>
     </>

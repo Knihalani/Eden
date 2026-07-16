@@ -26,6 +26,7 @@ import * as React from "react";
 import { Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { LoadingSkeleton } from "@/components/ui/skeleton";
+import { useEmbeddedSurface } from "@/components/layout/embedded-surface";
 
 export type PageContentSize = "default" | "wide" | "narrow" | "full";
 
@@ -35,6 +36,11 @@ export interface PageContentProps {
   size?: PageContentSize;
   /** Tailwind classes to merge (e.g. `bg-[var(--bg-base)]` on a flat page). */
   className?: string;
+  /**
+   * When true (or under EmbeddedSurface), skip outer padding/max-width
+   * so shell tab parents do not double-wrap layout chrome.
+   */
+  embedded?: boolean;
 }
 
 const SIZE: Record<PageContentSize, string> = {
@@ -53,7 +59,19 @@ export function PageContent({
   children,
   size = "default",
   className,
+  embedded = false,
 }: PageContentProps) {
+  const inEmbeddedSurface = useEmbeddedSurface();
+  const isEmbedded = embedded || inEmbeddedSurface;
+
+  if (isEmbedded) {
+    return (
+      <div className={cn("w-full space-y-6", className)}>
+        {children}
+      </div>
+    );
+  }
+
   return (
     <div
       className={cn(

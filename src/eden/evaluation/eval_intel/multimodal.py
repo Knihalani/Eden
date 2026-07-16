@@ -151,11 +151,16 @@ class MultiModalEvaluator:
             llm_client = None
         if llm_client is not None:
             try:
-                resp = llm_client.call(
-                    agent="multimodal_evaluator",
-                    prompt=prompt,
+                from eden.llm.internal_router import route_sync
+
+                resp = route_sync(
+                    "multimodal_evaluator",
+                    prompt,
                     slot="fast",
                     max_tokens=160,
+                    output_type="json",
+                    llm_client=llm_client,
+                    requires_quality_check=False,
                 )
                 score, rationale = _parse_judge_response(
                     getattr(resp, "content", ""),

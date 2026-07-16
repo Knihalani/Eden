@@ -3,9 +3,10 @@
 Reads the global ``trace.finalized`` Redis stream via a consumer group
 and runs detection tiers per trace:
 
-1. **Layer A** — deterministic descriptor tags + tool-error/loop stumbles.
-2. **AutoIssueScanner** (F20) — remaining stumble detectors.
-3. **Signal investigator** (F06/F35) — only when Layer A has no primary hit.
+1. **Layer A** — deterministic descriptors, float scores, limited stumbles.
+2. **T1 annotator** — semantic ``eval:llm:*`` search tags (no Issues).
+3. **AutoIssueScanner** (F20) — remaining stumble detectors.
+4. **Signal investigator** (F06/F35) — only when Layer A has no primary hit.
 
 Follows the module-level start/stop lifecycle used by the quality
 pipeline sidecar so it plugs into the API lifespan.
@@ -100,6 +101,7 @@ class TraceFinalizedConsumer:
                         session_id=data.get("session_id") or None,
                         user_id=data.get("user_id") or None,
                     )
+                    await self._run_annotator(org_id, trace_id, layer_a_report)
                     scan_results = await self._scanner.scan(
                         org_id,
                         trace_id,
@@ -144,10 +146,13 @@ class TraceFinalizedConsumer:
         session_id: str | None,
         user_id: str | None,
     ) -> Any | None:
-        """Run Layer A descriptors, persist tags, promote stumbles."""
+        """Run Layer A descriptors, persist scores/tags, promote stumbles."""
         try:
             from eden.evaluation.descriptors import DescriptorEngine
-            from eden.evaluation.descriptors.persist import persist_descriptor_tags
+            from eden.evaluation.descriptors.persist import (
+                persist_descriptor_tags,
+                persist_layer_a_judge_scores,
+            )
             from eden.evaluation.descriptors.taxonomy import LAYER_A_PRIMARY
             from eden.insights.rca._common import _fetch_trace_events
             from eden.issues.models import StumbleCreate
@@ -157,8 +162,13 @@ class TraceFinalizedConsumer:
             if not events:
                 return None
             report = DescriptorEngine(online=True).describe(events, trace_id=trace_id)
+            # Always persist scores (clean traces still get ~1.0 floats).
+            await persist_descriptor_tags(org_id, trace_id, report)
+            try:
+                await persist_layer_a_judge_scores(org_id, trace_id, report)
+            except Exception as score_exc:
+                logger.debug("layer_a judge_scores: %s", score_exc)
             if report.descriptors:
-                await persist_descriptor_tags(org_id, trace_id, report)
                 logger.info(
                     "layer_a: trace=%s descriptors=%s latency_ms=%.2f",
                     trace_id,
@@ -203,6 +213,8 @@ class TraceFinalizedConsumer:
                         logger.debug(
                             "layer_a stumble write failed: %s", stumble_exc
                         )
+            # Attach events for annotator (avoid a second fetch).
+            report._events = events  # type: ignore[attr-defined]
             report._primary_hit = bool(  # type: ignore[attr-defined]
                 report.descriptor_ids & LAYER_A_PRIMARY
             )
@@ -210,6 +222,42 @@ class TraceFinalizedConsumer:
         except Exception as exc:
             logger.debug("trace_finalized: layer_a skipped: %s", exc)
             return None
+
+    async def _run_annotator(
+        self,
+        org_id: str,
+        trace_id: str,
+        layer_a_report: Any | None,
+    ) -> None:
+        """T1 semantic tags after Layer A — observability only."""
+        try:
+            from eden.evaluation.annotator import annotate_and_persist
+            from eden.insights.rca._common import _fetch_trace_events
+
+            events = getattr(layer_a_report, "_events", None) if layer_a_report else None
+            if not events:
+                events = await _fetch_trace_events(org_id, trace_id)
+            layer_ids = (
+                set(getattr(layer_a_report, "descriptor_ids", ()) or ())
+                if layer_a_report
+                else set()
+            )
+            result = await annotate_and_persist(
+                org_id,
+                trace_id,
+                events or [],
+                layer_a_ids=layer_ids,
+            )
+            if result.tags:
+                logger.info(
+                    "annotator: trace=%s tags=%s model=%s cost=%.6f",
+                    trace_id,
+                    result.tags,
+                    result.model,
+                    result.cost_usd,
+                )
+        except Exception as exc:
+            logger.debug("trace_finalized: annotator skipped: %s", exc)
 
     async def _maybe_prod_eval(
         self, org_id: str, trace_id: str, *, agent_id: str | None

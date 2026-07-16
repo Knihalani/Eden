@@ -452,31 +452,25 @@ async def _llm_score(
     or ``None`` when the LLM is unavailable.
     """
     try:
-        from eden.llm.client import get_llm_client
-    except Exception:
-        return None
-    try:
-        client = await get_llm_client()
-        if client is None:
-            return None
-        # Tiny summary call; the actual eval grading is
-        # against a pinned dataset in a follow-up commit.
-        response = await client.complete(
-            prompt=(
+        from eden.llm.internal_router import route_async
+
+        response = await route_async(
+            "prompt_versioning_score",
+            (
                 "Score the prompt template on a 0-1 scale "
                 "for clarity + specificity. Return ONLY JSON: "
                 '{"score": <float>, "rationale": "..."}'
             ),
             slot="fast",
             max_tokens=200,
+            output_type="json",
+            requires_quality_check=False,
         )
-        if response is None:
-            return None
         import json as _json
         try:
-            return _json.loads(response)
+            return _json.loads(response.content)
         except Exception:
-            return {"score": None, "raw": str(response)[:200]}
+            return {"score": None, "raw": str(response.content)[:200]}
     except Exception as exc:
         logger.debug("prompt_service: llm_score failed: %s", exc)
         return None
