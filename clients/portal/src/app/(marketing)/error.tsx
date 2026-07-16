@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 import Link from "next/link";
-import { AlertTriangle } from "lucide-react";
+import { AlertTriangle, RefreshCw, Home } from "lucide-react";
 import { SUPPORT_EMAIL } from "@/lib/constants";
 
 /** Marketing 500 — landing page error. Kept minimal so it doesn't
