@@ -1,6 +1,6 @@
 /**
- * Product tour — walks the 12 consolidated portal surfaces, then
- * points at the public docs quickstart.
+ * Product tour — walks the core portal surfaces, then points at the
+ * public docs quickstart.
  */
 
 import { DOCS_QUICKSTART_URL } from "@/lib/constants";
@@ -23,14 +23,14 @@ export interface TourStep {
   ctaHref?: string;
 }
 
-/** Ordered tour: welcome → each nav surface → finish with docs. */
+/** Ordered tour: welcome → core nav surfaces → finish with docs. */
 export const PRODUCT_TOUR_STEPS: TourStep[] = [
   {
     id: "welcome",
     kind: "welcome",
     href: "/dashboard",
     title: "Welcome to Eden",
-    body: "A quick tour of the portal — where to watch agents, catch failures, and ship improvements. Skip anytime; you can resume from the banner.",
+    body: "A short walk through where you watch agents, catch failures, and ship fixes. Skip anytime — resume from the banner.",
   },
   {
     id: "dashboard",
@@ -38,7 +38,7 @@ export const PRODUCT_TOUR_STEPS: TourStep[] = [
     targetId: "dashboard",
     href: "/dashboard",
     title: "Dashboard",
-    body: "Your home base. Health, recent traces, cost, and alerts at a glance — start here when you open Eden.",
+    body: "Health, recent traces, cost, and alerts at a glance. Start here when you open Eden.",
   },
   {
     id: "agents",
@@ -46,15 +46,7 @@ export const PRODUCT_TOUR_STEPS: TourStep[] = [
     targetId: "agents",
     href: "/agents",
     title: "Agents",
-    body: "Register and manage the agents you observe. Connect a repo from here when you want Eden to see your code.",
-  },
-  {
-    id: "prompts",
-    kind: "nav",
-    targetId: "prompts",
-    href: "/prompts",
-    title: "Prompts",
-    body: "Versioned prompt templates with history — edit, compare, and roll back without redeploying guesswork.",
+    body: "Register and manage the agents you observe. Connect a repo when you want Eden to see your code.",
   },
   {
     id: "traces",
@@ -62,7 +54,7 @@ export const PRODUCT_TOUR_STEPS: TourStep[] = [
     targetId: "traces",
     href: "/traces",
     title: "Traces",
-    body: "Every AI call in one explorer. Open a row to inspect spans, replay sessions, debug checkpoints, or query the corpus.",
+    body: "Every AI call in one explorer. Open a row to inspect spans, replay sessions, and dig into failures.",
   },
   {
     id: "issues",
@@ -70,31 +62,7 @@ export const PRODUCT_TOUR_STEPS: TourStep[] = [
     targetId: "issues",
     href: "/issues",
     title: "Issues",
-    body: "Grouped agent failures and incident clusters — triage, heal, and verify instead of chasing one-off errors.",
-  },
-  {
-    id: "alerts",
-    kind: "nav",
-    targetId: "alerts",
-    href: "/alerts",
-    title: "Alerts",
-    body: "Threshold notifications and custom signal rules so you hear about cost, latency, or quality before customers do.",
-  },
-  {
-    id: "analytics",
-    kind: "nav",
-    targetId: "analytics",
-    href: "/analytics",
-    title: "Analytics",
-    body: "Usage, tools, users, and trend insights across agents — the long view of how the fleet behaves.",
-  },
-  {
-    id: "evals",
-    kind: "nav",
-    targetId: "evals",
-    href: "/evals",
-    title: "Evals",
-    body: "Datasets, labeling, custom metrics, and synthetic data — the ground truth loop that scores quality.",
+    body: "Grouped failures and incident clusters — triage and heal instead of chasing one-off errors.",
   },
   {
     id: "improve",
@@ -102,46 +70,22 @@ export const PRODUCT_TOUR_STEPS: TourStep[] = [
     targetId: "improve",
     href: "/improve",
     title: "Improve",
-    body: "The action queue: patches, plans, and sweep history. Approve changes that close the loop from issue → fix.",
-  },
-  {
-    id: "optimization",
-    kind: "nav",
-    targetId: "optimization",
-    href: "/optimization",
-    title: "Cost",
-    body: "Where tokens go — budgets, outcomes, forecasts, and model-routing advice to spend less without losing quality.",
-  },
-  {
-    id: "guardrails",
-    kind: "nav",
-    targetId: "guardrails",
-    href: "/guardrails",
-    title: "Guardrails",
-    body: "Safety policies and red-team checks that block unsafe prompts, PII leaks, and policy violations.",
+    body: "The action queue: patches, plans, and sweep history. Approve changes that close the loop.",
   },
   {
     id: "settings",
     kind: "nav",
     targetId: "settings",
-    href: "/settings",
-    title: "Settings",
-    body: "Workspace controls — members, billing, gateway, retention, and PII.",
-  },
-  {
-    id: "api-keys",
-    kind: "nav",
-    targetId: "settings",
     href: "/settings?tab=api-keys",
     title: "API keys",
-    body: "Create an org API key under Settings → API Keys. Or use Fill in on the docs quickstart when you are signed in — it injects a key into a ready-to-run snippet.",
+    body: "Create an org API key under Settings. Or use Fill in on the docs quickstart when you are signed in.",
   },
   {
     id: "finish",
     kind: "finish",
     href: "/settings?tab=api-keys",
     title: "You're ready",
-    body: "Grab an API key here, then follow the docs quickstart to send your first trace. The SDK defaults to api.edenobservability.com.",
+    body: "Grab an API key, then follow the docs quickstart to send your first trace. The SDK defaults to api.edenobservability.com.",
     ctaLabel: "Open docs quickstart",
     ctaHref: DOCS_QUICKSTART_URL,
   },
@@ -156,9 +100,9 @@ export function tourIndexFromOnboardingStep(
   const s = (step || "welcome").toLowerCase();
   if (s === "done") return PRODUCT_TOUR_TOTAL - 1;
   if (s === "install" || s === "install_sdk" || s === "wait" || s === "wait_for_pr") {
-    return PRODUCT_TOUR_TOTAL - 1; // finish / docs
+    return PRODUCT_TOUR_TOTAL - 1;
   }
-  if (s === "connect" || s === "connect_github") return 1; // start nav after welcome
+  if (s === "connect" || s === "connect_github") return 1;
   if (s.startsWith("tour:")) {
     const id = s.slice(5);
     const idx = PRODUCT_TOUR_STEPS.findIndex((t) => t.id === id);

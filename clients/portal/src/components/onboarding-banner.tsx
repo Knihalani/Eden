@@ -1,18 +1,16 @@
 "use client";
 
 /**
- * OnboardingBanner — resume chip when setup is incomplete.
+ * OnboardingBanner — resume chip when the personal product tour is incomplete.
  *
- * Skip / done comes only from Cat-23 ``onboardingApi`` state.
- * Opens the product tour via ``?onboarding=1``.
+ * Driven by Clerk ``unsafeMetadata.edenTour`` (same source as the overlay).
  */
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ChevronRight, Terminal, X } from "lucide-react";
-import { useOrg } from "@/hooks/use-org";
-import { onboardingApi, type OnboardingState } from "@/lib/api";
+import { useTourProgress } from "@/hooks/use-tour-progress";
 import {
   formatOnboardingProgress,
   isOnboardingWizardPath,
@@ -28,42 +26,25 @@ export function OnboardingBanner({
   collapsed?: boolean;
 }) {
   const pathname = usePathname();
-  const { currentOrg } = useOrg();
-  const [wizardState, setWizardState] = useState<OnboardingState | null>(null);
-  const [dismissed, setDismissed] = useState(false);
+  const { isLoaded, progress, isComplete } = useTourProgress();
+  const [dismissed, setDismissed] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return window.sessionStorage.getItem(SESSION_KEY) === "1";
+  });
 
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      setDismissed(window.sessionStorage.getItem(SESSION_KEY) === "1");
-    }
-    if (!currentOrg?.id) {
-      setWizardState(null);
-      return;
-    }
-    const orgId = currentOrg.id;
-    let cancelled = false;
-
-    onboardingApi
-      .getState(orgId)
-      .then((res) => {
-        if (!cancelled) setWizardState(res);
-      })
-      .catch(() => {
-        if (!cancelled) setWizardState(null);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [currentOrg?.id]);
-
+  if (!isLoaded) return null;
   if (isOnboardingWizardPath(pathname)) return null;
   if (collapsed) return null;
-  if (!wizardState) return null;
+  if (isComplete) return null;
   if (dismissed) return null;
 
-  const progress = formatOnboardingProgress(wizardState.step);
-  if (progress.isComplete) return null;
+  const stepId =
+    progress?.status === "active"
+      ? PRODUCT_TOUR_STEPS[progress.stepIndex]?.id
+      : "welcome";
+  const progressView = formatOnboardingProgress(
+    stepId ? `tour:${stepId}` : "welcome",
+  );
 
   function dismiss() {
     if (typeof window !== "undefined") {
@@ -79,16 +60,22 @@ export function OnboardingBanner({
       className="sticky top-14 z-20 border-b border-[var(--accent)]/25 bg-[var(--accent)]/5 backdrop-blur"
     >
       <div className="mx-auto flex max-w-7xl items-center gap-2 px-4 py-1.5 text-xs sm:text-sm">
-        <Terminal className="h-3.5 w-3.5 shrink-0 text-[var(--accent)]" aria-hidden />
+        <Terminal
+          className="h-3.5 w-3.5 shrink-0 text-[var(--accent)]"
+          aria-hidden
+        />
         <span className="font-medium text-[var(--text-primary)] whitespace-nowrap">
-          Step {progress.current}/{progress.total}
+          Step {progressView.current}/{progressView.total}
         </span>
         <span className="text-[var(--text-muted)]" aria-hidden>
           ·
         </span>
         <span className="min-w-0 truncate text-[var(--text-secondary)]">
-          {progress.label}
-          <span className="hidden text-[var(--text-muted)] sm:inline"> — {progress.blurb}</span>
+          {progressView.label}
+          <span className="hidden text-[var(--text-muted)] sm:inline">
+            {" "}
+            — {progressView.blurb}
+          </span>
         </span>
         <div className="ml-auto flex shrink-0 items-center gap-1.5">
           <Link

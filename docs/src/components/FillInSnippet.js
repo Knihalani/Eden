@@ -1,9 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 
 /**
- * Docs Fill-in — calls the portal ``/api/docs`` endpoint with
- * credentials (same-site Clerk cookies). Fill in only appears when
- * the user is signed in on edenobservability.com.
+ * Docs Fill-in — prefers credentialed fetch to portal ``/api/docs``.
+ * When Clerk cookies are host-only on the apex (common), falls back to
+ * a same-origin popup bridge at ``/docs-fill``.
  */
 
 const PORTAL_ORIGIN =
@@ -11,6 +11,7 @@ const PORTAL_ORIGIN =
   'https://edenobservability.com';
 
 const DOCS_API = `${PORTAL_ORIGIN}/api/docs`;
+const BRIDGE_URL = `${PORTAL_ORIGIN}/docs-fill`;
 const SIGN_IN_URL = `${PORTAL_ORIGIN}/sign-in`;
 
 function buildSnippet(lang, { apiKey, orgId }) {
@@ -81,6 +82,40 @@ if __name__ == "__main__":
     eden.get_default_client().flush()`;
 }
 
+function openBridge(op) {
+  const url = `${BRIDGE_URL}?op=${encodeURIComponent(op)}`;
+  const w = 480;
+  const h = 560;
+  const left = Math.max(0, Math.round(window.screenX + (window.outerWidth - w) / 2));
+  const top = Math.max(0, Math.round(window.screenY + (window.outerHeight - h) / 2));
+  return window.open(
+    url,
+    'eden-docs-fill',
+    `popup=yes,width=${w},height=${h},left=${left},top=${top}`,
+  );
+}
+
+function waitForBridgeMessage(op, timeoutMs = 120_000) {
+  return new Promise((resolve, reject) => {
+    const timer = window.setTimeout(() => {
+      window.removeEventListener('message', onMessage);
+      reject(new Error('Timed out waiting for Eden session'));
+    }, timeoutMs);
+
+    function onMessage(event) {
+      if (event.origin !== PORTAL_ORIGIN) return;
+      const data = event.data;
+      if (!data || data.type !== 'eden-docs-fill') return;
+      if (data.op && data.op !== op) return;
+      window.clearTimeout(timer);
+      window.removeEventListener('message', onMessage);
+      resolve(data);
+    }
+
+    window.addEventListener('message', onMessage);
+  });
+}
+
 export default function FillInSnippet() {
   const [lang, setLang] = useState('python');
   const [apiKey, setApiKey] = useState('');
@@ -106,9 +141,14 @@ export default function FillInSnippet() {
         });
         const data = await res.json().catch(() => ({ loggedIn: false }));
         if (cancelled) return;
-        setSession(data);
+        if (data.loggedIn) {
+          setSession(data);
+          return;
+        }
+        // Cookies often don't cross docs.* → apex; offer bridge.
+        setSession({ loggedIn: false, needsBridge: true });
       } catch (_) {
-        if (!cancelled) setSession({ loggedIn: false });
+        if (!cancelled) setSession({ loggedIn: false, needsBridge: true });
       }
     })();
     try {
@@ -127,21 +167,77 @@ export default function FillInSnippet() {
     };
   }, []);
 
+  const syncViaBridge = useCallback(async () => {
+    setBusy(true);
+    setError('');
+    try {
+      const popup = openBridge('session');
+      if (!popup) {
+        setError('Popup blocked — allow popups for docs, then try again.');
+        return;
+      }
+      const data = await waitForBridgeMessage('session');
+      if (data.error) {
+        setError(String(data.error));
+        setSession({ loggedIn: false, needsBridge: true });
+        return;
+      }
+      setSession({
+        loggedIn: Boolean(data.loggedIn),
+        orgId: data.orgId || null,
+        orgName: data.orgName,
+        role: data.role,
+        canCreateKeys: data.canCreateKeys,
+        needsBridge: false,
+      });
+      if (!data.loggedIn) {
+        setError('Not signed in on Eden — sign in, then sync again.');
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not sync Eden session');
+    } finally {
+      setBusy(false);
+    }
+  }, []);
+
   const fillIn = useCallback(async () => {
     setBusy(true);
     setError('');
     try {
-      const res = await fetch(DOCS_API, {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          orgId: session?.orgId || undefined,
-        }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        setError(data.error || `Request failed (${res.status})`);
+      // Prefer credentialed fetch when session already known via cookies.
+      if (session?.loggedIn && !session?.needsBridge) {
+        const res = await fetch(DOCS_API, {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            orgId: session?.orgId || undefined,
+          }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (res.ok && data.apiKey && data.orgId) {
+          setApiKey(data.apiKey);
+          setOrgId(data.orgId);
+          setStatus('filled');
+          try {
+            sessionStorage.setItem(
+              'eden-docs-fill',
+              JSON.stringify({ apiKey: data.apiKey, orgId: data.orgId }),
+            );
+          } catch (_) {}
+          return;
+        }
+        // Fall through to bridge on cookie/CORS failure.
+      }
+
+      const popup = openBridge('fill');
+      if (!popup) {
+        setError('Popup blocked — allow popups for docs, then try again.');
+        return;
+      }
+      const data = await waitForBridgeMessage('fill');
+      if (data.error) {
+        setError(String(data.error));
         return;
       }
       if (!data.apiKey || !data.orgId) {
@@ -151,14 +247,25 @@ export default function FillInSnippet() {
       setApiKey(data.apiKey);
       setOrgId(data.orgId);
       setStatus('filled');
+      setSession((s) => ({
+        ...(s || {}),
+        loggedIn: true,
+        orgId: data.orgId,
+        canCreateKeys: true,
+        needsBridge: false,
+      }));
       try {
         sessionStorage.setItem(
           'eden-docs-fill',
           JSON.stringify({ apiKey: data.apiKey, orgId: data.orgId }),
         );
       } catch (_) {}
-    } catch (_) {
-      setError('Could not reach the portal — check that you are signed in.');
+    } catch (e) {
+      setError(
+        e instanceof Error
+          ? e.message
+          : 'Could not reach the portal — check that you are signed in.',
+      );
     } finally {
       setBusy(false);
     }
@@ -175,7 +282,10 @@ export default function FillInSnippet() {
   }, [snippet]);
 
   const loggedIn = Boolean(session?.loggedIn);
-  const canFill = loggedIn && session?.canCreateKeys !== false && session?.orgId;
+  const needsBridge = Boolean(session?.needsBridge);
+  const canFill =
+    (loggedIn && session?.canCreateKeys !== false && session?.orgId) ||
+    needsBridge;
   const sessionLoading = session === null;
 
   return (
@@ -196,7 +306,16 @@ export default function FillInSnippet() {
           ))}
         </div>
         <div className="eden-fillin__actions">
-          {sessionLoading ? null : canFill ? (
+          {sessionLoading ? null : needsBridge && !loggedIn ? (
+            <button
+              type="button"
+              className="eden-fillin__primary"
+              onClick={syncViaBridge}
+              disabled={busy}
+            >
+              {busy ? 'Connecting…' : 'Sync Eden session'}
+            </button>
+          ) : canFill ? (
             <button
               type="button"
               className="eden-fillin__primary"
@@ -221,21 +340,23 @@ export default function FillInSnippet() {
           ? 'Checking portal session…'
           : filled
             ? 'Credentials are in the snippet for this browser session. Paste and run.'
-            : canFill
-              ? 'Fill in creates an API key in your workspace and writes it into the snippet.'
-              : loggedIn && !session?.canCreateKeys
-                ? 'You are signed in, but only org owners and admins can create API keys.'
-                : loggedIn && !session?.orgId
-                  ? 'Signed in — create a workspace in the portal, then return here.'
-                  : (
-                    <>
-                      Snippet uses placeholders until you{' '}
-                      <a href={SIGN_IN_URL} target="_blank" rel="noopener noreferrer">
-                        sign in to Eden
-                      </a>
-                      . Then Fill in will appear here.
-                    </>
-                  )}
+            : needsBridge && !loggedIn
+              ? 'Signed in on Eden? Sync your session (opens a short portal popup) so Fill in can create a key.'
+              : canFill && loggedIn
+                ? 'Fill in creates an API key in your workspace and writes it into the snippet.'
+                : loggedIn && !session?.canCreateKeys
+                  ? 'You are signed in, but only org owners and admins can create API keys.'
+                  : loggedIn && !session?.orgId
+                    ? 'Signed in — create a workspace in the portal, then return here.'
+                    : (
+                      <>
+                        Snippet uses placeholders until you{' '}
+                        <a href={SIGN_IN_URL} target="_blank" rel="noopener noreferrer">
+                          sign in to Eden
+                        </a>
+                        , then use Sync Eden session / Fill in here.
+                      </>
+                    )}
       </p>
       {error ? <p className="eden-fillin__error">{error}</p> : null}
       <pre className="eden-fillin__pre">

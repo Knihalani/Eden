@@ -42,7 +42,19 @@ async function shardOr404Null<T>(promise: Promise<T>): Promise<T | null> {
   try {
     return await promise;
   } catch (e) {
-    if (e instanceof ApiError && e.status === 404) return null;
+    // Soft-fail optional dashboard shards: missing routes (404),
+    // validation quirks (422), and transient backend errors (5xx)
+    // should render empty cards — not uncaught ApiError noise.
+    if (
+      e instanceof ApiError &&
+      (e.status === 404 ||
+        e.status === 422 ||
+        e.status >= 500 ||
+        e.status === 401 ||
+        e.status === 403)
+    ) {
+      return null;
+    }
     throw e;
   }
 }

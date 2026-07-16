@@ -3,9 +3,8 @@
 /**
  * ProductTour — spotlight overlay that introduces each portal surface.
  *
- * Renders a dimmed mask with a hole around `[data-tour-id]`, a floating
- * card with copy + Next/Back/Skip, and navigates between routes as the
- * user advances. Finish step links to the docs quickstart.
+ * Larger card, clearer hierarchy, Escape/X always invoke onSkip (parent
+ * closes optimistically). Finish step links to the docs quickstart.
  */
 
 import {
@@ -27,7 +26,9 @@ import {
 } from "@/lib/product-tour";
 import { cn } from "@/lib/utils";
 
-const PAD = 8;
+const PAD = 10;
+const CARD_W = 440;
+const CARD_H = 280;
 
 interface Rect {
   top: number;
@@ -54,43 +55,44 @@ function measureTarget(targetId: string | undefined): Rect | null {
 
 function cardPlacement(
   hole: Rect | null,
-): { top: number; left: number; side: "right" | "bottom" | "center" } {
-  const cardW = 360;
-  const cardH = 220;
+  narrow: boolean,
+): { top: number; left: number; side: "right" | "bottom" | "center" | "sheet" } {
   const vw = typeof window !== "undefined" ? window.innerWidth : 1200;
   const vh = typeof window !== "undefined" ? window.innerHeight : 800;
 
+  if (narrow) {
+    return { top: 0, left: 0, side: "sheet" };
+  }
+
   if (!hole) {
     return {
-      top: Math.max(24, (vh - cardH) / 2),
-      left: Math.max(16, (vw - cardW) / 2),
+      top: Math.max(32, (vh - CARD_H) / 2),
+      left: Math.max(20, (vw - CARD_W) / 2),
       side: "center",
     };
   }
 
-  // Prefer right of sidebar target
-  const rightLeft = hole.left + hole.width + 16;
-  if (rightLeft + cardW < vw - 16) {
+  const rightLeft = hole.left + hole.width + 20;
+  if (rightLeft + CARD_W < vw - 20) {
     return {
-      top: Math.min(Math.max(16, hole.top), vh - cardH - 16),
+      top: Math.min(Math.max(20, hole.top), vh - CARD_H - 20),
       left: rightLeft,
       side: "right",
     };
   }
 
-  // Else below
-  const belowTop = hole.top + hole.height + 16;
-  if (belowTop + cardH < vh - 16) {
+  const belowTop = hole.top + hole.height + 20;
+  if (belowTop + CARD_H < vh - 20) {
     return {
       top: belowTop,
-      left: Math.min(Math.max(16, hole.left), vw - cardW - 16),
+      left: Math.min(Math.max(20, hole.left), vw - CARD_W - 20),
       side: "bottom",
     };
   }
 
   return {
-    top: Math.max(16, hole.top - cardH - 16),
-    left: Math.min(Math.max(16, hole.left), vw - cardW - 16),
+    top: Math.max(20, hole.top - CARD_H - 20),
+    left: Math.min(Math.max(20, hole.left), vw - CARD_W - 20),
     side: "bottom",
   };
 }
@@ -119,7 +121,10 @@ export function ProductTour({
     PRODUCT_TOUR_STEPS[0];
   const [hole, setHole] = useState<Rect | null>(null);
   const [ready, setReady] = useState(false);
+  const [narrow, setNarrow] = useState(false);
   const navigating = useRef(false);
+  const skipRef = useRef(onSkip);
+  skipRef.current = onSkip;
 
   const refreshHole = useCallback(() => {
     if (!step || step.kind !== "nav") {
@@ -129,13 +134,18 @@ export function ProductTour({
     setHole(measureTarget(step.targetId));
   }, [step]);
 
-  // Ask layout to expand the sidebar so nav targets are measurable.
   useEffect(() => {
     if (!open) return;
     window.dispatchEvent(new Event("eden:product-tour"));
   }, [open, stepIndex]);
 
-  // Navigate to the step's route when needed.
+  useEffect(() => {
+    const sync = () => setNarrow(window.innerWidth < 640);
+    sync();
+    window.addEventListener("resize", sync);
+    return () => window.removeEventListener("resize", sync);
+  }, []);
+
   useEffect(() => {
     if (!open || !step?.href) return;
     const target = step.href.split("?")[0];
@@ -149,7 +159,6 @@ export function ProductTour({
     router.push(step.href);
   }, [open, step?.href, step?.id, pathname, router]);
 
-  // After navigation / open, wait for target + measure.
   useLayoutEffect(() => {
     if (!open) return;
     let cancelled = false;
@@ -163,7 +172,6 @@ export function ProductTour({
           setHole(r);
           setReady(true);
           navigating.current = false;
-          // Scroll target into view in sidebar
           const el = document.querySelector(
             `[data-tour-id="${step.targetId!.replace(/"/g, "")}"]`,
           );
@@ -175,7 +183,6 @@ export function ProductTour({
           requestAnimationFrame(tick);
           return;
         }
-        // Fallback: no spotlight, still show card
         setHole(null);
         setReady(true);
         return;
@@ -207,7 +214,8 @@ export function ProductTour({
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         e.preventDefault();
-        onSkip();
+        e.stopPropagation();
+        skipRef.current();
       } else if (e.key === "ArrowRight" || e.key === "Enter") {
         e.preventDefault();
         goNext();
@@ -216,10 +224,10 @@ export function ProductTour({
         goBack();
       }
     };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- goNext/goBack close over stepIndex
-  }, [open, stepIndex, onSkip]);
+  }, [open, stepIndex]);
 
   function goNext() {
     if (busy) return;
@@ -239,10 +247,11 @@ export function ProductTour({
 
   if (!open || typeof document === "undefined") return null;
 
-  const placement = cardPlacement(hole);
+  const placement = cardPlacement(hole, narrow);
   const isFinish = step.kind === "finish";
   const isWelcome = step.kind === "welcome";
-  const progressLabel = `${stepIndex + 1} / ${PRODUCT_TOUR_TOTAL}`;
+  const progressPct = ((stepIndex + 1) / PRODUCT_TOUR_TOTAL) * 100;
+  const isSheet = placement.side === "sheet";
 
   return createPortal(
     <AnimatePresence>
@@ -254,17 +263,16 @@ export function ProductTour({
           aria-labelledby="eden-tour-title"
           aria-describedby="eden-tour-body"
         >
-          {/* Spotlight mask */}
           <motion.div
             key={`mask-${step.id}`}
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            transition={{ duration: 0.2 }}
+            transition={{ duration: 0.22 }}
             className="absolute inset-0"
-            onClick={() => onSkip()}
+            onClick={() => skipRef.current()}
           >
-            {hole ? (
+            {hole && !narrow ? (
               <svg className="absolute inset-0 h-full w-full" aria-hidden>
                 <defs>
                   <mask id="eden-tour-mask">
@@ -274,7 +282,7 @@ export function ProductTour({
                       y={hole.top}
                       width={hole.width}
                       height={hole.height}
-                      rx={10}
+                      rx={12}
                       fill="black"
                     />
                   </mask>
@@ -282,7 +290,7 @@ export function ProductTour({
                 <rect
                   width="100%"
                   height="100%"
-                  fill="rgba(6, 8, 12, 0.72)"
+                  fill="rgba(4, 6, 10, 0.78)"
                   mask="url(#eden-tour-mask)"
                 />
                 <rect
@@ -290,104 +298,114 @@ export function ProductTour({
                   y={hole.top}
                   width={hole.width}
                   height={hole.height}
-                  rx={10}
+                  rx={12}
                   fill="none"
                   stroke="var(--accent)"
-                  strokeWidth={2}
+                  strokeWidth={2.5}
                   className="pointer-events-none"
+                  style={{ filter: "drop-shadow(0 0 10px color-mix(in srgb, var(--accent) 55%, transparent))" }}
                 />
               </svg>
             ) : (
-              <div className="absolute inset-0 bg-[rgba(6,8,12,0.72)] backdrop-blur-[2px]" />
+              <div className="absolute inset-0 bg-[rgba(4,6,10,0.78)] backdrop-blur-[3px]" />
             )}
           </motion.div>
 
-          {/* Floating card */}
           {ready && (
             <motion.div
               key={`card-${step.id}`}
-              initial={{ opacity: 0, y: 8, scale: 0.98 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: 4 }}
-              transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
-              style={{
-                top: placement.top,
-                left: placement.left,
-                width: "min(360px, calc(100vw - 32px))",
-              }}
+              initial={
+                isSheet
+                  ? { opacity: 0, y: 48 }
+                  : { opacity: 0, y: 12, scale: 0.97 }
+              }
+              animate={
+                isSheet
+                  ? { opacity: 1, y: 0 }
+                  : { opacity: 1, y: 0, scale: 1 }
+              }
+              exit={
+                isSheet
+                  ? { opacity: 0, y: 32 }
+                  : { opacity: 0, y: 8, scale: 0.98 }
+              }
+              transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
+              style={
+                isSheet
+                  ? undefined
+                  : {
+                      top: placement.top,
+                      left: placement.left,
+                      width: `min(${CARD_W}px, calc(100vw - 40px))`,
+                    }
+              }
               className={cn(
-                "pointer-events-auto absolute z-[81] rounded-xl border border-[var(--border-default)]",
-                "bg-[var(--bg-primary)] shadow-2xl shadow-black/40",
+                "pointer-events-auto z-[81] overflow-hidden border border-[var(--border-default)]",
+                "bg-[var(--bg-primary)] shadow-[0_24px_64px_rgba(0,0,0,0.55)]",
+                isSheet
+                  ? "absolute inset-x-0 bottom-0 rounded-t-2xl border-b-0"
+                  : "absolute rounded-2xl",
               )}
               onClick={(e) => e.stopPropagation()}
             >
-              <div className="flex items-start justify-between gap-3 border-b border-[var(--border-default)] px-4 py-3">
-                <div>
-                  <p className="text-[11px] font-medium uppercase tracking-wider text-[var(--text-muted)]">
-                    Product tour · {progressLabel}
+              <div
+                className="h-1 w-full bg-[var(--bg-tertiary)]"
+                aria-hidden
+              >
+                <div
+                  className="h-full bg-[var(--accent)] transition-[width] duration-300 ease-out"
+                  style={{ width: `${progressPct}%` }}
+                />
+              </div>
+
+              <div className="flex items-start justify-between gap-4 px-5 pt-5 pb-1 sm:px-6 sm:pt-6">
+                <div className="min-w-0">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--accent)]">
+                    Product tour · {stepIndex + 1} of {PRODUCT_TOUR_TOTAL}
                   </p>
                   <h2
                     id="eden-tour-title"
-                    className="mt-0.5 text-base font-semibold text-[var(--text-primary)]"
+                    className="mt-1.5 font-[family-name:var(--font-display)] text-xl font-semibold tracking-tight text-[var(--text-primary)] sm:text-2xl"
                   >
                     {step.title}
                   </h2>
                 </div>
                 <button
                   type="button"
-                  onClick={() => onSkip()}
-                  disabled={busy}
-                  aria-label="Skip tour"
-                  className="rounded-md p-1 text-[var(--text-muted)] hover:bg-[var(--bg-tertiary)] hover:text-[var(--text-primary)] disabled:opacity-50"
+                  onClick={() => skipRef.current()}
+                  aria-label="Close tour"
+                  className="shrink-0 rounded-lg p-2 text-[var(--text-muted)] transition-colors hover:bg-[var(--bg-tertiary)] hover:text-[var(--text-primary)]"
                 >
-                  <X className="h-4 w-4" />
+                  <X className="h-5 w-5" />
                 </button>
               </div>
 
-              <div className="px-4 py-3">
+              <div className="px-5 py-4 sm:px-6">
                 <p
                   id="eden-tour-body"
-                  className="text-sm leading-relaxed text-[var(--text-secondary)]"
+                  className="text-[15px] leading-relaxed text-[var(--text-secondary)] sm:text-base"
                 >
                   {step.body}
                 </p>
-
-                {/* Progress dots */}
-                <div className="mt-4 flex flex-wrap gap-1" aria-hidden>
-                  {PRODUCT_TOUR_STEPS.map((s, i) => (
-                    <div
-                      key={s.id}
-                      className={cn(
-                        "h-1 w-3 rounded-full transition-colors",
-                        i === stepIndex
-                          ? "bg-[var(--accent)]"
-                          : i < stepIndex
-                            ? "bg-[var(--accent)]/40"
-                            : "bg-[var(--bg-tertiary)]",
-                      )}
-                    />
-                  ))}
-                </div>
               </div>
 
-              <div className="flex items-center justify-between gap-2 border-t border-[var(--border-default)] px-4 py-3">
+              <div className="flex items-center justify-between gap-3 border-t border-[var(--border-default)] px-5 py-4 sm:px-6">
                 <button
                   type="button"
-                  disabled={busy}
-                  onClick={() => onSkip()}
-                  className="text-xs text-[var(--text-muted)] hover:text-[var(--text-primary)] disabled:opacity-50"
+                  onClick={() => skipRef.current()}
+                  className="text-sm text-[var(--text-muted)] transition-colors hover:text-[var(--text-primary)]"
                 >
-                  Skip tour
+                  Skip
                 </button>
                 <div className="flex items-center gap-2">
                   {!isWelcome && (
                     <button
                       type="button"
-                      disabled={busy || stepIndex === 0}
+                      disabled={stepIndex === 0}
                       onClick={goBack}
-                      className="inline-flex items-center gap-1 rounded-lg border border-[var(--border-default)] px-3 py-1.5 text-xs font-medium text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)] disabled:opacity-40"
+                      className="inline-flex items-center gap-1.5 rounded-xl border border-[var(--border-default)] px-3.5 py-2.5 text-sm font-medium text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-tertiary)] disabled:opacity-40"
                     >
-                      <ArrowLeft className="h-3.5 w-3.5" />
+                      <ArrowLeft className="h-4 w-4" />
                       Back
                     </button>
                   )}
@@ -395,31 +413,30 @@ export function ProductTour({
                     <>
                       <Link
                         href="/settings?tab=api-keys"
-                        className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border-default)] px-3 py-1.5 text-xs font-medium text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)]"
+                        className="inline-flex items-center gap-1.5 rounded-xl border border-[var(--border-default)] px-3.5 py-2.5 text-sm font-medium text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-tertiary)]"
                         onClick={() => onFinish()}
                       >
-                        Create API key
+                        API key
                       </Link>
                       <a
                         href={step.ctaHref}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--accent)] px-3 py-1.5 text-xs font-medium text-[var(--bg-primary)] hover:opacity-90"
+                        className="inline-flex items-center gap-1.5 rounded-xl bg-[var(--accent)] px-4 py-2.5 text-sm font-semibold text-[var(--accent-foreground)] transition-opacity hover:opacity-90"
                         onClick={() => onFinish()}
                       >
                         {step.ctaLabel ?? "Open docs"}
-                        <ExternalLink className="h-3.5 w-3.5" />
+                        <ExternalLink className="h-4 w-4" />
                       </a>
                     </>
                   ) : (
                     <button
                       type="button"
-                      disabled={busy}
                       onClick={goNext}
-                      className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--accent)] px-3 py-1.5 text-xs font-medium text-[var(--bg-primary)] hover:opacity-90 disabled:opacity-50"
+                      className="inline-flex items-center gap-1.5 rounded-xl bg-[var(--accent)] px-4 py-2.5 text-sm font-semibold text-[var(--accent-foreground)] transition-opacity hover:opacity-90"
                     >
                       {isWelcome ? "Start tour" : "Next"}
-                      <ArrowRight className="h-3.5 w-3.5" />
+                      <ArrowRight className="h-4 w-4" />
                     </button>
                   )}
                 </div>
