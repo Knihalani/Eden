@@ -17,7 +17,7 @@ import { PageHeader } from "@/components/layout/page-header";
 import { PageContent } from "@/components/layout/page-content";
 import { EmbeddedSurface } from "@/components/layout/embedded-surface";
 import { useQueryTab } from "@/hooks/use-query-tab";
-import { RepeatBadge, RegressionBadge, SeverityBadge, StatusBadge } from "./_components/issue-badges";
+import { RepeatBadge, RegressionBadge, IssueSeverityBadge, StatusBadge } from "./_components/issue-badges";
 
 const STATUS_FILTERS = [
   "all",
@@ -137,7 +137,7 @@ function IssuesList() {
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <SeverityBadge severity={i.severity} />
+                    <IssueSeverityBadge severity={i.severity} />
                     <StatusBadge status={i.status} />
                     <span className="text-xs font-mono px-2 py-0.5 rounded bg-[var(--bg-tertiary)] text-[var(--text-muted)]">
                       {i.kind}

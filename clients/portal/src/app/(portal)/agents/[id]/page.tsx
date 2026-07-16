@@ -37,6 +37,7 @@ import { queryKeys } from "@/lib/query-keys";
 import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorState } from "@/components/ui/error-state";
+import { NoOrgState } from "@/components/ui/no-org-state";
 import { PageHeader } from "@/components/layout/page-header";
 import { PageContent, PageLoading } from "@/components/layout/page-content";
 
@@ -105,9 +106,11 @@ export default function AgentDetailPage() {
 
   if (!orgId) {
     return (
-      <div className="p-8 text-sm text-[var(--text-muted)]">
-        Select an organisation to view this agent.
-      </div>
+      <NoOrgState
+        icon={Bot}
+        feature="Agents"
+        description="Select an organisation to view this agent."
+      />
     );
   }
 

@@ -169,11 +169,6 @@
   --chart-outcome-partial: #5B9EFF;
   --chart-outcome-failed: #FF6B7A;
 
-  /* Heatmap intensity stops (RGB triplets for use in rgba()) */
-  --heat-low: 95, 229, 168;
-  --heat-mid: 255, 181, 71;
-  --heat-high: 255, 107, 122;
-
   /* Overlay — modal scrim */
   --overlay: rgba(0, 0, 0, 0.72);
 
@@ -284,16 +279,9 @@
   /* Skeleton shimmer overlay */
   --shimmer: rgba(255, 255, 255, 0.05);
 
-  /* Builder canvas node colors (8 distinct hues) */
+  /* Builder canvas node colors (live tokens referenced from UI) */
   --node-agent: #10b981;
   --node-tool: #0ea5e9;
-  --node-scenario: #f59e0b;
-  --node-scoring: #a855f7;
-  --node-memory: #ec4899;
-  --node-loop: #06b6d4;
-  --node-seed: #f97316;
-  --node-default: #71717a;
-  --node-grid: #3f3f46;
 }
 
 /* ==================== Tailwind v4 Theme Integration ==================== */

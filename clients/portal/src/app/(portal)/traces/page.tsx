@@ -16,7 +16,7 @@
  * component and reused here.
  */
 
-import { useCallback, useMemo, useState , Suspense} from "react";
+import { useCallback, useMemo, useState, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import { Layers, RefreshCw, Loader2 } from "lucide-react";
@@ -25,6 +25,7 @@ import { PageContent } from "@/components/layout/page-content";
 import { EmbeddedSurface } from "@/components/layout/embedded-surface";
 import { NoOrgState } from "@/components/ui/no-org-state";
 import { ErrorState } from "@/components/ui/error-state";
+import { LoadingSkeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { TracesTab } from "../observability/_components/TracesTab";
 import { AnnotateTraceDialog } from "../observability/_components/AnnotateTraceDialog";
@@ -35,7 +36,6 @@ import { useOrgQuery } from "@/hooks/use-api-query";
 import { queryKeys } from "@/lib/query-keys";
 import { SessionTimeline, type AgentSessionTimelineItem } from "@/components/observability/SessionTimeline";
 import { TraceExportModal } from "../observability/_components/TraceExportModal";
-import { TraceShareModal } from "../observability/_components/TraceShareModal";
 import { LiveTailPanel } from "./_components/LiveTailPanel";
 import { SpanSearchBar } from "./_components/SpanSearchBar";
 import { SelectedTraceRail } from "../observability/_components/SelectedTraceCard";
@@ -56,6 +56,20 @@ function ViewLoading() {
       <Loader2 className="h-4 w-4 animate-spin text-[var(--text-muted)]" />
     </div>
   );
+}
+
+function traceMatchesFacet(trace: TraceItem, facet: string): boolean {
+  if (!facet) return true;
+  const needle = facet.toLowerCase();
+  const tags = trace.tags ?? [];
+  if (tags.some((tag) => {
+    const t = tag.toLowerCase();
+    return t === needle || t.startsWith(`${needle}:`) || t.includes(needle);
+  })) {
+    return true;
+  }
+  const hay = `${trace.model ?? ""} ${trace.agent_id ?? ""} ${trace.realm ?? ""}`.toLowerCase();
+  return hay.includes(needle);
 }
 
 const PAGE_SIZE = 50;
@@ -94,8 +108,6 @@ function TracesPageInner() {
   // re-rendering.
   const [annotateOpen, setAnnotateOpen] = useState(false);
   const [annotateTraceId, setAnnotateTraceId] = useState<string>("");
-  const [shareOpen, setShareOpen] = useState(false);
-  const [shareTraceId, setShareTraceId] = useState<string>("");
 
   const traceFilterParams = useMemo(
     () => ({
@@ -118,19 +130,23 @@ function TracesPageInner() {
     () =>
       agentSessionsApi
         .list(orgId!, { ...(filter.agent_id ? { agent_id: filter.agent_id } : {}), limit: 50 })
-        .then((res) => res.data?.sessions ?? [])
-        .catch(() => []),
+        .then((res) => res.data?.sessions ?? []),
   );
 
-  const traces = useMemo(
-    () => (tracesQuery.data?.traces ?? []) as unknown as TraceItem[],
-    [tracesQuery.data],
-  );
-  const tracesTotal = tracesQuery.data?.total ?? traces.length;
+  const traces = useMemo(() => {
+    const raw = (tracesQuery.data?.traces ?? []) as unknown as TraceItem[];
+    if (!facet) return raw;
+    return raw.filter((t) => traceMatchesFacet(t, facet));
+  }, [tracesQuery.data, facet]);
+  const tracesTotal = facet
+    ? traces.length
+    : (tracesQuery.data?.total ?? traces.length);
   const sessions = sessionsQuery.data ?? [];
   const loading = tracesQuery.isLoading || sessionsQuery.isLoading;
   const refreshing = tracesQuery.isFetching || sessionsQuery.isFetching;
-  const errorMessage = tracesQuery.error?.message ?? null;
+  const tracesError = tracesQuery.error?.message ?? null;
+  const sessionsError = sessionsQuery.error?.message ?? null;
+  const errorMessage = tracesError;
 
   const refresh = useCallback(() => {
     void tracesQuery.refetch();
@@ -300,6 +316,24 @@ function TracesPageInner() {
           }
         />
       )}
+      {sessionsError && !loading && !errorMessage && (
+        <ErrorState
+          title="Could not load agent sessions"
+          message={sessionsError}
+          action={
+            <Button
+              onClick={() => void sessionsQuery.refetch()}
+              variant="outline"
+              size="default"
+              disabled={sessionsQuery.isFetching}
+              loading={sessionsQuery.isFetching}
+            >
+              <RefreshCw className="w-4 h-4" />
+              Try again
+            </Button>
+          }
+        />
+      )}
       <div className="flex flex-col lg:flex-row gap-6">
         <div className="grid gap-4 lg:grid-cols-[1fr_18rem] flex-1 min-w-0">
         <div className="space-y-4 min-w-0">
@@ -326,7 +360,14 @@ function TracesPageInner() {
               onCreateAlertFromFilters={handleCreateAlertFromFilters}
               initialTraceId={initialTraceId}
             />
-          {!loading && !errorMessage && tracesTotal > traces.length && (
+          {!loading && !errorMessage && !facet && tracesTotal > traces.length && (
+            <div className="flex justify-center pt-2">
+              <Button variant="outline" size="default" onClick={handleLoadMore} loading={refreshing} disabled={refreshing}>
+                Load more traces
+              </Button>
+            </div>
+          )}
+          {!loading && !errorMessage && facet && (tracesQuery.data?.total ?? 0) > (tracesQuery.data?.traces?.length ?? 0) && (
             <div className="flex justify-center pt-2">
               <Button variant="outline" size="default" onClick={handleLoadMore} loading={refreshing} disabled={refreshing}>
                 Load more traces
@@ -351,11 +392,6 @@ function TracesPageInner() {
         onOpenChange={setAnnotateOpen}
         traceId={annotateTraceId}
       />
-      <TraceShareModal
-        open={shareOpen}
-        onOpenChange={setShareOpen}
-        traceId={shareTraceId}
-      />
     </PageContent>
   );
 }
@@ -368,7 +404,7 @@ function TracesPageInner() {
 // surfaces in the browser console as a 404.
 export default function TracesPage() {
   return (
-    <Suspense fallback={null}>
+    <Suspense fallback={<LoadingSkeleton variant="table" lines={6} size="wide" />}>
       <TracesPageInner />
     </Suspense>
   );

@@ -107,10 +107,6 @@ export default function FillInSnippet() {
         const data = await res.json().catch(() => ({ loggedIn: false }));
         if (cancelled) return;
         setSession(data);
-        if (data.orgId && !orgId) {
-          // Preview org id in placeholder even before Fill in
-          // (key still blank until create).
-        }
       } catch (_) {
         if (!cancelled) setSession({ loggedIn: false });
       }

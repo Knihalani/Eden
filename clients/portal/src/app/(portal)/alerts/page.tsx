@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo, Suspense } from "react";
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import dynamic from "next/dynamic";
 import { useOrg } from "@/hooks/use-org";
@@ -272,7 +273,7 @@ function AlertsPageInner() {
           icon={Bell}
         />
         <div className="mb-4 flex gap-2 text-sm">
-          <a href="/alerts" className="text-[var(--accent)] hover:underline">Feed</a>
+          <Link href="/alerts" className="text-[var(--accent)] hover:underline">Feed</Link>
           <span className="text-[var(--text-muted)]">·</span>
           <span className="font-medium text-[var(--text-primary)]">Signals</span>
         </div>
@@ -292,12 +293,12 @@ function AlertsPageInner() {
         description="Configure notifications when traces, costs, or quality cross a threshold."
         actions={
           <div className="flex items-center gap-2">
-            <a
+            <Link
               href="/alerts?tab=signals"
               className="text-xs text-[var(--accent)] hover:underline px-2"
             >
               Signals
-            </a>
+            </Link>
             <button
               onClick={fetchAlerts}
               disabled={loading || refreshing}

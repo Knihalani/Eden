@@ -1,11 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { Loader2, GitBranch, ArrowRight, Clock } from "lucide-react";
+import { GitBranch, ArrowRight, Clock } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 export interface TraceRow {
   trace_id: string;
   agent_id: string | null;
@@ -38,8 +39,17 @@ export function RecentTracesCard({
         </Link>
       </div>
 
-      {loading ? <div className="flex items-center justify-center py-10">
-          <Loader2 className="w-5 h-5 animate-spin text-[var(--text-muted)]" />
+      {loading ? <div className="space-y-2 px-5 pb-5" aria-busy="true" aria-live="polite">
+          {Array.from({ length: 5 }).map((_, i) => (
+            <div key={i} className="flex items-center gap-3 py-1.5">
+              <Skeleton className="h-2 w-2 rounded-full shrink-0" />
+              <div className="flex-1 space-y-1.5 min-w-0">
+                <Skeleton className="h-3.5 w-32" />
+                <Skeleton className="h-3 w-48" />
+              </div>
+              <Skeleton className="h-3 w-12 shrink-0" />
+            </div>
+          ))}
         </div> : empty ? <div className="px-5 pb-5">
           <EmptyState icon={GitBranch} title="No traces yet" description="Traces will appear here once your agents emit telemetry. Connect an agent to see live signals in seconds." action={<Link href="/dashboard?onboarding=1">
                 <Button>

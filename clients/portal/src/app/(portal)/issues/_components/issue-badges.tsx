@@ -1,7 +1,7 @@
 import { Repeat } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-export function SeverityBadge({ severity }: { severity: string }) {
+export function IssueSeverityBadge({ severity }: { severity: string }) {
   const colorMap: Record<string, string> = {
     p0: "bg-[var(--error)]/20 text-[var(--error)] border-[var(--error)]/30",
     p1: "bg-[var(--warning)]/20 text-[var(--warning)] border-[var(--warning)]/30",

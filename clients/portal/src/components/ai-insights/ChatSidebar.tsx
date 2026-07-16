@@ -35,10 +35,12 @@ import {
   Archive,
   ChevronDown,
   Terminal,
+  Square,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ToolCallCard } from "./ToolCallCard";
 import { ApprovalCard } from "./ApprovalCard";
+import { ErrorState } from "@/components/ui/error-state";
 import { useOrg } from "@/hooks/use-org";
 import { useToast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils";
@@ -62,6 +64,7 @@ interface ToolCall {
 }
 
 interface Message {
+  id: string;
   role: "user" | "assistant" | "tool";
   /** Text content for user/assistant; tool messages render via the tool_call list. */
   text?: string;
@@ -69,6 +72,15 @@ interface Message {
   toolCalls?: ToolCall[];
   /** True while a server stream for this turn is still in flight. */
   streaming?: boolean;
+  /** When set, render as a plain error (no markdown underscores). */
+  isError?: boolean;
+}
+
+function newMessageId(): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  return `msg-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 }
 
 const SIDEBAR_WIDTH = 360;
@@ -108,6 +120,7 @@ export function ChatSidebar() {
     return window.sessionStorage.getItem("eden:ai-sidebar:open") === "1";
   });
   const [sessions, setSessions] = useState<Session[]>([]);
+  const [sessionsError, setSessionsError] = useState<string | null>(null);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
@@ -122,6 +135,7 @@ export function ChatSidebar() {
   // streaming (EventSource doesn't support POST), so the ref was
   // both dead AND the in-flight POST had no cancel path.
   const abortRef = useRef<AbortController | null>(null);
+  const streamingRef = useRef(false);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -174,22 +188,18 @@ export function ChatSidebar() {
   useEffect(() => {
     if (!orgId) {
       setSessions([]);
+      setSessionsError(null);
       setActiveSessionId(null);
       setMessages([]);
       return;
     }
     let cancelled = false;
     setLoadingSessions(true);
+    setSessionsError(null);
     fetch(`/api/ai-insights/sessions?org_id=${orgId}`, { credentials: "include" })
       .then(async (r) => {
-        // 5xx: backend hiccup — log once and treat as empty list so
-        // the sidebar still renders ("no sessions yet"). Without this
-        // branch the original code threw on every 500 and the user
-        // saw "ai-insights: list sessions failed Error: HTTP 500" in
-        // the console on every page load.
         if (r.status >= 500) {
-          console.warn(`ai-insights: list sessions unavailable (HTTP ${r.status}) — using empty list`);
-          return { sessions: [] };
+          throw new Error(`Sessions unavailable (HTTP ${r.status})`);
         }
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         return (await r.json()) as { sessions: Session[] };
@@ -197,11 +207,13 @@ export function ChatSidebar() {
       .then((data) => {
         if (cancelled) return;
         setSessions(data.sessions);
+        setSessionsError(null);
       })
       .catch((err) => {
         if (cancelled) return;
         console.warn("ai-insights: list sessions failed", err);
-        // Don't toast on initial load — keep the sidebar usable.
+        setSessions([]);
+        setSessionsError(err instanceof Error ? err.message : "Failed to load sessions");
       })
       .finally(() => {
         if (!cancelled) setLoadingSessions(false);
@@ -230,29 +242,31 @@ export function ChatSidebar() {
       })
       .then((data) => {
         if (cancelled) return;
-        const rehydrated: Message[] = data.messages.map((m) => {
+        const rehydrated: Message[] = data.messages.map((m, idx) => {
           const blocks = Array.isArray(m.content) ? (m.content as Array<{ type: string; [k: string]: unknown }>) : [];
           if (m.role === "user") {
             return {
-              role: "user",
+              id: newMessageId(),
+              role: "user" as const,
               text: blocks
                 .filter((b) => b.type === "text")
-                .map((b) => b.text)
+                .map((b) => String(b.text ?? ""))
                 .join("\n"),
             };
           }
           if (m.role === "assistant") {
             return {
-              role: "assistant",
+              id: newMessageId(),
+              role: "assistant" as const,
               text: blocks
                 .filter((b) => b.type === "text")
-                .map((b) => b.text)
+                .map((b) => String(b.text ?? ""))
                 .join("\n"),
             };
           }
           // tool turn — the UI doesn't render tool messages directly;
           // the assistant's tool_call list is what surfaces results.
-          return { role: "tool" };
+          return { id: `tool-${idx}-${newMessageId()}`, role: "tool" as const };
         });
         setMessages(rehydrated);
       })
@@ -278,7 +292,23 @@ export function ChatSidebar() {
     return () => {
       abortRef.current?.abort();
       abortRef.current = null;
+      streamingRef.current = false;
     };
+  }, []);
+
+  const stopStreaming = useCallback(() => {
+    abortRef.current?.abort();
+    abortRef.current = null;
+    streamingRef.current = false;
+    setStreaming(false);
+    setMessages((prev) => {
+      const next = prev.slice();
+      const last = next[next.length - 1];
+      if (last && last.role === "assistant" && last.streaming) {
+        next[next.length - 1] = { ...last, streaming: false };
+      }
+      return next;
+    });
   }, []);
 
   const newChat = useCallback(() => {
@@ -317,12 +347,14 @@ export function ChatSidebar() {
     setInput("");
 
     // Optimistic append so the user sees their message immediately.
-    setMessages((prev) => [...prev, { role: "user", text }]);
-    // Make sure an in-flight assistant message exists.
+    const userId = newMessageId();
+    const assistantId = newMessageId();
     setMessages((prev) => [
       ...prev,
-      { role: "assistant", text: "", streaming: true, toolCalls: [] },
+      { id: userId, role: "user", text },
+      { id: assistantId, role: "assistant", text: "", streaming: true, toolCalls: [] },
     ]);
+    streamingRef.current = true;
     setStreaming(true);
 
     // Use POST + fetch streaming (the backend returns text/event-stream).
@@ -345,14 +377,22 @@ export function ChatSidebar() {
         signal: controller.signal,
       });
     } catch (err) {
+      if (controller.signal.aborted) {
+        streamingRef.current = false;
+        setStreaming(false);
+        return;
+      }
+      streamingRef.current = false;
       setStreaming(false);
       setMessages((prev) => {
         const next = prev.slice(0, -1);
         return [
           ...next,
           {
+            id: assistantId,
             role: "assistant",
-            text: `_Network error: ${err instanceof Error ? err.message : "unknown"}_`,
+            text: `Network error: ${err instanceof Error ? err.message : "unknown"}`,
+            isError: true,
           },
         ];
       });
@@ -361,6 +401,7 @@ export function ChatSidebar() {
     }
 
     if (!response.ok || !response.body) {
+      streamingRef.current = false;
       setStreaming(false);
       let detail = `HTTP ${response.status}`;
       try {
@@ -371,7 +412,10 @@ export function ChatSidebar() {
       }
       setMessages((prev) => {
         const next = prev.slice(0, -1);
-        return [...next, { role: "assistant", text: `_Error: ${detail}_` }];
+        return [
+          ...next,
+          { id: assistantId, role: "assistant", text: `Error: ${detail}`, isError: true },
+        ];
       });
       toast.error(detail);
       return;
@@ -487,6 +531,7 @@ export function ChatSidebar() {
             }
             return next;
           });
+          streamingRef.current = false;
           setStreaming(false);
           break;
         }
@@ -498,14 +543,21 @@ export function ChatSidebar() {
             if (last && last.role === "assistant" && last.streaming) {
               next[next.length - 1] = {
                 ...last,
-                text: (last.text ?? "") + `\n\n_Error: ${msg}_`,
+                text: (last.text ?? "") + (last.text ? "\n\n" : "") + `Error: ${msg}`,
                 streaming: false,
+                isError: true,
               };
             } else {
-              next.push({ role: "assistant", text: `_Error: ${msg}_` });
+              next.push({
+                id: newMessageId(),
+                role: "assistant",
+                text: `Error: ${msg}`,
+                isError: true,
+              });
             }
             return next;
           });
+          streamingRef.current = false;
           setStreaming(false);
           toast.error(msg);
           break;
@@ -539,27 +591,34 @@ export function ChatSidebar() {
         }
       }
       // Drain any trailing event.
-      if (buffer.trim()) {
+      if (buffer.trim() && !controller.signal.aborted) {
         flushEvent(buffer);
       }
     } catch (err) {
-      console.warn("ai-insights: stream error", err);
-      setMessages((prev) => {
-        const next = prev.slice();
-        const last = next[next.length - 1];
-        if (last && last.role === "assistant" && last.streaming) {
-          next[next.length - 1] = {
-            ...last,
-            text: (last.text ?? "") + `\n\n_Stream interrupted_`,
-            streaming: false,
-          };
-        }
-        return next;
-      });
-      setStreaming(false);
+      if (controller.signal.aborted) {
+        // Stop / unmount — streaming cleared in finally.
+      } else {
+        console.warn("ai-insights: stream error", err);
+        setMessages((prev) => {
+          const next = prev.slice();
+          const last = next[next.length - 1];
+          if (last && last.role === "assistant" && last.streaming) {
+            next[next.length - 1] = {
+              ...last,
+              text: (last.text ?? "") + (last.text ? "\n\n" : "") + "Stream interrupted",
+              streaming: false,
+              isError: true,
+            };
+          }
+          return next;
+        });
+      }
     } finally {
+      streamingRef.current = false;
+      setStreaming(false);
+      abortRef.current = null;
       // Refresh the session list so the title is up to date.
-      if (orgId) {
+      if (orgId && !controller.signal.aborted) {
         fetch(`/api/ai-insights/sessions?org_id=${orgId}`, { credentials: "include" })
           .then((r) => r.ok ? r.json() : null)
           .then((data) => {
@@ -621,12 +680,8 @@ export function ChatSidebar() {
             "fixed right-0 top-0 z-30 flex h-dvh flex-col",
             "border-l border-[var(--border-default)] bg-[var(--bg-primary)]",
             "shadow-xl lg:shadow-none",
-            "max-[480px]:!w-screen max-[480px]:!max-w-screen",
+            "w-[min(100vw,360px)] max-[480px]:w-screen",
           )}
-          style={{
-            width: SIDEBAR_WIDTH,
-            maxWidth: typeof window !== "undefined" && window.innerWidth <= 480 ? "100vw" : SIDEBAR_WIDTH,
-          }}
           role="complementary"
           aria-label="AI Insights assistant"
         >
@@ -656,6 +711,43 @@ export function ChatSidebar() {
                     <div className="flex items-center gap-1 px-3 py-2 text-xs text-[var(--text-muted)]">
                       <Loader2 className="h-3 w-3 animate-spin" />
                       Loading…
+                    </div>
+                  ) : sessionsError ? (
+                    <div className="px-2 py-2">
+                      <ErrorState
+                        title="Could not load sessions"
+                        message={sessionsError}
+                        action={
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              if (!orgId) return;
+                              setLoadingSessions(true);
+                              setSessionsError(null);
+                              fetch(`/api/ai-insights/sessions?org_id=${orgId}`, {
+                                credentials: "include",
+                              })
+                                .then(async (r) => {
+                                  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+                                  return (await r.json()) as { sessions: Session[] };
+                                })
+                                .then((data) => {
+                                  setSessions(data.sessions);
+                                  setSessionsError(null);
+                                })
+                                .catch((err) => {
+                                  setSessionsError(
+                                    err instanceof Error ? err.message : "Failed to load sessions",
+                                  );
+                                })
+                                .finally(() => setLoadingSessions(false));
+                            }}
+                          >
+                            Try again
+                          </Button>
+                        }
+                      />
                     </div>
                   ) : sessions.length === 0 ? (
                     <div className="px-3 py-2 text-xs text-[var(--text-muted)]">
@@ -740,8 +832,8 @@ export function ChatSidebar() {
                 </ul>
               </div>
             )}
-            {messages.map((m, i) => (
-              <MessageBlock key={i} message={m} />
+            {messages.map((m) => (
+              <MessageBlock key={m.id} message={m} />
             ))}
           </div>
 
@@ -779,19 +871,28 @@ export function ChatSidebar() {
                   "focus:outline-none disabled:opacity-50",
                 )}
               />
-              <Button
-                type="submit"
-                size="sm"
-                disabled={!input.trim() || streaming}
-                className="h-9 w-9 p-0"
-                aria-label="Send"
-              >
-                {streaming ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
+              {streaming ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={stopStreaming}
+                  className="h-9 w-9 p-0"
+                  aria-label="Stop generating"
+                >
+                  <Square className="h-3.5 w-3.5" />
+                </Button>
+              ) : (
+                <Button
+                  type="submit"
+                  size="sm"
+                  disabled={!input.trim()}
+                  className="h-9 w-9 p-0"
+                  aria-label="Send"
+                >
                   <Send className="h-4 w-4" />
-                )}
-              </Button>
+                </Button>
+              )}
             </div>
           </form>
         </aside>
@@ -832,7 +933,14 @@ function MessageBlock({ message }: { message: Message }) {
   if (message.role === "assistant") {
     return (
       <div className="flex justify-start">
-        <div className="max-w-[90%] space-y-2 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-secondary)] px-3 py-2 text-sm text-[var(--text-primary)]">
+        <div
+          className={cn(
+            "max-w-[90%] space-y-2 rounded-lg border px-3 py-2 text-sm",
+            message.isError
+              ? "border-[var(--error)]/30 bg-[var(--error-bg)] text-[var(--error)]"
+              : "border-[var(--border-subtle)] bg-[var(--bg-secondary)] text-[var(--text-primary)]",
+          )}
+        >
           {message.toolCalls?.map((tc) =>
             tc.name === "preview_nl_alert" ? (
               <ApprovalCard

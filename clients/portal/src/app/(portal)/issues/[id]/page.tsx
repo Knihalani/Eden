@@ -25,7 +25,7 @@ import {
 } from "lucide-react";
 import { PageContent } from "@/components/layout/page-content";
 import { cn } from "@/lib/utils";
-import { RegressionBadge, RepeatBadge, SeverityBadge, StatusBadge } from "../_components/issue-badges";
+import { RegressionBadge, RepeatBadge, IssueSeverityBadge, StatusBadge } from "../_components/issue-badges";
 
 type Tab = "overview" | "triage" | "fix" | "experiment";
 
@@ -207,7 +207,7 @@ export default function IssueDetailPage() {
         <div className="space-y-4">
           <div className="rounded-lg border border-[var(--border-default)] bg-[var(--bg-primary)] p-4">
             <div className="flex items-center gap-2 flex-wrap mb-2">
-              <SeverityBadge severity={issue.severity} />
+              <IssueSeverityBadge severity={issue.severity} />
               <StatusBadge status={issue.status} />
               <RegressionBadge regressionCaseId={issue.regression_case_id} status={issue.status} />
               <span className="text-xs font-mono px-2 py-0.5 rounded bg-[var(--bg-tertiary)] text-[var(--text-muted)]">{issue.kind}</span>
@@ -406,7 +406,7 @@ function TriagePanel({
             </span>
           ) : null}
           {tr.auto_escalate ? (
-            <span className="text-[10px] uppercase px-2 py-0.5 rounded bg-[var(--error-bg,#3a1a1a)] text-[var(--error)]">
+            <span className="text-[10px] uppercase px-2 py-0.5 rounded bg-[var(--error-bg)] text-[var(--error)]">
               auto-escalate
             </span>
           ) : null}
@@ -489,7 +489,7 @@ function StumblesList({ stumbles }: { stumbles: AgentStumble[] }) {
           {stumbles.map((s) => (
             <li key={s.id} className="rounded border border-[var(--border-subtle)] p-2">
               <div className="flex items-center gap-2 flex-wrap">
-                <SeverityBadge severity={s.severity} />
+                <IssueSeverityBadge severity={s.severity} />
                 <span className="text-xs text-[var(--text-muted)]">{s.detected_by}</span>
               </div>
               <p className="mt-1 text-sm text-[var(--text-secondary)]">{s.title}</p>
