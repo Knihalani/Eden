@@ -123,6 +123,16 @@ class CostTracker:
         except Exception as e:
             logger.warning(f"Cost tracking Redis update failed: {e}")
 
+        # Mirror spend into budget_service PG ledger (best-effort, F83 unify step 1).
+        if event.total_cost_cents > 0:
+            try:
+                from eden.services.budget_service import record_usage
+
+                cost_usd = event.total_cost_cents / 100.0
+                await record_usage(event.tenant_id, cost_usd)
+            except Exception as exc:
+                logger.debug("CostTracker: budget_service record_usage failed: %s", exc)
+
     async def check_budget(
         self,
         tenant_id: str,

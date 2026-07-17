@@ -366,3 +366,134 @@ async def export(
     pg = await get_postgres_client()
     svc = LabelingService(pg, user_skills=_user_skills)
     return await svc.export(org_id=org_id, status_filter=status, limit=limit)
+
+
+# ── F50 annotation queues (kanban) ─────────────────────────────────
+
+
+class CreateQueueRequest(BaseModel):
+    name: str = Field(..., min_length=1, max_length=200)
+    description: str = Field(default="", max_length=2_000)
+    label_schema: dict[str, Any] = Field(default_factory=dict)
+
+
+class MoveItemRequest(BaseModel):
+    item_id: str
+    status: str = Field(..., pattern="^(todo|in_progress|done|skipped)$")
+
+
+class PushDatasetRequest(BaseModel):
+    dataset_id: str
+
+
+@router.get("/queues")
+async def list_queues(
+    org_id: str = Path(...),
+    user: dict = Depends(get_current_user),
+) -> dict[str, Any]:
+    from eden.evaluation.labeling_queues import LabelingQueueService
+
+    queues = await LabelingQueueService().list_queues(org_id)
+    return {"queues": [q.to_dict() for q in queues], "total": len(queues)}
+
+
+@router.post("/queues")
+async def create_queue(
+    body: CreateQueueRequest,
+    org_id: str = Path(...),
+    user: dict = Depends(get_current_user),
+) -> dict[str, Any]:
+    from eden.evaluation.labeling_queues import LabelingQueueService
+
+    q = await LabelingQueueService().create_queue(
+        org_id, name=body.name, description=body.description, schema=body.label_schema
+    )
+    return {"queue": q.to_dict()}
+
+
+@router.get("/queues/{queue_id}")
+async def get_queue(
+    org_id: str = Path(...),
+    queue_id: str = Path(...),
+    user: dict = Depends(get_current_user),
+) -> dict[str, Any]:
+    from eden.evaluation.labeling_queues import LabelingQueueService
+
+    queues = await LabelingQueueService().list_queues(org_id)
+    for q in queues:
+        if q.id == queue_id:
+            return {"queue": q.to_dict()}
+    raise HTTPException(status_code=404, detail="queue not found")
+
+
+@router.get("/queues/{queue_id}/board")
+async def queue_board(
+    org_id: str = Path(...),
+    queue_id: str = Path(...),
+    user: dict = Depends(get_current_user),
+) -> dict[str, Any]:
+    from eden.evaluation.labeling_queues import LabelingQueueService
+
+    board = await LabelingQueueService().kanban_board(org_id, queue_id)
+    return {"queue_id": queue_id, "board": board}
+
+
+@router.get("/queues/{queue_id}/iaa")
+async def queue_iaa(
+    org_id: str = Path(...),
+    queue_id: str = Path(...),
+    user: dict = Depends(get_current_user),
+) -> dict[str, Any]:
+    """Cohen's κ from dual labels in item payload when present."""
+    from eden.evaluation.iaa import iaa_from_annotation_pairs
+    from eden.evaluation.labeling_queues import LabelingQueueService
+
+    board = await LabelingQueueService().kanban_board(org_id, queue_id)
+    pairs: list[tuple[str, str]] = []
+    for col_items in board.values():
+        for item in col_items:
+            payload = item.get("payload") or {}
+            if isinstance(payload, str):
+                import json
+
+                try:
+                    payload = json.loads(payload)
+                except Exception:
+                    payload = {}
+            a = payload.get("label_a") or payload.get("annotator_1")
+            b = payload.get("label_b") or payload.get("annotator_2")
+            if a and b:
+                pairs.append((str(a), str(b)))
+    return {"queue_id": queue_id, "iaa": iaa_from_annotation_pairs(pairs)}
+
+
+@router.post("/queues/{queue_id}/move")
+async def move_queue_item(
+    body: MoveItemRequest,
+    org_id: str = Path(...),
+    queue_id: str = Path(...),
+    user: dict = Depends(get_current_user),
+) -> dict[str, Any]:
+    from eden.evaluation.labeling_queues import LabelingQueueService
+
+    svc = LabelingQueueService()
+    try:
+        ok = await svc.move_item(org_id, queue_id, body.item_id, status=body.status)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"moved": ok, "item_id": body.item_id, "status": body.status}
+
+
+@router.post("/queues/{queue_id}/push-to-dataset")
+async def push_queue_to_dataset(
+    body: PushDatasetRequest,
+    org_id: str = Path(...),
+    queue_id: str = Path(...),
+    user: dict = Depends(get_current_user),
+) -> dict[str, Any]:
+    from eden.evaluation.labeling_queues import LabelingQueueService
+
+    result = await LabelingQueueService().push_to_dataset(
+        org_id, queue_id, dataset_id=body.dataset_id
+    )
+    return result

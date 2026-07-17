@@ -42,7 +42,9 @@ import {
 import { cn, isExternalHref } from "@/lib/utils";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
-import { CommandPalette } from "@/components/ui/command-palette";
+import { AppShell } from "@/components/portal-os/AppShell";
+import { CommandPalette } from "@/components/portal-os/CommandPalette";
+import { MobileBottomNav } from "@/components/portal-os/MobileBottomNav";
 import { ChatSidebar } from "@/components/ai-insights/ChatSidebar";
 import { Logo } from "@/components/brand/logo";
 import { PortalNavLink } from "@/components/layout/portal-nav-link";
@@ -325,7 +327,7 @@ function PortalLayoutContent({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (!loading && !user) {
-      router.replace("/login");
+      router.replace("/sign-in");
     }
   }, [user, loading, router]);
 
@@ -444,43 +446,12 @@ function PortalLayoutContent({ children }: { children: React.ReactNode }) {
   const hidePortalChrome = inOnboardingWizard;
 
   return (
-    // FIX-A: scroll the document natively instead of trapping content
-    // in an internal overflow container. The previous `h-screen +
-    // overflow-clip` row + `overflow-auto` on <main> was fragile —
-    // any flex-sizing bug surfaced as "the page is unscrollable
-    // and nothing is clickable" (the scroll wheel hit the trapped
-    // container instead of the document, and clicks on the overlay
-    // pseudo-elements were absorbed). Switching to a native
-    // document scroll with `min-h-dvh` + row flex gives the
-    // user the standard browser-scroll affordance everywhere, on
-    // every viewport, with no special-casing for mobile bottom nav.
-    // FIX-D: must be flex-row on lg+ so the sidebar sits beside
-    // <main>, not stacked above it. flex-col on mobile so the
-    // sidebar becomes the mobile drawer.
-    // FIX-E: ``lg:items-start`` on the row — NOT the default
-    // ``items-stretch``. With ``stretch``, both <aside> and <main>
-    // resolve to the row's cross-axis size (``min-h-dvh``), and
-    // content that's taller than the viewport OVERFLOWS <main> but
-    // never grows the row. The document element stays at viewport
-    // height, the html scroll container has nothing to scroll, and
-    // users see a frozen page. With ``items-start``, the row's
-    // cross-axis = max(child intrinsic sizes) = the tallest item's
-    // natural height. <main>'s content grows the row, the body
-    // grows, the html element scrolls. Sidebar keeps its own
-    // ``lg:h-dvh`` so the chrome still fills the viewport on
-    // short pages.
-    <div
-      className="min-h-dvh flex flex-col lg:flex-row lg:items-start bg-[var(--bg-secondary)]"
-      data-density={densityCompact ? "compact" : "comfortable"}
-    >
-      {/* Skip-to-content link — visually hidden until focused, allows keyboard users to bypass the sidebar nav */}
-      <a href="#main-content" className="skip-to-content">
-        Skip to main content
-      </a>
-      {/* Mobile sidebar overlay — div (not button) so keyboard tab
-       * skips it. aria-hidden + the existing CSS rule at globals.css:419-423
-       * kill pointer-events for non-interactive overlays. */}
-      {sidebarOpen && !hidePortalChrome && (
+    <AppShell
+      density={densityCompact ? "compact" : "comfortable"}
+      hideChrome={hidePortalChrome}
+      sidebar={
+        <>
+      {sidebarOpen && (
         <div
           role="presentation"
           aria-hidden="true"
@@ -489,12 +460,6 @@ function PortalLayoutContent({ children }: { children: React.ReactNode }) {
         />
       )}
 
-      {/* Sidebar: fixed drawer on mobile, sticky in-flow on lg.
-          Sticky (instead of fixed/h-full) lets the document scroll
-          natively while the sidebar follows. The sidebar's own
-          internal scroll handles the case where there are more
-          nav items than fit in the viewport. */}
-      {!hidePortalChrome && (
       <aside
         aria-label="Main sidebar navigation"
         className={cn(
@@ -779,26 +744,9 @@ function PortalLayoutContent({ children }: { children: React.ReactNode }) {
           </div>
         </div>
       </aside>
-      )}
-
-      {/* Main content — flex-1 takes remaining width; document scrolls
-          natively (no internal overflow). The mobile bottom nav
-          reserves bottom padding (pb-20) on small screens. ``min-h-0``
-          is required on a flex-col child so the flex algorithm lets
-          it shrink below its content height — without it the child
-          grows to fit the page content and pushes the body past
-          100dvh, breaking the document-scroll affordance. June 2026
-          scroll-pass fix. */}
-      <main
-        id="main-content"
-        className={cn(
-          "flex-1 min-w-0 flex flex-col",
-          hidePortalChrome ? "pb-0" : "pb-20 lg:pb-0",
-        )}
-        tabIndex={-1}
-      >
-        {/* Top bar */}
-        {!hidePortalChrome && (
+        </>
+      }
+      header={
         <header className="sticky top-0 z-30 bg-[var(--bg-primary)] border-b border-[var(--border-default)]">
           <div className="flex items-center justify-between h-14 px-4 lg:px-6">
             {/* Left: Mobile logo + hamburger */}
@@ -914,8 +862,13 @@ function PortalLayoutContent({ children }: { children: React.ReactNode }) {
             </div>
           </div>
         </header>
-        )}
-
+      }
+      mobileNav={<MobileBottomNav />}
+      commandPalette={
+        <CommandPalette open={commandPaletteOpen} onOpenChange={setCommandPaletteOpen} />
+      }
+      aiRail={<ChatSidebar />}
+    >
         {/* Page content — content-sized wrapper. The previous
             ``flex-1 min-h-0`` here was the silent scroll killer:
             ``flex-1`` is ``flex: 1 1 0%`` — flex-basis 0% forces the
@@ -1041,33 +994,7 @@ function PortalLayoutContent({ children }: { children: React.ReactNode }) {
           </ErrorBoundary>
         </div>
 
-        {/* Mobile bottom navigation. Centered "Observe" item is the
-            raised/pill style via `isCenter`; pb-safe gives the bar
-            enough breathing room for notched phones. */}
-        {!hidePortalChrome && (
-        <nav
-          className="lg:hidden fixed bottom-0 left-0 right-0 bg-[var(--bg-primary)] border-t border-[var(--border-default)] z-40 pb-[env(safe-area-inset-bottom)]"
-          aria-label="Mobile navigation"
-        >
-          <div className="flex items-center justify-around h-16 px-1">
-            <BottomNavItem href="/dashboard" icon={Home} label="Home" />
-            <BottomNavItem href="/traces" icon={Layers} label="Traces" />
-            <BottomNavItem href="/observability" icon={Activity} label="Observe" isCenter />
-            <BottomNavItem href="/alerts" icon={Bell} label="Alerts" />
-            <BottomNavItem href="/settings" icon={Settings} label="Settings" />
-          </div>
-        </nav>
-        )}
-
-        {/* Command Palette (Cmd+K) */}
-        <CommandPalette open={commandPaletteOpen} onOpenChange={setCommandPaletteOpen} />
-      </main>
-
-      {/* AI Insights chat sidebar — persistent across the portal.
-          Renders its own floating toggle button so it can be opened
-          from any page. */}
-      {!hidePortalChrome && <ChatSidebar />}
-    </div>
+    </AppShell>
   );
 }
 

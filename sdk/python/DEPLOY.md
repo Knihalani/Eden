@@ -46,22 +46,22 @@ python3 -c "import eden; print(eden.__version__, eden.trace, eden.instrument)"
 ```bash
 cd sdk/python
 python3 -m build --wheel --sdist --no-isolation
-# → produces ./dist/eden_sdk-0.1.0-py3-none-any.whl
-# → produces ./dist/eden-sdk-0.1.0.tar.gz
+# → produces ./dist/eden_sdk-0.3.1-py3-none-any.whl
+# → produces ./dist/eden-sdk-0.3.1.tar.gz
 ```
 
 ## Validate
 
 ```bash
 # Inspect the wheel contents:
-python3 -m zipfile -e dist/eden_sdk-0.1.0-py3-none-any.whl /tmp/inspect
+python3 -m zipfile -e dist/eden_sdk-0.3.1-py3-none-any.whl /tmp/inspect
 find /tmp/inspect -type f | sort
 rm -rf /tmp/inspect
 
 # Run twine check to validate the package metadata:
 python3 -m twine check dist/*
-# → "Checking dist/eden_sdk-0.1.0-py3-none-any.whl: PASSED"
-# → "Checking dist/eden-sdk-0.1.0.tar.gz: PASSED"
+# → "Checking dist/eden_sdk-0.3.1-py3-none-any.whl: PASSED"
+# → "Checking dist/eden-sdk-0.3.1.tar.gz: PASSED"
 ```
 
 ## Publish to Test PyPI (recommended first run)
@@ -76,7 +76,7 @@ python3 -m venv /tmp/eden-verify
 source /tmp/eden-verify/bin/activate
 pip install --index-url https://test.pypi.org/simple/ \
             --extra-index-url https://pypi.org/simple/ \
-            eden-sdk==0.1.0
+            eden-sdk==0.3.1
 python3 -c "import eden; print('imported eden', eden.__version__)"
 python3 -c "from eden_sdk import EdenClient; print('OK', EdenClient)"
 deactivate
@@ -90,7 +90,7 @@ python3 -m twine upload dist/*
 # → Uploads to https://pypi.org/project/eden-sdk/
 
 # Verify:
-pip install eden-sdk==0.1.0
+pip install eden-sdk==0.3.1
 python3 -c "import eden; print('imported eden', eden.__version__)"
 ```
 
@@ -98,12 +98,12 @@ python3 -c "import eden; print('imported eden', eden.__version__)"
 
 ```bash
 cd /Users/kaiavnihalani/Downloads/Eden
-git tag -a sdk-python-v0.1.0 -m "Release eden-sdk 0.1.0"
-git push origin sdk-python-v0.1.0
+git tag -a sdk-python-v0.3.1 -m "Release eden-sdk 0.1.0"
+git push origin sdk-python-v0.3.1
 ```
 
 ## Publishing a new version
 
-1. Bump the version in `sdk/python/pyproject.toml` (`version = "0.1.0"` → `"0.1.1"`).
+1. Bump the version in `sdk/python/pyproject.toml` (`version = "0.3.1"` → `"0.1.1"`).
 2. Re-run the pre-flight and build steps above.
 3. `git tag -a sdk-python-v0.1.1 -m "Release eden-sdk 0.1.1" && git push origin sdk-python-v0.1.1`.

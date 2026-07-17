@@ -118,16 +118,44 @@ Create `.claude/mcp.json`. Claude Code expects an explicit `"type": "stdio"`:
 | `get_trace` | read | Trace metadata and span tree |
 | `get_transcript` | read | Step-by-step messages and tool calls |
 | `list_checkpoints` | read | Debugger checkpoints for a trace |
-| `rerun_debugger` | debug | Rerun from a checkpoint step (returns cache hit stats when F03 prefix cache is populated; `new_trace_id` deferred until F01 live gateway ships) |
+| `rerun_debugger` | debug | Rerun from a checkpoint step |
 | `search_issues` | read | List agent issues |
 | `get_issue` | read | Full issue + example stumbles |
+| `get_trace_stumbles` | read | Stumble detections for a trace |
 | `triage_issue` | debug | Root-cause triage for an issue |
 | `run_autofix` | fix | Propose patch + optional PR |
 | `get_improvement_queue` | read | N17 closed-loop action queue |
+| `list_improvement_plans` / `get_improvement_plan` / `approve_improvement_plan` | read/fix | N23 plans |
+| `export_fixture` / `create_regression_case` | read/fix | Failure fixtures + regression cases |
+| `preview_change_impact` | read | N04 change impact preview |
+| `eden_health` | read | F84 self-obs health |
+| `tail_trace` | read | N11 live session tail |
+| `label_tool_call` | debug | F21 tool-call labels |
+| `query_eql` | read | Compile / preview EQL filters |
+| `query_sql` | read | Org-scoped read-only SQL |
+| `list_datasets` / `list_experiments` | read | Eval surface mirrors |
+| `get_judge_scores` | read | Layer A / judge scores for a trace |
+| `get_cost_breakdown` | read | FinOps explorer rollup |
+| `get_agentic_metrics` | read | F64 agentic metrics pack |
 
-Scopes `mcp:read`, `mcp:debug`, and `mcp:fix` gate debug and autofix
-tools. Today all org API keys authenticate as full-access; dedicated
-MCP-scoped keys ship behind the `eden_mcp_server_v1` feature flag.
+Scopes `mcp:read`, `mcp:debug`, and `mcp:fix` gate tools. Create an
+MCP-scoped key from **Settings → MCP** (`POST /orgs/{org}/mcp/keys`) or
+use **MCP presets** on **Settings → API Keys**.
+
+## Streamable HTTP (W28)
+
+In addition to stdio (`eden-mcp` / `python -m eden.mcp_server`), Eden
+exposes JSON-RPC over HTTP:
+
+```
+POST https://api.edenobservability.com/v1/mcp
+Authorization: Bearer <org-api-key>
+X-Org-Id: org_…
+```
+
+Methods: `initialize`, `tools/list`, `tools/call`, `ping`. GET on the
+same path returns a short SSE hello for endpoint discovery. Prefer
+stdio for Cursor; use HTTP for remote agents.
 
 ## Example prompts
 
@@ -136,15 +164,16 @@ Try these in Cursor's agent chat after MCP connects:
 - **"Why did trace `abc-123` fail? Show the transcript and any quality signals."**
 - **"List open P0 agent issues from the last 24 hours."**
 - **"Triage issue `iss_456` and summarize the root cause."**
-- **"Rerun trace `abc-123` from step 12 with this system prompt fix."**
-- **"Run autofix on issue `iss_456` in dry-run mode first."**
+- **"Show F64 agentic metrics for this org."**
+- **"Run a read-only SQL cost breakdown for the last day."**
 
 ## Smoke test
 
 1. Copy config from **Settings → MCP** (or paste the JSON above).
-2. Replace `<your-api-key>` with a real key.
+2. Replace `<your-api-key>` with a real MCP-scoped key.
 3. In Cursor agent chat: *"Call `search_traces` for org `{org_id}` with limit 5."*
-4. You should see recent traces returned as JSON.
+4. Optionally: *"Call `get_agentic_metrics`"* and *"Call `query_eql` with nl_text errors"*.
+5. You should see JSON tool results.
 
 If the server fails to start, check:
 

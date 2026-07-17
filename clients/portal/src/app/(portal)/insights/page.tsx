@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import { useOrg } from "@/hooks/use-org";
 import { useToast } from "@/components/ui/toast";
@@ -148,6 +149,9 @@ export default function InsightsPage() {
   }
   return <PageContent size="wide">
       <PageHeader title="Insights" subtitle="Automatic pattern detection and closed-loop improvement signals" icon={Lightbulb} actions={<div className="flex items-center gap-2">
+            <Button asChild variant="outline">
+              <Link href="/insights/topics">Topic clusters</Link>
+            </Button>
             <Button variant="default" onClick={handleRunDetectors} loading={runningDetectors} aria-label="Run insight detectors now">
               <Play className="w-4 h-4" />
               Run Detectors

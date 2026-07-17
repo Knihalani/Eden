@@ -37,7 +37,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Path, Request
 from pydantic import BaseModel, Field
 
-from eden.api.deps import get_ingestion_auth
+from eden.api.deps import get_ingest_auth
 from eden.config import get_settings
 from eden.observability.ingestion import (
     IngestError,
@@ -228,6 +228,10 @@ async def _ingest_handler(
 
     # Rate limit
     _check_rate_limit(org_id)
+    # Load shed (W9) — distinct from per-tenant RPM
+    from eden.observability.ingestion.shed import check_ingest_shed
+
+    check_ingest_shed(org_id)
 
     # Build attribution
     attribution = Attribution(
@@ -280,7 +284,7 @@ def _make_endpoint(path_format: str):
     async def handler(
         request: Request,
         org_id: str = Path(..., description="Organization ID"),
-        auth_ctx: dict = Depends(get_ingestion_auth),
+        auth_ctx: dict = Depends(get_ingest_auth),
     ) -> IngestResponse:
         # Read raw body — decoders handle their own JSON parsing.
         body = await request.body()
@@ -368,7 +372,7 @@ class ChunksIngestResponse(BaseModel):
 async def ingest_chunks(
     request: Request,
     org_id: str = Path(..., description="Organization ID"),
-    auth_ctx: dict = Depends(get_ingestion_auth),
+    auth_ctx: dict = Depends(get_ingest_auth),
 ) -> ChunksIngestResponse:
     body = await request.body()
     settings = get_settings()
@@ -378,6 +382,9 @@ async def ingest_chunks(
     ):
         raise HTTPException(status_code=413, detail="Body too large")
     _check_rate_limit(org_id)
+    from eden.observability.ingestion.shed import check_ingest_shed
+
+    check_ingest_shed(org_id)
     try:
         payload = ChunksIngestRequest.model_validate_json(body)
     except Exception as exc:

@@ -244,15 +244,21 @@ async function fetchApi<T>(
     // safe 5s default before trying once more — whichever is longer.
     const isIdempotent = method === "GET" || method === "HEAD" || method === "OPTIONS";
     const generalTransient = (s: number) => s >= 500 || s === 0 || s === 408;
-    /** Proxy 502 from ``forwardToBackend`` when Northflank is down —
-     *  retrying amplifies Vercel isolate load (LP-21). Detect by
-     *  ``detail`` before burning more attempts. */
+    /** Proxy 502/503 from ``forwardToBackend`` when Northflank is
+     *  down or circuit-broken — retrying amplifies Vercel isolate
+     *  load (LP-21). Detect by ``detail``/``upstream_down`` before
+     *  burning more attempts. Covers 502 unreachable/timed-out and
+     *  503 upstream-down/circuit-open. */
     const isProxyUpstreamDown = async (res: Response): Promise<boolean> => {
-      if (res.status !== 502) return false;
+      if (res.status !== 502 && res.status !== 503) return false;
       try {
-        const body = (await res.clone().json()) as { detail?: unknown };
+        const body = (await res.clone().json()) as {
+          detail?: unknown;
+          upstream_down?: unknown;
+        };
+        if (body?.upstream_down === true) return true;
         const detail = typeof body?.detail === "string" ? body.detail : "";
-        return /Backend (unreachable|timed out)/i.test(detail);
+        return /Backend (unreachable|timed out|unavailable|circuit open)/i.test(detail);
       } catch {
         return false;
       }
@@ -1934,6 +1940,80 @@ export const api = {
       body: JSON.stringify(body),
     }),
 
+  previewSearchAsSignal: (
+    orgId: string,
+    body: {
+      search_query: string;
+      trace_ids: string[];
+      mode?: "investigator" | "classifier";
+      backfill_days?: number;
+    },
+  ) =>
+    fetchApi<{
+      status: string;
+      data: {
+        proposed: { name: string; description: string; mode: string };
+        trace_count: number;
+        estimated_backfill_cost_usd: number;
+        backfill_trace_estimate: number;
+      };
+    }>(`/orgs/${orgId}/search/to-signal/preview`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+
+  listTopics: (orgId: string, facet?: string) =>
+    fetchApi<{
+      status: string;
+      topics: Array<{
+        id: string;
+        facet: string;
+        name: string;
+        sample_count: number;
+        share_pct: number | null;
+        representative_trace_ids: string[];
+      }>;
+      count: number;
+    }>(`/orgs/${orgId}/topics${facet ? `?facet=${facet}` : ""}`),
+
+  generateTopics: (orgId: string, facet: string = "task") =>
+    fetchApi<{ status: string; data: Record<string, unknown> }>(
+      `/orgs/${orgId}/topics/generate`,
+      { method: "POST", body: JSON.stringify({ facet }) },
+    ),
+
+  actOnTopic: (
+    orgId: string,
+    topicId: string,
+    body: { action: "dataset" | "alert"; name?: string },
+  ) =>
+    fetchApi<{ status: string; data: Record<string, unknown> }>(
+      `/orgs/${orgId}/topics/${topicId}/act`,
+      { method: "POST", body: JSON.stringify(body) },
+    ),
+
+  agenticMetricsSummary: (orgId: string, windowHours = 24, agentId?: string) => {
+    const q = new URLSearchParams({ window_hours: String(windowHours) });
+    if (agentId) q.set("agent_id", agentId);
+    return fetchApi<{
+      status: string;
+      data: {
+        metrics?: Record<
+          string,
+          { score: number | null; sample_count: number; source_judge?: string }
+        >;
+        by_agent?: Array<Record<string, unknown>>;
+        trace_count?: number;
+      };
+    }>(`/orgs/${orgId}/agentic-metrics/summary?${q}`);
+  },
+
+  createMcpKey: (orgId: string, name = "MCP", scopes?: string[]) =>
+    fetchApi<{ raw_key?: string; id?: string }>(`/orgs/${orgId}/mcp/keys`, {
+      method: "POST",
+      body: JSON.stringify({ name, scopes }),
+    }),
+
   labelToolCall: (
     orgId: string,
     spanId: string,
@@ -2340,6 +2420,67 @@ export const api = {
         count: number;
       };
     }>(`/orgs/${orgId}/budget/actions?limit=${limit}`),
+
+  // ── Customer FinOps (SOTA W8 / F60) ────────────────────────────
+  finopsExplorer: (orgId: string, windowHours = 24) =>
+    fetchApi<{
+      data: {
+        total_cost_usd: number;
+        previous_cost_usd: number;
+        delta_usd: number;
+        delta_pct: number | null;
+        by_feature: Array<{ key?: string; cost_usd: number; events: number; tokens: number }>;
+        by_model: Array<{ key?: string; cost_usd: number; events: number; tokens: number }>;
+        by_agent: Array<{ key?: string; cost_usd: number; events: number; tokens: number }>;
+        by_session: Array<{ key?: string; cost_usd: number; events: number; tokens: number }>;
+        by_day: Array<{ day?: string; cost_usd: number; events: number; tokens: number }>;
+        untagged_events: number;
+        cache_savings_usd: number;
+        window_hours: number;
+      };
+    }>(`/orgs/${orgId}/finops/explorer?window_hours=${windowHours}`),
+
+  finopsKillSwitches: (orgId: string) =>
+    fetchApi<{
+      data: {
+        matrix: Array<{ feature_key: string; enabled: boolean; source: string }>;
+        keys: string[];
+      };
+    }>(`/orgs/${orgId}/finops/kill-switches`),
+
+  setFinopsKillSwitch: (orgId: string, body: { feature_key: string; enabled: boolean }) =>
+    fetchApi<{ status: string }>(`/orgs/${orgId}/finops/kill-switches`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+
+  // ── N22 autonomy policy (W24) ─────────────────────────────────
+  getAutonomyPolicy: (orgId: string, agentId?: string) => {
+    const q = agentId ? `?agent_id=${encodeURIComponent(agentId)}` : "";
+    return fetchApi<{
+      data: AutonomyPolicy;
+    }>(`/orgs/${orgId}/settings/autonomy${q}`);
+  },
+
+  patchAutonomyPolicy: (
+    orgId: string,
+    body: Partial<AutonomyPolicyPatch>,
+    agentId?: string,
+  ) => {
+    const q = agentId ? `?agent_id=${encodeURIComponent(agentId)}` : "";
+    return fetchApi<{ data: AutonomyPolicy }>(`/orgs/${orgId}/settings/autonomy${q}`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    });
+  },
+
+  getAutonomyAudit: (orgId: string, limit = 50) =>
+    fetchApi<{
+      data: {
+        entries: AutonomyAuditEntry[];
+        count: number;
+      };
+    }>(`/orgs/${orgId}/settings/autonomy/audit?limit=${limit}`),
 
   // ── Webhook dead-letter queue (D.13) ───────────────────────────
   listWebhookDlq: (orgId: string, limit = 50) =>
@@ -3254,47 +3395,6 @@ export const agentIssuesApi = {
   },
   stumble: (orgId: string, stumbleId: string) =>
     fetchApi<IssuesEnvelope<{ stumble: AgentStumble }>>(`/orgs/${orgId}/stumbles/${stumbleId}`),
-  fixSession: (orgId: string, issueId: string) =>
-    fetchApi<IssuesEnvelope<{ session: Record<string, unknown> }>>(
-      `/orgs/${orgId}/agent-issues/${issueId}/fix/session`,
-    ),
-  fixApply: (orgId: string, issueId: string, data: { confirm?: boolean } = {}) =>
-    fetchApi<IssuesEnvelope<Record<string, unknown>>>(
-      `/orgs/${orgId}/agent-issues/${issueId}/fix/apply`,
-      { method: "POST", body: JSON.stringify(data) },
-    ),
-  fixChatStream: async (
-    orgId: string,
-    issueId: string,
-    data: { message: string; repo_full_name: string },
-  ) => {
-    const url = `/api/proxy/orgs/${orgId}/agent-issues/${issueId}/fix/chat`;
-    const doFetch = () =>
-      fetch(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
-        credentials: "include",
-      });
-
-    let res = await doFetch();
-    if (res.status === 429) {
-      const wait = retryAfterMs(res) ?? RETRY_AFTER_DEFAULT_MS;
-      await new Promise((r) => setTimeout(r, wait));
-      res = await doFetch();
-    }
-    if (!res.ok || !res.body) {
-      let detail = `Fix chat failed (${res.status})`;
-      try {
-        const body = (await res.json()) as { detail?: string };
-        if (body.detail) detail = body.detail;
-      } catch {
-        /* ignore */
-      }
-      throw new Error(detail);
-    }
-    return res.body;
-  },
   createRegressionCases: (
     orgId: string,
     issueId: string,
@@ -3303,6 +3403,10 @@ export const agentIssuesApi = {
     fetchApi<IssuesEnvelope<{ cases: unknown[]; count: number }>>(
       `/orgs/${orgId}/agent-issues/${issueId}/regression-cases`,
       { method: "POST", body: JSON.stringify(data ?? {}) },
+    ),
+  listRegressionCases: (orgId: string, issueId: string) =>
+    fetchApi<IssuesEnvelope<{ cases: unknown[]; count: number }>>(
+      `/orgs/${orgId}/agent-issues/${issueId}/regression-cases`,
     ),
   exportFixture: (orgId: string, issueId: string) =>
     fetchApi<IssuesEnvelope<{ fixture: Record<string, unknown> }>>(
@@ -3354,6 +3458,104 @@ export const agentSessionsApi = {
     fetchApi<IssuesEnvelope<{ session: AgentSessionRecord }>>(
       `/orgs/${orgId}/agent-sessions/${sessionId}`,
     ),
+  start: (
+    orgId: string,
+    body?: {
+      agent_id?: string;
+      user_id?: string;
+      metadata?: Record<string, unknown>;
+      session_id?: string;
+    },
+  ) =>
+    fetchApi<IssuesEnvelope<{ session: AgentSessionRecord }>>(
+      `/orgs/${orgId}/agent-sessions/start`,
+      { method: "POST", body: JSON.stringify(body ?? {}) },
+    ),
+  end: (
+    orgId: string,
+    sessionId: string,
+    body?: { success?: boolean; failure_reason?: string },
+  ) =>
+    fetchApi<IssuesEnvelope<{ session: AgentSessionRecord }>>(
+      `/orgs/${orgId}/agent-sessions/${sessionId}/end`,
+      { method: "POST", body: JSON.stringify(body ?? {}) },
+    ),
+  identify: (orgId: string, sessionId: string, user_id: string) =>
+    fetchApi<IssuesEnvelope<{ session_id: string; updated: boolean }>>(
+      `/orgs/${orgId}/agent-sessions/${sessionId}/identify`,
+      { method: "POST", body: JSON.stringify({ user_id }) },
+    ),
+  attachTrace: (orgId: string, sessionId: string, trace_id: string) =>
+    fetchApi<IssuesEnvelope<{ session_id: string; trace_id: string; attached: boolean }>>(
+      `/orgs/${orgId}/agent-sessions/${sessionId}/traces`,
+      { method: "POST", body: JSON.stringify({ trace_id }) },
+    ),
+};
+
+// ── F58 / U08 Saved views (wraps Phase N saved-searches) ─────────────
+
+export type SavedViewRecord = {
+  id: string;
+  org_id: string;
+  owner_id: string;
+  name: string;
+  query_type: string;
+  query: string;
+  params: Record<string, unknown>;
+  is_shared: boolean;
+  is_pinned: boolean;
+  tags: string[];
+  last_used_at?: string | null;
+  use_count: number;
+  created_at: string;
+  updated_at: string;
+};
+
+export const savedViewsApi = {
+  list: async (orgId: string, resource: string) => {
+    const res = await fetchApi<{ searches: SavedViewRecord[] }>(
+      `/orgs/${orgId}/saved-searches?scope=personal&limit=100`,
+    );
+    const searches = (res.searches ?? []).filter(
+      (s) =>
+        s.tags?.includes(`resource:${resource}`) ||
+        (s.params?.resource as string | undefined) === resource,
+    );
+    return { searches };
+  },
+  create: (
+    orgId: string,
+    input: {
+      name: string;
+      resource: string;
+      state: {
+        q?: string;
+        filter?: Record<string, string>;
+        sort?: { key: string; direction: "asc" | "desc" };
+        columns?: string[];
+        pastHours?: string;
+      };
+      is_shared?: boolean;
+    },
+  ) =>
+    fetchApi<SavedViewRecord>(`/orgs/${orgId}/saved-searches`, {
+      method: "POST",
+      body: JSON.stringify({
+        name: input.name,
+        query_type: "text",
+        query: input.state.q ?? "",
+        params: {
+          resource: input.resource,
+          ...input.state,
+        },
+        is_shared: input.is_shared ?? false,
+        tags: [`resource:${input.resource}`],
+      }),
+    }),
+  delete: (orgId: string, viewId: string) =>
+    fetchApi<void>(`/orgs/${orgId}/saved-searches/${viewId}`, { method: "DELETE" }),
+  recordUse: (orgId: string, viewId: string) =>
+    fetchApi<void>(`/orgs/${orgId}/saved-searches/${viewId}/use`, { method: "POST" }),
 };
 
 export type FleetAgentCard = {
@@ -3361,16 +3563,20 @@ export type FleetAgentCard = {
   display_name?: string;
   tier?: string;
   open_issues: number;
+  open_p0_issues?: number;
   stumble_count_7d: number;
   eval_pass_rate_24h: number | null;
   slo_breach?: boolean;
+  drift_flagged?: boolean;
+  autonomy_mode?: string;
+  compliance_profile?: string;
   severity_score: number;
   last_seen?: string | null;
 };
 
 export const fleetApi = {
   summary: (orgId: string) =>
-    fetchApi<IssuesEnvelope<{ agents: FleetAgentCard[]; count: number }>>(
+    fetchApi<IssuesEnvelope<{ agents: FleetAgentCard[]; count: number; sla_breach_count?: number; critical_count?: number }>>(
       `/orgs/${orgId}/fleet/summary`,
     ),
   heatmap: (orgId: string) =>
@@ -3378,12 +3584,108 @@ export const fleetApi = {
       `/orgs/${orgId}/fleet/heatmap`,
     ),
   delegation: (orgId: string) =>
-    fetchApi<IssuesEnvelope<{ nodes: Array<{ id: string; label: string }>; edges: Array<{ source: string; target: string; call_count_7d: number; error_rate_7d?: number }> }>>(
+    fetchApi<IssuesEnvelope<{ nodes: Array<{ id: string; label: string; delegation_trust?: number }>; edges: Array<{ source: string; target: string; call_count_7d: number; error_rate_7d?: number; delegation_trust?: number }> }>>(
       `/orgs/${orgId}/fleet/delegation`,
+    ),
+  slaBreaches: (orgId: string) =>
+    fetchApi<IssuesEnvelope<{ breaches: FleetAgentCard[]; count: number }>>(
+      `/orgs/${orgId}/fleet/sla-breaches`,
+    ),
+};
+
+export type AgentAuditEvent = {
+  id: string;
+  event_type: string;
+  event_subtype?: string | null;
+  agent_id?: string | null;
+  actor_id?: string | null;
+  actor_type: string;
+  payload?: Record<string, unknown>;
+  entry_hash?: string;
+  compliance_tags?: string[];
+  created_at?: string;
+};
+
+export const complianceApi = {
+  ledger: (orgId: string, params?: { agent_id?: string; event_type?: string; limit?: number }) => {
+    const q = new URLSearchParams();
+    if (params?.agent_id) q.set("agent_id", params.agent_id);
+    if (params?.event_type) q.set("event_type", params.event_type);
+    if (params?.limit != null) q.set("limit", String(params.limit));
+    const qs = q.toString();
+    return fetchApi<IssuesEnvelope<{ events: AgentAuditEvent[]; count: number }>>(
+      `/orgs/${orgId}/compliance/ledger${qs ? `?${qs}` : ""}`,
+    );
+  },
+  verifyChain: (orgId: string, params?: { agent_id?: string; limit?: number }) => {
+    const q = new URLSearchParams();
+    if (params?.agent_id) q.set("agent_id", params.agent_id);
+    if (params?.limit != null) q.set("limit", String(params.limit));
+    const qs = q.toString();
+    return fetchApi<IssuesEnvelope<{ total_rows: number; ok_rows: number; broken_rows: number; verified: boolean }>>(
+      `/orgs/${orgId}/compliance/verify${qs ? `?${qs}` : ""}`,
+      { method: "POST" },
+    );
+  },
+  exportPack: (
+    orgId: string,
+    agentId: string,
+    body: { period_start: string; period_end: string; framework?: string },
+  ) =>
+    fetchApi<{ status: string; data?: Record<string, unknown> }>(
+      `/orgs/${orgId}/compliance/agents/${encodeURIComponent(agentId)}/export`,
+      { method: "POST", body: JSON.stringify(body) },
     ),
 };
 
 // ── N17 Improvement Cockpit ─────────────────────────────────────────
+
+/** N22 autonomy policy envelope (Settings → Autonomous). */
+export type AutonomyPolicy = {
+  org_id: string;
+  agent_id?: string | null;
+  maintenance_mode: "autonomous" | "assisted" | "observe";
+  auto_runtime_heal: boolean;
+  auto_code_patch_pr: boolean;
+  auto_code_patch_merge: boolean;
+  auto_prompt_canary: boolean;
+  auto_nudge_promote: boolean;
+  auto_guardrail_promote: boolean;
+  daily_maintenance_budget_usd: number;
+  max_auto_rollbacks_per_day: number;
+  compliance_profile: "standard" | "hipaa" | "soc2_strict";
+  effective_mode?: string;
+  budget?: {
+    spent_usd: number;
+    limit_usd: number;
+    within_budget: boolean;
+  };
+};
+
+export type AutonomyPolicyPatch = {
+  maintenance_mode?: AutonomyPolicy["maintenance_mode"];
+  auto_runtime_heal?: boolean;
+  auto_code_patch_pr?: boolean;
+  auto_code_patch_merge?: boolean;
+  auto_prompt_canary?: boolean;
+  auto_nudge_promote?: boolean;
+  auto_guardrail_promote?: boolean;
+  daily_maintenance_budget_usd?: number;
+  max_auto_rollbacks_per_day?: number;
+  compliance_profile?: AutonomyPolicy["compliance_profile"];
+};
+
+export type AutonomyAuditEntry = {
+  id: string;
+  org_id: string;
+  agent_id?: string | null;
+  action: string;
+  tier_applied: string;
+  decision: string;
+  reason?: string | null;
+  created_at?: string;
+};
+
 export type ImproveQueueItem = {
   ref: string;
   item_type: string;
@@ -3641,6 +3943,110 @@ export const learnApi = {
     fetchApi<IssuesEnvelope<{ drafts: number; promoted: number }>>(
       `/orgs/${orgId}/kb/flywheel/status`,
     ),
+  listProductionSlices: (orgId: string, agentId?: string) => {
+    const path = agentId
+      ? `/orgs/${orgId}/production-datasets/${encodeURIComponent(agentId)}`
+      : `/orgs/${orgId}/production-datasets`;
+    return fetchApi<IssuesEnvelope<{ slices: Array<Record<string, unknown>> }>>(path);
+  },
+  refreshProductionSlices: (orgId: string, agentId?: string) => {
+    const q = agentId ? `?agent_id=${encodeURIComponent(agentId)}` : "";
+    return fetchApi<IssuesEnvelope<Record<string, unknown>>>(
+      `/orgs/${orgId}/production-datasets/refresh${q}`,
+      { method: "POST" },
+    );
+  },
+  listArtifacts: (orgId: string, agentId?: string, mode?: string) => {
+    const q = new URLSearchParams();
+    if (agentId) q.set("agent_id", agentId);
+    if (mode) q.set("mode", mode);
+    const qs = q.toString();
+    return fetchApi<
+      IssuesEnvelope<{ artifacts: Array<Record<string, unknown>> }> & { status?: string }
+    >(`/orgs/${orgId}/artifacts${qs ? `?${qs}` : ""}`);
+  },
+  listLedgers: (orgId: string) =>
+    fetchApi<IssuesEnvelope<{ ledgers: Array<Record<string, unknown>> }> & { status?: string }>(
+      `/orgs/${orgId}/ledger`,
+    ),
+  getLedger: (orgId: string, agentId: string) =>
+    fetchApi<IssuesEnvelope<{ ledger?: Record<string, unknown>; config?: Record<string, unknown> }>>(
+      `/orgs/${orgId}/agents/${encodeURIComponent(agentId)}/ledger`,
+    ),
+  previewLedger: (orgId: string, agentId: string, body: { task: string }) =>
+    fetchApi<IssuesEnvelope<{ preview?: Record<string, unknown> }>>(
+      `/orgs/${orgId}/agents/${encodeURIComponent(agentId)}/ledger/preview`,
+      { method: "POST", body: JSON.stringify(body) },
+    ),
+  promoteArtifact: (orgId: string, artifactId: string) =>
+    fetchApi<IssuesEnvelope<{ report?: Record<string, unknown>; promoted?: boolean }>>(
+      `/orgs/${orgId}/artifacts/${encodeURIComponent(artifactId)}/promote`,
+      { method: "POST" },
+    ),
+  archiveArtifact: (orgId: string, artifactId: string) =>
+    fetchApi<IssuesEnvelope<{ archived?: boolean }>>(
+      `/orgs/${orgId}/artifacts/${encodeURIComponent(artifactId)}/archive`,
+      { method: "POST" },
+    ),
+  authorArtifactNl: (orgId: string, body: { agent_id: string; description: string }) =>
+    fetchApi<IssuesEnvelope<{ artifact_id?: string }>>(
+      `/orgs/${orgId}/artifacts/author`,
+      { method: "POST", body: JSON.stringify(body) },
+    ),
+  exportArtifactsYaml: (orgId: string, agentId: string) =>
+    fetchApi<IssuesEnvelope<{ yaml?: string; tree?: Record<string, unknown> }>>(
+      `/orgs/${orgId}/artifacts/export?agent_id=${encodeURIComponent(agentId)}`,
+    ),
+  getPromotion: (orgId: string, candidateId: string) =>
+    fetchApi<IssuesEnvelope<{ candidate?: Record<string, unknown>; report?: Record<string, unknown> }>>(
+      `/orgs/${orgId}/promotions/${encodeURIComponent(candidateId)}`,
+    ),
+  approvePromotion: (orgId: string, candidateId: string) =>
+    fetchApi<IssuesEnvelope<{ report?: Record<string, unknown> }>>(
+      `/orgs/${orgId}/promotions/${encodeURIComponent(candidateId)}/approve`,
+      { method: "POST" },
+    ),
+  rejectPromotion: (orgId: string, candidateId: string, reason?: string) => {
+    const q = reason ? `?reason=${encodeURIComponent(reason)}` : "";
+    return fetchApi<IssuesEnvelope<{ rejected?: boolean }>>(
+      `/orgs/${orgId}/promotions/${encodeURIComponent(candidateId)}/reject${q}`,
+      { method: "POST" },
+    );
+  },
+  ledgerDiff: (orgId: string, agentId: string, sinceVersion: number) =>
+    fetchApi<IssuesEnvelope<{ diff?: Array<Record<string, unknown>> }>>(
+      `/orgs/${orgId}/agents/${encodeURIComponent(agentId)}/ledger/diff?since_version=${sinceVersion}`,
+    ),
+  regenerateLedger: (orgId: string, agentId: string) =>
+    fetchApi<IssuesEnvelope<{ ledger?: Record<string, unknown> }>>(
+      `/orgs/${orgId}/agents/${encodeURIComponent(agentId)}/ledger/regenerate`,
+      { method: "POST" },
+    ),
+  patchLedgerConfig: (
+    orgId: string,
+    agentId: string,
+    body: { enabled: boolean; max_tokens?: number },
+  ) =>
+    fetchApi<IssuesEnvelope<{ updated?: boolean; config?: Record<string, unknown> }>>(
+      `/orgs/${orgId}/agents/${encodeURIComponent(agentId)}/ledger/config`,
+      { method: "PATCH", body: JSON.stringify(body) },
+    ),
+  getScorecard: (orgId: string, suite?: string) => {
+    const q = suite ? `?suite=${encodeURIComponent(suite)}` : "";
+    return fetchApi<IssuesEnvelope<{ metrics?: Record<string, unknown>; failed?: boolean }>>(
+      `/orgs/${orgId}/improve/scorecard${q}`,
+    );
+  },
+  improvementLoopStatus: (orgId: string) =>
+    fetchApi<
+      IssuesEnvelope<{
+        steps?: Array<{ id: string; label: string; href: string; done: boolean }>;
+        completed?: number;
+        total?: number;
+        counts?: Record<string, number>;
+        next_step?: { id: string; label: string; href: string; done: boolean } | null;
+      }>
+    >(`/orgs/${orgId}/onboarding/improvement-loop`),
 };
 
 // ── Intelligence: Eval (Cat 3) ──────────────────────────────────────
@@ -4735,18 +5141,7 @@ export const providerRoutingApi = {
 
 (api as unknown as Record<string, unknown>).providerRoutingApi = providerRoutingApi;
 
-// ── AI Agent (Phase C — unified panel) ───────────────────────────────────
-//
-// ``aiApi`` is the frontend surface for the Cat 14 real backend.
-// Streaming chat uses native ``fetch`` + ``ReadableStream`` so the
-// portal can render text deltas as they arrive instead of waiting
-// for the SSE stream to close.
-
-export interface AiToolCatalogEntry {
-  name: string;
-  summary: string;
-  args: Record<string, { type: string; required?: boolean; default?: unknown; description?: string; enum?: string[] }>;
-}
+// ── AI chart / citation types (ChatSidebar; Phase-C aiApi deleted W20) ─────
 
 export interface AiCitation {
   kind: "span" | "trace" | "incident" | "agent" | "message" | "tool";
@@ -4773,190 +5168,6 @@ export interface AiChartSpec {
   target_key?: string;
   columns?: string[];
 }
-
-export interface AiToolCall {
-  name: string;
-  args: Record<string, unknown>;
-  result?: unknown;
-  error?: string;
-  latency_ms?: number;
-}
-
-export interface AiChunkHandler {
-  onTextDelta?: (text: string) => void;
-  onToolCall?: (tc: AiToolCall) => void;
-  onChart?: (chart: AiChartSpec) => void;
-  onCitation?: (cite: AiCitation) => void;
-  onDone?: (summary: { conversation_id: string; turns: number; prompt_tokens: number; completion_tokens: number }) => void;
-  onError?: (error: string) => void;
-}
-
-export interface AiChatRequest {
-  conversation_id?: string | null;
-  message: string;
-  page_context?: Record<string, unknown>;
-}
-
-export interface AiConversationSummary {
-  id: string;
-  title: string;
-  page_context?: Record<string, unknown>;
-  turn_count: number;
-  total_tokens: number;
-  total_cost_usd: number;
-  created_at: string;
-  updated_at: string;
-  last_message_at?: string | null;
-}
-
-export interface AiMessage {
-  id: string;
-  role: "user" | "assistant" | "tool" | "system";
-  content: string;
-  tool_calls: AiToolCall[];
-  chart_specs: AiChartSpec[];
-  citations: AiCitation[];
-  prompt_tokens: number;
-  completion_tokens: number;
-  model_used?: string | null;
-  created_at: string;
-}
-
-export interface AiConversationDetail {
-  conversation: AiConversationSummary;
-  messages: AiMessage[];
-}
-
-export const aiApi = {
-  tools: (orgId: string) =>
-    fetchApi<AiToolCatalogEntry[]>(`/orgs/${orgId}/ai/tools`, {
-      headers: { "X-Org-Id": orgId },
-    }),
-
-  listConversations: (orgId: string, limit = 50) =>
-    fetchApi<AiConversationSummary[]>(`/orgs/${orgId}/ai/conversations?limit=${limit}`, {
-      headers: { "X-Org-Id": orgId },
-    }),
-
-  getConversation: (orgId: string, conversationId: string) =>
-    fetchApi<AiConversationDetail>(
-      `/orgs/${orgId}/ai/conversations/${conversationId}`,
-      { headers: { "X-Org-Id": orgId },
-    }),
-
-  archiveConversation: (orgId: string, conversationId: string) =>
-    fetchApi<{ archived: boolean; conversation_id: string }>(
-      `/orgs/${orgId}/ai/conversations/${conversationId}`,
-      { method: "DELETE", headers: { "X-Org-Id": orgId } },
-    ),
-
-  /**
-   * Stream a chat turn via SSE. The handler callbacks fire as events
-   * arrive — text deltas, tool calls, charts, citations, then done.
-   * Returns an AbortController so the caller can cancel the stream
-   * (e.g. on panel close).
-   */
-  streamChat: async (
-    orgId: string,
-    body: AiChatRequest,
-    handler: AiChunkHandler,
-  ): Promise<AbortController> => {
-    const controller = new AbortController();
-    const url = `${API_BASE}/orgs/${orgId}/ai/chat`;
-    try {
-      const res = await fetch(url, {
-        method: "POST",
-        credentials: "include",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Org-Id": orgId,
-        },
-        body: JSON.stringify(body),
-        signal: controller.signal,
-      });
-      if (!res.ok || !res.body) {
-        handler.onError?.(`chat_failed: ${res.status}`);
-        return controller;
-      }
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
-      // SSE: events separated by blank lines, each line prefixed with
-      // "data: " (or "event:" etc).
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        let idx: number;
-        // Process each complete SSE event (terminated by blank line).
-        while ((idx = buffer.indexOf("\n\n")) !== -1) {
-          const eventText = buffer.slice(0, idx);
-          buffer = buffer.slice(idx + 2);
-          // Walk the data lines; an SSE "data:" may span multiple
-          // lines, joined by "\n".
-          const dataLines = eventText
-            .split("\n")
-            .filter((l) => l.startsWith("data: "))
-            .map((l) => l.slice("data: ".length))
-            .join("\n");
-          if (!dataLines) continue;
-          let parsed: { type?: string; text?: string; tool_call?: AiToolCall;
-                        chart?: AiChartSpec; citation?: AiCitation;
-                        error?: string;
-                        conversation_id?: string; turns?: number;
-                        prompt_tokens?: number; completion_tokens?: number };
-          try {
-            parsed = JSON.parse(dataLines);
-          } catch {
-            continue;
-          }
-          switch (parsed.type) {
-            case "text_delta":
-              handler.onTextDelta?.(parsed.text ?? "");
-              break;
-            case "tool_call":
-              if (parsed.tool_call) handler.onToolCall?.(parsed.tool_call);
-              break;
-            case "chart":
-              if (parsed.chart) handler.onChart?.(parsed.chart);
-              break;
-            case "citation":
-              if (parsed.citation) handler.onCitation?.(parsed.citation);
-              break;
-            case "error":
-              handler.onError?.(parsed.error ?? "unknown_error");
-              break;
-            case "summary":
-              handler.onDone?.({
-                conversation_id: parsed.conversation_id ?? "",
-                turns: parsed.turns ?? 0,
-                prompt_tokens: parsed.prompt_tokens ?? 0,
-                completion_tokens: parsed.completion_tokens ?? 0,
-              });
-              break;
-            case "done":
-              handler.onDone?.({
-                conversation_id: "",
-                turns: 0,
-                prompt_tokens: 0,
-                completion_tokens: 0,
-              });
-              break;
-            default:
-              break;
-          }
-        }
-      }
-    } catch (err) {
-      if ((err as Error).name !== "AbortError") {
-        handler.onError?.(`stream_error: ${(err as Error).message}`);
-      }
-    }
-    return controller;
-  },
-};
-
-(api as unknown as Record<string, unknown>).aiApi = aiApi;
 
 // ── Labeling (Phase D) ────────────────────────────────────────────────
 
@@ -5102,13 +5313,70 @@ const debuggerApi = {
     ),
   rerun: (
     orgId: string,
-    body: { trace_id: string; from_step?: number; prompt_override?: string },
+    body: {
+      trace_id: string;
+      from_step?: number;
+      prompt_override?: string;
+      live_prefix?: boolean;
+      session_id?: string;
+    },
   ) =>
-    fetchApi<RerunResult>(`/orgs/${orgId}/debugger/rerun`, {
+    fetchApi<RerunResult & { mode?: string; live_tail_steps?: number; session_id?: string }>(
+      `/orgs/${orgId}/debugger/rerun`,
+      {
+        method: "POST",
+        headers: { "X-Org-Id": orgId, "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      },
+    ),
+};
+
+export type DebugSessionRecord = {
+  id: string;
+  title: string;
+  source_trace_id?: string | null;
+  notes?: string;
+  run_count?: number;
+  runs?: Array<Record<string, unknown>>;
+  created_at?: string;
+  updated_at?: string;
+};
+
+const debugSessionsApi = {
+  list: (orgId: string, limit = 50) =>
+    fetchApi<{ sessions: DebugSessionRecord[]; count: number }>(
+      `/orgs/${orgId}/debugger/sessions?limit=${limit}`,
+      { headers: { "X-Org-Id": orgId } },
+    ),
+  get: (orgId: string, sessionId: string) =>
+    fetchApi<{ session: DebugSessionRecord }>(
+      `/orgs/${orgId}/debugger/sessions/${sessionId}`,
+      { headers: { "X-Org-Id": orgId } },
+    ),
+  create: (
+    orgId: string,
+    body: { title?: string; source_trace_id?: string; notes?: string } = {},
+  ) =>
+    fetchApi<{ session: DebugSessionRecord }>(`/orgs/${orgId}/debugger/sessions`, {
       method: "POST",
       headers: { "X-Org-Id": orgId, "Content-Type": "application/json" },
       body: JSON.stringify(body),
     }),
+  compare: (orgId: string, sessionId: string, runA: string, runB: string) =>
+    fetchApi<Record<string, unknown>>(
+      `/orgs/${orgId}/debugger/sessions/${sessionId}/compare?run_a=${encodeURIComponent(runA)}&run_b=${encodeURIComponent(runB)}`,
+      { headers: { "X-Org-Id": orgId } },
+    ),
+};
+
+const browserSessionsApi = {
+  replayForTrace: async (orgId: string, traceId: string) => {
+    const res = await fetchApi<{ data?: Record<string, unknown> } & Record<string, unknown>>(
+      `/orgs/${orgId}/traces/${encodeURIComponent(traceId)}/browser-replay`,
+      { headers: { "X-Org-Id": orgId } },
+    );
+    return (res.data ?? res) as Record<string, unknown>;
+  },
 };
 // ── QA Generator (Phase J — synthetic) ──────────────────────────────
 
@@ -5225,6 +5493,26 @@ const datasetsApi = {
       `/orgs/${orgId}/datasets`,
       { headers: { "X-Org-Id": orgId } },
     ),
+  create: (orgId: string, body: { name: string; description?: string }) =>
+    fetchApi<Dataset>(`/orgs/${orgId}/datasets`, {
+      method: "POST",
+      headers: { "X-Org-Id": orgId, "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+      noDedup: true,
+    }),
+  promoteFromTrace: (
+    orgId: string,
+    body: { trace_id: string; dataset_id?: string; dataset_name?: string },
+  ) =>
+    fetchApi<{ status: string; data: { dataset_id: string; row_id: string } }>(
+      `/orgs/${orgId}/datasets/promote-from-trace`,
+      {
+        method: "POST",
+        headers: { "X-Org-Id": orgId, "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+        noDedup: true,
+      },
+    ),
   get: (orgId: string, datasetId: string) =>
     fetchApi<Dataset & { columns: DatasetColumn[]; rows: DatasetRow[] }>(
       `/orgs/${orgId}/datasets/${datasetId}`,
@@ -5259,21 +5547,434 @@ const datasetsApi = {
     const qs = filename ? `?filename=${encodeURIComponent(filename)}` : "";
     return `${base}/orgs/${orgId}/datasets/${datasetId}/export${qs}`;
   },
+  updateRow: (
+    orgId: string,
+    datasetId: string,
+    rowId: string,
+    body: { values?: Record<string, unknown>; input?: string; expected_output?: string },
+  ) =>
+    fetchApi<DatasetRow>(`/orgs/${orgId}/datasets/${datasetId}/rows/${rowId}`, {
+      method: "PATCH",
+      headers: { "X-Org-Id": orgId, "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+      noDedup: true,
+    }),
+  createSnapshot: (orgId: string, datasetId: string) =>
+    fetchApi<{ status: string; snapshot: Record<string, unknown> }>(
+      `/orgs/${orgId}/datasets/${datasetId}/snapshots`,
+      { method: "POST", headers: { "X-Org-Id": orgId }, noDedup: true },
+    ),
+  importRows: (
+    orgId: string,
+    datasetId: string,
+    body: { rows: Record<string, unknown>[]; column_map?: Record<string, string> },
+  ) =>
+    fetchApi<{ status: string; inserted: number }>(
+      `/orgs/${orgId}/datasets/${datasetId}/import`,
+      {
+        method: "POST",
+        headers: { "X-Org-Id": orgId, "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+        noDedup: true,
+      },
+    ),
+};
+
+export interface PlaygroundRunResult {
+  template_name: string;
+  response: string;
+  model: string;
+  latency_ms: number;
+  cost_usd?: number | null;
+}
+
+export interface PersistedPlayground {
+  id: string;
+  name: string;
+  config: Record<string, unknown>;
+  created_at?: string;
+  updated_at?: string;
+}
+
+const playgroundApi = {
+  /** Legacy template runner (org prompt store). */
+  run: (
+    orgId: string,
+    name: string,
+    body: { params?: Record<string, unknown>; model?: string },
+  ) =>
+    fetchApi<PlaygroundRunResult>(`/orgs/${orgId}/prompts/${encodeURIComponent(name)}/playground`, {
+      method: "POST",
+      headers: { "X-Org-Id": orgId, "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+      noDedup: true,
+    }),
+  compare: (
+    orgId: string,
+    name: string,
+    body: { params?: Record<string, unknown>; model_b: string },
+  ) =>
+    fetchApi<{ a: PlaygroundRunResult; b: PlaygroundRunResult }>(
+      `/orgs/${orgId}/prompts/${encodeURIComponent(name)}/compare`,
+      {
+        method: "POST",
+        headers: { "X-Org-Id": orgId, "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+        noDedup: true,
+      },
+    ),
+  list: (orgId: string) =>
+    fetchApi<{ playgrounds: PersistedPlayground[]; total: number }>(
+      `/orgs/${orgId}/playgrounds`,
+      { headers: { "X-Org-Id": orgId } },
+    ),
+  create: (orgId: string, body: { name: string; config?: Record<string, unknown> }) =>
+    fetchApi<{ playground: PersistedPlayground }>(`/orgs/${orgId}/playgrounds`, {
+      method: "POST",
+      headers: { "X-Org-Id": orgId, "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+      noDedup: true,
+    }),
+  get: (orgId: string, playgroundId: string) =>
+    fetchApi<{ playground: PersistedPlayground }>(
+      `/orgs/${orgId}/playgrounds/${playgroundId}`,
+      { headers: { "X-Org-Id": orgId } },
+    ),
+  patch: (
+    orgId: string,
+    playgroundId: string,
+    body: { name?: string; config?: Record<string, unknown> },
+  ) =>
+    fetchApi<{ playground: PersistedPlayground }>(
+      `/orgs/${orgId}/playgrounds/${playgroundId}`,
+      {
+        method: "PATCH",
+        headers: { "X-Org-Id": orgId, "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+        noDedup: true,
+      },
+    ),
+  fromSpan: (
+    orgId: string,
+    body: {
+      trace_id: string;
+      span_id?: string;
+      messages?: Array<Record<string, unknown>>;
+      model?: string;
+      tools?: Array<Record<string, unknown>>;
+    },
+  ) =>
+    fetchApi<{ playground: PersistedPlayground }>(`/orgs/${orgId}/playgrounds/from-span`, {
+      method: "POST",
+      headers: { "X-Org-Id": orgId, "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+      noDedup: true,
+    }),
+  runPersisted: (
+    orgId: string,
+    playgroundId: string,
+    body?: { params?: Record<string, unknown>; dataset_rows?: Array<Record<string, unknown>> },
+  ) =>
+    fetchApi<{ status: string; run: Record<string, unknown> }>(
+      `/orgs/${orgId}/playgrounds/${playgroundId}/run`,
+      {
+        method: "POST",
+        headers: { "X-Org-Id": orgId, "Content-Type": "application/json" },
+        body: JSON.stringify(body || {}),
+        noDedup: true,
+      },
+    ),
+  promoteExperiment: (
+    orgId: string,
+    playgroundId: string,
+    body?: { name?: string; dataset_id?: string },
+  ) =>
+    fetchApi<{ status: string; experiment: Record<string, unknown> }>(
+      `/orgs/${orgId}/playgrounds/${playgroundId}/promote-experiment`,
+      {
+        method: "POST",
+        headers: { "X-Org-Id": orgId, "Content-Type": "application/json" },
+        body: JSON.stringify(body || {}),
+        noDedup: true,
+      },
+    ),
+};
+
+const offlineExperimentsApi = {
+  list: (orgId: string) =>
+    fetchApi<{ experiments: Array<Record<string, unknown>>; total: number }>(
+      `/orgs/${orgId}/experiments/offline`,
+      { headers: { "X-Org-Id": orgId } },
+    ),
+  create: (
+    orgId: string,
+    body: { name: string; dataset_id: string; config?: Record<string, unknown> },
+  ) =>
+    fetchApi<{ experiment: Record<string, unknown> }>(`/orgs/${orgId}/experiments/offline`, {
+      method: "POST",
+      headers: { "X-Org-Id": orgId, "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+      noDedup: true,
+    }),
+  run: (orgId: string, experimentId: string) =>
+    fetchApi<{ result: Record<string, unknown> }>(
+      `/orgs/${orgId}/experiments/offline/${experimentId}/run`,
+      { method: "POST", headers: { "X-Org-Id": orgId }, noDedup: true },
+    ),
+  compare: (orgId: string, experimentId: string, baselineId?: string) => {
+    const qs = baselineId ? `?baseline_id=${encodeURIComponent(baselineId)}` : "";
+    return fetchApi<{
+      compare: {
+        summary?: Record<string, number>;
+        datapoints?: Array<Record<string, unknown>>;
+        baseline_experiment_id?: string | null;
+      };
+    }>(`/orgs/${orgId}/experiments/offline/${experimentId}/compare${qs}`, {
+      headers: { "X-Org-Id": orgId },
+    });
+  },
+};
+
+const labelingQueuesApi = {
+  list: (orgId: string) =>
+    fetchApi<{ queues: Array<Record<string, unknown>>; total: number }>(
+      `/orgs/${orgId}/labeling/queues`,
+      { headers: { "X-Org-Id": orgId } },
+    ),
+  create: (
+    orgId: string,
+    body: { name: string; description?: string; label_schema?: Record<string, unknown> },
+  ) =>
+    fetchApi<{ queue: Record<string, unknown> }>(`/orgs/${orgId}/labeling/queues`, {
+      method: "POST",
+      headers: { "X-Org-Id": orgId, "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+      noDedup: true,
+    }),
+  get: (orgId: string, queueId: string) =>
+    fetchApi<{ queue: Record<string, unknown> }>(
+      `/orgs/${orgId}/labeling/queues/${queueId}`,
+      { headers: { "X-Org-Id": orgId } },
+    ),
+  board: (orgId: string, queueId: string) =>
+    fetchApi<{ board: Record<string, Array<Record<string, unknown>>> }>(
+      `/orgs/${orgId}/labeling/queues/${queueId}/board`,
+      { headers: { "X-Org-Id": orgId } },
+    ),
+  move: (orgId: string, queueId: string, body: { item_id: string; status: string }) =>
+    fetchApi<{ moved: boolean }>(`/orgs/${orgId}/labeling/queues/${queueId}/move`, {
+      method: "POST",
+      headers: { "X-Org-Id": orgId, "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+      noDedup: true,
+    }),
+  pushToDataset: (orgId: string, queueId: string, body: { dataset_id: string }) =>
+    fetchApi<Record<string, unknown>>(
+      `/orgs/${orgId}/labeling/queues/${queueId}/push-to-dataset`,
+      {
+        method: "POST",
+        headers: { "X-Org-Id": orgId, "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+        noDedup: true,
+      },
+    ),
+  iaa: (orgId: string, queueId: string) =>
+    fetchApi<{ iaa: { kappa: number; n: number; agreement_rate: number } }>(
+      `/orgs/${orgId}/labeling/queues/${queueId}/iaa`,
+      { headers: { "X-Org-Id": orgId } },
+    ),
+};
+
+const changeImpactApi = {
+  preview: (
+    orgId: string,
+    body: {
+      change_id: string;
+      changed_files: string[];
+      agent_id?: string;
+      trace_ids?: string[];
+    },
+  ) =>
+    fetchApi<{ data?: { report?: Record<string, unknown> } }>(
+      `/orgs/${orgId}/change-impact/preview`,
+      {
+        method: "POST",
+        headers: { "X-Org-Id": orgId, "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+        noDedup: true,
+      },
+    ),
+  get: (orgId: string, changeId: string) =>
+    fetchApi<{ data?: { report?: Record<string, unknown> } }>(
+      `/orgs/${orgId}/change-impact/${encodeURIComponent(changeId)}`,
+      { headers: { "X-Org-Id": orgId } },
+    ),
+};
+
+const wave6Api = {
+  listScoringRules: (orgId: string) =>
+    fetchApi<{ data: { rules: Record<string, unknown>[] } }>(
+      `/orgs/${orgId}/online-scoring/rules`,
+      { headers: { "X-Org-Id": orgId } },
+    ),
+  createScoringRule: (
+    orgId: string,
+    body: {
+      name: string;
+      scope?: string;
+      filter_query?: string;
+      scorer_type?: string;
+      sample_rate?: number;
+    },
+  ) =>
+    fetchApi(`/orgs/${orgId}/online-scoring/rules`, {
+      method: "POST",
+      body: JSON.stringify(body),
+      headers: { "X-Org-Id": orgId },
+    }),
+  getHomeDashboard: (orgId: string) =>
+    fetchApi<{ data: { dashboard: Record<string, unknown> } }>(
+      `/orgs/${orgId}/dashboards/home`,
+      { headers: { "X-Org-Id": orgId } },
+    ),
+  costKpi: (orgId: string, params?: { window_hours?: number; agent_id?: string }) => {
+    const q = new URLSearchParams();
+    if (params?.window_hours) q.set("window_hours", String(params.window_hours));
+    if (params?.agent_id) q.set("agent_id", params.agent_id);
+    const qs = q.toString();
+    return fetchApi<{ data: { tiles: Record<string, unknown>[] } }>(
+      `/orgs/${orgId}/cost-analytics/kpi${qs ? `?${qs}` : ""}`,
+      { headers: { "X-Org-Id": orgId } },
+    );
+  },
+  getPromptWorkspace: (orgId: string, name: string) =>
+    fetchApi(`/orgs/${orgId}/prompts/${encodeURIComponent(name)}/workspace`, {
+      headers: { "X-Org-Id": orgId },
+    }),
+  listPromptEnvironments: (orgId: string, name: string) =>
+    fetchApi<{ data?: { environments?: Array<Record<string, unknown>> } }>(
+      `/orgs/${orgId}/prompts/${encodeURIComponent(name)}/environments`,
+      { headers: { "X-Org-Id": orgId } },
+    ),
+  deployPrompt: (orgId: string, name: string, body: { env: string; version: number }) =>
+    fetchApi(`/orgs/${orgId}/prompts/${encodeURIComponent(name)}/deploy`, {
+      method: "POST",
+      body: JSON.stringify(body),
+      headers: { "X-Org-Id": orgId },
+    }),
+  resolvePrompt: (orgId: string, name: string, env = "production") =>
+    fetchApi(
+      `/orgs/${orgId}/prompts/${encodeURIComponent(name)}/resolve?env=${encodeURIComponent(env)}`,
+      { headers: { "X-Org-Id": orgId } },
+    ),
+  exportSqlToDataset: (
+    orgId: string,
+    body: { sql: string; dataset_name: string; trace_id_column?: string },
+  ) =>
+    fetchApi(`/orgs/${orgId}/sql/export/dataset`, {
+      method: "POST",
+      body: JSON.stringify(body),
+      headers: { "X-Org-Id": orgId },
+    }),
+  lateMetadata: (orgId: string, traceId: string, properties: Record<string, string>) =>
+    fetchApi(`/orgs/${orgId}/traces/${encodeURIComponent(traceId)}/metadata`, {
+      method: "POST",
+      body: JSON.stringify({ properties }),
+      headers: { "X-Org-Id": orgId },
+    }),
+  patchScoringRule: (
+    orgId: string,
+    ruleId: string,
+    body: Record<string, unknown>,
+  ) =>
+    fetchApi(`/orgs/${orgId}/online-scoring/rules/${encodeURIComponent(ruleId)}`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+      headers: { "X-Org-Id": orgId },
+    }),
+  rewindScoringRule: (orgId: string, ruleId: string, body?: Record<string, unknown>) =>
+    fetchApi(
+      `/orgs/${orgId}/online-scoring/rules/${encodeURIComponent(ruleId)}/rewind`,
+      {
+        method: "POST",
+        body: JSON.stringify(body || {}),
+        headers: { "X-Org-Id": orgId },
+      },
+    ),
+  applyScoring: (orgId: string, traceId: string, params?: { agent_id?: string; span_id?: string }) => {
+    const q = new URLSearchParams();
+    if (params?.agent_id) q.set("agent_id", params.agent_id);
+    if (params?.span_id) q.set("span_id", params.span_id);
+    const qs = q.toString();
+    return fetchApi(
+      `/orgs/${orgId}/online-scoring/apply/${encodeURIComponent(traceId)}${qs ? `?${qs}` : ""}`,
+      { method: "POST", headers: { "X-Org-Id": orgId }, noDedup: true },
+    );
+  },
+  listSpanScores: (orgId: string, spanId: string) =>
+    fetchApi(`/orgs/${orgId}/spans/${encodeURIComponent(spanId)}/scores`, {
+      headers: { "X-Org-Id": orgId },
+    }),
+  listTraceSpanScores: (orgId: string, traceId: string) =>
+    fetchApi(`/orgs/${orgId}/traces/${encodeURIComponent(traceId)}/span-scores`, {
+      headers: { "X-Org-Id": orgId },
+    }),
+  listAutomations: (orgId: string) =>
+    fetchApi(`/orgs/${orgId}/automations`, {
+      headers: { "X-Org-Id": orgId },
+    }),
+  createAutomation: (orgId: string, body: Record<string, unknown>) =>
+    fetchApi(`/orgs/${orgId}/automations`, {
+      method: "POST",
+      body: JSON.stringify(body),
+      headers: { "X-Org-Id": orgId },
+    }),
+  exportSqlToQueue: (
+    orgId: string,
+    body: { sql: string; queue_id: string; trace_id_column?: string },
+  ) =>
+    fetchApi(`/orgs/${orgId}/sql/export/queue`, {
+      method: "POST",
+      body: JSON.stringify(body),
+      headers: { "X-Org-Id": orgId },
+    }),
+  promoteToShadowGuardrail: (orgId: string, body: Record<string, unknown>) =>
+    fetchApi(`/orgs/${orgId}/eval/promote-to-shadow-guardrail`, {
+      method: "POST",
+      body: JSON.stringify(body),
+      headers: { "X-Org-Id": orgId },
+    }),
 };
 
 (api as unknown as Record<string, unknown>).labelingApi = labelingApi;
 (api as unknown as Record<string, unknown>).signalsApi = signalsApi;
 (api as unknown as Record<string, unknown>).debuggerApi = debuggerApi;
+(api as unknown as Record<string, unknown>).debugSessionsApi = debugSessionsApi;
+(api as unknown as Record<string, unknown>).browserSessionsApi = browserSessionsApi;
 (api as unknown as Record<string, unknown>).qaApi = qaApi;
 (api as unknown as Record<string, unknown>).redteamApi = redteamApi;
 (api as unknown as Record<string, unknown>).datasetsApi = datasetsApi;
 
-export { labelingApi, signalsApi, debuggerApi, qaApi, redteamApi, datasetsApi };
+export {
+  labelingApi,
+  signalsApi,
+  debuggerApi,
+  debugSessionsApi,
+  browserSessionsApi,
+  qaApi,
+  redteamApi,
+  datasetsApi,
+  playgroundApi,
+  offlineExperimentsApi,
+  labelingQueuesApi,
+  changeImpactApi,
+  wave6Api,
+};
 
 
 // ── Cat 23 v1.7 PR-discipline surface ────────────────────────────
 //
-// The discipline layer (server-side, eden.code_change.discipline)
+// The discipline layer (server-side patch policy / PR patterns)
 // exposes a small read-side API for the portal to render
 // "why did / didn't Eden open a PR" transparently.
 export interface DisciplineDecision {
@@ -5441,4 +6142,32 @@ export const nlAlertsApi = {
     api.listAlertEvents(orgId, params),
   overrideVerdict: (orgId: string, alertId: string, verdict: string) =>
     api.overrideAlertVerdict(orgId, alertId, verdict),
+};
+
+/** F84 admin status + synthetics. */
+export const adminStatusApi = {
+  edenStatus: (orgId: string) =>
+    fetchApi<{
+      status: string;
+      org_id: string;
+      components: Record<string, unknown>;
+      probe_ms: number;
+    }>(`/orgs/${orgId}/admin/eden-status`),
+  flags: (orgId: string) =>
+    fetchApi<{ org_id: string; flags: Record<string, unknown> }>(
+      `/orgs/${orgId}/admin/flags`,
+    ),
+  slowQueries: (orgId: string) =>
+    fetchApi<{ org_id: string; slow_query_count: number }>(
+      `/orgs/${orgId}/admin/slow-queries`,
+    ),
+  runSynthetics: (orgId: string) =>
+    fetchApi<{ org_id: string; probes: Record<string, unknown>; failed: number }>(
+      `/orgs/${orgId}/admin/synthetics/run`,
+      { method: "POST" },
+    ),
+  syntheticsLast: (orgId: string) =>
+    fetchApi<{
+      runs: Array<{ probe: string; status: string; created_at?: string | null }>;
+    }>(`/orgs/${orgId}/admin/synthetics/last`),
 };

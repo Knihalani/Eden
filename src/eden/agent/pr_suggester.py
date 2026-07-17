@@ -908,7 +908,7 @@ class PRSuggester:
         keep working when Postgres is unavailable.
         """
         try:
-            from eden.code_change._common import _insert_row
+            from eden.patches._common import _insert_row
         except Exception:
             return
         status = _suggestion_status_to_patch(suggestion.status)
@@ -979,7 +979,7 @@ class PRSuggester:
         agent PR-suggestion list.
         """
         try:
-            from eden.code_change._common import _select_rows
+            from eden.patches._common import _select_rows
         except Exception:
             return []
         try:
@@ -1024,7 +1024,7 @@ class PRSuggester:
         self, org_id: str, suggestion_id: str,
     ) -> PRSuggestion | None:
         try:
-            from eden.code_change._common import _select_one
+            from eden.patches._common import _select_one
         except Exception:
             return None
         try:
@@ -1051,7 +1051,7 @@ class PRSuggester:
         if status is None:
             return
         try:
-            from eden.code_change._common import _update_row
+            from eden.patches._common import _update_row
         except Exception:
             return
         try:

@@ -41,6 +41,8 @@ logger = logging.getLogger(__name__)
 # Free-tier defaults applied when no ``budgets`` row exists
 # for the org. Mirrors the cost_hard_limit_usd seeded in the
 # free-tier plan_tiers table.
+DEFAULT_ALERT_THRESHOLDS: list[int] = [50, 80, 100]
+
 FREE_TIER_DEFAULTS: dict[str, Any] = {
     "window": "monthly",
     "cost_soft_limit_usd": 0.80,
@@ -48,6 +50,7 @@ FREE_TIER_DEFAULTS: dict[str, Any] = {
     "enforcement_enabled": False,
     "action_on_exceed": "throttle",
     "threshold_alert_pct": 80,
+    "alert_thresholds": list(DEFAULT_ALERT_THRESHOLDS),
 }
 
 
@@ -97,7 +100,8 @@ async def get_budget(org_id: str) -> dict[str, Any]:
             """
             SELECT id, org_id, window, cost_soft_limit_usd,
                    cost_hard_limit_usd, enforcement_enabled,
-                   action_on_exceed, threshold_alert_pct
+                   action_on_exceed, threshold_alert_pct,
+                   alert_thresholds
               FROM budgets
              WHERE org_id = $1
              ORDER BY updated_at DESC
@@ -106,13 +110,53 @@ async def get_budget(org_id: str) -> dict[str, Any]:
             org_id,
         )
     except Exception as exc:
+        # alert_thresholds may be missing pre-migration 107
         logger.debug("budget_service: get_budget failed: %s", exc)
-        return {"org_id": org_id, **FREE_TIER_DEFAULTS, "source": "defaults"}
+        try:
+            row = await client.fetchrow(
+                """
+                SELECT id, org_id, window, cost_soft_limit_usd,
+                       cost_hard_limit_usd, enforcement_enabled,
+                       action_on_exceed, threshold_alert_pct
+                  FROM budgets
+                 WHERE org_id = $1
+                 ORDER BY updated_at DESC
+                 LIMIT 1
+                """,
+                org_id,
+            )
+        except Exception as exc2:
+            logger.debug("budget_service: get_budget fallback failed: %s", exc2)
+            return {"org_id": org_id, **FREE_TIER_DEFAULTS, "source": "defaults"}
     if row is None:
         return {"org_id": org_id, **FREE_TIER_DEFAULTS, "source": "defaults"}
     d = dict(row)
     d["source"] = "db"
+    d["alert_thresholds"] = _normalize_thresholds(d.get("alert_thresholds"))
     return d
+
+
+def _normalize_thresholds(raw: Any) -> list[int]:
+    if raw is None:
+        return list(DEFAULT_ALERT_THRESHOLDS)
+    if isinstance(raw, str):
+        import json
+
+        try:
+            raw = json.loads(raw)
+        except Exception:
+            return list(DEFAULT_ALERT_THRESHOLDS)
+    if not isinstance(raw, (list, tuple)):
+        return list(DEFAULT_ALERT_THRESHOLDS)
+    out: list[int] = []
+    for v in raw:
+        try:
+            iv = int(v)
+        except (TypeError, ValueError):
+            continue
+        if 0 <= iv <= 100 and iv not in out:
+            out.append(iv)
+    return sorted(out) if out else list(DEFAULT_ALERT_THRESHOLDS)
 
 
 async def get_consumption(
@@ -337,6 +381,120 @@ async def record_action(
         return False
 
 
+async def evaluate_budget_alerts(org_id: str) -> list[int]:
+    """Emit budget_actions for newly crossed 50/80/100% thresholds.
+
+    Returns the list of threshold percents that fired this call.
+    Idempotent per (org, window_start, threshold) via action log scan.
+    """
+    budget = await get_budget(org_id)
+    hard = float(budget.get("cost_hard_limit_usd") or 0.0)
+    if hard <= 0:
+        return []
+    consumption = await get_consumption(org_id, window=budget.get("window", "monthly"))
+    used = float(consumption.get("cost_usd") or 0.0)
+    pct = (used / hard) * 100.0
+    thresholds = _normalize_thresholds(budget.get("alert_thresholds"))
+    # Always include legacy single threshold_alert_pct
+    legacy = int(budget.get("threshold_alert_pct") or 80)
+    if legacy not in thresholds:
+        thresholds = sorted({*thresholds, legacy})
+
+    fired: list[int] = []
+    recent = await list_actions(org_id, limit=100)
+    already = {
+        int(a.get("threshold_pct") or 0)
+        for a in recent
+        if a.get("action_type") in ("threshold_breached", "budget_alert")
+        and str(a.get("window_start") or "")
+        in ("", str(consumption.get("window_start") or ""))
+    }
+    # Also match by threshold alone within recent window (best-effort).
+    already |= {
+        int(a.get("threshold_pct") or 0)
+        for a in recent
+        if a.get("action_type") in ("threshold_breached", "budget_alert")
+    }
+
+    for t in thresholds:
+        if pct < float(t):
+            continue
+        if t in already and t != 100:
+            # Allow re-fire only for hard exceed (100) once per window
+            # is enough — skip if already logged.
+            continue
+        if t in already:
+            continue
+        severity = "info" if t < 80 else ("warning" if t < 100 else "critical")
+        ok = await record_action(
+            org_id,
+            action_type="budget_alert",
+            severity=severity,
+            cost_at_action=used,
+            threshold_pct=t,
+            action_taken=f"alert_at_{t}pct",
+            budget_id=str(budget.get("id") or ""),
+        )
+        if ok:
+            fired.append(t)
+            try:
+                await _notify_budget_alert(org_id, t, used, hard)
+            except Exception as exc:
+                logger.debug("budget_service: notify failed: %s", exc)
+    return fired
+
+
+async def _notify_budget_alert(
+    org_id: str, threshold_pct: int, used: float, hard: float
+) -> None:
+    """Best-effort in-app + Slack notification for budget ladder alerts."""
+    try:
+        from eden.storage.postgres import get_postgres_client
+
+        client = await get_postgres_client()
+        if client is not None:
+            await client.execute(
+                """
+                INSERT INTO notifications (
+                    id, org_id, kind, title, body, created_at
+                ) VALUES (
+                    $1, $2, 'budget_alert', $3, $4, NOW()
+                )
+                ON CONFLICT DO NOTHING
+                """,
+                __import__("uuid").uuid4(),
+                org_id,
+                f"Budget {threshold_pct}% reached",
+                (
+                    f"Org spend ${used:.4f} is {threshold_pct}% of "
+                    f"hard limit ${hard:.4f}."
+                ),
+            )
+    except Exception as exc:
+        logger.debug("budget_service: in-app notify skipped: %s", exc)
+
+    try:
+        from eden.config import get_settings
+
+        webhook = getattr(get_settings(), "slack_webhook_url", "") or ""
+        if not webhook:
+            return
+        import httpx
+
+        async with httpx.AsyncClient(timeout=5.0) as http:
+            await http.post(
+                webhook,
+                json={
+                    "text": (
+                        f"[Eden] Budget alert {threshold_pct}% for org "
+                        f"{org_id}: ${used:.4f} / ${hard:.4f}"
+                    )
+                },
+            )
+    except Exception as exc:
+        logger.debug("budget_service: slack notify skipped: %s", exc)
+
+
 async def upsert_budget(
     org_id: str,
     *,
@@ -346,6 +504,7 @@ async def upsert_budget(
     window: str = "monthly",
     action_on_exceed: str = "throttle",
     threshold_alert_pct: int = 80,
+    alert_thresholds: list[int] | None = None,
 ) -> dict[str, Any]:
     """Admin endpoint: upsert the per-org budget config.
 
@@ -354,6 +513,9 @@ async def upsert_budget(
     """
     client = await _get_client()
     budget_id = _new_budget_id()
+    thresholds = _normalize_thresholds(
+        alert_thresholds if alert_thresholds is not None else DEFAULT_ALERT_THRESHOLDS
+    )
     if client is None:
         return {
             "id": budget_id,
@@ -364,18 +526,22 @@ async def upsert_budget(
             "enforcement_enabled": enforcement_enabled,
             "action_on_exceed": action_on_exceed,
             "threshold_alert_pct": threshold_alert_pct,
+            "alert_thresholds": thresholds,
             "source": "dry_run",
         }
     try:
+        import json
+
         await client.execute(
             """
             INSERT INTO budgets (
                 id, org_id, window, cost_soft_limit_usd,
                 cost_hard_limit_usd, enforcement_enabled,
                 action_on_exceed, threshold_alert_pct,
+                alert_thresholds,
                 created_at, updated_at
             ) VALUES (
-                $1, $2, $3, $4, $5, $6, $7, $8, NOW(), NOW()
+                $1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, NOW(), NOW()
             )
             ON CONFLICT (org_id, window) WHERE enforcement_enabled = TRUE
             DO UPDATE SET
@@ -384,6 +550,7 @@ async def upsert_budget(
                 enforcement_enabled = EXCLUDED.enforcement_enabled,
                 action_on_exceed = EXCLUDED.action_on_exceed,
                 threshold_alert_pct = EXCLUDED.threshold_alert_pct,
+                alert_thresholds = EXCLUDED.alert_thresholds,
                 updated_at = NOW()
             """,
             budget_id,
@@ -394,17 +561,53 @@ async def upsert_budget(
             bool(enforcement_enabled),
             action_on_exceed,
             int(threshold_alert_pct),
+            json.dumps(thresholds),
         )
     except Exception as exc:
         logger.debug("budget_service: upsert_budget failed: %s", exc)
+        # Pre-migration 107: retry without alert_thresholds
+        try:
+            await client.execute(
+                """
+                INSERT INTO budgets (
+                    id, org_id, window, cost_soft_limit_usd,
+                    cost_hard_limit_usd, enforcement_enabled,
+                    action_on_exceed, threshold_alert_pct,
+                    created_at, updated_at
+                ) VALUES (
+                    $1, $2, $3, $4, $5, $6, $7, $8, NOW(), NOW()
+                )
+                ON CONFLICT (org_id, window) WHERE enforcement_enabled = TRUE
+                DO UPDATE SET
+                    cost_soft_limit_usd = EXCLUDED.cost_soft_limit_usd,
+                    cost_hard_limit_usd = EXCLUDED.cost_hard_limit_usd,
+                    enforcement_enabled = EXCLUDED.enforcement_enabled,
+                    action_on_exceed = EXCLUDED.action_on_exceed,
+                    threshold_alert_pct = EXCLUDED.threshold_alert_pct,
+                    updated_at = NOW()
+                """,
+                budget_id,
+                org_id,
+                window,
+                float(cost_soft_limit_usd),
+                float(cost_hard_limit_usd),
+                bool(enforcement_enabled),
+                action_on_exceed,
+                int(threshold_alert_pct),
+            )
+        except Exception as exc2:
+            logger.debug("budget_service: upsert_budget fallback failed: %s", exc2)
     return await get_budget(org_id)
 
+
 __all__ = [
+    "DEFAULT_ALERT_THRESHOLDS",
+    "FREE_TIER_DEFAULTS",
+    "evaluate_budget_alerts",
     "get_budget",
     "get_consumption",
-    "record_usage",
     "list_actions",
     "record_action",
+    "record_usage",
     "upsert_budget",
-    "FREE_TIER_DEFAULTS",
 ]

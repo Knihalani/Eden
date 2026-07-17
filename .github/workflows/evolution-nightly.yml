@@ -1,0 +1,51 @@
+name: evolution-nightly (GA harness)
+
+# Nightly full evolution scorecard — smoke on PR via backend-ci optional hook.
+on:
+  schedule:
+    - cron: "0 4 * * *"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  evolution-full:
+    name: bench/evolution --suite full
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Eden
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+          # bench/ is not a hatch package; keep repo root on PYTHONPATH
+          # so `python -m bench.evolution.run` resolves.
+          echo "PYTHONPATH=${GITHUB_WORKSPACE}:${PYTHONPATH:-}" >> "$GITHUB_ENV"
+
+      - name: Run full evolution scorecard
+        run: python -m bench.evolution.run --suite full | tee evolution-scorecard.json
+        env:
+          EDEN_TESTING: "1"
+          PYTHONPATH: ${{ github.workspace }}
+
+      - name: Upload scorecard artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: evolution-scorecard-${{ github.run_id }}
+          path: evolution-scorecard.json
+          retention-days: 14
+
+      - name: Fail on scorecard gates
+        run: python -m bench.evolution.run --suite full
+        env:
+          EDEN_TESTING: "1"
+          PYTHONPATH: ${{ github.workspace }}

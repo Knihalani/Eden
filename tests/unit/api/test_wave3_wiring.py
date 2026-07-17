@@ -58,8 +58,9 @@ def test_install_learn_filters_installs_on_two_distinct_gateways():
             lw.install_learn_filters(gateway=gw1)
             lw.install_learn_filters(gateway=gw2)
 
-        assert gw1.register_filter.call_count == 3, "gw1 should have 3 filters installed"
-        assert gw2.register_filter.call_count == 3, "gw2 should have 3 filters installed"
+        # F68 added a 4th filter (prompt_deploy) alongside nudge/book/guardrail.
+        assert gw1.register_filter.call_count == 4, "gw1 should have 4 filters installed"
+        assert gw2.register_filter.call_count == 4, "gw2 should have 4 filters installed"
         assert id(gw1) in lw._installed_gateways
         assert id(gw2) in lw._installed_gateways
         assert lw._nudge_engine is not None, "NudgeEngine should be created once"
@@ -87,7 +88,7 @@ def test_install_learn_filters_idempotent_same_gateway():
             lw.install_learn_filters(gateway=gw)
             lw.install_learn_filters(gateway=gw)  # second call must be no-op
 
-        assert gw.register_filter.call_count == 3, "second call must not re-register"
+        assert gw.register_filter.call_count == 4, "second call must not re-register"
     finally:
         lw._installed_gateways = orig_gateways
         lw._nudge_engine = orig_engine

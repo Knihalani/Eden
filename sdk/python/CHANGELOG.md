@@ -4,6 +4,19 @@ All notable changes to the Eden Python SDK are documented here. The
 format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## 0.3.1 — 2026-07-17
+
+### Fixed
+- F23 `begin()` NameError (`get_default_client` unbound); `_current_session`
+  now uses contextvars and is set on `begin()` (parity with TS).
+
+### Added
+- Ingest-side session notify (`/ingest/agent-sessions`) with `X-Org-Api-Key`;
+  `identify()`, cost attach, flush-on-complete; exported from `eden` shim.
+- Bedrock + Gemini instrumentations; parity matrix in README; Mastra remains
+  an honest no-op stub.
+- Client sampling (N16 profiles), SQLite offline queue, doctor session check.
+
 ## 0.2.19 — 2026-07-09
 
 ### Fixed

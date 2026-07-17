@@ -82,9 +82,29 @@ jobs:
         with:
           bun-version: latest
       - run: bun install --frozen-lockfile
+      - name: Ensure Clerk test keys when secrets absent
+        run: |
+          SK="${CLERK_SECRET_KEY:-sk_test_PXZfewH5OceW7H1BFN2mRSvkouyt0EgprOzjq0cBWm}"
+          PK="${NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY:-pk_test_bW9kZXN0LWJ1Zy03LmNsZXJrLmFjY291bnRzLmRldiQ}"
+          echo "CLERK_SECRET_KEY=$SK" >> "$GITHUB_ENV"
+          echo "NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=$PK" >> "$GITHUB_ENV"
+          echo "CLERK_TEST_KEY_FALLBACK=1" >> "$GITHUB_ENV"
+        env:
+          CLERK_SECRET_KEY: ${{ secrets.CLERK_SECRET_KEY }}
+          NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY }}
       - run: bun run build
         env:
           NEXT_PUBLIC_API_URL: "http://localhost:8000"
+          # NEXT_PUBLIC_* must be present at build time for Clerk JS to mount in production start.
+          CLERK_SECRET_KEY: ${{ env.CLERK_SECRET_KEY }}
+          NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY }}
+
+      - name: Upload production build
+        uses: actions/upload-artifact@v4
+        with:
+          name: portal-next-build-${{ github.run_id }}
+          path: clients/portal/.next
+          retention-days: 3
 
       - name: Upload .next for inspection
         if: failure()
@@ -94,15 +114,13 @@ jobs:
           path: clients/portal/.next
           retention-days: 3
 
-  # Soft a11y audit — needs a live portal server (scripts/audit-a11y.cjs
-  # polls localhost). Non-blocking until the suite is green enough to
-  # gate merges. continue-on-error keeps Phase 4 soft-launch CI green
-  # even when axe reports serious/critical findings.
+  # U20 axe gate — polls localhost after production build + start.
+  # Runs authenticated (using Clerk testing token) so the real shell is audited.
+  # Blocks main on critical violations (serious findings reported, non-blocking).
   a11y:
-    name: Accessibility audit (soft)
+    name: Accessibility audit (U20 core routes)
     runs-on: ubuntu-latest
-    continue-on-error: true
-    needs: [typecheck]
+    needs: [build]
     defaults:
       run:
         working-directory: clients/portal
@@ -112,18 +130,125 @@ jobs:
         with:
           bun-version: latest
       - run: bun install --frozen-lockfile
-      - name: Start portal + audit:a11y
+      - run: bunx playwright install chromium
+      - name: Download production build
+        uses: actions/download-artifact@v4
+        with:
+          name: portal-next-build-${{ github.run_id }}
+          path: clients/portal/.next
+      - name: Ensure Clerk test keys when secrets absent
+        run: |
+          SK="${CLERK_SECRET_KEY:-sk_test_PXZfewH5OceW7H1BFN2mRSvkouyt0EgprOzjq0cBWm}"
+          PK="${NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY:-pk_test_bW9kZXN0LWJ1Zy03LmNsZXJrLmFjY291bnRzLmRldiQ}"
+          echo "CLERK_SECRET_KEY=$SK" >> "$GITHUB_ENV"
+          echo "NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=$PK" >> "$GITHUB_ENV"
+          echo "CLERK_TEST_KEY_FALLBACK=1" >> "$GITHUB_ENV"
+        env:
+          CLERK_SECRET_KEY: ${{ secrets.CLERK_SECRET_KEY }}
+          NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY }}
+      - name: Seed Clerk auth state (headless)
+        # Prefer GitHub Actions secrets; fall back to committed test-mode keys only
+        # when neither secret is set. The fallback keys are TEST-mode credentials
+        # for the modest-bug-7.clerk.accounts.dev instance — safe for CI.
+        env:
+          NEXT_PUBLIC_API_URL: "http://localhost:8000"
+          # Required: set CLERK_SECRET_KEY and NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY
+          # as repository secrets for production-parity auth in CI.
+          CLERK_SECRET_KEY: ${{ env.CLERK_SECRET_KEY }}
+          NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY }}
+          BASE_URL: "http://localhost:3000"
+          PORT: "3000"
+          NEXT_PUBLIC_SITE_URL: "http://localhost:3000"
+        run: |
+          bun run start -- -p 3000 -H localhost &
+          for i in $(seq 1 60); do
+            if curl -sf "http://localhost:3000/" >/dev/null; then break; fi
+            sleep 2
+          done
+          # seed-auth writes e2e/.auth-state.json used by audit:a11y.
+          # Fails loudly if Clerk secrets are misconfigured — no silent unauthenticated pass.
+          node e2e/golden/seed-auth.mjs
+      - name: Run authenticated axe audit
         env:
           NEXT_PUBLIC_API_URL: "http://localhost:8000"
           PORT: "3000"
+        run: bun run audit:a11y
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: a11y-reports-${{ github.run_id }}
+          path: clients/portal/report-a11y-*.json
+          retention-days: 7
+
+  # F85 golden paths — 8 deep-assertion paths with real Clerk auth.
+  # continue-on-error is intentionally REMOVED so this gates CI.
+  # If the job fails due to missing Clerk secrets, the error message will name
+  # the required env vars: CLERK_SECRET_KEY, NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY.
+  golden-paths:
+    name: Golden paths (F85)
+    runs-on: ubuntu-latest
+    needs: [build]
+    defaults:
+      run:
+        working-directory: clients/portal
+    steps:
+      - uses: actions/checkout@v7
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: bun install --frozen-lockfile
+      - run: bunx playwright install chromium
+      - name: Download production build
+        uses: actions/download-artifact@v4
+        with:
+          name: portal-next-build-${{ github.run_id }}
+          path: clients/portal/.next
+      - name: Ensure Clerk test keys when secrets absent
         run: |
-          bun run build
-          bun run start -- -p 3000 &
-          # Wait for the server, then run axe. Soft job — failures don't block.
+          SK="${CLERK_SECRET_KEY:-sk_test_PXZfewH5OceW7H1BFN2mRSvkouyt0EgprOzjq0cBWm}"
+          PK="${NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY:-pk_test_bW9kZXN0LWJ1Zy03LmNsZXJrLmFjY291bnRzLmRldiQ}"
+          echo "CLERK_SECRET_KEY=$SK" >> "$GITHUB_ENV"
+          echo "NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=$PK" >> "$GITHUB_ENV"
+          echo "CLERK_TEST_KEY_FALLBACK=1" >> "$GITHUB_ENV"
+        env:
+          CLERK_SECRET_KEY: ${{ secrets.CLERK_SECRET_KEY }}
+          NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY }}
+      - name: Start portal
+        env:
+          NEXT_PUBLIC_API_URL: "http://localhost:8000"
+          CLERK_SECRET_KEY: ${{ env.CLERK_SECRET_KEY }}
+          NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY }}
+          NEXT_PUBLIC_SITE_URL: "http://localhost:3000"
+          PORT: "3000"
+        run: |
+          bun run start -- -p 3000 -H localhost &
           for i in $(seq 1 60); do
-            if curl -sf "http://127.0.0.1:3000/" >/dev/null; then
-              break
-            fi
+            if curl -sf "http://localhost:3000/" >/dev/null; then break; fi
             sleep 2
           done
-          bun run audit:a11y || true
+          echo "Portal is up"
+      - name: Seed Clerk auth state (headless)
+        # Required secrets: CLERK_SECRET_KEY, NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY
+        # If secrets are not set, seed-auth falls back to committed test-mode keys.
+        # If auth seed fails outright, the golden-paths step below will fail with
+        # a clear message (GOLDEN_CI=1 exits 1 when no storageState exists).
+        env:
+          CLERK_SECRET_KEY: ${{ env.CLERK_SECRET_KEY }}
+          NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY }}
+          BASE_URL: "http://localhost:3000"
+          NEXT_PUBLIC_SITE_URL: "http://localhost:3000"
+          PORT: "3000"
+        run: node e2e/golden/seed-auth.mjs
+      - name: Run golden paths (deep assertions)
+        env:
+          NEXT_PUBLIC_API_URL: "http://localhost:8000"
+          BASE_URL: "http://localhost:3000"
+          NEXT_PUBLIC_SITE_URL: "http://localhost:3000"
+          GOLDEN_CI: "1"
+        run: node e2e/golden/golden-paths.spec.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: golden-screenshots-${{ github.run_id }}
+          path: clients/portal/e2e/golden/screenshots
+          retention-days: 7

@@ -30,7 +30,7 @@ export interface ShortcutMap {
   "3"?: () => void;
   "4"?: () => void;
   l?: () => void;
-  "?": () => void;
+  "?"?: () => void;
   [key: string]: (() => void) | undefined;
 }
 

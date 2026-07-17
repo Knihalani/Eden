@@ -12,6 +12,7 @@ NudgeActionType = Literal[
     "tool_block",
     "tool_rewrite",
     "subagent_hint",
+    "inrun_rescue",
 ]
 
 

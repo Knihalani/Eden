@@ -4,6 +4,13 @@ import createNextIntlPlugin from "next-intl/plugin";
 const withNextIntl = createNextIntlPlugin("./src/i18n/request.ts");
 
 const nextConfig: NextConfig = {
+  // Playwright golden paths hit 127.0.0.1; allow dev HMR from that host.
+  allowedDevOrigins: ["127.0.0.1", "localhost"],
+  // Monorepo: trace deps from the portal package, not a parent lockfile.
+  outputFileTracingRoot: import.meta.dirname,
+  experimental: {
+    optimizePackageImports: ["recharts", "lucide-react", "@xyflow/react", "framer-motion"],
+  },
   async redirects() {
     return [
       // Dead /jobs and /eval-harnesses surfaces → dashboard.
@@ -41,7 +48,14 @@ const nextConfig: NextConfig = {
       { source: "/autonomous/:path*", destination: "/improve", permanent: true },
       { source: "/improve/plans", destination: "/improve?tab=plans", permanent: false },
       { source: "/improve/runs", destination: "/improve?tab=history", permanent: false },
+      // F22 DELETED @ W26 — fix chat route → issue handoff
+      { source: "/issues/:id/fix", destination: "/issues/:id?tab=handoff", permanent: true },
+      { source: "/issues/:id/fix/:path*", destination: "/issues/:id?tab=handoff", permanent: true },
 
+      { source: "/apm", destination: "/traces", permanent: true },
+      { source: "/apm/:path*", destination: "/traces", permanent: true },
+      { source: "/playgrounds", destination: "/evals?tab=playgrounds", permanent: true },
+      { source: "/experiments", destination: "/evals?tab=experiments", permanent: true },
       { source: "/observability", destination: "/traces", permanent: true },
       { source: "/observability/apm", destination: "/traces", permanent: true },
       { source: "/observability/apm/:path*", destination: "/traces", permanent: true },
@@ -76,9 +90,27 @@ const nextConfig: NextConfig = {
       // Docs Fill-in lives on docs site; old portal quickstart → docs
       { source: "/quickstart", destination: "https://docs.edenobservability.com/quickstart", permanent: true },
 
-      // Onboarding → dashboard overlay
+      // Onboarding → dashboard overlay / connect flow
       { source: "/onboarding", destination: "/dashboard?onboarding=1", permanent: true },
-      { source: "/onboarding/:path*", destination: "/dashboard?onboarding=1", permanent: true },
+      // GitHub App callback + legacy deep links still use /onboarding/connect
+      { source: "/onboarding/connect", destination: "/agents/connect", permanent: false },
+      { source: "/onboarding/connect/:path*", destination: "/agents/connect", permanent: false },
+
+      // U01 trace deep links
+      { source: "/traces/:traceId", destination: "/traces?traceId=:traceId&view=traces", permanent: false },
+      { source: "/observability/traces/:traceId", destination: "/traces?traceId=:traceId&view=traces", permanent: true },
+      {
+        source: "/observability",
+        has: [{ type: "query", key: "trace_id" }],
+        destination: "/traces?traceId=:trace_id&view=traces",
+        permanent: false,
+      },
+      {
+        source: "/observability",
+        has: [{ type: "query", key: "traceId" }],
+        destination: "/traces?traceId=:traceId&view=traces",
+        permanent: false,
+      },
     ];
   },
 };

@@ -5,17 +5,16 @@ import {
   useContext,
   useState,
   useCallback,
+  useRef,
   type ReactNode,
 } from "react";
 import { cn } from "@/lib/utils";
-import { CheckCircle2, XCircle, Info, X } from "lucide-react";
+import { CheckCircle2, XCircle, Info, AlertTriangle, X } from "lucide-react";
 
-type ToastType = "success" | "error" | "info";
+type ToastType = "success" | "error" | "info" | "warning";
 
 interface ToastAction {
-  /** Button label, e.g. "Undo" or "View". */
   label: string;
-  /** Click handler. Removing the toast on action is the caller's job. */
   onClick: () => void;
 }
 
@@ -24,7 +23,6 @@ interface Toast {
   type: ToastType;
   message: string;
   description?: string;
-  /** Optional action button (typically "Undo" for reversible actions). */
   action?: ToastAction;
   exiting?: boolean;
 }
@@ -41,18 +39,74 @@ interface ToastContextType {
 }
 
 const ToastContext = createContext<ToastContextType | null>(null);
+const MAX_QUEUE = 5;
 
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([]);
+  const timersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+  const pausedRef = useRef<Set<string>>(new Set());
+  const remainingRef = useRef<Map<string, number>>(new Map());
+  const startedRef = useRef<Map<string, number>>(new Map());
 
-  const removeToast = useCallback((id: string) => {
-    setToasts((prev) =>
-      prev.map((t) => (t.id === id ? { ...t, exiting: true } : t))
-    );
-    setTimeout(() => {
-      setToasts((prev) => prev.filter((t) => t.id !== id));
-    }, 200);
+  const clearTimer = useCallback((id: string) => {
+    const t = timersRef.current.get(id);
+    if (t) clearTimeout(t);
+    timersRef.current.delete(id);
   }, []);
+
+  const removeToast = useCallback(
+    (id: string) => {
+      clearTimer(id);
+      pausedRef.current.delete(id);
+      remainingRef.current.delete(id);
+      startedRef.current.delete(id);
+      setToasts((prev) =>
+        prev.map((t) => (t.id === id ? { ...t, exiting: true } : t)),
+      );
+      setTimeout(() => {
+        setToasts((prev) => prev.filter((t) => t.id !== id));
+      }, 200);
+    },
+    [clearTimer],
+  );
+
+  const scheduleDismiss = useCallback(
+    (id: string, ms: number) => {
+      clearTimer(id);
+      startedRef.current.set(id, Date.now());
+      remainingRef.current.set(id, ms);
+      timersRef.current.set(
+        id,
+        setTimeout(() => {
+          if (!pausedRef.current.has(id)) removeToast(id);
+        }, ms),
+      );
+    },
+    [clearTimer, removeToast],
+  );
+
+  const pauseToast = useCallback(
+    (id: string) => {
+      if (pausedRef.current.has(id)) return;
+      pausedRef.current.add(id);
+      const started = startedRef.current.get(id) ?? Date.now();
+      const remaining = remainingRef.current.get(id) ?? 3000;
+      const elapsed = Date.now() - started;
+      remainingRef.current.set(id, Math.max(500, remaining - elapsed));
+      clearTimer(id);
+    },
+    [clearTimer],
+  );
+
+  const resumeToast = useCallback(
+    (id: string) => {
+      if (!pausedRef.current.has(id)) return;
+      pausedRef.current.delete(id);
+      const left = remainingRef.current.get(id) ?? 3000;
+      scheduleDismiss(id, left);
+    },
+    [scheduleDismiss],
+  );
 
   const addToast = useCallback(
     (
@@ -62,19 +116,25 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       action?: ToastAction,
     ) => {
       const id = `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
-      setToasts((prev) => [...prev, { id, type, message, description, action }]);
-      // Bump auto-dismiss to 5s for longer messages, 6s for action
-      // buttons (give users time to read + click "Undo").
-      const dismissMs = action ? 6000 : description ? 5000 : 3000;
-      setTimeout(() => removeToast(id), dismissMs);
+      setToasts((prev) => {
+        const next = [...prev, { id, type, message, description, action }];
+        return next.length > MAX_QUEUE ? next.slice(next.length - MAX_QUEUE) : next;
+      });
+      const dismissMs = action ? 6000 : description ? 5000 : type === "warning" ? 5000 : 3000;
+      scheduleDismiss(id, dismissMs);
     },
-    [removeToast]
+    [scheduleDismiss],
   );
 
   return (
     <ToastContext.Provider value={{ toasts, addToast, removeToast }}>
       {children}
-      <ToastContainer toasts={toasts} removeToast={removeToast} />
+      <ToastContainer
+        toasts={toasts}
+        removeToast={removeToast}
+        onPause={pauseToast}
+        onResume={resumeToast}
+      />
     </ToastContext.Provider>
   );
 }
@@ -91,22 +151,37 @@ export function useToast() {
       context.addToast("error", message, description, action),
     info: (message: string, description?: string, action?: ToastAction) =>
       context.addToast("info", message, description, action),
+    warning: (message: string, description?: string, action?: ToastAction) =>
+      context.addToast("warning", message, description, action),
   };
 }
 
 function ToastContainer({
   toasts,
   removeToast,
+  onPause,
+  onResume,
 }: {
   toasts: Toast[];
   removeToast: (id: string) => void;
+  onPause: (id: string) => void;
+  onResume: (id: string) => void;
 }) {
   if (toasts.length === 0) return null;
 
   return (
-    <div className="fixed top-20 right-4 flex flex-col gap-2 pointer-events-none max-w-[calc(100vw-2rem)]" style={{ zIndex: "var(--z-toast)" }}>
+    <div
+      className="fixed top-20 right-4 flex flex-col gap-2 pointer-events-none max-w-[calc(100vw-2rem)]"
+      style={{ zIndex: "var(--z-toast)" }}
+    >
       {toasts.map((toast) => (
-        <ToastItem key={toast.id} toast={toast} onRemove={() => removeToast(toast.id)} />
+        <ToastItem
+          key={toast.id}
+          toast={toast}
+          onRemove={() => removeToast(toast.id)}
+          onPause={() => onPause(toast.id)}
+          onResume={() => onResume(toast.id)}
+        />
       ))}
     </div>
   );
@@ -114,29 +189,41 @@ function ToastContainer({
 
 const TOAST_STYLES: Record<
   ToastType,
-  { bg: string; border: string; icon: typeof CheckCircle2; iconColor: string }
+  { border: string; icon: typeof CheckCircle2; iconColor: string }
 > = {
   success: {
-    bg: "bg-[var(--terminal-faint)]",
     border: "border-[var(--terminal)]/30",
     icon: CheckCircle2,
     iconColor: "text-[var(--terminal)]",
   },
   error: {
-    bg: "bg-[var(--error-dim)]",
     border: "border-[var(--error)]/30",
     icon: XCircle,
     iconColor: "text-[var(--error)]",
   },
   info: {
-    bg: "bg-[var(--accent-faint)]",
     border: "border-[var(--accent)]/30",
     icon: Info,
     iconColor: "text-[var(--accent)]",
   },
+  warning: {
+    border: "border-[var(--warning)]/40",
+    icon: AlertTriangle,
+    iconColor: "text-[var(--warning)]",
+  },
 };
 
-function ToastItem({ toast, onRemove }: { toast: Toast; onRemove: () => void }) {
+function ToastItem({
+  toast,
+  onRemove,
+  onPause,
+  onResume,
+}: {
+  toast: Toast;
+  onRemove: () => void;
+  onPause: () => void;
+  onResume: () => void;
+}) {
   const style = TOAST_STYLES[toast.type];
   const Icon = style.icon;
 
@@ -145,12 +232,16 @@ function ToastItem({ toast, onRemove }: { toast: Toast; onRemove: () => void }) 
       role="status"
       aria-live="polite"
       aria-atomic="true"
+      onMouseEnter={onPause}
+      onMouseLeave={onResume}
+      onFocus={onPause}
+      onBlur={onResume}
       className={cn(
         "flex items-center gap-3 px-4 py-3 rounded-xl border shadow-lg",
         "min-w-[300px] max-w-[400px] pointer-events-auto",
         "bg-[var(--bg-primary)]",
         style.border,
-        toast.exiting ? "toast-exit" : "toast-enter"
+        toast.exiting ? "toast-exit" : "toast-enter",
       )}
     >
       <Icon className={cn("w-5 h-5 flex-shrink-0", style.iconColor)} aria-hidden />

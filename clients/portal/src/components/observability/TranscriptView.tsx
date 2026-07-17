@@ -83,14 +83,15 @@ export function TranscriptView({
 
   React.useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
+      const down = e.key === "ArrowDown" || e.key === "j";
+      const up = e.key === "ArrowUp" || e.key === "k";
+      if (!down && !up) return;
       if (flatSpanIds.length === 0) return;
       e.preventDefault();
       const idx = selectedSpanId ? flatSpanIds.indexOf(selectedSpanId) : -1;
-      const next =
-        e.key === "ArrowDown"
-          ? flatSpanIds[Math.min(idx + 1, flatSpanIds.length - 1)]
-          : flatSpanIds[Math.max(idx - 1, 0)];
+      const next = down
+        ? flatSpanIds[Math.min(idx + 1, flatSpanIds.length - 1)]
+        : flatSpanIds[Math.max(idx - 1, 0)];
       if (next) setSelectedSpanId(next);
     };
     window.addEventListener("keydown", onKey);

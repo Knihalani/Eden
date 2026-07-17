@@ -45,6 +45,16 @@ class ExportPackRequest(BaseModel):
     framework: str = "soc2_type_ii"
 
 
+@router.post("/verify")
+async def verify_chain(
+    org_id: str = Path(...),
+    agent_id: str | None = Query(None),
+    limit: int = Query(500, ge=1, le=2000),
+) -> dict[str, Any]:
+    report = await _ledger.verify_chain(org_id, agent_id=agent_id, limit=limit)
+    return _ok("agent_audit_ledger_verify", report)
+
+
 @router.get("/ledger")
 async def query_ledger(
     org_id: str = Path(...),

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { useParams, usePathname } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import { useOrg } from "@/hooks/use-org";
 import { agentIssuesApi, type AgentStumble } from "@/lib/api";
 import { useOrgQuery, useOrgMutation } from "@/hooks/use-api-query";
@@ -16,33 +16,39 @@ import {
   Download,
   FlaskConical,
   Loader2,
-  MessageSquare,
   ShieldAlert,
   Stethoscope,
   CheckCircle2,
   Ban,
   Wrench,
+  Bug,
+  Database,
+  Copy,
 } from "lucide-react";
 import { PageContent } from "@/components/layout/page-content";
 import { cn } from "@/lib/utils";
 import { RegressionBadge, RepeatBadge, IssueSeverityBadge, StatusBadge } from "../_components/issue-badges";
 
-type Tab = "overview" | "triage" | "fix" | "experiment";
+type Tab = "overview" | "triage" | "handoff" | "experiment";
 
 export default function IssueDetailPage() {
   const { currentOrg } = useOrg();
   const orgId = currentOrg?.id ?? null;
   const params = useParams<{ id: string }>();
-  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const issueId = params?.id;
   const toast = useToast();
 
   const [tab, setTab] = useState<Tab>("overview");
   const [busy, setBusy] = useState<string | null>(null);
+  const [regressionCases, setRegressionCases] = useState<Record<string, unknown>[]>([]);
 
   useEffect(() => {
-    if (pathname?.endsWith("/fix")) setTab("fix");
-  }, [pathname]);
+    const qTab = searchParams?.get("tab");
+    if (qTab === "handoff" || searchParams?.get("handoff") === "coding-agent") {
+      setTab("handoff");
+    }
+  }, [searchParams]);
 
   const issueQuery = useOrgQuery(
     queryKeys.issues.detail(orgId, issueId),
@@ -77,6 +83,14 @@ export default function IssueDetailPage() {
     { enabled: Boolean(orgId) && Boolean(issueId) },
   );
   const experiments = experimentsQuery.data ?? [];
+
+  useEffect(() => {
+    if (!orgId || !issueId) return;
+    void agentIssuesApi
+      .listRegressionCases(orgId, issueId)
+      .then((res) => setRegressionCases((res.data?.cases as Record<string, unknown>[]) ?? []))
+      .catch(() => setRegressionCases([]));
+  }, [orgId, issueId, issue?.status, issue?.regression_case_id]);
 
   const invalidateIssue = [
     queryKeys.issues.detail(orgId, issueId),
@@ -148,6 +162,21 @@ export default function IssueDetailPage() {
     }
   };
 
+  const onSaveRegression = async () => {
+    if (!orgId || !issueId) return;
+    setBusy("regression");
+    try {
+      const res = await agentIssuesApi.createRegressionCases(orgId, issueId, { auto: true });
+      setRegressionCases((res.data?.cases as Record<string, unknown>[]) ?? []);
+      toast.success("Regression case saved to permanent memory");
+      void issueQuery.refetch();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Regression save failed");
+    } finally {
+      setBusy(null);
+    }
+  };
+
   const onCreateExperiment = async () => {
     if (!orgId || !issueId) return;
     setBusy("experiment");
@@ -185,7 +214,7 @@ export default function IssueDetailPage() {
   const tabs: { id: Tab; label: string; href?: string }[] = [
     { id: "overview", label: "Overview" },
     { id: "triage", label: "Triage" },
-    { id: "fix", label: "Fix", href: `/issues/${issueId}/fix` },
+    { id: "handoff", label: "Handoff" },
     { id: "experiment", label: "Experiment" },
   ];
 
@@ -259,10 +288,20 @@ export default function IssueDetailPage() {
               <Button size="sm" variant="secondary" disabled={busy !== null} onClick={onExportFixture}>
                 <Download className="h-3 w-3 mr-1" /> Export fixture
               </Button>
+              <Button size="sm" variant="secondary" disabled={busy !== null} onClick={() => void onSaveRegression()}>
+                <Database className="h-3 w-3 mr-1" /> Save regression
+              </Button>
               <Button size="sm" variant="outline" asChild>
-                <Link href={`/issues/${issueId}/fix`}>
-                  <MessageSquare className="h-3 w-3 mr-1" /> Fix in code
+                <Link href={`/improve?issue=${issueId}`}>
+                  <Bug className="h-3 w-3 mr-1" /> View improvement plan
                 </Link>
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setTab("handoff")}
+              >
+                <Wrench className="h-3 w-3 mr-1" /> Open in coding agent
               </Button>
               <Button size="sm" variant="secondary" disabled={busy !== null || issue.status === "resolved"} onClick={() => onResolve("resolved")}>
                 <CheckCircle2 className="h-3 w-3 mr-1" /> Resolve
@@ -270,11 +309,6 @@ export default function IssueDetailPage() {
               <Button size="sm" variant="outline" disabled={busy !== null || issue.status === "ignored"} onClick={() => onResolve("ignored")}>
                 <Ban className="h-3 w-3 mr-1" /> Ignore
               </Button>
-              <Link href={`/issues/${issueId}/fix`}>
-                <Button size="sm" variant="secondary" className="min-h-[44px]">
-                  <Wrench className="h-3 w-3 mr-1" /> Fix
-                </Button>
-              </Link>
             </div>
           </div>
 
@@ -286,6 +320,12 @@ export default function IssueDetailPage() {
                 <Stat label="Repeats" value={issue.repetition_count} />
                 <Stat label="Agent" value={issue.agent_id ?? "—"} />
               </div>
+              <RegressionMemoryPanel
+                cases={regressionCases}
+                caseId={issue.regression_case_id}
+                onSave={() => void onSaveRegression()}
+                busy={busy === "regression"}
+              />
               {issue.triage_result && Object.keys(issue.triage_result).length > 0 && (
                 <div className="rounded-lg border border-[var(--border-default)] bg-[var(--bg-primary)] p-4">
                   <h2 className="text-sm font-semibold mb-2">Triage result</h2>
@@ -302,15 +342,28 @@ export default function IssueDetailPage() {
             <TriagePanel triageResult={issue.triage_result} stumbles={stumbles} />
           )}
 
-          {tab === "fix" && (
-            <div className="rounded-lg border border-[var(--border-default)] bg-[var(--bg-primary)] p-4 space-y-3">
+          {tab === "handoff" && (
+            <div className="rounded-lg border border-[var(--border-default)] bg-[var(--bg-primary)] p-4 space-y-4">
               <p className="text-sm text-[var(--text-secondary)]">
-                Propose a fix via Improve queue or PR Suggestions. Eden links triage context to your repo.
+                Fixes ship via Improve queue (N20), coding-agent handoff, or fixture export.
+                In-portal fix chat (F22) was deleted.
               </p>
               <div className="flex flex-wrap gap-2">
-                <Button size="sm" asChild><Link href={`/improve?issue=${issueId}`}>Improve queue</Link></Button>
-                <Button size="sm" variant="secondary" asChild><Link href="/pr-suggestions">PR Suggestions</Link></Button>
+                <Button size="sm" asChild>
+                  <Link href={`/improve?issue=${issueId}`}>View improvement plan</Link>
+                </Button>
+                <Button size="sm" variant="outline" disabled={busy !== null} onClick={onExportFixture}>
+                  <Download className="h-3 w-3 mr-1" /> Export fixture
+                </Button>
               </div>
+              <CodingAgentHandoff
+                orgId={orgId!}
+                issueId={issueId!}
+                fingerprint={issue.fingerprint}
+                title={issue.title}
+                kind={issue.kind}
+                onCopy={() => toast.success("Handoff prompt copied")}
+              />
             </div>
           )}
 
@@ -325,9 +378,7 @@ export default function IssueDetailPage() {
                 </Button>
               </div>
               {issue.experiment_result && (
-                <pre className="p-2 rounded bg-[var(--bg-tertiary)] text-[11px] font-mono overflow-x-auto">
-                  {JSON.stringify(issue.experiment_result, null, 2)}
-                </pre>
+                <ExperimentReportBanner report={issue.experiment_result as Record<string, unknown>} />
               )}
               {experiments.length === 0 ? (
                 <p className="text-sm text-[var(--text-muted)]">No experiments yet. Start one to measure if a fix reduced stumble rate.</p>
@@ -356,6 +407,46 @@ export default function IssueDetailPage() {
   );
 }
 
+function ExperimentReportBanner({ report }: { report: Record<string, unknown> }) {
+  const prob = Number(report.prob_treatment_better ?? 0);
+  const rec = String(report.recommendation ?? "continue");
+  const control = Number(report.control_stumble_rate ?? 0);
+  const treatment = Number(report.treatment_stumble_rate ?? 0);
+  const recColor =
+    rec === "promote_treatment"
+      ? "text-[var(--success)]"
+      : rec === "insufficient_data"
+        ? "text-[var(--text-muted)]"
+        : "text-[var(--warning)]";
+  return (
+    <div className="rounded-lg border border-[var(--border-default)] bg-[var(--bg-secondary)] p-3 space-y-2">
+      <div className={`text-sm font-semibold ${recColor}`}>
+        {rec.replace(/_/g, " ")}
+      </div>
+      <div className="grid grid-cols-2 gap-2 text-xs md:grid-cols-4">
+        <div>
+          <div className="text-[var(--text-muted)]">P(treatment better)</div>
+          <div className="font-mono">{(prob * 100).toFixed(1)}%</div>
+        </div>
+        <div>
+          <div className="text-[var(--text-muted)]">Control stumble</div>
+          <div className="font-mono">{(control * 100).toFixed(1)}%</div>
+        </div>
+        <div>
+          <div className="text-[var(--text-muted)]">Treatment stumble</div>
+          <div className="font-mono">{(treatment * 100).toFixed(1)}%</div>
+        </div>
+        <div>
+          <div className="text-[var(--text-muted)]">Samples</div>
+          <div className="font-mono">
+            {String(report.n_control ?? 0)} / {String(report.n_treatment ?? 0)}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function TriagePanel({
   triageResult,
   stumbles,
@@ -374,6 +465,10 @@ function TriagePanel({
   const linkedFiles = Array.isArray(tr.linked_files)
     ? (tr.linked_files as unknown[]).map(String)
     : [];
+  const debuggerTraceId =
+    typeof tr.debugger_trace_id === "string"
+      ? tr.debugger_trace_id
+      : stumbles.find((s) => s.trace_id)?.trace_id ?? null;
   // Map a span id → the trace it was seen in (for deep links).
   const spanToTrace = new Map<string, string>();
   for (const s of stumbles) {
@@ -414,25 +509,47 @@ function TriagePanel({
         <p className="text-sm text-[var(--text-secondary)]">
           {String(tr.root_cause ?? "—")}
         </p>
+        {debuggerTraceId ? (
+          <Button size="sm" variant="secondary" asChild className="mt-2">
+            <Link href={`/debugger?trace_id=${encodeURIComponent(debuggerTraceId)}`}>
+              <Bug className="h-3 w-3 mr-1" /> Open debugger
+            </Link>
+          </Button>
+        ) : null}
       </div>
 
       {suggestedActions.length > 0 && (
         <div className="rounded-lg border border-[var(--border-default)] bg-[var(--bg-primary)] p-4">
           <h2 className="text-sm font-semibold mb-2">Suggested actions</h2>
           <ul className="space-y-2">
-            {suggestedActions.map((a, i) => (
+            {suggestedActions.map((a, i) => {
+              const actionType = String(a.type ?? a.action_type ?? "action");
+              const traceForDebugger =
+                typeof a.trace_id === "string"
+                  ? a.trace_id
+                  : debuggerTraceId;
+              return (
               <li
                 key={i}
                 className="rounded border border-[var(--border-subtle)] p-2 flex items-center gap-2 flex-wrap"
               >
                 <span className="text-xs font-mono px-2 py-0.5 rounded bg-[var(--bg-tertiary)] text-[var(--accent)]">
-                  {String(a.type ?? a.action_type ?? "action")}
+                  {actionType}
                 </span>
                 <span className="text-sm text-[var(--text-secondary)]">
                   {String(a.summary ?? "")}
                 </span>
+                {actionType === "debugger_rerun" && traceForDebugger ? (
+                  <Link
+                    href={`/debugger?trace_id=${encodeURIComponent(traceForDebugger)}`}
+                    className="text-xs text-[var(--accent)] hover:underline"
+                  >
+                    Open debugger
+                  </Link>
+                ) : null}
               </li>
-            ))}
+            );
+            })}
           </ul>
         </div>
       )}
@@ -511,6 +628,105 @@ function Stat({ label, value }: { label: string; value: string | number }) {
     <div className="rounded border border-[var(--border-subtle)] p-2">
       <p className="text-[10px] uppercase tracking-wide text-[var(--text-muted)]">{label}</p>
       <p className="text-sm font-semibold text-[var(--text-primary)] mt-0.5 truncate">{value}</p>
+    </div>
+  );
+}
+
+function RegressionMemoryPanel({
+  cases,
+  caseId,
+  onSave,
+  busy,
+}: {
+  cases: Record<string, unknown>[];
+  caseId?: string | null;
+  onSave: () => void;
+  busy: boolean;
+}) {
+  return (
+    <div className="rounded-lg border border-[var(--border-default)] bg-[var(--bg-primary)] p-4">
+      <div className="flex items-center justify-between gap-2 mb-2">
+        <h2 className="text-sm font-semibold flex items-center gap-2">
+          <Database className="h-4 w-4" /> Regression memory (D7)
+        </h2>
+        <Button size="sm" variant="outline" disabled={busy} onClick={onSave}>
+          {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : "Pin case"}
+        </Button>
+      </div>
+      {caseId ? (
+        <p className="text-xs font-mono text-[var(--text-muted)] mb-2">
+          Linked case: {caseId}
+        </p>
+      ) : (
+        <p className="text-xs text-[var(--text-muted)] mb-2">
+          No permanent regression case yet — pin one before resolve to gate future canaries.
+        </p>
+      )}
+      {cases.length === 0 ? (
+        <p className="text-sm text-[var(--text-muted)]">No cases materialized for this issue.</p>
+      ) : (
+        <ul className="space-y-1 text-xs font-mono">
+          {cases.map((c) => (
+            <li key={String(c.id)} className="text-[var(--text-secondary)]">
+              {String(c.id)} · trace {String(c.source_trace_id ?? "—")}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+function CodingAgentHandoff({
+  orgId,
+  issueId,
+  fingerprint,
+  title,
+  kind,
+  onCopy,
+}: {
+  orgId: string;
+  issueId: string;
+  fingerprint: string;
+  title: string;
+  kind: string;
+  onCopy: () => void;
+}) {
+  const prompt = [
+    `# Eden issue handoff`,
+    `org: ${orgId}`,
+    `issue_id: ${issueId}`,
+    `fingerprint: ${fingerprint}`,
+    `kind: ${kind}`,
+    `title: ${title}`,
+    ``,
+    `Fix this production agent failure. Export the Eden fixture from the issue`,
+    `page, reproduce locally, open a PR. Prefer Eden Improve plan approve`,
+    `when an N20 improvement_plan already exists for this fingerprint.`,
+  ].join("\n");
+
+  return (
+    <div
+      data-testid="coding-agent-handoff"
+      className="rounded border border-[var(--border-subtle)] bg-[var(--bg-secondary)] p-3 space-y-2"
+    >
+      <div className="flex items-center justify-between gap-2">
+        <h3 className="text-sm font-semibold flex items-center gap-2">
+          <Wrench className="h-4 w-4" /> Open in coding agent
+        </h3>
+        <Button
+          size="sm"
+          variant="secondary"
+          onClick={() => {
+            void navigator.clipboard.writeText(prompt).then(onCopy);
+          }}
+        >
+          <Copy className="h-3 w-3 mr-1" /> Copy prompt
+        </Button>
+      </div>
+      <pre className="text-[11px] font-mono whitespace-pre-wrap text-[var(--text-secondary)] overflow-x-auto">
+        {prompt}
+      </pre>
     </div>
   );
 }

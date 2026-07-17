@@ -2,7 +2,7 @@
 
 import * as _React from "react";
 import { cn } from "@/lib/utils";
-import { AlertTriangle, CheckCircle2, Circle, Clock, Info, LucideIcon, XCircle } from "lucide-react";
+import { AlertCircle, AlertTriangle, CheckCircle2, Circle, Clock, Info, LucideIcon, XCircle } from "lucide-react";
 import { STATUS, OUTCOMES, PR_STATUSES, IMPROVEMENT_PLAN_STATUSES, type StatusDescriptor, type OutcomeDescriptor } from "@/lib/types";
 
 interface StatusBadgeProps {
@@ -161,6 +161,85 @@ export function TraceOutcomeBadge({ outcome, className }: TraceOutcomeBadgeProps
 /**
  * Severity badge for incidents and alerts (critical / high / medium / low / info).
  */
+const ISSUE_PRIORITY_CLASSES: Record<string, string> = {
+  p0: "bg-[var(--error-bg)] text-[var(--error)] border-[var(--error)]/30",
+  p1: "bg-[var(--warning-bg)] text-[var(--warning)] border-[var(--warning)]/30",
+  p2: "bg-[var(--accent-faint)] text-[var(--accent)] border-[var(--accent)]/30",
+  p3: "bg-[var(--bg-tertiary)] text-[var(--text-secondary)] border-[var(--border-subtle)]",
+};
+
+const ISSUE_PRIORITY_ICONS: Record<string, LucideIcon> = {
+  p0: XCircle,
+  p1: AlertTriangle,
+  p2: Info,
+  p3: Circle,
+};
+
+const ISSUE_WORKFLOW_STATUSES: Record<string, StatusDescriptor> = {
+  open: {
+    label: "Open",
+    className: "bg-[var(--warning-bg)] text-[var(--warning)] border-[var(--warning)]/30",
+    icon: AlertCircle,
+  },
+  triaged: {
+    label: "Triaged",
+    className: "bg-[var(--accent-faint)] text-[var(--accent)] border-[var(--accent)]/30",
+    icon: Info,
+  },
+  fix_pending: {
+    label: "Fix pending",
+    className: "bg-[var(--accent-faint)] text-[var(--accent)] border-[var(--accent)]/30",
+    icon: Clock,
+  },
+  verifying: {
+    label: "Verifying",
+    className: "bg-[var(--accent-faint)] text-[var(--accent)] border-[var(--accent)]/30",
+    icon: Clock,
+  },
+  resolved: {
+    label: "Resolved",
+    className: "bg-[var(--terminal-faint)] text-[var(--terminal)] border-[var(--terminal)]/30",
+    icon: CheckCircle2,
+  },
+  regressed: {
+    label: "Regressed",
+    className: "bg-[var(--error-bg)] text-[var(--error)] border-[var(--error)]/30",
+    icon: XCircle,
+  },
+  ignored: {
+    label: "Ignored",
+    className: "bg-[var(--bg-tertiary)] text-[var(--text-muted)] border-[var(--border-subtle)]",
+    icon: Circle,
+  },
+};
+
+/**
+ * Agent-issue priority badge (p0–p3). Shared across Issues list and detail.
+ */
+export function IssuePriorityBadge({ severity, className }: { severity: string; className?: string }) {
+  const key = severity || "p3";
+  const Icon = ISSUE_PRIORITY_ICONS[key] || Circle;
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded border",
+        ISSUE_PRIORITY_CLASSES[key] ?? ISSUE_PRIORITY_CLASSES.p3,
+        className,
+      )}
+      role="status"
+      aria-label={`Priority ${key}`}
+    >
+      <Icon className="h-3 w-3 flex-shrink-0" aria-hidden />
+      {key}
+    </span>
+  );
+}
+
+/** Agent-issue workflow status (open, triaged, resolved, …). */
+export function IssueWorkflowBadge(props: Omit<StatusBadgeProps, "descriptors">) {
+  return <StatusBadge {...props} descriptors={ISSUE_WORKFLOW_STATUSES} />;
+}
+
 export function SeverityBadge({ severity, className }: { severity: string; className?: string }) {
   const key = severity || "info";
   const Icon = SEVERITY_ICON_FOR_BADGE[key] || Info;

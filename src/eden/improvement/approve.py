@@ -108,6 +108,27 @@ async def approve_plan(
         org_id, updated or plan, branch=opened_branch
     )
     await _audit_approve(org_id, plan_id, approved_by)
+    await _n06_ledger(
+        org_id,
+        plan_id,
+        event_subtype="approve",
+        actor_id=approved_by,
+        payload={
+            "pr_url": info.url,
+            "pr_number": info.number,
+            "branch": opened_branch,
+            "verify_job_id": verify_job_id,
+        },
+    )
+
+    merge_advice = {
+        "do_not_merge_until": "n01_verify_pass",
+        "verify_job_id": verify_job_id,
+        "message": (
+            "N01 regression verify must pass before merge advice; "
+            "do not merge until verify completes successfully."
+        ),
+    }
 
     return {
         "plan_id": plan_id,
@@ -116,6 +137,7 @@ async def approve_plan(
         "pr_number": info.number,
         "branch": opened_branch,
         "verify_job_id": verify_job_id,
+        "merge_advice": merge_advice,
         "plan": updated,
     }
 
@@ -251,6 +273,55 @@ async def _queue_verify(
     except Exception as exc:
         logger.debug("approve verify queue failed: %s", exc)
         return None
+
+
+async def _n06_ledger(
+    org_id: str,
+    plan_id: str,
+    *,
+    event_subtype: str,
+    actor_id: str | None = None,
+    payload: dict[str, Any] | None = None,
+) -> None:
+    """N06 compliance pack — append-only audit for N20 approve/reject."""
+    try:
+        from eden.governance.compliance_pack import AgentAuditLedgerWriter
+
+        await AgentAuditLedgerWriter().write(
+            org_id,
+            event_type="n20_code_patch",
+            event_subtype=event_subtype,
+            actor_id=actor_id,
+            actor_type="user" if actor_id else "system",
+            payload={"plan_id": plan_id, **(payload or {})},
+            compliance_tags=["soc2", "n20", "n06"],
+        )
+    except Exception as exc:
+        logger.debug("approve n06 ledger failed: %s", exc)
+
+
+async def reject_plan_audited(
+    org_id: str,
+    plan_id: str,
+    *,
+    rejected_by: str | None = None,
+    rejection_reason: str | None = None,
+) -> dict[str, Any] | None:
+    """Reject + N06 ledger (used by improve routes)."""
+    updated = await plans_repo.reject_plan(
+        org_id,
+        plan_id,
+        rejected_by=rejected_by,
+        rejection_reason=rejection_reason,
+    )
+    await _n06_ledger(
+        org_id,
+        plan_id,
+        event_subtype="reject",
+        actor_id=rejected_by,
+        payload={"rejection_reason": rejection_reason or ""},
+    )
+    return updated
 
 
 async def _audit_approve(

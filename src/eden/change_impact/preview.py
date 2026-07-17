@@ -194,7 +194,7 @@ class ImpactPreviewOrchestrator:
         )
 
     async def _sample_traces(
-        self, org_id: str, agent_id: str | None, limit: int = 10
+        self, org_id: str, agent_id: str | None, limit: int = 50
     ) -> list[str]:
         client = await self._client()
         if client is None:
@@ -202,11 +202,22 @@ class ImpactPreviewOrchestrator:
         try:
             rows = await client.fetch(
                 """
-                SELECT DISTINCT trace_id
-                FROM telemetry_events
-                WHERE tenant_id = $1
-                  AND ($2::text IS NULL OR attributes->>'agent_id' = $2)
-                ORDER BY timestamp DESC
+                SELECT DISTINCT ON (bucket) trace_id
+                FROM (
+                    SELECT trace_id,
+                           (CASE
+                              WHEN outcome IS DISTINCT FROM 'success' THEN 0
+                              WHEN COALESCE((attributes->>'cost_usd')::float, 0) > 0.05 THEN 1
+                              ELSE 2
+                            END) AS bucket,
+                           timestamp
+                    FROM telemetry_events
+                    WHERE tenant_id = $1
+                      AND timestamp >= now() - interval '7 days'
+                      AND ($2::text IS NULL OR attributes->>'agent_id' = $2)
+                    ORDER BY bucket, timestamp DESC
+                ) t
+                ORDER BY bucket, timestamp DESC
                 LIMIT $3
                 """,
                 org_id,
@@ -251,12 +262,12 @@ class ImpactPreviewOrchestrator:
         self, org_id: str, agent_id: str | None
     ) -> dict[str, Any]:
         try:
-            from eden.evaluation.regression_builder import RegressionCaseBuilder
+            from eden.evaluation.regression_runner import RegressionRunner
 
-            builder = RegressionCaseBuilder(pg=self._pg)
-            cases = await builder.list_cases(org_id, agent_id=agent_id, limit=50)
-            passed = len(cases)
-            return {"passed": passed, "failed": 0, "failures": []}
+            result = await RegressionRunner(pg=self._pg).run_suite(
+                org_id, agent_id=agent_id
+            )
+            return result.to_dict()
         except Exception as exc:
             logger.debug("regression eval failed: %s", exc)
             return {"passed": 0, "failed": 0, "failures": []}

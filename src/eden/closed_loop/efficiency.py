@@ -122,6 +122,20 @@ class AgentEfficiencyController:
     async def _open_patch_for_rca(
         self, org_id: str, rca_id: str
     ) -> dict[str, Any] | None:
+        # Prefer improvement_plans (N20/N23) over legacy proposed_patches.
+        if rca_id.startswith("iss_"):
+            issue_id = rca_id[4:]
+            try:
+                from eden.improvement import plans_repo
+
+                open_plan = await plans_repo.find_open_by_fingerprint(
+                    org_id, f"issue:{issue_id}"
+                )
+                if open_plan is not None:
+                    return open_plan
+            except Exception as exc:
+                logger.debug("efficiency.open_plan lookup failed: %s", exc)
+
         try:
             from eden.patches._common import _select_rows
 

@@ -197,12 +197,15 @@ class AgentChunk:
     ``tool_result`` events inline as they arrive.
     """
 
-    type: str  # "text_delta" | "tool_call" | "tool_result" | "chart" | "citation" | "done" | "error"
+    type: str  # "text_delta" | "tool_call" | "tool_result" | "chart" | "citation" | "done" | "error" | "cost" | "meta"
     text: str = ""
     chart: ChartSpec | None = None
     citation: Citation | None = None
     tool_call: ToolCall | None = None
     error: str = ""
+    cost_usd: float = 0.0
+    turn_cost_usd: float = 0.0
+    meta: dict[str, Any] | None = None
 
     def to_dict(self) -> dict[str, Any]:
         d = {"type": self.type}
@@ -216,6 +219,13 @@ class AgentChunk:
             d["tool_call"] = self.tool_call.to_dict()
         if self.error:
             d["error"] = self.error
+            d["message"] = self.error
+        if self.type == "cost" or self.cost_usd or self.turn_cost_usd:
+            d["cost_usd"] = self.cost_usd
+            d["turn_cost_usd"] = self.turn_cost_usd
+        if self.meta:
+            d.update(self.meta)
+            d["meta"] = self.meta
         return d
 
 
@@ -489,25 +499,67 @@ async def _tool_get_trace_messages(tenant_id: str, args: dict[str, Any]) -> dict
 
 
 async def _tool_query_sql(tenant_id: str, args: dict[str, Any]) -> dict[str, Any]:
-    """Read-only SQL via Cat 18 columnar engine with Postgres fallback."""
+    """Hardened read-only SQL via Cat 18 columnar (W22).
+
+    Rejects writes, multi-statements, and common DDL/DML keywords.
+    Returns ``spend_preview``; complex queries require ``confirm_spend``.
+    """
     from eden.columnar.query import ColumnarQueryEngine
 
-    sql = args.get("sql", "").strip()
+    sql = (args.get("sql") or "").strip()
     if not sql:
         return {"error": "sql is required"}
-    # Safety: reject anything that isn't a SELECT/WITH.
-    head = sql.lstrip().split(None, 1)[0].upper() if sql else ""
+    if ";" in sql.rstrip(";"):
+        return {"error": "multiple SQL statements are not allowed"}
+    sql = sql.rstrip(";").strip()
+    head = sql.split(None, 1)[0].upper() if sql else ""
     if head not in ("SELECT", "WITH"):
         return {"error": f"only SELECT/WITH queries are allowed, got {head!r}"}
+    banned = (
+        " INSERT ", " UPDATE ", " DELETE ", " DROP ", " ALTER ",
+        " CREATE ", " GRANT ", " REVOKE ", " TRUNCATE ", " COPY ",
+        " EXECUTE ", " CALL ",
+    )
+    padded = f" {sql.upper()} "
+    for token in banned:
+        if token in padded:
+            return {"error": f"forbidden SQL keyword:{token.strip()}"}
+
+    upper = sql.upper()
+    complexity = 1 + sum(
+        1 for frag in (" JOIN ", " GROUP BY ", " ORDER BY ") if frag in upper
+    )
+    estimated_usd = round(0.002 * complexity, 4)
+    spend_preview = {
+        "estimated_usd": estimated_usd,
+        "complexity": complexity,
+        "message": (
+            f"Estimated query cost ~${estimated_usd:.4f} "
+            f"(complexity={complexity}). Read-only; org-scoped."
+        ),
+    }
+    if estimated_usd >= 0.01 and not bool(args.get("confirm_spend")):
+        return {
+            "approval_required": True,
+            "spend_preview": spend_preview,
+            "tool": "query_sql",
+            "args": {"sql": sql, "confirm_spend": True},
+            "message": (
+                f"Query spend preview ~${estimated_usd:.4f}. Confirm to run."
+            ),
+        }
+
     engine = ColumnarQueryEngine()
     try:
         rows = await engine.execute(sql, params={"org_id": tenant_id})
-        # Truncate to 1000 rows so a runaway query doesn't blow
-        # the SSE channel.
-        rows = rows[:1000]
-        return {"rows": rows, "row_count": len(rows)}
+        rows = rows[:500]
+        return {
+            "rows": rows,
+            "row_count": len(rows),
+            "spend_preview": spend_preview,
+        }
     except Exception as exc:
-        return {"error": str(exc)}
+        return {"error": str(exc), "spend_preview": spend_preview}
 
 
 async def _tool_get_cost_summary(tenant_id: str, args: dict[str, Any]) -> dict[str, Any]:
@@ -1038,13 +1090,58 @@ _TOOL_REGISTRY: dict[str, dict[str, Any]] = {
                             "requires_role": "admin"},
 }
 
+#: Write tools never auto-execute from the LLM loop. They return
+#: ``approval_required`` so the portal ApprovalCard is the only
+#: mutation path (W20). Call ``dispatch_tool(..., execute_approved=True)``
+#: from the approve endpoint after RBAC + N06 audit.
+_APPROVAL_GATED_TOOLS = frozenset({
+    "mark_incident_resolved",
+    "open_pr_suggestion",
+    "create_alert_rule",
+    "create_signal",
+    "promote_artifact",
+    # W23 evaluate mutations
+    "create_dataset",
+    "promote_trace_to_dataset",
+    "create_experiment",
+    "create_playground",
+    "playground_from_span",
+})
 
-async def dispatch_tool(name: str, args: dict[str, Any], *,
-                         tenant_id: str, user_role: str = "user") -> ToolCall:
+#: Spend-preview confirmations (not silent writes). Approve re-runs
+#: with ``confirm_spend`` after the operator acknowledges cost.
+_SPEND_CONFIRM_TOOLS = frozenset({
+    "export_table",
+    "query_sql",
+    "run_analysis_template",
+})
+
+#: Insights write tools that inherit admin RBAC on merge.
+_WRITE_INSIGHTS_TOOLS = frozenset({
+    "create_alert_rule",
+    "create_signal",
+    "promote_artifact",
+    "create_dataset",
+    "promote_trace_to_dataset",
+    "create_experiment",
+    "create_playground",
+    "playground_from_span",
+})
+
+
+async def dispatch_tool(
+    name: str,
+    args: dict[str, Any],
+    *,
+    tenant_id: str,
+    user_role: str = "user",
+    execute_approved: bool = False,
+) -> ToolCall:
     """Run one tool and return a :class:`ToolCall` with the result.
 
     The dispatcher handles RBAC (admin-only tools reject non-admin
-    callers with a clear error) and latency timing.
+    callers with a clear error), approval gating for writes, and
+    latency timing.
     """
     start = time.perf_counter()
     spec = _TOOL_REGISTRY.get(name)
@@ -1054,6 +1151,19 @@ async def dispatch_tool(name: str, args: dict[str, Any], *,
         return ToolCall(
             name=name, args=args,
             error=f"permission_denied: {spec['requires_role']} role required",
+        )
+    if name in _APPROVAL_GATED_TOOLS and not execute_approved:
+        elapsed_ms = int((time.perf_counter() - start) * 1000)
+        return ToolCall(
+            name=name,
+            args=args,
+            result={
+                "approval_required": True,
+                "tool": name,
+                "args": args,
+                "message": "Confirmation required before this write runs.",
+            },
+            latency_ms=elapsed_ms,
         )
     try:
         # Some tools need user_role; pass it through kwargs.
@@ -1094,10 +1204,18 @@ and was it correlated with a judge-score regression?").
 
 Communication style:
 - Concise, technical, no filler. Code blocks for code.
+- Cite-before-claim (W23): before asserting facts about a concrete
+  trace/span/issue/agent/session id, emit a ```cite block for that id.
+  Never name an entity id in prose without a matching citation chip.
 - Always cite specific trace_ids, span_ids, agent_ids, issue_ids,
   patch_ids, or cluster_ids the user can click through to.
   Citations appear as chips in the UI.
 - Prefer aggregate tools over dumping rows on open-ended questions.
+- For dataset / experiment / playground mutations, call the write tool
+  (create_dataset, create_experiment, create_playground, …) — the
+  runtime surfaces ApprovalCard; never claim the write succeeded until
+  the operator confirms.
+- Call estimate_chat_cost before long multi-tool or export/SQL runs.
 - When you produce structured data, also produce a chart spec so
   the user gets a visualization. Pick the chart type that conveys
   the insight:
@@ -1170,10 +1288,39 @@ class ChatService:
         self._settings = get_settings()
         self._max_turns = self._settings.ai_agent_max_turns
 
-    async def _pick_model(self) -> str:
-        """Pick the T3 tier model via ModelRouter classification."""
-        if self._settings.ai_agent_t3_model:
-            return self._settings.ai_agent_t3_model
+    async def _pick_model(
+        self,
+        *,
+        user_message: str = "",
+        preferred_model: str | None = None,
+        preferred_tier: str = "auto",
+    ) -> tuple[str, str]:
+        """Pick model + tier (W23: T1/SLM vs T3 + operator picker).
+
+        Returns ``(model_id, tier_key)`` where tier_key is t1|t2|t3.
+        """
+        from eden.llmops.chat_sota import (
+            classify_chat_tier,
+            model_for_tier,
+            resolve_picker_model,
+        )
+        from eden.optimization.model_router import ModelTier
+
+        explicit, tier_key = resolve_picker_model(
+            preferred_model=preferred_model,
+            preferred_tier=preferred_tier,
+        )
+        if explicit:
+            return explicit, tier_key if tier_key != "auto" else "t3"
+
+        mt = classify_chat_tier(user_message, preferred_tier=tier_key)
+        if mt == ModelTier.T3 and self._settings.ai_agent_t3_model:
+            return self._settings.ai_agent_t3_model, "t3"
+        if mt == ModelTier.T1:
+            return model_for_tier(ModelTier.T1), "t1"
+        if mt == ModelTier.T2:
+            return model_for_tier(ModelTier.T2), "t2"
+
         try:
             from eden.llm.internal_router import resolve_models
 
@@ -1185,14 +1332,10 @@ class ChatService:
                 requires_novelty=True,
             )
             if models:
-                return models[0]
+                return models[0], "t3"
         except Exception:
             pass
-        try:
-            from eden.optimization.model_router import TIER_MODELS, ModelTier
-            return TIER_MODELS[ModelTier.T3][0]
-        except Exception:
-            return "x-ai/grok-4.5"
+        return model_for_tier(ModelTier.T3), "t3"
 
     async def _call_llm(
         self,
@@ -1235,6 +1378,8 @@ class ChatService:
         full_text = ""
         prompt_tokens = 0
         completion_tokens = 0
+        ttft_ms: int | None = None
+        t0 = time.perf_counter()
         try:
             # Streaming path — use the async client so the event
             # loop isn't blocked while a 60s Opus stream trickles
@@ -1252,6 +1397,8 @@ class ChatService:
                 delta = chunk.choices[0].delta
                 piece = getattr(delta, "content", None) or ""
                 if piece:
+                    if ttft_ms is None:
+                        ttft_ms = int((time.perf_counter() - t0) * 1000)
                     full_text += piece
                     await stream(piece)
                 usage = getattr(chunk, "usage", None)
@@ -1269,6 +1416,8 @@ class ChatService:
                 stream=False,
             )
             full_text = resp.choices[0].message.content or ""
+            if ttft_ms is None:
+                ttft_ms = int((time.perf_counter() - t0) * 1000)
             await stream(full_text)
             usage = getattr(resp, "usage", None)
             if usage:
@@ -1291,8 +1440,9 @@ class ChatService:
             "citations": citations,
             "prompt_tokens": prompt_tokens,
             "completion_tokens": completion_tokens,
+            "ttft_ms": ttft_ms,
             "cost_usd": float(getattr(usage, "cost", 0.0) or 0.0)
-            if 'usage' in locals() and usage is not None
+            if "usage" in locals() and usage is not None
             else 0.0,
         }
 
@@ -1330,7 +1480,39 @@ class ChatService:
 
         # Build the message history (last 20 turns to bound context).
         history = await self._load_history(client, conv_id, limit=20)
-        model = await self._pick_model()
+        preferred_model = page_context.get("preferred_model") or page_context.get(
+            "model"
+        )
+        preferred_tier = str(
+            page_context.get("preferred_tier")
+            or page_context.get("tier")
+            or "auto"
+        )
+        model, tier_key = await self._pick_model(
+            user_message=user_message,
+            preferred_model=str(preferred_model) if preferred_model else None,
+            preferred_tier=preferred_tier,
+        )
+        from eden.llmops.chat_sota import (
+            cite_before_claim,
+            estimate_turn_cost_usd,
+            ttft_budget_ms,
+            ttft_warning,
+        )
+
+        cost_est = estimate_turn_cost_usd(model)
+        await emit(
+            AgentChunk(
+                type="meta",
+                meta={
+                    "model": model,
+                    "tier": tier_key,
+                    "cost_estimate": cost_est,
+                    "ttft_budget_ms": ttft_budget_ms(tier_key),
+                    "session_spend_hint": True,
+                },
+            )
+        )
 
         # ReAct loop: at most max_turns assistant messages, each
         # possibly followed by tool results.
@@ -1349,6 +1531,37 @@ class ChatService:
         except Exception:
             _budget = {}
         _hard_limit = float(_budget.get("cost_hard_limit_usd", 0.0) or 0.0)
+        # Preflight: refuse the turn when already over hard cap or feature killed.
+        try:
+            from eden.llmops.feature_kills import is_feature_enabled
+            from eden.services.budget_service import get_consumption
+
+            if not await is_feature_enabled(tenant_id, "chat_sidebar"):
+                await emit(AgentChunk(
+                    type="error",
+                    error="ChatSidebar is disabled for this organization.",
+                ))
+                return {"conversation_id": str(conv_id), "turns": 0}
+            _cons = await get_consumption(
+                tenant_id, window=_budget.get("window", "monthly")
+            )
+            if (
+                _hard_limit > 0
+                and float(_cons.get("cost_usd") or 0) >= _hard_limit
+                and bool(_budget.get("enforcement_enabled"))
+            ):
+                await emit(AgentChunk(
+                    type="error",
+                    error=(
+                        f"Budget hard cap already reached "
+                        f"(${float(_cons.get('cost_usd') or 0):.4f} / "
+                        f"${_hard_limit:.4f})."
+                    ),
+                ))
+                return {"conversation_id": str(conv_id), "turns": 0}
+        except Exception as exc:
+            logger.debug("ChatService: preflight budget check failed: %s", exc)
+
         turn = 0
         while turn < self._max_turns:
             turn += 1
@@ -1380,13 +1593,61 @@ class ChatService:
             total_cost_usd += cost_usd
             if cost_usd > 0:
                 try:
+                    from eden.llmops.cost_ledger import CostEvent, record_cost_event
                     from eden.services.budget_service import record_usage
 
                     await record_usage(tenant_id, cost_usd)
+                    await record_cost_event(
+                        CostEvent(
+                            org_id=tenant_id,
+                            feature="chat_sidebar",
+                            model=model,
+                            cost_usd=cost_usd,
+                            input_tokens=int(llm_result.get("prompt_tokens") or 0),
+                            output_tokens=int(
+                                llm_result.get("completion_tokens") or 0
+                            ),
+                            user_id=user_id,
+                            session_id=str(conv_id),
+                        )
+                    )
                 except Exception as exc:
                     logger.debug(
                         "ChatService: record_usage failed: %s", exc,
                     )
+
+            await emit(AgentChunk(
+                type="cost",
+                cost_usd=total_cost_usd,
+                turn_cost_usd=cost_usd,
+                meta={
+                    "model": model,
+                    "tier": tier_key,
+                    "ttft_ms": llm_result.get("ttft_ms"),
+                    "ttft_budget_ms": ttft_budget_ms(tier_key),
+                    "cost_estimate": cost_est,
+                },
+            ))
+
+            warn = ttft_warning(llm_result.get("ttft_ms"), tier_key)
+            if warn:
+                await emit(AgentChunk(type="meta", meta={"ttft_warning": warn}))
+
+            # Soft cite-before-claim gate (W23) — warn, do not block.
+            cite_check = cite_before_claim(
+                llm_result.get("text") or "",
+                llm_result.get("citations") or [],
+            )
+            if not cite_check.get("ok") and cite_check.get("warning"):
+                await emit(
+                    AgentChunk(
+                        type="meta",
+                        meta={
+                            "cite_before_claim": cite_check,
+                            "warning": cite_check["warning"],
+                        },
+                    )
+                )
 
             # DL-15 budget gate: if the running total exceeds the
             # hard cap, break the loop and emit an error chunk so
@@ -1482,15 +1743,21 @@ class ChatService:
             """,
             conv_id, turn,
             total_prompt_tokens + total_completion_tokens,
-            (total_prompt_tokens + total_completion_tokens) * 0.000015,  # rough T3 estimate
+            total_cost_usd,
         )
 
-        await emit(AgentChunk(type="done", text=""))
+        await emit(AgentChunk(
+            type="done",
+            text="",
+            cost_usd=total_cost_usd,
+            turn_cost_usd=total_cost_usd,
+        ))
         return {
             "conversation_id": str(conv_id),
             "turns": turn,
             "prompt_tokens": total_prompt_tokens,
             "completion_tokens": total_completion_tokens,
+            "cost_usd": total_cost_usd,
         }
 
     # ── Persistence helpers ────────────────────────────────────────
@@ -1508,8 +1775,30 @@ class ChatService:
                 return row["id"]
         # Create a new conversation. Title = first 60 chars of the
         # first message (LLM-generated rename comes later via a
-        # follow-up T3 call).
+        # follow-up T3 call). When the caller already minted a
+        # session UUID (ChatSidebar / ai-insights), reuse it so
+        # rehydrate lookups hit the same row.
         title = first_message[:60].strip() or "New chat"
+        if conversation_id:
+            row = await client.fetchrow(
+                """
+                INSERT INTO ai_conversations (id, org_id, user_id, title, page_context)
+                VALUES ($1::uuid, $2, $3, $4, '{}'::jsonb)
+                ON CONFLICT (id) DO NOTHING
+                RETURNING id
+                """,
+                conversation_id, tenant_id, user_id, title,
+            )
+            if row:
+                return row["id"]
+            # PK conflict: id belongs to another row (e.g. other org).
+            # Re-check ours; otherwise mint a fresh conversation.
+            row = await client.fetchrow(
+                "SELECT id FROM ai_conversations WHERE id = $1 AND org_id = $2",
+                conversation_id, tenant_id,
+            )
+            if row:
+                return row["id"]
         row = await client.fetchrow(
             """
             INSERT INTO ai_conversations (org_id, user_id, title, page_context)
@@ -1659,7 +1948,10 @@ def _register_insights_tools() -> None:
                 raise RuntimeError(str(envelope.get("output", "tool error")))
             return envelope.get("output")
 
-        _TOOL_REGISTRY[name] = {"fn": _handler, "requires_role": None}
+        _TOOL_REGISTRY[name] = {
+            "fn": _handler,
+            "requires_role": "admin" if name in _WRITE_INSIGHTS_TOOLS else None,
+        }
         schema = tool.input_schema.get("properties", {})
         _TOOL_SPECS.append({
             "name": name,

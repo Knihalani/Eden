@@ -31,7 +31,17 @@ postgres:
   enabled: false
 ```
 
-The same pattern works for Redis, ClickHouse, and Qdrant.
+The same pattern works for Redis, ClickHouse, Qdrant, and Typesense
+(`externalTypesense.host`). See
+[docs/ops/typesense-clickhouse-external.md](../../docs/ops/typesense-clickhouse-external.md).
+
+### Workers / HPA / PDB / Secrets (W9)
+
+* `worker-deployment.yaml` — `python -m eden.workers.main`
+* `api-hpa.yaml` — CPU HPA when `api.hpa.enabled`
+* `pdb.yaml` — PDBs for API + worker
+* `secrets.yaml` — optional in-chart Secret (`secrets.create`)
+* Image digest pin via `image.digest` (preferred over `tag` in prod)
 
 ## SSO-ready
 

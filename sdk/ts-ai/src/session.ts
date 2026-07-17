@@ -1,5 +1,6 @@
 /**
  * Agent session SDK (F23) — multi-turn session unit.
+ * Lifecycle posts to ingest-side `/ingest/agent-sessions` with X-Org-Api-Key.
  */
 
 import { randomUUID } from "node:crypto";
@@ -20,6 +21,7 @@ export class AgentSession {
   userId?: string;
   metadata: Record<string, unknown>;
   traceIds: string[] = [];
+  costUsd = 0;
   private ended = false;
 
   constructor(opts: AgentSessionOptions & { orgId: string }) {
@@ -30,17 +32,37 @@ export class AgentSession {
     this.metadata = { ...(opts.metadata ?? {}) };
   }
 
+  async identify(userId: string): Promise<void> {
+    this.userId = userId;
+    await notifySession(this.orgId, "identify", {
+      sessionId: this.sessionId,
+      userId,
+    });
+  }
+
+  addCost(amountUsd: number): void {
+    if (amountUsd > 0) this.costUsd += amountUsd;
+  }
+
   trace(name: string, fn: (ctx: TraceContext) => Promise<unknown> | unknown): Promise<unknown> {
     return trace(name, async (ctx) => {
       ctx.setTag(`agent_session_id:${this.sessionId}`);
       if (this.agentId) ctx.setTag(`agent_id:${this.agentId}`);
       if (this.userId) ctx.setTag(`user_id:${this.userId}`);
       this.traceIds.push(ctx.traceId);
+      void notifySession(this.orgId, "attach_trace", {
+        sessionId: this.sessionId,
+        traceId: ctx.traceId,
+      });
       return fn(ctx);
     });
   }
 
-  async completeSession(success = true, failureReason?: string): Promise<void> {
+  async completeSession(
+    success = true,
+    failureReason?: string,
+    flush = true,
+  ): Promise<void> {
     if (this.ended) return;
     this.ended = true;
     await notifySession(this.orgId, "end", {
@@ -49,7 +71,16 @@ export class AgentSession {
       failureReason,
       traceIds: this.traceIds,
       metadata: this.metadata,
+      costUsd: this.costUsd,
     });
+    if (flush) {
+      try {
+        await getDefaultClient().flush();
+      } catch {
+        // best-effort
+      }
+    }
+    if (_current === this) _current = null;
   }
 }
 
@@ -74,6 +105,15 @@ export async function begin(opts: AgentSessionOptions = {}): Promise<AgentSessio
   return session;
 }
 
+export async function identify(
+  userId: string,
+  session?: AgentSession,
+): Promise<void> {
+  const target = session ?? _current;
+  if (!target) return;
+  await target.identify(userId);
+}
+
 export async function completeSession(
   session: AgentSession,
   success = true,
@@ -85,7 +125,7 @@ export async function completeSession(
 
 async function notifySession(
   orgId: string,
-  phase: "start" | "end",
+  phase: "start" | "end" | "identify" | "attach_trace",
   payload: Record<string, unknown>,
 ): Promise<void> {
   try {
@@ -93,26 +133,46 @@ async function notifySession(
     const cfg = client.getConfig();
     const base = (cfg.baseUrl ?? "https://api.edenobservability.com").replace(/\/$/, "");
     const headers: Record<string, string> = { "Content-Type": "application/json" };
-    if (cfg.apiKey) headers.Authorization = `Bearer ${cfg.apiKey}`;
+    if (cfg.orgId) headers["X-Org-Id"] = cfg.orgId;
+    if (cfg.apiKey) headers["X-Org-Api-Key"] = cfg.apiKey;
+    if (cfg.projectId) headers["X-Project-Id"] = cfg.projectId;
     const sid = String(payload.sessionId ?? "");
-    const url =
-      phase === "start"
-        ? `${base}/orgs/${orgId}/agent-sessions/start`
-        : `${base}/orgs/${orgId}/agent-sessions/${sid}/end`;
-    const body =
-      phase === "start"
-        ? {
-            agent_id: payload.agentId,
-            user_id: payload.userId,
-            metadata: payload.metadata,
-            session_id: sid,
-          }
-        : {
-            success: payload.success ?? true,
-            failure_reason: payload.failureReason,
-          };
-    await fetch(url, { method: "POST", headers, body: JSON.stringify(body) });
+    const root = `${base}/orgs/${orgId}/ingest/agent-sessions`;
+    let url: string;
+    let body: Record<string, unknown>;
+    if (phase === "start") {
+      url = `${root}/start`;
+      body = {
+        agent_id: payload.agentId,
+        user_id: payload.userId,
+        metadata: payload.metadata,
+        session_id: sid,
+      };
+    } else if (phase === "identify") {
+      url = `${root}/${sid}/identify`;
+      body = { user_id: payload.userId };
+    } else if (phase === "attach_trace") {
+      url = `${root}/${sid}/traces`;
+      body = { trace_id: payload.traceId };
+    } else {
+      url = `${root}/${sid}/end`;
+      body = {
+        success: payload.success ?? true,
+        failure_reason: payload.failureReason,
+        cost_usd: payload.costUsd,
+        trace_ids: payload.traceIds,
+      };
+    }
+    const resp = await fetch(url, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(body),
+    });
+    if (!resp.ok) {
+      // surface non-2xx without throwing into user code
+      void resp.text().catch(() => undefined);
+    }
   } catch {
-    // fire-and-forget
+    // fire-and-forget — never break the caller
   }
 }

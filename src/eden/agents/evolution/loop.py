@@ -62,17 +62,48 @@ async def run_evolution_pass() -> dict[str, Any]:
     """One evolution tick — never raises."""
     from eden.agents.evolution.components import JudgeScorePromptEvolver
     from eden.llm.client import OpenRouterClient
+    from eden.llmops.cost_ledger import cost_context
+    from eden.llmops.evolution_spend import EvolutionSpendBudget
+    from eden.llmops.feature_kills import is_feature_enabled
     from eden.llmops.promotion import get_promotion_loop
 
     summary: dict[str, Any] = {
         "evolver": {},
         "canaries_enrolled": 0,
         "promotion": {},
+        "spend_skipped": False,
     }
+
+    # Preflight: evolution spend cap (platform-wide ops budget).
+    # When over cap, skip LLM evolver; canary enroll + promotion still run.
+    ops_org = "eden-ops"
     try:
-        llm = OpenRouterClient()
-        evolver = JudgeScorePromptEvolver(llm_client=llm)
-        summary["evolver"] = await evolver.run()
+        if not await is_feature_enabled(ops_org, "evolution"):
+            summary["spend_skipped"] = True
+            summary["evolver"] = {"skipped": "feature_kill"}
+        else:
+            budget = EvolutionSpendBudget(ops_org)
+            if not await budget.may_spend(0.05):
+                summary["spend_skipped"] = True
+                summary["evolver"] = {
+                    "skipped": "evolution_spend_cap",
+                    **(await budget.status()),
+                }
+            else:
+                with cost_context(ops_org, "evolution"):
+                    llm = OpenRouterClient()
+                    evolver = JudgeScorePromptEvolver(llm_client=llm)
+                    summary["evolver"] = await evolver.run()
+                # Debit a conservative estimate when evolver did work.
+                evolved = summary["evolver"]
+                if isinstance(evolved, dict) and any(
+                    int(evolved.get(k) or 0) > 0
+                    for k in ("variants_created", "scanned", "candidates")
+                    if k in evolved
+                ):
+                    await budget.record(
+                        0.05, kind="evolution_pass", ref_id="loop"
+                    )
     except Exception as exc:
         logger.warning("evolution_loop: JudgeScorePromptEvolver failed: %s", exc)
 
@@ -132,4 +163,14 @@ async def stop_evolution_loop() -> None:
     _stop_event = None
 
 
-__all__ = ["run_evolution_pass", "start_evolution_loop", "stop_evolution_loop"]
+def is_evolution_loop_running() -> bool:
+    """Return True when the evolution loop asyncio task is alive."""
+    return _loop_task is not None and not _loop_task.done()
+
+
+__all__ = [
+    "run_evolution_pass",
+    "start_evolution_loop",
+    "stop_evolution_loop",
+    "is_evolution_loop_running",
+]

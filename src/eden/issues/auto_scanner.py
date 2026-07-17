@@ -23,24 +23,24 @@ from eden.issues.stumble_writer import StumbleWriter
 logger = logging.getLogger(__name__)
 
 # Detectors enabled per detection profile (F20). ``minimal`` runs the two
-# cheapest high-signal detectors; ``standard``/``advanced`` run all seven
-# detectors. Unknown profiles fall back to ``standard``.
+# cheapest high-signal detectors; ``standard``/``advanced`` run all eight
+# shipped detectors ($0 LLM). Unknown profiles fall back to ``standard``.
+_ALL_DETECTORS: frozenset[str] = frozenset(
+    {
+        "tool_error",
+        "loop",
+        "task_failure",
+        "slow_trace",
+        "hallucination",
+        "user_frustration",
+        "confusion_loop",
+        "high_cost",
+    }
+)
 _PROFILE_DETECTORS: dict[str, set[str]] = {
-    "minimal": {"task_failure"},
-    "standard": {
-        "task_failure",
-        "slow_trace",
-        "hallucination",
-        "user_frustration",
-        "high_cost",
-    },
-    "advanced": {
-        "task_failure",
-        "slow_trace",
-        "hallucination",
-        "user_frustration",
-        "high_cost",
-    },
+    "minimal": {"tool_error", "task_failure"},
+    "standard": set(_ALL_DETECTORS),
+    "advanced": set(_ALL_DETECTORS),
 }
 
 _FAILURE_OUTCOMES = {"failure", "error", "timeout", "crash", "failed"}

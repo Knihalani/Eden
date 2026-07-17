@@ -40,6 +40,11 @@ class AgentPatch(BaseModel):
     display_name: str | None = None
 
 
+@router.get("/sla-breaches")
+async def fleet_sla_breaches(org_id: str = Path(...)) -> dict[str, Any]:
+    return _ok("fleet_health", await _fleet.sla_breaches(org_id))
+
+
 @router.get("/summary")
 async def fleet_summary(org_id: str = Path(...)) -> dict[str, Any]:
     return _ok("fleet_health", await _fleet.summary(org_id))

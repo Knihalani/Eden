@@ -5,8 +5,12 @@ export const KNOWN_PORTAL_PREFIXES: readonly string[] = [
   "/dashboard",
   "/agents",
   "/traces",
+  "/sessions",
   "/issues",
   "/alerts",
+  "/artifacts",
+  "/ledger",
+  "/promotions",
   "/analytics",
   "/evals",
   "/improve",
@@ -18,6 +22,8 @@ export const KNOWN_PORTAL_PREFIXES: readonly string[] = [
   // Deep-link / tab-source survivors (list URLs redirect via next.config)
   "/incidents",
   "/datasets",
+  "/playgrounds",
+  "/experiments",
   "/labeling",
   "/studio",
   "/synthetic",
@@ -25,7 +31,9 @@ export const KNOWN_PORTAL_PREFIXES: readonly string[] = [
   "/inspector",
   "/replay",
   "/debugger",
+  "/debugger-sessions",
   "/fleet",
+  "/audit-trail",
   "/insights",
   "/tools",
   "/users",
@@ -33,6 +41,7 @@ export const KNOWN_PORTAL_PREFIXES: readonly string[] = [
   "/redteam",
   "/profile",
   "/docs-fill",
+  "/onboarding",
 ] as const;
 
 export function isKnownPortalPath(pathname: string | null | undefined): boolean {

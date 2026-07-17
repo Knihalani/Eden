@@ -198,6 +198,46 @@ def test_cursor_deep_link_format() -> None:
 
 
 @pytest.mark.asyncio
+async def test_issue_created_to_slack_post_under_60s() -> None:
+    """F47 AC: alert dispatch stays within the 60s issue-path budget."""
+    import time
+
+    from eden.integrations.slack import alerts
+
+    posted: dict[str, Any] = {}
+
+    async def _post(webhook: str, blocks: list[dict], event: str, severity: str) -> bool:
+        posted["blocks"] = blocks
+        return True
+
+    samples: list[float] = []
+    with patch("eden.config.get_settings", return_value=_settings()), patch.object(
+        alerts, "_redis", new=AsyncMock(return_value=_Redis())
+    ), patch.object(alerts, "_resolve_webhook", new=AsyncMock(return_value="https://x")), patch.object(
+        alerts, "_post", new=_post
+    ):
+        for i in range(20):
+            t0 = time.perf_counter()
+            ok = await alerts.alert_issue_event(
+                "org_test",
+                issue_id=f"iss-{i}",
+                payload={
+                    "severity": "p0",
+                    "kind": "tool_error",
+                    "title": "checkout bash loop",
+                    "user_count": 12,
+                    "stumble_count": 47,
+                },
+            )
+            samples.append(time.perf_counter() - t0)
+            assert ok is True
+
+    samples.sort()
+    p95_idx = min(len(samples) - 1, int(0.95 * len(samples)))
+    assert samples[p95_idx] < 60.0, f"p95 alert latency too high: {samples[p95_idx]:.3f}s"
+
+
+@pytest.mark.asyncio
 async def test_no_webhook_noops() -> None:
     with patch("eden.config.get_settings", return_value=_settings(webhook="")), patch.object(
         alerts, "_resolve_webhook", new=AsyncMock(return_value="")

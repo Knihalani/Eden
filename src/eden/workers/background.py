@@ -55,8 +55,11 @@ class BackgroundWorkers:
         )
         logger.info("background: leader supervisor started")
 
-    async def stop(self, timeout: float = 10.0) -> None:
-        """Stop the supervisor and drain hosted loops."""
+    async def stop(self, timeout: float = 35.0) -> None:
+        """Stop the supervisor and drain hosted loops.
+
+        Timeout must be ≥ the quality sidecar's 30s drain budget.
+        """
         self._stop.set()
         if self._task is None:
             return
@@ -147,13 +150,6 @@ class BackgroundWorkers:
             register_all_hooks()
         except Exception as exc:
             logger.warning("background: promotion hooks skipped: %s", exc)
-
-        try:
-            from eden.observability.trace_quality.wiring import install_all
-
-            install_all()
-        except Exception as exc:
-            logger.warning("background: trace_quality wiring skipped: %s", exc)
 
         try:
             from eden.llmops.learn_wiring import install_learn_filters
@@ -270,9 +266,14 @@ async def start_background_workers(settings: Settings | None = None) -> None:
     await _workers.start(settings)
 
 
-async def stop_background_workers(timeout: float = 10.0) -> None:
+async def stop_background_workers(timeout: float = 35.0) -> None:
     """Stop API-hosted background loops."""
     await _workers.stop(timeout)
+
+
+def background_evolution_loop_running() -> bool:
+    """True when this process is leader and the evolution loop is up."""
+    return _workers._state.evolution_loop
 
 
 def background_workers_running() -> bool:

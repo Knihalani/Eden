@@ -318,21 +318,52 @@ async def check_budget(
     return (spent < limit, spent, limit)
 
 
-async def record_spend(org_id: str, usd: float) -> float:
-    """Increment today's maintenance spend counter. Returns the new total."""
+async def record_spend(
+    org_id: str,
+    usd: float,
+    *,
+    feature: str = "autonomy",
+    model: str = "autonomy",
+    agent_id: str | None = None,
+    metadata: dict[str, Any] | None = None,
+) -> float:
+    """Increment today's maintenance spend + tag a customer CostEvent (W24).
+
+    Returns the new Redis daily total (0 when Redis is unavailable). Daily
+    caps are enforced by :func:`check_budget` / :func:`evaluate_mode`.
+    """
     if usd <= 0:
         return 0.0
+    new_total = 0.0
     redis = await _redis()
-    if redis is None:
-        return 0.0
-    key = f"{_SPEND_PREFIX}{org_id}:{_today()}"
+    if redis is not None:
+        key = f"{_SPEND_PREFIX}{org_id}:{_today()}"
+        try:
+            new_total = float(await redis.incrbyfloat(key, float(usd)))
+            await redis.expire(key, 172_800)  # keep 2 days for reporting
+        except Exception as exc:
+            logger.debug("autonomy_policy: record_spend failed: %s", exc)
+            new_total = 0.0
+    # Customer-visible CostEvent (FinOps explorer) — best-effort.
     try:
-        new_total = await redis.incrbyfloat(key, float(usd))
-        await redis.expire(key, 172_800)  # keep 2 days for reporting
-        return float(new_total)
+        from eden.llmops.cost_ledger import CostEvent, record_cost_event
+
+        await record_cost_event(
+            CostEvent(
+                org_id=org_id,
+                feature=(feature or "autonomy").lower(),
+                model=model or "autonomy",
+                cost_usd=float(usd),
+                agent_id=agent_id,
+                metadata={
+                    "source": "autonomy_policy",
+                    **(metadata or {}),
+                },
+            )
+        )
     except Exception as exc:
-        logger.debug("autonomy_policy: record_spend failed: %s", exc)
-        return 0.0
+        logger.debug("autonomy_policy: CostEvent tag failed: %s", exc)
+    return new_total
 
 
 # ── Audit ───────────────────────────────────────────────────────────

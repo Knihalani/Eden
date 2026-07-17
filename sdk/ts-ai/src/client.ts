@@ -22,6 +22,8 @@ import {
 } from "./types.js";
 import { type FilterConfig, redactPayload, redactString } from "./filters.js";
 import { optimizationOptOutHeaders } from "./gateway_optimizations.js";
+import { ClientSampler, type SamplingProfile } from "./sampling.js";
+import { OfflineQueue } from "./offline-queue.js";
 
 const DEFAULT_BASE_URL = "https://api.edenobservability.com";
 const DEFAULT_REALM = "production";
@@ -272,9 +274,25 @@ export class EdenSDK {
   // pending chunks stranded in the buffer at ``await`` time).
   private chunkInflightPromise: Promise<void> | null = null;
   private disposed = false;
+  private sampler: ClientSampler;
+  sampledOut = 0;
+  private offline: OfflineQueue | null = null;
 
   constructor(opts: EdenSDKOptions = {}) {
     this.config = resolveConfig(opts);
+    this.sampler = new ClientSampler({
+      profile: opts.samplingProfile ??
+        ((process.env.EDEN_SAMPLING_PROFILE as SamplingProfile | undefined) ??
+          "full"),
+      keepErrors: opts.sampleKeepErrors ?? true,
+    });
+    if (opts.offlineQueuePath || process.env.EDEN_OFFLINE_QUEUE === "1") {
+      try {
+        this.offline = new OfflineQueue(opts.offlineQueuePath);
+      } catch {
+        this.offline = null;
+      }
+    }
     if (this.config.debug) {
       // eslint-disable-next-line no-console
       console.debug(
@@ -353,6 +371,16 @@ export class EdenSDK {
   emit(event: TelemetryEvent): void {
     if (this.disposed) return;
     if (this.config.disabled) return;
+    const sampler = this.sampler;
+    const hasError = Boolean(
+      (event.payload as { error?: unknown; outcome?: string } | undefined)?.error ||
+        (event.payload as { outcome?: string } | undefined)?.outcome === "error",
+    );
+    const durationMs = event.durationMs ?? 0;
+    if (!sampler.shouldKeep({ hasError, durationMs })) {
+      this.sampledOut += 1;
+      return;
+    }
     // Drop the oldest event when we exceed the queue ceiling. This
     // mirrors the Python SDK's behaviour and prevents unbounded
     // memory growth in long-lived processes.
@@ -655,7 +683,16 @@ export class EdenSDK {
       // ingest.event and every TS trace misses the
       // agent.run / llm_completion SQL filters.
       const wired = redacted.map(eventToWire);
-      await this.postJson(url, wired);
+      const ok = await this.postJson(url, wired);
+      if (!ok && this.offline) {
+        for (const item of redacted) {
+          try {
+            this.offline.enqueue(format, (item.payload ?? {}) as Record<string, unknown>);
+          } catch {
+            // ignore spill errors
+          }
+        }
+      }
     }
   }
 
@@ -688,7 +725,7 @@ export class EdenSDK {
     await this.postJson(url, body);
   }
 
-  private async postJson(url: string, body: unknown): Promise<void> {
+  private async postJson(url: string, body: unknown): Promise<boolean> {
     if (typeof fetch === "undefined") {
       throw new Error(
         "[eden-ai] global fetch is not available; " +
@@ -711,7 +748,7 @@ export class EdenSDK {
           body: JSON.stringify(body),
           signal: controller.signal,
         });
-        if (res.ok) return; // success
+        if (res.ok) return true; // success
         const status = res.status;
         const retryable = status === 429 || status === 408 || status >= 500;
         if (!retryable || attempt >= MAX_ATTEMPTS) {
@@ -719,7 +756,7 @@ export class EdenSDK {
             // eslint-disable-next-line no-console
             console.debug("[eden-ai] non-2xx from gateway", status, url);
           }
-          return;
+          return false;
         }
         // Honour Retry-After if present. RFC 7231 allows either a
         // delta-seconds integer ("5") or an HTTP-date
@@ -742,7 +779,7 @@ export class EdenSDK {
             // eslint-disable-next-line no-console
             console.debug("[eden-ai] fetch failed", err);
           }
-          return;
+          return false;
         }
         const delayMs = Math.min(BASE_DELAY_MS * 2 ** (attempt - 1), 5_000);
         await new Promise((r) => setTimeout(r, delayMs));
@@ -750,6 +787,7 @@ export class EdenSDK {
         clearTimeout(timeout);
       }
     }
+    return false;
   }
 }
 

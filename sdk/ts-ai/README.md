@@ -132,6 +132,47 @@ const result = await chat.invoke([new HumanMessage("Hello!")]);
 
 `wrapLangChain` is a Proxy that instruments `invoke`, `call`, `stream`, and `batch` methods on any chat-model instance.
 
+## Instrumentation parity matrix
+
+| Framework | Status | API |
+|---|---|---|
+| OpenAI | Supported | `wrapOpenAI` |
+| Anthropic | Supported | `wrapAnthropic` |
+| Vercel AI | Supported | `wrapVercelAI` |
+| LangChain | Supported | `wrapLangChain` |
+| Mastra | Supported | `wrapMastra` |
+| Bedrock | Supported | `wrapBedrock` |
+| Gemini / Vertex | Supported | `wrapGemini` |
+| CrewAI / AutoGen / LlamaIndex / Pydantic AI | Python SDK | use `eden-sdk` |
+
+### Agent sessions (F23)
+
+```ts
+import { begin, identify } from "@eden-ai/sdk";
+
+const session = await begin({ agentId: "bot", userId: "u1" });
+await identify("u1");
+await session.trace("turn-1", async () => { /* ... */ });
+await session.completeSession(true);
+// POSTs to /orgs/{orgId}/ingest/agent-sessions with X-Org-Api-Key
+```
+
+### Stumbles (F28)
+
+```ts
+import { recordStumble } from "@eden-ai/sdk";
+await recordStumble("tool returned empty", { traceId, kind: "tool_error" });
+```
+
+### Sampling + offline
+
+| Env | Default | Purpose |
+|---|---|---|
+| `EDEN_SAMPLING_PROFILE` | `full` | `full` / `balanced` / `aggressive` (keep-errors default on) |
+| `EDEN_OFFLINE_QUEUE` | off | Spill failed batches to `~/.eden/offline_queue.jsonl` |
+
+OTel bridge uses `BatchSpanProcessor` → `/ingest/otel`.
+
 ## Talking to the Eden gateway (OpenAI-compatible)
 
 Eden ships an OpenAI-compatible proxy at `https://api.edenobservability.com/gateway/v1`

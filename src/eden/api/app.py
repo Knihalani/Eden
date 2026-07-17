@@ -102,11 +102,11 @@ def _init_sentry() -> None:
 _init_sentry()
 
 from eden.api.routes import (
+    admin_status,
     agent_issues,
     agent_sessions,
     agent_pr_suggestions,
     agents,
-    ai_agent,
     ai_insights,
     analytics,
     analytics_v2,
@@ -116,6 +116,7 @@ from eden.api.routes import (
     auth,
     autonomy,
     billing,
+    browser_sessions,
     budgets,
     change_impact,
     clerk_webhooks,
@@ -124,13 +125,17 @@ from eden.api.routes import (
     cost,
     cost_overrides,
     data_platform,
+    datasets_hub,
     datasets_spreadsheet,
+    experiments_offline,
     debugger,
     export,
     export_destinations,
     feature_flags,
+    finops,
     fleet,
     ingestion,
+    ingest_agent_sessions,
     improve,
     insights,
     learn,
@@ -170,8 +175,12 @@ from eden.api.routes import (
     notifications,
     observability,
     observability_a2a,
+    observability_computer_use,
+    observability_fine_tune,
     observability_mcp,
+    observability_provider_routing,
     observability_stream,
+    observability_voice,
     onboarding,
     optimization,
     orgs,
@@ -179,6 +188,7 @@ from eden.api.routes import (
     pii_policy,
     presigned_feedback,
     prompt_canary,
+    playgrounds,
     prompts,
     prompts_v2,
     production_eval,
@@ -194,8 +204,16 @@ from eden.api.routes import (
     sidebar_prefs,
     signals,
     search_signals,
+    signal_investigator,
+    signal_classifiers,
+    slack_interactive,
+    topics,
     tool_call_labels,
+    observability_live,
+    mcp_keys,
+    agentic_metrics,
     sql_query,
+    wave6_online,
     sso,
     streaming_tokens,
     support,
@@ -311,6 +329,8 @@ class HealthResponse(BaseModel):
     postgres: str
     qdrant: str
     quality_worker_running: bool = False
+    statgate_installed: bool = False
+    evolution_loop_running: bool = False
 
 
 # ============================================================================
@@ -385,6 +405,16 @@ async def lifespan(app: FastAPI):
         if settings.eden_production or settings.strict_startup_checks:
             raise
         logger.warning(f"KB initialization warning: {e}")
+
+    # N14 — StatGate / Cat 15/17/22 wiring on every API pod (idempotent).
+    # Worker start remains leader-gated in background workers below.
+    try:
+        from eden.observability.trace_quality.wiring import install_all
+
+        install_all()
+        logger.info("N14: trace_quality install_all completed")
+    except Exception as e:
+        logger.warning("N14: trace_quality install_all skipped: %s", e)
 
     # Phase 1 — background loops are gated by EDEN_RUN_BACKGROUND_WORKERS.
     # When enabled, a Redis leader lock ensures only one API replica runs
@@ -780,6 +810,7 @@ async def _http_exception(request: Request, exc: StarletteHTTPException):
     )
 
 # Include route modules
+app.include_router(admin_status.router)  # F84 /orgs/{org_id}/admin/eden-status
 app.include_router(kb.router)
 app.include_router(auth.router)
 app.include_router(clerk_webhooks.router)  # /webhooks/clerk
@@ -789,17 +820,27 @@ app.include_router(references.router)
 app.include_router(api_keys.router)
 app.include_router(billing.router)  # /orgs/{org_id}/billing
 app.include_router(budgets.router)  # /orgs/{org_id}/budget + /budget/ticker + /budget/actions (D.10 cost guardrails)
+app.include_router(finops.router)  # /orgs/{org_id}/finops/{explorer,export,kill-switches} (SOTA W8)
 app.include_router(cost.router)  # /orgs/{org_id}/cost/comparison (Cat 23 audit)
 app.include_router(analytics.router)  # /orgs/{org_id}/analytics
 app.include_router(export.router)  # /orgs/{org_id}/export
 app.include_router(export_destinations.router)  # /orgs/{org_id}/export/{destinations,schedules,run-now}
 app.include_router(ingestion.router)  # /orgs/{org_id}/ingest (multi-format observability ingestion)
+app.include_router(ingest_agent_sessions.router)  # /orgs/{org_id}/ingest/agent-sessions (F23 SDK, X-Org-Api-Key)
 app.include_router(observability.router)  # /orgs/{org_id}/observability/{traces,summary,spans/search,...}
 app.include_router(agents.router)  # /orgs/{org_id}/agents (Phase 2 surface — list + register + get)
 app.include_router(llmops.router)  # /orgs/{org_id}/llmops/{artifacts,prompts,ab-tests,experiments,gateway,monitoring,cache}
 app.include_router(trace_quality.router)  # /v1/traces/{trace_id}/{loops,quality,intervention,...} (Cat 22 trace quality)
 app.include_router(observability_mcp.router)  # /v1/traces/{id}/mcp + /v1/mcp/{org}/auth_failures (D.12.1)
+from eden.mcp_server.http_transport import router as mcp_http_router
+
+app.include_router(mcp_http_router)  # W28 Streamable HTTP MCP at /v1/mcp
 app.include_router(observability_a2a.router)  # /v1/traces/{id}/a2a + /v1/a2a/{org}/links + invocation graph (D.12.2)
+app.include_router(observability_computer_use.router)  # /v1/traces/{id}/computer_use + /v1/computer_use/{org}/steps (D.12.3)
+app.include_router(observability_voice.router)  # /v1/voice_sessions + /v1/traces/{id}/voice_sessions (D.12.4)
+app.include_router(observability_fine_tune.router)  # /v1/fine_tuning_runs + lineage (D.12.5)
+app.include_router(observability_fine_tune.webhook_router)  # /v1/webhooks/openai/fine_tuning (D.12.5, R-12)
+app.include_router(observability_provider_routing.router)  # /v1/provider_routing/{org}/{attempts,failure_rate} (D.12.6)
 app.include_router(internal_health.router)  # /v1/internal/health/* — ops dashboard (Phase 4 B3 §9.6)
 app.include_router(optimization.router)  # /orgs/{org_id}/optimization/{overview,costs,savings,cache,budget,}
 app.include_router(app_events.router)  # /orgs/{org_id}/ingest/app (Phase A1 app/site events)
@@ -807,7 +848,8 @@ app.include_router(scim.router)  # /orgs/{org_id}/scim/v2
 app.include_router(sso.router)  # /sso
 app.include_router(ai_insights.router)  # /orgs/{org_id}/ai-insights
 app.include_router(sidebar_prefs.router)  # /orgs/{org_id}/sidebar-prefs (per-user UI prefs)
-app.include_router(ai_agent.router)  # /orgs/{org_id}/ai (Phase C unified agent)
+# W20: Phase-C dual ``/ai`` surface unmounted — ChatSidebar + ai-insights only.
+# ai_agent module kept for ``_sse_format`` / unit helpers; do not remount.
 app.include_router(sharing.sharing_router)  # /orgs/{org_id}/traces/{trace_id}/share + saved-searches (Phase N)
 app.include_router(sharing.public_router)  # /public/traces/{token} (no auth, token-gated)
 # Phase A1: session lifecycle + presigned feedback tokens
@@ -823,7 +865,11 @@ app.include_router(labeling.router)  # /orgs/{org_id}/labeling (Phase D labeling
 app.include_router(signals.router)  # /orgs/{org_id}/signals (Phase Q plain-English signals)
 app.include_router(nl_alerts_routes.router)  # F81 NL alerts compile + rules
 app.include_router(debugger.router)  # /orgs/{org_id}/debugger (Phase P agent debugger)
+app.include_router(browser_sessions.router)  # F09 browser recording
+app.include_router(datasets_hub.router)  # /orgs/{org_id}/datasets (F53 hub list/create)
 app.include_router(datasets_spreadsheet.router)  # /orgs/{org_id}/datasets/{dataset_id} (Phase S spreadsheet)
+app.include_router(experiments_offline.router)  # /orgs/{org_id}/experiments/offline (F51)
+app.include_router(playgrounds.router)  # /orgs/{org_id}/playgrounds (W18 U03/F49)
 app.include_router(prompts.router)  # /orgs/{org_id}/prompts (Phase I prompt management + playground)
 app.include_router(prompts_v2.router)  # /orgs/{org_id}/prompts/* (D.9 versioning: /{name}/versions + /eval-runs)
 app.include_router(pii_policy.router)  # /orgs/{org_id}/pii-policy
@@ -841,9 +887,17 @@ app.include_router(change_impact.router)  # /orgs/{org_id}/change-impact (N04)
 app.include_router(improve.router)  # /orgs/{org_id}/improve (N17 cockpit + F04 autofix)
 app.include_router(learn.router)  # /orgs/{org_id}/{nudges,promotions,book,drift,...} (WS2)
 app.include_router(production_eval.router)  # /orgs/{org_id}/production-eval/* (N03, gated)
+app.include_router(wave6_online.router)  # Phase 5 Wave 6: F52-F79, F54-F68, F76, N15
 app.include_router(compliance_pack.router)  # /orgs/{org_id}/compliance/* (N06, gated)
 app.include_router(search_signals.router)  # /orgs/{org_id}/search/to-signal (N10)
+app.include_router(signal_investigator.router)  # F06 clusters + backfill
+app.include_router(signal_classifiers.router)  # F34 classifiers
+app.include_router(topics.router)  # F65 topics
+app.include_router(slack_interactive.router)  # F71 Slack bot
 app.include_router(tool_call_labels.router)  # /orgs/{org_id}/tool-calls/{span_id}/label (F21)
+app.include_router(observability_live.router)  # /orgs/{org_id}/stream/traces/* (N11 live)
+app.include_router(mcp_keys.router)  # /orgs/{org_id}/mcp/keys (W28)
+app.include_router(agentic_metrics.router)  # F64 agentic metrics pack
 app.include_router(autonomy.router)  # /orgs/{org_id}/settings/autonomy (N22, gated by closed_loop_orchestrator_v1)
 app.include_router(intelligence_agents.router)
 app.include_router(intelligence_apm_depth.router)
@@ -1077,6 +1131,21 @@ async def health_check():
     except Exception:
         worker_running = False
 
+    try:
+        from eden.observability.platform_activation import is_statgate_installed
+
+        statgate_installed = is_statgate_installed()
+    except Exception:
+        statgate_installed = False
+
+    evolution_loop_running = False
+    try:
+        from eden.agents.evolution.loop import is_evolution_loop_running
+
+        evolution_loop_running = is_evolution_loop_running()
+    except Exception:
+        pass
+
     # Degrade /health when the quality worker is expected on this process
     # (trace_quality_worker_enabled=true AND we are the background leader)
     # but the worker task has died or never started. Non-leader replicas skip
@@ -1100,6 +1169,8 @@ async def health_check():
         postgres=pg,
         qdrant=kb_health.get("qdrant", "unknown"),
         quality_worker_running=worker_running,
+        statgate_installed=statgate_installed,
+        evolution_loop_running=evolution_loop_running,
     )
 
     # HEALH_PROBE_MODE controls the status code:

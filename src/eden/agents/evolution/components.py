@@ -630,17 +630,6 @@ class IssuePromptEvolver(EvolutionComponent):
         if not agent:
             return {"created": 0, "skipped": True, "reason": "no_agent"}
 
-        triage = issue.triage_result or {}
-        summary = triage.get("summary") or triage.get("root_cause") or issue.title
-        failure_jobs = [
-            {
-                "issue_id": issue_id,
-                "fingerprint": issue.fingerprint,
-                "kind": issue.kind,
-                "summary": summary,
-            }
-        ]
-
         if self.prompt_versions is None:
             self.prompt_versions = await _maybe_await(get_prompt_versions_client())
 
@@ -651,11 +640,39 @@ class IssuePromptEvolver(EvolutionComponent):
         current_version = int((active or {}).get("version") or 1)
         current_prompt = (active or {}).get("prompt") or f"Agent {agent} system prompt."
 
+        triage = issue.triage_result or {}
+        summary = triage.get("summary") or triage.get("root_cause") or issue.title
+
+        from eden.config import get_settings
+
+        settings = get_settings()
         revised = (
             f"{current_prompt}\n\n"
             f"# Resolved issue guardrail ({issue.fingerprint})\n"
             f"Avoid recurrence of: {summary}"
         )
+
+        use_llm = False
+        if settings.evolver_min_samples and issue.stumble_count >= settings.evolver_min_samples:
+            use_llm = bool(triage.get("judge_regression"))
+
+        if use_llm and self.llm is not None:
+            try:
+                resp = await self.llm.complete(
+                    messages=[
+                        {
+                            "role": "user",
+                            "content": (
+                                "Append a minimal guardrail for: " + summary
+                            ),
+                        }
+                    ]
+                )
+                extra = (resp.get("content") or "").strip()
+                if extra:
+                    revised = f"{current_prompt}\n\n{extra}"
+            except Exception as exc:
+                logger.debug("IssuePromptEvolver LLM path skipped: %s", exc)
 
         try:
             ok = await self.prompt_versions.insert_version(

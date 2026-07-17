@@ -65,7 +65,7 @@ export function NoOrgState({
         <Building2 className="w-4 h-4" />
         Finish setup
       </Link>
-      <p className="text-xs text-[var(--text-faint)] mt-3">
+      <p className="text-xs text-[var(--text-muted)] mt-3">
         {feature} is unavailable until your workspace is linked.
       </p>
     </div>

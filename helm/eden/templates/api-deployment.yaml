@@ -19,7 +19,7 @@ spec:
     spec:
       containers:
         - name: api
-          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          image: "{{ include "eden.image" . }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           ports:
             - name: http
@@ -32,6 +32,27 @@ spec:
               value: {{ include "eden.redisUrl" . }}
             - name: EDEN_QDRANT_URL
               value: {{ include "eden.qdrantUrl" . }}
+            {{- if .Values.externalTypesense.host }}
+            - name: TYPESENSE_ENABLED
+              value: "true"
+            - name: TYPESENSE_HOST
+              value: {{ .Values.externalTypesense.host | quote }}
+            - name: TYPESENSE_PORT
+              value: {{ .Values.externalTypesense.port | default "8108" | quote }}
+            - name: TYPESENSE_PROTOCOL
+              value: {{ .Values.externalTypesense.protocol | default "http" | quote }}
+            {{- if and .Values.secrets.create .Values.secrets.typesenseApiKey }}
+            - name: TYPESENSE_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "eden.fullname" . }}-secrets
+                  key: typesense-api-key
+            {{- end }}
+            {{- end }}
+            {{- if .Values.externalClickhouse }}
+            - name: CLICKHOUSE_URL
+              value: {{ .Values.externalClickhouse | quote }}
+            {{- end }}
             - name: SKIP_MIGRATIONS
               value: "1"
             - name: EDEN_RUN_BACKGROUND_WORKERS

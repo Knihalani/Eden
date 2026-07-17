@@ -46,6 +46,7 @@ class UpsertBudgetRequest(BaseModel):
         default="throttle", pattern="^(throttle|kill|alert)$"
     )
     threshold_alert_pct: int = Field(default=80, ge=0, le=100)
+    alert_thresholds: list[int] = Field(default_factory=lambda: [50, 80, 100])
 
 
 @router.get("")
@@ -57,6 +58,8 @@ async def get_budget(org_id: str = Path(...)) -> dict[str, Any]:
     cost_soft = budget["cost_soft_limit_usd"]
     cost_hard = budget["cost_hard_limit_usd"]
     pct_of_hard = (cost_used / cost_hard * 100.0) if cost_hard > 0 else 0.0
+    thresholds = list(budget.get("alert_thresholds") or [50, 80, 100])
+    breached = [t for t in thresholds if pct_of_hard >= float(t)]
     return {
         "status": "ok",
         "feature": "budget_admin",
@@ -70,6 +73,8 @@ async def get_budget(org_id: str = Path(...)) -> dict[str, Any]:
                 "cost_hard_limit_usd": cost_hard,
                 "pct_of_hard": round(pct_of_hard, 2),
                 "threshold_alert_pct": budget["threshold_alert_pct"],
+                "alert_thresholds": thresholds,
+                "thresholds_breached": breached,
                 "alert_breached": pct_of_hard >= budget["threshold_alert_pct"],
                 "exceeded": pct_of_hard >= 100.0,
             },
@@ -92,6 +97,7 @@ async def upsert_budget(
         window=body.window,
         action_on_exceed=body.action_on_exceed,
         threshold_alert_pct=body.threshold_alert_pct,
+        alert_thresholds=body.alert_thresholds or [50, 80, 100],
     )
     return {
         "status": "ok",

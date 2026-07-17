@@ -120,6 +120,17 @@ export interface EdenSDKOptions {
   maxChunkBuffer?: number;
 
   /**
+   * N16-mirroring client sampling profile. Defaults to ``full``.
+   */
+  samplingProfile?: "full" | "balanced" | "aggressive";
+
+  /** Keep error events even when sampling (default true). */
+  sampleKeepErrors?: boolean;
+
+  /** Durable offline JSONL path; set or use EDEN_OFFLINE_QUEUE=1. */
+  offlineQueuePath?: string;
+
+  /**
    * When `true`, emit a console.debug line for every batch flush.
    * Defaults to `false`.
    */

@@ -44,9 +44,9 @@ export function isWaitPath(_pathname: string): boolean {
   return false;
 }
 
-export function isOnboardingWizardPath(pathname: string | null | undefined): boolean {
-  const path = pathname || "";
-  return path === "/onboarding" || path.startsWith("/onboarding/");
+export function isOnboardingWizardPath(_pathname: string | null | undefined): boolean {
+  // Legacy wizard routes redirect; improvement-loop keeps full chrome.
+  return false;
 }
 
 export interface OnboardingProgressView {

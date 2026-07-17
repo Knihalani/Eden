@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import uuid
+import yaml
 from datetime import UTC, datetime
 from typing import Any
 
@@ -11,6 +12,12 @@ from fastapi import APIRouter, Body, Depends, Path, Query
 from pydantic import BaseModel, Field
 
 from eden.api.deps import get_current_user
+from eden.api.utils.redact import redact_all
+from eden.preview.gates import (
+    artifacts_enabled,
+    ledger_enabled,
+    preview_disabled_envelope,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -50,13 +57,15 @@ async def list_nudges(
     org_id: str = Path(...),
     agent_id: str | None = Query(None),
 ) -> dict[str, Any]:
+    if not await artifacts_enabled(org_id):
+        return preview_disabled_envelope("artifacts")
     from eden.nudges.engine import NudgeEngine
 
     engine = NudgeEngine()
     if agent_id:
         nudges = await engine.list_active(org_id, agent_id, modes=("shadow", "promoted", "archived"))
     else:
-        nudges = []
+        nudges = await _list_org_artifacts(org_id)
     return _ok(
         "runtime_nudge",
         {
@@ -74,11 +83,36 @@ async def list_nudges(
     )
 
 
+async def _list_org_artifacts(org_id: str):
+    from eden.nudges.engine import NudgeEngine
+    from eden.nudges.models import Nudge
+    from eden.storage.postgres import get_postgres_client
+
+    client = await get_postgres_client()
+    if client is None:
+        return []
+    rows = await client.fetch(
+        """
+        SELECT id, org_id, agent_id, name, trigger, action_type,
+               content, mode, source_issue_id, evidence
+        FROM nudges
+        WHERE org_id = $1 AND mode = ANY($2::text[])
+        ORDER BY created_at DESC
+        LIMIT 200
+        """,
+        org_id,
+        ["shadow", "promoted", "archived"],
+    )
+    return [Nudge.from_row(dict(r)) for r in rows or []]
+
+
 @router.post("/nudges")
 async def create_nudge(
     org_id: str = Path(...),
     body: NudgeCreateRequest = Body(...),
 ) -> dict[str, Any]:
+    if not await artifacts_enabled(org_id):
+        return preview_disabled_envelope("artifacts")
     from eden.nudges.engine import NudgeEngine
     from eden.promotion.evidence_gate import EvidenceGate
 
@@ -99,18 +133,57 @@ async def create_nudge(
 
 @router.post("/nudges/{nudge_id}/promote")
 async def promote_nudge(org_id: str = Path(...), nudge_id: str = Path(...)) -> dict[str, Any]:
+    if not await artifacts_enabled(org_id):
+        return preview_disabled_envelope("artifacts")
+    from eden.llmops.warm_learn import warm_learn_caches
     from eden.promotion.evidence_gate import EvidenceGate
 
     gate = EvidenceGate()
-    candidates = await gate.list_queue(org_id, status="shadow")
-    candidate = next((c for c in candidates if str(c.get("ref_id")) == nudge_id), None)
-    if candidate:
-        report = await gate.promote_if_passed(org_id, str(candidate["id"]))
-        return _ok("evidence_gate", {"report": report.__dict__, "nudge_id": nudge_id})
-    from eden.nudges.engine import NudgeEngine
+    candidates = await gate.list_queue(org_id, status=None, limit=200)
+    candidate = next(
+        (c for c in candidates if str(c.get("ref_id")) == nudge_id and c.get("status") != "demoted"),
+        None,
+    )
+    if not candidate:
+        cid = await gate.enqueue(org_id, kind="nudge", ref_id=nudge_id, status="shadow")
+        if not cid:
+            return {
+                "status": "error",
+                "feature": "evidence_gate",
+                "live": True,
+                "data": {"message": "Failed to enqueue promotion candidate"},
+            }
+        candidate = await gate.get_candidate(org_id, cid)
+    if not candidate:
+        return {
+            "status": "error",
+            "feature": "evidence_gate",
+            "live": True,
+            "data": {"message": "Promotion candidate not found"},
+        }
+    report = await gate.promote_if_passed(org_id, str(candidate["id"]))
+    try:
+        from eden.storage.postgres import get_postgres_client
 
-    ok = await NudgeEngine().set_mode(org_id, nudge_id, "promoted")
-    return _ok("runtime_nudge", {"nudge_id": nudge_id, "promoted": ok})
+        client = await get_postgres_client()
+        if client:
+            agent_id = await client.fetchval(
+                "SELECT agent_id FROM nudges WHERE id = $1::uuid AND org_id = $2",
+                nudge_id,
+                org_id,
+            )
+            if agent_id:
+                await warm_learn_caches(org_id, str(agent_id))
+    except Exception as exc:
+        logger.debug("warm after promote failed: %s", redact_all(str(exc)))
+    return _ok(
+        "evidence_gate",
+        {
+            "report": report.__dict__,
+            "nudge_id": nudge_id,
+            "promoted": report.passed,
+        },
+    )
 
 
 @router.post("/nudges/{nudge_id}/archive")
@@ -182,6 +255,12 @@ class BookConfigRequest(BaseModel):
 
 @router.get("/agents/{agent_id}/book")
 async def get_book(org_id: str = Path(...), agent_id: str = Path(...)) -> dict[str, Any]:
+    if await ledger_enabled(org_id):
+        from eden.kb.ledger.generator import LedgerGenerator
+
+        ledger = await LedgerGenerator().get_latest(org_id, agent_id)
+        config = await LedgerGenerator().get_config(org_id, agent_id)
+        return _ok("agent_ledger", {"ledger": ledger, "book": ledger, "config": config})
     from eden.kb.book.generator import BookGenerator
 
     book = await BookGenerator().get_latest(org_id, agent_id)
@@ -299,3 +378,376 @@ async def kb_suggestions(org_id: str = Path(...), issue_id: str = Path(...)) -> 
         }
     )
     return _ok("kb_flywheel", {"issue_id": issue_id, "suggestions": suggestions})
+
+
+# ── Artifacts API aliases (/artifacts ↔ nudges) ─────────────────────
+
+
+@router.get("/artifacts")
+async def list_artifacts(
+    org_id: str = Path(...),
+    agent_id: str | None = Query(None),
+    mode: str | None = Query(None),
+) -> dict[str, Any]:
+    if not await artifacts_enabled(org_id):
+        return preview_disabled_envelope("artifacts")
+    from eden.nudges.cost_estimator import CostEstimator
+    from eden.nudges.engine import NudgeEngine
+
+    engine = NudgeEngine()
+    modes = (mode,) if mode else ("shadow", "promoted", "archived")
+    if agent_id:
+        nudges = await engine.list_active(org_id, agent_id, modes=modes)
+    else:
+        nudges = await _list_org_artifacts(org_id)
+        if mode:
+            nudges = [n for n in nudges if n.mode == mode]
+    est = CostEstimator()
+    return _ok(
+        "artifacts",
+        {
+            "artifacts": [
+                {
+                    "id": str(n.id),
+                    "agent_id": n.agent_id,
+                    "name": n.name,
+                    "mode": n.mode,
+                    "action_type": n.action_type,
+                    "trigger": n.trigger,
+                    "content": n.content,
+                    "source_issue_id": str(n.source_issue_id) if n.source_issue_id else None,
+                    "evidence": n.evidence or {},
+                    "cost": est.estimate(n.content).__dict__,
+                }
+                for n in nudges
+            ]
+        },
+    )
+
+
+@router.post("/artifacts")
+async def create_artifact(
+    org_id: str = Path(...),
+    body: NudgeCreateRequest = Body(...),
+) -> dict[str, Any]:
+    return await create_nudge(org_id, body)
+
+
+@router.post("/artifacts/{artifact_id}/promote")
+async def promote_artifact(org_id: str = Path(...), artifact_id: str = Path(...)) -> dict[str, Any]:
+    return await promote_nudge(org_id, artifact_id)
+
+
+@router.post("/artifacts/{artifact_id}/archive")
+async def archive_artifact(org_id: str = Path(...), artifact_id: str = Path(...)) -> dict[str, Any]:
+    return await archive_nudge(org_id, artifact_id)
+
+
+class ArtifactNLRequest(BaseModel):
+    agent_id: str
+    description: str
+
+
+@router.post("/artifacts/author")
+async def author_artifact_nl(
+    org_id: str = Path(...),
+    body: ArtifactNLRequest = Body(...),
+) -> dict[str, Any]:
+    if not await artifacts_enabled(org_id):
+        return preview_disabled_envelope("artifacts")
+    from eden.nudges.author import ArtifactAuthor
+
+    aid = await ArtifactAuthor().from_nl(
+        org_id, agent_id=body.agent_id, description=body.description
+    )
+    return _ok("artifacts", {"artifact_id": aid})
+
+
+@router.get("/artifacts/export")
+async def export_artifacts_yaml(
+    org_id: str = Path(...),
+    agent_id: str = Query(...),
+) -> dict[str, Any]:
+    if not await artifacts_enabled(org_id):
+        return preview_disabled_envelope("artifacts")
+    nudges = await _list_org_artifacts(org_id)
+    nudges = [n for n in nudges if n.agent_id == agent_id]
+    tree = {
+        "agent_id": agent_id,
+        "exported_at": datetime.now(UTC).isoformat(),
+        "artifacts": [
+            {
+                "id": str(n.id),
+                "name": n.name,
+                "mode": n.mode,
+                "trigger": n.trigger,
+                "action_type": n.action_type,
+                "content": n.content,
+            }
+            for n in nudges
+        ],
+    }
+    return _ok(
+        "artifacts_export",
+        {"yaml": yaml.safe_dump(tree, sort_keys=False), "tree": tree},
+    )
+
+
+# ── Ledger API aliases (/ledger ↔ book) ─────────────────────────────
+
+
+@router.get("/ledger")
+async def list_ledgers(org_id: str = Path(...)) -> dict[str, Any]:
+    if not await ledger_enabled(org_id):
+        return preview_disabled_envelope("ledger")
+    try:
+        from eden.storage.postgres import get_postgres_client
+
+        client = await get_postgres_client()
+        if client is None:
+            return _ok("ledger", {"ledgers": []})
+        rows = await client.fetch(
+            """
+            SELECT agent_id, version, inject_enabled, updated_at
+            FROM agent_ledgers
+            WHERE org_id = $1
+            ORDER BY updated_at DESC
+            LIMIT 100
+            """,
+            org_id,
+        )
+        return _ok("ledger", {"ledgers": [dict(r) for r in rows or []]})
+    except Exception as exc:
+        logger.debug("list ledgers: %s", redact_all(str(exc)))
+        return _ok("ledger", {"ledgers": []})
+
+
+@router.get("/agents/{agent_id}/ledger")
+async def get_ledger(org_id: str = Path(...), agent_id: str = Path(...)) -> dict[str, Any]:
+    if not await ledger_enabled(org_id):
+        return preview_disabled_envelope("ledger")
+    from eden.kb.ledger.generator import LedgerGenerator
+
+    ledger = await LedgerGenerator().get_latest(org_id, agent_id)
+    config = await LedgerGenerator().get_config(org_id, agent_id)
+    return _ok("agent_ledger", {"ledger": ledger, "config": config})
+
+
+@router.get("/agents/{agent_id}/ledger/diff")
+async def ledger_diff(
+    org_id: str = Path(...),
+    agent_id: str = Path(...),
+    since_version: int = Query(0),
+) -> dict[str, Any]:
+    if not await ledger_enabled(org_id):
+        return preview_disabled_envelope("ledger")
+    from eden.kb.ledger.generator import LedgerGenerator
+
+    diff = await LedgerGenerator().diff_since_version(org_id, agent_id, since_version)
+    return _ok("agent_ledger", {"diff": diff})
+
+
+class LedgerPreviewRequest(BaseModel):
+    task: str = ""
+
+
+@router.post("/agents/{agent_id}/ledger/preview")
+async def ledger_preview(
+    org_id: str = Path(...),
+    agent_id: str = Path(...),
+    body: LedgerPreviewRequest = Body(...),
+) -> dict[str, Any]:
+    if not await ledger_enabled(org_id):
+        return preview_disabled_envelope("ledger")
+    from eden.kb.ledger.retrieve import LedgerRetriever
+
+    preview = await LedgerRetriever().preview(org_id, agent_id, body.task)
+    return _ok("agent_ledger", {"preview": preview})
+
+
+@router.post("/agents/{agent_id}/ledger/regenerate")
+async def regenerate_ledger(org_id: str = Path(...), agent_id: str = Path(...)) -> dict[str, Any]:
+    if not await ledger_enabled(org_id):
+        return preview_disabled_envelope("ledger")
+    from eden.kb.ledger.generator import LedgerGenerator
+    from eden.llmops.warm_learn import warm_learn_caches
+
+    ledger = await LedgerGenerator().get_latest(org_id, agent_id)
+    await warm_learn_caches(org_id, agent_id)
+    return _ok("agent_ledger", {"ledger": ledger, "regenerated": True})
+
+
+@router.get("/improve/scorecard")
+async def improve_scorecard(
+    org_id: str = Path(...),
+    suite: str = Query("smoke"),
+) -> dict[str, Any]:
+    # Canonical impl ships with the API package (not bench/) so Docker
+    # images that only COPY src/ can serve this route.
+    from eden.llmops.evolution_scorecard import run_scorecard
+
+    result = run_scorecard(suite=suite)
+    return _ok("evolution_scorecard", result)
+
+
+@router.get("/onboarding/improvement-loop")
+async def improvement_loop_status(org_id: str = Path(...)) -> dict[str, Any]:
+    """Live teachable improvement-loop checklist (not a static page)."""
+    from eden.storage.postgres import get_postgres_client
+
+    client = await get_postgres_client()
+    steps: list[dict[str, Any]] = [
+        {
+            "id": "sdk",
+            "label": "Connect SDK",
+            "href": "/agents/connect",
+            "done": False,
+        },
+        {
+            "id": "trace",
+            "label": "First production trace",
+            "href": "/traces",
+            "done": False,
+        },
+        {
+            "id": "issue",
+            "label": "First detected issue",
+            "href": "/issues",
+            "done": False,
+        },
+        {
+            "id": "artifact",
+            "label": "First Artifact candidate",
+            "href": "/artifacts",
+            "done": False,
+        },
+        {
+            "id": "ledger",
+            "label": "Enable Ledger draft",
+            "href": "/ledger",
+            "done": False,
+        },
+    ]
+    counts = {
+        "api_keys": 0,
+        "traces": 0,
+        "issues": 0,
+        "artifacts": 0,
+        "ledgers": 0,
+    }
+    if client is not None:
+        try:
+            counts["api_keys"] = int(
+                await client.fetchval(
+                    "SELECT COUNT(*) FROM api_keys WHERE org_id = $1 AND revoked_at IS NULL",
+                    org_id,
+                )
+                or 0
+            )
+        except Exception:
+            try:
+                counts["api_keys"] = int(
+                    await client.fetchval(
+                        "SELECT COUNT(*) FROM organization_api_keys WHERE org_id = $1",
+                        org_id,
+                    )
+                    or 0
+                )
+            except Exception:
+                counts["api_keys"] = 0
+        try:
+            counts["traces"] = int(
+                await client.fetchval(
+                    """
+                    SELECT COUNT(DISTINCT trace_id) FROM telemetry_events
+                    WHERE tenant_id = $1
+                    """,
+                    org_id,
+                )
+                or 0
+            )
+        except Exception:
+            counts["traces"] = 0
+        try:
+            counts["issues"] = int(
+                await client.fetchval(
+                    "SELECT COUNT(*) FROM agent_issues WHERE org_id = $1",
+                    org_id,
+                )
+                or 0
+            )
+        except Exception:
+            counts["issues"] = 0
+        try:
+            counts["artifacts"] = int(
+                await client.fetchval(
+                    "SELECT COUNT(*) FROM nudges WHERE org_id = $1",
+                    org_id,
+                )
+                or 0
+            )
+        except Exception:
+            counts["artifacts"] = 0
+        try:
+            counts["ledgers"] = int(
+                await client.fetchval(
+                    """
+                    SELECT COUNT(*) FROM agent_ledgers
+                    WHERE org_id = $1 AND coalesce(enabled, false) = true
+                    """,
+                    org_id,
+                )
+                or 0
+            )
+        except Exception:
+            try:
+                counts["ledgers"] = int(
+                    await client.fetchval(
+                        "SELECT COUNT(*) FROM agent_book_config WHERE org_id = $1 AND enabled = true",
+                        org_id,
+                    )
+                    or 0
+                )
+            except Exception:
+                counts["ledgers"] = 0
+
+    done_map = {
+        "sdk": counts["api_keys"] > 0 or counts["traces"] > 0,
+        "trace": counts["traces"] > 0,
+        "issue": counts["issues"] > 0,
+        "artifact": counts["artifacts"] > 0,
+        "ledger": counts["ledgers"] > 0,
+    }
+    for step in steps:
+        step["done"] = bool(done_map.get(str(step["id"]), False))
+    completed = sum(1 for s in steps if s["done"])
+    return _ok(
+        "improvement_loop",
+        {
+            "steps": steps,
+            "completed": completed,
+            "total": len(steps),
+            "counts": counts,
+            "next_step": next((s for s in steps if not s["done"]), None),
+        },
+    )
+
+
+@router.patch("/agents/{agent_id}/ledger/config")
+async def patch_ledger_config(
+    org_id: str = Path(...),
+    agent_id: str = Path(...),
+    body: BookConfigRequest = Body(...),
+) -> dict[str, Any]:
+    if not await ledger_enabled(org_id):
+        return preview_disabled_envelope("ledger")
+    from eden.kb.ledger.generator import LedgerGenerator
+
+    ok = await LedgerGenerator().set_config(
+        org_id, agent_id, enabled=body.enabled, max_tokens=body.max_tokens
+    )
+    from eden.llmops.warm_learn import warm_learn_caches
+
+    await warm_learn_caches(org_id, agent_id)
+    return _ok("agent_ledger", {"updated": ok, "config": body.model_dump()})
+

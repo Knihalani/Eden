@@ -86,41 +86,39 @@ class TestOnboardingWaitUsesPolling:
 
 
 class TestChatSidebarAbortController:
-    """``ChatSidebar.tsx`` drops the dead ``eventSourceRef`` and
-    uses an ``AbortController`` for the in-flight POST stream.
+    """ChatSidebar stream cancel lives in ``useChatSidebar`` (W20 split).
+
+    The dead ``eventSourceRef`` must stay gone; AbortController +
+    abortRef + signal + reader.cancel remain on the stream hook.
     """
 
+    _HOOK = "src/components/ai-insights/hooks/useChatSidebar.ts"
+    _SHELL = "src/components/ai-insights/ChatSidebar.tsx"
+
     def test_no_event_source_ref(self) -> None:
-        """The dead ``eventSourceRef`` (used by the legacy
-        EventSource-based code path; submit() now uses raw fetch
-        streaming) must be gone."""
-        source = _read(
-            "src/components/ai-insights/ChatSidebar.tsx"
-        )
-        assert "eventSourceRef" not in source, (
-            "PQ-3 regression: dead eventSourceRef must be removed "
-            "(submit uses fetch streaming, not EventSource)"
-        )
+        """The dead ``eventSourceRef`` must be gone from shell + hook."""
+        for path in (self._SHELL, self._HOOK):
+            source = _read(path)
+            assert "eventSourceRef" not in source, (
+                "PQ-3 regression: dead eventSourceRef must be removed "
+                f"({path})"
+            )
 
     def test_has_abort_controller(self) -> None:
         """An ``AbortController`` is created per submit() and
         installed in the ``abortRef`` slot."""
-        source = _read(
-            "src/components/ai-insights/ChatSidebar.tsx"
-        )
+        source = _read(self._HOOK)
         assert "AbortController" in source, (
-            "PQ-3 regression: ChatSidebar must construct an AbortController"
+            "PQ-3 regression: useChatSidebar must construct an AbortController"
         )
         assert "abortRef" in source, (
-            "PQ-3 regression: ChatSidebar must hold an abortRef"
+            "PQ-3 regression: useChatSidebar must hold an abortRef"
         )
 
     def test_signal_passed_to_fetch(self) -> None:
         """The fetch() call carries the controller's signal so an
         unmount can cancel it."""
-        source = _read(
-            "src/components/ai-insights/ChatSidebar.tsx"
-        )
+        source = _read(self._HOOK)
         assert "signal: controller.signal" in source, (
             "PQ-3 regression: fetch() must pass controller.signal"
         )
@@ -128,9 +126,7 @@ class TestChatSidebarAbortController:
     def test_reader_cancel_on_abort(self) -> None:
         """The inner reader loop cancels its read on abort so the
         half-drained stream isn't flushed as garbage events."""
-        source = _read(
-            "src/components/ai-insights/ChatSidebar.tsx"
-        )
+        source = _read(self._HOOK)
         assert "reader.cancel" in source, (
             "PQ-3 regression: must call reader.cancel() on abort"
         )

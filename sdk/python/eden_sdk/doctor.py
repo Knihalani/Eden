@@ -144,6 +144,28 @@ def run_doctor(*, emit_test_event: bool = True, timeout_s: float = 5.0) -> Docto
             )
         )
 
+    # Session config readiness (F23) — does not require a live round-trip.
+    session_ok = bool(cfg.org_id and cfg.api_key and cfg.base_url)
+    checks.append(
+        DoctorCheck(
+            "session_config",
+            session_ok,
+            (
+                "Session ingest path ready "
+                f"(/orgs/{{org_id}}/ingest/agent-sessions)"
+                if session_ok
+                else "Session config incomplete — need org_id + api_key + base_url"
+            ),
+            {
+                "endpoint": (
+                    f"{cfg.base_url.rstrip('/')}/orgs/{cfg.org_id}/ingest/agent-sessions"
+                    if cfg.org_id and cfg.base_url
+                    else None
+                ),
+            },
+        )
+    )
+
     if emit_test_event and cfg.org_id and cfg.enabled:
         event_id = f"doctor_{uuid.uuid4().hex[:12]}"
         payload = {

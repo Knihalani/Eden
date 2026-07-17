@@ -5,7 +5,7 @@
 | **Feature ID** | F60 |
 | **Priority** | P1 |
 | **Effort** | M |
-| **Eden status** | PARTIAL — Cat 8 + optimization pages; not productized |
+| **Eden status** | DONE — FinOps explorer (W8): feature/model/agent/session/day + CSV export + 50/80/100 alerts |
 | **Competitive source** | Weave costs; Helicone cost tracking |
 | **UI spec** | U09 widgets + `/optimization` |
 | **Dependencies** | Cat 8, F57 |

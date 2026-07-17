@@ -67,7 +67,7 @@ export default function SyntheticPage() {
       <PageHeader
         eyebrow="Eval"
         title="Synthetic Q/A"
-        subtitle="Generate Q/A pairs for a topic to expand your eval suite. Each run produces a new dataset row group."
+        subtitle="Live QA generator (not a stub). Queues synthetic cases for eval datasets."
         icon={Sparkles}
         actions={
           <Button

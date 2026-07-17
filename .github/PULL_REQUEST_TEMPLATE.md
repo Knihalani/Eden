@@ -14,6 +14,14 @@
 - [ ] Refactor (no behavior change)
 - [ ] Docs / test / chore
 
+## Evolution / cost PRs
+
+If your PR touches `src/eden/nudges/`, `src/eden/kb/ledger/`, or `src/eden/agents/evolution/`:
+
+- [ ] Ran `python -m bench.evolution.run --suite smoke`
+- [ ] Attached scorecard delta or linked nightly artifact
+- [ ] Read `bench/evolution/ITERATION.md` backlog rules
+
 ## How was this tested?
 
 <!-- Unit tests, integration tests, manual repro. -->

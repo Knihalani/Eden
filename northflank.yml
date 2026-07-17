@@ -235,13 +235,15 @@ spec:
       value: "5"
     - name: SANDBOX_MAX_CONCURRENT
       value: "10"
-    # ── Typesense (full-text search) — NOT deployed on the free-tier
-    # sandbox. Cat 19 live-tail + Cat 4 retrieval degrade gracefully
-    # when Typesense is disabled. Do NOT point at localhost in prod —
-    # that silently fails every search request. Enable only when you
-    # provision a managed Typesense cluster and set TYPESENSE_HOST.
+    # ── Typesense (full-text search) — W9: enable when TYPESENSE_HOST
+    # secret is provisioned. Set TYPESENSE_ENABLED=true and wire host/key
+    # from Northflank secrets (do not use localhost).
     - name: TYPESENSE_ENABLED
-      value: "false"
+      value: "true"
+    - name: TYPESENSE_HOST
+      valueFrom: { secretKeyRef: { group: eden-required, key: TYPESENSE_HOST, optional: true } }
+    - name: TYPESENSE_API_KEY
+      valueFrom: { secretKeyRef: { group: eden-required, key: TYPESENSE_API_KEY, optional: true } }
     # ── Pipeline / observability defaults ───────────────────────
     - name: PIPELINE_TIMEOUT_SECONDS
       value: "300"

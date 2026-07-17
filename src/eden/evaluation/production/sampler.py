@@ -39,6 +39,10 @@ class ProductionEvalSampler:
         score, passed, billed_cost = await self._score_trace(
             org_id, trace_id, agent_id
         )
+        if score == 0.0 and not passed and billed_cost == 0.0:
+            rules_exist = await self._org_has_rules(org_id)
+            if not rules_exist:
+                return None
         row_id = await self._persist_score(
             org_id, trace_id, agent_id, score, passed, cost_usd=billed_cost
         )
@@ -124,7 +128,22 @@ class ProductionEvalSampler:
     async def _score_trace(
         self, org_id: str, trace_id: str, agent_id: str | None
     ) -> tuple[float, bool, float]:
-        """Reuse Layer A / judge_scores when present ($0); else pseudo-score."""
+        """Apply online rules; reuse Layer A scores; skip if no signal."""
+        try:
+            from eden.evaluation.online.rules_engine import OnlineScoringRulesEngine
+
+            engine = OnlineScoringRulesEngine()
+            applied = await engine.apply_rules_for_trace(
+                org_id, trace_id, agent_id=agent_id
+            )
+            if applied:
+                score = float(applied[0].get("score") or 0)
+                return score, bool(applied[0].get("passed")), float(
+                    applied[0].get("cost_usd") or 0
+                )
+        except Exception:
+            pass
+
         client = await self._client()
         if client is not None:
             try:
@@ -152,10 +171,8 @@ class ProductionEvalSampler:
                     return score, score >= 0.6, 0.0
             except Exception:
                 pass
-        # Deterministic pseudo-score for traces without judges yet.
-        h = int(hashlib.sha256(f"{trace_id}:{agent_id}".encode()).hexdigest()[:6], 16)
-        score = 0.55 + (h % 40) / 100.0
-        return score, score >= 0.7, _SCORE_COST_USD
+        # No rules matched and no existing scores — do not invent scores.
+        return 0.0, False, 0.0
 
     async def _persist_score(
         self,
@@ -257,6 +274,20 @@ class ProductionEvalSampler:
         except Exception as exc:
             logger.debug("prod_eval: trend failed: %s", exc)
             return []
+
+    async def _org_has_rules(self, org_id: str) -> bool:
+        client = await self._client()
+        if client is None:
+            return False
+        try:
+            n = await client.fetchval(
+                "SELECT count(*) FROM online_scoring_rules "
+                "WHERE org_id = $1 AND enabled = true",
+                org_id,
+            )
+            return int(n or 0) > 0
+        except Exception:
+            return False
 
     async def _client(self) -> Any | None:
         try:

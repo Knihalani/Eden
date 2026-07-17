@@ -151,8 +151,37 @@ async def _tick(*, dry_run: bool) -> dict[str, object]:
             logger.exception("[cron_tick] columnar_compaction failed: %s", exc)
             out["columnar_compaction"] = {"errors": [str(exc)]}
 
+    if now.hour == 2 and now.minute < 10 and not dry_run:
+        try:
+            from eden.evaluation.auto_curator import AutoCurator
+            from eden.storage.postgres import get_postgres_client
+
+            pg = await get_postgres_client()
+            if pg is not None:
+                org_rows = await pg.fetch(
+                    "SELECT DISTINCT org_id::text AS org_id FROM organizations LIMIT 50"
+                )
+                curator_out: list[dict[str, object]] = []
+                curator = AutoCurator()
+                for orow in org_rows:
+                    oid = str(orow["org_id"])
+                    curator_out.append(await curator.run_for_org(oid))
+                out["auto_curator"] = {"orgs": len(curator_out), "runs": curator_out[:5]}
+        except Exception as exc:
+            logger.exception("[cron_tick] auto_curator failed: %s", exc)
+            out["auto_curator"] = {"errors": [str(exc)]}
+
     if now.hour == 3 and now.minute < 10:
         out["daily"] = await _run_daily(now, dry_run=dry_run)
+
+    if now.weekday() == 0 and now.hour == 4 and now.minute < 10 and not dry_run:
+        try:
+            from eden.insights.drift_baseline_worker import DriftBaselineWorker
+
+            out["drift_baselines"] = await DriftBaselineWorker().run_once()
+        except Exception as exc:
+            logger.exception("[cron_tick] drift_baselines failed: %s", exc)
+            out["drift_baselines"] = {"errors": [str(exc)]}
 
     if now.minute % 15 < 5:
         out["mcp_rollup"] = await _run_mcp_rollup(dry_run=dry_run)
@@ -166,6 +195,28 @@ async def _tick(*, dry_run: bool) -> dict[str, object]:
     except Exception as exc:
         logger.exception("[cron_tick] improvement_sweeps failed: %s", exc)
         out["improvement_sweeps"] = {"errors": [str(exc)]}
+
+    if not dry_run:
+        try:
+            from eden.nudges.demotion_worker import ArtifactDemotionWorker
+            from eden.nudges.shadow_outcomes import ShadowOutcomeJoiner
+
+            out["artifact_demotion"] = await ArtifactDemotionWorker().run_once()
+            out["shadow_outcome_join"] = await ShadowOutcomeJoiner().run_once()
+        except Exception as exc:
+            logger.exception("[cron_tick] artifacts evolution workers failed: %s", exc)
+
+    if not dry_run and now.minute % 10 < 5:
+        try:
+            from eden.signals.backfill import SignalBackfillWorker
+            from eden.signals.clusterer import SignalEventClusterer
+
+            out["signal_backfill"] = await SignalBackfillWorker().run_once()
+            out["signal_cluster_quiet"] = (
+                await SignalEventClusterer().resolve_quiet_clusters()
+            )
+        except Exception as exc:
+            logger.exception("[cron_tick] signal workers failed: %s", exc)
 
     return out
 

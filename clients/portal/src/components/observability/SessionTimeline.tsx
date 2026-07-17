@@ -69,7 +69,7 @@ export function SessionTimeline({ sessions, orgId, className }: SessionTimelineP
                     {s.trace_ids!.map((tid) => (
                       <li key={tid}>
                         <Link
-                          href={`/traces/${tid}${orgId ? `?org=${orgId}` : ""}`}
+                          href={`/traces?traceId=${encodeURIComponent(tid)}&view=traces`}
                           className="text-xs font-mono text-[var(--accent)] hover:underline break-all"
                         >
                           {tid}

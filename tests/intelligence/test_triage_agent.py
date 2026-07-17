@@ -79,7 +79,14 @@ async def test_triage_statgate_first_no_llm() -> None:
         return_value=_issue(kind="loop", severity="p1", stumble_count=6)
     )
     repo.list_stumbles = AsyncMock(
-        return_value=[{"kind": "loop", "detail": {"repeat_count": 6}, "span_id": "s1"}]
+        return_value=[
+            {
+                "kind": "loop",
+                "detail": {"repeat_count": 6},
+                "span_id": "s1",
+                "trace_id": "trace-loop-1",
+            }
+        ]
     )
     repo.set_triage_result = AsyncMock(return_value=True)
 
@@ -92,7 +99,10 @@ async def test_triage_statgate_first_no_llm() -> None:
     assert tr["source"] == "statgate"
     assert tr["auto_escalate"] is True
     assert tr["fingerprint"] == "fp1"
-    assert tr["suggested_actions"][0]["type"] in {
+    assert tr["debugger_trace_id"] == "trace-loop-1"
+    action_types = {a["type"] for a in tr["suggested_actions"]}
+    assert "debugger_rerun" in action_types
+    assert action_types & {
         "rollback",
         "reweight",
         "cache_bust",

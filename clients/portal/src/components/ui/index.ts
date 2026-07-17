@@ -8,6 +8,42 @@ export type { InputProps } from "./input";
 export { Textarea } from "./textarea";
 export type { TextareaProps } from "./textarea";
 
+export { FormField } from "./form-field";
+export type { FormFieldProps } from "./form-field";
+
+export { Checkbox } from "./checkbox";
+export type { CheckboxProps } from "./checkbox";
+
+export { Switch } from "./switch";
+export type { SwitchProps } from "./switch";
+
+export {
+  Sheet,
+  SheetTrigger,
+  SheetClose,
+  SheetPortal,
+  SheetOverlay,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetDescription,
+} from "./sheet";
+export type { SheetContentProps } from "./sheet";
+
+export { FOCUS_RING_CLASS, FOCUS_RING_VARS } from "./focus-ring";
+
+export { EmptyState } from "./empty-state";
+export { ErrorState } from "./error-state";
+export { QueryState } from "./query-state";
+export { NoOrgState } from "./no-org-state";
+export { Breadcrumb } from "./breadcrumb";
+export type { BreadcrumbProps, BreadcrumbItem } from "./breadcrumb";
+export { Banner } from "./banner";
+export { Alert } from "./alert";
+export { StatCard } from "./stat-card";
+export type { StatCardProps } from "./stat-card";
+export { StatusBadge, IssuePriorityBadge, IssueWorkflowBadge } from "./status-badge";
+
 export {
   Select,
   SelectGroup,

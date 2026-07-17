@@ -84,7 +84,13 @@ export {
   begin,
   completeSession,
   currentSession,
+  identify,
   AgentSession,
   type AgentSessionOptions,
 } from "./session.js";
+export { recordStumble } from "./stumbles.js";
 export { autoInstrument, detectInstalledFrameworks, type AutoInstrumentResult } from "./detect-installed.js";
+export {
+  wrapBedrock,
+  wrapGemini,
+} from "./instrumentations/providers.js";

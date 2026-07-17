@@ -27,7 +27,7 @@ const POPULAR: Array<{
     group: "Observe",
     items: [
       { href: "/traces", icon: Activity, label: "Traces", description: "Search every trace in your system" },
-      { href: "/incidents", icon: Bell, label: "Incidents", description: "Open RCA clusters" },
+      { href: "/issues?tab=incidents", icon: Bell, label: "Incidents", description: "Open RCA clusters" },
     ] },
   {
     group: "Optimize",

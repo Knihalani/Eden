@@ -1,0 +1,87 @@
+name: eden-eval (F56 / N01)
+
+# Wires the composite action `.github/actions/eden-eval` into PR + nightly.
+# Requires GitHub secrets:
+#   EDEN_API_KEY  — Bearer token for /orgs/{org}/ci-eval/run
+#   EDEN_ORG_ID   — Target organization id
+# Optional:
+#   EDEN_BASE_URL — defaults to https://api.eden.com inside the action
+#
+# When secrets are missing the job fails loudly (no silent green).
+
+on:
+  pull_request:
+    paths:
+      - "src/eden/**"
+      - "clients/portal/**"
+      - "sdk/**"
+      - ".github/actions/eden-eval/**"
+      - ".github/workflows/eden-eval.yml"
+  schedule:
+    - cron: "30 5 * * *"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: eden-eval-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  eval:
+    name: Eden regression eval
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Require Eden eval secrets
+        env:
+          EDEN_API_KEY: ${{ secrets.EDEN_API_KEY }}
+          EDEN_ORG_ID: ${{ secrets.EDEN_ORG_ID }}
+        run: |
+          missing=()
+          [ -z "${EDEN_API_KEY:-}" ] && missing+=("EDEN_API_KEY")
+          [ -z "${EDEN_ORG_ID:-}" ] && missing+=("EDEN_ORG_ID")
+          if [ ${#missing[@]} -gt 0 ]; then
+            echo "::error::Missing required GitHub secret(s): ${missing[*]}"
+            echo "Add them under repo Settings → Secrets and variables → Actions."
+            echo "Optional: EDEN_BASE_URL (defaults to https://api.eden.com)."
+            exit 1
+          fi
+
+      - name: Collect changed files (PR)
+        id: files
+        if: github.event_name == 'pull_request'
+        run: |
+          git fetch origin "${{ github.base_ref }}" --depth=1 || true
+          git diff --name-only "origin/${{ github.base_ref }}...HEAD" > /tmp/changed-files.txt || true
+          {
+            echo "list<<EOF"
+            cat /tmp/changed-files.txt
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Resolve Eden API base URL
+        id: base
+        env:
+          EDEN_BASE_URL: ${{ secrets.EDEN_BASE_URL }}
+        run: |
+          if [ -n "${EDEN_BASE_URL:-}" ]; then
+            echo "url=$EDEN_BASE_URL" >> "$GITHUB_OUTPUT"
+          else
+            echo "url=https://api.eden.com" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Run eden-eval action
+        uses: ./.github/actions/eden-eval
+        with:
+          eden-api-key: ${{ secrets.EDEN_API_KEY }}
+          eden-org: ${{ secrets.EDEN_ORG_ID }}
+          eden-base-url: ${{ steps.base.outputs.url }}
+          change-id: ${{ github.event.pull_request.number || github.run_id }}
+          changed-files: ${{ steps.files.outputs.list }}
+          fail-on-regression: "true"

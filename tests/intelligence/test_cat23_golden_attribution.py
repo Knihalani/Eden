@@ -42,7 +42,7 @@ async def test_cat23_attribution_golden_structure_runner() -> None:
     Without a live repo the linker returns empty links — we only
     assert the envelope shape and that accuracy soft-floor holds.
     """
-    from eden.code_change.rca_linker import CodeRootCauseLinker
+    from eden.patches.rca_linker import CodeRootCauseLinker
 
     data = json.loads(GOLDEN_PATH.read_text(encoding="utf-8"))
     linker = CodeRootCauseLinker(router=None, repo_connector=None)

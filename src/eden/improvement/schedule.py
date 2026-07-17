@@ -130,14 +130,6 @@ async def _list_orgs() -> list[str]:
 
 async def run_due_sweeps(*, dry_run: bool = False) -> dict[str, Any]:
     """Cron entry: sweep every org whose schedule is due."""
-    from eden.config import get_settings
-
-    settings = get_settings()
-    if not getattr(settings, "improvement_schedule_enabled", False):
-        return {"skipped": True, "reason": "improvement_schedule_disabled"}
-    if not getattr(settings, "improvement_agent_v1", False):
-        return {"skipped": True, "reason": "improvement_agent_disabled"}
-
     now = datetime.now(UTC)
     out: dict[str, Any] = {"tick_at": now.isoformat(), "orgs": []}
     if dry_run:
@@ -147,6 +139,15 @@ async def run_due_sweeps(*, dry_run: bool = False) -> dict[str, Any]:
     agent = ImprovementAgent()
     for org_id in await _list_orgs():
         try:
+            from eden.preview.gates import (
+                improvement_agent_enabled,
+                improvement_schedule_enabled_for_org,
+            )
+
+            if not await improvement_schedule_enabled_for_org(org_id):
+                continue
+            if not await improvement_agent_enabled(org_id):
+                continue
             if not await is_due(org_id, now=now):
                 continue
             result = await agent.sweep(org_id)

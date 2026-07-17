@@ -25,13 +25,24 @@ MATRIX_PATH = Path("docs/ops/migration-matrix.md")
 
 
 def _extract_revisions() -> set[str]:
-    """Return the set of revision ids from the alembic versions dir."""
+    """Return the set of revision ids from the alembic versions dir.
+
+    Parses the ``revision = "..."`` (or ``revision: str = "..."``)
+    assignment that alembic itself reads — this is the source of
+    truth, unlike the free-text ``Revision ID:`` docstring line some
+    files also carry (a few migrations, e.g. 100-105, skip that
+    docstring convention entirely).
+    """
     revs: set[str] = set()
     for f in sorted(VERSIONS_DIR.glob("*.py")):
         if f.name == "__init__.py":
             continue
         src = f.read_text()
-        m = re.search(r"^Revision ID:\s*(\S+)", src, re.MULTILINE)
+        m = re.search(
+            r'^revision(?:\s*:\s*[\w.\[\] |]+)?\s*=\s*["\']([^"\']+)["\']',
+            src,
+            re.MULTILINE,
+        )
         if m:
             revs.add(m.group(1))
     return revs
@@ -63,10 +74,13 @@ def _matrix_revisions() -> set[str]:
         # The revision id is alphanumeric (numbers for the linear chain,
         # sha-prefix for the merge files). A few migrations (074,
         # 075) carry a descriptive suffix after the numeric prefix;
-        # accept those too.
+        # accept those too. The 096-099 chain-repair (2026-07-17)
+        # introduced bare single-letter suffixes (096b, 097a, 098b...)
+        # to de-duplicate revision ids without a full rename.
         if (
             re.fullmatch(r"[0-9a-f]{6,}", first)
             or re.fullmatch(r"\d{3}", first)
+            or re.fullmatch(r"\d{3}[a-z]", first)
             or re.fullmatch(r"\d{3}_[a-z0-9_]+", first)
         ):
             revs.add(first)

@@ -5,7 +5,7 @@ import dynamic from "next/dynamic";
 import { useOrganizationList } from "@clerk/nextjs";
 import { useOrg } from "@/hooks/use-org";
 import { useAuth } from "@/hooks/use-auth";
-import { Building2, Users, User, Code, Key, FileText, Shield, ShieldCheck, CreditCard, KeyRound, Lock, BarChart2, Server, EyeOff, Database, FileArchive, Settings2, Bot, Terminal } from "lucide-react";
+import { Building2, Users, User, Code, Key, FileText, Shield, ShieldCheck, CreditCard, KeyRound, Lock, BarChart2, Server, EyeOff, Database, FileArchive, Settings2, Bot, Terminal, Activity, Wallet } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 // Heavy tabs — code-split via next/dynamic so the initial settings bundle
@@ -84,6 +84,18 @@ const McpTab = dynamic(() => import("./_components/mcp-tab").then(m => ({
   ssr: false,
   loading: () => <Skeleton className="h-64 w-full" />
 });
+const StatusTab = dynamic(() => import("./_components/status-tab").then(m => ({
+  default: m.StatusTab
+})), {
+  ssr: false,
+  loading: () => <Skeleton className="h-64 w-full" />
+});
+const FinOpsKillsTab = dynamic(() => import("./_components/finops-kills-tab").then(m => ({
+  default: m.FinOpsKillsTab
+})), {
+  ssr: false,
+  loading: () => <Skeleton className="h-64 w-full" />
+});
 const AccountTab = dynamic(() => import("@/app/(portal)/profile/page"), {
   ssr: false,
   loading: () => <Skeleton className="h-64 w-full" />
@@ -102,7 +114,7 @@ import { PageHeader } from "@/components/layout/page-header";
 import { PageContent } from "@/components/layout/page-content";
 import { EmbeddedSurface } from "@/components/layout/embedded-surface";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-type Tab = "org" | "members" | "references" | "api-keys" | "mcp" | "security" | "scim" | "sso" | "audit-log" | "analytics" | "billing" | "gateway" | "pii" | "retention" | "exports" | "sidebar" | "autonomous" | "roles" | "account";
+type Tab = "org" | "members" | "references" | "api-keys" | "mcp" | "security" | "scim" | "sso" | "audit-log" | "analytics" | "billing" | "gateway" | "pii" | "retention" | "exports" | "sidebar" | "autonomous" | "roles" | "account" | "status" | "finops";
 type SettingsCategory = "Org" | "Members" | "Security" | "Compliance" | "Billing" | "Advanced";
 const TABS: ReadonlyArray<{
   id: Tab;
@@ -110,6 +122,7 @@ const TABS: ReadonlyArray<{
   icon: typeof Building2;
   category: SettingsCategory;
   hidden?: boolean;
+  keywords?: string[];
 }> = [{
   id: "org",
   label: "Organization",
@@ -191,6 +204,11 @@ const TABS: ReadonlyArray<{
   icon: FileText,
   category: "Compliance"
 }, {
+  id: "status",
+  label: "Platform status",
+  icon: Activity,
+  category: "Advanced"
+}, {
   id: "analytics",
   label: "Analytics",
   icon: BarChart2,
@@ -200,6 +218,12 @@ const TABS: ReadonlyArray<{
   label: "Billing",
   icon: CreditCard,
   category: "Billing"
+}, {
+  id: "finops",
+  label: "FinOps kills",
+  icon: Wallet,
+  category: "Billing",
+  keywords: ["finops", "kill", "kills", "cost", "feature kill"],
 }, {
   id: "autonomous",
   label: "Autonomous",
@@ -257,7 +281,11 @@ function SettingsPageInner() {
   // so the rail doesn't render blanks.
   const normalisedQuery = searchQuery.trim().toLowerCase();
   const visibleTabs = (normalisedQuery
-    ? TABS.filter((t) => !t.hidden && t.label.toLowerCase().includes(normalisedQuery))
+    ? TABS.filter((t) => {
+        if (t.hidden) return false;
+        const hay = `${t.label} ${(t.keywords ?? []).join(" ")}`.toLowerCase();
+        return hay.includes(normalisedQuery);
+      })
     : TABS.filter((t) => !t.hidden));
   const tabsByCategory: Record<SettingsCategory, typeof TABS[number][]> = {
     Org: [],
@@ -391,9 +419,11 @@ function SettingsPageInner() {
             {activeTab === "audit-log" && <AuditLogTab org={currentOrg} />}
             {activeTab === "analytics" && <AnalyticsTab />}
             {activeTab === "billing" && <BillingTab />}
+            {activeTab === "finops" && <FinOpsKillsTab />}
             {activeTab === "autonomous" && <AutonomousTab />}
             {activeTab === "exports" && <ExportsTab orgId={currentOrg?.id || ""} canManage={currentOrg?.role === "owner" || currentOrg?.role === "admin"} />}
             {activeTab === "sidebar" && <SidebarSettingsTab />}
+            {activeTab === "status" && <StatusTab />}
           </div>
         </PageContent>
       </div>

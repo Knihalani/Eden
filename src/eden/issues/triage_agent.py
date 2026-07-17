@@ -58,7 +58,8 @@ _ALLOWED_ACTION_TYPES = frozenset(
         "cache_bust",
         "propose_patch",
         "escalate",
-        # F30 ReAct MCP handoff types — surfaced to the IDE/MCP path.
+        # F30 portal debugger handoff (not MCP).
+        "debugger_rerun",
         "prompt_fix",
         "nudge",
         "mcp_handoff",
@@ -173,6 +174,7 @@ class TriageAgent:
                 "triaged_at": datetime.now(UTC).isoformat(),
             }
             triage_result = _enrich_playbook(triage_result, issue)
+            triage_result = _append_debugger_handoff(triage_result, stumbles)
             await self._repo.set_triage_result(org_id, issue_id, triage_result)
             return _envelope(
                 "triage",
@@ -191,6 +193,8 @@ class TriageAgent:
                 "severity_at_triage": issue.severity,
                 "triaged_at": datetime.now(UTC).isoformat(),
             }
+            triage_result = _enrich_playbook(triage_result, issue)
+            triage_result = _append_debugger_handoff(triage_result, stumbles)
             await self._repo.set_triage_result(org_id, issue_id, triage_result)
             return _envelope(
                 "triage",
@@ -240,6 +244,7 @@ class TriageAgent:
                 "triaged_at": datetime.now(UTC).isoformat(),
             }
             triage_result = _enrich_playbook(triage_result, issue)
+            triage_result = _append_debugger_handoff(triage_result, stumbles)
             await self._repo.set_triage_result(org_id, issue_id, triage_result)
             return _envelope(
                 "triage",
@@ -272,6 +277,7 @@ class TriageAgent:
             "triaged_at": datetime.now(UTC).isoformat(),
         }
         triage_result = _enrich_playbook(triage_result, issue)
+        triage_result = _append_debugger_handoff(triage_result, stumbles)
         await self._repo.set_triage_result(org_id, issue_id, triage_result)
         if llm_used:
             await self._debit_budget(org_id, _TRIAGE_COST_ESTIMATE_USD)
@@ -428,6 +434,13 @@ class TriageAgent:
         return cap if cap > 0 else None
 
     async def _budget_ok(self, org_id: str) -> bool:
+        try:
+            from eden.llmops.feature_kills import is_feature_enabled
+
+            if not await is_feature_enabled(org_id, "triage"):
+                return False
+        except Exception:
+            pass
         cap = await self._resolve_budget_cap(org_id)
         if cap is None:
             return True
@@ -463,6 +476,36 @@ class TriageAgent:
     def _statgate_root_cause(score: Any, issue: Any) -> str:
         checks = ", ".join(score.p0_checks) or "p0"
         return f"Deterministic P0 escalation ({checks}) for {issue.kind} issue"
+
+
+def _append_debugger_handoff(
+    triage_result: dict[str, Any], stumbles: list[dict[str, Any]]
+) -> dict[str, Any]:
+    """Attach portal debugger deep-link metadata (F30 — not MCP)."""
+    trace_id: str | None = None
+    for stumble in stumbles:
+        if isinstance(stumble, dict) and stumble.get("trace_id"):
+            trace_id = str(stumble["trace_id"])
+            break
+    if not trace_id:
+        return triage_result
+
+    actions = list(triage_result.get("suggested_actions") or [])
+    if not any(a.get("type") == "debugger_rerun" for a in actions if isinstance(a, dict)):
+        actions.insert(
+            0,
+            {
+                "type": "debugger_rerun",
+                "action_type": "debugger_rerun",
+                "summary": "Replay prefix in hermetic debugger",
+                "trace_id": trace_id,
+            },
+        )
+    return {
+        **triage_result,
+        "suggested_actions": actions,
+        "debugger_trace_id": trace_id,
+    }
 
 
 def _enrich_playbook(triage_result: dict[str, Any], issue: Any) -> dict[str, Any]:

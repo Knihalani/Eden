@@ -50,7 +50,14 @@ async def create_canary(
     version and a new ``experiment_id``. The existing active version
     of the agent (the "control") continues to handle the remaining
     ``100 - traffic_pct`` percent of calls.
+
+    N01: traffic above 5% requires regression suite pass.
     """
+    from eden.evaluation.regression_runner import RegressionRunner
+
+    await RegressionRunner().require_pass_for_canary(
+        org_id, agent_id=agent, traffic_pct=body.traffic_pct
+    )
     client = await get_postgres_client()
     if not client:
         raise HTTPException(status_code=503, detail="Database unavailable")
@@ -139,8 +146,8 @@ async def promote_canary(
 ) -> dict[str, Any]:
     """Promote the canary candidate to 100% traffic.
 
-    Sets the candidate's assignment traffic_pct to 100, ends the
-    experiment, and audit-logs the action.
+    EvidenceGate is non-optional (W25): evaluate must pass before
+    traffic is flipped to 100%.
     """
     client = await get_postgres_client()
     if not client:
@@ -157,6 +164,37 @@ async def promote_canary(
         if not row:
             raise HTTPException(status_code=404, detail="Experiment not found")
         candidate_version = row["candidate_version"]
+
+        from eden.promotion.evidence_gate import EvidenceGate
+
+        gate = EvidenceGate()
+        cid = await gate.enqueue(
+            org_id,
+            kind="prompt_version",
+            ref_id=f"{agent}:{candidate_version}",
+            status="shadow",
+        )
+        if not cid:
+            raise HTTPException(
+                status_code=503,
+                detail="EvidenceGate enqueue failed — promote blocked",
+            )
+        report = await gate.evaluate(org_id, cid)
+        if not report.passed:
+            return {
+                "experiment_id": experiment_id,
+                "agent": agent,
+                "candidate_version": candidate_version,
+                "status": "held",
+                "evidence_gate": {
+                    "passed": False,
+                    "recommendation": report.recommendation,
+                    "min_sample_size": report.min_sample_size,
+                    "explanation": report.explanation,
+                    "metrics": report.metrics,
+                },
+            }
+
         now = datetime.now(UTC)
         # Set the candidate to 100
         await client.execute(
@@ -186,6 +224,7 @@ async def promote_canary(
             """,
             now, experiment_id,
         )
+        await gate.promote_if_passed(org_id, cid)
         # Activate the prompt version (if not already)
         try:
             from eden.kb.prompt_versions.client import get_prompt_versions_client
@@ -219,6 +258,7 @@ async def promote_canary(
         "agent": agent,
         "candidate_version": candidate_version,
         "status": "promoted",
+        "evidence_gate": {"passed": True},
     }
 
 

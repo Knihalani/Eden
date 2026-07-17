@@ -17,6 +17,8 @@ const LLM_HOST_SUFFIXES = [
   "generativelanguage.googleapis.com",
   "api.cohere.com",
   "api.mistral.ai",
+  "bedrock-runtime.amazonaws.com",
+  "aiplatform.googleapis.com",
 ];
 
 const LLM_PATH_FRAGMENTS = [
@@ -35,7 +37,10 @@ function detectSourceFormat(url: string): string | null {
   const host = parsed.hostname.toLowerCase();
   const path = parsed.pathname.toLowerCase();
   if (LLM_HOST_SUFFIXES.some((suffix) => host.endsWith(suffix) || host === suffix)) {
-    return host.includes("anthropic") ? "anthropic" : "openai";
+    if (host.includes("anthropic")) return "anthropic";
+    if (host.includes("bedrock")) return "bedrock";
+    if (host.includes("googleapis") || host.includes("aiplatform")) return "gemini";
+    return "openai";
   }
   if (LLM_PATH_FRAGMENTS.some((fragment) => path.includes(fragment))) {
     return "openai";

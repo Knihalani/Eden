@@ -1,913 +1,229 @@
 "use client";
 
 /**
- * ChatSidebar — persistent right-hand AI assistant sidebar.
+ * ChatSidebar — persistent right-hand AI assistant (W20 spine + W21 navigate).
  *
- * Lifecycle:
- *   1. On mount, fetch the user's recent sessions and render them in
- *      the header list.
- *   2. When the user sends a message, append it to the current
- *      session (or create a new one) and POST to
- *      ``/api/ai-insights/chat`` which forwards the cookie + streams
- *      SSE back from FastAPI.
- *   3. As events land, append to the in-memory transcript:
- *        - ``session``   — record the new session id
- *        - ``text_delta``— append to the in-flight assistant message
- *        - ``tool_call`` — render a ``ToolCallCard`` in "running" state
- *        - ``tool_result``— update the matching card with the result
- *        - ``done``      — clear the in-flight state, allow new input
- *        - ``error``     — surface a toast, mark transcript as errored
- *
- * Persistence: every turn is also written to
- * ``ai_insights_chat_messages`` server-side, so the user can navigate
- * away from a page and come back to the same transcript.
+ * Logic lives in ``hooks/useChatSidebar``; UI split into
+ * SessionList / MessageList / Composer for LOC budget.
  */
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import { usePathname } from "next/navigation";
 import {
   Plus,
-  Send,
   X,
   PanelRightClose,
-  Loader2,
   AlertTriangle,
-  Archive,
   ChevronDown,
   Terminal,
-  Square,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { ToolCallCard } from "./ToolCallCard";
-import { ApprovalCard } from "./ApprovalCard";
-import { ErrorState } from "@/components/ui/error-state";
-import { useOrg } from "@/hooks/use-org";
-import { useToast } from "@/components/ui/toast";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
-
-interface Session {
-  session_id: string;
-  title: string;
-  updated_at: string | null;
-  archived: boolean;
-}
-
-interface ToolCall {
-  id: string;
-  name: string;
-  input?: Record<string, unknown>;
-  result?: {
-    status: "ok" | "error";
-    output?: unknown;
-    duration_ms?: number;
-  };
-}
-
-interface Message {
-  id: string;
-  role: "user" | "assistant" | "tool";
-  /** Text content for user/assistant; tool messages render via the tool_call list. */
-  text?: string;
-  /** Pending tool calls for the assistant turn; results are attached by id. */
-  toolCalls?: ToolCall[];
-  /** True while a server stream for this turn is still in flight. */
-  streaming?: boolean;
-  /** When set, render as a plain error (no markdown underscores). */
-  isError?: boolean;
-}
-
-function newMessageId(): string {
-  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
-    return crypto.randomUUID();
-  }
-  return `msg-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
-}
-
-const SIDEBAR_WIDTH = 360;
-
-function buildPageContext(pathname: string | null): {
-  pathname?: string;
-  trace_id?: string;
-  filters?: Record<string, string>;
-} {
-  const path = pathname ?? (typeof window !== "undefined" ? window.location.pathname : "");
-  const params =
-    typeof window !== "undefined"
-      ? new URLSearchParams(window.location.search)
-      : null;
-  const fromQuery = params?.get("trace_id") || params?.get("trace") || null;
-  const fromPath = path.match(/\/(?:traces|replay)\/([^/?#]+)/)?.[1] ?? null;
-  const issueMatch = path.match(/\/issues\/([^/?#]+)/)?.[1] ?? null;
-  return {
-    ...(path ? { pathname: path } : {}),
-    ...(fromQuery || fromPath ? { trace_id: fromQuery || fromPath || undefined } : {}),
-    ...(issueMatch ? { filters: { issue_id: issueMatch } } : {}),
-  };
-}
+import { useChatSidebar } from "./hooks/useChatSidebar";
+import { SessionList } from "./SessionList";
+import { MessageList } from "./MessageList";
+import { Composer } from "./Composer";
 
 export function ChatSidebar() {
-  const { currentOrg } = useOrg();
-  const toast = useToast();
-  const pathname = usePathname();
-  // ponytail: open state is persisted to sessionStorage so a
-  // returning user sees the AI assistant in the state they left it.
-  // Default is closed — the user explicitly opts in via the
-  // floating toggle button (bottom-right). The previous behavior
-  // (always closed, no persistence) made accidental click-throughs
-  // impossible to recover from without a page reload. June 2026 fix.
-  const [open, setOpen] = useState<boolean>(() => {
-    if (typeof window === "undefined") return false;
-    return window.sessionStorage.getItem("eden:ai-sidebar:open") === "1";
-  });
-  const [sessions, setSessions] = useState<Session[]>([]);
-  const [sessionsError, setSessionsError] = useState<string | null>(null);
-  const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [input, setInput] = useState("");
-  const [streaming, setStreaming] = useState(false);
-  const [loadingSessions, setLoadingSessions] = useState(false);
-  const [sessionMenuOpen, setSessionMenuOpen] = useState(false);
-  const scrollRef = useRef<HTMLDivElement | null>(null);
-  // PQ-3: AbortController per submit() so unmount cancels the
-  // in-flight fetch + its reader. Previously a dead EventSource
-  // ref was kept here (the legacy code path used EventSource for
-  // the GET sessions list); submit() has always used fetch
-  // streaming (EventSource doesn't support POST), so the ref was
-  // both dead AND the in-flight POST had no cancel path.
-  const abortRef = useRef<AbortController | null>(null);
-  const streamingRef = useRef(false);
+  const chat = useChatSidebar();
 
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    window.sessionStorage.setItem("eden:ai-sidebar:open", open ? "1" : "0");
-  }, [open]);
+  if (!chat.f70Enabled) return null;
 
-  // Cmd-J (from portal layout) toggles this panel.
-  useEffect(() => {
-    const onToggle = () => setOpen((v) => !v);
-    window.addEventListener("eden:toggle-ai-chat", onToggle);
-    return () => window.removeEventListener("eden:toggle-ai-chat", onToggle);
-  }, []);
-
-  // ponytail: Esc closes the chat. Saves the user from hunting for
-  // the close button when the chat covers the right side of the page.
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setOpen(false);
-    };
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [open]);
-
-  const orgId = currentOrg?.id;
-
-  // Desktop: push #main-content instead of overlaying it.
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const main = document.getElementById("main-content");
-    if (!main) return;
-    const mq = window.matchMedia("(min-width: 1024px)");
-    const apply = () => {
-      if (open && mq.matches && orgId) {
-        main.style.marginRight = `${SIDEBAR_WIDTH}px`;
-        main.style.transition = "margin-right 200ms ease-out";
-      } else {
-        main.style.marginRight = "";
-      }
-    };
-    apply();
-    mq.addEventListener("change", apply);
-    return () => {
-      mq.removeEventListener("change", apply);
-      main.style.marginRight = "";
-    };
-  }, [open, orgId]);
-
-  // Load the user's session list whenever the org changes.
-  useEffect(() => {
-    if (!orgId) {
-      setSessions([]);
-      setSessionsError(null);
-      setActiveSessionId(null);
-      setMessages([]);
-      return;
-    }
-    let cancelled = false;
-    setLoadingSessions(true);
-    setSessionsError(null);
-    fetch(`/api/ai-insights/sessions?org_id=${orgId}`, { credentials: "include" })
-      .then(async (r) => {
-        if (r.status >= 500) {
-          throw new Error(`Sessions unavailable (HTTP ${r.status})`);
-        }
-        if (!r.ok) throw new Error(`HTTP ${r.status}`);
-        return (await r.json()) as { sessions: Session[] };
-      })
-      .then((data) => {
-        if (cancelled) return;
-        setSessions(data.sessions);
-        setSessionsError(null);
-      })
-      .catch((err) => {
-        if (cancelled) return;
-        console.warn("ai-insights: list sessions failed", err);
-        setSessions([]);
-        setSessionsError(err instanceof Error ? err.message : "Failed to load sessions");
-      })
-      .finally(() => {
-        if (!cancelled) setLoadingSessions(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [orgId]);
-
-  // Rehydrate a session's messages when the user picks it.
-  useEffect(() => {
-    if (!orgId || !activeSessionId) {
-      setMessages([]);
-      return;
-    }
-    let cancelled = false;
-    fetch(
-      `/api/ai-insights/sessions/${activeSessionId}/messages?org_id=${orgId}`,
-      { credentials: "include" },
-    )
-      .then(async (r) => {
-        if (!r.ok) throw new Error(`HTTP ${r.status}`);
-        return (await r.json()) as {
-          messages: Array<{ role: string; content: unknown }>;
-        };
-      })
-      .then((data) => {
-        if (cancelled) return;
-        const rehydrated: Message[] = data.messages.map((m, idx) => {
-          const blocks = Array.isArray(m.content) ? (m.content as Array<{ type: string; [k: string]: unknown }>) : [];
-          if (m.role === "user") {
-            return {
-              id: newMessageId(),
-              role: "user" as const,
-              text: blocks
-                .filter((b) => b.type === "text")
-                .map((b) => String(b.text ?? ""))
-                .join("\n"),
-            };
-          }
-          if (m.role === "assistant") {
-            return {
-              id: newMessageId(),
-              role: "assistant" as const,
-              text: blocks
-                .filter((b) => b.type === "text")
-                .map((b) => String(b.text ?? ""))
-                .join("\n"),
-            };
-          }
-          // tool turn — the UI doesn't render tool messages directly;
-          // the assistant's tool_call list is what surfaces results.
-          return { id: `tool-${idx}-${newMessageId()}`, role: "tool" as const };
-        });
-        setMessages(rehydrated);
-      })
-      .catch((err) => {
-        if (cancelled) return;
-        console.warn("ai-insights: rehydrate failed", err);
-        toast.error("Failed to load conversation");
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [orgId, activeSessionId, toast]);
-
-  // Auto-scroll the transcript when new content lands.
-  useEffect(() => {
-    const el = scrollRef.current;
-    if (!el) return;
-    el.scrollTop = el.scrollHeight;
-  }, [messages, streaming]);
-
-  // Clean up any in-flight stream on unmount.
-  useEffect(() => {
-    return () => {
-      abortRef.current?.abort();
-      abortRef.current = null;
-      streamingRef.current = false;
-    };
-  }, []);
-
-  const stopStreaming = useCallback(() => {
-    abortRef.current?.abort();
-    abortRef.current = null;
-    streamingRef.current = false;
-    setStreaming(false);
-    setMessages((prev) => {
-      const next = prev.slice();
-      const last = next[next.length - 1];
-      if (last && last.role === "assistant" && last.streaming) {
-        next[next.length - 1] = { ...last, streaming: false };
-      }
-      return next;
-    });
-  }, []);
-
-  const newChat = useCallback(() => {
-    setActiveSessionId(null);
-    setMessages([]);
-  }, []);
-
-  const archiveSession = useCallback(
-    async (id: string) => {
-      if (!orgId) return;
-      try {
-        const r = await fetch(
-          `/api/ai-insights/sessions/${id}/archive?org_id=${orgId}`,
-          { method: "POST", credentials: "include" },
-        );
-        if (!r.ok) throw new Error(`HTTP ${r.status}`);
-        setSessions((prev) =>
-          prev.map((s) => (s.session_id === id ? { ...s, archived: true } : s)),
-        );
-        if (activeSessionId === id) {
-          setActiveSessionId(null);
-          setMessages([]);
-        }
-        toast.success("Conversation archived");
-      } catch (err) {
-        console.warn("ai-insights: archive failed", err);
-        toast.error("Could not archive conversation");
-      }
-    },
-    [orgId, activeSessionId, toast],
-  );
-
-  const submit = useCallback(async () => {
-    const text = input.trim();
-    if (!text || streaming || !orgId) return;
-    setInput("");
-
-    // Optimistic append so the user sees their message immediately.
-    const userId = newMessageId();
-    const assistantId = newMessageId();
-    setMessages((prev) => [
-      ...prev,
-      { id: userId, role: "user", text },
-      { id: assistantId, role: "assistant", text: "", streaming: true, toolCalls: [] },
-    ]);
-    streamingRef.current = true;
-    setStreaming(true);
-
-    // Use POST + fetch streaming (the backend returns text/event-stream).
-    // We can't use EventSource here because it doesn't support POST.
-    // PQ-3: install an AbortController so unmount can cancel the
-    // in-flight request and the inner reader loop.
-    const controller = new AbortController();
-    abortRef.current = controller;
-    let response: Response;
-    try {
-      response = await fetch(`/api/ai-insights/chat?org_id=${orgId}`, {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          message: text,
-          session_id: activeSessionId,
-          page_context: buildPageContext(pathname),
-        }),
-        signal: controller.signal,
-      });
-    } catch (err) {
-      if (controller.signal.aborted) {
-        streamingRef.current = false;
-        setStreaming(false);
-        return;
-      }
-      streamingRef.current = false;
-      setStreaming(false);
-      setMessages((prev) => {
-        const next = prev.slice(0, -1);
-        return [
-          ...next,
-          {
-            id: assistantId,
-            role: "assistant",
-            text: `Network error: ${err instanceof Error ? err.message : "unknown"}`,
-            isError: true,
-          },
-        ];
-      });
-      toast.error("Could not reach AI Insights");
-      return;
-    }
-
-    if (!response.ok || !response.body) {
-      streamingRef.current = false;
-      setStreaming(false);
-      let detail = `HTTP ${response.status}`;
-      try {
-        const body = await response.json();
-        detail = body.detail ?? detail;
-      } catch {
-        /* ignore */
-      }
-      setMessages((prev) => {
-        const next = prev.slice(0, -1);
-        return [
-          ...next,
-          { id: assistantId, role: "assistant", text: `Error: ${detail}`, isError: true },
-        ];
-      });
-      toast.error(detail);
-      return;
-    }
-
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = "";
-
-    const flushEvent = (rawEvent: string) => {
-      // SSE format: ``event: <type>\ndata: <json>\n\n`` (we only need
-      // the data line; the event type is also embedded in the JSON
-      // payload for safety).
-      const dataLines = rawEvent
-        .split("\n")
-        .filter((l) => l.startsWith("data:"))
-        .map((l) => l.slice(5).trim());
-      if (dataLines.length === 0) return;
-      const payload = dataLines.join("\n");
-      let parsed: { type: string; [k: string]: unknown };
-      try {
-        parsed = JSON.parse(payload);
-      } catch {
-        return;
-      }
-      handleEvent(parsed);
-    };
-
-    const handleEvent = (
-      ev: { type: string; [k: string]: unknown },
-    ) => {
-      switch (ev.type) {
-        case "session": {
-          const id = String(ev.session_id ?? "");
-          if (!id) return;
-          setActiveSessionId(id);
-          setSessions((prev) => {
-            if (prev.some((s) => s.session_id === id)) return prev;
-            return [
-              {
-                session_id: id,
-                title: String(ev.title ?? "New chat"),
-                updated_at: new Date().toISOString(),
-                archived: false,
-              },
-              ...prev,
-            ];
-          });
-          break;
-        }
-        case "text_delta": {
-          const text = String(ev.text ?? "");
-          setMessages((prev) => {
-            const next = prev.slice();
-            const last = next[next.length - 1];
-            if (last && last.role === "assistant" && last.streaming) {
-              next[next.length - 1] = { ...last, text: (last.text ?? "") + text };
-            }
-            return next;
-          });
-          break;
-        }
-        case "tool_call": {
-          const tc: ToolCall = {
-            id: String(ev.id),
-            name: String(ev.name),
-            input: (ev.input as Record<string, unknown>) ?? {},
-          };
-          setMessages((prev) => {
-            const next = prev.slice();
-            const last = next[next.length - 1];
-            if (last && last.role === "assistant") {
-              const toolCalls = [...(last.toolCalls ?? []), tc];
-              next[next.length - 1] = { ...last, toolCalls };
-            }
-            return next;
-          });
-          break;
-        }
-        case "tool_result": {
-          const id = String(ev.id);
-          setMessages((prev) => {
-            const next = prev.slice();
-            for (let i = next.length - 1; i >= 0; i--) {
-              const m = next[i];
-              if (m.role === "assistant" && m.toolCalls) {
-                const idx = m.toolCalls.findIndex((t) => t.id === id);
-                if (idx !== -1) {
-                  const updated = [...m.toolCalls];
-                  updated[idx] = {
-                    ...updated[idx],
-                    result: {
-                      status: (ev.status as "ok" | "error") ?? "ok",
-                      output: ev.output,
-                      duration_ms: typeof ev.duration_ms === "number" ? ev.duration_ms : undefined,
-                    },
-                  };
-                  next[i] = { ...m, toolCalls: updated };
-                  return next;
-                }
-              }
-            }
-            return next;
-          });
-          break;
-        }
-        case "done": {
-          setMessages((prev) => {
-            const next = prev.slice();
-            const last = next[next.length - 1];
-            if (last && last.role === "assistant") {
-              next[next.length - 1] = { ...last, streaming: false };
-            }
-            return next;
-          });
-          streamingRef.current = false;
-          setStreaming(false);
-          break;
-        }
-        case "error": {
-          const msg = String(ev.message ?? "Unknown error");
-          setMessages((prev) => {
-            const next = prev.slice();
-            const last = next[next.length - 1];
-            if (last && last.role === "assistant" && last.streaming) {
-              next[next.length - 1] = {
-                ...last,
-                text: (last.text ?? "") + (last.text ? "\n\n" : "") + `Error: ${msg}`,
-                streaming: false,
-                isError: true,
-              };
-            } else {
-              next.push({
-                id: newMessageId(),
-                role: "assistant",
-                text: `Error: ${msg}`,
-                isError: true,
-              });
-            }
-            return next;
-          });
-          streamingRef.current = false;
-          setStreaming(false);
-          toast.error(msg);
-          break;
-        }
-        default:
-          break;
-      }
-    };
-
-    try {
-      while (true) {
-        // PQ-3: short-circuit on abort so we don't try to enqueue
-        // half-drained bytes into the transcript after the user
-        // closes the sidebar. The reader is also explicitly cancelled
-        // so the underlying TCP socket is released immediately
-        // (a dangling reader keeps the response body buffered until
-        // GC, which can hold the SSE stream open for minutes).
-        if (controller.signal.aborted) {
-          await reader.cancel();
-          break;
-        }
-        const { value, done } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        let idx: number;
-        // SSE messages are separated by a blank line (``\n\n``).
-        while ((idx = buffer.indexOf("\n\n")) !== -1) {
-          const raw = buffer.slice(0, idx);
-          buffer = buffer.slice(idx + 2);
-          flushEvent(raw);
-        }
-      }
-      // Drain any trailing event.
-      if (buffer.trim() && !controller.signal.aborted) {
-        flushEvent(buffer);
-      }
-    } catch (err) {
-      if (controller.signal.aborted) {
-        // Stop / unmount — streaming cleared in finally.
-      } else {
-        console.warn("ai-insights: stream error", err);
-        setMessages((prev) => {
-          const next = prev.slice();
-          const last = next[next.length - 1];
-          if (last && last.role === "assistant" && last.streaming) {
-            next[next.length - 1] = {
-              ...last,
-              text: (last.text ?? "") + (last.text ? "\n\n" : "") + "Stream interrupted",
-              streaming: false,
-              isError: true,
-            };
-          }
-          return next;
-        });
-      }
-    } finally {
-      streamingRef.current = false;
-      setStreaming(false);
-      abortRef.current = null;
-      // Refresh the session list so the title is up to date.
-      if (orgId && !controller.signal.aborted) {
-        fetch(`/api/ai-insights/sessions?org_id=${orgId}`, { credentials: "include" })
-          .then((r) => r.ok ? r.json() : null)
-          .then((data) => {
-            if (data && Array.isArray(data.sessions)) {
-              setSessions(data.sessions as Session[]);
-            }
-          })
-          .catch(() => {});
-      }
-    }
-  }, [activeSessionId, input, orgId, pathname, streaming, toast]);
-
-  const hasOrg = !!orgId;
-  // Hide the floating chat toggle on the onboarding wizard —
-  // it's a z-50 fixed button in the bottom-right that overlaps the
-  // wizard's primary CTAs ("Get started", "Continue", "Create
-  // org"), and clicking those CTAs was being absorbed by the chat
-  // toggle. The user reported "clicks don't do anything on
-  // onboarding" — this was the cause. The chat toggle returns
-  // after the user finishes onboarding and has an active org.
-  const hideChatOnRoute =
-    pathname === "/onboarding" || pathname.startsWith("/onboarding/");
-
-  const activeSession = sessions.find((s) => s.session_id === activeSessionId);
-  const sessionLabel = activeSession?.title ?? "New chat";
-
-  // ── Render ────────────────────────────────────────────────────────
-  return (
-    <>
-      {/* Desktop edge tab — smaller than the old FAB; mobile keeps
-          bottom nav as the sole chrome affordance (plan: one bottom
-          affordance). Cmd-J still toggles on all viewports. */}
-      {!hideChatOnRoute && !open && (
+  const header = (
+    <div className="flex items-center justify-between border-b border-[var(--border-default)] px-3 py-2.5">
+      <div className="relative flex min-w-0 flex-1 items-center gap-2">
+        <Terminal className="h-3.5 w-3.5 shrink-0 text-[var(--accent)]" aria-hidden />
         <button
           type="button"
-          onClick={() => setOpen(true)}
-          className={cn(
-            "fixed right-0 top-1/2 z-50 hidden -translate-y-1/2 lg:flex",
-            "h-20 w-7 flex-col items-center justify-center gap-1 rounded-l-md",
-            "border border-r-0 border-[var(--border-default)] bg-[var(--bg-primary)]",
-            "text-[var(--text-muted)] hover:text-[var(--accent)] hover:border-[var(--accent)]/40",
-            "transition-colors",
-          )}
-          aria-label="Open AI assistant"
+          onClick={() => chat.setSessionMenuOpen((v) => !v)}
+          className="flex min-w-0 items-center gap-1 rounded-md px-1.5 py-1 text-left hover:bg-[var(--bg-tertiary)]"
+          aria-expanded={chat.sessionMenuOpen}
+          aria-haspopup="listbox"
+          aria-label="Chat sessions"
         >
-          <Terminal className="h-3.5 w-3.5" aria-hidden />
-          <span
-            className="text-[9px] font-medium uppercase tracking-wider"
-            style={{ writingMode: "vertical-rl" }}
-          >
-            Ask
+          <span className="truncate text-sm font-semibold text-[var(--text-primary)]">
+            {chat.sessionLabel}
           </span>
+          <ChevronDown
+            className="h-3.5 w-3.5 shrink-0 text-[var(--text-muted)]"
+            aria-hidden
+          />
         </button>
+        <SessionList
+          open={chat.sessionMenuOpen}
+          loading={chat.loadingSessions}
+          error={chat.sessionsError}
+          sessions={chat.sessions}
+          activeSessionId={chat.activeSessionId}
+          onSelect={chat.setActiveSessionId}
+          onArchive={chat.archiveSession}
+          onRetry={chat.refreshSessions}
+          onClose={() => chat.setSessionMenuOpen(false)}
+        />
+      </div>
+      <div className="flex shrink-0 items-center gap-0.5">
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={chat.newChat}
+          aria-label="New chat"
+          className="h-7 w-7 p-0"
+        >
+          <Plus className="h-4 w-4" />
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => chat.setOpen(false)}
+          aria-label="Close sidebar"
+          className="h-7 w-7 p-0"
+        >
+          <PanelRightClose className="h-4 w-4" />
+        </Button>
+      </div>
+    </div>
+  );
+
+  const body = chat.hasOrg ? (
+    <>
+      {header}
+      <MessageList
+        messages={chat.messages}
+        sessionId={chat.activeSessionId}
+        scrollRef={chat.scrollRef}
+      />
+      <Composer
+        input={chat.input}
+        onInputChange={chat.setInput}
+        onSubmit={() => void chat.submit()}
+        onStop={chat.stopStreaming}
+        streaming={chat.streaming}
+        sessionCostUsd={chat.sessionCostUsd}
+        modelOption={chat.modelOption}
+        onModelOptionChange={chat.setModelOption}
+        costEstimateUsd={chat.costEstimateUsd}
+        lastTtftMs={chat.lastTtftMs}
+        ttftBudgetMs={chat.ttftBudgetMs}
+        ttftWarning={chat.ttftWarning}
+      />
+    </>
+  ) : null;
+
+  return (
+    <>
+      {!chat.hideChatOnRoute && !chat.open && (
+        <div className="fixed right-0 top-1/2 z-50 hidden -translate-y-1/2 lg:block">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                onClick={() => {
+                  chat.setOpen(true);
+                  chat.dismissCoach();
+                }}
+                className={cn(
+                  "flex h-20 w-7 flex-col items-center justify-center gap-1 rounded-l-md",
+                  "border border-r-0 border-[var(--border-default)] bg-[var(--bg-primary)]",
+                  "text-[var(--text-muted)] hover:text-[var(--accent)] hover:border-[var(--accent)]/40",
+                  "transition-colors",
+                )}
+                aria-label="Open AI assistant"
+                data-ai-coach-anchor
+              >
+                <Terminal className="h-3.5 w-3.5" aria-hidden />
+                <span
+                  className="text-[9px] font-medium uppercase tracking-wider"
+                  style={{ writingMode: "vertical-rl" }}
+                >
+                  Ask
+                </span>
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="left" className="max-w-[220px] text-xs">
+              Ask Eden AI about this page — filters, similar traces, navigate.
+              Shortcut ⌘J · ⌘K → Ask AI
+            </TooltipContent>
+          </Tooltip>
+
+          {chat.showCoach && (
+            <div
+              role="status"
+              data-ai-coach-mark
+              className={cn(
+                "absolute right-9 top-1/2 w-56 -translate-y-1/2 rounded-md border",
+                "border-[var(--accent)]/40 bg-[var(--bg-primary)] p-3 text-xs shadow-lg",
+                "text-[var(--text-secondary)]",
+              )}
+            >
+              <p className="font-medium text-[var(--text-primary)]">Ask Eden AI</p>
+              <p className="mt-1 leading-snug">
+                Filter lists, find similar traces, and jump to issues from chat.
+                Try <span className="font-mono text-[var(--accent)]">/filter</span> or{" "}
+                <span className="font-mono text-[var(--accent)]">/go</span>.
+              </p>
+              <button
+                type="button"
+                className="mt-2 text-[11px] font-medium text-[var(--accent)] hover:underline"
+                onClick={chat.dismissCoach}
+              >
+                Got it
+              </button>
+            </div>
+          )}
+        </div>
       )}
 
-      {open && hasOrg && (
+      {/* Mobile: Sheet (focus trap + Esc via Radix Dialog) */}
+      {chat.isMobile && chat.hasOrg && (
+        <Sheet open={chat.open} onOpenChange={chat.setOpen}>
+          <SheetContent
+            side="right"
+            className="flex w-full max-w-full flex-col p-0 sm:max-w-md"
+            aria-label="AI Insights assistant"
+          >
+            <SheetHeader className="sr-only">
+              <SheetTitle>AI Insights assistant</SheetTitle>
+            </SheetHeader>
+            {body}
+          </SheetContent>
+        </Sheet>
+      )}
+
+      {/* Desktop: push-aside panel with focus trap */}
+      {!chat.isMobile && chat.open && chat.hasOrg && (
         <aside
+          ref={chat.panelRef as React.RefObject<HTMLElement>}
           className={cn(
             "fixed right-0 top-0 z-30 flex h-dvh flex-col",
             "border-l border-[var(--border-default)] bg-[var(--bg-primary)]",
             "shadow-xl lg:shadow-none",
-            "w-[min(100vw,360px)] max-[480px]:w-screen",
+            "w-[min(100vw,360px)]",
           )}
           role="complementary"
           aria-label="AI Insights assistant"
+          aria-modal="true"
         >
-          {/* Header */}
-          <div className="flex items-center justify-between border-b border-[var(--border-default)] px-3 py-2.5">
-            <div className="relative flex min-w-0 flex-1 items-center gap-2">
-              <Terminal className="h-3.5 w-3.5 shrink-0 text-[var(--accent)]" aria-hidden />
-              <button
-                type="button"
-                onClick={() => setSessionMenuOpen((v) => !v)}
-                className="flex min-w-0 items-center gap-1 rounded-md px-1.5 py-1 text-left hover:bg-[var(--bg-tertiary)]"
-                aria-expanded={sessionMenuOpen}
-                aria-haspopup="listbox"
-                aria-label="Chat sessions"
-              >
-                <span className="truncate text-sm font-semibold text-[var(--text-primary)]">
-                  {sessionLabel}
-                </span>
-                <ChevronDown className="h-3.5 w-3.5 shrink-0 text-[var(--text-muted)]" aria-hidden />
-              </button>
-              {sessionMenuOpen && (
-                <div
-                  role="listbox"
-                  className="absolute left-0 top-full z-20 mt-1 max-h-56 w-64 overflow-y-auto rounded-md border border-[var(--border-default)] bg-[var(--bg-primary)] py-1 shadow-lg"
-                >
-                  {loadingSessions ? (
-                    <div className="flex items-center gap-1 px-3 py-2 text-xs text-[var(--text-muted)]">
-                      <Loader2 className="h-3 w-3 animate-spin" />
-                      Loading…
-                    </div>
-                  ) : sessionsError ? (
-                    <div className="px-2 py-2">
-                      <ErrorState
-                        title="Could not load sessions"
-                        message={sessionsError}
-                        action={
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => {
-                              if (!orgId) return;
-                              setLoadingSessions(true);
-                              setSessionsError(null);
-                              fetch(`/api/ai-insights/sessions?org_id=${orgId}`, {
-                                credentials: "include",
-                              })
-                                .then(async (r) => {
-                                  if (!r.ok) throw new Error(`HTTP ${r.status}`);
-                                  return (await r.json()) as { sessions: Session[] };
-                                })
-                                .then((data) => {
-                                  setSessions(data.sessions);
-                                  setSessionsError(null);
-                                })
-                                .catch((err) => {
-                                  setSessionsError(
-                                    err instanceof Error ? err.message : "Failed to load sessions",
-                                  );
-                                })
-                                .finally(() => setLoadingSessions(false));
-                            }}
-                          >
-                            Try again
-                          </Button>
-                        }
-                      />
-                    </div>
-                  ) : sessions.length === 0 ? (
-                    <div className="px-3 py-2 text-xs text-[var(--text-muted)]">
-                      No conversations yet
-                    </div>
-                  ) : (
-                    sessions.map((s) => (
-                      <div
-                        key={s.session_id}
-                        role="option"
-                        aria-selected={s.session_id === activeSessionId}
-                        className={cn(
-                          "flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs",
-                          s.session_id === activeSessionId
-                            ? "bg-[var(--accent-faint)] text-[var(--accent)]"
-                            : "text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)]",
-                          s.archived && "opacity-50",
-                        )}
-                      >
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setActiveSessionId(s.session_id);
-                            setSessionMenuOpen(false);
-                          }}
-                          className="min-w-0 flex-1 truncate text-left"
-                        >
-                          {s.title}
-                        </button>
-                        {!s.archived && (
-                          <button
-                            type="button"
-                            onClick={() => archiveSession(s.session_id)}
-                            className="shrink-0 text-[var(--text-muted)] hover:text-[var(--text-primary)]"
-                            aria-label="Archive"
-                          >
-                            <Archive className="h-3 w-3" />
-                          </button>
-                        )}
-                      </div>
-                    ))
-                  )}
-                </div>
-              )}
-            </div>
-            <div className="flex shrink-0 items-center gap-0.5">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={newChat}
-                aria-label="New chat"
-                className="h-7 w-7 p-0"
-              >
-                <Plus className="h-4 w-4" />
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setOpen(false)}
-                aria-label="Close sidebar"
-                className="h-7 w-7 p-0"
-              >
-                <PanelRightClose className="h-4 w-4" />
-              </Button>
-            </div>
-          </div>
-
-          {/* Transcript */}
-          <div
-            ref={scrollRef}
-            className="flex-1 space-y-3 overflow-y-auto px-4 py-3"
-          >
-            {messages.length === 0 && (
-              <div className="rounded-md border border-dashed border-[var(--border-subtle)] p-3 text-xs text-[var(--text-muted)]">
-                Capture. Analyse. Improve. Ask about traces, cost,
-                evals, issues, proposed patches, or alerts.
-                <ul className="mt-2 list-disc space-y-1 pl-4">
-                  <li>Show recent traces</li>
-                  <li>What&apos;s our p95 latency this week?</li>
-                  <li>Alert me if cost exceeds $0.30/hr for 15 minutes</li>
-                  <li>Any open agent issues or pending patches?</li>
-                </ul>
-              </div>
-            )}
-            {messages.map((m) => (
-              <MessageBlock key={m.id} message={m} />
-            ))}
-          </div>
-
-          {/* Composer */}
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              submit();
-            }}
-            className="border-t border-[var(--border-default)] p-3"
-          >
-            <div className="flex items-end gap-2">
-              <textarea
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey) {
-                    e.preventDefault();
-                    submit();
-                  }
-                }}
-                rows={2}
-                placeholder={
-                  streaming
-                    ? "Streaming…"
-                    : "Ask about traces, cost, evals, issues…"
-                }
-                disabled={streaming}
-                aria-label="Ask AI Insights a question"
-                aria-disabled={streaming || undefined}
-                className={cn(
-                  "flex-1 resize-none rounded-md border border-[var(--border-default)]",
-                  "bg-[var(--bg-base)] px-3 py-2 text-sm text-[var(--text-primary)]",
-                  "placeholder:text-[var(--text-muted)] focus:border-[var(--accent)]",
-                  "focus:outline-none disabled:opacity-50",
-                )}
-              />
-              {streaming ? (
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  onClick={stopStreaming}
-                  className="h-9 w-9 p-0"
-                  aria-label="Stop generating"
-                >
-                  <Square className="h-3.5 w-3.5" />
-                </Button>
-              ) : (
-                <Button
-                  type="submit"
-                  size="sm"
-                  disabled={!input.trim()}
-                  className="h-9 w-9 p-0"
-                  aria-label="Send"
-                >
-                  <Send className="h-4 w-4" />
-                </Button>
-              )}
-            </div>
-          </form>
+          {body}
         </aside>
       )}
 
-      {!hasOrg && open && (
+      {!chat.hasOrg && chat.open && (
         <div className="fixed bottom-20 right-4 z-50 max-w-xs rounded-md border border-[var(--warning)]/40 bg-[var(--bg-primary)] p-3 text-xs text-[var(--text-secondary)] shadow-lg lg:bottom-4">
           <div className="flex items-start gap-2">
             <AlertTriangle className="h-4 w-4 text-[var(--warning)]" />
-            <div>
-              Select an organization from the sidebar to use AI Insights.
-            </div>
+            <div>Select an organization from the sidebar to use AI Insights.</div>
             <button
               type="button"
-              onClick={() => setOpen(false)}
+              onClick={() => chat.setOpen(false)}
               className="ml-auto text-[var(--text-muted)]"
               aria-label="Dismiss"
             >
@@ -918,61 +234,4 @@ export function ChatSidebar() {
       )}
     </>
   );
-}
-
-function MessageBlock({ message }: { message: Message }) {
-  if (message.role === "user") {
-    return (
-      <div className="flex justify-end">
-        <div className="max-w-[85%] rounded-lg bg-[var(--accent)] px-3 py-2 text-sm text-[var(--bg-base)]">
-          {message.text}
-        </div>
-      </div>
-    );
-  }
-  if (message.role === "assistant") {
-    return (
-      <div className="flex justify-start">
-        <div
-          className={cn(
-            "max-w-[90%] space-y-2 rounded-lg border px-3 py-2 text-sm",
-            message.isError
-              ? "border-[var(--error)]/30 bg-[var(--error-bg)] text-[var(--error)]"
-              : "border-[var(--border-subtle)] bg-[var(--bg-secondary)] text-[var(--text-primary)]",
-          )}
-        >
-          {message.toolCalls?.map((tc) =>
-            tc.name === "preview_nl_alert" ? (
-              <ApprovalCard
-                key={tc.id}
-                id={tc.id}
-                name={tc.name}
-                input={tc.input}
-                result={tc.result}
-              />
-            ) : (
-              <ToolCallCard
-                key={tc.id}
-                id={tc.id}
-                name={tc.name}
-                input={tc.input}
-                result={tc.result}
-              />
-            ),
-          )}
-          {message.text && (
-            <div className="whitespace-pre-wrap break-words">
-              {message.text}
-              {message.streaming && (
-                <span className="ml-1 inline-block h-3 w-1 animate-pulse bg-[var(--accent)]" />
-              )}
-            </div>
-          )}
-        </div>
-      </div>
-    );
-  }
-  // tool message — never rendered directly; tool results ride along
-  // with the assistant turn.
-  return null;
 }

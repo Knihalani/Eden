@@ -124,6 +124,10 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
   const runCommand = useCallback(
     (path: string) => {
       onOpenChange(false);
+      if (path === "eden:open-ai-chat") {
+        window.dispatchEvent(new CustomEvent("eden:ask-ai"));
+        return;
+      }
       if (isExternalHref(path)) {
         window.open(path, "_blank", "noopener,noreferrer");
         return;
@@ -166,12 +170,15 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
   // overlay intercepting clicks on the page below.
   if (!open) return null;
   return (
-    <div className="fixed inset-0 z-50">
+    <div className="fixed inset-0 z-50" role="presentation">
       <div
         className="fixed inset-0 bg-[var(--bg-base)]/40 backdrop-blur-sm"
         onClick={() => onOpenChange(false)}
       />
       <Cmnd
+        role="dialog"
+        aria-modal="true"
+        aria-label="Command palette"
         className={cn(
           // FIX-G: center vertically. The previous `top-[20%]`
           // anchored the menu 20% from the top of the viewport,

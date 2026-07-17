@@ -306,6 +306,15 @@ class TelemetryCollector:
         if not self._validate(event):
             return False
 
+        # 1b. Late-span policy (W9)
+        try:
+            from eden.observability.ingestion.late_span import evaluate_late_span
+
+            if evaluate_late_span(event) == "reject":
+                return False
+        except Exception:
+            pass
+
         # 2. Enrich
         self._enrich(event)
 
@@ -363,6 +372,14 @@ class TelemetryCollector:
             if not self._validate(event):
                 rejected += 1
                 continue
+            try:
+                from eden.observability.ingestion.late_span import evaluate_late_span
+
+                if evaluate_late_span(event) == "reject":
+                    rejected += 1
+                    continue
+            except Exception:
+                pass
             self._enrich(event)
             if self._is_duplicate(event):
                 deduplicated += 1
@@ -906,14 +923,33 @@ class TelemetryCollector:
                     and not event.tool_calls_full
                     and not event.name):
                 return
-            import time as _time
-            _index_start = _time.perf_counter()
             doc = build_span_doc(event)
-            await client.index_span(doc)
-            # Record index lag (event creation → indexed). Best-effort.
+            # Prefer bulk path when buffer is enabled; fall back to single upsert.
+            indexed_via_bulk = False
             try:
+                from eden.config import get_settings
+                from eden.observability.ingestion.bulk_typesense import enqueue_span_doc
+
+                if bool(getattr(get_settings(), "typesense_bulk_index_enabled", True)):
+                    await enqueue_span_doc(doc)
+                    indexed_via_bulk = True
+            except Exception:
+                indexed_via_bulk = False
+            if not indexed_via_bulk:
+                await client.index_span(doc)
+            # Typesense lag = event age at index time (not RPC duration).
+            try:
+                from datetime import UTC, datetime
+
                 from eden.observability.search_service import record_index_lag
-                record_index_lag(_time.perf_counter() - _index_start)
+
+                event_ts = datetime.fromisoformat(
+                    str(event.timestamp).replace("Z", "+00:00")
+                )
+                if event_ts.tzinfo is None:
+                    event_ts = event_ts.replace(tzinfo=UTC)
+                lag_s = max(0.0, (datetime.now(UTC) - event_ts).total_seconds())
+                record_index_lag(lag_s)
             except Exception:
                 pass
         except Exception as exc:

@@ -79,6 +79,53 @@ class AgentAuditLedgerWriter:
         except Exception:
             return None
 
+    async def verify_chain(
+        self,
+        org_id: str,
+        *,
+        agent_id: str | None = None,
+        limit: int = 500,
+    ) -> dict[str, Any]:
+        """Recompute hash chain for tamper-evidence attestation (N06)."""
+        events = await self.query(
+            org_id, agent_id=agent_id, limit=limit
+        )
+        chronological = list(reversed(events))
+        prev_hash: str | None = None
+        ok_rows = 0
+        broken: list[dict[str, Any]] = []
+        for entry in chronological:
+            payload = entry.get("payload") or {}
+            created_at = entry.get("created_at") or ""
+            if hasattr(created_at, "isoformat"):
+                created_at = created_at.isoformat()
+            canonical = json.dumps(payload, sort_keys=True, default=str)
+            expected = hashlib.sha256(
+                f"{prev_hash or ''}:{canonical}:{created_at}".encode()
+            ).hexdigest()
+            actual = entry.get("entry_hash") or ""
+            stored_prev = entry.get("prev_hash")
+            if actual == expected and stored_prev == prev_hash:
+                ok_rows += 1
+            else:
+                broken.append(
+                    {
+                        "id": entry.get("id"),
+                        "expected_hash": expected,
+                        "actual_hash": actual,
+                        "prev_hash_ok": stored_prev == prev_hash,
+                    }
+                )
+            prev_hash = actual
+        total = len(chronological)
+        return {
+            "total_rows": total,
+            "ok_rows": ok_rows,
+            "broken_rows": len(broken),
+            "verified": total > 0 and len(broken) == 0,
+            "broken": broken[:20],
+        }
+
     async def query(
         self,
         org_id: str,
@@ -101,7 +148,7 @@ class AgentAuditLedgerWriter:
         args.append(limit)
         sql = (
             "SELECT id, event_type, event_subtype, agent_id, actor_id, "
-            "actor_type, payload, entry_hash, compliance_tags, created_at "
+            "actor_type, payload, prev_hash, entry_hash, compliance_tags, created_at "
             "FROM agent_audit_ledger WHERE "
             + " AND ".join(clauses)
             + f" ORDER BY created_at DESC LIMIT ${len(args)}"
@@ -114,6 +161,7 @@ class AgentAuditLedgerWriter:
                 if d.get("created_at"):
                     d["created_at"] = d["created_at"].isoformat()
                 d["id"] = str(d["id"])
+                d["prev_hash"] = d.get("prev_hash")
                 if isinstance(d.get("payload"), str):
                     try:
                         d["payload"] = json.loads(d["payload"])
@@ -163,6 +211,7 @@ class CompliancePackGenerator:
         heal_events = [
             e for e in agent_events if e.get("event_type") in ("autonomous", "runtime")
         ]
+        attestation = await ledger.verify_chain(org_id, agent_id=agent_id, limit=500)
         pack_id = str(uuid.uuid4())
         enriched = {
             "pack_id": pack_id,
@@ -175,7 +224,9 @@ class CompliancePackGenerator:
             "heal_history": heal_events,
             "chain_attestation": {
                 "event_count": len(agent_events),
-                "verified": True,
+                "verified": attestation.get("verified", False),
+                "ok_rows": attestation.get("ok_rows", 0),
+                "broken_rows": attestation.get("broken_rows", 0),
             },
             "generated_at": datetime.now(UTC).isoformat(),
             "generated_by": generated_by or "system",

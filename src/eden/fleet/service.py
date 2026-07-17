@@ -94,7 +94,22 @@ class FleetHealthService:
         except Exception as exc:
             logger.debug("fleet: summary failed: %s", exc)
         agents.sort(key=lambda a: a.get("severity_score", 0), reverse=True)
-        return {"agents": agents, "count": len(agents)}
+        breaches = [a for a in agents if a.get("slo_breach")]
+        return {
+            "agents": agents,
+            "count": len(agents),
+            "sla_breach_count": len(breaches),
+            "critical_count": sum(
+                1 for a in agents if a.get("tier") == "critical"
+            ),
+        }
+
+    async def sla_breaches(self, org_id: str) -> dict[str, Any]:
+        summary = await self.summary(org_id)
+        breaches = [
+            a for a in summary.get("agents") or [] if a.get("slo_breach")
+        ]
+        return {"breaches": breaches, "count": len(breaches)}
 
     async def heatmap(self, org_id: str) -> dict[str, Any]:
         client = await self._client()
@@ -174,8 +189,12 @@ class FleetHealthService:
     ) -> dict[str, Any]:
         client = await self._client()
         open_issues = 0
+        open_p0 = 0
         eval_pass_rate: float | None = None
         stumble_count = 0
+        drift_flagged = False
+        autonomy_mode = "assisted"
+        compliance_profile = "standard"
         if client is not None:
             try:
                 row = await client.fetchrow(
@@ -186,6 +205,18 @@ class FleetHealthService:
                     agent_id,
                 )
                 open_issues = int(row["n"]) if row else 0
+            except Exception:
+                pass
+            try:
+                row = await client.fetchrow(
+                    "SELECT COUNT(*) AS n FROM agent_issues "
+                    "WHERE org_id = $1 AND agent_id = $2 "
+                    "AND status NOT IN ('resolved','ignored') "
+                    "AND severity = 'critical'",
+                    org_id,
+                    agent_id,
+                )
+                open_p0 = int(row["n"]) if row else 0
             except Exception:
                 pass
             try:
@@ -212,6 +243,36 @@ class FleetHealthService:
                 stumble_count = int(row["n"]) if row else 0
             except Exception:
                 pass
+            try:
+                row = await client.fetchrow(
+                    """
+                    SELECT dimensions FROM drift_reports
+                    WHERE org_id = $1 AND agent_id = $2
+                    ORDER BY created_at DESC LIMIT 1
+                    """,
+                    org_id,
+                    agent_id,
+                )
+                if row and row.get("dimensions"):
+                    dims = row["dimensions"]
+                    if isinstance(dims, str):
+                        import json as _json
+
+                        dims = _json.loads(dims)
+                    drift_flagged = any(
+                        bool(d.get("flagged")) for d in (dims or [])
+                    )
+            except Exception:
+                pass
+
+        try:
+            from eden.closed_loop.autonomy_policy import resolve
+
+            policy = await resolve(org_id, agent_id)
+            autonomy_mode = policy.effective_mode()
+            compliance_profile = policy.compliance_profile
+        except Exception:
+            pass
 
         slo = registry.get("slo_config") or {}
         if isinstance(slo, str):
@@ -225,9 +286,11 @@ class FleetHealthService:
         slo_breach = eval_pass_rate is not None and eval_pass_rate < min_pass
 
         severity = (
-            open_issues * 3.0
+            open_p0 * 5.0
+            + open_issues * 3.0
             + (2.0 if slo_breach else 0.0)
             + stumble_count * 0.1
+            + (1.5 if drift_flagged else 0.0)
             + (1.0 if registry.get("tier") == "critical" else 0.0)
         )
 
@@ -236,9 +299,13 @@ class FleetHealthService:
             "display_name": registry.get("display_name") or agent_id,
             "tier": registry.get("tier") or "standard",
             "open_issues": open_issues,
+            "open_p0_issues": open_p0,
             "stumble_count_7d": stumble_count,
             "eval_pass_rate_24h": eval_pass_rate,
             "slo_breach": slo_breach,
+            "drift_flagged": drift_flagged,
+            "autonomy_mode": autonomy_mode,
+            "compliance_profile": compliance_profile,
             "severity_score": round(severity, 2),
             "last_seen": (
                 registry["last_seen"].isoformat()

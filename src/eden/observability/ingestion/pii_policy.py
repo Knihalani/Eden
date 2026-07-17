@@ -63,6 +63,24 @@ def _touch_pii_policy(tenant_id: str) -> None:
         pass
 
 
+def resolve_policy_sync(tenant_id: str) -> PIIPolicy | None:
+    """Best-effort sync peek of the in-process policy cache (no DB).
+
+    Used by Typesense ``build_span_doc`` which must stay sync. Returns
+    ``None`` on cache miss so callers fall back to ``PIIPolicy()``.
+    """
+    if not tenant_id:
+        return None
+    entry = _cache.get(tenant_id)
+    if entry is None:
+        return None
+    expires_at, policy = entry
+    if time.monotonic() >= expires_at:
+        return None
+    _touch_pii_policy(tenant_id)
+    return policy
+
+
 def _evict_expired_pii_policies(now: float) -> None:
     """Drop ``_cache`` entries whose TTL has elapsed.
 

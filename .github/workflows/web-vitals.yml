@@ -1,0 +1,97 @@
+name: web-vitals (F82)
+
+# F82 — LCP/INP regression gate on Home + Traces.
+# Requires Clerk auth (same pattern as portal-ci golden paths).
+# Fails loudly when Clerk secrets are missing and fallback is disabled.
+on:
+  pull_request:
+    paths:
+      - "clients/portal/**"
+      - ".github/workflows/web-vitals.yml"
+  push:
+    branches: [main]
+    paths:
+      - "clients/portal/**"
+      - ".github/workflows/web-vitals.yml"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: web-vitals-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  vitals:
+    name: Web Vitals (Home + Traces)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: clients/portal
+    steps:
+      - uses: actions/checkout@v7
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: bun install --frozen-lockfile
+
+      - name: Resolve Clerk keys
+        # Prefer repo secrets; fall back to committed Clerk test-mode keys
+        # (same as portal-ci). seed-auth fails non-zero if keys are unusable.
+        run: |
+          SK="${CLERK_SECRET_KEY:-}"
+          PK="${NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY:-}"
+          if [ -z "$SK" ] || [ -z "$PK" ]; then
+            echo "::warning::CLERK_SECRET_KEY / NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY secrets unset — using committed test-mode keys (CLERK_TEST_KEY_FALLBACK=1)"
+            SK="${SK:-sk_test_PXZfewH5OceW7H1BFN2mRSvkouyt0EgprOzjq0cBWm}"
+            PK="${PK:-pk_test_bW9kZXN0LWJ1Zy03LmNsZXJrLmFjY291bnRzLmRldiQ}"
+            echo "CLERK_TEST_KEY_FALLBACK=1" >> "$GITHUB_ENV"
+          fi
+          echo "CLERK_SECRET_KEY=$SK" >> "$GITHUB_ENV"
+          echo "NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=$PK" >> "$GITHUB_ENV"
+        env:
+          CLERK_SECRET_KEY: ${{ secrets.CLERK_SECRET_KEY }}
+          NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY }}
+
+      - name: Build portal (Clerk keys baked)
+        run: bun run build
+        env:
+          NEXT_PUBLIC_API_URL: "http://localhost:8000"
+          CLERK_SECRET_KEY: ${{ env.CLERK_SECRET_KEY }}
+          NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY }}
+          NEXT_PUBLIC_SITE_URL: "http://127.0.0.1:3000"
+
+      - name: Install Playwright Chromium
+        run: bunx playwright install chromium --with-deps
+
+      - name: Start portal + seed auth + measure vitals
+        env:
+          NEXT_PUBLIC_API_URL: "http://localhost:8000"
+          CLERK_SECRET_KEY: ${{ env.CLERK_SECRET_KEY }}
+          NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY }}
+          NEXT_PUBLIC_SITE_URL: "http://127.0.0.1:3000"
+          PORT: "3000"
+          BASE_URL: "http://127.0.0.1:3000"
+          CLERK_TEST_KEY_FALLBACK: ${{ env.CLERK_TEST_KEY_FALLBACK }}
+        run: |
+          set -euo pipefail
+          bun run start -- -p 3000 -H 127.0.0.1 &
+          for i in $(seq 1 60); do
+            if curl -sf "http://127.0.0.1:3000/" >/dev/null; then
+              break
+            fi
+            sleep 2
+          done
+          if ! curl -sf "http://127.0.0.1:3000/" >/dev/null; then
+            echo "::error::Portal failed to start on :3000"
+            exit 1
+          fi
+          echo "Portal is up — seeding Clerk auth…"
+          node e2e/golden/seed-auth.mjs
+          if [ ! -f e2e/.auth-state.json ]; then
+            echo "::error::seed-auth did not write e2e/.auth-state.json — cannot measure authenticated vitals"
+            echo "Required secrets: CLERK_SECRET_KEY, NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY"
+            exit 1
+          fi
+          AUTH_STATE="$(pwd)/e2e/.auth-state.json" node scripts/measure-web-vitals.mjs

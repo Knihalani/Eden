@@ -18,11 +18,11 @@
    *      Direct hex/size/duration values live here. Never reference
    *      these directly from components — use the semantic tier.
    *
-   *   2. Semantic tokens — intent-based, named for what they DO
-   *      (--success, --warning, --error, --info, --primary,
-   *       --border-default, --text-muted, --accent-faint, --shadow-md).
-   *      Components consume these. Re-themeing or dark/light toggles
-   *      happens here without touching primitives or components.
+ *   2. Semantic tokens — intent-based, named for what they DO
+ *      (--success, --warning, --error, --info, --primary,
+ *       --border-default, --text-muted, --accent-faint, --shadow-md).
+ *      Components consume these. Portal is dark-only; retuning
+ *      contrast/accent happens here without touching components.
    *
    *   3. Component tokens — scoped to a single surface, named for
    *      where they live (--auth-card, --node-agent, --traffic-close,
@@ -909,7 +909,7 @@ button:active, [role="button"]:active {
   width: 64px;
 }
 
-/* Density prefs — wired from layout data-density attribute */
+/* Density prefs — wired from AppShell data-density attribute */
 [data-density="compact"] .nav-item {
   font-size: 0.8125rem;
 }
@@ -917,6 +917,17 @@ button:active, [role="button"]:active {
 [data-density="compact"] .nav-icon {
   width: 0.875rem;
   height: 0.875rem;
+}
+
+[data-density="compact"] [data-table] td,
+[data-density="compact"] [data-table] th,
+[data-density="compact"] .resource-filter input {
+  padding-top: 0.375rem;
+  padding-bottom: 0.375rem;
+}
+
+[data-density="compact"] .resource-os-toolbar {
+  gap: 0.5rem;
 }
 
 .sidebar-gradient {
@@ -1472,6 +1483,42 @@ input::placeholder, textarea::placeholder {
   }
 }
 
+/* U20 — allowed motion surfaces (panel open, row select, live append) */
+@keyframes panel-enter-keyframes {
+  from {
+    opacity: 0;
+    transform: translateX(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.panel-enter {
+  animation: panel-enter-keyframes 180ms ease-out;
+}
+
+.row-select-highlight {
+  transition:
+    border-color 120ms ease,
+    box-shadow 120ms ease;
+}
+
+@keyframes live-append-pulse-keyframes {
+  0%,
+  100% {
+    background-color: transparent;
+  }
+  50% {
+    background-color: var(--accent-faint);
+  }
+}
+
+.live-append-pulse {
+  animation: live-append-pulse-keyframes 600ms ease-out 1;
+}
+
 /* Respect reduced motion preferences */
 @media (prefers-reduced-motion: reduce) {
   html {
@@ -1500,5 +1547,14 @@ input::placeholder, textarea::placeholder {
 
   .stage-active {
     animation: none !important;
+  }
+
+  .panel-enter,
+  .live-append-pulse {
+    animation: none !important;
+  }
+
+  .row-select-highlight {
+    transition: none !important;
   }
 }

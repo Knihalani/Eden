@@ -6,7 +6,7 @@
 | **Slug** | `autonomous-code-modification` |
 | **Priority** | P0 |
 | **Effort** | L |
-| **Eden status** | **SHIPPED (v0)** — issue-scoped `issue_patch_trigger` + linked_files/RCA; weekly `optimization_schedule` + cron due-check; auto_pr remains opt-in (`False`). GitHub App / F22 chat still PARTIAL. |
+| **Eden status** | **DOGFOOD (SOTA W26)** — fingerprint ≥5× → `improvement_plans`; N22 gate; GitHub App PR; N01 merge advice; F22 deleted. Inbox model shared with N23. |
 | **Role in autonomous maintenance** | When root cause is in the **customer's agent application code**, Eden generates and opens a fix PR — so the platform repairs the agent, not just runtime config |
 | **Dependencies** | F29, F30, F22, N22, `code_change/scheduler.py`, F41, N01, N04 |
 

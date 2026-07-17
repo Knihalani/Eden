@@ -257,8 +257,23 @@ export function ToolCallCard({ id, name, input, result }: ToolCallCardProps) {
 
 function safeStringify(value: unknown): string {
   try {
-    return JSON.stringify(value, null, 2);
+    return redactPii(JSON.stringify(value, null, 2));
   } catch {
-    return String(value);
+    return redactPii(String(value));
   }
+}
+
+/** Lightweight PII redact for tool card payloads (emails + token-shaped secrets). */
+function redactPii(text: string): string {
+  if (!text) return text;
+  let out = text.replace(
+    /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/g,
+    "***",
+  );
+  out = out.replace(/(bearer\s+)[A-Za-z0-9._\-]{8,}/gi, "$1***");
+  out = out.replace(
+    /\b(token|access_token|api_key|apikey|secret|password|authorization)\s*[=:]\s*['"]?[A-Za-z0-9._\-+/= ]{6,}['"]?/gi,
+    "$1=***",
+  );
+  return out;
 }

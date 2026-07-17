@@ -145,6 +145,14 @@ class AlertTriageJudge:
         )
         await self.apply_verdict(alert_event_id, verdict)
         if notify and verdict.get("verdict") == "real_incident":
+            from eden.config import get_settings
+
+            settings = get_settings()
+            if not getattr(settings, "nl_alerts_paging_enabled", True):
+                return verdict
+            confidence = float(verdict.get("confidence") or 0)
+            if confidence < 0.7:
+                return verdict
             from eden.integrations.slack.alerts import alert_nl_event
 
             await alert_nl_event(

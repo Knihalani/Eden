@@ -16,9 +16,10 @@ _nudge_engine = None
 _nudge_filter = None
 _book_filter = None
 _guardrail_filter = None
+_prompt_deploy_filter = None
 
 
-_LEARN_FILTER_NAMES = ("runtime_nudge", "agent_book", "judge_guardrail")
+_LEARN_FILTER_NAMES = ("runtime_nudge", "agent_book", "judge_guardrail", "prompt_deploy")
 
 
 def install_learn_filters(gateway: object | None = None) -> None:
@@ -29,11 +30,12 @@ def install_learn_filters(gateway: object | None = None) -> None:
     and filter singletons are created only on the first call and reused on
     subsequent calls so ``NudgeEngine`` is not instantiated more than once.
     """
-    global _nudge_engine, _nudge_filter, _book_filter, _guardrail_filter
+    global _nudge_engine, _nudge_filter, _book_filter, _guardrail_filter, _prompt_deploy_filter
 
     from eden.llmops.filters.book import BookGatewayFilter
     from eden.llmops.filters.guardrail import get_guardrail_filter
     from eden.llmops.filters.nudge import NudgeGatewayFilter
+    from eden.llmops.filters.prompt_deploy import get_prompt_deploy_filter
     from eden.nudges.engine import NudgeEngine
 
     if gateway is None:
@@ -56,6 +58,7 @@ def install_learn_filters(gateway: object | None = None) -> None:
         _nudge_filter = NudgeGatewayFilter(_nudge_engine)
         _book_filter = BookGatewayFilter()
         _guardrail_filter = get_guardrail_filter()
+        _prompt_deploy_filter = get_prompt_deploy_filter()
 
     # Avoid double-registration if startup or eval_intel calls twice.
     for name in _LEARN_FILTER_NAMES:
@@ -64,10 +67,11 @@ def install_learn_filters(gateway: object | None = None) -> None:
     gateway.register_filter(_nudge_filter)
     gateway.register_filter(_book_filter)
     gateway.register_filter(_guardrail_filter)
+    gateway.register_filter(_prompt_deploy_filter)
     _installed_gateways.add(gateway_id)
     logger.info(
-        "learn_wiring: F39 nudge + F40 book + N15 guardrail filters installed "
-        "on %s (order: after PII/trajectory)",
+        "learn_wiring: F39 nudge + F40 book + N15 guardrail + F68 prompt_deploy "
+        "filters installed on %s (order: after PII/trajectory)",
         type(gateway).__name__,
     )
 

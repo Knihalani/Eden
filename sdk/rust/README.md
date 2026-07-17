@@ -1,5 +1,9 @@
 # eden-sdk (Rust)
 
+> **MVP / not GA.** Minimum-viable tier only. No framework auto-instrument,
+> streaming, retries, or full OpenTelemetry export in v0.1.0. Do not claim
+> SOTA parity with Py/TS SDKs (SOTA program keeps Go/Rust as MVP banners).
+
 Minimum-viable Rust client for Eden's telemetry ingest API. Mirrors the
 Python `eden.sdk` and the `@eden/sdk` packages: send a `TraceEvent` to
 `POST /orgs/{org_id}/ingest/{format}` and Eden's observability platform

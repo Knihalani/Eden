@@ -63,6 +63,8 @@ class DriftReportBuilder:
             "flagged": flagged,
             "delta_pct": round(delta_pct, 2),
             "sample_count": sample_count,
+            "baseline_histogram": baseline,
+            "current_histogram": current,
             "summary": (
                 f"{dimension} shifted (PSI={psi:.3f})"
                 if flagged

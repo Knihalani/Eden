@@ -12,7 +12,7 @@ from pydantic import BaseModel, Field
 
 from eden.api.deps import get_current_user
 from eden.api.utils.redact import redact_all
-from eden.improvement.approve import ApproveBlocked, approve_plan
+from eden.improvement.approve import ApproveBlocked, approve_plan, reject_plan_audited
 from eden.improvement.cockpit_aggregator import (
     ImprovementCockpitAggregator,
     snooze_item,
@@ -44,14 +44,27 @@ def _ok(feature: str, data: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _require_agent_v1() -> None:
+def _require_agent_v1(org_id: str) -> None:
+    """Sync fallback — global flag only (prefer _require_agent_v1_async)."""
     from eden.config import get_settings
 
-    if not getattr(get_settings(), "improvement_agent_v1", False):
-        raise HTTPException(
-            status_code=503,
-            detail="improvement_agent_v1 is disabled",
-        )
+    if getattr(get_settings(), "improvement_agent_v1", False):
+        return
+    raise HTTPException(
+        status_code=503,
+        detail="improvement_agent_v1 is disabled for this org",
+    )
+
+
+async def _require_agent_v1_async(org_id: str) -> None:
+    from eden.preview.gates import improvement_agent_enabled
+
+    if await improvement_agent_enabled(org_id):
+        return
+    raise HTTPException(
+        status_code=503,
+        detail="improvement_agent_v1 is disabled for this org",
+    )
 
 
 class SnoozeRequest(BaseModel):
@@ -105,7 +118,7 @@ async def list_plans(
     agent_id: str | None = Query(None),
     limit: int = Query(50, ge=1, le=200),
 ) -> dict[str, Any]:
-    _require_agent_v1()
+    await _require_agent_v1_async(org_id)
     plans = await plans_repo.list_plans(
         org_id,
         status=status,
@@ -121,7 +134,7 @@ async def get_plan(
     org_id: str = Path(...),
     plan_id: str = Path(...),
 ) -> dict[str, Any]:
-    _require_agent_v1()
+    await _require_agent_v1_async(org_id)
     plan = await plans_repo.get_plan(org_id, plan_id)
     if plan is None:
         raise HTTPException(status_code=404, detail="plan not found")
@@ -134,7 +147,7 @@ async def patch_plan(
     plan_id: str = Path(...),
     body: PlanPatchRequest = Body(...),
 ) -> dict[str, Any]:
-    _require_agent_v1()
+    await _require_agent_v1_async(org_id)
     plan = await plans_repo.get_plan(org_id, plan_id)
     if plan is None:
         raise HTTPException(status_code=404, detail="plan not found")
@@ -155,7 +168,7 @@ async def approve_plan_route(
     plan_id: str = Path(...),
     applied_by: str | None = Query(None),
 ) -> dict[str, Any]:
-    _require_agent_v1()
+    await _require_agent_v1_async(org_id)
     try:
         result = await approve_plan(org_id, plan_id, approved_by=applied_by)
     except ApproveBlocked as exc:
@@ -177,11 +190,11 @@ async def reject_plan_route(
     body: RejectRequest = Body(default=RejectRequest()),
     rejected_by: str | None = Query(None),
 ) -> dict[str, Any]:
-    _require_agent_v1()
+    await _require_agent_v1_async(org_id)
     plan = await plans_repo.get_plan(org_id, plan_id)
     if plan is None:
         raise HTTPException(status_code=404, detail="plan not found")
-    updated = await plans_repo.reject_plan(
+    updated = await reject_plan_audited(
         org_id,
         plan_id,
         rejected_by=rejected_by,
@@ -199,7 +212,7 @@ async def snooze_plan_route(
     plan_id: str = Path(...),
     body: SnoozePlanRequest = Body(default=SnoozePlanRequest()),
 ) -> dict[str, Any]:
-    _require_agent_v1()
+    await _require_agent_v1_async(org_id)
     if body.snoozed_until:
         until = datetime.fromisoformat(body.snoozed_until.replace("Z", "+00:00"))
     else:
@@ -216,7 +229,7 @@ async def list_runs(
     org_id: str = Path(...),
     limit: int = Query(50, ge=1, le=200),
 ) -> dict[str, Any]:
-    _require_agent_v1()
+    await _require_agent_v1_async(org_id)
     runs = await runs_repo.list_runs(org_id, limit=limit)
     watermark = await runs_repo.get_watermark(org_id)
     return _ok(
@@ -234,7 +247,7 @@ async def get_run(
     org_id: str = Path(...),
     run_id: str = Path(...),
 ) -> dict[str, Any]:
-    _require_agent_v1()
+    await _require_agent_v1_async(org_id)
     run = await runs_repo.get_run(org_id, run_id)
     if run is None:
         raise HTTPException(status_code=404, detail="run not found")
@@ -246,7 +259,7 @@ async def trigger_run(
     org_id: str = Path(...),
     body: ManualRunRequest = Body(default=ManualRunRequest()),
 ) -> dict[str, Any]:
-    _require_agent_v1()
+    await _require_agent_v1_async(org_id)
     result = await ImprovementAgent().sweep(
         org_id,
         agent_id=body.agent_id,
@@ -258,7 +271,7 @@ async def trigger_run(
 
 @router.get("/schedule")
 async def get_schedule(org_id: str = Path(...)) -> dict[str, Any]:
-    _require_agent_v1()
+    await _require_agent_v1_async(org_id)
     sched = await resolved_schedule(org_id)
     return _ok("improvement_schedule", sched)
 
@@ -268,7 +281,7 @@ async def put_schedule(
     org_id: str = Path(...),
     body: ScheduleUpdateRequest = Body(...),
 ) -> dict[str, Any]:
-    _require_agent_v1()
+    await _require_agent_v1_async(org_id)
     updated = await imp_settings.update_settings(
         org_id,
         improvement_schedule_cron=body.improvement_schedule_cron,

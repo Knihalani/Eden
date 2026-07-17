@@ -54,7 +54,7 @@ export default function StudioPage() {
   const [activeTab, setActiveTab] = useState<Tab>("templates");
   const [error, setError] = useState("");
   return <PageContent size="wide">
-      <PageHeader eyebrow="Eval" title="Custom-Metric Studio" subtitle="Design, generate, and version custom evaluation rubrics from templates or examples." icon={Sparkles} />
+      <PageHeader eyebrow="Eval" title="Custom-Metric Studio" subtitle="Live metric studio (not a stub) — design, generate, and version rubrics from templates or examples." icon={Sparkles} />
 
       {error && <div className="bg-[var(--error-bg)] text-[var(--error)] text-sm px-4 py-3 rounded-xl flex items-center gap-2.5 border border-[var(--error)]/20">
           <AlertTriangle className="w-4 h-4 flex-shrink-0" />

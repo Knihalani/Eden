@@ -18,6 +18,8 @@ import Link from "next/link";
 import { SkeletonTableRow } from "@/components/ui/skeleton";
 import { TraceOutcomeBadge } from "@/components/ui/status-badge";
 import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
+import { InfiniteDataTable } from "@/components/portal-os";
+import { U20_EMPTY_COPY } from "@/lib/portal-polish";
 import type { TraceFilter, TraceItem } from "../_lib/types";
 import { Card } from "@/components/ui/card";
 interface TracesTabProps {
@@ -38,6 +40,9 @@ interface TracesTabProps {
   onAnnotate?: (id: string) => void;
   /** U04 — create NL alert from current filter chips. */
   onCreateAlertFromFilters?: (filter: TraceFilter) => void;
+  hasMore?: boolean;
+  onLoadMore?: () => void;
+  loadingMore?: boolean;
 }
 const OUTCOMES = ["success", "failure", "partial", "timeout", "crash"] as const;
 
@@ -72,6 +77,9 @@ export function TracesTab({
   showReplayLink = true,
   onAnnotate,
   onCreateAlertFromFilters,
+  hasMore,
+  onLoadMore,
+  loadingMore,
 }: TracesTabProps) {
   // Pattern 5.1 (Langfuse): Only render token / cost columns when
   // at least one trace actually has that data. Avoids adding three
@@ -184,7 +192,10 @@ export function TracesTab({
       {/* Filters */}
       <Card padding="sm" className="flex flex-wrap items-center gap-3">
         <Filter className="w-4 h-4 text-[var(--text-muted)]" />
-        <select value={filter.realm} onChange={e => onFilterChange({
+        <select
+          aria-label="Filter by realm"
+          value={filter.realm}
+          onChange={e => onFilterChange({
         ...filter,
         realm: e.target.value
       })} className="px-3 py-1.5 bg-[var(--bg-secondary)] border border-[var(--border-default)] rounded-lg text-sm text-[var(--text-primary)]">
@@ -192,7 +203,10 @@ export function TracesTab({
           <option value="environment">Environment</option>
           <option value="production">Production</option>
         </select>
-        <select value={filter.outcome} onChange={e => onFilterChange({
+        <select
+          aria-label="Filter by outcome"
+          value={filter.outcome}
+          onChange={e => onFilterChange({
         ...filter,
         outcome: e.target.value
       })} className="px-3 py-1.5 bg-[var(--bg-secondary)] border border-[var(--border-default)] rounded-lg text-sm text-[var(--text-primary)]">
@@ -201,7 +215,7 @@ export function TracesTab({
               {o.charAt(0).toUpperCase() + o.slice(1)}
             </option>)}
         </select>
-        <input type="text" placeholder="Agent ID..." value={filter.agent_id} onChange={e => onFilterChange({
+        <input type="text" aria-label="Filter by agent ID" placeholder="Agent ID..." value={filter.agent_id} onChange={e => onFilterChange({
         ...filter,
         agent_id: e.target.value
       })} className="px-3 py-1.5 bg-[var(--bg-secondary)] border border-[var(--border-default)] rounded-lg text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)]" />
@@ -224,10 +238,10 @@ export function TracesTab({
           {Array.from({
         length: 8
       }).map((_, i) => <SkeletonTableRow key={i} columns={["w-32", "w-24", "w-20", "w-28", "w-16"]} />)}
-        </Card> : <DataTable columns={columns} rows={traces} rowKey={t => t.trace_id} loading={loading && traces.length > 0} defaultSort={{
+        </Card> : <InfiniteDataTable columns={columns} rows={traces} rowKey={t => t.trace_id} loading={loading && traces.length > 0} hasMore={hasMore} onLoadMore={onLoadMore} loadingMore={loadingMore} defaultSort={{
       key: "duration_ms",
       direction: "desc"
-    }} emptyTitle="No traces found" emptyDescription="Send telemetry from the Eden SDK or run a job — traces will appear here as your agents run." emptyIcon={Layers} emptyVariant="terminal" emptyTerminal={<div className="rounded-lg overflow-hidden border border-[var(--border-default)] bg-[var(--bg-base)] text-left shadow-[0_24px_60px_-24px_rgba(0,0,0,0.6)]">
+    }} emptyTitle="No traces found" emptyDescription={U20_EMPTY_COPY.traces} emptyIcon={Layers} emptyVariant="terminal" emptyTerminal={<div className="rounded-lg overflow-hidden border border-[var(--border-default)] bg-[var(--bg-base)] text-left shadow-[0_24px_60px_-24px_rgba(0,0,0,0.6)]">
               <div className="flex items-center gap-1.5 px-3 py-1.5 bg-[var(--bg-secondary)] border-b border-[var(--border-subtle)]">
                 <span className="w-2 h-2 rounded-full bg-[var(--traffic-close)]" />
                 <span className="w-2 h-2 rounded-full bg-[var(--traffic-minimize)]" />
@@ -260,6 +274,6 @@ export function TracesTab({
               </div>
             </div>} onRowClick={t => onSelectTrace(t.trace_id)} rowAttrs={t => ({
       "data-trace-id": t.trace_id
-    })} highlightRowId={initialTraceId} pageSize={25} />}
+    })} highlightRowId={initialTraceId} />}
     </div>;
 }

@@ -78,15 +78,43 @@ eden.instrument("openai", "langchain")  # specific frameworks
 eden.uninstrument("openai")           # tear down a patch
 ```
 
-| Framework     | Mechanism                                   |
-|---------------|---------------------------------------------|
-| openai        | Monkey-patch `chat.completions.create`      |
-| anthropic     | Monkey-patch `messages.create`              |
-| langchain     | `BaseCallbackHandler` registered globally   |
-| llama_index   | `BaseSpanHandler` registered via `Settings.callback_manager` |
-| crewai        | Default `step_callback` + `task_callback`   |
-| autogen       | Global `register_reply_hook` on `ConversableAgent` |
-| mastra        | No-op (use the TypeScript SDK)              |
+| Framework     | Mechanism                                   | Status |
+|---------------|---------------------------------------------|--------|
+| openai        | Monkey-patch `chat.completions.create`      | Supported |
+| anthropic     | Monkey-patch `messages.create`              | Supported |
+| langchain     | `BaseCallbackHandler` registered globally   | Supported |
+| llama_index   | `BaseSpanHandler` via `Settings.callback_manager` | Supported |
+| crewai        | Default `step_callback` + `task_callback`   | Supported |
+| autogen       | Global `register_reply_hook`                | Supported |
+| pydantic_ai   | Agent run hooks                             | Supported |
+| bedrock       | boto3 `bedrock-runtime` API call wrap       | Supported |
+| gemini        | `google.generativeai` generate_content      | Supported |
+| mastra        | **No-op stub** (TypeScript-only framework)  | Unsupported on Python — use `@eden-ai/sdk` |
+| Vercel AI     | N/A (TS)                                    | Use TypeScript SDK |
+
+### Agent sessions (F23)
+
+```python
+import eden
+
+eden.configure(org_id="org_123", api_key="sk_...")
+
+with eden.begin(agent_id="bot", user_id="u1") as session:
+    eden.identify("u1")
+    with session.trace("turn-1"):
+        ...
+# posts to /orgs/{org_id}/ingest/agent-sessions with X-Org-Api-Key
+```
+
+See `examples/10_sessions.py`.
+
+### Sampling + offline queue
+
+| Env / config | Default | Purpose |
+|---|---|---|
+| `EDEN_SAMPLING_PROFILE` | `full` | `full` / `balanced` (~15%) / `aggressive` (~5%); errors always kept |
+| `EDEN_SAMPLE_KEEP_ERRORS` | `1` | Keep error events under sampling |
+| `EDEN_OFFLINE_QUEUE` | `0` | Spill failed batches to `~/.eden/offline_queue.sqlite3` |
 
 ## Token extraction & model normalization
 

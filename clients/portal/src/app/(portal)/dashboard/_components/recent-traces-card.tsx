@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { GitBranch, ArrowRight, Clock } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { U20_EMPTY_COPY } from "@/lib/portal-polish";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -51,7 +52,7 @@ export function RecentTracesCard({
             </div>
           ))}
         </div> : empty ? <div className="px-5 pb-5">
-          <EmptyState icon={GitBranch} title="No traces yet" description="Traces will appear here once your agents emit telemetry. Connect an agent to see live signals in seconds." action={<Link href="/dashboard?onboarding=1">
+          <EmptyState icon={GitBranch} title="No traces yet" description={U20_EMPTY_COPY.dashboardTraces} action={<Link href="/dashboard?onboarding=1">
                 <Button>
                   <GitBranch className="w-4 h-4" />
                   Connect a repo
@@ -59,7 +60,7 @@ export function RecentTracesCard({
               </Link>} size="sm" />
         </div> : <ul className="divide-y divide-[var(--border-subtle)]">
           {top.map(t => <li key={t.trace_id}>
-              <Link href={`/traces?trace_id=${encodeURIComponent(t.trace_id)}`} className="flex items-center gap-3 px-5 py-2.5 hover:bg-[var(--bg-secondary)] transition-colors group">
+              <Link href={`/traces?traceId=${encodeURIComponent(t.trace_id)}&view=traces`} className="flex items-center gap-3 px-5 py-2.5 hover:bg-[var(--bg-secondary)] transition-colors group">
                 <OutcomeDot outcome={t.outcome} />
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-mono text-[var(--text-primary)] truncate">

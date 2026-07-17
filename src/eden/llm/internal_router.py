@@ -70,9 +70,13 @@ def route_sync(
     expected_min_length: int = 50,
     llm_client: Any | None = None,
     router: ModelRouter | None = None,
+    org_id: str | None = None,
+    feature: str = "unknown",
     **kwargs: Any,
 ) -> LLMResponse:
     """Synchronous internal LLM call via ``ModelRouter.route``."""
+    from eden.llmops.cost_ledger import cost_context
+
     r = router or get_router(llm_client)
     task = build_task(
         agent,
@@ -81,8 +85,10 @@ def route_sync(
         output_type=output_type,
         expected_min_length=expected_min_length,
         requires_quality_check=kwargs.pop("requires_quality_check", True),
+        org_id=org_id,
     )
-    return r.route(task, prompt, system_prompt=system_prompt, **kwargs)
+    with cost_context(org_id, feature, agent_id=agent):
+        return r.route(task, prompt, system_prompt=system_prompt, **kwargs)
 
 
 async def route_async(
@@ -97,9 +103,13 @@ async def route_async(
     expected_min_length: int = 50,
     llm_client: Any | None = None,
     router: ModelRouter | None = None,
+    org_id: str | None = None,
+    feature: str = "unknown",
     **kwargs: Any,
 ) -> LLMResponse:
     """Async internal LLM call via ``ModelRouter.aroute``."""
+    from eden.llmops.cost_ledger import cost_context
+
     r = router or get_router(llm_client)
     task = build_task(
         agent,
@@ -109,8 +119,12 @@ async def route_async(
         requires_novelty=requires_novelty,
         expected_min_length=expected_min_length,
         requires_quality_check=kwargs.pop("requires_quality_check", True),
+        org_id=org_id,
     )
-    return await r.aroute(task, prompt, system_prompt=system_prompt, **kwargs)
+    with cost_context(org_id, feature, agent_id=agent):
+        return await r.aroute(
+            task, prompt, system_prompt=system_prompt, org_id=org_id, **kwargs
+        )
 
 
 async def resolve_models(

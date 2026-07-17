@@ -10,6 +10,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { EdenSDK, getDefaultClient, resetDefaultClient, setDefaultClient } from "../src/client.js";
 import { type TelemetryEvent } from "../src/types.js";
+import { SDK_VERSION } from "../src/version.js";
 
 interface CapturedRequest {
   url: string;
@@ -127,7 +128,11 @@ describe("EdenSDK configuration", () => {
 
 describe("EdenSDK event batching", () => {
   it("emits a single batched POST to /ingest/openai", async () => {
-    const sdk = new EdenSDK({ orgId: "org_test", apiKey: "key_test" });
+    const sdk = new EdenSDK({
+      orgId: "org_test",
+      apiKey: "key_test",
+      baseUrl: "http://localhost:8000",
+    });
     for (let i = 0; i < 5; i++) {
       sdk.emit(_makeEvent("openai", "llm_completion", i));
     }
@@ -142,7 +147,11 @@ describe("EdenSDK event batching", () => {
   });
 
   it("groups events by source_format into separate POSTs", async () => {
-    const sdk = new EdenSDK({ orgId: "org_test", apiKey: "key_test" });
+    const sdk = new EdenSDK({
+      orgId: "org_test",
+      apiKey: "key_test",
+      baseUrl: "http://localhost:8000",
+    });
     sdk.emit(_makeEvent("openai", "llm_completion", 1));
     sdk.emit(_makeEvent("anthropic", "llm_completion", 2));
     sdk.emit(_makeEvent("anthropic", "llm_completion", 3));
@@ -204,7 +213,11 @@ describe("EdenSDK event batching", () => {
 
 describe("EdenSDK chunk flush", () => {
   it("POSTs chunks to /ingest/chunks", async () => {
-    const sdk = new EdenSDK({ orgId: "org_test", apiKey: "key_test" });
+    const sdk = new EdenSDK({
+      orgId: "org_test",
+      apiKey: "key_test",
+      baseUrl: "http://localhost:8000",
+    });
     sdk.bufferChunk({
       eventId: "evt_1",
       traceId: "trc_1",
@@ -460,7 +473,7 @@ describe("EdenSDK User-Agent header", () => {
     });
     return sdk.flush().then(() => {
       expect(captured.length).toBe(1);
-      expect(captured[0].headers["User-Agent"]).toBe("@eden-ai/sdk/0.3.0");
+      expect(captured[0].headers["User-Agent"]).toBe(`@eden-ai/sdk/${SDK_VERSION}`);
     });
   });
 });

@@ -95,16 +95,34 @@ class ImprovementCockpitAggregator:
         *,
         limit: int = 100,
     ) -> ImprovementQueue:
-        issues_t, actions_t, patches_t, nudges_t, promotions_t = await asyncio.gather(
-            self._from_issues(org_id, agent_id),
-            self._from_closed_loop(org_id),
-            self._from_improvement_plans(org_id, agent_id),
-            self._from_nudges(org_id, agent_id),
-            self._from_promotions(org_id),
-            return_exceptions=True,
+        issues_t, actions_t, patches_t, nudges_t, promotions_t, artifacts_t, ledger_t, evolution_t, heals_t, denials_t = (
+            await asyncio.gather(
+                self._from_issues(org_id, agent_id),
+                self._from_closed_loop(org_id),
+                self._from_improvement_plans(org_id, agent_id),
+                self._from_nudges(org_id, agent_id),
+                self._from_promotions(org_id),
+                self._from_artifacts_pending(org_id, agent_id),
+                self._from_ledger_stale(org_id, agent_id),
+                self._from_evolution_canaries(org_id, agent_id),
+                self._from_self_heals(org_id),
+                self._from_autonomy_denials(org_id, agent_id),
+                return_exceptions=True,
+            )
         )
         items: list[ImprovementItem] = []
-        for result in (issues_t, actions_t, patches_t, nudges_t, promotions_t):
+        for result in (
+            issues_t,
+            actions_t,
+            patches_t,
+            nudges_t,
+            promotions_t,
+            artifacts_t,
+            ledger_t,
+            evolution_t,
+            heals_t,
+            denials_t,
+        ):
             if isinstance(result, BaseException):
                 logger.debug("cockpit source failed: %s", result)
                 continue
@@ -112,9 +130,11 @@ class ImprovementCockpitAggregator:
 
         now = datetime.now(UTC)
         items = [i for i in items if not is_snoozed(org_id, i.ref, now=now)]
+        fleet_sev = await self._fleet_severity_map(org_id)
         items.sort(
             key=lambda i: (
                 _SEVERITY_RANK.get(i.severity, 9),
+                -fleet_sev.get(i.agent_id or "", 0.0),
                 i.title.lower(),
             )
         )
@@ -133,6 +153,21 @@ class ImprovementCockpitAggregator:
             counts_by_column=by_col,
             counts_by_type=by_type,
         )
+
+    async def _fleet_severity_map(self, org_id: str) -> dict[str, float]:
+        """N05 severity ranking for N17 queue ordering."""
+        try:
+            from eden.fleet.service import FleetHealthService
+
+            summary = await FleetHealthService().summary(org_id)
+            return {
+                str(a.get("agent_id")): float(a.get("severity_score") or 0)
+                for a in summary.get("agents") or []
+                if a.get("agent_id")
+            }
+        except Exception as exc:
+            logger.debug("cockpit fleet severity: %s", exc)
+            return {}
 
     async def _from_issues(
         self, org_id: str, agent_id: str | None
@@ -219,6 +254,130 @@ class ImprovementCockpitAggregator:
                     autonomy_tier_required=tier,
                     blocked_reason=blocked_reason,
                     source="closed_loop",
+                )
+            )
+        return out
+
+    async def _from_self_heals(self, org_id: str) -> list[ImprovementItem]:
+        """N21/W24 — surface recent auto-heal executions in Improve."""
+        try:
+            from eden.storage.postgres import get_postgres_client
+
+            client = await get_postgres_client()
+            if client is None:
+                return []
+            rows = await client.fetch(
+                """
+                SELECT id, action_type, status, before_state_json,
+                       after_state_json, created_at
+                FROM self_heal_actions
+                WHERE org_id = $1
+                  AND created_at > NOW() - INTERVAL '7 days'
+                ORDER BY created_at DESC
+                LIMIT 40
+                """,
+                org_id,
+            )
+        except Exception as exc:
+            logger.debug("cockpit self_heals: %s", exc)
+            return []
+        out: list[ImprovementItem] = []
+        for r in rows or []:
+            if not isinstance(r, dict) and hasattr(r, "keys"):
+                r = dict(r)
+            aid = str(r.get("id") or "")
+            action_type = str(r.get("action_type") or "self_heal")
+            status = str(r.get("status") or "pending")
+            column = COLUMN_AUTONOMOUS
+            if status in ("pending_approval", "approved", "denied", "failed"):
+                column = COLUMN_NEEDS_YOU
+            elif status == "executed":
+                column = COLUMN_VERIFY
+            blocked = None
+            if status == "denied":
+                blocked = "Heal denied"
+            elif status == "failed":
+                blocked = "Heal execution failed"
+            elif status == "pending_approval":
+                blocked = "Awaiting human approval"
+            out.append(
+                ImprovementItem(
+                    ref=f"self_heal:{aid}",
+                    item_type="auto_heal",
+                    title=f"Auto-heal: {action_type}",
+                    column=column,
+                    severity="high" if status == "failed" else "medium",
+                    status=status,
+                    href="/improve",
+                    payload={
+                        "action_id": aid,
+                        "action_type": action_type,
+                        "status": status,
+                    },
+                    blocked_reason=blocked,
+                    source="self_heal",
+                )
+            )
+        return out
+
+    async def _from_autonomy_denials(
+        self, org_id: str, agent_id: str | None
+    ) -> list[ImprovementItem]:
+        """N22/W24 — policy denials visible in Improve cockpit."""
+        try:
+            from eden.storage.postgres import get_postgres_client
+
+            client = await get_postgres_client()
+            if client is None:
+                return []
+            rows = await client.fetch(
+                """
+                SELECT id, agent_id, action, tier_applied, decision,
+                       reason, created_at
+                FROM autonomy_audit_log
+                WHERE org_id = $1
+                  AND decision IN ('deny', 'require_approval')
+                  AND action NOT IN ('policy_update', 'alert', 'recommend')
+                  AND created_at > NOW() - INTERVAL '7 days'
+                ORDER BY created_at DESC
+                LIMIT 40
+                """,
+                org_id,
+            )
+        except Exception as exc:
+            logger.debug("cockpit autonomy denials: %s", exc)
+            return []
+        out: list[ImprovementItem] = []
+        for r in rows or []:
+            if not isinstance(r, dict) and hasattr(r, "keys"):
+                r = dict(r)
+            row_agent = r.get("agent_id")
+            if agent_id and row_agent and str(row_agent) != agent_id:
+                continue
+            eid = str(r.get("id") or "")
+            action = str(r.get("action") or "action")
+            decision = str(r.get("decision") or "deny")
+            reason = str(r.get("reason") or f"policy {decision}")
+            out.append(
+                ImprovementItem(
+                    ref=f"autonomy_denial:{eid}",
+                    item_type="policy_denial",
+                    title=f"Policy {decision}: {action}",
+                    column=COLUMN_NEEDS_YOU,
+                    severity="medium",
+                    agent_id=str(row_agent) if row_agent else None,
+                    status=decision,
+                    href="/settings?tab=autonomous",
+                    payload={
+                        "audit_id": eid,
+                        "action": action,
+                        "decision": decision,
+                        "tier": r.get("tier_applied"),
+                    },
+                    autonomy_tier_required=str(r.get("tier_applied") or "")
+                    or None,
+                    blocked_reason=reason[:240],
+                    source="autonomy_audit",
                 )
             )
         return out
@@ -386,6 +545,169 @@ class ImprovementCockpitAggregator:
                     autonomy_tier_required=tier,
                     blocked_reason=blocked_reason,
                     source="nudges",
+                )
+            )
+        return out
+
+    async def _from_artifacts_pending(
+        self, org_id: str, agent_id: str | None
+    ) -> list[ImprovementItem]:
+        try:
+            from eden.preview.gates import artifacts_enabled
+
+            if not await artifacts_enabled(org_id):
+                return []
+            from eden.promotion.evidence_gate import EvidenceGate
+
+            candidates = await EvidenceGate().list_queue(org_id, status="shadow", limit=30)
+        except Exception as exc:
+            logger.debug("cockpit artifacts pending: %s", exc)
+            return []
+        out: list[ImprovementItem] = []
+        for row in candidates:
+            if str(row.get("kind") or "") != "nudge":
+                continue
+            cid = str(row.get("id") or "")
+            ref_id = str(row.get("ref_id") or "")
+            out.append(
+                ImprovementItem(
+                    ref=f"artifact:{ref_id}",
+                    item_type="nudge_shadow",
+                    title=f"Artifact candidate ready for review ({ref_id[:12]})",
+                    column=COLUMN_PROPOSED,
+                    severity="medium",
+                    agent_id=agent_id,
+                    status="shadow",
+                    href=f"/artifacts?candidate={cid}",
+                    payload={"candidate_id": cid, "artifact_id": ref_id},
+                    source="artifacts_pending",
+                )
+            )
+        return out
+
+    async def _from_ledger_stale(
+        self, org_id: str, agent_id: str | None
+    ) -> list[ImprovementItem]:
+        try:
+            from eden.preview.gates import ledger_enabled
+
+            if not await ledger_enabled(org_id):
+                return []
+            from eden.storage.postgres import get_postgres_client
+
+            client = await get_postgres_client()
+            if client is None:
+                return []
+            if agent_id:
+                rows = await client.fetch(
+                    """
+                    SELECT agent_id, version, updated_at
+                    FROM agent_ledgers
+                    WHERE org_id = $1 AND agent_id = $2
+                      AND updated_at < now() - interval '7 days'
+                    """,
+                    org_id,
+                    agent_id,
+                )
+            else:
+                rows = await client.fetch(
+                    """
+                    SELECT agent_id, version, updated_at
+                    FROM agent_ledgers
+                    WHERE org_id = $1
+                      AND updated_at < now() - interval '7 days'
+                    LIMIT 20
+                    """,
+                    org_id,
+                )
+        except Exception as exc:
+            logger.debug("cockpit ledger stale: %s", exc)
+            return []
+        out: list[ImprovementItem] = []
+        for r in rows or []:
+            aid = str(r.get("agent_id") or "")
+            out.append(
+                ImprovementItem(
+                    ref=f"ledger_stale:{aid}",
+                    item_type="ledger_stale",
+                    title=f"Ledger stale for {aid} — review entries",
+                    column=COLUMN_NEEDS_YOU,
+                    severity="low",
+                    agent_id=aid,
+                    status="stale",
+                    href=f"/agents/{aid}/ledger",
+                    payload={"version": r.get("version")},
+                    source="ledger_stale",
+                )
+            )
+        return out
+
+    async def _from_evolution_canaries(
+        self, org_id: str, agent_id: str | None
+    ) -> list[ImprovementItem]:
+        """N18 — active prompt canaries visible in cockpit + Artifacts link."""
+        try:
+            from eden.preview.gates import evolution_loop_enabled_for_org
+
+            if not await evolution_loop_enabled_for_org(org_id):
+                return []
+            from eden.storage.postgres import get_postgres_client
+
+            client = await get_postgres_client()
+            if client is None:
+                return []
+            if agent_id:
+                rows = await client.fetch(
+                    """
+                    SELECT id, agent_id, name, status, current_version
+                    FROM prompt_canaries
+                    WHERE org_id = $1 AND agent_id = $2 AND status = 'active'
+                    ORDER BY created_at DESC
+                    LIMIT 15
+                    """,
+                    org_id,
+                    agent_id,
+                )
+            else:
+                rows = await client.fetch(
+                    """
+                    SELECT id, agent_id, name, status, current_version
+                    FROM prompt_canaries
+                    WHERE org_id = $1 AND status = 'active'
+                    ORDER BY created_at DESC
+                    LIMIT 15
+                    """,
+                    org_id,
+                )
+        except Exception as exc:
+            logger.debug("cockpit evolution canaries: %s", exc)
+            return []
+        out: list[ImprovementItem] = []
+        for r in rows or []:
+            cid = str(r.get("id") or "")
+            aid = str(r.get("agent_id") or "default")
+            name = str(r.get("name") or "Prompt canary")
+            blocked_reason, tier = await _autonomy_block_reason(
+                org_id, "prompt_canary", aid
+            )
+            column = COLUMN_AUTONOMOUS if not blocked_reason else COLUMN_NEEDS_YOU
+            out.append(
+                ImprovementItem(
+                    ref=f"evolution:{cid}",
+                    item_type="prompt_canary",
+                    title=f"Evolution canary: {name}",
+                    column=column,
+                    severity="medium",
+                    agent_id=aid,
+                    status=str(r.get("status") or "active"),
+                    href=f"/agents/{aid}/artifacts",
+                    payload={
+                        "canary_id": cid,
+                        "version": r.get("current_version"),
+                    },
+                    autonomy_tier_required=tier,
+                    blocked_reason=blocked_reason,
+                    source="evolution_loop",
                 )
             )
         return out

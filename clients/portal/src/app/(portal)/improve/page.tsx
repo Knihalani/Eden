@@ -6,7 +6,7 @@ import dynamic from "next/dynamic";
 import { Check, Clock, Loader2, RefreshCw } from "lucide-react";
 
 import { PageHeader } from "@/components/layout/page-header";
-import { PageContent } from "@/components/layout/page-content";
+import { CoreResourcePage, CrossLinkBar } from "@/components/portal-os";
 import { EmbeddedSurface } from "@/components/layout/embedded-surface";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -53,10 +53,25 @@ const COLUMNS: Array<{ id: string; label: string; hint: string }> = [
   { id: "verify", label: "Verify", hint: "Approved patches awaiting check" },
 ];
 
+const SEVERITY_RANK: Record<string, number> = {
+  critical: 0,
+  p0: 0,
+  high: 1,
+  p1: 1,
+  medium: 2,
+  p2: 2,
+  low: 3,
+  p3: 3,
+};
+
+function severityRank(sev: string): number {
+  return SEVERITY_RANK[sev.toLowerCase()] ?? 4;
+}
+
 function severityClass(sev: string): string {
   const s = sev.toLowerCase();
-  if (s === "critical" || s === "high") return "text-[var(--error)]";
-  if (s === "medium") return "text-[var(--warning)]";
+  if (s === "critical" || s === "high" || s === "p0" || s === "p1") return "text-[var(--error)]";
+  if (s === "medium" || s === "p2") return "text-[var(--warning)]";
   return "text-[var(--text-muted)]";
 }
 
@@ -128,6 +143,13 @@ function ImprovePageInner() {
         : "needs_you";
       map[key].push(item);
     }
+    for (const col of COLUMNS) {
+      map[col.id].sort((a, b) => {
+        const sev = severityRank(a.severity) - severityRank(b.severity);
+        if (sev !== 0) return sev;
+        return String(a.title).localeCompare(String(b.title));
+      });
+    }
     return map;
   }, [items]);
 
@@ -170,28 +192,43 @@ function ImprovePageInner() {
   if (!currentOrg) return <NoOrgState feature="Improve" />;
 
   return (
-    <>
-      <PageHeader
-        title="Improve"
-        subtitle="Action queue, improvement plans, and sweep history."
-        description="One queue for triage, patches, nudges, and promotions from Agent Issues."
-        actions={
-          tab === "queue" ? (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => void load()}
-              disabled={loading}
-              aria-label="Refresh improvement queue"
-            >
-              <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />
-              Refresh
-            </Button>
-          ) : undefined
-        }
-      />
-      <PageContent>
-        <div role="tablist" aria-label="Improve sections" className="mb-4 flex gap-1 border-b border-[var(--border-default)]">
+    <CoreResourcePage
+      size="wide"
+      header={
+        <PageHeader
+          title="Improve"
+          subtitle="Action queue, improvement plans, and sweep history."
+          description="One queue for triage, patches, nudges, and promotions from Agent Issues."
+          actions={
+            tab === "queue" ? (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => void load()}
+                disabled={loading}
+                aria-label="Refresh improvement queue"
+              >
+                <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />
+                Refresh
+              </Button>
+            ) : undefined
+          }
+        />
+      }
+      toolbar={
+        <div className="mb-4 space-y-3">
+          <CrossLinkBar
+            links={[
+              { label: "Issues", href: "/issues" },
+              { label: "Artifacts", href: "/artifacts" },
+              { label: "Promotions", href: "/promotions" },
+              { label: "Scorecard", href: "/improve/scorecard" },
+              { label: "Change impact", href: "/improve/change-impact" },
+              { label: "Online scoring", href: "/improve/online-scoring" },
+              { label: "Book / Drift", href: "/agents" },
+            ]}
+          />
+          <div role="tablist" aria-label="Improve sections" className="flex gap-1 border-b border-[var(--border-default)]">
           {IMPROVE_TABS.map((t) => (
             <button
               key={t}
@@ -209,8 +246,11 @@ function ImprovePageInner() {
               {t === "queue" ? "Queue" : t === "plans" ? "Plans" : "History"}
             </button>
           ))}
+          </div>
         </div>
-
+      }
+      table={
+        <>
         {tab === "plans" && (
           <EmbeddedSurface>
             <PlansView />
@@ -314,9 +354,29 @@ function ImprovePageInner() {
                               <PlanKindBadge kind={kind} />
                             </div>
                           )}
+                          {item.item_type === "auto_heal" && (
+                            <p className="mt-1 text-[11px] text-[var(--accent)]">
+                              Auto-heal event
+                            </p>
+                          )}
+                          {item.item_type === "policy_denial" && (
+                            <p className="mt-1 text-[11px] text-[var(--error)]">
+                              Policy denial
+                            </p>
+                          )}
                           {item.blocked_reason && (
-                            <p className="mt-1 text-[11px] text-[var(--warning)]">
-                              Blocked: {item.blocked_reason}
+                            <p
+                              className={cn(
+                                "mt-1 text-[11px]",
+                                item.item_type === "policy_denial"
+                                  ? "text-[var(--error)]"
+                                  : "text-[var(--warning)]",
+                              )}
+                            >
+                              {item.item_type === "policy_denial"
+                                ? "Denied: "
+                                : "Blocked: "}
+                              {item.blocked_reason}
                             </p>
                           )}
                           {item.autonomy_tier_required && (
@@ -364,7 +424,8 @@ function ImprovePageInner() {
         )}
           </>
         )}
-      </PageContent>
-    </>
+        </>
+      }
+    />
   );
 }

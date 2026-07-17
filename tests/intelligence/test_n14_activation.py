@@ -41,7 +41,7 @@ def test_settings_have_trace_quality_fields() -> None:
 
 
 def test_app_lifespan_calls_install_all_and_workers() -> None:
-    """G1 — lifespan delegates N14 activation to background workers."""
+    """G1 — lifespan runs install_all on every pod; workers leader-gated."""
     from pathlib import Path
 
     app_src = (
@@ -58,13 +58,16 @@ def test_app_lifespan_calls_install_all_and_workers() -> None:
         / "workers"
         / "background.py"
     ).read_text(encoding="utf-8")
+    assert "install_all()" in app_src
     assert "start_background_workers" in app_src
     assert "run_background_workers" in app_src
-    assert "install_all()" in worker_src
+    assert "install_all()" not in worker_src
     assert "start_worker()" in worker_src
     assert "register_all_hooks()" in worker_src
     assert "start_judge_tailer" in worker_src
     assert "stop_judge_tailer" in worker_src
+    assert "statgate_installed" in app_src
+    assert "evolution_loop_running" in app_src
 
 
 @pytest.mark.asyncio
@@ -80,12 +83,16 @@ async def test_start_judge_tailer_respects_disable_flag() -> None:
 
 
 def test_install_all_is_idempotent() -> None:
+    from eden.observability.platform_activation import reset_for_tests
     from eden.observability.trace_quality.wiring import install_all
 
-    # Two calls in the same process must not raise (mirrors
-    # tests/api/test_hot_path_p99_regression.py:154).
+    reset_for_tests()
     install_all()
     install_all()
+
+    from eden.observability.platform_activation import is_statgate_installed
+
+    assert is_statgate_installed() is True
 
 
 @pytest.mark.asyncio
@@ -130,3 +137,82 @@ async def test_start_worker_respects_disable_flag() -> None:
         with patch("eden.config.get_settings", return_value=_S()):
             await worker_mod.start_worker()
             assert worker_mod.is_worker_running() is False
+
+
+def test_statgate_wraps_apply_approved_after_install_all() -> None:
+    """StatGate must monkey-patch ClosedLoopExecutor.apply_approved."""
+    from eden.llmops import closed_loop_executor as cle
+    from eden.observability.platform_activation import reset_for_tests
+    from eden.observability.trace_quality.wiring import install_all
+
+    reset_for_tests()
+    before = cle.ClosedLoopExecutor.apply_approved
+    install_all()
+    after = cle.ClosedLoopExecutor.apply_approved
+    assert after is not before
+
+
+def test_platform_activation_metrics_exported() -> None:
+    from eden.observability.platform_activation import (
+        get_platform_activation_metrics,
+        mark_wiring_installed,
+        record_hot_path_duration,
+        reset_for_tests,
+    )
+
+    reset_for_tests()
+    mark_wiring_installed(success=True)
+    record_hot_path_duration(0.001)
+    snap = get_platform_activation_metrics()
+    assert snap["eden_wiring_install_success"] == 1.0
+    assert snap["eden_hot_path_guardrail_duration_seconds_count"] >= 1
+
+
+@pytest.mark.asyncio
+async def test_guardrail_demote_hook_calls_eval_link() -> None:
+    """Demote hook must disable guardrail, not record-only."""
+    from unittest.mock import AsyncMock
+
+    from eden.llmops.promotion_hooks import GuardrailHook
+
+    demote = AsyncMock(return_value={"status": "ok", "data": {"status": "disabled"}})
+    with patch(
+        "eden.llmops.promotion_hooks._record_action",
+        AsyncMock(return_value="aid-1"),
+    ), patch(
+        "eden.guardrails.EvalToGuardrailLink.demote",
+        demote,
+    ):
+        await GuardrailHook().on_judge_below_floor("org_t", judge_name="j1")
+    demote.assert_awaited_once_with(
+        "org_t", judge_name="j1", reason="judge_below_floor"
+    )
+
+
+def test_etec_attr_bridge_documented_in_loop_detector() -> None:
+    """F20 loop detector reads etec_loop_score from span attributes."""
+    from eden.issues.auto_scanner import AutoIssueScanner
+
+    events = [
+        {
+            "event_type": "span.end",
+            "attributes": {"etec_loop_score": "0.95"},
+            "duration_ms": 10,
+        }
+    ]
+    stumbles = AutoIssueScanner()._detect_loops(
+        "org", "trace-1", None, None, None, events
+    )
+    assert stumbles and stumbles[0].kind == "loop"
+    assert stumbles[0].detail.get("etec_loop_score") == 0.95
+
+
+def test_background_worker_stop_timeout_covers_quality_drain() -> None:
+    """Supervisor stop timeout must be ≥ quality worker 30s drain."""
+    import inspect
+
+    from eden.workers import background as bg
+
+    sig = inspect.signature(bg.stop_background_workers)
+    default = sig.parameters["timeout"].default
+    assert float(default) >= 30.0

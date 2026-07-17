@@ -198,7 +198,6 @@ async def _insert_eval_to_guardrail_link(
     threshold: float,
     status: str = "active",
 ) -> str | None:
-    """Insert a row into ``eval_to_guardrail_links``."""
     try:
         from eden.storage.postgres import get_postgres_client
     except Exception:
@@ -231,6 +230,91 @@ async def _insert_eval_to_guardrail_link(
     except Exception:
         return None
     return str(d.get("id"))
+
+
+async def _disable_eval_guardrail_link(
+    org_id: str,
+    *,
+    judge_name: str,
+    reason: str = "",
+) -> dict[str, Any]:
+    """Disable the promoted judge guardrail + link rows for an org."""
+    out: dict[str, Any] = {
+        "judge_name": judge_name,
+        "policy_ids": [],
+        "link_ids": [],
+        "disabled": False,
+        "reason": reason[:512],
+    }
+    try:
+        from eden.storage.postgres import get_postgres_client
+    except Exception:
+        return out
+    try:
+        client = await get_postgres_client()
+    except Exception:
+        return out
+    if client is None:
+        return out
+    jname = judge_name[:64]
+    try:
+        link_rows = await client.fetch(
+            """
+            SELECT id, guardrail_policy_id
+            FROM eval_to_guardrail_links
+            WHERE org_id = $1 AND judge_name = $2 AND status = 'active'
+            """,
+            org_id,
+            jname,
+        )
+    except Exception as exc:
+        logger.debug("guardrails: link fetch failed: %s", exc)
+        return out
+    policy_ids: list[str] = []
+    link_ids: list[str] = []
+    for row in link_rows or []:
+        try:
+            d = dict(row)
+        except Exception:
+            continue
+        lid = d.get("id")
+        pid = d.get("guardrail_policy_id")
+        if lid is not None:
+            link_ids.append(str(lid))
+        if pid is not None:
+            policy_ids.append(str(pid))
+    if not link_ids and not policy_ids:
+        return out
+    try:
+        async with client.transaction():
+            if link_ids:
+                await client.execute(
+                    """
+                    UPDATE eval_to_guardrail_links
+                    SET status = 'disabled'
+                    WHERE org_id = $1 AND judge_name = $2 AND status = 'active'
+                    """,
+                    org_id,
+                    jname,
+                )
+            if policy_ids:
+                await client.execute(
+                    """
+                    UPDATE guardrail_policies
+                    SET status = 'disabled'
+                    WHERE org_id = $1
+                      AND id = ANY($2::uuid[])
+                      AND status = 'active'
+                    """,
+                    org_id,
+                    policy_ids,
+                )
+        out["policy_ids"] = policy_ids
+        out["link_ids"] = link_ids
+        out["disabled"] = True
+    except Exception as exc:
+        logger.debug("guardrails: disable link failed: %s", exc)
+    return out
 
 
 def _row_to_dict(row: Any) -> dict[str, Any]:
@@ -611,6 +695,60 @@ class EvalToGuardrailLink:
                 "judge_name": judge_name,
                 "threshold": float(threshold),
                 "action": action,
+            },
+        )
+
+    async def demote(
+        self,
+        org_id: str,
+        *,
+        judge_name: str,
+        reason: str = "",
+    ) -> dict[str, Any]:
+        """Disable a promoted judge guardrail (eval-to-guardrail demote)."""
+        if not isinstance(judge_name, str) or not judge_name:
+            return not_implemented(self.name, message="judge_name is required")
+
+        result = await _disable_eval_guardrail_link(
+            org_id,
+            judge_name=judge_name,
+            reason=reason,
+        )
+        if not result.get("disabled"):
+            return _ok_envelope(
+                self.name,
+                {
+                    "org_id": org_id,
+                    "judge_name": judge_name,
+                    "status": "not_found",
+                    "reason": reason,
+                },
+            )
+
+        try:
+            from eden.llmops.filters.guardrail import get_guardrail_filter
+            from eden.llmops.learn_wiring import install_learn_filters
+
+            install_learn_filters()
+            filt = get_guardrail_filter()
+            remaining = [
+                p
+                for p in filt._policies.get(org_id, [])
+                if str(p.get("judge_name") or "") != judge_name
+            ]
+            filt.load_policies(org_id, remaining)
+        except Exception as hook_exc:
+            logger.debug("eval_to_guardrail: gateway filter reload failed: %s", hook_exc)
+
+        return _ok_envelope(
+            self.name,
+            {
+                "org_id": org_id,
+                "judge_name": judge_name,
+                "status": "disabled",
+                "policy_ids": result.get("policy_ids") or [],
+                "link_ids": result.get("link_ids") or [],
+                "reason": reason,
             },
         )
 

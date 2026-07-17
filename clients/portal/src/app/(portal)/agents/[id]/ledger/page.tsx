@@ -1,0 +1,308 @@
+"use client";
+
+import Link from "next/link";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useParams } from "next/navigation";
+import { ArrowLeft, BookOpen, Loader2, RefreshCw } from "lucide-react";
+
+import { PageHeader } from "@/components/layout/page-header";
+import { PageContent } from "@/components/layout/page-content";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { EmptyState } from "@/components/ui/empty-state";
+import { Input } from "@/components/ui/input";
+import { useOrg } from "@/hooks/use-org";
+import { useKeyboardShortcuts } from "@/hooks/use-keyboard-shortcuts";
+import { DiffViewer } from "@/components/improve/diff-viewer";
+import { MarkdownProse, textToUnifiedDiff } from "@/components/improve/markdown-prose";
+import { learnApi } from "@/lib/api";
+import {
+  artifactHref,
+  driftHref,
+  issueFullHref,
+  traceHref,
+  tracesFilteredHref,
+} from "@/lib/portal-cross-links";
+import { errorFromCaught } from "@/lib/safe-error-message";
+import { CrossLinkBar } from "@/components/portal-os";
+
+function CitationChip({ cite }: { cite: string }) {
+  if (cite.startsWith("artifact:")) {
+    const id = cite.replace("artifact:", "");
+    return (
+      <Link href={artifactHref(id)} className="rounded bg-[var(--accent-faint)] px-2 py-0.5 text-xs hover:underline">
+        artifact:{id.slice(0, 8)}
+      </Link>
+    );
+  }
+  if (cite.startsWith("trace:")) {
+    const id = cite.replace("trace:", "");
+    return (
+      <Link href={traceHref(id)} className="rounded bg-[var(--accent-faint)] px-2 py-0.5 text-xs hover:underline">
+        trace:{id.slice(0, 8)}
+      </Link>
+    );
+  }
+  if (cite.length > 8) {
+    return (
+      <Link
+        href={issueFullHref(cite)}
+        className="rounded bg-[var(--accent-faint)] px-2 py-0.5 text-xs hover:underline"
+      >
+        issue:{cite.slice(0, 8)}
+      </Link>
+    );
+  }
+  return <span className="rounded bg-[var(--bg-secondary)] px-2 py-0.5 text-xs">{cite}</span>;
+}
+
+export default function AgentLedgerPage() {
+  const params = useParams<{ id: string }>();
+  const agentId = useMemo(
+    () => (params?.id ? decodeURIComponent(params.id) : ""),
+    [params?.id],
+  );
+  const { currentOrg } = useOrg();
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [entries, setEntries] = useState<Array<Record<string, unknown>>>([]);
+  const [enabled, setEnabled] = useState(false);
+  const [maxTokens, setMaxTokens] = useState(800);
+  const [version, setVersion] = useState(0);
+  const [sinceVersion, setSinceVersion] = useState(0);
+  const [diff, setDiff] = useState<Array<Record<string, unknown>>>([]);
+  const [diffText, setDiffText] = useState("");
+  const [diffMode, setDiffMode] = useState<"unified" | "split">("unified");
+  const [task, setTask] = useState("");
+  const [preview, setPreview] = useState<Record<string, unknown> | null>(null);
+  const [regenerating, setRegenerating] = useState(false);
+
+  const load = useCallback(async () => {
+    if (!currentOrg || !agentId) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await learnApi.getLedger(currentOrg.id, agentId);
+      const ledger = res.data?.ledger as Record<string, unknown> | undefined;
+      const config = res.data?.config as Record<string, unknown> | undefined;
+      setEntries((ledger?.entries as Array<Record<string, unknown>>) ?? []);
+      setEnabled(Boolean(config?.enabled));
+      setMaxTokens(Number(config?.max_tokens ?? 800));
+      setVersion(Number(ledger?.version ?? 0));
+    } catch (e) {
+      setError(errorFromCaught(e, "Failed to load ledger"));
+    } finally {
+      setLoading(false);
+    }
+  }, [currentOrg, agentId]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const runPreview = async () => {
+    if (!currentOrg || !agentId) return;
+    const res = await learnApi.previewLedger(currentOrg.id, agentId, { task: task || "Sample task" });
+    setPreview((res.data?.preview as Record<string, unknown>) ?? null);
+  };
+
+  const loadDiff = async () => {
+    if (!currentOrg || !agentId) return;
+    const res = await learnApi.ledgerDiff(currentOrg.id, agentId, sinceVersion);
+    const rows = (res.data?.diff as Array<Record<string, unknown>>) ?? [];
+    setDiff(rows);
+    const parts = rows.map((d) => {
+      const chapter = String(d.chapter ?? "chapter");
+      const before = String(d.before ?? d.old_text ?? "");
+      const after = String(d.after ?? d.new_text ?? d.text ?? "");
+      if (before || after) return textToUnifiedDiff(before, after, chapter);
+      return `--- a/${chapter}\n+++ b/${chapter}\n@@ -1,1 +1,1 @@\n-v${String(d.version ?? "?")}\n+v${String(d.version ?? "?")} · ${chapter}`;
+    });
+    setDiffText(parts.join("\n") || textToUnifiedDiff("", entries.map((e) => String(e.text ?? "")).join("\n\n"), "ledger"));
+  };
+
+  const toggleInject = async (on: boolean) => {
+    if (!currentOrg || !agentId) return;
+    await learnApi.patchLedgerConfig(currentOrg.id, agentId, { enabled: on, max_tokens: maxTokens });
+    setEnabled(on);
+  };
+
+  const saveMaxTokens = async (value: number) => {
+    if (!currentOrg || !agentId) return;
+    setMaxTokens(value);
+    await learnApi.patchLedgerConfig(currentOrg.id, agentId, { enabled, max_tokens: value });
+  };
+
+  const regenerate = async () => {
+    if (!currentOrg || !agentId) return;
+    setRegenerating(true);
+    try {
+      await learnApi.regenerateLedger(currentOrg.id, agentId);
+      await load();
+    } catch (e) {
+      setError(errorFromCaught(e, "Regenerate failed"));
+    } finally {
+      setRegenerating(false);
+    }
+  };
+
+  useKeyboardShortcuts(
+    {
+      d: () => void loadDiff(),
+      r: () => void regenerate(),
+    },
+    Boolean(agentId),
+  );
+
+  return (
+    <PageContent>
+      <PageHeader
+        title="The Book"
+        description="Living memory — failures, fixes, and gotchas as markdown with citation chips."
+      />
+      <div className="mb-4 flex flex-wrap items-center gap-2 text-sm">
+        <Link
+          href={`/agents/${encodeURIComponent(agentId)}`}
+          className="inline-flex items-center gap-1 text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          Back to agent
+        </Link>
+      </div>
+      <CrossLinkBar
+        className="mb-4"
+        links={[
+          { label: "Drift", href: driftHref(agentId) },
+          { label: "Traces", href: tracesFilteredHref({ agent_id: agentId }) },
+          { label: "Artifacts", href: artifactHref() },
+          { label: "Improve", href: "/improve" },
+        ]}
+      />
+      <Card className="mb-4 flex flex-wrap items-center justify-between gap-4 p-4">
+        <div className="flex flex-wrap items-center gap-3">
+          <BookOpen className="h-5 w-5" />
+          <span className="text-sm">Gateway injection {enabled ? "on" : "off"}</span>
+          <Button variant="outline" size="sm" onClick={() => void toggleInject(!enabled)}>
+            {enabled ? "Disable" : "Enable"}
+          </Button>
+          <span className="text-xs text-[var(--text-muted)]">v{version}</span>
+          <label className="flex items-center gap-2 text-xs text-[var(--text-muted)]">
+            Max tokens
+            <input
+              type="range"
+              min={500}
+              max={2000}
+              step={100}
+              value={maxTokens}
+              onChange={(e) => void saveMaxTokens(Number(e.target.value))}
+              className="w-24"
+            />
+            {maxTokens}
+          </label>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <Input
+            placeholder="Task for inject preview"
+            value={task}
+            onChange={(e) => setTask(e.target.value)}
+            className="w-48"
+          />
+          <Button variant="outline" size="sm" onClick={() => void runPreview()}>
+            Preview inject
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => void loadDiff()}>
+            Version diff
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => void regenerate()} disabled={regenerating}>
+            {regenerating ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+          </Button>
+        </div>
+      </Card>
+      {preview ? (
+        <Card className="mb-4 space-y-2 p-4 text-sm">
+          <div className="font-medium">Inject preview</div>
+          <div className="flex flex-wrap gap-4 text-xs text-[var(--text-muted)]">
+            <span>Tokens: {String(preview.tokens ?? "—")}</span>
+            <span>Est. $/match: {String(preview.est_usd_per_match ?? "—")}</span>
+          </div>
+          <MarkdownProse content={String(preview.injected_block ?? "")} />
+        </Card>
+      ) : null}
+      {diffText || diff.length > 0 ? (
+        <Card className="mb-4 space-y-3 p-4 text-sm">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="font-medium">Version diff since v{sinceVersion}</div>
+            <Input
+              type="number"
+              className="w-24"
+              value={sinceVersion}
+              onChange={(e) => setSinceVersion(Number(e.target.value))}
+              aria-label="Compare since version"
+            />
+          </div>
+          {diff.length > 0 ? (
+            <div className="flex flex-wrap gap-2 text-xs text-[var(--text-muted)]">
+              {diff.map((d, i) => (
+                <span key={i}>
+                  v{String(d.version)} · {String(d.chapter)}
+                </span>
+              ))}
+            </div>
+          ) : null}
+          <DiffViewer
+            diff={diffText}
+            diffMode={diffMode}
+            onModeChange={setDiffMode}
+            emptyMessage="No chapter text changes in this range."
+          />
+        </Card>
+      ) : null}
+      {error ? <EmptyState title="Error" description={error} /> : null}
+      {loading ? (
+        <Loader2 className="h-8 w-8 animate-spin" />
+      ) : entries.length === 0 ? (
+        <EmptyState
+          title="Ledger draft empty"
+          description="The Book is living memory for this agent — failures, fixes, and gotchas in plain language."
+          action={
+            <div className="flex flex-wrap justify-center gap-2">
+              <Button size="sm" variant="outline" asChild>
+                <Link href="/issues">Resolve an issue</Link>
+              </Button>
+              <Button size="sm" asChild>
+                <Link href={artifactHref()}>Promote an artifact</Link>
+              </Button>
+            </div>
+          }
+        />
+      ) : (
+        <div className="space-y-2">
+          {entries.map((e) => {
+            const cites = (e.citations as string[] | undefined) ?? [];
+            return (
+              <Card key={String(e.id)} className="p-4">
+                <div className="text-xs text-[var(--text-muted)]">
+                  {String(e.chapter)} · v{String(e.version)}
+                </div>
+                <MarkdownProse
+                  className="mt-1"
+                  content={String(e.content_md ?? e.text ?? "")}
+                />
+                {cites.length > 0 ? (
+                  <div className="mt-2 flex flex-wrap gap-1" aria-label="Citations">
+                    {cites.map((c) => (
+                      <CitationChip key={c} cite={String(c)} />
+                    ))}
+                  </div>
+                ) : null}
+              </Card>
+            );
+          })}
+        </div>
+      )}
+      <p className="mt-4 text-center text-xs text-[var(--text-muted)]">
+        <kbd>d</kbd> version diff · <kbd>r</kbd> regenerate
+      </p>
+    </PageContent>
+  );
+}

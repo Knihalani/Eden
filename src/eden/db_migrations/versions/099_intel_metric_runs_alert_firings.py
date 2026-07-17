@@ -1,8 +1,13 @@
 """099_intel_metric_runs_alert_firings — Cat 18/19/21 runtime tables.
 
 Revision ID: 099
-Revises: 098
+Revises: 099a
 Create Date: 2026-07-13
+
+Renumbered down_revision from a duplicate "098" (see
+096_debugger_llm_cache.py for the chain-repair note) — this file
+keeps the "099" id (100_artifacts_ledger.py already depends on
+it) but now continues from "099a".
 
 Closes the remaining Cat 21 + Cat 19 persistence gaps:
 
@@ -24,7 +29,7 @@ from __future__ import annotations
 from alembic import op
 
 revision = "099"
-down_revision = "098"
+down_revision = "099a"
 branch_labels = None
 depends_on = None
 

@@ -1,5 +1,6 @@
-"""B-18 + B-19 fix: add UNIQUE constraints so the new UPSERT
-write paths can rely on a single canonical row per tuple.
+"""075_uniqueness_constraints — B-18 + B-19 fix: add UNIQUE
+constraints so the new UPSERT write paths can rely on a single
+canonical row per tuple.
 
 Migration 020 created the 3 agent tables
 (``agent_performance_snapshots``, ``agent_relationships``,
@@ -32,7 +33,7 @@ non-NULL rows. The dedup CTE uses
 non-NULL ``dataset_id`` wins, then the latest id as
 final tiebreaker.
 
-Revision ID: 075_uniqueness_constraints
+Revision ID: 075
 Revises: 074_hook_repetition_closed_loop
 Create Date: 2026-06-29 14:00:00.000000
 """

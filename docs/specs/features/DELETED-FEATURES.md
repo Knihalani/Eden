@@ -5,6 +5,20 @@
 
 ---
 
+## July 2026 SOTA W26 — F22 DELETED
+
+| Removed | Reason | Replacement |
+|---|---|---|
+| `src/eden/patches/issue_fix_chat.py` | In-portal SSE fix chat; dual path vs N20 | N20 `improvement/issue_patch_trigger` → `improvement_plans` |
+| `POST/GET …/agent-issues/{id}/fix/*` | Fix chat / apply / session routes | Improve approve → GitHub App PR |
+| Portal `/issues/[id]/fix` | Fix tab UI | Redirect → `/issues/:id?tab=handoff` |
+| Flags `issue_fix_chat_v1`, `issue_fix_auto_verify_v1` | Feature gates for F22 | Removed |
+| Table `issue_fix_sessions` | Session store for F22 | Dropped in migration `110_w26_drop_issue_fix_sessions` |
+
+**Status stamp:** F22 = **DELETED** (2026-07-17). Do not rebuild.
+
+---
+
 ## July 2026 portal consolidation
 
 ### GitHub auto-integrate PR path (removed)
@@ -64,7 +78,8 @@ Leave Phase-1-cut predict endpoints, HIPAA stubs, multimodal `None`, AgentBenchm
 - `issue_patch_trigger.py` — issue → plan enqueue
 - `patch_generator.py` — unified diff generation
 - `pr_creator.py` — GitHub PR via `PRProvider`
-- `issue_fix_chat.py` — chat-guided fix (F22)
+
+**F22 chat removed in W26** (was briefly salvaged then deleted — see § July 2026 SOTA W26).
 
 **Legacy DB tables preserved (read-only):** `proposed_patches`, `pr_rejection_memory`. New writes target `improvement_plans` (N23).
 

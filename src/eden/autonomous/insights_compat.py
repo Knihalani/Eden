@@ -67,8 +67,34 @@ async def stream_insights_chat(
                     },
                     "duration_ms": chunk.tool_call.latency_ms,
                 })
+        elif chunk.type == "chart" and chunk.chart:
+            await queue.put({
+                "type": "chart",
+                "chart": chunk.chart.to_dict(),
+            })
+        elif chunk.type == "citation" and chunk.citation:
+            await queue.put({
+                "type": "citation",
+                "citation": chunk.citation.to_dict(),
+            })
+        elif chunk.type == "cost":
+            await queue.put({
+                "type": "cost",
+                "cost_usd": chunk.cost_usd,
+                "turn_cost_usd": chunk.turn_cost_usd,
+                **(chunk.meta or {}),
+            })
+        elif chunk.type == "meta":
+            await queue.put({"type": "meta", **(chunk.meta or {})})
         elif chunk.type == "error" and chunk.error:
             await queue.put({"type": "error", "message": chunk.error})
+        elif chunk.type == "done":
+            await queue.put({
+                "type": "done",
+                "cost_usd": chunk.cost_usd,
+                "turn_cost_usd": chunk.turn_cost_usd,
+                "conversation_id": session_id,
+            })
 
     async def run_chat() -> None:
         service = get_chat_service()
@@ -90,6 +116,8 @@ async def stream_insights_chat(
                 },
                 "stop_reason": "end_turn",
                 "conversation_id": summary.get("conversation_id", session_id),
+                "cost_usd": summary.get("cost_usd", 0),
+                "turn_cost_usd": summary.get("cost_usd", 0),
             })
         except Exception as exc:
             logger.exception("insights_compat stream failed")
@@ -120,7 +148,7 @@ async def list_messages_from_conversation(
     try:
         rows = await client.fetch(
             """
-            SELECT role, content, tool_calls, created_at
+            SELECT role, content, tool_calls, tool_results, chart_specs, citations, created_at
             FROM ai_messages
             WHERE conversation_id = $1
             ORDER BY created_at ASC
@@ -135,11 +163,28 @@ async def list_messages_from_conversation(
     for row in rows:
         content = row["content"] or ""
         tool_calls = row.get("tool_calls") or []
-        if isinstance(tool_calls, str):
-            try:
-                tool_calls = json.loads(tool_calls)
-            except json.JSONDecodeError:
-                tool_calls = []
+        tool_results = row.get("tool_results") or []
+        chart_specs = row.get("chart_specs") or []
+        citations = row.get("citations") or []
+        for field_name, raw in (
+            ("tool_calls", tool_calls),
+            ("tool_results", tool_results),
+            ("chart_specs", chart_specs),
+            ("citations", citations),
+        ):
+            if isinstance(raw, str):
+                try:
+                    parsed = json.loads(raw)
+                except json.JSONDecodeError:
+                    parsed = []
+                if field_name == "tool_calls":
+                    tool_calls = parsed
+                elif field_name == "tool_results":
+                    tool_results = parsed
+                elif field_name == "chart_specs":
+                    chart_specs = parsed
+                else:
+                    citations = parsed
         blocks: list[dict[str, Any]] = []
         if content:
             blocks.append({"type": "text", "text": content})
@@ -149,8 +194,23 @@ async def list_messages_from_conversation(
                     "type": "tool_use",
                     "id": tc.get("id") or str(uuid.uuid4()),
                     "name": tc.get("name", ""),
-                    "input": tc.get("args") or {},
+                    "input": tc.get("args") or tc.get("input") or {},
+                    "result": tc.get("result"),
                 })
+        for tr in tool_results if isinstance(tool_results, list) else []:
+            if isinstance(tr, dict) and tr.get("name"):
+                blocks.append({
+                    "type": "tool_result",
+                    "name": tr.get("name", ""),
+                    "output": tr.get("result"),
+                    "error": tr.get("error"),
+                })
+        for chart in chart_specs if isinstance(chart_specs, list) else []:
+            if isinstance(chart, dict):
+                blocks.append({"type": "chart", "chart": chart})
+        for cite in citations if isinstance(citations, list) else []:
+            if isinstance(cite, dict):
+                blocks.append({"type": "citation", "citation": cite})
         out.append({
             "role": row["role"],
             "content": blocks or [{"type": "text", "text": ""}],

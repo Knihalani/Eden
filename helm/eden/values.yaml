@@ -6,6 +6,8 @@
 image:
   repository: eden/api
   tag: latest
+  # Prefer digest pins in production, e.g. sha256:abc...
+  digest: ""
   pullPolicy: IfNotPresent
 
 # -- Replica counts
@@ -17,12 +19,23 @@ api:
   service:
     type: ClusterIP
     port: 8000
+  hpa:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 8
+    targetCPUUtilizationPercentage: 70
+  pdb:
+    enabled: true
+    minAvailable: 1
 
 worker:
   replicaCount: 2
   resources:
     requests: { cpu: 200m, memory: 512Mi }
     limits: { cpu: 2000m, memory: 2Gi }
+  pdb:
+    enabled: true
+    minAvailable: 1
 
 # -- Pluggable backends. Set any of these to a non-empty string
 # to use an external service instead of the in-chart one.
@@ -30,13 +43,21 @@ externalPostgres: ""
 externalRedis: ""
 externalClickhouse: ""
 externalQdrant: ""
+externalTypesense:
+  host: ""
+  port: "8108"
+  protocol: "http"
 
 # -- In-chart services. Disable the ones you've externalised.
 postgres:
   enabled: true
+  user: eden
+  password: eden
+  db: eden
   image:
     repository: postgres
     tag: "16"
+    digest: ""
   persistence:
     enabled: true
     size: 50Gi
@@ -45,13 +66,25 @@ redis:
   image:
     repository: redis
     tag: "7"
+    digest: ""
 clickhouse:
-  enabled: false  # off by default — heavy memory footprint
+  enabled: false  # off by default — heavy memory footprint; prefer externalClickhouse
 qdrant:
   enabled: true
   image:
     repository: qdrant/qdrant
     tag: "v1.7.0"
+    digest: ""
+typesense:
+  enabled: false  # prefer externalTypesense in production
+
+# -- Secrets created by this chart (stringData). Prefer ExternalSecrets in prod.
+secrets:
+  create: false
+  postgresPassword: ""
+  typesenseApiKey: ""
+  clickhousePassword: ""
+  redisPassword: ""
 
 # -- SSO-ready: OIDC issuer + SAML metadata URL.
 # The backend reads EDEN_SSO_OIDC_ISSUER and EDEN_SSO_SAML_METADATA_URL

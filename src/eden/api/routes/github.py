@@ -365,6 +365,17 @@ async def _enqueue_change_impact_preview(
         changed_files=agent_files,
         agent_id=ChangeDetector.resolve_agent_id(agent_files),
     )
+    try:
+        from eden.evaluation.ci_webhook import CIWebhookHandler
+
+        await CIWebhookHandler().on_prompt_change(
+            org_id,
+            changed_files=agent_files,
+            change_id=change_id,
+            agent_id=ChangeDetector.resolve_agent_id(agent_files),
+        )
+    except Exception as exc:
+        logger.debug("N01 CI webhook on PR failed: %s", redact_all(str(exc)))
     logger.info(
         "change_impact_preview org=%s change=%s recommendation=%s head=%s",
         org_id,

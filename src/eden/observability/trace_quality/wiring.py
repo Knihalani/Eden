@@ -366,12 +366,23 @@ def install_cat15_trajectory_replaces_intervention() -> None:
 
 def install_all() -> None:
     """Install every Cat 15/17/22 wiring. Idempotent."""
-    install_cat15_policy_extension()
-    install_cat15_trajectory_replaces_intervention()
-    install_cat17_stat_gate_gating()
-    install_cat17_closed_loop_collection()
-    install_cat22_sampling_policy()
-    logger.info("wiring: all Cat 15/17/22 wirings installed")
+    success = True
+    try:
+        install_cat15_policy_extension()
+        install_cat15_trajectory_replaces_intervention()
+        install_cat17_stat_gate_gating()
+        install_cat17_closed_loop_collection()
+        install_cat22_sampling_policy()
+        logger.info("wiring: all Cat 15/17/22 wirings installed")
+    except Exception as exc:  # pragma: no cover - defensive
+        success = False
+        logger.warning("wiring: install_all partial failure: %s", exc)
+    try:
+        from eden.observability.platform_activation import mark_wiring_installed
+
+        mark_wiring_installed(success=success)
+    except Exception as exc:  # pragma: no cover - defensive
+        logger.debug("wiring: platform_activation mark failed: %s", exc)
 
 
 # ── Helpers ───────────────────────────────────────────────────────

@@ -60,6 +60,13 @@ class AttachTraceRequest(BaseModel):
     trace_id: str = Field(..., min_length=1)
 
 
+@router.get("/contract")
+async def session_contract() -> dict[str, Any]:
+    from eden.services.session_contract import SESSION_CONTRACT
+
+    return _ok("agent_session_contract", {"contract": SESSION_CONTRACT})
+
+
 @router.post("/start")
 async def start_session(
     org_id: str = Path(...),

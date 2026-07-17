@@ -1,9 +1,13 @@
-"""F40 agent Book gateway filter."""
+"""F40 agent Book / Ledger gateway filter."""
 
 from __future__ import annotations
 
 import logging
 from typing import Any
+
+from eden.kb.ledger.retrieve import LedgerRetriever
+from eden.llmops.warm_learn import schedule_warm_learn
+from eden.preview.gates import ledger_enabled_sync
 
 logger = logging.getLogger(__name__)
 
@@ -15,7 +19,7 @@ def _book_cache_key(org_id: str, agent_id: str) -> str:
 
 
 class BookGatewayFilter:
-    """Append Book excerpt to system prompt when enabled."""
+    """Append Ledger retrieval to request context for shared InjectBudget."""
 
     name = "agent_book"
 
@@ -31,7 +35,24 @@ class BookGatewayFilter:
         if not org_id or not agent_id:
             return request, []
 
-        book = _BOOK_CACHE.get(_book_cache_key(str(org_id), str(agent_id)))
+        org_s = str(org_id)
+        agent_s = str(agent_id)
+        if ledger_enabled_sync(org_s):
+            text, audit = LedgerRetriever().pack_sync(org_s, agent_s)
+            if not text:
+                schedule_warm_learn(org_s, agent_s, task_text=str(getattr(request, "prompt", "") or ""))
+            elif text:
+                setattr(request, "_ledger_inject_text", text)
+                setattr(request, "inject_tokens", audit.get("inject_tokens", 0))
+                setattr(request, "inject_truncated", audit.get("inject_truncated", False))
+                return request, [f"ledger_injected:{audit.get('inject_tokens', 0)}"]
+
+        return self._legacy_book_apply(request, org_s, agent_s)
+
+    def _legacy_book_apply(
+        self, request: Any, org_id: str, agent_id: str
+    ) -> tuple[Any, list[str]]:
+        book = _BOOK_CACHE.get(_book_cache_key(org_id, agent_id))
         if not book or not book.get("content_md"):
             return request, []
 

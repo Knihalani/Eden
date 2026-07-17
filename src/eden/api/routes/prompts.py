@@ -1,14 +1,7 @@
 """Phase I — Prompt management + Playground API routes.
 
-Five routes:
-
-  * ``POST /orgs/{org}/prompts`` — register a new template
-  * ``GET  /orgs/{org}/prompts`` — list template names
-  * ``GET  /orgs/{org}/prompts/{name}`` — get the latest version
-  * ``PATCH /orgs/{org}/prompts/{name}`` — bump to a new version
-  * ``POST /orgs/{org}/prompts/{name}/rollback/{version}`` — rollback
-  * ``POST /orgs/{org}/prompts/{name}/playground`` — run a template
-  * ``POST /orgs/{org}/prompts/{name}/compare`` — compare two models
+Persisted via ``OrgPromptStore`` (Postgres write-through; memory fallback).
+Legacy template playground/compare retained; product surface is ``/playgrounds``.
 """
 
 from __future__ import annotations
@@ -20,12 +13,12 @@ from fastapi import APIRouter, Depends, HTTPException, Path
 from pydantic import BaseModel, Field
 
 from eden.api.routes.auth import get_current_user
+from eden.playground.llm_handler import make_playground_handler
+from eden.prompts.pg_store import OrgPromptStore
 from eden.prompts.registry import (
     Playground,
     PlaygroundResult,
-    PromptRegistry,
     PromptTemplate,
-    default_llm_handler,
 )
 
 logger = logging.getLogger(__name__)
@@ -36,9 +29,7 @@ router = APIRouter(
     tags=["prompts"],
 )
 
-
-# In-memory registry (Phase I.5 wires Postgres).
-_REGISTRY = PromptRegistry()
+_STORE = OrgPromptStore()
 
 
 # ── Schemas ───────────────────────────────────────────────────────
@@ -72,7 +63,7 @@ class PromptTemplateResponse(BaseModel):
 
 
 class PromptListResponse(BaseModel):
-    prompts: list[str]  # just the names
+    prompts: list[str]
     total_count: int
 
 
@@ -120,18 +111,12 @@ class CompareResponse(BaseModel):
     b: PlaygroundResponse
 
 
-# ── Helpers ───────────────────────────────────────────────────────
-
-
 def _to_response(t: PromptTemplate) -> PromptTemplateResponse:
     return PromptTemplateResponse(**t.to_dict())
 
 
 def _playground_to_response(r: PlaygroundResult) -> PlaygroundResponse:
     return PlaygroundResponse(**r.to_dict())
-
-
-# ── Routes ────────────────────────────────────────────────────────
 
 
 @router.post(
@@ -152,7 +137,7 @@ async def register_template(
         max_tokens=body.max_tokens, description=body.description,
     )
     try:
-        template = _REGISTRY.register(template)
+        template = await _STORE.register(org_id, template)
     except ValueError as exc:
         raise HTTPException(
             status_code=409,
@@ -170,7 +155,7 @@ async def list_templates(
     org_id: str = Path(...),
     user: dict = Depends(get_current_user),
 ) -> PromptListResponse:
-    names = _REGISTRY.list_names()
+    names = await _STORE.list_names(org_id)
     return PromptListResponse(prompts=names, total_count=len(names))
 
 
@@ -184,7 +169,7 @@ async def get_template(
     name: str = Path(...),
     user: dict = Depends(get_current_user),
 ) -> PromptTemplateResponse:
-    t = _REGISTRY.get(name)
+    t = await _STORE.get(org_id, name)
     if t is None:
         raise HTTPException(status_code=404, detail="template not found")
     return _to_response(t)
@@ -201,10 +186,9 @@ async def update_template(
     name: str = Path(...),
     user: dict = Depends(get_current_user),
 ) -> PromptTemplateResponse:
-    existing = _REGISTRY.get(name)
+    existing = await _STORE.get(org_id, name)
     if existing is None:
         raise HTTPException(status_code=404, detail="template not found")
-    # Build a new version with merged fields.
     new = PromptTemplate(
         name=name,
         system=body.system if body.system is not None else existing.system,
@@ -238,7 +222,7 @@ async def update_template(
         ),
     )
     try:
-        new = _REGISTRY.update(new)
+        new = await _STORE.update(org_id, new)
     except ValueError as exc:
         raise HTTPException(
             status_code=409,
@@ -257,7 +241,7 @@ async def list_versions(
     name: str = Path(...),
     user: dict = Depends(get_current_user),
 ) -> VersionListResponse:
-    versions = _REGISTRY.list_versions(name)
+    versions = await _STORE.list_versions(org_id, name)
     if not versions:
         raise HTTPException(status_code=404, detail="template not found")
     return VersionListResponse(name=name, versions=versions)
@@ -275,7 +259,7 @@ async def rollback_template(
     user: dict = Depends(get_current_user),
 ) -> PromptTemplateResponse:
     try:
-        new = _REGISTRY.rollback(name, version)
+        new = await _STORE.rollback(org_id, name, version)
     except ValueError as exc:
         raise HTTPException(
             status_code=404,
@@ -295,10 +279,9 @@ async def playground(
     name: str = Path(...),
     user: dict = Depends(get_current_user),
 ) -> PlaygroundResponse:
-    t = _REGISTRY.get(name)
+    t = await _STORE.get(org_id, name)
     if t is None:
         raise HTTPException(status_code=404, detail="template not found")
-    # Use the requested model if provided.
     if body.model is not None:
         t = PromptTemplate(
             name=t.name, system=t.system, user=t.user,
@@ -308,7 +291,7 @@ async def playground(
             max_tokens=t.max_tokens, description=t.description,
             version=t.version,
         )
-    pg = Playground(default_llm_handler)
+    pg = Playground(make_playground_handler(org_id))
     try:
         result = await pg.run(t, body.params)
     except Exception as exc:
@@ -330,10 +313,10 @@ async def compare(
     name: str = Path(...),
     user: dict = Depends(get_current_user),
 ) -> CompareResponse:
-    t = _REGISTRY.get(name)
+    t = await _STORE.get(org_id, name)
     if t is None:
         raise HTTPException(status_code=404, detail="template not found")
-    pg = Playground(default_llm_handler)
+    pg = Playground(make_playground_handler(org_id))
     try:
         a, b = await pg.compare(t, body.params, body.model_b)
     except Exception as exc:

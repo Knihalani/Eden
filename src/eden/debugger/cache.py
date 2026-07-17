@@ -24,6 +24,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import time
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -172,4 +173,114 @@ class PrefixCacheService:
             return []
 
 
-__all__ = ["llm_input_hash", "PrefixCacheService"]
+# ── Microbenchmarks (F03 stretch acceptance) ─────────────────────
+
+
+def microbench_llm_input_hash(
+    *,
+    iterations: int = 10_000,
+    messages: list[dict[str, Any]] | None = None,
+) -> dict[str, float]:
+    """Measure hot-path ``llm_input_hash`` latency (target p99 < 1 ms).
+
+    Returns p50/p95/p99 in milliseconds plus iteration count.
+    """
+    payload = messages or [
+        {"role": "user", "content": "step question"},
+        {"role": "assistant", "content": "step answer"},
+    ]
+    samples: list[float] = []
+    for _ in range(max(1, iterations)):
+        t0 = time.perf_counter()
+        llm_input_hash(payload)
+        samples.append(time.perf_counter() - t0)
+    samples.sort()
+
+    def _pct(p: float) -> float:
+        idx = min(len(samples) - 1, int(p * len(samples)))
+        return samples[idx] * 1000.0
+
+    return {
+        "p50_ms": _pct(0.50),
+        "p95_ms": _pct(0.95),
+        "p99_ms": _pct(0.99),
+        "iterations": float(len(samples)),
+    }
+
+
+def microbench_backfill_throughput(
+    *,
+    trace_count: int = 100,
+    steps_per_trace: int = 8,
+    messages: list[dict[str, Any]] | None = None,
+) -> dict[str, float]:
+    """Estimate checkpoint hash throughput for backfill (target ≥1k traces/hr).
+
+    Simulates the CPU work per trace step (hash only — DB upsert is async).
+    Extrapolates ``traces_per_hour`` from the measured window.
+    """
+    payload = messages or [
+        {"role": "user", "content": "backfill prompt"},
+        {"role": "assistant", "content": "backfill response"},
+    ]
+    traces = max(1, trace_count)
+    steps = max(1, steps_per_trace)
+    t0 = time.perf_counter()
+    for _ in range(traces):
+        for _step in range(steps):
+            llm_input_hash(payload)
+    elapsed = max(time.perf_counter() - t0, 1e-9)
+    traces_per_hour = traces / elapsed * 3600.0
+    return {
+        "traces_per_hour": traces_per_hour,
+        "elapsed_s": elapsed,
+        "trace_count": float(traces),
+        "steps_per_trace": float(steps),
+    }
+
+
+def microbench_prefix_replay(
+    *,
+    prefix_steps: int = 20,
+    iterations: int = 200,
+) -> dict[str, float]:
+    """Simulate cached-prefix replay CPU work (F01 target p95 < 2s).
+
+    Measures in-memory hash + JSON canonicalization per prefix step —
+    the dominant CPU cost before gateway tail execution.
+    """
+    messages = [
+        {"role": "user", "content": "prefix step prompt"},
+        {"role": "assistant", "content": "prefix step response"},
+    ]
+    samples: list[float] = []
+    steps = max(1, prefix_steps)
+    reps = max(1, iterations)
+    for _ in range(reps):
+        t0 = time.perf_counter()
+        for _step in range(steps):
+            llm_input_hash(messages)
+            json.dumps(messages, sort_keys=True, separators=(",", ":"))
+        samples.append(time.perf_counter() - t0)
+    samples.sort()
+
+    def _pct(p: float) -> float:
+        idx = min(len(samples) - 1, int(p * len(samples)))
+        return samples[idx] * 1000.0
+
+    return {
+        "p50_ms": _pct(0.50),
+        "p95_ms": _pct(0.95),
+        "p99_ms": _pct(0.99),
+        "prefix_steps": float(steps),
+        "iterations": float(reps),
+    }
+
+
+__all__ = [
+    "llm_input_hash",
+    "PrefixCacheService",
+    "microbench_llm_input_hash",
+    "microbench_backfill_throughput",
+    "microbench_prefix_replay",
+]

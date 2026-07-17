@@ -1,8 +1,11 @@
 """097_signal_definitions_f35_bridge — F35 default-library bridge columns.
 
-Revision ID: 097
-Revises: 096
+Revision ID: 097b
+Revises: 097a
 Create Date: 2026-07-15
+
+Renumbered from a duplicate "097" (see 096_debugger_llm_cache.py
+for the chain-repair note) — continues from "097a".
 
 Bridges the F35 default signal library (seeded into ``nl_signals``) into
 ``signal_definitions`` — the table the per-trace investigator (F06)
@@ -24,8 +27,8 @@ from __future__ import annotations
 
 from alembic import op
 
-revision = "097"
-down_revision = "096"
+revision = "097b"
+down_revision = "097a"
 branch_labels = None
 depends_on = None
 

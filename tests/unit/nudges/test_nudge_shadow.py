@@ -51,7 +51,11 @@ def test_trigger_eval_tool_result_match():
     assert evaluate_trigger(trigger, ctx) is True
 
 
-def test_shadow_nudge_does_not_mutate_prompt():
+def test_shadow_nudge_does_not_mutate_prompt(monkeypatch):
+    import eden.llmops.filters.nudge as nudge_filter_mod
+
+    monkeypatch.setattr(nudge_filter_mod, "artifacts_enabled_sync", lambda _: True)
+
     nudge = Nudge(
         id=uuid4(),
         org_id="org-1",
@@ -79,7 +83,11 @@ def test_shadow_nudge_does_not_mutate_prompt():
     assert audit and audit[0]["applied"] is False
 
 
-def test_promoted_nudge_appends_to_prompt():
+def test_promoted_nudge_appends_to_prompt(monkeypatch):
+    import eden.llmops.filters.nudge as nudge_filter_mod
+
+    monkeypatch.setattr(nudge_filter_mod, "artifacts_enabled_sync", lambda _: True)
+
     nudge = Nudge(
         id=uuid4(),
         org_id="org-1",
@@ -99,8 +107,13 @@ def test_promoted_nudge_appends_to_prompt():
     out, findings = filt.apply(req)
 
     assert "Use python3 on macOS." in out.prompt
-    assert out.prompt != req.prompt or "eden-nudge" in out.prompt
-    assert any("nudge_applied" in f for f in findings)
+    # Promoted system_append nudges route through InjectBudget.pack
+    # (F83 gateway provider-cache unification) — the marker is now
+    # "eden-inject:artifact:<id>", not the older "eden-nudge:<id>".
+    assert out.prompt != req.prompt or "eden-inject" in out.prompt
+    # system_append promoted nudges report as "nudge_promoted:<id>"
+    # once packed via InjectBudget (see NudgeGatewayFilter.apply).
+    assert any("nudge_promoted" in f for f in findings)
 
 
 def test_apply_nudge_to_prompt_system_append():

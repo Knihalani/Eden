@@ -162,6 +162,7 @@ def _build_settings_class():
         typesense_collection: str = "eden_spans"
         typesense_enabled: bool = True
         typesense_search_v1: bool = True
+        typesense_bulk_index_enabled: bool = True
 
         # Feature flags — gates the per-Cat intelligence surface.
         # The Cat 1-23 wiring tests flip these via monkeypatch; see
@@ -211,6 +212,8 @@ def _build_settings_class():
         # N23 — recurring improvement agent (replaces Cat 23 inbox).
         improvement_agent_v1: bool = False
         improvement_schedule_enabled: bool = False
+        # F62 — SLM-as-judge tier for online scoring (fast slot / Haiku-class).
+        online_scoring_slm_v1: bool = True
 
         # ── Cat 23 Phase 3b: quality gates (scheduler, critic, cost cap) ─
         # These knobs are read by ``eden.patches.patch_generator.PatchGenerator``
@@ -228,11 +231,9 @@ def _build_settings_class():
         # in the last 24h exceeds this. $50/day covers ~150 T2 patches at
         # $0.30 each (per the Phase 3b cost table in the plan).
         max_cost_per_user_per_day: float = 50.0
-        # Minimum number of traces that must cluster together on the same
-        # RCA signature before the scheduler will generate a patch. Prevents
-        # one-off flukes from triggering an autonomous PR. ``IncidentClusterer``
-        # already defaults to 3; this knob just exposes it to env-level config.
-        patch_cluster_min_size: int = 3
+        # Minimum fingerprint / stumble count before N20 enqueues an
+        # improvement_plan. Spec floor is 5×; env may raise but not lower.
+        patch_cluster_min_size: int = 5
         # Soft + hard caps on lines changed per diff. 200 lines is the
         # soft cap — patches this size generate normally. 500 lines is the
         # hard cap — anything bigger returns an "investigation" envelope and
@@ -283,6 +284,8 @@ def _build_settings_class():
         # ``usage.cost`` field for budget tracking instead of the
         # per-token estimate. Off by default per C-5 rollout guidance.
         ai_agent_real_cost: bool = False
+        # W20 / F70 — in-product ChatSidebar copilot (features.f70).
+        features_f70: bool = True
         # DL-10: hard cap on the ChatService gateway's request
         # ``max_tokens`` parameter. The OpenRouter upstream caps at
         # 4096 by default; set to 0 to disable the cap. The test
@@ -353,8 +356,17 @@ def _build_settings_class():
         interrupt_before_archivist: bool = True
         interrupt_before_human_review: bool = True
 
-        # JWT Authentication
-        jwt_secret: str = "change-me-in-production"
+        # JWT Authentication — accept JWT_SECRET and EDEN_JWT_SECRET
+        # (docs/boot error mention both; without AliasChoices only the
+        # pydantic field name / JWT_SECRET env form worked).
+        jwt_secret: str = Field(
+            default="change-me-in-production",
+            validation_alias=AliasChoices(
+                "jwt_secret",
+                "JWT_SECRET",
+                "EDEN_JWT_SECRET",
+            ),
+        )
         # Optional secondary key accepted during a rotation window. When
         # set, ``decode_access_token`` will accept tokens signed with
         # either the primary or this previous key. Tokens issued with
@@ -480,6 +492,14 @@ def _build_settings_class():
             "bedrock", "gemini", "framework", "webhook",
         ]
         ingestion_chunks_max_per_request: int = 1000
+        # W9 — load shed when in-process buffer / lag pressure is high.
+        ingestion_shed_enabled: bool = True
+        ingestion_shed_max_depth: int = 5000
+        ingestion_shed_retry_after_seconds: int = 5
+        # W9 — late-span watermark (reject beyond max age).
+        late_span_policy_enabled: bool = True
+        late_span_max_age_seconds: float = 86400.0  # 24h
+        late_span_soft_age_seconds: float = 3600.0  # stamp late_span attr after 1h
         # OTLP gRPC sidecar (off by default — HTTP-JSON via the POST routes
         # is the canonical path).
         ingestion_otlp_enabled: bool = False
@@ -722,17 +742,26 @@ def _build_settings_class():
         auto_issue_detection_v1: bool = True
         per_trace_signals_v1: bool = True
         tool_call_label_learning_v1: bool = True
+        tool_call_inference_v1: bool = False
+        tool_call_min_labels: int = 5
+        # N11 live in-flight trace streaming (Redis pub/sub). Defaults on
+        # for Wave 27 so portal/SDK/MCP surfaces are exercisable; flip off
+        # via env for rollback.
+        live_trace_streaming_v1: bool = True
+        live_mcp_tail_v1: bool = True
+        live_max_sessions_per_org: int = 100
         signal_classifiers_v1: bool = True
+        agentic_metrics_v1: bool = True
         closed_loop_orchestrator_v1: bool = True
-        # WS3 fix/prove surface (F22, N04, F23)
-        issue_fix_chat_v1: bool = True
-        issue_fix_auto_verify_v1: bool = True
+        # WS3 prove surface (N04, F23) — portal fix-chat DELETED @ W26
         change_impact_preview_v1: bool = True
         agent_sessions_v1: bool = True
+        debug_sessions_v1: bool = True
+        browser_recording_v1: bool = True
         # Triage budget (F30) — optional max LLM spend per org per day.
-        # ``<=0`` / unset = unlimited; orgs may override via
-        # ``code_change_policy.max_triage_cost_usd_per_day``.
-        max_triage_cost_usd_per_day: float = 0.0
+        # Positive default enforces a daily cap; orgs may override via
+        # ``code_change_policy.max_triage_cost_usd_per_day`` (incl. 0 = unlimited).
+        max_triage_cost_usd_per_day: float = 5.0
 
         # ── Autonomy policy engine (N22) ────────────────────────────────
         # Org-level defaults for the autonomous-maintenance safety
@@ -763,6 +792,18 @@ def _build_settings_class():
         verify_poll_interval_seconds: int = 60
         verify_max_attempts: int = 3
 
+        # ── Artifacts + Ledger (GA — default on; org features can kill) ─
+        artifacts_v1: bool = True
+        ledger_v1: bool = True
+        artifacts_inrun_v1: bool = False
+        improvement_loop_preview: bool = False
+        zero_label_onboarding_v1: bool = False
+        inject_budget_soft_tokens: int = 800
+        inject_budget_hard_tokens: int = 1200
+        max_promoted_artifacts: int = 8
+        max_evolution_ops_usd_per_org_day: float = 2.0
+        min_lift_per_100_tokens: float = 0.5
+
         # ── WS4 enterprise feature flags ────────────────────────────────
         # Sampling reuses Layer A judge_scores when present ($0 path).
         production_eval_sampling_v1: bool = True
@@ -784,6 +825,14 @@ def _build_settings_class():
         issue_alerts_enabled: bool = True
         issue_alert_dedup_minutes: int = 15
         issue_alert_max_per_hour: int = 30
+
+        # ── Phase 7 Wave 8 (F06/F65/F71/N10) ───────────────────────────
+        signal_clusters_v1: bool = True
+        signal_backfill_v1: bool = True
+        deep_search_to_signal_v1: bool = True
+        slack_signing_secret: str = ""
+        slack_interactive_v1: bool = True
+        f65_topics_v1: bool = True
 
         # ── Kill-switch defaults (v2.7 hot-path) ────────────────────────
         # Mutating actions default OFF per audit/permission policy.
@@ -809,10 +858,11 @@ def _build_settings_class():
             """Return the default kill-switch state for ``action_class``.
 
             Audit 2026-07-02 — mutating classes default False;
-            read-only default True; unknown classes default True
-            (fail-open so observability never silently breaks).
+            read-only default True. Unknown classes default **False**
+            (fail-closed) so new action types cannot auto-apply until
+            explicitly allow-listed.
             """
-            return self._KILL_SWITCH_DEFAULT.get(action_class, True)
+            return self._KILL_SWITCH_DEFAULT.get(action_class, False)
 
 
 

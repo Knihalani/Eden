@@ -17,6 +17,8 @@ export const queryKeys = {
     all: ["dashboard"] as const,
     summary: (orgId: string | null | undefined, filters?: Record<string, unknown>) =>
       ["dashboard", "summary", orgId, filters ?? {}] as const,
+    agentic: (orgId: string | null | undefined) =>
+      ["dashboard", "agentic", orgId] as const,
   },
   observability: {
     all: ["observability"] as const,
@@ -32,6 +34,8 @@ export const queryKeys = {
       ["observability", "timeline", orgId, traceId] as const,
     heatmap: (orgId: string | null | undefined, metric: string, filters?: Record<string, unknown>) =>
       ["observability", "heatmap", orgId, metric, filters ?? {}] as const,
+    spans: (orgId: string | null | undefined, filters?: Record<string, unknown>) =>
+      ["observability", "spans", orgId, filters ?? {}] as const,
   },
   agents: {
     all: ["agents"] as const,
@@ -39,6 +43,8 @@ export const queryKeys = {
       ["agents", "list", orgId, filters ?? {}] as const,
     sessions: (orgId: string | null | undefined, filters?: Record<string, unknown>) =>
       ["agents", "sessions", orgId, filters ?? {}] as const,
+    session: (orgId: string | null | undefined, sessionId: string | null | undefined) =>
+      ["agents", "session", orgId, sessionId] as const,
   },
   alerts: {
     all: ["alerts"] as const,
@@ -87,6 +93,15 @@ export const queryKeys = {
     summary: (orgId: string | null | undefined) => ["fleet", "summary", orgId] as const,
     heatmap: (orgId: string | null | undefined) => ["fleet", "heatmap", orgId] as const,
     delegation: (orgId: string | null | undefined) => ["fleet", "delegation", orgId] as const,
+    slaBreaches: (orgId: string | null | undefined) => ["fleet", "slaBreaches", orgId] as const,
+    agentic: (orgId: string | null | undefined) => ["fleet", "agentic", orgId] as const,
+  },
+  compliance: {
+    all: ["compliance"] as const,
+    ledger: (orgId: string | null | undefined, filters?: Record<string, unknown>) =>
+      ["compliance", "ledger", orgId, filters ?? {}] as const,
+    verify: (orgId: string | null | undefined, filters?: Record<string, unknown>) =>
+      ["compliance", "verify", orgId, filters ?? {}] as const,
   },
   analytics: {
     all: ["analytics"] as const,
@@ -157,6 +172,11 @@ export const queryKeys = {
     all: ["budget"] as const,
     detail: (orgId: string | null | undefined) => ["budget", "detail", orgId] as const,
     actions: (orgId: string | null | undefined) => ["budget", "actions", orgId] as const,
+  },
+  finops: {
+    all: ["finops"] as const,
+    explorer: (orgId: string | null | undefined, hours: number) =>
+      ["finops", "explorer", orgId, hours] as const,
   },
   redteam: {
     all: ["redteam"] as const,

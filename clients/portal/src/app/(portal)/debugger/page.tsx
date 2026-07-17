@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState, useCallback, useEffect } from "react";
 import { useSearchParams } from "next/navigation";
 import { useOrg } from "@/hooks/use-org";
@@ -22,6 +23,7 @@ export default function DebuggerPage() {
   const [filter, setFilter] = useState("");
   const [traceId, setTraceId] = useState(searchParams.get("trace_id") ?? "");
   const [promptOverride, setPromptOverride] = useState("");
+  const [livePrefix, setLivePrefix] = useState(true);
   const [lastDiff, setLastDiff] = useState<RerunResult["diff"]>([]);
 
   const load = useCallback(async () => {
@@ -73,6 +75,12 @@ export default function DebuggerPage() {
         subtitle="Time-travel checkpoints. Enter a trace id to list saved steps, then re-run from a step."
         actions={
           <>
+            <Link
+              href="/debugger-sessions"
+              className="text-xs text-[var(--accent)] hover:underline mr-2"
+            >
+              Debug sessions
+            </Link>
             <input
               value={traceId}
               onChange={(e) => setTraceId(e.target.value)}
@@ -90,6 +98,14 @@ export default function DebuggerPage() {
               className="h-8 w-56 rounded-md border border-[var(--border-subtle)] bg-[var(--bg-elev-1)] px-2 text-xs"
               aria-label="Prompt override"
             />
+            <label className="flex items-center gap-1.5 text-xs text-[var(--text-muted)]">
+              <input
+                type="checkbox"
+                checked={livePrefix}
+                onChange={(e) => setLivePrefix(e.target.checked)}
+              />
+              Cached-prefix live (F01)
+            </label>
             <DataTableSearch value={filter} onChange={setFilter} placeholder="Filter steps" />
             <Button onClick={load} variant="outline" size="sm" disabled={loading || !traceId.trim()}>
               <RefreshCw className="h-3.5 w-3.5" /> Load
@@ -151,6 +167,7 @@ export default function DebuggerPage() {
                       const result = await debuggerApi.rerun(currentOrg.id, {
                         trace_id: r.trace_id,
                         from_step: r.step_number,
+                        live_prefix: livePrefix,
                         ...(promptOverride.trim()
                           ? { prompt_override: promptOverride.trim() }
                           : {}),

@@ -249,6 +249,99 @@ class ClickHouseSink:
             TTL timestamp + INTERVAL 90 DAY
         """)
 
+        # F83 — hourly drift aggregates (outcome × agent) for Home p95 tiles.
+        # Populated automatically from telemetry_events_ch inserts.
+        await self._execute(f"""
+            CREATE TABLE IF NOT EXISTS {self.config.database}.drift_hourly (
+                tenant_id String,
+                agent_id String,
+                outcome LowCardinality(String),
+                hour DateTime,
+                event_count UInt64,
+                avg_duration_ms Float64
+            )
+            ENGINE = SummingMergeTree()
+            PARTITION BY toYYYYMM(hour)
+            ORDER BY (tenant_id, agent_id, outcome, hour)
+            TTL hour + INTERVAL 90 DAY
+        """)
+
+        await self._execute(f"""
+            CREATE MATERIALIZED VIEW IF NOT EXISTS {self.config.database}.drift_hourly_mv
+            TO {self.config.database}.drift_hourly
+            AS SELECT
+                tenant_id,
+                agent_id,
+                outcome,
+                toStartOfHour(timestamp) AS hour,
+                count() AS event_count,
+                avg(duration_ms) AS avg_duration_ms
+            FROM {self.config.database}.telemetry_events_ch
+            GROUP BY tenant_id, agent_id, outcome, hour
+        """)
+
+        # F83 — daily experiment/benchmark rollups for compare panel.
+        await self._execute(f"""
+            CREATE TABLE IF NOT EXISTS {self.config.database}.experiment_daily (
+                tenant_id UUID,
+                benchmark_id UUID,
+                day Date,
+                run_count UInt64,
+                pass_count UInt64,
+                avg_score Float64,
+                avg_duration_ms Float64
+            )
+            ENGINE = SummingMergeTree()
+            PARTITION BY toYYYYMM(day)
+            ORDER BY (tenant_id, benchmark_id, day)
+            TTL day + INTERVAL 90 DAY
+        """)
+
+        await self._execute(f"""
+            CREATE MATERIALIZED VIEW IF NOT EXISTS {self.config.database}.experiment_daily_mv
+            TO {self.config.database}.experiment_daily
+            AS SELECT
+                tenant_id,
+                benchmark_id,
+                toDate(timestamp) AS day,
+                count() AS run_count,
+                sum(passed) AS pass_count,
+                avg(score) AS avg_score,
+                avg(duration_ms) AS avg_duration_ms
+            FROM {self.config.database}.benchmark_results
+            GROUP BY tenant_id, benchmark_id, day
+        """)
+
+        # W9 — Home KPI daily rollups (trace volume, error rate, p95 latency).
+        await self._execute(f"""
+            CREATE TABLE IF NOT EXISTS {self.config.database}.home_kpi_daily (
+                tenant_id String,
+                day Date,
+                event_count UInt64,
+                error_count UInt64,
+                avg_duration_ms Float64,
+                p95_duration_ms Float64
+            )
+            ENGINE = SummingMergeTree()
+            PARTITION BY toYYYYMM(day)
+            ORDER BY (tenant_id, day)
+            TTL day + INTERVAL 90 DAY
+        """)
+
+        await self._execute(f"""
+            CREATE MATERIALIZED VIEW IF NOT EXISTS {self.config.database}.home_kpi_daily_mv
+            TO {self.config.database}.home_kpi_daily
+            AS SELECT
+                tenant_id,
+                toDate(timestamp) AS day,
+                count() AS event_count,
+                countIf(outcome = 'error') AS error_count,
+                avg(duration_ms) AS avg_duration_ms,
+                quantile(0.95)(duration_ms) AS p95_duration_ms
+            FROM {self.config.database}.telemetry_events_ch
+            GROUP BY tenant_id, day
+        """)
+
         await self._apply_ttl_migrations()
 
         self._initialized = True
@@ -285,6 +378,18 @@ class ClickHouseSink:
             (
                 "benchmark_results",
                 "timestamp + INTERVAL 7 YEAR",
+            ),
+            (
+                "drift_hourly",
+                "hour + INTERVAL 90 DAY",
+            ),
+            (
+                "experiment_daily",
+                "day + INTERVAL 90 DAY",
+            ),
+            (
+                "home_kpi_daily",
+                "day + INTERVAL 90 DAY",
             ),
         ]
         for table, ttl_expr in ttl_statements:

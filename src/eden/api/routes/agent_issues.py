@@ -7,14 +7,12 @@ it in the standard ``_ok_envelope`` shape).
 
 from __future__ import annotations
 
-import json
 import logging
 import uuid
 from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import APIRouter, Body, Depends, Path, Query
-from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from eden.api.deps import get_current_user, require_feature_flag
@@ -25,7 +23,6 @@ from eden.issues.repo import IssuesRepo
 logger = logging.getLogger(__name__)
 
 _FLAG = "agent_issues_v0"
-_FIX_FLAG = "issue_fix_chat_v1"
 
 router = APIRouter(
     prefix="/orgs/{org_id}",
@@ -89,15 +86,6 @@ class TriageRequest(BaseModel):
     force: bool = False
 
 
-class FixChatRequest(BaseModel):
-    message: str = Field(..., min_length=1, max_length=8000)
-    repo_full_name: str = Field(..., min_length=3)
-
-
-class FixApplyRequest(BaseModel):
-    confirm: bool = True
-
-
 class RegressionCaseRequest(BaseModel):
     max_traces: int = Field(default=3, ge=1, le=10)
     auto: bool = True
@@ -152,6 +140,7 @@ async def resolve_issue(
         org_id, issue_id, target, set_resolved_at=(target == "resolved")
     )
     regression_cases: list[dict[str, Any]] = []
+    regression_run: dict[str, Any] | None = None
     evolution: dict[str, Any] | None = None
     if ok and target == "resolved":
         try:
@@ -160,6 +149,17 @@ async def resolve_issue(
             regression_cases = await on_issue_resolved(org_id, issue_id)
         except Exception as exc:
             logger.debug("regression on resolve failed: %s", redact_all(str(exc)))
+        try:
+            from eden.evaluation.regression_runner import RegressionRunner
+
+            issue = await _repo.get_issue(org_id, issue_id)
+            agent_id = issue.agent_id if issue else None
+            run = await RegressionRunner().run_suite(
+                org_id, agent_id=agent_id, change_id=f"issue-resolve-{issue_id}"
+            )
+            regression_run = run.to_dict()
+        except Exception as exc:
+            logger.debug("regression run on resolve failed: %s", redact_all(str(exc)))
         try:
             from eden.agents.evolution.components import IssuePromptEvolver
 
@@ -193,6 +193,7 @@ async def resolve_issue(
             "status": target,
             "updated": ok,
             "regression_cases": regression_cases,
+            "regression_run": regression_run,
             "prompt_evolution": evolution,
         },
     )
@@ -423,6 +424,19 @@ async def issue_experiment_report(
     return await IssueExperimentWizard().report(org_id, issue_id, link_id)
 
 
+@router.get("/agent-issues/{issue_id}/regression-cases")
+async def list_regression_cases(
+    org_id: str = Path(...), issue_id: str = Path(...)
+) -> dict[str, Any]:
+    from eden.evaluation.regression_builder import RegressionCaseBuilder
+
+    cases = await RegressionCaseBuilder().list_for_issue(org_id, issue_id)
+    return _ok(
+        "regression_eval",
+        {"cases": [c.to_dict() for c in cases], "count": len(cases)},
+    )
+
+
 @router.post("/agent-issues/{issue_id}/regression-cases")
 async def create_regression_cases(
     org_id: str = Path(...),
@@ -439,64 +453,3 @@ async def create_regression_cases(
         {"cases": [c.to_dict() for c in cases], "count": len(cases)},
     )
 
-
-@router.post(
-    "/agent-issues/{issue_id}/fix/chat",
-    dependencies=[Depends(require_feature_flag(_FIX_FLAG))],
-)
-async def fix_chat(
-    org_id: str = Path(...),
-    issue_id: str = Path(...),
-    body: FixChatRequest = Body(...),
-) -> StreamingResponse:
-    from eden.patches.issue_fix_chat import IssueFixChatService
-
-    svc = IssueFixChatService()
-
-    async def event_stream():
-        async for event in svc.stream_chat(
-            org_id,
-            issue_id,
-            message=body.message,
-            repo_full_name=body.repo_full_name,
-        ):
-            yield f"event: {event['event']}\ndata: {json.dumps(event['data'])}\n\n"
-
-    return StreamingResponse(event_stream(), media_type="text/event-stream")
-
-
-@router.get(
-    "/agent-issues/{issue_id}/fix/session",
-    dependencies=[Depends(require_feature_flag(_FIX_FLAG))],
-)
-async def fix_session(
-    org_id: str = Path(...), issue_id: str = Path(...)
-) -> dict[str, Any]:
-    from eden.patches.issue_fix_chat import IssueFixChatService
-
-    session = await IssueFixChatService().get_session(org_id, issue_id)
-    if session is None:
-        return {
-            "status": "not_found",
-            "feature": "issue_fix_chat",
-            "live": True,
-            "data": {"issue_id": issue_id},
-        }
-    return _ok("issue_fix_chat", {"session": session.to_dict()})
-
-
-@router.post(
-    "/agent-issues/{issue_id}/fix/apply",
-    dependencies=[Depends(require_feature_flag(_FIX_FLAG))],
-)
-async def fix_apply(
-    org_id: str = Path(...),
-    issue_id: str = Path(...),
-    body: FixApplyRequest = Body(default=FixApplyRequest()),
-) -> dict[str, Any]:
-    from eden.patches.issue_fix_chat import IssueFixChatService
-
-    result = await IssueFixChatService().apply_patch(
-        org_id, issue_id, confirm=body.confirm
-    )
-    return _ok("issue_fix_chat", result)

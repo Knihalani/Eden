@@ -903,7 +903,14 @@ async def evaluate_trajectory_step(
         [c or "" for c in checks],
     ))
 
-    elapsed_ms = (time.perf_counter() - t0) * 1000.0
+    elapsed_s = time.perf_counter() - t0
+    elapsed_ms = elapsed_s * 1000.0
+    try:
+        from eden.observability.platform_activation import record_hot_path_duration
+
+        record_hot_path_duration(elapsed_s)
+    except Exception:  # pragma: no cover - defensive
+        pass
     if elapsed_ms > 5.0:
         # ponytail: warn, do not raise — the hot-path MUST
         # not throw even when the kill-switch DB is slow.

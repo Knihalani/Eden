@@ -125,7 +125,10 @@ class TraceFinalizedConsumer:
                             "trace_finalized: statgate_p0_rail: %s", rail_exc
                         )
                     if not _layer_a_primary_hit(layer_a_report):
-                        await _run_signal_investigator(org_id, trace_id)
+                        # F34: classifiers before F06 investigator.
+                        skip_inv = await _run_signal_classifiers(org_id, trace_id)
+                        if not skip_inv:
+                            await _run_signal_investigator(org_id, trace_id)
                     await self._maybe_prod_eval(
                         org_id,
                         trace_id,
@@ -328,6 +331,27 @@ def _record_queue_lag(message_id: Any) -> None:
         pass
 
 
+async def _run_signal_classifiers(org_id: str, trace_id: str) -> bool:
+    """F34 — run classifiers before investigator; True = skip F06."""
+    try:
+        from eden.signals.classifier_worker import (
+            run_classifiers_before_investigator,
+        )
+
+        result = await run_classifiers_before_investigator(org_id, trace_id)
+        if result.get("skip_investigator"):
+            logger.info(
+                "f34: skip investigator org=%s trace=%s savings=%.4f",
+                org_id,
+                trace_id,
+                float(result.get("savings_usd") or 0),
+            )
+            return True
+    except Exception as exc:
+        logger.debug("trace_finalized: classifiers failed: %s", exc)
+    return False
+
+
 async def _run_signal_investigator(org_id: str, trace_id: str) -> None:
     """F06 — per-trace signal investigator (best-effort)."""
     try:
@@ -338,9 +362,21 @@ async def _run_signal_investigator(org_id: str, trace_id: str) -> None:
     except Exception:
         pass
     try:
+        from eden.llmops.cost_ledger import CostEvent, record_cost_event
         from eden.signals.investigator import investigate_trace
 
         await investigate_trace(org_id, trace_id)
+        # Meter investigator path for FinOps vs classifier savings.
+        await record_cost_event(
+            CostEvent(
+                org_id=org_id,
+                feature="signal_investigator",
+                model="f06_statgate",
+                cost_usd=0.03,
+                trace_id=trace_id,
+                metadata={"path": "investigator"},
+            )
+        )
     except Exception as exc:
         logger.debug("trace_finalized: signal investigator failed: %s", exc)
 

@@ -19,7 +19,7 @@ spec:
       restartPolicy: OnFailure
       containers:
         - name: migrate
-          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          image: "{{ include "eden.image" . }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           command:
             - python

@@ -26,6 +26,80 @@ from eden.storage.postgres import get_postgres_client
 logger = logging.getLogger(__name__)
 security = HTTPBearer(auto_error=False)
 
+# API-key scope families (Wave 1). Legacy references/jobs-only keys are
+# grandfathered for ingest/gateway until callers mint scoped keys.
+_LEGACY_API_KEY_SCOPES = frozenset({
+    "references:read",
+    "references:write",
+    "jobs:read",
+    "jobs:write",
+})
+INGEST_SCOPES = frozenset({"ingest:write", "ingest:read", "ingest:*", "*"})
+GATEWAY_SCOPES = frozenset({"gateway:write", "gateway:read", "gateway:*", "*"})
+MCP_SCOPES = frozenset({"mcp:read", "mcp:debug", "mcp:fix", "mcp:*", "*"})
+
+
+def api_key_has_scope(scopes: list[str] | None, allowed: frozenset[str]) -> bool:
+    """Return True when the key grants at least one scope in ``allowed``.
+
+    Empty scopes → allow (defensive). Keys whose scopes are *only* the
+    pre-Wave-1 references/jobs set are grandfathered. Once a key includes
+    any ingest/gateway/mcp family scope, enforcement is strict.
+    """
+    s = set(scopes or [])
+    if not s:
+        return True
+    if s <= _LEGACY_API_KEY_SCOPES:
+        return True
+    if s & allowed:
+        return True
+    # Family wildcards already included in ``allowed``; also accept bare "*".
+    return "*" in s
+
+
+async def _assert_org_header_matches_session(
+    *,
+    x_org_id: str | None,
+    payload: dict,
+    is_clerk: bool,
+) -> str:
+    """Resolve the trusted org id for a human session.
+
+    Wave 1: JWT/session org is authoritative. ``X-Org-Id`` may only
+    *agree* with the session org (Clerk claim or Eden cookie
+    ``current_org_id``). A mismatched header is rejected as spoofing —
+    never used to upsert membership into a foreign org.
+    """
+    jwt_org_raw = (
+        extract_org_id(payload)
+        if is_clerk
+        else (payload.get("current_org_id") if payload else None)
+    )
+    if not jwt_org_raw and not x_org_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="No active organization",
+        )
+
+    jwt_org = await resolve_eden_org_id(jwt_org_raw) if jwt_org_raw else None
+    header_org = await resolve_eden_org_id(x_org_id) if x_org_id else None
+
+    if jwt_org and header_org and jwt_org != header_org:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="X-Org-Id does not match session organization",
+        )
+
+    # Prefer session claim; allow header only when session has no org
+    # (legacy cookie edge) AND membership will be verified in DB without upsert.
+    trusted = jwt_org or header_org
+    if not trusted:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="No active organization",
+        )
+    return trusted
+
 
 # Bearer-JWT resolver used by the auth dependencies below. Pulls the
 # JWT from the ``Authorization: Bearer <jwt>`` header first (the path
@@ -230,6 +304,10 @@ async def get_current_org_member(
     Mirrors ``require_org_member`` but returns a typed ``OrgMember``
     instead of a raw dict. Raises 401 on no/invalid auth, 403 on
     no membership in the requested org.
+
+    Wave 1: session org claim is authoritative; ``X-Org-Id`` cannot
+    spoof a foreign tenant. Membership upsert only runs when the JWT
+    org matches the trusted org (never for header-only spoof).
     """
     clerk_user_id = payload.get("sub") or extract_user_id(payload)
     if not clerk_user_id:
@@ -237,22 +315,19 @@ async def get_current_org_member(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid token payload",
         )
-    raw_org_id = (
-        x_org_id
-        or (extract_org_id(payload) if _is_clerk_payload_public(payload) else None)
-        or payload.get("current_org_id")
+    is_clerk = _is_clerk_payload_public(payload)
+    eden_org_id = await _assert_org_header_matches_session(
+        x_org_id=x_org_id,
+        payload=payload,
+        is_clerk=is_clerk,
     )
-    if not raw_org_id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="No active organization",
-        )
 
     eden_user_id = await resolve_eden_user_id(clerk_user_id)
-    eden_org_id = await resolve_eden_org_id(raw_org_id)
-    is_clerk = _is_clerk_payload_public(payload)
     clerk_role = extract_org_role(payload) if is_clerk else None
     eden_role = clerk_role_to_eden_role(clerk_role)
+    jwt_org_raw = extract_org_id(payload) if is_clerk else payload.get("current_org_id")
+    jwt_org = await resolve_eden_org_id(jwt_org_raw) if jwt_org_raw else None
+    session_matches = bool(jwt_org and jwt_org == eden_org_id)
 
     client = await get_postgres_client()
     row = None
@@ -275,7 +350,9 @@ async def get_current_org_member(
             exc,
         )
 
-    if not row and is_clerk:
+    # Upsert only when Clerk session org matches trusted org — never
+    # for a spoofed header pointing at a foreign tenant.
+    if not row and is_clerk and session_matches:
         await ensure_clerk_membership(eden_user_id, eden_org_id, clerk_role)
         try:
             row = await client.fetchrow(
@@ -291,10 +368,11 @@ async def get_current_org_member(
         except Exception:
             row = None
         if not row:
+            # Pending webhook sync — only for session-matched org.
             db_user = await get_user_by_id(clerk_user_id, lookup_column="clerk_id")
             return OrgMember(
                 user_id=eden_user_id or clerk_user_id,
-                org_id=eden_org_id or raw_org_id,
+                org_id=eden_org_id,
                 role=eden_role,
                 email=(db_user or {}).get("email") or "",
                 name=(db_user or {}).get("name") or "",
@@ -307,8 +385,8 @@ async def get_current_org_member(
         )
     return OrgMember(
         user_id=eden_user_id or clerk_user_id,
-        org_id=eden_org_id or raw_org_id,
-        role=row["role"],
+        org_id=eden_org_id,
+        role=row["role"] if not (is_clerk and session_matches) else (eden_role or row["role"]),
         email=row.get("email") or "",
         name=row.get("user_name") or "",
     )
@@ -735,24 +813,26 @@ async def get_current_org(
         return None
 
     user_id = payload.get("sub") or extract_user_id(payload)
-    # Clerk path: trust the org_id + role claims from the session JWT.
+    # Clerk path: session org claim is authoritative (Wave 1).
     is_clerk = _is_clerk_payload_public(payload)
     if is_clerk:
-        raw_org_id = x_org_id or extract_org_id(payload)
-        if not raw_org_id:
+        try:
+            eden_org_id = await _assert_org_header_matches_session(
+                x_org_id=x_org_id,
+                payload=payload,
+                is_clerk=True,
+            )
+        except HTTPException:
             return None
         eden_user_id = await resolve_eden_user_id(user_id)
-        eden_org_id = await resolve_eden_org_id(raw_org_id)
         clerk_role = extract_org_role(payload)
         eden_role = clerk_role_to_eden_role(clerk_role)
+        jwt_org_raw = extract_org_id(payload)
+        jwt_org = await resolve_eden_org_id(jwt_org_raw) if jwt_org_raw else None
+        session_matches = bool(jwt_org and jwt_org == eden_org_id)
         # Defensive: a DB blip or RLS-blanket here must not 500 the
         # request — fall through to the synthesised pending_sync
-        # entry. Clerk is the source of truth for the role; the
-        # Eden row is just for name/slug/archived_at bookkeeping
-        # which we can synthesize. (Site-wide fix July 2026: was
-        # the source of 500s on optimization/overview and
-        # sidebar-prefs when the user was signed in but the
-        # get_postgres_client() call failed.)
+        # entry only when the JWT org matches.
         row = None
         try:
             client = await get_postgres_client()
@@ -784,7 +864,7 @@ async def get_current_org(
                 "falling through to synthesised pending_sync entry",
                 eden_user_id, eden_org_id, exc,
             )
-        if not row:
+        if not row and session_matches:
             await ensure_clerk_membership(eden_user_id, eden_org_id, clerk_role)
             try:
                 client = await get_postgres_client()
@@ -801,11 +881,11 @@ async def get_current_org(
             except Exception:
                 row = None
         if not row:
+            if not session_matches:
+                return None
             # Clerk says the user is in this org but Eden's
             # ``org_members`` row doesn't exist yet — the Clerk
-            # webhook (``user.created`` / ``organizationMembership.created``)
-            # will create it shortly. Return a synthesised entry so the
-            # caller can still proceed with the Clerk-trusted role.
+            # webhook will create it shortly.
             return {
                 "org_id": eden_org_id,
                 "role": eden_role,
@@ -814,9 +894,6 @@ async def get_current_org(
                 "archived_at": None,
                 "_pending_sync": True,
             }
-        # Clerk is the source of truth for role — overwrite whatever
-        # Eden's row says. This keeps role changes in Clerk in
-        # effect without waiting for a webhook round-trip.
         return {
             "org_id": eden_org_id,
             "role": eden_role,
@@ -825,8 +902,18 @@ async def get_current_org(
             "archived_at": row.get("archived_at"),
         }
 
-    # Legacy Eden cookie path — unchanged.
-    org_id = await resolve_eden_org_id(x_org_id or payload.get("current_org_id"))
+    # Legacy Eden cookie path — header must match cookie org when both set.
+    cookie_org = payload.get("current_org_id")
+    if x_org_id and cookie_org:
+        resolved_header = await resolve_eden_org_id(x_org_id)
+        resolved_cookie = await resolve_eden_org_id(cookie_org)
+        if (
+            resolved_header
+            and resolved_cookie
+            and resolved_header != resolved_cookie
+        ):
+            return None
+    org_id = await resolve_eden_org_id(cookie_org or x_org_id)
     user_id = await resolve_eden_user_id(user_id)
 
     if not org_id or not user_id:
@@ -1368,23 +1455,30 @@ def require_feature_flag(flag_name: str):
 # Ingestion Auth (Phase 7.0)
 # ============================================================================
 
-async def get_ingestion_auth(
-    x_org_id: str | None = Header(None, alias="X-Org-Id"),
-    x_org_api_key: str | None = Header(None, alias="X-Org-Api-Key"),
-    authorization: str | None = Cookie(None),
+async def _ingestion_auth_impl(
+    *,
+    x_org_id: str | None,
+    x_org_api_key: str | None,
+    authorization: str | None,
+    required_scopes: frozenset[str] | None,
 ) -> dict:
-    """Authenticate an ingestion / gateway request.
-
-    Accepts either an API key (X-Org-Api-Key) or a session cookie
-    (``authorization``). Returns the org context dict; raises 401
-    if neither is provided or both are invalid.
-
-    The gateway/ingestion routes use this instead of
-    ``get_current_user`` so the OpenAI-compatible HTTP gateway can be
-    hit with just an API key (no browser cookie).
-    """
+    """Shared ingest/gateway auth body (not a FastAPI dependency)."""
     if x_org_api_key:
-        return await get_current_org_api_key(x_org_id, x_org_api_key)
+        if not x_org_id:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="X-Org-Id header required with API key",
+            )
+        org = await get_current_org_api_key(x_org_id, x_org_api_key)
+        if required_scopes and not api_key_has_scope(org.get("scopes"), required_scopes):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=(
+                    "API key missing required scope "
+                    f"(need one of: {sorted(required_scopes)})"
+                ),
+            )
+        return org
 
     if not authorization:
         raise HTTPException(
@@ -1392,17 +1486,6 @@ async def get_ingestion_auth(
             detail="X-Org-Api-Key header or session cookie required",
         )
 
-    # NOTE: get_current_org's ``payload`` parameter is a FastAPI
-    # dependency (``_try_resolve_token_payload``). Calling it
-    # imperatively with ``get_current_org(x_org_id)`` here passes
-    # nothing for the dep slot, so FastAPI leaves the placeholder
-    # ``Depends(...)`` object unevaluated — and the next
-    # ``payload.get("sub")`` raises AttributeError on the
-    # ``Depends`` object. Resolve the payload up front and pass
-    # it through. Pre-fix the call was
-    # ``get_current_org(x_org_id, authorization)`` which collided
-    # the cookie string with the payload slot (same AttributeError,
-    # different cause).
     from eden.api.deps import _try_resolve_token_payload
 
     payload = await _try_resolve_token_payload(authorization_cookie=authorization)
@@ -1418,3 +1501,68 @@ async def get_ingestion_auth(
             detail="Not a member of this organization",
         )
     return org
+
+
+async def get_ingestion_auth(
+    x_org_id: str | None = Header(None, alias="X-Org-Id"),
+    x_org_api_key: str | None = Header(None, alias="X-Org-Api-Key"),
+    authorization: str | None = Cookie(None),
+) -> dict:
+    """Authenticate an ingestion / gateway request (no scope gate).
+
+    Prefer :func:`get_ingest_auth` / :func:`get_gateway_auth` on new
+    routes so API-key scopes are enforced.
+    """
+    return await _ingestion_auth_impl(
+        x_org_id=x_org_id,
+        x_org_api_key=x_org_api_key,
+        authorization=authorization,
+        required_scopes=None,
+    )
+
+
+def require_ingestion_scopes(*scopes: str):
+    """FastAPI dependency factory: ingest/gateway API-key scope gate."""
+    allowed = frozenset(scopes)
+
+    async def _dep(
+        x_org_id: str | None = Header(None, alias="X-Org-Id"),
+        x_org_api_key: str | None = Header(None, alias="X-Org-Api-Key"),
+        authorization: str | None = Cookie(None),
+    ) -> dict:
+        return await _ingestion_auth_impl(
+            x_org_id=x_org_id,
+            x_org_api_key=x_org_api_key,
+            authorization=authorization,
+            required_scopes=allowed,
+        )
+
+    return _dep
+
+
+async def get_ingest_auth(
+    x_org_id: str | None = Header(None, alias="X-Org-Id"),
+    x_org_api_key: str | None = Header(None, alias="X-Org-Api-Key"),
+    authorization: str | None = Cookie(None),
+) -> dict:
+    """Ingest-path auth requiring ``ingest:*`` family scopes on API keys."""
+    return await _ingestion_auth_impl(
+        x_org_id=x_org_id,
+        x_org_api_key=x_org_api_key,
+        authorization=authorization,
+        required_scopes=INGEST_SCOPES,
+    )
+
+
+async def get_gateway_auth(
+    x_org_id: str | None = Header(None, alias="X-Org-Id"),
+    x_org_api_key: str | None = Header(None, alias="X-Org-Api-Key"),
+    authorization: str | None = Cookie(None),
+) -> dict:
+    """Gateway-path auth requiring ``gateway:*`` family scopes on API keys."""
+    return await _ingestion_auth_impl(
+        x_org_id=x_org_id,
+        x_org_api_key=x_org_api_key,
+        authorization=authorization,
+        required_scopes=GATEWAY_SCOPES,
+    )
