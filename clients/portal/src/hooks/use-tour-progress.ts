@@ -19,12 +19,20 @@ import {
 export function useTourProgress() {
   const { user, isLoaded } = useUser();
 
+  // Clerk may return a new unsafeMetadata object every render. Key off the
+  // serialized tour payload so parse/memo only re-run when tour data changes.
+  const tourRaw = user?.unsafeMetadata?.[EDEN_TOUR_META_KEY];
+  const tourKey =
+    tourRaw == null
+      ? ""
+      : typeof tourRaw === "string"
+        ? tourRaw
+        : JSON.stringify(tourRaw);
+
   const progress = useMemo(
-    () =>
-      parseEdenTourProgress(
-        user?.unsafeMetadata?.[EDEN_TOUR_META_KEY] as unknown,
-      ),
-    [user?.unsafeMetadata],
+    () => parseEdenTourProgress(tourRaw as unknown),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- tourKey is the stable identity
+    [tourKey],
   );
 
   const persist = useCallback(

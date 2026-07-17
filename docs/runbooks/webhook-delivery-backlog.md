@@ -129,9 +129,7 @@ queue; the DLQ is the post-exhaustion dead-letter store.
 
 ## After — communicate
 
-8. **Status page**: post a notice on `status.edenobservability.com`
-   if the backlog was visible to customers (latency > 5min).
-9. **Customer comms**: for any org that hit the queue-depth
+8. **Customer comms**: for any org that hit the queue-depth
    warning (the `_BACKLOG_ALERT_THRESHOLD` of 500), email
    `ops@` contact with the current delivery latency.
 

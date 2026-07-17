@@ -136,8 +136,10 @@ export function ProductTour({
 
   useEffect(() => {
     if (!open) return;
+    // Fire once when the tour opens — not on every step — so the sidebar
+    // does not thrash expand/collapse mid-tour.
     window.dispatchEvent(new Event("eden:product-tour"));
-  }, [open, stepIndex]);
+  }, [open]);
 
   useEffect(() => {
     const sync = () => setNarrow(window.innerWidth < 640);

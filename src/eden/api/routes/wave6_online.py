@@ -10,7 +10,7 @@ from typing import Any
 from fastapi import APIRouter, Body, Depends, HTTPException, Path, Query
 from pydantic import BaseModel, Field
 
-from eden.api.deps import get_current_user
+from eden.api.deps import get_current_user, resolve_eden_org_id
 from eden.automations.engine import AutomationsEngine
 from eden.evaluation.categorical_classifier import CategoricalClassifierService
 from eden.evaluation.code_evaluator import CodeEvaluatorRunner
@@ -243,15 +243,23 @@ class WidgetUpsert(BaseModel):
     widget_id: str | None = None
 
 
+async def _resolved_org(org_id: str) -> str:
+    """Prefer Eden UUID; fall back to path id so legacy tenants still work."""
+    resolved = await resolve_eden_org_id(org_id)
+    return resolved or org_id
+
+
 @router.get("/dashboards/home")
 async def get_home_dashboard(org_id: str = Path(...)) -> dict[str, Any]:
-    dash = await MonitoringDashboardService().get_home(org_id)
+    dash = await MonitoringDashboardService().get_home(await _resolved_org(org_id))
     return _ok("f57", {"dashboard": dash})
 
 
 @router.get("/dashboards")
 async def list_dashboards(org_id: str = Path(...)) -> dict[str, Any]:
-    rows = await MonitoringDashboardService().list_dashboards(org_id)
+    rows = await MonitoringDashboardService().list_dashboards(
+        await _resolved_org(org_id)
+    )
     return _ok("f57", {"dashboards": rows})
 
 
@@ -260,7 +268,7 @@ async def create_dashboard(
     org_id: str = Path(...), body: DashboardCreate = Body(...)
 ) -> dict[str, Any]:
     rec = await MonitoringDashboardService().create_dashboard(
-        org_id, name=body.name, is_home=body.is_home
+        await _resolved_org(org_id), name=body.name, is_home=body.is_home
     )
     return _ok("f57", {"dashboard": rec})
 
@@ -272,7 +280,7 @@ async def upsert_widget(
     body: WidgetUpsert = Body(...),
 ) -> dict[str, Any]:
     rec = await MonitoringDashboardService().upsert_widget(
-        org_id, dashboard_id, **body.model_dump()
+        await _resolved_org(org_id), dashboard_id, **body.model_dump()
     )
     return _ok("f57", {"widget": rec})
 
@@ -284,7 +292,7 @@ async def execute_widget_query(
     agent_id: str | None = Body(None, embed=True),
 ) -> dict[str, Any]:
     result = await MonitoringDashboardService().execute_widget_query(
-        org_id, query, agent_id=agent_id
+        await _resolved_org(org_id), query, agent_id=agent_id
     )
     return _ok("f57", {"result": result})
 

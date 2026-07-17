@@ -31,9 +31,6 @@ export const FREE_TIER_TAGLINE = `Free during soft launch · ${FREE_TIER_CAP_SHO
 /** Sales contact — used by billing plan cards. */
 export const SALES_EMAIL = "sales@eden.dev";
 
-/** External status page (real URL). */
-export const STATUS_PAGE_URL = "https://status.edenobservability.com";
-
 /** Public Docusaurus docs site (hosted separately from the portal). */
 export const DOCS_URL = "https://docs.edenobservability.com";
 

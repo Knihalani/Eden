@@ -32,10 +32,12 @@ export function parseEdenTourProgress(raw: unknown): EdenTourProgress | null {
   return {
     status,
     stepIndex,
+    // Stable fallback — inventing `new Date()` on every parse caused
+    // new object identity and fed the tour overlay re-render loop.
     updatedAt:
       typeof o.updatedAt === "string" && o.updatedAt
         ? o.updatedAt
-        : new Date().toISOString(),
+        : "1970-01-01T00:00:00.000Z",
   };
 }
 

@@ -121,7 +121,7 @@ export function ChatSidebar() {
   return (
     <>
       {!chat.hideChatOnRoute && !chat.open && (
-        <div className="fixed right-0 top-1/2 z-50 hidden -translate-y-1/2 lg:block">
+        <div className="fixed bottom-20 right-4 z-50 lg:bottom-6 lg:right-6">
           <Tooltip>
             <TooltipTrigger asChild>
               <button
@@ -131,21 +131,16 @@ export function ChatSidebar() {
                   chat.dismissCoach();
                 }}
                 className={cn(
-                  "flex h-20 w-7 flex-col items-center justify-center gap-1 rounded-l-md",
-                  "border border-r-0 border-[var(--border-default)] bg-[var(--bg-primary)]",
-                  "text-[var(--text-muted)] hover:text-[var(--accent)] hover:border-[var(--accent)]/40",
+                  "z-allow-click flex h-12 w-12 items-center justify-center rounded-full",
+                  "border border-[var(--border-default)] bg-[var(--bg-primary)]",
+                  "text-[var(--text-secondary)] shadow-lg",
+                  "hover:border-[var(--accent)]/50 hover:text-[var(--accent)]",
                   "transition-colors",
                 )}
                 aria-label="Open AI assistant"
                 data-ai-coach-anchor
               >
-                <Terminal className="h-3.5 w-3.5" aria-hidden />
-                <span
-                  className="text-[9px] font-medium uppercase tracking-wider"
-                  style={{ writingMode: "vertical-rl" }}
-                >
-                  Ask
-                </span>
+                <Terminal className="h-5 w-5" aria-hidden />
               </button>
             </TooltipTrigger>
             <TooltipContent side="left" className="max-w-[220px] text-xs">
@@ -159,7 +154,7 @@ export function ChatSidebar() {
               role="status"
               data-ai-coach-mark
               className={cn(
-                "absolute right-9 top-1/2 w-56 -translate-y-1/2 rounded-md border",
+                "absolute bottom-14 right-0 w-56 rounded-md border",
                 "border-[var(--accent)]/40 bg-[var(--bg-primary)] p-3 text-xs shadow-lg",
                 "text-[var(--text-secondary)]",
               )}

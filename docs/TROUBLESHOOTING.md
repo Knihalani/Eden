@@ -73,5 +73,4 @@ Northflank secrets + redeploy.
 * Architecture: `docs/architecture.md`
 * Data flow: `docs/data-flow.md`
 * API reference: `/portal/docs` (auto-generated from OpenAPI)
-* Status: <https://status.edenobservability.com>
 * Support: <support@edenobservability.com>

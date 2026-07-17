@@ -697,17 +697,37 @@ async def observability_summary(
         common_args.append(agent_id)
         common_where += f" AND attributes->>'agent_id' = ${len(common_args)}"
 
+    empty: dict[str, Any] = {
+        "window_hours": window_hours,
+        "agent_id": agent_id,
+        "total_events": 0,
+        "total_traces": 0,
+        "error_rate": 0.0,
+        "p50_ms": None,
+        "p95_ms": None,
+        "p99_ms": None,
+        "total_cost_usd": 0.0,
+        "eval_coverage_pct": 0.0,
+        "top_failure_modes": [],
+        "top_tools": [],
+        "hot_paths": [],
+        "model_breakdown": [],
+    }
+    if client is None:
+        if compare_previous:
+            empty["previous"] = {
+                "total_traces": 0,
+                "error_rate": 0.0,
+                "p95_ms": None,
+                "total_cost_usd": 0.0,
+            }
+        return empty
+
     # 1-7 fire in parallel via asyncio.gather — six 50ms queries
     # collapse into a single round-trip latency instead of 6×.
-    (
-        totals,
-        pct,
-        failure_modes,
-        top_tools,
-        hot_paths,
-        model_breakdown,
-        eval_coverage_row,
-    ) = await asyncio.gather(
+    # return_exceptions so a missing judge_scores table (etc.) cannot
+    # 500 the whole dashboard summary.
+    gathered = await asyncio.gather(
             client.fetchrow(
                 f"SELECT count(*) AS total_events, "
                 f"count(DISTINCT trace_id) AS total_traces, "
@@ -775,7 +795,30 @@ async def observability_summary(
                 """,
                 *common_args,
             ),
+            return_exceptions=True,
         )
+
+    def _ok_row(value: Any) -> Any:
+        return None if isinstance(value, BaseException) else value
+
+    def _ok_rows(value: Any) -> list[Any]:
+        return [] if isinstance(value, BaseException) else list(value or [])
+
+    totals = _ok_row(gathered[0])
+    pct = _ok_row(gathered[1])
+    failure_modes = _ok_rows(gathered[2])
+    top_tools = _ok_rows(gathered[3])
+    hot_paths = _ok_rows(gathered[4])
+    model_breakdown = _ok_rows(gathered[5])
+    eval_coverage_row = _ok_row(gathered[6])
+    for idx, part in enumerate(gathered):
+        if isinstance(part, BaseException):
+            logger.warning(
+                "observability_summary subquery[%s] failed org=%s: %s",
+                idx,
+                org_id,
+                part,
+            )
     total_events = int((totals or {}).get("total_events") or 0)
     total_traces = int((totals or {}).get("total_traces") or 0)
     errors = int((totals or {}).get("errors") or 0)
@@ -818,29 +861,53 @@ async def observability_summary(
             prev_args.append(agent_id)
             prev_where += f" AND attributes->>'agent_id' = ${len(prev_args)}"
 
-        prev_totals, prev_pct = await asyncio.gather(
-            client.fetchrow(
-                f"SELECT count(*) AS total_events, "
-                f"count(DISTINCT trace_id) AS total_traces, "
-                f"sum(CASE WHEN error IS NOT NULL THEN 1 ELSE 0 END) AS errors "
-                f"FROM telemetry_events WHERE {prev_where}",
-                *prev_args,
-            ),
-            client.fetchrow(
-                f"SELECT percentile_cont(0.95) WITHIN GROUP (ORDER BY duration_ms) AS p95, "
-                f"coalesce(sum(cost_usd), 0) AS cost "
-                f"FROM telemetry_events WHERE {prev_where}",
-                *prev_args,
-            ),
-        )
-        prev_total_events = int(prev_totals["total_events"] or 0) if prev_totals else 0
-        prev_total_traces = int(prev_totals["total_traces"] or 0) if prev_totals else 0
-        prev_errors = int(prev_totals["errors"] or 0) if prev_totals else 0
-        result["previous"] = {
-            "total_traces": prev_total_traces,
-            "error_rate": (prev_errors / prev_total_events) if prev_total_events else 0.0,
-            "p95_ms": float(prev_pct["p95"]) if prev_pct and prev_pct["p95"] is not None else None,
-            "total_cost_usd": float(prev_pct["cost"]) if prev_pct and prev_pct["cost"] is not None else 0.0,
-        }
+        try:
+            prev_gathered = await asyncio.gather(
+                client.fetchrow(
+                    f"SELECT count(*) AS total_events, "
+                    f"count(DISTINCT trace_id) AS total_traces, "
+                    f"sum(CASE WHEN error IS NOT NULL THEN 1 ELSE 0 END) AS errors "
+                    f"FROM telemetry_events WHERE {prev_where}",
+                    *prev_args,
+                ),
+                client.fetchrow(
+                    f"SELECT percentile_cont(0.95) WITHIN GROUP (ORDER BY duration_ms) AS p95, "
+                    f"coalesce(sum(cost_usd), 0) AS cost "
+                    f"FROM telemetry_events WHERE {prev_where}",
+                    *prev_args,
+                ),
+                return_exceptions=True,
+            )
+            prev_totals = _ok_row(prev_gathered[0])
+            prev_pct = _ok_row(prev_gathered[1])
+            for idx, part in enumerate(prev_gathered):
+                if isinstance(part, BaseException):
+                    logger.warning(
+                        "observability_summary previous[%s] failed org=%s: %s",
+                        idx,
+                        org_id,
+                        part,
+                    )
+            prev_total_events = int(prev_totals["total_events"] or 0) if prev_totals else 0
+            prev_total_traces = int(prev_totals["total_traces"] or 0) if prev_totals else 0
+            prev_errors = int(prev_totals["errors"] or 0) if prev_totals else 0
+            result["previous"] = {
+                "total_traces": prev_total_traces,
+                "error_rate": (prev_errors / prev_total_events) if prev_total_events else 0.0,
+                "p95_ms": float(prev_pct["p95"]) if prev_pct and prev_pct["p95"] is not None else None,
+                "total_cost_usd": float(prev_pct["cost"]) if prev_pct and prev_pct["cost"] is not None else 0.0,
+            }
+        except Exception as exc:
+            logger.warning(
+                "observability_summary compare_previous failed org=%s: %s",
+                org_id,
+                exc,
+            )
+            result["previous"] = {
+                "total_traces": 0,
+                "error_rate": 0.0,
+                "p95_ms": None,
+                "total_cost_usd": 0.0,
+            }
 
     return result
