@@ -43,9 +43,16 @@ def upgrade() -> None:
             embedding BYTEA,
             weight DOUBLE PRECISION NOT NULL DEFAULT 1.0,
             version INT NOT NULL DEFAULT 1,
-            created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-            UNIQUE (ledger_id, chapter, md5(text))
+            created_at TIMESTAMPTZ NOT NULL DEFAULT now()
         )
+        """
+    )
+    # Expression unique constraints are not valid in CREATE TABLE UNIQUE (...);
+    # use a unique index on md5(text) instead.
+    op.execute(
+        """
+        CREATE UNIQUE INDEX IF NOT EXISTS uq_ledger_entries_ledger_chapter_text
+        ON ledger_entries (ledger_id, chapter, md5(text))
         """
     )
     op.execute(

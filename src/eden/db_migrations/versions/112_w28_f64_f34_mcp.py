@@ -18,6 +18,17 @@ depends_on = None
 
 
 def upgrade() -> None:
+    # signal_classifiers may be absent on DBs that skipped earlier signal DDL.
+    op.execute(
+        """
+        CREATE TABLE IF NOT EXISTS signal_classifiers (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            org_id TEXT NOT NULL,
+            name TEXT NOT NULL DEFAULT '',
+            created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+        )
+        """
+    )
     op.execute(
         """
         ALTER TABLE signal_classifiers
