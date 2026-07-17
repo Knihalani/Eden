@@ -72,6 +72,23 @@ def upgrade() -> None:
         """
     )
 
+    # budgets may be missing if 052 was stamped without applying.
+    op.execute(
+        """
+        CREATE TABLE IF NOT EXISTS budgets (
+            id                            VARCHAR(64) PRIMARY KEY,
+            org_id                        VARCHAR(128) NOT NULL,
+            "window"                      VARCHAR(16) NOT NULL DEFAULT 'monthly',
+            cost_soft_limit_usd           DOUBLE PRECISION NOT NULL DEFAULT 0.80,
+            cost_hard_limit_usd           DOUBLE PRECISION NOT NULL DEFAULT 1.00,
+            enforcement_enabled           BOOLEAN NOT NULL DEFAULT FALSE,
+            action_on_exceed              VARCHAR(16) NOT NULL DEFAULT 'throttle',
+            threshold_alert_pct           INT NOT NULL DEFAULT 80,
+            created_at                    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            updated_at                    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+        """
+    )
     op.execute(
         """
         ALTER TABLE budgets

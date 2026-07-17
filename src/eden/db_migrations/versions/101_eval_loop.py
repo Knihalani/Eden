@@ -129,6 +129,31 @@ def upgrade() -> None:
         )
         """
     )
+    # Legacy SQL migration 035 created labeling_items; some prod DBs never
+    # received it. Create a compatible base table before queue columns.
+    op.execute(
+        """
+        CREATE TABLE IF NOT EXISTS labeling_items (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            org_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+            source_trace_id TEXT,
+            source_span_id TEXT,
+            source_dataset_id UUID,
+            source_synthetic_qa_id TEXT,
+            payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+            label_schema JSONB NOT NULL DEFAULT '{}'::jsonb,
+            prompt TEXT,
+            -- users.id is TEXT in prod (Clerk/Eden hybrid ids); keep assigned_to TEXT.
+            assigned_to TEXT,
+            status TEXT NOT NULL DEFAULT 'pending',
+            tags TEXT[] NOT NULL DEFAULT '{}',
+            annotations_required INT NOT NULL DEFAULT 1,
+            required_skills TEXT[] NOT NULL DEFAULT '{}',
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+        """
+    )
     op.execute(
         """
         ALTER TABLE labeling_items
