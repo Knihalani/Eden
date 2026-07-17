@@ -1,0 +1,45 @@
+name: DR drill
+
+# SOTA Wave 9 — scheduled disaster-recovery restore smoke.
+# Invokes scripts/dr_drill.sh. Soft-fails when no backup is present
+# in CI (report still uploaded when produced).
+
+on:
+  schedule:
+    - cron: "0 6 * * 1" # Mondays 06:00 UTC
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "scripts/dr_drill.sh"
+      - ".github/workflows/dr-drill.yml"
+
+jobs:
+  dr-drill:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Run DR drill script
+        env:
+          BACKUP_LOCAL_DIR: ./backups
+          REPORT_DIR: ./reports
+          # CI without a real backup should not block PRs — script exits
+          # non-zero when missing; we capture and annotate.
+          DR_DRILL_ALLOW_MISSING_BACKUP: "1"
+        run: |
+          set +e
+          bash scripts/dr_drill.sh
+          code=$?
+          if [ "$code" -ne 0 ]; then
+            if [ ! -f "$(ls -1t reports/dr-drill-*.json 2>/dev/null | head -1)" ]; then
+              echo "::warning::DR drill exited $code (likely no backup in CI). Workflow is advisory until BACKUP_S3_BUCKET is configured."
+              exit 0
+            fi
+          fi
+          exit "$code"
+      - name: Upload DR report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dr-drill-report
+          path: reports/dr-drill-*.json
+          if-no-files-found: ignore

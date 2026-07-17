@@ -1,0 +1,75 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "eden.fullname" . }}-worker
+  labels:
+    {{- include "eden.labels" . | nindent 4 }}
+    app.kubernetes.io/component: worker
+spec:
+  replicas: {{ .Values.worker.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "eden.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: worker
+  template:
+    metadata:
+      labels:
+        {{- include "eden.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: worker
+    spec:
+      containers:
+        - name: worker
+          image: "{{ include "eden.image" . }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["python", "-m", "eden.workers.main"]
+          env:
+            - name: EDEN_DB_URL
+              value: {{ include "eden.postgresUrl" . }}
+            - name: EDEN_REDIS_URL
+              value: {{ include "eden.redisUrl" . }}
+            - name: EDEN_QDRANT_URL
+              value: {{ include "eden.qdrantUrl" . }}
+            - name: SKIP_MIGRATIONS
+              value: "1"
+            - name: EDEN_RUN_BACKGROUND_WORKERS
+              value: "1"
+            - name: EDEN_PRODUCTION
+              value: "true"
+            {{- if .Values.externalTypesense.host }}
+            - name: TYPESENSE_ENABLED
+              value: "true"
+            - name: TYPESENSE_HOST
+              value: {{ .Values.externalTypesense.host | quote }}
+            - name: TYPESENSE_PORT
+              value: {{ .Values.externalTypesense.port | default "8108" | quote }}
+            - name: TYPESENSE_PROTOCOL
+              value: {{ .Values.externalTypesense.protocol | default "http" | quote }}
+            {{- if .Values.secrets.typesenseApiKey }}
+            - name: TYPESENSE_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "eden.fullname" . }}-secrets
+                  key: typesense-api-key
+            {{- end }}
+            {{- end }}
+            {{- if .Values.externalClickhouse }}
+            - name: CLICKHOUSE_URL
+              value: {{ .Values.externalClickhouse | quote }}
+            {{- end }}
+          # W9 readiness contract — process must be alive (no HTTP on workers).
+          livenessProbe:
+            exec:
+              command: ["python", "-c", "import eden; print('ok')"]
+            initialDelaySeconds: 40
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            exec:
+              command: ["python", "-c", "import eden; print('ok')"]
+            initialDelaySeconds: 15
+            periodSeconds: 20
+            timeoutSeconds: 10
+            failureThreshold: 3
+          resources:
+            {{- toYaml .Values.worker.resources | nindent 12 }}

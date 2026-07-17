@@ -1,4 +1,5 @@
 """Datasets module."""
+from eden.datasets.hub import DatasetHub, DatasetRecord, DatasetSnapshot
 from eden.datasets.spreadsheet import (
     FILTER_OPERATORS,
     AIHandler,
@@ -15,6 +16,9 @@ from eden.datasets.spreadsheet import (
 
 __all__ = [
     "AIHandler",
+    "DatasetHub",
+    "DatasetRecord",
+    "DatasetSnapshot",
     "FILTER_OPERATORS",
     "SpreadsheetColumn",
     "SpreadsheetRow",

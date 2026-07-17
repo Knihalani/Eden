@@ -36,6 +36,11 @@ _LLM_HOST_SUFFIXES = (
     "api.mistral.ai",
     "api.together.xyz",
     "api.perplexity.ai",
+    "bedrock-runtime.us-east-1.amazonaws.com",
+    "bedrock-runtime.us-west-2.amazonaws.com",
+    "bedrock-runtime.amazonaws.com",
+    "aiplatform.googleapis.com",
+    "us-central1-aiplatform.googleapis.com",
 )
 
 _LLM_PATH_FRAGMENTS = (
@@ -53,6 +58,10 @@ def _detect_source_format(url: str) -> str | None:
     if any(host.endswith(suffix) or host == suffix for suffix in _LLM_HOST_SUFFIXES):
         if "anthropic" in host:
             return "anthropic"
+        if "bedrock" in host:
+            return "bedrock"
+        if "googleapis" in host or "aiplatform" in host:
+            return "gemini"
         return "openai"
     if any(fragment in path for fragment in _LLM_PATH_FRAGMENTS):
         return "openai"

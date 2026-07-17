@@ -76,14 +76,38 @@ class TestToolRegistry:
     def test_write_tools_require_role(self):
         assert _TOOL_REGISTRY["mark_incident_resolved"]["requires_role"] == "admin"
         assert _TOOL_REGISTRY["open_pr_suggestion"]["requires_role"] == "admin"
-        # Phase 3a added open_pr_suggestion (admin-gated Cat 23 PR
-        # materialisation). Both write tools must keep their admin
-        # gate; everything else must stay permissionless.
+        if "create_alert_rule" in _TOOL_REGISTRY:
+            assert _TOOL_REGISTRY["create_alert_rule"]["requires_role"] == "admin"
+        # Write tools must keep their admin gate; read tools stay open.
+        admin_gated = {
+            "mark_incident_resolved",
+            "open_pr_suggestion",
+            "create_alert_rule",
+            "create_signal",
+            "promote_artifact",
+        }
         for name, spec in _TOOL_REGISTRY.items():
-            if name not in ("mark_incident_resolved", "open_pr_suggestion"):
+            if name in admin_gated:
+                assert spec["requires_role"] == "admin", name
+            else:
                 assert spec["requires_role"] is None, (
                     f"{name} unexpectedly requires role {spec['requires_role']!r}"
                 )
+
+    @pytest.mark.asyncio
+    async def test_write_tools_return_approval_required(self):
+        from eden.autonomous.agent import _APPROVAL_GATED_TOOLS
+
+        tc = await dispatch_tool(
+            "mark_incident_resolved",
+            {"cluster_id": "clu_abc"},
+            tenant_id="t-1",
+            user_role="admin",
+        )
+        assert tc.error is None or tc.error == ""
+        assert isinstance(tc.result, dict)
+        assert tc.result.get("approval_required") is True
+        assert "mark_incident_resolved" in _APPROVAL_GATED_TOOLS
 
     def test_tool_specs_have_required_fields(self):
         for spec in tool_specs():
@@ -113,15 +137,14 @@ class TestDispatchTool:
 
     @pytest.mark.asyncio
     async def test_admin_only_tool_allows_admin(self):
-        # We don't have a real DB, so the tool will fail at DB lookup —
-        # but it should NOT be blocked by RBAC.
+        # W20: write tools return approval_required instead of executing.
         tc = await dispatch_tool(
             "mark_incident_resolved",
             {"cluster_id": "clu_abc"},
             tenant_id="t-1", user_role="admin",
         )
-        # Either success or a postgres error, but never "permission_denied".
         assert "permission_denied" not in (tc.error or "")
+        assert tc.result and tc.result.get("approval_required") is True
 
 
 # ── Schemas ───────────────────────────────────────────────────────
@@ -313,9 +336,22 @@ class TestModelSelection:
             "eden.autonomous.agent.get_settings",
             lambda: _FakeSettings(ai_agent_t3_model=""),
         )
+
+        async def _boom(*_a, **_k):
+            raise RuntimeError("no router")
+
+        monkeypatch.setattr(
+            "eden.llm.internal_router.resolve_models",
+            _boom,
+            raising=False,
+        )
         service = ChatService()
-        model = await service._pick_model()
+        model, tier = await service._pick_model(
+            user_message="investigate cost spike and export traces",
+            preferred_tier="t3",
+        )
         assert model == "x-ai/grok-4.5"
+        assert tier == "t3"
 
     @pytest.mark.asyncio
     async def test_override_takes_precedence(self, monkeypatch):
@@ -324,7 +360,24 @@ class TestModelSelection:
             lambda: _FakeSettings(ai_agent_t3_model="anthropic/claude-sonnet-4.6"),
         )
         service = ChatService()
-        assert await service._pick_model() == "anthropic/claude-sonnet-4.6"
+        model, tier = await service._pick_model(
+            user_message="investigate root cause",
+            preferred_tier="t3",
+        )
+        assert model == "anthropic/claude-sonnet-4.6"
+        assert tier == "t3"
+
+    @pytest.mark.asyncio
+    async def test_picks_t1_for_short_question(self, monkeypatch):
+        monkeypatch.setattr(
+            "eden.autonomous.agent.get_settings",
+            lambda: _FakeSettings(ai_agent_t3_model=""),
+        )
+        service = ChatService()
+        model, tier = await service._pick_model(user_message="what is p95?")
+        assert tier == "t1"
+        assert model  # non-empty SLM id
+
 
 
 class _FakeSettings:

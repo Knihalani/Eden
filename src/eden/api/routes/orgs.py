@@ -316,9 +316,74 @@ async def create_org(
     try:
         from eden.signals.defaults import seed_org_signals
 
-        await seed_org_signals(org_id, profile="standard", created_by=user_id, pg=client)
+        await seed_org_signals(org_id, profile="advanced", created_by=user_id, pg=client)
     except Exception as exc:  # noqa: BLE001
         logger.info("F35 signal seed skipped for org=%s: %s", org_id, redact_all(str(exc)))
+
+    # Phase 3 GA defaults — Artifacts + Ledger on for new orgs (also Settings default True).
+    try:
+        import json
+
+        await client.execute(
+            """
+            UPDATE organizations
+            SET features = COALESCE(features, '{}'::jsonb) || $2::jsonb
+            WHERE id = $1
+            """,
+            org_id,
+            json.dumps(
+                {
+                    "artifacts_v1": True,
+                    "ledger_v1": True,
+                    "improvement_loop_preview": True,
+                    # Phase 8 — autonomous SRE defaults (new orgs only).
+                    "improvement_agent_v1": True,
+                    "improvement_schedule_enabled": True,
+                    "improvement_schedule_cron": "0 3 * * 0",
+                    "evolution_loop_enabled": True,
+                    "evolver_auto_canary_pct": 5,
+                }
+            ),
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.info("Phase3 feature seed skipped for org=%s: %s", org_id, redact_all(str(exc)))
+
+    # N22 — seed org-default autonomy policy row (required before auto-execute).
+    try:
+        import json as _json
+
+        from eden.closed_loop.autonomy_policy import AutonomousMaintenancePolicy
+
+        policy = AutonomousMaintenancePolicy(
+            org_id=org_id,
+            agent_id=None,
+            maintenance_mode="assisted",
+            auto_runtime_heal=True,
+            auto_code_patch_pr=False,
+            auto_code_patch_merge=False,
+            auto_prompt_canary=True,
+            auto_nudge_promote=False,
+            auto_guardrail_promote=False,
+            compliance_profile="standard",
+        )
+        existing_policy = await client.fetchrow(
+            "SELECT id FROM autonomy_policies WHERE org_id = $1 AND agent_id IS NULL",
+            org_id,
+        )
+        if existing_policy is None:
+            await client.execute(
+                """
+                INSERT INTO autonomy_policies
+                    (id, org_id, agent_id, policy, compliance_profile, updated_at)
+                VALUES ($1::uuid, $2, NULL, $3::jsonb, $4, NOW())
+                """,
+                str(uuid4()),
+                org_id,
+                _json.dumps(policy.to_json()),
+                policy.compliance_profile,
+            )
+    except Exception as exc:  # noqa: BLE001
+        logger.info("N22 autonomy policy seed skipped for org=%s: %s", org_id, redact_all(str(exc)))
 
     return {
         "org_id": org_id,

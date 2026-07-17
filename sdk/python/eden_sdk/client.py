@@ -165,9 +165,29 @@ class EdenClient:
         # and race to create a second worker thread.
         self._lifecycle_lock = threading.Lock()
         self._dropped_total = 0
+        self._sampled_out_total = 0
         self._sent_total = 0
         self._failed_total = 0
         self._latency_window: deque[float] = deque(maxlen=1024)
+        from eden_sdk.sampling import ClientSampler, SampleSignals
+
+        profile = getattr(self.config, "sampling_profile", "full") or "full"
+        if profile not in ("full", "balanced", "aggressive"):
+            profile = "full"
+        self._sampler = ClientSampler(
+            profile=profile,  # type: ignore[arg-type]
+            keep_errors=bool(getattr(self.config, "sample_keep_errors", True)),
+        )
+        self._SampleSignals = SampleSignals
+        self._offline = None
+        offline_path = getattr(self.config, "offline_queue_path", None)
+        if offline_path:
+            try:
+                from eden_sdk.offline_queue import OfflineQueue
+
+                self._offline = OfflineQueue(offline_path)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("eden offline queue disabled: %s", exc)
         # Generation counter: incremented at the end of each
         # send_batch. ``flush()`` waits until the queue is empty
         # AND the generation is stable for one tick — that way
@@ -251,6 +271,18 @@ class EdenClient:
         framework callbacks running on the user's event loop.
         """
         if not self.config.enabled:
+            return
+        payload = event.payload if isinstance(event.payload, dict) else {}
+        has_error = bool(
+            payload.get("error")
+            or payload.get("outcome") == "error"
+            or payload.get("status") == "error"
+        )
+        duration_ms = float(payload.get("duration_ms") or 0)
+        if not self._sampler.should_keep(
+            self._SampleSignals(has_error=has_error, duration_ms=duration_ms)
+        ):
+            self._sampled_out_total += 1
             return
         if self.config.dry_run:
             self._sent_total += 1
@@ -642,6 +674,7 @@ class EdenClient:
                             "eden ingest %s failed after %d attempts: %s",
                             source_format, attempt, exc,
                         )
+                        self._spill_offline(source_format, payloads)
                         break
 
                     status = resp.status_code
@@ -658,6 +691,7 @@ class EdenClient:
                             "eden ingest %s returned %s: %s",
                             source_format, status, resp.text[:200],
                         )
+                        self._spill_offline(source_format, payloads)
                         break
                     # Respect Retry-After if present. The spec (RFC 7231)
                     # allows either a delta-seconds integer or an
@@ -680,6 +714,28 @@ class EdenClient:
                 # Outermost catch: anything the retry loop didn't handle.
                 self._failed_total += count
                 logger.warning("eden ingest %s failed: %s", source_format, exc)
+                self._spill_offline(source_format, payloads)
+
+    def _spill_offline(self, source_format: str, payloads: list[dict[str, Any]]) -> None:
+        if self._offline is None:
+            return
+        for p in payloads:
+            try:
+                self._offline.enqueue(source_format, p)
+            except Exception as exc:  # noqa: BLE001
+                logger.debug("offline spill failed: %s", exc)
+
+    def flush_offline(self, limit: int = 100) -> int:
+        """Re-enqueue durable offline events after reconnect. Returns count."""
+        if self._offline is None:
+            return 0
+        drained = self._offline.drain(limit=limit)
+        ids: list[int] = []
+        for rid, fmt, payload in drained:
+            self.enqueue(TraceEvent(payload=payload, source_format=fmt))
+            ids.append(rid)
+        self._offline.ack(ids)
+        return len(ids)
 
     # ── Stats / introspection ─────────────────────────────────────────
 
@@ -690,6 +746,10 @@ class EdenClient:
     @property
     def dropped(self) -> int:
         return self._dropped_total
+
+    @property
+    def sampled_out(self) -> int:
+        return self._sampled_out_total
 
     @property
     def failed(self) -> int:

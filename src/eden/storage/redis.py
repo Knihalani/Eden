@@ -473,7 +473,13 @@ class Lock:
         """
         client = await get_redis_client()
         if client is None:
-            return True  # No Redis = no locking (warn in logs)
+            # Fail-closed: without Redis every replica would become
+            # leader. Refuse acquisition so singleton loops stay idle.
+            logger.warning(
+                "leader lock acquire refused: Redis unavailable (%s)",
+                self._key,
+            )
+            return False
 
         self._token = token or f"{time.time()}"
         result = await client.set(self._key, self._token, nx=True, ex=self.ttl)
@@ -486,7 +492,7 @@ class Lock:
 
         client = await get_redis_client()
         if client is None:
-            return True
+            return False
 
         # Lua script for atomic check-and-delete (prevents releasing
         # a lock that was acquired by another process after ours expired)
@@ -507,7 +513,7 @@ class Lock:
 
         client = await get_redis_client()
         if client is None:
-            return True
+            return False
 
         lua = """
             if redis.call("get", KEYS[1]) == ARGV[1] then

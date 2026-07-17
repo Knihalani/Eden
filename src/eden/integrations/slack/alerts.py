@@ -279,6 +279,18 @@ def _build_blocks(
             ],
         }
     )
+    from eden.config import get_settings
+
+    if getattr(get_settings(), "slack_interactive_v1", True):
+        try:
+            from eden.integrations.slack.interactive import interactive_action_blocks
+
+            trace_id = payload.get("trace_id") or payload.get("example_trace_id")
+            blocks.extend(
+                interactive_action_blocks(org_id, issue_id, str(trace_id) if trace_id else None)
+            )
+        except Exception as exc:
+            logger.debug("slack alerts: interactive blocks skipped: %s", exc)
     blocks.append(
         {
             "type": "context",

@@ -90,9 +90,22 @@ export const viewport = {
  */
 const ALLOWED_REDIRECT_ORIGINS = [
   "http://localhost:3000",
+  // Playwright golden paths + portal-ci bind to 127.0.0.1 (not localhost).
+  "http://127.0.0.1:3000",
   "https://edenobservability.com",
   process.env.NEXT_PUBLIC_SITE_URL,
 ].filter((origin): origin is string => Boolean(origin));
+
+// Dev/CI: allow the active PORT on both loopback hostnames (golden paths, a11y).
+if (process.env.NODE_ENV !== "production") {
+  const devPort = process.env.PORT || "3000";
+  for (const host of ["localhost", "127.0.0.1"]) {
+    const origin = `http://${host}:${devPort}`;
+    if (!ALLOWED_REDIRECT_ORIGINS.includes(origin)) {
+      ALLOWED_REDIRECT_ORIGINS.push(origin);
+    }
+  }
+}
 
 export default async function RootLayout({
   children,

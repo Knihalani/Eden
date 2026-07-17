@@ -1,11 +1,11 @@
 "use client";
 
 /**
- * McpTab — Settings → MCP connection wizard (WS8).
+ * McpTab — Settings → MCP connection wizard (WS8 / W28).
  *
  * Copy-paste `.cursor/mcp.json` and Claude Code config with
- * org-scoped env vars. Dedicated MCP key issuance (`POST /v1/mcp/keys`)
- * is not shipped yet — users reuse org API keys from Settings → API Keys.
+ * org-scoped env vars. MCP keys: Settings → API Keys (MCP presets)
+ * or ``POST /orgs/{org}/mcp/keys``. Streamable HTTP also at ``POST /v1/mcp``.
  */
 
 import { useMemo, useState } from "react";
@@ -14,6 +14,9 @@ import { Check, Copy, ExternalLink, Key, Terminal } from "lucide-react";
 import { SettingsCard } from "@/components/settings/settings-card";
 import { IntegrationStatusBanner } from "@/components/settings/integration-status-banner";
 import { DOCS_URL } from "@/lib/constants";
+import { api } from "@/lib/api";
+import { useToast } from "@/components/ui/toast";
+import { Button } from "@/components/ui/button";
 
 const DEFAULT_API_BASE = "https://api.edenobservability.com";
 
@@ -21,7 +24,7 @@ interface McpTabProps {
   org: { id: string; name: string; role: string } | null;
 }
 
-type ConfigTarget = "cursor" | "claude";
+type ConfigTarget = "cursor" | "claude" | "http";
 
 function buildCursorConfig(orgId: string, apiBase: string) {
   return JSON.stringify(
@@ -64,6 +67,16 @@ function buildClaudeConfig(orgId: string, apiBase: string) {
   );
 }
 
+function buildHttpNote(orgId: string, apiBase: string) {
+  return [
+    "# Streamable HTTP (W28)",
+    `# POST ${apiBase}/v1/mcp  with Authorization: Bearer <key>`,
+    `# Header X-Org-Id: ${orgId}`,
+    "# JSON-RPC: initialize | tools/list | tools/call",
+    "# Prefer stdio (eden-mcp) for Cursor; HTTP for remote agents.",
+  ].join("\n");
+}
+
 const MCP_TOOLS = [
   "search_traces",
   "get_trace",
@@ -72,21 +85,41 @@ const MCP_TOOLS = [
   "rerun_debugger",
   "search_issues",
   "get_issue",
+  "get_trace_stumbles",
   "triage_issue",
   "run_autofix",
   "get_improvement_queue",
+  "list_improvement_plans",
+  "get_improvement_plan",
+  "approve_improvement_plan",
+  "export_fixture",
+  "create_regression_case",
+  "preview_change_impact",
+  "eden_health",
+  "tail_trace",
+  "label_tool_call",
+  "query_eql",
+  "query_sql",
+  "list_datasets",
+  "list_experiments",
+  "get_judge_scores",
+  "get_cost_breakdown",
+  "get_agentic_metrics",
 ] as const;
 
 const EXAMPLE_PROMPTS = [
   "Why did trace abc-123 fail? Show the transcript and quality signals.",
   "List open P0 agent issues from the last 24 hours.",
-  "Triage issue iss_456 and suggest a fix.",
-  "Rerun trace abc-123 from step 12 with this system prompt override.",
+  "Run a read-only SQL cost breakdown for the last day.",
+  "Show F64 agentic metrics for this org.",
 ] as const;
 
 export function McpTab({ org }: McpTabProps) {
+  const toast = useToast();
   const [target, setTarget] = useState<ConfigTarget>("cursor");
   const [copied, setCopied] = useState(false);
+  const [creatingKey, setCreatingKey] = useState(false);
+  const [rawKey, setRawKey] = useState<string | null>(null);
 
   const apiBase =
     (typeof process !== "undefined" && process.env.NEXT_PUBLIC_EDEN_API_BASE) ||
@@ -94,19 +127,38 @@ export function McpTab({ org }: McpTabProps) {
 
   const configText = useMemo(() => {
     const orgId = org?.id ?? "<your-org-id>";
+    if (target === "http") return buildHttpNote(orgId, apiBase);
     return target === "cursor"
       ? buildCursorConfig(orgId, apiBase)
       : buildClaudeConfig(orgId, apiBase);
   }, [org?.id, apiBase, target]);
 
   const configPath =
-    target === "cursor" ? ".cursor/mcp.json" : ".claude/mcp.json";
+    target === "cursor"
+      ? ".cursor/mcp.json"
+      : target === "claude"
+        ? ".claude/mcp.json"
+        : "HTTP /v1/mcp";
 
   const copyConfig = () => {
     void navigator.clipboard.writeText(configText).then(() => {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     });
+  };
+
+  const createMcpKey = async () => {
+    if (!org) return;
+    setCreatingKey(true);
+    try {
+      const res = await api.createMcpKey(org.id, "MCP");
+      setRawKey(res.raw_key ?? null);
+      toast.success("MCP-scoped API key created");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Failed to create MCP key");
+    } finally {
+      setCreatingKey(false);
+    }
   };
 
   if (!org) {
@@ -129,14 +181,14 @@ export function McpTab({ org }: McpTabProps) {
                 Connect Eden MCP in your IDE
               </h3>
               <p className="text-sm text-[var(--text-secondary)] mt-1">
-                Wire Cursor or Claude Code to search traces, triage issues, rerun
-                the debugger, and run autofix — without leaving your editor.
+                Wire Cursor or Claude Code to search traces, run EQL/SQL/eval
+                reads, and triage issues — without leaving your editor.
               </p>
             </div>
           </div>
 
           <div className="flex flex-wrap gap-2">
-            {(["cursor", "claude"] as const).map((id) => (
+            {(["cursor", "claude", "http"] as const).map((id) => (
               <button
                 key={id}
                 type="button"
@@ -147,15 +199,25 @@ export function McpTab({ org }: McpTabProps) {
                     : "px-3 py-1.5 rounded-lg text-sm font-medium text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)]"
                 }
               >
-                {id === "cursor" ? "Cursor" : "Claude Code"}
+                {id === "cursor"
+                  ? "Cursor"
+                  : id === "claude"
+                    ? "Claude Code"
+                    : "Streamable HTTP"}
               </button>
             ))}
           </div>
 
           <div className="p-3 rounded-lg bg-[var(--bg-tertiary)] border border-[var(--border-default)]">
             <p className="text-xs text-[var(--text-muted)] mb-2">
-              Save as <code className="font-mono">{configPath}</code> in your
-              project root (or merge into your existing MCP config).
+              {target === "http" ? (
+                <>Endpoint notes for remote agents</>
+              ) : (
+                <>
+                  Save as <code className="font-mono">{configPath}</code> in your
+                  project root (or merge into your existing MCP config).
+                </>
+              )}
             </p>
             <pre className="text-xs font-mono text-[var(--text-primary)] overflow-x-auto whitespace-pre-wrap break-all">
               {configText}
@@ -173,47 +235,50 @@ export function McpTab({ org }: McpTabProps) {
               {copied ? "Copied" : "Copy config"}
             </button>
           </div>
-
-          <p className="text-xs text-[var(--text-muted)]">
-            Requires the Eden platform package so{" "}
-            <code className="font-mono">eden-mcp</code> is on your PATH (
-            <code className="font-mono">pip install -e .</code> in a monorepo
-            checkout). Replace{" "}
-            <code className="font-mono">&lt;your-api-key&gt;</code> with an org
-            API key. Alternatively use{" "}
-            <code className="font-mono">python -m eden.mcp_server</code> if the
-            console script is not on your PATH.
-          </p>
         </div>
       </SettingsCard>
 
       <SettingsCard>
         <div className="flex items-start gap-3">
           <Key className="w-5 h-5 text-[var(--text-muted)] mt-0.5 flex-shrink-0" />
-          <div className="space-y-2">
+          <div className="space-y-2 flex-1">
             <h3 className="text-sm font-semibold text-[var(--text-primary)]">
-              API key
+              MCP API key
             </h3>
             <p className="text-sm text-[var(--text-secondary)]">
-              MCP uses your org API key via{" "}
-              <code className="font-mono text-xs">EDEN_API_KEY</code>. Dedicated
-              MCP-scoped keys are not available yet — use a standard org API key
-              from Settings → API Keys.
+              Create an org-scoped key with{" "}
+              <code className="font-mono text-xs">mcp:read/debug/fix</code>{" "}
+              scopes via POST /orgs/&#123;org&#125;/mcp/keys.
             </p>
-            <Link
-              href="/settings?tab=api-keys"
-              className="inline-flex items-center gap-1 text-sm text-[var(--accent)] hover:underline"
-            >
-              Settings → API Keys
-              <ExternalLink className="w-3.5 h-3.5" />
-            </Link>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={creatingKey}
+                onClick={() => void createMcpKey()}
+              >
+                {creatingKey ? "Creating…" : "Create MCP key"}
+              </Button>
+              <Link
+                href="/settings?tab=api-keys"
+                className="inline-flex items-center gap-1 text-sm text-[var(--accent)] hover:underline"
+              >
+                Settings → API Keys
+                <ExternalLink className="w-3.5 h-3.5" />
+              </Link>
+            </div>
+            {rawKey ? (
+              <pre className="mt-2 text-xs font-mono break-all rounded border border-[var(--border-default)] p-2">
+                {rawKey}
+              </pre>
+            ) : null}
           </div>
         </div>
       </SettingsCard>
 
       <SettingsCard>
         <h3 className="text-sm font-semibold text-[var(--text-primary)] mb-2">
-          Available tools
+          Available tools ({MCP_TOOLS.length})
         </h3>
         <div className="flex flex-wrap gap-1.5">
           {MCP_TOOLS.map((tool) => (

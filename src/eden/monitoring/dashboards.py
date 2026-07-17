@@ -1,0 +1,233 @@
+"""F57 custom monitoring dashboards + editable Home."""
+
+from __future__ import annotations
+
+import json
+import logging
+import uuid
+from typing import Any
+
+logger = logging.getLogger(__name__)
+
+
+class MonitoringDashboardService:
+    """CRUD dashboards and widgets; execute widget queries."""
+
+    async def _client(self) -> Any | None:
+        try:
+            from eden.storage.postgres import get_postgres_client
+
+            return await get_postgres_client()
+        except Exception:
+            return None
+
+    async def list_dashboards(self, org_id: str) -> list[dict[str, Any]]:
+        client = await self._client()
+        if client is None:
+            return []
+        rows = await client.fetch(
+            "SELECT * FROM monitoring_dashboards WHERE org_id = $1 "
+            "ORDER BY is_home DESC, updated_at DESC",
+            org_id,
+        )
+        return [dict(r) for r in rows]
+
+    async def get_home(self, org_id: str) -> dict[str, Any] | None:
+        client = await self._client()
+        if client is None:
+            return None
+        row = await client.fetchrow(
+            "SELECT * FROM monitoring_dashboards WHERE org_id = $1 AND is_home = true "
+            "ORDER BY updated_at DESC LIMIT 1",
+            org_id,
+        )
+        if not row:
+            return await self.ensure_default_home(org_id)
+        dash = dict(row)
+        dash["widgets"] = await self.list_widgets(org_id, str(row["id"]))
+        return dash
+
+    async def ensure_default_home(self, org_id: str) -> dict[str, Any]:
+        dashboards = await self.list_dashboards(org_id)
+        if dashboards:
+            home = next((d for d in dashboards if d.get("is_home")), dashboards[0])
+            home["widgets"] = await self.list_widgets(org_id, str(home["id"]))
+            return home
+        client = await self._client()
+        if client is None:
+            return {"org_id": org_id, "name": "Home", "is_home": True, "widgets": []}
+        did = str(uuid.uuid4())
+        await client.execute(
+            """
+            INSERT INTO monitoring_dashboards (id, org_id, name, is_home)
+            VALUES ($1::uuid, $2, 'Home', true)
+            """,
+            did,
+            org_id,
+        )
+        for i, (wtype, title, query) in enumerate(
+            [
+                ("traces", "Trace volume", "summary:traces"),
+                ("cost", "Cost (24h)", "summary:cost"),
+                ("scores", "Eval pass rate", "summary:eval_pass_rate"),
+                ("issues", "Open issues", "summary:issues"),
+            ]
+        ):
+            await client.execute(
+                """
+                INSERT INTO dashboard_widgets
+                (id, dashboard_id, org_id, widget_type, title, query, position)
+                VALUES ($1::uuid, $2::uuid, $3, $4, $5, $6, $7)
+                """,
+                str(uuid.uuid4()),
+                did,
+                org_id,
+                wtype,
+                title,
+                query,
+                i,
+            )
+        dash = {"id": did, "org_id": org_id, "name": "Home", "is_home": True}
+        dash["widgets"] = await self.list_widgets(org_id, did)
+        return dash
+
+    async def create_dashboard(
+        self, org_id: str, *, name: str, is_home: bool = False
+    ) -> dict[str, Any] | None:
+        client = await self._client()
+        if client is None:
+            return None
+        did = str(uuid.uuid4())
+        if is_home:
+            await client.execute(
+                "UPDATE monitoring_dashboards SET is_home = false WHERE org_id = $1",
+                org_id,
+            )
+        await client.execute(
+            """
+            INSERT INTO monitoring_dashboards (id, org_id, name, is_home)
+            VALUES ($1::uuid, $2, $3, $4)
+            """,
+            did,
+            org_id,
+            name,
+            is_home,
+        )
+        return {"id": did, "name": name, "is_home": is_home}
+
+    async def list_widgets(self, org_id: str, dashboard_id: str) -> list[dict[str, Any]]:
+        client = await self._client()
+        if client is None:
+            return []
+        rows = await client.fetch(
+            """
+            SELECT * FROM dashboard_widgets
+            WHERE org_id = $1 AND dashboard_id = $2::uuid
+            ORDER BY position ASC
+            """,
+            org_id,
+            dashboard_id,
+        )
+        return [dict(r) for r in rows]
+
+    async def upsert_widget(
+        self,
+        org_id: str,
+        dashboard_id: str,
+        *,
+        widget_type: str,
+        title: str,
+        query: str,
+        config: dict[str, Any] | None = None,
+        position: int = 0,
+        widget_id: str | None = None,
+    ) -> dict[str, Any] | None:
+        client = await self._client()
+        if client is None:
+            return None
+        wid = widget_id or str(uuid.uuid4())
+        await client.execute(
+            """
+            INSERT INTO dashboard_widgets
+            (id, dashboard_id, org_id, widget_type, title, query, config, position)
+            VALUES ($1::uuid, $2::uuid, $3, $4, $5, $6, $7::jsonb, $8)
+            ON CONFLICT (id) DO UPDATE SET
+                widget_type = EXCLUDED.widget_type,
+                title = EXCLUDED.title,
+                query = EXCLUDED.query,
+                config = EXCLUDED.config,
+                position = EXCLUDED.position,
+                updated_at = NOW()
+            """,
+            wid,
+            dashboard_id,
+            org_id,
+            widget_type,
+            title,
+            query,
+            json.dumps(config or {}),
+            position,
+        )
+        return {"id": wid, "title": title, "query": query}
+
+    async def execute_widget_query(
+        self, org_id: str, query: str, *, agent_id: str | None = None
+    ) -> dict[str, Any]:
+        """Resolve preset or SQL/EQL widget queries."""
+        if query.startswith("summary:"):
+            key = query.split(":", 1)[1]
+            return await self._summary_value(org_id, key, agent_id=agent_id)
+        if query.strip().upper().startswith("SELECT"):
+            from eden.observability.sql_executor import SqlExecutor
+
+            executor = SqlExecutor()
+            result = await executor.execute(org_id, query)
+            return {"type": "sql", "result": result}
+        return {"type": "unknown", "query": query}
+
+    async def _summary_value(
+        self, org_id: str, key: str, *, agent_id: str | None = None
+    ) -> dict[str, Any]:
+        client = await self._client()
+        if client is None:
+            return {"key": key, "value": None}
+        if key == "traces":
+            row = await client.fetchrow(
+                """
+                SELECT count(DISTINCT trace_id) AS n FROM telemetry_events
+                WHERE tenant_id = $1 AND timestamp > NOW() - interval '24 hours'
+                """,
+                org_id,
+            )
+            return {"key": key, "value": int(row["n"] or 0) if row else 0}
+        if key == "cost":
+            row = await client.fetchrow(
+                """
+                SELECT coalesce(sum(cost_usd), 0) AS cost FROM telemetry_events
+                WHERE tenant_id = $1 AND timestamp > NOW() - interval '24 hours'
+                """,
+                org_id,
+            )
+            return {"key": key, "value": float(row["cost"] or 0) if row else 0.0}
+        if key == "eval_pass_rate":
+            q = (
+                "SELECT avg(CASE WHEN passed THEN 1.0 ELSE 0.0 END) AS rate "
+                "FROM production_eval_scores WHERE org_id = $1 "
+                "AND scored_at > NOW() - interval '7 days'"
+            )
+            args: list[Any] = [org_id]
+            if agent_id:
+                q += " AND agent_id = $2"
+                args.append(agent_id)
+            row = await client.fetchrow(q, *args)
+            return {"key": key, "value": float(row["rate"] or 0) if row else None}
+        if key == "issues":
+            row = await client.fetchrow(
+                """
+                SELECT count(*) AS n FROM agent_issues
+                WHERE org_id = $1 AND status NOT IN ('resolved', 'archived')
+                """,
+                org_id,
+            )
+            return {"key": key, "value": int(row["n"] or 0) if row else 0}
+        return {"key": key, "value": None}

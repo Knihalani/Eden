@@ -1,10 +1,11 @@
 "use client";
 
 /**
- * Sidebar config — 12 top-level surfaces (July 2026 consolidation).
+ * U12 IA freeze — ≤12 core nav items (July 2026 Wave 3).
  *
- * Deep links (agent detail, issue detail, plan detail) stay routable
- * but are not nav items. Connect lives as a CTA on Agents.
+ * Observe / Improve / Evaluate / Workspace grouping.
+ * Advanced surfaces (agents, prompts, analytics, guardrails, cost) hidden
+ * behind the Advanced toggle until expanded.
  */
 
 import type { ComponentType } from "react";
@@ -13,6 +14,7 @@ import {
   Settings,
   FileText,
   ShieldAlert,
+  ShieldCheck,
   type LucideIcon,
 } from "lucide-react";
 import {
@@ -46,10 +48,11 @@ export interface SidebarGroup {
   items: SidebarItem[];
 }
 
+/** Core leaf count: 9 (≤12 per U12). Advanced items excluded from default count. */
 export const DEFAULT_SIDEBAR: SidebarGroup[] = [
   {
     id: "build",
-    label: "Build",
+    label: "Home",
     items: [
       {
         id: "dashboard",
@@ -57,20 +60,6 @@ export const DEFAULT_SIDEBAR: SidebarGroup[] = [
         label: "Dashboard",
         icon: LayoutDashboard,
         description: "One-glance view of agents, traces, costs, and alerts.",
-      },
-      {
-        id: "agents",
-        href: "/agents",
-        label: "Agents",
-        icon: AgentIcon,
-        description: "Manage AI agents and fleet health. Connect repos from here.",
-      },
-      {
-        id: "prompts",
-        href: "/prompts",
-        label: "Prompts",
-        icon: FileText,
-        description: "Version and manage prompt templates.",
       },
     ],
   },
@@ -83,7 +72,7 @@ export const DEFAULT_SIDEBAR: SidebarGroup[] = [
         href: "/traces",
         label: "Traces",
         icon: TraceIcon,
-        description: "Every AI call — inspect, replay, and debug from one place.",
+        description: "Traces, spans, and sessions — inspect without leaving the hub.",
       },
       {
         id: "issues",
@@ -100,29 +89,68 @@ export const DEFAULT_SIDEBAR: SidebarGroup[] = [
         description: "Threshold notifications and custom signal rules.",
       },
       {
+        id: "agents",
+        href: "/agents",
+        label: "Agents",
+        icon: AgentIcon,
+        category: "advanced",
+        description: "Manage AI agents and fleet health.",
+      },
+      {
         id: "analytics",
         href: "/analytics",
         label: "Analytics",
         icon: InsightsIcon,
+        category: "advanced",
         description: "Usage, tools, users, and trend insights.",
       },
       {
-        id: "evals",
-        href: "/evals",
-        label: "Evals",
-        icon: EvalIcon,
-        description: "Datasets, labeling, studio metrics, and synthetic data.",
+        id: "signals",
+        href: "/alerts?tab=signals",
+        label: "Signals",
+        icon: AlertNavIcon,
+        category: "advanced",
+        description: "Deep search signals and classifier rules.",
+      },
+      {
+        id: "debugger-sessions",
+        href: "/debugger-sessions",
+        label: "Debug sessions",
+        icon: TraceIcon,
+        category: "advanced",
+        description: "Multi-run debugger timeline and compare (F74).",
       },
     ],
   },
   {
     id: "optimize",
-    label: "Optimize",
+    label: "Improve",
     items: [
+      {
+        id: "artifacts",
+        href: "/artifacts",
+        label: "Artifacts",
+        icon: PatchIcon,
+        description: "Versioned runtime fixes with evidence-gated promotion.",
+      },
+      {
+        id: "ledger",
+        href: "/ledger",
+        label: "Ledger",
+        icon: FileText,
+        description: "Compounding institutional memory for your agents.",
+      },
+      {
+        id: "promotions",
+        href: "/promotions",
+        label: "Promotions",
+        icon: PatchIcon,
+        description: "EvidenceGate inbox — approve or reject shadow candidates.",
+      },
       {
         id: "improve",
         href: "/improve",
-        label: "Improve",
+        label: "Improve queue",
         icon: PatchIcon,
         description: "Action queue, improvement plans, and sweep history.",
       },
@@ -131,6 +159,7 @@ export const DEFAULT_SIDEBAR: SidebarGroup[] = [
         href: "/optimization",
         label: "Cost",
         icon: CostIcon,
+        category: "advanced",
         description: "Spend, budgets, outcomes, forecasts, and model advice.",
       },
       {
@@ -138,7 +167,29 @@ export const DEFAULT_SIDEBAR: SidebarGroup[] = [
         href: "/guardrails",
         label: "Guardrails",
         icon: GuardrailIcon,
+        category: "advanced",
         description: "Safety policies and red-team tests.",
+      },
+      {
+        id: "prompts",
+        href: "/prompts",
+        label: "Prompts",
+        icon: FileText,
+        category: "advanced",
+        description: "Version and manage prompt templates.",
+      },
+    ],
+  },
+  {
+    id: "automate",
+    label: "Evaluate",
+    items: [
+      {
+        id: "evals",
+        href: "/evals",
+        label: "Evals",
+        icon: EvalIcon,
+        description: "Playgrounds, experiments, datasets, labeling, and studio.",
       },
     ],
   },
@@ -146,6 +197,13 @@ export const DEFAULT_SIDEBAR: SidebarGroup[] = [
     id: "workspace",
     label: "Workspace",
     items: [
+      {
+        id: "audit-trail",
+        href: "/audit-trail",
+        label: "Audit trail",
+        icon: ShieldCheck,
+        description: "Chain-verified compliance packs and agent audit events (N06).",
+      },
       {
         id: "settings",
         href: "/settings",
@@ -168,6 +226,7 @@ export const DEFAULT_SIDEBAR: SidebarGroup[] = [
         href: DOCS_URL,
         label: "Docs",
         icon: FileText,
+        category: "advanced",
         description: "API reference, guides, and examples.",
       },
     ],
@@ -186,3 +245,8 @@ export const ALL_ITEM_IDS: string[] = (() => {
   }
   return out;
 })();
+
+/** U12 core visible items (excludes advanced category). */
+export const CORE_NAV_ITEM_COUNT = DEFAULT_SIDEBAR.flatMap((g) => g.items).filter(
+  (i) => i.category !== "advanced",
+).length;

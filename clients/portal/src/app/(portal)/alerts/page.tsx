@@ -15,7 +15,9 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Button } from "@/components/ui/button";
 import { NoOrgState } from "@/components/ui/no-org-state";
 import { PageHeader } from "@/components/layout/page-header";
-import { PageContent } from "@/components/layout/page-content";
+import { CoreResourcePage, DetailPanelShell, useResourceUrlState, ResourceOsToolbar, BulkActionBar } from "@/components/portal-os";
+import { CrossLinkBar } from "@/components/portal-os/CrossLinkBar";
+import { incidentHref, traceHref } from "@/lib/portal-cross-links";
 import { EmbeddedSurface } from "@/components/layout/embedded-surface";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -113,7 +115,8 @@ function AlertsPageInner() {
   const [verdictFilter, setVerdictFilter] = useState<VerdictFilter>("all");
   const [acknowledgedFilter, setAcknowledgedFilter] = useState<boolean | null>(null);
   const [selectedAlerts, setSelectedAlerts] = useState<Set<string>>(new Set());
-  const [expandedAlert, setExpandedAlert] = useState<string | null>(null);
+  const { state: urlState, setState: setUrlState } = useResourceUrlState();
+  const alertId = urlState.alertId;
   const [offset, setOffset] = useState(0);
   const [rulesOpen, setRulesOpen] = useState(
     searchParams.get("tab") === "rules",
@@ -253,6 +256,8 @@ function AlertsPageInner() {
   }, {} as Record<string, number>);
 
   const hasSelection = selectedAlerts.size > 0;
+  const selectedAlert = alertId ? alerts.find((a) => a.alert_id === alertId) ?? null : null;
+  const alertIndex = alertId ? alerts.findIndex((a) => a.alert_id === alertId) : -1;
 
   if (!currentOrg) {
     return (
@@ -266,32 +271,39 @@ function AlertsPageInner() {
 
   if (showSignals) {
     return (
-      <PageContent>
-        <PageHeader
-          title="Alerts"
-          subtitle="Threshold notifications and custom signal rules."
-          icon={Bell}
-        />
-        <div className="mb-4 flex gap-2 text-sm">
-          <Link href="/alerts" className="text-[var(--accent)] hover:underline">Feed</Link>
-          <span className="text-[var(--text-muted)]">·</span>
-          <span className="font-medium text-[var(--text-primary)]">Signals</span>
-        </div>
-        <EmbeddedSurface>
-          <SignalsView />
-        </EmbeddedSurface>
-      </PageContent>
+      <CoreResourcePage
+        header={
+          <PageHeader
+            title="Alerts"
+            subtitle="Threshold notifications and custom signal rules."
+            icon={Bell}
+          />
+        }
+        toolbar={
+          <div className="mb-4 flex gap-2 text-sm">
+            <Link href="/alerts" className="text-[var(--accent)] hover:underline">Feed</Link>
+            <span className="text-[var(--text-muted)]">·</span>
+            <span className="font-medium text-[var(--text-primary)]">Signals</span>
+          </div>
+        }
+        table={
+          <EmbeddedSurface>
+            <SignalsView />
+          </EmbeddedSurface>
+        }
+      />
     );
   }
 
   return (
-    <PageContent>
-      <PageHeader
-        title="Alerts"
-        subtitle={loading ? "..." : `${total} alerts · ${unreadCount} unread`}
-        icon={Bell}
-        description="Configure notifications when traces, costs, or quality cross a threshold."
-        actions={
+    <CoreResourcePage
+      header={
+        <PageHeader
+          title="Alerts"
+          subtitle={loading ? "..." : `${total} alerts · ${unreadCount} unread`}
+          icon={Bell}
+          description="Configure notifications when traces, costs, or quality cross a threshold."
+          actions={
           <div className="flex items-center gap-2">
             <Link
               href="/alerts?tab=signals"
@@ -327,8 +339,35 @@ function AlertsPageInner() {
           )}
           </div>
         }
+        />
+      }
+      table={
+        <>
+      <ResourceOsToolbar
+        resourceKey="alerts"
+        onCreateAlert={() => {
+          window.location.href = "/alerts?tab=rules";
+        }}
+        exportRows={alerts.map((a) => ({
+          id: a.alert_id,
+          title: a.title,
+          severity: a.severity,
+          acknowledged: a.acknowledged,
+          created_at: a.created_at,
+        }))}
+        exportFilename="alerts.csv"
+        className="mb-4"
       />
-
+      <BulkActionBar
+        count={selectedAlerts.size}
+        onClear={() => setSelectedAlerts(new Set())}
+        actions={[
+          {
+            label: "Acknowledge",
+            onClick: () => void handleBatchAcknowledge(),
+          },
+        ]}
+      />
       {/* Stats Cards */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-6">
         {(["critical", "high", "warning", "info", "debug"] as const).map((sev) => {
@@ -544,7 +583,7 @@ function AlertsPageInner() {
             description={
               severityFilter !== "all" || acknowledgedFilter !== null
                 ? "No alerts match your current filters. Try clearing the filters to see all alerts."
-                : "No active alerts. Eden will surface cost spikes, quality drops, and pipeline failures here as they happen."
+                : "No active alerts. Create a rule to catch cost spikes, quality drops, and pipeline failures."
             }
             size="lg"
             action={
@@ -558,7 +597,18 @@ function AlertsPageInner() {
                 >
                   Clear filters
                 </button>
-              ) : undefined
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => {
+                    window.location.href = "/alerts?tab=rules";
+                  }}
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--accent)] px-3 py-2 text-xs font-medium text-[var(--bg-base)] hover:bg-[var(--accent-hover)]"
+                  data-testid="alerts-create-rule-cta"
+                >
+                  Create rule
+                </button>
+              )
             }
           />
         ) : (
@@ -566,8 +616,8 @@ function AlertsPageInner() {
             {alerts.map((alert) => {
               const config = getSeverityConfig(alert.severity);
               const Icon = config.icon;
-              const isExpanded = expandedAlert === alert.alert_id;
               const isSelected = selectedAlerts.has(alert.alert_id);
+              const isActive = alertId === alert.alert_id;
 
               return (
                 <motion.div
@@ -577,13 +627,17 @@ function AlertsPageInner() {
                   animate={{ opacity: alert.acknowledged ? 0.6 : 1 }}
                   className={cn(
                     "rounded-lg border transition-all",
-                    isSelected ? "border-[var(--accent)]/30 bg-[var(--accent-faint)]/20" : "border-[var(--border-default)] bg-[var(--bg-primary)]",
-                    !alert.acknowledged && !isSelected && "hover:border-[var(--border-strong)]"
+                    isSelected || isActive
+                      ? "border-[var(--accent)]/30 bg-[var(--accent-faint)]/20"
+                      : "border-[var(--border-default)] bg-[var(--bg-primary)]",
+                    !alert.acknowledged && !isSelected && !isActive && "hover:border-[var(--border-strong)]"
                   )}
                 >
                   <div
                     className="flex items-start gap-3 p-4 cursor-pointer"
-                    onClick={() => setExpandedAlert(isExpanded ? null : alert.alert_id)}
+                    onClick={() =>
+                      setUrlState({ alertId: isActive ? undefined : alert.alert_id })
+                    }
                   >
                     {/* Checkbox */}
                     <button
@@ -673,43 +727,8 @@ function AlertsPageInner() {
                           <CheckCircle2 className="w-4 h-4" />
                         </button>
                       )}
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setExpandedAlert(isExpanded ? null : alert.alert_id);
-                        }}
-                        aria-label={isExpanded ? `Collapse ${alert.title}` : `Expand ${alert.title}`}
-                        aria-expanded={isExpanded}
-                        className="p-1.5 text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)] rounded-lg transition-colors"
-                      >
-                        {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                      </button>
                     </div>
                   </div>
-
-                  {/* Expanded Detail */}
-                  <AnimatePresence>
-                    {isExpanded && (
-                      <motion.div
-                        initial={{ height: 0, opacity: 0 }}
-                        animate={{ height: "auto", opacity: 1 }}
-                        exit={{ height: 0, opacity: 0 }}
-                        transition={{ duration: 0.2 }}
-                        className="overflow-hidden"
-                      >
-                        <div className="px-4 pb-4 pt-0 border-t border-[var(--border-default)]">
-                          <div className="pt-3 space-y-2">
-                            <DetailRow label="Alert ID" value={alert.alert_id} />
-                            <DetailRow label="Entity" value={alert.entity_id} />
-                            <DetailRow label="Severity" value={alert.severity} />
-                            <DetailRow label="Created" value={new Date(alert.created_at).toLocaleString()} />
-                            <DetailRow label="Channels" value={alert.channels.join(", ") || "—"} />
-                            <DetailRow label="Status" value={alert.acknowledged ? "Acknowledged" : "Unread"} />
-                          </div>
-                        </div>
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
                 </motion.div>
               );
             })}
@@ -739,7 +758,63 @@ function AlertsPageInner() {
           </>
         )}
       </div>
-    </PageContent>
+        </>
+      }
+      detail={
+        alertId && selectedAlert ? (
+          <DetailPanelShell
+            open
+            onClose={() => setUrlState({ alertId: undefined })}
+            title={selectedAlert.title}
+            onPrev={
+              alertIndex > 0
+                ? () => setUrlState({ alertId: alerts[alertIndex - 1]?.alert_id })
+                : undefined
+            }
+            onNext={
+              alertIndex >= 0 && alertIndex < alerts.length - 1
+                ? () => setUrlState({ alertId: alerts[alertIndex + 1]?.alert_id })
+                : undefined
+            }
+            headerActions={
+              !selectedAlert.acknowledged ? (
+                <button
+                  type="button"
+                  onClick={() => void handleAcknowledge(selectedAlert.alert_id)}
+                  className="text-xs px-2 py-1 rounded bg-[var(--accent)] text-[var(--bg-base)]"
+                >
+                  Acknowledge
+                </button>
+              ) : null
+            }
+          >
+            <CrossLinkBar
+              links={[
+                { label: "View incidents", href: incidentHref() },
+                ...(selectedAlert.entity_id?.startsWith("trace")
+                  || (selectedAlert.metadata?.trace_id as string | undefined)
+                  ? [{
+                      label: "Example traces",
+                      href: traceHref(
+                        (selectedAlert.metadata?.trace_id as string) ?? selectedAlert.entity_id,
+                      ),
+                    }]
+                  : [{ label: "Traces hub", href: "/traces" }]),
+              ]}
+            />
+            <div className="p-4 space-y-2">
+              <p className="text-sm text-[var(--text-secondary)]">{selectedAlert.message}</p>
+              <DetailRow label="Alert ID" value={selectedAlert.alert_id} />
+              <DetailRow label="Entity" value={selectedAlert.entity_id || "—"} />
+              <DetailRow label="Severity" value={selectedAlert.severity} />
+              <DetailRow label="Created" value={new Date(selectedAlert.created_at).toLocaleString()} />
+              <DetailRow label="Channels" value={selectedAlert.channels.join(", ") || "—"} />
+              <DetailRow label="Status" value={selectedAlert.acknowledged ? "Acknowledged" : "Unread"} />
+            </div>
+          </DetailPanelShell>
+        ) : null
+      }
+    />
   );
 }
 

@@ -19,6 +19,7 @@ from fastapi import APIRouter, Depends, HTTPException, Path
 from pydantic import BaseModel, Field
 
 from eden.api.routes.auth import get_current_user
+from eden.api.utils.redact import redact_all
 from eden.api.utils.safe_error import safe_detail
 from eden.services.cat2_intel.signals import (
     CompiledRule,
@@ -208,7 +209,7 @@ async def _estimate_backfill(pg: Any, org_id: str) -> int:
             str(_BACKFILL_WINDOW_DAYS),
         )
     except Exception as exc:
-        logger.debug("backfill estimate failed org_id=%s: %s", org_id, exc)
+        logger.debug("backfill estimate failed org_id=%s: %s", org_id, redact_all(str(exc)))
         return 0
     if row is None:
         return 0

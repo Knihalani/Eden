@@ -1,4 +1,11 @@
-"""098 — F81 NL alert rules, alert events triage, feedback."""
+"""098 — F81 NL alert rules, alert events triage, feedback.
+
+Revision ID: 098b
+Revises: 098a
+
+Renumbered from a duplicate "098" (see 096_debugger_llm_cache.py
+for the chain-repair note) — continues from "098a".
+"""
 
 from __future__ import annotations
 
@@ -6,8 +13,8 @@ from collections.abc import Sequence
 
 from alembic import op
 
-revision: str = "098"
-down_revision: str | Sequence[str] | None = "097"
+revision: str = "098b"
+down_revision: str | Sequence[str] | None = "098a"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

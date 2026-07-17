@@ -169,6 +169,33 @@ class NudgeEngine:
             return False
 
 
+def apply_nudge_to_request(nudge: Nudge, request: Any) -> tuple[Any, str, bool]:
+    """Apply promoted nudge actions to gateway request (sync hot path)."""
+    prompt = getattr(request, "prompt", "") or ""
+    if nudge.action_type == "system_append":
+        request.prompt = f"{prompt}\n\n<!-- eden-nudge:{nudge.id} -->\n{nudge.content}"
+        return request, f"nudge_applied:{nudge.id}", True
+    if nudge.action_type == "subagent_hint":
+        hint = f"[Eden hint] {nudge.content}"
+        request.prompt = f"{prompt}\n\n{hint}"
+        return request, f"nudge_hint:{nudge.id}", True
+    if nudge.action_type == "tool_block":
+        tool = str((nudge.evidence or {}).get("tool") or nudge.content.split()[0])
+        blocked = list(getattr(request, "blocked_tools", None) or [])
+        if tool and tool not in blocked:
+            blocked.append(tool)
+        setattr(request, "blocked_tools", blocked)
+        return request, f"nudge_tool_block:{nudge.id}", True
+    if nudge.action_type == "tool_rewrite":
+        rewrites = dict(getattr(request, "tool_rewrites", None) or {})
+        tool = str((nudge.evidence or {}).get("tool") or "")
+        if tool:
+            rewrites[tool] = nudge.content
+        setattr(request, "tool_rewrites", rewrites)
+        return request, f"nudge_tool_rewrite:{nudge.id}", True
+    return request, f"nudge_matched:{nudge.id}", False
+
+
 def apply_nudge_to_prompt(nudge: Nudge, prompt: str) -> tuple[str, str]:
     """Apply a promoted nudge to the request prompt."""
     if nudge.action_type == "system_append":
@@ -178,3 +205,39 @@ def apply_nudge_to_prompt(nudge: Nudge, prompt: str) -> tuple[str, str]:
         hint = f"[Eden hint] {nudge.content}"
         return f"{prompt}\n\n{hint}", f"nudge_hint:{nudge.id}"
     return prompt, f"nudge_matched:{nudge.id}"
+
+
+def microbench_evaluate_sync(*, iterations: int = 5000) -> dict[str, float]:
+    """Hot-path microbench for NudgeEngine.evaluate_sync (p95 target <5ms)."""
+    import time
+    from uuid import uuid4
+
+    from eden.nudges.models import Nudge
+
+    org_id = "bench-org"
+    agent_id = "bench-agent"
+    nudge = Nudge(
+        id=uuid4(),
+        org_id=org_id,
+        agent_id=agent_id,
+        name="bench",
+        trigger={"all": [{"event": "prompt_contains", "text": "hello"}]},
+        action_type="system_append",
+        content="fix",
+        mode="promoted",
+    )
+    _NUDGE_CACHE[_cache_key(org_id, agent_id)] = [nudge]
+    ctx = {"org_id": org_id, "agent_id": agent_id, "prompt": "hello world"}
+    samples: list[float] = []
+    for _ in range(iterations):
+        t0 = time.perf_counter()
+        evaluate_trigger(nudge.trigger, ctx)
+        samples.append((time.perf_counter() - t0) * 1000)
+    samples.sort()
+    p95_idx = int(len(samples) * 0.95) - 1
+    return {
+        "iterations": float(iterations),
+        "p50_ms": samples[len(samples) // 2],
+        "p95_ms": samples[max(p95_idx, 0)],
+        "p99_ms": samples[int(len(samples) * 0.99) - 1],
+    }

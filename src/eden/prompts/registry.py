@@ -16,11 +16,9 @@ Two surfaces:
      method runs the same prompt against two models and
      returns the results side-by-side for inspection.
 
-The registry is intentionally **in-memory** (the
-:class:`PromptRegistry` class). The migration to a
-DB-backed store is Phase I.5 — the unit-testable surface
-is what we ship now, and the DB persistence is a thin
-layer on top.
+The registry supports an in-memory ``PromptRegistry`` for unit tests.
+Production routes use ``OrgPromptStore`` (Postgres write-through with
+memory fallback) so templates survive process restarts.
 """
 
 from __future__ import annotations
@@ -269,21 +267,10 @@ LLMHandler = Callable[[dict[str, Any]], Awaitable[PlaygroundResult]]
 
 
 async def default_llm_handler(prompt_dict: dict[str, Any]) -> PlaygroundResult:
-    """Default LLM handler stub."""
-    import asyncio
-    await asyncio.sleep(0)
-    text = prompt_dict.get("user", "")
-    return PlaygroundResult(
-        template_name="",
-        template_version=0,
-        model=prompt_dict.get("model", "stub"),
-        response=f"[stub:{text[:50]}{'...' if len(text) > 50 else ''}]",
-        latency_ms=0.5,
-        prompt_tokens=len(text.split()),
-        completion_tokens=5,
-        cost_usd=0.0,
-        created_at=datetime.now(UTC).isoformat(),
-    )
+    """Default playground LLM handler (ModelRouter + caps; offline fallback)."""
+    from eden.playground.llm_handler import playground_llm_handler
+
+    return await playground_llm_handler(prompt_dict)
 
 
 class Playground:

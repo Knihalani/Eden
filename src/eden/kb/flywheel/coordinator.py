@@ -30,8 +30,16 @@ class KBFlywheelCoordinator:
         for skill in skills:
             await self._insert_skill(skill)
         stumble_count = int(issue.get("stumble_count") or 0)
-        if stumble_count >= 5:
-            await self._draft_shadow_nudge(issue)
+        if stumble_count >= 3:
+            from eden.nudges.author import ArtifactAuthor
+
+            await ArtifactAuthor().from_issue(org_id, issue)
+        from eden.llmops.warm_learn import warm_learn_caches
+
+        agent_id = str(issue.get("agent_id") or "default")
+        triage = issue.get("triage_result") or {}
+        task = str(triage.get("summary") or issue.get("title") or "")[:200]
+        await warm_learn_caches(org_id, agent_id, task_text=task)
         await self._enqueue_promotion(issue)
         await self._notify_cockpit(org_id, "kb_learned", issue.get("id"))
 
@@ -80,23 +88,40 @@ class KBFlywheelCoordinator:
 
     def _draft_from_insight(self, insight: Any) -> dict[str, Any]:
         title = getattr(insight, "title", None) or getattr(insight, "summary", "Insight skill")
+        summary = str(title)[:500]
+        insight_id = getattr(insight, "insight_id", uuid4())
+        template = (
+            f"# Procedural skill from insight\n"
+            f"# insight_id={insight_id}\n"
+            f"def apply_guard(context: dict) -> str:\n"
+            f"    \"\"\"{summary}\"\"\"\n"
+            f"    return {repr(summary)}\n"
+        )
         return {
             "id": str(uuid4()),
-            "name": f"insight-{getattr(insight, 'insight_id', uuid4())}",
-            "description": str(title)[:500],
-            "code_template": "# Draft from insight\npass",
+            "name": f"insight-{insight_id}",
+            "description": summary,
+            "code_template": template,
             "archivist_reviewed": False,
             "confidence_score": float(getattr(insight, "confidence", 0.5) or 0.5),
             "source_insight_id": str(getattr(insight, "insight_id", "")),
         }
 
     def _draft_from_issue(self, issue: dict[str, Any]) -> list[dict[str, Any]]:
+        triage = issue.get("triage_result") or {}
+        fix = triage.get("recommended_fix") or triage.get("summary") or issue.get("title")
+        template = (
+            f"# Skill from resolved issue\n"
+            f"# kind={issue.get('kind')}\n"
+            f"def guard():\n"
+            f"    return {repr(str(fix)[:500])}\n"
+        )
         return [
             {
                 "id": str(uuid4()),
                 "name": f"issue-{issue.get('id', 'unknown')}",
                 "description": str(issue.get("title") or "Resolved issue skill")[:500],
-                "code_template": "# Draft from resolved issue\npass",
+                "code_template": template,
                 "archivist_reviewed": False,
                 "confidence_score": 0.6,
                 "source_issue_id": str(issue.get("id") or ""),
@@ -138,7 +163,34 @@ class KBFlywheelCoordinator:
             )
 
     async def _enqueue_promotion(self, issue: dict[str, Any]) -> None:
-        pass
+        org_id = str(issue.get("org_id") or "")
+        issue_id = str(issue.get("id") or "")
+        if not org_id or not issue_id:
+            return
+        if not await self._may_draft(org_id, "kb_draft"):
+            return
+        try:
+            from eden.promotion.evidence_gate import EvidenceGate
+            from eden.storage.postgres import get_postgres_client
+
+            client = await get_postgres_client()
+            if client is None:
+                return
+            row = await client.fetchrow(
+                """
+                SELECT id FROM skills
+                WHERE name = $1
+                ORDER BY created_at DESC
+                LIMIT 1
+                """,
+                f"issue-{issue_id}",
+            )
+            if row is None:
+                return
+            skill_id = str(row["id"])
+            await EvidenceGate().enqueue(org_id, kind="kb_skill", ref_id=skill_id)
+        except Exception as exc:
+            logger.debug("flywheel enqueue promotion failed: %s", exc)
 
     async def _notify_cockpit(self, org_id: str, kind: str, ref: Any) -> None:
         try:
@@ -161,7 +213,7 @@ class KBFlywheelCoordinator:
             return True
 
     async def on_promotion(self, org_id: str, kind: str, ref_id: str) -> None:
-        """F40 Book chapter hook on F41 promotion."""
+        """Ledger chapter hook on F41 promotion."""
         if kind == "nudge":
             try:
                 from eden.storage.postgres import get_postgres_client
@@ -169,16 +221,27 @@ class KBFlywheelCoordinator:
                 client = await get_postgres_client()
                 if client:
                     row = await client.fetchrow(
-                        "SELECT agent_id FROM nudges WHERE id = $1", ref_id
+                        "SELECT agent_id, name, content FROM nudges WHERE id = $1", ref_id
                     )
                     if row:
-                        from eden.kb.book.generator import BookGenerator
+                        from eden.kb.ledger.generator import LedgerGenerator
+                        from eden.preview.gates import ledger_enabled
 
-                        await BookGenerator().generate(
-                            org_id, str(row["agent_id"]), publish_mode="auto_publish"
-                        )
+                        if await ledger_enabled(org_id):
+                            await LedgerGenerator().upsert_do_not_repeat(
+                                org_id,
+                                str(row["agent_id"]),
+                                text=f"Proven fix: {row['name']}\n{row['content'][:1000]}",
+                                source_ids=[ref_id],
+                            )
+                        else:
+                            from eden.kb.book.generator import BookGenerator
+
+                            await BookGenerator().generate(
+                                org_id, str(row["agent_id"]), publish_mode="auto_publish"
+                            )
             except Exception as exc:
-                logger.debug("flywheel book update failed: %s", exc)
+                logger.debug("flywheel ledger update failed: %s", exc)
 
 
 _coordinator = KBFlywheelCoordinator()

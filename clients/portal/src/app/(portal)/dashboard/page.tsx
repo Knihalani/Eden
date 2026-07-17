@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
   DollarSign,
@@ -8,15 +8,17 @@ import {
   GitBranch,
   Sparkles,
   Key,
+  LayoutGrid,
 } from "lucide-react";
-import { api, ApiError } from "@/lib/api";
+import { api, ApiError, wave6Api } from "@/lib/api";
 import { useOrg } from "@/hooks/use-org";
 import { usePermissions } from "@/hooks/use-permissions";
 import { useOrgQuery } from "@/hooks/use-api-query";
 import { queryKeys } from "@/lib/query-keys";
 import { PageHeader } from "@/components/layout/page-header";
-import { PageContent } from "@/components/layout/page-content";
+import { CoreResourcePage } from "@/components/portal-os";
 import { StatCard } from "@/components/ui/stat-card";
+import { Button } from "@/components/ui/button";
 import { ThroughputCard } from "./_components/throughput-card";
 import { LatencyCard } from "./_components/latency-card";
 import {
@@ -26,8 +28,40 @@ import { QuickLinks } from "./_components/quick-links";
 import { Card } from "@/components/ui/card";
 import { NoOrgState } from "@/components/ui/no-org-state";
 import { DOCS_QUICKSTART_URL } from "@/lib/constants";
+import { usePagePerf } from "@/lib/perf";
+import { cn } from "@/lib/utils";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+
+const DEFAULT_WIDGETS = [
+  "throughput",
+  "latency",
+  "cost",
+  "anomalies",
+  "failures",
+  "agentic",
+  "traces",
+  "links",
+] as const;
+type WidgetId = (typeof DEFAULT_WIDGETS)[number];
+
+function layoutStorageKey(orgId: string) {
+  return `eden.home.layout.${orgId}`;
+}
+
+function loadLayout(orgId: string): WidgetId[] {
+  try {
+    const raw = localStorage.getItem(layoutStorageKey(orgId));
+    if (!raw) return [...DEFAULT_WIDGETS];
+    const parsed = JSON.parse(raw) as string[];
+    const valid = parsed.filter((id): id is WidgetId =>
+      (DEFAULT_WIDGETS as readonly string[]).includes(id),
+    );
+    return valid.length > 0 ? valid : [...DEFAULT_WIDGETS];
+  } catch {
+    return [...DEFAULT_WIDGETS];
+  }
+}
 
 /**
  * Wraps a per-shard promise so a 404 ("not deployed yet" — not a
@@ -60,6 +94,7 @@ async function shardOr404Null<T>(promise: Promise<T>): Promise<T | null> {
 }
 
 export default function DashboardPage() {
+  usePagePerf("/dashboard");
   const { currentOrg, authError, orgSyncing, orgSyncTimedOut, refreshOrgs } = useOrg();
   const { hasPermission } = usePermissions();
   // Gate the primary "Connect a repo" CTA on the actual permission
@@ -69,6 +104,34 @@ export default function DashboardPage() {
   const canConnect = hasPermission("integrations:write");
 
   const orgId = currentOrg?.id ?? null;
+  const [editing, setEditing] = useState(false);
+  const [visibleWidgets, setVisibleWidgets] = useState<WidgetId[]>([...DEFAULT_WIDGETS]);
+
+  useEffect(() => {
+    if (orgId) setVisibleWidgets(loadLayout(orgId));
+  }, [orgId]);
+
+  const saveLayout = (next: WidgetId[]) => {
+    setVisibleWidgets(next);
+    if (orgId) {
+      try {
+        localStorage.setItem(layoutStorageKey(orgId), JSON.stringify(next));
+      } catch {
+        /* ignore quota */
+      }
+    }
+  };
+
+  const toggleWidget = (id: WidgetId) => {
+    if (visibleWidgets.includes(id)) {
+      if (visibleWidgets.length <= 1) return;
+      saveLayout(visibleWidgets.filter((w) => w !== id));
+    } else {
+      saveLayout([...visibleWidgets, id]);
+    }
+  };
+
+  const show = (id: WidgetId) => visibleWidgets.includes(id);
 
   // Four telemetry shards fetched independently via useOrgQuery so a
   // 404 on one (or a real outage) never black-holes the others, and
@@ -111,6 +174,21 @@ export default function DashboardPage() {
     orgId,
     () => shardOr404Null(api.getCostComparison(orgId!)),
   );
+  const costKpiQuery = useOrgQuery(
+    ["cost-kpi", orgId, 24],
+    orgId,
+    () => shardOr404Null(wave6Api.costKpi(orgId!, { window_hours: 24 })),
+  );
+  const agenticQuery = useOrgQuery(
+    queryKeys.dashboard.agentic(orgId),
+    orgId,
+    () => shardOr404Null(api.agenticMetricsSummary(orgId!, 24)),
+  );
+  useOrgQuery(
+    ["home-dashboard", orgId],
+    orgId,
+    () => shardOr404Null(wave6Api.getHomeDashboard(orgId!)),
+  );
 
   const loading =
     tracesQuery.isLoading ||
@@ -141,6 +219,9 @@ export default function DashboardPage() {
   const optimization = optimizationQuery.data ?? null;
   const alerts = alertsQuery.data?.alerts ?? [];
   const costComparison = costComparisonQuery.data ?? null;
+  const agentic = agenticQuery.data?.data ?? null;
+  const actionCompletion =
+    agentic?.metrics?.action_completion?.score ?? null;
 
   // ── Derived metrics ─────────────────────────────────────────────
   const throughputSeries = useMemo<Array<{ t: string; eps: number }>>(
@@ -177,20 +258,39 @@ export default function DashboardPage() {
   // whenever the calendar month didn't align with "last 30 days".
   const costThisMonth = costComparison?.current_month_cents ?? null;
   const costLastMonth = costComparison?.previous_month_cents ?? null;
-  // No last-month data → no trend arrow. The StatCard subtitle will
-  // render "—" rather than a fake dollar comparison.
+  const kpiTiles =
+    (costKpiQuery.data as { data?: { tiles?: Array<Record<string, unknown>> } } | null)?.data
+      ?.tiles ??
+    (costKpiQuery.data as { tiles?: Array<Record<string, unknown>> } | null)?.tiles ??
+    [];
+  const kpiCostTile = kpiTiles.find((t) =>
+    String(t.id ?? t.key ?? t.title ?? "").toLowerCase().includes("cost"),
+  );
+  const kpiDeltaPct =
+    typeof kpiCostTile?.delta_pct === "number"
+      ? Math.round(kpiCostTile.delta_pct as number)
+      : null;
+  // Prefer F60 KPI Δ; else month-over-month. Never fabricate a trend.
   const costDeltaPct =
-    costLastMonth !== null && costLastMonth > 0 && costThisMonth !== null
-      ? Math.round(((costThisMonth - costLastMonth) / costLastMonth) * 100)
-      : 0;
+    kpiDeltaPct !== null
+      ? kpiDeltaPct
+      : costLastMonth !== null && costLastMonth > 0 && costThisMonth !== null
+        ? Math.round(((costThisMonth - costLastMonth) / costLastMonth) * 100)
+        : 0;
   const costTrend: "up" | "down" | null =
-    costLastMonth === null || costThisMonth === null
-      ? null
-      : costDeltaPct === 0
+    kpiDeltaPct !== null
+      ? kpiDeltaPct === 0
         ? null
-        : costDeltaPct > 0
+        : kpiDeltaPct > 0
           ? "up"
-          : "down";
+          : "down"
+      : costLastMonth === null || costThisMonth === null
+        ? null
+        : costDeltaPct === 0
+          ? null
+          : costDeltaPct > 0
+            ? "up"
+            : "down";
 
   // Alerts "24h" card — the feed itself has no time-window filter,
   // so the card used to label an unbounded fetch as "24h". Filter
@@ -244,41 +344,77 @@ export default function DashboardPage() {
   }
 
   return (
-    <PageContent size="wide" className="space-y-4 sm:space-y-5">
-      <PageHeader
-        title="Telemetry Overview"
-        subtitle={
-          isFirstRun && canConnect
-            ? "Live signals from your agents — connect a repo to start seeing traces here."
-            : "Live signals from your agents and pipelines."
-        }
-        className="mb-4 sm:mb-5"
-        greeting={currentOrg ? `Welcome back to ${currentOrg.name}.` : undefined}
-        actions={
-          canConnect ? (
-            <Link
-              href={isFirstRun ? "/dashboard?onboarding=1" : "/agents/connect"}
-              className="inline-flex items-center gap-1.5 px-3 py-2 bg-[var(--accent)] text-[var(--accent-foreground)] rounded-lg text-sm font-medium hover:bg-[var(--accent-hover)] transition-colors"
+    <CoreResourcePage
+      size="wide"
+      className="space-y-4 sm:space-y-5"
+      header={
+        <PageHeader
+          title="Home"
+          subtitle={
+            isFirstRun && canConnect
+              ? "Live signals from your agents — connect a repo to start seeing traces here."
+              : "Editable first screen — volume, cost Δ, anomalies, and quick links."
+          }
+          className="mb-4 sm:mb-5"
+          greeting={currentOrg ? `Welcome back to ${currentOrg.name}.` : undefined}
+          actions={
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                variant={editing ? "default" : "outline"}
+                size="sm"
+                onClick={() => setEditing((e) => !e)}
+                aria-pressed={editing}
+              >
+                <LayoutGrid className="h-3.5 w-3.5" />
+                {editing ? "Done" : "Edit layout"}
+              </Button>
+              {canConnect ? (
+                <Link
+                  href={isFirstRun ? "/dashboard?onboarding=1" : "/agents/connect"}
+                  className="inline-flex items-center gap-1.5 px-3 py-2 bg-[var(--accent)] text-[var(--accent-foreground)] rounded-lg text-sm font-medium hover:bg-[var(--accent-hover)] transition-colors"
+                >
+                  <GitBranch className="w-3.5 h-3.5" />
+                  Connect a repo
+                </Link>
+              ) : (
+                <span className="text-xs text-[var(--text-muted)] px-3 py-2">
+                  Ask an admin to connect a repo
+                </span>
+              )}
+            </div>
+          }
+        />
+      }
+      table={
+        <>
+      {editing ? (
+        <Card className="mb-4 flex flex-wrap gap-2 p-3">
+          {DEFAULT_WIDGETS.map((id) => (
+            <button
+              key={id}
+              type="button"
+              onClick={() => toggleWidget(id)}
+              className={cn(
+                "rounded-md px-2.5 py-1 text-xs capitalize",
+                show(id)
+                  ? "bg-[var(--accent-faint)] text-[var(--accent)]"
+                  : "bg-[var(--bg-tertiary)] text-[var(--text-muted)]",
+              )}
             >
-              <GitBranch className="w-3.5 h-3.5" />
-              Connect a repo
-            </Link>
-          ) : (
-            <span className="text-xs text-[var(--text-muted)] px-3 py-2">
-              Ask an admin to connect a repo
-            </span>
-          )
-        }
-      />
-
+              {id}
+            </button>
+          ))}
+          <Button
+            size="sm"
+            variant="ghost"
+            className="text-xs"
+            onClick={() => saveLayout([...DEFAULT_WIDGETS])}
+          >
+            Reset
+          </Button>
+        </Card>
+      ) : null}
       {error && (
-        // Status ladder uses --error / --error-bg / --error-strong
-        // (June 2026 status ladder refinement) — but inverting the
-        // foreground color (use --error on --error-bg instead of
-        // --error-strong) was wrong because error-strong is
-        // significantly darker. This banner intentionally uses
-        // --error-strong on --error-bg because the banner is a
-        // callout, not a status pill.
         <div
           role="alert"
           className="mb-4 p-3 rounded-xl border border-[var(--error)]/40 bg-[var(--error-bg)] text-[var(--error)] text-sm"
@@ -330,23 +466,30 @@ export default function DashboardPage() {
         </Card>
       ) : (
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3 sm:gap-4 mb-4">
-        <ThroughputCard
-          loading={loading}
-          series={throughputSeries}
-          currentEps={currentEps}
-        />
-        <LatencyCard
-          loading={loading}
-          p95Ms={p95}
-          p50Ms={p50}
-        />
-        {(() => {
+        {show("throughput") ? (
+          <ThroughputCard
+            loading={loading}
+            series={throughputSeries}
+            currentEps={currentEps}
+          />
+        ) : null}
+        {show("latency") ? (
+          <LatencyCard
+            loading={loading}
+            p95Ms={p95}
+            p50Ms={p50}
+          />
+        ) : null}
+        {show("cost")
+          ? (() => {
           const centsThisMonth = costThisMonth;
           const centsLastMonth = costLastMonth;
           const empty = !loading && (centsThisMonth === null || centsThisMonth === 0);
           const usd = (centsThisMonth ?? 0) / 100;
           const subtitle = empty
             ? "no cost data yet"
+            : kpiDeltaPct !== null
+            ? "Δ vs prior period"
             : centsLastMonth === null
             ? "last month: —"
             : `last month: $${(centsLastMonth / 100).toFixed(2)}`;
@@ -366,8 +509,10 @@ export default function DashboardPage() {
               href="/optimization"
             />
           );
-        })()}
-        {(() => {
+        })()
+          : null}
+        {show("anomalies")
+          ? (() => {
           const severityCounts = countBySeverity(lastDayAlerts);
           const severityClass = anomalyCount === 0
             ? "bg-[var(--accent-faint)] text-[var(--accent)]"
@@ -392,11 +537,29 @@ export default function DashboardPage() {
               empty={false}
             />
           );
-        })()}
+        })()
+          : null}
+        {show("agentic") ? (
+          <StatCard
+            title="Agentic quality"
+            value={
+              actionCompletion == null
+                ? "—"
+                : `${Math.round(actionCompletion * 100)}%`
+            }
+            subtitle="F64 action completion · 24h"
+            icon={Sparkles}
+            accent="accent"
+            loading={agenticQuery.isLoading}
+            empty={actionCompletion == null}
+            emptyText="Scores appear after Layer A runs on finalized traces."
+            href="/agents?tab=fleet"
+          />
+        ) : null}
       </div>
       )}
 
-      {!isFirstRun && topFailureModes.length > 0 && (
+      {!isFirstRun && show("failures") && topFailureModes.length > 0 && (
         <Card className="p-4 sm:p-5 mb-4 border border-[var(--border)]">
           <h2 className="text-sm font-medium text-[var(--text-primary)] mb-3">
             Top failure modes (24h)
@@ -426,14 +589,20 @@ export default function DashboardPage() {
           the PageHeader actions, and the footer trace count is
           already covered by Anomalies / Throughput sublines. */}
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-4 sm:gap-6">
-        <div className="xl:col-span-2">
-          <RecentTracesCard loading={loading} traces={lastDayTraces.slice(0, 10)} />
-        </div>
-        <div className="xl:col-span-1">
-          <QuickLinks />
-        </div>
+        {show("traces") ? (
+          <div className="xl:col-span-2">
+            <RecentTracesCard loading={loading} traces={lastDayTraces.slice(0, 10)} />
+          </div>
+        ) : null}
+        {show("links") ? (
+          <div className={cn(show("traces") ? "xl:col-span-1" : "xl:col-span-3")}>
+            <QuickLinks />
+          </div>
+        ) : null}
       </div>
-    </PageContent>
+        </>
+      }
+    />
   );
 }
 

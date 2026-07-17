@@ -6,7 +6,7 @@
 | **Slug** | `issue-fix-github-chat` |
 | **Priority** | P0 |
 | **Effort** | L |
-| **Eden status** | **PARTIAL** |
+| **Eden status** | **DELETED (SOTA W26)** — do not rebuild; use N20 + coding-agent handoff |
 | **Competitive source** | Sentrial, Raindrop |
 | **Closes gap** | 2.3, 3.10 |
 | **Dependencies** | F29, F30, GitHub App, Cat 23 |

@@ -75,13 +75,28 @@ class AutoCurator:
 
             client = await get_postgres_client()
             if client is None:
-                return self._synthetic_traces(agent_id)
+                return []
             rows = await client.fetch(
                 """
-                SELECT id::text AS trace_id, title, kind
-                FROM agent_issues
-                WHERE org_id = $1 AND agent_id = $2
-                ORDER BY last_seen DESC
+                SELECT DISTINCT ON (bucket)
+                       trace_id::text AS trace_id,
+                       attributes->>'stumble_kind' AS kind,
+                       COALESCE(attributes->>'title', span_name, 'trace') AS title
+                FROM (
+                    SELECT trace_id, attributes, span_name,
+                           (CASE
+                              WHEN outcome IS DISTINCT FROM 'success' THEN 0
+                              WHEN COALESCE((attributes->>'cost_usd')::float, 0) > 0.05 THEN 1
+                              ELSE 2
+                            END) AS bucket,
+                           timestamp
+                    FROM telemetry_events
+                    WHERE tenant_id = $1
+                      AND timestamp >= now() - interval '7 days'
+                      AND ($2::text IS NULL OR attributes->>'agent_id' = $2)
+                    ORDER BY bucket, timestamp DESC
+                ) t
+                ORDER BY bucket, timestamp DESC
                 LIMIT $3
                 """,
                 org_id,
@@ -90,16 +105,35 @@ class AutoCurator:
             )
             if rows:
                 return [dict(r) for r in rows]
-        except Exception:
-            pass
-        return self._synthetic_traces(agent_id)
+            issue_rows = await client.fetch(
+                """
+                SELECT example_stumble_ids, title, kind
+                FROM agent_issues
+                WHERE org_id = $1 AND agent_id = $2
+                ORDER BY last_seen DESC
+                LIMIT 50
+                """,
+                org_id,
+                agent_id,
+            )
+            out: list[dict[str, Any]] = []
+            for ir in issue_rows:
+                for tid in ir.get("example_stumble_ids") or []:
+                    out.append(
+                        {
+                            "trace_id": str(tid),
+                            "title": ir.get("title") or "issue-linked",
+                            "kind": ir.get("kind") or "stumble",
+                        }
+                    )
+            return out[:200]
+        except Exception as exc:
+            logger.debug("auto_curator sample failed: %s", exc)
+            return []
 
     @staticmethod
     def _synthetic_traces(agent_id: str) -> list[dict[str, Any]]:
-        return [
-            {"trace_id": f"trace-{agent_id}-{i}", "title": f"case-{i}", "kind": "stumble"}
-            for i in range(50)
-        ]
+        return []
 
     def _cluster(self, traces: list[dict[str, Any]]) -> list[list[dict[str, Any]]]:
         """Simple hash-bucket clustering (k = min(20, sqrt(n)))."""
@@ -123,23 +157,30 @@ class AutoCurator:
             for cluster_id, members in enumerate(clusters):
                 medoid = members[0]
                 trace_ids = [str(m.get("trace_id") or m.get("id") or "") for m in members]
+                label = str(medoid.get("kind") or medoid.get("title") or f"cluster-{cluster_id}")
+                dataset_id = await self._ensure_slice_dataset(
+                    client, org_id, agent_id, cluster_id, trace_ids
+                )
                 await client.execute(
                     """
                     INSERT INTO production_eval_slices
-                        (id, org_id, agent_id, cluster_id, cluster_label,
+                        (id, org_id, agent_id, dataset_id, cluster_id, cluster_label,
                          medoid_trace_id, case_count, member_trace_ids, refreshed_at)
-                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, now())
+                    VALUES ($1, $2, $3, $4::uuid, $5, $6, $7, $8, $9, now())
                     ON CONFLICT (org_id, agent_id, cluster_id)
                     DO UPDATE SET medoid_trace_id = EXCLUDED.medoid_trace_id,
                                   case_count = EXCLUDED.case_count,
                                   member_trace_ids = EXCLUDED.member_trace_ids,
+                                  dataset_id = EXCLUDED.dataset_id,
+                                  cluster_label = EXCLUDED.cluster_label,
                                   refreshed_at = now()
                     """,
                     uuid4(),
                     org_id,
                     agent_id,
+                    dataset_id,
                     cluster_id,
-                    f"cluster-{cluster_id}",
+                    label,
                     medoid.get("trace_id") or medoid.get("id") or "",
                     len(members),
                     trace_ids,
@@ -149,6 +190,43 @@ class AutoCurator:
             logger.debug("auto_curator upsert failed: %s", exc)
             return len(clusters)
         return count
+
+    async def _ensure_slice_dataset(
+        self,
+        client: Any,
+        org_id: str,
+        agent_id: str,
+        cluster_id: int,
+        trace_ids: list[str],
+    ) -> str | None:
+        name = f"{agent_id}/auto-slice-{cluster_id}"
+        row = await client.fetchrow(
+            "SELECT id FROM datasets WHERE org_id = $1 AND name = $2",
+            org_id,
+            name,
+        )
+        if row:
+            dataset_id = str(row["id"])
+        else:
+            dataset_id = str(uuid4())
+            await client.execute(
+                """
+                INSERT INTO datasets (id, org_id, name, description, source_type, source_ref)
+                VALUES ($1::uuid, $2, $3, $4, 'auto_slice', $5)
+                """,
+                dataset_id,
+                org_id,
+                name,
+                f"F44 auto-curated slice for {agent_id}",
+                f"cluster-{cluster_id}",
+            )
+        from eden.datasets.hub import DatasetHub
+
+        hub = DatasetHub(client)
+        for tid in trace_ids[:20]:
+            if tid:
+                await hub.promote_trace(org_id, tid, dataset_id=dataset_id)
+        return dataset_id
 
     async def _record_run(
         self, org_id: str, agent_id: str | None, result: dict[str, Any]

@@ -121,7 +121,7 @@ def _get_openai_api_error():
     return APIError
 from pydantic import BaseModel, Field  # noqa: E402
 
-from eden.api.deps import get_ingestion_auth  # noqa: E402
+from eden.api.deps import get_gateway_auth  # noqa: E402
 from eden.api.utils.redact import redact_all
 from eden.api.utils.safe_error import redact_upstream_error, safe_detail  # noqa: E402
 from eden.config import get_settings  # noqa: E402
@@ -456,7 +456,7 @@ async def _maybe_record_time_travel_from_gateway(
             cache_mode=request_body.get("cache_mode"),
         )
     except Exception as exc:  # noqa: BLE001
-        logger.debug("gateway: time-travel record_step failed: %s", exc)
+        logger.debug("gateway: time-travel record_step failed: %s", redact_all(str(exc)))
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -678,6 +678,134 @@ class _PIIFailClosedError(Exception):
     Caught by the chat / completions / embeddings handlers and
     translated into a 422 response.
     """
+
+
+class _GuardrailBlockedError(Exception):
+    """Raised when a live guardrail blocks the gateway request (Wave 2)."""
+
+    def __init__(
+        self,
+        verdict: dict | None = None,
+        message: str = "guardrail blocked",
+    ) -> None:
+        self.verdict = verdict or {}
+        super().__init__(message)
+
+
+def _write_back_prompt_to_messages(
+    messages: list[dict[str, Any]],
+    *,
+    original_prompt: str,
+    mutated_prompt: str,
+) -> list[dict[str, Any]]:
+    """Map a mutated flat prompt back onto OpenAI-shaped messages."""
+    if mutated_prompt == original_prompt:
+        return messages
+    if original_prompt and mutated_prompt.endswith(original_prompt):
+        prefix = mutated_prompt[: -len(original_prompt)].rstrip("\n")
+        if not prefix:
+            return messages
+        out = [dict(m) for m in messages]
+        if out and out[0].get("role") == "system" and isinstance(out[0].get("content"), str):
+            out[0] = {**out[0], "content": f"{prefix}\n\n{out[0]['content']}"}
+        else:
+            out.insert(0, {"role": "system", "content": prefix})
+        return out
+    return [{"role": "system", "content": mutated_prompt}]
+
+
+def _apply_learn_filters_to_messages(
+    messages: list[dict[str, Any]],
+    *,
+    org_id: str,
+    agent_id: str = "",
+    metadata: dict[str, Any] | None = None,
+) -> tuple[list[dict[str, Any]], list[str]]:
+    """Run learn filters on live ``/gateway/v1`` messages (Wave 2).
+
+    Mutates messages for both unary and stream paths. Raises
+    ``_GuardrailBlockedError`` on block (fail-closed).
+    """
+    if not messages:
+        return messages, []
+
+    from eden.llmops.filters.guardrail import GuardrailBlocked
+
+    gw = get_ai_gateway()
+    original_prompt = messages_to_prompt(messages)
+    mr = ModelRequest(
+        model_family="openai",
+        model_version="gpt-4o-mini",
+        prompt=original_prompt,
+        tenant_id=org_id,
+    )
+    mr.org_id = org_id  # type: ignore[attr-defined]
+    mr.agent_id = agent_id or ""  # type: ignore[attr-defined]
+    mr.metadata = metadata or {}  # type: ignore[attr-defined]
+    mr.context = {  # type: ignore[attr-defined]
+        "org_id": org_id,
+        "agent_id": agent_id or "",
+        "prompt": original_prompt,
+        "nudges_enabled": True,
+        "book_enabled": True,
+    }
+
+    skip = {"pii"}
+    findings: list[str] = []
+    for filt in list(gw._filters.filters):
+        name = getattr(filt, "name", "") or ""
+        if name in skip:
+            continue
+        if not filt.enabled(mr):
+            continue
+        try:
+            mr, f_findings = filt.apply(mr)
+            findings.extend(f_findings)
+        except GuardrailBlocked as exc:
+            raise _GuardrailBlockedError(
+                getattr(exc, "verdict", None),
+                str(exc),
+            ) from exc
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "learn filter %s failed on /gateway/v1: %s",
+                name,
+                redact_all(str(exc)),
+            )
+
+    mutated = getattr(mr, "prompt", original_prompt) or original_prompt
+    out = _write_back_prompt_to_messages(
+        messages,
+        original_prompt=original_prompt,
+        mutated_prompt=mutated,
+    )
+    if findings:
+        logger.info(
+            "gateway: learn filters applied org=%s agent=%s findings=%s",
+            org_id,
+            agent_id or "-",
+            findings,
+        )
+    return out, findings
+
+
+def _resolve_gateway_agent_id(
+    request: Request,
+    raw_body: dict[str, Any],
+    body: ChatCompletionRequest,
+) -> str:
+    """Resolve agent id from headers / body extras for learn filters."""
+    for key in ("X-Eden-Agent-Id", "x-eden-agent-id", "X-Agent-Id"):
+        val = request.headers.get(key)
+        if val:
+            return str(val).strip()
+    extras = body.extras if isinstance(body.extras, dict) else {}
+    for key in ("agent_id", "eden_agent_id"):
+        if extras.get(key):
+            return str(extras[key]).strip()
+        if raw_body.get(key):
+            return str(raw_body[key]).strip()
+    return ""
 
 
 _TRUTHY = frozenset({"1", "true", "yes", "on"})
@@ -1078,7 +1206,7 @@ def _run_pii_filter(prompt: str) -> tuple[str, list[str]]:
 async def chat_completions(
     request: Request,
     raw_body: dict[str, Any],
-    auth_ctx: dict = Depends(get_ingestion_auth),
+    auth_ctx: dict = Depends(get_gateway_auth),
 ) -> Any:
     """``POST /gateway/v1/chat/completions`` — full OpenAI wire
     compatibility. Streams when ``stream=true``; otherwise returns a
@@ -1162,6 +1290,47 @@ async def chat_completions(
                 ),
             },
         ) from exc
+
+    # Wave 2: learn filters mutate live messages (nudge/book/guardrail/
+    # prompt_deploy) before unary AND stream upstream calls.
+    agent_id = _resolve_gateway_agent_id(request, raw_body, body)
+    learn_meta: dict[str, Any] = {}
+    extras = body.extras if isinstance(body.extras, dict) else {}
+    for key in ("prompt_name", "prompt_id", "env", "prompt_env"):
+        if extras.get(key) is not None:
+            learn_meta[key] = extras[key]
+        elif raw_body.get(key) is not None:
+            learn_meta[key] = raw_body[key]
+    learn_findings: list[str] = []
+    try:
+        body.messages, learn_findings = _apply_learn_filters_to_messages(
+            body.messages,
+            org_id=org_id,
+            agent_id=agent_id,
+            metadata=learn_meta or None,
+        )
+    except _GuardrailBlockedError as exc:
+        await _emit_gateway_telemetry(
+            org_id=org_id,
+            auth_ctx=auth_ctx,
+            model=body.model,
+            endpoint="chat.completions",
+            request_body=raw_body,
+            outcome="failure",
+            error_type="guardrail_blocked",
+            user_label=user_label,
+            extra_payload={"guardrail_verdict": exc.verdict},
+        )
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "error": "guardrail_blocked",
+                "message": str(exc) or "Request blocked by live guardrail",
+                "verdict": exc.verdict,
+            },
+        ) from exc
+    if learn_findings:
+        pii_findings = list(pii_findings or []) + learn_findings
 
     # 2. Resolve per-request upstream (X-Upstream-* headers honored,
     #    falls back to server-configured OpenRouter or MiniMax).
@@ -1331,6 +1500,7 @@ async def _chat_completions_unary(
                 extra_payload=extra_payload,
             )
             return JSONResponse(content=shaped, headers=_opt_response_headers())
+        tags.append("exact_cache:miss")
 
     try:
         if flags.coalesce and cache_key:
@@ -1546,7 +1716,7 @@ async def _chat_completions_stream(
 async def completions(
     request: Request,
     raw_body: dict[str, Any],
-    auth_ctx: dict = Depends(get_ingestion_auth),
+    auth_ctx: dict = Depends(get_gateway_auth),
 ) -> Any:
     """``POST /gateway/v1/completions`` — legacy text completions.
 
@@ -1753,7 +1923,7 @@ async def completions(
 async def embeddings(
     request: Request,
     raw_body: dict[str, Any],
-    auth_ctx: dict = Depends(get_ingestion_auth),
+    auth_ctx: dict = Depends(get_gateway_auth),
 ):
     """``POST /gateway/v1/embeddings`` — OpenAI-compatible embeddings.
 
@@ -1906,7 +2076,7 @@ class ModelsListResponse(BaseModel):
 )
 async def list_models(
     request: Request,
-    auth_ctx: dict = Depends(get_ingestion_auth),
+    auth_ctx: dict = Depends(get_gateway_auth),
 ) -> ModelsListResponse:
     """``GET /gateway/v1/models`` — list available models.
 
@@ -1964,7 +2134,7 @@ async def list_models(
 )
 async def get_model(
     model_id: str,
-    auth_ctx: dict = Depends(get_ingestion_auth),
+    auth_ctx: dict = Depends(get_gateway_auth),
 ) -> ModelInfo:
     """``GET /gateway/v1/models/{model_id}`` — single model.
 

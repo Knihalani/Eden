@@ -224,7 +224,8 @@ class PromotionHook:
     ) -> str | None:
         """A new judge score fell below the threshold for its eval version.
 
-        Returns the action id (or ``None`` on substrate error).
+        N18 degrade-on-judge: record action + roll back active prompt canaries
+        for the org so evolution does not keep expanding a losing variant.
         """
         severity = "high" if score < 0.4 else "medium"
         action_id = await _record_action(
@@ -239,12 +240,57 @@ class PromotionHook:
             },
             severity=severity,
         )
+        try:
+            await self._degrade_active_canaries(org_id, judge_name=judge_name)
+        except Exception as exc:
+            logger.debug(
+                "promotion_hook.degrade_on_judge failed org=%s: %s", org_id, exc
+            )
         logger.debug(
             "promotion_hook.on_judge_regression org=%s judge=%s "
             "trace=%s score=%.3f action_id=%s",
             org_id, judge_name, trace_id, score, action_id,
         )
         return action_id
+
+    async def _degrade_active_canaries(
+        self, org_id: str, *, judge_name: str
+    ) -> int:
+        """Roll back active prompt canaries (degrade-on-judge)."""
+        from eden.storage.postgres import get_postgres_client
+
+        client = await get_postgres_client()
+        if client is None:
+            return 0
+        rows = await client.fetch(
+            """
+            SELECT experiment_id, agent
+            FROM prompt_canary_experiments
+            WHERE tenant_id = $1 AND status = 'active'
+            LIMIT 20
+            """,
+            org_id,
+        )
+        degraded = 0
+        from eden.llmops.promotion import get_promotion_loop
+
+        loop = get_promotion_loop()
+        for row in rows or []:
+            await loop._rollback(
+                client,
+                str(row["experiment_id"]),
+                str(row["agent"]),
+                org_id,
+            )
+            degraded += 1
+        if degraded:
+            logger.info(
+                "degrade-on-judge: rolled back %s canaries org=%s judge=%s",
+                degraded,
+                org_id,
+                judge_name,
+            )
+        return degraded
 
     async def on_judge_improvement(
         self,
@@ -845,6 +891,20 @@ class GuardrailHook:
             payload={"judge_name": judge_name},
             severity="medium",
         )
+        try:
+            from eden.guardrails import EvalToGuardrailLink
+
+            link = EvalToGuardrailLink()
+            await link.demote(
+                org_id,
+                judge_name=judge_name,
+                reason="judge_below_floor",
+            )
+        except Exception as exc:  # pragma: no cover - defensive
+            logger.debug(
+                "guardrail_hook: EvalToGuardrailLink.demote failed: %s",
+                exc,
+            )
         logger.debug(
             "guardrail_hook.on_judge_below_floor org=%s judge=%s "
             "action_id=%s",

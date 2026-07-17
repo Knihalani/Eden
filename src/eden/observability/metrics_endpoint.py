@@ -166,6 +166,36 @@ async def metrics() -> Response:
     except Exception as exc:  # noqa: BLE001
         logger.debug("metrics: failed to read search stats: %s", exc)
 
+    # W9 — ingest shed + N09 dedupe ratio
+    try:
+        from eden.observability.ingestion.shed import get_shed_stats
+
+        shed = get_shed_stats()
+        lines.append(
+            "# HELP eden_ingest_shed_total Ingest requests rejected by load shed.\n"
+            "# TYPE eden_ingest_shed_total counter\n"
+            f"eden_ingest_shed_total {int(shed.get('shed_total', 0))}\n"
+        )
+        lines.append(
+            "# HELP eden_ingest_shed_depth Last observed ingest pressure depth.\n"
+            "# TYPE eden_ingest_shed_depth gauge\n"
+            f"eden_ingest_shed_depth {float(shed.get('last_depth', 0))}\n"
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("metrics: failed to read shed stats: %s", exc)
+
+    try:
+        from eden.observability.compression.blob_store import get_blob_store
+
+        ratio = get_blob_store().dedupe_ratio()
+        lines.append(
+            "# HELP eden_blob_dedupe_ratio N09 content dedupe ratio (seen/stored).\n"
+            "# TYPE eden_blob_dedupe_ratio gauge\n"
+            f"eden_blob_dedupe_ratio {ratio}\n"
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("metrics: failed to read blob dedupe: %s", exc)
+
     # Issues layer metrics (F28 stumble writes / F20 scanner / F29 list).
     try:
         from eden.issues.metrics import (
@@ -220,6 +250,46 @@ async def metrics() -> Response:
         )
     except Exception as exc:  # noqa: BLE001
         logger.debug("metrics: failed to read issues stats: %s", exc)
+
+    # N14 platform activation gauges (quality worker, wiring, hot path).
+    try:
+        from eden.observability.platform_activation import (
+            get_platform_activation_metrics,
+        )
+
+        pa = get_platform_activation_metrics()
+        lines.append(
+            _render(
+                "eden_quality_worker_running",
+                help_text="1 when the quality sidecar worker task is alive.",
+                value=float(pa["eden_quality_worker_running"]),
+            )
+        )
+        lines.append(
+            _render(
+                "eden_wiring_install_success",
+                help_text="1 when install_all() completed on this process.",
+                value=float(pa["eden_wiring_install_success"]),
+            )
+        )
+        lines.append(
+            _render(
+                "eden_quality_worker_lag_seconds",
+                help_text="Seconds since the quality worker last watermark.",
+                value=float(pa["eden_quality_worker_lag_seconds"]),
+            )
+        )
+        hot_count = int(pa.get("eden_hot_path_guardrail_duration_seconds_count", 0))
+        hot_sum = float(pa.get("eden_hot_path_guardrail_duration_seconds_sum", 0.0))
+        lines.append(
+            "# HELP eden_hot_path_guardrail_duration_seconds "
+            "Hot-path guardrail evaluate_trajectory_step duration.\n"
+            "# TYPE eden_hot_path_guardrail_duration_seconds summary\n"
+            f"eden_hot_path_guardrail_duration_seconds_sum {hot_sum}\n"
+            f"eden_hot_path_guardrail_duration_seconds_count {hot_count}\n"
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("metrics: failed to read platform activation stats: %s", exc)
 
     body = "".join(lines)
     return Response(content=body, media_type="text/plain; version=0.0.4; charset=utf-8")

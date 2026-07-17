@@ -49,6 +49,27 @@ const QUICK_LINKS: QuickLinkItem[] = [
     accent: "agent",
   },
   {
+    label: "Artifacts",
+    description: "Shadow fixes & promotion",
+    href: "/artifacts",
+    icon: Activity,
+    accent: "trace",
+  },
+  {
+    label: "Improvement loop",
+    description: "7-day GA checklist",
+    href: "/onboarding/improvement-loop",
+    icon: BookOpen,
+    accent: "agent",
+  },
+  {
+    label: "Scorecard",
+    description: "Evolution lift & cost gates",
+    href: "/improve/scorecard",
+    icon: Zap,
+    accent: "cost",
+  },
+  {
     label: "Traces",
     description: "Inspect every AI call",
     href: "/traces",

@@ -1,23 +1,19 @@
 """Intelligence Gap — Predictive + Drift (Cat 13) routes.
 
-ponytail: per upgradespec §D.3 (Phase 1 cut), Cat 13 ships
-only :class:`QualityPredictor` and :class:`DriftDetector`.
-The ``cost`` / ``capacity`` / ``risk`` / embedding-drift
-routes were removed; the deep-link endpoints return a
-stable 501 envelope pointing at the deferred-roadmap doc.
+Ships all 5 Cat 13 services: :class:`QualityPredictor`,
+:class:`CostPredictor`, :class:`CapacityPredictor`,
+:class:`RiskScorer`, and :class:`DriftDetector` (output +
+embedding). ``/drift`` is the v2 consolidated route that
+dispatches on the ``drift_type`` body field; ``/drift/output``
+and ``/drift/embedding`` are kept as v1 routes for back-compat
+with existing deep links.
 
-The Cat 8 Cost Intelligence already covers the per-day
-median projection (the trailing-median logic from
-``CostPredictor`` was folded into Cat 7 — see
-``docs/eden-cost-intel-plan.md``).
+The Cat 8 Cost Intelligence's trailing-median forecast is a
+narrower single-number projection; :class:`CostPredictor` here
+is the fuller per-day + per-agent breakdown service (see
+``docs/observability-gap/13-predictive-intelligence.md``).
 
-The embedding-drift detector was removed; the output-drift
-detector (PSI on judge-score distribution) remains the
-single ship-ready drift surface.
-
-Mounted at ``/orgs/{org_id}/intelligence/predict`` so the
-prefix is preserved and deep-linked portal pages resolve
-to 501 rather than 404.
+Mounted at ``/orgs/{org_id}/intelligence/predict``.
 
 Gates:
 * ``intelligence_gap_v0`` umbrella flag
@@ -34,7 +30,13 @@ from fastapi import APIRouter, Body, Depends, Path
 from pydantic import BaseModel, Field
 
 from eden.api.deps import get_current_user, require_feature_flag
-from eden.predictive import DriftDetector, QualityPredictor
+from eden.predictive import (
+    CapacityPredictor,
+    CostPredictor,
+    DriftDetector,
+    QualityPredictor,
+    RiskScorer,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +50,9 @@ router = APIRouter(
 )
 
 _quality = QualityPredictor()
+_cost = CostPredictor()
+_capacity = CapacityPredictor()
+_risk = RiskScorer()
 _drift = DriftDetector()
 
 
@@ -69,6 +74,25 @@ class QualityRequest(BaseModel):
     horizon_days: int | None = Field(default=None, ge=1, le=90)
 
 
+class CostRequest(BaseModel):
+    request_id: str | None = Field(default=None)
+    forecast_horizon: str = Field(default="30d", description="e.g. 7d, 30d, 90d")
+    history_window: str = Field(default="30d", description="e.g. 7d, 30d, 90d")
+    group_by: str = Field(default="agent", description="agent | org")
+
+
+class CapacityRequest(BaseModel):
+    horizon_days: int = Field(default=7, ge=1, le=90)
+    forecast_horizon: str | None = None
+    scenario: str = Field(default="baseline")
+    current_fleet_size: int | None = None
+
+
+class RiskRequest(BaseModel):
+    request_id: str | None = Field(default=None)
+    window: str = Field(default="24h", description="e.g. 24h, 7d")
+
+
 class DriftRequest(BaseModel):
     window: str = Field(default="24h", description="e.g. 24h, 7d")
     method: str = Field(
@@ -77,9 +101,12 @@ class DriftRequest(BaseModel):
     baseline_window: str = Field(
         default="7d", description="baseline window for PSI",
     )
+    drift_type: str = Field(
+        default="output", description="output | embedding",
+    )
 
 
-# ── Routes (kept) ────────────────────────────────────────────────────
+# ── Routes ───────────────────────────────────────────────────────────
 
 
 @router.post("/quality")
@@ -103,15 +130,82 @@ async def predict_quality(
     )
 
 
+@router.post("/cost")
+async def predict_cost(
+    org_id: str = Path(...),
+    body: CostRequest = Body(default_factory=CostRequest),
+) -> dict[str, Any]:
+    """Per-day cost forecast with per-agent breakdown + WoW alert."""
+    import uuid
+
+    request_id = body.request_id or f"portal-{uuid.uuid4().hex[:12]}"
+    return await _cost.predict(
+        org_id,
+        request_id=request_id,
+        forecast_horizon=body.forecast_horizon,
+        history_window=body.history_window,
+        group_by=body.group_by,
+    )
+
+
+@router.post("/capacity")
+async def predict_capacity(
+    org_id: str = Path(...),
+    body: CapacityRequest = Body(default_factory=CapacityRequest),
+) -> dict[str, Any]:
+    """N-day GPU-hour demand projection under a demand scenario."""
+    kwargs: dict[str, Any] = {
+        "horizon_days": body.horizon_days,
+        "forecast_horizon": body.forecast_horizon,
+        "scenario": body.scenario,
+    }
+    if body.current_fleet_size is not None:
+        kwargs["current_fleet_size"] = body.current_fleet_size
+    return await _capacity.predict(org_id, **kwargs)
+
+
+@router.post("/risk")
+async def score_risk(
+    org_id: str = Path(...),
+    body: RiskRequest = Body(default_factory=RiskRequest),
+) -> dict[str, Any]:
+    """Composite org risk score (judge-score / cost-CV / latency-p95 / drift)."""
+    import uuid
+
+    request_id = body.request_id or f"portal-{uuid.uuid4().hex[:12]}"
+    return await _risk.score(org_id, request_id=request_id, window=body.window)
+
+
+@router.post("/drift/output")
+async def detect_output_drift_v1(
+    org_id: str = Path(...),
+    body: DriftRequest = Body(default_factory=DriftRequest),
+) -> dict[str, Any]:
+    """v1 route (back-compat): PSI-based output drift on judge scores."""
+    return await _drift.detect_output_drift(org_id, window=body.window)
+
+
+@router.post("/drift/embedding")
+async def detect_embedding_drift_v1(
+    org_id: str = Path(...),
+    body: DriftRequest = Body(default_factory=DriftRequest),
+) -> dict[str, Any]:
+    """v1 route (back-compat): embedding/topic drift on response text."""
+    return await _drift.detect_embedding_drift(org_id, window=body.window)
+
+
 @router.post("/drift")
 async def detect_drift(
     org_id: str = Path(...),
     body: DriftRequest = Body(default_factory=DriftRequest),
 ) -> dict[str, Any]:
-    """PSI-based output drift detector on judge-score distribution."""
-    result = await _drift.detect_output_drift(
-        org_id, window=body.window,
-    )
+    """v2 consolidated drift route — dispatches on ``drift_type``
+    (``output`` default, or ``embedding``).
+    """
+    if body.drift_type == "embedding":
+        result = await _drift.detect_embedding_drift(org_id, window=body.window)
+    else:
+        result = await _drift.detect_output_drift(org_id, window=body.window)
     if isinstance(result, dict) and isinstance(result.get("data"), dict):
         result["data"]["method"] = body.method
     return result

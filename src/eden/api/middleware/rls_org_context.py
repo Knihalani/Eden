@@ -102,8 +102,8 @@ class RLSOrgContextMiddleware(BaseHTTPMiddleware):
                     # we commit below the GUC reverts — the desired
                     # scoping.
                     await conn.execute(
-                        "SELECT set_config('app.current_org_id', $1, true)",
-                        org_id,
+                        "SELECT set_config('app.current_org_id', $1::text, true)",
+                        str(org_id),
                     )
                     # Stash for routes that want RLS-correct queries.
                     request.state.pg_conn = conn

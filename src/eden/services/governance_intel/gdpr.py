@@ -123,6 +123,36 @@ class RightToBeForgottenService:
             })
             total_rows += count
 
+        # W9 — cross-store fanout (fail visibly when store missing)
+        fanout_results: list[dict[str, Any]] = []
+        if not dry_run:
+            try:
+                from eden.services.governance_intel.rtbf_fanout import fanout_rtbf
+
+                fanout_results = await fanout_rtbf(
+                    org_id, user_id=user_id, dry_run=False
+                )
+            except Exception as exc:
+                logger.warning("rtbf fanout crashed: %s", exc)
+                fanout_results = [
+                    {"store": "*", "status": "failed", "error": str(exc)}
+                ]
+        else:
+            try:
+                from eden.services.governance_intel.rtbf_fanout import fanout_rtbf
+
+                fanout_results = await fanout_rtbf(
+                    org_id, user_id=user_id, dry_run=True
+                )
+            except Exception as exc:
+                fanout_results = [
+                    {"store": "*", "status": "failed", "error": str(exc)}
+                ]
+
+        fanout_incomplete = [
+            r for r in fanout_results if r.get("status") in ("failed", "unavailable")
+        ]
+
         # Audit log
         if not dry_run and client is not None:
             try:
@@ -141,6 +171,8 @@ class RightToBeForgottenService:
                         "tables": [p["table"] for p in per_table],
                         "total_rows": total_rows,
                         "sla_days": sla_days,
+                        "fanout": fanout_results,
+                        "fanout_incomplete": len(fanout_incomplete) > 0,
                     }),
                 ))
             except Exception as exc:
@@ -161,6 +193,9 @@ class RightToBeForgottenService:
                     sum(p["rows_anonymised"] for p in per_table)
                     if not dry_run else 0
                 ),
+                "fanout": fanout_results,
+                "fanout_complete": len(fanout_incomplete) == 0,
+                "fanout_incomplete": fanout_incomplete,
                 "processed_at": _now_iso(),
             },
         )

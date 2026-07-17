@@ -1,0 +1,118 @@
+"""W28 — convenience MCP-scoped API key issuance."""
+
+from __future__ import annotations
+
+from typing import Any
+
+from fastapi import APIRouter, Depends, Path
+from pydantic import BaseModel, Field
+
+from eden.api.deps import get_current_user, require_org_admin
+from eden.api.routes import api_keys as api_keys_mod
+
+router = APIRouter(
+    prefix="/orgs/{org_id}/mcp/keys",
+    tags=["mcp-keys"],
+    dependencies=[Depends(get_current_user), Depends(require_org_admin)],
+)
+
+_MCP_DEFAULT_SCOPES = ["mcp:read", "mcp:debug", "mcp:fix"]
+
+
+class CreateMcpKeyBody(BaseModel):
+    name: str = Field(default="MCP", min_length=2, max_length=100)
+    scopes: list[str] | None = Field(
+        default=None,
+        description="Defaults to mcp:read + mcp:debug + mcp:fix",
+    )
+
+
+@router.post("")
+async def create_mcp_key(
+    org_id: str = Path(...),
+    body: CreateMcpKeyBody | None = None,
+    user: dict = Depends(get_current_user),
+) -> dict[str, Any]:
+    """Create an org API key pre-scoped for MCP (org-tenanted)."""
+    scopes = list((body.scopes if body else None) or _MCP_DEFAULT_SCOPES)
+    for s in scopes:
+        if s not in api_keys_mod.VALID_SCOPES:
+            from fastapi import HTTPException
+
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid scope: {s}. Valid: {api_keys_mod.VALID_SCOPES}",
+            )
+    create_body = api_keys_mod.CreateApiKeyBody(
+        name=(body.name if body else "MCP"),
+        scopes=scopes,
+    )
+    return await api_keys_mod.create_api_key(org_id, create_body, user=user)
+
+
+@router.get("")
+async def list_mcp_keys(
+    org_id: str = Path(...),
+    user: dict = Depends(get_current_user),
+) -> list[dict[str, Any]]:
+    """List keys that include at least one mcp:* scope."""
+    await require_org_admin(org_id)
+    _ = user
+    from eden.storage.postgres import get_postgres_client
+
+    client = await get_postgres_client()
+    if client is None:
+        return []
+    try:
+        rows = await client.fetch(
+            """
+            SELECT id::text, name, key_prefix, scopes, created_at, last_used_at
+            FROM organization_api_keys
+            WHERE org_id = $1
+              AND revoked_at IS NULL
+            ORDER BY created_at DESC
+            LIMIT 100
+            """,
+            org_id,
+        )
+    except Exception:
+        try:
+            rows = await client.fetch(
+                """
+                SELECT id::text, name, key_prefix, scopes, created_at, last_used_at
+                FROM api_keys
+                WHERE org_id = $1
+                  AND revoked_at IS NULL
+                ORDER BY created_at DESC
+                LIMIT 100
+                """,
+                org_id,
+            )
+        except Exception:
+            return []
+    out: list[dict[str, Any]] = []
+    for r in rows:
+        scopes = r["scopes"] or []
+        if isinstance(scopes, str):
+            import json
+
+            try:
+                scopes = json.loads(scopes)
+            except (TypeError, ValueError):
+                scopes = []
+        if any(str(s).startswith("mcp:") or s == "*" for s in scopes):
+            out.append(
+                {
+                    "id": r["id"],
+                    "name": r["name"],
+                    "key_prefix": r["key_prefix"],
+                    "scopes": scopes,
+                    "created_at": r["created_at"].isoformat()
+                    if r["created_at"]
+                    else None,
+                    "last_used_at": r["last_used_at"].isoformat()
+                    if r["last_used_at"]
+                    else None,
+                }
+            )
+    return out

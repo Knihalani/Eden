@@ -21,7 +21,7 @@ python3 -m build --wheel --sdist --no-isolation
 python3 -m twine check dist/*                          # → PASSED
 python3 -m twine upload --repository testpypi dist/*   # Test PyPI
 python3 -m twine upload dist/*                         # Production PyPI
-git tag -a sdk-python-v0.3.0 -m "Release eden-sdk 0.3.0" && git push origin sdk-python-v0.3.0
+git tag -a sdk-python-v0.3.1 -m "Release eden-sdk 0.3.1" && git push origin sdk-python-v0.3.1
 ```
 
 ### TypeScript (`@eden-ai/sdk`)
@@ -34,7 +34,7 @@ bun test                                               # → 106 pass, 0 fail
 npm run build                                          # → builds dist/ + subpaths
 npm publish --dry-run --cache /tmp/npm-cache          # Dry-run validation
 npm publish --access public                            # Production npm
-git tag -a sdk-ts-v0.3.0 -m "Release @eden-ai/sdk 0.3.0" && git push origin sdk-ts-v0.3.0
+git tag -a sdk-ts-v0.3.1 -m "Release @eden-ai/sdk 0.3.1" && git push origin sdk-ts-v0.3.1
 ```
 
 ## Pre-flight checklist
@@ -66,10 +66,20 @@ Before tagging a release, verify the following end-to-end:
 ## Release checklist
 
 1. Bump the version:
-   - `sdk/python/pyproject.toml`: `version = "0.3.0"`
-   - `sdk/ts-ai/package.json`: `"version": "0.3.0"`
+   - `sdk/python/pyproject.toml`: `version = "0.3.1"`
+   - `sdk/ts-ai/package.json`: `"version": "0.3.1"`
 2. Update the release notes (in this repo's root `CHANGELOG.md`, if present).
 3. Run the pre-flight checklist above for the SDKs you are publishing.
+
+### What changed in 0.3.1
+
+- **Python**: F23 sessions NameError fix + contextvars; ingest org-key
+  sessions; Bedrock/Gemini instrumentations; N16 client sampling;
+  SQLite offline queue; doctor session check.
+- **TypeScript**: ingest sessions + `identify`/`recordStumble`;
+  `wrapBedrock`/`wrapGemini`; sampling + JSONL offline queue;
+  OTel `BatchSpanProcessor`; npm CHANGELOG/repository metadata.
+- **API**: `POST /orgs/{org_id}/ingest/agent-sessions/*` (X-Org-Api-Key).
 
 ### What changed in 0.3.0
 

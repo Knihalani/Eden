@@ -106,7 +106,7 @@
 | 072 | trace_guardrail_actions | yes | forever | none | medium | Cat 15 + Cat 22 guardrail | v2.7 |
 | 073 | tenant_guardrail_action_config | yes | forever | none | medium | v2.7 kill switch | v2.7 |
 | 074_hook_repetition_closed_loop | hook_repetition_closed_loop | yes | forever | none | low | Cat 15 B-15 | v2.7 |
-| 075_uniqueness_constraints | uniqueness_constraints | yes | forever | none | medium | B-18 dedup CTEs | v2.7 |
+| 075 | uniqueness_constraints | yes | forever | none | medium | B-18 dedup CTEs | v2.7 |
 | 076 | account_lockout | yes | forever | none | low | auth | Phase 4 |
 | 077 | password_reset_tokens | yes | forever | none | low | auth | Phase 4 |
 | 078 | two_factor_recovery_codes | yes | forever | none | low | auth (2FA) | Phase 4 |
@@ -124,6 +124,42 @@
 | 090 | nl_signals | yes | forever | none | low | F35 plain-English signals (created_by matches users.id type) | Autopilot |
 | 092 | market_ready_consolidated (WS1–WS4) | yes | forever | none | high | prod readiness (detect, learn, fix, enterprise) | Phase prod |
 | 093 | redteam_findings (org-scoped) | yes | forever | none | low | red-team findings persistence | Phase prod |
+| 094 | strategy_store_org_id | yes | forever | none | low | Cat 23 strategy store tenant scoping | GA hardening |
+| 095 | agent_activity_events | yes | forever | none | low | Cat 23 Gate 4a activity feed table | GA hardening |
+| 096 | compliance_jobs + dsar_tickets + do_not_sell_requests | yes | forever | none | medium | GDPR/CCPA compliance persistence | GA hardening |
+| 096b | debugger_llm_cache | yes | forever | none | low | F03 prefix cache table (renumbered from a duplicate `096` — see note below) | GA hardening |
+| 097a | cat23_rls | yes | forever | none | medium | Cat 23 tenant RLS on migration-027 tables (renumbered from a duplicate `097`) | GA hardening |
+| 097b | signal_definitions_f35_bridge | yes | forever | none | low | F35 default-library → `signal_definitions` bridge columns (renumbered from a duplicate `097`) | GA hardening |
+| 098a | cat23_deferred_tables | yes | forever | none | medium | Cat 23 Gate 4b deferred tables + RLS (renumbered from a duplicate `098`) | GA hardening |
+| 098b | nl_alert_rules_f81 | yes | forever | none | medium | F81 NL alert rules, alert events triage, feedback (renumbered from a duplicate `098`) | GA hardening |
+| 099a | improvement_agent_n23 | yes | forever | none | medium | N23 `improvement_runs` + `improvement_plans` (renumbered from a duplicate `099`) | GA hardening |
+| 099 | intel_metric_runs_alert_firings | yes | forever | none | low | Cat 18/19/21 runtime tables — `custom_metric_runs.id` widen + `eql_alert_firings` | GA hardening |
+| 100_artifacts_ledger | artifacts_ledger | yes | forever | none | medium | F39/F40 `agent_ledgers` + `ledger_entries` + `evolution_ops_spend` | GA Wave (Artifacts/Ledger) |
+| 101_eval_loop | eval_loop | yes | forever | none | medium | Eval loop: datasets hub, offline experiments, regression runs, labeling queues | GA Wave (Eval loop) |
+| 102_wave6_online_quality | wave6_online_quality | yes | forever | none | medium | Online scoring, dashboards, prompt deploy, automations | GA Wave (Online quality) |
+| 103_wave7_debugger_browser | wave7_debugger_browser | yes | forever | none | low | Debug sessions, browser recording | GA Wave (Debugger) |
+| 104_wave8_signals | wave8_signals | yes | forever | none | medium | Signal clusters, backfill jobs, topics, N10 jobs | GA Wave (Signals) |
+| 105_wave14_self_obs | wave14_self_obs | yes | forever | none | low | F84 `eden_synthetic_runs` for dogfood probes | GA Wave (F82-F85) |
+| 106_filterbar_indexes | filterbar_indexes | yes | forever | none | low | F83 composite indexes on `telemetry_events(tenant_id, agent_id/outcome, timestamp)` for FilterBar query paths | GA Wave (F83 optimization) |
+| 107_customer_cost_events | customer_cost_events | yes | forever | none | low | SOTA W7/W8 CostEvent ledger + FinOps thresholds | SOTA W7/W8 |
+| 108_f84_heartbeats | eden_component_heartbeats | yes | forever | none | low | F84 component heartbeats (SOTA W9) | SOTA W9 |
+
+### Migration chain repair (2026-07-17, GA hardening)
+
+Migrations `096`–`099` were each authored **twice** on parallel branches
+with duplicate revision ids (`096` × 2, `097` × 2, `098` × 2, `099` × 2),
+all sharing the same `down_revision`. This produced two branch heads at
+every level and made `alembic history` / `alembic upgrade head` fail
+outright with `Requested revision 097 overlaps with other requested
+revisions 096`. Fixed by renumbering the second file in each pair to a
+`b`/`a`-suffixed id (`096b`, `097a`/`097b`, `098a`/`098b`, `099a`) and
+re-threading `down_revision` so the chain is linear:
+`095 → 096 → 096b → 097a → 097b → 098a → 098b → 099a → 099 → 100`.
+No table/column definitions changed — only revision ids and
+`down_revision` pointers. `alembic heads` now reports a single head
+(`105_wave14_self_obs`) and `tests/docs/test_migration_matrix.py`
+passes. See `git log -- src/eden/db_migrations/versions/09[6-9]*.py`
+for the exact diffs.
 
 ## Critical-path migrations (downgrade risk = `hard`)
 

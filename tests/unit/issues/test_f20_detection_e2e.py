@@ -158,5 +158,6 @@ async def test_minimal_profile_skips_slow_detector() -> None:
     )
     kinds = {sc.kind for sc in captured}
     assert "timeout" not in kinds  # slow_trace suppressed
-    assert "tool_error" not in kinds  # Layer A owns tool_error (not auto_scanner)
+    assert "tool_error" in kinds
     assert "task_failure" in kinds
+    assert "loop" not in kinds

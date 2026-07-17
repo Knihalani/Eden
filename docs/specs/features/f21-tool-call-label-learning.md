@@ -6,7 +6,7 @@
 | **Slug** | `tool-call-label-learning` |
 | **Priority** | P2 |
 | **Effort** | L |
-| **Eden status** | **MISSING** |
+| **Eden status** | **DONE (W27)** — labels persist + calibrator + MCP; inference flag default off |
 | **Competitive source** | Sentrial |
 | **Closes gap** | 2.2 |
 | **Dependencies** | F29, N13 (transcript UI), F28, F06, F04, N22 |

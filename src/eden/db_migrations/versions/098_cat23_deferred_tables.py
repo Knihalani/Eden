@@ -1,8 +1,11 @@
 """098_cat23_deferred_tables — Cat 23 Gate 4b deferred tables.
 
-Revision ID: 098
-Revises: 097
+Revision ID: 098a
+Revises: 097b
 Create Date: 2026-07-13
+
+Renumbered from a duplicate "098" (see 096_debugger_llm_cache.py
+for the chain-repair note) — continues from "097b".
 
 Adds the three Cat 23 tables that were commented out in
 migration 027 (upgradespec §D.7):
@@ -22,8 +25,8 @@ from __future__ import annotations
 
 from alembic import op
 
-revision = "098"
-down_revision = "097"
+revision = "098a"
+down_revision = "097b"
 branch_labels = None
 depends_on = None
 

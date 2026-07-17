@@ -12,7 +12,7 @@ from uuid import uuid4
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Response, status
 from pydantic import BaseModel, Field
 
-from eden.api.deps import get_current_user, require_org_admin
+from eden.api.deps import get_current_user, log_audit_event, require_org_admin
 from eden.api.utils.redact import redact_all
 from eden.storage.postgres import get_postgres_client
 from eden.storage.redis import get_redis_client
@@ -26,6 +26,17 @@ VALID_SCOPES = [
     "references:write",
     "jobs:read",
     "jobs:write",
+    "ingest:read",
+    "ingest:write",
+    "ingest:*",
+    "gateway:read",
+    "gateway:write",
+    "gateway:*",
+    "mcp:read",
+    "mcp:debug",
+    "mcp:fix",
+    "mcp:*",
+    "*",
 ]
 
 
@@ -244,6 +255,20 @@ async def create_api_key(
         user["user_id"],
     )
 
+    # N06 / Wave 1 — key lifecycle audit
+    try:
+        await log_audit_event(
+            client,
+            org_id=org_id,
+            user_id=user["user_id"],
+            action="api_key.create",
+            target_type="org_api_key",
+            target_id=key_id,
+            metadata={"name": name, "scopes": scopes, "key_prefix": key_prefix},
+        )
+    except Exception as exc:
+        logger.debug("api_key.create audit write failed (non-fatal): %s", redact_all(str(exc)))
+
     return {
         "id": key_id,
         "name": name,
@@ -395,6 +420,19 @@ async def revoke_api_key(
         "DELETE FROM org_api_keys WHERE id = $1",
         key_id,
     )
+
+    try:
+        await log_audit_event(
+            client,
+            org_id=org_id,
+            user_id=user["user_id"],
+            action="api_key.revoke",
+            target_type="org_api_key",
+            target_id=key_id,
+            metadata={},
+        )
+    except Exception as exc:
+        logger.debug("api_key.revoke audit write failed (non-fatal): %s", redact_all(str(exc)))
 
     return {"message": "API key revoked"}
 

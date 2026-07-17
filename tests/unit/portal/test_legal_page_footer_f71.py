@@ -52,11 +52,15 @@ class TestF71LegalPageFooter:
 
     def test_footer_includes_do_not_sell_link(self) -> None:
         src = _get_legal_page_source()
-        # The footer MUST include a link to the CCPA do-not-sell endpoint
-        # at the canonical path the backend exposes (compliance.do_not_sell).
-        assert "/api/v1/me/do-not-sell" in src, (
+        # The footer MUST link to the dedicated /do-not-sell portal
+        # page (a real form that POSTs to /api/v1/me/do-not-sell via
+        # the proxy — see app/(marketing)/do-not-sell/page.tsx). A
+        # raw <Link> straight to the backend API route would only
+        # ever fire a GET, which the POST-only endpoint rejects; the
+        # portal page is the correct, working CCPA opt-out surface.
+        assert 'href="/do-not-sell"' in src, (
             "F71 regression: LegalPage footer no longer includes the "
-            "CCPA Do Not Sell link (pointing at /api/v1/me/do-not-sell)."
+            "CCPA Do Not Sell link (pointing at the /do-not-sell portal page)."
         )
         # The link text MUST match the CCPA-required wording
         # ("Do Not Sell My Personal Information" — but the UI
@@ -93,19 +97,32 @@ class TestF71LegalPageFooter:
                 f"F71 regression: LegalPage footer missing the '{label}' link."
             )
 
-    def test_footer_uses_dns_prefetch_false(self) -> None:
-        src = _get_legal_page_source()
-        # The Do Not Sell link MUST be marked prefetch={false}
-        # so a Next.js router prefetch doesn't fire a GET on a
-        # POST endpoint on every page load.
-        # The link is wrapped in <Link prefetch={false} href="/api/v1/me/do-not-sell"
-        # — assert the order matches.
-        assert re.search(
-            r"prefetch=\{false\}[^>]*href=\"/api/v1/me/do-not-sell\"|"
-            r"href=\"/api/v1/me/do-not-sell\"[^>]*prefetch=\{false\}",
-            src,
-        ), (
-            "F71 regression: LegalPage Do Not Sell link is missing "
-            "prefetch={false}, so Next.js will fire a GET on a POST "
-            "endpoint on every page load."
+    def test_do_not_sell_page_posts_to_the_ccpa_endpoint(self) -> None:
+        # The footer links to a real /do-not-sell portal page (a form)
+        # rather than directly to the backend API route — Next.js
+        # <Link> only ever issues navigations/prefetch GETs, so a
+        # POST-only endpoint can never be linked to directly without
+        # breaking (the original motivation for this test). Pin that
+        # the dedicated page still exists and actually POSTs to the
+        # canonical CCPA endpoint instead of silently regressing to
+        # a dead link or a GET.
+        from pathlib import Path
+
+        page_src = (
+            Path(__file__).parent.parent.parent.parent
+            / "clients"
+            / "portal"
+            / "src"
+            / "app"
+            / "(marketing)"
+            / "do-not-sell"
+            / "page.tsx"
+        ).read_text()
+        assert re.search(r'method:\s*"POST"', page_src), (
+            "F71 regression: /do-not-sell page no longer POSTs — a GET "
+            "against the CCPA endpoint will be rejected by the backend."
+        )
+        assert "/api/v1/me/do-not-sell" in page_src, (
+            "F71 regression: /do-not-sell page no longer targets the "
+            "canonical CCPA endpoint (/api/v1/me/do-not-sell)."
         )

@@ -30,6 +30,27 @@ def _match_condition(condition: dict[str, Any], context: dict[str, Any]) -> bool
         needle = condition.get("text") or ""
         prompt = str(context.get("prompt") or "")
         return needle in prompt
+    if event == "tool_call":
+        tool = condition.get("tool") or condition.get("tool_name") or "*"
+        min_repeats = int(condition.get("min_repeats") or 1)
+        recent = context.get("recent_tool_calls") or []
+        count = sum(
+            1
+            for call in recent
+            if tool in ("*", "") or str(call.get("tool_name") or "") == tool
+        )
+        return count >= min_repeats
+    if event == "tool_error":
+        tool = condition.get("tool") or condition.get("tool_name") or "*"
+        for call in context.get("recent_tool_calls") or []:
+            if tool not in ("*", "") and str(call.get("tool_name") or "") != tool:
+                continue
+            if call.get("error") or call.get("is_error"):
+                return True
+            result = str(call.get("result") or "")
+            if "error" in result.lower() or "failed" in result.lower():
+                return True
+        return False
     return False
 
 

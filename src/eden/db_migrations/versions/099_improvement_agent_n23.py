@@ -1,4 +1,11 @@
-"""099 — N23 improvement_runs + improvement_plans."""
+"""099 — N23 improvement_runs + improvement_plans.
+
+Revision ID: 099a
+Revises: 098b
+
+Renumbered from a duplicate "099" (see 096_debugger_llm_cache.py
+for the chain-repair note) — continues from "098b".
+"""
 
 from __future__ import annotations
 
@@ -6,8 +13,8 @@ from collections.abc import Sequence
 
 from alembic import op
 
-revision: str = "099"
-down_revision: str | Sequence[str] | None = "098"
+revision: str = "099a"
+down_revision: str | Sequence[str] | None = "098b"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

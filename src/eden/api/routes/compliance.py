@@ -22,6 +22,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from pydantic import BaseModel, EmailStr, Field
 
 from eden.api.deps import get_current_user
+from eden.api.utils.redact import redact_all
 from eden.services import compliance_jobs as jobs
 
 logger = logging.getLogger(__name__)
@@ -60,7 +61,7 @@ async def export_my_data(
         )
     except Exception as exc:  # noqa: BLE001
         # Table may not exist yet in older deploys — still accept.
-        logger.warning("compliance.export create_job failed: %s", exc)
+        logger.warning("compliance.export create_job failed: %s", redact_all(str(exc)))
         job_id = f"export_fallback_{user_id[:8]}"
         background_tasks.add_task(jobs.run_user_export_job, job_id, user_id)
         return ExportJobAccepted(
@@ -134,7 +135,7 @@ async def delete_me(
             requested_by=user_id,
         )
     except Exception as exc:  # noqa: BLE001
-        logger.warning("compliance.delete_me create_job failed: %s", exc)
+        logger.warning("compliance.delete_me create_job failed: %s", redact_all(str(exc)))
         job_id = f"delete_user_{user_id[:8]}"
     background_tasks.add_task(jobs.run_user_delete_job, job_id, user_id)
     purge_at = datetime.now(UTC) + timedelta(days=365 * 7)
@@ -177,7 +178,7 @@ async def delete_org_data(
             requested_by=caller,
         )
     except Exception as exc:  # noqa: BLE001
-        logger.warning("compliance.delete_org create_job failed: %s", exc)
+        logger.warning("compliance.delete_org create_job failed: %s", redact_all(str(exc)))
         job_id = f"delete_org_{org_id[:8]}"
     background_tasks.add_task(jobs.run_org_delete_job, job_id, org_id)
     purge_at = datetime.now(UTC) + timedelta(days=30)
@@ -228,7 +229,7 @@ async def submit_dsar(body: DSARRequest) -> DSARAccepted:
             details=body.details,
         )
     except Exception as exc:  # noqa: BLE001
-        logger.warning("compliance.dsar persist failed: %s — returning ephemeral ticket", exc)
+        logger.warning("compliance.dsar persist failed: %s — returning ephemeral ticket", redact_all(str(exc)))
         ticket_id = f"dsar_ephemeral_{asyncio.get_event_loop().time():.0f}"
         sla_due = datetime.now(UTC) + timedelta(days=30)
     logger.info(
@@ -338,7 +339,7 @@ async def do_not_sell(body: DNSRequest) -> DNSAccepted:
     try:
         effective = await jobs.record_do_not_sell(str(body.email))
     except Exception as exc:  # noqa: BLE001
-        logger.warning("compliance.do_not_sell persist failed: %s", exc)
+        logger.warning("compliance.do_not_sell persist failed: %s", redact_all(str(exc)))
         effective = datetime.now(UTC)
     logger.info("compliance.do_not_sell: email=***@%s", recipient_domain)
     return DNSAccepted(

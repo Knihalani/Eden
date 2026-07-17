@@ -113,6 +113,20 @@ export async function runDoctor(opts: {
     });
   }
 
+  const sessionOk = Boolean(cfg.orgId && cfg.apiKey && cfg.baseUrl);
+  checks.push({
+    name: "sessionConfig",
+    ok: sessionOk,
+    message: sessionOk
+      ? "Session ingest path ready (/orgs/{orgId}/ingest/agent-sessions)"
+      : "Session config incomplete — need orgId + apiKey + baseUrl",
+    detail: {
+      endpoint: cfg.orgId && cfg.baseUrl
+        ? `${cfg.baseUrl.replace(/\/$/, "")}/orgs/${cfg.orgId}/ingest/agent-sessions`
+        : null,
+    },
+  });
+
   if (emitTestEvent && cfg.orgId && !cfg.disabled) {
     const eventId = `doctor_${randomId()}`;
     client.emit({

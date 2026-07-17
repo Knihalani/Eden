@@ -1,8 +1,14 @@
 """096_debugger_llm_cache — F03 prefix cache table.
 
-Revision ID: 096
-Revises: 095
+Revision ID: 096b
+Revises: 096
 Create Date: 2026-07-14
+
+Renumbered from a duplicate "096" — this file and
+096_compliance_jobs.py were both authored against down_revision
+"095" on parallel branches. "096" stayed with compliance_jobs;
+this file continues the chain as "096b" so alembic has a single
+linear head (see docs/ops/migration-matrix.md).
 
 Adds ``debugger_llm_cache`` — the content-addressed LLM response cache
 that backs the F03 prefix-cache ingest path and the Wave-7 F01
@@ -25,8 +31,8 @@ from __future__ import annotations
 
 from alembic import op
 
-revision = "096"
-down_revision = "095"
+revision = "096b"
+down_revision = "096"
 branch_labels = None
 depends_on = None
 

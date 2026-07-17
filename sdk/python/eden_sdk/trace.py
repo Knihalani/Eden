@@ -172,10 +172,14 @@ def trace(
     *,
     trace_id: str | None = None,
     attributes: dict[str, Any] | None = None,
+    stream: bool | None = None,
 ) -> Iterator[Span]:
     """Open a new trace as a context manager. The yielded ``Span``
     supports ``set_input`` / ``set_output`` / ``set_tag`` / ``set_status``
     and exposes ``span.trace_id`` / ``span.span_id`` for correlation.
+
+    Pass ``stream=True`` (or set ``EDEN_LIVE=1``) to publish in-flight
+    span events to the N11 live channel while the trace runs.
 
     >>> with eden.trace("qa-pipeline") as root:
     ...     root.set_input({"q": "hi"})
@@ -217,6 +221,27 @@ def trace(
     span_token = _active_span.set(span)
     span.trace_token = trace_token  # type: ignore[attr-defined]
     span.span_token = span_token  # type: ignore[attr-defined]
+
+    live_on = False
+    try:
+        from eden_sdk.live import emit_span_live, live_mode_enabled
+
+        live_on = live_mode_enabled(stream=stream) or bool(
+            getattr(cfg, "live", False)
+        )
+        if live_on:
+            emit_span_live(
+                session_id=new_trace_id,
+                event_type="span_start",
+                span_id=span.span_id,
+                name=name,
+                trace_id=new_trace_id,
+                parent_id=span.parent_span_id,
+                stream=True,
+            )
+    except Exception:
+        live_on = False
+
     try:
         yield span
     except BaseException as exc:
@@ -228,6 +253,30 @@ def trace(
     finally:
         # Always emit a framework event for the trace, even on errors.
         _emit_trace_event(span, ctx)
+        if live_on:
+            try:
+                from eden_sdk.live import emit_span_live, get_live_publisher
+
+                emit_span_live(
+                    session_id=new_trace_id,
+                    event_type="span_end",
+                    span_id=span.span_id,
+                    name=name,
+                    trace_id=new_trace_id,
+                    parent_id=span.parent_span_id,
+                    status="ok" if span.outcome == "success" else "error",
+                    attributes={"duration_ms": span.duration_ms},
+                    stream=True,
+                )
+                # Root span finalize: no parent active after reset below —
+                # finalize when this is the outermost stream-enabled span.
+                if parent is None:
+                    get_live_publisher().finalize(
+                        session_id=new_trace_id,
+                        trace_id=new_trace_id,
+                    )
+            except Exception:
+                pass
         # Reset context vars.
         _active_span.reset(span_token)
         _active_trace.reset(trace_token)

@@ -20,7 +20,7 @@ import {
   ShieldOff,
   Wrench,
 } from "lucide-react";
-import { api, codeChangePolicyApi, improveRunsApi, type CodeChangePolicy, type ImprovementSchedule, type OptimizationSchedule } from "@/lib/api";
+import { api, codeChangePolicyApi, improveRunsApi, type AutonomyPolicy, type CodeChangePolicy, type ImprovementSchedule, type OptimizationSchedule } from "@/lib/api";
 import { useOrg } from "@/hooks/use-org";
 import { usePermissions } from "@/hooks/use-permissions";
 import { useToast } from "@/components/ui/toast";
@@ -91,6 +91,9 @@ export default function AutonomousTab() {
   const [loaded, setLoaded] = useState(false);
   const [scheduleLoaded, setScheduleLoaded] = useState(false);
   const [n23ScheduleLoaded, setN23ScheduleLoaded] = useState(false);
+  const [n22Policy, setN22Policy] = useState<AutonomyPolicy | null>(null);
+  const [n22Busy, setN22Busy] = useState(false);
+  const [n22Loaded, setN22Loaded] = useState(false);
 
   // Seed from the org's current settings JSONB.
   useEffect(() => {
@@ -134,6 +137,29 @@ export default function AutonomousTab() {
         if (!cancelled) {
           setN23Schedule(DEFAULT_N23_SCHEDULE);
           setN23ScheduleLoaded(true);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [currentOrg]);
+
+  // N22 autonomy policy bounds (maintenance mode + daily caps).
+  useEffect(() => {
+    if (!currentOrg) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await api.getAutonomyPolicy(currentOrg.id);
+        if (!cancelled) {
+          setN22Policy(res?.data ?? null);
+          setN22Loaded(true);
+        }
+      } catch {
+        if (!cancelled) {
+          setN22Policy(null);
+          setN22Loaded(true);
         }
       }
     })();
@@ -291,6 +317,20 @@ export default function AutonomousTab() {
     }
   }
 
+  async function persistN22(patch: Partial<AutonomyPolicy>) {
+    if (!currentOrg || !isAdmin) return;
+    setN22Busy(true);
+    try {
+      const res = await api.patchAutonomyPolicy(currentOrg.id, patch);
+      setN22Policy(res?.data ?? null);
+      toast.success("Autonomy policy updated");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : String(err));
+    } finally {
+      setN22Busy(false);
+    }
+  }
+
   async function persistAutoPr(next: boolean) {
     if (!currentOrg) return;
     setScheduleBusy(true);
@@ -361,9 +401,161 @@ export default function AutonomousTab() {
           <li><strong className="text-[var(--text-primary)]">T4 — Auto-merge:</strong> Highest blast radius — auto-merge approved patches (off by default).</li>
         </ul>
         <p className="text-xs text-[var(--text-muted)]">
-          HIPAA compliance profile forces T0 (observe only). Configure per-agent overrides under Settings → Autonomy policy.
+          HIPAA compliance profile forces T0 (observe only). Edit bounds below;
+          kill switches for rollback / reweight / cache_bust live under Settings → FinOps.
         </p>
       </div>
+
+      {n22Loaded && n22Policy && (
+        <div className="rounded-xl border border-[var(--border-default)] bg-[var(--bg-secondary)]/30 p-4 space-y-4">
+          <div className="flex items-start gap-3">
+            <div className="rounded-lg bg-[var(--accent-faint)] p-2 shrink-0">
+              <ShieldAlert className="w-5 h-5 text-[var(--accent)]" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <h3 className="text-sm font-semibold text-[var(--text-primary)]">
+                Maintenance bounds (N22)
+              </h3>
+              <p className="text-xs text-[var(--text-secondary)] mt-0.5 leading-relaxed">
+                Effective mode:{" "}
+                <span className="font-medium text-[var(--text-primary)]">
+                  {n22Policy.effective_mode ?? n22Policy.maintenance_mode}
+                </span>
+                {n22Policy.budget && (
+                  <>
+                    {" · "}
+                    Budget ${n22Policy.budget.spent_usd.toFixed(2)} / $
+                    {n22Policy.budget.limit_usd.toFixed(2)}
+                    {!n22Policy.budget.within_budget && (
+                      <span className="text-[var(--error)]"> (exhausted)</span>
+                    )}
+                  </>
+                )}
+              </p>
+            </div>
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className="block text-xs space-y-1">
+              <span className="text-[var(--text-secondary)]">Maintenance mode</span>
+              <select
+                className="w-full rounded-md border border-[var(--border-default)] bg-[var(--bg-base)] px-2 py-1.5 text-sm"
+                value={n22Policy.maintenance_mode}
+                disabled={!isAdmin || n22Busy}
+                onChange={(e) => {
+                  const maintenance_mode = e.target.value as AutonomyPolicy["maintenance_mode"];
+                  setN22Policy((p) => (p ? { ...p, maintenance_mode } : p));
+                  void persistN22({ maintenance_mode });
+                }}
+              >
+                <option value="observe">Observe — detect + recommend only</option>
+                <option value="assisted">Assisted — auto runtime heal; patches need approve</option>
+                <option value="autonomous">Autonomous — heal + open PRs per bounds</option>
+              </select>
+            </label>
+
+            <label className="block text-xs space-y-1">
+              <span className="text-[var(--text-secondary)]">Compliance profile</span>
+              <select
+                className="w-full rounded-md border border-[var(--border-default)] bg-[var(--bg-base)] px-2 py-1.5 text-sm"
+                value={n22Policy.compliance_profile}
+                disabled={!isAdmin || n22Busy}
+                onChange={(e) => {
+                  const compliance_profile = e.target
+                    .value as AutonomyPolicy["compliance_profile"];
+                  setN22Policy((p) => (p ? { ...p, compliance_profile } : p));
+                  void persistN22({ compliance_profile });
+                }}
+              >
+                <option value="standard">Standard</option>
+                <option value="soc2_strict">SOC2 strict (no auto-merge)</option>
+                <option value="hipaa">HIPAA (observe only)</option>
+              </select>
+            </label>
+
+            <label className="block text-xs space-y-1">
+              <span className="text-[var(--text-secondary)]">
+                Daily maintenance budget (USD)
+              </span>
+              <input
+                type="number"
+                min={0}
+                step={1}
+                className="w-full rounded-md border border-[var(--border-default)] bg-[var(--bg-base)] px-2 py-1.5 text-sm"
+                value={n22Policy.daily_maintenance_budget_usd}
+                disabled={!isAdmin || n22Busy}
+                onBlur={(e) => {
+                  const daily_maintenance_budget_usd = Number(e.target.value);
+                  if (Number.isFinite(daily_maintenance_budget_usd)) {
+                    void persistN22({ daily_maintenance_budget_usd });
+                  }
+                }}
+                onChange={(e) => {
+                  const daily_maintenance_budget_usd = Number(e.target.value);
+                  setN22Policy((p) =>
+                    p ? { ...p, daily_maintenance_budget_usd } : p,
+                  );
+                }}
+              />
+            </label>
+
+            <label className="block text-xs space-y-1">
+              <span className="text-[var(--text-secondary)]">
+                Max auto-rollbacks / day
+              </span>
+              <input
+                type="number"
+                min={0}
+                max={50}
+                step={1}
+                className="w-full rounded-md border border-[var(--border-default)] bg-[var(--bg-base)] px-2 py-1.5 text-sm"
+                value={n22Policy.max_auto_rollbacks_per_day}
+                disabled={!isAdmin || n22Busy}
+                onBlur={(e) => {
+                  const max_auto_rollbacks_per_day = Number(e.target.value);
+                  if (Number.isFinite(max_auto_rollbacks_per_day)) {
+                    void persistN22({ max_auto_rollbacks_per_day });
+                  }
+                }}
+                onChange={(e) => {
+                  const max_auto_rollbacks_per_day = Number(e.target.value);
+                  setN22Policy((p) =>
+                    p ? { ...p, max_auto_rollbacks_per_day } : p,
+                  );
+                }}
+              />
+            </label>
+          </div>
+
+          <div className="grid gap-2 sm:grid-cols-2">
+            {(
+              [
+                ["auto_runtime_heal", "Auto runtime heal (rollback / reweight / cache bust)"],
+                ["auto_code_patch_pr", "Auto open code-patch PRs"],
+                ["auto_code_patch_merge", "Auto-merge patches (sandbox only)"],
+                ["auto_prompt_canary", "Auto prompt canaries"],
+              ] as const
+            ).map(([key, label]) => (
+              <label
+                key={key}
+                className="flex items-center gap-2 text-xs text-[var(--text-secondary)]"
+              >
+                <input
+                  type="checkbox"
+                  checked={Boolean(n22Policy[key])}
+                  disabled={!isAdmin || n22Busy}
+                  onChange={(e) => {
+                    const next = e.target.checked;
+                    setN22Policy((p) => (p ? { ...p, [key]: next } : p));
+                    void persistN22({ [key]: next });
+                  }}
+                />
+                {label}
+              </label>
+            ))}
+          </div>
+        </div>
+      )}
 
       <FlagRow
         title="Intelligence surface (Cat 1-23)"

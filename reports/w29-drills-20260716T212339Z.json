@@ -1,0 +1,13 @@
+{
+  "ts": "20260716T212339Z",
+  "flag_drill": {
+    "verdict": "PASS"
+  },
+  "dr_drill": {
+    "verdict": "FAIL",
+    "exit_code": 2,
+    "report": "/Users/kaiavnihalani/Downloads/Eden/reports/dr-drill-20260716T212339Z.json"
+  },
+  "workflow_present": true,
+  "honesty": "DR is advisory in CI without BACKUP_S3_BUCKET; flag drill is contract-level unless staging URL set."
+}

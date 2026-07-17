@@ -19,6 +19,7 @@ from uuid import uuid4
 from fastapi import APIRouter, Header, HTTPException, status
 from pydantic import BaseModel, Field
 
+from eden.api.utils.redact import redact_all
 from eden.config import get_settings
 from eden.storage.postgres import get_postgres_client
 
@@ -499,7 +500,7 @@ async def _link_clerk_id(client, user_id: str, clerk_user_id: str) -> None:
             "Failed to link clerk_id=%s to user=%s: %s",
             clerk_user_id,
             user_id,
-            exc,
+            redact_all(str(exc)),
         )
 
 
@@ -552,7 +553,7 @@ async def _sync_clerk_for_scim_user(
         if row and row.get("clerk_id"):
             clerk_user_id = str(row["clerk_id"])
     except Exception as exc:  # noqa: BLE001
-        logger.warning("SCIM clerk_id lookup failed user=%s: %s", user_id, exc)
+        logger.warning("SCIM clerk_id lookup failed user=%s: %s", user_id, redact_all(str(exc)))
 
     try:
         if active:
@@ -591,7 +592,7 @@ async def _sync_clerk_for_scim_user(
                         "Clerk membership create failed (user=%s org=%s): %s",
                         clerk_user_id,
                         clerk_org_id,
-                        exc,
+                        redact_all(str(exc)),
                     )
         else:
             # Deprovision: look up existing Clerk user only — never create.
@@ -625,7 +626,7 @@ async def _sync_clerk_for_scim_user(
                         "Clerk membership delete failed (user=%s org=%s): %s",
                         clerk_user_id,
                         clerk_org_id,
-                        exc,
+                        redact_all(str(exc)),
                     )
     except ClerkAPIError as exc:
         logger.warning(
@@ -633,14 +634,14 @@ async def _sync_clerk_for_scim_user(
             org_id,
             email,
             active,
-            exc,
+            redact_all(str(exc)),
         )
     except Exception as exc:  # noqa: BLE001 — defensive
         logger.exception(
             "Unexpected SCIM Clerk sync error (org=%s email=%s): %s",
             org_id,
             email,
-            exc,
+            redact_all(str(exc)),
         )
 
 

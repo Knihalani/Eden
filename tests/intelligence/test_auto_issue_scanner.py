@@ -144,6 +144,24 @@ async def test_minimal_profile_skips_loop_and_slow() -> None:
 
 
 @pytest.mark.asyncio
+async def test_standard_profile_enables_all_detectors() -> None:
+    from eden.issues.auto_scanner import _PROFILE_DETECTORS
+
+    standard = _PROFILE_DETECTORS["standard"]
+    expected = {
+        "tool_error",
+        "loop",
+        "task_failure",
+        "slow_trace",
+        "hallucination",
+        "user_frustration",
+        "confusion_loop",
+        "high_cost",
+    }
+    assert expected.issubset(standard)
+
+
+@pytest.mark.asyncio
 async def test_consumer_handle_scans_and_acks() -> None:
     import eden.workers.trace_finalized_consumer as mod
 

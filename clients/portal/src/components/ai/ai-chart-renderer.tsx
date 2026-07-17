@@ -25,7 +25,10 @@ import {
   ScatterChart, Scatter,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend,
 } from "recharts";
+import { Download } from "lucide-react";
 import type { AiChartSpec } from "@/lib/api";
+import { downloadCsv, downloadPng } from "@/lib/export";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 const COLORS = [
@@ -47,18 +50,55 @@ interface Props {
 
 export function AiChartRenderer({ chart, className, height = 240 }: Props) {
   const unitSuffix = chart.unit ? ` (${chart.unit})` : "";
+  const chartRef = React.useRef<HTMLDivElement>(null);
+  const csvRows = (chart.data ?? []) as Array<Record<string, unknown>>;
+  const baseName = (chart.title || chart.type || "chart").replace(/\s+/g, "-").toLowerCase();
+
   return (
-    <div className={cn(
-      "rounded border border-[var(--border)] bg-[var(--bg-primary)] p-3",
-      "my-2",
-      className,
-    )}>
-      <div className="mb-2 flex items-baseline justify-between">
+    <div
+      className={cn(
+        "rounded border border-[var(--border)] bg-[var(--bg-primary)] p-3",
+        "my-2",
+        className,
+      )}
+      data-ai-chart
+    >
+      <div className="mb-2 flex items-baseline justify-between gap-2">
         <div className="text-xs font-medium text-[var(--text-secondary)]">
           {chart.title}
         </div>
-        <div className="text-[10px] uppercase tracking-wide text-[var(--text-muted)]">
-          {chart.type}{unitSuffix}
+        <div className="flex items-center gap-1">
+          <div className="text-[10px] uppercase tracking-wide text-[var(--text-muted)]">
+            {chart.type}{unitSuffix}
+          </div>
+          {csvRows.length > 0 && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-6 px-1.5 text-[10px]"
+              aria-label="Download chart CSV"
+              onClick={() => downloadCsv(`${baseName}.csv`, csvRows)}
+            >
+              <Download className="h-3 w-3" aria-hidden />
+              CSV
+            </Button>
+          )}
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-6 px-1.5 text-[10px]"
+            aria-label="Download chart PNG"
+            onClick={() => {
+              if (chartRef.current) {
+                void downloadPng(`${baseName}.png`, chartRef.current);
+              }
+            }}
+          >
+            <Download className="h-3 w-3" aria-hidden />
+            PNG
+          </Button>
         </div>
       </div>
       {chart.data.length === 0 ? (
@@ -66,7 +106,7 @@ export function AiChartRenderer({ chart, className, height = 240 }: Props) {
           No data
         </div>
       ) : (
-        <div style={{ width: "100%", height }}>
+        <div ref={chartRef} style={{ width: "100%", height }}>
           <ResponsiveContainer>
             {renderChart(chart)}
           </ResponsiveContainer>

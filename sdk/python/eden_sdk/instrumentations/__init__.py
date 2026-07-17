@@ -29,6 +29,8 @@ __all__ = [
     "autogen",
     "mastra",
     "pydantic_ai",
+    "bedrock",
+    "gemini",
 ]
 
 

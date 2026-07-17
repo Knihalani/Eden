@@ -1,4 +1,8 @@
-"""Issue → improvement_plan trigger (N23, salvaged from patches/)."""
+"""Issue → improvement_plan trigger (N20 / N23).
+
+Fingerprint ≥5× → N22 gate → PatchGenerator → improvement_plans.
+Portal fix-chat is deleted — this is the only issue→code path.
+"""
 
 from __future__ import annotations
 
@@ -9,16 +13,35 @@ from eden.improvement import plans_repo
 
 logger = logging.getLogger(__name__)
 
-_OPEN_STATUSES = ("draft", "pending_review", "approved", "pr_opened")
+_MIN_FINGERPRINT_COUNT = 5
 
 
-def _improvement_enabled() -> bool:
+def _improvement_enabled_sync() -> bool:
     try:
         from eden.config import get_settings
 
         return bool(getattr(get_settings(), "improvement_agent_v1", False))
     except Exception:
         return False
+
+
+async def _improvement_enabled(org_id: str) -> bool:
+    try:
+        from eden.preview.gates import improvement_agent_enabled
+
+        return await improvement_agent_enabled(org_id)
+    except Exception:
+        return _improvement_enabled_sync()
+
+
+def _min_fingerprint_count() -> int:
+    try:
+        from eden.config import get_settings
+
+        configured = int(getattr(get_settings(), "patch_cluster_min_size", 5) or 5)
+    except Exception:
+        configured = 5
+    return max(_MIN_FINGERPRINT_COUNT, configured)
 
 
 async def _issue_context(org_id: str, issue_id: str) -> dict[str, Any] | None:
@@ -69,6 +92,7 @@ async def build_candidate_from_issue(org_id: str, issue: Any) -> Any | None:
             "fingerprint": issue.fingerprint,
             "severity": sev,
             "confidence": float(triage.get("confidence", 0.6)),
+            "stumble_count": int(getattr(issue, "stumble_count", 0) or 0),
         },
         triage_snapshot=triage,
         severity=sev,
@@ -103,10 +127,52 @@ def _plan_payload_from_patch(
             "patch_id": patch_data.get("patch_id"),
             "severity": (issue.severity or "medium").lower(),
             "confidence": float(triage.get("confidence", 0.6)),
+            "stumble_count": int(getattr(issue, "stumble_count", 0) or 0),
         },
         "triage_snapshot": triage,
         "llm_cost_usd": float(patch_data.get("cost_usd") or 0),
     }
+
+
+async def _n22_may_propose(org_id: str, agent_id: str | None) -> tuple[bool, str]:
+    try:
+        from eden.closed_loop.autonomy_policy import audit, decide, resolve
+
+        policy = await resolve(org_id, agent_id)
+        verdict, reason, tier = decide(policy, "propose_patch")
+        await audit(
+            org_id,
+            agent_id=agent_id,
+            action="propose_patch",
+            tier=tier or "auto_code_patch_pr",
+            decision=verdict,
+            reason=reason or "",
+        )
+        if verdict == "deny":
+            return False, reason or "n22_deny"
+        return True, reason or "ok"
+    except Exception as exc:
+        logger.debug("issue_patch_trigger: n22 check failed: %s", exc)
+        return False, f"n22_unavailable:{exc}"
+
+
+async def _budget_ok(org_id: str) -> tuple[bool, str]:
+    """Budgets from cost ledger (W7/W8) + daily maintenance cap."""
+    try:
+        from eden.config import get_settings
+        from eden.llmops.cost_ledger import sum_feature_spend_today
+
+        cap = float(getattr(get_settings(), "daily_maintenance_budget_usd", 25.0) or 0)
+        if cap > 0:
+            spent = await sum_feature_spend_today(
+                org_id, features=("patches", "autonomy")
+            )
+            if spent >= cap:
+                return False, f"budget_exhausted:{spent:.2f}>={cap:.2f}"
+    except Exception as exc:
+        logger.debug("issue_patch_trigger: cost_ledger budget: %s", exc)
+
+    return True, "ok"
 
 
 async def propose_plan_for_issue(
@@ -115,13 +181,41 @@ async def propose_plan_for_issue(
     *,
     run_id: str | None = None,
 ) -> dict[str, Any]:
-    """Generate patch + return plan payload (N23 inbox). Never raises."""
-    if not _improvement_enabled():
+    """Generate patch + return plan payload (N20 inbox). Never raises."""
+    if not await _improvement_enabled(org_id):
         return {"status": "disabled", "reason": "improvement_agent_v1=false"}
 
     ctx = await _issue_context(org_id, issue_id)
     if ctx is None:
         return {"status": "not_found", "reason": f"issue {issue_id!r} not found"}
+
+    issue = ctx["issue"]
+    min_count = _min_fingerprint_count()
+    stumble_count = int(getattr(issue, "stumble_count", 0) or 0)
+    if stumble_count < min_count:
+        return {
+            "status": "suppressed",
+            "reason": "fingerprint_below_threshold",
+            "stumble_count": stumble_count,
+            "min_required": min_count,
+            "issue_id": issue_id,
+        }
+
+    allowed, n22_reason = await _n22_may_propose(org_id, ctx.get("agent_id") or None)
+    if not allowed:
+        return {
+            "status": "denied",
+            "reason": n22_reason,
+            "issue_id": issue_id,
+        }
+
+    budget_ok, budget_reason = await _budget_ok(org_id)
+    if not budget_ok:
+        return {
+            "status": "suppressed",
+            "reason": budget_reason,
+            "issue_id": issue_id,
+        }
 
     fp = f"issue:{issue_id}"
     existing = await _find_open_plan(org_id, fp)
@@ -185,12 +279,29 @@ async def propose_plan_for_issue(
     if plan is None:
         return {"status": "error", "reason": "persist_failed", "issue_id": issue_id}
 
+    cost = float(data.get("cost_usd") or payload.get("llm_cost_usd") or 0)
+    if cost > 0:
+        try:
+            from eden.closed_loop.autonomy_policy import record_spend
+
+            await record_spend(
+                org_id,
+                cost,
+                feature="patches",
+                model=str(data.get("model_used") or "patch_generator"),
+                agent_id=ctx.get("agent_id") or None,
+                metadata={"issue_id": issue_id, "plan_id": plan["id"]},
+            )
+        except Exception as exc:
+            logger.debug("issue_patch_trigger: record_spend failed: %s", exc)
+
     return {
         "status": "proposed",
         "plan_id": plan["id"],
         "plan": plan,
         "issue_id": issue_id,
         "linked_files_count": len(linked_files),
+        "stumble_count": stumble_count,
     }
 
 
@@ -321,7 +432,7 @@ async def _extract_linker_inputs(
 
 
 async def propose_patch_for_issue(org_id: str, issue_id: str) -> dict[str, Any]:
-    """Backward-compat alias for improve/autofix and F46."""
+    """Alias for improve/autofix and F46."""
     result = await propose_plan_for_issue(org_id, issue_id)
     if result.get("plan_id"):
         result["patch_id"] = result["plan_id"]

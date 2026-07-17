@@ -46,17 +46,36 @@ DEFAULT_TTL_SECONDS = 3 * 60 * 60
 
 
 def _get_hmac_secret() -> bytes:
-    """Read the HMAC secret from Settings. Falls back to a
-    process-local secret if ``JWT_SECRET`` is not configured (dev
-    only — production must set ``JWT_SECRET``).
+    """Read the HMAC secret from Settings (``jwt_secret`` /
+    ``JWT_SECRET`` / ``EDEN_JWT_SECRET``).
+
+    Never invent a random per-process secret in production — that
+    would invalidate tokens across workers/restarts and hide
+    misconfiguration. Test mode may use a stable fixture secret.
     """
+    import os
+
     s = get_settings()
-    secret = getattr(s, "jwt_secret", None) or os.environ.get("JWT_SECRET", "")
+    secret = (getattr(s, "jwt_secret", None) or "").strip()
     if not secret:
-        # Process-local fallback so dev environments don't 500.
-        # NOT persistent across restarts; tokens issued in this mode
-        # are invalidated on every process restart.
-        secret = f"dev-only-{secrets.token_hex(16)}"
+        secret = (
+            os.environ.get("EDEN_JWT_SECRET", "")
+            or os.environ.get("JWT_SECRET", "")
+        ).strip()
+    if not secret or secret == "change-me-in-production":
+        testing = os.environ.get("EDEN_TESTING", "").lower() in (
+            "1",
+            "true",
+            "yes",
+        ) or bool(os.environ.get("PYTEST_CURRENT_TEST"))
+        if testing:
+            # Stable fixture — must not rotate per call.
+            secret = "eden-presigned-test-secret-do-not-use-in-prod"
+        else:
+            raise RuntimeError(
+                "Presigned feedback tokens require jwt_secret. "
+                "Set EDEN_JWT_SECRET (or JWT_SECRET) before issuing tokens."
+            )
     return secret.encode()
 
 

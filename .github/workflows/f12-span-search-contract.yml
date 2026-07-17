@@ -1,0 +1,65 @@
+name: F12 span-search contract (scaled-down)
+
+# Proves the F12 wiring path (build_span_doc + PIIMasker + search latency
+# harness) without requiring a 10M Typesense staging cluster.
+# Honesty: this is NOT the GA 10M p95 gate — see docs/ops/F12-STAGING-10M-SPAN-SEARCH.md.
+
+on:
+  pull_request:
+    paths:
+      - "src/eden/observability/typesense_client.py"
+      - "src/eden/observability/search_service.py"
+      - "scripts/bench_f12_span_search.py"
+      - "docs/ops/F12-STAGING-10M-SPAN-SEARCH.md"
+      - ".github/workflows/f12-span-search-contract.yml"
+      - "tests/unit/api/test_w3_contracts.py"
+  push:
+    branches: [main]
+    paths:
+      - "src/eden/observability/typesense_client.py"
+      - "src/eden/observability/search_service.py"
+      - "scripts/bench_f12_span_search.py"
+      - "docs/ops/F12-STAGING-10M-SPAN-SEARCH.md"
+      - ".github/workflows/f12-span-search-contract.yml"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: f12-span-search-contract
+  cancel-in-progress: true
+
+jobs:
+  f12-contract:
+    name: F12 contract bench (N=10k SQLite proxy)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v3
+        with:
+          version: "latest"
+      - name: Install runtime deps
+        run: uv sync --frozen --no-dev
+      - name: Run scaled-down F12 bench
+        env:
+          PYTHONPATH: "src:."
+          # Explicitly unset Typesense so CI always exercises the
+          # documented SQLite/PG-fallback contract path.
+          TYPESENSE_API_KEY: ""
+          TYPESENSE_HOST: ""
+        run: |
+          set -euo pipefail
+          uv run python scripts/bench_f12_span_search.py --n=10000 --requests=200 | tee /tmp/f12-bench.txt
+          # Gate: harness must finish and report a p95 line. 10M Typesense
+          # remains operator-gated; this job only proves wiring.
+          grep -E 'p95' /tmp/f12-bench.txt
+          grep -E 'LOCAL SYNTHETIC PROXY|SQLite|Mode' /tmp/f12-bench.txt
+      - name: Upload bench log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: f12-contract-bench
+          path: /tmp/f12-bench.txt
+          retention-days: 30

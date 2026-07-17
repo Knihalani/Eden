@@ -268,7 +268,7 @@ const CARDS: CardSpec[] = [
   {
     key: "incidents",
     title: "Active Incidents",
-    href: "/incidents",
+    href: "/issues?tab=incidents",
     icon: AlertOctagon,
     iconClassName: "bg-[var(--error-bg)] text-[var(--error)]",
     load: (orgId) => rcaApi.listIncidents(orgId),
@@ -377,7 +377,7 @@ const CARDS: CardSpec[] = [
   {
     key: "user_satisfaction",
     title: "User Satisfaction",
-    href: "/users",
+    href: "/analytics?tab=users",
     icon: Sparkles,
     iconClassName: "bg-[var(--accent-light)] text-[var(--accent)]",
     load: (orgId) => userApi.getCohortDashboard(orgId),
@@ -398,7 +398,7 @@ const CARDS: CardSpec[] = [
   {
     key: "custom_metrics",
     title: "Custom Metrics",
-    href: "/studio",
+    href: "/evals?tab=studio",
     icon: Calculator,
     iconClassName: "bg-[var(--primary-light)] text-[var(--primary)]",
     load: (orgId) => metricStudioApi.listMetrics(orgId),
@@ -413,7 +413,7 @@ const CARDS: CardSpec[] = [
   {
     key: "apm_sampling",
     title: "APM Keep Ratio",
-    href: "/apm",
+    href: "/traces",
     icon: Sliders,
     iconClassName: "bg-[var(--accent-light)] text-[var(--accent)]",
     load: (orgId) => apmApi.samplingStats(orgId),
@@ -453,7 +453,7 @@ const CARDS: CardSpec[] = [
   {
     key: "retrieval_gaps",
     title: "Knowledge Gaps",
-    href: "/observability/retrieval",
+    href: "/traces?facet=retrieval",
     icon: Database,
     iconClassName: "bg-[var(--warning-bg)] text-[var(--warning-strong)]",
     load: (orgId) => retrievalApi.gaps(orgId),
@@ -468,7 +468,7 @@ const CARDS: CardSpec[] = [
   {
     key: "memory_reaver",
     title: "Reweaver Suggestions",
-    href: "/observability/memory",
+    href: "/traces?facet=memory",
     icon: GitBranch,
     iconClassName: "bg-[var(--primary-light)] text-[var(--primary)]",
     load: (orgId) => memoryApi.reweaverSuggest(orgId),
@@ -483,7 +483,7 @@ const CARDS: CardSpec[] = [
   {
     key: "eval_versions",
     title: "Eval Versions",
-    href: "/observability/eval",
+    href: "/evals?tab=eval",
     icon: GraduationCap,
     iconClassName: "bg-[var(--accent-light)] text-[var(--accent)]",
     load: (orgId) => evalApi.listVersions(orgId),
@@ -498,7 +498,7 @@ const CARDS: CardSpec[] = [
   {
     key: "recommendations",
     title: "Recommendations",
-    href: "/autonomous",
+    href: "/improve",
     icon: ListChecks,
     iconClassName: "bg-[var(--primary-light)] text-[var(--primary)]",
     load: (orgId) => autonomousApi.recommendations(orgId),
@@ -513,7 +513,7 @@ const CARDS: CardSpec[] = [
   {
     key: "experiments",
     title: "Active Experiments",
-    href: "/experiments",
+    href: "/evals?tab=experiments",
     icon: Layers,
     iconClassName: "bg-[var(--accent-light)] text-[var(--accent)]",
     load: (orgId) => experimentsApi.listTrafficSplits(orgId),
@@ -528,7 +528,7 @@ const CARDS: CardSpec[] = [
   {
     key: "tools",
     title: "Tracked Tools",
-    href: "/tools",
+    href: "/analytics?tab=tools",
     icon: Wrench,
     iconClassName: "bg-[var(--primary-light)] text-[var(--primary)]",
     load: (orgId) => toolsApi.attribution(orgId, { days: 7 }),
@@ -549,7 +549,7 @@ const CARDS: CardSpec[] = [
   {
     key: "closed_loop",
     title: "Pending Actions",
-    href: "/closed-loop",
+    href: "/improve",
     icon: ClipboardList,
     iconClassName: "bg-[var(--warning-bg)] text-[var(--warning-strong)]",
     load: (orgId) => closedLoopApi.dashboard(orgId),
@@ -582,7 +582,7 @@ const CARDS: CardSpec[] = [
   {
     key: "replay_sessions",
     title: "Replay Sessions",
-    href: "/replay",
+    href: "/traces?view=replay",
     icon: Settings2,
     iconClassName: "bg-[var(--primary-light)] text-[var(--primary)]",
     load: (orgId) => replayApi.listSessions(orgId),

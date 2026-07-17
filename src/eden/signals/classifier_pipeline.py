@@ -103,12 +103,121 @@ class ClassifierTrainingPipeline:
         model = await self._load_model(org_id, signal_id)
         if model is None:
             return False, 0.0
+        return self._predict(model, features)
+
+    async def infer_with_blob(
+        self, model_blob: Any, features: list[float]
+    ) -> tuple[bool, float]:
+        if not model_blob:
+            return False, 0.0
+        try:
+            model = pickle.loads(bytes(model_blob))
+        except Exception:
+            return False, 0.0
+        return self._predict(model, features)
+
+    @staticmethod
+    def _predict(model: Any, features: list[float]) -> tuple[bool, float]:
         try:
             proba = float(model.predict_proba([features])[0][1])
         except Exception:
-            pred = int(model.predict([features])[0])
-            proba = float(pred)
+            try:
+                pred = int(model.predict([features])[0])
+                proba = float(pred)
+            except Exception:
+                return False, 0.0
         return proba >= 0.5, proba
+
+    async def get_status(self, org_id: str, signal_id: str) -> dict[str, Any]:
+        try:
+            from eden.storage.postgres import get_postgres_client
+
+            pg = await get_postgres_client()
+        except Exception:
+            return {"status": "unavailable"}
+        if pg is None:
+            return {"status": "unavailable"}
+        row = await pg.fetchrow(
+            """
+            SELECT id::text, model_type, metrics, shadow_mode,
+                   COALESCE(investigator_disabled, FALSE) AS investigator_disabled,
+                   sample_count, trained_at, version
+            FROM signal_classifiers
+            WHERE org_id = $1 AND signal_id = $2
+            ORDER BY trained_at DESC
+            LIMIT 1
+            """,
+            org_id,
+            signal_id,
+        )
+        if not row:
+            return {"status": "missing", "signal_id": signal_id}
+        metrics = row["metrics"]
+        if isinstance(metrics, str):
+            try:
+                metrics = json.loads(metrics)
+            except (TypeError, ValueError):
+                metrics = {}
+        return {
+            "status": "ok",
+            "classifier_id": row["id"],
+            "signal_id": signal_id,
+            "model_type": row["model_type"],
+            "metrics": metrics,
+            "shadow_mode": bool(row["shadow_mode"]),
+            "investigator_disabled": bool(row["investigator_disabled"]),
+            "sample_count": int(row["sample_count"] or 0),
+            "trained_at": row["trained_at"].isoformat()
+            if row["trained_at"]
+            else None,
+            "version": int(row["version"] or 1),
+        }
+
+    async def promote(
+        self, org_id: str, signal_id: str, *, min_agreement: float = 0.8
+    ) -> dict[str, Any]:
+        """Disable investigator for signal when shadow agreement passes."""
+        from eden.signals.shadow_compare import ShadowComparator
+
+        report = await ShadowComparator().report(org_id, signal_id)
+        agreement = report.get("agreement_rate")
+        if agreement is None or float(agreement) < min_agreement:
+            return {
+                "status": "blocked",
+                "reason": "shadow_agreement_below_threshold",
+                "report": report,
+            }
+        try:
+            from eden.storage.postgres import get_postgres_client
+
+            pg = await get_postgres_client()
+        except Exception:
+            return {"status": "unavailable"}
+        if pg is None:
+            return {"status": "unavailable"}
+        await pg.execute(
+            """
+            UPDATE signal_classifiers
+            SET shadow_mode = FALSE,
+                investigator_disabled = TRUE
+            WHERE org_id = $1 AND signal_id = $2
+              AND id = (
+                SELECT id FROM signal_classifiers
+                WHERE org_id = $1 AND signal_id = $2
+                ORDER BY trained_at DESC LIMIT 1
+              )
+            """,
+            org_id,
+            signal_id,
+        )
+        return {
+            "status": "ok",
+            "promoted": True,
+            "signal_id": signal_id,
+            "investigator_disabled": True,
+            "shadow_mode": False,
+            "report": report,
+        }
 
     async def retrain_due_orgs(self) -> dict[str, Any]:
         """Cron entry: retrain classifiers with fresh signal events."""

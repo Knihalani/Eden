@@ -1,5 +1,11 @@
 # Eden Go SDK
 
+> **MVP / not GA.** This SDK is intentionally stub-level. Do not claim
+> feature parity with the Python or TypeScript SDKs. Streaming wrappers,
+> framework auto-instrumentation, and SOTA sampling/offline/OTel land
+> only if a future program expands Go scope (SOTA W6 banners Go/Rust as
+> out of GA).
+
 Minimum-viable Go SDK for the [Eden](https://github.com/eden-ai/eden)
 observability platform. Designed to be imported into any Go service that
 calls OpenAI or Anthropic, with one goal: report every LLM call to

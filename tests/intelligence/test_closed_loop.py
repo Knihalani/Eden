@@ -183,6 +183,9 @@ class TestGuardrailHook:
         with patch(
             "eden.llmops.promotion_hooks._record_action",
             AsyncMock(side_effect=_capture),
+        ), patch(
+            "eden.guardrails.EvalToGuardrailLink.demote",
+            AsyncMock(return_value={"status": "ok", "data": {"status": "disabled"}}),
         ):
             await GuardrailHook().on_judge_below_floor(
                 "org_t", judge_name="j1"

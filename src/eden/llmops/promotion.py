@@ -223,6 +223,12 @@ class PromotionLoop:
             success_lift >= settings.promotion_min_success_rate_lift
             and latency_ratio <= settings.promotion_max_latency_ratio
         ):
+            # EvidenceGate is non-optional for full promote (W25).
+            passed = await self._evidence_gate_promote(
+                tenant_id, experiment_id, agent, candidate_version
+            )
+            if not passed:
+                return "keep"
             await self._promote(client, experiment_id, agent, candidate_version, tenant_id)
             return "promote"
         # Rollback: candidate is clearly worse (success_lift < -5%)
@@ -333,6 +339,32 @@ class PromotionLoop:
             )
         except Exception as exc:
             logger.debug(f"audit log in rollback failed: {exc}")
+
+    async def _evidence_gate_promote(
+        self,
+        org_id: str,
+        experiment_id: str,
+        agent: str,
+        candidate_version: int,
+    ) -> bool:
+        """100% canary promote must pass EvidenceGate enqueue."""
+        try:
+            from eden.promotion.evidence_gate import EvidenceGate
+
+            gate = EvidenceGate()
+            cid = await gate.enqueue(
+                org_id,
+                kind="prompt_version",
+                ref_id=f"{agent}:{candidate_version}",
+                status="shadow",
+            )
+            if not cid:
+                return False
+            report = await gate.evaluate_bayesian(org_id, cid)
+            return report.passed
+        except Exception as exc:
+            logger.warning("promotion loop evidence gate: %s", exc)
+            return False
 
 
 _promotion_loop: PromotionLoop | None = None

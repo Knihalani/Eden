@@ -208,6 +208,58 @@ class EvalToGuardrailLink:
             },
         )
 
+    async def promote_to_shadow(
+        self,
+        org_id: str,
+        *,
+        judge_name: str,
+        threshold: float,
+    ) -> dict[str, Any]:
+        """N15 — shadow guardrail first; EvidenceGate required for block."""
+        result = await self.promote_to_guardrail(
+            org_id, judge_name=judge_name, threshold=threshold
+        )
+        if result.get("status") != "ok":
+            return result
+        data = result.get("data") or {}
+        policy_id = data.get("guardrail_policy_id")
+        candidate_id: str | None = None
+        try:
+            from eden.promotion.evidence_gate import EvidenceGate
+
+            candidate_id = await EvidenceGate().enqueue(
+                org_id,
+                kind="guardrail",
+                ref_id=str(policy_id or judge_name),
+                status="shadow",
+            )
+        except Exception as exc:
+            logger.debug("eval_to_guardrail: evidence gate enqueue failed: %s", exc)
+        try:
+            from eden.llmops.filters.guardrail import get_guardrail_filter
+            from eden.llmops.learn_wiring import install_learn_filters
+
+            install_learn_filters()
+            filt = get_guardrail_filter()
+            existing = filt._policies.get(org_id, [])
+            existing.append(
+                {
+                    "judge_id": policy_id,
+                    "judge_name": judge_name,
+                    "threshold": threshold,
+                    "enforcement_level": "log",
+                    "keyword": judge_name,
+                }
+            )
+            filt.load_policies(org_id, existing)
+        except Exception as hook_exc:
+            logger.debug("eval_to_guardrail: shadow filter reload failed: %s", hook_exc)
+        if isinstance(data, dict):
+            data["enforcement_level"] = "shadow"
+            data["evidence_gate_candidate_id"] = candidate_id
+            result["data"] = data
+        return result
+
 
 # ── 2. CustomPythonEval ─────────────────────────────────────────────
 

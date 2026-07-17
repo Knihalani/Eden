@@ -37,9 +37,20 @@ const ALL_SCOPES = [
   { id: "references:write", label: "Write References" },
   { id: "jobs:read", label: "Read Jobs" },
   { id: "jobs:write", label: "Submit Jobs" },
+  { id: "ingest:write", label: "Ingest write" },
+  { id: "mcp:read", label: "MCP read" },
+  { id: "mcp:debug", label: "MCP debug" },
+  { id: "mcp:fix", label: "MCP fix" },
+  { id: "mcp:*", label: "MCP all" },
 ];
 
-const SDK_DEFAULT_SCOPES = ALL_SCOPES.map((s) => s.id);
+const SDK_DEFAULT_SCOPES = [
+  "references:read",
+  "references:write",
+  "jobs:read",
+  "jobs:write",
+];
+const MCP_DEFAULT_SCOPES = ["mcp:read", "mcp:debug", "mcp:fix"];
 
 export function ApiKeysTab({ org }: ApiKeysTabProps) {
   const toast = useToast();
@@ -298,6 +309,25 @@ export function ApiKeysTab({ org }: ApiKeysTabProps) {
                 <p className="text-sm font-medium text-[var(--text-primary)] mb-2">
                   Permissions
                 </p>
+                <div className="mb-2 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    className="text-xs text-[var(--accent)] hover:underline"
+                    onClick={() => setSelectedScopes(SDK_DEFAULT_SCOPES)}
+                  >
+                    SDK presets
+                  </button>
+                  <button
+                    type="button"
+                    className="text-xs text-[var(--accent)] hover:underline"
+                    onClick={() => {
+                      setNewKeyName("MCP");
+                      setSelectedScopes(MCP_DEFAULT_SCOPES);
+                    }}
+                  >
+                    MCP presets
+                  </button>
+                </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   {ALL_SCOPES.map((scope) => (
                     <label

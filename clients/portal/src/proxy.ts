@@ -3,6 +3,7 @@ import createIntlMiddleware from "next-intl/middleware";
 import { NextResponse } from "next/server";
 import { routing } from "@/i18n/routing";
 import { KNOWN_PORTAL_PREFIXES } from "@/lib/portal-routes";
+import { buildHubRedirectUrl } from "@/lib/portal-hub-redirect";
 
 // Protected-first: block everything, allow the routes that must stay
 // reachable without a session (marketing pages, auth flows, the
@@ -116,6 +117,11 @@ export default clerkMiddleware(async (auth, request) => {
 
   const url = new URL(request.url);
   const path = url.pathname;
+
+  const hubTarget = buildHubRedirectUrl(path, url.search);
+  if (hubTarget) {
+    return NextResponse.redirect(new URL(hubTarget, url.origin), 307);
+  }
 
   // Auth gate — only known portal prefixes require a session.
   //

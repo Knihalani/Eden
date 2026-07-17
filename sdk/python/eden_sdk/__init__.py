@@ -54,6 +54,12 @@ from eden_sdk.trace import (
     trace,
     trace_agent,
 )
+from eden_sdk.live import (
+    LiveSpanPublisher,
+    emit_span_live,
+    get_live_publisher,
+    live_mode_enabled,
+)
 
 __all__ = [
     # Configuration
@@ -71,6 +77,11 @@ __all__ = [
     "TraceContext",
     "current_span",
     "current_trace",
+    # N11 live streaming
+    "LiveSpanPublisher",
+    "emit_span_live",
+    "get_live_publisher",
+    "live_mode_enabled",
     # Auto-instrumentation
     "instrument",
     "uninstrument",
@@ -110,10 +121,11 @@ __all__ = [
     "begin",
     "complete_session",
     "current_session",
+    "identify",
     "AgentSession",
 ]
 
-__version__ = "0.3.0"
+__version__ = "0.3.1"
 
 
 # Lazy instrumentation registry — the per-framework modules are
@@ -196,6 +208,8 @@ _FRAMEWORK_DETECTORS: dict[str, tuple[str, ...]] = {
     "anthropic": ("anthropic",),
     "mastra": ("mastra",),
     "pydantic_ai": ("pydantic_ai", "pydantic_ai.agent"),
+    "bedrock": ("boto3", "botocore"),
+    "gemini": ("google.generativeai", "google.genai"),
 }
 
 def _detect_one(module_names: tuple[str, ...]) -> bool:
@@ -306,6 +320,12 @@ def current_session() -> Any:
     from eden_sdk.session import current_session as _current
 
     return _current()
+
+
+def identify(user_id: str, **kwargs: Any) -> None:
+    from eden_sdk.session import identify as _identify
+
+    return _identify(user_id, **kwargs)
 
 
 def __getattr__(name: str) -> Any:

@@ -70,6 +70,12 @@ def build_public_openapi_spec(full_spec: dict[str, Any]) -> dict[str, Any]:
             public_paths[path] = kept
 
     spec["paths"] = public_paths
+    # Drop internal tags from the top-level tag catalog.
+    if isinstance(spec.get("tags"), list):
+        spec["tags"] = [
+            t for t in spec["tags"]
+            if isinstance(t, dict) and t.get("name") not in _INTERNAL_TAGS
+        ]
     spec["info"] = {
         **(spec.get("info") or {}),
         "title": "Eden Public API",

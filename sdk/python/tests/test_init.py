@@ -164,6 +164,8 @@ def test_detect_installed_frameworks_returns_full_map() -> None:
         "autogen",
         "mastra",
         "pydantic_ai",
+        "bedrock",
+        "gemini",
     }
     assert set(result.keys()) == expected
     # All values must be booleans.

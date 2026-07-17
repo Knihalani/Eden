@@ -23,6 +23,7 @@ import {
   ChevronRight,
   ArrowLeftRight,
 } from "lucide-react";
+import { PromptEnvironmentsPanel } from "@/components/prompts/PromptEnvironmentsPanel";
 
 interface PromptEntry {
   id: string;
@@ -365,6 +366,13 @@ export default function PromptsPage() {
                           })}
                         </div>
                       )}
+                      {orgId ? (
+                        <PromptEnvironmentsPanel
+                          orgId={orgId}
+                          promptName={p.name}
+                          latestVersion={v[0]?.version}
+                        />
+                      ) : null}
                     </div>
                   )}
                 </div>

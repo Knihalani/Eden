@@ -5,20 +5,24 @@ from __future__ import annotations
 import logging
 import uuid
 from contextlib import AbstractContextManager
+from contextvars import ContextVar
 from dataclasses import dataclass, field
 from types import TracebackType
 from typing import Any
 
+from eden_sdk.client import get_default_client
 from eden_sdk.config import get_config
 from eden_sdk.trace import TraceContext, current_trace, trace
 
 logger = logging.getLogger("eden_sdk.session")
 
-_current_session: dict[str, "AgentSession | None"] = {"value": None}
+_current_session: ContextVar["AgentSession | None"] = ContextVar(
+    "eden_current_session", default=None
+)
 
 
 def current_session() -> "AgentSession | None":
-    return _current_session["value"]
+    return _current_session.get()
 
 
 @dataclass
@@ -31,7 +35,25 @@ class AgentSession(AbstractContextManager["AgentSession"]):
     user_id: str | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
     trace_ids: list[str] = field(default_factory=list)
+    cost_usd: float = 0.0
     _ended: bool = False
+    _token: Any = field(default=None, repr=False)
+
+    def identify(self, user_id: str) -> None:
+        """Attach ``user_id`` to this session (local + ingest notify)."""
+        self.user_id = user_id
+        _notify_session(
+            "identify",
+            {
+                "session_id": self.session_id,
+                "org_id": self.org_id,
+                "user_id": user_id,
+            },
+        )
+
+    def add_cost(self, amount_usd: float) -> None:
+        if amount_usd and amount_usd > 0:
+            self.cost_usd += float(amount_usd)
 
     def trace(self, name: str, **kwargs: Any) -> TraceContext:
         """Start a child trace attributed to this session."""
@@ -44,6 +66,14 @@ class AgentSession(AbstractContextManager["AgentSession"]):
             if self.user_id:
                 active.set_attribute("user_id", self.user_id)
             self.trace_ids.append(active.trace_id)
+            _notify_session(
+                "attach_trace",
+                {
+                    "session_id": self.session_id,
+                    "org_id": self.org_id,
+                    "trace_id": active.trace_id,
+                },
+            )
         return ctx
 
     def complete(
@@ -51,23 +81,35 @@ class AgentSession(AbstractContextManager["AgentSession"]):
         *,
         success: bool = True,
         failure_reason: str | None = None,
+        flush: bool = True,
     ) -> None:
         if self._ended:
             return
         self._ended = True
-        _notify_session("end", {
-            "session_id": self.session_id,
-            "org_id": self.org_id,
-            "agent_id": self.agent_id,
-            "user_id": self.user_id,
-            "success": success,
-            "failure_reason": failure_reason,
-            "trace_ids": list(self.trace_ids),
-            "metadata": dict(self.metadata),
-        })
+        _notify_session(
+            "end",
+            {
+                "session_id": self.session_id,
+                "org_id": self.org_id,
+                "agent_id": self.agent_id,
+                "user_id": self.user_id,
+                "success": success,
+                "failure_reason": failure_reason,
+                "trace_ids": list(self.trace_ids),
+                "metadata": dict(self.metadata),
+                "cost_usd": self.cost_usd,
+            },
+        )
+        if flush:
+            try:
+                get_default_client().flush(timeout=2.0)
+            except Exception as exc:  # noqa: BLE001
+                logger.debug("session.flush failed: %s", exc)
+        if current_session() is self:
+            _current_session.set(None)
 
     def __enter__(self) -> AgentSession:
-        _current_session["value"] = self
+        self._token = _current_session.set(self)
         return self
 
     def __exit__(
@@ -77,10 +119,19 @@ class AgentSession(AbstractContextManager["AgentSession"]):
         tb: TracebackType | None,
     ) -> bool:
         if exc is not None and not self._ended:
-            self.complete(success=False, failure_reason=str(exc))
+            self.complete(success=False, failure_reason=str(exc), flush=True)
         elif not self._ended:
-            self.complete(success=True)
-        _current_session["value"] = None
+            self.complete(success=True, flush=True)
+        if self._token is not None:
+            try:
+                _current_session.reset(self._token)
+            except Exception:  # noqa: BLE001
+                pass
+            self._token = None
+        # begin() may have set the ContextVar before __enter__; reset
+        # alone can restore that value — always clear after exit.
+        if current_session() is self:
+            _current_session.set(None)
         return False
 
 
@@ -101,22 +152,34 @@ def begin(
         user_id=user_id,
         metadata=dict(metadata or {}),
     )
-    client = get_default_client()
+    _current_session.set(session)
     try:
-        _notify_session("start", {
-            "session_id": session.session_id,
-            "org_id": session.org_id,
-            "agent_id": agent_id,
-            "user_id": user_id,
-            "metadata": session.metadata,
-        })
-    except Exception as exc:
-        logger.debug("session.start notify failed: %s", exc)
+        _notify_session(
+            "start",
+            {
+                "session_id": session.session_id,
+                "org_id": session.org_id,
+                "agent_id": agent_id,
+                "user_id": user_id,
+                "metadata": session.metadata,
+            },
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("session.start notify failed: %s", exc)
     return session
 
 
+def identify(user_id: str, *, session: AgentSession | None = None) -> None:
+    """Identify the current (or given) session with a user_id."""
+    target = session or current_session()
+    if target is None:
+        logger.warning("eden identify: no active session")
+        return
+    target.identify(user_id)
+
+
 def _notify_session(phase: str, payload: dict[str, Any]) -> None:
-    """Best-effort HTTP notify for agent session lifecycle."""
+    """Best-effort HTTP notify for agent session lifecycle (ingest path)."""
     import threading
 
     def _post() -> None:
@@ -128,28 +191,43 @@ def _notify_session(phase: str, payload: dict[str, Any]) -> None:
                 return
             base = cfg.base_url.rstrip("/")
             sid = payload.get("session_id", "")
+            root = f"{base}/orgs/{cfg.org_id}/ingest/agent-sessions"
             if phase == "start":
-                url = f"{base}/orgs/{cfg.org_id}/agent-sessions/start"
+                url = f"{root}/start"
                 body = {
                     "agent_id": payload.get("agent_id"),
                     "user_id": payload.get("user_id"),
                     "metadata": payload.get("metadata"),
                     "session_id": sid,
                 }
+            elif phase == "identify":
+                url = f"{root}/{sid}/identify"
+                body = {"user_id": payload.get("user_id")}
+            elif phase == "attach_trace":
+                url = f"{root}/{sid}/traces"
+                body = {"trace_id": payload.get("trace_id")}
             else:
-                url = f"{base}/orgs/{cfg.org_id}/agent-sessions/{sid}/end"
+                url = f"{root}/{sid}/end"
                 body = {
                     "success": payload.get("success", True),
                     "failure_reason": payload.get("failure_reason"),
+                    "cost_usd": payload.get("cost_usd"),
+                    "trace_ids": payload.get("trace_ids"),
                 }
-            headers: dict[str, str] = {}
-            if cfg.api_key:
-                headers["Authorization"] = f"Bearer {cfg.api_key}"
-            httpx.post(url, json=body, headers=headers, timeout=5.0)
-        except Exception as exc:
-            logger.debug("session %s notify failed: %s", phase, exc)
+            headers = cfg.auth_headers()
+            headers.setdefault("Content-Type", "application/json")
+            resp = httpx.post(url, json=body, headers=headers, timeout=5.0)
+            if resp.status_code >= 400:
+                logger.warning(
+                    "session %s notify returned %s: %s",
+                    phase,
+                    resp.status_code,
+                    resp.text[:200],
+                )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("session %s notify failed: %s", phase, exc)
 
-    threading.Thread(target=_post, daemon=True).start()
+    threading.Thread(target=_post, daemon=True, name="eden-sdk-session").start()
 
 
 def complete_session(
@@ -167,4 +245,5 @@ __all__ = [
     "begin",
     "complete_session",
     "current_session",
+    "identify",
 ]

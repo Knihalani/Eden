@@ -40,6 +40,20 @@ class TestRegistry:
             "list_proposed_patches",
             "preview_nl_alert",
             "create_alert_rule",
+            "navigate",
+            "propose_filter",
+            "find_similar",
+            "open_trace",
+            "open_issue",
+            "open_session",
+            "open_alert",
+            "open_artifact",
+            "preview_nl_signal",
+            "create_signal",
+            "promote_artifact",
+            "export_table",
+            "list_analysis_templates",
+            "run_analysis_template",
         ):
             assert required in names
 
@@ -229,3 +243,112 @@ async def test_preview_nl_alert_tool_dispatch() -> None:
     assert output["approval_required"] is True
     assert output["eql"]
     assert output["alerts_url"] == "/alerts"
+
+
+@pytest.mark.asyncio
+async def test_navigate_and_propose_filter_client_actions() -> None:
+    nav = await tools.dispatch_tool_call(ORG, "navigate", {"path": "/traces"})
+    assert nav["status"] == "ok"
+    assert nav["output"]["client_action"] == "navigate"
+    assert nav["output"]["href"] == "/traces"
+
+    bad = await tools.dispatch_tool_call(
+        ORG, "navigate", {"path": "https://evil.example/x"}
+    )
+    assert bad["status"] == "ok"
+    assert "error" in bad["output"]
+
+    filt = await tools.dispatch_tool_call(
+        ORG,
+        "propose_filter",
+        {"q": "latency:>2 status:error", "path": "/traces"},
+    )
+    assert filt["status"] == "ok"
+    out = filt["output"]
+    assert out["client_action"] == "propose_filter"
+    assert out["q"] == "latency:>2 status:error"
+    assert out["href"].startswith("/traces?q=")
+
+    opened = await tools.dispatch_tool_call(
+        ORG, "open_trace", {"trace_id": "trc_abc"}
+    )
+    assert opened["status"] == "ok"
+    assert opened["output"]["client_action"] == "navigate"
+    assert "trc_abc" in opened["output"]["href"]
+
+
+def test_safe_portal_href() -> None:
+    assert tools._safe_portal_href("/issues/abc") == "/issues/abc"
+    assert tools._safe_portal_href("//evil") is None
+    assert tools._safe_portal_href("http://x") is None
+    assert tools._safe_portal_href("/unknown-root") is None
+
+
+@pytest.mark.asyncio
+async def test_preview_nl_signal_approval_required() -> None:
+    result = await tools.dispatch_tool_call(
+        ORG,
+        "preview_nl_signal",
+        {"description": "LLM refusal rate above 5% in the last 24 hours"},
+    )
+    assert result["status"] == "ok"
+    output = result["output"]
+    assert output["approval_required"] is True
+    assert output["rule"]["metric"] == "refusal_rate"
+    assert output["signals_url"] == "/signals"
+
+
+@pytest.mark.asyncio
+async def test_export_table_slow_traces_csv_client_action() -> None:
+    client = AsyncMock()
+    client.fetch = AsyncMock(
+        return_value=[
+            _row({
+                "trace_id": "trc_slow",
+                "started_at": datetime(2026, 7, 1, tzinfo=UTC),
+                "realm": "production",
+                "agent_id": "agent_a",
+                "model": "gpt-4o",
+                "outcome": "success",
+                "error_type": None,
+                "span_count": 3,
+                "duration_ms": 9000.0,
+                "cost_usd": 0.02,
+            }),
+        ]
+    )
+    with patch.object(tools, "get_postgres_client", AsyncMock(return_value=client)):
+        result = await tools.dispatch_tool_call(
+            ORG,
+            "export_table",
+            {"template": "slow_traces", "format": "csv"},
+        )
+    assert result["status"] == "ok"
+    out = result["output"]
+    assert out["client_action"] == "download"
+    assert out["format"] == "csv"
+    assert out["row_count"] >= 1
+    assert out["rows"][0]["trace_id"] == "trc_slow"
+    assert "spend_preview" in out
+
+
+@pytest.mark.asyncio
+async def test_query_sql_rejects_writes_and_spend_gates() -> None:
+    bad = await tools.dispatch_tool_call(
+        ORG, "query_sql", {"sql": "DELETE FROM telemetry_events"}
+    )
+    assert bad["status"] == "ok"
+    assert "error" in bad["output"]
+
+    multi = await tools.dispatch_tool_call(
+        ORG, "query_sql", {"sql": "SELECT 1; SELECT 2"}
+    )
+    assert "error" in multi["output"]
+
+    gated = await tools.dispatch_tool_call(
+        ORG,
+        "query_sql",
+        {"sql": "SELECT a FROM t JOIN u ON a=b GROUP BY a ORDER BY a"},
+    )
+    assert gated["output"].get("approval_required") is True
+    assert "spend_preview" in gated["output"]

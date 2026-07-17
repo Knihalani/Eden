@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-import random
 import uuid
 from datetime import UTC, datetime
 from typing import Any
@@ -86,14 +85,61 @@ class IssueExperimentWizard:
                 issue_id,
             )
             fp = issue["fingerprint"] if issue else None
-            n_control = max(50, random.randint(80, 200))
-            n_treatment = max(50, random.randint(80, 200))
-            control_rate = 0.06 + random.random() * 0.04
-            treatment_rate = control_rate * (0.3 + random.random() * 0.4)
-            prob_better = min(
-                0.99,
-                max(0.05, 1.0 - (treatment_rate / max(control_rate, 0.001))),
+            control_rows = await client.fetch(
+                """
+                SELECT outcome FROM telemetry_events
+                WHERE tenant_id = $1
+                  AND attributes->>'fingerprint' = $2
+                  AND timestamp >= now() - interval '14 days'
+                  AND (attributes->>'variant' IS NULL OR attributes->>'variant' = $3)
+                LIMIT 500
+                """,
+                org_id,
+                fp,
+                row["control_variant"],
             )
+            treatment_rows = await client.fetch(
+                """
+                SELECT outcome FROM telemetry_events
+                WHERE tenant_id = $1
+                  AND attributes->>'fingerprint' = $2
+                  AND timestamp >= now() - interval '14 days'
+                  AND attributes->>'variant' = $3
+                LIMIT 500
+                """,
+                org_id,
+                fp,
+                row["treatment_variant"],
+            )
+            n_control = len(control_rows or [])
+            n_treatment = len(treatment_rows or [])
+
+            def _stumble_rate(rows: list) -> float:
+                if not rows:
+                    return 0.0
+                fails = sum(1 for r in rows if (r.get("outcome") or "") != "success")
+                return fails / len(rows)
+
+            control_rate = _stumble_rate(control_rows or [])
+            treatment_rate = _stumble_rate(treatment_rows or [])
+            control_metrics = [
+                1.0 if (r.get("outcome") or "") != "success" else 0.0
+                for r in control_rows or []
+            ]
+            treatment_metrics = [
+                1.0 if (r.get("outcome") or "") != "success" else 0.0
+                for r in treatment_rows or []
+            ]
+            try:
+                from eden.experiments._common import _prob_treatment_better
+
+                prob_better = (
+                    _prob_treatment_better(control_metrics, treatment_metrics)
+                    if control_metrics and treatment_metrics
+                    else 0.5
+                )
+            except Exception:
+                prob_better = 0.5
             recommendation = (
                 "promote_treatment"
                 if prob_better > 0.95 and n_control >= row["min_samples_per_variant"]

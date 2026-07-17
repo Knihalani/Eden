@@ -2,20 +2,9 @@
 
 "use client";
 
-import { useState, useMemo, Suspense } from "react";
-import Link from "next/link";
-import dynamic from "next/dynamic";
-import { useOrg } from "@/hooks/use-org";
-import { agentsApi, type AgentSummary } from "@/lib/api";
-import { Card } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { EmptyState } from "@/components/ui/empty-state";
-import { Skeleton } from "@/components/ui/skeleton";
-import { NoOrgState } from "@/components/ui/no-org-state";
-import { QueryState } from "@/components/ui/query-state";
 import { PageHeader } from "@/components/layout/page-header";
-import { PageContent } from "@/components/layout/page-content";
 import { EmbeddedSurface } from "@/components/layout/embedded-surface";
+import { CoreResourcePage, CrossLinkBar } from "@/components/portal-os";
 import {
   Bot,
   ExternalLink,
@@ -31,6 +20,17 @@ import { cn } from "@/lib/utils";
 import { useQueryTab } from "@/hooks/use-query-tab";
 import { useOrgQuery } from "@/hooks/use-api-query";
 import { queryKeys } from "@/lib/query-keys";
+import { NoOrgState } from "@/components/ui/no-org-state";
+import { QueryState } from "@/components/ui/query-state";
+import { EmptyState } from "@/components/ui/empty-state";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { agentsApi, type AgentSummary } from "@/lib/api";
+import { useOrg } from "@/hooks/use-org";
+import { useState, useMemo, Suspense } from "react";
+import Link from "next/link";
+import dynamic from "next/dynamic";
 
 const AGENT_TABS = ["agents", "fleet"] as const;
 const FleetView = dynamic(() => import("@/app/(portal)/fleet/page"), {
@@ -127,68 +127,82 @@ function AgentsPageInner() {
   }
 
   return (
-    <PageContent size="wide">
-      <PageHeader
-        eyebrow="Build"
-        title="Agents"
-        subtitle={
-          loading
-            ? "Loading…"
-            : `${total} registered · connect a repo or open fleet health.`
-        }
-        icon={Bot}
-        description="Manage agents and fleet health. Connect repos from the primary CTA."
-        actions={
-          <div className="flex items-center gap-2">
-            <Link
-              href="/agents/connect"
-              aria-label="Connect a new agent"
-              className="inline-flex items-center gap-1.5 px-3 py-2 bg-[var(--accent)] text-[var(--bg-primary)] rounded-lg text-sm font-medium hover:opacity-90 transition-opacity"
-            >
-              <Plus className="w-4 h-4" />
-              Connect new agent
-            </Link>
-            {tab === "agents" && (
-            <Button
-              onClick={() => void agentsQuery.refetch()}
-              variant="outline"
-              size="default"
-              disabled={refreshing}
-              loading={refreshing}
-              aria-label="Refresh agents"
-            >
-              <RefreshCw className="h-4 w-4" /> Refresh
-            </Button>
-            )}
+    <CoreResourcePage
+      size="wide"
+      header={
+        <PageHeader
+          eyebrow="Build"
+          title="Agents"
+          subtitle={
+            loading
+              ? "Loading…"
+              : `${total} registered · connect a repo or open fleet health.`
+          }
+          icon={Bot}
+          description="Manage agents and fleet health. Connect repos from the primary CTA."
+          actions={
+            <div className="flex items-center gap-2">
+              <Link
+                href="/agents/connect"
+                aria-label="Connect a new agent"
+                className="inline-flex items-center gap-1.5 px-3 py-2 bg-[var(--accent)] text-[var(--bg-primary)] rounded-lg text-sm font-medium hover:opacity-90 transition-opacity"
+              >
+                <Plus className="w-4 h-4" />
+                Connect new agent
+              </Link>
+              {tab === "agents" && (
+              <Button
+                onClick={() => void agentsQuery.refetch()}
+                variant="outline"
+                size="default"
+                disabled={refreshing}
+                loading={refreshing}
+                aria-label="Refresh agents"
+              >
+                <RefreshCw className="h-4 w-4" /> Refresh
+              </Button>
+              )}
+            </div>
+          }
+        />
+      }
+      toolbar={
+        <div className="mb-4 space-y-3">
+          <CrossLinkBar
+            links={[
+              { label: "Fleet", href: "/agents?tab=fleet" },
+              { label: "Improve", href: "/improve" },
+              { label: "Ledger", href: "/ledger" },
+              { label: "Audit trail", href: "/audit-trail" },
+            ]}
+          />
+          <div role="tablist" aria-label="Agents sections" className="flex gap-1 border-b border-[var(--border-default)]">
+            {AGENT_TABS.map((t) => (
+              <button
+                key={t}
+                type="button"
+                role="tab"
+                aria-selected={tab === t}
+                onClick={() => setTab(t)}
+                className={cn(
+                  "px-3 py-2 text-sm font-medium capitalize border-b-2 -mb-px",
+                  tab === t
+                    ? "border-[var(--accent)] text-[var(--text-primary)]"
+                    : "border-transparent text-[var(--text-muted)] hover:text-[var(--text-primary)]",
+                )}
+              >
+                {t}
+              </button>
+            ))}
           </div>
-        }
-      />
-
-      <div role="tablist" aria-label="Agents sections" className="mb-4 flex gap-1 border-b border-[var(--border-default)]">
-        {AGENT_TABS.map((t) => (
-          <button
-            key={t}
-            type="button"
-            role="tab"
-            aria-selected={tab === t}
-            onClick={() => setTab(t)}
-            className={cn(
-              "px-3 py-2 text-sm font-medium capitalize border-b-2 -mb-px",
-              tab === t
-                ? "border-[var(--accent)] text-[var(--text-primary)]"
-                : "border-transparent text-[var(--text-muted)] hover:text-[var(--text-primary)]",
-            )}
-          >
-            {t}
-          </button>
-        ))}
-      </div>
-
-      {tab === "fleet" ? (
-        <EmbeddedSurface>
-          <FleetView />
-        </EmbeddedSurface>
-      ) : (
+        </div>
+      }
+      table={
+        tab === "fleet" ? (
+          <EmbeddedSurface>
+            <FleetView />
+          </EmbeddedSurface>
+        ) : (
       <QueryState
         loading={loading && agents.length === 0}
         error={agentsQuery.error}
@@ -321,8 +335,9 @@ function AgentsPageInner() {
           </>
         )}
       </QueryState>
-      )}
-    </PageContent>
+        )
+      }
+    />
   );
 }
 

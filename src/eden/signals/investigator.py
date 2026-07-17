@@ -248,6 +248,12 @@ async def investigate_trace(
                 await _maybe_write_stumble(
                     org_id, trace_id, row, payload, agent_id=agent_id
                 )
+                try:
+                    from eden.signals.clusterer import cluster_after_match
+
+                    await cluster_after_match(org_id, signal_id)
+                except Exception:
+                    pass
         elif inv_prompt:
             # LLM investigator path removed — heuristics only (UnifiedJudge
             # + Layer A cover semantic detection without per-signal LLM).
@@ -262,6 +268,12 @@ async def investigate_trace(
                 await _maybe_write_stumble(
                     org_id, trace_id, row, payload, agent_id=agent_id
                 )
+                try:
+                    from eden.signals.clusterer import cluster_after_match
+
+                    await cluster_after_match(org_id, signal_id)
+                except Exception:
+                    pass
         else:
             matched, payload, confidence = _heuristic_match(description, events)
             written.append(
@@ -273,6 +285,12 @@ async def investigate_trace(
                 await _maybe_write_stumble(
                     org_id, trace_id, row, payload, agent_id=agent_id
                 )
+                try:
+                    from eden.signals.clusterer import cluster_after_match
+
+                    await cluster_after_match(org_id, signal_id)
+                except Exception:
+                    pass
 
     return written
 

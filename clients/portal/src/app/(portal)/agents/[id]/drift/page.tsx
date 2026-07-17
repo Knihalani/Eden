@@ -1,19 +1,23 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { useParams } from "next/navigation";
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import { useParams, useSearchParams } from "next/navigation";
 import { ArrowLeft, Activity, Loader2, RefreshCw } from "lucide-react";
 
 import { PageHeader } from "@/components/layout/page-header";
 import { PageContent } from "@/components/layout/page-content";
+import { DriftHistogram } from "@/components/portal-os/DriftHistogram";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorState } from "@/components/ui/error-state";
 import { useOrg } from "@/hooks/use-org";
+import { useKeyboardShortcuts } from "@/hooks/use-keyboard-shortcuts";
 import { learnApi } from "@/lib/api";
+import { driftHref, ledgerHref, tracesFilteredHref } from "@/lib/portal-cross-links";
 import { errorFromCaught } from "@/lib/safe-error-message";
+import { cn } from "@/lib/utils";
 
 interface DriftDimension {
   dimension: string;
@@ -21,10 +25,29 @@ interface DriftDimension {
   flagged: boolean;
   delta_pct: number;
   summary: string;
+  baseline_histogram?: number[];
+  current_histogram?: number[];
+  sample_count?: number;
 }
 
 export default function AgentDriftPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex justify-center py-12">
+          <Loader2 className="h-8 w-8 animate-spin text-[var(--text-muted)]" />
+        </div>
+      }
+    >
+      <AgentDriftPageInner />
+    </Suspense>
+  );
+}
+
+function AgentDriftPageInner() {
   const params = useParams<{ id: string }>();
+  const searchParams = useSearchParams();
+  const focusDimension = searchParams.get("dimension");
   const agentId = useMemo(
     () => (params?.id ? decodeURIComponent(params.id) : ""),
     [params?.id],
@@ -35,6 +58,7 @@ export default function AgentDriftPage() {
   const [dimensions, setDimensions] = useState<DriftDimension[]>([]);
   const [summary, setSummary] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [focusedIdx, setFocusedIdx] = useState(0);
 
   const load = useCallback(async () => {
     if (!currentOrg || !agentId) return;
@@ -46,12 +70,16 @@ export default function AgentDriftPage() {
       const dims = (report?.dimensions as DriftDimension[]) ?? [];
       setDimensions(dims);
       setSummary((report?.plain_english_summary as string) ?? null);
+      if (focusDimension) {
+        const idx = dims.findIndex((d) => d.dimension === focusDimension);
+        if (idx >= 0) setFocusedIdx(idx);
+      }
     } catch (e) {
       setError(errorFromCaught(e, "Failed to load drift report"));
     } finally {
       setLoading(false);
     }
-  }, [currentOrg, agentId]);
+  }, [currentOrg, agentId, focusDimension]);
 
   useEffect(() => {
     void load();
@@ -70,20 +98,40 @@ export default function AgentDriftPage() {
     }
   };
 
+  useKeyboardShortcuts(
+    {
+      c: () => void recompute(),
+      ...Object.fromEntries(
+        [1, 2, 3, 4, 5, 6, 7].map((n) => [
+          String(n),
+          () => {
+            const idx = n - 1;
+            if (idx < dimensions.length) setFocusedIdx(idx);
+          },
+        ]),
+      ),
+    },
+    dimensions.length > 0,
+  );
+
   const flagged = dimensions.filter((d) => d.flagged);
+  const focused = dimensions[focusedIdx];
 
   return (
     <PageContent>
       <PageHeader
         title="Behavioral drift"
-        description={`PSI pinpoint report for ${agentId}`}
+        description={`24h vs 7d baseline · ${agentId}`}
         actions={
           <div className="flex gap-2">
+            <Button variant="outline" size="sm" asChild>
+              <Link href={ledgerHref(agentId)}>Ledger</Link>
+            </Button>
             <Button variant="outline" size="sm" onClick={() => void load()} disabled={loading}>
               <RefreshCw className="h-4 w-4" />
             </Button>
             <Button size="sm" onClick={() => void recompute()} disabled={busy}>
-              {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : "Recompute"}
+              {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : "Compute now"}
             </Button>
           </div>
         }
@@ -122,28 +170,41 @@ export default function AgentDriftPage() {
         </div>
       ) : dimensions.length === 0 ? (
         <EmptyState
-          title="No drift data"
-          description="Run compute to build a baseline comparison."
+          title="No baseline yet"
+          description="Eden needs enough production traces to learn normal behavior."
           action={
-            <Button size="sm" onClick={() => void recompute()} disabled={busy}>
-              Compute drift
-            </Button>
+            <div className="flex flex-wrap justify-center gap-2">
+              <Button size="sm" onClick={() => void recompute()} disabled={busy}>
+                Compute when data sufficient
+              </Button>
+              <Button size="sm" variant="outline" asChild>
+                <Link href={tracesFilteredHref({ agent_id: agentId })}>Open Traces</Link>
+              </Button>
+            </div>
           }
         />
       ) : (
-        <div className="space-y-3">
-          {dimensions.map((d) => (
+        <div className="grid gap-3 md:grid-cols-2">
+          {dimensions.map((d, idx) => (
             <Card
               key={d.dimension}
-              className={`p-4 ${d.flagged ? "border-[var(--warning)]" : ""}`}
+              className={cn(
+                "p-4",
+                d.flagged && "border-[var(--warning)]",
+                focusedIdx === idx && "ring-1 ring-[var(--accent)]",
+              )}
+              onClick={() => setFocusedIdx(idx)}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") setFocusedIdx(idx);
+              }}
             >
               <div className="flex items-center justify-between">
                 <span className="font-medium">{d.dimension}</span>
                 <span
                   className={
-                    d.flagged
-                      ? "text-[var(--warning)]"
-                      : "text-[var(--text-muted)]"
+                    d.flagged ? "text-[var(--warning)]" : "text-[var(--text-muted)]"
                   }
                 >
                   PSI {d.psi.toFixed(3)}
@@ -156,15 +217,41 @@ export default function AgentDriftPage() {
                   {d.delta_pct}%
                 </p>
               ) : null}
+              {d.baseline_histogram && d.current_histogram ? (
+                <div className="mt-3">
+                  <DriftHistogram
+                    baseline={d.baseline_histogram}
+                    current={d.current_histogram}
+                  />
+                </div>
+              ) : null}
+              <Button
+                size="sm"
+                variant="outline"
+                className="mt-3 w-full"
+                asChild
+              >
+                <Link href={tracesFilteredHref({ agent_id: agentId, dimension: d.dimension })}>
+                  Show example traces
+                </Link>
+              </Button>
             </Card>
           ))}
           {flagged.length === 0 ? (
-            <p className="text-center text-sm text-[var(--text-muted)]">
+            <p className="col-span-full text-center text-sm text-[var(--text-muted)]">
               No dimensions above PSI 0.2 threshold.
             </p>
           ) : null}
         </div>
       )}
+      {focused ? (
+        <p className="mt-4 text-center text-xs text-[var(--text-muted)]">
+          Focused: {focused.dimension} · Press 1–7 to switch · <kbd>c</kbd> recompute ·{" "}
+          <Link href={driftHref(agentId, focused.dimension)} className="text-[var(--accent)] hover:underline">
+            Share link
+          </Link>
+        </p>
+      ) : null}
     </PageContent>
   );
 }

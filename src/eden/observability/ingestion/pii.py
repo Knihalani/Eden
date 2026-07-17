@@ -17,10 +17,11 @@ This lets tenants:
   detected credential causes the masker to raise ``PIIMaskingError``;
   the ingest handler maps that to a 422.
 
-Failure policy is fail-open: if the masker raises an unexpected
-exception, the event is still ingested with whatever it managed to
-mask, and a warning is logged. This matches the existing
-telemetry-soft-fail pattern across the SDK.
+Failure policy is fail-closed for unexpected masker errors when the
+tenant policy sets ``fail_closed_on_credentials`` (Wave 1). Otherwise
+unexpected exceptions remain fail-open with a warning log so soft
+telemetry paths do not drop events. ``PIIMaskingError`` always
+propagates so ingest handlers can return 422.
 """
 
 from __future__ import annotations
@@ -42,10 +43,9 @@ async def mask_payload(
 ) -> Any:
     """Run PIIMasker on a payload dict/list/scalar in a worker thread.
 
-    On any exception, logs a warning and returns the original value
-    unchanged. If a ``PIIMaskingError`` is raised (fail-closed
-    detected a credential), it propagates — the caller is expected
-    to translate that into a 422 response.
+    ``PIIMaskingError`` always propagates. Unexpected exceptions
+    propagate when the tenant policy is fail-closed; otherwise the
+    original value is returned (fail-open) with a warning.
     """
     if payload is None:
         return payload
@@ -62,6 +62,8 @@ async def mask_payload(
         except PIIMaskingError:
             raise
         except Exception as exc:
+            if policy.fail_closed_on_credentials or getattr(policy, "mode", None) == "fail_closed":
+                raise
             logger.warning(f"PII pre-mask failed on string; persisting unmasked: {exc}")
             return payload
     if isinstance(payload, list):
@@ -73,11 +75,7 @@ async def mask_payload(
         except PIIMaskingError:
             raise
         except Exception as exc:
-            # Audit 2026-07-02 S-16 — when fail_closed, any
-            # exception (including non-PII ones like a regex
-            # engine crash) must propagate. Otherwise return
-            # the original payload and continue (fail-open).
-            if policy.fail_closed_on_credentials:
+            if policy.fail_closed_on_credentials or getattr(policy, "mode", None) == "fail_closed":
                 raise
             logger.warning(f"PII pre-mask failed; persisting unmasked: {exc}")
             return payload

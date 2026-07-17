@@ -25,6 +25,14 @@ if grep -rn 'function SeverityBadge' src 2>/dev/null \
   exit 1
 fi
 
+echo "→ checking for local IssuePriorityBadge / IssueSeverityBadge defs…"
+if grep -rn 'function IssuePriorityBadge\|function IssueSeverityBadge' src 2>/dev/null \
+  | grep -v 'ui/status-badge.tsx' \
+  | grep -v '__tests__'; then
+  echo "✗ duplicate issue priority badge def found"
+  exit 1
+fi
+
 echo "→ checking for old logo.svg…"
 if [ -f public/logo.svg ]; then
   echo "✗ public/logo.svg should be deleted (use logo.png)"

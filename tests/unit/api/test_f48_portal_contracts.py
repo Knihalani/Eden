@@ -122,11 +122,9 @@ def test_backend_nl_alert_routes_are_mounted() -> None:
 
 def test_sidebar_signals_nav_is_visible() -> None:
     text = SIDEBAR.read_text(encoding="utf-8")
-    signal_lines = [ln for ln in text.splitlines() if 'href: "/signals"' in ln]
-    assert signal_lines, "expected a Signals nav entry with href: \"/signals\""
-    assert not any(ln.strip().startswith("//") for ln in signal_lines), (
-        "Signals nav entry must not be commented out (F48 re-enabled)"
-    )
+    signal_lines = [ln for ln in text.splitlines() if 'href: "/alerts?tab=signals"' in ln]
+    assert signal_lines, 'expected Signals nav entry with href: "/alerts?tab=signals"'
+    assert any('id: "signals"' in ln for ln in text.splitlines())
 
 
 @pytest.mark.asyncio
@@ -165,4 +163,37 @@ def test_backend_improve_routes_are_mounted() -> None:
     assert "/orgs/{org_id}/improve/plans/{plan_id}/approve" in paths
     assert "/orgs/{org_id}/improve/runs" in paths
     assert "/orgs/{org_id}/improve/schedule" in paths
+
+
+def test_phase2_agent_sessions_portal_paths() -> None:
+    src = PORTAL_API.read_text(encoding="utf-8")
+    block = src.split("export const agentSessionsApi")[1].split(
+        "// ── F58"
+    )[0]
+    assert "/agent-sessions" in block
+    assert "start:" in block
+    assert "end:" in block
+    assert "attachTrace:" in block
+
+
+def test_phase2_saved_views_portal_paths() -> None:
+    src = PORTAL_API.read_text(encoding="utf-8")
+    assert "savedViewsApi" in src
+    assert "/saved-searches" in src
+
+
+def test_backend_agent_sessions_routes_are_mounted() -> None:
+    from eden.api.routes import agent_sessions
+
+    paths = {r.path for r in agent_sessions.router.routes if isinstance(r, APIRoute)}
+    assert "" in paths or paths  # list route mounted on router prefix
+    assert any("start" in p for p in paths)
+    assert any("end" in p for p in paths)
+
+
+def test_backend_saved_searches_routes_are_mounted() -> None:
+    from eden.api.routes.sharing import sharing_router
+
+    paths = {r.path for r in sharing_router.routes if isinstance(r, APIRoute)}
+    assert "/orgs/{org_id}/saved-searches" in paths
 

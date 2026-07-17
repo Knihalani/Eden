@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import Link from "next/link";
 import { useOrg } from "@/hooks/use-org";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -187,8 +188,16 @@ export default function SignalsPage() {
             rows={filtered}
             rowKey={(r) => r.id}
             emptyTitle="No signals yet"
-            emptyDescription='Create a signal above — e.g. "error rate above 5%" — and the compiled rule appears immediately.'
+            emptyDescription='Create a signal above — or save a span search as a signal from Traces. Then wire an alert rule.'
             emptyIcon={Activity}
+            emptyAction={
+              <Link
+                href="/alerts?tab=rules"
+                className="text-xs text-[var(--accent)] hover:underline"
+              >
+                Create alert rule
+              </Link>
+            }
             columns={[
               {
                 key: "description",

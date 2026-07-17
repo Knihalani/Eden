@@ -767,6 +767,25 @@ async def _upsert_report(
             payload.get("max_jaccard"),
             payload.get("step_index"),
         )
+        if row and (payload.get("verdict") or "") != "OK":
+            try:
+                from eden.nudges.author import ArtifactAuthor
+                from eden.preview.gates import artifacts_enabled
+
+                if await artifacts_enabled(str(tenant_id)):
+                    detectors = payload.get("detectors_tripped") or []
+                    kind = detectors[0] if detectors else "loop"
+                    await ArtifactAuthor().from_loop_report(
+                        str(tenant_id),
+                        agent_id=str(payload.get("agent_id") or "default"),
+                        report={
+                            "kind": kind,
+                            "trace_id": trace_id,
+                            "tool_name": payload.get("tool_name"),
+                        },
+                    )
+            except Exception as exc:
+                logger.debug("loop→artifact draft failed: %s", exc)
     elif table == "trace_quality_reports":
         row = await client.fetchrow(
             """

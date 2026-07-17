@@ -54,6 +54,7 @@ from pydantic import BaseModel, Field
 from sse_starlette.sse import EventSourceResponse
 
 from eden.api.deps import get_current_user, log_audit_event, require_org_member
+from eden.api.utils.rate_limit import RateLimitExceeded, SlidingWindowRateLimiter
 from eden.api.utils.redact import redact_all
 from eden.api.utils.safe_error import safe_detail
 from eden.config import get_settings
@@ -68,22 +69,65 @@ router = APIRouter(
     tags=["ai-insights"],
 )
 
+# W23: ChatSidebar rate limit — 30 turns / minute / org+user (soft Loop parity).
+_chat_rate_limiter = SlidingWindowRateLimiter(max_requests=30, window_seconds=60.0)
+
 
 # ============================================================================
 # Schemas
 # ============================================================================
 
 class PageContext(BaseModel):
-    """Optional UI context so answers cite the view the user is on."""
+    """Optional UI context so answers cite the view the user is on (W21 rich)."""
 
     pathname: str | None = Field(
         None,
         description="Current portal pathname, e.g. /traces or /issues/abc.",
         max_length=512,
     )
+    search: str | None = Field(
+        None,
+        description="Current URL search string including leading ?.",
+        max_length=2048,
+    )
+    resource: str | None = Field(
+        None,
+        description="Top-level resource segment (traces, issues, …).",
+        max_length=64,
+    )
     trace_id: str | None = Field(
         None,
         description="Optional trace_id from the URL or selected row.",
+        max_length=128,
+    )
+    issue_id: str | None = Field(
+        None,
+        description="Optional issue id from path or query.",
+        max_length=128,
+    )
+    session_id: str | None = Field(
+        None,
+        description="Optional session id from path or query.",
+        max_length=128,
+    )
+    alert_id: str | None = Field(
+        None,
+        description="Optional alert id from query.",
+        max_length=128,
+    )
+    artifact_id: str | None = Field(
+        None,
+        description="Optional artifact id from query.",
+        max_length=128,
+    )
+    q: str | None = Field(
+        None,
+        description="Active U08 list filter string (?q=).",
+        max_length=1024,
+    )
+    selected_id: str | None = Field(
+        None,
+        description="Primary selected entity id on the page.",
         max_length=128,
     )
     filters: dict[str, Any] | None = Field(
@@ -105,6 +149,16 @@ class ChatRequest(BaseModel):
     page_context: PageContext | None = Field(
         None,
         description="Portal page context (pathname, optional trace_id).",
+    )
+    preferred_model: str | None = Field(
+        None,
+        max_length=128,
+        description="Operator model picker id (or 'auto').",
+    )
+    preferred_tier: str | None = Field(
+        None,
+        max_length=16,
+        description="t1 | t2 | t3 | auto — T1/SLM vs T3 routing hint.",
     )
 
 
@@ -142,8 +196,18 @@ dumping rows on open-ended questions.
 - Include deep links from tool output (traces_url / issues_url) when \
 citing an id.
 - Never invent data. Surface tool errors plainly.
-- Use page_context (pathname / trace_id) when present — do not ask \
-for an id the UI already provides.
+- Use page_context (pathname / trace_id / q / resource / selected_id) \
+when present — do not ask for an id the UI already provides.
+- To change the UI: call navigate, propose_filter, find_similar, or \
+open_trace / open_issue / open_session / open_alert / open_artifact \
+(these return client_action payloads the portal executes).
+- Cite-before-claim: emit ```cite blocks before naming concrete \
+trace/span/issue ids in prose.
+- Dataset / experiment / playground writes \
+(create_dataset, promote_trace_to_dataset, create_experiment, \
+create_playground, playground_from_span) are approval-gated — call \
+them to preview; the operator Confirm card executes.
+- Call estimate_chat_cost before long multi-tool or export runs.
 
 If the user asks for something outside your tools, say so. Don't \
 guess. Point them at /traces, /issues, /closed-loop, or \
@@ -280,23 +344,40 @@ def _format_history_for_prompt(
 # Persistence helpers
 # ============================================================================
 
-async def _load_session(org_id: str, user_id: str, session_id: str) -> dict[str, Any] | None:
-    """Fetch a single chat session, scoped to (org, user).
+async def _resolve_user_role(org_id: str, user_id: str) -> str:
+    """Look up the caller's role inside ``org_id``.
 
-    Defensive: a DB blip returns ``None`` so the caller sees
-    "session not found" instead of a 500. Distinguishing a real
-    not-found row from a DB error is impossible without a
-    second round-trip, so we treat both the same — safer than
-    shipping a 500 to the chat sidebar. July 2026 site-wide
-    hardening (companion to the list_sessions try/except).
+    Returns one of: ``"owner"``, ``"admin"``, ``"member"``, ``"viewer"``.
+    Defaults to ``"member"`` if the role can't be resolved.
     """
+    try:
+        client = await get_postgres_client()
+        if client is None:
+            return "member"
+        row = await client.fetchrow(
+            """
+            SELECT m.role
+            FROM org_members m
+            WHERE m.org_id = $1 AND m.user_id = $2
+            """,
+            org_id, user_id,
+        )
+        if row:
+            return str(row["role"])
+    except Exception as exc:
+        logger.debug("role lookup failed: %s", redact_all(str(exc)))
+    return "member"
+
+
+async def _load_session(org_id: str, user_id: str, session_id: str) -> dict[str, Any] | None:
+    """Fetch a single chat session from ``ai_conversations``, scoped to (org, user)."""
     try:
         client = await get_postgres_client()
         return await client.fetchrow(
             """
-            SELECT session_id, org_id, user_id, title, archived_at, created_at, updated_at
-            FROM ai_insights_chat_sessions
-            WHERE session_id = $1 AND org_id = $2 AND user_id = $3
+            SELECT id AS session_id, org_id, user_id, title, archived_at, created_at, updated_at
+            FROM ai_conversations
+            WHERE id = $1 AND org_id = $2 AND user_id = $3
             """,
             session_id, org_id, user_id,
         )
@@ -309,20 +390,17 @@ async def _load_session(org_id: str, user_id: str, session_id: str) -> dict[str,
 
 
 async def _create_session(org_id: str, user_id: str, title: str) -> str:
-    """Insert a new chat session row and return its uuid.
+    """Insert a new ``ai_conversations`` row and return its uuid.
 
-    Re-raises DB errors so the caller (``/chat``) can surface
-    them as an explicit ``error`` SSE event rather than a 500.
-    The chat stream already catches all exceptions via the
-    outer ``try/except`` in ``_stream_chat`` (see
-    ``_stream_chat``'s last-resort guard).
+    The same UUID is passed into ChatService so messages land on
+    this row (no dual-table id drift).
     """
     session_id = str(uuid.uuid4())
     client = await get_postgres_client()
     await client.execute(
         """
-        INSERT INTO ai_insights_chat_sessions (session_id, org_id, user_id, title)
-        VALUES ($1, $2, $3, $4)
+        INSERT INTO ai_conversations (id, org_id, user_id, title, page_context)
+        VALUES ($1::uuid, $2, $3, $4, '{}'::jsonb)
         """,
         session_id, org_id, user_id, title,
     )
@@ -330,19 +408,19 @@ async def _create_session(org_id: str, user_id: str, title: str) -> str:
 
 
 async def _append_message(session_id: str, role: str, content: list[dict[str, Any]]) -> None:
-    """Persist one chat turn. Best-effort: a DB blip is logged
-    but doesn't stop the chat stream — the user would lose
-    their reply if a single transient write failed. The outer
-    ``_stream_chat`` finally block still emits a ``done`` event
-    so the client gets a clean stream close."""
+    """Legacy helper retained for callers; chat path uses ChatService."""
     try:
         client = await get_postgres_client()
+        text = ""
+        for block in content:
+            if isinstance(block, dict) and block.get("type") == "text":
+                text += str(block.get("text") or "")
         await client.execute(
             """
-            INSERT INTO ai_insights_chat_messages (message_id, session_id, role, content_jsonb)
-            VALUES ($1, $2, $3, $4::jsonb)
+            INSERT INTO ai_messages (conversation_id, role, content)
+            VALUES ($1::uuid, $2, $3)
             """,
-            str(uuid.uuid4()), session_id, role, json.dumps(content),
+            session_id, role, text,
         )
     except Exception as exc:
         logger.warning(
@@ -352,25 +430,21 @@ async def _append_message(session_id: str, role: str, content: list[dict[str, An
 
 
 async def _touch_session(session_id: str, title: str | None = None) -> None:
-    """Bump ``updated_at`` (and optionally ``title``) on a session.
-
-    Best-effort: a DB blip is logged but the chat stream still
-    finishes normally — losing the updated_at tick on one turn
-    is harmless."""
+    """Bump ``updated_at`` (and optionally ``title``) on a conversation."""
     try:
         client = await get_postgres_client()
         if title:
             await client.execute(
                 """
-                UPDATE ai_insights_chat_sessions
+                UPDATE ai_conversations
                 SET updated_at = NOW(), title = $2
-                WHERE session_id = $1
+                WHERE id = $1
                 """,
                 session_id, title,
             )
         else:
             await client.execute(
-                "UPDATE ai_insights_chat_sessions SET updated_at = NOW() WHERE session_id = $1",
+                "UPDATE ai_conversations SET updated_at = NOW() WHERE id = $1",
                 session_id,
             )
     except Exception as exc:
@@ -381,43 +455,10 @@ async def _touch_session(session_id: str, title: str | None = None) -> None:
 
 
 async def _load_history(session_id: str) -> list[dict[str, Any]]:
-    """Reconstruct Anthropic-compatible messages from the DB.
+    """Reconstruct messages from ``ai_messages`` for legacy callers."""
+    from eden.autonomous.insights_compat import list_messages_from_conversation
 
-    Defensive: a DB blip returns an empty history so the chat
-    stream treats the session as fresh — better than a 500 mid-
-    conversation. The outer ``_stream_chat`` try/except already
-    surfaces any ``Exception`` (not just DB errors) as an
-    ``error`` SSE event, but returning ``[]`` here means the
-    in-memory transcript still starts cleanly."""
-    try:
-        client = await get_postgres_client()
-        rows = await client.fetch(
-            """
-            SELECT role, content_jsonb
-            FROM ai_insights_chat_messages
-            WHERE session_id = $1
-            ORDER BY created_at ASC
-            """,
-            session_id,
-        )
-    except Exception as exc:
-        logger.warning(
-            "ai_insights: _load_history failed for session=%s: %s",
-            session_id, redact_all(str(exc)),
-        )
-        return []
-    messages: list[dict[str, Any]] = []
-    for r in rows:
-        content = r["content_jsonb"]
-        # content_jsonb is a JSON string (we stored via ::jsonb cast); asyncpg
-        # usually deserialises it to a python list. Guard both.
-        if isinstance(content, str):
-            try:
-                content = json.loads(content)
-            except json.JSONDecodeError:
-                content = []
-        messages.append({"role": r["role"], "content": content})
-    return messages
+    return await list_messages_from_conversation(session_id)
 
 
 def _derive_title(message: str) -> str:
@@ -510,11 +551,18 @@ async def chat(
     entry so the org's compliance view can see AI usage.
     """
     user_id = user["user_id"]
-    from eden.api.routes.ai_agent import _resolve_user_role
-
     user_role = await _resolve_user_role(org_id, user_id)
 
-    # Find or create the session.
+    try:
+        await _chat_rate_limiter.check(f"ai-insights:{org_id}:{user_id}")
+    except RateLimitExceeded as exc:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=f"Chat rate limit exceeded. Retry after {int(exc.retry_after)}s.",
+            headers={"Retry-After": str(int(exc.retry_after))},
+        ) from exc
+
+    # Find or create the session on the unified ``ai_conversations`` store.
     if body.session_id:
         existing = await _load_session(org_id, user_id, body.session_id)
         if not existing:
@@ -539,7 +587,7 @@ async def chat(
                 org_id=org_id,
                 user_id=user_id,
                 action="ai_insights.session.create",
-                target_type="ai_insights_session",
+                target_type="ai_conversation",
                 target_id=session_id,
                 metadata={"title": _derive_title(body.message)},
             )
@@ -551,6 +599,10 @@ async def chat(
         page_ctx.update(
             body.page_context.model_dump(exclude_none=True),
         )
+    if body.preferred_model:
+        page_ctx["preferred_model"] = body.preferred_model
+    if body.preferred_tier:
+        page_ctx["preferred_tier"] = body.preferred_tier
 
     async def event_generator():
         async for ev in _stream_chat(
@@ -565,6 +617,78 @@ async def chat(
             yield {"event": ev.get("type", "message"), "data": json.dumps(ev, default=str)}
 
     return EventSourceResponse(event_generator())
+
+
+class ApproveRequest(BaseModel):
+    """Body for POST /approve — ConfirmationCard write path."""
+
+    tool: str = Field(..., min_length=1, max_length=128)
+    args: dict[str, Any] = Field(default_factory=dict)
+    session_id: str | None = Field(None, max_length=64)
+
+
+@router.post("/approve")
+async def approve_tool(
+    org_id: str,
+    body: ApproveRequest,
+    org: dict = Depends(require_org_member),
+    user: dict = Depends(get_current_user),
+):
+    """Execute an approval-gated write tool after operator confirm.
+
+    RBAC is enforced inside ``dispatch_tool``. N06 audit is written
+    on success so the compliance pack can see ChatSidebar mutations.
+    """
+    from eden.autonomous.agent import (
+        _APPROVAL_GATED_TOOLS,
+        _SPEND_CONFIRM_TOOLS,
+        dispatch_tool,
+    )
+
+    user_id = user["user_id"]
+    user_role = await _resolve_user_role(org_id, user_id)
+    allowed = _APPROVAL_GATED_TOOLS | _SPEND_CONFIRM_TOOLS
+    if body.tool not in allowed:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Tool {body.tool!r} is not approval-gated",
+        )
+
+    tc = await dispatch_tool(
+        body.tool,
+        body.args or {},
+        tenant_id=org_id,
+        user_role=user_role,
+        execute_approved=True,
+    )
+    if tc.error:
+        status_code = (
+            status.HTTP_403_FORBIDDEN
+            if "permission_denied" in tc.error
+            else status.HTTP_400_BAD_REQUEST
+        )
+        raise HTTPException(status_code=status_code, detail=tc.error)
+
+    try:
+        pg = await get_postgres_client()
+        await log_audit_event(
+            client=pg,
+            org_id=org_id,
+            user_id=user_id,
+            action=f"ai_insights.tool.approve.{body.tool}",
+            target_type="ai_tool",
+            target_id=body.session_id or body.tool,
+            metadata={"tool": body.tool, "args": body.args or {}},
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("ai_insights: approve audit failed (non-fatal): %s", exc)
+
+    return {
+        "tool": body.tool,
+        "status": "ok",
+        "result": tc.result,
+        "duration_ms": tc.latency_ms,
+    }
 
 
 @router.get("/sessions")
@@ -588,8 +712,8 @@ async def list_sessions(
         client = await get_postgres_client()
         rows = await client.fetch(
             """
-            SELECT session_id, title, created_at, updated_at, archived_at
-            FROM ai_insights_chat_sessions
+            SELECT id AS session_id, title, created_at, updated_at, archived_at
+            FROM ai_conversations
             WHERE org_id = $1 AND user_id = $2
             ORDER BY (archived_at IS NULL) DESC, updated_at DESC
             LIMIT $3
@@ -639,52 +763,20 @@ async def list_messages(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Session not found",
         )
-    try:
-        client = await get_postgres_client()
-        rows = await client.fetch(
-            """
-            SELECT message_id, role, content_jsonb, created_at
-            FROM ai_insights_chat_messages
-            WHERE session_id = $1
-            ORDER BY created_at ASC
-            """,
-            session_id,
-        )
-    except Exception as exc:
-        logger.warning(
-            "ai_insights: list_messages failed for user=%s org=%s session=%s: %s",
-            user_id, org_id, session_id, redact_all(str(exc)),
-        )
-        rows = []
-    if not rows:
-        from eden.autonomous.insights_compat import list_messages_from_conversation
+    from eden.autonomous.insights_compat import list_messages_from_conversation
 
-        compat = await list_messages_from_conversation(session_id)
-        if compat:
-            return {
-                "session_id": session_id,
-                "title": existing["title"],
-                "messages": [
-                    {
-                        "message_id": f"compat_{i}",
-                        "role": m["role"],
-                        "content": m["content"],
-                        "created_at": m.get("created_at"),
-                    }
-                    for i, m in enumerate(compat)
-                ],
-            }
+    compat = await list_messages_from_conversation(session_id)
     return {
         "session_id": session_id,
         "title": existing["title"],
         "messages": [
             {
-                "message_id": str(r["message_id"]),
-                "role": r["role"],
-                "content": r["content_jsonb"],
-                "created_at": r["created_at"].isoformat() if r["created_at"] else None,
+                "message_id": f"msg_{i}",
+                "role": m["role"],
+                "content": m["content"],
+                "created_at": m.get("created_at"),
             }
-            for r in rows
+            for i, m in enumerate(compat)
         ],
     }
 
@@ -712,7 +804,7 @@ async def archive_session(
     try:
         client = await get_postgres_client()
         await client.execute(
-            "UPDATE ai_insights_chat_sessions SET archived_at = NOW() WHERE session_id = $1",
+            "UPDATE ai_conversations SET archived_at = NOW() WHERE id = $1",
             session_id,
         )
     except Exception as exc:

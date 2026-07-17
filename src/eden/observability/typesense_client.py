@@ -203,13 +203,23 @@ def build_span_doc(event: Any) -> dict[str, Any]:
     input_text = _extract_text(event.request_body)
     output_text = _extract_text(event.response_body)
 
-    # PII redaction before index — apply the Cat 10 / org PII masker
-    # synchronously so build_span_doc stays a pure-ish function usable
-    # from sync and async contexts. Fail-open: any masker exception
-    # leaves the text as-is rather than dropping the document.
+    # PII redaction before index — Wave 1 fail-closed: masker exceptions
+    # refuse the document (raise) so unmasked PII is never indexed.
+    # Tenant policy is resolved when ``event.tenant_id`` is present.
     try:
-        from eden.data_platform.pii import PIIMasker, PIIPolicy
-        _masker = PIIMasker(policy=PIIPolicy())
+        from eden.data_platform.pii import PIIMasker, PIIMaskingError, PIIPolicy
+
+        policy = PIIPolicy()
+        tenant = getattr(event, "tenant_id", None) or ""
+        if tenant:
+            try:
+                from eden.observability.ingestion.pii_policy import resolve_policy_sync
+
+                policy = resolve_policy_sync(tenant) or policy
+            except Exception:
+                # Sync resolver may be unavailable; keep default policy.
+                pass
+        _masker = PIIMasker(policy=policy)
         if input_text:
             _masked = _masker.mask(input_text)
             input_text = _masked if isinstance(_masked, str) else input_text
@@ -217,7 +227,16 @@ def build_span_doc(event: Any) -> dict[str, Any]:
             _masked = _masker.mask(output_text)
             output_text = _masked if isinstance(_masked, str) else output_text
     except Exception as _pii_exc:
-        logger.debug("Typesense PII mask failed (non-fatal): %s", _pii_exc)
+        from eden.data_platform.pii import PIIMaskingError
+
+        if isinstance(_pii_exc, PIIMaskingError):
+            raise
+        logger.warning(
+            "Typesense PII mask failed; refusing index for tenant=%s: %s",
+            getattr(event, "tenant_id", None),
+            _pii_exc,
+        )
+        raise
 
     attrs = event.attributes if isinstance(event.attributes, dict) else {}
     tool_names = _extract_tool_names(attrs, event.request_body)
@@ -467,14 +486,23 @@ class TypesenseClient:
         The ``filter_by`` syntax is ``tenant_id:='x' && trace_id:='y'``.
         """
         flt = f"tenant_id:={tenant_id} && trace_id:={trace_id}"
+        return await self.delete_by_filter(flt)
+
+    async def delete_by_filter(self, filter_by: str) -> int:
+        """Bulk-delete docs matching a Typesense ``filter_by`` expression."""
         status, body = await self._request(
             "DELETE",
             f"/collections/{self._collection}/documents",
-            params={"filter_by": flt},
+            params={"filter_by": filter_by},
         )
         if status in (200, 201, 202) and isinstance(body, dict):
             return int(body.get("num_deleted", 0))
         return 0
+
+    async def delete_by_user(self, tenant_id: str, user_id: str) -> int:
+        """RTBF: delete spans attributed to ``user_id`` within a tenant."""
+        flt = f"tenant_id:={tenant_id} && user_id:={user_id}"
+        return await self.delete_by_filter(flt)
 
     # ── Health ─────────────────────────────────────────────────────
 

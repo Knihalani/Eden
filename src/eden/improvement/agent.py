@@ -94,13 +94,25 @@ def _parse_deps_from_lockfile(path: str, content: str) -> list[str]:
     return names
 
 
-def _agent_enabled() -> bool:
+def _agent_enabled(org_id: str) -> bool:
+    """Sync gate for sweep entry — checks global flag only (async routes use gates)."""
     try:
         from eden.config import get_settings
 
-        return bool(getattr(get_settings(), "improvement_agent_v1", False))
+        if getattr(get_settings(), "improvement_agent_v1", False):
+            return True
     except Exception:
-        return False
+        pass
+    return False
+
+
+async def _agent_enabled_for_org(org_id: str) -> bool:
+    try:
+        from eden.preview.gates import improvement_agent_enabled
+
+        return await improvement_agent_enabled(org_id)
+    except Exception:
+        return _agent_enabled(org_id)
 
 
 class ImprovementAgent:
@@ -115,7 +127,7 @@ class ImprovementAgent:
         issue_id: str | None = None,
         trigger: str = "manual",
     ) -> dict[str, Any]:
-        if not _agent_enabled():
+        if not await _agent_enabled_for_org(org_id):
             return {"status": "disabled", "reason": "improvement_agent_v1=false"}
 
         watermark = since or await runs_repo.get_watermark(org_id)

@@ -945,32 +945,76 @@ async def _execute_rollback(
 
 
 async def _execute_reweight(after_state: dict[str, Any]) -> dict[str, Any]:
-    """Record a reweight intent. The Cat 14 drift_alert hook
-    fires on the status change; a downstream worker can subscribe
-    and tune the actual ModelRouter T3→T2 fallback threshold.
+    """Shift model router weights away from the heaviest model (N21).
 
-    In-process: no shared router state to mutate. The audit log
-    captures the intent so the change is observable.
+    Best-effort UPDATE of ``model_router_weights`` when rows exist; always
+    records intent + fires the drift-alert hook for downstream workers.
     """
+    org_id = after_state.get("org_id", "unknown")
+    shifted = False
+    try:
+        from eden.storage.postgres import get_postgres_client
+
+        client = await get_postgres_client()
+        if client is not None:
+            rows = await client.fetch(
+                "SELECT model, weight FROM model_router_weights "
+                "WHERE org_id = $1 ORDER BY weight DESC NULLS LAST",
+                org_id,
+            )
+            if rows and len(rows) >= 2:
+                heavy = dict(rows[0])
+                light = dict(rows[1])
+                heavy_w = float(heavy.get("weight") or 1.0)
+                light_w = float(light.get("weight") or 0.0)
+                delta = min(0.2, heavy_w * 0.25)
+                new_heavy = max(0.05, heavy_w - delta)
+                new_light = light_w + (heavy_w - new_heavy)
+                await client.execute(
+                    "UPDATE model_router_weights SET weight = $3 "
+                    "WHERE org_id = $1 AND model = $2",
+                    org_id,
+                    heavy["model"],
+                    new_heavy,
+                )
+                await client.execute(
+                    "UPDATE model_router_weights SET weight = $3 "
+                    "WHERE org_id = $1 AND model = $2",
+                    org_id,
+                    light["model"],
+                    new_light,
+                )
+                after_state["from_model"] = heavy["model"]
+                after_state["to_model"] = light["model"]
+                after_state["weights"] = {
+                    heavy["model"]: new_heavy,
+                    light["model"]: new_light,
+                }
+                shifted = True
+    except Exception as exc:
+        logger.debug("reweight: weight update failed: %s", exc)
+        after_state["weight_error"] = str(exc)
+
     try:
         from eden.llmops.promotion_hooks import PromotionHook
-        # G11: signature is ``(org_id, *, drift_type, severity)`` — the
-        # old ``context=`` kwarg raised a (swallowed) TypeError so the
-        # hook never fired; ``severity="info"`` was also off-whitelist.
+
         await PromotionHook().on_drift_alert(
-            after_state.get("org_id", "unknown"),
+            org_id,
             drift_type="self_heal_reweight",
             severity="low",
         )
     except Exception as exc:
-        # The hook is best-effort; the reweight itself always
-        # succeeds in the audit log.
         logger.debug("reweight: drift_alert hook failed: %s", exc)
     after_state["executed"] = True
     after_state["reweighted"] = True
+    after_state["weights_shifted"] = shifted
     after_state["note"] = (
-        "T3→T2 fallback threshold bumped (intent recorded; "
-        "PromotionHook.on_drift_alert fired for downstream workers)"
+        "model router weights shifted"
+        if shifted
+        else (
+            "reweight intent recorded (no model_router_weights rows); "
+            "PromotionHook.on_drift_alert fired for downstream workers"
+        )
     )
     return after_state
 
@@ -1156,18 +1200,35 @@ async def _capture_before_state(
 
 
 async def _heal_precheck(org_id: str, action_type: str) -> str | None:
-    """N21 guardrails — policy deny + daily rollback cap."""
+    """N21/W24 guardrails — kill switch + policy deny + daily rollback cap."""
+    action = action_type or "heal"
+    # Kill switches fail-closed (unknown / DB error → blocked).
     try:
-        from eden.closed_loop.autonomy_policy import decide, resolve
+        from eden.llmops.feature_kills import is_autonomy_action_enabled
+
+        if not await is_autonomy_action_enabled(org_id, action):
+            return f"kill switch disabled for action class {action!r}"
+    except Exception as exc:
+        logger.debug("heal_precheck kill switch failed: %s", exc)
+        return "kill switch check failed (fail-closed)"
+
+    try:
+        from eden.closed_loop.autonomy_policy import audit, decide, resolve
 
         policy = await resolve(org_id, None)
-        verdict, reason, _tier = decide(policy, action_type or "heal")
+        verdict, reason, tier = decide(policy, action)
+        await audit(
+            org_id,
+            agent_id=None,
+            action=action,
+            tier=tier,
+            decision=verdict,
+            reason=reason or "heal_precheck",
+        )
         if verdict == "deny":
             return reason or "heal denied by autonomy policy"
         if action_type == "rollback":
-            from eden.config import get_settings
-
-            cap = int(getattr(get_settings(), "max_auto_rollbacks_per_day", 3))
+            cap = int(policy.max_auto_rollbacks_per_day or 3)
             from eden.storage.postgres import get_postgres_client
 
             client = await get_postgres_client()
@@ -1183,6 +1244,7 @@ async def _heal_precheck(org_id: str, action_type: str) -> str | None:
                     return f"daily rollback cap ({cap}) reached"
     except Exception as exc:
         logger.debug("heal_precheck failed: %s", exc)
+        return "heal precheck failed (fail-closed)"
     return None
 
 

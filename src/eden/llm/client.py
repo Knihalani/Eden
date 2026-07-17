@@ -608,13 +608,27 @@ class OpenRouterClient:
         return result
 
     def _log_usage(self, response: LLMResponse) -> None:
-        """Log usage for cost tracking."""
+        """Log usage for cost tracking + customer CostEvent write-through."""
         self._usage_log.append(response.usage)
         logger.debug(
             f"LLM call: model={response.model}, "
             f"tokens={response.usage.total_tokens}, "
             f"cost={response.usage.cost}"
         )
+        try:
+            from eden.llmops.cost_ledger import schedule_record_from_usage
+
+            schedule_record_from_usage(
+                model=response.model or "unknown",
+                prompt_tokens=int(response.usage.prompt_tokens or 0),
+                completion_tokens=int(response.usage.completion_tokens or 0),
+                total_tokens=int(response.usage.total_tokens or 0),
+                cost_usd=float(response.usage.cost)
+                if response.usage.cost is not None
+                else None,
+            )
+        except Exception as exc:
+            logger.debug("OpenRouterClient cost ledger write-through failed: %s", exc)
 
     def get_total_usage(self) -> UsageStats:
         """Get aggregated usage statistics."""

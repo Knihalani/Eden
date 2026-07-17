@@ -86,11 +86,11 @@ export default function FineTuneLineagePage() {
     return (
       <PageContent size="narrow" className="space-y-4">
         <Link
-          href="/observability"
+          href="/traces"
           className="inline-flex items-center gap-2 text-sm text-[var(--text-secondary)] hover:text-[var(--accent)]"
         >
           <ArrowLeft className="w-4 h-4" />
-          Back to observability
+          Back to traces
         </Link>
         <ErrorState
           title="Could not load lineage"
@@ -121,11 +121,11 @@ export default function FineTuneLineagePage() {
   return (
     <PageContent size="default">
       <Link
-        href="/observability"
+        href="/traces"
         className="inline-flex items-center gap-2 text-sm text-[var(--text-secondary)] hover:text-[var(--accent)]"
       >
         <ArrowLeft className="w-4 h-4" />
-        Back to observability
+        Back to traces
       </Link>
 
       <PageHeader

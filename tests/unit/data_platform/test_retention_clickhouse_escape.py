@@ -9,6 +9,13 @@ f-string. The ClickHouse HTTP endpoint does not support
 parameterised queries, so the only safe path is to escape single
 quotes (SQL-standard doubled-quote) before substitution.
 
+As of the Wave 6 GA hardening pass, ``_delete_from_clickhouse`` issues
+TWO ``ALTER TABLE ... DELETE`` statements — one against
+``metrics.agent_performance`` (keyed on ``tenant_id``) and one against
+``default.telemetry_events_ch`` (keyed on ``org_id``, since that table
+mirrors Postgres ``telemetry_events`` for GDPR completeness). Both
+statements must escape the same way.
+
 The admin-only ``DELETE /gdpr/tenant`` endpoint forwards
 ``tenant_id`` straight from the URL path into this function, so
 a malicious or compromised admin could otherwise inject arbitrary
@@ -41,6 +48,7 @@ def _make_fake_session(captured: dict):
 
     captured["ctx_enter_called"] = False
     captured["post_called"] = False
+    captured["bodies"] = []
 
     resp = _FakeResp()
     ctx = AsyncMock()
@@ -55,7 +63,10 @@ def _make_fake_session(captured: dict):
         captured["post_called"] = True
         captured["url"] = url
         body = data
-        captured["body"] = body.decode("utf-8") if isinstance(body, (bytes, bytearray)) else body
+        decoded = body.decode("utf-8") if isinstance(body, (bytes, bytearray)) else body
+        captured["bodies"].append(decoded)
+        # Kept for backward-compat with call sites expecting the last body.
+        captured["body"] = decoded
         return ctx
 
     session.post = _post
@@ -76,16 +87,25 @@ async def test_delete_from_clickhouse_escapes_single_quotes() -> None:
         # if the escape regressed.
         await mgr._delete_from_clickhouse("evil'; DROP TABLE x; --")
 
-    assert "tenant_id = 'evil''; DROP TABLE x; --'" in captured["body"], (
-        f"Expected SQL-standard doubled-quote escape in body; got: {captured['body']!r}"
+    all_bodies = " | ".join(captured["bodies"])
+    assert "tenant_id = 'evil''; DROP TABLE x; --'" in all_bodies, (
+        f"Expected SQL-standard doubled-quote escape in agent_performance body; got: {all_bodies!r}"
     )
-    # And the original attack string must NOT appear unmodified.
-    assert "evil'; DROP TABLE x; --'" not in captured["body"]
+    assert "org_id = 'evil''; DROP TABLE x; --'" in all_bodies, (
+        f"Expected SQL-standard doubled-quote escape in telemetry_events_ch body; got: {all_bodies!r}"
+    )
+    # And the original attack string must NOT appear unmodified anywhere.
+    assert "evil'; DROP TABLE x; --'" not in all_bodies
 
 
 @pytest.mark.asyncio
 async def test_delete_from_clickhouse_returns_one_on_success() -> None:
-    """Successful ALTER DELETE returns 1 (matches the existing contract)."""
+    """Successful ALTER DELETE returns the count of tables purged.
+
+    Wave 6 added a second DELETE against ``telemetry_events_ch``, so a
+    fully successful run now purges 2 tables (agent_performance +
+    telemetry_events_ch), not 1.
+    """
     captured: dict = {}
     fake_session = _make_fake_session(captured)
 
@@ -95,7 +115,7 @@ async def test_delete_from_clickhouse_returns_one_on_success() -> None:
         mgr = DataRetentionManager()
         out = await mgr._delete_from_clickhouse("00000000-0000-0000-0000-000000000001")
 
-    assert out == 1
+    assert out == 2
 
 
 @pytest.mark.asyncio

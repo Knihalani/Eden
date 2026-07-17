@@ -171,6 +171,27 @@ async def _fetch_action_by_id(
     return _row_to_dict(row) if row else None
 
 
+_MUTATING_ACTION_KINDS = frozenset(
+    {
+        "rollback",
+        "rollback_canary",
+        "reweight",
+        "cache_bust",
+        "propose_patch",
+        "propose_patch_from_rca",
+    }
+)
+
+_ACTION_KIND_TO_POLICY: dict[str, str] = {
+    "rollback": "rollback",
+    "rollback_canary": "rollback",
+    "reweight": "reweight",
+    "cache_bust": "cache_bust",
+    "propose_patch": "propose_patch",
+    "propose_patch_from_rca": "propose_patch",
+}
+
+
 async def _dispatch_side_effect(
     org_id: str, action: dict[str, Any]
 ) -> dict[str, Any]:
@@ -192,6 +213,33 @@ async def _dispatch_side_effect(
     target = action.get("target")
     issue_id = payload.get("issue_id") if isinstance(payload, dict) else None
 
+    if kind in _MUTATING_ACTION_KINDS:
+        try:
+            from eden.closed_loop.autonomy_policy import audit, decide, resolve
+
+            policy_action = _ACTION_KIND_TO_POLICY.get(kind, kind)
+            policy = await resolve(org_id, None)
+            verdict, reason, tier = decide(policy, policy_action)
+            await audit(
+                org_id,
+                agent_id=None,
+                action=policy_action,
+                tier=tier,
+                decision=verdict,
+                reason=reason or "closed_loop_executor",
+            )
+            if verdict != "allow":
+                return {
+                    "side_effect": "denied",
+                    "detail": {"reason": reason, "tier": tier, "action_kind": kind},
+                }
+        except Exception as exc:
+            logger.debug("closed_loop_executor: N22 gate failed: %s", exc)
+            return {
+                "side_effect": "denied",
+                "detail": {"reason": "autonomy policy unavailable", "error": str(exc)},
+            }
+
     try:
         if kind == "investigate":
             if issue_id:
@@ -212,6 +260,21 @@ async def _dispatch_side_effect(
 
             after = await _execute_rollback(org_id, {}, {"action_type": "rollback"})
             return {"side_effect": "rollback", "detail": after}
+
+        if kind == "block_promotion":
+            # N18 degrade-on-judge side-effect via closed-loop executor.
+            try:
+                from eden.llmops.promotion_hooks import get_promotion_hook
+
+                hook = get_promotion_hook()
+                judge = ""
+                if isinstance(payload, dict):
+                    judge = str(payload.get("judge_name") or target or "")
+                n = await hook._degrade_active_canaries(org_id, judge_name=judge)
+                return {"side_effect": "block_promotion", "detail": {"degraded": n}}
+            except Exception as exc:
+                logger.debug("dispatch: block_promotion failed: %s", exc)
+                return {"side_effect": "recorded", "detail": {"kind": kind}}
 
         if kind == "reweight":
             from eden.autonomous.investigation import _execute_reweight

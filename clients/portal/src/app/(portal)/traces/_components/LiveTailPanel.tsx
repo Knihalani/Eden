@@ -6,6 +6,7 @@
  */
 
 import { Pause, Play, Radio, RefreshCw, Trash2 } from "lucide-react";
+import { useEffect, useRef } from "react";
 import { useObservabilityStream } from "@/hooks/use-observability-stream";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -23,6 +24,17 @@ export function LiveTailPanel({
 }: LiveTailPanelProps) {
   const { connected, events, paused, failed, pause, resume, clear, retry } =
     useObservabilityStream({ orgId, maxEvents: 40, enabled });
+  const listRef = useRef<HTMLUListElement>(null);
+  const prevLen = useRef(events.length);
+
+  useEffect(() => {
+    if (events.length > prevLen.current && listRef.current) {
+      listRef.current.classList.remove("live-append-pulse");
+      void listRef.current.offsetWidth;
+      listRef.current.classList.add("live-append-pulse");
+    }
+    prevLen.current = events.length;
+  }, [events.length]);
 
   return (
     <section
@@ -105,7 +117,10 @@ export function LiveTailPanel({
           Waiting for new traces…
         </p>
       ) : (
-        <ul className="max-h-48 overflow-y-auto divide-y divide-[var(--border-subtle)]">
+        <ul
+          ref={listRef}
+          className="max-h-48 overflow-y-auto divide-y divide-[var(--border-subtle)]"
+        >
           {events.map((ev) => (
             <li key={ev.trace_id}>
               <button

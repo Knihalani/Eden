@@ -1,36 +1,13 @@
 """Cat 10 — Governance Intelligence (Compliance + Security + Approvals).
 
-Package layout:
-
-* :mod:`._common` — shared envelope / Postgres helper / ID gen /
-  hook firing (mirrors :mod:`eden.services.user_intel._common`
-  and :mod:`eden.services.cost_intel._common`).
-* :mod:`.approval`  — :class:`ApprovalWorkflowService`
-* :mod:`.compliance` — :class:`ComplianceEvidenceGenerator`
-  (SOC 2 / HIPAA / GDPR / ISO 27001)
-* :mod:`.security`  — :class:`SecurityScanner`
-  (Datadog Sensitive Data Scanner parity)
-* :mod:`.gdpr`      — :class:`RightToBeForgottenService` (v2)
-* :mod:`.lineage`   — :class:`DataLineageService` (v2)
-* :mod:`.dashboard` — :class:`ComplianceDashboardService` (v2)
-
-Mirrors the layout of :mod:`eden.services.user_intel`.
+Eager imports removed (W9) — heavy compliance/security stacks pull numpy
+and other native deps; submodule imports stay cheap for RTBF fanout tests
+and hot paths.
 """
 
-from eden.services.governance_intel.approval import ApprovalWorkflowService
-from eden.services.governance_intel.compliance import ComplianceEvidenceGenerator
-from eden.services.governance_intel.dashboard import ComplianceDashboardService
-from eden.services.governance_intel.gdpr import RightToBeForgottenService
-from eden.services.governance_intel.lineage import DataLineageService
-from eden.services.governance_intel.rtbf_tracker import (
-    ALL_RTBF_STATUSES,
-    RTBF_STATUS_COMPLETED,
-    RTBF_STATUS_FAILED,
-    RTBF_STATUS_IN_PROGRESS,
-    RTBF_STATUS_PENDING,
-    RtbfRequestTracker,
-)
-from eden.services.governance_intel.security import SecurityScanner
+from __future__ import annotations
+
+from typing import Any
 
 __all__ = [
     "ApprovalWorkflowService",
@@ -39,7 +16,6 @@ __all__ = [
     "DataLineageService",
     "RightToBeForgottenService",
     "SecurityScanner",
-    # Phase K — RTBF lifecycle.
     "RtbfRequestTracker",
     "RTBF_STATUS_PENDING",
     "RTBF_STATUS_IN_PROGRESS",
@@ -47,3 +23,30 @@ __all__ = [
     "RTBF_STATUS_FAILED",
     "ALL_RTBF_STATUSES",
 ]
+
+_LAZY: dict[str, tuple[str, str]] = {
+    "ApprovalWorkflowService": (".approval", "ApprovalWorkflowService"),
+    "ComplianceEvidenceGenerator": (".compliance", "ComplianceEvidenceGenerator"),
+    "ComplianceDashboardService": (".dashboard", "ComplianceDashboardService"),
+    "RightToBeForgottenService": (".gdpr", "RightToBeForgottenService"),
+    "DataLineageService": (".lineage", "DataLineageService"),
+    "SecurityScanner": (".security", "SecurityScanner"),
+    "RtbfRequestTracker": (".rtbf_tracker", "RtbfRequestTracker"),
+    "ALL_RTBF_STATUSES": (".rtbf_tracker", "ALL_RTBF_STATUSES"),
+    "RTBF_STATUS_COMPLETED": (".rtbf_tracker", "RTBF_STATUS_COMPLETED"),
+    "RTBF_STATUS_FAILED": (".rtbf_tracker", "RTBF_STATUS_FAILED"),
+    "RTBF_STATUS_IN_PROGRESS": (".rtbf_tracker", "RTBF_STATUS_IN_PROGRESS"),
+    "RTBF_STATUS_PENDING": (".rtbf_tracker", "RTBF_STATUS_PENDING"),
+}
+
+
+def __getattr__(name: str) -> Any:
+    if name not in _LAZY:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    mod_name, attr = _LAZY[name]
+    from importlib import import_module
+
+    mod = import_module(mod_name, __name__)
+    value = getattr(mod, attr)
+    globals()[name] = value
+    return value

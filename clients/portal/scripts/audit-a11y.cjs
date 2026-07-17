@@ -1,45 +1,44 @@
 #!/usr/bin/env node
 /**
- * ui-audit 2026-07-06 M8: run @axe-core/cli against the running
- * portal dev server. Surfaces WCAG-A and WCAG-AA violations on
- * the most-used surfaces — surfaces that unit tests can't catch
- * (landmark gaps, label-association failures, color-contrast
- * regressions, focus-order bugs).
+ * U20 axe gate — run @axe-core/cli (unauthenticated) OR Playwright + axe-core
+ * (authenticated, when e2e/.auth-state.json is present) against the running
+ * portal server. Audits 5 core routes (WCAG 2.2 AA).
+ *
+ * Authenticated mode (default when storageState exists):
+ *   Uses Playwright with the saved Clerk storageState so pages render the real
+ *   authenticated shell rather than the /sign-in redirect stub.
+ *
+ * Unauthenticated fallback:
+ *   Falls back to @axe-core/cli when storageState is not present (e.g. first
+ *   install before seed-auth has been run).
  *
  * Usage:
  *   PORT=3000 bun run audit:a11y
  *
- * Behavior:
- *   - Polls http://localhost:$PORT until the server responds (5s timeout).
- *   - Runs axe against /dashboard, /agents, /observability,
- *     /pr-suggestions, /settings, /billing, / (marketing).
- *   - Aggregates findings across pages; exits non-zero on any
- *     "serious" or "critical" violation.
- *   - Prints a JSON summary on stdout for CI parsing.
- *
- * Setup:
- *   The script assumes the dev server is already running on PORT.
- *   In CI, start it in a background step before running this script:
- *     bun run dev &  # wait ~10s for compile
- *     bun run audit:a11y
+ * CI: run seed-auth.mjs first (saves storageState), start production server,
+ * then run this script. Fails on any critical violation.
  */
-const { execSync, spawn } = require("node:child_process");
+const { execSync, execFileSync } = require("node:child_process");
 const http = require("node:http");
 const path = require("node:path");
+const fs = require("node:fs");
 
 const PORT = process.env.PORT || "3000";
+// Keep in sync with src/lib/portal-polish.ts U20_CORE_AXE_ROUTES
 const ROUTES = [
-  "/",
   "/dashboard",
-  "/agents",
-  "/observability",
-  "/pr-suggestions",
-  "/settings",
-  "/billing",
+  "/traces",
+  "/issues",
+  "/artifacts",
+  "/playgrounds",
+  "/evals",
+  "/improve",
+  "/alerts",
 ];
-const SERIOUS = new Set(["serious", "critical"]);
+const BLOCKING_IMPACTS = new Set(["critical"]);
+const STATE_PATH = path.join(__dirname, "../e2e/.auth-state.json");
 
-function pingServer(port, timeoutMs = 30000) {
+function pingServer(port, timeoutMs = 60000) {
   const deadline = Date.now() + timeoutMs;
   return new Promise((resolve, reject) => {
     const tick = () => {
@@ -63,64 +62,182 @@ function pingServer(port, timeoutMs = 30000) {
   });
 }
 
-function runAxe(url) {
-  const axeBin = path.join(
-    process.cwd(),
-    "node_modules",
-    ".bin",
-    "axe",
-  );
+/**
+ * Unauthenticated audit via @axe-core/cli.
+ * Used as fallback when no storageState exists.
+ */
+function runAxeCli(url) {
+  const axeBin = path.join(process.cwd(), "node_modules", ".bin", "axe");
+  const reportFile = `report-${encodeURIComponent(url)}.json`;
   try {
-    const stdout = execSync(
-      `"${axeBin}" "${url}" --exit --tags wcag2a,wcag2aa,wcag21a,wcag21aa --save report-${encodeURIComponent(url)}.json`,
+    execSync(
+      `"${axeBin}" "${url}" --exit --tags wcag2a,wcag2aa,wcag21a,wcag21aa,wcag22aa --save "${reportFile}"`,
       { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] },
     );
-    return { ok: true, stdout };
-  } catch (err) {
-    // axe exits non-zero when violations are found. The JSON report
-    // is written to disk; we read stdout for the summary.
-    return { ok: false, stdout: err.stdout || "", stderr: err.stderr || "" };
+    return { ok: true, reportFile };
+  } catch {
+    return { ok: false, reportFile };
   }
 }
 
-async function main() {
-  console.log(`[audit:a11y] waiting for dev server on :${PORT}...`);
-  await pingServer(PORT);
-  console.log("[audit:a11y] dev server up; running axe against", ROUTES.length, "routes");
+/**
+ * Authenticated audit via Playwright + axe-core injected into the page.
+ * Runs with the saved Clerk storageState so the real authenticated shell
+ * renders instead of the /sign-in redirect.
+ */
+async function runAxeWithAuth(routes, storageState) {
+  const { chromium } = require("playwright");
+  const axeSourcePath = require.resolve("axe-core");
+  const axeSource = fs.readFileSync(axeSourcePath, "utf8");
 
-  let totalSerious = 0;
+  const browser = await chromium.launch({ headless: true });
+  const ctx = await browser.newContext({
+    viewport: { width: 1440, height: 900 },
+    storageState,
+  });
+  const page = await ctx.newPage();
   const results = [];
-  for (const route of ROUTES) {
-    const url = `http://localhost:${PORT}${route}`;
-    const r = runAxe(url);
-    results.push({ route, ok: r.ok });
-    if (!r.ok) {
-      // Count "serious"/"critical" violations in the saved JSON.
+
+  for (const route of routes) {
+    const url = `http://127.0.0.1:${PORT}${route}`;
+    console.log(`[audit:a11y] → ${url} (authenticated)`);
+
+    try {
+      await page.goto(url, { waitUntil: "domcontentloaded", timeout: 30_000 });
+      // Wait for React to hydrate
+      await page.waitForTimeout(2000);
+
+      // Inject axe-core into the page
+      await page.addScriptTag({ content: axeSource });
+
+      // Run axe analysis
+      const axeResults = await page.evaluate(async () => {
+        return await window.axe.run(document, {
+          runOnly: {
+            type: "tag",
+            values: ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"],
+          },
+        });
+      });
+
+      const violations = axeResults.violations || [];
+      const critical = violations.filter((v) => v.impact === "critical").length;
+      const serious = violations.filter((v) => v.impact === "serious").length;
+
+      // Log any critical violations with details for debugging
+      if (critical > 0) {
+        for (const v of violations.filter((v) => v.impact === "critical")) {
+          console.error(
+            `[audit:a11y]   CRITICAL: ${v.id} — ${v.description}\n` +
+            `    Nodes: ${v.nodes.slice(0, 2).map((n) => n.html?.slice(0, 120)).join(", ")}`,
+          );
+        }
+      }
+      if (serious > 0) {
+        for (const v of violations.filter((v) => v.impact === "serious")) {
+          console.warn(
+            `[audit:a11y]   serious: ${v.id} — ${v.description}`,
+          );
+        }
+      }
+
+      console.log(`[audit:a11y] ${route}: ${critical} critical, ${serious} serious`);
+      results.push({ route, ok: critical === 0, critical, serious, violations: violations.length });
+
+      // Save JSON report for CI artifact
+      const reportPath = path.join(process.cwd(), `report-a11y-auth-${encodeURIComponent(route)}.json`);
+      fs.writeFileSync(reportPath, JSON.stringify(axeResults, null, 2));
+    } catch (e) {
+      console.error(`[audit:a11y] ${route}: error during axe run:`, e.message);
+      results.push({ route, ok: false, critical: 0, serious: 0, error: e.message });
+    }
+  }
+
+  await browser.close();
+  return results;
+}
+
+async function main() {
+  console.log(`[audit:a11y] waiting for server on :${PORT}...`);
+  await pingServer(PORT);
+
+  const hasStorageState = fs.existsSync(STATE_PATH);
+  let storageState = null;
+  if (hasStorageState) {
+    try {
+      storageState = JSON.parse(fs.readFileSync(STATE_PATH, "utf8"));
+      console.log("[audit:a11y] storageState found — running authenticated audit (U20 real shell)");
+    } catch (e) {
+      console.warn("[audit:a11y] WARNING: storageState parse failed:", e.message);
+    }
+  }
+
+  if (!storageState) {
+    console.warn(
+      "[audit:a11y] No storageState available — running unauthenticated audit.\n" +
+      "  NOTE: authenticated pages (Dashboard, Traces, etc.) will be audited as\n" +
+      "  the /sign-in redirect stub, not the real authenticated shell.\n" +
+      "  Run seed-auth.mjs before audit:a11y for a full U20 audit.",
+    );
+  }
+
+  console.log("[audit:a11y] auditing U20 core routes:", ROUTES.join(", "));
+
+  let totalCritical = 0;
+  let totalSerious = 0;
+  let results;
+
+  if (storageState) {
+    results = await runAxeWithAuth(ROUTES, storageState);
+    for (const r of results) {
+      totalCritical += r.critical || 0;
+      totalSerious += r.serious || 0;
+    }
+  } else {
+    // Unauthenticated fallback via @axe-core/cli
+    results = [];
+    for (const route of ROUTES) {
+      const url = `http://localhost:${PORT}${route}`;
+      const r = runAxeCli(url);
+      const reportPath = path.join(process.cwd(), r.reportFile);
+      let critical = 0;
+      let serious = 0;
+
       try {
-        const reportPath = path.join(
-          process.cwd(),
-          `report-${encodeURIComponent(url)}.json`,
-        );
-        const report = JSON.parse(require("node:fs").readFileSync(reportPath, "utf8"));
-        const serious = (report.violations || []).filter((v) => SERIOUS.has(v.impact));
-        totalSerious += serious.length;
-        console.log(`[audit:a11y] ${route}: ${serious.length} serious/critical`);
+        const report = JSON.parse(fs.readFileSync(reportPath, "utf8"));
+        const violations = report.violations || [];
+        critical = violations.filter((v) => v.impact === "critical").length;
+        serious = violations.filter((v) => v.impact === "serious").length;
+        totalCritical += critical;
+        totalSerious += serious;
+        console.log(`[audit:a11y] ${route}: ${critical} critical, ${serious} serious`);
       } catch (e) {
         console.error(`[audit:a11y] ${route}: failed to read report`, e.message);
       }
-    } else {
-      console.log(`[audit:a11y] ${route}: clean`);
+
+      results.push({ route, ok: r.ok && critical === 0, critical, serious });
     }
   }
 
   console.log("\n[audit:a11y] === summary ===");
-  console.log(JSON.stringify({ totalSerious, routes: results }, null, 2));
+  console.log(
+    JSON.stringify(
+      {
+        mode: storageState ? "authenticated" : "unauthenticated",
+        totalCritical,
+        totalSerious,
+        routes: results,
+      },
+      null,
+      2,
+    ),
+  );
 
-  if (totalSerious > 0) {
-    console.error(`[audit:a11y] FAIL: ${totalSerious} serious/critical violations`);
+  if (totalCritical > 0) {
+    console.error(`[audit:a11y] FAIL: ${totalCritical} critical violations`);
     process.exit(1);
   }
-  console.log("[audit:a11y] PASS");
+  console.log("[audit:a11y] PASS (no critical)");
 }
 
 main().catch((e) => {

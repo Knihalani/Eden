@@ -269,6 +269,59 @@ class ClosedLoopOrchestrator:
     async def _request_heal(
         self, event: LoopEvent, triage_result: dict[str, Any]
     ) -> None:
+        from eden.closed_loop.playbooks import resolve_playbook
+
+        action_type = resolve_playbook(None, triage_result) or ""
+        for a in triage_result.get("suggested_actions") or []:
+            if isinstance(a, dict):
+                at = a.get("action_type") or a.get("type")
+                if at in _HEALABLE:
+                    action_type = at
+                    break
+        if action_type:
+            verdict = await self._decide_action(event, action_type)
+            if verdict != "allow":
+                logger.info(
+                    "orchestrator: heal blocked by N22 issue=%s action=%s verdict=%s",
+                    event.issue_id,
+                    action_type,
+                    verdict,
+                )
+                # Surface denial to Improve cockpit via audit (already
+                # written by _decide_action) + escalate when P0.
+                return
+
+        # Kill switch fail-closed before mutating.
+        if action_type:
+            try:
+                from eden.llmops.feature_kills import is_autonomy_action_enabled
+
+                if not await is_autonomy_action_enabled(
+                    event.org_id, action_type
+                ):
+                    from eden.closed_loop.autonomy_policy import audit
+
+                    await audit(
+                        event.org_id,
+                        agent_id=event.payload.get("agent_id"),
+                        action=action_type,
+                        tier="kill_switch",
+                        decision="deny",
+                        reason=f"kill switch disabled for {action_type}",
+                    )
+                    logger.info(
+                        "orchestrator: heal kill-switched issue=%s action=%s",
+                        event.issue_id,
+                        action_type,
+                    )
+                    return
+            except Exception as exc:
+                logger.warning(
+                    "orchestrator: kill switch check failed (fail-closed): %s",
+                    exc,
+                )
+                return
+
         await apply_transition(
             event.org_id,
             event.issue_id,

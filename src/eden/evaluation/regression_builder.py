@@ -50,9 +50,12 @@ class RegressionCaseBuilder:
 
     def __init__(self, pg: Any | None = None) -> None:
         self._pg = pg
+        self._memory_only = pg is None
         self._memory: list[RegressionCase] = []
 
     async def _client(self) -> Any | None:
+        if self._memory_only:
+            return None
         if self._pg is not None:
             return self._pg
         try:
@@ -61,6 +64,38 @@ class RegressionCaseBuilder:
             return await get_postgres_client()
         except Exception:
             return None
+
+    async def list_for_issue(
+        self, org_id: str, issue_id: str
+    ) -> list[RegressionCase]:
+        """Return permanent regression cases linked to an issue (D7)."""
+        memory_hits = [
+            c
+            for c in self._memory
+            if c.org_id == org_id and c.source_issue_id == issue_id
+        ]
+        client = await self._client()
+        if client is None:
+            return memory_hits
+        rows = await client.fetch(
+            """
+            SELECT id, org_id, dataset_id, source_issue_id, source_trace_id,
+                   fingerprint, auto_generated, input_data, expected_data,
+                   metadata, created_at
+            FROM regression_eval_cases
+            WHERE org_id = $1 AND source_issue_id = $2::uuid
+            ORDER BY created_at DESC
+            """,
+            org_id,
+            issue_id,
+        )
+        db_cases = [_row_to_case(dict(r)) for r in rows]
+        if memory_hits:
+            seen = {c.id for c in db_cases}
+            for c in memory_hits:
+                if c.id not in seen:
+                    db_cases.append(c)
+        return db_cases
 
     async def from_issue(
         self,

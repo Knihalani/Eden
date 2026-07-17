@@ -452,6 +452,13 @@ class LabelingService:
         items: list[LabelingItem] = []
         for row in rows[:limit]:
             item = _row_to_item(row)
+            try:
+                from eden.evaluation.labeling_leases import claim_lease
+
+                if not await claim_lease(org_id, item.id, annotator_id):
+                    continue
+            except Exception:
+                pass
             # Don't re-assign if already assigned.
             existing = await self._pg.fetchrow(
                 """
@@ -534,6 +541,12 @@ class LabelingService:
             """,
             item_id, annotator_id,
         )
+        try:
+            from eden.evaluation.labeling_leases import release_lease
+
+            await release_lease(org_id, item_id, annotator_id)
+        except Exception:
+            pass
         # If item has annotations_required annotations, flip
         # to "completed".
         item = await self._pg.fetchrow(

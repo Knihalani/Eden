@@ -1,0 +1,37 @@
+{
+  "trace_id": "tr-redacted-001",
+  "org_id": "org_seed_ga",
+  "realm": "staging",
+  "outcome": "failure",
+  "span_count": 12,
+  "duration_ms": 1840,
+  "agent_id": "support-bot",
+  "spans": [
+    {
+      "span_id": "sp-001",
+      "name": "agent.turn",
+      "event_type": "llm_call",
+      "duration_ms": 920,
+      "payload": {
+        "model": "gpt-4.1-mini",
+        "messages": [
+          { "role": "user", "content": "[REDACTED_USER_QUERY]" }
+        ],
+        "response": { "content": "[REDACTED_ASSISTANT_REPLY]" }
+      }
+    },
+    {
+      "span_id": "sp-002",
+      "name": "grep",
+      "event_type": "tool_invocation",
+      "duration_ms": 120,
+      "payload": {
+        "tool_name": "grep",
+        "arguments": { "pattern": "[REDACTED]" },
+        "result": "[REDACTED_TOOL_OUTPUT_TRUNCATED]"
+      }
+    }
+  ],
+  "issue_id": "iss-redacted-001",
+  "artifact_id": "art-shadow-001"
+}

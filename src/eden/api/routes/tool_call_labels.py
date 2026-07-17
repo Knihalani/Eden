@@ -8,7 +8,8 @@ from typing import Any
 from fastapi import APIRouter, Body, Depends, Path
 from pydantic import BaseModel, Field
 
-from eden.api.deps import get_current_user, require_org_member
+from eden.api.deps import get_current_user, require_feature_flag, require_org_member
+from eden.learning.tool_call_calibrator import list_calibrators, train_and_persist
 from eden.learning.tool_call_labels import ToolCallLabelCreate, ToolCallLabelService
 
 logger = logging.getLogger(__name__)
@@ -16,7 +17,10 @@ logger = logging.getLogger(__name__)
 router = APIRouter(
     prefix="/orgs/{org_id}/tool-calls",
     tags=["tool-call-labels"],
-    dependencies=[Depends(get_current_user)],
+    dependencies=[
+        Depends(get_current_user),
+        Depends(require_feature_flag("tool_call_label_learning_v1")),
+    ],
 )
 
 _svc = ToolCallLabelService()
@@ -52,7 +56,20 @@ async def label_tool_call(
             labeled_by=labeled_by or None,
         )
     )
-    return {"status": "ok", "feature": "tool_call_labels", "live": True, "data": result}
+    train_hint = None
+    if body.agent_id and await _svc.should_train(org_id, body.agent_id, body.tool_name):
+        try:
+            train_hint = await train_and_persist(org_id, body.agent_id, body.tool_name)
+        except Exception as exc:
+            logger.debug("calibrator train skipped: %s", exc)
+            train_hint = {"status": "train_error", "error": str(exc)}
+    return {
+        "status": "ok",
+        "feature": "tool_call_labels",
+        "live": True,
+        "data": result,
+        "calibrator": train_hint,
+    }
 
 
 @router.delete("/{span_id}/label")
@@ -85,3 +102,33 @@ async def list_tool_labels(
         "data": rows,
         "count": len(rows),
     }
+
+
+@router.get("/agents/{agent_id}/tool-calibrators")
+async def get_tool_calibrators(
+    org_id: str = Path(...),
+    agent_id: str = Path(...),
+    _member: dict = Depends(require_org_member),
+) -> dict[str, Any]:
+    rows = await list_calibrators(org_id, agent_id)
+    return {
+        "status": "ok",
+        "feature": "tool_call_labels",
+        "live": True,
+        "data": rows,
+        "count": len(rows),
+    }
+
+
+@router.post("/agents/{agent_id}/tool-calibrators/retrain")
+async def retrain_tool_calibrator(
+    org_id: str = Path(...),
+    agent_id: str = Path(...),
+    body: dict[str, Any] = Body(default_factory=dict),
+    _member: dict = Depends(require_org_member),
+) -> dict[str, Any]:
+    tool_name = str(body.get("tool_name") or "")
+    if not tool_name:
+        return {"status": "error", "error": "tool_name required"}
+    result = await train_and_persist(org_id, agent_id, tool_name)
+    return {"status": "ok", "feature": "tool_call_labels", "live": True, "data": result}

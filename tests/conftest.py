@@ -783,3 +783,29 @@ def _reset_trace_quality_state() -> None:
         hooks.reset_for_tests()
     except Exception:
         pass
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# LLM internal-router singleton reset (autouse)
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# ``eden.llm.internal_router.get_router()`` memoizes a
+# process-global ``ModelRouter`` the first time it's called with
+# no explicit ``llm_client`` — the memoized instance captures
+# whatever ``eden.llm.client.get_llm_client()`` returned *at that
+# moment*. Any test that patches ``get_llm_client`` after another
+# test already built the singleton gets silently ignored: calls
+# route through the stale (previous test's) mock instead of the
+# freshly-patched one. Reset it before every test so
+# ``route_async(...)`` / ``_call_llm(...)`` always re-resolve the
+# current ``get_llm_client()`` patch.
+@pytest.fixture(autouse=True)
+def _reset_llm_internal_router() -> None:
+    try:
+        from eden.llm import internal_router
+    except Exception:
+        yield
+        return
+    internal_router._default_router = None
+    yield
+    internal_router._default_router = None

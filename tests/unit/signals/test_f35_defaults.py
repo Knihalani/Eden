@@ -56,6 +56,29 @@ async def test_seed_org_signals_inserts_and_skips_dupes() -> None:
 
 
 @pytest.mark.asyncio
+async def test_seed_org_signals_inserts_eight_on_advanced_profile() -> None:
+    executed: list[tuple[Any, ...]] = []
+
+    class FakePg:
+        def __init__(self) -> None:
+            self._rows: list[dict[str, Any]] = []
+
+        async def fetch(self, *_a: Any, **_k: Any) -> list[dict[str, Any]]:
+            return list(self._rows)
+
+        async def execute(self, sql: str, *args: Any, **kwargs: Any) -> None:
+            executed.append((sql, args))
+
+    pg = FakePg()
+    result = await seed_org_signals("org_adv", profile="advanced", pg=pg)
+    assert result.count == 8
+    nl_inserts = [a for sql, a in executed if "INSERT INTO nl_signals" in sql]
+    def_inserts = [a for sql, a in executed if "INSERT INTO signal_definitions" in sql]
+    assert len(nl_inserts) == 8
+    assert len(def_inserts) == 8
+
+
+@pytest.mark.asyncio
 async def test_seed_missing_table_returns_zero() -> None:
     pg = AsyncMock()
     pg.fetch = AsyncMock(side_effect=Exception("relation nl_signals does not exist"))

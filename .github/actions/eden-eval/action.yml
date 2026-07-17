@@ -1,0 +1,115 @@
+name: eden-eval
+description: >
+  Run Eden regression eval on PR changes. Posts score table vs baseline
+  and fails the check when regression gate is block (F56 / N01).
+author: Eden
+
+inputs:
+  eden-api-key:
+    description: Eden API key
+    required: true
+  eden-org:
+    description: Target organization ID
+    required: true
+  eden-base-url:
+    description: Eden API base URL
+    required: false
+    default: https://api.eden.com
+  change-id:
+    description: Unique change identifier (e.g. PR number)
+    required: true
+  changed-files:
+    description: Newline-separated list of changed file paths
+    required: false
+    default: ""
+  agent-id:
+    description: Optional agent scope for regression suite
+    required: false
+    default: ""
+  fail-on-regression:
+    description: Fail workflow when gate is block
+    required: false
+    default: "true"
+
+outputs:
+  gate:
+    description: pass or block
+    value: ${{ steps.run.outputs.gate }}
+  regression-json:
+    description: Full regression result JSON
+    value: ${{ steps.run.outputs.regression_json }}
+
+runs:
+  using: composite
+  steps:
+    - name: Run Eden CI eval
+      id: run
+      shell: bash
+      env:
+        EDEN_API_KEY: ${{ inputs.eden-api-key }}
+        EDEN_ORG: ${{ inputs.eden-org }}
+        EDEN_BASE_URL: ${{ inputs.eden-base-url }}
+      run: |
+        set -euo pipefail
+        files_json=$(printf '%s' "${{ inputs.changed-files }}" | python -c "
+        import json, sys
+        text = sys.stdin.read().strip()
+        files = [l.strip() for l in text.splitlines() if l.strip()]
+        print(json.dumps(files))
+        ")
+        payload=$(python - <<PY
+        import json, os
+        print(json.dumps({
+            "change_id": "${{ inputs.change-id }}",
+            "changed_files": json.loads('''$files_json'''),
+            "agent_id": "${{ inputs.agent-id }}" or None,
+        }))
+        PY
+        )
+        resp=$(curl -sf -X POST \
+          -H "Authorization: Bearer ${EDEN_API_KEY}" \
+          -H "Content-Type: application/json" \
+          -d "$payload" \
+          "${EDEN_BASE_URL}/orgs/${EDEN_ORG}/ci-eval/run")
+        echo "$resp" > /tmp/eden-ci-eval.json
+        gate=$(python -c "import json; print(json.load(open('/tmp/eden-ci-eval.json'))['data'].get('gate','pass'))")
+        echo "gate=$gate" >> "$GITHUB_OUTPUT"
+        {
+          echo "regression_json<<EOF"
+          cat /tmp/eden-ci-eval.json
+          echo "EOF"
+        } >> "$GITHUB_OUTPUT"
+
+    - name: Post PR comment
+      if: github.event_name == 'pull_request'
+      shell: bash
+      run: |
+        python - <<'PY' > /tmp/eden-eval-comment.md
+        import json
+        data = json.load(open("/tmp/eden-ci-eval.json"))
+        inner = data.get("data") or {}
+        gate = inner.get("gate", "?")
+        reg = inner.get("regression") or {}
+        emoji = "✅" if gate == "pass" else "❌"
+        print(f"## {emoji} Eden eval regression")
+        print("")
+        print(f"- **Gate:** `{gate}`")
+        print(f"- **Change:** `{inner.get('change_id', '?')}`")
+        if reg:
+            print(f"- **Passed:** {reg.get('passed', '?')}/{reg.get('total', '?')}")
+            print(f"- **OK:** {reg.get('ok', '?')}")
+        PY
+
+    - name: Publish PR comment
+      if: github.event_name == 'pull_request'
+      uses: marocchino/sticky-pull-request-comment@v2
+      with:
+        header: eden-eval
+        path: /tmp/eden-eval-comment.md
+
+    - name: Fail on regression
+      if: inputs.fail-on-regression == 'true' && steps.run.outputs.gate == 'block'
+      shell: bash
+      run: |
+        echo "::error::Eden regression gate blocked this change."
+        exit 1

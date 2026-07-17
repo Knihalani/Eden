@@ -297,6 +297,20 @@ async def gdpr(
     )
 
 
+@router.post("/compliance/iso27001")
+async def iso27001(
+    body: CompliancePeriodRequest,
+    org_id: str = Path(...),
+    user: Any = Depends(get_current_user),
+) -> dict[str, Any]:
+    return await _evidence.generate_iso27001_evidence(
+        org_id,
+        period_start=body.period_start,
+        period_end=body.period_end,
+        generated_by=_actor_id(user),
+    )
+
+
 # ────────────────────────────────────────────────────────────────────
 #  Security (2 routes)
 # ────────────────────────────────────────────────────────────────────

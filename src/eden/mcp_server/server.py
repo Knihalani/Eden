@@ -296,6 +296,146 @@ TOOL_CATALOG: list[dict[str, Any]] = [
             "required": ["org_id", "change_id", "changed_files"],
         },
     },
+    {
+        "name": "eden_health",
+        "description": "F84 — Eden self-observability health (workers, ingest lag, components).",
+        "scope": "mcp:read",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "org_id": {"type": "string"},
+            },
+            "required": ["org_id"],
+        },
+    },
+    {
+        "name": "tail_trace",
+        "description": "N11 — tail live in-flight session events (buffer snapshot / SSE bridge).",
+        "scope": "mcp:read",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "org_id": {"type": "string"},
+                "session_id": {"type": "string"},
+                "from_event_id": {"type": "integer"},
+                "max_events": {"type": "integer"},
+            },
+            "required": ["org_id", "session_id"],
+        },
+    },
+    {
+        "name": "label_tool_call",
+        "description": "F21 — label a tool span good|bad for misuse learning.",
+        "scope": "mcp:debug",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "org_id": {"type": "string"},
+                "span_id": {"type": "string"},
+                "trace_id": {"type": "string"},
+                "tool_name": {"type": "string"},
+                "label": {"type": "string", "enum": ["good", "bad"]},
+                "reason": {"type": "string"},
+                "agent_id": {"type": "string"},
+                "args_summary": {"type": "string"},
+            },
+            "required": ["org_id", "span_id", "trace_id", "tool_name", "label"],
+        },
+    },
+    {
+        "name": "query_eql",
+        "description": "Compile / preview an Eden Query Language (EQL) filter (read-only).",
+        "scope": "mcp:read",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "org_id": {"type": "string"},
+                "nl_text": {"type": "string"},
+                "eql": {"type": "string"},
+            },
+            "required": ["org_id"],
+        },
+    },
+    {
+        "name": "query_sql",
+        "description": "Run a read-only org-scoped SQL query (safe ChatSidebar mirror).",
+        "scope": "mcp:read",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "org_id": {"type": "string"},
+                "sql": {"type": "string"},
+                "limit": {"type": "integer"},
+            },
+            "required": ["org_id", "sql"],
+        },
+    },
+    {
+        "name": "list_datasets",
+        "description": "List evaluation datasets for the org.",
+        "scope": "mcp:read",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "org_id": {"type": "string"},
+                "limit": {"type": "integer"},
+            },
+            "required": ["org_id"],
+        },
+    },
+    {
+        "name": "list_experiments",
+        "description": "List experiments for the org.",
+        "scope": "mcp:read",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "org_id": {"type": "string"},
+                "limit": {"type": "integer"},
+            },
+            "required": ["org_id"],
+        },
+    },
+    {
+        "name": "get_judge_scores",
+        "description": "Fetch judge / Layer A scores for a trace (eval read tool).",
+        "scope": "mcp:read",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "org_id": {"type": "string"},
+                "trace_id": {"type": "string"},
+            },
+            "required": ["org_id", "trace_id"],
+        },
+    },
+    {
+        "name": "get_cost_breakdown",
+        "description": "Customer FinOps cost breakdown by feature (org-scoped).",
+        "scope": "mcp:read",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "org_id": {"type": "string"},
+                "window_hours": {"type": "integer"},
+            },
+            "required": ["org_id"],
+        },
+    },
+    {
+        "name": "get_agentic_metrics",
+        "description": "F64 agentic metrics pack summary (tool selection, action completion, …).",
+        "scope": "mcp:read",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "org_id": {"type": "string"},
+                "window_hours": {"type": "integer"},
+                "agent_id": {"type": "string"},
+            },
+            "required": ["org_id"],
+        },
+    },
 ]
 
 _HANDLERS: dict[str, ToolHandler] = {
@@ -316,6 +456,16 @@ _HANDLERS: dict[str, ToolHandler] = {
     "export_fixture": tool_fns.export_fixture,
     "create_regression_case": tool_fns.create_regression_case,
     "preview_change_impact": tool_fns.preview_change_impact,
+    "eden_health": tool_fns.eden_health,
+    "tail_trace": tool_fns.tail_trace,
+    "label_tool_call": tool_fns.label_tool_call,
+    "query_eql": tool_fns.query_eql,
+    "query_sql": tool_fns.query_sql,
+    "list_datasets": tool_fns.list_datasets,
+    "list_experiments": tool_fns.list_experiments,
+    "get_judge_scores": tool_fns.get_judge_scores,
+    "get_cost_breakdown": tool_fns.get_cost_breakdown,
+    "get_agentic_metrics": tool_fns.get_agentic_metrics,
 }
 
 _SCOPE_BY_NAME = {t["name"]: t["scope"] for t in TOOL_CATALOG}

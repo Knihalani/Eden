@@ -15,6 +15,7 @@ import logging
 import os
 import threading
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -144,6 +145,14 @@ class EdenConfig:
     # client is started has no effect on the in-flight
     # AsyncClient.
     transport: Any | None = None
+    # N16-mirroring client sampling (default full = keep all).
+    sampling_profile: str = "full"
+    sample_keep_errors: bool = True
+    # Durable offline queue path (None = disabled). Set to a file path
+    # or use EDEN_OFFLINE_QUEUE=1 for ~/.eden/offline_queue.sqlite3.
+    offline_queue_path: str | None = None
+    # N11 live streaming — also enabled via EDEN_LIVE=1 or trace(stream=True).
+    live: bool = False
 
     @property
     def enabled(self) -> bool:
@@ -321,6 +330,16 @@ def _from_env() -> EdenConfig:
         coalesce=_env_opt_bool("EDEN_COALESCE"),
         provider_cache_layout=_env_opt_bool("EDEN_PROVIDER_CACHE_LAYOUT"),
         response_repair=_env_opt_bool("EDEN_RESPONSE_REPAIR"),
+        sampling_profile=(
+            os.getenv("EDEN_SAMPLING_PROFILE", "full").strip().lower() or "full"
+        ),
+        sample_keep_errors=_env_opt_bool("EDEN_SAMPLE_KEEP_ERRORS", default=True),
+        offline_queue_path=(
+            str(Path.home() / ".eden" / "offline_queue.sqlite3")
+            if os.getenv("EDEN_OFFLINE_QUEUE", "").lower() in {"1", "true", "yes", "on"}
+            else (os.getenv("EDEN_OFFLINE_QUEUE_PATH") or None)
+        ),
+        live=os.getenv("EDEN_LIVE", "").lower() in {"1", "true", "yes", "on"},
     )
 
 

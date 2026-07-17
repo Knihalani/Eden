@@ -37,9 +37,10 @@ export function configureOtelExporter(opts: OtelExporterOptions = {}): void {
 
     const { NodeTracerProvider } = otel;
     const { OTLPTraceExporter } = exporterMod;
+    const { BatchSpanProcessor } = await import("@opentelemetry/sdk-trace-base");
     const provider = new NodeTracerProvider();
     provider.addSpanProcessor(
-      new (await import("@opentelemetry/sdk-trace-base")).SimpleSpanProcessor(
+      new BatchSpanProcessor(
         new OTLPTraceExporter({ url: endpoint, headers }),
       ),
     );

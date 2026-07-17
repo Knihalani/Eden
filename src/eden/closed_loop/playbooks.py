@@ -6,14 +6,16 @@ from typing import Any
 
 # Maps triage issue kinds → preferred remediation playbook.
 _KIND_PLAYBOOKS: dict[str, str] = {
-    "loop": "cache_bust",
-    "hallucination": "reweight",
-    "tool_error": "rollback",
+    "loop": "nudge_shadow",
+    "hallucination": "prompt_canary",
+    "tool_error": "nudge_shadow",
     "mcp_auth_failure": "cache_bust",
     "statgate_p0": "rollback",
     "timeout": "reweight",
     "user_frustration": "reweight",
     "task_failure": "rollback",
+    "prompt_regression": "prompt_canary",
+    "confusion_loop": "nudge_shadow",
 }
 
 # Secondary signals in triage_result can override kind defaults.
@@ -53,5 +55,7 @@ def playbook_label(action_type: str | None) -> str:
         "rollback": "Roll back active canary / prompt version",
         "reweight": "Shift model routing toward cheaper tier",
         "cache_bust": "Flush semantic response cache",
+        "nudge_shadow": "Draft shadow Artifact from issue signals",
+        "prompt_canary": "Enroll prompt canary via EvidenceGate",
     }
     return labels.get(action_type or "", "Advisory — no automated heal")

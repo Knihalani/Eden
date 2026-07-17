@@ -60,6 +60,13 @@ async def test_invalid_profile_rejected() -> None:
 
 
 @pytest.mark.asyncio
+async def test_auto_issue_detection_default_true() -> None:
+    from eden.config import get_settings
+
+    assert get_settings().auto_issue_detection_v1 is True
+
+
+@pytest.mark.asyncio
 async def test_session_failure_writes_task_failure_stumble() -> None:
     from eden.services.agent_sessions import AgentSession, AgentSessionService
 

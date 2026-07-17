@@ -185,6 +185,78 @@ class BlobStore:
             return 1.0
         return seen / stored
 
+    def release(self, org_id: str, content_hash: str) -> int:
+        """Decrement in-memory refcount; drop blob at zero. Returns new count."""
+        key = (org_id, content_hash)
+        count = self._ref_counts.get(key, 0)
+        if count <= 0:
+            return 0
+        count -= 1
+        if count <= 0:
+            self._ref_counts.pop(key, None)
+            self._memory.pop(key, None)
+            return 0
+        self._ref_counts[key] = count
+        return count
+
+    async def release_pg(self, org_id: str, content_hash: str) -> int:
+        """Decrement Postgres ``span_content_blobs.ref_count``; delete at zero."""
+        try:
+            from eden.storage.postgres import get_postgres_client
+
+            client = await get_postgres_client()
+        except Exception as exc:
+            logger.debug("blob_store release_pg unavailable: %s", exc)
+            return -1
+        if client is None:
+            return -1
+        try:
+            row = await client.fetchrow(
+                """
+                UPDATE span_content_blobs
+                   SET ref_count = GREATEST(ref_count - 1, 0)
+                 WHERE org_id = $1 AND content_hash = $2
+             RETURNING ref_count
+                """,
+                org_id,
+                content_hash,
+            )
+            if row is None:
+                return 0
+            new_count = int(row["ref_count"] or 0)
+            if new_count <= 0:
+                await client.execute(
+                    """
+                    DELETE FROM span_content_blobs
+                     WHERE org_id = $1 AND content_hash = $2 AND ref_count <= 0
+                    """,
+                    org_id,
+                    content_hash,
+                )
+            return new_count
+        except Exception as exc:
+            logger.debug("blob_store release_pg failed: %s", exc)
+            return -1
+
+    async def release_org(self, org_id: str) -> int:
+        """RTBF helper: drop all in-memory blobs for org; best-effort PG wipe."""
+        keys = [k for k in list(self._memory) if k[0] == org_id]
+        for key in keys:
+            self._memory.pop(key, None)
+            self._ref_counts.pop(key, None)
+        try:
+            from eden.storage.postgres import get_postgres_client
+
+            client = await get_postgres_client()
+            if client is not None:
+                await client.execute(
+                    "DELETE FROM span_content_blobs WHERE org_id = $1",
+                    org_id,
+                )
+        except Exception as exc:
+            logger.debug("blob_store release_org pg failed: %s", exc)
+        return len(keys)
+
     def stats(self) -> dict[str, int | float]:
         out: dict[str, int | float] = dict(self._stats)
         out["dedupe_ratio"] = self.dedupe_ratio()

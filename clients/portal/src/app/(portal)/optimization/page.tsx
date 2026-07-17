@@ -48,6 +48,17 @@ const BudgetPage = dynamic(() => import("./budget/page"), {
       <Loader2 className="h-5 w-5 animate-spin text-[var(--text-muted)]" />
     </div>
   ) });
+const FinOpsExplorer = dynamic(
+  () => import("./_components/finops-explorer"),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="flex h-64 items-center justify-center">
+        <Loader2 className="h-5 w-5 animate-spin text-[var(--text-muted)]" />
+      </div>
+    ),
+  },
+);
 const AdvisorPage = dynamic(() => import("./model-advisor/page"), {
   ssr: false,
   loading: () => (
@@ -653,7 +664,7 @@ function OptimizationPageInner() {
                 exit={{ opacity: 0, y: -4 }}
                 transition={{ duration: 0.15 }}
               >
-                <CostTab />
+                <FinOpsExplorer />
               </motion.div>
             </TabsContent>
           )}

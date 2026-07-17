@@ -1,0 +1,254 @@
+"use client";
+
+/**
+ * MessageCards — LLM message stack (formerly transcript-view twin).
+ * Canonical message-card surface under transcript-v2; inspector imports this.
+ * F21: tool rows expose ✓/✗ label buttons when orgId + traceId provided.
+ */
+
+import { memo, useCallback, useState } from "react";
+import { cn } from "@/lib/utils";
+
+export interface ToolCall {
+  id: string;
+  name: string;
+  args: Record<string, unknown>;
+  result?: unknown;
+  status: "ok" | "error" | "pending";
+  span_id?: string;
+}
+
+export interface TranscriptMessage {
+  id: string;
+  role: "system" | "user" | "assistant" | "tool";
+  content: string;
+  reasoning?: string;
+  tool_calls?: ToolCall[];
+  tool_call_id?: string;
+  timestamp?: string;
+  children?: TranscriptMessage[];
+  span_id?: string;
+}
+
+export interface MessageCardsProps {
+  messages: TranscriptMessage[];
+  className?: string;
+  collapseAtChars?: number;
+  orgId?: string;
+  traceId?: string;
+  agentId?: string;
+}
+
+const ROLE_META: Record<
+  TranscriptMessage["role"],
+  { label: string; color: string; icon: string }
+> = {
+  system: { label: "System", color: "var(--text-muted)", icon: "⚙" },
+  user: { label: "User", color: "var(--info)", icon: "▶" },
+  assistant: { label: "Assistant", color: "var(--accent)", icon: "◆" },
+  tool: { label: "Tool", color: "var(--warning)", icon: "🔧" },
+};
+
+export function MessageCards({
+  messages,
+  className,
+  collapseAtChars = 1000,
+  orgId,
+  traceId,
+  agentId,
+}: MessageCardsProps) {
+  if (messages.length === 0) {
+    return (
+      <div
+        className={cn(
+          "rounded border border-dashed border-[var(--border)] p-6 text-center text-sm text-[var(--text-muted)]",
+          className,
+        )}
+      >
+        No messages in this trace.
+      </div>
+    );
+  }
+  return (
+    <div className={cn("flex flex-col gap-2", className)} data-testid="message-cards">
+      {messages.map((m) => (
+        <MessageCard
+          key={m.id}
+          message={m}
+          collapseAtChars={collapseAtChars}
+          orgId={orgId}
+          traceId={traceId}
+          agentId={agentId}
+        />
+      ))}
+    </div>
+  );
+}
+
+/** @deprecated Prefer MessageCards — kept for inspector import path. */
+export const TranscriptView = MessageCards;
+export type TranscriptViewProps = MessageCardsProps;
+
+const MessageCard = memo(function MessageCard({
+  message,
+  collapseAtChars,
+  orgId,
+  traceId,
+  agentId,
+}: {
+  message: TranscriptMessage;
+  collapseAtChars: number;
+  orgId?: string;
+  traceId?: string;
+  agentId?: string;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const meta = ROLE_META[message.role];
+  const tooLong = message.content.length > collapseAtChars;
+  const displayed =
+    tooLong && !expanded ? message.content.slice(0, collapseAtChars) + "…" : message.content;
+
+  return (
+    <div className="rounded-lg border border-[var(--border-default)] bg-[var(--bg-primary)] p-3">
+      <div className="mb-1 flex items-center gap-2 text-xs font-medium" style={{ color: meta.color }}>
+        <span aria-hidden>{meta.icon}</span>
+        {meta.label}
+      </div>
+      <pre className="whitespace-pre-wrap break-words font-sans text-sm text-[var(--text-secondary)]">
+        {displayed}
+      </pre>
+      {tooLong && (
+        <button
+          type="button"
+          className="mt-1 text-[11px] text-[var(--accent)] hover:underline"
+          onClick={() => setExpanded((e) => !e)}
+        >
+          {expanded ? "Collapse" : "Expand"}
+        </button>
+      )}
+      {message.tool_calls && message.tool_calls.length > 0 && (
+        <ToolLabelRow
+          toolCalls={message.tool_calls}
+          orgId={orgId}
+          traceId={traceId}
+          agentId={agentId}
+          fallbackSpanId={message.span_id ?? message.id}
+        />
+      )}
+      {message.role === "tool" && orgId && traceId && (
+        <ToolLabelRow
+          toolCalls={[
+            {
+              id: message.tool_call_id ?? message.id,
+              name: message.content.slice(0, 64) || "tool",
+              args: {},
+              status: "ok",
+              span_id: message.span_id ?? message.id,
+            },
+          ]}
+          orgId={orgId}
+          traceId={traceId}
+          agentId={agentId}
+          fallbackSpanId={message.span_id ?? message.id}
+        />
+      )}
+      {message.children && message.children.length > 0 && (
+        <div className="mt-2 ml-3 border-l border-[var(--border-subtle)] pl-3">
+          <MessageCards
+            messages={message.children}
+            collapseAtChars={collapseAtChars}
+            orgId={orgId}
+            traceId={traceId}
+            agentId={agentId}
+          />
+        </div>
+      )}
+    </div>
+  );
+});
+
+function ToolLabelRow({
+  toolCalls,
+  orgId,
+  traceId,
+  agentId,
+  fallbackSpanId,
+}: {
+  toolCalls: ToolCall[];
+  orgId?: string;
+  traceId?: string;
+  agentId?: string;
+  fallbackSpanId: string;
+}) {
+  const [labelState, setLabelState] = useState<Record<string, string>>({});
+  const [busy, setBusy] = useState(false);
+
+  const submit = useCallback(
+    async (tc: ToolCall, label: "good" | "bad") => {
+      if (!orgId || !traceId) return;
+      const spanId = tc.span_id || tc.id || fallbackSpanId;
+      setBusy(true);
+      try {
+        const { api } = await import("@/lib/api");
+        await api.labelToolCall(orgId, spanId, {
+          trace_id: traceId,
+          tool_name: tc.name,
+          label,
+          agent_id: agentId,
+          args_summary: JSON.stringify(tc.args ?? {}).slice(0, 500),
+        });
+        setLabelState((s) => ({ ...s, [spanId]: label }));
+      } catch {
+        setLabelState((s) => ({ ...s, [spanId]: "error" }));
+      } finally {
+        setBusy(false);
+      }
+    },
+    [orgId, traceId, agentId, fallbackSpanId],
+  );
+
+  if (!orgId || !traceId) return null;
+
+  return (
+    <ul className="mt-2 space-y-1" data-testid="f21-tool-labels">
+      {toolCalls.map((tc) => {
+        const spanId = tc.span_id || tc.id || fallbackSpanId;
+        const state = labelState[spanId];
+        return (
+          <li
+            key={spanId}
+            className="flex items-center gap-2 rounded border border-[var(--border-subtle)] px-2 py-1 text-[11px]"
+          >
+            <span className="font-mono truncate">{tc.name}</span>
+            <span className="ml-auto flex items-center gap-1">
+              {state === "good" || state === "bad" ? (
+                <span className="text-[var(--text-muted)]">labeled {state}</span>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    disabled={busy}
+                    aria-label={`Label ${tc.name} good`}
+                    className="rounded px-1.5 py-0.5 border border-[var(--terminal)] text-[var(--terminal)] disabled:opacity-50"
+                    onClick={() => void submit(tc, "good")}
+                  >
+                    ✓
+                  </button>
+                  <button
+                    type="button"
+                    disabled={busy}
+                    aria-label={`Label ${tc.name} bad`}
+                    className="rounded px-1.5 py-0.5 border border-[var(--error)] text-[var(--error)] disabled:opacity-50"
+                    onClick={() => void submit(tc, "bad")}
+                  >
+                    ✗
+                  </button>
+                </>
+              )}
+            </span>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}

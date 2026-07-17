@@ -1,19 +1,28 @@
 "use client";
 
+import { PageHeader } from "@/components/layout/page-header";
+import { CoreResourcePage, CrossLinkBar } from "@/components/portal-os";
+import { Loader2, Network, ShieldAlert, Activity, GitBranch } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { useState } from "react";
 import Link from "next/link";
 import { useOrg } from "@/hooks/use-org";
-import { fleetApi } from "@/lib/api";
+import { api, fleetApi } from "@/lib/api";
 import { useOrgQuery } from "@/hooks/use-api-query";
 import { queryKeys } from "@/lib/query-keys";
 import { Card } from "@/components/ui/card";
 import { NoOrgState } from "@/components/ui/no-org-state";
-import { PageContent } from "@/components/layout/page-content";
-import { PageHeader } from "@/components/layout/page-header";
-import { Loader2, Network, ShieldAlert } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { EmptyState } from "@/components/ui/empty-state";
+import { ErrorState } from "@/components/ui/error-state";
+import { Button } from "@/components/ui/button";
 
 type FleetTab = "agents" | "heatmap" | "delegation";
+
+const AUTONOMY_LABEL: Record<string, string> = {
+  autonomous: "Autonomous",
+  assisted: "Assisted",
+  observe: "Observe only",
+};
 
 export default function FleetPage() {
   const { currentOrg } = useOrg();
@@ -35,10 +44,24 @@ export default function FleetPage() {
     orgId,
     () => fleetApi.delegation(orgId!),
   );
+  const slaQuery = useOrgQuery(
+    queryKeys.fleet.slaBreaches(orgId),
+    orgId,
+    () => fleetApi.slaBreaches(orgId!),
+  );
+  const agenticQuery = useOrgQuery(
+    queryKeys.fleet.agentic(orgId),
+    orgId,
+    () => api.agenticMetricsSummary(orgId!, 24),
+  );
 
   const agents = summaryQuery.data?.data?.agents ?? [];
   const heatmap = heatmapQuery.data?.data?.cells ?? [];
   const edges = delegationQuery.data?.data?.edges ?? [];
+  const slaCount = slaQuery.data?.data?.count ?? summaryQuery.data?.data?.sla_breach_count ?? 0;
+  const criticalCount = summaryQuery.data?.data?.critical_count ?? 0;
+  const agenticScore =
+    agenticQuery.data?.data?.metrics?.action_completion?.score ?? null;
   const loading = summaryQuery.isLoading || heatmapQuery.isLoading || delegationQuery.isLoading;
   const error =
     summaryQuery.error?.message ?? heatmapQuery.error?.message ?? delegationQuery.error?.message ?? null;
@@ -61,12 +84,82 @@ export default function FleetPage() {
   );
 
   return (
-    <PageContent size="default">
-      <PageHeader
-        title="Fleet Health"
-        subtitle="Agent health cards, stumble heatmap, and delegation graph for your multi-agent platform."
-        icon={Network}
-      />
+    <CoreResourcePage
+      size="default"
+      header={
+        <PageHeader
+          title="Fleet Health"
+          subtitle="Multi-agent SRE view — severity-ranked health cards, stumble heatmap, and delegation graph."
+          icon={Network}
+          actions={
+            <Link
+              href="/improve"
+              className="text-sm text-[var(--accent)] hover:underline min-h-[44px] inline-flex items-center"
+            >
+              Open improve queue →
+            </Link>
+          }
+        />
+      }
+      toolbar={
+        <CrossLinkBar
+          className="mb-4"
+          links={[
+            { label: "Agents", href: "/agents" },
+            { label: "Improve", href: "/improve" },
+            { label: "Audit trail", href: "/audit-trail" },
+            { label: "Issues", href: "/issues" },
+          ]}
+        />
+      }
+      kpiStrip={
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-6">
+          <Card padding="sm" className="text-center">
+            <div className="text-2xl font-semibold tabular-nums">{agents.length}</div>
+            <div className="text-[10px] uppercase tracking-wide text-[var(--text-muted)]">Agents</div>
+          </Card>
+          <Card padding="sm" className="text-center">
+            <div className={cn("text-2xl font-semibold tabular-nums", slaCount > 0 && "text-[var(--error)]")}>
+              {slaCount}
+            </div>
+            <div className="text-[10px] uppercase tracking-wide text-[var(--text-muted)]">SLO breaches</div>
+          </Card>
+          <Card padding="sm" className="text-center">
+            <div className="text-2xl font-semibold tabular-nums">{criticalCount}</div>
+            <div className="text-[10px] uppercase tracking-wide text-[var(--text-muted)]">Critical tier</div>
+          </Card>
+          <Card padding="sm" className="text-center">
+            <div className="text-2xl font-semibold tabular-nums">{edges.length}</div>
+            <div className="text-[10px] uppercase tracking-wide text-[var(--text-muted)]">Delegation edges</div>
+          </Card>
+          <Card padding="sm" className="text-center" data-testid="f64-agentic-fleet">
+            <div className="text-2xl font-semibold tabular-nums">
+              {agenticScore == null ? "—" : `${Math.round(agenticScore * 100)}%`}
+            </div>
+            <div className="text-[10px] uppercase tracking-wide text-[var(--text-muted)]">
+              Agentic quality
+            </div>
+          </Card>
+        </div>
+      }
+      table={
+        <>
+      {error ? (
+        <ErrorState
+          className="mb-4"
+          message={error}
+          action={
+            <Button variant="outline" size="sm" onClick={() => void summaryQuery.refetch()}>
+              Try again
+            </Button>
+          }
+        />
+      ) : null}
+      {loading && agents.length === 0 ? (
+        <div className="flex justify-center py-8">
+          <Loader2 className="h-6 w-6 animate-spin text-[var(--text-muted)]" />
+        </div>
+      ) : null}
 
       <div
         role="tablist"
@@ -128,11 +221,33 @@ export default function FleetPage() {
                     {a.tier}
                   </span>
                 </div>
-                <p className="text-xs font-mono text-[var(--text-muted)] truncate mb-3">{a.agent_id}</p>
+                <p className="text-xs font-mono text-[var(--text-muted)] truncate mb-2">{a.agent_id}</p>
+                <div className="flex flex-wrap gap-1 mb-3">
+                  {a.autonomy_mode && (
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--accent-faint)] text-[var(--accent)]">
+                      {AUTONOMY_LABEL[a.autonomy_mode] ?? a.autonomy_mode}
+                    </span>
+                  )}
+                  {a.compliance_profile && a.compliance_profile !== "standard" && (
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--warning-bg)] text-[var(--warning)]">
+                      {a.compliance_profile}
+                    </span>
+                  )}
+                  {a.drift_flagged && (
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--error-dim)] text-[var(--error)] flex items-center gap-0.5">
+                      <Activity className="h-3 w-3" /> Drift
+                    </span>
+                  )}
+                </div>
                 <dl className="grid grid-cols-2 gap-2 text-xs">
                   <div>
                     <dt className="text-[var(--text-muted)]">Open issues</dt>
-                    <dd className="font-semibold text-[var(--text-primary)]">{a.open_issues}</dd>
+                    <dd className="font-semibold text-[var(--text-primary)]">
+                      {a.open_issues}
+                      {(a.open_p0_issues ?? 0) > 0 && (
+                        <span className="text-[var(--error)] ml-1">({a.open_p0_issues} P0)</span>
+                      )}
+                    </dd>
                   </div>
                   <div>
                     <dt className="text-[var(--text-muted)]">Stumbles (7d)</dt>
@@ -154,12 +269,26 @@ export default function FleetPage() {
                     <ShieldAlert className="h-3 w-3" /> SLO breach
                   </p>
                 )}
-                <Link
-                  href={`/issues?agent=${encodeURIComponent(a.agent_id)}`}
-                  className="mt-3 inline-block text-xs text-[var(--accent)] hover:underline min-h-[44px] leading-[44px]"
-                >
-                  View issues →
-                </Link>
+                <div className="mt-3 flex flex-wrap gap-3">
+                  <Link
+                    href={`/issues?agent=${encodeURIComponent(a.agent_id)}`}
+                    className="text-xs text-[var(--accent)] hover:underline min-h-[44px] leading-[44px]"
+                  >
+                    Issues →
+                  </Link>
+                  <Link
+                    href={`/improve?agent=${encodeURIComponent(a.agent_id)}`}
+                    className="text-xs text-[var(--accent)] hover:underline min-h-[44px] leading-[44px]"
+                  >
+                    Improve →
+                  </Link>
+                  <Link
+                    href={`/audit-trail?agent=${encodeURIComponent(a.agent_id)}`}
+                    className="text-xs text-[var(--accent)] hover:underline min-h-[44px] leading-[44px]"
+                  >
+                    Audit trail →
+                  </Link>
+                </div>
               </div>
             ))}
           </div>
@@ -214,16 +343,30 @@ export default function FleetPage() {
         </Card>
       ) : (
         <div className="rounded-lg border border-[var(--border-default)] bg-[var(--bg-primary)] p-4">
-          <h2 className="text-sm font-semibold text-[var(--text-primary)] mb-3">Delegation graph (7d)</h2>
-          <ul className="space-y-1 text-xs font-mono text-[var(--text-secondary)]">
+          <h2 className="text-sm font-semibold text-[var(--text-primary)] mb-3 flex items-center gap-2">
+            <GitBranch className="h-4 w-4" /> Delegation graph (7d)
+          </h2>
+          <ul className="space-y-2 text-xs font-mono text-[var(--text-secondary)]">
             {edges.slice(0, 30).map((e) => (
-              <li key={`${e.source}-${e.target}`}>
-                {e.source} → {e.target} ({e.call_count_7d} calls)
+              <li
+                key={`${e.source}-${e.target}`}
+                className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--border-subtle)] pb-1"
+              >
+                <span>
+                  {e.source} → {e.target}
+                </span>
+                <span className="text-[var(--text-muted)] tabular-nums">
+                  {e.call_count_7d} calls
+                  {e.error_rate_7d != null && ` · ${Math.round(e.error_rate_7d * 100)}% err`}
+                  {e.delegation_trust != null && ` · trust ${e.delegation_trust}`}
+                </span>
               </li>
             ))}
           </ul>
         </div>
       )}
-    </PageContent>
+        </>
+      }
+    />
   );
 }

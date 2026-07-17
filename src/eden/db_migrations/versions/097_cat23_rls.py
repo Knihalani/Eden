@@ -1,8 +1,11 @@
 """097_cat23_rls — Phase 2A Cat 23 tenant RLS.
 
-Revision ID: 097
-Revises: 096
+Revision ID: 097a
+Revises: 096b
 Create Date: 2026-07-13
+
+Renumbered from a duplicate "097" (see 096_debugger_llm_cache.py
+for the chain-repair note) — continues from "096b".
 
 Enables row-level security on the Cat 23 (Autonomous Code
 Modification) tables created in migration 027. Migration 027
@@ -24,8 +27,8 @@ from __future__ import annotations
 
 from alembic import op
 
-revision = "097"
-down_revision = "096"
+revision = "097a"
+down_revision = "096b"
 branch_labels = None
 depends_on = None
 

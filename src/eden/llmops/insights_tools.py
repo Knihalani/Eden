@@ -1239,6 +1239,1352 @@ async def create_alert_rule(
 
 
 # ============================================================================
+# Tools — Signals / promote / export / analysis (W22)
+# ============================================================================
+
+_ANALYSIS_TEMPLATES: dict[str, dict[str, Any]] = {
+    "slow_traces": {
+        "label": "Slow traces",
+        "description": "Top traces by duration in the last 24h",
+        "estimated_usd": 0.0,
+        "export_format": "csv",
+        "filter_q": "latency:>2000",
+    },
+    "error_traces": {
+        "label": "Error traces",
+        "description": "Failed / error outcome traces",
+        "estimated_usd": 0.0,
+        "export_format": "csv",
+        "filter_q": "status:error",
+    },
+    "cost_by_model": {
+        "label": "Cost by model",
+        "description": "Usage spend grouped by model (7d)",
+        "estimated_usd": 0.01,
+        "export_format": "csv",
+        "tool": "get_cost_breakdown",
+    },
+    "open_issues": {
+        "label": "Open agent issues",
+        "description": "Open issues for triage",
+        "estimated_usd": 0.0,
+        "export_format": "csv",
+        "tool": "list_agent_issues",
+    },
+}
+
+
+def _estimate_sql_spend(sql: str) -> dict[str, Any]:
+    """Heuristic spend / risk preview for read-only SQL (no LLM $)."""
+    upper = sql.upper()
+    complexity = 1
+    if " JOIN " in upper:
+        complexity += 2
+    if " GROUP BY " in upper:
+        complexity += 1
+    if " ORDER BY " in upper:
+        complexity += 1
+    estimated_usd = round(0.002 * complexity, 4)
+    return {
+        "estimated_usd": estimated_usd,
+        "complexity": complexity,
+        "message": (
+            f"Estimated query cost ~${estimated_usd:.4f} "
+            f"(complexity={complexity}). Read-only; org-scoped."
+        ),
+    }
+
+
+@insights_tool(
+    name="preview_nl_signal",
+    description=(
+        "Compile a plain-English signal to a structured rule without saving. "
+        "Use when the user asks to create a signal. Returns rule preview "
+        "for an approval card."
+    ),
+    input_schema={
+        "type": "object",
+        "properties": {
+            "description": {
+                "type": "string",
+                "description": (
+                    "Plain-English signal, e.g. "
+                    "'LLM refusal rate above 5% in the last 24 hours'."
+                ),
+            },
+        },
+        "required": ["description"],
+    },
+)
+async def preview_nl_signal(
+    org_id: str,
+    description: str,
+) -> dict[str, Any]:
+    _ = org_id
+    from eden.services.cat2_intel.signals import compile_signal
+
+    rule = compile_signal(description)
+    return {
+        "approval_required": True,
+        "description": description,
+        "rule": rule.to_dict(),
+        "suggested_name": (description.strip()[:80] or "Signal"),
+        "signals_url": "/signals",
+    }
+
+
+@insights_tool(
+    name="create_signal",
+    description=(
+        "Persist an NL signal after the user approves the rule preview. "
+        "Admin-gated write."
+    ),
+    input_schema={
+        "type": "object",
+        "properties": {
+            "description": {
+                "type": "string",
+                "description": "Plain-English signal description.",
+            },
+            "enabled": {
+                "type": "boolean",
+                "description": "Whether the signal is enabled (default true).",
+            },
+        },
+        "required": ["description"],
+    },
+)
+async def create_signal(
+    org_id: str,
+    description: str,
+    enabled: bool = True,
+) -> dict[str, Any]:
+    import uuid
+
+    from eden.services.cat2_intel.signals import compile_signal, signal_signature
+
+    desc = (description or "").strip()
+    if not desc:
+        return {"error": "description is required"}
+    rule = compile_signal(desc)
+    signal_id = str(uuid.uuid4())
+    cluster_id = signal_signature(desc)
+    client = await get_postgres_client()
+    if client is None:
+        return {"error": "postgres unavailable"}
+    await client.execute(
+        """
+        INSERT INTO nl_signals
+            (id, org_id, description, rule, enabled, cluster_id)
+        VALUES ($1, $2, $3, $4::jsonb, $5, $6)
+        """,
+        signal_id,
+        org_id,
+        desc,
+        json.dumps(rule.to_dict()),
+        enabled,
+        cluster_id,
+    )
+    return {
+        "signal_id": signal_id,
+        "description": desc,
+        "rule": rule.to_dict(),
+        "enabled": enabled,
+        "signals_url": "/signals",
+    }
+
+
+@insights_tool(
+    name="promote_artifact",
+    description=(
+        "Promote an artifact/nudge through EvidenceGate after operator "
+        "approval. Admin-gated write — never auto-executes."
+    ),
+    input_schema={
+        "type": "object",
+        "properties": {
+            "artifact_id": {
+                "type": "string",
+                "description": "Artifact / nudge id to promote.",
+            },
+        },
+        "required": ["artifact_id"],
+    },
+)
+async def promote_artifact(
+    org_id: str,
+    artifact_id: str,
+) -> dict[str, Any]:
+    from eden.promotion.evidence_gate import EvidenceGate
+
+    aid = (artifact_id or "").strip()
+    if not aid:
+        return {"error": "artifact_id is required"}
+    gate = EvidenceGate()
+    candidates = await gate.list_queue(org_id, status=None, limit=200)
+    candidate = next(
+        (
+            c
+            for c in candidates
+            if str(c.get("ref_id")) == aid and c.get("status") != "demoted"
+        ),
+        None,
+    )
+    if not candidate:
+        cid = await gate.enqueue(org_id, kind="nudge", ref_id=aid, status="shadow")
+        if not cid:
+            return {"error": "Failed to enqueue promotion candidate"}
+        candidate = await gate.get_candidate(org_id, cid)
+    if not candidate:
+        return {"error": "Promotion candidate not found"}
+    report = await gate.promote_if_passed(org_id, str(candidate["id"]))
+    return {
+        "artifact_id": aid,
+        "candidate_id": str(candidate["id"]),
+        "promoted": bool(getattr(report, "passed", False)),
+        "report": getattr(report, "__dict__", {}),
+        "promotions_url": "/promotions",
+    }
+
+
+@insights_tool(
+    name="export_table",
+    description=(
+        "Export tabular rows as CSV or XLSX for client download. "
+        "Pass rows from a prior tool, or use template='slow_traces' "
+        "to fetch and export slow traces. Returns a client_action."
+    ),
+    input_schema={
+        "type": "object",
+        "properties": {
+            "rows": {
+                "type": "array",
+                "description": "Array of row objects to export.",
+                "items": {"type": "object"},
+            },
+            "format": {
+                "type": "string",
+                "enum": ["csv", "xlsx"],
+                "description": "Download format (default csv).",
+            },
+            "filename": {
+                "type": "string",
+                "description": "Suggested download filename.",
+            },
+            "template": {
+                "type": "string",
+                "description": (
+                    "Optional analysis template id "
+                    "(slow_traces, error_traces) to fetch rows."
+                ),
+            },
+            "confirm_spend": {
+                "type": "boolean",
+                "description": "Acknowledge spend preview for large exports.",
+            },
+        },
+    },
+)
+async def export_table(
+    org_id: str,
+    rows: list[dict[str, Any]] | None = None,
+    format: str = "csv",  # noqa: A002 — tool schema name
+    filename: str | None = None,
+    template: str | None = None,
+    confirm_spend: bool = False,
+) -> dict[str, Any]:
+    fmt = (format or "csv").lower().strip()
+    if fmt not in ("csv", "xlsx"):
+        return {"error": f"unsupported format: {fmt!r}"}
+
+    out_rows: list[dict[str, Any]] = list(rows or [])
+    if template and not out_rows:
+        tmpl = _ANALYSIS_TEMPLATES.get(template)
+        if not tmpl:
+            return {"error": f"unknown template: {template!r}"}
+        if template in ("slow_traces", "error_traces"):
+            outcome = "error" if template == "error_traces" else None
+            fetched = await list_traces(
+                org_id,
+                limit=50,
+                since="24h",
+                outcome=outcome,
+            )
+            out_rows = list(fetched.get("traces") or [])
+            if template == "slow_traces":
+                out_rows = sorted(
+                    out_rows,
+                    key=lambda r: float(r.get("duration_ms") or 0),
+                    reverse=True,
+                )
+
+    if not out_rows:
+        return {"error": "no rows to export"}
+
+    n = len(out_rows)
+    spend = {
+        "estimated_usd": round(0.0001 * max(n, 1), 4),
+        "row_count": n,
+        "message": f"Export {n} rows as {fmt.upper()}.",
+    }
+    if n > 500 and not confirm_spend:
+        return {
+            "approval_required": True,
+            "spend_preview": spend,
+            "tool": "export_table",
+            "args": {
+                "format": fmt,
+                "filename": filename,
+                "template": template,
+                "confirm_spend": True,
+                # Re-fetch on confirm when template set; otherwise pass a cap.
+                **(
+                    {"rows": out_rows}
+                    if not template
+                    else {}
+                ),
+                "_row_count": n,
+            },
+            "message": (
+                f"Large export ({n} rows). Confirm to download "
+                f"(est. ${spend['estimated_usd']:.4f})."
+            ),
+        }
+
+    safe_name = (filename or f"eden-export.{fmt}").strip()
+    if not safe_name.endswith(f".{fmt}"):
+        safe_name = f"{safe_name}.{fmt}"
+    return {
+        "client_action": "download",
+        "format": fmt,
+        "filename": safe_name,
+        "rows": out_rows[:5000],
+        "row_count": min(n, 5000),
+        "spend_preview": spend,
+        "message": f"Downloading {min(n, 5000)} rows as {fmt.upper()}.",
+    }
+
+
+@insights_tool(
+    name="list_analysis_templates",
+    description=(
+        "List built-in analysis templates (slow traces, errors, cost, issues) "
+        "with spend previews. Use run_analysis_template to execute one."
+    ),
+    input_schema={"type": "object", "properties": {}},
+)
+async def list_analysis_templates(org_id: str) -> dict[str, Any]:
+    _ = org_id
+    items = [
+        {
+            "id": tid,
+            "label": meta["label"],
+            "description": meta["description"],
+            "spend_preview": {
+                "estimated_usd": meta["estimated_usd"],
+                "message": f"Est. ${meta['estimated_usd']:.4f}",
+            },
+            "export_format": meta.get("export_format", "csv"),
+        }
+        for tid, meta in _ANALYSIS_TEMPLATES.items()
+    ]
+    return {"templates": items, "count": len(items)}
+
+
+@insights_tool(
+    name="run_analysis_template",
+    description=(
+        "Run a built-in analysis template and optionally prepare a CSV "
+        "export (client_action download). Includes spend_preview."
+    ),
+    input_schema={
+        "type": "object",
+        "properties": {
+            "template_id": {
+                "type": "string",
+                "description": "Template id from list_analysis_templates.",
+            },
+            "export": {
+                "type": "boolean",
+                "description": "If true, also return a download client_action.",
+            },
+            "confirm_spend": {
+                "type": "boolean",
+                "description": "Acknowledge spend when estimated_usd > 0.",
+            },
+        },
+        "required": ["template_id"],
+    },
+)
+async def run_analysis_template(
+    org_id: str,
+    template_id: str,
+    export: bool = False,
+    confirm_spend: bool = False,
+) -> dict[str, Any]:
+    meta = _ANALYSIS_TEMPLATES.get(template_id)
+    if not meta:
+        return {"error": f"unknown template: {template_id!r}"}
+    est = float(meta.get("estimated_usd") or 0)
+    spend = {
+        "estimated_usd": est,
+        "message": f"Template '{template_id}' est. ${est:.4f}",
+    }
+    if est > 0 and not confirm_spend:
+        return {
+            "approval_required": True,
+            "spend_preview": spend,
+            "tool": "run_analysis_template",
+            "args": {
+                "template_id": template_id,
+                "export": export,
+                "confirm_spend": True,
+            },
+            "message": (
+                f"This analysis may cost ~${est:.4f}. "
+                "Confirm to run."
+            ),
+        }
+
+    data: dict[str, Any]
+    if template_id in ("slow_traces", "error_traces"):
+        outcome = "error" if template_id == "error_traces" else None
+        data = await list_traces(org_id, limit=50, since="24h", outcome=outcome)
+        if template_id == "slow_traces":
+            traces = list(data.get("traces") or [])
+            traces.sort(
+                key=lambda r: float(r.get("duration_ms") or 0),
+                reverse=True,
+            )
+            data = {**data, "traces": traces}
+    elif meta.get("tool") == "get_cost_breakdown":
+        data = await get_cost_breakdown(org_id, since="7d")
+    elif meta.get("tool") == "list_agent_issues":
+        data = await list_agent_issues(org_id)
+    else:
+        data = {"error": "template not implemented"}
+
+    result: dict[str, Any] = {
+        "template_id": template_id,
+        "label": meta["label"],
+        "spend_preview": spend,
+        "data": data,
+    }
+    if export and meta.get("filter_q"):
+        result["client_action"] = "propose_filter"
+        result["q"] = meta["filter_q"]
+        result["href"] = f"/traces?q={meta['filter_q']}"
+    if export:
+        rows: list[dict[str, Any]] = []
+        if "traces" in data:
+            rows = list(data["traces"] or [])
+        elif "by_model" in data:
+            rows = list(data["by_model"] or [])
+        elif "issues" in data:
+            rows = list(data["issues"] or [])
+        if rows:
+            result["download"] = {
+                "client_action": "download",
+                "format": "csv",
+                "filename": f"{template_id}.csv",
+                "rows": rows[:5000],
+                "row_count": min(len(rows), 5000),
+            }
+    return result
+
+
+@insights_tool(
+    name="query_sql",
+    description=(
+        "Run a hardened read-only SQL SELECT/WITH against org telemetry. "
+        "Rejects writes and multi-statements. Returns spend_preview. "
+        "Prefer analysis templates for common questions."
+    ),
+    input_schema={
+        "type": "object",
+        "properties": {
+            "sql": {
+                "type": "string",
+                "description": "Read-only SELECT or WITH query.",
+            },
+            "confirm_spend": {
+                "type": "boolean",
+                "description": "Acknowledge spend for complex queries.",
+            },
+        },
+        "required": ["sql"],
+    },
+)
+async def query_sql_insights(
+    org_id: str,
+    sql: str,
+    confirm_spend: bool = False,
+) -> dict[str, Any]:
+    """Insights-registered query_sql; agent registry keeps its own hardened copy."""
+    cleaned = (sql or "").strip()
+    if not cleaned:
+        return {"error": "sql is required"}
+    # Strip trailing semicolons; reject multi-statement.
+    if ";" in cleaned.rstrip(";"):
+        return {"error": "multiple SQL statements are not allowed"}
+    cleaned = cleaned.rstrip(";").strip()
+    head = cleaned.split(None, 1)[0].upper() if cleaned else ""
+    if head not in ("SELECT", "WITH"):
+        return {"error": f"only SELECT/WITH queries are allowed, got {head!r}"}
+    banned = (
+        " INSERT ",
+        " UPDATE ",
+        " DELETE ",
+        " DROP ",
+        " ALTER ",
+        " CREATE ",
+        " GRANT ",
+        " REVOKE ",
+        " TRUNCATE ",
+        " COPY ",
+        " EXECUTE ",
+        " CALL ",
+        " INTO ",
+    )
+    padded = f" {cleaned.upper()} "
+    for token in banned:
+        if token in padded:
+            return {"error": f"forbidden SQL keyword:{token.strip()}"}
+
+    spend = _estimate_sql_spend(cleaned)
+    if spend["estimated_usd"] >= 0.01 and not confirm_spend:
+        return {
+            "approval_required": True,
+            "spend_preview": spend,
+            "tool": "query_sql",
+            "args": {"sql": cleaned, "confirm_spend": True},
+            "message": (
+                f"Query spend preview ~${spend['estimated_usd']:.4f}. "
+                "Confirm to run."
+            ),
+        }
+
+    from eden.columnar.query import ColumnarQueryEngine
+
+    engine = ColumnarQueryEngine()
+    try:
+        rows = await engine.execute(cleaned, params={"org_id": org_id})
+        rows = rows[:500]
+        return {
+            "rows": rows,
+            "row_count": len(rows),
+            "spend_preview": spend,
+            "org_id": org_id,
+        }
+    except Exception as exc:  # noqa: BLE001
+        return {"error": str(exc), "spend_preview": spend}
+
+
+# ============================================================================
+# Tools — Navigate / filters (client-executed actions)
+# ============================================================================
+
+_PORTAL_PATH_PREFIXES: tuple[str, ...] = (
+    "/traces",
+    "/issues",
+    "/alerts",
+    "/sessions",
+    "/debugger-sessions",
+    "/artifacts",
+    "/experiments",
+    "/datasets",
+    "/playgrounds",
+    "/dashboard",
+    "/improve",
+    "/agents",
+    "/evals",
+    "/signals",
+    "/promotions",
+    "/debugger",
+    "/ledger",
+    "/fleet",
+    "/synthetic",
+    "/prompts",
+    "/optimization",
+    "/observability",
+    "/labeling",
+    "/settings",
+    "/studio",
+    "/audit-trail",
+    "/finops",
+)
+
+
+def _safe_portal_href(path: str) -> str | None:
+    """Allow only relative portal paths (no scheme / open redirect)."""
+    if not path or not isinstance(path, str):
+        return None
+    href = path.strip()
+    if not href.startswith("/") or href.startswith("//"):
+        return None
+    if "://" in href or "\\" in href:
+        return None
+    base = href.split("?", 1)[0].split("#", 1)[0]
+    if base == "/":
+        return href
+    if any(base == p or base.startswith(p + "/") for p in _PORTAL_PATH_PREFIXES):
+        return href
+    return None
+
+
+@insights_tool(
+    name="navigate",
+    description=(
+        "Navigate the portal to a path (e.g. /traces, /issues, /alerts). "
+        "Returns a client_action the UI executes. Prefer open_trace / "
+        "open_issue when targeting a specific entity."
+    ),
+    input_schema={
+        "type": "object",
+        "properties": {
+            "path": {
+                "type": "string",
+                "description": "Portal path, optionally with query string.",
+            },
+        },
+        "required": ["path"],
+    },
+)
+async def navigate(org_id: str, path: str) -> dict[str, Any]:
+    _ = org_id
+    href = _safe_portal_href(path)
+    if not href:
+        return {"error": f"invalid or disallowed path: {path!r}"}
+    return {
+        "client_action": "navigate",
+        "href": href,
+        "message": f"Navigating to {href}",
+    }
+
+
+@insights_tool(
+    name="propose_filter",
+    description=(
+        "Propose and apply a U08 query-language filter on a list page "
+        "(typically /traces). Pass q like 'latency:>2 status:error "
+        "agent:support'. Returns client_action propose_filter."
+    ),
+    input_schema={
+        "type": "object",
+        "properties": {
+            "q": {
+                "type": "string",
+                "description": "U08 filter string (agent:, status:, latency:, …).",
+            },
+            "path": {
+                "type": "string",
+                "description": "List path to apply on (default /traces).",
+            },
+        },
+        "required": ["q"],
+    },
+)
+async def propose_filter(
+    org_id: str,
+    q: str,
+    path: str = "/traces",
+) -> dict[str, Any]:
+    from urllib.parse import quote
+
+    _ = org_id
+    query = (q or "").strip()
+    if not query:
+        return {"error": "q must be a non-empty filter string"}
+    base = (path or "/traces").strip() or "/traces"
+    if "?" in base:
+        base = base.split("?", 1)[0]
+    href = _safe_portal_href(f"{base}?q={quote(query)}")
+    if not href:
+        return {"error": f"invalid path for filter: {path!r}"}
+    return {
+        "client_action": "propose_filter",
+        "q": query,
+        "href": href,
+        "path": base,
+        "message": f"Applying filter on {base}: {query}",
+    }
+
+
+@insights_tool(
+    name="find_similar",
+    description=(
+        "Find traces similar to a seed trace_id or free-text query "
+        "(by error_type / agent / model). Returns matching traces and "
+        "optionally a propose_filter client_action to browse them."
+    ),
+    input_schema={
+        "type": "object",
+        "properties": {
+            "trace_id": {
+                "type": "string",
+                "description": "Seed trace to find similars for.",
+            },
+            "query": {
+                "type": "string",
+                "description": "Free-text topic when no trace_id.",
+            },
+            "since": {
+                "type": "string",
+                "description": "Lower bound. Default: 7d.",
+            },
+            "limit": {
+                "type": "integer",
+                "description": "Max traces (default 15, max 50).",
+                "minimum": 1,
+                "maximum": 50,
+            },
+            "apply_filter": {
+                "type": "boolean",
+                "description": "If true, also return propose_filter client_action.",
+            },
+        },
+    },
+)
+async def find_similar(
+    org_id: str,
+    trace_id: str | None = None,
+    query: str | None = None,
+    since: str = "7d",
+    limit: int = 15,
+    apply_filter: bool = True,
+) -> dict[str, Any]:
+    from urllib.parse import quote
+
+    limit = max(1, min(int(limit), 50))
+    seed: dict[str, Any] = {}
+    search_q = (query or "").strip()
+
+    if trace_id:
+        client = await get_postgres_client()
+        row = await client.fetchrow(
+            """
+            SELECT trace_id,
+                   max(outcome) AS outcome,
+                   max(COALESCE(model_name, attributes->>'model')) AS model,
+                   max(error_type) AS error_type,
+                   max(COALESCE(agent_id, attributes->>'agent_id')) AS agent_id
+            FROM telemetry_events
+            WHERE tenant_id = $1 AND trace_id = $2
+            GROUP BY trace_id
+            LIMIT 1
+            """,
+            org_id,
+            trace_id,
+        )
+        if row:
+            seed = {
+                "trace_id": row["trace_id"],
+                "outcome": row["outcome"],
+                "model": row["model"],
+                "error_type": row["error_type"],
+                "agent_id": row["agent_id"],
+            }
+            if not search_q:
+                search_q = (
+                    (row["error_type"] or row["agent_id"] or row["model"] or "")
+                    or ""
+                ).strip()
+
+    if not search_q and not seed:
+        return {"error": "provide trace_id or query"}
+
+    result = await search_traces(
+        org_id=org_id,
+        query=search_q or (seed.get("error_type") or "error"),
+        since=since,
+        limit=limit,
+    )
+    traces = [
+        t
+        for t in (result.get("traces") or [])
+        if not trace_id or t.get("trace_id") != trace_id
+    ]
+    filter_parts: list[str] = []
+    if seed.get("error_type"):
+        filter_parts.append(f'text:"{seed["error_type"]}"')
+    elif seed.get("agent_id"):
+        filter_parts.append(f"agent:{seed['agent_id']}")
+    elif search_q:
+        filter_parts.append(f'text:"{search_q}"')
+    filter_q = " ".join(filter_parts)
+    out: dict[str, Any] = {
+        "seed": seed or None,
+        "query": search_q,
+        "count": len(traces),
+        "traces": traces,
+    }
+    if apply_filter and filter_q:
+        href = f"/traces?q={quote(filter_q)}"
+        out["client_action"] = "propose_filter"
+        out["q"] = filter_q
+        out["href"] = href
+        out["message"] = f"Found {len(traces)} similar traces; applying filter."
+    return out
+
+
+@insights_tool(
+    name="open_trace",
+    description="Open a trace in the traces hub (client navigate).",
+    input_schema={
+        "type": "object",
+        "properties": {
+            "trace_id": {"type": "string", "description": "Trace id to open."},
+        },
+        "required": ["trace_id"],
+    },
+)
+async def open_trace(org_id: str, trace_id: str) -> dict[str, Any]:
+    _ = org_id
+    tid = (trace_id or "").strip()
+    if not tid:
+        return {"error": "trace_id required"}
+    from urllib.parse import quote
+
+    href = f"/traces?traceId={quote(tid)}&trace_id={quote(tid)}"
+    return {
+        "client_action": "navigate",
+        "href": href,
+        "trace_id": tid,
+        "message": f"Opening trace {tid}",
+    }
+
+
+@insights_tool(
+    name="open_issue",
+    description="Open an issue detail or issues hub (client navigate).",
+    input_schema={
+        "type": "object",
+        "properties": {
+            "issue_id": {"type": "string", "description": "Issue id to open."},
+        },
+        "required": ["issue_id"],
+    },
+)
+async def open_issue(org_id: str, issue_id: str) -> dict[str, Any]:
+    _ = org_id
+    iid = (issue_id or "").strip()
+    if not iid:
+        return {"error": "issue_id required"}
+    from urllib.parse import quote
+
+    href = f"/issues/{quote(iid)}"
+    return {
+        "client_action": "navigate",
+        "href": href,
+        "issue_id": iid,
+        "message": f"Opening issue {iid}",
+    }
+
+
+@insights_tool(
+    name="open_session",
+    description="Open a session timeline (client navigate).",
+    input_schema={
+        "type": "object",
+        "properties": {
+            "session_id": {"type": "string", "description": "Session id."},
+        },
+        "required": ["session_id"],
+    },
+)
+async def open_session(org_id: str, session_id: str) -> dict[str, Any]:
+    _ = org_id
+    sid = (session_id or "").strip()
+    if not sid:
+        return {"error": "session_id required"}
+    from urllib.parse import quote
+
+    href = f"/sessions/{quote(sid)}"
+    return {
+        "client_action": "navigate",
+        "href": href,
+        "session_id": sid,
+        "message": f"Opening session {sid}",
+    }
+
+
+@insights_tool(
+    name="open_alert",
+    description="Open alerts hub, optionally focusing an alert id.",
+    input_schema={
+        "type": "object",
+        "properties": {
+            "alert_id": {
+                "type": "string",
+                "description": "Optional alert id to select.",
+            },
+        },
+    },
+)
+async def open_alert(org_id: str, alert_id: str | None = None) -> dict[str, Any]:
+    _ = org_id
+    from urllib.parse import quote
+
+    if alert_id and alert_id.strip():
+        href = f"/alerts?alertId={quote(alert_id.strip())}"
+    else:
+        href = "/alerts"
+    return {
+        "client_action": "navigate",
+        "href": href,
+        "alert_id": (alert_id or "").strip() or None,
+        "message": f"Opening {href}",
+    }
+
+
+@insights_tool(
+    name="open_artifact",
+    description="Open artifacts hub, optionally focusing an artifact id.",
+    input_schema={
+        "type": "object",
+        "properties": {
+            "artifact_id": {
+                "type": "string",
+                "description": "Optional artifact id.",
+            },
+        },
+    },
+)
+async def open_artifact(
+    org_id: str,
+    artifact_id: str | None = None,
+) -> dict[str, Any]:
+    _ = org_id
+    from urllib.parse import quote
+
+    if artifact_id and artifact_id.strip():
+        href = f"/artifacts?artifactId={quote(artifact_id.strip())}"
+    else:
+        href = "/artifacts"
+    return {
+        "client_action": "navigate",
+        "href": href,
+        "artifact_id": (artifact_id or "").strip() or None,
+        "message": f"Opening {href}",
+    }
+
+
+# ============================================================================
+# Tools — Datasets / experiments / playgrounds (W23)
+# ============================================================================
+
+
+@insights_tool(
+    name="list_datasets",
+    description="List org datasets (id, name, row/version counts).",
+    input_schema={
+        "type": "object",
+        "properties": {
+            "limit": {
+                "type": "integer",
+                "description": "Max rows (default 20, max 50).",
+            },
+        },
+    },
+)
+async def list_datasets(org_id: str, limit: int = 20) -> dict[str, Any]:
+    from eden.datasets.hub import DatasetHub
+
+    lim = max(1, min(int(limit or 20), 50))
+    hub = DatasetHub()
+    rows = await hub.list_datasets(org_id, limit=lim)
+    return {
+        "datasets": [r.to_dict() for r in rows],
+        "total": len(rows),
+        "href": "/datasets",
+    }
+
+
+@insights_tool(
+    name="create_dataset",
+    description=(
+        "Create a dataset (approval-gated write). Pass name + optional "
+        "description / source_ref."
+    ),
+    input_schema={
+        "type": "object",
+        "properties": {
+            "name": {"type": "string", "description": "Dataset name."},
+            "description": {"type": "string"},
+            "source_type": {"type": "string"},
+            "source_ref": {"type": "string"},
+        },
+        "required": ["name"],
+    },
+)
+async def create_dataset(
+    org_id: str,
+    name: str,
+    description: str = "",
+    source_type: str = "manual",
+    source_ref: str | None = None,
+) -> dict[str, Any]:
+    from eden.datasets.hub import DatasetHub
+
+    hub = DatasetHub()
+    rec = await hub.create_dataset(
+        org_id,
+        name=(name or "").strip() or "Untitled dataset",
+        description=description or "",
+        source_type=source_type or "manual",
+        source_ref=source_ref,
+    )
+    return {
+        "dataset": rec.to_dict(),
+        "href": f"/datasets/{rec.id}",
+        "message": f"Created dataset {rec.name}",
+    }
+
+
+@insights_tool(
+    name="promote_trace_to_dataset",
+    description=(
+        "Append a production trace into a dataset (approval-gated). "
+        "Creates the dataset when dataset_id is omitted."
+    ),
+    input_schema={
+        "type": "object",
+        "properties": {
+            "trace_id": {"type": "string"},
+            "dataset_id": {"type": "string"},
+            "dataset_name": {"type": "string"},
+        },
+        "required": ["trace_id"],
+    },
+)
+async def promote_trace_to_dataset(
+    org_id: str,
+    trace_id: str,
+    dataset_id: str | None = None,
+    dataset_name: str | None = None,
+) -> dict[str, Any]:
+    from eden.datasets.hub import DatasetHub
+
+    hub = DatasetHub()
+    result = await hub.promote_trace(
+        org_id,
+        (trace_id or "").strip(),
+        dataset_id=dataset_id,
+        dataset_name=dataset_name,
+    )
+    return {"status": "ok", "data": result, "href": "/datasets"}
+
+
+@insights_tool(
+    name="list_experiments",
+    description="List offline experiments for the org (F51).",
+    input_schema={
+        "type": "object",
+        "properties": {
+            "limit": {"type": "integer"},
+        },
+    },
+)
+async def list_experiments(org_id: str, limit: int = 20) -> dict[str, Any]:
+    from eden.experiments.offline_runner import OfflineExperimentRunner
+
+    lim = max(1, min(int(limit or 20), 50))
+    runner = OfflineExperimentRunner()
+    exps = await runner.list_experiments(org_id, limit=lim)
+    return {"experiments": exps, "total": len(exps), "href": "/experiments"}
+
+
+@insights_tool(
+    name="summarize_experiment",
+    description=(
+        "Summarize experiment deltas vs baseline (compare grid). "
+        "Pass experiment_id and optional baseline_id."
+    ),
+    input_schema={
+        "type": "object",
+        "properties": {
+            "experiment_id": {"type": "string"},
+            "baseline_id": {"type": "string"},
+        },
+        "required": ["experiment_id"],
+    },
+)
+async def summarize_experiment(
+    org_id: str,
+    experiment_id: str,
+    baseline_id: str | None = None,
+) -> dict[str, Any]:
+    from eden.experiments.offline_runner import OfflineExperimentRunner
+
+    runner = OfflineExperimentRunner()
+    try:
+        result = await runner.compare(
+            org_id, experiment_id, baseline_id=baseline_id
+        )
+    except ValueError as exc:
+        return {"status": "error", "message": str(exc)}
+    return {
+        "status": "ok",
+        "compare": result,
+        "href": f"/experiments?id={experiment_id}",
+    }
+
+
+@insights_tool(
+    name="create_experiment",
+    description=(
+        "Create an offline experiment bound to a dataset (approval-gated)."
+    ),
+    input_schema={
+        "type": "object",
+        "properties": {
+            "name": {"type": "string"},
+            "dataset_id": {"type": "string"},
+            "config": {"type": "object"},
+            "baseline_experiment_id": {"type": "string"},
+            "source_issue_id": {"type": "string"},
+        },
+        "required": ["name", "dataset_id"],
+    },
+)
+async def create_experiment(
+    org_id: str,
+    name: str,
+    dataset_id: str,
+    config: dict[str, Any] | None = None,
+    baseline_experiment_id: str | None = None,
+    source_issue_id: str | None = None,
+) -> dict[str, Any]:
+    from eden.experiments.offline_runner import OfflineExperimentRunner
+
+    runner = OfflineExperimentRunner()
+    exp = await runner.create(
+        org_id,
+        name=(name or "").strip() or "Untitled experiment",
+        dataset_id=dataset_id,
+        config=config or {},
+        baseline_experiment_id=baseline_experiment_id,
+        source_issue_id=source_issue_id,
+    )
+    return {
+        "experiment": exp.to_dict(),
+        "href": "/experiments",
+        "message": f"Created experiment {exp.name}",
+    }
+
+
+@insights_tool(
+    name="list_playgrounds",
+    description="List prompt playgrounds for the org (F49).",
+    input_schema={
+        "type": "object",
+        "properties": {
+            "limit": {"type": "integer"},
+        },
+    },
+)
+async def list_playgrounds(org_id: str, limit: int = 20) -> dict[str, Any]:
+    from eden.playground.service import PlaygroundService
+
+    lim = max(1, min(int(limit or 20), 50))
+    svc = PlaygroundService()
+    items = await svc.list(org_id, limit=lim)
+    return {
+        "playgrounds": [p.to_dict() for p in items],
+        "total": len(items),
+        "href": "/playgrounds",
+    }
+
+
+@insights_tool(
+    name="create_playground",
+    description="Create a prompt playground (approval-gated write).",
+    input_schema={
+        "type": "object",
+        "properties": {
+            "name": {"type": "string"},
+            "config": {"type": "object"},
+        },
+        "required": ["name"],
+    },
+)
+async def create_playground(
+    org_id: str,
+    name: str,
+    config: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    from eden.playground.service import PlaygroundService
+
+    svc = PlaygroundService()
+    rec = await svc.create(
+        org_id, name=(name or "").strip() or "Untitled playground", config=config or None
+    )
+    return {
+        "playground": rec.to_dict(),
+        "href": f"/playgrounds?id={rec.id}",
+        "message": f"Created playground {rec.name}",
+    }
+
+
+@insights_tool(
+    name="playground_from_span",
+    description=(
+        "Open a playground seeded from a trace/span (approval-gated write)."
+    ),
+    input_schema={
+        "type": "object",
+        "properties": {
+            "trace_id": {"type": "string"},
+            "span_id": {"type": "string"},
+            "model": {"type": "string"},
+        },
+        "required": ["trace_id"],
+    },
+)
+async def playground_from_span(
+    org_id: str,
+    trace_id: str,
+    span_id: str | None = None,
+    model: str | None = None,
+) -> dict[str, Any]:
+    from eden.playground.service import PlaygroundService
+
+    svc = PlaygroundService()
+    rec = await svc.from_span(
+        org_id,
+        trace_id=(trace_id or "").strip(),
+        span_id=span_id,
+        messages=[],
+        model=model,
+        tools=[],
+    )
+    return {
+        "playground": rec.to_dict(),
+        "href": f"/playgrounds?id={rec.id}",
+        "message": f"Playground from span on {trace_id}",
+    }
+
+
+@insights_tool(
+    name="estimate_chat_cost",
+    description=(
+        "Estimate USD cost for a ChatSidebar turn given model + token sizes. "
+        "Call before long / multi-tool runs."
+    ),
+    input_schema={
+        "type": "object",
+        "properties": {
+            "model": {"type": "string"},
+            "prompt_tokens": {"type": "integer"},
+            "completion_tokens": {"type": "integer"},
+            "tier": {"type": "string", "description": "t1 | t3 | auto"},
+        },
+    },
+)
+async def estimate_chat_cost(
+    org_id: str,
+    model: str | None = None,
+    prompt_tokens: int = 2500,
+    completion_tokens: int = 800,
+    tier: str = "auto",
+) -> dict[str, Any]:
+    _ = org_id
+    from eden.llmops.chat_sota import (
+        classify_chat_tier,
+        estimate_turn_cost_usd,
+        model_for_tier,
+        resolve_picker_model,
+        ttft_budget_ms,
+    )
+
+    explicit, tier_key = resolve_picker_model(
+        preferred_model=model, preferred_tier=tier
+    )
+    if explicit:
+        chosen = explicit
+        used_tier = tier_key if tier_key != "auto" else "t3"
+    else:
+        mt = classify_chat_tier("", preferred_tier=tier_key)
+        chosen = model_for_tier(mt)
+        used_tier = mt.value
+    est = estimate_turn_cost_usd(
+        chosen,
+        prompt_tokens=prompt_tokens,
+        completion_tokens=completion_tokens,
+    )
+    est["tier"] = used_tier
+    est["ttft_budget_ms"] = ttft_budget_ms(used_tier)
+    est["spend_preview"] = {
+        "estimated_usd": est["estimated_usd"],
+        "model": chosen,
+        "tier": used_tier,
+    }
+    return est
+
+
+@insights_tool(
+    name="tail_live_trace",
+    description=(
+        "N11 — open a live session in the traces hub and report recent "
+        "buffered live events (portal Live badge / SSE)."
+    ),
+    input_schema={
+        "type": "object",
+        "properties": {
+            "session_id": {
+                "type": "string",
+                "description": "Live session id (or in-flight trace id).",
+            },
+            "from_event_id": {
+                "type": "integer",
+                "description": "Resume after this event id.",
+            },
+            "max_events": {"type": "integer"},
+        },
+        "required": ["session_id"],
+    },
+)
+async def tail_live_trace(
+    org_id: str,
+    session_id: str,
+    from_event_id: int = 0,
+    max_events: int = 40,
+) -> dict[str, Any]:
+    from urllib.parse import quote
+
+    sid = (session_id or "").strip()
+    if not sid:
+        return {"error": "session_id required"}
+
+    events: list[dict[str, Any]] = []
+    try:
+        from eden.observability.live.publisher import LiveTracePublisher
+
+        buffered = await LiveTracePublisher().drain_buffer(org_id, sid)
+        events = [
+            e
+            for e in buffered
+            if int(e.get("event_id") or 0) > int(from_event_id or 0)
+        ][: max(1, min(int(max_events or 40), 200))]
+    except Exception as exc:
+        logger.debug("tail_live_trace buffer: %s", exc)
+
+    href = f"/traces?traceId={quote(sid)}&live=1&session={quote(sid)}"
+    return {
+        "session_id": sid,
+        "events": events,
+        "count": len(events),
+        "feature": "live_trace_streaming",
+        "client_action": "navigate",
+        "href": href,
+        "message": (
+            f"Opened live tail for session {sid} "
+            f"({len(events)} buffered events)."
+        ),
+    }
+
+
+# ============================================================================
 # Tool dispatch
 # ============================================================================
 

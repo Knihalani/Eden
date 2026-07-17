@@ -74,6 +74,18 @@ export const BREADCRUMB_LABELS: Record<string, BreadcrumbLabel> = {
   mcp: { label: "MCP SRE", category: "observe" },
   "model-advisor": { label: "Model Advisor", category: "optimize" },
   "closed-loop": { label: "Closed-Loop", category: "automate" },
+  artifacts: { label: "Artifacts", category: "automate" },
+  experiments: { label: "Experiments", category: "automate" },
+  playgrounds: { label: "Playgrounds", category: "automate" },
+  promotions: { label: "Promotions", category: "automate" },
+  evals: { label: "Evals", category: "automate" },
+  sessions: { label: "Sessions", category: "observe" },
+  ledger: { label: "Ledger", category: "observe" },
+  book: { label: "Agent Book", category: "automate" },
+  drift: { label: "Drift", category: "automate" },
+  "debugger-sessions": { label: "Debugger sessions", category: "observe" },
+  audit: { label: "Audit trail", category: "workspace" },
+  "audit-trail": { label: "Audit trail", category: "workspace" },
 };
 
 export interface Breadcrumb {
