@@ -2,7 +2,7 @@
  * GET /api/health — proxy to FastAPI's /health.
  *
  * Same as /api/proxy/health but on a dedicated route so callers
- * (auth-brand-panel, status pages, uptime monitors) don't have to
+ * (auth-brand-panel, uptime monitors) don't have to
  * remember the /api/proxy prefix. The handler is intentionally
  * tiny — the real work happens in `forwardToBackend`.
  *

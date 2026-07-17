@@ -21,31 +21,49 @@ class MonitoringDashboardService:
         except Exception:
             return None
 
+    @staticmethod
+    def _empty_home(org_id: str) -> dict[str, Any]:
+        return {
+            "org_id": org_id,
+            "name": "Home",
+            "is_home": True,
+            "widgets": [],
+        }
+
     async def list_dashboards(self, org_id: str) -> list[dict[str, Any]]:
         client = await self._client()
         if client is None:
             return []
-        rows = await client.fetch(
-            "SELECT * FROM monitoring_dashboards WHERE org_id = $1 "
-            "ORDER BY is_home DESC, updated_at DESC",
-            org_id,
-        )
-        return [dict(r) for r in rows]
+        try:
+            rows = await client.fetch(
+                "SELECT * FROM monitoring_dashboards WHERE org_id = $1 "
+                "ORDER BY is_home DESC, updated_at DESC",
+                org_id,
+            )
+            return [dict(r) for r in rows]
+        except Exception as exc:
+            # Missing migration 102 / table → empty list, never 500 the portal.
+            logger.warning("list_dashboards failed org=%s: %s", org_id, exc)
+            return []
 
     async def get_home(self, org_id: str) -> dict[str, Any] | None:
         client = await self._client()
         if client is None:
-            return None
-        row = await client.fetchrow(
-            "SELECT * FROM monitoring_dashboards WHERE org_id = $1 AND is_home = true "
-            "ORDER BY updated_at DESC LIMIT 1",
-            org_id,
-        )
-        if not row:
-            return await self.ensure_default_home(org_id)
-        dash = dict(row)
-        dash["widgets"] = await self.list_widgets(org_id, str(row["id"]))
-        return dash
+            return self._empty_home(org_id)
+        try:
+            row = await client.fetchrow(
+                "SELECT * FROM monitoring_dashboards WHERE org_id = $1 AND is_home = true "
+                "ORDER BY updated_at DESC LIMIT 1",
+                org_id,
+            )
+            if not row:
+                return await self.ensure_default_home(org_id)
+            dash = dict(row)
+            dash["widgets"] = await self.list_widgets(org_id, str(row["id"]))
+            return dash
+        except Exception as exc:
+            logger.warning("get_home failed org=%s: %s", org_id, exc)
+            return self._empty_home(org_id)
 
     async def ensure_default_home(self, org_id: str) -> dict[str, Any]:
         dashboards = await self.list_dashboards(org_id)
@@ -55,41 +73,61 @@ class MonitoringDashboardService:
             return home
         client = await self._client()
         if client is None:
-            return {"org_id": org_id, "name": "Home", "is_home": True, "widgets": []}
+            return self._empty_home(org_id)
         did = str(uuid.uuid4())
-        await client.execute(
-            """
-            INSERT INTO monitoring_dashboards (id, org_id, name, is_home)
-            VALUES ($1::uuid, $2, 'Home', true)
-            """,
-            did,
-            org_id,
-        )
-        for i, (wtype, title, query) in enumerate(
-            [
-                ("traces", "Trace volume", "summary:traces"),
-                ("cost", "Cost (24h)", "summary:cost"),
-                ("scores", "Eval pass rate", "summary:eval_pass_rate"),
-                ("issues", "Open issues", "summary:issues"),
-            ]
-        ):
+        try:
             await client.execute(
                 """
-                INSERT INTO dashboard_widgets
-                (id, dashboard_id, org_id, widget_type, title, query, position)
-                VALUES ($1::uuid, $2::uuid, $3, $4, $5, $6, $7)
+                INSERT INTO monitoring_dashboards (id, org_id, name, is_home)
+                VALUES ($1::uuid, $2, 'Home', true)
+                ON CONFLICT (org_id, name) DO NOTHING
                 """,
-                str(uuid.uuid4()),
                 did,
                 org_id,
-                wtype,
-                title,
-                query,
-                i,
             )
-        dash = {"id": did, "org_id": org_id, "name": "Home", "is_home": True}
-        dash["widgets"] = await self.list_widgets(org_id, did)
-        return dash
+            # Concurrent first-load may have won the unique (org_id, name) race.
+            existing = await client.fetchrow(
+                "SELECT * FROM monitoring_dashboards WHERE org_id = $1 AND name = 'Home' "
+                "ORDER BY updated_at DESC LIMIT 1",
+                org_id,
+            )
+            if existing:
+                did = str(existing["id"])
+            else:
+                # Conflict path didn't insert and no row found — fall back empty.
+                return self._empty_home(org_id)
+
+            widgets = await self.list_widgets(org_id, did)
+            if not widgets:
+                for i, (wtype, title, query) in enumerate(
+                    [
+                        ("traces", "Trace volume", "summary:traces"),
+                        ("cost", "Cost (24h)", "summary:cost"),
+                        ("scores", "Eval pass rate", "summary:eval_pass_rate"),
+                        ("issues", "Open issues", "summary:issues"),
+                    ]
+                ):
+                    await client.execute(
+                        """
+                        INSERT INTO dashboard_widgets
+                        (id, dashboard_id, org_id, widget_type, title, query, position)
+                        VALUES ($1::uuid, $2::uuid, $3, $4, $5, $6, $7)
+                        ON CONFLICT (id) DO NOTHING
+                        """,
+                        str(uuid.uuid4()),
+                        did,
+                        org_id,
+                        wtype,
+                        title,
+                        query,
+                        i,
+                    )
+            dash = {"id": did, "org_id": org_id, "name": "Home", "is_home": True}
+            dash["widgets"] = await self.list_widgets(org_id, did)
+            return dash
+        except Exception as exc:
+            logger.warning("ensure_default_home failed org=%s: %s", org_id, exc)
+            return self._empty_home(org_id)
 
     async def create_dashboard(
         self, org_id: str, *, name: str, is_home: bool = False
@@ -119,16 +157,25 @@ class MonitoringDashboardService:
         client = await self._client()
         if client is None:
             return []
-        rows = await client.fetch(
-            """
-            SELECT * FROM dashboard_widgets
-            WHERE org_id = $1 AND dashboard_id = $2::uuid
-            ORDER BY position ASC
-            """,
-            org_id,
-            dashboard_id,
-        )
-        return [dict(r) for r in rows]
+        try:
+            rows = await client.fetch(
+                """
+                SELECT * FROM dashboard_widgets
+                WHERE org_id = $1 AND dashboard_id = $2::uuid
+                ORDER BY position ASC
+                """,
+                org_id,
+                dashboard_id,
+            )
+            return [dict(r) for r in rows]
+        except Exception as exc:
+            logger.warning(
+                "list_widgets failed org=%s dashboard=%s: %s",
+                org_id,
+                dashboard_id,
+                exc,
+            )
+            return []
 
     async def upsert_widget(
         self,

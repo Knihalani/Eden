@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Eden · OpenRouter Smoke Agent</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="shell">
+      <header class="top">
+        <div class="brand">
+          <span class="mark" aria-hidden="true"></span>
+          <div>
+            <p class="product">Eden</p>
+            <h1>OpenRouter smoke agent</h1>
+          </div>
+        </div>
+        <div class="top-meta">
+          <span class="pill" id="health-pill">checking…</span>
+          <a
+            class="link"
+            href="https://edenobservability.com/traces"
+            target="_blank"
+            rel="noreferrer"
+            >prod traces ↗</a
+          >
+        </div>
+      </header>
+
+      <main class="layout">
+        <aside class="panel config">
+          <h2>Credentials</h2>
+          <p class="hint">
+            Values entered here stay in this browser tab (and optional server
+            env defaults). They are sent only to this local process and OpenRouter /
+            Eden prod.
+          </p>
+
+          <fieldset>
+            <legend>OpenRouter</legend>
+            <label>
+              API key
+              <input
+                id="openrouter-key"
+                type="password"
+                autocomplete="off"
+                spellcheck="false"
+                placeholder="sk-or-v1-…"
+              />
+            </label>
+            <label>
+              Model id
+              <input
+                id="model"
+                type="text"
+                autocomplete="off"
+                spellcheck="false"
+                placeholder="openai/gpt-4o-mini"
+              />
+            </label>
+          </fieldset>
+
+          <fieldset>
+            <legend>Eden prod</legend>
+            <label>
+              Org id
+              <input
+                id="eden-org"
+                type="text"
+                autocomplete="off"
+                spellcheck="false"
+                placeholder="org_…"
+              />
+            </label>
+            <label>
+              API key
+              <input
+                id="eden-key"
+                type="password"
+                autocomplete="off"
+                spellcheck="false"
+                placeholder="sk_eden_…"
+              />
+            </label>
+            <label>
+              Base URL
+              <input
+                id="eden-base"
+                type="text"
+                autocomplete="off"
+                spellcheck="false"
+                value="https://api.edenobservability.com"
+              />
+            </label>
+            <label>
+              Project id
+              <input
+                id="eden-project"
+                type="text"
+                autocomplete="off"
+                spellcheck="false"
+                value="openrouter-smoke-agent"
+              />
+            </label>
+          </fieldset>
+
+          <button type="button" class="ghost" id="save-local">
+            Remember in this browser
+          </button>
+        </aside>
+
+        <section class="panel chat">
+          <div class="chat-head">
+            <h2>Agent</h2>
+            <p class="hint">
+              Tool-calling agent via <code>@eden-ai/sdk</code>
+              <code>wrapOpenAI</code> → OpenRouter. Sessions + LLM spans go to
+              prod Eden.
+            </p>
+          </div>
+
+          <div id="transcript" class="transcript" aria-live="polite"></div>
+
+          <form id="chat-form" class="composer">
+            <textarea
+              id="message"
+              rows="3"
+              placeholder="Try: What time is it UTC, and what is (19.5 + 2.5) * 3? Also look up Singapore."
+              required
+            ></textarea>
+            <div class="composer-row">
+              <button type="submit" id="send">Run agent</button>
+              <span id="status" class="status"></span>
+            </div>
+          </form>
+        </section>
+
+        <aside class="panel events">
+          <h2>Turn events</h2>
+          <p class="hint">LLM rounds, tool calls, session id from the last run.</p>
+          <pre id="events">No runs yet.</pre>
+        </aside>
+      </main>
+    </div>
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>

@@ -24,7 +24,6 @@ import {
   GATEWAY_URL,
   FREE_TIER_TAGLINE,
   FREE_TIER_CAP_SHORT,
-  STATUS_PAGE_URL,
 } from "@/lib/constants";
 import { CodeChip } from "@/components/ui";
 import {
@@ -492,18 +491,6 @@ export default function LandingPage() {
           </div>
 
           <div className="hidden md:flex items-center gap-2">
-            <a
-              href={STATUS_PAGE_URL}
-              target="_blank"
-              rel="noreferrer"
-              className="hidden lg:inline-flex items-center gap-2 px-3 py-1.5 text-xs text-[var(--text-muted)] hover:text-[var(--text-secondary)]"
-            >
-              <span className="relative flex h-1.5 w-1.5">
-                <span className="absolute inline-flex h-full w-full rounded-full bg-[var(--terminal)] opacity-60 animate-ping" />
-                <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-[var(--terminal)]" />
-              </span>
-              All systems normal
-            </a>
             {signedIn ? (
               <Link
                 href="/dashboard"
@@ -781,28 +768,13 @@ export default function LandingPage() {
         </section>
 
         {/* ============================== Trust strip ==============================
-         * The previous version rendered a row of grey text labels
-         * (OpenAI · Anthropic · ...), which is the most identifiable
-         * "AI slop" 2024-landing-page pattern. The integrations are
-         * now mentioned inline in the install section's prose and in
-         * the pillar descriptions, so the strip can carry a
-         * different signal: live system status + on-brand
-         * credibility proof points.
-         *
-         * The new strip is a thin micro-label row that answers
-         * "can I trust this is real?" with:
-         *   - All systems normal (live status, accent green)
-         *   - Human-reviewed patches
-         *   - Open source SDKs (Apache-2.0)
-         * Each item is a small Chip-style pill with a status icon
-         * (green dot, lock, code) so it reads as data, not a
-         * logo placeholder row. */}
+         * Thin credibility row — not a logo farm, not a fake status page. */}
         <section className="border-y border-[var(--border-subtle)] bg-[var(--bg-secondary)]/40">
           <div className="max-w-7xl mx-auto px-6 py-5">
             <ul className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-[11px] font-mono uppercase tracking-[0.18em]">
               <li className="inline-flex items-center gap-2 text-[var(--text-secondary)]">
-                <span className="inline-flex h-1.5 w-1.5 rounded-full bg-[var(--terminal)]" />
-                <span>All systems normal</span>
+                <Terminal className="w-3 h-3 text-[var(--text-faint)]" />
+                <span>Drop-in SDKs</span>
               </li>
               <li className="text-[var(--text-faint)]" aria-hidden="true">/</li>
               <li className="inline-flex items-center gap-2 text-[var(--text-secondary)]">
@@ -1499,18 +1471,6 @@ export default function LandingPage() {
                 </a>
                 <a href={`${DOCS_URL}/reference/`} target="_blank" rel="noopener noreferrer" className="text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)]">
                   API reference
-                </a>
-                <a
-                  href="https://status.edenobservability.com"
-                  target="_blank"
-                  rel="noreferrer"
-                  className="text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)] inline-flex items-center gap-1.5"
-                >
-                  Status
-                  <span className="relative flex h-1.5 w-1.5">
-                    <span className="absolute inline-flex h-full w-full rounded-full bg-[var(--terminal)] opacity-60 animate-ping" />
-                    <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-[var(--terminal)]" />
-                  </span>
                 </a>
               </div>
               <div className="flex flex-col gap-3">

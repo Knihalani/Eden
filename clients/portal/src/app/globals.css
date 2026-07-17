@@ -517,7 +517,7 @@ body {
 
 /* FIX-N: on the onboarding wizard, no z-50 fixed element may sit
  * over the wizard CTAs. The ChatSidebar floating toggle
- * (fixed bottom-4 right-4 z-50) was eating the user's clicks on
+ * (fixed bottom-right FAB, z-50) was eating the user's clicks on
  * "Get started" / "Continue" / "Create org" before this rule
  * existed. ChatSidebar itself is gated by usePathname(), but this
  * is a belt-and-braces CSS backstop in case any other floating

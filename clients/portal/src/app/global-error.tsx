@@ -34,12 +34,12 @@ export default function GlobalError({
               <h1 className="text-xl font-semibold">Something broke server-side</h1>
               <p className="text-sm text-[var(--text-secondary)]">
                 Eden hit an unexpected error rendering this page. Reloading usually
-                clears it; if it persists, check{" "}
+                clears it; if it persists, contact{" "}
                 <a
-                  href="https://status.edenobservability.com"
+                  href="mailto:hello@edenobservability.com"
                   className="text-[var(--accent)] hover:underline"
                 >
-                  status.edenobservability.com
+                  hello@edenobservability.com
                 </a>
                 .
               </p>

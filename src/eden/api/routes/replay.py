@@ -57,19 +57,45 @@ async def list_alerts(
 ):
     """List in-app alerts for an organization (scoped to the caller)."""
     client = await get_postgres_client()
-    user_id = await eden_user_id_from_auth(user)
+    if client is None:
+        raise HTTPException(status_code=503, detail="Database unavailable")
+
+    try:
+        user_id = await eden_user_id_from_auth(user)
+    except Exception as exc:
+        logger.warning("list_alerts user resolve failed: %s", exc)
+        raise HTTPException(status_code=503, detail="User lookup failed") from exc
     if not user_id:
         raise HTTPException(status_code=404, detail="User not found")
 
-    eden_org_id = await resolve_eden_org_id(org_id)
-    if not eden_org_id:
+    # Resolve org in-line so DB blips become 503, not a fake "Organization not found".
+    try:
+        org_row = await client.fetchrow(
+            """
+            SELECT id FROM organizations
+            WHERE id::text = $1 OR clerk_org_id::text = $1
+            LIMIT 1
+            """,
+            org_id,
+        )
+    except Exception as exc:
+        logger.warning("list_alerts org resolve failed org=%s: %s", org_id, exc)
+        raise HTTPException(
+            status_code=503, detail="Organization lookup failed"
+        ) from exc
+    if not org_row:
         raise HTTPException(status_code=404, detail="Organization not found")
+    eden_org_id = str(org_row["id"])
 
-    membership = await client.fetchrow(
-        "SELECT role FROM org_members WHERE org_id = $1 AND user_id = $2",
-        eden_org_id,
-        user_id,
-    )
+    try:
+        membership = await client.fetchrow(
+            "SELECT role FROM org_members WHERE org_id = $1 AND user_id = $2",
+            eden_org_id,
+            user_id,
+        )
+    except Exception as exc:
+        logger.warning("list_alerts membership query failed: %s", exc)
+        raise HTTPException(status_code=503, detail="Membership lookup failed") from exc
     if not membership:
         raise HTTPException(status_code=403, detail="Not a member of this organization")
 
@@ -94,30 +120,41 @@ async def list_alerts(
 
     where_clause = " AND ".join(conditions)
 
-    count_row = await client.fetchrow(
-        f"SELECT COUNT(*) as total FROM notifications WHERE {where_clause}",
-        *params,
-    )
-    total = count_row["total"] if count_row else 0
+    try:
+        count_row = await client.fetchrow(
+            f"SELECT COUNT(*) as total FROM notifications WHERE {where_clause}",
+            *params,
+        )
+        total = count_row["total"] if count_row else 0
 
-    unread_row = await client.fetchrow(
-        f"SELECT COUNT(*) as unread FROM notifications WHERE {where_clause} AND read_at IS NULL",
-        *params,
-    )
-    unread_count = unread_row["unread"] if unread_row else 0
+        unread_row = await client.fetchrow(
+            f"SELECT COUNT(*) as unread FROM notifications WHERE {where_clause} AND read_at IS NULL",
+            *params,
+        )
+        unread_count = unread_row["unread"] if unread_row else 0
 
-    rows = await client.fetch(
-        f"""
-        SELECT id, user_id, org_id, type, title, body, data, read_at, created_at
-        FROM notifications
-        WHERE {where_clause}
-        ORDER BY created_at DESC
-        LIMIT ${param_idx} OFFSET ${param_idx + 1}
-        """,
-        *params,
-        limit,
-        offset,
-    )
+        rows = await client.fetch(
+            f"""
+            SELECT id, user_id, org_id, type, title, body, data, read_at, created_at
+            FROM notifications
+            WHERE {where_clause}
+            ORDER BY created_at DESC
+            LIMIT ${param_idx} OFFSET ${param_idx + 1}
+            """,
+            *params,
+            limit,
+            offset,
+        )
+    except Exception as exc:
+        # Missing notifications table / schema drift → empty feed, not a hard 500/404.
+        logger.warning("list_alerts query failed org=%s: %s", eden_org_id, exc)
+        return {
+            "alerts": [],
+            "total": 0,
+            "unread_count": 0,
+            "limit": limit,
+            "offset": offset,
+        }
 
     alerts = []
     for row in rows:

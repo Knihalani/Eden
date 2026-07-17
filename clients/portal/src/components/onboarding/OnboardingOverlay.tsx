@@ -28,8 +28,12 @@ export function OnboardingOverlay() {
   const [busy, setBusy] = useState(false);
   /** After Skip/Finish, ignore effect re-open until URL force flag clears. */
   const userClosedRef = useRef(false);
+  /** Bootstrap Clerk metadata at most once per mount (avoids #185 loops). */
+  const bootstrappedRef = useRef(false);
 
   const forceOpen = searchParams.get("onboarding") === "1";
+  const progressStatus = progress?.status;
+  const progressStep = progress?.stepIndex ?? 0;
 
   const clearOnboardingQuery = useCallback(() => {
     if (!forceOpen) return;
@@ -47,14 +51,18 @@ export function OnboardingOverlay() {
     if (userClosedRef.current) return;
 
     if (forceOpen) {
-      setStepIndexLocal(progress?.status === "active" ? progress.stepIndex : 0);
+      setStepIndexLocal(progressStatus === "active" ? progressStep : 0);
       setOpen(true);
       return;
     }
     if (!isComplete) {
-      setStepIndexLocal(progress?.stepIndex ?? 0);
+      setStepIndexLocal(progressStep);
       setOpen(true);
-      if (!progress) {
+      // Only seed Clerk metadata when there is no tour record yet.
+      // Depend on primitives (status/step), never the progress object —
+      // object identity churn was causing React #185 (max update depth).
+      if (!progressStatus && !bootstrappedRef.current) {
+        bootstrappedRef.current = true;
         void setStatus("active", 0).catch(() => {
           /* first paint still shows tour */
         });
@@ -62,7 +70,7 @@ export function OnboardingOverlay() {
     } else {
       setOpen(false);
     }
-  }, [isLoaded, forceOpen, isComplete, progress, setStatus]);
+  }, [isLoaded, forceOpen, isComplete, progressStatus, progressStep, setStatus]);
 
   async function handleSkip() {
     // Close first — never leave the user stuck behind a failing persist.

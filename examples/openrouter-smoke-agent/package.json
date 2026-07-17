@@ -1,0 +1,21 @@
+{
+  "name": "eden-openrouter-smoke-agent",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Local dashboard + tool-calling agent that sends traces to prod Eden via the published @eden-ai/sdk",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "start": "tsx src/server.ts",
+    "doctor": "eden-doctor"
+  },
+  "dependencies": {
+    "@eden-ai/sdk": "^0.3.1",
+    "openai": "^6.48.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.8.0"
+  }
+}
