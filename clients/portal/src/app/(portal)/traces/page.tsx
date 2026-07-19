@@ -7,10 +7,11 @@
 import { useCallback, useMemo, useState, Suspense, useEffect } from "react";
 import { useSearchParams } from "next/navigation";
 import dynamic from "next/dynamic";
-import { Layers, RefreshCw, Loader2 } from "lucide-react";
+import { BookOpen, Key, Layers, RefreshCw, Loader2 } from "lucide-react";
 import { PageHeader } from "@/components/layout/page-header";
 import { PageContent } from "@/components/layout/page-content";
 import { NoOrgState } from "@/components/ui/no-org-state";
+import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorState } from "@/components/ui/error-state";
 import { LoadingSkeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
@@ -43,6 +44,8 @@ import { usePagePerf, useTableQueryPerf, markEden } from "@/lib/perf";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
 import { EmbeddedSurface } from "@/components/layout/embedded-surface";
+import { DOCS_QUICKSTART_URL } from "@/lib/constants";
+import { U20_EMPTY_COPY } from "@/lib/portal-polish";
 
 const HUB_VIEWS = ["traces", "spans", "sessions"] as const;
 const LEGACY_VIEWS = ["inspect", "replay", "debug", "query"] as const;
@@ -334,22 +337,51 @@ function TracesPageInner() {
       {hubView === "traces" && (
         <div className="grid gap-4 lg:grid-cols-[1fr_18rem]">
           <div className="space-y-4 min-w-0">
-            <SpanSearchBar orgId={currentOrg.id} onSelectTrace={handleSelectTrace} />
-            <TracesTab
-              traces={traces}
-              loading={loading}
-              filter={effectiveFilter}
-              onFilterChange={setFilter}
-              onSelectTrace={handleSelectTrace}
-              onViewTimeline={handleViewTimeline}
-              onExport={handleExport}
-              onAnnotate={handleAnnotate}
-              onCreateAlertFromFilters={handleCreateAlertFromFilters}
-              initialTraceId={traceId || undefined}
-              hasMore={!loading && !errorMessage && tracesTotal > traces.length}
-              onLoadMore={() => setLimit((l) => l + PAGE_SIZE)}
-              loadingMore={refreshing}
-            />
+            {!loading && !errorMessage && traces.length === 0 ? (
+              <div data-testid="traces-first-run-hint">
+                <EmptyState
+                  icon={Layers}
+                  title="No traces yet"
+                  description={U20_EMPTY_COPY.traces}
+                  size="lg"
+                  action={
+                    <div className="flex flex-wrap items-center justify-center gap-2">
+                      <Button asChild className="min-h-11">
+                        <Link href="/settings?tab=api-keys">
+                          <Key className="h-4 w-4" />
+                          API keys
+                        </Link>
+                      </Button>
+                      <Button asChild variant="outline" className="min-h-11">
+                        <a href={DOCS_QUICKSTART_URL} target="_blank" rel="noopener noreferrer">
+                          <BookOpen className="h-4 w-4" />
+                          Docs quickstart
+                        </a>
+                      </Button>
+                    </div>
+                  }
+                />
+              </div>
+            ) : (
+              <>
+                <SpanSearchBar orgId={currentOrg.id} onSelectTrace={handleSelectTrace} />
+                <TracesTab
+                  traces={traces}
+                  loading={loading}
+                  filter={effectiveFilter}
+                  onFilterChange={setFilter}
+                  onSelectTrace={handleSelectTrace}
+                  onViewTimeline={handleViewTimeline}
+                  onExport={handleExport}
+                  onAnnotate={handleAnnotate}
+                  onCreateAlertFromFilters={handleCreateAlertFromFilters}
+                  initialTraceId={traceId || undefined}
+                  hasMore={!loading && !errorMessage && tracesTotal > traces.length}
+                  onLoadMore={() => setLimit((l) => l + PAGE_SIZE)}
+                  loadingMore={refreshing}
+                />
+              </>
+            )}
           </div>
           <LiveTailPanel orgId={currentOrg.id} onSelectTrace={handleSelectTrace} />
         </div>

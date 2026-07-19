@@ -3,8 +3,8 @@
 /**
  * U12 IA freeze — ≤12 core nav items (July 2026 Wave 3).
  *
- * Observe / Improve / Evaluate / Workspace grouping.
- * Advanced surfaces (agents, prompts, analytics, guardrails, cost) hidden
+ * Product path order: Home → Observe → Evaluate → Improve → Workspace.
+ * Advanced surfaces (agents, prompts, analytics, guardrails, cost) stay
  * behind the Advanced toggle until expanded.
  */
 
@@ -15,6 +15,7 @@ import {
   FileText,
   ShieldAlert,
   ShieldCheck,
+  KeyRound,
   type LucideIcon,
 } from "lucide-react";
 import {
@@ -27,7 +28,7 @@ import {
   AlertNavIcon,
   InsightsIcon,
 } from "@/components/icons/eden-nav-icons";
-import { DOCS_URL } from "@/lib/constants";
+import { DOCS_QUICKSTART_URL } from "@/lib/constants";
 
 export type SidebarIcon = LucideIcon | ComponentType<{ className?: string }>;
 
@@ -48,7 +49,7 @@ export interface SidebarGroup {
   items: SidebarItem[];
 }
 
-/** Core leaf count: 9 (≤12 per U12). Advanced items excluded from default count. */
+/** Core leaf count: ≤12 per U12. Advanced items excluded from default count. */
 export const DEFAULT_SIDEBAR: SidebarGroup[] = [
   {
     id: "build",
@@ -123,9 +124,29 @@ export const DEFAULT_SIDEBAR: SidebarGroup[] = [
     ],
   },
   {
+    id: "automate",
+    label: "Evaluate",
+    items: [
+      {
+        id: "evals",
+        href: "/evals",
+        label: "Evals",
+        icon: EvalIcon,
+        description: "Playgrounds, experiments, datasets, labeling, and studio.",
+      },
+    ],
+  },
+  {
     id: "optimize",
     label: "Improve",
     items: [
+      {
+        id: "improve",
+        href: "/improve",
+        label: "Improve",
+        icon: PatchIcon,
+        description: "Action queue, improvement plans, and sweep history.",
+      },
       {
         id: "artifacts",
         href: "/artifacts",
@@ -146,13 +167,6 @@ export const DEFAULT_SIDEBAR: SidebarGroup[] = [
         label: "Promotions",
         icon: PatchIcon,
         description: "EvidenceGate inbox — approve or reject shadow candidates.",
-      },
-      {
-        id: "improve",
-        href: "/improve",
-        label: "Improve queue",
-        icon: PatchIcon,
-        description: "Action queue, improvement plans, and sweep history.",
       },
       {
         id: "optimization",
@@ -181,19 +195,6 @@ export const DEFAULT_SIDEBAR: SidebarGroup[] = [
     ],
   },
   {
-    id: "automate",
-    label: "Evaluate",
-    items: [
-      {
-        id: "evals",
-        href: "/evals",
-        label: "Evals",
-        icon: EvalIcon,
-        description: "Playgrounds, experiments, datasets, labeling, and studio.",
-      },
-    ],
-  },
-  {
     id: "workspace",
     label: "Workspace",
     items: [
@@ -212,6 +213,13 @@ export const DEFAULT_SIDEBAR: SidebarGroup[] = [
         description: "Members, billing, account, gateway, retention, PII, exports.",
         children: [
           {
+            id: "api-keys",
+            href: "/settings?tab=api-keys",
+            label: "API keys",
+            icon: KeyRound,
+            description: "Org API key and org id for the SDK and gateway.",
+          },
+          {
             id: "settings-webhooks-dlq",
             href: "/settings/webhooks-dlq",
             label: "Webhook DLQ",
@@ -223,11 +231,10 @@ export const DEFAULT_SIDEBAR: SidebarGroup[] = [
       },
       {
         id: "docs",
-        href: DOCS_URL,
-        label: "Docs",
+        href: DOCS_QUICKSTART_URL,
+        label: "Quickstart",
         icon: FileText,
-        category: "advanced",
-        description: "API reference, guides, and examples.",
+        description: "Docs quickstart — gateway or SDK, then send a first trace.",
       },
     ],
   },

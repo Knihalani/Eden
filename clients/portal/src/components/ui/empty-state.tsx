@@ -27,6 +27,8 @@ export interface EmptyStateProps {
    */
   variant?: "panel" | "plain" | "terminal";
   className?: string;
+  /** Optional id for the title heading (aria-labelledby). */
+  titleId?: string;
 }
 
 const SIZE_STYLES: Record<NonNullable<EmptyStateProps["size"]>, {
@@ -68,12 +70,17 @@ export function EmptyState({
   size = "md",
   variant = "panel",
   className,
+  titleId,
 }: EmptyStateProps) {
   const s = SIZE_STYLES[size];
+  const autoId = React.useId();
+  const headingId = titleId ?? autoId;
   const inner = (
     <>
       {variant === "terminal" && terminal ? (
-        <div className="mb-5 mx-auto max-w-md">{terminal}</div>
+        <div className="mb-5 mx-auto max-w-md" aria-hidden={true}>
+          {terminal}
+        </div>
       ) : (
         Icon && (
           <div
@@ -81,12 +88,16 @@ export function EmptyState({
               "mx-auto rounded-xl bg-[var(--bg-tertiary)] border border-[var(--border-subtle)] flex items-center justify-center text-[var(--text-muted)]",
               s.iconWrap,
             )}
+            aria-hidden="true"
           >
             <Icon className={cn(s.icon, "stroke-1")} aria-hidden />
           </div>
         )
       )}
-      <p className={cn("font-medium text-[var(--text-secondary)]", s.title)}>
+      <p
+        id={headingId}
+        className={cn("font-medium text-[var(--text-secondary)]", s.title)}
+      >
         {title}
       </p>
       {description && (
@@ -106,6 +117,10 @@ export function EmptyState({
   if (variant === "panel") {
     return (
       <div
+        role="status"
+        aria-live="polite"
+        aria-atomic="true"
+        aria-labelledby={headingId}
         className={cn(
           "rounded-xl border border-[var(--border-default)] bg-[var(--bg-primary)] text-center p-6",
           s.wrap,
@@ -118,7 +133,13 @@ export function EmptyState({
   }
 
   return (
-    <div className={cn("text-center", s.wrap, className)}>
+    <div
+      role="status"
+      aria-live="polite"
+      aria-atomic="true"
+      aria-labelledby={headingId}
+      className={cn("text-center", s.wrap, className)}
+    >
       {inner}
     </div>
   );

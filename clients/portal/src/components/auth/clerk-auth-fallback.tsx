@@ -21,8 +21,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useClerk } from "@clerk/nextjs";
-import { AlertTriangle, Mail } from "lucide-react";
-import { GATEWAY_URL } from "@/lib/constants";
+import { AlertTriangle, ExternalLink, Mail } from "lucide-react";
+import { DOCS_QUICKSTART_URL } from "@/lib/constants";
 
 // Fail-closed budget if Clerk never inserts form controls. Healthy
 // mounts usually resolve via MutationObserver well under 1s.
@@ -130,7 +130,7 @@ export function ClerkAuthFallback({ children, formLabel }: ClerkAuthFallbackProp
               <span className="w-2 h-2 rounded-full bg-[var(--text-faint)]" />
             </span>
             <span className="ml-1 text-[10px] font-mono uppercase tracking-[0.18em] text-[var(--text-muted)]">
-              Meanwhile, try the CLI
+              Meanwhile, try the SDK
             </span>
           </div>
           <div className="p-4 font-mono text-[13px] leading-relaxed text-[var(--text-secondary)]">
@@ -139,17 +139,22 @@ export function ClerkAuthFallback({ children, formLabel }: ClerkAuthFallbackProp
               <span className="text-[var(--accent)]">$</span>{" "}
               <span className="text-[var(--text-primary)]">pip install eden-sdk</span>
             </div>
-            <div className="mt-3 text-[var(--text-faint)]"># point your OpenAI client at the gateway</div>
+            <div className="mt-3 text-[var(--text-faint)]"># after you have an API key from Settings</div>
             <div className="mt-1.5 break-all">
               <span className="text-[var(--accent)]">$</span>{" "}
-              <span className="text-[var(--text-primary)]">
-                export OPENAI_BASE_URL={GATEWAY_URL}
-              </span>
+              <span className="text-[var(--text-primary)]">export EDEN_API_KEY=…</span>
             </div>
-            <div className="mt-3 text-[var(--text-faint)]"># review a PR-suggestion</div>
+            <div className="mt-3 text-[var(--text-faint)]"># send your first trace</div>
             <div className="mt-1.5">
-              <span className="text-[var(--accent)]">$</span>{" "}
-              <span className="text-[var(--text-primary)]">open eden://pr-suggestions</span>
+              <a
+                href={DOCS_QUICKSTART_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 text-[var(--accent)] hover:text-[var(--accent-hover)]"
+              >
+                Docs quickstart
+                <ExternalLink className="h-3 w-3" aria-hidden />
+              </a>
             </div>
           </div>
         </div>

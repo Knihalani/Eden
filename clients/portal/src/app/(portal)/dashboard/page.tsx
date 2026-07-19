@@ -5,6 +5,7 @@ import Link from "next/link";
 import {
   DollarSign,
   AlertTriangle,
+  BookOpen,
   GitBranch,
   Sparkles,
   Key,
@@ -108,7 +109,13 @@ export default function DashboardPage() {
   const [visibleWidgets, setVisibleWidgets] = useState<WidgetId[]>([...DEFAULT_WIDGETS]);
 
   useEffect(() => {
-    if (orgId) setVisibleWidgets(loadLayout(orgId));
+    if (!orgId) return;
+    const next = loadLayout(orgId);
+    setVisibleWidgets((prev) =>
+      prev.length === next.length && prev.every((id, i) => id === next[i])
+        ? prev
+        : next,
+    );
   }, [orgId]);
 
   const saveLayout = (next: WidgetId[]) => {
@@ -190,9 +197,9 @@ export default function DashboardPage() {
     () => shardOr404Null(wave6Api.getHomeDashboard(orgId!)),
   );
 
+  const telemetryLoading = tracesQuery.isLoading || summaryQuery.isLoading;
   const loading =
-    tracesQuery.isLoading ||
-    summaryQuery.isLoading ||
+    telemetryLoading ||
     optimizationQuery.isLoading ||
     alertsQuery.isLoading ||
     costComparisonQuery.isLoading;
@@ -305,21 +312,50 @@ export default function DashboardPage() {
   // Last 24h traces — see comment above on the eslint-disable for
   // the same purity rule (filter cutoff, not control flow).
   const lastDayTraces = useMemo(() => {
-     
     const cutoff = Date.now() - DAY_MS;
     return traces.filter((t) => new Date(t.started_at).getTime() >= cutoff);
   }, [traces]);
 
-  // Detect first-run: the summary shard loaded successfully AND both
-  // it and the trace list report zero traces. Requiring `summary !=
-  // null` (rather than defaulting a failed/404 fetch to 0 via `??`)
-  // is the fix — a shard failure must never be mistaken for "this is
-  // a brand-new tenant". June 2026 data-trust fix.
-  const isFirstRun =
-    !loading &&
-    summary !== null &&
-    tracesTotal === 0 &&
-    (summary.total_traces ?? 0) === 0;
+  // Soft-failed traces shard (success + null) or hard error — never
+  // present as a first-run empty inbox. Wait until the query has settled
+  // before calling anything "empty".
+  const tracesSettled =
+    tracesQuery.isFetched || tracesQuery.isError || tracesQuery.isSuccess;
+  const tracesUnavailable =
+    tracesQuery.isError ||
+    (tracesSettled && tracesQuery.data == null);
+  const tracesErrorMessage = tracesQuery.isError
+    ? (tracesQuery.error?.message ?? "Could not load traces.")
+    : tracesUnavailable
+      ? "Telemetry API did not return traces."
+      : null;
+
+  // Install-forward by default: show the checklist until telemetry proves
+  // we have traces (or the traces shard is hard-unavailable). Optimistic
+  // true avoids a Connect-primary flash while queries hang on a cold API.
+  const tracesHonestlyEmpty =
+    tracesSettled &&
+    tracesQuery.data != null &&
+    tracesTotal === 0;
+  const hasTraceTraffic =
+    tracesSettled &&
+    tracesQuery.data != null &&
+    tracesTotal > 0;
+  const [installPath, setInstallPath] = useState(true);
+  useEffect(() => {
+    if (hasTraceTraffic) {
+      setInstallPath(false);
+      return;
+    }
+    if (tracesUnavailable) {
+      setInstallPath(false);
+      return;
+    }
+    if (tracesHonestlyEmpty || !tracesSettled) {
+      setInstallPath(true);
+    }
+  }, [hasTraceTraffic, tracesUnavailable, tracesHonestlyEmpty, tracesSettled]);
+  const isFirstRun = installPath;
 
   // No-org branch: brand-new Clerk signups land here before they've
   // joined or created an org. Without this guard the dashboard sat in
@@ -334,10 +370,10 @@ export default function DashboardPage() {
         onRetrySync={() => void refreshOrgs()}
         description={
           orgSyncTimedOut
-            ? "Workspace sync is taking longer than expected. Try refreshing, or finish setup from onboarding."
+            ? "Workspace sync is taking longer than expected. Refresh to try again — the product tour does not create or sync your organization."
             : orgSyncing
               ? undefined
-              : "Finish setup to start capturing traces, alerts, and cost data for your agents."
+              : "Your Clerk organization is not linked to Eden yet. Refresh after signup, or ask an admin to invite you."
         }
       />
     );
@@ -351,27 +387,65 @@ export default function DashboardPage() {
         <PageHeader
           title="Home"
           subtitle={
-            isFirstRun && canConnect
-              ? "Live signals from your agents — connect a repo to start seeing traces here."
+            isFirstRun
+              ? "Install the SDK or gateway to send traces — connecting a repo is optional."
               : "Editable first screen — volume, cost Δ, anomalies, and quick links."
           }
           className="mb-4 sm:mb-5"
           greeting={currentOrg ? `Welcome back to ${currentOrg.name}.` : undefined}
           actions={
             <div className="flex flex-wrap items-center gap-2">
-              <Button
-                variant={editing ? "default" : "outline"}
-                size="sm"
-                onClick={() => setEditing((e) => !e)}
-                aria-pressed={editing}
-              >
-                <LayoutGrid className="h-3.5 w-3.5" />
-                {editing ? "Done" : "Edit layout"}
-              </Button>
-              {canConnect ? (
+              {!isFirstRun ? (
+                <Button
+                  variant={editing ? "default" : "outline"}
+                  size="sm"
+                  className="min-h-[44px]"
+                  onClick={() => setEditing((e) => !e)}
+                  aria-pressed={editing}
+                >
+                  <LayoutGrid className="h-3.5 w-3.5" />
+                  {editing ? "Done" : "Edit layout"}
+                </Button>
+              ) : null}
+              {isFirstRun ? (
+                <>
+                  <Link
+                    href="/settings?tab=api-keys"
+                    className="inline-flex items-center gap-1.5 min-h-[44px] h-11 px-3 py-2 bg-[var(--accent)] text-[var(--accent-foreground)] rounded-lg text-sm font-medium hover:bg-[var(--accent-hover)] transition-colors"
+                  >
+                    <Key className="w-3.5 h-3.5" />
+                    API keys
+                  </Link>
+                  <a
+                    href={DOCS_QUICKSTART_URL}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 min-h-[44px] h-11 px-3 py-2 border border-[var(--border)] rounded-lg text-sm font-medium text-[var(--text-primary)] hover:bg-[var(--bg-secondary)] transition-colors"
+                  >
+                    <BookOpen className="w-3.5 h-3.5" />
+                    Docs quickstart
+                  </a>
+                  <Link
+                    href="/dashboard?onboarding=1"
+                    className="inline-flex items-center gap-1.5 min-h-[44px] h-11 px-3 py-2 border border-[var(--border)] rounded-lg text-sm font-medium text-[var(--text-primary)] hover:bg-[var(--bg-secondary)] transition-colors"
+                  >
+                    <Sparkles className="w-3.5 h-3.5" />
+                    Product tour
+                  </Link>
+                  {canConnect ? (
+                    <Link
+                      href="/agents/connect"
+                      className="inline-flex items-center gap-1.5 min-h-[44px] h-11 px-3 py-2 border border-[var(--border)] rounded-lg text-sm font-medium text-[var(--text-primary)] hover:bg-[var(--bg-secondary)] transition-colors"
+                    >
+                      <GitBranch className="w-3.5 h-3.5" />
+                      Connect a repo
+                    </Link>
+                  ) : null}
+                </>
+              ) : canConnect ? (
                 <Link
-                  href={isFirstRun ? "/dashboard?onboarding=1" : "/agents/connect"}
-                  className="inline-flex items-center gap-1.5 px-3 py-2 bg-[var(--accent)] text-[var(--accent-foreground)] rounded-lg text-sm font-medium hover:bg-[var(--accent-hover)] transition-colors"
+                  href="/agents/connect"
+                  className="inline-flex items-center gap-1.5 min-h-[44px] h-11 px-3 py-2 bg-[var(--accent)] text-[var(--accent-foreground)] rounded-lg text-sm font-medium hover:bg-[var(--accent-hover)] transition-colors"
                 >
                   <GitBranch className="w-3.5 h-3.5" />
                   Connect a repo
@@ -424,44 +498,87 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* Row 1: metrics or first-run getting started */}
+      {/* Row 1: metrics or first-run checklist (install path; no CTA theatre) */}
       {isFirstRun ? (
-        <Card className="p-6 sm:p-8 border border-[var(--border)] bg-[var(--surface)]">
+        <Card
+          data-testid="dashboard-first-run"
+          className="p-6 sm:p-8 border border-[var(--border)] bg-[var(--surface)]"
+        >
           <div className="max-w-xl space-y-4">
-            <h2 className="text-lg font-semibold text-[var(--text-primary)]">
-              Get started with observability
-            </h2>
-            <p className="text-sm text-[var(--text-muted)]">
-              Create an API key, install the SDK, and send a test trace. Throughput,
-              latency, and failures show up here once ingestion starts.
-            </p>
-            <div className="flex flex-wrap gap-3">
-              <Link
-                href={DOCS_QUICKSTART_URL}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1.5 px-3 py-2 bg-[var(--accent)] text-[var(--accent-foreground)] rounded-lg text-sm font-medium hover:bg-[var(--accent-hover)] transition-colors"
-              >
-                <Key className="w-3.5 h-3.5" />
-                Docs quickstart
-              </Link>
-              <Link
-                href="/dashboard?onboarding=1"
-                className="inline-flex items-center gap-1.5 px-3 py-2 border border-[var(--border)] rounded-lg text-sm font-medium text-[var(--text-primary)] hover:bg-[var(--bg-secondary)] transition-colors"
-              >
-                <Sparkles className="w-3.5 h-3.5" />
-                Product tour
-              </Link>
-              {canConnect && (
-                <Link
-                  href="/agents?tab=fleet"
-                  className="inline-flex items-center gap-1.5 px-3 py-2 border border-[var(--border)] rounded-lg text-sm font-medium text-[var(--text-primary)] hover:bg-[var(--bg-secondary)] transition-colors"
-                >
-                  <GitBranch className="w-3.5 h-3.5" />
-                  Connect a repo
-                </Link>
-              )}
+            <div className="space-y-2">
+              <h2 className="text-lg font-semibold text-[var(--text-primary)]">
+                Get started with observability
+              </h2>
+              <p className="text-sm text-[var(--text-muted)]">
+                Create an API key, install the SDK or gateway, run doctor, then open
+                Traces. Connecting a repo is optional — use the header actions.
+              </p>
             </div>
+            <ol className="space-y-1 text-sm list-none">
+              <li>
+                <Link
+                  href="/settings?tab=api-keys"
+                  className="inline-flex items-center gap-2 min-h-[44px] text-[var(--text-primary)] hover:text-[var(--accent)] transition-colors"
+                >
+                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-[var(--accent-faint)] text-xs font-semibold text-[var(--accent)]">
+                    1
+                  </span>
+                  <span>
+                    <span className="font-medium">Create API key</span>
+                    <span className="text-[var(--text-muted)]"> — Settings → API keys</span>
+                  </span>
+                </Link>
+              </li>
+              <li>
+                <a
+                  href={DOCS_QUICKSTART_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-2 min-h-[44px] text-[var(--text-primary)] hover:text-[var(--accent)] transition-colors"
+                >
+                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-[var(--accent-faint)] text-xs font-semibold text-[var(--accent)]">
+                    2
+                  </span>
+                  <span>
+                    <span className="font-medium">Install SDK / gateway</span>
+                    <span className="text-[var(--text-muted)]"> — docs quickstart</span>
+                  </span>
+                </a>
+              </li>
+              <li>
+                <a
+                  href={DOCS_QUICKSTART_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-2 min-h-[44px] text-[var(--text-primary)] hover:text-[var(--accent)] transition-colors"
+                >
+                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-[var(--accent-faint)] text-xs font-semibold text-[var(--accent)]">
+                    3
+                  </span>
+                  <span>
+                    <span className="font-medium">Run doctor</span>
+                    <span className="text-[var(--text-muted)]">
+                      {" "}
+                      — eden-doctor or python -m eden_sdk.doctor
+                    </span>
+                  </span>
+                </a>
+              </li>
+              <li>
+                <Link
+                  href="/traces"
+                  className="inline-flex items-center gap-2 min-h-[44px] text-[var(--text-primary)] hover:text-[var(--accent)] transition-colors"
+                >
+                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-[var(--accent-faint)] text-xs font-semibold text-[var(--accent)]">
+                    4
+                  </span>
+                  <span>
+                    <span className="font-medium">Open Traces</span>
+                    <span className="text-[var(--text-muted)]"> — confirm first events</span>
+                  </span>
+                </Link>
+              </li>
+            </ol>
           </div>
         </Card>
       ) : (
@@ -591,7 +708,12 @@ export default function DashboardPage() {
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-4 sm:gap-6">
         {show("traces") ? (
           <div className="xl:col-span-2">
-            <RecentTracesCard loading={loading} traces={lastDayTraces.slice(0, 10)} />
+            <RecentTracesCard
+              loading={!tracesSettled || tracesQuery.isLoading}
+              traces={lastDayTraces.slice(0, 10)}
+              unavailable={tracesUnavailable}
+              errorMessage={tracesErrorMessage}
+            />
           </div>
         ) : null}
         {show("links") ? (

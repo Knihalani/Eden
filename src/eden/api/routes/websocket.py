@@ -83,10 +83,24 @@ def _role_cache_set_local(key: tuple[str, str], value: bool) -> None:
 async def _role_cache_get_async(key: tuple[str, str]) -> bool | None:
     """Return the cached role decision for ``key``, or ``None`` on miss.
 
-    Distributed via Redis (key ``hilt-role:<user>:<job>``, TTL 30 s)
-    when available so multi-worker deploys share state; falls back
-    to the in-memory OrderedDict otherwise.
+    Local L0 first (zero Redis commands). Redis is only consulted on
+    a local miss when RATE_LIMIT_DISTRIBUTED is on — same conserve
+    posture as rate limiting for Upstash Free.
     """
+    local = _role_cache_get_local(key)
+    if local is not None:
+        return local
+
+    use_redis = False
+    try:
+        from eden.config import get_settings
+
+        use_redis = bool(get_settings().rate_limit_distributed)
+    except Exception:
+        use_redis = False
+    if not use_redis:
+        return None
+
     try:
         redis = await get_redis_client()
     except Exception:
@@ -98,22 +112,31 @@ async def _role_cache_get_async(key: tuple[str, str]) -> bool | None:
             )
             if raw is None:
                 return None
-            return raw == "1"
+            value = raw == "1"
+            _role_cache_set_local(key, value)
+            return value
         except Exception as exc:
             logger.debug(
                 "hilt role cache Redis GET failed; using local: %s", redact_all(str(exc)),
             )
-    return _role_cache_get_local(key)
+    return None
 
 
 async def _role_cache_set_async(key: tuple[str, str], value: bool) -> None:
     """Cache a role decision for ``key`` for ``_USER_ROLE_TTL_SECONDS``.
 
-    Writes go to both Redis (when available) AND the local cache so a
-    follow-up read in the same worker doesn't pay a Redis round-trip
-    for a hot key.
+    Always writes local L0. Redis write only when distributed mode is on.
     """
     _role_cache_set_local(key, value)
+    use_redis = False
+    try:
+        from eden.config import get_settings
+
+        use_redis = bool(get_settings().rate_limit_distributed)
+    except Exception:
+        use_redis = False
+    if not use_redis:
+        return
     try:
         redis = await get_redis_client()
     except Exception:

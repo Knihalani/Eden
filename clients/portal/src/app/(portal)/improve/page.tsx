@@ -25,6 +25,7 @@ import { errorFromCaught } from "@/lib/safe-error-message";
 import { PlanKindBadge } from "@/components/improve/plan-kind-badge";
 import type { ImprovementPlanKind } from "@/lib/api";
 import { useQueryTab } from "@/hooks/use-query-tab";
+import { DOCS_QUICKSTART_URL } from "@/lib/constants";
 
 const IMPROVE_TABS = ["queue", "plans", "history"] as const;
 
@@ -47,7 +48,7 @@ function TabLoading() {
 
 const COLUMNS: Array<{ id: string; label: string; hint: string }> = [
   { id: "urgent", label: "Urgent", hint: "P0 / critical issues" },
-  { id: "needs_you", label: "Needs you", hint: "PR merge, approvals, credentials" },
+  { id: "needs_you", label: "Needs you", hint: "Approvals, credentials, merge decisions" },
   { id: "autonomous", label: "Eden fixing", hint: "Heal / canary / rollback in flight" },
   { id: "proposed", label: "Proposed", hint: "Closed-loop recommendations" },
   { id: "verify", label: "Verify", hint: "Approved patches awaiting check" },
@@ -198,7 +199,7 @@ function ImprovePageInner() {
         <PageHeader
           title="Improve"
           subtitle="Action queue, improvement plans, and sweep history."
-          description="One queue for triage, patches, nudges, and promotions from Agent Issues."
+          description="Needs traces and Agent Issues first. One queue for triage, patches, nudges, and promotions."
           actions={
             tab === "queue" ? (
               <Button
@@ -289,14 +290,17 @@ function ImprovePageInner() {
         ) : items.length === 0 ? (
           <EmptyState
             title="Nothing in the queue"
-            description="When Eden detects issues or proposes patches and nudges, they show up here — operator and autonomous columns."
+            description="Needs production traces and Agent Issues first. Create an API key, install the SDK or gateway from the docs, then return when Eden has signals to triage."
             action={
               <div className="flex flex-wrap items-center justify-center gap-2">
-                <Link href="/dashboard?onboarding=1">
-                  <Button>Install SDK</Button>
+                <a href={DOCS_QUICKSTART_URL} target="_blank" rel="noopener noreferrer">
+                  <Button className="min-h-11">Docs quickstart</Button>
+                </a>
+                <Link href="/settings?tab=api-keys">
+                  <Button variant="outline" className="min-h-11">Create API key</Button>
                 </Link>
                 <Link href="/issues">
-                  <Button variant="outline">View Issues</Button>
+                  <Button variant="outline" className="min-h-11">View Issues</Button>
                 </Link>
               </div>
             }

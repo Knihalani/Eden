@@ -56,15 +56,24 @@ async def get_redis_client() -> Redis | None:
         return None
 
     try:
+        # health_check_interval=0 disables redis-py's periodic PING.
+        # On Upstash Free (500k cmds/month) a 30s ping per connection
+        # alone burns ~86k cmds/month — and rate-limit Lua was worse.
+        health_interval = int(
+            getattr(_get_settings(), "redis_health_check_interval", 0) or 0
+        )
         _redis_client = await redis.from_url(
             redis_url,
             encoding="utf-8",
             decode_responses=True,
             socket_connect_timeout=5,
             socket_keepalive=True,
-            health_check_interval=30,
+            health_check_interval=health_interval,
         )
-        logger.info("Redis client connected.")
+        logger.info(
+            "Redis client connected (health_check_interval=%ss).",
+            health_interval,
+        )
         return _redis_client
     except Exception as e:
         logger.warning(f"Redis connection failed: {e}")

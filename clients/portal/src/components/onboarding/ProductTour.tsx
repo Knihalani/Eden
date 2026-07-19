@@ -3,8 +3,8 @@
 /**
  * ProductTour — spotlight overlay that introduces each portal surface.
  *
- * Larger card, clearer hierarchy, Escape/X always invoke onSkip (parent
- * closes optimistically). Finish step links to the docs quickstart.
+ * Escape / X / Skip always invoke onSkip (parent closes optimistically).
+ * Finish step links to the docs quickstart. Agents stay optional.
  */
 
 import {
@@ -13,6 +13,7 @@ import {
   useLayoutEffect,
   useRef,
   useState,
+  type MouseEvent as ReactMouseEvent,
 } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
@@ -30,11 +31,30 @@ const PAD = 10;
 const CARD_W = 440;
 const CARD_H = 280;
 
+const FOCUSABLE =
+  'button:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])';
+
+const btnBase =
+  "inline-flex min-h-11 items-center justify-center gap-1.5 rounded-xl px-3.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-primary)]";
+const btnGhost = cn(
+  btnBase,
+  "border border-[var(--border-default)] text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)] disabled:opacity-40",
+);
+const btnPrimary = cn(
+  btnBase,
+  "bg-[var(--accent)] px-4 font-semibold text-[var(--accent-foreground)] hover:opacity-90",
+);
+
 interface Rect {
   top: number;
   left: number;
   width: number;
   height: number;
+}
+
+function prefersReducedMotion(): boolean {
+  if (typeof window === "undefined") return false;
+  return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 }
 
 function measureTarget(targetId: string | undefined): Rect | null {
@@ -125,9 +145,11 @@ export function ProductTour({
   const navigating = useRef(false);
   const skipRef = useRef(onSkip);
   skipRef.current = onSkip;
+  const cardRef = useRef<HTMLDivElement>(null);
+  const previouslyFocused = useRef<HTMLElement | null>(null);
 
   const refreshHole = useCallback(() => {
-    if (!step || step.kind !== "nav") {
+    if (!step || step.kind !== "nav" || !step.targetId) {
       setHole(null);
       return;
     }
@@ -136,9 +158,10 @@ export function ProductTour({
 
   useEffect(() => {
     if (!open) return;
-    // Fire once when the tour opens — not on every step — so the sidebar
-    // does not thrash expand/collapse mid-tour.
     window.dispatchEvent(new Event("eden:product-tour"));
+    return () => {
+      window.dispatchEvent(new Event("eden:product-tour-end"));
+    };
   }, [open]);
 
   useEffect(() => {
@@ -149,10 +172,43 @@ export function ProductTour({
   }, []);
 
   useEffect(() => {
+    if (!open) return;
+    previouslyFocused.current =
+      (document.activeElement as HTMLElement | null) ?? null;
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prevOverflow;
+      previouslyFocused.current?.focus?.({ preventScroll: true });
+    };
+  }, [open]);
+
+  useEffect(() => {
+    if (!open || !ready) return;
+    const root = cardRef.current;
+    if (!root) return;
+    const primary =
+      root.querySelector<HTMLElement>("[data-tour-primary]") ??
+      root.querySelector<HTMLElement>(FOCUSABLE);
+    primary?.focus({ preventScroll: true });
+  }, [open, ready, stepIndex]);
+
+  useEffect(() => {
     if (!open || !step?.href) return;
-    const target = step.href.split("?")[0];
-    const here = (pathname || "").split("?")[0];
-    if (here === target || here.startsWith(target + "/")) {
+    const targetUrl = new URL(step.href, "http://eden.local");
+    const herePath = (pathname || "").split("?")[0] || "/";
+    const targetPath = targetUrl.pathname;
+    const pathMatches =
+      herePath === targetPath || herePath.startsWith(targetPath + "/");
+    const wantTab = targetUrl.searchParams.get("tab");
+    // useSearchParams is available via pathname-only nav elsewhere; read
+    // live query so /settings?tab=org → api-keys still pushes.
+    const hereTab =
+      typeof window !== "undefined"
+        ? new URLSearchParams(window.location.search).get("tab")
+        : null;
+    const tabMatches = !wantTab || wantTab === hereTab;
+    if (pathMatches && tabMatches) {
       navigating.current = false;
       return;
     }
@@ -168,16 +224,19 @@ export function ProductTour({
 
     const tick = () => {
       if (cancelled) return;
-      if (step.kind === "nav") {
+      if (step.kind === "nav" && step.targetId) {
         const r = measureTarget(step.targetId);
         if (r) {
           setHole(r);
           setReady(true);
           navigating.current = false;
           const el = document.querySelector(
-            `[data-tour-id="${step.targetId!.replace(/"/g, "")}"]`,
+            `[data-tour-id="${step.targetId.replace(/"/g, "")}"]`,
           );
-          el?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+          el?.scrollIntoView({
+            block: "nearest",
+            behavior: prefersReducedMotion() ? "auto" : "smooth",
+          });
           return;
         }
         attempts += 1;
@@ -218,7 +277,35 @@ export function ProductTour({
         e.preventDefault();
         e.stopPropagation();
         skipRef.current();
-      } else if (e.key === "ArrowRight" || e.key === "Enter") {
+        return;
+      }
+
+      if (e.key === "Tab" && cardRef.current) {
+        const nodes = Array.from(
+          cardRef.current.querySelectorAll<HTMLElement>(FOCUSABLE),
+        ).filter((el) => el.offsetParent !== null || el === document.activeElement);
+        if (nodes.length === 0) return;
+        const first = nodes[0];
+        const last = nodes[nodes.length - 1];
+        const active = document.activeElement as HTMLElement | null;
+        if (e.shiftKey) {
+          if (active === first || !cardRef.current.contains(active)) {
+            e.preventDefault();
+            last.focus();
+          }
+        } else if (active === last || !cardRef.current.contains(active)) {
+          e.preventDefault();
+          first.focus();
+        }
+        return;
+      }
+
+      if (e.key === "ArrowRight" || e.key === "Enter") {
+        const target = e.target as HTMLElement | null;
+        // Never steal Enter from card controls (Skip / Back / Close / CTAs).
+        if (target?.closest?.("a, button, [role='button'], textarea, input, select")) {
+          return;
+        }
         e.preventDefault();
         goNext();
       } else if (e.key === "ArrowLeft") {
@@ -228,8 +315,7 @@ export function ProductTour({
     };
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- goNext/goBack close over stepIndex
-  }, [open, stepIndex]);
+  }, [open, stepIndex, busy]);
 
   function goNext() {
     if (busy) return;
@@ -255,6 +341,22 @@ export function ProductTour({
   const progressPct = ((stepIndex + 1) / PRODUCT_TOUR_TOTAL) * 100;
   const isSheet = placement.side === "sheet";
 
+  function dismissUnlessHole(e: ReactMouseEvent) {
+    if (hole) {
+      const x = e.clientX;
+      const y = e.clientY;
+      if (
+        x >= hole.left &&
+        x <= hole.left + hole.width &&
+        y >= hole.top &&
+        y <= hole.top + hole.height
+      ) {
+        return;
+      }
+    }
+    skipRef.current();
+  }
+
   return createPortal(
     <AnimatePresence>
       {open && (
@@ -272,7 +374,7 @@ export function ProductTour({
             exit={{ opacity: 0 }}
             transition={{ duration: 0.22 }}
             className="absolute inset-0"
-            onClick={() => skipRef.current()}
+            onClick={dismissUnlessHole}
           >
             {hole && !narrow ? (
               <svg className="absolute inset-0 h-full w-full" aria-hidden>
@@ -303,18 +405,18 @@ export function ProductTour({
                   rx={12}
                   fill="none"
                   stroke="var(--accent)"
-                  strokeWidth={2.5}
+                  strokeWidth={2}
                   className="pointer-events-none"
-                  style={{ filter: "drop-shadow(0 0 10px color-mix(in srgb, var(--accent) 55%, transparent))" }}
                 />
               </svg>
             ) : (
-              <div className="absolute inset-0 bg-[rgba(4,6,10,0.78)] backdrop-blur-[3px]" />
+              <div className="absolute inset-0 bg-[rgba(4,6,10,0.78)]" />
             )}
           </motion.div>
 
           {ready && (
             <motion.div
+              ref={cardRef}
               key={`card-${step.id}`}
               initial={
                 isSheet
@@ -345,7 +447,7 @@ export function ProductTour({
                 "pointer-events-auto z-[81] overflow-hidden border border-[var(--border-default)]",
                 "bg-[var(--bg-primary)] shadow-[0_24px_64px_rgba(0,0,0,0.55)]",
                 isSheet
-                  ? "absolute inset-x-0 bottom-0 rounded-t-2xl border-b-0"
+                  ? "absolute inset-x-0 bottom-0 rounded-t-2xl border-b-0 pb-[env(safe-area-inset-bottom)]"
                   : "absolute rounded-2xl",
               )}
               onClick={(e) => e.stopPropagation()}
@@ -363,7 +465,7 @@ export function ProductTour({
               <div className="flex items-start justify-between gap-4 px-5 pt-5 pb-1 sm:px-6 sm:pt-6">
                 <div className="min-w-0">
                   <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--accent)]">
-                    Product tour · {stepIndex + 1} of {PRODUCT_TOUR_TOTAL}
+                    Product tour · {stepIndex + 1} / {PRODUCT_TOUR_TOTAL}
                   </p>
                   <h2
                     id="eden-tour-title"
@@ -376,7 +478,11 @@ export function ProductTour({
                   type="button"
                   onClick={() => skipRef.current()}
                   aria-label="Close tour"
-                  className="shrink-0 rounded-lg p-2 text-[var(--text-muted)] transition-colors hover:bg-[var(--bg-tertiary)] hover:text-[var(--text-primary)]"
+                  className={cn(
+                    "inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-[var(--text-muted)]",
+                    "transition-colors hover:bg-[var(--bg-tertiary)] hover:text-[var(--text-primary)]",
+                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-primary)]",
+                  )}
                 >
                   <X className="h-5 w-5" />
                 </button>
@@ -391,21 +497,24 @@ export function ProductTour({
                 </p>
               </div>
 
-              <div className="flex items-center justify-between gap-3 border-t border-[var(--border-default)] px-5 py-4 sm:px-6">
+              <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[var(--border-default)] px-5 py-4 sm:px-6">
                 <button
                   type="button"
                   onClick={() => skipRef.current()}
-                  className="text-sm text-[var(--text-muted)] transition-colors hover:text-[var(--text-primary)]"
+                  className={cn(
+                    "min-h-11 px-2 text-sm text-[var(--text-muted)] transition-colors hover:text-[var(--text-primary)]",
+                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-primary)] rounded-lg",
+                  )}
                 >
-                  Skip
+                  Skip tour
                 </button>
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center justify-end gap-2">
                   {!isWelcome && (
                     <button
                       type="button"
                       disabled={stepIndex === 0}
                       onClick={goBack}
-                      className="inline-flex items-center gap-1.5 rounded-xl border border-[var(--border-default)] px-3.5 py-2.5 text-sm font-medium text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-tertiary)] disabled:opacity-40"
+                      className={btnGhost}
                     >
                       <ArrowLeft className="h-4 w-4" />
                       Back
@@ -415,27 +524,64 @@ export function ProductTour({
                     <>
                       <Link
                         href="/settings?tab=api-keys"
-                        className="inline-flex items-center gap-1.5 rounded-xl border border-[var(--border-default)] px-3.5 py-2.5 text-sm font-medium text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-tertiary)]"
+                        className={btnGhost}
                         onClick={() => onFinish()}
                       >
-                        API key
+                        API keys
                       </Link>
                       <a
                         href={step.ctaHref}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1.5 rounded-xl bg-[var(--accent)] px-4 py-2.5 text-sm font-semibold text-[var(--accent-foreground)] transition-opacity hover:opacity-90"
+                        data-tour-primary
+                        data-tour-cta
+                        className={btnPrimary}
                         onClick={() => onFinish()}
                       >
                         {step.ctaLabel ?? "Open docs"}
                         <ExternalLink className="h-4 w-4" />
                       </a>
                     </>
+                  ) : step.ctaHref ? (
+                    <>
+                      <button
+                        type="button"
+                        onClick={goNext}
+                        className={btnGhost}
+                      >
+                        {isWelcome ? "Start tour" : "Next"}
+                        <ArrowRight className="h-4 w-4" />
+                      </button>
+                      {step.ctaExternal ? (
+                        <a
+                          href={step.ctaHref}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          data-tour-primary
+                          data-tour-cta
+                          className={btnPrimary}
+                        >
+                          {step.ctaLabel ?? "Open"}
+                          <ExternalLink className="h-4 w-4" />
+                        </a>
+                      ) : (
+                        <Link
+                          href={step.ctaHref}
+                          data-tour-primary
+                          data-tour-cta
+                          className={btnPrimary}
+                        >
+                          {step.ctaLabel ?? "Open"}
+                          <ArrowRight className="h-4 w-4" />
+                        </Link>
+                      )}
+                    </>
                   ) : (
                     <button
                       type="button"
                       onClick={goNext}
-                      className="inline-flex items-center gap-1.5 rounded-xl bg-[var(--accent)] px-4 py-2.5 text-sm font-semibold text-[var(--accent-foreground)] transition-opacity hover:opacity-90"
+                      data-tour-primary
+                      className={btnPrimary}
                     >
                       {isWelcome ? "Start tour" : "Next"}
                       <ArrowRight className="h-4 w-4" />

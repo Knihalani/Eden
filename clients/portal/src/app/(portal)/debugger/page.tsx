@@ -53,7 +53,6 @@ export default function DebuggerPage() {
       void load();
     }
     // Only run on mount / when org first becomes available.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentOrg?.id]);
 
   if (!currentOrg) return <NoOrgState feature="Debugger" />;

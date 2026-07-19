@@ -45,13 +45,23 @@ export function OnboardingOverlay() {
 
   useEffect(() => {
     if (!isLoaded) return;
-    if (!forceOpen && userClosedRef.current) {
-      userClosedRef.current = false;
+    // Keep Skip/Finish sticky until Clerk marks the tour complete.
+    // Clearing userClosedRef on every non-forceOpen run raced setStatus
+    // and reopened the overlay while status was still "active".
+    if (userClosedRef.current) {
+      if (isComplete && !forceOpen) {
+        userClosedRef.current = false;
+      }
+      if (userClosedRef.current) return;
     }
-    if (userClosedRef.current) return;
 
     if (forceOpen) {
-      setStepIndexLocal(progressStatus === "active" ? progressStep : 0);
+      // ?onboarding=1 always reopens. Resume when paused/active; restart after Finish.
+      setStepIndexLocal(
+        progressStatus === "active" || progressStatus === "skipped"
+          ? progressStep
+          : 0,
+      );
       setOpen(true);
       return;
     }
@@ -80,7 +90,7 @@ export function OnboardingOverlay() {
     setBusy(true);
     try {
       await setStatus("skipped", stepIndex);
-      toast.success("Tour skipped — resume anytime from the banner");
+      toast.success("Tour paused — resume from the banner anytime");
     } catch {
       toast.error("Tour closed — progress may not have saved");
     } finally {

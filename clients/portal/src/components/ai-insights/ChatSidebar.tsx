@@ -205,7 +205,6 @@ export function ChatSidebar() {
           )}
           role="complementary"
           aria-label="AI Insights assistant"
-          aria-modal="true"
         >
           {body}
         </aside>

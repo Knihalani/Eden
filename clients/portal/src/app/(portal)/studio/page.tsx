@@ -3,7 +3,6 @@
 import { useEffect, useState, useCallback } from "react";
 import { useOrg } from "@/hooks/use-org";
 import { metricStudioApi } from "@/lib/api";
-import { cn } from "@/lib/utils";
 import { EmptyState } from "@/components/ui/empty-state";
 import { NoOrgState } from "@/components/ui/no-org-state";
 import { PageHeader } from "@/components/layout/page-header";

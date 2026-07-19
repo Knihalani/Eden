@@ -57,3 +57,11 @@ export function buildEdenTourProgress(
 export function isTourComplete(progress: EdenTourProgress | null): boolean {
   return progress?.status === "done" || progress?.status === "skipped";
 }
+
+/** Banner stays visible after Skip so Resume / API-key CTAs remain reachable. */
+export function shouldShowTourBanner(
+  progress: EdenTourProgress | null,
+): boolean {
+  if (!progress) return true;
+  return progress.status !== "done";
+}

@@ -622,6 +622,12 @@ def _build_settings_class():
         rate_limit_enabled: bool = True
         rate_limit_default_per_window: int = 60
         rate_limit_window_seconds: int = 60
+        # When False (default), rate limits use in-process token buckets /
+        # sliding windows and do NOT touch Redis. Upstash Free tier is
+        # 500k commands/month; per-request Redis Lua (3–5 cmds each) was
+        # exhausting that quota. Set RATE_LIMIT_DISTRIBUTED=true only when
+        # running multiple API replicas that must share counters.
+        rate_limit_distributed: bool = False
         # IdempotencyMiddleware — when enabled, mutating ``/v1/*``
         # requests that carry an ``Idempotency-Key`` header are
         # deduped (Redis + Postgres). Requests without the header
@@ -632,11 +638,20 @@ def _build_settings_class():
         # ClickHouse — used by data_platform.clickhouse_sink + the columnar
         # engine (Cat 18). HTTP interface only; see
         # docs/architecture/clickhouse-transport.md for why.
+        # Production points CLICKHOUSE_URL at Tinybird
+        # (https://api.us-east.tinybird.co); the sink auto-detects that
+        # host and switches to Tinybird Events API + /v0/sql.
         clickhouse_url: str = "http://localhost:8123"
         clickhouse_database: str = "eden"
         clickhouse_user: str = "default"
         clickhouse_password: str = ""
         clickhouse_timeout: int = 30
+        # Tinybird workspace tokens (Events API + pipe/SQL reads).
+        # Prefer TINYBIRD_ADMIN_TOKEN for ingest; branch token is fine
+        # for read-only pipe queries in staging.
+        tinybird_api_host: str = ""
+        tinybird_admin_token: str = ""
+        tinybird_branch_token: str = ""
 
         # Prometheus /metrics scrape auth. When set, scrapers must present
         # ``Authorization: Bearer <token>`` to read /metrics. When empty,
@@ -645,10 +660,14 @@ def _build_settings_class():
         # the Eden backend (Northflank project secret).
         metrics_bearer_token: str = ""
 
-        # Redis — used by TenantRateLimitMiddleware, IdempotencyMiddleware,
-        # OptimizationCache, and the RedisTailer judge pipeline. Empty
-        # string disables Redis (in-memory fallback for all middlewares).
+        # Redis — used by IdempotencyMiddleware, OptimizationCache,
+        # leader election, and the RedisTailer judge pipeline. Empty
+        # string disables Redis (in-memory fallback for middlewares).
+        # Upstash Free = 500k cmds/month — keep health checks off and
+        # rate_limit_distributed=False unless you upgrade the plan.
         redis_url: str = "redis://localhost:6379/0"
+        # redis-py PING cadence. 0 disables (recommended on Upstash Free).
+        redis_health_check_interval: int = 0
 
         # ── GitHub App (onboarding wizard) ────────────────────────────────
         # The onboarding wizard uses a GitHub App (not an OAuth App) so we

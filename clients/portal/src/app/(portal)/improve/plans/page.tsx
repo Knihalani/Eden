@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   AlertCircle,
@@ -28,6 +29,7 @@ import { PageHeader } from "@/components/layout/page-header";
 import { PageContent } from "@/components/layout/page-content";
 import { PlanKindBadge } from "@/components/improve/plan-kind-badge";
 import { errorFromCaught } from "@/lib/safe-error-message";
+import { DOCS_QUICKSTART_URL } from "@/lib/constants";
 
 const PAGE_SIZE = 50;
 
@@ -299,8 +301,21 @@ export default function ImprovementPlansPage() {
       ) : plans.length === 0 ? (
         <EmptyState
           title="No improvement plans yet"
-          description="The recurring improvement agent sweeps production signals and lands ranked plans here. Configure the schedule under Settings → Autonomous."
+          description="Needs production traces and Agent Issues first. Create an API key, install the SDK or gateway, then the improvement agent can land ranked plans here."
           icon={History}
+          action={
+            <div className="flex flex-wrap items-center justify-center gap-2">
+              <a href={DOCS_QUICKSTART_URL} target="_blank" rel="noopener noreferrer">
+                <Button className="min-h-11">Docs quickstart</Button>
+              </a>
+              <Link href="/settings?tab=api-keys">
+                <Button variant="outline" className="min-h-11">Create API key</Button>
+              </Link>
+              <Link href="/issues">
+                <Button variant="outline" className="min-h-11">View Issues</Button>
+              </Link>
+            </div>
+          }
         />
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">

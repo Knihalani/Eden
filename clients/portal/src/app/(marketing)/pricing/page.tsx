@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { ArrowRight } from "lucide-react";
 import { LegalPage } from "@/components/layout/legal-page";
 import {
+  DOCS_QUICKSTART_URL,
   FREE_TIER_ORG_CAP_USD,
   FREE_TIER_PERSONAL_CAP_USD,
   FREE_TIER_TAGLINE,
@@ -12,46 +14,71 @@ export const metadata: Metadata = {
   description: FREE_TIER_TAGLINE,
 };
 
+const ctaPrimary =
+  "inline-flex items-center justify-center gap-2 min-h-11 px-5 py-2.5 text-sm font-medium bg-[var(--accent)] text-[var(--bg-base)] rounded-lg hover:bg-[var(--accent-hover)] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-secondary)]";
+
+const ctaSecondary =
+  "inline-flex items-center justify-center gap-2 min-h-11 px-5 py-2.5 text-sm font-medium text-[var(--text-primary)] bg-[var(--bg-secondary)] border border-[var(--border-default)] rounded-lg hover:bg-[var(--bg-tertiary)] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-secondary)]";
+
 export default function PricingPage() {
   return (
     <LegalPage
       eyebrow="Pricing"
-      title="Simple pricing"
-      description="Soft launch is free. Capture traces, run evals, and queue human-reviewed patch suggestions without a credit card."
+      title="Free during soft launch"
+      description={FREE_TIER_TAGLINE}
       size="medium"
     >
-      <div className="rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-primary)] p-8">
-        <p className="text-[11px] font-mono uppercase tracking-widest text-[var(--accent)] mb-2">
-          Free
+      <div className="border-t border-[var(--border-subtle)] pt-8">
+        <p className="text-[11px] font-mono uppercase tracking-widest text-[var(--accent)] mb-3">
+          Soft launch · Free
         </p>
-        <p className="text-4xl font-bold text-[var(--text-primary)] mb-2" style={{ letterSpacing: "-0.03em" }}>
+        <p
+          className="text-4xl font-bold text-[var(--text-primary)] mb-6"
+          style={{ letterSpacing: "-0.03em" }}
+        >
           $0
         </p>
-        <p className="text-sm text-[var(--text-secondary)] mb-6">
-          Soft launch — paid Team / Pro plans are not available yet.
-        </p>
-        <ul className="space-y-2 text-sm text-[var(--text-secondary)] mb-8">
+        <ul className="space-y-2.5 text-sm text-[var(--text-secondary)] mb-8 max-w-xl">
           <li>
-            ${FREE_TIER_PERSONAL_CAP_USD}/mo LLM spend cap (personal workspace, 1 seat)
+            ${FREE_TIER_PERSONAL_CAP_USD}/mo LLM spend cap — personal workspace, 1 seat
           </li>
           <li>
-            ${FREE_TIER_ORG_CAP_USD}/mo LLM spend cap (org workspace, up to 3 seats)
+            ${FREE_TIER_ORG_CAP_USD}/mo LLM spend cap — org workspace, up to 3 seats
           </li>
-          <li>Gateway + SDKs (Python, TypeScript; Go and Rust packages also available)</li>
-          <li>Org workspace, invites, and AI assistant sidebar</li>
-          <li>Improve loop + patch suggestions (human-reviewed — you open the PR)</li>
+          <li>
+            Gateway + SDKs (
+            <code className="font-mono text-[13px] text-[var(--text-primary)]">eden-sdk</code>
+            {" / "}
+            <code className="font-mono text-[13px] text-[var(--text-primary)]">@eden-ai/sdk</code>
+            )
+          </li>
+          <li>Org workspace, invites, and cited AI assistant</li>
+          <li>Improve loop + patch suggestions — human-reviewed; you open the PR</li>
         </ul>
-        <Link
-          href="/sign-up"
-          className="inline-flex items-center justify-center rounded-md bg-[var(--accent)] px-4 py-2 text-sm font-medium text-[var(--bg-primary)] hover:opacity-90"
-        >
-          Start free
-        </Link>
+        <p className="text-sm text-[var(--text-muted)] mb-8 max-w-xl">
+          Paid Team / Pro plans are not available yet. No credit card required.
+        </p>
+        <div className="flex flex-wrap items-center gap-3">
+          <Link href="/sign-up" className={ctaPrimary}>
+            Start free
+            <ArrowRight className="w-4 h-4" aria-hidden />
+          </Link>
+          <a
+            href={DOCS_QUICKSTART_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className={ctaSecondary}
+          >
+            Quickstart
+          </a>
+        </div>
       </div>
-      <p className="mt-6 text-sm text-[var(--text-muted)]">{FREE_TIER_TAGLINE}</p>
-      <p className="mt-4 text-sm text-[var(--text-muted)]">
-        Need a higher volume commitment or enterprise tenancy?{" "}
-        <Link href="/contact" className="text-[var(--accent)] hover:underline">
+      <p className="mt-10 text-sm text-[var(--text-muted)]">
+        Need higher volume or enterprise tenancy?{" "}
+        <Link
+          href="/contact"
+          className="text-[var(--accent)] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] rounded"
+        >
           Contact us
         </Link>
         .

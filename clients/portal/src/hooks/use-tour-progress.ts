@@ -12,6 +12,7 @@ import {
   buildEdenTourProgress,
   isTourComplete,
   parseEdenTourProgress,
+  shouldShowTourBanner,
   type EdenTourProgress,
   type EdenTourStatus,
 } from "@/lib/tour-progress";
@@ -29,11 +30,17 @@ export function useTourProgress() {
         ? tourRaw
         : JSON.stringify(tourRaw);
 
-  const progress = useMemo(
-    () => parseEdenTourProgress(tourRaw as unknown),
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- tourKey is the stable identity
-    [tourKey],
-  );
+  const progress = useMemo(() => {
+    if (!tourKey) return parseEdenTourProgress(null);
+    if (tourKey.startsWith("{") || tourKey.startsWith("[")) {
+      try {
+        return parseEdenTourProgress(JSON.parse(tourKey));
+      } catch {
+        return parseEdenTourProgress(null);
+      }
+    }
+    return parseEdenTourProgress(tourKey);
+  }, [tourKey]);
 
   const persist = useCallback(
     async (next: EdenTourProgress) => {
@@ -60,6 +67,7 @@ export function useTourProgress() {
 
   const setStepIndex = useCallback(
     async (stepIndex: number) => {
+      // Advancing a step means the tour is active again (incl. resume from Skip).
       const next = buildEdenTourProgress({
         status: "active",
         stepIndex,
@@ -74,6 +82,7 @@ export function useTourProgress() {
     isLoaded,
     progress,
     isComplete: isTourComplete(progress),
+    showBanner: shouldShowTourBanner(progress),
     setStatus,
     setStepIndex,
     persist,

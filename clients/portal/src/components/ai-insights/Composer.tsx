@@ -9,7 +9,6 @@ import {
   type ChatModelOptionId,
 } from "./types";
 import {
-  SLASH_COMMANDS,
   filterMentions,
   filterSlashCommands,
   type MentionOption,

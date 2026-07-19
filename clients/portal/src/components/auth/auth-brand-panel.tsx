@@ -6,7 +6,6 @@ import {
   Activity,
   Terminal,
   GitPullRequest,
-  Sparkles,
   ArrowRight,
 } from "lucide-react";
 import { Logo } from "@/components/brand/logo";
@@ -17,6 +16,7 @@ import {
   HEALTH_REFRESH_INTERVAL_MS,
   DOCS_URL,
 } from "@/lib/constants";
+import { cn } from "@/lib/utils";
 
 type HealthState = "ok" | "degraded" | "down" | "unknown";
 
@@ -82,6 +82,15 @@ const FOOTER_LINKS = [
  */
 export function AuthBrandPanel() {
   const [health, setHealth] = useState<HealthState>("unknown");
+  const [reduceMotion, setReduceMotion] = useState(false);
+
+  useEffect(() => {
+    const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const sync = () => setReduceMotion(mq.matches);
+    sync();
+    mq.addEventListener("change", sync);
+    return () => mq.removeEventListener("change", sync);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -130,8 +139,12 @@ export function AuthBrandPanel() {
 
   return (
     <div className="relative min-h-screen overflow-hidden bg-[var(--bg-primary)]">
-      {/* Animated mesh gradient background — pure CSS */}
-      <div className="auth-mesh-gradient" aria-hidden="true" />
+      {/* Mesh gradient — static when prefers-reduced-motion */}
+      <div
+        className="auth-mesh-gradient"
+        aria-hidden="true"
+        style={reduceMotion ? { animation: "none" } : undefined}
+      />
 
       {/* Subtle grid overlay */}
       <div className="auth-grid-overlay" aria-hidden="true" />
@@ -147,15 +160,14 @@ export function AuthBrandPanel() {
         <div className="flex flex-col gap-10 max-w-lg">
           {/* Hero */}
           <div>
-            <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-[var(--accent-faint)] text-[var(--accent)] text-[11px] font-medium tracking-wide mb-5 border border-[var(--accent)]/20">
-              <Sparkles className="w-3 h-3" />
+            <p className="mb-5 font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--accent)]">
               {PRODUCT_TAGLINE}
-            </div>
+            </p>
 
-            <h1 className="auth-hero-line mb-4">
+            <p className="auth-hero-line mb-4">
               Capture. Analyse.{" "}
               <span className="text-[var(--accent)]">Improve.</span>
-            </h1>
+            </p>
 
             <p className="text-[15px] text-[var(--text-secondary)] leading-relaxed max-w-md">
               Every LLM call through Eden&apos;s gateway, every trace queryable in your
@@ -176,10 +188,7 @@ export function AuthBrandPanel() {
                   <div className="flex items-center gap-2">
                     <span
                       className="auth-pipeline-dot"
-                      style={{
-                        background: node.color,
-                        boxShadow: `0 0 10px ${node.color}80`,
-                      }}
+                      style={{ background: node.color }}
                     />
                     <span className="text-[12px] font-mono text-[var(--text-primary)]">
                       {node.label}
@@ -225,12 +234,14 @@ export function AuthBrandPanel() {
             }}
           >
             <span className="relative flex h-1.5 w-1.5">
+              {!reduceMotion ? (
+                <span
+                  className="absolute inline-flex h-full w-full rounded-full opacity-60 animate-ping"
+                  style={{ background: statusColor }}
+                />
+              ) : null}
               <span
-                className="absolute inline-flex h-full w-full rounded-full opacity-60 animate-ping"
-                style={{ background: statusColor }}
-              />
-              <span
-                className="relative inline-flex h-1.5 w-1.5 rounded-full"
+                className={cn("relative inline-flex h-1.5 w-1.5 rounded-full")}
                 style={{ background: statusColor }}
               />
             </span>

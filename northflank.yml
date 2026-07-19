@@ -206,8 +206,15 @@ spec:
     - name: QDRANT_API_KEY
       valueFrom: { secretKeyRef: { group: eden-required, key: QDRANT_API_KEY } }
     # ── Redis (external — Upstash free tier) ────────────────────
+    # Conserve commands: rate limits stay in-process (single replica),
+    # redis-py health PINGs disabled. Set RATE_LIMIT_DISTRIBUTED=true
+    # only after upgrading Upstash past Free (500k cmds/month).
     - name: REDIS_URL
       valueFrom: { secretKeyRef: { group: eden-required, key: REDIS_URL } }
+    - name: RATE_LIMIT_DISTRIBUTED
+      value: "false"
+    - name: REDIS_HEALTH_CHECK_INTERVAL
+      value: "0"
     # ── Tinybird (Cat 18 columnar) — already external ───────────
     - name: CLICKHOUSE_URL
       value: https://api.us-east.tinybird.co
@@ -469,6 +476,10 @@ spec:
 
     - name: REDIS_URL
       valueFrom: { secretKeyRef: { group: eden-required, key: REDIS_URL } }
+    - name: RATE_LIMIT_DISTRIBUTED
+      value: "false"
+    - name: REDIS_HEALTH_CHECK_INTERVAL
+      value: "0"
     - name: CLICKHOUSE_URL
       value: https://api.us-east.tinybird.co
     - name: CLICKHOUSE_DATABASE
@@ -487,6 +498,8 @@ spec:
       valueFrom: { secretKeyRef: { group: eden-required, key: OPENROUTER_API_KEY } }
     - name: TINYBIRD_ADMIN_TOKEN
       valueFrom: { secretKeyRef: { group: eden-required, key: TINYBIRD_ADMIN_TOKEN } }
+    - name: TINYBIRD_BRANCH_TOKEN
+      valueFrom: { secretKeyRef: { group: eden-required, key: TINYBIRD_BRANCH_TOKEN } }
     - name: SENTRY_DSN
       valueFrom: { secretKeyRef: { group: eden-required, key: SENTRY_DSN } }
     # ── Clerk (Phase 2 audit — workers need it for Cat 14 autonomous
@@ -567,6 +580,10 @@ spec:
       value: "1"
     - name: REDIS_URL
       valueFrom: { secretKeyRef: { group: eden-required, key: REDIS_URL } }
+    - name: RATE_LIMIT_DISTRIBUTED
+      value: "false"
+    - name: REDIS_HEALTH_CHECK_INTERVAL
+      value: "0"
     - name: JWT_SECRET
       valueFrom: { secretKeyRef: { group: eden-required, key: JWT_SECRET } }
     - name: ENCRYPTION_KEY

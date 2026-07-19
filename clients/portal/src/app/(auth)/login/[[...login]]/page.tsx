@@ -6,12 +6,9 @@ import { clerkAppearance } from "@/components/auth/clerk-theme";
 // sso-callback, etc.) all resolve under /login/*. The `path` prop
 // tells Clerk to treat /login as its base URL.
 //
-// The page wraps Clerk's <SignIn /> in our original split-layout
-// chrome (brand panel left, form card right) so the auth screen
-// matches the rest of the dark-terminal portal. Clerk's appearance
-// API (in clerk-theme.ts) maps our CSS variables onto Clerk's theme
-// tokens so the form inputs, buttons, and alerts all inherit the
-// dark palette instead of Clerk's default light theme.
+// Legacy /login alias. next.config.ts 307s /login → /sign-in.
+// Cross-links use canonical /sign-up so we never bounce
+// /login → /signup → /sign-up in a multi-hop loop.
 //
 // ClerkAuthFallback wraps the <SignIn /> component. If the Clerk
 // SDK fails to mount (missing publishable key, network blocked,
@@ -38,13 +35,14 @@ export default function LoginPage() {
           <SignIn
             path="/login"
             routing="path"
-            signUpUrl="/signup"
+            signUpUrl="/sign-up"
             // Send signed-in users to the dashboard, not back to "/".
             // Without an explicit fallback Clerk sometimes resolves to
             // the current URL, which can leave a user who clicked
             // "Sign in" from /signup stuck on the auth card. Mirrors
             // the /sign-in route so both paths behave identically.
             fallbackRedirectUrl="/dashboard"
+            signUpForceRedirectUrl="/dashboard?onboarding=1"
             appearance={clerkAppearance}
           />
         </ClerkAuthFallback>

@@ -15,6 +15,7 @@ import { useOrg } from "@/hooks/use-org";
 import { learnApi } from "@/lib/api";
 import { errorFromCaught } from "@/lib/safe-error-message";
 import { cn } from "@/lib/utils";
+import { DOCS_QUICKSTART_URL } from "@/lib/constants";
 
 type LoopStep = {
   id: string;
@@ -106,7 +107,17 @@ export default function ImprovementLoopOnboardingPage() {
           ) : steps.length === 0 ? (
             <EmptyState
               title="Loop status unavailable"
-              description="Connect an org with telemetry to teach the improvement loop."
+              description="Send traces via SDK or gateway first. Linking a GitHub repo is optional — Connect is not required to teach the loop."
+              action={
+                <div className="flex flex-wrap items-center justify-center gap-2">
+                  <a href={DOCS_QUICKSTART_URL} target="_blank" rel="noopener noreferrer">
+                    <Button className="min-h-11">Docs quickstart</Button>
+                  </a>
+                  <Link href="/settings?tab=api-keys">
+                    <Button variant="outline" className="min-h-11">Create API key</Button>
+                  </Link>
+                </div>
+              }
             />
           ) : (
             <>

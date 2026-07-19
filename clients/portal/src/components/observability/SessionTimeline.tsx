@@ -21,7 +21,7 @@ export interface SessionTimelineProps {
   className?: string;
 }
 
-export function SessionTimeline({ sessions, orgId, className }: SessionTimelineProps) {
+export function SessionTimeline({ sessions, orgId: _orgId, className }: SessionTimelineProps) {
   if (sessions.length === 0) {
     return (
       <p className={cn("text-sm text-[var(--text-muted)]", className)}>

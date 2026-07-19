@@ -26,7 +26,7 @@ export default function SignInPage() {
       <div className="w-full max-w-md space-y-6">
         {/* Branded eyebrow above the Clerk card so the screen reads
             as "Eden auth" rather than a generic Clerk form. The
-            <SignIn /> component hides its own headerSubtitle via
+            <SignIn /> component hides its own header via
             the appearance config in clerk-theme.ts. */}
         <div className="text-center space-y-1.5">
           <p className="text-[10px] font-mono font-semibold uppercase tracking-[0.18em] text-[var(--accent)]">
@@ -49,6 +49,7 @@ export default function SignInPage() {
             // the current URL, which can leave a user who clicked "Sign
             // in" from /sign-up stuck on the auth card.
             fallbackRedirectUrl="/dashboard"
+            signUpForceRedirectUrl="/dashboard?onboarding=1"
             appearance={clerkAppearance}
           />
         </ClerkAuthFallback>

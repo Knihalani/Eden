@@ -67,20 +67,29 @@ async def test_redis_sliding_window_denies_over_cap() -> None:
 
 @pytest.mark.asyncio
 async def test_limiter_raises_via_redis_path() -> None:
-    """SlidingWindowRateLimiter.check uses Redis when configured."""
+    """SlidingWindowRateLimiter.check uses Redis when distributed mode is on."""
     fake = _FakeRedisSliding()
     limiter = SlidingWindowRateLimiter(max_requests=3, window_seconds=60.0)
 
-    with patch(
-        "eden.storage.redis.get_redis_client",
-        AsyncMock(return_value=fake),
+    with (
+        patch(
+            "eden.storage.redis.get_redis_client",
+            AsyncMock(return_value=fake),
+        ),
+        patch(
+            "eden.config.get_settings",
+            return_value=type(
+                "S",
+                (),
+                {"rate_limit_distributed": True},
+            )(),
+        ),
     ):
         for _ in range(3):
             await limiter.check("redis-login-ip")
         with pytest.raises(RateLimitExceeded) as excinfo:
             await limiter.check("redis-login-ip")
-
-    assert excinfo.value.retry_after >= 1.0
+        assert excinfo.value.retry_after >= 1.0
 
 
 @pytest.mark.asyncio

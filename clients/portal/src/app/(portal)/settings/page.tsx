@@ -257,16 +257,13 @@ function SettingsPageInner() {
   const [activeTab, setActiveTab] = useState<Tab>(TABS.some(t => t.id === initialTab) ? initialTab : "org");
   const [searchQuery, setSearchQuery] = useState("");
 
-  // Keep the URL in sync with the active tab so deep links work and
-  // refreshes don't drop the user back to the first tab. We split the
-  // effect: this one handles URL → state, the one below handles
-  // state → URL (handleTabChange) — both are explicit about deps.
+  // URL → state only. Functional setState avoids update loops when
+  // searchParams identity churns but the tab string is unchanged.
+  const urlTabParam = searchParams.get("tab");
   useEffect(() => {
-    const urlTab = searchParams.get("tab");
-    if (urlTab && urlTab !== activeTab && TABS.some(t => t.id === urlTab)) {
-      setActiveTab(urlTab as Tab);
-    }
-  }, [searchParams, activeTab]);
+    if (!urlTabParam || !TABS.some((t) => t.id === urlTabParam)) return;
+    setActiveTab((prev) => (prev === urlTabParam ? prev : (urlTabParam as Tab)));
+  }, [urlTabParam]);
   const handleTabChange = (tabId: string) => {
     setActiveTab(tabId as Tab);
     const params = new URLSearchParams(window.location.search);
@@ -337,7 +334,7 @@ function SettingsPageInner() {
           <SettingsSearch value={searchQuery} onChange={setSearchQuery} totalLabel={normalisedQuery ? `Showing ${visibleTabs.length} of ${TABS.length} settings` : undefined} />
           <nav className="flex flex-row lg:flex-col gap-3 overflow-x-auto lg:overflow-visible pb-1 lg:pb-0 -mx-1 px-1 lg:mx-0 lg:px-0" role="tablist" aria-label="Settings sections">
             {visibleCategories.map(category => <SettingsCategoryGroup key={category} category={category} count={tabsByCategory[category].length}>
-                {tabsByCategory[category].map(tab => <button key={tab.id} type="button" role="tab" data-tab-id={tab.id} data-tour-id={tab.id} aria-selected={activeTab === tab.id} id={`settings-tab-${tab.id}`} onClick={() => handleTabChange(tab.id)} className={cn("flex-shrink-0 lg:w-full px-3 py-2 rounded-lg text-sm font-medium flex items-center gap-2 lg:gap-3 transition-colors whitespace-nowrap", activeTab === tab.id ? "bg-[var(--accent-faint)] text-[var(--accent)] lg:border-l-2 lg:border-[var(--accent)]" : "text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)]")}>
+                {tabsByCategory[category].map(tab => <button key={tab.id} type="button" role="tab" data-tab-id={tab.id} data-tour-id={tab.id} aria-selected={activeTab === tab.id} id={`settings-tab-${tab.id}`} onClick={() => handleTabChange(tab.id)} className={cn("flex-shrink-0 lg:w-full min-h-11 px-3 py-2 rounded-lg text-sm font-medium flex items-center gap-2 lg:gap-3 transition-colors whitespace-nowrap", activeTab === tab.id ? "bg-[var(--accent-faint)] text-[var(--accent)] lg:border-l-2 lg:border-[var(--accent)]" : "text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)]")}>
                     <tab.icon className="w-4 h-4 flex-shrink-0" aria-hidden />
                     <span>{tab.label}</span>
                   </button>)}

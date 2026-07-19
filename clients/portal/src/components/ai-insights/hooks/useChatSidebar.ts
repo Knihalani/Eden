@@ -24,6 +24,10 @@ export { SIDEBAR_WIDTH };
 export function useChatSidebar() {
   const { currentOrg } = useOrg();
   const toast = useToast();
+  // useToast() returns a fresh object each render — keep a stable ref so
+  // effects that call toast don't re-fire forever (Agent 11 / Merge B P0).
+  const toastRef = useRef(toast);
+  toastRef.current = toast;
   const pathname = usePathname();
   const router = useRouter();
 
@@ -252,10 +256,11 @@ export function useChatSidebar() {
 
   useEffect(() => {
     if (!orgId) {
-      setSessions([]);
+      // Guarded setters: bare setX([]) re-renders forever (new [] !== prev []).
+      setSessions((s) => (s.length === 0 ? s : []));
       setSessionsError(null);
-      setActiveSessionId(null);
-      setMessages([]);
+      setActiveSessionId((id) => (id === null ? id : null));
+      setMessages((m) => (m.length === 0 ? m : []));
       return;
     }
     refreshSessions();
@@ -264,7 +269,9 @@ export function useChatSidebar() {
   // Rehydrate messages when the user picks a session.
   useEffect(() => {
     if (!orgId || !activeSessionId) {
-      if (!activeSessionId) setMessages([]);
+      if (!activeSessionId) {
+        setMessages((m) => (m.length === 0 ? m : []));
+      }
       return;
     }
     let cancelled = false;
@@ -330,12 +337,12 @@ export function useChatSidebar() {
       .catch((err) => {
         if (cancelled) return;
         console.warn("ai-insights: rehydrate failed", err);
-        toast.error("Failed to load conversation");
+        toastRef.current.error("Failed to load conversation");
       });
     return () => {
       cancelled = true;
     };
-  }, [orgId, activeSessionId, toast]);
+  }, [orgId, activeSessionId]);
 
   useEffect(() => {
     const el = scrollRef.current;
@@ -373,13 +380,13 @@ export function useChatSidebar() {
           setActiveSessionId(null);
           setMessages([]);
         }
-        toast.success("Conversation archived");
+        toastRef.current.success("Conversation archived");
       } catch (err) {
         console.warn("ai-insights: archive failed", err);
-        toast.error("Could not archive conversation");
+        toastRef.current.error("Could not archive conversation");
       }
     },
-    [orgId, activeSessionId, toast],
+    [orgId, activeSessionId],
   );
 
   const dismissCoach = useCallback(() => {
@@ -455,7 +462,7 @@ export function useChatSidebar() {
           },
         ];
       });
-      toast.error("Could not reach AI Insights");
+      toastRef.current.error("Could not reach AI Insights");
       return;
     }
 
@@ -476,7 +483,7 @@ export function useChatSidebar() {
           { id: assistantId, role: "assistant", text: `Error: ${detail}`, isError: true },
         ];
       });
-      toast.error(detail);
+      toastRef.current.error(detail);
       return;
     }
 
@@ -656,7 +663,7 @@ export function useChatSidebar() {
             setCostEstimateUsd(est.estimated_usd);
           }
           if (typeof ev.warning === "string" && /cite-before-claim/i.test(ev.warning)) {
-            toast.error(ev.warning);
+            toastRef.current.error(ev.warning);
           }
           break;
         }
@@ -692,7 +699,7 @@ export function useChatSidebar() {
             abortRef.current?.abort();
             abortRef.current = null;
           }
-          toast.error(msg);
+          toastRef.current.error(msg);
           break;
         }
         default:
@@ -765,7 +772,6 @@ export function useChatSidebar() {
     orgId,
     pathname,
     streaming,
-    toast,
     refreshSessions,
     dismissCoach,
     modelOption,

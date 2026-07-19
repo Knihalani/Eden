@@ -1,0 +1,75 @@
+{
+  "title": "Eden — Observability + improvement for AI agents",
+  "bodyHas": {
+    "getStarted": true,
+    "createKey": true,
+    "installSdk": true,
+    "doctor": true,
+    "openTraces": true,
+    "sdkSubtitle": true,
+    "unavailable": false,
+    "noTracesYet": false,
+    "editLayout": false
+  },
+  "checklist": [
+    "1Create API key — Settings → API keys",
+    "2Install SDK / gateway — docs quickstart",
+    "3Run doctor — eden-doctor or python -m eden_sdk.doctor",
+    "4Open Traces — confirm first events"
+  ],
+  "actionOrder": [
+    "API keys",
+    "Docs quickstart",
+    "Product tour",
+    "Connect a repo"
+  ],
+  "connectHrefs": [
+    "/agents/connect"
+  ],
+  "connectHasOnboarding": false,
+  "smallHits": [],
+  "firstRunPrimaries": [
+    {
+      "label": "API keys",
+      "href": "/settings?tab=api-keys",
+      "h": 44,
+      "w": 100
+    },
+    {
+      "label": "Docs quickstart",
+      "href": "https://docs.edenobservability.com/quickstart",
+      "h": 44,
+      "w": 149
+    },
+    {
+      "label": "Product tour",
+      "href": "/dashboard?onboarding=1",
+      "h": 44,
+      "w": 128
+    },
+    {
+      "label": "Connect a repo",
+      "href": "/agents/connect",
+      "h": 44,
+      "w": 145
+    }
+  ],
+  "bans": {
+    "edenSdkWrong": false,
+    "fullPrompt": false
+  },
+  "bodySnippet": "Skip to main content\nEden\nCollapse\n⌘B\nEden Workspace\nHOME\nDashboard\nOBSERVE\nTraces\nIssues\nAlerts\nEVALUATE\nEvals\nIMPROVE\nImprove\nArtifacts\nLedger\nPromotions\nWORKSPACE\nAudit trail\nSettings\nAPI keys\nQuickstart\nCustomize sidebar\nShow advanced\nK\n\nkaiav.nihalani\n\nkaiav.nihalani@gmail.com\n\nBuild · Dashboard\nAbout this page\nSearch...\n⌘K\nTour paused · You're ready\nResume tour\nEden is having trouble reaching the server. Please try again in a moment.\nRetry\nSign in\nHome\n\nInstall the SDK or gateway to send traces — connecting a repo is optional.\n\nAPI keys\nDocs quickstart\nProduct tour\nConnect a repo\nGet sta",
+  "consoleErrors": [
+    "Maximum update depth exceeded. This can happen when a component calls setState inside useEffect, but useEffect either doesn't have a dependency array, or one of the dependencies changes on every rende",
+    "Maximum update depth exceeded. This can happen when a component calls setState inside useEffect, but useEffect either doesn't have a dependency array, or one of the dependencies changes on every rende",
+    "Maximum update depth exceeded. This can happen when a component calls setState inside useEffect, but useEffect either doesn't have a dependency array, or one of the dependencies changes on every rende",
+    "Maximum update depth exceeded. This can happen when a component calls setState inside useEffect, but useEffect either doesn't have a dependency array, or one of the dependencies changes on every rende",
+    "Maximum update depth exceeded. This can happen when a component calls setState inside useEffect, but useEffect either doesn't have a dependency array, or one of the dependencies changes on every rende",
+    "Maximum update depth exceeded. This can happen when a component calls setState inside useEffect, but useEffect either doesn't have a dependency array, or one of the dependencies changes on every rende",
+    "Maximum update depth exceeded. This can happen when a component calls setState inside useEffect, but useEffect either doesn't have a dependency array, or one of the dependencies changes on every rende",
+    "Maximum update depth exceeded. This can happen when a component calls setState inside useEffect, but useEffect either doesn't have a dependency array, or one of the dependencies changes on every rende"
+  ],
+  "url": "http://127.0.0.1:3000/dashboard",
+  "label": "desktop-1280",
+  "width": 1280
+}

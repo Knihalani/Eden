@@ -1,0 +1,11 @@
+{
+  "agent": "06-onboard-tour",
+  "static_order": ["welcome","api-keys","install","traces","dashboard","issues","improve","finish"],
+  "spotlight_ids": ["api-keys","traces","dashboard","issues","improve"],
+  "api_keys_href": "/settings?tab=api-keys",
+  "install_cta": "DOCS_QUICKSTART_URL",
+  "finish_href": "/dashboard",
+  "agents_mandatory": false,
+  "browser_deep_test": "BLOCKED — Clerk session key mismatch / auth-state expired; seed-auth ERR_CONNECTION_REFUSED + infinite redirect loop in next logs. Static asserts passed.",
+  "probe_script": "e2e/golden/agent06-tour-probe.mjs"
+}

@@ -79,14 +79,16 @@ const clerkAppearance = {
     },
 
     // ---- Header (logo + title) ----
-    // Suppress Clerk's default subtitle — the brand panel on the left
-    // already establishes context; showing "Welcome back" inside the
-    // card adds noise without information.
+    // Branded pages render their own eyebrow + H1 above the card.
+    // Hiding Clerk's header avoids a dual-H1 a11y failure and the
+    // generic "Create your account" / "Sign in" duplicate.
     header: {
-      marginBottom: "1.25rem",
-      gap: "0.5rem",
+      display: "none",
+      marginBottom: 0,
+      gap: 0,
     },
     headerTitle: {
+      display: "none",
       color: "var(--text-primary)",
       fontSize: "1.5rem",
       fontWeight: 700,
@@ -189,6 +191,8 @@ const clerkAppearance = {
       color: "var(--accent-foreground)",
       fontWeight: 600,
       fontSize: "0.875rem",
+      // 44px touch target (WCAG 2.5.5 / Apple HIG) on primary CTA.
+      minHeight: "2.75rem",
       borderRadius: "var(--radius-md)",
       transition:
         "background-color var(--duration-fast), box-shadow var(--duration-fast), transform var(--duration-fast)",
@@ -196,6 +200,10 @@ const clerkAppearance = {
       "&:active": { transform: "translateY(1px)" },
       "&:disabled": { opacity: 0.5, cursor: "not-allowed" },
       "&:focus": {
+        boxShadow: "0 0 0 2px var(--border-glow)",
+        outline: "none",
+      },
+      "&:focus-visible": {
         boxShadow: "0 0 0 2px var(--border-glow)",
         outline: "none",
       },
@@ -212,6 +220,7 @@ const clerkAppearance = {
       borderRadius: "var(--radius-md)",
       fontWeight: 500,
       fontSize: "0.875rem",
+      minHeight: "2.75rem",
       transition:
         "background-color var(--duration-fast), border-color var(--duration-fast)",
       "&:hover": {
@@ -219,6 +228,10 @@ const clerkAppearance = {
         borderColor: "var(--border-strong)",
       },
       "&:focus": {
+        boxShadow: "0 0 0 2px var(--border-glow)",
+        outline: "none",
+      },
+      "&:focus-visible": {
         boxShadow: "0 0 0 2px var(--border-glow)",
         outline: "none",
       },
