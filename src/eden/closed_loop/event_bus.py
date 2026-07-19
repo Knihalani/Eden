@@ -24,7 +24,9 @@ _GROUP = "eden-closed-loop"
 _CONSUMER = f"loop-{socket.gethostname()}"
 _STREAM_MAXLEN = 100_000
 _BATCH = 32
-_BLOCK_MS = 2_000
+# Upstash Free counts every blocked XREADGROUP as 1 cmd. 2s → ~1.3M/mo
+# idle; 30s → ~86k/mo. Latency only matters when events are enqueued.
+_BLOCK_MS = 30_000
 _IDEMPOTENCY_TTL_S = 3_600
 
 _TASK: asyncio.Task | None = None

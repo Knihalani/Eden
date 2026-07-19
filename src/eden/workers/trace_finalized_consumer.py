@@ -32,7 +32,9 @@ _GROUP = "eden-auto-scan"
 _CONSUMER = f"auto-scan-{socket.gethostname()}"
 _MAX_CONCURRENT_SCANS = 5
 _BATCH = 32
-_BLOCK_MS = 2_000
+# Upstash Free counts every blocked XREADGROUP as 1 cmd. 2s → ~1.3M/mo
+# idle; 30s → ~86k/mo.
+_BLOCK_MS = 30_000
 
 _TASK: asyncio.Task | None = None
 _STOP: asyncio.Event | None = None
