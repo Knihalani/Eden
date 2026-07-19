@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Layers } from "lucide-react";
+import { Logo } from "@/components/brand/logo";
 import { PRODUCT_VERSION } from "@/lib/constants";
 
 interface AuthSplitLayoutProps {
@@ -54,13 +54,8 @@ export function AuthSplitLayout({ brandPanel, children }: AuthSplitLayoutProps) 
 
       {/* Mobile-only compact header with logo + tagline */}
       <div className="flex items-center justify-between border-b border-[var(--border-subtle)] bg-[var(--bg-primary)] px-6 py-4 md:hidden">
-        <Link href="/" className="flex items-center gap-2.5">
-          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-[var(--accent)] shadow-md shadow-[var(--accent)]/30">
-            <Layers className="h-4 w-4 text-[var(--bg-base)]" strokeWidth={2.5} />
-          </div>
-          <span className="text-base font-bold tracking-tight text-[var(--text-primary)]">
-            Eden
-          </span>
+        <Link href="/" className="flex min-h-11 items-center">
+          <Logo size="sm" showWordmark priority href={null} />
         </Link>
         <p className="font-mono text-[11px] tracking-wide text-[var(--text-muted)]" aria-label="Eden product version">
           {PRODUCT_VERSION} · observability

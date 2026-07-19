@@ -19,7 +19,7 @@ export default function SignUpPage() {
       <div className="w-full max-w-md space-y-6">
         {/* Branded eyebrow above the Clerk card so the screen reads
             as "Eden auth" rather than a generic Clerk form. The
-            <SignUp /> component hides its own headerSubtitle via
+            <SignUp /> component hides its own header via
             the appearance config in clerk-theme.ts. */}
         <div className="text-center space-y-1.5">
           <p className="text-[10px] font-mono font-semibold uppercase tracking-[0.18em] text-[var(--accent)]">
@@ -29,7 +29,8 @@ export default function SignUpPage() {
             Create your account
           </h1>
           <p className="text-sm text-[var(--text-muted)]">
-            Spin up an Eden workspace in under a minute
+            Then take the product tour, create an API key, and send your first
+            trace from the docs quickstart.
           </p>
         </div>
         <ClerkAuthFallback formLabel="sign-up">
@@ -37,8 +38,8 @@ export default function SignUpPage() {
             path="/sign-up"
             routing="path"
             signInUrl="/sign-in"
-            // Clerk creates a workspace at signup — land on the streamlined
-            // onboarding wizard (welcome → install → optional repo).
+            // After signup: dashboard opens the product tour overlay
+            // (welcome → API keys → install → traces → finish / docs).
             fallbackRedirectUrl="/dashboard?onboarding=1"
             signInForceRedirectUrl="/dashboard"
             appearance={clerkAppearance}

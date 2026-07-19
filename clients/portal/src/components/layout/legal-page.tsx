@@ -43,15 +43,29 @@ export function LegalPage({
   return (
     <div className="min-h-screen bg-[var(--bg-secondary)]">
       <nav className="sticky top-0 z-50 h-16 bg-[var(--bg-primary)]/90 backdrop-blur-xl border-b border-[var(--border-subtle)]">
-        <div className="max-w-5xl mx-auto px-6 h-full flex items-center justify-between">
+        <div className="max-w-5xl mx-auto px-6 h-full flex items-center justify-between gap-4">
           <Logo size="md" showWordmark href="/" />
-          <Link
-            href="/"
-            className="inline-flex items-center gap-1.5 text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors"
-          >
-            <ChevronLeft className="w-4 h-4" />
-            Back to home
-          </Link>
+          <div className="flex items-center gap-1 sm:gap-2">
+            <Link
+              href="/pricing"
+              className="hidden sm:inline-flex items-center min-h-11 px-3 text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] rounded-lg"
+            >
+              Pricing
+            </Link>
+            <Link
+              href="/sign-up"
+              className="inline-flex items-center justify-center min-h-11 px-4 text-sm font-medium bg-[var(--accent)] text-[var(--bg-base)] rounded-lg hover:bg-[var(--accent-hover)] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-primary)]"
+            >
+              Start free
+            </Link>
+            <Link
+              href="/"
+              className="inline-flex items-center gap-1.5 min-h-11 px-2 text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] rounded-lg"
+            >
+              <ChevronLeft className="w-4 h-4" aria-hidden />
+              Back to home
+            </Link>
+          </div>
         </div>
       </nav>
 
@@ -101,26 +115,50 @@ export function LegalPage({
         <div className="mx-auto px-6 py-8 max-w-5xl flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-sm text-[var(--text-secondary)]">
             <Link
+              href="/about"
+              className="hover:text-[var(--text-primary)] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] rounded"
+            >
+              About
+            </Link>
+            <Link
+              href="/pricing"
+              className="hover:text-[var(--text-primary)] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] rounded"
+            >
+              Pricing
+            </Link>
+            <Link
+              href="/contact"
+              className="hover:text-[var(--text-primary)] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] rounded"
+            >
+              Contact
+            </Link>
+            <Link
+              href="/changelog"
+              className="hover:text-[var(--text-primary)] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] rounded"
+            >
+              Changelog
+            </Link>
+            <Link
               href="/privacy"
-              className="hover:text-[var(--text-primary)] transition-colors"
+              className="hover:text-[var(--text-primary)] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] rounded"
             >
               Privacy
             </Link>
             <Link
               href="/terms"
-              className="hover:text-[var(--text-primary)] transition-colors"
+              className="hover:text-[var(--text-primary)] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] rounded"
             >
               Terms
             </Link>
             <Link
               href="/dpa"
-              className="hover:text-[var(--text-primary)] transition-colors"
+              className="hover:text-[var(--text-primary)] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] rounded"
             >
               DPA
             </Link>
             <Link
               href="/security"
-              className="hover:text-[var(--text-primary)] transition-colors"
+              className="hover:text-[var(--text-primary)] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] rounded"
             >
               Security
             </Link>

@@ -81,7 +81,7 @@ export default function LabelingQueueBoardPage() {
 
   useEffect(() => {
     load();
-  }, [currentOrg?.id, queueId]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [currentOrg?.id, queueId]);
 
   const applyLabel = async (label: string) => {
     if (!currentOrg?.id || !active) return;

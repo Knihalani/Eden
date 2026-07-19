@@ -6,6 +6,7 @@
  */
 
 import { useState } from "react";
+import Link from "next/link";
 import { Trash2, Users, Shield, ShieldOff } from "lucide-react";
 import { usePermissions } from "@/hooks/use-permissions";
 import { useToast } from "@/components/ui/toast";
@@ -16,6 +17,8 @@ import { queryKeys } from "@/lib/query-keys";
 import { cn } from "@/lib/utils";
 import { SettingsCard } from "@/components/settings/settings-card";
 import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
+import { NoOrgState } from "@/components/ui/no-org-state";
+import { useOrg } from "@/hooks/use-org";
 import { InvitePanel } from "./invite-panel";
 
 interface MembersTabProps {
@@ -26,6 +29,7 @@ export function MembersTab({ org }: MembersTabProps) {
   const { hasPermission } = usePermissions();
   const toast = useToast();
   const { confirm, ConfirmDialog } = useConfirm();
+  const { refreshOrgs, orgSyncing, orgSyncTimedOut } = useOrg();
   const orgId = org?.id ?? null;
   const membersQuery = useOrgQuery(
     queryKeys.settings.members(orgId),
@@ -122,9 +126,26 @@ export function MembersTab({ org }: MembersTabProps) {
 
   if (!org) {
     return (
-      <div className="text-center py-12 text-[var(--text-secondary)]">
-        Select an organization to manage members
-      </div>
+      <NoOrgState
+        feature="Members"
+        icon={Users}
+        syncing={orgSyncing && !orgSyncTimedOut}
+        syncTimedOut={orgSyncTimedOut}
+        onRetrySync={() => void refreshOrgs()}
+        description={
+          orgSyncTimedOut
+            ? undefined
+            : "Select or create an organization to manage members. The product tour does not sync your workspace."
+        }
+        secondaryAction={
+          <Link
+            href="/settings?tab=org"
+            className="inline-flex min-h-11 items-center text-sm text-[var(--accent)] hover:underline"
+          >
+            Open Organization settings
+          </Link>
+        }
+      />
     );
   }
 

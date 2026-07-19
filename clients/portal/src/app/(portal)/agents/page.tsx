@@ -31,6 +31,7 @@ import { useOrg } from "@/hooks/use-org";
 import { useState, useMemo, Suspense } from "react";
 import Link from "next/link";
 import dynamic from "next/dynamic";
+import { DOCS_QUICKSTART_URL } from "@/lib/constants";
 
 const AGENT_TABS = ["agents", "fleet"] as const;
 const FleetView = dynamic(() => import("@/app/(portal)/fleet/page"), {
@@ -136,19 +137,28 @@ function AgentsPageInner() {
           subtitle={
             loading
               ? "Loading…"
-              : `${total} registered · connect a repo or open fleet health.`
+              : `${total} registered · SDK first; link a repo only when you need GitHub listing.`
           }
           icon={Bot}
-          description="Manage agents and fleet health. Connect repos from the primary CTA."
+          description="Agents appear after SDK/CLI registration. Linking a GitHub repo is optional."
           actions={
             <div className="flex items-center gap-2">
+              <a
+                href={DOCS_QUICKSTART_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="Open docs quickstart"
+                className="inline-flex min-h-11 items-center gap-1.5 rounded-lg bg-[var(--accent)] px-3 py-2 text-sm font-medium text-[var(--bg-primary)] transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]/40"
+              >
+                Docs quickstart
+              </a>
               <Link
                 href="/agents/connect"
-                aria-label="Connect a new agent"
-                className="inline-flex items-center gap-1.5 px-3 py-2 bg-[var(--accent)] text-[var(--bg-primary)] rounded-lg text-sm font-medium hover:opacity-90 transition-opacity"
+                aria-label="Link a repository (optional)"
+                className="inline-flex min-h-11 items-center gap-1.5 rounded-lg border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-2 text-sm font-medium text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-tertiary)] hover:text-[var(--text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]/40"
               >
                 <Plus className="w-4 h-4" />
-                Connect new agent
+                Link repo
               </Link>
               {tab === "agents" && (
               <Button
@@ -226,10 +236,21 @@ function AgentsPageInner() {
             <EmptyState
               icon={Bot}
               title="No agents yet"
-              description="Register your first agent via the SDK or CLI."
+              description="Register via the SDK or CLI after you create an API key. Linking a GitHub repo is optional and does not install the SDK."
               size="lg"
               action={
-                <div className="flex flex-col items-center gap-2 text-sm">
+                <div className="flex flex-col items-center gap-3 text-sm">
+                  <div className="flex flex-wrap items-center justify-center gap-2">
+                    <a href={DOCS_QUICKSTART_URL} target="_blank" rel="noopener noreferrer">
+                      <Button className="min-h-11">Docs quickstart</Button>
+                    </a>
+                    <Link href="/settings?tab=api-keys">
+                      <Button variant="outline" className="min-h-11">Create API key</Button>
+                    </Link>
+                    <Link href="/agents/connect">
+                      <Button variant="outline" className="min-h-11">Link repo (optional)</Button>
+                    </Link>
+                  </div>
                   <code className="px-3 py-1.5 rounded bg-[var(--bg-tertiary)] font-mono text-xs text-[var(--text-secondary)]">
                     eden config discover-agents
                   </code>

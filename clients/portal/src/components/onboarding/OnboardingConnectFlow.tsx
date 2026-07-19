@@ -1,9 +1,9 @@
 /**
- * OnboardingConnectFlow — GitHub App install + repo pick (no auto-PR).
+ * OnboardingConnectFlow — optional GitHub App install + repo pick.
  *
  * Used by both:
  *   onboarding overlay — optional connect step
- *   /agents/connect     — post-onboarding, "+ Connect new agent"
+ *   /agents/connect     — optional repo link (SDK install is manual)
  *
  * Renders:
  *   1. RBAC gate — if the current user lacks `integrations:write`,
@@ -19,7 +19,12 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useOrg } from "@/hooks/use-org";
 import { usePermissions } from "@/hooks/use-permissions";
-import { githubApi, type GitHubInstallation, type GitHubRepo } from "@/lib/api";
+import {
+  agentsApi,
+  githubApi,
+  type GitHubInstallation,
+  type GitHubRepo,
+} from "@/lib/api";
 import { clearStoredInstallationId, readStoredInstallationId } from "@/lib/github-install";
 import { useToast } from "@/components/ui/toast";
 import {
@@ -59,10 +64,12 @@ type ConnectPhase =
   | "linked";
 
 interface Props {
-  /** Called when the user confirms a linked repo (no PR opened). */
+  /** Called when the user confirms a linked repo. */
   onLinked?: (repo: GitHubRepo, meta: { agentName: string; agentId: string }) => void;
   /** Set true in the onboarding overlay so skip/continue copy matches. */
   inWizard?: boolean;
+  /** Hide the in-flow hero when the host page already has a PageHeader. */
+  showHero?: boolean;
   /** Initial installation_id (set by the OAuth callback). */
   preselectedInstallationId?: number | null;
   /** Called when the user skips GitHub entirely. */
@@ -72,6 +79,7 @@ interface Props {
 export function OnboardingConnectFlow({
   onLinked,
   inWizard = false,
+  showHero = true,
   preselectedInstallationId,
   onSkip,
 }: Props) {
@@ -108,8 +116,9 @@ export function OnboardingConnectFlow({
     setError(null);
     try {
       const insts = await githubApi.listInstallations(currentOrg.id);
-      setInstallations(insts.filter((i) => !i.suspended));
-      if (insts.length === 0 && !pendingInstallationId) {
+      const activeInsts = insts.filter((i) => !i.suspended);
+      setInstallations(activeInsts);
+      if (activeInsts.length === 0 && !pendingInstallationId) {
         setRepos([]);
         setPhase("install-app");
         return;
@@ -122,10 +131,11 @@ export function OnboardingConnectFlow({
       } else if (rs.length === 1) {
         setSelectedRepo(rs[0]);
       }
-      setPhase(rs.length > 0 ? "pick-repo" : pendingInstallationId ? "claiming" : "install-app");
+      // Never stick on "claiming" after load — that spinner hid errors forever.
+      setPhase(rs.length > 0 ? "pick-repo" : "install-app");
     } catch (err) {
       setError(errorFromCaught(err, "Could not load repos"));
-      setPhase(pendingInstallationId ? "claiming" : "install-app");
+      setPhase("install-app");
     } finally {
       setLoadingRepos(false);
     }
@@ -148,6 +158,9 @@ export function OnboardingConnectFlow({
         } catch (err) {
           const msg = errorFromCaught(err, "Could not register GitHub installation");
           setError(msg);
+          clearStoredInstallationId();
+          setPhase("install-app");
+          return;
         }
       }
       await loadRepos();
@@ -169,15 +182,31 @@ export function OnboardingConnectFlow({
     }
   }
 
-  function confirmLink() {
-    if (!selectedRepo) return;
-    clearStoredInstallationId();
-    setPhase("linked");
-    toast.success(`Linked ${selectedRepo.full_name}`);
-    onLinked?.(selectedRepo, {
-      agentName: agentName || selectedRepo.name,
-      agentId,
-    });
+  async function confirmLink() {
+    if (!selectedRepo || !currentOrg?.id) return;
+    setAuthorizing(true);
+    setError(null);
+    try {
+      const name = agentName.trim() || selectedRepo.name;
+      await agentsApi.register(currentOrg.id, {
+        name,
+        agent_id: agentId.trim() || undefined,
+        repo_url: selectedRepo.html_url,
+      });
+      clearStoredInstallationId();
+      setPhase("linked");
+      toast.success(`Linked ${selectedRepo.full_name}`);
+      onLinked?.(selectedRepo, {
+        agentName: name,
+        agentId: agentId.trim(),
+      });
+    } catch (err) {
+      const msg = errorFromCaught(err, "Could not link repository");
+      setError(msg);
+      toast.error(msg);
+    } finally {
+      setAuthorizing(false);
+    }
   }
 
   function handleSkip() {
@@ -222,22 +251,23 @@ export function OnboardingConnectFlow({
   if (configured === true && canIntegrate && installations.length === 0 && !loadingRepos && phase === "install-app") {
     return (
       <div className="space-y-8">
-        <ConnectHero />
+        {showHero ? <ConnectHero /> : null}
         {error && <ErrorBanner message={error} />}
         <div className="rounded-xl border border-[var(--border-default)] bg-[var(--bg-secondary)] p-6">
           <h3 className="text-base font-semibold text-[var(--text-primary)]">
             Install the Eden GitHub App
           </h3>
           <p className="mt-2 text-sm leading-relaxed text-[var(--text-secondary)]">
-            Pick which repositories Eden can access for listing and future
-            improvement PRs. SDK install is always manual — Eden no longer
-            opens an auto-integration PR.
+            Optional after first ingestion. Link a repo so Eden can list it
+            for agents and operator-approved improvement plans. Install the
+            SDK yourself to send traces.
           </p>
           <div className="mt-5 flex flex-wrap items-center gap-3">
             <button
+              type="button"
               onClick={startInstall}
               disabled={authorizing}
-              className="inline-flex items-center gap-2 rounded-lg bg-[var(--accent)] px-5 py-2.5 text-sm font-medium text-[var(--bg-primary)] hover:opacity-90 disabled:opacity-50"
+              className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-[var(--accent)] px-5 py-2.5 text-sm font-medium text-[var(--bg-primary)] hover:opacity-90 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]/40"
             >
               {authorizing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Github className="h-4 w-4" />}
               Connect GitHub
@@ -247,7 +277,7 @@ export function OnboardingConnectFlow({
               <button
                 type="button"
                 onClick={handleSkip}
-                className="inline-flex items-center gap-2 rounded-lg border border-[var(--border-default)] bg-[var(--bg-primary)] px-4 py-2.5 text-sm font-medium text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)] hover:text-[var(--text-primary)]"
+                className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-[var(--border-default)] bg-[var(--bg-primary)] px-4 py-2.5 text-sm font-medium text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)] hover:text-[var(--text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]/40"
               >
                 Skip / continue with SDK only
               </button>
@@ -282,7 +312,7 @@ export function OnboardingConnectFlow({
           <button
             type="button"
             onClick={handleSkip}
-            className="inline-flex items-center gap-2 rounded-lg bg-[var(--accent)] px-4 py-2 text-sm font-medium text-[var(--bg-primary)] hover:opacity-90"
+            className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-[var(--accent)] px-4 py-2 text-sm font-medium text-[var(--bg-primary)] hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]/40"
           >
             Continue to SDK install
             <ArrowRight className="h-4 w-4" />
@@ -294,7 +324,7 @@ export function OnboardingConnectFlow({
 
   return (
     <div className="space-y-6">
-      <ConnectHero />
+      {showHero ? <ConnectHero /> : null}
       {error && <ErrorBanner message={error} />}
 
       <div className="flex items-center justify-between gap-2">
@@ -304,7 +334,7 @@ export function OnboardingConnectFlow({
         <button
           type="button"
           onClick={() => void loadRepos()}
-          className="inline-flex items-center gap-1 text-xs text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+          className="inline-flex min-h-11 items-center gap-1 px-2 text-xs text-[var(--text-muted)] hover:text-[var(--text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]/40"
         >
           <RefreshCw className="h-3 w-3" />
           Refresh
@@ -317,7 +347,7 @@ export function OnboardingConnectFlow({
             key={`${repo.installation_id}:${repo.full_name}`}
             type="button"
             onClick={() => setSelectedRepo(repo)}
-            className={`flex w-full items-center gap-3 px-3 py-2.5 text-left text-sm transition-colors ${
+            className={`flex min-h-11 w-full items-center gap-3 px-3 py-2.5 text-left text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--accent)]/40 ${
               selectedRepo?.full_name === repo.full_name
                 ? "bg-[var(--accent)]/10 text-[var(--text-primary)]"
                 : "hover:bg-[var(--bg-tertiary)] text-[var(--text-secondary)]"
@@ -336,66 +366,78 @@ export function OnboardingConnectFlow({
 
       {selectedRepo && (
         <div className="space-y-3">
-          <div className="text-sm font-medium">Agent name</div>
+          <label className="block text-sm font-medium" htmlFor="connect-agent-name">
+            Agent name
+          </label>
           <input
+            id="connect-agent-name"
             type="text"
             value={agentName}
             onChange={(e) => setAgentName(e.target.value)}
             placeholder={selectedRepo.name}
-            className="w-full rounded-lg border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-2 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)]"
+            className="min-h-11 w-full rounded-lg border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-2 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]/40"
           />
-          <div className="text-sm font-medium">Agent ID (optional)</div>
+          <label className="block text-sm font-medium" htmlFor="connect-agent-id">
+            Agent ID (optional)
+          </label>
           <input
+            id="connect-agent-id"
             type="text"
             value={agentId}
             onChange={(e) => setAgentId(e.target.value)}
             placeholder="auto-generated if blank"
-            className="w-full rounded-lg border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-2 font-mono text-xs text-[var(--text-primary)] placeholder:text-[var(--text-muted)]"
+            className="min-h-11 w-full rounded-lg border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-2 font-mono text-xs text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]/40"
           />
         </div>
       )}
 
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         {inWizard ? (
           <button
             type="button"
             onClick={handleSkip}
-            className="text-sm text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+            className="min-h-11 text-sm text-[var(--text-muted)] hover:text-[var(--text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]/40"
           >
             Skip GitHub
           </button>
         ) : (
           <Link
             href="/agents"
-            className="text-sm text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+            className="inline-flex min-h-11 items-center text-sm text-[var(--text-muted)] hover:text-[var(--text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]/40"
           >
             ← Back to agents
           </Link>
         )}
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {(inWizard || onSkip) && (
             <button
               type="button"
               onClick={handleSkip}
-              className="inline-flex items-center gap-1 rounded border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-2 text-sm text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)]"
+              className="inline-flex min-h-11 items-center gap-1 rounded border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-2 text-sm text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]/40"
             >
               Skip / continue with SDK only
             </button>
           )}
           <button
+            type="button"
             onClick={startInstall}
             disabled={authorizing}
-            className="inline-flex items-center gap-1 rounded border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-2 text-sm text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)] disabled:opacity-50"
+            className="inline-flex min-h-11 items-center gap-1 rounded border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-2 text-sm text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)] disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]/40"
           >
             <Github className="h-3.5 w-3.5" />
             Add another GitHub install
           </button>
           <button
-            onClick={confirmLink}
-            disabled={!selectedRepo}
-            className="inline-flex items-center gap-2 rounded-lg bg-[var(--accent)] px-4 py-2 text-sm font-medium text-[var(--bg-primary)] hover:opacity-90 disabled:opacity-50"
+            type="button"
+            onClick={() => void confirmLink()}
+            disabled={!selectedRepo || authorizing}
+            className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-[var(--accent)] px-4 py-2 text-sm font-medium text-[var(--bg-primary)] hover:opacity-90 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]/40"
           >
-            <Check className="h-4 w-4" />
+            {authorizing ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Check className="h-4 w-4" />
+            )}
             Link repository
           </button>
         </div>
@@ -408,14 +450,14 @@ function ConnectHero() {
   return (
     <div className="space-y-3">
       <p className="text-[10px] font-mono font-semibold uppercase tracking-[0.18em] text-[var(--accent)]">
-        Connect repo
+        Optional
       </p>
       <h2 className="text-2xl font-bold tracking-tight text-[var(--text-primary)]">
         Link a GitHub repository
       </h2>
       <p className="max-w-xl text-sm leading-relaxed text-[var(--text-secondary)]">
-        Optional. Install the Eden GitHub App so Eden can list your repos.
-        Then install the SDK yourself — Eden does not open an auto-integration PR.
+        Optional after first ingestion. Install the Eden GitHub App so Eden
+        can list your repos. Install the SDK yourself to send traces.
       </p>
     </div>
   );
@@ -468,7 +510,7 @@ function PanelWarning({
       <button
         type="button"
         onClick={onSkip}
-        className="inline-flex items-center gap-2 rounded-lg bg-[var(--accent)] px-4 py-2 text-sm font-medium text-[var(--bg-primary)] hover:opacity-90"
+        className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-[var(--accent)] px-4 py-2 text-sm font-medium text-[var(--bg-primary)] hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]/40"
       >
         {inWizard ? "Skip / continue with SDK only" : "Skip — I'll install manually"}
         <ArrowRight className="h-4 w-4" />
@@ -508,7 +550,7 @@ function PanelLocked({
       <button
         type="button"
         onClick={onSkip}
-        className="inline-flex items-center gap-2 rounded-lg bg-[var(--accent)] px-4 py-2 text-sm font-medium text-[var(--bg-primary)] hover:opacity-90"
+        className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-[var(--accent)] px-4 py-2 text-sm font-medium text-[var(--bg-primary)] hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]/40"
       >
         {inWizard ? "Continue to SDK install / skip GitHub" : "Continue without GitHub"}
         <ArrowRight className="h-4 w-4" />

@@ -163,6 +163,13 @@ function AlertsPageInner() {
     // global QueryClient retry policy (see query-provider.tsx).
     { refetchInterval: 15_000 },
   );
+  const rulesQuery = useOrgQuery(
+    queryKeys.alerts.nlRules(orgId),
+    orgId,
+    () => api.listNlAlertRules(orgId!),
+  );
+  const hasAlertRules = (rulesQuery.data?.rules?.length ?? 0) > 0;
+  const rulesReady = !rulesQuery.isLoading && !rulesQuery.isPending;
   const loading = alertsQuery.isLoading;
   const refreshing = alertsQuery.isFetching && !loading;
   const error = alertsQuery.error?.message ?? null;
@@ -315,7 +322,7 @@ function AlertsPageInner() {
               onClick={fetchAlerts}
               disabled={loading || refreshing}
               aria-label="Refresh alerts"
-              className="p-2 text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)] rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="inline-flex min-h-11 min-w-11 items-center justify-center p-2 text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)] rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               title="Refresh"
             >
               <RefreshCw className={cn("w-4 h-4", (loading || refreshing) && "animate-spin")} />
@@ -368,7 +375,8 @@ function AlertsPageInner() {
           },
         ]}
       />
-      {/* Stats Cards */}
+      {/* Stats — only when there is feed data or an active severity filter */}
+      {(alerts.length > 0 || severityFilter !== "all") && (
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-6">
         {(["critical", "high", "warning", "info", "debug"] as const).map((sev) => {
           const config = getSeverityConfig(sev);
@@ -379,7 +387,7 @@ function AlertsPageInner() {
               key={sev}
               onClick={() => setSeverityFilter(severityFilter === sev ? "all" : sev)}
               className={cn(
-                "flex items-center gap-3 p-3 rounded-lg border transition-all text-left",
+                "flex items-center gap-3 p-3 min-h-11 rounded-lg border transition-all text-left",
                 severityFilter === sev
                   ? cn(config.bg, "border-[var(--border-strong)]")
                   : "bg-[var(--bg-primary)] border-[var(--border-default)] hover:border-[var(--border-strong)]"
@@ -398,6 +406,7 @@ function AlertsPageInner() {
           );
         })}
       </div>
+      )}
 
       {/* Filters */}
       <div className="flex flex-wrap items-center gap-2 mb-4">
@@ -430,7 +439,7 @@ function AlertsPageInner() {
         <button
           onClick={() => setRulesOpen(!rulesOpen)}
           className={cn(
-            "flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors",
+            "flex items-center gap-1.5 min-h-11 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors",
             rulesOpen
               ? "bg-[var(--accent-faint)] text-[var(--accent)]"
               : "text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)]"
@@ -579,11 +588,23 @@ function AlertsPageInner() {
           <EmptyState
             variant="plain"
             icon={Bell}
-            title="All clear"
+            title={
+              severityFilter !== "all" || acknowledgedFilter !== null
+                ? "No matching alerts"
+                : !rulesReady
+                  ? "Checking alert rules…"
+                  : hasAlertRules
+                    ? "All clear"
+                    : "No alert rules yet"
+            }
             description={
               severityFilter !== "all" || acknowledgedFilter !== null
                 ? "No alerts match your current filters. Try clearing the filters to see all alerts."
-                : "No active alerts. Create a rule to catch cost spikes, quality drops, and pipeline failures."
+                : !rulesReady
+                  ? "Confirming whether notification rules are configured before calling the feed healthy."
+                  : hasAlertRules
+                    ? "No active alerts for your rules. New notifications appear here when thresholds fire."
+                    : "Alerts fire from rules you define. Create a rule to catch cost spikes, quality drops, and pipeline failures — empty does not mean healthy until rules exist."
             }
             size="lg"
             action={
@@ -593,17 +614,24 @@ function AlertsPageInner() {
                     setSeverityFilter("all");
                     setAcknowledgedFilter(null);
                   }}
-                  className="text-xs text-[var(--accent)] hover:underline"
+                  className="inline-flex min-h-11 items-center text-sm text-[var(--accent)] hover:underline"
                 >
                   Clear filters
                 </button>
-              ) : (
+              ) : !rulesReady ? null : (
                 <button
                   type="button"
                   onClick={() => {
-                    window.location.href = "/alerts?tab=rules";
+                    setRulesOpen(true);
+                    const params = new URLSearchParams(searchParams.toString());
+                    params.set("tab", "rules");
+                    window.history.replaceState(
+                      null,
+                      "",
+                      `${window.location.pathname}?${params.toString()}`,
+                    );
                   }}
-                  className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--accent)] px-3 py-2 text-xs font-medium text-[var(--bg-base)] hover:bg-[var(--accent-hover)]"
+                  className="inline-flex min-h-11 items-center gap-1.5 rounded-lg bg-[var(--accent)] px-4 py-2.5 text-sm font-medium text-[var(--bg-base)] hover:bg-[var(--accent-hover)]"
                   data-testid="alerts-create-rule-cta"
                 >
                   Create rule
@@ -721,7 +749,7 @@ function AlertsPageInner() {
                             handleAcknowledge(alert.alert_id);
                           }}
                           aria-label={`Acknowledge alert: ${alert.title}`}
-                          className="p-1.5 text-[var(--text-muted)] hover:text-[var(--success)] hover:bg-[var(--success)]/10 rounded-lg transition-colors"
+                          className="inline-flex min-h-11 min-w-11 items-center justify-center p-1.5 text-[var(--text-muted)] hover:text-[var(--accent)] hover:bg-[var(--accent-faint)] rounded-lg transition-colors"
                           title="Acknowledge"
                         >
                           <CheckCircle2 className="w-4 h-4" />

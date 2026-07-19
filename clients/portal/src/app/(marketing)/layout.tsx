@@ -1,5 +1,9 @@
 import type { Metadata } from "next";
 
+// Avoid statically caching marketing HTML with a stale signed-out CTA.
+// Child pages use Clerk client hooks; force-dynamic keeps SSR fresh.
+export const dynamic = "force-dynamic";
+
 const PORTAL = process.env.NEXT_PUBLIC_PORTAL_URL || "https://edenobservability.com";
 
 export const metadata: Metadata = {

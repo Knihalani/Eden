@@ -16,13 +16,10 @@ import { useEffect, useState, useRef, useCallback, Suspense } from "react";
 import { Pin, PanelLeftClose, PanelLeftOpen, RefreshCw } from "lucide-react";
 import {
   Loader2,
-  
   LogOut,
-  Layers,
   Menu,
   X,
   Home,
-  
   Settings,
   CreditCard,
   Building2,
@@ -30,15 +27,10 @@ import {
   Bell,
   ChevronRight,
   Check,
-  
-  
-  
-  Activity,
-  
-  
   AlertTriangle,
   ArrowRight,
-  WifiOff } from "lucide-react";
+  WifiOff,
+} from "lucide-react";
 import { cn, isExternalHref } from "@/lib/utils";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
@@ -152,20 +144,43 @@ function PortalLayoutContent({ children }: { children: React.ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
   const [advancedCollapsed, setAdvancedCollapsed] = useState(true);
+  /** True while product tour overlay is open — demotes mobile drawer modal. */
+  const [tourSpotlightActive, setTourSpotlightActive] = useState(false);
   const densityCompact = prefs.density === "compact";
   const [userDropdownOpen, setUserDropdownOpen] = useState(false);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const userDropdownRef = useRef<HTMLDivElement>(null);
+  const sidebarCloseRef = useRef<HTMLButtonElement>(null);
+  const menuButtonRef = useRef<HTMLButtonElement>(null);
+  const sidebarAsideRef = useRef<HTMLElement>(null);
   // ponytail: hydrated after mount so the first client paint matches the
   // SSR markup (collapsed=false). Without the gate the sidebar would
   // jump from expanded → collapsed on every reload, which is jarring.
   const [collapseHydrated, setCollapseHydrated] = useState(false);
+  /** lg breakpoint — mobile drawer a11y only applies below this. */
+  const [isNarrowViewport, setIsNarrowViewport] = useState(false);
+
+  const closeMobileDrawer = useCallback(() => {
+    setSidebarOpen(false);
+    if (!isNarrowViewport) return;
+    requestAnimationFrame(() => {
+      menuButtonRef.current?.focus();
+    });
+  }, [isNarrowViewport]);
 
   // Hydrate collapse preference from localStorage on mount.
   useEffect(() => {
     setCollapsed(readCollapsedPreference());
     setAdvancedCollapsed(readAdvancedCollapsed());
     setCollapseHydrated(true);
+  }, []);
+
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 1023px)");
+    const sync = () => setIsNarrowViewport(mq.matches);
+    sync();
+    mq.addEventListener("change", sync);
+    return () => mq.removeEventListener("change", sync);
   }, []);
 
   const toggleAdvanced = useCallback(() => {
@@ -212,11 +227,23 @@ function PortalLayoutContent({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     function onTourOpen() {
+      // Tour spotlights need expanded rail so data-tour-id targets measure.
+      // Open the drawer on narrow viewports, but demote it from a modal
+      // while the tour owns focus (see aria-modal below).
       setCollapsed(false);
+      setAdvancedCollapsed(false);
       setSidebarOpen(true);
+      setTourSpotlightActive(true);
+    }
+    function onTourEnd() {
+      setTourSpotlightActive(false);
     }
     window.addEventListener("eden:product-tour", onTourOpen);
-    return () => window.removeEventListener("eden:product-tour", onTourOpen);
+    window.addEventListener("eden:product-tour-end", onTourEnd);
+    return () => {
+      window.removeEventListener("eden:product-tour", onTourOpen);
+      window.removeEventListener("eden:product-tour-end", onTourEnd);
+    };
   }, []);
 
   // ponytail: built-in PerformanceObserver for the three Core Web
@@ -305,7 +332,7 @@ function PortalLayoutContent({ children }: { children: React.ReactNode }) {
       // Escape while typing — that's owned by the form field itself.
       if (e.key === "Escape" && sidebarOpen && !isFormField) {
         e.preventDefault();
-        setSidebarOpen(false);
+        closeMobileDrawer();
         return;
       }
       // Cmd/Ctrl+B (or just `\` outside inputs) toggles the sidebar.
@@ -319,7 +346,40 @@ function PortalLayoutContent({ children }: { children: React.ReactNode }) {
     }
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [sidebarOpen]);
+  }, [sidebarOpen, closeMobileDrawer]);
+
+  const mobileDrawerOpen = isNarrowViewport && sidebarOpen;
+
+  // Mobile drawer: initial focus, scroll lock, Tab cycle inside dialog.
+  useEffect(() => {
+    if (!mobileDrawerOpen) return;
+    sidebarCloseRef.current?.focus();
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    const root = sidebarAsideRef.current;
+    function onTabTrap(e: KeyboardEvent) {
+      if (e.key !== "Tab" || !root) return;
+      const nodes = root.querySelectorAll<HTMLElement>(
+        'a[href], button:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      );
+      if (nodes.length === 0) return;
+      const first = nodes[0];
+      const last = nodes[nodes.length - 1];
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    }
+    document.addEventListener("keydown", onTabTrap);
+    return () => {
+      document.body.style.overflow = prevOverflow;
+      document.removeEventListener("keydown", onTabTrap);
+    };
+  }, [mobileDrawerOpen]);
 
   const handleCollapse = useCallback(() => {
     setCollapsed((prev) => !prev);
@@ -451,23 +511,28 @@ function PortalLayoutContent({ children }: { children: React.ReactNode }) {
       hideChrome={hidePortalChrome}
       sidebar={
         <>
-      {sidebarOpen && (
+      {mobileDrawerOpen && (
         <div
           role="presentation"
           aria-hidden="true"
           className="fixed inset-0 bg-[var(--bg-base)]/50 z-40 lg:hidden cursor-default"
-          onClick={() => setSidebarOpen(false)}
+          onClick={closeMobileDrawer}
         />
       )}
 
       <aside
-        aria-label="Main sidebar navigation"
+        ref={sidebarAsideRef}
+        id="portal-sidebar"
+        aria-label="Main navigation"
+        role={mobileDrawerOpen && !tourSpotlightActive ? "dialog" : undefined}
+        aria-modal={mobileDrawerOpen && !tourSpotlightActive ? true : undefined}
         className={cn(
-          "sidebar flex flex-col relative bg-[var(--bg-primary)] border-r border-[var(--border-default)] z-40",
+          "sidebar flex flex-col relative bg-[var(--bg-primary)] border-r border-[var(--border-default)] z-50",
           "fixed inset-y-0 left-0 lg:sticky lg:top-0 lg:self-start lg:h-dvh lg:flex-shrink-0",
           collapsed ? "collapsed" : "",
           sidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0",
-          "transition-[transform,width] duration-300 ease-out lg:transition-[width]"
+          "transition-[transform,width] duration-300 ease-out lg:transition-[width]",
+          "motion-reduce:transition-none",
         )}
         style={{
           width: collapsed ? SIDEBAR_COLLAPSED_WIDTH : SIDEBAR_EXPANDED_WIDTH }}
@@ -519,8 +584,11 @@ function PortalLayoutContent({ children }: { children: React.ReactNode }) {
             </kbd>
           </button>
           <button
-            onClick={() => setSidebarOpen(false)}
-            className="lg:hidden p-1.5 text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)] rounded-md transition-colors"
+            ref={sidebarCloseRef}
+            id="portal-sidebar-close"
+            type="button"
+            onClick={closeMobileDrawer}
+            className="lg:hidden inline-flex items-center justify-center min-h-[44px] min-w-[44px] p-2.5 text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)] rounded-md transition-colors motion-reduce:transition-none"
             aria-label="Close menu"
           >
             <X className="w-4 h-4" />
@@ -578,7 +646,7 @@ function PortalLayoutContent({ children }: { children: React.ReactNode }) {
                   description={item.description}
                   collapsed={collapsed}
                   compact={densityCompact}
-                  onClick={() => setSidebarOpen(false)}
+                  onClick={closeMobileDrawer}
                   pinned
                   onTogglePin={() => togglePin(item.id)}
                 />
@@ -601,18 +669,19 @@ function PortalLayoutContent({ children }: { children: React.ReactNode }) {
                     badge={item.badge}
                     collapsed={collapsed}
                     compact={densityCompact}
-                    onClick={() => setSidebarOpen(false)}
+                    onClick={closeMobileDrawer}
                     pinned={isPinned}
                     onTogglePin={() => togglePin(item.id)}
                   >
                     {item.children?.map((child) => (
                       <NavSubItem
                         key={child.id}
+                        tourId={child.id}
                         href={child.href}
                         label={child.label}
                         description={child.description}
                         compact={densityCompact}
-                        onClick={() => setSidebarOpen(false)}
+                        onClick={closeMobileDrawer}
                       />
                     ))}
                   </NavItem>
@@ -638,13 +707,13 @@ function PortalLayoutContent({ children }: { children: React.ReactNode }) {
                 <span>{advancedCollapsed ? "Show advanced" : "Hide advanced"}</span>
                 <span
                   className={cn(
-                    "w-7 h-3.5 rounded-full p-0.5 transition-colors",
+                    "w-7 h-3.5 rounded-full p-0.5 transition-colors motion-reduce:transition-none",
                     advancedCollapsed ? "bg-[var(--bg-tertiary)]" : "bg-[var(--accent)]"
                   )}
                 >
                   <span
                     className={cn(
-                      "block w-2.5 h-2.5 rounded-full bg-white transition-transform",
+                      "block w-2.5 h-2.5 rounded-full bg-white transition-transform motion-reduce:transition-none",
                       advancedCollapsed ? "translate-x-0" : "translate-x-3.5"
                     )}
                   />
@@ -752,9 +821,14 @@ function PortalLayoutContent({ children }: { children: React.ReactNode }) {
             {/* Left: Mobile logo + hamburger */}
             <div className="flex items-center gap-3 lg:hidden">
               <button
+                ref={menuButtonRef}
+                type="button"
                 onClick={() => setSidebarOpen(true)}
-                className="p-2.5 text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)] rounded-lg active:bg-[var(--border-default)]"
+                className="inline-flex items-center justify-center min-h-[44px] min-w-[44px] p-2.5 text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)] rounded-lg active:bg-[var(--border-default)]"
                 aria-label="Open menu"
+                aria-expanded={sidebarOpen}
+                aria-controls="portal-sidebar"
+                aria-haspopup="dialog"
               >
                 <Menu className="w-5 h-5" />
               </button>
@@ -1196,11 +1270,14 @@ function isActivePath(pathname: string, href: string, search?: string): boolean 
 }
 
 function NavSubItem({
+  tourId,
   href,
   label,
   description,
   compact,
   onClick }: {
+  /** Stable id for product-tour spotlight (`data-tour-id`). */
+  tourId?: string;
   href: string;
   label: string;
   /** One-line "what is this" hint shown in the hover tooltip.
@@ -1218,10 +1295,11 @@ function NavSubItem({
     <PortalNavLink
       href={href}
       onClick={onClick}
+      data-tour-id={tourId || undefined}
       aria-label={label}
       aria-current={active ? "page" : undefined}
       className={cn(
-        "nav-subitem block pl-9 pr-3 rounded-md text-xs font-medium transition-colors relative",
+        "nav-subitem block pl-9 pr-3 rounded-md text-xs font-medium transition-colors motion-reduce:transition-none relative",
         compact ? "py-1" : "py-1.5",
         active
           ? "text-[var(--accent)] bg-[var(--accent-light)]/60"
@@ -1302,8 +1380,9 @@ function NavItem({
             aria-current={active ? "page" : undefined}
             showExternalIcon={external && !collapsed}
             className={cn(
-              "nav-item flex items-center gap-3 px-3 rounded-lg text-sm transition-all duration-150 relative",
+              "nav-item flex items-center gap-3 px-3 rounded-lg text-sm transition-all duration-150 motion-reduce:transition-none relative",
               compact ? "py-1.5" : "py-2",
+              onTogglePin && !collapsed && "pr-9",
               active
                 ? "font-semibold text-[var(--accent)] bg-[var(--accent-light)] opacity-100"
                 : "font-medium text-[var(--text-secondary)] opacity-60 hover:text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)] hover:opacity-100"
@@ -1319,7 +1398,7 @@ function NavItem({
             )}
             <Icon
               className={cn(
-                "flex-shrink-0 nav-icon transition-all duration-200",
+                "flex-shrink-0 nav-icon transition-all duration-200 motion-reduce:transition-none",
                 compact ? "w-3.5 h-3.5" : "w-4 h-4",
                 active ? "text-[var(--accent)]" : "text-[var(--text-muted)] group-hover:text-[var(--text-secondary)]"
               )}
@@ -1332,29 +1411,37 @@ function NavItem({
                     {badge}
                   </span>
                 )}
-                {onTogglePin && (
-                  <button
-                    onClick={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      onTogglePin();
-                    }}
-                    aria-label={pinned ? `Unpin ${label}` : `Pin ${label}`}
-                    aria-pressed={pinned}
-                    className={cn(
-                      "pin-button p-1 rounded transition-all",
-                      pinned
-                        ? "text-[var(--accent)] opacity-100"
-                        : "text-[var(--text-muted)] hover:text-[var(--accent)] hover:bg-[var(--bg-tertiary)]"
-                    )}
-                    title={pinned ? "Unpin from sidebar" : "Pin to top of sidebar"}
-                  >
-                    <Pin className={cn("w-3.5 h-3.5", pinned && "fill-current")} />
-                  </button>
-                )}
               </>
             )}
           </PortalNavLink>
+        );
+        const pinControl =
+          onTogglePin && !collapsed ? (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                onTogglePin();
+              }}
+              aria-label={pinned ? `Unpin ${label}` : `Pin ${label}`}
+              aria-pressed={pinned}
+              className={cn(
+                "pin-button absolute right-1 top-1/2 -translate-y-1/2 p-1 rounded transition-all",
+                pinned
+                  ? "text-[var(--accent)] opacity-100"
+                  : "text-[var(--text-muted)] opacity-0 group-hover/navitem:opacity-100 hover:text-[var(--accent)] hover:bg-[var(--bg-tertiary)]",
+              )}
+              title={pinned ? "Unpin from sidebar" : "Pin to top of sidebar"}
+            >
+              <Pin className={cn("w-3.5 h-3.5", pinned && "fill-current")} />
+            </button>
+          ) : null;
+        const linkWithPin = (
+          <div className="relative">
+            {link}
+            {pinControl}
+          </div>
         );
         // Tooltip with description is shown even when the sidebar is
         // expanded — the label alone ("Traces", "Insights", "Tools")
@@ -1376,7 +1463,7 @@ function NavItem({
         );
         const tooltipNode = (
           <Tooltip delayDuration={150}>
-            <TooltipTrigger asChild>{link}</TooltipTrigger>
+            <TooltipTrigger asChild>{linkWithPin}</TooltipTrigger>
             {richTooltip}
           </Tooltip>
         );
@@ -1387,49 +1474,6 @@ function NavItem({
         <div className="mt-0.5 space-y-0.5">{children}</div>
       )}
     </div>
-  );
-}
-
-function BottomNavItem({
-  href,
-  icon: Icon,
-  label,
-  isCenter }: {
-  href: string;
-  icon: typeof Home;
-  label: string;
-  isCenter?: boolean;
-}) {
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
-  const active = isActivePath(pathname, href, searchParams.toString());
-
-  return (
-    <Link
-      href={href}
-      aria-label={label}
-      aria-current={active ? "page" : undefined}
-      className={cn(
-        "flex flex-col items-center justify-center min-w-[44px] min-h-[44px] gap-1 transition-colors relative",
-        isCenter && "relative -mt-3",
-        active ? "text-[var(--accent)]" : "text-[var(--text-muted)] hover:text-[var(--text-secondary)]"
-      )}
-    >
-      {active && !isCenter && (
-        <span
-          aria-hidden="true"
-          className="absolute top-0 left-1/2 -translate-x-1/2 w-8 h-0.5 rounded-full bg-[var(--accent)]"
-        />
-      )}
-      {isCenter ? (
-        <span className="flex items-center justify-center w-12 h-12 rounded-full bg-[var(--accent)] text-[var(--accent-foreground)] shadow-lg shadow-[var(--accent)]/30">
-          <Icon className="w-6 h-6" />
-        </span>
-      ) : (
-        <Icon className="w-5 h-5" />
-      )}
-      <span className={cn("text-[10px] font-medium", isCenter && "sr-only")}>{label}</span>
-    </Link>
   );
 }
 

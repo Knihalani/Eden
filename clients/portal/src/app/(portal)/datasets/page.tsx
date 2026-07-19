@@ -71,7 +71,7 @@ function DatasetsPageInner() {
         toast.error(e instanceof Error ? e.message : "Promote failed");
       }
     })();
-  }, [searchParams, currentOrg?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [searchParams, currentOrg?.id]);
 
   if (!currentOrg) return <NoOrgState feature="Datasets" />;
 

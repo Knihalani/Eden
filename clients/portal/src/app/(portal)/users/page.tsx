@@ -121,7 +121,6 @@ export default function UsersPage() {
     goalsQuery.refetch();
     cohortsQuery.refetch();
     segmentsQuery.refetch();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionsQuery.refetch, goalsQuery.refetch, cohortsQuery.refetch, segmentsQuery.refetch]);
 
   async function handleCreateGoal() {

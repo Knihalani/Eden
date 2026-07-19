@@ -136,17 +136,34 @@ class TenantRateLimitMiddleware:
         # without the startup contract.
 
     async def _get_redis(self):
-        """Lazy-load Redis client if REDIS_URL is configured."""
+        """Lazy-load Redis client when distributed rate limiting is on.
+
+        Shares the process singleton from ``eden.storage.redis`` — a
+        second ``from_url`` connection previously doubled health-check
+        PINGs and burned Upstash Free quota.
+        """
         if self._redis is not None:
             return self._redis
-        redis_url = getattr(_get_settings(), "redis_url", "")
+        settings = _get_settings()
+        if not getattr(settings, "rate_limit_distributed", False):
+            self._redis = False  # sentinel: memory-only mode
+            return None
+        redis_url = getattr(settings, "redis_url", "")
         if redis_url:
             try:
-                import redis.asyncio as aioredis
-                self._redis = await aioredis.from_url(redis_url, decode_responses=True)
-                logger.info("TenantRateLimitMiddleware: Redis backend connected")
+                from eden.storage.redis import get_redis_client
+
+                client = await get_redis_client()
+                if client is None:
+                    self._redis = False
+                    return None
+                self._redis = client
+                logger.info("TenantRateLimitMiddleware: Redis backend connected (shared)")
             except Exception as exc:
-                logger.warning(f"TenantRateLimitMiddleware: Redis unavailable ({exc}), using in-memory fallback")
+                logger.warning(
+                    "TenantRateLimitMiddleware: Redis unavailable (%s), using in-memory fallback",
+                    exc,
+                )
                 self._redis = False  # sentinel: don't retry
         else:
             self._redis = False
@@ -479,16 +496,23 @@ class TenantRateLimitMiddleware:
         reset_ts = int(time.time() + window)
         retry_after = 0
 
-        try:
-            allowed, remaining, reset_ts, retry_after = await self._check_redis(
-                limit_key, limit, window
-            )
-        except Exception:
-            logger.warning(
-                "tenant_rate_limit: Redis check failed for %s; falling back to local bucket",
-                limit_key,
-                exc_info=True,
-            )
+        # Prefer in-memory buckets unless RATE_LIMIT_DISTRIBUTED=true.
+        # Per-request Redis Lua was the dominant Upstash Free burn.
+        use_redis = bool(getattr(get_settings(), "rate_limit_distributed", False))
+        if use_redis:
+            try:
+                allowed, remaining, reset_ts, retry_after = await self._check_redis(
+                    limit_key, limit, window
+                )
+            except Exception:
+                logger.warning(
+                    "tenant_rate_limit: Redis check failed for %s; falling back to local bucket",
+                    limit_key,
+                    exc_info=True,
+                )
+                use_redis = False
+
+        if not use_redis:
             refill_rate = limit / window
             bucket = await self._get_bucket(limit_key, limit, refill_rate)
             allowed, remaining, retry_after = await bucket.consume(1.0)

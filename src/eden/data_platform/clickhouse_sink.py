@@ -40,17 +40,31 @@ class ClickHouseConfig:
     user: str = "default"
     password: str = ""
     timeout: int = 30
+    tinybird_token: str = ""
 
     @classmethod
     def from_settings(cls) -> ClickHouseConfig:
         s = get_settings()
+        token = (
+            getattr(s, "tinybird_admin_token", "")
+            or getattr(s, "tinybird_branch_token", "")
+            or getattr(s, "clickhouse_password", "")
+            or ""
+        )
+        host_override = getattr(s, "tinybird_api_host", "") or ""
+        url = host_override or getattr(s, "clickhouse_url", "http://localhost:8123")
         return cls(
-            url=getattr(s, "clickhouse_url", "http://localhost:8123"),
+            url=url,
             database=getattr(s, "clickhouse_database", "eden"),
             user=getattr(s, "clickhouse_user", "default"),
-            password=getattr(s, "clickhouse_password", ""),
+            password=getattr(s, "clickhouse_password", "") or token,
             timeout=getattr(s, "clickhouse_timeout", 30),
+            tinybird_token=token,
         )
+
+    @property
+    def is_tinybird(self) -> bool:
+        return "tinybird.co" in (self.url or "").lower()
 
 
 @dataclass
@@ -96,8 +110,32 @@ class ClickHouseSink:
             self._session = None
 
     async def _execute(self, query: str, params: dict | None = None) -> str:
-        """Execute a ClickHouse query via HTTP interface."""
+        """Execute a ClickHouse / Tinybird SQL query via HTTP."""
         session = await self._get_session()
+        if self.config.is_tinybird:
+            token = self.config.tinybird_token or self.config.password
+            if not token:
+                raise ClickHouseError(
+                    "Tinybird token missing (set TINYBIRD_ADMIN_TOKEN)"
+                )
+            url = f"{self.config.url.rstrip('/')}/v0/sql"
+            headers = {"Authorization": f"Bearer {token}"}
+            # Tinybird /v0/sql accepts q=…; ignore CREATE/ALTER on Tinybird
+            # (datasources are managed by `tb deploy`).
+            q = query.strip()
+            upper = q.upper()
+            if upper.startswith(("CREATE ", "ALTER ", "DROP ")):
+                return ""
+            async with session.post(
+                url,
+                params={"q": q},
+                headers=headers,
+            ) as resp:
+                text = await resp.text()
+                if resp.status != 200:
+                    raise ClickHouseError(f"HTTP {resp.status}: {text[:500]}")
+                return text
+
         url = f"{self.config.url.rstrip('/')}/"
         payload = {"query": query}
         if params:
@@ -114,8 +152,25 @@ class ClickHouseSink:
             return text
 
     async def init_schema(self) -> None:
-        """Create ClickHouse tables if they don't exist. Idempotent."""
+        """Create ClickHouse tables if they don't exist. Idempotent.
+
+        On Tinybird, schema is owned by ``tinybird/*.datasource`` +
+        ``tb deploy`` — skip DDL so we don't burn the 1k req/day quota.
+        """
         if self._initialized:
+            return
+
+        if self.config.is_tinybird:
+            if not (self.config.tinybird_token or self.config.password):
+                logger.warning(
+                    "Tinybird host configured but TINYBIRD_ADMIN_TOKEN empty; "
+                    "analytics ingest will fall back to Postgres"
+                )
+            self._initialized = True
+            logger.info(
+                "Tinybird mode: skipping DDL (datasources via tb deploy) at %s",
+                self.config.url,
+            )
             return
 
         try:
@@ -582,15 +637,40 @@ class ClickHouseSink:
         return report
 
     async def _insert_json(self, table: str, rows: list[dict[str, Any]]) -> None:
-        """Insert rows into a ClickHouse table using JSONEachRow format."""
+        """Insert rows via ClickHouse JSONEachRow or Tinybird Events API."""
         if not rows:
             return
 
         session = await self._get_session()
+        body = "\n".join(json.dumps(r, default=str) for r in rows)
+
+        if self.config.is_tinybird:
+            token = self.config.tinybird_token or self.config.password
+            if not token:
+                raise ClickHouseError(
+                    "Tinybird token missing (set TINYBIRD_ADMIN_TOKEN)"
+                )
+            # Datasource names match tinybird/datasources/*.datasource
+            # (no database prefix). Strip accidental ``eden.`` prefix.
+            ds = table.split(".")[-1]
+            url = f"{self.config.url.rstrip('/')}/v0/events"
+            headers = {
+                "Authorization": f"Bearer {token}",
+                "Content-Type": "application/json",
+            }
+            async with session.post(
+                url,
+                params={"name": ds},
+                data=body,
+                headers=headers,
+            ) as resp:
+                text = await resp.text()
+                if resp.status not in (200, 202):
+                    raise ClickHouseError(f"HTTP {resp.status}: {text[:500]}")
+            return
+
         url = f"{self.config.url.rstrip('/')}/"
         query = f"INSERT INTO {self.config.database}.{table} FORMAT JSONEachRow"
-
-        body = "\n".join(json.dumps(r, default=str) for r in rows)
         auth = (
             aiohttp.BasicAuth(self.config.user, self.config.password)
             if self.config.password
@@ -793,8 +873,11 @@ class ClickHouseSink:
         return rows
 
     async def health_check(self) -> str:
-        """Check ClickHouse connectivity."""
+        """Check ClickHouse / Tinybird connectivity."""
         try:
+            if self.config.is_tinybird:
+                if not (self.config.tinybird_token or self.config.password):
+                    return "error: tinybird token missing"
             await self._execute("SELECT 1")
             return "connected"
         except Exception as exc:

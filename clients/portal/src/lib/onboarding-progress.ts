@@ -1,5 +1,5 @@
 /**
- * Onboarding progress — product tour resume chip + legacy Cat-23 mapping.
+ * Onboarding progress — product tour resume chip + legacy step mapping.
  */
 
 import {
@@ -34,9 +34,15 @@ export function onboardingProgressIndex(
 /** Legacy path helper — onboarding routes redirect to tour overlay. */
 export function onboardingProgressIndexFromPath(pathname: string): number {
   const path = (pathname || "").replace(/\/$/, "") || "/dashboard";
-  if (path.includes("install") || path.includes("wait")) return PRODUCT_TOUR_TOTAL - 1;
-  if (path.includes("connect")) return 1;
-  if (path.includes("done")) return PRODUCT_TOUR_TOTAL - 1;
+  if (path.includes("/settings")) return tourIndexFromOnboardingStep("api-keys");
+  if (path.includes("/traces")) return tourIndexFromOnboardingStep("traces");
+  if (path.includes("/issues")) return tourIndexFromOnboardingStep("issues");
+  if (path.includes("/improve")) return tourIndexFromOnboardingStep("improve");
+  if (path.includes("install")) return tourIndexFromOnboardingStep("install");
+  if (path.includes("wait") || path.includes("connect") || path.includes("done")) {
+    return PRODUCT_TOUR_TOTAL - 1;
+  }
+  if (path.includes("/dashboard")) return tourIndexFromOnboardingStep("dashboard");
   return 0;
 }
 

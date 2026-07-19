@@ -2,7 +2,6 @@
 
 import { useRef } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import type { ReactNode } from "react";
 import { DataTable, type DataTableColumn, type DataTableBulkAction, type DataTableProps } from "@/components/ui/data-table";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";

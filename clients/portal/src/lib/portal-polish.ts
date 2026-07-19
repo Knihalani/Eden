@@ -17,17 +17,17 @@ export const U20_CORE_AXE_ROUTES = [
 /** Gap 4.8 empty-state voice — precise, technical, calm (no exclamation marks). */
 export const U20_EMPTY_COPY = {
   dashboardTraces:
-    "Traces will appear here once your agents emit telemetry. Connect an agent to see live signals in seconds.",
+    "Traces appear here once the SDK or gateway sends telemetry. Create an API key, follow the docs quickstart, then run eden-doctor to verify.",
   issues:
-    "Issues appear automatically when Eden detects agent failures in finalized traces — usually within 60 seconds of a failed run.",
+    "Issues appear when Eden detects failures in finalized traces — usually within 60 seconds of a failed run. Install the SDK (docs quickstart), create an API key, then send traffic.",
   artifacts:
-    "Artifacts are reusable fixes Eden learns from production. After ~7 days of traffic, recurring issues become shadow candidates here.",
+    "Artifacts are reusable fixes Eden learns from production. Create an API key, send traces via the SDK or gateway, then after recurring issues appear, shadow candidates land here.",
   ledger:
     "Resolve an issue or promote an Artifact to seed your first Ledger draft. Ledgers compound institutional memory across agents.",
   traces:
-    "Connect the Eden SDK (or run a job) — traces appear here as your agents emit telemetry. Start with eden.init() in your app.",
+    "Traces appear once the gateway or SDK sends telemetry. Create an API key, follow the docs quickstart, then run eden-doctor (or python -m eden_sdk.doctor) to verify ingest.",
   playground:
-    "Run a prompt against a template to compare models before opening an offline experiment.",
+    "An eval scores agent output against a rubric or expected answer — create a playground to compare prompts, then promote to an experiment (docs quickstart if you still need traces).",
 } as const;
 
 /** Core mutations that must surface toast feedback (U20 WP5). */

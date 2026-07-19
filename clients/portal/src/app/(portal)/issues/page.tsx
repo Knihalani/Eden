@@ -9,10 +9,9 @@ import { useOrgQuery } from "@/hooks/use-api-query";
 import { queryKeys } from "@/lib/query-keys";
 import { EmptyState } from "@/components/ui/empty-state";
 import { NoOrgState } from "@/components/ui/no-org-state";
-import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { AlertCircle, Loader2, ShieldAlert } from "lucide-react";
+import { AlertCircle, BookOpen, Key, Loader2, ShieldAlert } from "lucide-react";
 import { PageHeader } from "@/components/layout/page-header";
 import { CoreResourcePage, DetailPanelShell, useResourceUrlState, VirtualizedList, ResourceOsToolbar, BulkActionBar } from "@/components/portal-os";
 import { CrossLinkBar } from "@/components/portal-os/CrossLinkBar";
@@ -21,6 +20,7 @@ import { useQueryTab } from "@/hooks/use-query-tab";
 import { usePagePerf, useTableQueryPerf } from "@/lib/perf";
 import { artifactHref, experimentHref } from "@/lib/portal-cross-links";
 import { U20_EMPTY_COPY } from "@/lib/portal-polish";
+import { DOCS_QUICKSTART_URL } from "@/lib/constants";
 import { useToast } from "@/components/ui/toast";
 import { RepeatBadge, RegressionBadge, IssueSeverityBadge, StatusBadge } from "./_components/issue-badges";
 import { useQueryClient } from "@tanstack/react-query";
@@ -147,26 +147,28 @@ function IssuesList({
           <Loader2 className="h-4 w-4 mr-2 animate-spin" /> Loading…
         </div>
       ) : issues.length === 0 ? (
-        <Card padding="lg">
-          <EmptyState
-            icon={ShieldAlert}
-            title="No issues yet"
-            description={U20_EMPTY_COPY.issues}
-            action={
-              <div className="flex flex-wrap items-center justify-center gap-2">
-                <Link href="/dashboard?onboarding=1">
-                  <Button>
-                    <ShieldAlert className="h-4 w-4" />
-                    Install SDK
-                  </Button>
+        <EmptyState
+          icon={ShieldAlert}
+          title="No issues yet"
+          description={U20_EMPTY_COPY.issues}
+          size="lg"
+          action={
+            <div className="flex flex-wrap items-center justify-center gap-2">
+              <Button asChild className="min-h-11">
+                <a href={DOCS_QUICKSTART_URL} target="_blank" rel="noopener noreferrer">
+                  <BookOpen className="h-4 w-4" />
+                  Install SDK
+                </a>
+              </Button>
+              <Button asChild variant="outline" className="min-h-11">
+                <Link href="/settings?tab=api-keys">
+                  <Key className="h-4 w-4" />
+                  API keys
                 </Link>
-                <Link href="/issues?tab=incidents">
-                  <Button variant="outline">View Incidents</Button>
-                </Link>
-              </div>
-            }
-          />
-        </Card>
+              </Button>
+            </div>
+          }
+        />
       ) : (
         <VirtualizedList
           items={issues}

@@ -94,19 +94,28 @@ export function OrgTab({
     setIsTransferExpanded(prev => !prev);
   }
   if (!org && !showCreate) {
-    return <EmptyState icon={Building2} title="No organization yet" description="Create an organization to start managing members, keys, and settings." action={<Button onClick={() => setShowCreate(true)}>
+    return (
+      <EmptyState
+        icon={Building2}
+        title="No organization yet"
+        description="Create an organization here to manage members, API keys, and settings. The product tour does not create or sync your workspace."
+        action={
+          <Button className="min-h-11" onClick={() => setShowCreate(true)}>
             <Plus className="w-4 h-4" />
             Create Organization
-          </Button>} />;
+          </Button>
+        }
+      />
+    );
   }
   if (showCreate) {
     return <SettingsCard title="Create Organization">
         <input type="text" value={newOrgName} onChange={e => setNewOrgName(e.target.value)} placeholder="Organization name" className="w-full px-3 py-2 rounded-lg border border-[var(--border-default)] mb-4 bg-[var(--bg-secondary)] text-[var(--text-primary)]" />
         <div className="flex gap-2 justify-end">
-          <button onClick={() => setShowCreate(false)} className="px-4 py-2 text-sm text-[var(--text-muted)]">
+          <button type="button" onClick={() => setShowCreate(false)} className="min-h-11 px-4 py-2 text-sm text-[var(--text-muted)]">
             Cancel
           </button>
-          <button onClick={handleCreateOrg} disabled={loading} className="px-4 py-2 bg-[var(--accent)] text-[var(--accent-foreground)] rounded-lg text-sm font-medium disabled:opacity-50">
+          <button type="button" onClick={handleCreateOrg} disabled={loading} className="min-h-11 px-4 py-2 bg-[var(--accent)] text-[var(--accent-foreground)] rounded-lg text-sm font-medium disabled:opacity-50">
             {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Create Organization"}
           </button>
         </div>

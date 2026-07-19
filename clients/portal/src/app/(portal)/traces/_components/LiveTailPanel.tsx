@@ -114,7 +114,7 @@ export function LiveTailPanel({
         </p>
       ) : events.length === 0 ? (
         <p className="text-xs text-[var(--text-muted)] py-2">
-          Waiting for new traces…
+          Waiting for ingest — gateway, SDK, or eden-doctor hello-world.
         </p>
       ) : (
         <ul

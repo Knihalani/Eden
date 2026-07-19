@@ -26,6 +26,7 @@ import { learnApi } from "@/lib/api";
 import { issueHref } from "@/lib/portal-cross-links";
 import { errorFromCaught } from "@/lib/safe-error-message";
 import { U20_EMPTY_COPY } from "@/lib/portal-polish";
+import { DOCS_QUICKSTART_URL } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 
 type ArtifactRow = ArtifactDetail & { id: string };
@@ -248,11 +249,16 @@ function ArtifactsPageInner() {
                 description={U20_EMPTY_COPY.artifacts}
                 action={
                   <div className="flex flex-wrap justify-center gap-2">
-                    <Button size="sm" asChild>
-                      <Link href="/issues">View Agent Issues</Link>
+                    <Button className="min-h-11" asChild>
+                      <a href={DOCS_QUICKSTART_URL} target="_blank" rel="noopener noreferrer">
+                        Docs quickstart
+                      </a>
                     </Button>
-                    <Button size="sm" variant="outline" asChild>
-                      <Link href="/dashboard?onboarding=1">Connect agent</Link>
+                    <Button variant="outline" className="min-h-11" asChild>
+                      <Link href="/settings?tab=api-keys">Create API key</Link>
+                    </Button>
+                    <Button variant="outline" className="min-h-11" asChild>
+                      <Link href="/issues">View Agent Issues</Link>
                     </Button>
                   </div>
                 }

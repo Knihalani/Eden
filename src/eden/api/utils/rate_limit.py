@@ -131,11 +131,22 @@ class SlidingWindowRateLimiter:
         Raises:
             RateLimitExceeded: If the rate limit has been exceeded.
         """
-        retry_after = await _redis_sliding_window_check(
-            key, self.max_requests, self.window_seconds,
-        )
-        if retry_after is not None:
-            raise RateLimitExceeded(retry_after=retry_after)
+        # Redis path is opt-in (RATE_LIMIT_DISTRIBUTED=true). Default
+        # in-memory keeps Upstash Free under the monthly command quota.
+        use_redis = False
+        try:
+            from eden.config import get_settings
+
+            use_redis = bool(get_settings().rate_limit_distributed)
+        except Exception:
+            use_redis = False
+
+        if use_redis:
+            retry_after = await _redis_sliding_window_check(
+                key, self.max_requests, self.window_seconds,
+            )
+            if retry_after is not None:
+                raise RateLimitExceeded(retry_after=retry_after)
 
         now = time.monotonic()
         cutoff = now - self.window_seconds
