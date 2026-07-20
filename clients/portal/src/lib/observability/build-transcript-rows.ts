@@ -2,7 +2,7 @@ import type { TranscriptMessage, TranscriptRow } from "@/lib/observability/types
 
 type SpanNode = Record<string, unknown>;
 
-const TOOL_PAYLOAD_PREVIEW = 240;
+const TOOL_PAYLOAD_PREVIEW = 1_200;
 
 export interface BuildTranscriptOptions {
   /** F82 — defer large tool bodies; show preview until expanded. */
@@ -55,10 +55,9 @@ function spanToRow(node: SpanNode, options: BuildTranscriptOptions): TranscriptR
           })
         : undefined,
     },
-    response_body: truncateToolPayload(
-      payload.response ?? payload.output ?? payload.content,
-      lazy,
-    ),
+    // Never lazy-truncate the model response — that is the main thing
+    // users open a trace to read. Tool args/results still preview.
+    response_body: payload.response ?? payload.output ?? payload.content,
     tool_calls: Array.isArray(payload.tool_calls)
       ? (payload.tool_calls as TranscriptRow["tool_calls"])
       : spanType === "tool_invocation"
@@ -145,4 +144,12 @@ export function buildTranscriptRows(
       new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime(),
   );
   return rows;
+}
+
+/** Hierarchical span tree for the Tree tab (preserves children). */
+export function buildSpanTree(
+  rootSpans: SpanNode[],
+  options: BuildTranscriptOptions = {},
+): TranscriptRow[] {
+  return rootSpans.map((node) => spanToRow(node, options));
 }

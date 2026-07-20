@@ -331,7 +331,7 @@ function TranscriptRowItem({
     "var(--text-muted)";
 
   return (
-    <div>
+    <div data-span-id={row.span_id}>
       <div
         className={`group flex items-center gap-space-2 rounded-md border px-space-3 py-space-2 transition-colors ${
           selected
@@ -442,14 +442,9 @@ function TranscriptRowItem({
             <ImagesPanel images={row.images} orgId={orgId} />
           )}
 
-          {/* Response content (when no structured messages).
-              NOTE: ``row.response_body`` is typed as ``unknown``,
-              so a ``&&`` short-circuit here would leak ``unknown``
-              into the JSX children union and trigger TS2322 on
-              every sibling. The ternary + ``typeof`` narrowing
-              keeps the result type a clean
-              ``JSX.Element | null``. */}
-          {typeof row.response_body !== "undefined" && !row.request_body?.messages ? (
+          {/* Always show response when present — request messages must not
+              hide the assistant output (primary reason people open traces). */}
+          {typeof row.response_body !== "undefined" && row.response_body != null ? (
             <ResponsePanel response={row.response_body as never} />
           ) : null}
 
@@ -723,13 +718,37 @@ function ImagesPanel({ images }: { images: NonNullable<TR["images"]>; orgId?: st
   );
 }
 
+function extractResponseText(response: unknown): string | null {
+  if (response == null) return null;
+  if (typeof response === "string") return response;
+  if (typeof response !== "object") return String(response);
+  const obj = response as Record<string, unknown>;
+  // OpenAI chat completion shape
+  const choices = obj.choices;
+  if (Array.isArray(choices) && choices[0] && typeof choices[0] === "object") {
+    const msg = (choices[0] as { message?: { content?: unknown } }).message;
+    if (typeof msg?.content === "string" && msg.content.trim()) return msg.content;
+  }
+  if (typeof obj.content === "string" && obj.content.trim()) return obj.content;
+  if (typeof obj.output === "string" && obj.output.trim()) return obj.output;
+  if (typeof obj.text === "string" && obj.text.trim()) return obj.text;
+  return null;
+}
+
 function ResponsePanel({ response }: { response: unknown }) {
+  const text = extractResponseText(response);
   return (
     <div>
       <SectionHeader>Response</SectionHeader>
-      <div className="overflow-x-auto rounded border border-[var(--border-default)] bg-[var(--bg-primary)] p-space-2 text-2xs">
-        <LazyJson value={response} />
-      </div>
+      {text ? (
+        <div className="whitespace-pre-wrap rounded border border-[var(--border-default)] bg-[var(--bg-primary)] p-space-2 text-xs text-[var(--text-primary)] leading-relaxed">
+          {text}
+        </div>
+      ) : (
+        <div className="overflow-x-auto rounded border border-[var(--border-default)] bg-[var(--bg-primary)] p-space-2 text-2xs">
+          <LazyJson value={response} />
+        </div>
+      )}
     </div>
   );
 }

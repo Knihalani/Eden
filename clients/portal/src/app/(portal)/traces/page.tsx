@@ -46,6 +46,7 @@ import {
   useResourceUrlState,
   useSavedViews,
   isViewDirty,
+  writeMasterDetailParam,
   type FilterMode,
 } from "@/components/portal-os";
 import { useQueryTab } from "@/hooks/use-query-tab";
@@ -63,6 +64,8 @@ const HUB_VIEWS = ["traces", "spans", "sessions"] as const;
 const LEGACY_VIEWS = ["inspect", "replay", "debug", "query", "time-travel"] as const;
 const FACET_VIEWS = ["mcp", "decisions", "memory", "retrieval"] as const;
 const ALL_VIEWS = [...HUB_VIEWS, ...LEGACY_VIEWS] as const;
+const DETAIL_MODES = ["transcript", "tree", "timeline", "meta", "scores"] as const;
+type DetailMode = (typeof DETAIL_MODES)[number];
 
 const LEGACY_TOOL_LINKS = [
   { href: "/traces?view=inspect", label: "Inspector" },
@@ -187,6 +190,11 @@ function TracesPageInner() {
       : null;
   const isFacetView = activeFacet != null;
   const liveOn = searchParams.get("live") === "1";
+  const modeParam = searchParams.get("mode");
+  const detailMode: DetailMode =
+    modeParam && (DETAIL_MODES as readonly string[]).includes(modeParam)
+      ? (modeParam as DetailMode)
+      : "transcript";
 
   // Master–detail: canonical `?traceId=` (aliases read via useResourceUrlState).
   const traceId = urlState.traceId ?? "";
@@ -494,15 +502,47 @@ function TracesPageInner() {
   );
 
   const handleCloseDetail = useCallback(() => {
-    setUrlState({ traceId: undefined, spanId: undefined });
-  }, [setUrlState]);
+    replaceSearchParams((params) => {
+      writeMasterDetailParam(params, "traceId", undefined);
+      writeMasterDetailParam(params, "spanId", undefined);
+      params.delete("mode");
+    });
+  }, [replaceSearchParams]);
 
   const handleViewTimeline = useCallback(
     (id: string) => {
-      setUrlState({ traceId: id, spanId: undefined });
-      selectHubView("traces");
+      replaceSearchParams((params) => {
+        writeMasterDetailParam(params, "traceId", id);
+        writeMasterDetailParam(params, "spanId", undefined);
+        params.set("mode", "timeline");
+        params.delete("view");
+        params.delete("facet");
+      });
     },
-    [setUrlState, selectHubView],
+    [replaceSearchParams],
+  );
+
+  const handleViewTree = useCallback(
+    (id: string) => {
+      replaceSearchParams((params) => {
+        writeMasterDetailParam(params, "traceId", id);
+        writeMasterDetailParam(params, "spanId", undefined);
+        params.set("mode", "tree");
+        params.delete("view");
+        params.delete("facet");
+      });
+    },
+    [replaceSearchParams],
+  );
+
+  const handleDetailModeChange = useCallback(
+    (mode: DetailMode) => {
+      replaceSearchParams((params) => {
+        if (mode === "transcript") params.delete("mode");
+        else params.set("mode", mode);
+      });
+    },
+    [replaceSearchParams],
   );
 
   const handleExport = useCallback((id: string) => {
@@ -876,6 +916,7 @@ function TracesPageInner() {
                   filter={effectiveFilter}
                   onSelectTrace={handleSelectTrace}
                   onViewTimeline={handleViewTimeline}
+                  onViewTree={handleViewTree}
                   onExport={handleExport}
                   onAnnotate={handleAnnotate}
                   initialTraceId={traceId || undefined}
@@ -947,15 +988,30 @@ function TracesPageInner() {
             <DetailPanelShell
               open
               onClose={handleCloseDetail}
-              title={
-                <span className="font-mono text-xs truncate">{traceId.slice(0, 20)}…</span>
-              }
+              title={(() => {
+                const selected = traces.find((t) => t.trace_id === traceId);
+                const primary =
+                  selected?.agent_id || selected?.model || `${traceId.slice(0, 20)}…`;
+                const showUuid = Boolean(selected?.agent_id || selected?.model);
+                return (
+                  <span className="flex min-w-0 flex-col gap-0.5">
+                    <span className="truncate text-sm font-medium">{primary}</span>
+                    {showUuid ? (
+                      <span className="truncate font-mono text-2xs text-[var(--text-muted)]">
+                        {traceId.slice(0, 20)}…
+                      </span>
+                    ) : null}
+                  </span>
+                );
+              })()}
             >
               <TraceDetailPanel
                 traceId={traceId}
                 highlightSpanId={spanId}
                 onClose={handleCloseDetail}
                 hideCloseControl
+                initialMode={detailMode}
+                onModeChange={handleDetailModeChange}
               />
             </DetailPanelShell>
           ) : null
