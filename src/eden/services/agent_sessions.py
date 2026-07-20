@@ -225,6 +225,8 @@ class AgentSessionService:
         client = await self._client()
         if client is None:
             return
+        # asyncpg requires datetime for timestamptz — AgentSession stores ISO
+        # strings for JSON/API, so coerce before bind (passing str → 503).
         await client.execute(
             """
             INSERT INTO agent_sessions (
@@ -250,9 +252,24 @@ class AgentSessionService:
             session.success,
             session.failure_reason,
             json.dumps(session.trace_ids),
-            session.started_at,
-            session.ended_at,
+            _as_timestamptz(session.started_at),
+            _as_timestamptz(session.ended_at),
         )
+
+
+def _as_timestamptz(value: str | datetime | None) -> datetime | None:
+    """Coerce ISO strings / datetimes for asyncpg timestamptz binds."""
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value if value.tzinfo is not None else value.replace(tzinfo=UTC)
+    text = str(value).strip()
+    if not text:
+        return None
+    if text.endswith("Z"):
+        text = text[:-1] + "+00:00"
+    dt = datetime.fromisoformat(text)
+    return dt if dt.tzinfo is not None else dt.replace(tzinfo=UTC)
 
 
 def _row_to_session(row: dict[str, Any]) -> AgentSession:
