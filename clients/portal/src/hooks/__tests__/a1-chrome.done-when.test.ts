@@ -82,6 +82,18 @@ describe("A1 portal chrome Done-when", () => {
     expect(org).toMatch(/classifyOrgLoadError/);
   });
 
+  it("React #310: chrome banner useEffect is above loading early returns", () => {
+    const chrome = read("app/(portal)/portal-chrome.tsx");
+    const start = chrome.indexOf("function PortalLayoutContent");
+    expect(start).toBeGreaterThanOrEqual(0);
+    const body = chrome.slice(start);
+    const effectIdx = body.indexOf("CHROME_BANNER_ATTR");
+    const earlyIdx = body.indexOf("if (loading && !isKnownPortalPath");
+    expect(effectIdx).toBeGreaterThanOrEqual(0);
+    expect(earlyIdx).toBeGreaterThanOrEqual(0);
+    expect(effectIdx).toBeLessThan(earlyIdx);
+  });
+
   it("P35: PerformanceObservers gated to development", () => {
     const src = read("app/(portal)/portal-chrome.tsx");
     expect(src).toMatch(/NODE_ENV\s*!==\s*["']development["']/);

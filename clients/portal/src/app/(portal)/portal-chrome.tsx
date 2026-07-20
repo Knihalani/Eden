@@ -463,6 +463,37 @@ function PortalLayoutContent({ children }: { children: React.ReactNode }) {
     router,
   ]);
 
+  // Banner flags + chrome-banner attr effect MUST run before any early
+  // return — otherwise loading→authed flips the hook count (React #310).
+  // Show a banner above the page when /auth/me failed. Session kind
+  // (401/403) offers Sign in; server/degraded kind keeps the Clerk
+  // session and known org — Retry only, no forced re-auth.
+  const showAuthBanner = !!(!loading && user && authError);
+  const isSessionAuthError = authErrorKind === "session";
+  // Don't stack the sync banner on top of the wizard — welcome already
+  // shows a sync status card, and dual sticky chrome blocks the CTA.
+  const showOrgSyncingBanner = !!(
+    !loading &&
+    user &&
+    orgSyncing &&
+    authErrorKind !== "session" &&
+    !isOnboardingWizardPath(pathname)
+  );
+  // Signal cookie / tour overlays to defer while chrome banners own attention.
+  const blockingChromeBanner = !!(showAuthBanner || showOrgSyncingBanner || !online);
+
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    if (blockingChromeBanner) {
+      document.documentElement.setAttribute(CHROME_BANNER_ATTR, "1");
+    } else {
+      document.documentElement.removeAttribute(CHROME_BANNER_ATTR);
+    }
+    return () => {
+      document.documentElement.removeAttribute(CHROME_BANNER_ATTR);
+    };
+  }, [blockingChromeBanner]);
+
   // Unknown portal URL (e.g. a typo): bypass the auth gate entirely
   // so the catch-all's notFound() can render the 404 immediately.
   // Without this, Clerk auth hangs (or fails on a non-allowed
@@ -536,34 +567,6 @@ function PortalLayoutContent({ children }: { children: React.ReactNode }) {
   if (!user) {
     return null;
   }
-
-  // Show a banner above the page when /auth/me failed. Session kind
-  // (401/403) offers Sign in; server/degraded kind keeps the Clerk
-  // session and known org — Retry only, no forced re-auth.
-  const showAuthBanner = !loading && user && authError;
-  const isSessionAuthError = authErrorKind === "session";
-  // Don't stack the sync banner on top of the wizard — welcome already
-  // shows a sync status card, and dual sticky chrome blocks the CTA.
-  const showOrgSyncingBanner =
-    !loading &&
-    user &&
-    orgSyncing &&
-    authErrorKind !== "session" &&
-    !isOnboardingWizardPath(pathname);
-  // Signal cookie / tour overlays to defer while chrome banners own attention.
-  const blockingChromeBanner = !!(showAuthBanner || showOrgSyncingBanner || !online);
-
-  useEffect(() => {
-    if (typeof document === "undefined") return;
-    if (blockingChromeBanner) {
-      document.documentElement.setAttribute(CHROME_BANNER_ATTR, "1");
-    } else {
-      document.documentElement.removeAttribute(CHROME_BANNER_ATTR);
-    }
-    return () => {
-      document.documentElement.removeAttribute(CHROME_BANNER_ATTR);
-    };
-  }, [blockingChromeBanner]);
 
   const breadcrumbs = buildBreadcrumbs(pathname);
   const { pinnedItems, groups } = applySidebarPrefs(prefs, advancedCollapsed);
