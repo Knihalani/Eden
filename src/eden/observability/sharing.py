@@ -447,10 +447,10 @@ class SavedSearchService:
             INSERT INTO saved_searches
                 (id, org_id, owner_id, name, query_type, query,
                  params, is_shared, is_pinned, tags)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+            VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9, $10)
             """,
             search_id, org_id, owner_id, name, query_type, query,
-            _json_dumps(params or {}), is_shared, is_pinned, tags or [],
+            _json_dumps(params or {}), is_shared, is_pinned, list(tags or []),
         )
         # Read it back so the caller gets a fully-formed object.
         fetched = await self.get_by_id(org_id, search_id)
@@ -495,7 +495,7 @@ class SavedSearchService:
             args.append(query_type)
             idx += 1
         if params is not None:
-            sets.append(f"params = ${idx}")
+            sets.append(f"params = ${idx}::jsonb")
             args.append(_json_dumps(params))
             idx += 1
         if is_shared is not None:

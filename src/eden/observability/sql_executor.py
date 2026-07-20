@@ -103,6 +103,7 @@ ALLOWED_TABLES: frozenset[str] = frozenset({
     "predictions",
     # Saved searches (Phase N) — so users can JOIN against them.
     "saved_searches",
+    "saved_search_signal_links",
     # ABAC roles (Cat 10) — read-only for org members.
     "org_members",
     # Agent registrations (Cat 6).

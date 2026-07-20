@@ -116,7 +116,7 @@ async def save_search_as_signal(
     saved_id = str(uuid.uuid4())
     await pg.execute(
         """
-        INSERT INTO saved_searches
+        INSERT INTO saved_search_signal_links
             (id, org_id, query_text, trace_count, signal_id)
         VALUES ($1, $2, $3, $4, $5)
         """,
