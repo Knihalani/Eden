@@ -9,7 +9,8 @@ interface PermissionGateProps {
   permission: Permission;
   /** Optional fallback shown when the user lacks the permission. */
   fallback?: React.ReactNode;
-  children: React.ReactNode;
+  /** Content shown when the user has the permission. Optional for deny-only gates. */
+  children?: React.ReactNode;
 }
 
 /**
