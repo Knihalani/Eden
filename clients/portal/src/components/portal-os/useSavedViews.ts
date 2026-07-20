@@ -91,10 +91,16 @@ export function useSavedViews(resource: string) {
     queryKey: ["saved-views", orgId, resource],
     enabled: Boolean(orgId),
     queryFn: async () => {
-      const res = await savedViewsApi.list(orgId!, resource);
-      return res.searches ?? [];
+      try {
+        const res = await savedViewsApi.list(orgId!, resource);
+        return res.searches ?? [];
+      } catch {
+        // Views are optional chrome — never crash the traces hub.
+        return [];
+      }
     },
     staleTime: 60_000,
+    retry: false,
   });
 
   const views = useMemo(

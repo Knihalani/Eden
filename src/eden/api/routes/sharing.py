@@ -406,12 +406,21 @@ async def list_saved_searches(
         raise HTTPException(status_code=401, detail="Authentication required")
     pg = await get_postgres_client()
     svc = SavedSearchService(pg)
-    if scope == "personal":
-        searches = await svc.list_personal(org_id, user_id, limit=limit)
-    elif scope == "shared":
-        searches = await svc.list_shared(org_id, limit=limit)
-    else:  # recent
-        searches = await svc.list_recent(org_id, user_id, limit=limit)
+    try:
+        if scope == "personal":
+            searches = await svc.list_personal(org_id, user_id, limit=limit)
+        elif scope == "shared":
+            searches = await svc.list_shared(org_id, limit=limit)
+        else:  # recent
+            searches = await svc.list_recent(org_id, user_id, limit=limit)
+    except Exception as exc:
+        # Schema drift must not crash every hub that mounts ViewsMenu.
+        logger.exception("list saved-searches failed: %s", exc)
+        raise HTTPException(
+            status_code=503,
+            detail="Saved searches temporarily unavailable",
+            headers={"Retry-After": "5"},
+        ) from exc
     return SavedSearchListResponse(
         searches=[_search_to_response(s) for s in searches],
     )
