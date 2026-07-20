@@ -127,6 +127,34 @@ async def test_route_postgres_missing_client_raises_unavailable() -> None:
 
 
 @pytest.mark.asyncio
+async def test_route_postgres_empty_jsonb_uses_not_null_defaults() -> None:
+    """Empty payload/tags must not bind SQL NULL (NOT NULL JSONB columns)."""
+    collector = TelemetryCollector()
+    fake_pg = MagicMock()
+    fake_pg.execute = AsyncMock()
+    event = _event("evt-empty-jsonb")
+    event.payload = {}
+    event.metrics = {"_ingest_latency_ms": 1.0}
+    event.attributes = {"_content_hash": "abc"}
+    event.tags = []
+    with (
+        patch.object(collector, "_get_postgres", new=AsyncMock(return_value=fake_pg)),
+        patch(
+            "eden.storage.compression.compress_many",
+            return_value=[None] * 8,
+        ),
+    ):
+        await collector._route_postgres(event)
+    assert fake_pg.execute.await_count == 1
+    args = fake_pg.execute.await_args.args
+    # $15 payload, $16 metrics, $17 attributes, $18 tags (1-indexed in SQL)
+    assert args[15] == "{}"
+    assert args[16] == json.dumps({"_ingest_latency_ms": 1.0}, separators=(",", ":"))
+    assert args[17] == json.dumps({"_content_hash": "abc"}, separators=(",", ":"))
+    assert args[18] == "[]"
+
+
+@pytest.mark.asyncio
 async def test_ingest_batch_surfaces_pg_unavailable() -> None:
     collector = TelemetryCollector()
     with (
