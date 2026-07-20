@@ -31,14 +31,15 @@ interface ExampleRow {
   rationale: string;
 }
 
-export type TemplateSeed = {
+type TemplateSeed = {
   name: string;
   domain: string;
   notes?: string;
 };
 
-/** Mirror of studio metrics empty gate — keep in sync with MyMetricsTab. */
-export function showStudioMetricsEmpty(opts: {
+/** Mirror of studio metrics empty gate — keep in sync with MyMetricsTab.
+ * Not exported: Next.js App Router rejects non-standard page exports. */
+function showStudioMetricsEmpty(opts: {
   loading: boolean;
   hasError: boolean;
   metricCount: number;
@@ -47,7 +48,7 @@ export function showStudioMetricsEmpty(opts: {
 }
 
 /** True when From-examples work should block navigation without confirm. */
-export function studioExamplesIsDirty(opts: {
+function studioExamplesIsDirty(opts: {
   generated: boolean;
   name: string;
   examples: ExampleRow[];

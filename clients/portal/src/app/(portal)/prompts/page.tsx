@@ -29,8 +29,9 @@ import {
 } from "lucide-react";
 import { PromptEnvironmentsPanel } from "@/components/prompts/PromptEnvironmentsPanel";
 
-/** Mirror of prompts list empty gate — keep in sync with page render. */
-export function showPromptsEmpty(opts: {
+/** Mirror of prompts list empty gate — keep in sync with page render.
+ * Not exported: Next.js App Router rejects non-standard page exports. */
+function showPromptsEmpty(opts: {
   isLoading: boolean;
   isError: boolean;
   promptCount: number;
