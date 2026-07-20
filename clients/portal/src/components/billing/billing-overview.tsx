@@ -106,7 +106,7 @@ export function BillingOverview({ variant = "page" }: BillingOverviewProps) {
               <p className="mt-0.5">{errorCopy.message}</p>
             </div>
           </div>
-          {fetchError && isRetryableIntelligenceError(fetchError) && (
+          {fetchError != null && isRetryableIntelligenceError(fetchError) ? (
             <button
               type="button"
               onClick={() => loadData()}
@@ -114,7 +114,7 @@ export function BillingOverview({ variant = "page" }: BillingOverviewProps) {
             >
               Retry
             </button>
-          )}
+          ) : null}
         </div>
       )}
 
