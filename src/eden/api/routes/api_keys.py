@@ -2,15 +2,17 @@
 
 import contextlib
 import hashlib
+import json
 import logging
 import secrets
 import time
 from collections import deque
 from datetime import UTC, datetime, timedelta
+from typing import Any
 from uuid import uuid4
 
-from fastapi import APIRouter, Body, Depends, Header, HTTPException, Path, Query, Response, status
-from pydantic import BaseModel, Field
+from fastapi import APIRouter, Depends, Header, HTTPException, Path, Query, Request, Response, status
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from eden.api.deps import (
     _try_resolve_token_payload,
@@ -45,10 +47,88 @@ VALID_SCOPES = [
     "*",
 ]
 
+# Portal ApiKeysTab SDK presets — used when body omits / empties scopes.
+_DEFAULT_CREATE_SCOPES = [
+    "references:read",
+    "references:write",
+    "jobs:read",
+    "jobs:write",
+    "ingest:write",
+    "gateway:write",
+]
+
 
 class CreateApiKeyBody(BaseModel):
-    name: str = Field(min_length=2, max_length=100)
-    scopes: list[str] = Field(min_length=1)
+    """Create-key payload. Defaults match the portal SDK preset so an
+    empty / partial body (proxy strip, omitted scopes) still succeeds
+    instead of FastAPI 422 ``Field required`` / ``too_short``.
+    """
+
+    name: str = Field(default="SDK", min_length=2, max_length=100)
+    scopes: list[str] = Field(default_factory=lambda: list(_DEFAULT_CREATE_SCOPES))
+
+    @model_validator(mode="before")
+    @classmethod
+    def _coerce_partial(cls, data: Any) -> Any:
+        if data is None:
+            return {"name": "SDK", "scopes": list(_DEFAULT_CREATE_SCOPES)}
+        if not isinstance(data, dict):
+            return data
+        out = dict(data)
+        # Accept singular ``scope`` from older clients.
+        if "scopes" not in out and "scope" in out:
+            scope = out.pop("scope")
+            out["scopes"] = scope if isinstance(scope, list) else [scope]
+        scopes = out.get("scopes")
+        if scopes is None or scopes == []:
+            out["scopes"] = list(_DEFAULT_CREATE_SCOPES)
+        name = out.get("name")
+        if name is None or (isinstance(name, str) and len(name.strip()) < 2):
+            out["name"] = "SDK"
+        return out
+
+    @field_validator("scopes")
+    @classmethod
+    def _scopes_nonempty(cls, v: list[str]) -> list[str]:
+        if not v:
+            return list(_DEFAULT_CREATE_SCOPES)
+        return v
+
+
+async def _parse_create_api_key_body(request: Request) -> CreateApiKeyBody:
+    """Parse JSON body with empty-body tolerance.
+
+    FastAPI ``Body(...)`` 422s on empty string / missing body before
+    field defaults apply. The portal proxy occasionally forwards an
+    empty body (middleware header rewrite / client race) — treat that
+    as SDK defaults instead of ``invalid request``.
+    """
+    raw = await request.body()
+    if not raw or not raw.strip():
+        return CreateApiKeyBody()
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Invalid JSON body: {exc}",
+        ) from exc
+    if data is None:
+        return CreateApiKeyBody()
+    if not isinstance(data, dict):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Request body must be a JSON object",
+        )
+    try:
+        return CreateApiKeyBody.model_validate(data)
+    except Exception as exc:
+        # Surface a short string detail (portal maps array-shaped 422
+        # detail to a generic "invalid request").
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(exc),
+        ) from exc
 
 # B-11 (Session 24): per-(org, user) sliding-window rate limit on
 # ``POST /orgs/{org_id}/api-keys``. Audit 2026-07-03 — distributed
@@ -185,10 +265,25 @@ def get_key_prefix(key: str) -> str:
     return key[-8:]
 
 
-@router.post("", response_model=dict)
+@router.post(
+    "",
+    response_model=dict,
+    openapi_extra={
+        "requestBody": {
+            "required": False,
+            "content": {
+                "application/json": {
+                    "schema": CreateApiKeyBody.model_json_schema(
+                        ref_template="#/components/schemas/{model}"
+                    ),
+                }
+            },
+        }
+    },
+)
 async def create_api_key(
+    request: Request,
     org_id: str = Depends(require_path_org_access),
-    body: CreateApiKeyBody = Body(...),
     user: dict = Depends(get_current_user),
     payload: dict | None = Depends(_try_resolve_token_payload),
 ):
@@ -196,7 +291,27 @@ async def create_api_key(
 
     Returns the raw key once - it cannot be retrieved again.
     The user must save the raw key securely.
+
+    Body is parsed manually (not via ``Body(...)``) so empty / partial
+    JSON falls back to SDK defaults instead of FastAPI 422.
     """
+    body = await _parse_create_api_key_body(request)
+    return await create_api_key_from_body(
+        org_id=org_id,
+        body=body,
+        user=user,
+        payload=payload,
+    )
+
+
+async def create_api_key_from_body(
+    *,
+    org_id: str,
+    body: CreateApiKeyBody,
+    user: dict,
+    payload: dict | None,
+) -> dict:
+    """Shared create path for HTTP + MCP key helpers."""
     # Must pass JWT payload — bare ``require_org_admin(org_id)`` leaves
     # FastAPI's Depends() sentinel and 500s on prod (AttributeError).
     await require_org_admin(org_id, payload)
@@ -217,8 +332,8 @@ async def create_api_key(
                 headers={"Retry-After": str(int(wait))},
             )
 
-    name = body.name.strip()
-    scopes = list(body.scopes)
+    name = body.name.strip() or "SDK"
+    scopes = list(body.scopes) or list(_DEFAULT_CREATE_SCOPES)
 
     # Validate name
     if not name or len(name) < 2 or len(name) > 100:

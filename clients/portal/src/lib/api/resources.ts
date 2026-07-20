@@ -617,8 +617,25 @@ export const api = {
     fetchApi<string[]>(`/orgs/${orgId}/references/purposes`),
 
   // API Keys
-  createApiKey: (orgId: string, name: string, scopes: string[]) =>
-    fetchApi<{
+  createApiKey: (
+    orgId: string,
+    name: string,
+    scopes?: string[],
+  ) => {
+    const SDK_DEFAULT_SCOPES = [
+      "references:read",
+      "references:write",
+      "jobs:read",
+      "jobs:write",
+      "ingest:write",
+      "gateway:write",
+    ];
+    const trimmed = (name ?? "").trim() || "SDK";
+    const resolvedScopes =
+      Array.isArray(scopes) && scopes.length > 0
+        ? scopes
+        : SDK_DEFAULT_SCOPES;
+    return fetchApi<{
       id: string;
       name: string;
       key_prefix: string;
@@ -627,8 +644,9 @@ export const api = {
       created_at: string | null;
     }>(`/orgs/${orgId}/api-keys`, {
       method: "POST",
-      body: JSON.stringify({ name, scopes }),
-    }),
+      body: JSON.stringify({ name: trimmed, scopes: resolvedScopes }),
+    });
+  },
 
   listApiKeys: (orgId: string) =>
     fetchApi<Array<{

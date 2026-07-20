@@ -11,6 +11,44 @@ import {
 const GENERIC =
   "Something went wrong. Please try again or refresh the page.";
 
+/** Pull a short human hint from FastAPI validation ``detail`` JSON. */
+function summarizeValidationDetail(raw: string): string | null {
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    const items = Array.isArray(parsed)
+      ? parsed
+      : parsed &&
+          typeof parsed === "object" &&
+          Array.isArray((parsed as { detail?: unknown }).detail)
+        ? ((parsed as { detail: unknown[] }).detail)
+        : null;
+    if (!items || items.length === 0) return null;
+    const parts: string[] = [];
+    for (const item of items.slice(0, 3)) {
+      if (!item || typeof item !== "object") continue;
+      const loc = (item as { loc?: unknown }).loc;
+      const msg = (item as { msg?: unknown }).msg;
+      const field =
+        Array.isArray(loc) && loc.length > 0
+          ? String(loc[loc.length - 1])
+          : null;
+      if (field && typeof msg === "string" && msg) {
+        parts.push(`${field}: ${msg}`);
+      } else if (typeof msg === "string" && msg) {
+        parts.push(msg);
+      }
+    }
+    return parts.length > 0 ? parts.join("; ") : null;
+  } catch {
+    // Non-JSON detail (plain string from our HTTPException path).
+    if (raw.length > 0 && raw.length < 160 && !raw.startsWith("[")) {
+      return raw;
+    }
+    return null;
+  }
+}
+
 const PATTERNS: Array<{ test: RegExp; message: string }> = [
   { test: /401|403|not\s*authenticated|authentication\s*required|unauthorized|session\s*expired/i, message: "Session expired. Please sign in again." },
   { test: /404|not\s*found/i, message: "We couldn't find what you're looking for." },
@@ -76,6 +114,12 @@ export function toUserFacingError(
       /github|repo_not_connected|Connect GitHub/i.test(raw)
     ) {
       return "Invalid request — refresh the page and try connecting GitHub again.";
+    }
+    // Prefer a short field-level hint when FastAPI returns the usual
+    // ``[{loc, msg, ...}]`` detail array (stringified by fetchApi).
+    const fieldHint = summarizeValidationDetail(raw);
+    if (fieldHint) {
+      return `Invalid request — ${fieldHint}`;
     }
     return "Invalid request — check the form and try again.";
   }
