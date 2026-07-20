@@ -242,6 +242,12 @@ async def create_api_key(
         )
 
     client = await get_postgres_client()
+    if client is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Failed to create API key",
+            headers={"Retry-After": "5"},
+        )
 
     # Generate the raw key and its hash
     raw_key = generate_api_key()
@@ -254,7 +260,7 @@ async def create_api_key(
         await client.execute(
             """
             INSERT INTO org_api_keys (id, org_id, name, key_hash, key_prefix, scopes, created_by)
-            VALUES ($1, $2, $3, $4, $5, $6, $7)
+            VALUES ($1::uuid, $2::uuid, $3, $4, $5, $6::text[], $7)
             """,
             key_id,
             org_id,
@@ -262,7 +268,7 @@ async def create_api_key(
             key_hash,
             key_prefix,
             scopes,
-            user["user_id"],
+            str(user["user_id"]),
         )
     except Exception as exc:
         msg = str(exc).lower()
@@ -316,7 +322,7 @@ async def list_api_keys(
     org_id: str = Depends(require_path_org_access),
     limit: int = Query(50, ge=1, le=200),
     cursor: str | None = Query(None, description='Opaque pagination cursor from the ``X-Next-Cursor`` response header. Omit for the first page.'),
-    response: Response = None,
+    response: Response = None,  # FastAPI injects Response regardless of default
     user: dict = Depends(get_current_user),
     payload: dict | None = Depends(_try_resolve_token_payload),
 ):
@@ -337,6 +343,12 @@ async def list_api_keys(
     await require_org_admin(org_id, payload)
 
     client = await get_postgres_client()
+    if client is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="API keys temporarily unavailable",
+            headers={"Retry-After": "5"},
+        )
 
     # Cursor format: ``"<created_at_iso>|<id>"`` — opaque to clients,
     # lexicographically ordered on the same axis as ``ORDER BY``.
@@ -355,33 +367,55 @@ async def list_api_keys(
                 ),
             ) from None
 
-    if cursor_created_at is not None and cursor_id is not None:
-        query = """
-            SELECT id, name, key_prefix, scopes, created_by,
-                   last_used_at, created_at
-            FROM org_api_keys
-            WHERE org_id = $1
-              AND (created_at, id) < ($2, $3)
-            ORDER BY created_at DESC, id DESC
-            LIMIT $4
-        """
-        rows = await client.fetch(
-            query,
-            org_id,
-            cursor_created_at,
-            cursor_id,
-            limit + 1,  # +1 to detect "has next page"
-        )
-    else:
-        query = """
-            SELECT id, name, key_prefix, scopes, created_by,
-                   last_used_at, created_at
-            FROM org_api_keys
-            WHERE org_id = $1
-            ORDER BY created_at DESC, id DESC
-            LIMIT $2
-        """
-        rows = await client.fetch(query, org_id, limit + 1)
+    # Soft-revoke filter + text org compare (non-UUID org ids → clean miss).
+    active_clause = (
+        "AND (active IS TRUE OR active IS NULL) "
+        "AND revoked_at IS NULL"
+    )
+    try:
+        if cursor_created_at is not None and cursor_id is not None:
+            query = f"""
+                SELECT id, name, key_prefix, scopes, created_by,
+                       last_used_at, created_at
+                FROM org_api_keys
+                WHERE org_id::text = $1
+                  {active_clause}
+                  AND (created_at, id) < ($2, $3)
+                ORDER BY created_at DESC, id DESC
+                LIMIT $4
+            """
+            rows = await client.fetch(
+                query,
+                org_id,
+                cursor_created_at,
+                cursor_id,
+                limit + 1,  # +1 to detect "has next page"
+            )
+        else:
+            query = f"""
+                SELECT id, name, key_prefix, scopes, created_by,
+                       last_used_at, created_at
+                FROM org_api_keys
+                WHERE org_id::text = $1
+                  {active_clause}
+                ORDER BY created_at DESC, id DESC
+                LIMIT $2
+            """
+            rows = await client.fetch(query, org_id, limit + 1)
+    except Exception as exc:
+        msg = str(exc).lower()
+        if "does not exist" in msg or "undefinedcolumn" in msg:
+            logger.error(
+                "list_api_keys: schema mismatch (missing column?): %s",
+                redact_all(str(exc)),
+            )
+        else:
+            logger.warning("list_api_keys: query failed: %s", redact_all(str(exc)))
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="API keys temporarily unavailable",
+            headers={"Retry-After": "5"},
+        ) from exc
 
     has_more = len(rows) > limit
     page_rows = rows[:limit]
@@ -391,33 +425,20 @@ async def list_api_keys(
             "id": str(r["id"]),
             "name": r["name"],
             "key_prefix": r["key_prefix"],
-            "scopes": r["scopes"],
-            "created_by": str(r["created_by"]),
+            "scopes": list(r["scopes"] or []),
+            "created_by": str(r["created_by"]) if r.get("created_by") else None,
             "last_used_at": r["last_used_at"].isoformat() if r.get("last_used_at") else None,
             "created_at": r["created_at"].isoformat() if r.get("created_at") else None,
         }
         for r in page_rows
     ]
 
-    if has_more and page_rows:
+    if has_more and page_rows and response is not None:
         last = page_rows[-1]
         response.headers["X-Next-Cursor"] = (
             f"{last['created_at'].isoformat()}|{last['id']}"
         )
     return items
-
-    return [
-        {
-            "id": str(r["id"]),
-            "name": r["name"],
-            "key_prefix": r["key_prefix"],
-            "scopes": r["scopes"],
-            "created_by": str(r["created_by"]),
-            "last_used_at": r["last_used_at"].isoformat() if r.get("last_used_at") else None,
-            "created_at": r["created_at"].isoformat() if r.get("created_at") else None,
-        }
-        for r in rows
-    ]
 
 
 @router.delete("/{key_id}", response_model=dict)
@@ -427,14 +448,25 @@ async def revoke_api_key(
     user: dict = Depends(get_current_user),
     payload: dict | None = Depends(_try_resolve_token_payload),
 ):
-    """Revoke (delete) an API key."""
+    """Revoke (soft-delete) an API key."""
     await require_org_admin(org_id, payload)
 
     client = await get_postgres_client()
+    if client is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="API keys temporarily unavailable",
+            headers={"Retry-After": "5"},
+        )
 
-    # Verify the key belongs to this org
+    # Verify the key belongs to this org and is still active
     key = await client.fetchrow(
-        "SELECT id FROM org_api_keys WHERE id = $1 AND org_id = $2",
+        """
+        SELECT id FROM org_api_keys
+        WHERE id::text = $1 AND org_id::text = $2
+          AND (active IS TRUE OR active IS NULL)
+          AND revoked_at IS NULL
+        """,
         key_id,
         org_id,
     )
@@ -445,8 +477,12 @@ async def revoke_api_key(
         )
 
     await client.execute(
-        "DELETE FROM org_api_keys WHERE id = $1",
-        key_id,
+        """
+        UPDATE org_api_keys
+        SET active = FALSE, revoked_at = NOW()
+        WHERE id = $1
+        """,
+        key["id"],
     )
 
     try:

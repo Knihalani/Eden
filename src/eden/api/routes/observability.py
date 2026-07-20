@@ -415,6 +415,11 @@ async def list_traces(
         # page of traces (avoids multiplying every event by tag count).
         lim_idx = len(args) + 1
         off_idx = len(args) + 2
+        # Schema note: prod ``telemetry_events`` (mig 009+) has JSONB
+        # ``tags``, ``error_type`` (not ``error``), and cost in
+        # metrics/payload JSON — not top-level ``cost_usd`` / TEXT[].
+        # insights_tools.list_traces already follows that shape; keep
+        # this route aligned so list never 503s on UndefinedColumn.
         rows_coro = client.fetch(
             f"""
             WITH page AS (
@@ -425,15 +430,48 @@ async def list_traces(
                            max(agent_id),
                            max(attributes->>'agent_id')
                        ) AS agent_id,
-                       max(attributes->>'model') AS model,
-                       max(attributes->>'provider') AS provider,
-                       max(attributes->>'session_id') AS session_id,
+                       coalesce(
+                           max(model),
+                           max(model_name),
+                           max(attributes->>'model')
+                       ) AS model,
+                       coalesce(
+                           max(provider_name),
+                           max(attributes->>'provider')
+                       ) AS provider,
+                       coalesce(
+                           max(session_id),
+                           max(attributes->>'session_id')
+                       ) AS session_id,
                        max(attributes->>'agent_session_id') AS attr_agent_session_id,
                        max(outcome) AS outcome,
-                       max(error) AS error,
-                       sum((payload->>'input_tokens')::int) AS input_tokens,
-                       sum((payload->>'output_tokens')::int) AS output_tokens,
-                       coalesce(sum(cost_usd), 0) AS cost_usd,
+                       max(error_type) AS error_type,
+                       max(attributes->>'error') AS attr_error,
+                       sum(
+                           coalesce(
+                               NULLIF(payload->>'input_tokens', '')::int,
+                               usage_prompt_tokens,
+                               0
+                           )
+                       ) AS input_tokens,
+                       sum(
+                           coalesce(
+                               NULLIF(payload->>'output_tokens', '')::int,
+                               usage_completion_tokens,
+                               0
+                           )
+                       ) AS output_tokens,
+                       coalesce(
+                           sum(
+                               coalesce(
+                                   NULLIF(metrics->>'cost_usd', '')::float,
+                                   NULLIF(payload->>'cost_usd', '')::float,
+                                   NULLIF(attributes->>'cost_usd', '')::float,
+                                   0
+                               )
+                           ),
+                           0
+                       ) AS cost_usd,
                        count(*) AS span_count,
                        max(duration_ms) AS duration_ms
                 FROM telemetry_events
@@ -450,7 +488,8 @@ async def list_traces(
                    p.provider,
                    p.session_id,
                    p.outcome,
-                   p.error,
+                   p.error_type,
+                   p.attr_error,
                    p.input_tokens,
                    p.output_tokens,
                    p.cost_usd,
@@ -459,7 +498,12 @@ async def list_traces(
                    (
                        SELECT array_agg(DISTINCT tag)
                        FROM telemetry_events e2
-                       CROSS JOIN LATERAL unnest(e2.tags) AS tag
+                       CROSS JOIN LATERAL jsonb_array_elements_text(
+                           CASE
+                               WHEN jsonb_typeof(e2.tags) = 'array' THEN e2.tags
+                               ELSE '[]'::jsonb
+                           END
+                       ) AS tag
                        WHERE e2.tenant_id = $1
                          AND e2.trace_id = p.trace_id
                          AND tag IS NOT NULL
@@ -469,7 +513,12 @@ async def list_traces(
                        (
                            SELECT split_part(tag, ':', 2)
                            FROM telemetry_events e3
-                           CROSS JOIN LATERAL unnest(e3.tags) AS tag
+                           CROSS JOIN LATERAL jsonb_array_elements_text(
+                               CASE
+                                   WHEN jsonb_typeof(e3.tags) = 'array' THEN e3.tags
+                                   ELSE '[]'::jsonb
+                               END
+                           ) AS tag
                            WHERE e3.tenant_id = $1
                              AND e3.trace_id = p.trace_id
                              AND tag LIKE 'agent_session_id:%'
@@ -515,7 +564,11 @@ async def list_traces(
             input_tokens=int(r["input_tokens"] or 0) if r["input_tokens"] else None,
             output_tokens=int(r["output_tokens"] or 0) if r["output_tokens"] else None,
             cost_cents=int(round(float(r["cost_usd"] or 0.0) * 100)),
-            error=dict(r["error"]) if r["error"] else None,
+            error=(
+                {"type": r["error_type"]}
+                if r.get("error_type")
+                else ({"message": r["attr_error"]} if r.get("attr_error") else None)
+            ),
             streaming_metrics=None,
             tags=list(r["tags"] or []),
             session_id=r["session_id"] if r.get("session_id") else None,
@@ -867,7 +920,8 @@ async def observability_summary(
             client.fetchrow(
                 f"SELECT count(*) AS total_events, "
                 f"count(DISTINCT trace_id) AS total_traces, "
-                f"sum(CASE WHEN error IS NOT NULL THEN 1 ELSE 0 END) AS errors "
+                f"sum(CASE WHEN error_type IS NOT NULL "
+                f"OR (attributes ? 'error') THEN 1 ELSE 0 END) AS errors "
                 f"FROM telemetry_events WHERE {common_where}",
                 *common_args,
             ),
@@ -875,15 +929,20 @@ async def observability_summary(
                 f"SELECT percentile_cont(0.50) WITHIN GROUP (ORDER BY duration_ms) AS p50, "
                 f"percentile_cont(0.95) WITHIN GROUP (ORDER BY duration_ms) AS p95, "
                 f"percentile_cont(0.99) WITHIN GROUP (ORDER BY duration_ms) AS p99, "
-                f"coalesce(sum(cost_usd), 0) AS cost "
+                f"coalesce(sum(coalesce("
+                f"  NULLIF(metrics->>'cost_usd','')::float,"
+                f"  NULLIF(payload->>'cost_usd','')::float,"
+                f"  NULLIF(attributes->>'cost_usd','')::float,"
+                f"  0)), 0) AS cost "
                 f"FROM telemetry_events WHERE {common_where}",
                 *common_args,
             ),
             client.fetch(
-                f"SELECT coalesce(error->>'type', error->>'category', event_type) AS name, "
+                f"SELECT coalesce(error_type, attributes->>'error', event_type) AS name, "
                 f"count(*) AS count, "
                 f"array_agg(distinct trace_id) FILTER (WHERE trace_id IS NOT NULL) AS sample_trace_ids "
-                f"FROM telemetry_events WHERE {common_where} AND error IS NOT NULL "
+                f"FROM telemetry_events WHERE {common_where} "
+                f"  AND (error_type IS NOT NULL OR (attributes ? 'error')) "
                 f"GROUP BY 1 ORDER BY count DESC LIMIT 10",
                 *common_args,
             ),
@@ -903,9 +962,13 @@ async def observability_summary(
                 *common_args,
             ),
             client.fetch(
-                f"SELECT attributes->>'model' AS model, "
+                f"SELECT coalesce(model, model_name, attributes->>'model') AS model, "
                 f"count(*) AS calls, "
-                f"coalesce(sum(cost_usd), 0) AS cost_usd "
+                f"coalesce(sum(coalesce("
+                f"  NULLIF(metrics->>'cost_usd','')::float,"
+                f"  NULLIF(payload->>'cost_usd','')::float,"
+                f"  NULLIF(attributes->>'cost_usd','')::float,"
+                f"  0)), 0) AS cost_usd "
                 f"FROM telemetry_events WHERE {common_where} "
                 f"  AND event_type = 'llm_call' "
                 f"GROUP BY 1",
@@ -1002,13 +1065,18 @@ async def observability_summary(
                 client.fetchrow(
                     f"SELECT count(*) AS total_events, "
                     f"count(DISTINCT trace_id) AS total_traces, "
-                    f"sum(CASE WHEN error IS NOT NULL THEN 1 ELSE 0 END) AS errors "
+                    f"sum(CASE WHEN error_type IS NOT NULL "
+                    f"OR (attributes ? 'error') THEN 1 ELSE 0 END) AS errors "
                     f"FROM telemetry_events WHERE {prev_where}",
                     *prev_args,
                 ),
                 client.fetchrow(
                     f"SELECT percentile_cont(0.95) WITHIN GROUP (ORDER BY duration_ms) AS p95, "
-                    f"coalesce(sum(cost_usd), 0) AS cost "
+                    f"coalesce(sum(coalesce("
+                    f"  NULLIF(metrics->>'cost_usd','')::float,"
+                    f"  NULLIF(payload->>'cost_usd','')::float,"
+                    f"  NULLIF(attributes->>'cost_usd','')::float,"
+                    f"  0)), 0) AS cost "
                     f"FROM telemetry_events WHERE {prev_where}",
                     *prev_args,
                 ),

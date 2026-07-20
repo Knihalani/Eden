@@ -70,7 +70,14 @@ export function toUserFacingError(
     return "We couldn't find what you're looking for.";
   }
   if (status === 422) {
-    return "Invalid request — refresh the page and try connecting GitHub again.";
+    // 422 is FastAPI/Pydantic validation — not GitHub-specific.
+    // Only map to reconnect copy when the raw detail mentions GitHub/repo.
+    if (
+      /github|repo_not_connected|Connect GitHub/i.test(raw)
+    ) {
+      return "Invalid request — refresh the page and try connecting GitHub again.";
+    }
+    return "Invalid request — check the form and try again.";
   }
   if (status === 429) {
     return "Too many requests — please wait a moment and try again.";
