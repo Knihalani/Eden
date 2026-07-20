@@ -1,0 +1,18 @@
+[project]
+name = "eden-minimax-pydantic-agent"
+version = "1.0.0"
+description = "Pydantic AI tool-calling agent → MiniMax (OpenAI-compatible) → prod Eden observability"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+  "eden-sdk[pydantic_ai,openai]",
+  "pydantic-ai>=0.1",
+  "openai>=1.30",
+  "python-dotenv>=1.0",
+]
+
+[tool.uv.sources]
+eden-sdk = { path = "../../sdk/python", editable = true }
+
+[tool.uv]
+package = false

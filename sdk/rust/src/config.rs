@@ -21,9 +21,15 @@ const ALLOWED_INGEST_FORMATS: &[&str] = &[
 /// Unknown / SDK-semantic labels (`custom`, `langchain`, …) remap to
 /// `webhook` so the gateway does not return HTTP 415. Mirrors the
 /// Python / TypeScript SDKs.
+///
+/// Literal `framework` also remaps to `webhook`: TraceEvent JSON is not
+/// OTel `resourceSpans`, and `/ingest/framework` would 422 `body_not_object`.
 pub fn resolve_ingest_path(source_format: &str) -> &'static str {
     let fmt = source_format.trim().to_ascii_lowercase();
     if fmt.is_empty() {
+        return "webhook";
+    }
+    if fmt == "framework" || fmt == "custom" {
         return "webhook";
     }
     for allowed in ALLOWED_INGEST_FORMATS {
@@ -177,7 +183,14 @@ mod tests {
 
     #[test]
     fn resolve_ingest_path_unknown_to_webhook() {
-        for bad in ["custom", "langchain", "vercel-ai", "eden-sdk-doctor", ""] {
+        for bad in [
+            "custom",
+            "framework",
+            "langchain",
+            "vercel-ai",
+            "eden-sdk-doctor",
+            "",
+        ] {
             assert_eq!(
                 resolve_ingest_path(bad),
                 "webhook",

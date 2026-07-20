@@ -32,7 +32,10 @@ ALLOWED_INGEST_FORMATS: frozenset[str] = frozenset(
     }
 )
 
-# Semantic aliases → allow-listed path. Identity for already-allowed.
+# Semantic aliases → allow-listed path.
+# NOTE: literal ``framework`` must remap to ``webhook``. The framework
+# decoder expects OTel ``resourceSpans``; SDK TraceEvent JSON (arrays)
+# would 422 with ``body_not_object`` if posted to /ingest/framework.
 _INGEST_FORMAT_REMAP: dict[str, str] = {
     # Catch-all / doctor / logging / custom SDK stamps
     "custom": "webhook",
@@ -42,7 +45,8 @@ _INGEST_FORMAT_REMAP: dict[str, str] = {
     "eden-trace-agent-ts": "webhook",
     "eden-auto-instrument-ts": "webhook",
     "eden-auto-instrument": "webhook",
-    # Framework SDKs emit TraceEvent JSON, not OTel resourceSpans
+    # TraceEvent JSON ≠ OTel — including the literal "framework" label
+    "framework": "webhook",
     "vercel-ai": "webhook",
     "langchain": "webhook",
     "llama_index": "webhook",
@@ -59,6 +63,8 @@ _INGEST_FORMAT_REMAP: dict[str, str] = {
 def resolve_ingest_path(source_format: str) -> str:
     """Return the ``/ingest/{format}`` path segment for ``source_format``."""
     fmt = (source_format or "").strip().lower() or "webhook"
+    if fmt in _INGEST_FORMAT_REMAP:
+        return _INGEST_FORMAT_REMAP[fmt]
     if fmt in ALLOWED_INGEST_FORMATS:
         return fmt
-    return _INGEST_FORMAT_REMAP.get(fmt, "webhook")
+    return "webhook"

@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
+from typing import Any
+
 import pytest
 
-from eden.services.agent_sessions import AgentSessionService
+from eden.services.agent_sessions import AgentSession, AgentSessionService, _as_timestamptz
 
 
 @pytest.mark.asyncio
@@ -44,3 +47,37 @@ async def test_attach_traces_single_persist() -> None:
     loaded = await svc.get("org-1", started.id)
     assert loaded is not None
     assert loaded.trace_ids == ["a", "b", "c"]
+
+
+def test_as_timestamptz_coerces_iso_strings() -> None:
+    dt = _as_timestamptz("2026-07-20T23:21:59.762126+00:00")
+    assert isinstance(dt, datetime)
+    assert dt.tzinfo is not None
+    assert _as_timestamptz("2026-07-20T23:21:59.762126Z") is not None
+    assert _as_timestamptz(None) is None
+    aware = datetime(2026, 7, 20, 12, 0, tzinfo=UTC)
+    assert _as_timestamptz(aware) is aware
+
+
+@pytest.mark.asyncio
+async def test_persist_binds_datetime_not_iso_string() -> None:
+    """Regression: asyncpg rejects ISO strings for timestamptz (prod 503)."""
+    captured: dict[str, Any] = {}
+
+    class _FakePg:
+        async def execute(self, _query: str, *args: Any) -> str:
+            captured["args"] = args
+            return "OK"
+
+    svc = AgentSessionService(pg=_FakePg())
+    session = AgentSession(
+        id="11111111-1111-1111-1111-111111111111",
+        org_id="org-1",
+        agent_id="bot",
+        started_at="2026-07-20T23:21:59.762126+00:00",
+        ended_at=None,
+    )
+    await svc._persist(session)
+    args = captured["args"]
+    assert isinstance(args[8], datetime), f"started_at bound as {type(args[8])}"
+    assert args[9] is None

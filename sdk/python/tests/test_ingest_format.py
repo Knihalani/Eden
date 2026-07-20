@@ -23,7 +23,7 @@ def _reset(monkeypatch: pytest.MonkeyPatch) -> None:
     [
         ("openai", "openai"),
         ("anthropic", "anthropic"),
-        ("framework", "framework"),
+        ("framework", "webhook"),  # TraceEvent JSON → webhook, not OTel path
         ("webhook", "webhook"),
         ("custom", "webhook"),
         ("eden-sdk-doctor", "webhook"),

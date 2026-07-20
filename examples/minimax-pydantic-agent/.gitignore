@@ -1,0 +1,4 @@
+# Local-only artifacts (root .gitignore already covers .env / .venv)
+.python-version
+__pycache__/
+*.pyc

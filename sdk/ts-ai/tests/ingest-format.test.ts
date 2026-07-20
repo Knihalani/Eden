@@ -7,7 +7,7 @@ import { configure, resetDefaultClient } from "../src/index.js";
 describe("resolveIngestPath", () => {
   it.each([
     ["openai", "openai"],
-    ["framework", "framework"],
+    ["framework", "webhook"], // TraceEvent JSON → webhook, not OTel path
     ["webhook", "webhook"],
     ["custom", "webhook"],
     ["eden-sdk-doctor", "webhook"],

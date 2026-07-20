@@ -30,6 +30,8 @@ const INGEST_FORMAT_REMAP: Record<string, string> = {
   "eden-trace-agent-ts": "webhook",
   "eden-auto-instrument-ts": "webhook",
   "eden-auto-instrument": "webhook",
+  // TraceEvent JSON ≠ OTel resourceSpans — /ingest/framework would 422.
+  framework: "webhook",
   "vercel-ai": "webhook",
   langchain: "webhook",
   llama_index: "webhook",
@@ -45,6 +47,7 @@ const INGEST_FORMAT_REMAP: Record<string, string> = {
 /** Return the `/ingest/{format}` path segment for a sourceFormat label. */
 export function resolveIngestPath(sourceFormat: string): string {
   const fmt = (sourceFormat || "").trim().toLowerCase() || "webhook";
+  if (fmt in INGEST_FORMAT_REMAP) return INGEST_FORMAT_REMAP[fmt]!;
   if (ALLOWED_INGEST_FORMATS.has(fmt)) return fmt;
-  return INGEST_FORMAT_REMAP[fmt] ?? "webhook";
+  return "webhook";
 }
