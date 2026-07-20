@@ -145,11 +145,15 @@ export function SelectedTraceCard({ traceId }: SelectedTraceCardProps) {
                         : "bg-[var(--bg-tertiary)] text-[var(--text-muted)]",
                 )}
               >
-                {trace.outcome ?? "unknown"}
+                {trace.outcome ?? "—"}
               </span>
             }
           />
-          <Row icon={Clock} label="Duration" value={`${trace.duration_ms.toFixed(0)}ms`} />
+          <Row
+            icon={Clock}
+            label="Duration"
+            value={trace.duration_ms != null ? `${trace.duration_ms.toFixed(0)}ms` : "—"}
+          />
           <Row icon={Hash} label="Spans" value={String(trace.span_count)} />
           <Row
             icon={Activity}

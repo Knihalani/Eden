@@ -23,7 +23,7 @@ export interface TraceItem {
   realm: "environment" | "production" | string;
   outcome: Outcome | null;
   span_count: number;
-  duration_ms: number;
+  duration_ms: number | null;
   streaming_metrics?: StreamingMetrics | null;
   // Pattern 5.1 (Langfuse): optional token / cost columns. Surfaced
   // by /api/orgs/{orgId}/observability/traces when telemetry-derived
