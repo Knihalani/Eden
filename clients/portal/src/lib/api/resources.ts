@@ -2585,7 +2585,7 @@ export type ObservabilityTrace = {
   realm: string;
   outcome: string | null;
   span_count: number;
-  duration_ms: number;
+  duration_ms: number | null;
   agent_id?: string | null;
   started_at?: string | null;
   model?: string | null;

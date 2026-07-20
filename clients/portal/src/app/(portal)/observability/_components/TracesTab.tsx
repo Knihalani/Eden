@@ -65,6 +65,10 @@ function formatCostUSD(cents: number | null | undefined): string {
   if (dollars < 0.01) return "<$0.01";
   return `$${dollars.toFixed(2)}`;
 }
+function formatDurationMs(ms: number | null | undefined): string {
+  if (ms == null) return "—";
+  return `${ms.toFixed(0)}ms`;
+}
 export function TracesTab({
   traces,
   loading,
@@ -116,7 +120,7 @@ export function TracesTab({
     header: "Duration",
     sortable: true,
     align: "right",
-    cell: t => <span className="text-[var(--text-secondary)]">{t.duration_ms.toFixed(0)}ms</span>
+    cell: t => <span className="text-[var(--text-secondary)]">{formatDurationMs(t.duration_ms)}</span>
   }, ...(showTokenCostCols ? [{
     // Pattern 5.1 (Langfuse): right-aligned token counts with
     // thousands separators. Hide entirely when no row carries

@@ -149,7 +149,7 @@ class TraceListItem(BaseModel):
     started_at: str | None = None
     outcome: str | None = None
     span_count: int = 0
-    duration_ms: float = 0.0
+    duration_ms: float | None = None
     # Cat 23 audit — fields promised by the portal type but missing here.
     # Portal `clients/portal/src/lib/api.ts:2452-2470` reads these; keeping
     # the model honest avoids `undefined` values after the empty stub is
@@ -461,16 +461,12 @@ async def list_traces(
                                0
                            )
                        ) AS output_tokens,
-                       coalesce(
-                           sum(
-                               coalesce(
-                                   NULLIF(metrics->>'cost_usd', '')::float,
-                                   NULLIF(payload->>'cost_usd', '')::float,
-                                   NULLIF(attributes->>'cost_usd', '')::float,
-                                   0
-                               )
-                           ),
-                           0
+                       sum(
+                           coalesce(
+                               NULLIF(metrics->>'cost_usd', '')::float,
+                               NULLIF(payload->>'cost_usd', '')::float,
+                               NULLIF(attributes->>'cost_usd', '')::float
+                           )
                        ) AS cost_usd,
                        count(*) AS span_count,
                        max(duration_ms) AS duration_ms
@@ -558,12 +554,18 @@ async def list_traces(
             started_at=r["started_at"].isoformat() if r["started_at"] else None,
             outcome=r["outcome"],
             span_count=int(r["span_count"] or 0),
-            duration_ms=float(r["duration_ms"] or 0.0),
+            duration_ms=(
+                float(r["duration_ms"]) if r["duration_ms"] is not None else None
+            ),
             model=r["model"],
             provider=r["provider"],
             input_tokens=int(r["input_tokens"] or 0) if r["input_tokens"] else None,
             output_tokens=int(r["output_tokens"] or 0) if r["output_tokens"] else None,
-            cost_cents=int(round(float(r["cost_usd"] or 0.0) * 100)),
+            cost_cents=(
+                int(round(float(r["cost_usd"]) * 100))
+                if r["cost_usd"] is not None
+                else None
+            ),
             error=(
                 {"type": r["error_type"]}
                 if r.get("error_type")

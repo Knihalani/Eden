@@ -140,7 +140,22 @@ export function OutcomeBadge({ outcome, className, iconOnly = false }: OutcomeBa
  * Distinct from `OutcomeBadge` which maps to OUTCOMES tiers (gold/silver/bronze).
  */
 export function TraceOutcomeBadge({ outcome, className }: TraceOutcomeBadgeProps) {
-  const key = outcome || "unknown";
+  if (outcome == null || outcome === "") {
+    return (
+      <span
+        className={cn(
+          "inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-medium",
+          "bg-[var(--bg-tertiary)] text-[var(--text-muted)]",
+          className,
+        )}
+        role="status"
+        aria-label="Trace outcome: none"
+      >
+        —
+      </span>
+    );
+  }
+  const key = outcome;
   const Icon = TRACE_OUTCOME_ICONS[key] || TRACE_OUTCOME_ICONS.unknown;
   return (
     <span

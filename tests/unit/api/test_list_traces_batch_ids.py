@@ -103,6 +103,68 @@ async def test_list_traces_batch_ids_skips_days_window(
 
 
 @pytest.mark.asyncio
+async def test_list_traces_null_duration_and_cost_stay_null(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Probe/minimal events: missing duration/cost must not become 0."""
+    client = MagicMock()
+
+    async def _fetch(sql: str, *args: Any) -> list[dict[str, Any]]:
+        return [
+            {
+                "trace_id": "t-probe",
+                "started_at": datetime(2020, 1, 1, tzinfo=UTC),
+                "realm": "production",
+                "agent_id": None,
+                "model": None,
+                "provider": None,
+                "session_id": None,
+                "agent_session_id": None,
+                "outcome": None,
+                "error_type": None,
+                "attr_error": None,
+                "input_tokens": None,
+                "output_tokens": None,
+                "cost_usd": None,
+                "span_count": 1,
+                "duration_ms": None,
+                "tags": [],
+            }
+        ]
+
+    async def _fetchval(sql: str, *args: Any) -> int:
+        return 1
+
+    client.fetch = _fetch
+    client.fetchval = _fetchval
+
+    import eden.storage.postgres as real_pg
+
+    monkeypatch.setattr(
+        real_pg, "get_postgres_client", AsyncMock(return_value=client)
+    )
+
+    result = await observability.list_traces(
+        org_id="org-1",
+        realm=None,
+        outcome=None,
+        agent_id=None,
+        trace_id=None,
+        trace_ids=None,
+        limit=50,
+        offset=0,
+        days=7,
+        user={"sub": "u"},
+    )
+
+    assert len(result.traces) == 1
+    item = result.traces[0]
+    assert item.duration_ms is None
+    assert item.cost_cents is None
+    assert item.outcome is None
+
+
+@pytest.mark.asyncio
 async def test_list_traces_postgres_none_is_503_not_empty(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
