@@ -38,6 +38,13 @@ class FakeEventSource {
   emitError() {
     this.onerror?.(new Event("error"));
   }
+
+  emitNamed(type: string, data: string) {
+    const ev = new MessageEvent(type, { data });
+    for (const cb of this.listeners[type] ?? []) {
+      cb(ev);
+    }
+  }
 }
 
 beforeEach(() => {
@@ -114,5 +121,33 @@ describe("useObservabilityStream reconnect cap", () => {
       FakeEventSource.instances[FakeEventSource.instances.length - 1].onopen?.();
     });
     expect(result.current.failed).toBe(false);
+  });
+
+  it("named SSE event: error sets failed and does not reconnect", async () => {
+    const onError = vi.fn();
+    const { result } = renderHook(() =>
+      useObservabilityStream({ orgId: "org_1", onError }),
+    );
+
+    expect(FakeEventSource.instances).toHaveLength(1);
+    const source = FakeEventSource.instances[0];
+
+    act(() => {
+      source.emitNamed(
+        "error",
+        JSON.stringify({ code: "redis_unavailable", message: "offline" }),
+      );
+    });
+
+    expect(result.current.failed).toBe(true);
+    expect(result.current.connected).toBe(false);
+    expect(onError).toHaveBeenCalledTimes(1);
+    expect(source.closed).toBe(true);
+
+    const openedAfter = FakeEventSource.instances.length;
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(60_000);
+    });
+    expect(FakeEventSource.instances).toHaveLength(openedAfter);
   });
 });

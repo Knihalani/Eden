@@ -7,13 +7,13 @@ import { api } from "@/lib/api";
 import { useOrgQuery, useOrgMutation } from "@/hooks/use-api-query";
 import { queryKeys } from "@/lib/query-keys";
 import { EmptyState } from "@/components/ui/empty-state";
+import { ErrorState } from "@/components/ui/error-state";
 import { NoOrgState } from "@/components/ui/no-org-state";
 import { PageHeader } from "@/components/layout/page-header";
 import { PageContent } from "@/components/layout/page-content";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Users, Target, Smile, Users2, Layers, Plus, Loader2, AlertTriangle, Activity, TrendingUp, Search, RefreshCw } from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
 import { DataTable } from "@/components/ui/data-table";
 import { Card } from "@/components/ui/card";
 import { errorFromCaught } from "@/lib/safe-error-message";
@@ -92,21 +92,25 @@ export default function UsersPage() {
     queryKeys.users.sessions(orgId, sessionsDays),
     orgId,
     () => api.post<{ sessions: SessionRow[] }>(`/orgs/${orgId}/intelligence/user/sessions/aggregate`, { days: sessionsDays }),
+    { enabled: activeTab === "sessions" },
   );
   const goalsQuery = useOrgQuery(
     queryKeys.users.goals(orgId),
     orgId,
     () => api.get<{ goals: Goal[] }>(`/orgs/${orgId}/intelligence/user/goals`),
+    { enabled: activeTab === "goals" },
   );
   const cohortsQuery = useOrgQuery(
     queryKeys.users.cohorts(orgId),
     orgId,
     () => api.get<{ cohorts: Cohort[] }>(`/orgs/${orgId}/intelligence/user/dashboard/cohort`),
+    { enabled: activeTab === "cohorts" },
   );
   const segmentsQuery = useOrgQuery(
     queryKeys.users.segments(orgId),
     orgId,
     () => api.get<{ segments: Segment[] }>(`/orgs/${orgId}/intelligence/user/segment`),
+    { enabled: activeTab === "segments" },
   );
 
   const createGoalMutation = useOrgMutation(
@@ -115,13 +119,30 @@ export default function UsersPage() {
     { invalidateKeys: [queryKeys.users.goals(orgId)] },
   );
 
-  const queryError = sessionsQuery.error ?? goalsQuery.error ?? cohortsQuery.error ?? segmentsQuery.error;
-  const retryAll = useCallback(() => {
-    sessionsQuery.refetch();
-    goalsQuery.refetch();
-    cohortsQuery.refetch();
-    segmentsQuery.refetch();
-  }, [sessionsQuery.refetch, goalsQuery.refetch, cohortsQuery.refetch, segmentsQuery.refetch]);
+  // Only the active tab's error — ORing all tabs caused a false banner when
+  // a previously visited tab failed and the user switched away.
+  const activeTabError =
+    activeTab === "sessions"
+      ? sessionsQuery.error
+      : activeTab === "goals"
+        ? goalsQuery.error
+        : activeTab === "cohorts"
+          ? cohortsQuery.error
+          : activeTab === "segments"
+            ? segmentsQuery.error
+            : null;
+  const retryActiveTab = useCallback(() => {
+    if (activeTab === "sessions") void sessionsQuery.refetch();
+    else if (activeTab === "goals") void goalsQuery.refetch();
+    else if (activeTab === "cohorts") void cohortsQuery.refetch();
+    else if (activeTab === "segments") void segmentsQuery.refetch();
+  }, [
+    activeTab,
+    sessionsQuery.refetch,
+    goalsQuery.refetch,
+    cohortsQuery.refetch,
+    segmentsQuery.refetch,
+  ]);
 
   async function handleCreateGoal() {
     if (!newGoalName.trim()) return;
@@ -172,15 +193,6 @@ export default function UsersPage() {
   return <PageContent size="wide">
       <PageHeader eyebrow="Intelligence" title="User Intelligence" subtitle="The 97% problem: behaviour-driven satisfaction, behavioural cohorts, and goal tracking" icon={Users} />
 
-      {queryError && <div role="alert" className="bg-[var(--error-bg)] text-[var(--error)] text-sm px-4 py-3 rounded-xl flex items-center gap-2.5 border border-[var(--error)]/20">
-          <AlertTriangle className="w-4 h-4 flex-shrink-0" aria-hidden />
-          <span className="flex-1">{queryError.message}</span>
-          <Button variant="ghost" size="sm" onClick={retryAll} aria-label="Retry loading all tabs">
-            <RefreshCw className="w-3.5 h-3.5" aria-hidden />
-            Retry
-          </Button>
-        </div>}
-
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as Tab)}>
         <TabsList aria-label="User intelligence sections" className="bg-[var(--bg-tertiary)] rounded-xl h-auto flex-wrap w-fit">
@@ -212,27 +224,65 @@ export default function UsersPage() {
           ))}
         </TabsList>
 
-      {/* Content */}
-      <AnimatePresence mode="wait">
-        <motion.div key={activeTab} initial={{
-        opacity: 0,
-        y: 8
-      }} animate={{
-        opacity: 1,
-        y: 0
-      }} exit={{
-        opacity: 0,
-        y: -6
-      }} transition={{
-        duration: 0.2
-      }}>
-          {activeTab === "sessions" && <SessionsTab sessions={sessionsQuery.data?.sessions ?? []} loading={sessionsQuery.isLoading} days={sessionsDays} onDaysChange={setSessionsDays} onRefresh={() => sessionsQuery.refetch()} />}
-          {activeTab === "goals" && <GoalsTab goals={goalsQuery.data?.goals ?? []} loading={goalsQuery.isLoading} showAdd={showAddGoal} onShowAddChange={setShowAddGoal} newName={newGoalName} onNewNameChange={setNewGoalName} newTarget={newGoalTarget} onNewTargetChange={setNewGoalTarget} newDescription={newGoalDescription} onNewDescriptionChange={setNewGoalDescription} onCreate={handleCreateGoal} creating={createGoalMutation.isPending} error={goalError} />}
-          {activeTab === "satisfaction" && <SatisfactionTab traceId={satisfactionTraceId} onTraceIdChange={setSatisfactionTraceId} onAnalyze={handleSatisfactionAnalyze} satisfaction={satisfaction} correction={correction} loading={satisfactionLoading} error={satisfactionError} recent={recentSatisfaction} />}
-          {activeTab === "cohorts" && <CohortsTab cohorts={cohortsQuery.data?.cohorts ?? []} loading={cohortsQuery.isLoading} onRefresh={() => cohortsQuery.refetch()} />}
-          {activeTab === "segments" && <SegmentsTab segments={segmentsQuery.data?.segments ?? []} loading={segmentsQuery.isLoading} onRefresh={() => segmentsQuery.refetch()} />}
-        </motion.div>
-      </AnimatePresence>
+      {/* Content — ErrorState preferred over false empty on API failure */}
+          {activeTab === "sessions" && (
+            <SessionsTab
+              sessions={sessionsQuery.data?.sessions ?? []}
+              loading={sessionsQuery.isLoading}
+              error={activeTabError?.message ?? null}
+              days={sessionsDays}
+              onDaysChange={setSessionsDays}
+              onRefresh={retryActiveTab}
+            />
+          )}
+          {activeTab === "goals" && (
+            <GoalsTab
+              goals={goalsQuery.data?.goals ?? []}
+              loading={goalsQuery.isLoading}
+              loadError={activeTabError?.message ?? null}
+              onRetryLoad={retryActiveTab}
+              showAdd={showAddGoal}
+              onShowAddChange={setShowAddGoal}
+              newName={newGoalName}
+              onNewNameChange={setNewGoalName}
+              newTarget={newGoalTarget}
+              onNewTargetChange={setNewGoalTarget}
+              newDescription={newGoalDescription}
+              onNewDescriptionChange={setNewGoalDescription}
+              onCreate={handleCreateGoal}
+              creating={createGoalMutation.isPending}
+              error={goalError}
+            />
+          )}
+          {activeTab === "satisfaction" && (
+            <SatisfactionTab
+              traceId={satisfactionTraceId}
+              onTraceIdChange={setSatisfactionTraceId}
+              onAnalyze={handleSatisfactionAnalyze}
+              satisfaction={satisfaction}
+              correction={correction}
+              loading={satisfactionLoading}
+              error={satisfactionError}
+              recent={recentSatisfaction}
+            />
+          )}
+          {activeTab === "cohorts" && (
+            <CohortsTab
+              cohorts={cohortsQuery.data?.cohorts ?? []}
+              loading={cohortsQuery.isLoading}
+              error={activeTabError?.message ?? null}
+              onRefresh={retryActiveTab}
+            />
+          )}
+          {activeTab === "segments" && (
+            <SegmentsTab
+              segments={segmentsQuery.data?.segments ?? []}
+              loading={segmentsQuery.isLoading}
+              error={activeTabError?.message ?? null}
+              onRefresh={retryActiveTab}
+            />
+          )}
+        
       </Tabs>
     </PageContent>;
 }
@@ -244,12 +294,14 @@ export default function UsersPage() {
 function SessionsTab({
   sessions,
   loading,
+  error,
   days,
   onDaysChange,
   onRefresh
 }: {
   sessions: SessionRow[];
   loading: boolean;
+  error: string | null;
   days: number;
   onDaysChange: (d: number) => void;
   onRefresh: () => void;
@@ -270,7 +322,19 @@ function SessionsTab({
         </button>
       </Card>
 
-      {loading && sessions.length === 0 ? <div className="flex items-center justify-center py-20" role="status" aria-live="polite">
+      {error ? (
+        <ErrorState
+          size="lg"
+          title="Could not load sessions"
+          message={error}
+          action={
+            <Button variant="outline" size="sm" onClick={onRefresh} disabled={loading}>
+              <RefreshCw className="w-3.5 h-3.5" aria-hidden />
+              Try again
+            </Button>
+          }
+        />
+      ) : loading && sessions.length === 0 ? <div className="flex items-center justify-center py-20" role="status" aria-live="polite">
           <Loader2 className="w-8 h-8 animate-spin text-[var(--accent)]" aria-hidden />
         </div> : sessions.length === 0 ? <EmptyState icon={Activity} title="No sessions yet" description="Aggregated user sessions appear here once your agents start serving real users." size="lg" /> : <Card padding="lg" className="overflow-hidden">
           <DataTable columns={[{
@@ -312,6 +376,8 @@ function SessionsTab({
 function GoalsTab({
   goals,
   loading,
+  loadError,
+  onRetryLoad,
   showAdd,
   onShowAddChange,
   newName,
@@ -326,6 +392,8 @@ function GoalsTab({
 }: {
   goals: Goal[];
   loading: boolean;
+  loadError: string | null;
+  onRetryLoad: () => void;
   showAdd: boolean;
   onShowAddChange: (v: boolean) => void;
   newName: string;
@@ -350,17 +418,8 @@ function GoalsTab({
         </button>
       </div>
 
-      <AnimatePresence>
-        {showAdd && <motion.div id="new-goal-form" initial={{
-        opacity: 0,
-        height: 0
-      }} animate={{
-        opacity: 1,
-        height: "auto"
-      }} exit={{
-        opacity: 0,
-        height: 0
-      }} className="bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-xl overflow-hidden">
+      <>
+        {showAdd && <div id="new-goal-form" className="bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-xl overflow-hidden">
             <div className="p-5 space-y-3">
               <h3 className="text-sm font-semibold text-[var(--text-primary)]">New Goal</h3>
               <div className="grid sm:grid-cols-2 gap-3">
@@ -388,10 +447,22 @@ function GoalsTab({
                 Create Goal
               </button>
             </div>
-          </motion.div>}
-      </AnimatePresence>
+          </div>}
+      </>
 
-      {loading && goals.length === 0 ? <div className="flex items-center justify-center py-20" role="status" aria-live="polite">
+      {loadError ? (
+        <ErrorState
+          size="lg"
+          title="Could not load goals"
+          message={loadError}
+          action={
+            <Button variant="outline" size="sm" onClick={onRetryLoad} disabled={loading}>
+              <RefreshCw className="w-3.5 h-3.5" aria-hidden />
+              Try again
+            </Button>
+          }
+        />
+      ) : loading && goals.length === 0 ? <div className="flex items-center justify-center py-20" role="status" aria-live="polite">
           <Loader2 className="w-8 h-8 animate-spin text-[var(--accent)]" aria-hidden />
         </div> : goals.length === 0 ? <EmptyState icon={Target} title="No goals tracked" description="Define the success metrics you want to monitor — current progress will appear here as data flows in." size="lg" /> : <div className="grid sm:grid-cols-2 gap-3">
           {goals.map(goal => {
@@ -478,13 +549,7 @@ function SatisfactionTab({
       {/* Result */}
       {loading ? <div className="flex items-center justify-center py-20" role="status" aria-live="polite">
           <Loader2 className="w-8 h-8 animate-spin text-[var(--accent)]" aria-hidden />
-        </div> : satisfaction ? <motion.div initial={{
-      opacity: 0,
-      y: 8
-    }} animate={{
-      opacity: 1,
-      y: 0
-    }} className="space-y-4">
+        </div> : satisfaction ? <div className="space-y-4">
           <Card padding="lg">
             <div className="flex items-center justify-between mb-4">
               <div>
@@ -552,7 +617,7 @@ function SatisfactionTab({
                   </div>)}
               </div>
             </Card>}
-        </motion.div> : null}
+        </div> : null}
 
       {/* Recent traces */}
       {recent.length > 0 && <Card padding="lg" className="overflow-hidden">
@@ -584,10 +649,12 @@ function SatisfactionTab({
 function CohortsTab({
   cohorts,
   loading,
+  error,
   onRefresh
 }: {
   cohorts: Cohort[];
   loading: boolean;
+  error: string | null;
   onRefresh: () => void;
 }) {
   return <div className="space-y-4">
@@ -598,7 +665,19 @@ function CohortsTab({
         </button>
       </div>
 
-      {loading && cohorts.length === 0 ? <div className="flex items-center justify-center py-20" role="status" aria-live="polite">
+      {error ? (
+        <ErrorState
+          size="lg"
+          title="Could not load cohorts"
+          message={error}
+          action={
+            <Button variant="outline" size="sm" onClick={onRefresh} disabled={loading}>
+              <RefreshCw className="w-3.5 h-3.5" aria-hidden />
+              Try again
+            </Button>
+          }
+        />
+      ) : loading && cohorts.length === 0 ? <div className="flex items-center justify-center py-20" role="status" aria-live="polite">
           <Loader2 className="w-8 h-8 animate-spin text-[var(--accent)]" aria-hidden />
         </div> : cohorts.length === 0 ? <EmptyState icon={Users2} title="No cohorts yet" description="Behavioural cohorts surface once the system has enough traces to group users by behaviour patterns." size="lg" /> : <Card padding="lg" className="overflow-hidden">
           <DataTable columns={[{
@@ -641,10 +720,12 @@ function CohortsTab({
 function SegmentsTab({
   segments,
   loading,
+  error,
   onRefresh
 }: {
   segments: Segment[];
   loading: boolean;
+  error: string | null;
   onRefresh: () => void;
 }) {
   return <div className="space-y-4">
@@ -655,7 +736,19 @@ function SegmentsTab({
         </button>
       </div>
 
-      {loading && segments.length === 0 ? <div className="flex items-center justify-center py-20" role="status" aria-live="polite">
+      {error ? (
+        <ErrorState
+          size="lg"
+          title="Could not load segments"
+          message={error}
+          action={
+            <Button variant="outline" size="sm" onClick={onRefresh} disabled={loading}>
+              <RefreshCw className="w-3.5 h-3.5" aria-hidden />
+              Try again
+            </Button>
+          }
+        />
+      ) : loading && segments.length === 0 ? <div className="flex items-center justify-center py-20" role="status" aria-live="polite">
           <Loader2 className="w-8 h-8 animate-spin text-[var(--accent)]" aria-hidden />
         </div> : segments.length === 0 ? <EmptyState icon={Layers} title="No segments defined" description="User segments are derived from behavioural signals — they will appear here automatically as patterns emerge." size="lg" /> : <Card padding="lg" className="overflow-hidden">
           <DataTable columns={[{

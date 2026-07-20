@@ -119,6 +119,28 @@ Target < 2% over 50 runs. Retry once on navigation timeout only.
 Navigation timeout is 60 s per path; `waitForTimeout` guards are kept
 to 800–1 200 ms to reduce timer-related flake.
 
+## P29 — Golden-path sleep debt (A10 / Wave 1.5)
+
+Several probes still bake fixed sleeps instead of selector/network-idle asserts:
+
+| File | Approx sleeps | Preferred fix (Wave 1.5) |
+|---|---|---|
+| `e2e/golden/agent06-tour-probe.mjs` | 9× `waitForTimeout` | Wait for Connect CTA / org chip |
+| `e2e/golden/agent07-portal-home-probe.mjs` | 1× 3500ms | `waitForSelector` Home KPI / networkidle |
+| `e2e/golden/agent08-observe-probe.mjs` | 2× | Traces table row visible |
+| `e2e/golden/agent09-evaluate-probe.mjs` | 2× | Eval empty-state / list |
+| `e2e/golden/agent10-improve-connect-probe.mjs` | 2× | Improve hub heading |
+| `e2e/golden/golden-paths.spec.mjs` | 4× 800–1200ms | Prefer role/text locators |
+
+**Policy:** treat remaining sleeps as documented debt (P29). Cheap selector
+fixes may land in Wave 1; bulk replacement is Wave 1.5 (`W15-d`).
+
+## P30 — Vitest whole-source `readFileSync` debt
+
+Portal structural suites under `src/lib/__tests__/w*-portal.test.ts` often
+`readFileSync` entire page/API sources. Prefer AST/import checks or smaller
+fixtures (P30). Tracked as Wave 1.5 hygiene — do not expand whole-file reads.
+
 ## Debug
 
 - Append `?debug=1` on portal routes in dev to surface query keys.

@@ -14,6 +14,7 @@ from eden.api.deps import (
     eden_user_id_from_auth,
     get_current_org,
     get_current_user,
+    get_eden_user_row_from_auth,
     log_audit_event,
     require_org_admin,
     require_org_member,
@@ -23,6 +24,7 @@ from eden.api.deps import (
     resolve_eden_user_id,
 )
 from eden.api.routes.billing import check_limit, sync_plan_usage
+from eden.api.utils.org_schema import organizations_have_is_personal
 from eden.api.utils.redact import redact_all
 from eden.config import get_settings
 from eden.services.invitation_service import (
@@ -42,7 +44,7 @@ router = APIRouter(prefix="/orgs", tags=["organizations"])
 
 class InviteMemberRequest(BaseModel):
     email: EmailStr
-    role: str = Field(default="member", pattern="^(owner|admin|member|viewer)$")
+    role: str = Field(default="member", pattern="^(admin|member|viewer)$")
 
 
 class UpdateMemberRoleRequest(BaseModel):
@@ -58,6 +60,58 @@ def slugify(name: str) -> str:
 def get_email_domain(email: str) -> str:
     """Extract the domain from an email address."""
     return email.split("@")[-1].lower() if "@" in email else ""
+
+
+async def _assert_invitation_for_caller(
+    *,
+    org_id: str,
+    invitation_id: str,
+    user: dict,
+) -> dict:
+    """Load a pending invite and ensure it belongs to this path + caller.
+
+    Accept/decline must not require pre-existing org membership (invitees
+    are not members yet), but they MUST verify:
+    1. Path ``org_id`` matches the invitation's org (no cross-tenant URL).
+    2. Caller's Eden email matches the invitee email (no IDOR by UUID).
+    """
+    client = await get_postgres_client()
+    invitation = await client.fetchrow(
+        """
+        SELECT id, org_id, email, status
+        FROM org_invitations
+        WHERE id = $1
+        """,
+        invitation_id,
+    )
+    if not invitation:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invitation not found",
+        )
+
+    path_org = await resolve_eden_org_id(org_id)
+    invite_org = await resolve_eden_org_id(str(invitation["org_id"]))
+    if not path_org or not invite_org or path_org != invite_org:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Invitation not found for this organization",
+        )
+
+    eden_user = await get_eden_user_row_from_auth(user)
+    if not eden_user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User account is still provisioning. Please refresh.",
+        )
+    caller_email = (eden_user.get("email") or "").strip().lower()
+    invite_email = (invitation.get("email") or "").strip().lower()
+    if not caller_email or caller_email != invite_email:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Invitation was not sent to this account",
+        )
+    return invitation
 
 
 async def check_domain_restriction(client, org_id: str, email: str) -> tuple[bool, str | None]:
@@ -192,31 +246,73 @@ async def create_org(
     # Clerk; for webhook-created rows in the future, the
     # ``organization.created`` webhook will land at the
     # ``_upsert_org`` handler and backfill the same column.
+    #
+    # First/solo workspace: mark ``is_personal=true`` so settings can
+    # soft-hide invite/SCIM/transfer for a single-developer org.
+    # Subsequent orgs the same user creates stay team orgs (false).
+    existing_memberships = await client.fetchval(
+        "SELECT COUNT(*)::int FROM org_members WHERE user_id = $1",
+        user_id,
+    )
+    is_personal = int(existing_memberships or 0) == 0
+    personal_col = await organizations_have_is_personal(client)
+
     org_id = str(uuid4())
     try:
-        query = """
-            INSERT INTO organizations (id, clerk_org_id, name, slug, owner_id, settings)
-            VALUES ($1, $2, $3, $4, $5, '{}')
-            RETURNING id
-        """
-        row = await client.fetchrow(query, org_id, clerk_org_id, name, slug, user_id)
+        if personal_col:
+            query = """
+                INSERT INTO organizations (
+                    id, clerk_org_id, name, slug, owner_id, settings, is_personal
+                )
+                VALUES ($1, $2, $3, $4, $5, '{}', $6)
+                RETURNING id
+            """
+            row = await client.fetchrow(
+                query, org_id, clerk_org_id, name, slug, user_id, is_personal
+            )
+        else:
+            query = """
+                INSERT INTO organizations (id, clerk_org_id, name, slug, owner_id, settings)
+                VALUES ($1, $2, $3, $4, $5, '{}')
+                RETURNING id
+            """
+            row = await client.fetchrow(
+                query, org_id, clerk_org_id, name, slug, user_id
+            )
+            is_personal = False
     except Exception as exc:
         # If we created the Clerk org but failed to write the Eden
         # row, we have an orphan in Clerk. Log loudly so an operator
         # can run cleanup; don't auto-delete (Clerk charges per org
         # on some plans and auto-delete is riskier than the leak).
+        msg = str(exc).lower()
         logger.exception(
             "Failed to write Eden org row after Clerk create "
             "(org_id=%s clerk_org_id=%s): %s",
             org_id, clerk_org_id, redact_all(str(exc)),
         )
+        if "unique" in msg or "duplicate" in msg:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Organization already exists",
+            ) from exc
+        if "invalid input syntax for type uuid" in msg:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid user id",
+            ) from exc
+        if "foreign key" in msg:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="User not found",
+            ) from exc
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Failed to create organization",
         ) from exc
     if not row:
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Failed to create organization",
         )
 
@@ -335,12 +431,12 @@ async def create_org(
                 {
                     "artifacts_v1": True,
                     "ledger_v1": True,
-                    "improvement_loop_preview": True,
-                    # Phase 8 — autonomous SRE defaults (new orgs only).
+                    # Phase 8 / N23 — align with config.py GA defaults (agent ON).
+                    "improvement_loop_preview": False,
                     "improvement_agent_v1": True,
                     "improvement_schedule_enabled": True,
                     "improvement_schedule_cron": "0 3 * * 0",
-                    "evolution_loop_enabled": True,
+                    "evolution_loop_enabled": False,
                     "evolver_auto_canary_pct": 5,
                 }
             ),
@@ -392,6 +488,7 @@ async def create_org(
         "role": "owner",
         "clerk_org_id": clerk_org_id,
         "org_degraded": degraded,
+        "is_personal": bool(is_personal) if personal_col else False,
     }
 
 
@@ -406,35 +503,44 @@ async def list_user_orgs(
     if not user_id:
         return []
 
+    personal_col = await organizations_have_is_personal(client)
+    personal_select = ", o.is_personal" if personal_col else ""
+    personal_group = ", o.is_personal" if personal_col else ""
+
     if include_archived:
-        query = """
+        query = f"""
             SELECT o.id, o.name, o.slug, o.owner_id, o.archived_at,
                    om.role,
                    COUNT(om2.id) as member_count
+                   {personal_select}
             FROM organizations o
             JOIN org_members om ON om.org_id = o.id
             LEFT JOIN org_members om2 ON om2.org_id = o.id
             WHERE om.user_id = $1
             GROUP BY o.id, o.name, o.slug, o.owner_id, o.archived_at, om.role
+                   {personal_group}
             ORDER BY o.created_at DESC
         """
         rows = await client.fetch(query, user_id)
     else:
-        query = """
+        query = f"""
             SELECT o.id, o.name, o.slug, o.owner_id, o.archived_at,
                    om.role,
                    COUNT(om2.id) as member_count
+                   {personal_select}
             FROM organizations o
             JOIN org_members om ON om.org_id = o.id
             LEFT JOIN org_members om2 ON om2.org_id = o.id
             WHERE om.user_id = $1 AND o.archived_at IS NULL
             GROUP BY o.id, o.name, o.slug, o.owner_id, o.archived_at, om.role
+                   {personal_group}
             ORDER BY o.created_at DESC
         """
         rows = await client.fetch(query, user_id)
 
-    return [
-        {
+    out: list[dict] = []
+    for r in rows:
+        item = {
             "id": str(r["id"]),
             "name": r["name"],
             "slug": r["slug"],
@@ -443,8 +549,10 @@ async def list_user_orgs(
             "member_count": r["member_count"],
             "archived_at": r["archived_at"].isoformat() if r.get("archived_at") else None,
         }
-        for r in rows
-    ]
+        if personal_col:
+            item["is_personal"] = bool(r["is_personal"])
+        out.append(item)
+    return out
 
 
 @router.get("/{org_id}", response_model=dict)
@@ -458,10 +566,19 @@ async def get_org(org_id: str, user: dict = Depends(get_current_user)):
             detail="Not a member of this organization",
         )
 
+    # Path may be a Clerk ``org_…`` id — rewrite before UUID-typed SQL
+    # or asyncpg raises DataError → unhandled 500.
+    eden_org_id = await resolve_eden_org_id(org_id)
+    if not eden_org_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Organization not found",
+        )
+
     # Verify membership
     membership = await client.fetchrow(
         "SELECT role FROM org_members WHERE org_id = $1 AND user_id = $2",
-        org_id,
+        eden_org_id,
         user_id,
     )
     if not membership:
@@ -473,7 +590,7 @@ async def get_org(org_id: str, user: dict = Depends(get_current_user)):
     # Get org details
     org = await client.fetchrow(
         "SELECT id, name, slug, owner_id, settings, created_at FROM organizations WHERE id = $1",
-        org_id,
+        eden_org_id,
     )
     if not org:
         raise HTTPException(
@@ -483,7 +600,7 @@ async def get_org(org_id: str, user: dict = Depends(get_current_user)):
 
     member_count = await client.fetchval(
         "SELECT COUNT(*) FROM org_members WHERE org_id = $1",
-        org_id,
+        eden_org_id,
     )
 
     return {
@@ -503,20 +620,22 @@ async def send_invite(
     org_id: str,
     body: InviteMemberRequest,
     user: dict = Depends(get_current_user),
-        _check_members_invite: dict = Depends(require_org_permission_dep('members:invite')),
+    org: dict = Depends(require_org_permission_dep("members:invite")),
 ):
     """Send an email invitation to a user to join the organization."""
     email = str(body.email).strip().lower()
     role = body.role
+    # Permission dep already resolved Clerk path → Eden UUID.
+    eden_org_id = org["org_id"]
 
     # Refresh seat usage before inviting.
     try:
-        await sync_plan_usage(org_id)
+        await sync_plan_usage(eden_org_id)
     except Exception as exc:  # noqa: BLE001
         logger.warning("sync_plan_usage before invite failed: %s", redact_all(str(exc)))
 
     # Check seat limit before inviting
-    if await check_limit(org_id, "seats"):
+    if await check_limit(eden_org_id, "seats"):
         raise HTTPException(
             status_code=status.HTTP_402_PAYMENT_REQUIRED,
             detail="Seat limit reached. Upgrade your plan to add more members.",
@@ -525,7 +644,7 @@ async def send_invite(
     client = await get_postgres_client()
 
     # Check domain restriction
-    is_allowed, error_msg = await check_domain_restriction(client, org_id, email)
+    is_allowed, error_msg = await check_domain_restriction(client, eden_org_id, email)
     if not is_allowed:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -535,9 +654,9 @@ async def send_invite(
     # Check if user already a member
     existing_member = await client.fetchrow(
         "SELECT id FROM org_members WHERE org_id = $1 AND user_id = (SELECT id FROM users WHERE LOWER(email) = LOWER($2) LIMIT 1)",
-        org_id,
+        eden_org_id,
         email,
-    )    # Audit 2026-06-22 B1.8 — case-insensitive email lookup
+    )  # Audit 2026-06-22 B1.8 — case-insensitive email lookup
     if existing_member:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -547,7 +666,7 @@ async def send_invite(
     # Create invitation (generates token)
     try:
         plain_token, invitation = await create_invitation(
-            org_id=org_id,
+            org_id=eden_org_id,
             email=email,
             role=role,
             invited_by=user["user_id"],
@@ -572,7 +691,7 @@ async def send_invite(
     # Audit log
     await log_audit_event(
         client=client,
-        org_id=org_id,
+        org_id=eden_org_id,
         user_id=user["user_id"],
         action="member.invited",
         target_type="user",
@@ -595,11 +714,11 @@ async def send_invite(
 async def list_invitations(
     org_id: str,
     user: dict = Depends(get_current_user),
-        _check_members_invite: dict = Depends(require_org_permission_dep('members:invite')),
+    org: dict = Depends(require_org_permission_dep("members:invite")),
 ):
     """List all pending invitations for an organization."""
-
-    invitations = await get_pending_invitations(org_id)
+    _ = org_id, user
+    invitations = await get_pending_invitations(org["org_id"])
     return invitations
 
 
@@ -617,6 +736,10 @@ async def accept_org_invitation(
     re-queries the invite, validates status + expiry, and inserts
     the row idempotently.
     """
+    await _assert_invitation_for_caller(
+        org_id=org_id, invitation_id=invitation_id, user=user
+    )
+
     try:
         result = await accept_invitation(invitation_id, user["user_id"])
     except ValueError as e:
@@ -654,8 +777,14 @@ async def decline_org_invitation(
     invitation_id: str,
     user: dict = Depends(get_current_user),
 ):
-    """Decline an organization invitation."""
-    await require_org_member(org_id)
+    """Decline an organization invitation.
+
+    Mirror accept: invitees are not members yet, so do NOT
+    ``require_org_member``. Verify path org + invitee email instead.
+    """
+    await _assert_invitation_for_caller(
+        org_id=org_id, invitation_id=invitation_id, user=user
+    )
 
     try:
         await decline_invitation(invitation_id, user["user_id"])
@@ -685,14 +814,18 @@ async def remove_member(
     org_id: str,
     user_id: str,
     user: dict = Depends(get_current_user),
-        _check_members_remove: dict = Depends(require_org_permission_dep('members:remove')),
+    org: dict = Depends(require_org_permission_dep("members:remove")),
 ):
     """Remove a member from the organization."""
+    eden_org_id = org["org_id"]
+    _ = org_id
 
     client = await get_postgres_client()
 
     # Can't remove owner
-    org_data = await client.fetchrow("SELECT owner_id FROM organizations WHERE id = $1", org_id)
+    org_data = await client.fetchrow(
+        "SELECT owner_id FROM organizations WHERE id = $1", eden_org_id
+    )
     if org_data and str(org_data["owner_id"]) == user_id:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -702,7 +835,8 @@ async def remove_member(
     # Can't remove self if not admin
     om = await client.fetchrow(
         "SELECT role FROM org_members WHERE user_id = $1 AND org_id = $2",
-        user["user_id"], org_id,
+        user["user_id"],
+        eden_org_id,
     )
     if user_id == user["user_id"] and (not om or om["role"] != "owner"):
         raise HTTPException(
@@ -712,19 +846,18 @@ async def remove_member(
 
     await client.execute(
         "DELETE FROM org_members WHERE org_id = $1 AND user_id = $2",
-        org_id,
+        eden_org_id,
         user_id,
     )
 
     # Best-effort Clerk membership delete so the switcher stays in sync.
     try:
         from eden.api.utils.clerk_client import (
-            ClerkAPIError,
             delete_membership,
             resolve_clerk_org_id,
         )
 
-        clerk_org_id = await resolve_clerk_org_id(client, org_id)
+        clerk_org_id = await resolve_clerk_org_id(client, eden_org_id)
         member_row = await client.fetchrow(
             "SELECT clerk_id FROM users WHERE id = $1",
             user_id,
@@ -739,7 +872,7 @@ async def remove_member(
     except Exception as exc:  # noqa: BLE001
         logger.warning(
             "Clerk membership delete failed org=%s user=%s: %s",
-            org_id,
+            eden_org_id,
             user_id,
             redact_all(str(exc)),
         )
@@ -747,7 +880,7 @@ async def remove_member(
     # Audit log
     await log_audit_event(
         client=client,
-        org_id=org_id,
+        org_id=eden_org_id,
         user_id=user["user_id"],
         action="member.removed",
         target_type="user",
@@ -764,11 +897,15 @@ async def update_member_role(
     user_id: str,
     body: UpdateMemberRoleRequest,
     user: dict = Depends(get_current_user),
-    _check_members_invite: dict = Depends(require_org_permission_dep("members:invite")),
+    org: dict = Depends(require_org_permission_dep("members:invite")),
 ):
     """Update a member's role (admin/member/viewer). Owner cannot be demoted here."""
+    eden_org_id = org["org_id"]
+    _ = org_id
     client = await get_postgres_client()
-    org_data = await client.fetchrow("SELECT owner_id FROM organizations WHERE id = $1", org_id)
+    org_data = await client.fetchrow(
+        "SELECT owner_id FROM organizations WHERE id = $1", eden_org_id
+    )
     if org_data and str(org_data["owner_id"]) == user_id:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -781,7 +918,7 @@ async def update_member_role(
         WHERE org_id = $1 AND user_id = $2
         RETURNING user_id
         """,
-        org_id,
+        eden_org_id,
         user_id,
         body.role,
     )
@@ -794,7 +931,7 @@ async def update_member_role(
             update_membership,
         )
 
-        clerk_org_id = await resolve_clerk_org_id(client, org_id)
+        clerk_org_id = await resolve_clerk_org_id(client, eden_org_id)
         member_row = await client.fetchrow(
             "SELECT clerk_id FROM users WHERE id = $1",
             user_id,
@@ -809,14 +946,14 @@ async def update_member_role(
     except Exception as exc:  # noqa: BLE001
         logger.warning(
             "Clerk role sync failed org=%s user=%s: %s",
-            org_id,
+            eden_org_id,
             user_id,
             redact_all(str(exc)),
         )
 
     await log_audit_event(
         client=client,
-        org_id=org_id,
+        org_id=eden_org_id,
         user_id=user["user_id"],
         action="member.role_updated",
         target_type="user",
@@ -832,8 +969,15 @@ async def list_org_members(
     user: dict = Depends(get_current_user),
     x_org_id: str | None = Header(None, alias="X-Org-Id"),
     payload: dict | None = Depends(_try_resolve_token_payload),
+    limit: int = Query(default=500, ge=1, le=2000),
 ):
-    """List all members of an organization."""
+    """List members of an organization (bounded).
+
+    ``limit`` caps the result set so a large tenant cannot dump an
+    unbounded JOIN of ``org_members`` × ``users`` on every settings
+    load. Default 500 covers typical orgs; raise via query param up
+    to 2000 when an admin UI needs a fuller roster.
+    """
     eden_org_id = await resolve_eden_org_id(org_id or x_org_id)
     if not eden_org_id:
         raise HTTPException(
@@ -856,8 +1000,9 @@ async def list_org_members(
         JOIN users u ON u.id = om.user_id
         WHERE om.org_id = $1
         ORDER BY om.joined_at ASC
+        LIMIT $2
     """
-    rows = await client.fetch(query, eden_org_id)
+    rows = await client.fetch(query, eden_org_id, limit)
 
     return [
         {
@@ -880,32 +1025,34 @@ async def update_org_settings(
     org_id: str,
     settings: dict,
     user: dict = Depends(get_current_user),
-        _check_settings_edit: dict = Depends(require_org_permission_dep('settings:edit')),
+    org: dict = Depends(require_org_permission_dep("settings:edit")),
 ):
     """Update organization settings (admin only)."""
+    eden_org_id = org["org_id"]
+    _ = org_id
 
     client = await get_postgres_client()
 
     # Get old settings for audit
     old_settings = await client.fetchval(
         "SELECT settings FROM organizations WHERE id = $1",
-        org_id,
+        eden_org_id,
     )
 
     await client.execute(
         "UPDATE organizations SET settings = $1 WHERE id = $2",
         settings,
-        org_id,
+        eden_org_id,
     )
 
     # Audit log
     await log_audit_event(
         client=client,
-        org_id=org_id,
+        org_id=eden_org_id,
         user_id=user["user_id"],
         action="settings.updated",
         target_type="settings",
-        target_id=org_id,
+        target_id=eden_org_id,
         metadata={"old_settings": old_settings or {}, "new_settings": settings},
     )
 
@@ -913,24 +1060,28 @@ async def update_org_settings(
 
 
 @router.post("/{org_id}/archive", response_model=dict)
-async def archive_org(org_id: str, user: dict = Depends(get_current_user),
-        _check_settings_edit: dict = Depends(require_org_permission_dep('settings:edit')),
+async def archive_org(
+    org_id: str,
+    user: dict = Depends(get_current_user),
+    org: dict = Depends(require_org_permission_dep("settings:edit")),
 ):
     """Archive an organization (soft-delete). Admin or owner only."""
+    eden_org_id = org["org_id"]
+    _ = org_id
 
     client = await get_postgres_client()
 
     # Check if already archived
-    org = await client.fetchrow(
+    org_row = await client.fetchrow(
         "SELECT archived_at FROM organizations WHERE id = $1",
-        org_id,
+        eden_org_id,
     )
-    if not org:
+    if not org_row:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Organization not found",
         )
-    if org.get("archived_at"):
+    if org_row.get("archived_at"):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Organization is already archived",
@@ -938,38 +1089,48 @@ async def archive_org(org_id: str, user: dict = Depends(get_current_user),
 
     await client.execute(
         "UPDATE organizations SET archived_at = NOW() WHERE id = $1",
-        org_id,
+        eden_org_id,
     )
 
     # Audit log
     await log_audit_event(
         client=client,
-        org_id=org_id,
+        org_id=eden_org_id,
         user_id=user["user_id"],
         action="org.archived",
         target_type="organization",
-        target_id=org_id,
+        target_id=eden_org_id,
         metadata={},
     )
 
-    return {"message": "Organization archived", "org_id": org_id}
+    return {"message": "Organization archived", "org_id": eden_org_id}
 
 
 @router.delete("/{org_id}", response_model=dict)
-async def delete_org(org_id: str, user: dict = Depends(get_current_user)):
+async def delete_org(
+    org_id: str,
+    user: dict = Depends(get_current_user),
+    payload: dict | None = Depends(_try_resolve_token_payload),
+):
     """Permanently delete an organization. Owner only. Warning: cascades to all org data."""
-    await require_org_owner(org_id)
+    # Pass path org_id + resolved JWT — bare ``await require_org_owner(org_id)``
+    # leaves ``payload`` as an unresolved Depends sentinel → always 403.
+    # Use Eden UUID from ownership gate — raw Clerk path ids are not
+    # organizations.id / skills.org_id values.
+    org = await require_org_owner(org_id, payload)
+    eden_org_id = org["org_id"]
+    _ = org_id, user
 
     client = await get_postgres_client()
 
     # Check for existing data (jobs feature removed June 2026)
     skill_count = await client.fetchval(
         "SELECT COUNT(*) FROM skills WHERE org_id = $1",
-        org_id,
+        eden_org_id,
     )
     ref_count = await client.fetchval(
         "SELECT COUNT(*) FROM code_references WHERE org_id = $1",
-        org_id,
+        eden_org_id,
     )
 
     total_data = (skill_count or 0) + (ref_count or 0)
@@ -980,11 +1141,11 @@ async def delete_org(org_id: str, user: dict = Depends(get_current_user)):
         )
 
     # Verify no archived_at (must be actively deleted)
-    org = await client.fetchrow(
+    org_row = await client.fetchrow(
         "SELECT id FROM organizations WHERE id = $1 AND archived_at IS NOT NULL",
-        org_id,
+        eden_org_id,
     )
-    if not org:
+    if not org_row:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Organization must be archived before permanent deletion. Archive first, then delete.",
@@ -993,10 +1154,10 @@ async def delete_org(org_id: str, user: dict = Depends(get_current_user)):
     # Delete org (cascade should handle org_members and other CASCADE references)
     await client.execute(
         "DELETE FROM organizations WHERE id = $1",
-        org_id,
+        eden_org_id,
     )
 
-    return {"message": "Organization permanently deleted", "org_id": org_id}
+    return {"message": "Organization permanently deleted", "org_id": eden_org_id}
 
 
 @router.post("/{org_id}/transfer-ownership", response_model=dict)
@@ -1004,12 +1165,14 @@ async def transfer_ownership(
     org_id: str,
     target_user_id: str,
     user: dict = Depends(get_current_user),
-        _check_org_transfer: dict = Depends(require_org_permission_dep('org:transfer')),
+    org: dict = Depends(require_org_permission_dep("org:transfer")),
 ):
     """Transfer organization ownership to another member.
 
     The current owner becomes an admin after the transfer.
     """
+    eden_org_id = org["org_id"]
+    _ = org_id
 
     client = await get_postgres_client()
     current_user_id = user["user_id"]
@@ -1017,7 +1180,7 @@ async def transfer_ownership(
     # Verify target user is a member
     target_member = await client.fetchrow(
         "SELECT role FROM org_members WHERE org_id = $1 AND user_id = $2",
-        org_id,
+        eden_org_id,
         target_user_id,
     )
     if not target_member:
@@ -1041,7 +1204,7 @@ async def transfer_ownership(
         # Verify target is still a member (race-safe via WHERE clause).
         result = await client.execute(
             "UPDATE org_members SET role = 'owner' WHERE org_id = $1 AND user_id = $2",
-            org_id,
+            eden_org_id,
             target_user_id,
         )
         if result.endswith(" 0"):
@@ -1052,20 +1215,20 @@ async def transfer_ownership(
         # Demote old owner
         await client.execute(
             "UPDATE org_members SET role = 'admin' WHERE org_id = $1 AND user_id = $2",
-            org_id,
+            eden_org_id,
             current_user_id,
         )
         # Finally update organizations.owner_id
         await client.execute(
             "UPDATE organizations SET owner_id = $1 WHERE id = $2",
             target_user_id,
-            org_id,
+            eden_org_id,
         )
 
     # Audit log
     await log_audit_event(
         client=client,
-        org_id=org_id,
+        org_id=eden_org_id,
         user_id=current_user_id,
         action="ownership.transferred",
         target_type="user",
@@ -1084,19 +1247,22 @@ async def transfer_ownership(
 async def get_scim_config(
     org_id: str,
     user: dict = Depends(get_current_user),
+    payload: dict | None = Depends(_try_resolve_token_payload),
 ):
     """Get SCIM configuration for the organization (admin only).
 
     Returns config including whether SCIM is enabled, last sync, etc.
     Does NOT return the raw token (it's hashed).
     """
-    await require_org_admin(org_id)
+    org = await require_org_admin(org_id, payload)
+    eden_org_id = org["org_id"]
+    _ = user
 
     client = await get_postgres_client()
 
     row = await client.fetchrow(
         "SELECT scim_enabled, last_sync_at, provisioned_user_count, created_at, updated_at FROM org_scim_config WHERE org_id = $1",
-        org_id,
+        eden_org_id,
     )
 
     if not row:
@@ -1120,19 +1286,21 @@ async def configure_scim(
     org_id: str,
     enabled: bool,
     user: dict = Depends(get_current_user),
+    payload: dict | None = Depends(_try_resolve_token_payload),
 ):
     """Enable or disable SCIM for the organization (admin only).
 
     When enabling, generates a new bearer token.
     """
-    await require_org_admin(org_id)
+    org = await require_org_admin(org_id, payload)
+    eden_org_id = org["org_id"]
 
     client = await get_postgres_client()
 
     # Check if config exists
     existing = await client.fetchrow(
         "SELECT id, scim_token_hash FROM org_scim_config WHERE org_id = $1",
-        org_id,
+        eden_org_id,
     )
 
     if enabled:
@@ -1148,7 +1316,7 @@ async def configure_scim(
                 WHERE org_id = $2
                 """,
                 token_hash,
-                org_id,
+                eden_org_id,
             )
         else:
             await client.execute(
@@ -1156,18 +1324,18 @@ async def configure_scim(
                 INSERT INTO org_scim_config (org_id, scim_enabled, scim_token_hash)
                 VALUES ($1, TRUE, $2)
                 """,
-                org_id,
+                eden_org_id,
                 token_hash,
             )
 
         # Audit log
         await log_audit_event(
             client=client,
-            org_id=org_id,
+            org_id=eden_org_id,
             user_id=user["user_id"],
             action="scim.enabled",
             target_type="scim_config",
-            target_id=org_id,
+            target_id=eden_org_id,
             metadata={},
         )
 
@@ -1185,7 +1353,7 @@ async def configure_scim(
                 SET scim_enabled = FALSE, scim_token_hash = NULL, updated_at = NOW()
                 WHERE org_id = $1
                 """,
-                org_id,
+                eden_org_id,
             )
         else:
             await client.execute(
@@ -1193,17 +1361,17 @@ async def configure_scim(
                 INSERT INTO org_scim_config (org_id, scim_enabled)
                 VALUES ($1, FALSE)
                 """,
-                org_id,
+                eden_org_id,
             )
 
         # Audit log
         await log_audit_event(
             client=client,
-            org_id=org_id,
+            org_id=eden_org_id,
             user_id=user["user_id"],
             action="scim.disabled",
             target_type="scim_config",
-            target_id=org_id,
+            target_id=eden_org_id,
             metadata={},
         )
 
@@ -1217,12 +1385,14 @@ async def configure_scim(
 async def rotate_scim_token(
     org_id: str,
     user: dict = Depends(get_current_user),
+    payload: dict | None = Depends(_try_resolve_token_payload),
 ):
     """Rotate the SCIM bearer token (admin only).
 
     Invalidates the old token and generates a new one.
     """
-    await require_org_admin(org_id)
+    org = await require_org_admin(org_id, payload)
+    eden_org_id = org["org_id"]
 
     client = await get_postgres_client()
 
@@ -1233,7 +1403,7 @@ async def rotate_scim_token(
     # Update or create config
     existing = await client.fetchrow(
         "SELECT id FROM org_scim_config WHERE org_id = $1",
-        org_id,
+        eden_org_id,
     )
 
     if existing:
@@ -1244,7 +1414,7 @@ async def rotate_scim_token(
             WHERE org_id = $2
             """,
             token_hash,
-            org_id,
+            eden_org_id,
         )
     else:
         await client.execute(
@@ -1252,18 +1422,18 @@ async def rotate_scim_token(
             INSERT INTO org_scim_config (org_id, scim_enabled, scim_token_hash)
             VALUES ($1, TRUE, $2)
             """,
-            org_id,
+            eden_org_id,
             token_hash,
         )
 
     # Audit log
     await log_audit_event(
         client=client,
-        org_id=org_id,
+        org_id=eden_org_id,
         user_id=user["user_id"],
         action="scim.token_rotated",
         target_type="scim_config",
-        target_id=org_id,
+        target_id=eden_org_id,
         metadata={},
     )
 
@@ -1293,9 +1463,11 @@ class AddAllowedDomainRequest(BaseModel):
 async def list_allowed_domains(
     org_id: str,
     user: dict = Depends(get_current_user),
+    payload: dict | None = Depends(_try_resolve_token_payload),
 ):
     """List all allowed email domains for an organization."""
-    await require_org_admin(org_id)
+    org = await require_org_admin(org_id, payload)
+    eden_org_id = org["org_id"]
 
     client = await get_postgres_client()
     rows = await client.fetch(
@@ -1305,7 +1477,7 @@ async def list_allowed_domains(
         WHERE org_id = $1
         ORDER BY domain ASC
         """,
-        org_id,
+        eden_org_id,
     )
 
     return [
@@ -1324,9 +1496,11 @@ async def add_allowed_domain(
     org_id: str,
     request: AddAllowedDomainRequest,
     user: dict = Depends(get_current_user),
+    payload: dict | None = Depends(_try_resolve_token_payload),
 ):
     """Add an allowed email domain to an organization."""
-    await require_org_admin(org_id)
+    org = await require_org_admin(org_id, payload)
+    eden_org_id = org["org_id"]
 
     domain = request.domain.lower().strip()
     if not domain:
@@ -1343,7 +1517,12 @@ async def add_allowed_domain(
         )
 
     client = await get_postgres_client()
-    user_id = user["user_id"]
+    user_id = await eden_user_id_from_auth(user)
+    if not user_id:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User not found",
+        )
 
     try:
         row = await client.fetchrow(
@@ -1352,25 +1531,42 @@ async def add_allowed_domain(
             VALUES ($1, $2, $3)
             RETURNING id, created_at
             """,
-            org_id,
+            eden_org_id,
             domain,
             user_id,
         )
     except Exception as e:
-        if "unique constraint" in str(e).lower() or "duplicate" in str(e).lower():
+        msg = str(e).lower()
+        if "unique" in msg or "duplicate" in msg:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail="Domain is already in the allowed list",
             ) from e
+        if "invalid input syntax for type uuid" in msg:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid organization id",
+            ) from e
+        if "foreign key" in msg:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid organization or user for domain allowlist",
+            ) from e
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Failed to add domain",
         ) from e
+
+    if row is None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Domain is already in the allowed list",
+        )
 
     # Audit log
     await log_audit_event(
         client=client,
-        org_id=org_id,
+        org_id=eden_org_id,
         user_id=user_id,
         action="domain.added",
         target_type="domain",
@@ -1391,16 +1587,19 @@ async def remove_allowed_domain(
     org_id: str,
     domain_id: str,
     user: dict = Depends(get_current_user),
+    payload: dict | None = Depends(_try_resolve_token_payload),
 ):
     """Remove an allowed email domain from an organization."""
-    await require_org_admin(org_id)
+    org = await require_org_admin(org_id, payload)
+    eden_org_id = org["org_id"]
+    user_id = await eden_user_id_from_auth(user)
 
     client = await get_postgres_client()
 
     result = await client.execute(
         "DELETE FROM org_allowed_domains WHERE id = $1 AND org_id = $2",
         domain_id,
-        org_id,
+        eden_org_id,
     )
     if result == "DELETE 0":
         raise HTTPException(
@@ -1411,8 +1610,8 @@ async def remove_allowed_domain(
     # Audit log
     await log_audit_event(
         client=client,
-        org_id=org_id,
-        user_id=user["user_id"],
+        org_id=eden_org_id,
+        user_id=user_id or user.get("user_id"),
         action="domain.removed",
         target_type="domain",
         target_id=domain_id,
@@ -1426,14 +1625,20 @@ async def remove_allowed_domain(
 async def get_domain_restriction_settings(
     org_id: str,
     user: dict = Depends(get_current_user),
+    payload: dict | None = Depends(_try_resolve_token_payload),
 ):
     """Get domain restriction settings for an organization."""
-    await require_org_member(org_id, authorization=None)
+    # ``authorization=None`` was a TypeError → 500; pass resolved JWT.
+    # Use Eden UUID from membership gate — raw Clerk path ids are not
+    # organizations.id values (same rewrite as allowed-domains).
+    org = await require_org_member(org_id, payload)
+    eden_org_id = org["org_id"]
+    _ = user
 
     client = await get_postgres_client()
     row = await client.fetchrow(
         "SELECT domain_restriction_enforced FROM organizations WHERE id = $1",
-        org_id,
+        eden_org_id,
     )
     if not row:
         raise HTTPException(
@@ -1451,26 +1656,28 @@ async def update_domain_restriction_settings(
     org_id: str,
     request: DomainRestrictionSettings,
     user: dict = Depends(get_current_user),
+    payload: dict | None = Depends(_try_resolve_token_payload),
 ):
     """Update domain restriction enforcement for an organization."""
-    await require_org_admin(org_id)
+    org = await require_org_admin(org_id, payload)
+    eden_org_id = org["org_id"]
 
     client = await get_postgres_client()
 
     await client.execute(
         "UPDATE organizations SET domain_restriction_enforced = $1 WHERE id = $2",
         request.domain_restriction_enforced,
-        org_id,
+        eden_org_id,
     )
 
     # Audit log
     await log_audit_event(
         client=client,
-        org_id=org_id,
+        org_id=eden_org_id,
         user_id=user["user_id"],
         action="domain_restriction.updated",
         target_type="settings",
-        target_id=org_id,
+        target_id=eden_org_id,
         metadata={"domain_restriction_enforced": request.domain_restriction_enforced},
     )
 
@@ -1493,13 +1700,15 @@ async def enforce_org_2fa(
     org_id: str,
     request: EnforceTwoFARequest,
     user: dict = Depends(get_current_user),
+    payload: dict | None = Depends(_try_resolve_token_payload),
 ):
     """Enable or disable 2FA enforcement for the organization.
 
     Only org admins/owners can toggle this setting.
     When enabled, all org members must have 2FA enabled to access the org.
     """
-    await require_org_admin(org_id)
+    org = await require_org_admin(org_id, payload)
+    eden_org_id = org["org_id"]
 
     client = await get_postgres_client()
 
@@ -1507,17 +1716,17 @@ async def enforce_org_2fa(
     await client.execute(
         "UPDATE organizations SET two_factor_enforced = $1 WHERE id = $2",
         request.enforce,
-        org_id,
+        eden_org_id,
     )
 
     # Audit log
     await log_audit_event(
         client=client,
-        org_id=org_id,
+        org_id=eden_org_id,
         user_id=user["user_id"],
         action="2fa_enforcement.updated",
         target_type="settings",
-        target_id=org_id,
+        target_id=eden_org_id,
         metadata={"two_factor_enforced": request.enforce},
     )
 
@@ -1532,14 +1741,16 @@ async def enforce_org_2fa(
 async def get_2fa_enforcement_status(
     org_id: str,
     user: dict = Depends(get_current_user),
+    payload: dict | None = Depends(_try_resolve_token_payload),
 ):
     """Get 2FA enforcement status for an organization."""
-    await require_org_admin(org_id)
+    org = await require_org_admin(org_id, payload)
+    eden_org_id = org["org_id"]
 
     client = await get_postgres_client()
     row = await client.fetchrow(
         "SELECT two_factor_enforced FROM organizations WHERE id = $1",
-        org_id,
+        eden_org_id,
     )
 
     if not row:
@@ -1557,12 +1768,14 @@ async def get_2fa_enforcement_status(
 async def get_org_members_2fa_status(
     org_id: str,
     user: dict = Depends(get_current_user),
+    payload: dict | None = Depends(_try_resolve_token_payload),
 ):
     """Get 2FA status for all members in an organization.
 
     Only org admins/owners can view this.
     """
-    await require_org_admin(org_id)
+    org = await require_org_admin(org_id, payload)
+    eden_org_id = org["org_id"]
 
     client = await get_postgres_client()
 
@@ -1573,7 +1786,7 @@ async def get_org_members_2fa_status(
         WHERE om.org_id = $1
         ORDER BY om.joined_at DESC
     """
-    rows = await client.fetch(query, org_id)
+    rows = await client.fetch(query, eden_org_id)
 
     return [
         {

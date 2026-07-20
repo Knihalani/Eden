@@ -58,7 +58,7 @@ export const DEFAULT_SIDEBAR: SidebarGroup[] = [
       {
         id: "dashboard",
         href: "/dashboard",
-        label: "Dashboard",
+        label: "Home",
         icon: LayoutDashboard,
         description: "One-glance view of agents, traces, costs, and alerts.",
       },
@@ -78,7 +78,7 @@ export const DEFAULT_SIDEBAR: SidebarGroup[] = [
       {
         id: "issues",
         href: "/issues",
-        label: "Issues",
+        label: "Agent Issues",
         icon: ShieldAlert,
         description: "Grouped failures and incident clusters.",
       },

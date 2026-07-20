@@ -20,7 +20,6 @@
  */
 
 import { useEffect, useMemo, useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
 import {
   Brain,
   ChevronDown,
@@ -72,20 +71,20 @@ interface CandidateOption {
 
 const CANDIDATES: CandidateOption[] = [
   // OpenAI
-  { provider: "openai",     modelId: "gpt-5",            label: "GPT-5",         tier: "frontier", color: "bg-emerald-500/10 text-emerald-400 border-emerald-500/30" },
-  { provider: "openai",     modelId: "gpt-5-mini",       label: "GPT-5 mini",    tier: "mid",      color: "bg-emerald-500/10 text-emerald-400 border-emerald-500/30" },
-  { provider: "openai",     modelId: "gpt-5-nano",       label: "GPT-5 nano",    tier: "budget",   color: "bg-emerald-500/10 text-emerald-400 border-emerald-500/30" },
-  { provider: "openai",     modelId: "gpt-4o",           label: "GPT-4o",        tier: "frontier", color: "bg-emerald-500/10 text-emerald-400 border-emerald-500/30" },
-  { provider: "openai",     modelId: "gpt-4o-mini",      label: "GPT-4o mini",   tier: "mid",      color: "bg-emerald-500/10 text-emerald-400 border-emerald-500/30" },
-  { provider: "openai",     modelId: "o3",               label: "o3 (reasoning)", tier: "frontier", color: "bg-emerald-500/10 text-emerald-400 border-emerald-500/30" },
-  { provider: "openai",     modelId: "o3-mini",          label: "o3-mini",       tier: "mid",      color: "bg-emerald-500/10 text-emerald-400 border-emerald-500/30" },
+  { provider: "openai",     modelId: "gpt-5",            label: "GPT-5",         tier: "frontier", color: "bg-[var(--success-bg)] text-[var(--success)] border-[var(--success)]/30" },
+  { provider: "openai",     modelId: "gpt-5-mini",       label: "GPT-5 mini",    tier: "mid",      color: "bg-[var(--success-bg)] text-[var(--success)] border-[var(--success)]/30" },
+  { provider: "openai",     modelId: "gpt-5-nano",       label: "GPT-5 nano",    tier: "budget",   color: "bg-[var(--success-bg)] text-[var(--success)] border-[var(--success)]/30" },
+  { provider: "openai",     modelId: "gpt-4o",           label: "GPT-4o",        tier: "frontier", color: "bg-[var(--success-bg)] text-[var(--success)] border-[var(--success)]/30" },
+  { provider: "openai",     modelId: "gpt-4o-mini",      label: "GPT-4o mini",   tier: "mid",      color: "bg-[var(--success-bg)] text-[var(--success)] border-[var(--success)]/30" },
+  { provider: "openai",     modelId: "o3",               label: "o3 (reasoning)", tier: "frontier", color: "bg-[var(--success-bg)] text-[var(--success)] border-[var(--success)]/30" },
+  { provider: "openai",     modelId: "o3-mini",          label: "o3-mini",       tier: "mid",      color: "bg-[var(--success-bg)] text-[var(--success)] border-[var(--success)]/30" },
   // Anthropic
-  { provider: "anthropic",  modelId: "claude-opus-4-5",  label: "Claude Opus 4.5", tier: "frontier", color: "bg-orange-500/10 text-orange-300 border-orange-500/30" },
-  { provider: "anthropic",  modelId: "claude-sonnet-4-6", label: "Claude Sonnet 4.6", tier: "frontier", color: "bg-orange-500/10 text-orange-300 border-orange-500/30" },
-  { provider: "anthropic",  modelId: "claude-haiku-4-5", label: "Claude Haiku 4.5", tier: "mid", color: "bg-orange-500/10 text-orange-300 border-orange-500/30" },
+  { provider: "anthropic",  modelId: "claude-opus-4-5",  label: "Claude Opus 4.5", tier: "frontier", color: "bg-[var(--warning-bg)] text-[var(--warning)] border-[var(--warning)]/30" },
+  { provider: "anthropic",  modelId: "claude-sonnet-4-6", label: "Claude Sonnet 4.6", tier: "frontier", color: "bg-[var(--warning-bg)] text-[var(--warning)] border-[var(--warning)]/30" },
+  { provider: "anthropic",  modelId: "claude-haiku-4-5", label: "Claude Haiku 4.5", tier: "mid", color: "bg-[var(--warning-bg)] text-[var(--warning)] border-[var(--warning)]/30" },
   // Google
-  { provider: "openai",     modelId: "gemini-3-pro",     label: "Gemini 3 Pro",  tier: "frontier", color: "bg-sky-500/10 text-sky-300 border-sky-500/30" },
-  { provider: "openai",     modelId: "gemini-2.5-flash", label: "Gemini 2.5 Flash", tier: "mid", color: "bg-sky-500/10 text-sky-300 border-sky-500/30" },
+  { provider: "google",     modelId: "gemini-3-pro",     label: "Gemini 3 Pro",  tier: "frontier", color: "bg-sky-500/10 text-sky-300 border-sky-500/30" },
+  { provider: "google",     modelId: "gemini-2.5-flash", label: "Gemini 2.5 Flash", tier: "mid", color: "bg-sky-500/10 text-sky-300 border-sky-500/30" },
   // Local / self-hosted
   { provider: "ollama",     modelId: "llama3.1:8b",      label: "Llama 3.1 8B (local)", tier: "local", color: "bg-zinc-500/10 text-zinc-300 border-zinc-500/30" },
   { provider: "vllm",       modelId: "qwen2.5:32b",      label: "Qwen 2.5 32B (local)", tier: "local", color: "bg-zinc-500/10 text-zinc-300 border-zinc-500/30" },
@@ -95,7 +94,7 @@ const DEFAULT_CANDIDATE_IDS = [
   "openai::gpt-4o",
   "openai::gpt-4o-mini",
   "anthropic::claude-sonnet-4-6",
-  "openai::gemini-2.5-flash",
+  "google::gemini-2.5-flash",
 ];
 
 function optKey(c: CandidateOption): string {
@@ -158,9 +157,9 @@ function SpecRow({ label, current, candidate, format, better }: {
   const delta = candidate - current;
   const candIsBetter = better === "higher" ? delta > 0 : delta < 0;
   const arrowBetter = candIsBetter ? (
-    <TrendingDown className="h-3 w-3 text-emerald-400 rotate-180" />
+    <TrendingDown className="h-3 w-3 text-[var(--success)] rotate-180" />
   ) : delta === 0 ? null : (
-    better === "higher" ? <TrendingDown className="h-3 w-3 text-rose-400" /> : <TrendingUp className="h-3 w-3 text-rose-400" />
+    better === "higher" ? <TrendingDown className="h-3 w-3 text-[var(--error)]" /> : <TrendingUp className="h-3 w-3 text-[var(--error)]" />
   );
   return (
     <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3 py-1.5 text-sm">
@@ -172,14 +171,14 @@ function SpecRow({ label, current, candidate, format, better }: {
         <div className="flex h-3 items-center gap-1">
           <span className={cn(
             "tabular-nums text-xs font-semibold",
-            candIsBetter ? "text-emerald-400" : delta === 0 ? "text-[var(--text-secondary)]" : "text-rose-400",
+            candIsBetter ? "text-[var(--success)]" : delta === 0 ? "text-[var(--text-secondary)]" : "text-[var(--error)]",
           )}>
             {delta === 0 ? "—" : `${delta > 0 ? "+" : ""}${format(delta)}`}
           </span>
           {arrowBetter}
         </div>
       </div>
-      <span className={cn("tabular-nums", candIsBetter ? "font-semibold text-emerald-400" : "text-[var(--text-primary)]")}>
+      <span className={cn("tabular-nums", candIsBetter ? "font-semibold text-[var(--success)]" : "text-[var(--text-primary)]")}>
         {format(candidate)}
       </span>
     </div>
@@ -470,9 +469,9 @@ function CompareView({ comparison, loading, error }: {
           <span className="text-sm text-[var(--text-muted)]">Blended cost ratio</span>
           <span className={cn(
             "tabular-nums text-base font-semibold",
-            ratioIsFree ? "text-emerald-400" :
-              comparison.cost_ratio < 1 ? "text-emerald-400" :
-                comparison.cost_ratio > 1.2 ? "text-rose-400" :
+            ratioIsFree ? "text-[var(--success)]" :
+              comparison.cost_ratio < 1 ? "text-[var(--success)]" :
+                comparison.cost_ratio > 1.2 ? "text-[var(--error)]" :
                   "text-[var(--text-primary)]",
           )}>
             {ratioIsFree ? "free" : `${comparison.cost_ratio.toFixed(2)}×`}
@@ -665,13 +664,9 @@ function CandidatePicker({ selected, onChange }: {
         </div>
         <ChevronDown className={cn("h-4 w-4 shrink-0 text-[var(--text-muted)] transition-transform", open && "rotate-180")} />
       </button>
-      <AnimatePresence>
+      <>
         {open && (
-          <motion.div
-            initial={{ opacity: 0, y: -4 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -4 }}
-            transition={{ duration: 0.12 }}
+          <div
             className="absolute z-20 mt-1 w-full overflow-hidden rounded-md border border-[var(--border-default)] bg-[var(--bg-primary)] shadow-lg"
           >
             <div className="border-b border-[var(--border-default)] p-2">
@@ -719,9 +714,9 @@ function CandidatePicker({ selected, onChange }: {
                 );
               })}
             </ul>
-          </motion.div>
+          </div>
         )}
-      </AnimatePresence>
+      </>
     </div>
   );
 }
@@ -799,7 +794,7 @@ export default function ModelAdvisorPage() {
     return () => {
       cancelled = true;
     };
-  }, [currentOrg, mode, currentKey, candidateKeys.join("|"), windowDays]);
+  }, [currentOrg?.id, mode, currentKey, candidateKeys.join("|"), windowDays]);
 
   // Compare effect
   useEffect(() => {
@@ -839,7 +834,7 @@ export default function ModelAdvisorPage() {
     return () => {
       cancelled = true;
     };
-  }, [currentOrg, mode, currentKey, candidateKeys.join("|")]);
+  }, [currentOrg?.id, mode, currentKey, candidateKeys.join("|")]);
 
   // Project effect (re-fires on scale change)
   useEffect(() => {
@@ -881,7 +876,7 @@ export default function ModelAdvisorPage() {
     return () => {
       cancelled = true;
     };
-  }, [currentOrg, mode, currentKey, candidateKeys.join("|"), scaleFactor, windowDays]);
+  }, [currentOrg?.id, mode, currentKey, candidateKeys.join("|"), scaleFactor, windowDays]);
 
   if (!currentOrg) {
     return <NoOrgState feature="Model advisor" />;

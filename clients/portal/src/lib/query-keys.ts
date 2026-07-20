@@ -36,15 +36,24 @@ export const queryKeys = {
       ["observability", "heatmap", orgId, metric, filters ?? {}] as const,
     spans: (orgId: string | null | undefined, filters?: Record<string, unknown>) =>
       ["observability", "spans", orgId, filters ?? {}] as const,
+    tokens: (orgId: string | null | undefined, traceId: string | null | undefined) =>
+      ["observability", "tokens", orgId, traceId] as const,
   },
   agents: {
     all: ["agents"] as const,
     list: (orgId: string | null | undefined, filters?: Record<string, unknown>) =>
       ["agents", "list", orgId, filters ?? {}] as const,
+    detail: (orgId: string | null | undefined, agentId: string | null | undefined) =>
+      ["agents", "detail", orgId, agentId] as const,
     sessions: (orgId: string | null | undefined, filters?: Record<string, unknown>) =>
       ["agents", "sessions", orgId, filters ?? {}] as const,
     session: (orgId: string | null | undefined, sessionId: string | null | undefined) =>
       ["agents", "session", orgId, sessionId] as const,
+    sessionTraces: (
+      orgId: string | null | undefined,
+      sessionId: string | null | undefined,
+      traceIdsKey?: string | null,
+    ) => ["agents", "sessionTraces", orgId, sessionId, traceIdsKey ?? null] as const,
   },
   alerts: {
     all: ["alerts"] as const,
@@ -55,16 +64,15 @@ export const queryKeys = {
     events: (orgId: string | null | undefined, filters?: Record<string, unknown>) =>
       ["alerts", "events", orgId, filters ?? {}] as const,
   },
+  signals: {
+    all: ["signals"] as const,
+    list: (orgId: string | null | undefined) => ["signals", "list", orgId] as const,
+  },
   cost: {
     all: ["cost"] as const,
     comparison: (orgId: string | null | undefined) => ["cost", "comparison", orgId] as const,
-    efficiency: (orgId: string | null | undefined, days?: number) =>
-      ["cost", "efficiency", orgId, days ?? null] as const,
-    roi: (orgId: string | null | undefined, days?: number) =>
-      ["cost", "roi", orgId, days ?? null] as const,
-    anomalies: (orgId: string | null | undefined, days?: number) =>
-      ["cost", "anomalies", orgId, days ?? null] as const,
-    forecast: (orgId: string | null | undefined) => ["cost", "forecast", orgId] as const,
+    kpi: (orgId: string | null | undefined, windowHours?: number) =>
+      ["cost", "kpi", orgId, windowHours ?? null] as const,
   },
   optimization: {
     all: ["optimization"] as const,
@@ -87,6 +95,8 @@ export const queryKeys = {
       ["issues", "stumbles", orgId, filters ?? {}] as const,
     experiments: (orgId: string | null | undefined, issueId: string | null | undefined) =>
       ["issues", "experiments", orgId, issueId] as const,
+    regressionCases: (orgId: string | null | undefined, issueId: string | null | undefined) =>
+      ["issues", "regressionCases", orgId, issueId] as const,
   },
   fleet: {
     all: ["fleet"] as const,
@@ -118,6 +128,9 @@ export const queryKeys = {
     all: ["improve"] as const,
     queue: (orgId: string | null | undefined, filters?: Record<string, unknown>) =>
       ["improve", "queue", orgId, filters ?? {}] as const,
+    /** Probe listPlans(limit=1) — detects improvement_agent_v1 503 without enabling the flag. */
+    featureGate: (orgId: string | null | undefined) =>
+      ["improve", "feature-gate", orgId] as const,
     plans: (orgId: string | null | undefined, filters?: Record<string, unknown>) =>
       ["improve", "plans", orgId, filters ?? {}] as const,
     plan: (orgId: string | null | undefined, planId: string | null | undefined) =>
@@ -141,8 +154,11 @@ export const queryKeys = {
   },
   tools: {
     all: ["tools"] as const,
-    attribution: (orgId: string | null | undefined, days?: number) =>
-      ["tools", "attribution", orgId, days ?? null] as const,
+    attribution: (
+      orgId: string | null | undefined,
+      toolId?: string | null,
+      window?: string | null,
+    ) => ["tools", "attribution", orgId, toolId ?? null, window ?? null] as const,
     taxonomy: (orgId: string | null | undefined) => ["tools", "taxonomy", orgId] as const,
   },
   prompts: {
@@ -167,6 +183,11 @@ export const queryKeys = {
     quality: (orgId: string | null | undefined, filters?: Record<string, unknown>) =>
       ["predict", "quality", orgId, filters ?? {}] as const,
     drift: (orgId: string | null | undefined) => ["predict", "drift", orgId] as const,
+    cost: (orgId: string | null | undefined, filters?: Record<string, unknown>) =>
+      ["predict", "cost", orgId, filters ?? {}] as const,
+    capacity: (orgId: string | null | undefined, filters?: Record<string, unknown>) =>
+      ["predict", "capacity", orgId, filters ?? {}] as const,
+    risk: (orgId: string | null | undefined) => ["predict", "risk", orgId] as const,
   },
   budget: {
     all: ["budget"] as const,
@@ -196,6 +217,111 @@ export const queryKeys = {
       ["prSuggestions", "list", orgId, filters ?? {}] as const,
     detail: (orgId: string | null | undefined, suggestionId: string | null | undefined) =>
       ["prSuggestions", "detail", orgId, suggestionId] as const,
+  },
+  auditTrail: {
+    all: ["auditTrail"] as const,
+    ledger: (orgId: string | null | undefined, filters?: Record<string, unknown>) =>
+      ["auditTrail", "ledger", orgId, filters ?? {}] as const,
+    fleetAgents: (orgId: string | null | undefined) =>
+      ["auditTrail", "fleetAgents", orgId] as const,
+  },
+  artifacts: {
+    all: ["artifacts"] as const,
+    list: (orgId: string | null | undefined) => ["artifacts", "list", orgId] as const,
+  },
+  studio: {
+    all: ["studio"] as const,
+    templates: (orgId: string | null | undefined) => ["studio", "templates", orgId] as const,
+  },
+  synthetic: {
+    all: ["synthetic"] as const,
+    runs: (orgId: string | null | undefined) => ["synthetic", "runs", orgId] as const,
+  },
+  eval: {
+    all: ["eval"] as const,
+    versions: (orgId: string | null | undefined) => ["eval", "versions", orgId] as const,
+  },
+  retrieval: {
+    all: ["retrieval"] as const,
+    gaps: (orgId: string | null | undefined) => ["retrieval", "gaps", orgId] as const,
+  },
+  gateway: {
+    all: ["gateway"] as const,
+    models: (orgId: string | null | undefined) => ["gateway", "models", orgId] as const,
+  },
+  exports: {
+    all: ["exports"] as const,
+    destinations: (orgId: string | null | undefined) => ["exports", "destinations", orgId] as const,
+    schedules: (orgId: string | null | undefined) => ["exports", "schedules", orgId] as const,
+  },
+  // P6b — remaining hand-rolled page keys
+  labeling: {
+    all: ["labeling"] as const,
+    items: (orgId: string | null | undefined) => ["labeling", "items", orgId] as const,
+    queues: (orgId: string | null | undefined) => ["labeling", "queues", orgId] as const,
+  },
+  topics: {
+    all: ["topics"] as const,
+    list: (orgId: string | null | undefined, facet?: string) =>
+      ["topics", "list", orgId, facet ?? null] as const,
+  },
+  piiPolicy: {
+    all: ["piiPolicy"] as const,
+    detail: (orgId: string | null | undefined) => ["piiPolicy", "detail", orgId] as const,
+  },
+  retentionPolicy: {
+    all: ["retentionPolicy"] as const,
+    detail: (orgId: string | null | undefined) => ["retentionPolicy", "detail", orgId] as const,
+  },
+  orgAnalytics: {
+    all: ["orgAnalytics"] as const,
+    detail: (orgId: string | null | undefined) => ["orgAnalytics", "detail", orgId] as const,
+  },
+  auditLog: {
+    all: ["auditLog"] as const,
+    list: (orgId: string | null | undefined, filters?: Record<string, unknown>) =>
+      ["auditLog", "list", orgId, filters ?? {}] as const,
+  },
+  scim: {
+    all: ["scim"] as const,
+    config: (orgId: string | null | undefined) => ["scim", "config", orgId] as const,
+  },
+  sso: {
+    all: ["sso"] as const,
+    providers: (orgId: string | null | undefined) => ["sso", "providers", orgId] as const,
+  },
+  references: {
+    all: ["references"] as const,
+    list: (orgId: string | null | undefined, filters?: Record<string, unknown>) =>
+      ["references", "list", orgId, filters ?? {}] as const,
+  },
+  roles: {
+    all: ["roles"] as const,
+    list: (orgId: string | null | undefined) => ["roles", "list", orgId] as const,
+  },
+  finopsKills: {
+    all: ["finopsKills"] as const,
+    matrix: (orgId: string | null | undefined) => ["finopsKills", "matrix", orgId] as const,
+  },
+  security: {
+    all: ["security"] as const,
+    twoFa: (orgId: string | null | undefined) => ["security", "twoFa", orgId] as const,
+  },
+  webhookDlq: {
+    all: ["webhookDlq"] as const,
+    list: (orgId: string | null | undefined) => ["webhookDlq", "list", orgId] as const,
+  },
+  playgrounds: {
+    all: ["playgrounds"] as const,
+    list: (orgId: string | null | undefined) => ["playgrounds", "list", orgId] as const,
+  },
+  dslAlerts: {
+    all: ["dslAlerts"] as const,
+    list: (orgId: string | null | undefined) => ["dslAlerts", "list", orgId] as const,
+  },
+  memory: {
+    all: ["memory"] as const,
+    reaver: (orgId: string | null | undefined) => ["memory", "reaver", orgId] as const,
   },
 } as const;
 

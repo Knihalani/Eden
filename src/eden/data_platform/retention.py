@@ -30,6 +30,9 @@ from eden.data_platform.pii import PIIMasker
 logger = logging.getLogger(__name__)
 settings = get_settings()
 
+# Chunk size for cold-archive SELECTs — never load an unbounded table.
+ARCHIVE_CHUNK_SIZE = 1000
+
 
 @dataclass
 class RetentionPolicy:
@@ -55,6 +58,13 @@ DEFAULT_POLICIES: list[RetentionPolicy] = [
     RetentionPolicy("debug_dumps", 7, 0, 0, 7),
     RetentionPolicy("quarantine_events", 7, 30, 90, 90),
 ]
+
+# data_type → hot table eligible for cold archival. Policies without an
+# entry must not call archive_to_cold("silver_events") or they will wipe
+# unrelated telemetry (e.g. debug_dumps with warm_days=0).
+_ARCHIVE_TABLE_BY_TYPE: dict[str, str] = {
+    "raw_traces": "silver_events",
+}
 
 
 @dataclass
@@ -95,12 +105,14 @@ class DataRetentionManager:
         Returns the number of rows redacted.
         """
         client = await self._get_postgres()
+        # asyncpg timestamptz params must be datetime objects, not ISO strings.
+        cutoff = before_date
         if self.dry_run:
             query = """
                 SELECT COUNT(*) FROM silver_events
                 WHERE timestamp < $1 AND pii_detected = TRUE
             """
-            count = await client.fetchval(query, before_date.isoformat()) or 0
+            count = await client.fetchval(query, cutoff) or 0
             logger.info(f"[DRY RUN] Would redact PII from {count} silver_events rows")
             return count
 
@@ -113,7 +125,7 @@ class DataRetentionManager:
             RETURNING silver_event_id
         """
         redacted_meta = json.dumps({"_pii_redacted": True})
-        rows = await client.fetch(query, before_date.isoformat(), redacted_meta)
+        rows = await client.fetch(query, cutoff, redacted_meta)
         count = len(rows)
         logger.info(f"Redacted PII from {count} silver_events rows before {before_date.isoformat()}")
         return count
@@ -122,50 +134,84 @@ class DataRetentionManager:
         self,
         before_date: datetime,
         table: str = "silver_events",
+        *,
+        chunk_size: int = ARCHIVE_CHUNK_SIZE,
     ) -> tuple[int, int]:
         """Move warm PostgreSQL data to cold S3 storage and delete from hot.
+
+        Uses keyset pagination (``timestamp``, ``silver_event_id``) with a
+        hard ``LIMIT`` so archival never issues an unbounded ``SELECT *``.
+
+        Hot rows are deleted only after a successful S3 write; a failed or
+        skipped archive never drops data.
 
         Returns (rows_archived, s3_objects_created).
         """
         client = await self._get_postgres()
-        RetentionReport()
-
-        # Fetch rows to archive
-        query = f"""
-            SELECT * FROM {table}
-            WHERE timestamp < $1
-            ORDER BY timestamp ASC
-        """
-        rows = await client.fetch(query, before_date.isoformat())
-        if not rows:
-            return 0, 0
-
-        # Archive to S3 as NDJSON
+        limit = max(1, int(chunk_size))
         archived = 0
         s3_objects = 0
-        if not self.dry_run:
-            s3_objects = await self._write_s3_archive(rows, table)
-            archived = len(rows)
+        last_ts: Any = None
+        last_id: Any = None
+        # asyncpg rejects ISO strings for timestamptz comparisons.
+        cutoff = before_date
 
-            # Delete from hot PostgreSQL
-            ids = [r["silver_event_id"] for r in rows]
-            chunk_size = 1000
-            for i in range(0, len(ids), chunk_size):
-                chunk = ids[i:i + chunk_size]
-                placeholders = ", ".join(f"${j + 2}" for j in range(len(chunk)))
+        while True:
+            if last_ts is None:
+                query = f"""
+                    SELECT * FROM {table}
+                    WHERE timestamp < $1
+                    ORDER BY timestamp ASC, silver_event_id ASC
+                    LIMIT $2
+                """
+                rows = await client.fetch(query, cutoff, limit)
+            else:
+                query = f"""
+                    SELECT * FROM {table}
+                    WHERE timestamp < $1
+                      AND (timestamp, silver_event_id) > ($2::timestamptz, $3::uuid)
+                    ORDER BY timestamp ASC, silver_event_id ASC
+                    LIMIT $4
+                """
+                rows = await client.fetch(query, cutoff, last_ts, last_id, limit)
+
+            if not rows:
+                break
+
+            if self.dry_run:
+                archived += len(rows)
+                logger.info(
+                    f"[DRY RUN] Would archive chunk of {len(rows)} rows from {table}"
+                )
+            else:
+                written = await self._write_s3_archive(rows, table)
+                if written <= 0:
+                    logger.error(
+                        "S3 archive write produced 0 objects; "
+                        f"skipping DELETE of {len(rows)} rows from {table}"
+                    )
+                    break
+                s3_objects += written
+                ids = [r["silver_event_id"] for r in rows]
+                placeholders = ", ".join(f"${j + 2}" for j in range(len(ids)))
                 del_query = f"""
                     DELETE FROM {table}
                     WHERE timestamp < $1 AND silver_event_id IN ({placeholders})
                 """
-                await client.execute(del_query, before_date.isoformat(), *chunk)
+                await client.execute(del_query, cutoff, *ids)
+                archived += len(rows)
 
+            last_row = rows[-1]
+            last_ts = last_row["timestamp"]
+            last_id = last_row["silver_event_id"]
+            if len(rows) < limit:
+                break
+
+        if archived and not self.dry_run:
             logger.info(
                 f"Archived {archived} rows from {table} to S3 cold storage, "
                 f"created {s3_objects} objects"
             )
-        else:
-            logger.info(f"[DRY RUN] Would archive {len(rows)} rows from {table}")
-
         return archived, s3_objects
 
     async def _write_s3_archive(self, rows: list[dict], table: str) -> int:
@@ -221,10 +267,11 @@ class DataRetentionManager:
             ("specs", "org_id"),
             # Wave 6 GDPR completeness — telemetry tables were previously
             # only swept by the periodic retention cron, not on explicit
-            # user delete. All three must be purged on right-to-erasure.
-            ("telemetry_events", "org_id"),
+            # user delete. Schema uses tenant_id (not org_id) on the
+            # telemetry event / stream tables; archive index uses org_id.
+            ("telemetry_events", "tenant_id"),
             ("trace_archive_index", "org_id"),
-            ("telemetry_stream_chunks", "org_id"),
+            ("telemetry_stream_chunks", "tenant_id"),
         ]
 
         for table, col in tables:
@@ -285,10 +332,23 @@ class DataRetentionManager:
         If you ever loosen this, you MUST keep the escape — and
         ideally switch to ClickHouse's prepared-statements HTTP
         endpoint instead of f-string interpolation.
+
+        Tinybird workspaces reject ALTER DELETE via ``/v0/sql``.
+        When the configured host is Tinybird we soft-skip (log +
+        return 0) rather than POST raw ALTER bodies that silently
+        fail or 5xx the GDPR route.
         """
         # ClickHouse integration is optional — if not configured, skip
         clickhouse_url = getattr(settings, "clickhouse_url", "")
         if not clickhouse_url:
+            return 0
+
+        if "tinybird.co" in clickhouse_url.lower():
+            logger.warning(
+                "GDPR ClickHouse purge skipped: Tinybird host cannot "
+                "ALTER DELETE via /v0/sql (tenant=%s)",
+                tenant_id,
+            )
             return 0
 
         # SQL-standard string-literal escape: double the quote.
@@ -304,9 +364,11 @@ class DataRetentionManager:
                     ),
                     # Wave 6: telemetry_events_ch mirrors Postgres
                     # telemetry_events; must be purged on tenant delete.
+                    # Column is tenant_id (not org_id) — matches DDL +
+                    # Tinybird datasource schema.
                     (
                         "ALTER TABLE default.telemetry_events_ch "
-                        f"DELETE WHERE org_id = '{safe_tenant_id}'"
+                        f"DELETE WHERE tenant_id = '{safe_tenant_id}'"
                     ),
                 ]
                 for query in ch_deletes:
@@ -315,10 +377,16 @@ class DataRetentionManager:
                     ) as resp:
                         if resp.status == 200:
                             deleted += 1
+                        else:
+                            logger.warning(
+                                "ClickHouse GDPR delete HTTP %s: %s",
+                                resp.status,
+                                (await resp.text())[:200],
+                            )
                 return deleted
-        except Exception:
-            pass
-        return 0
+        except Exception as exc:
+            logger.warning("ClickHouse GDPR delete failed: %s", exc)
+            return 0
 
     async def _mark_s3_for_deletion(self, tenant_id: str) -> int:
         """Tag S3 objects for tenant deletion (lifecycle handles actual removal)."""
@@ -356,21 +424,35 @@ class DataRetentionManager:
         report = RetentionReport()
         now = datetime.now(UTC)
 
-        # PII scrubbing
-        if policy.scrub_pii_after_days is not None:
+        # PII scrubbing (only meaningful for trace/silver policies)
+        if (
+            policy.scrub_pii_after_days is not None
+            and policy.data_type in _ARCHIVE_TABLE_BY_TYPE
+        ):
             pii_before = now - timedelta(days=policy.scrub_pii_after_days)
             try:
                 report.pii_redacted_rows = await self.purge_pii_fields(pii_before)
             except Exception as exc:
                 report.errors.append(f"PII purge failed: {exc}")
 
-        # Archival to cold
-        archive_before = now - timedelta(days=policy.warm_days)
-        try:
-            archived, _ = await self.archive_to_cold(archive_before, table="silver_events")
-            report.archived_rows = archived
-        except Exception as exc:
-            report.errors.append(f"Archival failed: {exc}")
+        # Archival to cold — only for policies that own a hot table, and
+        # never when warm_days <= 0 (would archive "everything older than now").
+        archive_table = _ARCHIVE_TABLE_BY_TYPE.get(policy.data_type)
+        if archive_table is not None and policy.warm_days > 0:
+            archive_before = now - timedelta(days=policy.warm_days)
+            try:
+                archived, _ = await self.archive_to_cold(
+                    archive_before, table=archive_table
+                )
+                report.archived_rows = archived
+            except Exception as exc:
+                report.errors.append(f"Archival failed: {exc}")
+        elif policy.data_type == "debug_dumps":
+            try:
+                dump_before = now - timedelta(days=max(policy.delete_after_days, 1))
+                report.deleted_rows = await self.cleanup_debug_dumps(dump_before)
+            except Exception as exc:
+                report.errors.append(f"Debug dump cleanup failed: {exc}")
 
         # Deletion — purge rows already in cold archive past retention.
         delete_before = now - timedelta(days=policy.delete_after_days)

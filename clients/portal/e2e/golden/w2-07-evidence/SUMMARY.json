@@ -1,0 +1,45 @@
+{
+  "agent": "W2-07",
+  "base": "https://edenobservability.com",
+  "auth_blocker": {
+    "auth_state_exists": true,
+    "path": "e2e/.auth-state.json",
+    "cookie_domains": [
+      ".img.clerk.com",
+      ".modest-bug-7.clerk.accounts.dev",
+      "localhost"
+    ],
+    "valid_for_prod": false,
+    "seed_auth_attempted": false,
+    "reason": "Auth state present but localhost/Clerk-test scoped; not used for inventing prod credentials. Golden paths redirected all 8 routes to /sign-in.",
+    "portal_audit": "SKIPPED \u2014 portal-audit.mjs hardcodes BASE=http://127.0.0.1:$PORT and ignores env BASE (see e2e/portal-audit.log)"
+  },
+  "marketing_5xx": "none \u2014 all marketing/legal pages HTTP 200, no Application error / Unhandled Runtime / Internal Server Error in visible body",
+  "false_positive_note": "HTML payload contains next-intl common.error string \"Something went wrong. Please try again.\" \u2014 not a live crash (see crash_*.html from first pass; ignore)",
+  "qdrant_health": {
+    "endpoint": "/api/health and /api/proxy/health",
+    "http": 503,
+    "status": "degraded",
+    "postgres": "connected",
+    "qdrant": "error: [Errno 99] Cannot assign requested address",
+    "portal_ui_impact_visible": "Not visible on unauthenticated marketing pages. Authenticated portal surfaces could not be audited (auth blocker). /health and /status page routes return marketing HTML shell (200), not API health JSON."
+  },
+  "golden_paths": {
+    "failed": 8,
+    "total": 8,
+    "log": "e2e/golden/w2-07-evidence/golden-paths.log",
+    "screenshots": "e2e/golden/screenshots/w2-07/*-fail.png"
+  },
+  "evidence_paths": [
+    "clients/portal/e2e/golden/w2-07-evidence/route-status.md",
+    "clients/portal/e2e/golden/w2-07-evidence/route-status.tsv",
+    "clients/portal/e2e/golden/w2-07-evidence/health_api_health.json",
+    "clients/portal/e2e/golden/w2-07-evidence/health_api_proxy_health.json",
+    "clients/portal/e2e/golden/w2-07-evidence/auth-state-meta.json",
+    "clients/portal/e2e/golden/w2-07-evidence/public-playwright.json",
+    "clients/portal/e2e/golden/w2-07-evidence/screenshots/",
+    "clients/portal/e2e/golden/w2-07-evidence/golden-paths.log",
+    "clients/portal/e2e/golden/w2-07-evidence/portal-audit.log",
+    "clients/portal/e2e/golden/screenshots/w2-07/"
+  ]
+}

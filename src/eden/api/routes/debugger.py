@@ -15,7 +15,12 @@ from typing import Any
 from fastapi import APIRouter, Body, Depends, Path, Query
 from pydantic import BaseModel, Field
 
-from eden.api.deps import get_current_user, require_feature_flag
+from eden.api.deps import (
+    _try_resolve_token_payload,
+    get_current_user,
+    require_feature_flag,
+    resolve_path_org_access,
+)
 from eden.debugger.checkpoints import (
     Checkpoint,
     CheckpointStore,
@@ -29,9 +34,19 @@ from eden.storage.postgres import get_postgres_client
 logger = logging.getLogger(__name__)
 
 
+async def _require_path_org(
+    org_id: str = Path(..., description="Organization ID"),
+    user: dict = Depends(get_current_user),
+    payload: dict | None = Depends(_try_resolve_token_payload),
+) -> str:
+    _, eden_org = await resolve_path_org_access(org_id, user, payload)
+    return eden_org
+
+
 router = APIRouter(
     prefix="/orgs/{org_id}/debugger",
     tags=["debugger"],
+    dependencies=[Depends(_require_path_org)],
 )
 
 
@@ -136,7 +151,7 @@ def _checkpoint_to_response(c: Checkpoint) -> CheckpointResponse:
     summary="List checkpoints for a trace (query: trace_id)",
 )
 async def list_checkpoints_query(
-    org_id: str = Path(...),
+    org_id: str = Depends(_require_path_org),
     trace_id: str = Query(..., min_length=1, description="Trace to list checkpoints for"),
     user: dict = Depends(get_current_user),
 ) -> CheckpointListResponse:
@@ -152,13 +167,13 @@ async def list_checkpoints_query(
     summary="List all checkpoints for a trace, in step order",
 )
 async def list_checkpoints(
-    org_id: str = Path(...),
+    org_id: str = Depends(_require_path_org),
     trace_id: str = Path(...),
     user: dict = Depends(get_current_user),
 ) -> CheckpointListResponse:
     pg = await get_postgres_client()
     store = CheckpointStore(pg)
-    cps = await store.list_for_trace(trace_id)
+    cps = await store.list_for_trace(trace_id, org_id=org_id)
     return CheckpointListResponse(
         checkpoints=[_checkpoint_to_response(c) for c in cps],
     )
@@ -170,7 +185,7 @@ async def list_checkpoints(
 )
 async def rerun(
     body: RerunRequest,
-    org_id: str = Path(...),
+    org_id: str = Depends(_require_path_org),
     user: dict = Depends(get_current_user),
 ) -> dict[str, Any]:
     pg = await get_postgres_client()
@@ -207,6 +222,7 @@ async def rerun(
             body.trace_id,
             from_step=body.from_step,
             prompt_override=body.prompt_override,
+            org_id=org_id,
         )
         out = RerunResponse(
             source_trace_id=result.source_trace_id,
@@ -237,7 +253,7 @@ async def rerun(
     dependencies=[Depends(require_feature_flag("debug_sessions_v1"))],
 )
 async def list_debug_sessions(
-    org_id: str = Path(...),
+    org_id: str = Depends(_require_path_org),
     limit: int = Query(50, ge=1, le=200),
     user: dict = Depends(get_current_user),
 ) -> dict[str, Any]:
@@ -255,7 +271,7 @@ async def list_debug_sessions(
     dependencies=[Depends(require_feature_flag("debug_sessions_v1"))],
 )
 async def create_debug_session(
-    org_id: str = Path(...),
+    org_id: str = Depends(_require_path_org),
     body: CreateDebugSessionRequest = Body(default=CreateDebugSessionRequest()),
     user: dict = Depends(get_current_user),
 ) -> dict[str, Any]:
@@ -275,7 +291,7 @@ async def create_debug_session(
     dependencies=[Depends(require_feature_flag("debug_sessions_v1"))],
 )
 async def get_debug_session(
-    org_id: str = Path(...),
+    org_id: str = Depends(_require_path_org),
     session_id: str = Path(...),
     user: dict = Depends(get_current_user),
 ) -> dict[str, Any]:
@@ -292,7 +308,7 @@ async def get_debug_session(
     dependencies=[Depends(require_feature_flag("debug_sessions_v1"))],
 )
 async def compare_debug_runs(
-    org_id: str = Path(...),
+    org_id: str = Depends(_require_path_org),
     session_id: str = Path(...),
     run_a: str = Query(..., alias="run_a"),
     run_b: str = Query(..., alias="run_b"),
@@ -314,7 +330,7 @@ async def compare_debug_runs(
 )
 async def discover(
     body: DiscoverRequest,
-    org_id: str = Path(...),
+    org_id: str = Depends(_require_path_org),
     user: dict = Depends(get_current_user),
 ) -> DiscoverResponse:
     entrypoints = discover_entrypoint(

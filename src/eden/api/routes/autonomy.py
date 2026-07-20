@@ -22,7 +22,7 @@ from typing import Any
 from fastapi import APIRouter, Body, Depends, Path, Query
 from pydantic import BaseModel
 
-from eden.api.deps import get_current_user, require_feature_flag
+from eden.api.deps import get_current_user, require_feature_flag, require_path_org_access
 from eden.api.utils.redact import redact_all
 
 logger = logging.getLogger(__name__)
@@ -35,6 +35,7 @@ router = APIRouter(
     dependencies=[
         Depends(require_feature_flag(_FLAG)),
         Depends(get_current_user),
+        Depends(require_path_org_access),
     ],
 )
 
@@ -65,7 +66,7 @@ class AutonomyPatch(BaseModel):
 
 @router.get("")
 async def get_autonomy(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     agent_id: str | None = Query(None),
     current_user: dict[str, Any] = Depends(get_current_user),
 ) -> dict[str, Any]:
@@ -85,7 +86,7 @@ async def get_autonomy(
 
 @router.patch("")
 async def patch_autonomy(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     agent_id: str | None = Query(None),
     body: AutonomyPatch = Body(...),
     current_user: dict[str, Any] = Depends(get_current_user),
@@ -130,7 +131,7 @@ async def patch_autonomy(
 
 @router.get("/audit")
 async def get_audit(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     limit: int = Query(100, ge=1, le=500),
 ) -> dict[str, Any]:
     from eden.storage.postgres import get_postgres_client

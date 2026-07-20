@@ -25,9 +25,9 @@ adopt OpenLLMetry get supported for free.
 
 from __future__ import annotations
 
-import json
 import logging
 
+from eden.observability.ingestion.json_body import loads_body
 from eden.observability.ingestion.attribution import Attribution
 from eden.observability.telemetry_collector import TelemetryEvent
 
@@ -69,7 +69,7 @@ def _identify_framework(
                 return val
 
     try:
-        parsed = json.loads(body)
+        parsed = loads_body(body)
     except (ValueError, UnicodeDecodeError):
         return None
     if not isinstance(parsed, dict):
@@ -120,7 +120,7 @@ class FrameworkDecoder:
         # specific framework, we still want to ingest it (with framework
         # name = "unknown" or absent).
         try:
-            parsed = json.loads(body)
+            parsed = loads_body(body)
         except (ValueError, UnicodeDecodeError):
             return False
         if not isinstance(parsed, dict):

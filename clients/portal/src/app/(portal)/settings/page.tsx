@@ -1,10 +1,12 @@
 "use client";
 
-import { useState, useEffect , Suspense} from "react";
+import { useState, useEffect, useRef, Suspense } from "react";
 import dynamic from "next/dynamic";
 import { useOrganizationList } from "@clerk/nextjs";
 import { useOrg } from "@/hooks/use-org";
 import { useAuth } from "@/hooks/use-auth";
+import { usePermissions } from "@/hooks/use-permissions";
+import { useToast } from "@/components/ui/toast";
 import { Building2, Users, User, Code, Key, FileText, Shield, ShieldCheck, CreditCard, KeyRound, Lock, BarChart2, Server, EyeOff, Database, FileArchive, Settings2, Bot, Terminal, Activity, Wallet } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -109,7 +111,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useSearchParams, useRouter } from "next/navigation";
 import { SettingsSearch } from "@/components/settings/settings-search";
 import { SettingsCategoryGroup } from "@/components/settings/settings-category-group";
-import { Card } from "@/components/ui/card";
+import { Panel } from "@/components/ui/panel";
 import { PageHeader } from "@/components/layout/page-header";
 import { PageContent } from "@/components/layout/page-content";
 import { EmbeddedSurface } from "@/components/layout/embedded-surface";
@@ -248,23 +250,93 @@ function SettingsPageInner() {
     organizations,
     setCurrentOrg
   } = useOrg();
+  const { hasPermission, role } = usePermissions();
+  const toast = useToast();
   const {
     setActive: setActiveOrg
   } = useOrganizationList();
   const router = useRouter();
   const searchParams = useSearchParams();
+  // Billing / FinOps / MCP: admin+ (settings:edit or billing:view).
+  // SCIM / gateway / PII / retention / exports / API keys / roles /
+  // autonomous: settings:edit only — members/viewers must not see them
+  // in the rail (deep-links fall back to org with an Admin-only toast).
+  // Audit Log: audit:view (owner/admin) — hide from rail for members/viewers.
+  const canEditSettings = hasPermission("settings:edit");
+  const canSeeAdminTabs =
+    canEditSettings || hasPermission("billing:view");
+  const canViewAudit = hasPermission("audit:view");
+  const isPersonalOrg = Boolean(currentOrg?.is_personal);
+  const isBillingAdminTab = (id: Tab) =>
+    id === "billing" || id === "finops" || id === "mcp";
+  const isSettingsEditTab = (id: Tab) =>
+    id === "scim" ||
+    id === "gateway" ||
+    id === "pii" ||
+    id === "retention" ||
+    id === "exports" ||
+    id === "api-keys" ||
+    id === "roles" ||
+    id === "autonomous";
+  const canAccessTab = (id: Tab) => {
+    // Soft-hide team-provisioning admin surfaces for personal (solo) workspaces.
+    if (isPersonalOrg && (id === "scim" || id === "sso")) return false;
+    if (id === "audit-log") return canViewAudit;
+    if (isBillingAdminTab(id)) return canSeeAdminTabs;
+    if (isSettingsEditTab(id)) return canEditSettings;
+    return true;
+  };
   const initialTab = searchParams.get("tab") as Tab || "org";
-  const [activeTab, setActiveTab] = useState<Tab>(TABS.some(t => t.id === initialTab) ? initialTab : "org");
+  const [activeTab, setActiveTab] = useState<Tab>(
+    TABS.some(t => t.id === initialTab) && canAccessTab(initialTab)
+      ? initialTab
+      : "org",
+  );
   const [searchQuery, setSearchQuery] = useState("");
+  const deniedTabNotified = useRef<string | null>(null);
+  const toastRef = useRef(toast);
+  toastRef.current = toast;
 
   // URL → state only. Functional setState avoids update loops when
   // searchParams identity churns but the tab string is unchanged.
   const urlTabParam = searchParams.get("tab");
   useEffect(() => {
     if (!urlTabParam || !TABS.some((t) => t.id === urlTabParam)) return;
+    // Wait for role so we do not toast "Admin only" while permissions
+    // are still resolving for an actual admin.
+    if (!role) return;
+    if (!canAccessTab(urlTabParam as Tab)) {
+      setActiveTab((prev) => (prev === "org" ? prev : "org"));
+      if (deniedTabNotified.current !== urlTabParam) {
+        deniedTabNotified.current = urlTabParam;
+        // Personal orgs soft-hide SCIM/SSO — do not mislabel as "Admin only".
+        if (
+          isPersonalOrg &&
+          (urlTabParam === "scim" || urlTabParam === "sso")
+        ) {
+          toastRef.current.warning(
+            "Team organizations only",
+            "SCIM and SSO apply to team workspaces, not personal ones. Create a team organization to use them.",
+          );
+        } else {
+          toastRef.current.warning(
+            "Admin only",
+            "That settings tab requires an organization admin.",
+          );
+        }
+      }
+      const params = new URLSearchParams(window.location.search);
+      if (params.get("tab") !== "org") {
+        params.set("tab", "org");
+        router.replace(`/settings?${params.toString()}`, { scroll: false });
+      }
+      return;
+    }
+    deniedTabNotified.current = null;
     setActiveTab((prev) => (prev === urlTabParam ? prev : (urlTabParam as Tab)));
-  }, [urlTabParam]);
+  }, [urlTabParam, canSeeAdminTabs, canEditSettings, canViewAudit, isPersonalOrg, role, router]);
   const handleTabChange = (tabId: string) => {
+    if (!canAccessTab(tabId as Tab)) return;
     setActiveTab(tabId as Tab);
     const params = new URLSearchParams(window.location.search);
     params.set("tab", tabId);
@@ -275,15 +347,16 @@ function SettingsPageInner() {
 
   // Filter tabs by search query. Substring match on label (case
   // insensitive). When a query is set, hide empty category groups
-  // so the rail doesn't render blanks.
+  // so the rail doesn't render blanks. Permission-gated tabs stay
+  // hidden from members/viewers.
   const normalisedQuery = searchQuery.trim().toLowerCase();
   const visibleTabs = (normalisedQuery
     ? TABS.filter((t) => {
-        if (t.hidden) return false;
+        if (t.hidden || !canAccessTab(t.id)) return false;
         const hay = `${t.label} ${(t.keywords ?? []).join(" ")}`.toLowerCase();
         return hay.includes(normalisedQuery);
       })
-    : TABS.filter((t) => !t.hidden));
+    : TABS.filter((t) => !t.hidden && canAccessTab(t.id)));
   const tabsByCategory: Record<SettingsCategory, typeof TABS[number][]> = {
     Org: [],
     Members: [],
@@ -346,12 +419,15 @@ function SettingsPageInner() {
       {/* Main Content */}
       <div className="flex-1 min-w-0">
         <PageContent>
-          <PageHeader title="Settings" icon={Settings2} />
+          <PageHeader
+            title="Settings"
+            subtitle="Organization, API keys, security, and compliance."
+          />
 
           {/* Org Switcher */}
-          {organizations.length > 0 && <Card padding="md" className="mb-6">
+          {organizations.length > 0 && <Panel tone="flat" padding="md" className="mb-6">
               <div className="flex items-center gap-3 mb-3">
-                <Building2 className="w-5 h-5 text-[var(--text-muted)]" />
+                <Building2 className="w-4 h-4 text-[var(--text-muted)]" />
                 <span className="text-sm font-medium text-[var(--text-primary)]">Current Organization</span>
               </div>
               <div className="flex flex-col sm:flex-row sm:items-center gap-3">
@@ -383,7 +459,7 @@ function SettingsPageInner() {
                   </SelectContent>
                 </Select>
               </div>
-            </Card>}
+            </Panel>}
 
           {/* Tab Content */}
           <div role="tabpanel" aria-labelledby={`settings-tab-${activeTab}`}>
@@ -394,14 +470,14 @@ function SettingsPageInner() {
               </EmbeddedSurface>
             )}
             {activeTab === "members" && <MembersTab org={currentOrg} />}
-            {activeTab === "roles" && <RolesTab />}
+            {activeTab === "roles" && canEditSettings && <RolesTab />}
             {activeTab === "references" && <ReferencesTab org={currentOrg} />}
-            {activeTab === "api-keys" && <ApiKeysTab org={currentOrg} />}
-            {activeTab === "mcp" && <McpTab org={currentOrg} />}
+            {activeTab === "api-keys" && canEditSettings && <ApiKeysTab org={currentOrg} />}
+            {activeTab === "mcp" && canSeeAdminTabs && <McpTab org={currentOrg} />}
             {activeTab === "security" && <SecurityTab />}
-            {activeTab === "scim" && <ScimTab org={currentOrg} />}
+            {activeTab === "scim" && canEditSettings && <ScimTab org={currentOrg} />}
             {activeTab === "sso" && (
-              <div className="rounded-lg border border-[var(--border-default)] bg-[var(--bg-secondary)] p-6 text-sm text-[var(--text-secondary)]">
+              <div className="rounded-lg bg-[var(--bg-secondary)] p-6 text-sm text-[var(--text-secondary)]">
                 <p className="font-medium text-[var(--text-primary)] mb-2">SSO deferred for soft launch</p>
                 <p>
                   Enterprise SSO requires Clerk Enterprise Connections or a completed
@@ -410,15 +486,20 @@ function SettingsPageInner() {
                 </p>
               </div>
             )}
-            {activeTab === "gateway" && <GatewayTab org={currentOrg} />}
-            {activeTab === "pii" && <PiiPolicyTab />}
-            {activeTab === "retention" && <RetentionPolicyTab />}
+            {activeTab === "gateway" && canEditSettings && <GatewayTab org={currentOrg} />}
+            {activeTab === "pii" && canEditSettings && <PiiPolicyTab />}
+            {activeTab === "retention" && canEditSettings && <RetentionPolicyTab />}
             {activeTab === "audit-log" && <AuditLogTab org={currentOrg} />}
             {activeTab === "analytics" && <AnalyticsTab />}
-            {activeTab === "billing" && <BillingTab />}
-            {activeTab === "finops" && <FinOpsKillsTab />}
-            {activeTab === "autonomous" && <AutonomousTab />}
-            {activeTab === "exports" && <ExportsTab orgId={currentOrg?.id || ""} canManage={currentOrg?.role === "owner" || currentOrg?.role === "admin"} />}
+            {activeTab === "billing" && canSeeAdminTabs && <BillingTab />}
+            {activeTab === "finops" && canSeeAdminTabs && <FinOpsKillsTab />}
+            {activeTab === "autonomous" && canEditSettings && <AutonomousTab />}
+            {activeTab === "exports" && canEditSettings && (
+              <ExportsTab
+                orgId={currentOrg?.id || ""}
+                canManage={canEditSettings}
+              />
+            )}
             {activeTab === "sidebar" && <SidebarSettingsTab />}
             {activeTab === "status" && <StatusTab />}
           </div>

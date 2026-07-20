@@ -6,7 +6,15 @@ from typing import Any
 
 import pytest
 
+from eden.mcp_server.auth import McpAuthContext
 from eden.mcp_server.server import TOOL_CATALOG, call_tool, list_tools
+
+_WRITE_AUTH = McpAuthContext(
+    api_key="test-key",
+    base_url="http://127.0.0.1:8000",
+    scopes=("mcp:read", "mcp:debug", "mcp:fix"),
+)
+
 
 
 class _FakeClient:
@@ -105,6 +113,7 @@ async def test_call_tool_debugger_and_issues() -> None:
         "triage_issue",
         {"org_id": "org_1", "issue_id": "iss_9"},
         client=client,
+        auth=_WRITE_AUTH,
     )
     assert triage["status"] == "ok"
     assert triage["result"]["root_cause"] == "loop"
@@ -113,6 +122,7 @@ async def test_call_tool_debugger_and_issues() -> None:
         "run_autofix",
         {"org_id": "org_1", "issue_id": "iss_9", "dry_run": True},
         client=client,
+        auth=_WRITE_AUTH,
     )
     assert fix["status"] == "ok"
     assert fix["result"]["dry_run"] is True

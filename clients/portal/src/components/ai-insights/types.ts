@@ -165,35 +165,5 @@ export function needsApproval(tc: ToolCall): boolean {
   return false;
 }
 
-/** Operator model picker options (W23 Loop-class). */
-export const CHAT_MODEL_OPTIONS = [
-  {
-    id: "auto",
-    label: "Auto",
-    tier: "auto" as const,
-    description: "T1/SLM for simple; T3 for tools",
-  },
-  {
-    id: "t1",
-    label: "Fast",
-    tier: "t1" as const,
-    description: "Lowest TTFT / cost",
-  },
-  {
-    id: "t3",
-    label: "Expert",
-    tier: "t3" as const,
-    description: "Multi-tool copilot",
-  },
-] as const;
-
-export type ChatModelOptionId = (typeof CHAT_MODEL_OPTIONS)[number]["id"];
-
-export function resolvePreferredTier(optionId: string): {
-  preferred_model?: string;
-  preferred_tier: string;
-} {
-  if (optionId === "t1") return { preferred_tier: "t1" };
-  if (optionId === "t3") return { preferred_tier: "t3" };
-  return { preferred_model: "auto", preferred_tier: "auto" };
-}
+/** Chat always routes to T2 — no operator model picker. */
+export const CHAT_PREFERRED_TIER = "t2" as const;

@@ -196,6 +196,7 @@ def _wrap_sync_stream(original, self, args, kwargs):
     stream_event_id = f"stream_anthropic_{_uuid.uuid4().hex[:16]}"
     client = get_default_client()
     buffer = client._chunk_buffer if hasattr(client, "_chunk_buffer") else None
+    _cap_text = bool(getattr(client.config, "capture_chunk_text", False))
 
     def _gen():
         model = _extract_model(kwargs)
@@ -302,7 +303,7 @@ def _wrap_sync_stream(original, self, args, kwargs):
                         "event_id": stream_event_id,
                         "trace_id": trace_id,
                         "chunk_index": chunk_count - 1,
-                        "delta_text": delta_text if isinstance(delta_text, str) else None,
+                        "delta_text": (delta_text if isinstance(delta_text, str) else None) if _cap_text else None,
                         "ttft_ms": (t_first - start) * 1000.0 if t_first is not None else None,
                         "itl_ms": (now - prev) * 1000.0 if prev is not None else None,
                         "tpot_ms": tpot_ms,
@@ -361,6 +362,7 @@ def _wrap_async_stream(original, self, args, kwargs):
     stream_event_id = f"stream_anthropic_{_uuid.uuid4().hex[:16]}"
     client = get_default_client()
     buffer = client._chunk_buffer if hasattr(client, "_chunk_buffer") else None
+    _cap_text = bool(getattr(client.config, "capture_chunk_text", False))
 
     async def _agen():
         model = _extract_model(kwargs)
@@ -467,7 +469,7 @@ def _wrap_async_stream(original, self, args, kwargs):
                         "event_id": stream_event_id,
                         "trace_id": trace_id,
                         "chunk_index": chunk_count - 1,
-                        "delta_text": delta_text if isinstance(delta_text, str) else None,
+                        "delta_text": (delta_text if isinstance(delta_text, str) else None) if _cap_text else None,
                         "ttft_ms": (t_first - start) * 1000.0 if t_first is not None else None,
                         "itl_ms": (now - prev) * 1000.0 if prev is not None else None,
                         "tpot_ms": tpot_ms,

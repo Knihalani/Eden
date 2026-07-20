@@ -18,6 +18,17 @@ import httpx
 
 logger = logging.getLogger(__name__)
 
+_HTTPX: httpx.AsyncClient | None = None
+_VALUE_SEP = "|"
+
+
+def _shared_httpx(timeout: float) -> httpx.AsyncClient:
+    """Process-wide httpx client — never ``async with`` this instance."""
+    global _HTTPX
+    if _HTTPX is None or _HTTPX.is_closed:
+        _HTTPX = httpx.AsyncClient(timeout=timeout)
+    return _HTTPX
+
 
 def verify_slack_signature(
     *,
@@ -44,16 +55,66 @@ def verify_slack_signature(
     return hmac.compare_digest(expected, signature)
 
 
+def encode_action_value(org_id: str, resource_id: str) -> str:
+    """Embed Eden ``org_id`` in Block Kit action values (not Slack team_id)."""
+    return f"{org_id}{_VALUE_SEP}{resource_id}"
+
+
+def decode_action_value(value: str) -> tuple[str | None, str]:
+    """Return ``(org_id, resource_id)`` from an encoded action value."""
+    raw = str(value or "")
+    if _VALUE_SEP in raw:
+        org_id, resource_id = raw.split(_VALUE_SEP, 1)
+        return (org_id or None), resource_id
+    return None, raw
+
+
+async def resolve_eden_org_for_slack_team(team_id: str) -> str | None:
+    """Map Slack ``team_id`` → Eden org via ``org_integrations`` config."""
+    if not team_id:
+        return None
+    try:
+        from eden.storage.postgres import get_postgres_client
+
+        client = await get_postgres_client()
+        if client is None:
+            return None
+        row = await client.fetchrow(
+            """
+            SELECT org_id FROM org_integrations
+            WHERE provider = 'slack'
+              AND enabled = true
+              AND (
+                    config->>'team_id' = $1
+                 OR config->>'slack_team_id' = $1
+              )
+            LIMIT 1
+            """,
+            team_id,
+        )
+        return str(row["org_id"]) if row else None
+    except Exception as exc:
+        logger.debug("slack interactive: team→org lookup failed: %s", exc)
+        return None
+
+
 async def handle_slash_command(payload: dict[str, Any]) -> dict[str, Any]:
     """Route ``/eden`` slash commands."""
     text = str(payload.get("text") or "").strip()
-    org_id = str(payload.get("team_id") or payload.get("enterprise_id") or "")
+    team_id = str(payload.get("team_id") or payload.get("enterprise_id") or "")
     user = str(payload.get("user_id") or "")
+    org_id = await resolve_eden_org_for_slack_team(team_id)
 
     if not text:
         return _ephemeral(
             "Usage: `/eden trace <trace_id>` | `/eden issue <issue_id>` "
             "| `/eden ack <issue_id>`"
+        )
+
+    if not org_id:
+        return _ephemeral(
+            "This Slack workspace is not linked to an Eden org. "
+            "Ask an admin to set `team_id` on the Slack integration."
         )
 
     parts = text.split(maxsplit=1)
@@ -78,18 +139,26 @@ async def handle_block_actions(payload: dict[str, Any]) -> dict[str, Any]:
     action_id = str(action.get("action_id") or "")
     value = str(action.get("value") or "")
     user = (payload.get("user") or {}).get("id") or ""
-    org_id = str(
+    team_id = str(
         (payload.get("team") or {}).get("id")
         or (payload.get("enterprise") or {}).get("id")
         or ""
     )
+    org_from_value, resource_id = decode_action_value(value)
+    org_id = org_from_value or await resolve_eden_org_for_slack_team(team_id)
+    if not org_id:
+        return _ephemeral(
+            "This Slack workspace is not linked to an Eden org."
+        )
+    if not resource_id:
+        return _ephemeral("Missing resource id.")
 
     if action_id == "eden_ack_issue":
-        return await _ack_issue(org_id, value, user_id=user)
+        return await _ack_issue(org_id, resource_id, user_id=user)
     if action_id == "eden_assign_issue":
-        return await _assign_issue(org_id, value, assignee=user)
+        return await _assign_issue(org_id, resource_id, assignee=user)
     if action_id == "eden_view_trace":
-        return await _trace_lookup(org_id, value)
+        return await _trace_lookup(org_id, resource_id)
     return {}
 
 
@@ -189,13 +258,13 @@ def interactive_action_blocks(
             "type": "button",
             "action_id": "eden_ack_issue",
             "text": {"type": "plain_text", "text": "Acknowledge"},
-            "value": issue_id,
+            "value": encode_action_value(org_id, issue_id),
         },
         {
             "type": "button",
             "action_id": "eden_assign_issue",
             "text": {"type": "plain_text", "text": "Assign to me"},
-            "value": issue_id,
+            "value": encode_action_value(org_id, issue_id),
         },
     ]
     if trace_id:
@@ -204,10 +273,9 @@ def interactive_action_blocks(
                 "type": "button",
                 "action_id": "eden_view_trace",
                 "text": {"type": "plain_text", "text": "View trace"},
-                "value": trace_id,
+                "value": encode_action_value(org_id, trace_id),
             }
         )
-    _ = org_id
     return [{"type": "actions", "elements": elements}]
 
 
@@ -215,8 +283,8 @@ async def post_response_url(response_url: str, body: dict[str, Any]) -> bool:
     if not response_url:
         return False
     try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            resp = await client.post(response_url, json=body)
+        client = _shared_httpx(10.0)
+        resp = await client.post(response_url, json=body)
         return resp.status_code in (200, 204)
     except httpx.RequestError as exc:
         logger.debug("slack interactive: response_url failed: %s", exc)

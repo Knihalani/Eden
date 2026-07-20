@@ -17,7 +17,6 @@ Usage:
 
 from __future__ import annotations
 
-import json
 import logging
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -26,6 +25,7 @@ from typing import Any
 import aiohttp
 
 from eden.config import get_settings
+from eden.util.jsonx import dumps as _jsonx_dumps
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -65,6 +65,17 @@ class ClickHouseConfig:
     @property
     def is_tinybird(self) -> bool:
         return "tinybird.co" in (self.url or "").lower()
+
+    def qualified_table(self, table: str) -> str:
+        """Return a SQL table reference valid for the active substrate.
+
+        Tinybird datasources are workspace-scoped bare names (no
+        ``database.`` prefix). Local ClickHouse uses ``db.table``.
+        """
+        bare = (table or "").split(".")[-1]
+        if self.is_tinybird:
+            return bare
+        return f"{self.database}.{bare}"
 
 
 @dataclass
@@ -120,12 +131,21 @@ class ClickHouseSink:
                 )
             url = f"{self.config.url.rstrip('/')}/v0/sql"
             headers = {"Authorization": f"Bearer {token}"}
-            # Tinybird /v0/sql accepts q=…; ignore CREATE/ALTER on Tinybird
-            # (datasources are managed by `tb deploy`).
+            # Tinybird SQL is SELECT-only; datasources are owned by
+            # ``tb deploy``. Raise (do not silent-no-op) so callers
+            # soft-fail / fall back instead of treating DDL as success.
             q = query.strip()
             upper = q.upper()
-            if upper.startswith(("CREATE ", "ALTER ", "DROP ")):
-                return ""
+            if upper.startswith(
+                ("CREATE ", "ALTER ", "DROP ", "OPTIMIZE ", "TRUNCATE ", "INSERT ")
+            ):
+                raise ClickHouseError(
+                    "Tinybird /v0/sql rejects DDL/DML; use datasources + Events API"
+                )
+            # Default Tinybird response is JSON. Force TSV so
+            # ``_parse_tsv`` does not silently corrupt JSON bodies.
+            if "FORMAT " not in upper:
+                q = f"{q.rstrip().rstrip(';')} FORMAT TabSeparatedWithNames"
             async with session.post(
                 url,
                 params={"q": q},
@@ -642,7 +662,8 @@ class ClickHouseSink:
             return
 
         session = await self._get_session()
-        body = "\n".join(json.dumps(r, default=str) for r in rows)
+        # orjson via jsonx — NDJSON for JSONEachRow / Tinybird Events
+        body = "\n".join(_jsonx_dumps(r, default=str) for r in rows)
 
         if self.config.is_tinybird:
             token = self.config.tinybird_token or self.config.password
@@ -739,8 +760,11 @@ class ClickHouseSink:
                 )
                 VALUES ($1, $2, NOW(), 0)
             """
-            for row in rows:
-                await client.execute(query, table, json.dumps(row, default=str))
+            args = [
+                (table, _jsonx_dumps(row, default=str))
+                for row in rows
+            ]
+            await client.executemany(query, args)
             logger.info(f"Fallback: wrote {len(rows)} rows to PostgreSQL clickhouse_fallback")
         except Exception as exc:
             logger.error(f"Fallback to PostgreSQL also failed: {exc}")
@@ -779,7 +803,7 @@ class ClickHouseSink:
                 sum(total_tokens) as total_tokens,
                 sum(cost_usd) as total_cost_usd,
                 max(timestamp) as last_seen
-            FROM {self.config.database}.agent_performance
+            FROM {self.config.qualified_table("agent_performance")}
             {where}
             GROUP BY tenant_id, agent_name
             ORDER BY total_cost_usd DESC
@@ -813,7 +837,7 @@ class ClickHouseSink:
                 quantile(0.95)(duration_ms) as p95_duration_ms,
                 max(duration_ms) as max_duration_ms,
                 sumIf(1, status = 'error') as error_count
-            FROM {self.config.database}.pipeline_stages
+            FROM {self.config.qualified_table("pipeline_stages")}
             {where}
             GROUP BY stage
             ORDER BY avg_duration_ms DESC
@@ -851,7 +875,7 @@ class ClickHouseSink:
                 sum(quantity) as total_quantity,
                 sum(cost_usd) as total_cost_usd,
                 count() as event_count
-            FROM {self.config.database}.usage_trends
+            FROM {self.config.qualified_table("usage_trends")}
             {where}
             GROUP BY time_bucket, event_type, resource
             ORDER BY time_bucket DESC
@@ -860,17 +884,126 @@ class ClickHouseSink:
         result = await self._execute(query)
         return self._parse_tsv(result)
 
+    async def query_home_kpis(
+        self,
+        tenant_id: str,
+        *,
+        window_hours: int = 24,
+    ) -> dict[str, Any]:
+        """Aggregate Home KPI tiles from telemetry_events_ch / Tinybird.
+
+        Soft contract: callers must catch errors and fall back to Postgres.
+        Uses live telemetry table (works on Tinybird without home_kpi_daily MV).
+
+        ``cost_usd`` is not a column on ``telemetry_events_ch`` (neither the
+        ClickHouse DDL nor the Tinybird datasource). Returning ``0`` keeps
+        the Home KPI contract stable; cost tiles come from the ledger / PG.
+        """
+        hours = max(1, int(window_hours))
+        # SQL-standard string-literal escape (not backslash).
+        safe_tid = str(tenant_id).replace("'", "''")
+        table = self.config.qualified_table("telemetry_events_ch")
+        query = f"""
+            SELECT
+                count() AS event_count,
+                countIf(outcome = 'error') AS error_count,
+                avg(duration_ms) AS avg_duration_ms,
+                quantile(0.95)(duration_ms) AS p95_duration_ms
+            FROM {table}
+            WHERE tenant_id = '{safe_tid}'
+              AND timestamp >= now() - INTERVAL {hours} HOUR
+            FORMAT TabSeparatedWithNames
+        """
+        result = await self._execute(query)
+        rows = self._parse_tsv(result)
+        if not rows:
+            # Some CH/Tinybird paths omit header line — parse as single value row.
+            parts = [p for p in (result or "").strip().split("\t") if p != ""]
+            if len(parts) >= 4:
+                rows = [{
+                    "event_count": parts[0],
+                    "error_count": parts[1],
+                    "avg_duration_ms": parts[2],
+                    "p95_duration_ms": parts[3],
+                }]
+        cur = rows[0] if rows else {}
+        prev_query = f"""
+            SELECT count() AS event_count
+            FROM {table}
+            WHERE tenant_id = '{safe_tid}'
+              AND timestamp < now() - INTERVAL {hours} HOUR
+              AND timestamp >= now() - INTERVAL {hours * 2} HOUR
+            FORMAT TabSeparatedWithNames
+        """
+        prev_raw = await self._execute(prev_query)
+        prev_rows = self._parse_tsv(prev_raw)
+        if not prev_rows:
+            parts = [p for p in (prev_raw or "").strip().split("\t") if p != ""]
+            if parts:
+                prev_rows = [{"event_count": parts[0]}]
+        prev = prev_rows[0] if prev_rows else {}
+        return {
+            "event_count": int(float(cur.get("event_count") or 0)),
+            "error_count": int(float(cur.get("error_count") or 0)),
+            "avg_duration_ms": float(cur.get("avg_duration_ms") or 0),
+            "p95_duration_ms": float(cur.get("p95_duration_ms") or 0),
+            "cost_usd": 0.0,
+            "prev_event_count": int(float(prev.get("event_count") or 0)),
+        }
+
     def _parse_tsv(self, tsv: str) -> list[dict[str, Any]]:
-        """Parse ClickHouse TSV output into a list of dicts."""
-        lines = tsv.strip().split("\n")
+        """Parse ClickHouse / Tinybird query output into a list of dicts.
+
+        Accepts TabSeparatedWithNames. If the body is Tinybird's default
+        JSON envelope (``{"data":[...]}``), parse that instead of
+        mis-reading JSON lines as TSV columns (silent corruption).
+        Rows whose column count does not match the header are skipped.
+        """
+        if not tsv or not tsv.strip():
+            return []
+        stripped = tsv.strip()
+        if stripped.startswith("{") or stripped.startswith("["):
+            return self._parse_json_result(stripped)
+        lines = stripped.split("\n")
         if len(lines) < 2:
             return []
         headers = lines[0].split("\t")
-        rows = []
+        n_cols = len(headers)
+        rows: list[dict[str, Any]] = []
         for line in lines[1:]:
+            if not line:
+                continue
             values = line.split("\t")
-            rows.append(dict(zip(headers, values, strict=False)))
+            if len(values) != n_cols:
+                logger.warning(
+                    "ClickHouse TSV row skipped: expected %d cols, got %d",
+                    n_cols,
+                    len(values),
+                )
+                continue
+            rows.append(dict(zip(headers, values, strict=True)))
         return rows
+
+    def _parse_json_result(self, body: str) -> list[dict[str, Any]]:
+        """Parse Tinybird / CH JSON query responses; reject error envelopes."""
+        import json
+
+        try:
+            payload = json.loads(body)
+        except json.JSONDecodeError as exc:
+            raise ClickHouseError(
+                f"unparseable JSON query response: {exc}"
+            ) from exc
+        if isinstance(payload, dict) and payload.get("error"):
+            raise ClickHouseError(f"query error: {payload.get('error')}")
+        if isinstance(payload, dict) and "data" in payload:
+            data = payload["data"]
+            if not isinstance(data, list):
+                return []
+            return [r for r in data if isinstance(r, dict)]
+        if isinstance(payload, list):
+            return [r for r in payload if isinstance(r, dict)]
+        raise ClickHouseError("unexpected JSON query response shape")
 
     async def health_check(self) -> str:
         """Check ClickHouse / Tinybird connectivity."""

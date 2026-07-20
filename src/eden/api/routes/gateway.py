@@ -269,8 +269,14 @@ def get_ai_gateway() -> AIGateway:
             import asyncio as _asyncio
             _loop = _asyncio.get_event_loop()
             if _loop.is_running():
-                _asyncio.create_task(_gateway.refresh_pricing_from_models_dev())
-                _asyncio.create_task(_gateway.refresh_pricing())
+                # B24: coalesce both pricing refreshes into one task.
+                async def _coalesced_pricing_refresh(gw):
+                    await _asyncio.gather(
+                        gw.refresh_pricing_from_models_dev(),
+                        gw.refresh_pricing(),
+                        return_exceptions=True,
+                    )
+                _asyncio.create_task(_coalesced_pricing_refresh(_gateway))
             else:
                 # Synchronous startup path (rare): just skip - the
                 # next request will trigger it via ``refresh_pricing``.
@@ -843,7 +849,7 @@ def _get_async_client_for_legacy_tests() -> AsyncOpenAI | None:
     return _async_client
 
 
-def _resolve_request_pii_policy(
+async def _resolve_request_pii_policy(
     request: Request | None,
     raw_body: dict[str, Any] | None,
     *,
@@ -856,7 +862,9 @@ def _resolve_request_pii_policy(
 
       1. Per-request bypass flag (``X-PII-Bypass: true`` header
          or ``pii_filter_enabled: false`` body field) — skip masking
-         and emit ``pii_bypassed:per_request``.
+         and emit ``pii_bypassed:per_request``, **except** when the
+         tenant policy is fail-closed (no org flag / key scope exists
+         to authorize overriding fail-closed; client bypass is denied).
 
       2. Per-request override headers (``X-PII-Mode``,
          ``X-PII-Disabled-Categories``) — applied on top of the
@@ -879,16 +887,12 @@ def _resolve_request_pii_policy(
     """
     findings: list[str] = []
 
-    # 1. Per-request bypass wins over everything.
-    if bypass:
-        findings.append("pii_bypassed:per_request")
-        return None, findings, True
-
-    # 2. Resolve tenant policy from cache.
+    # Resolve tenant policy first — needed both for fail-closed
+    # bypass denial and for effective policy construction.
     tenant_policy: PIIPolicy | None = None
     try:
         from eden.llmops.policy_cache import get_policy_for_tenant
-        tenant_policy = _run_async(get_policy_for_tenant, org_id)
+        tenant_policy = await get_policy_for_tenant(org_id)
     except Exception as exc:  # noqa: BLE001
         logger.debug(
             "gateway: per-tenant PII policy resolver failed for "
@@ -896,8 +900,26 @@ def _resolve_request_pii_policy(
             org_id, redact_all(str(exc)),
         )
 
-    # 3. Apply per-request overrides on top of the tenant policy.
+    # 1. Per-request bypass — denied when tenant is fail-closed
+    # (no allow-bypass policy flag / key scope exists; fail closed).
+    if bypass:
+        tp = tenant_policy if tenant_policy is not None else PIIPolicy()
+        is_fail_closed = (
+            getattr(tp, "mode", None) == "fail_closed"
+            or bool(getattr(tp, "fail_closed_on_credentials", False))
+        )
+        if is_fail_closed:
+            findings.append("pii_bypass_denied:fail_closed")
+        else:
+            findings.append("pii_bypassed:per_request")
+            return None, findings, True
+
+    # 2. Apply per-request overrides on top of the tenant policy.
     effective_policy = tenant_policy if tenant_policy is not None else PIIPolicy()
+    tenant_fail_closed = (
+        getattr(effective_policy, "mode", None) == "fail_closed"
+        or bool(getattr(effective_policy, "fail_closed_on_credentials", False))
+    )
 
     if request is not None:
         header_mode = (request.headers.get("X-PII-Mode") or "").strip().lower()
@@ -906,17 +928,22 @@ def _resolve_request_pii_policy(
         ).strip()
 
         if header_mode in ("off", "redact", "fail_closed"):
-            if header_mode != effective_policy.mode:
-                findings.append(f"pii_mode:{header_mode}")
-            # Re-build the policy with the requested mode. We
-            # start from the tenant policy's category set so the
-            # disable list is preserved.
-            effective_policy = PIIPolicy(
-                mode=header_mode,
-                enabled_categories=set(effective_policy.enabled_categories),
-                disabled_categories=set(effective_policy.disabled_categories),
-                fail_closed_on_credentials=effective_policy.fail_closed_on_credentials,
-            )
+            # Same spirit as X-PII-Bypass deny: client must not
+            # disable PII when the tenant policy is fail-closed.
+            if header_mode == "off" and tenant_fail_closed:
+                findings.append("pii_mode_denied:fail_closed")
+            else:
+                if header_mode != effective_policy.mode:
+                    findings.append(f"pii_mode:{header_mode}")
+                # Re-build the policy with the requested mode. We
+                # start from the tenant policy's category set so the
+                # disable list is preserved.
+                effective_policy = PIIPolicy(
+                    mode=header_mode,
+                    enabled_categories=set(effective_policy.enabled_categories),
+                    disabled_categories=set(effective_policy.disabled_categories),
+                    fail_closed_on_credentials=effective_policy.fail_closed_on_credentials,
+                )
 
         if header_disabled:
             new_disabled = {
@@ -939,14 +966,17 @@ def _resolve_request_pii_policy(
         body_mode = (raw_body.get("pii_mode") or "").strip().lower()
         body_disabled = raw_body.get("pii_disabled_categories")
         if body_mode in ("off", "redact", "fail_closed"):
-            if body_mode != effective_policy.mode:
-                findings.append(f"pii_mode:{body_mode}_via_body")
-            effective_policy = PIIPolicy(
-                mode=body_mode,
-                enabled_categories=set(effective_policy.enabled_categories),
-                disabled_categories=set(effective_policy.disabled_categories),
-                fail_closed_on_credentials=effective_policy.fail_closed_on_credentials,
-            )
+            if body_mode == "off" and tenant_fail_closed:
+                findings.append("pii_mode_denied:fail_closed")
+            else:
+                if body_mode != effective_policy.mode:
+                    findings.append(f"pii_mode:{body_mode}_via_body")
+                effective_policy = PIIPolicy(
+                    mode=body_mode,
+                    enabled_categories=set(effective_policy.enabled_categories),
+                    disabled_categories=set(effective_policy.disabled_categories),
+                    fail_closed_on_credentials=effective_policy.fail_closed_on_credentials,
+                )
         if isinstance(body_disabled, list):
             new_disabled = {str(c) for c in body_disabled if c}
             if new_disabled != effective_policy.disabled_categories:
@@ -963,7 +993,7 @@ def _resolve_request_pii_policy(
     return effective_policy, findings, False
 
 
-def _apply_pii_filter_to_messages(
+async def _apply_pii_filter_to_messages(
     messages: list[dict[str, Any]],
     *,
     org_id: str = "",
@@ -981,9 +1011,10 @@ def _apply_pii_filter_to_messages(
 
       1. ``bypass=True`` (set by the ``X-PII-Bypass: true`` header
          or a ``pii_filter_enabled: false`` field in the request
-         body) — the caller is asserting that the system is designed
-         to use the raw PII. We skip masking and emit a
-         ``pii_bypassed:per_request`` finding for telemetry.
+         body) — skip masking and emit ``pii_bypassed:per_request``,
+         except when the tenant policy is fail-closed (client bypass
+         cannot override without an org allow-bypass flag + key
+         scope; neither exists today, so bypass is denied).
 
       2. Per-request overrides via ``X-PII-Mode`` /
          ``X-PII-Disabled-Categories`` headers (or the equivalent
@@ -1012,7 +1043,7 @@ def _apply_pii_filter_to_messages(
     if not messages:
         return messages, []
 
-    effective_policy, findings, bypassed = _resolve_request_pii_policy(
+    effective_policy, findings, bypassed = await _resolve_request_pii_policy(
         request,
         raw_body,
         org_id=org_id,
@@ -1087,28 +1118,7 @@ def _apply_pii_filter_to_messages(
     return messages, findings
 
 
-def _run_async(coro_factory, *args):
-    """Run an async coroutine from sync context.
-
-    The gateway's per-tenant policy cache is async (so it can
-    share a Postgres connection pool with the rest of the route
-    stack) but the PII redactor calls it from a sync code path.
-    This helper runs the coroutine on a dedicated thread with its
-    own event loop so we don't block the request handler.
-
-    For requests that already have a running event loop (the
-    FastAPI handler), we still use ``asyncio.run`` on a worker
-    thread — the cache entries are stored at module scope, so
-    cross-loop access is safe.
-    """
-    import asyncio
-    import concurrent.futures
-    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
-        future = ex.submit(lambda: asyncio.run(coro_factory(*args)))
-        return future.result(timeout=2.0)
-
-
-def _apply_pii_filter_to_flat_string(
+async def _apply_pii_filter_to_flat_string(
     prompt: str,
     *,
     org_id: str = "",
@@ -1135,7 +1145,7 @@ def _apply_pii_filter_to_flat_string(
 
     Returns ``(scrubbed, findings)``.
     """
-    effective_policy, findings, bypassed = _resolve_request_pii_policy(
+    effective_policy, findings, bypassed = await _resolve_request_pii_policy(
         request,
         raw_body,
         org_id=org_id,
@@ -1255,7 +1265,7 @@ async def chat_completions(
     )
     bypass = bypass_header or bypass_body
     try:
-        body.messages, pii_findings = _apply_pii_filter_to_messages(
+        body.messages, pii_findings = await _apply_pii_filter_to_messages(
             body.messages,
             org_id=org_id,
             request=request,
@@ -1285,8 +1295,7 @@ async def chat_completions(
                 "message": (
                     "PII policy is fail-closed for this tenant and "
                     "the request contains a credential-like value. "
-                    "Remove the credential or set 'pii_filter_enabled': "
-                    "false in the request body to opt out per-request."
+                    "Remove the credential and retry."
                 ),
             },
         ) from exc
@@ -1639,17 +1648,17 @@ async def _chat_completions_stream(
         except _get_openai_api_error() as exc:
             outcome = "failure"
             error_type = type(exc).__name__
-            err_payload = {
-                "error": {
-                    "message": str(getattr(exc, "message", exc)),
-                    "type": error_type,
-                    "code": getattr(exc, "code", None),
-                }
-            }
             # P39 audit (2026-07-06): the SDK ``message`` attribute can
             # carry the provider URL, a prefix of the API key, and the
             # model name. Surface a fixed safe string instead; clients
             # use ``type`` (class name) to drive retry/backoff policy.
+            err_payload = {
+                "error": {
+                    "message": _redact_sse_error_message(exc),
+                    "type": error_type,
+                    "code": getattr(exc, "code", None),
+                }
+            }
             logger.warning(
                 "gateway chat.completions stream failed: %s: %s",
                 error_type, redact_all(str(exc)),
@@ -1753,7 +1762,7 @@ async def completions(
     prompt = body.prompt
     try:
         if isinstance(prompt, str):
-            scrubbed, _findings = _apply_pii_filter_to_flat_string(
+            scrubbed, _findings = await _apply_pii_filter_to_flat_string(
                 prompt,
                 org_id=org_id,
                 request=request,
@@ -1766,7 +1775,7 @@ async def completions(
             scrubbed_list: list[Any] = []
             for item in prompt:
                 if isinstance(item, str):
-                    scrubbed, _ = _apply_pii_filter_to_flat_string(
+                    scrubbed, _ = await _apply_pii_filter_to_flat_string(
                         item,
                         org_id=org_id,
                         request=request,
@@ -1795,8 +1804,7 @@ async def completions(
                 "message": (
                     "PII policy is fail-closed for this tenant and the "
                     "request contains a credential-like value. Remove "
-                    "the credential or set 'pii_filter_enabled': false "
-                    "in the request body to opt out per-request."
+                    "the credential and retry."
                 ),
             },
         ) from exc
@@ -1813,6 +1821,8 @@ async def completions(
             # Audit 2026-06-22 B1.27 — cache chunk id once per stream;
             # previously regenerated each chunk, breaking client-side dedup.
             stream_id = f"cmpl-{uuid.uuid4().hex[:24]}"
+            outcome = "success"
+            error_type: str | None = None
             try:
                 stream = await client.completions.create(
                     **{k: v for k, v in upstream_kwargs.items() if k != "stream"},
@@ -1847,13 +1857,21 @@ async def completions(
                         logger.debug(f"legacy completion chunk failed: {exc}")
                 yield sse_done()
             except _get_openai_api_error() as exc:
-                # P39 audit (2026-07-06): redact upstream error in SSE
-                # payload — same redaction as the chat.completions path.
+                # P39: redact upstream error; never emit [DONE] after
+                # failure so partial deltas are not treated as success.
+                outcome = "failure"
+                error_type = type(exc).__name__
                 logger.warning(
                     "gateway legacy completions stream failed: %s: %s",
-                    type(redact_all(str(exc))).__name__, redact_all(str(exc)),
+                    error_type,
+                    redact_all(str(exc)),
                 )
-                yield sse_format({"error": {"message": _redact_sse_error_message(exc), "type": type(exc).__name__}})
+                yield sse_format({
+                    "error": {
+                        "message": _redact_sse_error_message(exc),
+                        "type": error_type,
+                    }
+                })
             finally:
                 await _emit_gateway_telemetry(
                     org_id=org_id,
@@ -1861,7 +1879,8 @@ async def completions(
                     model=body.model,
                     endpoint="completions",
                     request_body=raw_body,
-                    outcome="success",
+                    outcome=outcome,
+                    error_type=error_type,
                     duration_ms=(time.monotonic() - start) * 1000,
                 )
 
@@ -1962,7 +1981,7 @@ async def embeddings(
     inp = body.input
     try:
         if isinstance(inp, str):
-            scrubbed, _ = _apply_pii_filter_to_flat_string(
+            scrubbed, _ = await _apply_pii_filter_to_flat_string(
                 inp,
                 org_id=org_id,
                 request=request,
@@ -1975,7 +1994,7 @@ async def embeddings(
             scrubbed_list: list[Any] = []
             for item in inp:
                 if isinstance(item, str):
-                    scrubbed, _ = _apply_pii_filter_to_flat_string(
+                    scrubbed, _ = await _apply_pii_filter_to_flat_string(
                         item,
                         org_id=org_id,
                         request=request,
@@ -2004,8 +2023,7 @@ async def embeddings(
                 "message": (
                     "PII policy is fail-closed for this tenant and the "
                     "request contains a credential-like value. Remove "
-                    "the credential or set 'pii_filter_enabled': false "
-                    "in the request body to opt out per-request."
+                    "the credential and retry."
                 ),
             },
         ) from exc

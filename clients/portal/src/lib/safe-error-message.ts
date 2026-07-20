@@ -3,6 +3,11 @@
  * Technical details are only returned in development builds.
  */
 
+import {
+  IMPROVE_FEATURE_DISABLED_MESSAGE,
+  REPO_NOT_CONNECTED_MESSAGE,
+} from "@/lib/improve-feature";
+
 const GENERIC =
   "Something went wrong. Please try again or refresh the page.";
 
@@ -27,6 +32,34 @@ export function toUserFacingError(
     typeof (error as { status?: unknown }).status === "number"
       ? (error as { status: number }).status
       : undefined;
+
+  const raw =
+    error instanceof Error
+      ? error.message
+      : typeof error === "object" &&
+          error !== null &&
+          "message" in error &&
+          typeof (error as { message?: unknown }).message === "string"
+        ? (error as { message: string }).message
+        : typeof error === "string"
+          ? error
+          : "";
+
+  // Feature kill-switches and repo-connection gaps often return 503 with
+  // an explicit reason — do not collapse those into the generic server banner.
+  if (
+    /improvement_agent_v1/i.test(raw) ||
+    /disabled for this org/i.test(raw)
+  ) {
+    return IMPROVE_FEATURE_DISABLED_MESSAGE;
+  }
+  if (
+    /repo_not_connected/i.test(raw) ||
+    /Connect GitHub App/i.test(raw)
+  ) {
+    return REPO_NOT_CONNECTED_MESSAGE;
+  }
+
   if (typeof status === "number" && status >= 500) {
     return "Eden is having trouble reaching the server. Please try again in a moment.";
   }
@@ -42,13 +75,6 @@ export function toUserFacingError(
   if (status === 429) {
     return "Too many requests — please wait a moment and try again.";
   }
-
-  const raw =
-    error instanceof Error
-      ? error.message
-      : typeof error === "string"
-        ? error
-        : "";
 
   if (!raw) return fallback;
 

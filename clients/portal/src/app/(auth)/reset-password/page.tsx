@@ -42,7 +42,7 @@ export default function ResetPasswordPage() {
           </div>
           <Link
             href="/sign-in"
-            className="inline-flex items-center gap-2 rounded-lg bg-[var(--accent)] px-4 py-2.5 text-sm font-medium text-[var(--bg-primary)] hover:opacity-90"
+            className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-[var(--accent)] px-4 py-2.5 text-sm font-medium text-[var(--bg-primary)] hover:opacity-90"
           >
             Continue to sign in
             <ArrowRight className="w-4 h-4" aria-hidden="true" />

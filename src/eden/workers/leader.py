@@ -51,7 +51,14 @@ async def _extend_lock_periodically(
         await asyncio.sleep(interval)
         if stop.is_set():
             break
-        if not await lock.extend(lock.ttl):
+        try:
+            extended = await lock.extend(lock.ttl)
+        except Exception as exc:
+            logger.warning(
+                "leader: extend raised for %s: %s", lock.name, exc
+            )
+            break
+        if not extended:
             logger.warning("leader: lost lock %s during extend", lock.name)
             break
 
@@ -69,13 +76,27 @@ async def run_if_leader(
   Followers wait ``interval`` seconds between acquisition attempts.
   The lock TTL defaults to three times the interval so a slow tick
   does not lose leadership mid-run.
+
+  Redis / acquire failures are logged and retried on the next
+  interval — they must not kill the calling supervised loop.
     """
     lock_ttl = ttl or max(30, int(interval * 3))
     stop_event = stop or asyncio.Event()
 
     while not stop_event.is_set():
         lock = Lock(lock_name, ttl=lock_ttl, prefix="eden:leader")
-        if await lock.acquire():
+        try:
+            acquired = await lock.acquire()
+        except Exception as exc:
+            logger.error(
+                "leader: acquire %s raised: %s",
+                lock_name,
+                exc,
+                exc_info=True,
+            )
+            acquired = False
+
+        if acquired:
             extender_stop = asyncio.Event()
             extender = asyncio.create_task(
                 _extend_lock_periodically(lock, interval, extender_stop),
@@ -85,16 +106,30 @@ async def run_if_leader(
                 await work()
             except asyncio.CancelledError:
                 raise
-            except Exception as exc:  # pragma: no cover - defensive
-                logger.warning("leader: work %s failed: %s", lock_name, exc)
+            except Exception as exc:
+                logger.error(
+                    "leader: work %s failed: %s",
+                    lock_name,
+                    exc,
+                    exc_info=True,
+                )
             finally:
                 extender_stop.set()
                 extender.cancel()
-                with contextlib.suppress(asyncio.CancelledError):
+                with contextlib.suppress(asyncio.CancelledError, Exception):
                     await extender
-                await lock.release()
+                try:
+                    await lock.release()
+                except Exception as exc:
+                    logger.warning(
+                        "leader: release %s failed: %s", lock_name, exc
+                    )
         else:
-            logger.debug("leader: not leader for %s; sleeping %.0fs", lock_name, interval)
+            logger.debug(
+                "leader: not leader for %s; sleeping %.0fs",
+                lock_name,
+                interval,
+            )
 
         try:
             await asyncio.wait_for(stop_event.wait(), timeout=interval)

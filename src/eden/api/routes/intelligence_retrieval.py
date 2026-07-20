@@ -21,7 +21,7 @@ from typing import Any
 from fastapi import APIRouter, Body, Depends, Path
 from pydantic import BaseModel
 
-from eden.api.deps import get_current_user, require_feature_flag
+from eden.api.deps import get_current_user, require_feature_flag, require_path_org_access
 from eden.kb.retrieval_intel.utilization import (
     ChunkAttribution,
     KnowledgeGapDetector,
@@ -37,6 +37,7 @@ router = APIRouter(
     dependencies=[
         Depends(require_feature_flag("intelligence_gap_v0")),
         Depends(get_current_user),
+        Depends(require_path_org_access),
     ],
 )
 
@@ -56,7 +57,7 @@ class ReorderRequest(BaseModel):
 
 @router.post("/{trace_id}/utilization")
 async def utilization(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     trace_id: str = Path(...),
 ) -> dict[str, Any]:
     return await _util.score(org_id, trace_id)
@@ -64,7 +65,7 @@ async def utilization(
 
 @router.post("/gaps")
 async def gaps(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     body: GapRequest = Body(...),
 ) -> dict[str, Any]:
     return await _gaps.detect(org_id, window=body.window)
@@ -72,7 +73,7 @@ async def gaps(
 
 @router.post("/{trace_id}/attribution")
 async def attribution(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     trace_id: str = Path(...),
 ) -> dict[str, Any]:
     return await _attr.attribution(org_id, trace_id)
@@ -80,7 +81,7 @@ async def attribution(
 
 @router.post("/reorder")
 async def reorder(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     body: ReorderRequest = Body(...),
 ) -> dict[str, Any]:
     return await _reorder.suggest(org_id, collection=body.collection)

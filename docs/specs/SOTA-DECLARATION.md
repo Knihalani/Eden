@@ -52,7 +52,7 @@ This is **not** a claim of zero remaining infra work. Soft PARTIALs below are kn
 | F64 / F34 / MCP stretch (W28) | **True** | Streamable HTTP JSON-RPC honesty |
 | `eden-mcp` installable + smoke | **True** | `scripts/w29_mcp_smoke.sh` |
 | Flag + DR drills | **Soft** | Contract + workflow; DR advisory without backup bucket |
-| Perf/cost scorecard vs standards | **True** | [`SOTA-PERF-COST-SCORECARD.md`](./SOTA-PERF-COST-SCORECARD.md) |
+| Perf/cost scorecard vs standards | **Soft** | [`SOTA-PERF-COST-SCORECARD.md`](./SOTA-PERF-COST-SCORECARD.md) — PARTIAL-GREEN; N08 StatGate latency + K44 slow-query producers demoted from MET |
 | No F22 rebuild / no Eden COGS UI / no docs redesign | **True** | Hard constraints held |
 | Alembic single head | **True** | Expected head `112_w28_f64_f34_mcp` |
 

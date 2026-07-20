@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo, Suspense } from "react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import dynamic from "next/dynamic";
 import { useOrg } from "@/hooks/use-org";
 import { useToast } from "@/components/ui/toast";
@@ -12,14 +12,14 @@ import { queryKeys } from "@/lib/query-keys";
 import { cn } from "@/lib/utils";
 import { formatRelativeTime } from "@/lib/format";
 import { EmptyState } from "@/components/ui/empty-state";
+import { ErrorState } from "@/components/ui/error-state";
 import { Button } from "@/components/ui/button";
 import { NoOrgState } from "@/components/ui/no-org-state";
 import { PageHeader } from "@/components/layout/page-header";
-import { CoreResourcePage, DetailPanelShell, useResourceUrlState, ResourceOsToolbar, BulkActionBar } from "@/components/portal-os";
+import { CoreResourcePage, DetailPanelShell, useResourceUrlState, ResourceOsToolbar, BulkActionBar, VirtualizedList } from "@/components/portal-os";
 import { CrossLinkBar } from "@/components/portal-os/CrossLinkBar";
 import { incidentHref, traceHref } from "@/lib/portal-cross-links";
 import { EmbeddedSurface } from "@/components/layout/embedded-surface";
-import { motion, AnimatePresence } from "framer-motion";
 import {
   Bell,
   AlertTriangle,
@@ -100,7 +100,13 @@ function getSeverityConfig(severity: string) {
 
 export default function AlertsPage() {
   return (
-    <Suspense fallback={null}>
+    <Suspense
+      fallback={
+        <div className="flex h-48 items-center justify-center">
+          <Loader2 className="h-8 w-8 animate-spin text-[var(--text-muted)]" />
+        </div>
+      }
+    >
       <AlertsPageInner />
     </Suspense>
   );
@@ -108,7 +114,8 @@ export default function AlertsPage() {
 
 function AlertsPageInner() {
   const searchParams = useSearchParams();
-  const { currentOrg } = useOrg();
+  const router = useRouter();
+  const { currentOrg, orgSyncing } = useOrg();
   const orgId = currentOrg?.id ?? null;
   const toast = useToast();
   const [severityFilter, setSeverityFilter] = useState<SeverityFilter>("all");
@@ -157,27 +164,30 @@ function AlertsPageInner() {
     queryKeys.alerts.list(orgId, alertsParams),
     orgId,
     () => api.listAlerts(orgId!, alertsParams),
-    // 15s polling — refetchIntervalInBackground defaults to false,
-    // so this pauses on tab-hidden the same way the old usePolling
-    // hook did; the 401/403 permanent-bail semantics come from the
-    // global QueryClient retry policy (see query-provider.tsx).
-    { refetchInterval: 15_000 },
+    // P4: ≥30s idle poll; pauses when document hidden (RQ default).
+    // Tab-gated: skip while Signals/Rules tabs are active.
+    // Skip while Clerk↔Eden org sync is in flight to avoid a false 404.
+    {
+      refetchInterval: 30_000,
+      enabled: !orgSyncing && !showSignals && !rulesOpen,
+    },
   );
   const rulesQuery = useOrgQuery(
     queryKeys.alerts.nlRules(orgId),
     orgId,
     () => api.listNlAlertRules(orgId!),
+    { enabled: !orgSyncing },
   );
   const hasAlertRules = (rulesQuery.data?.rules?.length ?? 0) > 0;
-  const rulesReady = !rulesQuery.isLoading && !rulesQuery.isPending;
+  const rulesReady =
+    !rulesQuery.isLoading && !rulesQuery.isPending && !rulesQuery.isError;
+  const rulesError = rulesQuery.error?.message ?? null;
   const loading = alertsQuery.isLoading;
   const refreshing = alertsQuery.isFetching && !loading;
   const error = alertsQuery.error?.message ?? null;
   const total = alertsQuery.data?.total ?? 0;
   const unreadCount = alertsQuery.data?.unread_count ?? 0;
-  // The API returns rows without the legacy ``message``,
-  // ``entity_id``, ``channels`` fields. Map at the boundary so the
-  // rest of the page can keep the existing local shape.
+  // Map listAlerts envelope → page AlertItem shape (message ← description).
   const alerts: AlertItem[] = (alertsQuery.data?.alerts ?? []).map((a) => ({
     alert_id: a.alert_id,
     title: a.title,
@@ -185,13 +195,13 @@ function AlertsPageInner() {
     source: a.source,
     message: a.description,
     severity: a.severity,
-    entity_id: "",
+    entity_id: a.entity_id ?? a.source ?? "",
     acknowledged: a.acknowledged,
     triggered_at: a.triggered_at,
     created_at: a.triggered_at,
     acknowledged_at: a.acknowledged_at,
     acknowledged_by: a.acknowledged_by,
-    channels: [],
+    channels: a.channels ?? [],
     metadata: a.metadata,
   }));
 
@@ -199,15 +209,20 @@ function AlertsPageInner() {
     () => ({
       ...(verdictFilter !== "all" ? { verdict: verdictFilter } : {}),
       limit,
-      offset,
+      // Triage feed is independent of alert-list pagination.
+      offset: 0,
     }),
-    [verdictFilter, limit, offset],
+    [verdictFilter, limit],
   );
   const eventsQuery = useOrgQuery(
     queryKeys.alerts.events(orgId, eventsParams),
     orgId,
     () => api.listAlertEvents(orgId!, eventsParams),
-    { refetchInterval: 15_000 },
+    // P4 consolidate: listAlerts keeps the 30s poll; triage events
+    // load once (and on filter/key change) — avoid dual 30s RPS.
+    {
+      enabled: !orgSyncing && !showSignals && !rulesOpen,
+    },
   );
   const triageEvents = eventsQuery.data?.events ?? [];
 
@@ -257,6 +272,8 @@ function AlertsPageInner() {
     });
   };
 
+  // Page-window counts only — listAlerts returns one offset/limit slice;
+  // chip totals are not org-wide until the API exposes severity aggregates.
   const severityCounts = alerts.reduce((acc, a) => {
     acc[a.severity] = (acc[a.severity] || 0) + 1;
     return acc;
@@ -283,11 +300,10 @@ function AlertsPageInner() {
           <PageHeader
             title="Alerts"
             subtitle="Threshold notifications and custom signal rules."
-            icon={Bell}
           />
         }
         toolbar={
-          <div className="mb-4 flex gap-2 text-sm">
+          <div className="flex gap-2 text-sm">
             <Link href="/alerts" className="text-[var(--accent)] hover:underline">Feed</Link>
             <span className="text-[var(--text-muted)]">·</span>
             <span className="font-medium text-[var(--text-primary)]">Signals</span>
@@ -308,13 +324,12 @@ function AlertsPageInner() {
         <PageHeader
           title="Alerts"
           subtitle={loading ? "..." : `${total} alerts · ${unreadCount} unread`}
-          icon={Bell}
           description="Configure notifications when traces, costs, or quality cross a threshold."
           actions={
           <div className="flex items-center gap-2">
             <Link
               href="/alerts?tab=signals"
-              className="text-xs text-[var(--accent)] hover:underline px-2"
+              className="text-xs text-[var(--text-muted)] hover:text-[var(--accent)] px-2"
             >
               Signals
             </Link>
@@ -328,13 +343,12 @@ function AlertsPageInner() {
               <RefreshCw className={cn("w-4 h-4", (loading || refreshing) && "animate-spin")} />
             </button>
           {hasSelection && (
-            <motion.button
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
+            <Button
+              size="sm"
               onClick={handleBatchAcknowledge}
               disabled={ackLoading}
               aria-label={`Acknowledge ${selectedAlerts.size} selected alerts`}
-              className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium bg-[var(--accent)] text-[var(--bg-base)] rounded-lg hover:bg-[var(--accent-hover)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="min-h-11"
             >
               {ackLoading ? (
                 <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -342,7 +356,7 @@ function AlertsPageInner() {
                 <Check className="w-3.5 h-3.5" />
               )}
               Acknowledge {selectedAlerts.size}
-            </motion.button>
+            </Button>
           )}
           </div>
         }
@@ -353,7 +367,8 @@ function AlertsPageInner() {
       <ResourceOsToolbar
         resourceKey="alerts"
         onCreateAlert={() => {
-          window.location.href = "/alerts?tab=rules";
+          setRulesOpen(true);
+          router.replace("/alerts?tab=rules");
         }}
         exportRows={alerts.map((a) => ({
           id: a.alert_id,
@@ -377,7 +392,8 @@ function AlertsPageInner() {
       />
       {/* Stats — only when there is feed data or an active severity filter */}
       {(alerts.length > 0 || severityFilter !== "all") && (
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-6">
+      <div className="mb-6 space-y-2">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
         {(["critical", "high", "warning", "info", "debug"] as const).map((sev) => {
           const config = getSeverityConfig(sev);
           const count = severityCounts[sev] || 0;
@@ -385,12 +401,15 @@ function AlertsPageInner() {
           return (
             <button
               key={sev}
-              onClick={() => setSeverityFilter(severityFilter === sev ? "all" : sev)}
+              onClick={() => {
+                setSeverityFilter(severityFilter === sev ? "all" : sev);
+                setOffset(0);
+              }}
               className={cn(
-                "flex items-center gap-3 p-3 min-h-11 rounded-lg border transition-all text-left",
+                "flex items-center gap-3 p-3 min-h-11 rounded-lg transition-all text-left",
                 severityFilter === sev
-                  ? cn(config.bg, "border-[var(--border-strong)]")
-                  : "bg-[var(--bg-primary)] border-[var(--border-default)] hover:border-[var(--border-strong)]"
+                  ? cn(config.bg, "ring-1 ring-[var(--border-strong)]")
+                  : "bg-[var(--bg-secondary)] hover:bg-[var(--bg-tertiary)]"
               )}
             >
               <div className={cn("p-1.5 rounded-md", config.bg)}>
@@ -406,11 +425,16 @@ function AlertsPageInner() {
           );
         })}
       </div>
+      <p className="text-[10px] text-[var(--text-muted)]">
+        Counts reflect this page ({offset + 1}–{Math.min(offset + alerts.length, total || offset + alerts.length)}
+        {total > 0 ? ` of ${total}` : ""}), not the full org feed.
+      </p>
+      </div>
       )}
 
       {/* Filters */}
       <div className="flex flex-wrap items-center gap-2 mb-4">
-        <div className="flex items-center gap-1 bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-lg p-1">
+        <div className="flex items-center gap-1 rounded-lg bg-[var(--bg-secondary)] p-1">
           {(["all", "unread", "acknowledged"] as const).map((filter) => (
             <button
               key={filter}
@@ -434,10 +458,21 @@ function AlertsPageInner() {
           ))}
         </div>
 
-        <div className="h-4 w-px bg-[var(--border-default)]" />
+        <div className="h-4 w-px bg-[var(--border-subtle)]" />
 
         <button
-          onClick={() => setRulesOpen(!rulesOpen)}
+          onClick={() => {
+            const next = !rulesOpen;
+            setRulesOpen(next);
+            const params = new URLSearchParams(searchParams.toString());
+            if (next) {
+              params.set("tab", "rules");
+            } else {
+              params.delete("tab");
+            }
+            const qs = params.toString();
+            router.replace(qs ? `/alerts?${qs}` : "/alerts");
+          }}
           className={cn(
             "flex items-center gap-1.5 min-h-11 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors",
             rulesOpen
@@ -450,9 +485,9 @@ function AlertsPageInner() {
           {rulesOpen ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
         </button>
 
-        <div className="h-4 w-px bg-[var(--border-default)]" />
+        <div className="h-4 w-px bg-[var(--border-subtle)]" />
 
-        <div className="flex items-center gap-1 bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-lg p-1">
+        <div className="flex items-center gap-1 rounded-lg bg-[var(--bg-secondary)] p-1">
           {(["all", "real_incident", "benign", "duplicate", "pending"] as const).map((v) => (
             <button
               key={v}
@@ -474,13 +509,9 @@ function AlertsPageInner() {
       </div>
 
       {/* Alert Rules Panel */}
-      <AnimatePresence>
+      <>
         {rulesOpen && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: "auto", opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.2 }}
+          <div
             className="overflow-hidden mb-4"
           >
             <AlertRulesPanel
@@ -491,25 +522,9 @@ function AlertsPageInner() {
                 agent_id: searchParams.get("agent_id") || "",
               }}
             />
-          </motion.div>
+          </div>
         )}
-      </AnimatePresence>
-
-      {/* Error */}
-      {error && (
-        <div className="mb-4 p-3 rounded-lg border border-[var(--error)]/20 bg-[var(--error)]/10 text-sm text-[var(--error)] flex items-center gap-2">
-          <AlertCircle className="w-4 h-4 flex-shrink-0" />
-          {error}
-          <Button
-              variant="link"
-              size="sm"
-              onClick={fetchAlerts}
-              className="ml-auto"
-            >
-              Retry
-            </Button>
-        </div>
-      )}
+      </>
 
       {/* Triage events (F81) */}
       {triageEvents.length > 0 && (
@@ -522,7 +537,7 @@ function AlertsPageInner() {
             return (
               <div
                 key={ev.id}
-                className="rounded-lg border border-[var(--border-default)] bg-[var(--bg-primary)] p-4"
+                className="rounded-lg bg-[var(--bg-secondary)] p-4"
               >
                 <div className="flex items-center gap-2 mb-1">
                   <span className="text-sm font-semibold text-[var(--text-primary)]">{ev.title}</span>
@@ -584,6 +599,35 @@ function AlertsPageInner() {
             <Loader2 className="w-6 h-6 text-[var(--text-muted)] animate-spin" />
             <p className="text-sm text-[var(--text-muted)]">Loading alerts...</p>
           </div>
+        ) : error ? (
+          <ErrorState
+            title="Could not load alerts"
+            message={error}
+            action={
+              <Button onClick={fetchAlerts} variant="outline" size="sm">
+                Try again
+              </Button>
+            }
+          />
+        ) : alerts.length === 0 &&
+          rulesError &&
+          severityFilter === "all" &&
+          acknowledgedFilter === null ? (
+          <ErrorState
+            title="Could not verify alert rules"
+            message={rulesError}
+            action={
+              <Button
+                onClick={() => void rulesQuery.refetch()}
+                variant="outline"
+                size="sm"
+                loading={rulesQuery.isFetching}
+                data-testid="alerts-rules-retry"
+              >
+                Try again
+              </Button>
+            }
+          />
         ) : alerts.length === 0 ? (
           <EmptyState
             variant="plain"
@@ -613,8 +657,11 @@ function AlertsPageInner() {
                   onClick={() => {
                     setSeverityFilter("all");
                     setAcknowledgedFilter(null);
+                    setVerdictFilter("all");
+                    setOffset(0);
                   }}
                   className="inline-flex min-h-11 items-center text-sm text-[var(--accent)] hover:underline"
+                  data-testid="alerts-clear-filters"
                 >
                   Clear filters
                 </button>
@@ -625,11 +672,7 @@ function AlertsPageInner() {
                     setRulesOpen(true);
                     const params = new URLSearchParams(searchParams.toString());
                     params.set("tab", "rules");
-                    window.history.replaceState(
-                      null,
-                      "",
-                      `${window.location.pathname}?${params.toString()}`,
-                    );
+                    router.replace(`/alerts?${params.toString()}`);
                   }}
                   className="inline-flex min-h-11 items-center gap-1.5 rounded-lg bg-[var(--accent)] px-4 py-2.5 text-sm font-medium text-[var(--bg-base)] hover:bg-[var(--accent-hover)]"
                   data-testid="alerts-create-rule-cta"
@@ -641,24 +684,25 @@ function AlertsPageInner() {
           />
         ) : (
           <>
-            {alerts.map((alert) => {
+            <VirtualizedList
+              items={alerts}
+              rowKey={(alert) => alert.alert_id}
+              rowHeight={108}
+            >
+              {(alert) => {
               const config = getSeverityConfig(alert.severity);
               const Icon = config.icon;
               const isSelected = selectedAlerts.has(alert.alert_id);
               const isActive = alertId === alert.alert_id;
 
               return (
-                <motion.div
+                <div
                   key={alert.alert_id}
-                  layout
-                  initial={false}
-                  animate={{ opacity: alert.acknowledged ? 0.6 : 1 }}
                   className={cn(
-                    "rounded-lg border transition-all",
+                    "rounded-lg transition-all",
                     isSelected || isActive
-                      ? "border-[var(--accent)]/30 bg-[var(--accent-faint)]/20"
-                      : "border-[var(--border-default)] bg-[var(--bg-primary)]",
-                    !alert.acknowledged && !isSelected && !isActive && "hover:border-[var(--border-strong)]"
+                      ? "bg-[var(--accent-faint)]/40 ring-1 ring-[var(--accent)]/30"
+                      : "hover:bg-[var(--bg-secondary)]",
                   )}
                 >
                   <div
@@ -757,9 +801,10 @@ function AlertsPageInner() {
                       )}
                     </div>
                   </div>
-                </motion.div>
+                </div>
               );
-            })}
+              }}
+            </VirtualizedList>
 
             {/* Pagination */}
             {total > limit && (
@@ -877,6 +922,7 @@ function AlertRulesPanel({
   );
   const nlRules = rulesQuery.data?.rules ?? [];
   const loading = rulesQuery.isLoading;
+  const rulesError = rulesQuery.error?.message ?? null;
 
   useEffect(() => {
     if (!prefillFilters) return;
@@ -993,6 +1039,17 @@ function AlertRulesPanel({
 
       {loading ? (
         <Loader2 className="w-4 h-4 animate-spin text-[var(--text-muted)]" />
+      ) : rulesError ? (
+        <ErrorState
+          size="sm"
+          title="Could not load rules"
+          message={rulesError}
+          action={
+            <Button size="sm" variant="outline" onClick={() => void rulesQuery.refetch()}>
+              Try again
+            </Button>
+          }
+        />
       ) : nlRules.length === 0 ? (
         <p className="text-xs text-[var(--text-muted)]">No NL rules yet. Compile and save above.</p>
       ) : (

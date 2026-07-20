@@ -1,7 +1,6 @@
 "use client";
 
 import * as React from "react";
-import { ResponsiveContainer } from "recharts";
 import { Download } from "lucide-react";
 import { Section } from "@/components/ui/section";
 import { Button } from "@/components/ui/button";
@@ -121,9 +120,10 @@ export function ChartCard({
         {isEmpty && showFallback ? (
           fallback
         ) : (
-          <ResponsiveContainer width="100%" height="100%">
-            {children}
-          </ResponsiveContainer>
+          // Sized host only — callers that need recharts must wrap with
+          // ResponsiveContainer themselves so this shell never pulls the
+          // chart library into shared chrome/bundles.
+          <div className="h-full w-full">{children}</div>
         )}
       </div>
       {(showDataTable || tableOpen) && csvRows && csvRows.length > 0 ? (

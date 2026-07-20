@@ -170,6 +170,9 @@ def app(stub_pg, admin_member, monkeypatch):
     app.include_router(rbac.permissions_router)
     # Key the override on the original function object the route captured.
     app.dependency_overrides[original_get_member] = _get_member
+    # Handlers bind org_id via Depends(require_path_org_access); stub the
+    # resolved Eden id so unit tests do not need a real JWT.
+    app.dependency_overrides[rbac.require_path_org_access] = lambda: "org-test"
     return app
 
 
@@ -292,6 +295,7 @@ def test_assign_requires_admin_role(stub_pg, monkeypatch):
     app.include_router(rbac.router)
     app.include_router(rbac.permissions_router)
     app.dependency_overrides[original_get_member] = _get_member
+    app.dependency_overrides[rbac.require_path_org_access] = lambda: "org-test"
     c = TestClient(app)
 
     resp = c.post(

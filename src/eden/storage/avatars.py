@@ -55,7 +55,14 @@ def _s3_bucket() -> str:
     return (getattr(settings, "bronze_s3_bucket", "") or "").strip()
 
 
+_S3_CLIENT = None
+
+
 def _make_s3_client():
+    """Return a process-wide boto3 S3 client (K20 singleton)."""
+    global _S3_CLIENT
+    if _S3_CLIENT is not None:
+        return _S3_CLIENT
     import boto3
 
     settings = get_settings()
@@ -68,7 +75,13 @@ def _make_s3_client():
     if access_key and secret_key:
         kwargs["aws_access_key_id"] = access_key
         kwargs["aws_secret_access_key"] = secret_key
-    return boto3.client("s3", **kwargs)
+    _S3_CLIENT = boto3.client("s3", **kwargs)
+    return _S3_CLIENT
+
+
+def get_s3_client():
+    """Public accessor for the shared S3 client."""
+    return _make_s3_client()
 
 
 async def store_avatar(user_id: str, blob: bytes, content_type: str) -> str:
@@ -79,7 +92,7 @@ async def store_avatar(user_id: str, blob: bytes, content_type: str) -> str:
 
     if _use_s3():
         bucket = _s3_bucket()
-        client = _make_s3_client()
+        client = get_s3_client()
         await asyncio.to_thread(
             client.put_object,
             Bucket=bucket,

@@ -16,12 +16,18 @@ import logging
 from typing import Any
 from uuid import uuid4
 
-from fastapi import APIRouter, Header, HTTPException, status
+from fastapi import APIRouter, Body, Depends, Header, HTTPException, Path, status
 from pydantic import BaseModel, Field
 
+from eden.api.deps import resolve_eden_org_id
 from eden.api.utils.redact import redact_all
 from eden.config import get_settings
 from eden.storage.postgres import get_postgres_client
+
+_SCIM_USER_COLUMNS = (
+    "id, org_id, scim_external_id, user_id, user_email, "
+    "display_name, is_active, created_at, last_synced_at"
+)
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -102,14 +108,25 @@ class SCIMError(BaseModel):
 # ============================================================================
 
 async def get_current_org_scim(
-    org_id: str,
+    org_id: str = Path(..., description="Organization ID"),
     authorization: str | None = Header(None, alias="Authorization"),
 ) -> dict:
     """Validate SCIM bearer token and return org context.
 
-    Compares hashed token against org_scim_config.scim_token_hash.
-    Raises HTTPException 401 if invalid or SCIM not enabled.
+    Resolves Clerk-style path ids to the Eden org UUID before SQL so
+    ``org_scim_config.org_id`` (UUID) never receives a raw ``org_…``
+    string (DataError → 500). Compares hashed token against
+    ``org_scim_config.scim_token_hash``. Raises HTTPException 401 if
+    invalid or SCIM not enabled.
     """
+    eden_org_id = await resolve_eden_org_id(org_id)
+    if not eden_org_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Organization not found",
+        )
+    org_id = eden_org_id
+
     if not authorization:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -177,6 +194,13 @@ async def get_current_org_scim(
         "org_id": org_id,
         "org_name": org_row["name"] if org_row else None,
     }
+
+
+async def require_scim_org_id(
+    org_ctx: dict = Depends(get_current_org_scim),
+) -> str:
+    """Path org_id → Eden UUID after SCIM bearer validation."""
+    return str(org_ctx["org_id"])
 
 
 # ============================================================================
@@ -268,16 +292,41 @@ async def _get_or_create_user(client, email: str, given_name: str | None, family
     user_id = str(uuid4())
     display_name = " ".join(filter(None, [given_name, family_name])) or email.split("@")[0]
 
-    await client.execute(
-        """
-        INSERT INTO users (id, email, name, password_hash)
-        VALUES ($1, $2, $3, $4)
-        """,
-        user_id,
-        email.lower(),
-        display_name,
-        "",  # No password - user authenticates via SCIM/SSO
-    )
+    try:
+        await client.execute(
+            """
+            INSERT INTO users (id, email, name, password_hash)
+            VALUES ($1, $2, $3, $4)
+            """,
+            user_id,
+            email.lower(),
+            display_name,
+            "",  # No password - user authenticates via SCIM/SSO
+        )
+    except Exception as exc:
+        msg = str(exc).lower()
+        # Concurrent provision of the same email — re-fetch winner.
+        if "unique" in msg or "duplicate" in msg:
+            raced = await client.fetchrow(
+                "SELECT id FROM users WHERE email = $1",
+                email.lower(),
+            )
+            if raced:
+                return str(raced["id"])
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="A user with this email already exists",
+            ) from exc
+        if "invalid input syntax for type uuid" in msg:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid user id",
+            ) from exc
+        logger.warning("SCIM _get_or_create_user INSERT failed: %s", redact_all(str(exc)))
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Failed to create user",
+        ) from exc
 
     return user_id
 
@@ -305,18 +354,53 @@ async def _sync_user_to_org(
     if not scim_user:
         # Create new SCIM user mapping
         scim_user_id = str(uuid4())
-        await client.execute(
-            """
-            INSERT INTO scim_users (id, org_id, scim_external_id, user_id, user_email, display_name, is_active)
-            VALUES ($1, $2, $3, $4, (SELECT email FROM users WHERE id = $4), $5, $6)
-            """,
-            scim_user_id,
-            org_id,
-            scim_external_id,
-            user_id,
-            display_name,
-            active,
-        )
+        try:
+            await client.execute(
+                """
+                INSERT INTO scim_users (id, org_id, scim_external_id, user_id, user_email, display_name, is_active)
+                VALUES ($1, $2, $3, $4, (SELECT email FROM users WHERE id = $4), $5, $6)
+                """,
+                scim_user_id,
+                org_id,
+                scim_external_id,
+                user_id,
+                display_name,
+                active,
+            )
+        except Exception as exc:
+            msg = str(exc).lower()
+            if "unique" in msg or "duplicate" in msg:
+                raced = await client.fetchrow(
+                    "SELECT id FROM scim_users WHERE org_id = $1 AND scim_external_id = $2",
+                    org_id,
+                    scim_external_id,
+                )
+                if raced:
+                    scim_user_id = str(raced["id"])
+                else:
+                    raise HTTPException(
+                        status_code=status.HTTP_409_CONFLICT,
+                        detail="SCIM user already exists",
+                    ) from exc
+            elif "invalid input syntax for type uuid" in msg:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Invalid organization or user id",
+                ) from exc
+            elif "foreign key" in msg:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Organization or user not found",
+                ) from exc
+            else:
+                logger.warning(
+                    "SCIM _sync_user_to_org INSERT failed: %s",
+                    redact_all(str(exc)),
+                )
+                raise HTTPException(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail="Failed to sync SCIM user",
+                ) from exc
     else:
         scim_user_id = str(scim_user["id"])
         # Update existing SCIM user
@@ -651,11 +735,10 @@ async def _sync_clerk_for_scim_user(
 
 @router.get("/Users", response_model=SCIMListResponse)
 async def list_scim_users(
-    org_id: str,
+    org_id: str = Depends(require_scim_org_id),
     filter: str | None = None,
     startIndex: int = 1,
     count: int = 100,
-    authorization: str | None = Header(None, alias="Authorization"),
 ):
     """List all SCIM-provisioned users for the org (RFC 7644 Section 3.4.2).
 
@@ -664,7 +747,6 @@ async def list_scim_users(
     - startIndex: 1-based index for pagination
     - count: maximum results to return
     """
-    await get_current_org_scim(org_id, authorization)
 
     client = await get_postgres_client()
 
@@ -718,15 +800,13 @@ async def list_scim_users(
 
 @router.post("/Users", response_model=dict, status_code=status.HTTP_201_CREATED)
 async def create_scim_user(
-    org_id: str,
-    scim_user: SCIMUser,
-    authorization: str | None = Header(None, alias="Authorization"),
+    org_id: str = Depends(require_scim_org_id),
+    scim_user: SCIMUser = Body(...),
 ):
     """Provision a new user via SCIM (RFC 7644 Section 3.4.3).
 
     Creates user account and adds to org as member.
     """
-    await get_current_org_scim(org_id, authorization)
 
     # Parse SCIM resource
     try:
@@ -808,7 +888,7 @@ async def create_scim_user(
 
     # Fetch created SCIM user
     created = await client.fetchrow(
-        "SELECT * FROM scim_users WHERE id = $1",
+        f"SELECT {_SCIM_USER_COLUMNS} FROM scim_users WHERE id = $1",
         scim_user_id,
     )
 
@@ -817,12 +897,10 @@ async def create_scim_user(
 
 @router.get("/Users/{scim_user_id}", response_model=dict)
 async def get_scim_user(
-    org_id: str,
-    scim_user_id: str,
-    authorization: str | None = Header(None, alias="Authorization"),
+    org_id: str = Depends(require_scim_org_id),
+    scim_user_id: str = Path(...),
 ):
     """Get a SCIM user by ID (RFC 7644 Section 3.4.1)."""
-    await get_current_org_scim(org_id, authorization)
 
     client = await get_postgres_client()
 
@@ -848,22 +926,20 @@ async def get_scim_user(
 
 @router.put("/Users/{scim_user_id}", response_model=dict)
 async def update_scim_user(
-    org_id: str,
-    scim_user_id: str,
-    scim_user: SCIMUser,
-    authorization: str | None = Header(None, alias="Authorization"),
+    org_id: str = Depends(require_scim_org_id),
+    scim_user_id: str = Path(...),
+    scim_user: SCIMUser = Body(...),
 ):
     """Update (replace) a SCIM user via PUT (RFC 7644 Section 3.4.4.1).
 
     Replaces all mutable attributes of the user.
     """
-    await get_current_org_scim(org_id, authorization)
 
     client = await get_postgres_client()
 
     # Verify user exists
     existing = await client.fetchrow(
-        "SELECT * FROM scim_users WHERE id = $1 AND org_id = $2",
+        f"SELECT {_SCIM_USER_COLUMNS} FROM scim_users WHERE id = $1 AND org_id = $2",
         scim_user_id,
         org_id,
     )
@@ -950,7 +1026,7 @@ async def update_scim_user(
 
     # Fetch updated SCIM user
     updated = await client.fetchrow(
-        "SELECT * FROM scim_users WHERE id = $1",
+        f"SELECT {_SCIM_USER_COLUMNS} FROM scim_users WHERE id = $1",
         scim_user_id,
     )
 
@@ -959,10 +1035,9 @@ async def update_scim_user(
 
 @router.patch("/Users/{scim_user_id}", response_model=dict)
 async def patch_scim_user(
-    org_id: str,
-    scim_user_id: str,
-    patch: SCIMPatchOp,
-    authorization: str | None = Header(None, alias="Authorization"),
+    org_id: str = Depends(require_scim_org_id),
+    scim_user_id: str = Path(...),
+    patch: SCIMPatchOp = Body(...),
 ):
     """Partial update via PatchOp (RFC 7644 §3.5.2) — required by Azure AD.
 
@@ -970,12 +1045,11 @@ async def patch_scim_user(
     ``emails``. Deprovision (``active=false``) suspends Eden membership
     and removes the Clerk org membership.
     """
-    await get_current_org_scim(org_id, authorization)
 
     client = await get_postgres_client()
 
     existing = await client.fetchrow(
-        "SELECT * FROM scim_users WHERE id = $1 AND org_id = $2",
+        f"SELECT {_SCIM_USER_COLUMNS} FROM scim_users WHERE id = $1 AND org_id = $2",
         scim_user_id,
         org_id,
     )
@@ -1071,7 +1145,7 @@ async def patch_scim_user(
     )
 
     updated = await client.fetchrow(
-        "SELECT * FROM scim_users WHERE id = $1",
+        f"SELECT {_SCIM_USER_COLUMNS} FROM scim_users WHERE id = $1",
         scim_user_id,
     )
     return _scim_user_to_resource(dict(updated))
@@ -1079,22 +1153,20 @@ async def patch_scim_user(
 
 @router.delete("/Users/{scim_user_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_scim_user(
-    org_id: str,
-    scim_user_id: str,
-    authorization: str | None = Header(None, alias="Authorization"),
+    org_id: str = Depends(require_scim_org_id),
+    scim_user_id: str = Path(...),
 ):
     """De-provision a user (RFC 7644 Section 3.4.4.5).
 
     Per spec, we suspend the user (set is_active=False and org_members.role='suspended')
     rather than deleting, to preserve data.
     """
-    await get_current_org_scim(org_id, authorization)
 
     client = await get_postgres_client()
 
     # Get SCIM user
     scim_user = await client.fetchrow(
-        "SELECT * FROM scim_users WHERE id = $1 AND org_id = $2",
+        f"SELECT {_SCIM_USER_COLUMNS} FROM scim_users WHERE id = $1 AND org_id = $2",
         scim_user_id,
         org_id,
     )
@@ -1148,11 +1220,9 @@ async def delete_scim_user(
 
 @router.get("/ServiceProviderConfig")
 async def get_service_provider_config(
-    org_id: str,
-    authorization: str | None = Header(None, alias="Authorization"),
+    org_id: str = Depends(require_scim_org_id),
 ):
     """Return SCIM service provider configuration."""
-    await get_current_org_scim(org_id, authorization)
 
     return {
         "schemas": ["urn:ietf:params:scim:schemas:core:2.0:ServiceProviderConfig"],
@@ -1176,11 +1246,9 @@ async def get_service_provider_config(
 
 @router.get("/ResourceTypes", response_model=dict)
 async def get_resource_types(
-    org_id: str,
-    authorization: str | None = Header(None, alias="Authorization"),
+    org_id: str = Depends(require_scim_org_id),
 ):
     """Return supported SCIM resource types."""
-    await get_current_org_scim(org_id, authorization)
 
     return {
         "schemas": ["urn:ietf:params:scim:schemas:core:2.0:ResourceType"],
@@ -1201,11 +1269,9 @@ async def get_resource_types(
 
 @router.get("/Schemas", response_model=dict)
 async def get_schemas(
-    org_id: str,
-    authorization: str | None = Header(None, alias="Authorization"),
+    org_id: str = Depends(require_scim_org_id),
 ):
     """Return SCIM schemas."""
-    await get_current_org_scim(org_id, authorization)
 
     return {
         "schemas": ["urn:ietf:params:scim:schemas:core:2.0:Schema"],

@@ -52,6 +52,13 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
+_LABELING_ITEM_COLUMNS = (
+    "id, org_id, payload, label_schema, prompt, status, tags, "
+    "annotations_required, required_skills, source_trace_id, "
+    "source_span_id, source_dataset_id, source_synthetic_qa_id, "
+    "assigned_to, created_at, updated_at"
+)
+
 
 # ── Dataclasses ──────────────────────────────────────────────────
 
@@ -409,8 +416,8 @@ class LabelingService:
         rows: list[dict[str, Any]] = []
         # 1. Explicitly assigned to this annotator.
         rows.extend(await self._pg.fetch(
-            """
-            SELECT * FROM labeling_items
+            f"""
+            SELECT {_LABELING_ITEM_COLUMNS} FROM labeling_items
             WHERE org_id = $1 AND status = 'pending'
               AND assigned_to = $2
             ORDER BY created_at ASC
@@ -423,8 +430,8 @@ class LabelingService:
             user_skill_set = set(self._user_skills(annotator_id) or [])
             if user_skill_set:
                 skill_rows = await self._pg.fetch(
-                    """
-                    SELECT * FROM labeling_items
+                    f"""
+                    SELECT {_LABELING_ITEM_COLUMNS} FROM labeling_items
                     WHERE org_id = $1 AND status = 'pending'
                       AND assigned_to IS NULL
                       AND required_skills && $2::text[]
@@ -437,8 +444,8 @@ class LabelingService:
         if len(rows) < limit:
             # 3. Unassigned + no required_skills.
             any_rows = await self._pg.fetch(
-                """
-                SELECT * FROM labeling_items
+                f"""
+                SELECT {_LABELING_ITEM_COLUMNS} FROM labeling_items
                 WHERE org_id = $1 AND status = 'pending'
                   AND assigned_to IS NULL
                   AND (required_skills IS NULL OR cardinality(required_skills) = 0)
@@ -507,6 +514,17 @@ class LabelingService:
         so revisions overwrite."""
         if not 0.0 <= float(confidence) <= 1.0:
             raise ValueError("confidence must be in [0, 1]")
+        item = await self._pg.fetchrow(
+            """
+            SELECT annotations_required
+            FROM labeling_items
+            WHERE id = $1 AND org_id = $2
+            """,
+            item_id,
+            org_id,
+        )
+        if item is None:
+            raise ValueError("item not found")
         # Normalise label: scalars become {"value": x},
         # dicts stay as-is.
         if not isinstance(label, (dict, list)):
@@ -536,10 +554,10 @@ class LabelingService:
             """
             UPDATE labeling_assignments
             SET completed_at = NOW()
-            WHERE item_id = $1 AND annotator_id = $2
+            WHERE org_id = $1 AND item_id = $2 AND annotator_id = $3
               AND completed_at IS NULL
             """,
-            item_id, annotator_id,
+            org_id, item_id, annotator_id,
         )
         try:
             from eden.evaluation.labeling_leases import release_lease
@@ -549,24 +567,21 @@ class LabelingService:
             pass
         # If item has annotations_required annotations, flip
         # to "completed".
-        item = await self._pg.fetchrow(
-            "SELECT annotations_required FROM labeling_items WHERE id = $1",
+        n = await self._pg.fetchval(
+            "SELECT count(*) FROM annotations WHERE item_id = $1 AND org_id = $2",
             item_id,
+            org_id,
         )
-        if item is not None:
-            n = await self._pg.fetchval(
-                "SELECT count(*) FROM annotations WHERE item_id = $1",
+        if n is not None and int(n) >= int(item["annotations_required"]):
+            await self._pg.execute(
+                """
+                UPDATE labeling_items
+                SET status = 'completed'
+                WHERE id = $1 AND org_id = $2 AND status != 'completed'
+                """,
                 item_id,
+                org_id,
             )
-            if n is not None and int(n) >= int(item["annotations_required"]):
-                await self._pg.execute(
-                    """
-                    UPDATE labeling_items
-                    SET status = 'completed'
-                    WHERE id = $1 AND status != 'completed'
-                    """,
-                    item_id,
-                )
         # Read back the annotation.
         row = await self._pg.fetchrow(
             """
@@ -599,10 +614,10 @@ class LabelingService:
             """
             UPDATE labeling_assignments
             SET completed_at = NOW()
-            WHERE item_id = $1 AND annotator_id = $2
+            WHERE org_id = $1 AND item_id = $2 AND annotator_id = $3
               AND completed_at IS NULL
             """,
-            item_id, annotator_id,
+            org_id, item_id, annotator_id,
         )
         # Update the item to skipped (regardless of its
         # previous state, as long as it wasn't completed).

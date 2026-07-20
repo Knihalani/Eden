@@ -61,9 +61,12 @@ def _build_settings_class():
         # ``eden_production`` enables fail-closed startup checks and
         # stricter KB init. ``run_background_workers`` gates whether the
         # API process hosts in-process background loops (off when a
-        # dedicated ``eden-worker`` job is deployed).
+        # dedicated ``eden-worker`` job is deployed). Default False so
+        # API pods do not host loops unless explicitly enabled.
         eden_production: bool = False
-        run_background_workers: bool = True
+        run_background_workers: bool = False
+        # Cap for fire-and-forget ``bounded_create_task`` hot sites.
+        background_task_concurrency: int = 64
         strict_startup_checks: bool = False
         eden_upload_dir: str = "/tmp/eden-uploads"
         avatar_storage_backend: str = "local"  # "local" | "s3"
@@ -82,10 +85,10 @@ def _build_settings_class():
         # in the Northflank env block.
         cors_origins_raw: str = ""
 
-        # /health probe override — when set, /health returns this status code
-        # (200 healthy / 503 degraded). Defaults to "auto" which derives the
-        # code from the postgres + qdrant + sandbox probes. Set to "200" in
-        # environments where Northflank restarts aren't safe (e.g. local dev).
+        # /health probe override. "auto" → 200 when healthy, 503 when
+        # degraded (soft deps included — monitors page on HTTP status).
+        # Ingress MUST use /ready, not /health. Set "200" for local/dev
+        # so soft-dep degradation does not trip restart loops.
         health_probe_mode: str = "auto"
 
         # PostgreSQL
@@ -181,11 +184,10 @@ def _build_settings_class():
         time_travel_recording_enabled: bool = True
         # Cat 14 (autonomous) destructive-action flag. The
         # ``/heal``, ``/heal/{id}/approve``, ``/heal/{id}/deny`` routes
-        # require this + the per-action two-stage opt-in. Default
-        # true so the recommendations + SelfHealer queue are
-        # reachable; the human-approval gate is what actually
-        # blocks the side-effect.
-        autonomous_actions_v0: bool = True
+        # require this + the per-action two-stage opt-in. OFF by
+        # default — enable explicitly; the human-approval gate still
+        # blocks side-effects when the flag is on.
+        autonomous_actions_v0: bool = False
         experiments_v1: bool = False
 
         # F03 — checkpoint ingest + prefix cache.
@@ -210,8 +212,10 @@ def _build_settings_class():
         auto_revert_enabled: bool = False
 
         # N23 — recurring improvement agent (replaces Cat 23 inbox).
-        improvement_agent_v1: bool = False
-        improvement_schedule_enabled: bool = False
+        # Default ON for GA / new deploys (matches GA-COMPLETION-CHECKLIST N23).
+        # Kill via IMPROVEMENT_AGENT_V1=false or per-org features if needed.
+        improvement_agent_v1: bool = True
+        improvement_schedule_enabled: bool = True
         # F62 — SLM-as-judge tier for online scoring (fast slot / Haiku-class).
         online_scoring_slm_v1: bool = True
 
@@ -285,7 +289,8 @@ def _build_settings_class():
         # per-token estimate. Off by default per C-5 rollout guidance.
         ai_agent_real_cost: bool = False
         # W20 / F70 — in-product ChatSidebar copilot (features.f70).
-        features_f70: bool = True
+        # OFF by default; set FEATURES_F70=true to enable.
+        features_f70: bool = False
         # DL-10: hard cap on the ChatService gateway's request
         # ``max_tokens`` parameter. The OpenRouter upstream caps at
         # 4096 by default; set to 0 to disable the cap. The test
@@ -668,6 +673,12 @@ def _build_settings_class():
         redis_url: str = "redis://localhost:6379/0"
         # redis-py PING cadence. 0 disables (recommended on Upstash Free).
         redis_health_check_interval: int = 0
+        # Cap per-command Redis wait so a hung Upstash socket cannot
+        # stall an ASGI worker (rate-limit / idempotency / locks).
+        redis_socket_timeout: float = 2.0
+        # Bound the asyncio connection pool — redis-py's default is
+        # effectively unbounded and can open sockets under load.
+        redis_max_connections: int = 32
 
         # ── GitHub App (onboarding wizard) ────────────────────────────────
         # The onboarding wizard uses a GitHub App (not an OAuth App) so we
@@ -708,17 +719,43 @@ def _build_settings_class():
 
         # ── N16 intelligence-aware tail sampling ───────────────────────
         # Master switch + profile for the in-process policy
-        # (``eden.observability.sampling.policy``). OTel edge sampling is
-        # configured separately in ``deploy/otel-collector-config.yaml``.
-        # ``sampling_enabled=False`` or ``sampling_profile=full`` keeps
-        # 100% of traces (safe rollback). ``probabilistic_sample_rate``
-        # overrides the profile fallback when set below 1.0; default 1.0
-        # means "use profile rate" (not "keep everything").
-        sampling_enabled: bool = True
-        sampling_profile: str = "balanced"  # full | balanced | aggressive
-        probabilistic_sample_rate: float = 1.0
+        # (``eden.observability.sampling.policy``), applied on ingest via
+        # ``eden.observability.sampling.apply.should_route_event``.
+        # OTel edge sampling is configured separately in
+        # ``deploy/otel-collector-config.yaml``.
+        #
+        # Soft-launch / Wave-1 default is ``full`` (100% keep) so new
+        # installs match SDK ``EDEN_SAMPLING_PROFILE`` default. For cost
+        # reduction after soft-launch, set ``EDEN_SAMPLING_PROFILE=balanced``
+        # (~15% non-signal keep; errors/loops/stumbles always kept) or
+        # ``aggressive`` (~5%). ``sampling_enabled=False`` also keeps 100%.
+        # ``probabilistic_sample_rate`` overrides the profile fallback when
+        # set below 1.0; default 1.0 means "use profile rate".
+        sampling_enabled: bool = Field(
+            default=True,
+            validation_alias=AliasChoices(
+                "sampling_enabled",
+                "SAMPLING_ENABLED",
+                "EDEN_SAMPLING_ENABLED",
+            ),
+        )
+        sampling_profile: str = Field(
+            default="full",  # full | balanced | aggressive
+            validation_alias=AliasChoices(
+                "sampling_profile",
+                "SAMPLING_PROFILE",
+                "EDEN_SAMPLING_PROFILE",
+            ),
+        )
+        probabilistic_sample_rate: float = Field(
+            default=1.0,
+            validation_alias=AliasChoices(
+                "probabilistic_sample_rate",
+                "PROBABILISTIC_SAMPLE_RATE",
+                "EDEN_PROBABILISTIC_SAMPLE_RATE",
+            ),
+        )
         sampling_slow_threshold_ms: float = 5_000.0
-
         # ── N09 content-addressed / message dedupe ─────────────────────
         # Gates ``message_store`` upserts on ingest and ``BlobStore``
         # intern. When False, payloads stay fully inline (N09 rollback).
@@ -726,7 +763,7 @@ def _build_settings_class():
         # blob store is additive for large system/tool payloads.
         content_dedupe_enabled: bool = True
 
-        quality_pipeline_workers: int = 2
+        quality_pipeline_workers: int = 8
         quality_pipeline_watermark_poll_ms: int = 1000
         quality_pipeline_batch_size: int = 100
 
@@ -773,7 +810,8 @@ def _build_settings_class():
         agentic_metrics_v1: bool = True
         closed_loop_orchestrator_v1: bool = True
         # WS3 prove surface (N04, F23) — portal fix-chat DELETED @ W26
-        change_impact_preview_v1: bool = True
+        # OFF by default; set CHANGE_IMPACT_PREVIEW_V1=true to enable.
+        change_impact_preview_v1: bool = False
         agent_sessions_v1: bool = True
         debug_sessions_v1: bool = True
         browser_recording_v1: bool = True

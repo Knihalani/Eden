@@ -2,13 +2,17 @@
 
 import { useCallback, useMemo, useState } from "react";
 import Link from "next/link";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useMutation } from "@tanstack/react-query";
+import { useOrgQuery } from "@/hooks/use-api-query";
+import { queryKeys } from "@/lib/query-keys";
 import { Layers, Loader2, Sparkles, Database, Bell, ChevronDown } from "lucide-react";
 import { api } from "@/lib/api";
 import { useOrg } from "@/hooks/use-org";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
+import { ErrorState } from "@/components/ui/error-state";
 import { NoOrgState } from "@/components/ui/no-org-state";
+import { useToast } from "@/components/ui/toast";
 
 type Facet = "task" | "sentiment" | "issues";
 type ViewMode = "list" | "scatter";
@@ -30,20 +34,27 @@ type Topic = {
 export default function TopicsPage() {
   const { currentOrg } = useOrg();
   const orgId = currentOrg?.id;
+  const toast = useToast();
   const [facet, setFacet] = useState<Facet>("task");
   const [view, setView] = useState<ViewMode>("list");
   const [actingId, setActingId] = useState<string | null>(null);
   const [actOpenId, setActOpenId] = useState<string | null>(null);
 
-  const { data, isLoading, refetch, isFetching } = useQuery({
-    queryKey: ["topics", orgId, facet],
-    queryFn: () => api.listTopics(orgId!, facet),
-    enabled: Boolean(orgId),
-  });
+  const { data, isLoading, isError, error, refetch, isFetching } = useOrgQuery(
+    queryKeys.topics.list(orgId, facet),
+    orgId,
+    () => api.listTopics(orgId!, facet),
+  );
 
   const generate = useMutation({
     mutationFn: () => api.generateTopics(orgId!, facet),
     onSuccess: () => void refetch(),
+    onError: (err) => {
+      toast.error(
+        "Generate failed",
+        err instanceof Error ? err.message : "Could not generate topics.",
+      );
+    },
   });
 
   const runAct = useCallback(
@@ -54,6 +65,11 @@ export default function TopicsPage() {
       try {
         await api.actOnTopic(orgId, topicId, { action, name });
         await refetch();
+      } catch (err) {
+        toast.error(
+          action === "dataset" ? "Create dataset failed" : "Online rule failed",
+          err instanceof Error ? err.message : "Could not act on topic.",
+        );
       } finally {
         setActingId(null);
       }
@@ -153,6 +169,16 @@ export default function TopicsPage() {
           <Loader2 className="h-4 w-4 animate-spin" />
           Loading topics…
         </div>
+      ) : isError ? (
+        <ErrorState
+          title="Could not load topics"
+          message={error?.message ?? "Topics could not be loaded. Try again."}
+          action={
+            <Button variant="outline" size="sm" onClick={() => void refetch()}>
+              Try again
+            </Button>
+          }
+        />
       ) : topics.length === 0 ? (
         <EmptyState
           icon={Layers}

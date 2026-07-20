@@ -9,9 +9,15 @@ from uuid import uuid4
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
 
-from eden.api.deps import get_current_user, get_postgres_client, require_org_admin
+from eden.api.deps import (
+    _try_resolve_token_payload,
+    get_current_user,
+    get_postgres_client,
+    require_org_admin,
+)
 from eden.config import get_settings
 from eden.storage.redis import get_redis_client
+from eden.api.utils.redact import redact_all
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -62,8 +68,11 @@ def _generate_scim_token() -> str:
 async def list_sso_providers(
     org_id: str = Query(..., alias="org_id"),
     user: dict = Depends(get_current_user),
+    payload: dict | None = Depends(_try_resolve_token_payload),
 ):
     """List all SSO providers for an organization."""
+    await require_org_admin(org_id, payload)
+
     client = await get_postgres_client()
 
     query = """
@@ -96,9 +105,10 @@ async def create_sso_provider(
     config: SSOProviderConfig,
     org_id: str = Query(..., alias="org_id"),
     user: dict = Depends(get_current_user),
+    payload: dict | None = Depends(_try_resolve_token_payload),
 ):
     """Create a new SSO provider configuration."""
-    await require_org_admin(org_id)
+    await require_org_admin(org_id, payload)
 
     client = await get_postgres_client()
 
@@ -118,9 +128,32 @@ async def create_sso_provider(
         VALUES ($1, $2, $3, $4, $5, $6)
         RETURNING id
     """
-    row = await client.fetchrow(
-        query, provider_id, org_id, config.provider_type, config.name, config_data, user["user_id"]
-    )
+    try:
+        row = await client.fetchrow(
+            query, provider_id, org_id, config.provider_type, config.name, config_data, user["user_id"]
+        )
+    except Exception as exc:
+        msg = str(exc).lower()
+        if "unique" in msg or "duplicate" in msg:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="SSO provider already exists for this organization",
+            ) from exc
+        if "invalid input syntax for type uuid" in msg:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid organization id",
+            ) from exc
+        if "foreign key" in msg:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Organization not found",
+            ) from exc
+        logger.warning("create_sso_provider INSERT failed: %s", redact_all(str(exc)))
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Failed to create SSO provider",
+        ) from exc
     if row is None:
         # INSERT with RETURNING returning None signals a constraint
         # violation (e.g. org_id FK, duplicate provider_type+name).
@@ -139,9 +172,10 @@ async def update_sso_provider(
     config: dict,
     org_id: str = Query(..., alias="org_id"),
     user: dict = Depends(get_current_user),
+    payload: dict | None = Depends(_try_resolve_token_payload),
 ):
     """Update an SSO provider configuration."""
-    await require_org_admin(org_id)
+    await require_org_admin(org_id, payload)
 
     client = await get_postgres_client()
 
@@ -172,9 +206,10 @@ async def enable_sso_provider(
     provider_id: str,
     org_id: str = Query(..., alias="org_id"),
     user: dict = Depends(get_current_user),
+    payload: dict | None = Depends(_try_resolve_token_payload),
 ):
     """Enable an SSO provider."""
-    await require_org_admin(org_id)
+    await require_org_admin(org_id, payload)
 
     client = await get_postgres_client()
 
@@ -194,9 +229,10 @@ async def disable_sso_provider(
     provider_id: str,
     org_id: str = Query(..., alias="org_id"),
     user: dict = Depends(get_current_user),
+    payload: dict | None = Depends(_try_resolve_token_payload),
 ):
     """Disable an SSO provider."""
-    await require_org_admin(org_id)
+    await require_org_admin(org_id, payload)
 
     client = await get_postgres_client()
 
@@ -217,9 +253,10 @@ async def enforce_sso(
     enforce: bool = True,
     org_id: str = Query(..., alias="org_id"),
     user: dict = Depends(get_current_user),
+    payload: dict | None = Depends(_try_resolve_token_payload),
 ):
     """Toggle SSO enforcement (blocks password login for org members)."""
-    await require_org_admin(org_id)
+    await require_org_admin(org_id, payload)
 
     client = await get_postgres_client()
 
@@ -240,9 +277,10 @@ async def generate_scim_token(
     provider_id: str,
     org_id: str = Query(..., alias="org_id"),
     user: dict = Depends(get_current_user),
+    payload: dict | None = Depends(_try_resolve_token_payload),
 ):
     """Generate or rotate SCIM bearer token for a provider."""
-    await require_org_admin(org_id)
+    await require_org_admin(org_id, payload)
 
     client = await get_postgres_client()
 
@@ -278,9 +316,10 @@ async def revoke_scim_token(
     provider_id: str,
     org_id: str = Query(..., alias="org_id"),
     user: dict = Depends(get_current_user),
+    payload: dict | None = Depends(_try_resolve_token_payload),
 ):
     """Revoke SCIM bearer token."""
-    await require_org_admin(org_id)
+    await require_org_admin(org_id, payload)
 
     client = await get_postgres_client()
 

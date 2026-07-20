@@ -16,13 +16,17 @@ import { useOrgQuery } from "@/hooks/use-api-query";
 import { queryKeys } from "@/lib/query-keys";
 import { cn } from "@/lib/utils";
 import { SettingsCard } from "@/components/settings/settings-card";
+import { Button } from "@/components/ui/button";
 import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
+import { ErrorState } from "@/components/ui/error-state";
 import { NoOrgState } from "@/components/ui/no-org-state";
 import { useOrg } from "@/hooks/use-org";
+import { errorFromCaught } from "@/lib/safe-error-message";
 import { InvitePanel } from "./invite-panel";
+import type { Organization } from "@/lib/types";
 
 interface MembersTabProps {
-  org: { id: string; name: string; role: string } | null;
+  org: Organization | null;
 }
 
 export function MembersTab({ org }: MembersTabProps) {
@@ -31,6 +35,11 @@ export function MembersTab({ org }: MembersTabProps) {
   const { confirm, ConfirmDialog } = useConfirm();
   const { refreshOrgs, orgSyncing, orgSyncTimedOut } = useOrg();
   const orgId = org?.id ?? null;
+  const isPersonal = Boolean(org?.is_personal);
+  const canInvite = hasPermission("members:invite") && !isPersonal;
+  // Remove is a separate permission from invite — viewers/members must
+  // not see the trash control (backend 403s, but the UI must not tease).
+  const canRemove = hasPermission("members:remove");
   const membersQuery = useOrgQuery(
     queryKeys.settings.members(orgId),
     orgId,
@@ -49,6 +58,10 @@ export function MembersTab({ org }: MembersTabProps) {
   );
   const members = membersQuery.data ?? [];
   const loading = membersQuery.isLoading;
+  // Fail closed: 5xx must not paint as "No members yet".
+  const loadError = membersQuery.error
+    ? errorFromCaught(membersQuery.error, "Failed to load members")
+    : null;
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState("member");
   const [lastInviteUrl, setLastInviteUrl] = useState<string | null>(null);
@@ -158,7 +171,7 @@ export function MembersTab({ org }: MembersTabProps) {
       header: "Role",
       sortable: true,
       cell: (m) =>
-        m.role === "owner" || !hasPermission("members:invite") ? (
+        m.role === "owner" || !canInvite ? (
           <span
             className={cn(
               "px-2 py-1 rounded-md text-sm font-medium",
@@ -232,7 +245,7 @@ export function MembersTab({ org }: MembersTabProps) {
       header: "",
       align: "right",
       cell: (m) =>
-        m.role !== "owner" ? (
+        canRemove && m.role !== "owner" ? (
           <button
             onClick={() => handleRemove(m.user_id)}
             className="p-2 text-[var(--error)] hover:bg-[var(--error-dim)] rounded-lg"
@@ -246,7 +259,13 @@ export function MembersTab({ org }: MembersTabProps) {
 
   return (
     <div className="space-y-4">
-      {hasPermission("members:invite") && (
+      {isPersonal && (
+        <p className="text-sm text-[var(--text-muted)] rounded-lg border border-[var(--border-default)] bg-[var(--bg-secondary)] px-4 py-3">
+          This is a personal workspace. Invites are unavailable — create a team
+          organization under Organization settings to add members.
+        </p>
+      )}
+      {canInvite && (
         <SettingsCard title="Invite member">
           <div className="space-y-2">
             <div className="flex gap-3">
@@ -327,24 +346,42 @@ export function MembersTab({ org }: MembersTabProps) {
       )}
 
       <SettingsCard contentClassName="p-0">
-        <DataTable
-          columns={columns}
-          rows={members}
-          rowKey={(m) => m.user_id}
-          loading={loading}
-          defaultSort={{ key: "name", direction: "asc" }}
-          emptyTitle="No members yet"
-          emptyDescription={
-            hasPermission("members:invite")
-              ? "Use the invite form above to add your team."
-              : undefined
-          }
-          emptyIcon={Users}
-          pageSize={25}
-        />
+        {loadError ? (
+          <div className="p-4">
+            <ErrorState
+              title="Could not load members"
+              message={loadError}
+              action={
+                <Button
+                  variant="outline"
+                  className="min-h-11"
+                  onClick={() => void membersQuery.refetch()}
+                >
+                  Try again
+                </Button>
+              }
+            />
+          </div>
+        ) : (
+          <DataTable
+            columns={columns}
+            rows={members}
+            rowKey={(m) => m.user_id}
+            loading={loading}
+            defaultSort={{ key: "name", direction: "asc" }}
+            emptyTitle="No members yet"
+            emptyDescription={
+              canInvite
+                ? "Use the invite form above to add your team."
+                : undefined
+            }
+            emptyIcon={Users}
+            pageSize={25}
+          />
+        )}
       </SettingsCard>
 
-      <InvitePanel orgId={org.id} canManage={hasPermission("members:invite")} />
+      {canInvite && <InvitePanel orgId={org.id} canManage />}
       {ConfirmDialog}
     </div>
   );

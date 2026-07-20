@@ -26,13 +26,24 @@ class AutomationsEngine:
         except Exception:
             return None
 
-    async def list_automations(self, org_id: str) -> list[dict[str, Any]]:
+    async def list_automations(
+        self, org_id: str, *, limit: int = 100
+    ) -> list[dict[str, Any]]:
         client = await self._client()
         if client is None:
             return []
+        capped = max(1, min(int(limit), 100))
         rows = await client.fetch(
-            "SELECT * FROM automations WHERE org_id = $1 ORDER BY updated_at DESC",
+            """
+            SELECT id, org_id, name, trigger_type, trigger_config,
+                   action_type, action_config, enabled, created_at, updated_at
+            FROM automations
+            WHERE org_id = $1
+            ORDER BY updated_at DESC
+            LIMIT $2
+            """,
             org_id,
+            capped,
         )
         return [dict(r) for r in rows]
 

@@ -151,8 +151,11 @@ export interface UseSidebarPrefs {
   setDensity: (d: Density) => void;
   /** True while a server write is in flight. */
   saving: boolean;
+  /** Last server save failure, if any (null after a successful write). */
+  saveError: string | null;
+  /** Retry the last pending prefs payload. */
+  retrySave: () => void;
 }
-
 export function useSidebarPrefs(): UseSidebarPrefs {
   const { currentOrg } = useOrg();
   const orgId = currentOrg?.id;
@@ -161,18 +164,22 @@ export function useSidebarPrefs(): UseSidebarPrefs {
   const [prefs, setPrefs] = useState<SidebarPrefs>(DEFAULT_PREFS);
   const [ready, setReady] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingPrefs = useRef<SidebarPrefs | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     if (!orgId) {
       setPrefs(DEFAULT_PREFS);
       setReady(true);
+      setSaveError(null);
       return;
     }
     const cached = readCached(orgId);
     if (cached) setPrefs(cached);
     setReady(false);
+    setSaveError(null);
     (async () => {
       try {
         const res = await api.getSidebarPrefs(orgId);
@@ -180,7 +187,7 @@ export function useSidebarPrefs(): UseSidebarPrefs {
         if (res) setPrefs(fromApiPrefs(res));
         writeCached(orgId, fromApiPrefs(res));
       } catch {
-        // tolerate — fall back to cached or defaults.
+        // tolerate load — fall back to cached or defaults; write path still surfaces errors.
       } finally {
         if (!cancelled) setReady(true);
       }
@@ -190,26 +197,45 @@ export function useSidebarPrefs(): UseSidebarPrefs {
     };
   }, [orgId]);
 
+  const persistPrefs = useCallback(
+    async (next: SidebarPrefs) => {
+      if (!orgId) return;
+      setSaving(true);
+      setSaveError(null);
+      try {
+        await api.setSidebarPrefs(orgId, toApiPrefs(next));
+        pendingPrefs.current = null;
+      } catch (err) {
+        // sessionStorage still has the latest for this tab, but do not claim a successful sync.
+        setSaveError(
+          err instanceof Error ? err.message : "Failed to save sidebar preferences",
+        );
+      } finally {
+        setSaving(false);
+      }
+    },
+    [orgId],
+  );
+
   // Debounced write back to the API + sessionStorage.
   const queueSave = useCallback(
     (next: SidebarPrefs) => {
       if (!orgId) return;
       writeCached(orgId, next);
+      pendingPrefs.current = next;
       if (saveTimer.current) clearTimeout(saveTimer.current);
-      saveTimer.current = setTimeout(async () => {
-        setSaving(true);
-        try {
-          await api.setSidebarPrefs(orgId, toApiPrefs(next));
-        } catch {
-          // tolerate — sessionStorage still has the latest.
-        } finally {
-          setSaving(false);
-        }
+      saveTimer.current = setTimeout(() => {
+        void persistPrefs(next);
       }, SAVE_DEBOUNCE_MS);
     },
-    [orgId]
+    [orgId, persistPrefs],
   );
 
+  const retrySave = useCallback(() => {
+    const next = pendingPrefs.current;
+    if (!next || !orgId) return;
+    void persistPrefs(next);
+  }, [orgId, persistPrefs]);
   const update = useCallback(
     (updater: (prev: SidebarPrefs) => SidebarPrefs) => {
       setPrefs((prev) => {
@@ -226,6 +252,8 @@ export function useSidebarPrefs(): UseSidebarPrefs {
       prefs,
       ready,
       saving,
+      saveError,
+      retrySave,
       pin: (id) => update((p) => ({ ...p, pinned: Array.from(new Set([...p.pinned, id])) })),
       unpin: (id) => update((p) => ({ ...p, pinned: p.pinned.filter((x) => x !== id) })),
       togglePin: (id) =>
@@ -245,7 +273,7 @@ export function useSidebarPrefs(): UseSidebarPrefs {
       setDensity: (d) => update((p) => ({ ...p, density: d })),
       reset: () => update(() => DEFAULT_PREFS),
     }),
-    [prefs, ready, saving, update]
+    [prefs, ready, saving, saveError, retrySave, update]
   );
 }
 

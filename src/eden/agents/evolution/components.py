@@ -14,10 +14,13 @@ The split between the two classes mirrors the test contract:
   for canary enrollment.
 
 * :class:`PromptEvolvers` is the *canary* — when a new variant is
-  inserted, it enrolls the variant in a canary at
-  ``settings.evolver_auto_canary_pct`` traffic, updates the
-  variant's ``quality_metrics`` JSONB with the canary metadata,
-  and writes an ``evolver.auto_canary_created`` audit entry.
+  inserted, it enrolls the variant by writing
+  ``prompt_canary_experiments`` (+ ``prompt_version_assignments``)
+  at ``settings.evolver_auto_canary_pct`` traffic, merges canary
+  metadata into ``quality_metrics``, and writes an
+  ``evolver.auto_canary_created`` audit entry. Cockpit and
+  PromotionLoop both read ``prompt_canary_experiments`` (not the
+  legacy ``prompt_canaries`` table).
 
 The two are deliberately decoupled so the canary stage can be
 gated / opted-out via config (``evolver_auto_canary_pct=0``)
@@ -349,13 +352,14 @@ class PromptEvolvers(EvolutionComponent):
        not a parseable int), skip — variants stay inactive.
     2. Clamp the percentage to ``[0, 100]`` so a typo (e.g. 250)
        can't silently enroll the entire traffic in a canary.
-    3. Call ``prompt_versions.update_quality_metrics`` with
-       ``canary_status='active'``, ``canary_traffic_pct``,
-       ``ab_test_active=True``, ``ab_test_round=round``, and a
-       ``canary_created_at`` ISO timestamp.
-    4. Best-effort: write an ``evolver.auto_canary_created`` row
+    3. Resolve ``org_id`` from ``quality_metrics``; without it,
+       fail closed (no fake canary success).
+    4. INSERT ``prompt_canary_experiments`` +
+       ``prompt_version_assignments`` (PromotionLoop + cockpit).
+    5. Merge canary fields into ``quality_metrics`` (best-effort).
+    6. Best-effort: write an ``evolver.auto_canary_created`` row
        to ``org_audit_log``. Audit failure does not block the
-       canary (the variant stays enrolled).
+       canary (the experiment row stays enrolled).
     """
 
     def __init__(self, llm_client: Any = None) -> None:
@@ -367,13 +371,17 @@ class PromptEvolvers(EvolutionComponent):
         agent: str,
         version: int,
         round: int,
+        *,
+        org_id: str | None = None,
+        control_version: int | None = None,
     ) -> bool:
         """Enroll the just-inserted variant in a canary.
 
-        Returns ``True`` if the canary was created, ``False`` if it
-        was skipped (disabled, bad config, or variant update
-        failed). Audit-log failures are absorbed — they never
-        flip the return value to ``False``.
+        Returns ``True`` only if a ``prompt_canary_experiments`` row
+        (and assignment) was written — the same table PromotionLoop
+        and the improve cockpit read. Returns ``False`` when disabled,
+        org_id cannot be resolved, or the experiment write fails.
+        Audit-log failures are absorbed and do not flip success.
         """
         # Defensive: garbage config (e.g. "not-a-number") must not
         # silently enroll every variant. We treat any non-int as
@@ -393,60 +401,43 @@ class PromptEvolvers(EvolutionComponent):
 
         if self.prompt_versions is None:
             # Lazy import so tests that build via __new__ can skip this.
-            from eden.kb.prompt_versions.client import get_prompt_versions_client
+            try:
+                from eden.kb.prompt_versions.client import (
+                    get_prompt_versions_client,
+                )
 
-            self.prompt_versions = await _maybe_await(get_prompt_versions_client())
+                self.prompt_versions = await _maybe_await(
+                    get_prompt_versions_client()
+                )
+            except Exception as exc:  # pragma: no cover - defensive
+                logger.debug(
+                    "PromptEvolvers: prompt_versions client unavailable: %s",
+                    exc,
+                )
+                self.prompt_versions = None
 
         from datetime import datetime
+        from uuid import uuid4
 
-        metrics = {
-            "canary_status": "active",
-            "canary_traffic_pct": pct,
-            "ab_test_active": True,
-            "ab_test_round": int(round),
-            "canary_created_at": datetime.now(UTC).isoformat(),
-        }
+        from eden.storage.postgres import get_postgres_client
+
+        # Fail closed: cockpit + PromotionLoop read
+        # ``prompt_canary_experiments``. Do not claim canary success
+        # from quality_metrics alone (legacy ``prompt_canaries`` is
+        # not written here).
         try:
-            updated = await self.prompt_versions.update_quality_metrics(
-                agent, version, metrics
-            )
+            pg = await _maybe_await(get_postgres_client())
         except Exception as exc:  # pragma: no cover - defensive
             logger.debug(
-                "PromptEvolvers: update_quality_metrics failed for %s v%s: %s",
+                "PromptEvolvers: postgres unavailable for canary %s v%s: %s",
                 agent,
                 version,
                 exc,
             )
             return False
-        if not updated:
-            return False
 
-        # Best-effort audit log. The ``prompt_versions`` table is
-        # keyed by ``(agent, version)`` only — there is no
-        # ``org_id`` column, so we cannot recover the owning tenant
-        # from the schema. Audit 2026-07-07 — pre-fix the code did
-        # ``SELECT id FROM organizations LIMIT 1`` /
-        # ``SELECT id FROM users LIMIT 1``, which attributes every
-        # canary-creation event to whatever org/user happened to be
-        # at the top of the table. For a multi-tenant system that
-        # is a tenant-isolation bug in the audit log (Org A's
-        # evolver claim to have created a canary for Org B's agent
-        # because both queries return the top-of-table row). The
-        # safest fix is to skip the audit insert when we cannot
-        # resolve the correct ``org_id`` — the canary is still
-        # created, and operators see a clear log line instead of
-        # a misleading audit row. Future work: add an ``org_id``
-        # column to ``prompt_versions`` so this audit insert can be
-        # tenant-correct.
-        try:
-            from eden.storage.postgres import get_postgres_client
-
-            pg = await _maybe_await(get_postgres_client())
-            org_id: str | None = None
-            # The ``prompt_versions`` table does not carry an
-            # ``org_id``; check whether the row's quality_metrics
-            # JSONB carries one (set by the canary-creating path).
-            # If not, we cannot reliably attribute the audit row.
+        resolved_org = org_id
+        if not resolved_org:
             try:
                 row = await pg.fetchrow(
                     "SELECT quality_metrics FROM prompt_versions "
@@ -459,29 +450,94 @@ class PromptEvolvers(EvolutionComponent):
             if row:
                 qm = row.get("quality_metrics")
                 if isinstance(qm, dict):
-                    org_id = qm.get("org_id")
+                    resolved_org = qm.get("org_id")
                 elif isinstance(qm, str):
                     try:
                         qm_parsed = json.loads(qm)
                         if isinstance(qm_parsed, dict):
-                            org_id = qm_parsed.get("org_id")
+                            resolved_org = qm_parsed.get("org_id")
                     except (TypeError, ValueError):
-                        org_id = None
-            if not org_id:
+                        resolved_org = None
+        if not resolved_org:
+            logger.warning(
+                "PromptEvolvers: cannot resolve org_id for %s v%s; "
+                "auto-canary not enrolled (cockpit would not see it).",
+                agent,
+                version,
+            )
+            return False
+
+        experiment_id = str(uuid4())
+        ctrl = (
+            int(control_version)
+            if control_version is not None
+            else max(0, int(version) - 1)
+        )
+        try:
+            await pg.execute(
+                "INSERT INTO prompt_canary_experiments ("
+                "experiment_id, tenant_id, agent, control_version, "
+                "candidate_version, traffic_pct, status, notes"
+                ") VALUES ($1, $2, $3, $4, $5, $6, 'active', $7)",
+                experiment_id,
+                resolved_org,
+                agent,
+                ctrl,
+                int(version),
+                pct,
+                f"evolver auto-canary round={int(round)}",
+            )
+            await pg.execute(
+                "INSERT INTO prompt_version_assignments ("
+                "assignment_id, tenant_id, agent, version, traffic_pct, "
+                "experiment_id, status"
+                ") VALUES ($1, $2, $3, $4, $5, $6, 'active') "
+                "ON CONFLICT (tenant_id, agent, version, experiment_id) "
+                "DO UPDATE SET traffic_pct = $5",
+                str(uuid4()),
+                resolved_org,
+                agent,
+                int(version),
+                pct,
+                experiment_id,
+            )
+        except Exception as exc:
+            logger.warning(
+                "PromptEvolvers: prompt_canary_experiments INSERT "
+                "failed for %s v%s: %s",
+                agent,
+                version,
+                exc,
+            )
+            return False
+
+        metrics = {
+            "canary_status": "active",
+            "canary_traffic_pct": pct,
+            "ab_test_active": True,
+            "ab_test_round": int(round),
+            "canary_created_at": datetime.now(UTC).isoformat(),
+            "experiment_id": experiment_id,
+            "org_id": resolved_org,
+        }
+        if self.prompt_versions is not None:
+            try:
+                await self.prompt_versions.update_quality_metrics(
+                    agent, version, metrics
+                )
+            except Exception as exc:  # pragma: no cover - defensive
+                # Experiment row is the cockpit source of truth; metrics
+                # are best-effort enrichment after a successful enroll.
                 logger.debug(
-                    "PromptEvolvers: cannot resolve org_id for %s v%s; "
-                    "skipping org_audit_log INSERT to avoid "
-                    "cross-tenant attribution.",
+                    "PromptEvolvers: update_quality_metrics failed for "
+                    "%s v%s: %s",
                     agent,
                     version,
+                    exc,
                 )
-                return True
-            # No user context here (the evolver runs as a system
-            # worker, not as an authenticated user). Look up the
-            # "system" placeholder user; if it has not been
-            # provisioned yet, skip the audit rather than blame an
-            # arbitrary user. The audit table requires user_id NOT
-            # NULL per migration 008.
+
+        # Best-effort audit — never flips success after experiment write.
+        try:
             user_id = await pg.fetchval(
                 "SELECT id FROM users WHERE clerk_id = 'system' LIMIT 1"
             )
@@ -498,12 +554,14 @@ class PromptEvolvers(EvolutionComponent):
                 "version": int(version),
                 "traffic_pct": pct,
                 "round": int(round),
+                "experiment_id": experiment_id,
             }
             await pg.execute(
                 "INSERT INTO org_audit_log ("
-                "org_id, user_id, action, target_type, target_id, metadata, created_at"
+                "org_id, user_id, action, target_type, target_id, "
+                "metadata, created_at"
                 ") VALUES ($1, $2, $3, $4, $5, $6, NOW())",
-                org_id,
+                resolved_org,
                 user_id,
                 "evolver.auto_canary_created",
                 "prompt_version",
@@ -605,8 +663,12 @@ class IssuePromptEvolver(EvolutionComponent):
     """Issue-driven prompt evolution (N18).
 
     When an issue is resolved with triage context, generate a prompt
-    variant addressing the root cause and enroll it in a shadow canary
-    via :class:`PromptEvolvers`.
+    variant via prompts_v2 (:class:`~eden.services.prompt_versioning.PromptService`)
+    and enroll it in a shadow canary via :class:`PromptEvolvers`.
+
+    Migration 055 dropped the legacy ``prompt_versions`` schema that
+    ``PromptVersionsClient`` targets — this evolver must not call
+    those APIs or claim success when they no-op.
     """
 
     async def evolve_from_issue(
@@ -622,7 +684,12 @@ class IssuePromptEvolver(EvolutionComponent):
             issue = await IssuesRepo().get_issue(org_id, issue_id)
         except Exception as exc:
             logger.debug("IssuePromptEvolver load: %s", exc)
-            return {"created": 0, "skipped": True, "reason": "load_failed"}
+            return {
+                "created": 0,
+                "skipped": True,
+                "reason": "load_failed",
+                "error": str(exc),
+            }
         if issue is None:
             return {"created": 0, "skipped": True, "reason": "not_found"}
 
@@ -630,22 +697,48 @@ class IssuePromptEvolver(EvolutionComponent):
         if not agent:
             return {"created": 0, "skipped": True, "reason": "no_agent"}
 
-        if self.prompt_versions is None:
-            self.prompt_versions = await _maybe_await(get_prompt_versions_client())
+        try:
+            from eden.services.prompt_versioning import PromptService
+
+            svc = PromptService()
+        except Exception as exc:
+            logger.warning(
+                "IssuePromptEvolver: PromptService import failed: %s", exc
+            )
+            return {
+                "created": 0,
+                "skipped": True,
+                "reason": "prompts_v2_unavailable",
+                "error": (
+                    "IssuePromptEvolver requires prompts_v2 PromptService; "
+                    f"import failed: {exc}"
+                ),
+            }
 
         try:
-            active = await self.prompt_versions.get_active_version(agent)
-        except Exception:
-            active = None
-        current_version = int((active or {}).get("version") or 1)
-        current_prompt = (active or {}).get("prompt") or f"Agent {agent} system prompt."
+            versions = await svc.list_versions(org_id, agent, limit=1)
+        except Exception as exc:
+            logger.warning("IssuePromptEvolver list_versions failed: %s", exc)
+            return {
+                "created": 0,
+                "skipped": True,
+                "reason": "prompts_v2_list_failed",
+                "error": str(exc),
+            }
+
+        latest = versions[0] if versions else None
+        current_version = int((latest or {}).get("version") or 0)
+        current_prompt = (
+            (latest or {}).get("template")
+            or f"Agent {agent} system prompt."
+        )
 
         triage = issue.triage_result or {}
         summary = triage.get("summary") or triage.get("root_cause") or issue.title
 
         from eden.config import get_settings
 
-        settings = get_settings()
+        cfg = get_settings()
         revised = (
             f"{current_prompt}\n\n"
             f"# Resolved issue guardrail ({issue.fingerprint})\n"
@@ -653,7 +746,8 @@ class IssuePromptEvolver(EvolutionComponent):
         )
 
         use_llm = False
-        if settings.evolver_min_samples and issue.stumble_count >= settings.evolver_min_samples:
+        stumble_count = int(getattr(issue, "stumble_count", 0) or 0)
+        if cfg.evolver_min_samples and stumble_count >= cfg.evolver_min_samples:
             use_llm = bool(triage.get("judge_regression"))
 
         if use_llm and self.llm is not None:
@@ -675,34 +769,65 @@ class IssuePromptEvolver(EvolutionComponent):
                 logger.debug("IssuePromptEvolver LLM path skipped: %s", exc)
 
         try:
-            ok = await self.prompt_versions.insert_version(
+            created = await svc.create_version(
+                org_id,
                 agent,
-                current_version + 1,
-                revised,
-                active=False,
-                ab_test_active=True,
-                quality_metrics={
-                    "org_id": org_id,
+                template=revised,
+                model="eden-evolver",
+                params={
                     "source_issue_id": issue_id,
                     "evolver": "issue_prompt",
+                    "ab_test_active": True,
+                    "ab_test_round": 1,
                 },
+                change_note=f"issue_prompt_evolver:{issue_id}",
+                created_by="issue_prompt_evolver",
             )
         except Exception as exc:
-            logger.debug("IssuePromptEvolver insert failed: %s", exc)
-            return {"created": 0, "skipped": True, "reason": "insert_failed"}
+            logger.warning("IssuePromptEvolver create_version failed: %s", exc)
+            return {
+                "created": 0,
+                "skipped": True,
+                "reason": "prompts_v2_create_failed",
+                "error": str(exc),
+            }
 
-        if not ok:
-            return {"created": 0, "skipped": True, "reason": "insert_rejected"}
+        if not created:
+            return {
+                "created": 0,
+                "skipped": True,
+                "reason": "prompts_v2_create_rejected",
+                "error": (
+                    "PromptService.create_version returned None — "
+                    "prompts_v2 schema/DB unavailable (legacy "
+                    "PromptVersionsClient is not used)"
+                ),
+            }
 
+        new_version = int(created.get("version") or (current_version + 1))
         evolver = PromptEvolvers(llm_client=self.llm)
-        evolver.prompt_versions = self.prompt_versions
-        await evolver._auto_create_canary(agent, current_version + 1, round=1)
-        return {
+        canary_ok = await evolver._auto_create_canary(
+            agent,
+            new_version,
+            round=1,
+            org_id=org_id,
+            control_version=current_version,
+        )
+        result: dict[str, Any] = {
             "created": 1,
             "agent": agent,
-            "version": current_version + 1,
+            "version": new_version,
             "issue_id": issue_id,
+            "prompt_version_id": created.get("id"),
+            "canary_enrolled": bool(canary_ok),
         }
+        if not canary_ok:
+            result["canary_error"] = (
+                "auto_canary_not_enrolled — "
+                "prompt_canary_experiments write failed or "
+                "evolver_auto_canary_pct disabled"
+            )
+        return result
 
 
 async def _maybe_await(value: Any) -> Any:

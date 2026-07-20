@@ -8,7 +8,7 @@
  * - other ``approval_required`` tools → POST /ai-insights/approve
  */
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import {
   CheckCircle2,
@@ -121,6 +121,24 @@ export function ApprovalCard({
   const [saving, setSaving] = useState(false);
   const [done, setDone] = useState(false);
   const [cancelled, setCancelled] = useState(false);
+
+  // Sync controlled fields when tool result/preview arrives after mount
+  // (card mounts on tool_call; preview lands later on tool_result).
+  // Depend on result (stable prop), not the derived preview objects —
+  // those are new every render and would clobber in-progress edits.
+  useEffect(() => {
+    if (result?.status !== "ok") return;
+    const ap = extractAlertPreview(result.output);
+    if (ap) {
+      setEql(ap.eql);
+      setRuleName(ap.suggestedName);
+      return;
+    }
+    const sp = extractSignalPreview(result.output);
+    if (sp) {
+      setSignalDesc(sp.description);
+    }
+  }, [result]);
 
   const isRunning = !result;
   const isError = result?.status === "error";

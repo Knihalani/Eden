@@ -1,0 +1,131 @@
+{
+  "agent": "W2-08",
+  "title": "Live ingest curl matrix",
+  "timestamp_utc": "2026-07-20T02:07:47.543034+00:00",
+  "base_url": "https://api.edenobservability.com",
+  "env_check": {
+    "process.EDEN_ORG_ID": "absent",
+    "process.EDEN_API_KEY": "absent",
+    "process.EDEN_ORG_API_KEY": "absent",
+    "clients/portal/.env.local": "present; EDEN_ORG_ID / EDEN_API_KEY / EDEN_ORG_API_KEY absent",
+    "root/.env": "present; EDEN_ORG_ID / EDEN_API_KEY / EDEN_ORG_API_KEY absent",
+    "root/.env.production": "present; no EDEN org/api key vars",
+    "clients/portal/.env": "present; no EDEN org/api key vars"
+  },
+  "positive_path": "BLOCKED_NEEDS_KEYS",
+  "required_env_vars_exact": [
+    "EDEN_ORG_ID",
+    "EDEN_ORG_API_KEY",
+    "EDEN_API_KEY"
+  ],
+  "required_note": "Provide EDEN_ORG_ID and either EDEN_ORG_API_KEY or EDEN_API_KEY (org key sk_eden_...). Headers: X-Org-Api-Key + X-Org-Id.",
+  "blocked_positive_cases": [
+    "POST /orgs/{org}/ingest/openai accepted (openai-format)",
+    "POST custom-format accepted (see note: /ingest/custom is 404 in prod OpenAPI)",
+    "Idempotent replay (Idempotency-Key / content-derived IDs)"
+  ],
+  "openapi_note": {
+    "ingest_custom": "NOT in production OpenAPI (404)",
+    "openai": "POST /orgs/{org_id}/ingest/openai",
+    "custom_format_candidates": [
+      "POST /orgs/{org_id}/observability/telemetry/ingest",
+      "POST /orgs/{org_id}/observability/telemetry/ingest/batch",
+      "POST /orgs/{org_id}/ingest/framework"
+    ]
+  },
+  "health": {
+    "http": 503,
+    "body": {
+      "status": "degraded",
+      "version": "0.1.0",
+      "postgres": "connected",
+      "qdrant": "error: [Errno 99] Cannot assign requested address",
+      "quality_worker_running": true
+    }
+  },
+  "negative_auth": {
+    "openai_missing_key": {
+      "http": 401,
+      "expect": 401,
+      "pass": true,
+      "body": {
+        "error": "unauthorized",
+        "detail": "Authentication required"
+      }
+    },
+    "openai_empty_key": {
+      "http": 401,
+      "expect": 401,
+      "pass": true,
+      "body": {
+        "error": "unauthorized",
+        "detail": "Authentication required"
+      }
+    },
+    "openai_bad_key_no_org_header": {
+      "http": 401,
+      "expect": 401,
+      "pass": true,
+      "body": {
+        "error": "unauthorized",
+        "detail": "X-Org-Id header required with API key"
+      }
+    },
+    "openai_bad_key_with_org": {
+      "http": 500,
+      "expect": 401,
+      "pass": false,
+      "note": "Server returns internal_error instead of 401 for invalid X-Org-Api-Key when X-Org-Id is also sent",
+      "body": {
+        "error": "internal_error",
+        "detail": "An unexpected error occurred"
+      },
+      "bad_key_masked": "****0000"
+    },
+    "openai_malformed_key_with_org": {
+      "http": 500,
+      "expect": 401,
+      "pass": false,
+      "body": {
+        "error": "internal_error",
+        "detail": "An unexpected error occurred"
+      }
+    },
+    "ingest_custom_path": {
+      "http": 404,
+      "expect": "401 or route exists",
+      "pass": false,
+      "note": "/orgs/{org}/ingest/custom not registered in production OpenAPI",
+      "body": {
+        "error": "not_found",
+        "detail": "Not Found"
+      }
+    },
+    "telemetry_ingest_bad_key": {
+      "http": 403,
+      "expect": 401,
+      "pass": false,
+      "note": "Custom-format candidate; returns forbidden (Not a member) rather than unauthorized",
+      "body": {
+        "error": "forbidden",
+        "detail": "Not a member of this organization"
+      }
+    },
+    "framework_bad_key": {
+      "http": 500,
+      "expect": 401,
+      "pass": false,
+      "body": {
+        "error": "internal_error",
+        "detail": "An unexpected error occurred"
+      }
+    }
+  },
+  "trace_id_tag_intended": "wave2-live-*",
+  "trace_ids_used_in_neg_probes": [
+    "wave2-live-20260720T020631Z-3230",
+    "wave2-live-authprobe",
+    "wave2-live-20260720-neg"
+  ],
+  "secrets_committed": false
+}

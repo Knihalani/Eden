@@ -2,18 +2,21 @@
 
 from __future__ import annotations
 
+import logging
 import uuid
 from datetime import UTC, datetime
 from typing import Any
 
-from fastapi import APIRouter, Body, Depends, Path, Query
+from fastapi import APIRouter, Body, Depends, HTTPException, Path, Query
 from pydantic import BaseModel, Field
 
-from eden.api.deps import get_current_user, require_feature_flag
+from eden.api.deps import get_current_user, require_feature_flag, require_path_org_access
 from eden.governance.compliance_pack import (
     AgentAuditLedgerWriter,
     CompliancePackGenerator,
 )
+
+logger = logging.getLogger(__name__)
 
 _FLAG = "compliance_pack_export_v1"
 router = APIRouter(
@@ -22,6 +25,7 @@ router = APIRouter(
     dependencies=[
         Depends(require_feature_flag(_FLAG)),
         Depends(get_current_user),
+        Depends(require_path_org_access),
     ],
 )
 _ledger = AgentAuditLedgerWriter()
@@ -47,30 +51,38 @@ class ExportPackRequest(BaseModel):
 
 @router.post("/verify")
 async def verify_chain(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     agent_id: str | None = Query(None),
     limit: int = Query(500, ge=1, le=2000),
 ) -> dict[str, Any]:
-    report = await _ledger.verify_chain(org_id, agent_id=agent_id, limit=limit)
+    try:
+        report = await _ledger.verify_chain(org_id, agent_id=agent_id, limit=limit)
+    except Exception as exc:
+        logger.warning("compliance verify failed: %s", exc)
+        raise HTTPException(status_code=503, detail="Audit ledger unavailable") from exc
     return _ok("agent_audit_ledger_verify", report)
 
 
 @router.get("/ledger")
 async def query_ledger(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     agent_id: str | None = Query(None),
     event_type: str | None = Query(None),
     limit: int = Query(100, ge=1, le=500),
 ) -> dict[str, Any]:
-    events = await _ledger.query(
-        org_id, agent_id=agent_id, event_type=event_type, limit=limit
-    )
+    try:
+        events = await _ledger.query(
+            org_id, agent_id=agent_id, event_type=event_type, limit=limit
+        )
+    except Exception as exc:
+        logger.warning("compliance ledger query failed: %s", exc)
+        raise HTTPException(status_code=503, detail="Audit ledger unavailable") from exc
     return _ok("agent_audit_ledger", {"events": events, "count": len(events)})
 
 
 @router.post("/agents/{agent_id}/export")
 async def export_agent_pack(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     agent_id: str = Path(...),
     body: ExportPackRequest = Body(...),
 ) -> dict[str, Any]:

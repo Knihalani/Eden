@@ -56,12 +56,36 @@ const EVENT_FIELD_MAP: Record<string, string> = {
  * nested ``payload`` / ``metrics`` / ``attributes`` are already
  * snake_case inside the SDK (instrumentations emit them that way)
  * and pass through unchanged.
+ *
+ * Hot-path note: write known fields directly instead of
+ * ``Object.entries`` + map lookup. Flush batches can be dozens of
+ * events; avoiding per-key allocation keeps serialization off the
+ * critical path relative to gzip + fetch.
  */
 export function eventToWire(event: TelemetryEvent): Record<string, unknown> {
-  const out: Record<string, unknown> = {};
-  for (const [k, v] of Object.entries(event as unknown as Record<string, unknown>)) {
-    const key = EVENT_FIELD_MAP[k] ?? k;
-    out[key] = v;
+  const out: Record<string, unknown> = {
+    event_id: event.eventId,
+    tenant_id: event.tenantId,
+    project_id: event.projectId,
+    trace_id: event.traceId,
+    realm: event.realm,
+    event_type: event.eventType,
+    timestamp: event.timestamp,
+    source_format: event.sourceFormat,
+    payload: event.payload,
+  };
+  if (event.metrics !== undefined) out.metrics = event.metrics;
+  if (event.tags !== undefined) out.tags = event.tags;
+  if (event.attributes !== undefined) out.attributes = event.attributes;
+  if (event.agentId !== undefined) out.agent_id = event.agentId;
+  if (event.agentVersion !== undefined) out.agent_version = event.agentVersion;
+  if (event.environmentId !== undefined) out.environment_id = event.environmentId;
+  if (event.parentSpanId !== undefined) out.parent_span_id = event.parentSpanId;
+  if (event.spanId !== undefined) out.span_id = event.spanId;
+  if (event.name !== undefined) out.name = event.name;
+  if (event.durationMs !== undefined) out.duration_ms = event.durationMs;
+  if (event.modelNormalized !== undefined) {
+    out.model_normalized = event.modelNormalized;
   }
   return out;
 }
@@ -87,13 +111,26 @@ const CHUNK_FIELD_MAP: Record<string, string> = {
  * The gateway's ``ChunksIngestRequest`` is snake_case; missing
  * the conversion here would leave ``deltaText``/``tpotMs``
  * unreadable server-side.
+ *
+ * Same direct-field hot path as {@link eventToWire}.
  */
 export function chunkToWire(chunk: StreamChunk): Record<string, unknown> {
-  const out: Record<string, unknown> = {};
-  for (const [k, v] of Object.entries(chunk as unknown as Record<string, unknown>)) {
-    const key = CHUNK_FIELD_MAP[k] ?? k;
-    out[key] = v;
+  const out: Record<string, unknown> = {
+    event_id: chunk.eventId,
+    trace_id: chunk.traceId,
+    chunk_index: chunk.chunkIndex,
+    received_at_client_ms: chunk.receivedAtClientMs,
+  };
+  if (chunk.deltaText !== undefined) out.delta_text = chunk.deltaText;
+  if (chunk.reasoningDelta !== undefined) {
+    out.reasoning_delta = chunk.reasoningDelta;
   }
+  if (chunk.toolCallDelta !== undefined) {
+    out.tool_call_delta = chunk.toolCallDelta;
+  }
+  if (chunk.ttftMs !== undefined) out.ttft_ms = chunk.ttftMs;
+  if (chunk.itlMs !== undefined) out.itl_ms = chunk.itlMs;
+  if (chunk.tpotMs !== undefined) out.tpot_ms = chunk.tpotMs;
   return out;
 }
 

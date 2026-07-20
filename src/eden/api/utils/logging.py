@@ -15,7 +15,21 @@ import structlog
 from eden.api.middleware.correlation_id import get_correlation_id
 from eden.config import get_settings
 
-settings = get_settings()
+# Cached once — app_name/version/env do not change after process start.
+# Avoids get_settings() + string work on every log line.
+_SERVICE_CTX: dict[str, str] | None = None
+
+
+def _service_context() -> dict[str, str]:
+    global _SERVICE_CTX
+    if _SERVICE_CTX is None:
+        s = get_settings()
+        _SERVICE_CTX = {
+            "service": s.app_name.lower().replace(" ", "_"),
+            "version": s.app_version,
+            "env": "development" if s.debug else "production",
+        }
+    return _SERVICE_CTX
 
 
 def _add_correlation_id(logger: Any, method_name: str, event_dict: dict) -> dict:
@@ -26,9 +40,7 @@ def _add_correlation_id(logger: Any, method_name: str, event_dict: dict) -> dict
 
 def _add_service_context(logger: Any, method_name: str, event_dict: dict) -> dict:
     """Add service-level context (name, version, environment) to logs."""
-    event_dict["service"] = settings.app_name.lower().replace(" ", "_")
-    event_dict["version"] = settings.app_version
-    event_dict["env"] = "development" if settings.debug else "production"
+    event_dict.update(_service_context())
     return event_dict
 
 
@@ -41,6 +53,7 @@ def configure_logging() -> None:
     This should be called **once** during application startup, before
     any log messages are emitted.
     """
+    settings = get_settings()
     shared_processors: list[Any] = [
         structlog.contextvars.merge_contextvars,
         structlog.stdlib.add_log_level,

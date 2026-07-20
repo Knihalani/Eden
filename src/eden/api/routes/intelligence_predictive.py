@@ -29,7 +29,7 @@ from typing import Any
 from fastapi import APIRouter, Body, Depends, Path
 from pydantic import BaseModel, Field
 
-from eden.api.deps import get_current_user, require_feature_flag
+from eden.api.deps import get_current_user, require_feature_flag, require_path_org_access
 from eden.predictive import (
     CapacityPredictor,
     CostPredictor,
@@ -46,6 +46,7 @@ router = APIRouter(
     dependencies=[
         Depends(require_feature_flag("intelligence_gap_v0")),
         Depends(get_current_user),
+        Depends(require_path_org_access),
     ],
 )
 
@@ -111,7 +112,7 @@ class DriftRequest(BaseModel):
 
 @router.post("/quality")
 async def predict_quality(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     body: QualityRequest = Body(...),
 ) -> dict[str, Any]:
     """Per-day judge-score forecast with CUSUM anomalies."""
@@ -132,7 +133,7 @@ async def predict_quality(
 
 @router.post("/cost")
 async def predict_cost(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     body: CostRequest = Body(default_factory=CostRequest),
 ) -> dict[str, Any]:
     """Per-day cost forecast with per-agent breakdown + WoW alert."""
@@ -150,7 +151,7 @@ async def predict_cost(
 
 @router.post("/capacity")
 async def predict_capacity(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     body: CapacityRequest = Body(default_factory=CapacityRequest),
 ) -> dict[str, Any]:
     """N-day GPU-hour demand projection under a demand scenario."""
@@ -166,7 +167,7 @@ async def predict_capacity(
 
 @router.post("/risk")
 async def score_risk(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     body: RiskRequest = Body(default_factory=RiskRequest),
 ) -> dict[str, Any]:
     """Composite org risk score (judge-score / cost-CV / latency-p95 / drift)."""
@@ -178,7 +179,7 @@ async def score_risk(
 
 @router.post("/drift/output")
 async def detect_output_drift_v1(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     body: DriftRequest = Body(default_factory=DriftRequest),
 ) -> dict[str, Any]:
     """v1 route (back-compat): PSI-based output drift on judge scores."""
@@ -187,7 +188,7 @@ async def detect_output_drift_v1(
 
 @router.post("/drift/embedding")
 async def detect_embedding_drift_v1(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     body: DriftRequest = Body(default_factory=DriftRequest),
 ) -> dict[str, Any]:
     """v1 route (back-compat): embedding/topic drift on response text."""
@@ -196,7 +197,7 @@ async def detect_embedding_drift_v1(
 
 @router.post("/drift")
 async def detect_drift(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     body: DriftRequest = Body(default_factory=DriftRequest),
 ) -> dict[str, Any]:
     """v2 consolidated drift route — dispatches on ``drift_type``

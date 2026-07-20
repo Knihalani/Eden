@@ -94,16 +94,6 @@ async def run_evolution_pass() -> dict[str, Any]:
                     llm = OpenRouterClient()
                     evolver = JudgeScorePromptEvolver(llm_client=llm)
                     summary["evolver"] = await evolver.run()
-                # Debit a conservative estimate when evolver did work.
-                evolved = summary["evolver"]
-                if isinstance(evolved, dict) and any(
-                    int(evolved.get(k) or 0) > 0
-                    for k in ("variants_created", "scanned", "candidates")
-                    if k in evolved
-                ):
-                    await budget.record(
-                        0.05, kind="evolution_pass", ref_id="loop"
-                    )
     except Exception as exc:
         logger.warning("evolution_loop: JudgeScorePromptEvolver failed: %s", exc)
 
@@ -140,7 +130,7 @@ async def start_evolution_loop() -> None:
     """Start the background evolution loop (idempotent)."""
     global _loop_task, _stop_event
     settings = get_settings()
-    if not getattr(settings, "evolution_loop_enabled", True):
+    if not getattr(settings, "evolution_loop_enabled", False):
         logger.info("evolution_loop: disabled via settings")
         return
     if _loop_task and not _loop_task.done():

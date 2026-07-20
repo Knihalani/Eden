@@ -20,6 +20,19 @@ from eden.issues.models import Issue, StumbleCreate
 
 logger = logging.getLogger(__name__)
 
+_ISSUE_LIST_COLUMNS = (
+    "id, org_id, fingerprint, kind, title, status, severity, "
+    "stumble_count, user_count, repetition_count, agent_id, "
+    "affected_user_ids, example_stumble_ids, triage_result, "
+    "experiment_id, experiment_result, regression_case_id, "
+    "first_seen, last_seen"
+)
+
+_STUMBLE_LIST_COLUMNS = (
+    "id, org_id, trace_id, session_id, user_id, agent_id, span_id, "
+    "kind, fingerprint, title, detail, severity, detected_by, detected_at"
+)
+
 
 def _row_to_issue(row: dict[str, Any]) -> Issue:
     return Issue(
@@ -153,7 +166,7 @@ class IssuesRepo:
             clauses.append(f"detected_at >= ${len(args)}")
         args.append(int(limit))
         sql = (
-            "SELECT * FROM agent_stumbles WHERE "
+            f"SELECT {_STUMBLE_LIST_COLUMNS} FROM agent_stumbles WHERE "
             + " AND ".join(clauses)
             + f" ORDER BY detected_at DESC LIMIT ${len(args)}"
         )
@@ -266,7 +279,7 @@ class IssuesRepo:
         args.append(int(offset))
         offset_pos = len(args)
         sql = (
-            "SELECT * FROM agent_issues WHERE "
+            f"SELECT {_ISSUE_LIST_COLUMNS} FROM agent_issues WHERE "
             + " AND ".join(clauses)
             + f" ORDER BY last_seen DESC LIMIT ${limit_pos} OFFSET ${offset_pos}"
         )

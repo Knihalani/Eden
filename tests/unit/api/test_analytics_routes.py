@@ -202,6 +202,9 @@ def app(stub_pg, monkeypatch):
     async def _get_user():
         return {"id": "u-test", "email": "t@test.io", "org_id": "org-test"}
 
+    async def _path_org():
+        return "org-test"
+
     # Mock Redis client (not used by new routes, but imported by optimization).
     async def _get_redis():
         return None
@@ -214,6 +217,9 @@ def app(stub_pg, monkeypatch):
 
     # FastAPI's dependency_overrides is the correct way to stub a Depends().
     app.dependency_overrides[eden_deps.get_current_user] = _get_user
+    # Wave path-org gate: sub-routes bind Depends(require_path_org_access).
+    app.dependency_overrides[analytics.require_path_org_access] = _path_org
+    app.dependency_overrides[optimization.require_path_org_access] = _path_org
     return app
 
 

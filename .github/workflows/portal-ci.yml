@@ -30,7 +30,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: portal-ci
+  group: portal-ci-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -98,6 +98,10 @@ jobs:
           # NEXT_PUBLIC_* must be present at build time for Clerk JS to mount in production start.
           CLERK_SECRET_KEY: ${{ env.CLERK_SECRET_KEY }}
           NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY }}
+
+      # K43 / P0-BUNDLE-CI — fail if any chunk >400KB or total >6MB.
+      - name: Check bundle size budgets
+        run: bun run check:bundle
 
       - name: Upload production build
         uses: actions/upload-artifact@v4
@@ -182,8 +186,10 @@ jobs:
 
   # F85 golden paths — 8 deep-assertion paths with real Clerk auth.
   # continue-on-error is intentionally REMOVED so this gates CI.
-  # If the job fails due to missing Clerk secrets, the error message will name
-  # the required env vars: CLERK_SECRET_KEY, NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY.
+  # Auth seed failure exits non-zero (job fails). Path failures also exit 1
+  # (GOLDEN_ALLOW_FAIL must never be set here — that soft-fails EXIT 0).
+  # Required env: CLERK_SECRET_KEY, NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY
+  # (repo secrets preferred; committed pk_test fallback via CLERK_TEST_KEY_FALLBACK).
   golden-paths:
     name: Golden paths (F85)
     runs-on: ubuntu-latest
@@ -228,23 +234,29 @@ jobs:
           done
           echo "Portal is up"
       - name: Seed Clerk auth state (headless)
-        # Required secrets: CLERK_SECRET_KEY, NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY
-        # If secrets are not set, seed-auth falls back to committed test-mode keys.
-        # If auth seed fails outright, the golden-paths step below will fail with
-        # a clear message (GOLDEN_CI=1 exits 1 when no storageState exists).
+        # Hard-fail when seed-auth exits non-zero or does not write storageState.
+        # Do not soft-pass golden paths without usable auth.
         env:
           CLERK_SECRET_KEY: ${{ env.CLERK_SECRET_KEY }}
           NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY }}
           BASE_URL: "http://localhost:3000"
           NEXT_PUBLIC_SITE_URL: "http://localhost:3000"
           PORT: "3000"
-        run: node e2e/golden/seed-auth.mjs
+        run: |
+          set -euo pipefail
+          node e2e/golden/seed-auth.mjs
+          if [[ ! -f e2e/.auth-state.json ]]; then
+            echo "[golden-ci] FATAL: seed-auth did not write e2e/.auth-state.json"
+            echo "  Required env: CLERK_SECRET_KEY, NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY"
+            exit 1
+          fi
       - name: Run golden paths (deep assertions)
         env:
           NEXT_PUBLIC_API_URL: "http://localhost:8000"
           BASE_URL: "http://localhost:3000"
           NEXT_PUBLIC_SITE_URL: "http://localhost:3000"
           GOLDEN_CI: "1"
+          # Intentionally unset — GOLDEN_ALLOW_FAIL=1 would soft-exit 0 on path failures.
         run: node e2e/golden/golden-paths.spec.mjs
       - uses: actions/upload-artifact@v4
         if: always()

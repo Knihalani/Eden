@@ -3,15 +3,18 @@
 import Link from "next/link";
 import { Suspense, useEffect, useState } from "react";
 import dynamic from "next/dynamic";
+import { useRouter } from "next/navigation";
 import { useOrg } from "@/hooks/use-org";
-import { agentIssuesApi, type AgentIssue } from "@/lib/api";
+import { usePermissions } from "@/hooks/use-permissions";
+import { agentIssuesApi, ApiError, type AgentIssue } from "@/lib/api";
 import { useOrgQuery } from "@/hooks/use-api-query";
 import { queryKeys } from "@/lib/query-keys";
 import { EmptyState } from "@/components/ui/empty-state";
+import { ErrorState } from "@/components/ui/error-state";
 import { NoOrgState } from "@/components/ui/no-org-state";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { AlertCircle, BookOpen, Key, Loader2, ShieldAlert } from "lucide-react";
+import { BookOpen, Key, Loader2, ShieldAlert } from "lucide-react";
 import { PageHeader } from "@/components/layout/page-header";
 import { CoreResourcePage, DetailPanelShell, useResourceUrlState, VirtualizedList, ResourceOsToolbar, BulkActionBar } from "@/components/portal-os";
 import { CrossLinkBar } from "@/components/portal-os/CrossLinkBar";
@@ -38,6 +41,10 @@ const STATUS_FILTERS = [
 const PAGE_SIZE = 100;
 const MAX_LIMIT = 200;
 const TOP_TABS = ["issues", "incidents"] as const;
+const TOP_TAB_LABELS: Record<(typeof TOP_TABS)[number], string> = {
+  issues: "Agent Issues",
+  incidents: "Incidents",
+};
 
 const IncidentsView = dynamic(() => import("@/app/(portal)/incidents/page"), {
   ssr: false,
@@ -62,7 +69,12 @@ function IssuesList({
   onSelectedIdsChange: (ids: string[]) => void;
 }) {
   const { currentOrg } = useOrg();
+  const { hasPermission } = usePermissions();
+  // API key create/revoke is owner/admin only (settings:edit). Members
+  // and viewers must not get a primary "API keys" first-run CTA.
+  const canManageKeys = hasPermission("settings:edit");
   const orgId = currentOrg?.id ?? null;
+  const router = useRouter();
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [limit, setLimit] = useState(PAGE_SIZE);
 
@@ -99,13 +111,13 @@ function IssuesList({
       <ResourceOsToolbar
         resourceKey="issues"
         onCreateAlert={() => {
-          window.location.href = "/alerts?tab=rules";
+          router.push("/alerts?tab=rules");
         }}
         exportRows={exportRows}
         exportFilename="issues.csv"
         className="mb-4"
       />
-      <div role="tablist" aria-label="Issue status filter" className="flex items-center gap-1 mb-4 border-b border-[var(--border-default)] overflow-x-auto">
+      <div role="tablist" aria-label="Issue status filter" className="flex items-center gap-1 mb-4 border-b border-[var(--border-subtle)] overflow-x-auto">
         {STATUS_FILTERS.map((s) => (
           <button
             key={s}
@@ -116,7 +128,7 @@ function IssuesList({
               setLimit(PAGE_SIZE);
             }}
             className={cn(
-              "px-3 py-2 text-sm font-medium border-b-2 -mb-px transition-colors whitespace-nowrap capitalize",
+              "min-h-11 px-3 py-2 text-sm font-medium border-b-2 -mb-px transition-colors whitespace-nowrap capitalize",
               statusFilter === s
                 ? "border-[var(--accent)] text-[var(--text-primary)]"
                 : "border-transparent text-[var(--text-muted)] hover:text-[var(--text-primary)]",
@@ -127,25 +139,27 @@ function IssuesList({
         ))}
       </div>
 
-      {error && (
-        <div role="alert" className="mb-4 flex items-start justify-between gap-2 rounded-lg border border-[var(--error)] bg-[var(--error-bg)] p-3 text-sm text-[var(--error)]">
-          <div className="flex items-start gap-2">
-            <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
-            <div>
-              <p className="font-medium">Failed to load issues</p>
-              <p className="text-xs mt-1 opacity-80">{error}</p>
-            </div>
-          </div>
-          <button onClick={load} disabled={loading} className="text-xs font-medium underline underline-offset-2 hover:opacity-80 disabled:opacity-50 shrink-0">
-            Retry
-          </button>
-        </div>
-      )}
-
       {loading ? (
         <div role="status" aria-busy="true" className="flex items-center justify-center p-12 text-sm text-[var(--text-muted)]">
           <Loader2 className="h-4 w-4 mr-2 animate-spin" /> Loading…
         </div>
+      ) : error ? (
+        <ErrorState
+          title="Failed to load issues"
+          message={error}
+          className="mb-4"
+          action={
+            <Button
+              onClick={load}
+              variant="outline"
+              size="sm"
+              loading={refreshing}
+              disabled={loading}
+            >
+              Retry
+            </Button>
+          }
+        />
       ) : issues.length === 0 ? (
         <EmptyState
           icon={ShieldAlert}
@@ -160,12 +174,18 @@ function IssuesList({
                   Install SDK
                 </a>
               </Button>
-              <Button asChild variant="outline" className="min-h-11">
-                <Link href="/settings?tab=api-keys">
-                  <Key className="h-4 w-4" />
-                  API keys
-                </Link>
-              </Button>
+              {canManageKeys ? (
+                <Button asChild variant="outline" className="min-h-11">
+                  <Link href="/settings?tab=api-keys">
+                    <Key className="h-4 w-4" />
+                    API keys
+                  </Link>
+                </Button>
+              ) : (
+                <span className="text-xs text-[var(--text-muted)] px-3 py-2">
+                  Ask an admin for an API key
+                </span>
+              )}
             </div>
           }
         />
@@ -173,7 +193,7 @@ function IssuesList({
         <VirtualizedList
           items={issues}
           rowKey={(i) => i.id}
-          className="space-y-2"
+          className="divide-y divide-[var(--border-subtle)]"
         >
           {(i) => {
             const checked = selectedIds.includes(i.id);
@@ -181,10 +201,10 @@ function IssuesList({
               <div
                 key={i.id}
                 className={cn(
-                  "row-select-highlight flex w-full items-start gap-3 rounded-lg border bg-[var(--bg-primary)] p-4 hover:border-[var(--accent)] transition-colors",
+                  "row-select-highlight flex w-full items-start gap-3 rounded-lg px-3 py-3.5 transition-colors hover:bg-[var(--bg-secondary)]",
                   selectedId === i.id
-                    ? "border-[var(--accent)] ring-1 ring-[var(--accent)]/30 is-selected"
-                    : "border-[var(--border-default)]",
+                    ? "bg-[var(--accent-faint)]/40 ring-1 ring-[var(--accent)]/30 is-selected"
+                    : "",
                 )}
               >
                 <input
@@ -255,6 +275,9 @@ function IssuesPageInner() {
     { enabled: Boolean(orgId) && Boolean(issueId) },
   );
   const selectedIssue: AgentIssue | null = issueDetailQuery.data?.data?.issue ?? null;
+  const issueDetailNotFound =
+    issueDetailQuery.error instanceof ApiError && issueDetailQuery.error.status === 404;
+  const issueDetailError = issueDetailQuery.error?.message ?? null;
   const issueIndex = issueId ? listIssues.findIndex((i) => i.id === issueId) : -1;
 
   if (!currentOrg) {
@@ -271,14 +294,13 @@ function IssuesPageInner() {
     <CoreResourcePage
       header={
         <PageHeader
-          title="Issues"
-          subtitle="Grouped agent failures and systemic incident clusters."
-          icon={ShieldAlert}
-          description="Triage stumbles here; switch to Incidents for RCA clusters across many failures."
+          title="Agent Issues"
+          subtitle="Grouped agent failures — the primary triage loop. Switch to Incidents for systemic RCA clusters."
+          description="Triage stumbles here; Incidents cluster many failures into one RCA summary."
         />
       }
       toolbar={
-        <div role="tablist" aria-label="Issues sections" className="mb-4 flex gap-1 border-b border-[var(--border-default)]">
+        <div role="tablist" aria-label="Issues sections" className="flex gap-1 border-b border-[var(--border-subtle)]">
           {TOP_TABS.map((t) => (
             <button
               key={t}
@@ -287,13 +309,13 @@ function IssuesPageInner() {
               aria-selected={tab === t}
               onClick={() => setTab(t)}
               className={cn(
-                "px-3 py-2 text-sm font-medium capitalize border-b-2 -mb-px",
+                "min-h-11 px-3 py-2 text-sm font-medium border-b-2 -mb-px",
                 tab === t
                   ? "border-[var(--accent)] text-[var(--text-primary)]"
                   : "border-transparent text-[var(--text-muted)] hover:text-[var(--text-primary)]",
               )}
             >
-              {t}
+              {TOP_TAB_LABELS[t]}
             </button>
           ))}
         </div>
@@ -384,6 +406,25 @@ function IssuesPageInner() {
               <div className="flex items-center justify-center p-8 text-sm text-[var(--text-muted)]">
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" /> Loading…
               </div>
+            ) : issueDetailNotFound || (!selectedIssue && !issueDetailError) ? (
+              <p className="p-4 text-sm text-[var(--text-muted)]">Issue not found.</p>
+            ) : issueDetailError ? (
+              <ErrorState
+                title="Could not load issue"
+                message={issueDetailError}
+                size="sm"
+                className="m-4"
+                action={
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="min-h-11"
+                    onClick={() => void issueDetailQuery.refetch()}
+                  >
+                    Try again
+                  </Button>
+                }
+              />
             ) : selectedIssue ? (
               <div className="flex h-full flex-col">
                 <CrossLinkBar

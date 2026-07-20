@@ -14,6 +14,7 @@ import { Input } from "@/components/ui/input";
 import { FormField } from "@/components/ui/form-field";
 import { Switch } from "@/components/ui/switch";
 import { EmptyState } from "@/components/ui/empty-state";
+import { ErrorState } from "@/components/ui/error-state";
 import { NoOrgState } from "@/components/ui/no-org-state";
 import { useToast } from "@/components/ui/toast";
 import { Loader2, Sparkles, Plus, RotateCcw, FlaskConical } from "lucide-react";
@@ -32,14 +33,14 @@ type ScoringRule = {
 function SlmBadge({ type }: { type?: string }) {
   if ((type || "").toLowerCase() !== "slm") return null;
   return (
-    <span className="rounded bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-600">
+    <span className="rounded bg-[var(--warning-bg)] px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--warning)]">
       SLM
     </span>
   );
 }
 
 export default function OnlineScoringPage() {
-  const { currentOrg } = useOrg();
+  const { currentOrg, authError } = useOrg();
   const orgId = currentOrg?.id ?? null;
   const toast = useToast();
   const qc = useQueryClient();
@@ -61,7 +62,8 @@ export default function OnlineScoringPage() {
 
   const rules = (rulesQuery.data?.data?.rules ?? []) as ScoringRule[];
 
-  if (!currentOrg) return <NoOrgState feature="Online scoring" />;
+  if (!currentOrg && !authError) return <NoOrgState feature="Online scoring" />;
+  if (!currentOrg) return null;
 
   const refresh = () =>
     qc.invalidateQueries({ queryKey: ["wave6", "scoring-rules", orgId] });
@@ -245,6 +247,20 @@ export default function OnlineScoringPage() {
             <Loader2 className="h-4 w-4 animate-spin" />
             Loading rules…
           </div>
+        ) : rulesQuery.isError ? (
+          <ErrorState
+            title="Could not load scoring rules"
+            message={
+              rulesQuery.error instanceof Error
+                ? rulesQuery.error.message
+                : "Online scoring rules could not be loaded."
+            }
+            action={
+              <Button variant="outline" size="sm" onClick={() => void refresh()}>
+                Try again
+              </Button>
+            }
+          />
         ) : rules.length === 0 ? (
           <EmptyState
             icon={Sparkles}

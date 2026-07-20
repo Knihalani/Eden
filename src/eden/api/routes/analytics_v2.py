@@ -12,19 +12,29 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from eden.analytics import cohort_retention, funnel
-from eden.api.deps import get_current_user
+from eden.api.deps import get_current_user, require_path_org_access
+from eden.api.utils.redact import redact_all
+from eden.api.utils.safe_error import raise_mapped_db_error
 
 logger = logging.getLogger(__name__)
-router = APIRouter(prefix="/orgs/{org_id}/analytics", tags=["analytics"])
+router = APIRouter(prefix="/orgs/{org_id}/analytics", tags=["analytics"], dependencies=[Depends(require_path_org_access)])
 
 
 @router.get("/cohorts")
 async def get_cohorts(
-    org_id: str,
+    org_id: str = Depends(require_path_org_access),
     weeks: int = Query(default=8, ge=1, le=52),
     user: dict[str, Any] = Depends(get_current_user),
 ) -> dict[str, Any]:
-    rows = await cohort_retention(org_id, weeks=weeks)
+    try:
+        rows = await cohort_retention(org_id, weeks=weeks)
+    except Exception as exc:
+        logger.warning("get_cohorts failed: %s", redact_all(str(exc)))
+        raise_mapped_db_error(
+            exc,
+            fallback="cohort analytics unavailable",
+            uuid_detail="Invalid organization id",
+        )
     return {
         "org_id": org_id,
         "weeks": weeks,
@@ -42,7 +52,7 @@ async def get_cohorts(
 
 @router.get("/funnel")
 async def get_funnel(
-    org_id: str,
+    org_id: str = Depends(require_path_org_access),
     steps: str = Query(..., description="Comma-separated list of step names, ordered"),
     window_days: int = Query(default=30, ge=1, le=365),
     user: dict[str, Any] = Depends(get_current_user),
@@ -50,7 +60,17 @@ async def get_funnel(
     step_list = [s.strip() for s in steps.split(",") if s.strip()]
     if len(step_list) < 2:
         raise HTTPException(status_code=400, detail="Provide at least two comma-separated steps")
-    result = await funnel(org_id, step_list, window_days=window_days)
+    try:
+        result = await funnel(org_id, step_list, window_days=window_days)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.warning("get_funnel failed: %s", redact_all(str(exc)))
+        raise_mapped_db_error(
+            exc,
+            fallback="funnel analytics unavailable",
+            uuid_detail="Invalid organization id",
+        )
     return {
         "org_id": org_id,
         "window_days": window_days,

@@ -1,6 +1,8 @@
 name: web-vitals (F82)
 
-# F82 — LCP/INP regression gate on Home + Traces.
+# F82 / A10 — LCP/INP/CLS/FCP/TTFB regression gate on Home + Traces.
+# Budgets: clients/portal/src/lib/perf/budgets.ts
+# Measure: clients/portal/scripts/measure-web-vitals.mjs
 # Requires Clerk auth (same pattern as portal-ci golden paths).
 # Fails loudly when Clerk secrets are missing and fallback is disabled.
 on:
@@ -61,6 +63,10 @@ jobs:
           CLERK_SECRET_KEY: ${{ env.CLERK_SECRET_KEY }}
           NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY }}
           NEXT_PUBLIC_SITE_URL: "http://127.0.0.1:3000"
+
+      # K43 / P0-BUNDLE-CI — fail if any chunk >400KB or total >6MB.
+      - name: Check bundle size budgets
+        run: bun run check:bundle
 
       - name: Install Playwright Chromium
         run: bunx playwright install chromium --with-deps

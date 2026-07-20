@@ -116,12 +116,12 @@ async fn config_url_trims_trailing_slash() {
 }
 
 #[tokio::test]
-async fn send_batch_posts_envelope() {
+async fn send_batch_posts_raw_json_array() {
     let server = MockServer::start();
     let mock = server.mock(|when, then| {
         when.method(POST)
             .path("/orgs/org_test/ingest/openai")
-            .body(r#"{"events":[{"a":1},{"b":2}]}"#);
+            .body(r#"[{"a":1},{"b":2}]"#);
         then.status(200).body(r#"{"accepted":2,"rejected":0,"total":2}"#);
     });
 

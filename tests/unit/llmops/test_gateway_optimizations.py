@@ -156,6 +156,30 @@ def test_cache_key_includes_max_completion_tokens():
     assert key_a != key_b
 
 
+def test_layout_does_not_mutate_caller_messages():
+    messages = [
+        {"role": "user", "content": "hi"},
+        {"role": "system", "content": "You are helpful."},
+    ]
+    original = [dict(m) for m in messages]
+    laid_out, applied = layout_for_provider_cache(messages, provider="anthropic")
+    assert applied is True
+    assert messages == original
+    assert laid_out is not messages
+    assert laid_out[0]["role"] == "system"
+
+
+def test_default_seed_rows_cached_but_copy_isolated():
+    from eden.llmops.pricing import default_seed_rows
+
+    a = default_seed_rows()
+    b = default_seed_rows()
+    assert a == b
+    assert a is not b
+    a.pop(next(iter(a)))
+    assert len(a) == len(b) - 1
+
+
 @pytest.mark.asyncio
 async def test_gateway_coalescer_dedupes_concurrent_calls():
     coalescer = GatewayCoalescer(window_ms=500)

@@ -1,0 +1,105 @@
+{
+  "probe": "W2 wave2 public portal route probe (no auth)",
+  "base": "https://edenobservability.com",
+  "local": "down (127.0.0.1:3000)",
+  "timestamp_utc": "2026-07-20T05:02:18.110185+00:00",
+  "total": 23,
+  "pass": 23,
+  "fail": 0,
+  "unintentional_5xx_count": 0,
+  "unintentional_5xx_routes": [],
+  "intentional_5xx": [
+    {
+      "route": "/api/health",
+      "code": 503,
+      "notes": "intentional soft-degraded 503 JSON; health=degraded; postgres=connected; qdrant=error: [Errno 99] Cannot assign requested address"
+    }
+  ],
+  "all_5xx": [
+    {
+      "route": "/api/health",
+      "code": 503,
+      "notes": "intentional soft-degraded 503 JSON; health=degraded; postgres=connected; qdrant=error: [Errno 99] Cannot assign requested address",
+      "intentional": true
+    }
+  ],
+  "crash_hits_count": 0,
+  "crash_hit_routes": [],
+  "focus": {
+    "/contact": {
+      "http_code": 200,
+      "final_url": "https://edenobservability.com/contact",
+      "title": "Eden \u2014 Observability + improvement for AI agents",
+      "crash_markers": "",
+      "verdict": "PASS",
+      "notes": "i18n-false-positive-ok"
+    },
+    "/status": {
+      "http_code": 200,
+      "final_url": "https://edenobservability.com/status",
+      "title": "Eden \u2014 Observability + improvement for AI agents",
+      "crash_markers": "",
+      "verdict": "PASS",
+      "notes": "i18n-false-positive-ok"
+    },
+    "/health": {
+      "http_code": 200,
+      "final_url": "https://edenobservability.com/health",
+      "title": "Eden \u2014 Observability + improvement for AI agents",
+      "crash_markers": "",
+      "verdict": "PASS",
+      "notes": "i18n-false-positive-ok"
+    },
+    "/api/health": {
+      "http_code": 503,
+      "final_url": "https://edenobservability.com/api/health",
+      "title": "json:status=degraded",
+      "crash_markers": "",
+      "verdict": "PASS",
+      "notes": "intentional soft-degraded 503 JSON; health=degraded; postgres=connected; qdrant=error: [Errno 99] Cannot assign requested address"
+    }
+  },
+  "failures": [],
+  "artifacts": {
+    "tsv": "/Users/kaiavnihalani/Downloads/Eden/clients/portal/e2e/golden/w2-wave2-public-probe/route-probe.tsv",
+    "summary": "/Users/kaiavnihalani/Downloads/Eden/clients/portal/e2e/golden/w2-wave2-public-probe/SUMMARY.json"
+  },
+  "focus_detail": {
+    "/contact": {
+      "http_code": 200,
+      "behavior": "Marketing contact page with Get in touch + ContactForm (name/email/message) + mailto:hello@edenobservability.com",
+      "crash": false
+    },
+    "/status": {
+      "http_code": 200,
+      "behavior": "NOT a public status page \u2014 portal soft-404 shell (NEXT_HTTP_ERROR_FALLBACK;404). Same size (~21570B) loading chrome. No Application error.",
+      "crash": false,
+      "soft_404_digest": "NEXT_HTTP_ERROR_FALLBACK;404"
+    },
+    "/health": {
+      "http_code": 200,
+      "behavior": "NOT API health \u2014 same portal soft-404 shell as /status. Use /api/health for JSON.",
+      "crash": false,
+      "soft_404_digest": "NEXT_HTTP_ERROR_FALLBACK;404"
+    },
+    "/api/health": {
+      "http_code": 503,
+      "behavior": "Intentional soft-degraded JSON (postgres connected, qdrant Errno 99). Repo route.ts can rewrite soft-degraded\u2192200; prod still returns 503.",
+      "crash": false,
+      "unintentional_5xx": false,
+      "body": {
+        "status": "degraded",
+        "postgres": "connected",
+        "qdrant": "error: [Errno 99] Cannot assign requested address"
+      }
+    }
+  },
+  "notes": [
+    "Base: https://edenobservability.com (local :3000 down)",
+    "23/23 PASS under criteria: no Application error / Unhandled Runtime Error; no unintentional 5xx",
+    "Only 5xx: /api/health 503 soft-degraded (documented/intentional)",
+    "/status and /health are soft-404 HTML shells (HTTP 200) \u2014 not crashes, not real status/health pages",
+    "i18n string 'Something went wrong. Please try again.' present in HTML bundles \u2014 false positive, not a live crash",
+    "/login\u2192/sign-in and /signup\u2192/sign-up redirects work (final URL updated)"
+  ]
+}

@@ -183,11 +183,13 @@ class StreamingTokenCapture:
         span_id = token.get("span_id")
         if not span_id:
             return False
-        next_index = self._last_index.get(span_id, -1) + 1
-        self._last_index[span_id] = next_index
-        token["token_index"] = next_index
-        self._buffer.append(token)
-        if len(self._buffer) >= self._batch_size:
+        async with self._lock_for(span_id):
+            next_index = self._last_index.get(span_id, -1) + 1
+            self._last_index[span_id] = next_index
+            token["token_index"] = next_index
+            self._buffer.append(token)
+            should_flush = len(self._buffer) >= self._batch_size
+        if should_flush:
             return await self._flush()
         return False
 
@@ -198,10 +200,8 @@ class StreamingTokenCapture:
         like the rest of the surface — DB errors are
         logged and swallowed so the gateway keeps serving.
 
-        Audit 2026-07-02 P-10: pre-allocate per-span indices
-        serially (mutates ``_last_index``), then fire the N
-        INSERTs via asyncio.gather. Each token's index is
-        stable regardless of gather completion order.
+        Uses a single ``executemany`` INSERT (not N round-trips).
+        Per-span index allocation is serial under ``_lock_for``.
         """
         if not tokens:
             return 0
@@ -213,59 +213,70 @@ class StreamingTokenCapture:
         client = await get_postgres_client()
         if client is None:
             return 0
-        # Step 1 (serial): allocate indices per-span.
+        # Step 1 (serial, locked): allocate indices per-span.
         indexed: list[tuple[dict[str, Any], int]] = []
         for tok in tokens:
             span_id = tok.get("span_id")
-            idx = self._last_index.get(span_id, -1) + 1
-            self._last_index[span_id] = idx
+            if not span_id:
+                continue
+            async with self._lock_for(span_id):
+                idx = self._last_index.get(span_id, -1) + 1
+                self._last_index[span_id] = idx
             indexed.append((tok, idx))
 
-        async def _do_insert(tok: dict[str, Any], idx: int) -> bool:
-            try:
-                await client.execute(
-                    """
-                    INSERT INTO streaming_tokens (
-                        id, org_id, trace_id, span_id, token_index,
-                        token_text, token_byte_len, delta_ms, abs_ms,
-                        finish_reason, redacted, created_at
-                    ) VALUES (
-                        $1, $2, $3, $4, $5,
-                        $6, $7, $8, $9,
-                        $10, $11, NOW()
-                    )
-                    ON CONFLICT (span_id, token_index) DO UPDATE
-                    SET token_byte_len = EXCLUDED.token_byte_len,
-                        delta_ms        = EXCLUDED.delta_ms,
-                        abs_ms          = EXCLUDED.abs_ms,
-                        finish_reason   = COALESCE(
-                            EXCLUDED.finish_reason,
-                            streaming_tokens.finish_reason
-                        ),
-                        redacted        = EXCLUDED.redacted OR
-                            streaming_tokens.redacted
-                    """,
-                    uuid.uuid4(),
-                    tok.get("org_id", ""),
-                    tok.get("trace_id", ""),
-                    tok.get("span_id"),
-                    idx,
-                    tok.get("token_text"),
-                    int(tok.get("token_byte_len", 0)),
-                    int(tok.get("delta_ms", 0)),
-                    int(tok.get("abs_ms", 0)),
-                    tok.get("finish_reason"),
-                    bool(tok.get("redacted", False)),
-                )
-                return True
-            except Exception as exc:
-                logger.debug("streaming: write_token failed: %s", redact_all(str(exc)))
-                return False
+        if not indexed:
+            return 0
 
-        results = await asyncio.gather(
-            *(_do_insert(tok, idx) for tok, idx in indexed),
-        )
-        return sum(1 for r in results if r)
+        rows = [
+            (
+                uuid.uuid4(),
+                tok.get("org_id", ""),
+                tok.get("trace_id", ""),
+                tok.get("span_id"),
+                idx,
+                tok.get("token_text"),
+                int(tok.get("token_byte_len", 0)),
+                int(tok.get("delta_ms", 0)),
+                int(tok.get("abs_ms", 0)),
+                tok.get("finish_reason"),
+                bool(tok.get("redacted", False)),
+            )
+            for tok, idx in indexed
+        ]
+        try:
+            await client.executemany(
+                """
+                INSERT INTO streaming_tokens (
+                    id, org_id, trace_id, span_id, token_index,
+                    token_text, token_byte_len, delta_ms, abs_ms,
+                    finish_reason, redacted, created_at
+                ) VALUES (
+                    $1, $2, $3, $4, $5,
+                    $6, $7, $8, $9,
+                    $10, $11, NOW()
+                )
+                ON CONFLICT (span_id, token_index) DO UPDATE
+                SET token_byte_len = EXCLUDED.token_byte_len,
+                    delta_ms        = EXCLUDED.delta_ms,
+                    abs_ms          = EXCLUDED.abs_ms,
+                    finish_reason   = COALESCE(
+                        EXCLUDED.finish_reason,
+                        streaming_tokens.finish_reason
+                    ),
+                    redacted        = EXCLUDED.redacted OR
+                        streaming_tokens.redacted
+                """,
+                rows,
+            )
+            return len(rows)
+        except Exception as exc:
+            logger.debug("streaming: write_batch failed: %s", redact_all(str(exc)))
+            return 0
+
+    async def release_span(self, span_id: str) -> None:
+        """Drop per-span lock/index state after a stream ends."""
+        self._span_locks.pop(span_id, None)
+        self._last_index.pop(span_id, None)
 
     async def _flush(self) -> bool:
         """Flush the buffer to Postgres. Returns True on flush."""

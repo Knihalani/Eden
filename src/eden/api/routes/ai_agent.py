@@ -34,7 +34,7 @@ from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
-from eden.api.deps import get_current_user
+from eden.api.deps import get_current_user, require_path_org_access
 from eden.autonomous.agent import (
     AgentChunk,
     get_chat_service,
@@ -42,7 +42,11 @@ from eden.autonomous.agent import (
 )
 
 logger = logging.getLogger(__name__)
-router = APIRouter(prefix="/orgs/{org_id}/ai", tags=["ai-agent"])
+router = APIRouter(
+    prefix="/orgs/{org_id}/ai",
+    tags=["ai-agent"],
+    dependencies=[Depends(require_path_org_access)],
+)
 
 
 # ── Pydantic schemas ──────────────────────────────────────────────
@@ -119,14 +123,14 @@ async def _resolve_user_role(org_id: str, user_id: str) -> str:
     """Look up the caller's role inside ``org_id``.
 
     Returns one of: ``"owner"``, ``"admin"``, ``"member"``, ``"viewer"``.
-    Defaults to ``"member"`` if the role can't be resolved — read-only
-    tools still work; write tools (mark_incident_resolved) reject.
+    Raises 403 when membership/role cannot be resolved — never defaults
+    a non-member to ``"member"``.
     """
     try:
         from eden.storage.postgres import get_postgres_client
         client = await get_postgres_client()
         if client is None:
-            return "member"
+            raise HTTPException(status_code=503, detail="postgres_unavailable")
         row = await client.fetchrow(
             """
             SELECT m.role
@@ -137,9 +141,12 @@ async def _resolve_user_role(org_id: str, user_id: str) -> str:
         )
         if row:
             return str(row["role"])
+    except HTTPException:
+        raise
     except Exception as exc:
         logger.debug(f"role lookup failed: {exc}")
-    return "member"
+        raise HTTPException(status_code=503, detail="role_lookup_failed") from exc
+    raise HTTPException(status_code=403, detail="Not a member of this organization")
 
 
 # ── Routes ─────────────────────────────────────────────────────────
@@ -148,7 +155,7 @@ async def _resolve_user_role(org_id: str, user_id: str) -> str:
 @router.post("/chat")
 async def chat_route(
     request: Request,
-    org_id: str = Path(..., description="Organization ID"),
+    org_id: str = Depends(require_path_org_access),
     body: ChatRequest = ...,
     user: dict = Depends(get_current_user),
 ) -> StreamingResponse:
@@ -248,7 +255,7 @@ async def chat_route(
 
 @router.get("/conversations", response_model=list[ConversationSummary])
 async def list_conversations_route(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     user: dict = Depends(get_current_user),
     limit: int = Query(50, ge=1, le=200),
 ):
@@ -289,7 +296,7 @@ async def list_conversations_route(
 @router.get("/conversations/{conversation_id}",
             response_model=ConversationDetail)
 async def get_conversation_route(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     conversation_id: str = Path(...),
     user: dict = Depends(get_current_user),
 ):
@@ -356,7 +363,7 @@ async def get_conversation_route(
 
 @router.delete("/conversations/{conversation_id}")
 async def archive_conversation_route(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     conversation_id: str = Path(...),
     user: dict = Depends(get_current_user),
 ):
@@ -379,7 +386,7 @@ async def archive_conversation_route(
 
 @router.get("/tools", response_model=list[ToolCatalogEntry])
 async def list_tools_route(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     user: dict = Depends(get_current_user),
 ):
     """Public catalog of tools the agent can call.

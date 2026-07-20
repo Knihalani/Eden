@@ -28,7 +28,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Path
 from pydantic import BaseModel, Field
 
-from eden.api.deps import OrgMember, get_current_org_member, log_audit_event
+from eden.api.deps import OrgMember, get_current_org_member, log_audit_event, require_path_org_access
 from eden.api.utils.redact import redact_all
 from eden.llmops import registry_store
 from eden.llmops.registry_store import (
@@ -42,6 +42,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(
     prefix="/orgs/{org_id}/gateway/models",
     tags=["gateway-models"],
+    dependencies=[Depends(require_path_org_access)],
 )
 
 
@@ -127,7 +128,7 @@ def _require_admin(member: OrgMember) -> None:
 @router.get("", response_model=list[GatewayModelOut])
 async def list_gateway_models(
     member: OrgMember = Depends(get_current_org_member),
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
 ) -> list[GatewayModelOut]:
     """List every registered model for the org. Keys are masked."""
     configs = await registry_store.list_models(member.org_id)
@@ -141,7 +142,7 @@ async def list_gateway_models(
 async def create_gateway_model(
     body: GatewayModelCreate,
     member: OrgMember = Depends(get_current_org_member),
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
 ) -> GatewayModelOut:
     """Register a new upstream model. Owner/admin only."""
     _require_admin(member)
@@ -174,19 +175,27 @@ async def create_gateway_model(
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     except Exception as exc:  # noqa: BLE001
         # Unique-constraint violation on (org_id, name) → 409
-        msg = str(exc)
-        if "unique" in msg.lower() or "duplicate" in msg.lower():
+        msg = str(exc).lower()
+        if "unique" in msg or "duplicate" in msg:
             raise HTTPException(
                 status_code=409,
                 detail=f"A model named '{body.name}' is already registered",
             ) from exc
-        if "foreign key" in msg.lower():
+        if "foreign key" in msg:
             raise HTTPException(
                 status_code=400,
                 detail="Unknown organization",
             ) from exc
+        if "invalid input syntax for type uuid" in msg:
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid organization or model id",
+            ) from exc
         logger.warning("create_gateway_model failed: %s", redact_all(str(exc)))
-        raise HTTPException(status_code=500, detail="Failed to register model") from exc
+        raise HTTPException(
+            status_code=503,
+            detail="Failed to register model",
+        ) from exc
 
     # Audit
     try:
@@ -219,7 +228,7 @@ async def create_gateway_model(
 @router.get("/{model_id}", response_model=GatewayModelOut)
 async def get_gateway_model(
     member: OrgMember = Depends(get_current_org_member),
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     model_id: str = Path(...),
 ) -> GatewayModelOut:
     cfg = await registry_store.get_model_by_id(member.org_id, model_id)
@@ -235,7 +244,7 @@ async def get_gateway_model(
 async def update_gateway_model(
     body: GatewayModelUpdate,
     member: OrgMember = Depends(get_current_org_member),
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     model_id: str = Path(...),
 ) -> GatewayModelOut:
     """Partially update a registered model. Owner/admin only."""
@@ -298,7 +307,7 @@ async def update_gateway_model(
 @router.delete("/{model_id}", response_model=dict)
 async def delete_gateway_model(
     member: OrgMember = Depends(get_current_org_member),
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     model_id: str = Path(...),
 ) -> dict:
     """Permanently remove a registered model. Owner/admin only."""
@@ -337,7 +346,7 @@ async def delete_gateway_model(
 async def resolve_gateway_model(
     body: GatewayModelResolveIn,
     member: OrgMember = Depends(get_current_org_member),
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
 ) -> GatewayModelResolveOut:
     """Resolve a logical model name to its upstream config.
 

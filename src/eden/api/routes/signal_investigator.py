@@ -9,7 +9,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Path, Query
 from pydantic import BaseModel, Field
 
-from eden.api.deps import get_current_user
+from eden.api.deps import get_current_user, require_path_org_access
 from eden.api.utils.safe_error import safe_detail
 from eden.signals.backfill import (
     enqueue_backfill,
@@ -23,7 +23,9 @@ logger = logging.getLogger(__name__)
 router = APIRouter(
     prefix="/orgs/{org_id}",
     tags=["signal-investigator"],
-    dependencies=[Depends(get_current_user)],
+    dependencies=[Depends(get_current_user),
+        Depends(require_path_org_access),
+    ],
 )
 
 
@@ -37,7 +39,7 @@ class ResolveClusterRequest(BaseModel):
 
 @router.get("/signals/{signal_id}/events")
 async def list_signal_events(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     signal_id: str = Path(...),
     matched: bool | None = Query(None),
     limit: int = Query(100, ge=1, le=500),
@@ -94,7 +96,7 @@ async def list_signal_events(
 
 @router.get("/signal-clusters")
 async def list_signal_clusters(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     signal_id: str | None = Query(None),
     status: str = Query("open"),
     user: dict = Depends(get_current_user),
@@ -150,7 +152,7 @@ async def list_signal_clusters(
 @router.post("/signal-clusters/{cluster_id}/resolve")
 async def resolve_signal_cluster(
     body: ResolveClusterRequest,
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     cluster_id: str = Path(...),
     user: dict = Depends(get_current_user),
 ) -> dict[str, Any]:
@@ -181,7 +183,7 @@ async def resolve_signal_cluster(
 @router.post("/signals/{signal_id}/backfill")
 async def start_signal_backfill(
     body: BackfillRequest,
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     signal_id: str = Path(...),
     user: dict = Depends(get_current_user),
 ) -> dict[str, Any]:
@@ -199,7 +201,7 @@ async def start_signal_backfill(
 
 @router.get("/signals/{signal_id}/backfill/{job_id}")
 async def get_signal_backfill_status(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     signal_id: str = Path(...),
     job_id: str = Path(...),
     user: dict = Depends(get_current_user),
@@ -213,7 +215,7 @@ async def get_signal_backfill_status(
 
 @router.get("/signals/{signal_id}/backfill-estimate")
 async def signal_backfill_estimate(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     signal_id: str = Path(...),
     window_days: int = Query(7, ge=1, le=30),
     user: dict = Depends(get_current_user),

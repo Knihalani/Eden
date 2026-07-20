@@ -17,11 +17,11 @@ async def fetch_traces(org_id: str) -> list[dict]:
         return []
     rows = await client.fetch(
         """
-        SELECT trace_id, realm, agent_id, started_at, outcome,
+        SELECT trace_id, realm, agent_id, timestamp, outcome,
                span_count, duration_ms
         FROM telemetry_events
         WHERE tenant_id = $1
-        ORDER BY started_at DESC
+        ORDER BY timestamp DESC
         LIMIT 10000
         """,
         org_id,

@@ -7,14 +7,14 @@ from typing import Any
 from fastapi import APIRouter, Depends, Path
 from pydantic import BaseModel, Field
 
-from eden.api.deps import get_current_user, require_org_member
+from eden.api.deps import get_current_user, require_path_org_access
 from eden.signals.classifier_pipeline import ClassifierTrainingPipeline
 from eden.signals.shadow_compare import ShadowComparator
 
 router = APIRouter(
     prefix="/orgs/{org_id}/signals/{signal_id}/classifier",
     tags=["signal-classifiers"],
-    dependencies=[Depends(get_current_user), Depends(require_org_member)],
+    dependencies=[Depends(get_current_user), Depends(require_path_org_access)],
 )
 _pipeline = ClassifierTrainingPipeline()
 _shadow = ShadowComparator()
@@ -30,7 +30,7 @@ class PromoteBody(BaseModel):
 
 @router.post("/train")
 async def train_classifier(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     signal_id: str = Path(...),
     body: TrainBody | None = None,
 ) -> dict[str, Any]:
@@ -54,7 +54,7 @@ async def train_classifier(
 
 @router.get("")
 async def get_classifier(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     signal_id: str = Path(...),
 ) -> dict[str, Any]:
     data = await _pipeline.get_status(org_id, signal_id)
@@ -63,7 +63,7 @@ async def get_classifier(
 
 @router.post("/promote")
 async def promote_classifier(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     signal_id: str = Path(...),
     body: PromoteBody | None = None,
 ) -> dict[str, Any]:
@@ -74,7 +74,7 @@ async def promote_classifier(
 
 @router.post("/shadow-report")
 async def shadow_report(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     signal_id: str = Path(...),
 ) -> dict[str, Any]:
     data = await _shadow.report(org_id, signal_id)

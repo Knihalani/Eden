@@ -73,8 +73,8 @@ class IntegrationPlan:
 # Templates
 # ---------------------------------------------------------------------------
 
-PYTHON_REQUIREMENTS_LINE = "eden-ai>=0.1.0  # added by Eden onboarding\n"
-TS_PACKAGE_LINE = '"@eden-ai/sdk": "^0.1.0"  // added by Eden onboarding\n'
+PYTHON_REQUIREMENTS_LINE = "eden-sdk>=0.3.2  # added by Eden onboarding\n"
+TS_PACKAGE_LINE = '"@eden-ai/sdk": "^0.3.2"  // added by Eden onboarding\n'
 
 # Use a sentinel for the {framework} placeholder so we can use
 # str.format_map with a custom formatter that ignores `${VAR}`
@@ -143,16 +143,17 @@ def _render_eden_config(framework: str, llm_provider: str = "") -> str:
 PYTHON_INSTRUMENT_TEMPLATE = '''\
 # Added by Eden onboarding — Eden auto-instrumentation.
 import os
-import eden  # type: ignore  # noqa: F401
+import eden
 
-# Initialise the global tracer. No-op if env vars are not set.
-eden.init(
-    api_key=os.environ.get("EDEN_API_KEY", ""),
-    org_id=os.environ.get("EDEN_DEFAULT_ORG", ""),
-    base_url=os.environ.get("EDEN_BASE_URL", "http://localhost:8000"),
-    framework={framework_repr},
-    auto_instrument=True,
-)
+_org = os.environ.get("EDEN_ORG_ID") or os.environ.get("EDEN_DEFAULT_ORG")
+_key = os.environ.get("EDEN_API_KEY")
+if _org and _key:
+    eden.configure(
+        api_key=_key,
+        org_id=_org,
+        base_url=os.environ.get("EDEN_BASE_URL", "http://localhost:8000"),
+    )
+{instrument_call}
 '''
 
 
@@ -171,7 +172,7 @@ init({{
 
 
 # Provider-specific bootstrap env vars.  Each entry maps a detected
-# framework to the env vars that should be set before ``eden.init()``
+# framework to the env vars that should be set before ``eden.configure()``
 # so the OpenAI-compatible / Anthropic-compatible auto-instrumentors
 # route calls to the right provider.
 #
@@ -279,20 +280,22 @@ def _render_ts_env_setup(framework: str) -> str:
 
 
 # Provider-aware bootstrap: same shape as PYTHON_INSTRUMENT_TEMPLATE
-# but interpolates a per-provider env-setup block before ``eden.init()``.
+# but interpolates a per-provider env-setup block before ``eden.configure()``.
 # Used for any framework in PROVIDER_BOOTSTRAP_ENVS.
 PYTHON_INSTRUMENT_PROVIDER_TEMPLATE = '''\
 # Added by Eden onboarding — Eden auto-instrumentation.
-{env_setup}
-import eden  # type: ignore  # noqa: F401
+{env_setup}import os
+import eden
 
-eden.init(
-    api_key=os.environ.get("EDEN_API_KEY", ""),
-    org_id=os.environ.get("EDEN_DEFAULT_ORG", ""),
-    base_url=os.environ.get("EDEN_BASE_URL", "http://localhost:8000"),
-    framework={framework_repr},
-    auto_instrument=True,
-)
+_org = os.environ.get("EDEN_ORG_ID") or os.environ.get("EDEN_DEFAULT_ORG")
+_key = os.environ.get("EDEN_API_KEY")
+if _org and _key:
+    eden.configure(
+        api_key=_key,
+        org_id=_org,
+        base_url=os.environ.get("EDEN_BASE_URL", "http://localhost:8000"),
+    )
+{instrument_call}
 '''
 
 
@@ -309,6 +312,50 @@ init({{
   autoInstrument: true,
 }});
 """
+
+
+def _python_instrument_call(framework: str) -> str:
+    """Return a source line that instruments the detected framework."""
+    mapping = {
+        "openai": "openai",
+        "anthropic": "anthropic",
+        "langchain": "langchain",
+        "llama_index": "llama_index",
+        "crewai": "crewai",
+        "autogen": "autogen",
+        "mastra": "mastra",
+        "pydantic_ai": "pydantic_ai",
+        "bedrock": "bedrock",
+        "gemini": "gemini",
+        # OpenAI-compatible local / cloud providers
+        "ollama": "openai",
+        "ollama_cloud": "openai",
+        "vllm": "openai",
+        "lmstudio": "openai",
+        "llamacpp": "openai",
+        "openrouter": "openai",
+        "minimax": "openai",
+    }
+    target = mapping.get(framework)
+    if target:
+        return f'eden.instrument("{target}")'
+    return "eden.instrument()"
+
+
+def _python_import_hint(framework: str) -> str:
+    """Keep import-only hints; drop snippets that already call instrument."""
+    imports = PYTHON_IMPORT_SNIPPETS.get(framework, "")
+    if not imports:
+        return ""
+    kept: list[str] = []
+    for line in imports.splitlines(keepends=True):
+        stripped = line.strip()
+        if "eden.instrument" in stripped or stripped in {"import eden", "import eden  # type: ignore  # noqa: F401"}:
+            continue
+        if stripped.startswith("import eden"):
+            continue
+        kept.append(line)
+    return "".join(kept)
 
 
 
@@ -403,17 +450,18 @@ def _maybe_update_package_json(repo_root: Path, additions: list[str]) -> FileCha
 
 def _build_python_instrument_file(detection: FrameworkDetection) -> str:
     fw = detection.framework
-    imports = PYTHON_IMPORT_SNIPPETS.get(fw, "")
+    imports = _python_import_hint(fw)
+    instrument_call = _python_instrument_call(fw)
     # Providers in PROVIDER_BOOTSTRAP_ENVS get the env-aware template
     # so the OpenAI-compatible instrumentor routes calls to the right
     # endpoint (Ollama, Groq, Together, vLLM, LM Studio, etc).
     if fw in PROVIDER_BOOTSTRAP_ENVS:
         env_setup = _render_python_env_setup(fw)
         body = PYTHON_INSTRUMENT_PROVIDER_TEMPLATE.format(
-            env_setup=env_setup, framework_repr=repr(fw)
+            env_setup=env_setup, instrument_call=instrument_call
         )
     else:
-        body = PYTHON_INSTRUMENT_TEMPLATE.format(framework_repr=repr(fw))
+        body = PYTHON_INSTRUMENT_TEMPLATE.format(instrument_call=instrument_call)
     return (
         "# Auto-generated by Eden onboarding — safe to delete if you\n"
         "# prefer to instrument manually.\n"
@@ -520,8 +568,8 @@ def build_integration_plan(
 
     # --- Dependencies & install commands ----------------------------------
     if detection.language == "python":
-        plan.dependencies.append("eden-ai")
-        plan.install_commands.append("pip install -e '.[eden]'  # or: pip install eden-ai")
+        plan.dependencies.append("eden-sdk")
+        plan.install_commands.append("pip install -e '.[eden]'  # or: pip install eden-sdk")
         req_change = _maybe_update_requirements(root, [PYTHON_REQUIREMENTS_LINE])
         if req_change:
             plan.changes.append(req_change)
@@ -615,8 +663,8 @@ def build_integration_plan_from_files(
 
     # --- Dependencies -----------------------------------------------------
     if detection.language == "python":
-        plan.dependencies.append("eden-ai")
-        plan.install_commands.append("pip install eden-ai")
+        plan.dependencies.append("eden-sdk")
+        plan.install_commands.append("pip install eden-sdk")
         req_change = _maybe_update_requirements_text(
             files.get("requirements.txt"), [PYTHON_REQUIREMENTS_LINE]
         )

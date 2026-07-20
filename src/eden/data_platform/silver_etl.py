@@ -182,7 +182,9 @@ class SilverETLPipeline:
             params = [since.isoformat(), limit]
 
         query = f"""
-            SELECT *
+            SELECT id, org_id, user_id, event_type, resource, quantity, unit,
+                   model, cost_usd, metadata, correlation_id, created_at,
+                   silver_processed
             FROM usage_events
             WHERE silver_processed = FALSE OR silver_processed IS NULL
             {since_clause}

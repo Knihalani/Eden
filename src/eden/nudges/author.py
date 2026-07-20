@@ -120,7 +120,6 @@ class ArtifactAuthor:
                 text = (getattr(resp, "content", None) or "").strip()
                 if text:
                     content = text[:2000]
-                await budget.record(0.005, kind="artifact_author_nl", ref_id=agent_id)
             except Exception as exc:
                 logger.debug("artifact author NL fast path failed: %s", exc)
 

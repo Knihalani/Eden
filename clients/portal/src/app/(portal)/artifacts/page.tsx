@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState, Suspense } from "react";
+import { useMemo, useState, Suspense } from "react";
 import { Download, Loader2, Package, PenLine, Sparkles } from "lucide-react";
 
 import { PageHeader } from "@/components/layout/page-header";
@@ -14,15 +14,18 @@ import {
 } from "@/components/portal-os";
 import { ArtifactDetailPanel, type ArtifactDetail } from "@/components/artifacts/ArtifactDetailPanel";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
+import { Panel } from "@/components/ui/panel";
 import { ErrorState } from "@/components/ui/error-state";
 import { Input } from "@/components/ui/input";
+import { NoOrgState } from "@/components/ui/no-org-state";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/components/ui/toast";
 import { useOrg } from "@/hooks/use-org";
+import { useOrgQuery } from "@/hooks/use-api-query";
 import { useListKeyboardNav } from "@/hooks/use-list-keyboard-nav";
 import { learnApi } from "@/lib/api";
+import { queryKeys } from "@/lib/query-keys";
 import { issueHref } from "@/lib/portal-cross-links";
 import { errorFromCaught } from "@/lib/safe-error-message";
 import { U20_EMPTY_COPY } from "@/lib/portal-polish";
@@ -35,12 +38,10 @@ const MODE_TABS = ["all", "shadow", "promoted", "archived"] as const;
 
 function ArtifactsPageInner() {
   const { currentOrg } = useOrg();
+  const orgId = currentOrg?.id ?? null;
   const toast = useToast();
   const { state: urlState, setState: setUrlState } = useResourceUrlState();
   const artifactId = urlState.artifactId;
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [artifacts, setArtifacts] = useState<ArtifactRow[]>([]);
   const [tab, setTab] = useState<(typeof MODE_TABS)[number]>("shadow");
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [promoteWarn, setPromoteWarn] = useState(false);
@@ -48,37 +49,27 @@ function ArtifactsPageInner() {
   const [nlAgent, setNlAgent] = useState("");
   const [nlText, setNlText] = useState("");
 
-  const load = useCallback(async () => {
-    if (!currentOrg) return;
-    setLoading(true);
-    setError(null);
-    try {
-      const res = await learnApi.listArtifacts(currentOrg.id);
+  const artifactsQuery = useOrgQuery(
+    queryKeys.artifacts.list(orgId),
+    orgId,
+    async () => {
+      const res = await learnApi.listArtifacts(orgId!);
       if (res.status === "preview_disabled") {
         // Kill-switch / misconfig — not an opt-in wall. Soft-fail to empty + message.
-        setError(
+        throw new Error(
           (res.data as { message?: string } | undefined)?.message ??
             "Artifacts are disabled for this organization.",
         );
-        setArtifacts([]);
-        return;
       }
-      setArtifacts(
-        ((res.data?.artifacts as ArtifactRow[]) ?? []).map((a) => ({
-          ...a,
-          id: String(a.id),
-        })),
-      );
-    } catch (e) {
-      setError(errorFromCaught(e, "Failed to load artifacts"));
-    } finally {
-      setLoading(false);
-    }
-  }, [currentOrg]);
-
-  useEffect(() => {
-    void load();
-  }, [load]);
+      return ((res.data?.artifacts as ArtifactRow[]) ?? []).map((a) => ({
+        ...a,
+        id: String(a.id),
+      }));
+    },
+  );
+  const artifacts = artifactsQuery.data ?? [];
+  const loading = artifactsQuery.isLoading;
+  const error = artifactsQuery.error?.message ?? null;
 
   const filtered = useMemo(() => {
     if (tab === "all") return artifacts;
@@ -107,11 +98,22 @@ function ArtifactsPageInner() {
       return;
     }
     try {
-      await learnApi.promoteArtifact(currentOrg.id, a.id);
-      toast.success("Artifact promoted");
-      setPromoteWarn(false);
-      setPromoteTarget(null);
-      await load();
+      const res = await learnApi.promoteArtifact(currentOrg.id, a.id);
+      const report = res.data?.report as Record<string, unknown> | undefined;
+      if (res.data?.promoted || report?.passed) {
+        toast.success("Artifact promoted");
+        setPromoteWarn(false);
+        setPromoteTarget(null);
+        await artifactsQuery.refetch();
+      } else {
+        const held = String(
+          report?.explanation ||
+            report?.recommendation ||
+            report?.gate_verdict ||
+            "hold",
+        );
+        toast.error(`Promotion held: ${held}`);
+      }
     } catch (e) {
       toast.error(errorFromCaught(e, "Promotion failed"));
     }
@@ -126,7 +128,7 @@ function ArtifactsPageInner() {
       toast.success(ids.length === 1 ? "Artifact archived" : `Archived ${ids.length} artifacts`);
       setSelectedIds([]);
       if (artifactId && ids.includes(artifactId)) setUrlState({ artifactId: undefined });
-      await load();
+      await artifactsQuery.refetch();
     } catch (e) {
       toast.error(errorFromCaught(e, "Archive failed"));
     }
@@ -159,7 +161,7 @@ function ArtifactsPageInner() {
       });
       toast.success("Shadow artifact drafted");
       setNlText("");
-      await load();
+      await artifactsQuery.refetch();
     } catch (e) {
       toast.error(errorFromCaught(e, "Author failed"));
     }
@@ -171,11 +173,18 @@ function ArtifactsPageInner() {
     );
   };
 
+  const artifactMode = (a: ArtifactRow) => a.mode ?? "shadow";
   const kpi = {
-    shadow: artifacts.filter((a) => a.mode === "shadow").length,
-    promoted: artifacts.filter((a) => a.mode === "promoted").length,
-    archived: artifacts.filter((a) => a.mode === "archived").length,
+    shadow: artifacts.filter((a) => artifactMode(a) === "shadow").length,
+    promoted: artifacts.filter((a) => artifactMode(a) === "promoted").length,
+    archived: artifacts.filter((a) => artifactMode(a) === "archived").length,
   };
+  const filterActive = tab !== "all";
+  const filteredEmpty = !loading && !error && filtered.length === 0;
+
+  if (!currentOrg) {
+    return <NoOrgState feature="Artifacts" icon={Package} />;
+  }
 
   const tableBody = (
     <>
@@ -190,19 +199,42 @@ function ArtifactsPageInner() {
         exportFilename="artifacts.csv"
         className="mb-4"
       />
+      {error ? (
+        <ErrorState
+          title="Could not load artifacts"
+          message={error}
+          className="mb-4"
+          action={
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => void artifactsQuery.refetch()}
+              loading={artifactsQuery.isFetching}
+            >
+              Try again
+            </Button>
+          }
+        />
+      ) : null}
+      {loading ? (
+        <div className="flex justify-center py-12">
+          <Loader2 className="h-8 w-8 animate-spin text-[var(--text-muted)]" />
+        </div>
+      ) : error ? null : (
+        <>
       <div className="mb-4 grid grid-cols-2 gap-2 text-center sm:grid-cols-4">
         {[
           { label: "Shadow", value: kpi.shadow },
           { label: "Promoted", value: kpi.promoted },
-          { label: "Archived 7d", value: kpi.archived },
+          { label: "Archived", value: kpi.archived },
         ].map((k) => (
-          <Card key={k.label} className="p-3">
+          <Panel key={k.label} tone="flat" padding="sm" className="text-center">
             <div className="text-lg font-semibold">{k.value}</div>
             <div className="text-xs text-[var(--text-muted)]">{k.label}</div>
-          </Card>
+          </Panel>
         ))}
       </div>
-      <Card className="mb-4 space-y-2 p-4">
+      <Panel tone="flat" padding="md" className="mb-4 space-y-2">
         <div className="flex items-center gap-2 text-sm font-medium">
           <PenLine className="h-4 w-4" />
           Author from plain English
@@ -226,13 +258,7 @@ function ArtifactsPageInner() {
             Draft shadow
           </Button>
         </div>
-      </Card>
-      {error ? <ErrorState message={error} action={<Button size="sm" variant="outline" onClick={() => void load()}>Retry</Button>} /> : null}
-      {loading ? (
-        <div className="flex justify-center py-12">
-          <Loader2 className="h-8 w-8 animate-spin text-[var(--text-muted)]" />
-        </div>
-      ) : (
+      </Panel>
         <Tabs value={tab} onValueChange={(v) => setTab(v as (typeof MODE_TABS)[number])}>
           <TabsList>
             {MODE_TABS.map((m) => (
@@ -242,12 +268,31 @@ function ArtifactsPageInner() {
             ))}
           </TabsList>
           <TabsContent value={tab} className="mt-4">
-            {filtered.length === 0 ? (
+            {filteredEmpty ? (
               <EmptyState
+                variant="plain"
                 icon={Package}
-                title="No artifacts yet"
-                description={U20_EMPTY_COPY.artifacts}
+                title={
+                  filterActive && artifacts.length > 0
+                    ? `No ${tab} artifacts`
+                    : "No artifacts yet"
+                }
+                description={
+                  filterActive && artifacts.length > 0
+                    ? `Nothing in the ${tab} mode. Switch to All or another mode to see your ${artifacts.length} artifact${artifacts.length === 1 ? "" : "s"}.`
+                    : U20_EMPTY_COPY.artifacts
+                }
                 action={
+                  filterActive && artifacts.length > 0 ? (
+                    <Button
+                      className="min-h-11"
+                      variant="outline"
+                      onClick={() => setTab("all")}
+                      data-testid="artifacts-clear-mode-filter"
+                    >
+                      Show all artifacts
+                    </Button>
+                  ) : (
                   <div className="flex flex-wrap justify-center gap-2">
                     <Button className="min-h-11" asChild>
                       <a href={DOCS_QUICKSTART_URL} target="_blank" rel="noopener noreferrer">
@@ -261,16 +306,17 @@ function ArtifactsPageInner() {
                       <Link href="/issues">View Agent Issues</Link>
                     </Button>
                   </div>
+                  )
                 }
               />
             ) : (
-              <div className="space-y-2">
+              <div className="divide-y divide-[var(--border-subtle)]">
                 {filtered.map((a) => (
-                  <Card
+                  <div
                     key={a.id}
                     className={cn(
-                      "row-select-highlight p-4 transition-colors",
-                      artifactId === a.id && "border-[var(--accent)] ring-1 ring-[var(--accent)]/30 is-selected",
+                      "row-select-highlight px-1 py-4 transition-colors",
+                      artifactId === a.id && "bg-[var(--accent-faint)]/40 ring-1 ring-[var(--accent)]/30 rounded-lg is-selected",
                     )}
                   >
                     <div className="flex items-start justify-between gap-4">
@@ -313,22 +359,23 @@ function ArtifactsPageInner() {
                             <Download className="h-4 w-4" />
                           </Button>
                         ) : null}
-                        {a.mode === "shadow" ? (
+                        {artifactMode(a) === "shadow" ? (
                           <Button size="sm" onClick={() => void doPromote(a)}>
                             Promote
                           </Button>
                         ) : null}
                       </div>
                     </div>
-                  </Card>
+                  </div>
                 ))}
               </div>
             )}
           </TabsContent>
         </Tabs>
+        </>
       )}
       {promoteWarn && promoteTarget ? (
-        <Card className="fixed bottom-20 right-6 z-50 max-w-md border-[var(--warning-strong)] p-4 shadow-lg">
+        <Panel tone="inset" padding="md" className="fixed bottom-20 right-6 z-50 max-w-md shadow-lg ring-[var(--warning-strong)]">
           <p className="text-sm font-medium">Low value score</p>
           <p className="mt-1 text-xs text-[var(--text-muted)]">
             This Artifact may cost more in tokens than lift it provides. Promote only if you accept
@@ -342,7 +389,7 @@ function ArtifactsPageInner() {
               Cancel
             </Button>
           </div>
-        </Card>
+        </Panel>
       ) : null}
       <BulkActionBar
         count={selectedIds.length}
@@ -372,7 +419,7 @@ function ArtifactsPageInner() {
           title="Artifacts"
           description="Production traces become Artifacts — versioned, evidence-gated runtime fixes."
           actions={
-            <Button variant="outline" size="sm" asChild>
+            <Button variant="ghost" size="sm" asChild>
               <Link href="/promotions">Promotions inbox</Link>
             </Button>
           }

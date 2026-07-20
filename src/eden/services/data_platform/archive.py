@@ -212,8 +212,14 @@ class ArchiveService:
         )
         return len(rows)
 
-    async def lookup(self, trace_id: str) -> dict[str, Any] | None:
-        """Return the archive index row for ``trace_id``, or ``None``."""
+    async def lookup(
+        self, trace_id: str, org_id: str | None = None
+    ) -> dict[str, Any] | None:
+        """Return the archive index row for ``trace_id``, or ``None``.
+
+        When ``org_id`` is set, a row owned by a different org is treated
+        as not found (no cross-tenant archive IDOR).
+        """
         from eden.storage.postgres import get_postgres_client
 
         client = await get_postgres_client()
@@ -229,23 +235,30 @@ class ArchiveService:
         )
         if row is None:
             return None
+        if org_id is not None and str(row["org_id"]) != str(org_id):
+            return None
         return dict(row)
 
-    async def rehydrate(self, trace_id: str) -> list[dict[str, Any]]:
+    async def rehydrate(
+        self, trace_id: str, org_id: str | None = None
+    ) -> list[dict[str, Any]]:
         """Fetch the NDJSON from Impossible Cloud and return parsed rows.
 
         Read-through cache: identical ``trace_id`` lookups within
         the process lifetime are served from an ``lru_cache``. The
         cache is invalidated whenever ``_archive_one_trace`` writes
         (so a re-archive reflects in subsequent reads).
+
+        Org ownership is checked via :meth:`lookup` *before* the cache
+        so a cached blob is never served across tenants.
         """
+        meta = await self.lookup(trace_id, org_id=org_id)
+        if meta is None:
+            return []
+
         cached = _rehydrate_cache(trace_id)
         if cached is not None:
             return cached
-
-        meta = await self.lookup(trace_id)
-        if meta is None:
-            return []
 
         body = await self._read_impossible_cloud(meta["archive_path"])
         rows = [json.loads(line) for line in body.splitlines() if line.strip()]

@@ -7,10 +7,10 @@ import uuid
 from datetime import UTC, datetime
 from typing import Any
 
-from fastapi import APIRouter, Body, Depends, Path
+from fastapi import APIRouter, Body, Depends, HTTPException, Path
 from pydantic import BaseModel, Field
 
-from eden.api.deps import get_current_user, require_feature_flag
+from eden.api.deps import get_current_user, require_feature_flag, require_path_org_access
 from eden.change_impact.preview import (
     ImpactPreviewOrchestrator,
     format_pr_comment,
@@ -26,6 +26,7 @@ router = APIRouter(
     dependencies=[
         Depends(require_feature_flag(_FLAG)),
         Depends(get_current_user),
+        Depends(require_path_org_access),
     ],
 )
 
@@ -48,19 +49,25 @@ class PreviewRequest(BaseModel):
     changed_files: list[str] = Field(default_factory=list)
     agent_id: str | None = None
     trace_ids: list[str] | None = None
+    prompt_override: str | None = None
 
 
 @router.post("/preview")
 async def preview_change(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     body: PreviewRequest = Body(...),
 ) -> dict[str, Any]:
+    from eden.storage.postgres import get_postgres_client
+
+    if await get_postgres_client() is None:
+        raise HTTPException(status_code=503, detail="Postgres unavailable")
     report = await _orchestrator.generate_report(
         org_id,
         change_id=body.change_id,
         changed_files=body.changed_files,
         agent_id=body.agent_id,
         trace_ids=body.trace_ids,
+        prompt_override=body.prompt_override,
     )
     return _ok(
         "change_impact",
@@ -73,16 +80,15 @@ async def preview_change(
 
 @router.get("/{change_id}")
 async def get_impact_report(
-    org_id: str = Path(...), change_id: str = Path(...)
+    org_id: str = Depends(require_path_org_access), change_id: str = Path(...)
 ) -> dict[str, Any]:
+    from eden.storage.postgres import get_postgres_client
+
+    if await get_postgres_client() is None:
+        raise HTTPException(status_code=503, detail="Postgres unavailable")
     report = await _orchestrator.get_report(org_id, change_id)
     if report is None:
-        return {
-            "status": "not_found",
-            "feature": "change_impact",
-            "live": True,
-            "data": {"change_id": change_id},
-        }
+        raise HTTPException(status_code=404, detail="change impact report not found")
     return _ok(
         "change_impact",
         {"report": report.to_dict(), "pr_comment": format_pr_comment(report)},

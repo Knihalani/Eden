@@ -35,10 +35,9 @@ The v0 ship:
   ``guardrail_policies`` / ``guardrail_evaluations`` /
   ``intervention_log`` tables (created in migration 020). The
   service layer never fabricates policy state.
-* **Default-allow for** :class:`InterventionEngine` — the
-  headline guardrail route returns ``verdict: "allow"`` with
-  ``live: false`` so production flows don't break before a real
-  policy exists. A real policy is what flips the verdict.
+* **Fail-closed for** :class:`InterventionEngine` — incomplete
+  / unevaluable policy sets return ``verdict: "block"`` with
+  ``live: false``. Enforced detector policies flip ``live``.
 * **Closed-loop wiring** — the :class:`InterventionEngine`
   fires :class:`GuardrailHook.on_judge_threshold_breach` when
   a judge-driven policy is reliably catching real issues
@@ -425,14 +424,18 @@ def _validate_action(a: str) -> bool:
 def _ok_envelope(feature: str, data: dict[str, Any]) -> dict[str, Any]:
     """Live ok-envelope for the Cat 15 surface.
 
-    Mirrors the rest of the intelligence surface — the
-    ``live: True`` flag signals the front-end to render the
-    real policy (not the "stub" badge).
+    Outer ``live`` mirrors ``data.live`` when present so fail-closed
+    / unenforced paths never advertise ``live: true`` for unrestricted
+    traffic. CRUD and detector paths without an explicit ``data.live``
+    keep ``live: true``.
     """
+    live = True
+    if isinstance(data, dict) and "live" in data:
+        live = bool(data["live"])
     return {
         "status": "ok",
         "feature": feature,
-        "live": True,
+        "live": live,
         "timestamp": _now_iso(),
         "data": data,
     }

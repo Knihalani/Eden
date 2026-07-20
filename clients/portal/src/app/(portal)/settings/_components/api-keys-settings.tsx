@@ -5,9 +5,14 @@ import { Plus, Key, Loader2, Trash2, Copy, Check } from "lucide-react";
 import { useToast } from "@/components/ui/toast";
 import { useConfirm } from "@/hooks/use-confirm";
 import { api } from "@/lib/api";
+import { usePermissions } from "@/hooks/use-permissions";
+import { isAdminOrOwner } from "@/lib/roles";
 import { SettingsCard } from "@/components/settings/settings-card";
+import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
+import { ErrorState } from "@/components/ui/error-state";
 import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
+import { errorFromCaught } from "@/lib/safe-error-message";
 import type { Organization } from "@/lib/types";
 
 interface ApiKey {
@@ -28,13 +33,17 @@ const ALL_SCOPES = [
   { id: "references:write", label: "Write References" },
   { id: "jobs:read", label: "Read Jobs" },
   { id: "jobs:write", label: "Submit Jobs" },
+  { id: "ingest:write", label: "Ingest write" },
+  { id: "gateway:write", label: "Gateway write" },
 ];
 
 export function ApiKeysSettings({ org }: ApiKeysSettingsProps) {
   const toast = useToast();
   const { confirm, ConfirmDialog } = useConfirm();
+  const { role: resolvedRole } = usePermissions();
   const [keys, setKeys] = useState<ApiKey[]>([]);
   const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [newKeyName, setNewKeyName] = useState("");
   const [selectedScopes, setSelectedScopes] = useState<string[]>([]);
@@ -45,11 +54,14 @@ export function ApiKeysSettings({ org }: ApiKeysSettingsProps) {
   const loadKeys = async () => {
     if (!org) return;
     setLoading(true);
+    setLoadError(null);
     try {
       const data = await api.listApiKeys(org.id);
       setKeys(data);
-    } catch {
-      // Fall through
+    } catch (e) {
+      // Fail closed: do not paint "No API keys" on a 5xx.
+      setLoadError(errorFromCaught(e, "Failed to load API keys"));
+      setKeys([]);
     } finally {
       setLoading(false);
     }
@@ -118,7 +130,8 @@ export function ApiKeysSettings({ org }: ApiKeysSettingsProps) {
     );
   }
 
-  const canManage = org.role === "owner" || org.role === "admin";
+  const canManage =
+    isAdminOrOwner(resolvedRole) || isAdminOrOwner(org.role);
 
   const columns: DataTableColumn<ApiKey>[] = [
     { key: "name", header: "Name", sortable: true, sticky: true, cell: (k) => <span className="font-medium text-[var(--text-primary)]">{k.name}</span> },
@@ -281,17 +294,29 @@ export function ApiKeysSettings({ org }: ApiKeysSettingsProps) {
       )}
 
       <SettingsCard title="Active keys" description={`${keys.length} on file`}>
-        <DataTable
-          columns={columns}
-          rows={keys}
-          rowKey={(k) => k.id}
-          loading={loading}
-          defaultSort={{ key: "name", direction: "asc" }}
-          emptyTitle="No API keys yet"
-          emptyDescription="Create a key to call the Eden API from CI or your own scripts."
-          emptyIcon={Key}
-          pageSize={25}
-        />
+        {loadError ? (
+          <ErrorState
+            title="Could not load API keys"
+            message={loadError}
+            action={
+              <Button variant="outline" className="min-h-11" onClick={() => void loadKeys()}>
+                Try again
+              </Button>
+            }
+          />
+        ) : (
+          <DataTable
+            columns={columns}
+            rows={keys}
+            rowKey={(k) => k.id}
+            loading={loading}
+            defaultSort={{ key: "name", direction: "asc" }}
+            emptyTitle="No API keys yet"
+            emptyDescription="Create a key to call the Eden API from CI or your own scripts."
+            emptyIcon={Key}
+            pageSize={25}
+          />
+        )}
       </SettingsCard>
       {ConfirmDialog}
     </div>

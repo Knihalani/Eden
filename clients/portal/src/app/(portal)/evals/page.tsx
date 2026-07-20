@@ -7,7 +7,7 @@
 import { Suspense } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
-import { ExternalLink, FlaskConical, Loader2 } from "lucide-react";
+import { ExternalLink, Loader2 } from "lucide-react";
 import { PageHeader } from "@/components/layout/page-header";
 import { CoreResourcePage } from "@/components/portal-os";
 import { EmbeddedSurface } from "@/components/layout/embedded-surface";
@@ -45,7 +45,7 @@ const TAB_META: Record<
   },
   eval: {
     label: "Scores",
-    title: "Judge versions, clusters, and HIL signals from scored traces",
+    title: "Judge versions and failure clusters from scored traces",
   },
   labeling: {
     label: "Labeling",
@@ -109,12 +109,11 @@ function EvalsInner() {
           title="Evals"
           eyebrow="Evaluate"
           subtitle="An eval scores agent output against a rubric or expected answer. First-run: dataset → playground → experiment."
-          icon={FlaskConical}
           description="Author and run evaluations without leaving this surface. Studio/synthetic are live metric & QA tools — not stubs."
           actions={
-            <Button asChild variant="outline" className="min-h-11">
+            <Button asChild variant="ghost" className="min-h-11">
               <a href={DOCS_QUICKSTART_URL} target="_blank" rel="noopener noreferrer">
-                Docs quickstart
+                Docs
                 <ExternalLink className="h-3.5 w-3.5" aria-hidden />
               </a>
             </Button>
@@ -125,7 +124,7 @@ function EvalsInner() {
         <div
           role="tablist"
           aria-label="Evals sections"
-          className="mb-6 flex flex-wrap gap-1 border-b border-[var(--border-default)]"
+          className="flex flex-wrap gap-1 border-b border-[var(--border-subtle)]"
         >
           {TABS.map((t) => (
             <button

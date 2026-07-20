@@ -20,10 +20,10 @@ unbounded:
 - ``ai_conversations``        — AI-insights chat sessions.
 - ``ai_messages``             — AI-insights chat messages.
 
-Each sweep is a single ``DELETE ... LIMIT`` (Postgres supports
-``DELETE ... LIMIT N`` since PG 13) inside a transaction. The
-``LIMIT`` keeps each sweep row-bounded so the cron never holds
-a long lock. Re-running the cron picks up the next batch.
+Each sweep is a batched ``DELETE`` via ``ctid IN (SELECT … LIMIT N)``
+(Postgres has no MySQL-style ``DELETE … LIMIT``). The ``LIMIT`` keeps
+each sweep row-bounded so the cron never holds a long lock. Re-running
+the cron picks up the next batch.
 
 Wired into ``data_platform.retention_cron.run()`` which is the
 Northflank daily job at 02:00 UTC.
@@ -230,23 +230,26 @@ class PostgresCleanupService:
             return int(count)
 
         try:
+            # Postgres has no ``DELETE … LIMIT`` (MySQL syntax). Batch via
+            # ctid subquery so sweeps stay bounded and actually run.
+            limit = int(self.batch_limit)
             sql = (
                 f"DELETE FROM {sweep.table} "
-                f"WHERE {where_sql} "
-                f"LIMIT {int(self.batch_limit)}"
+                f"WHERE ctid IN ("
+                f"  SELECT ctid FROM {sweep.table} "
+                f"  WHERE {where_sql} "
+                f"  LIMIT {limit}"
+                f") "
+                f"RETURNING 1"
             )
-            await client.execute(sql, *params)
+            deleted = await client.fetch(sql, *params)
         except Exception as exc:
             logger.warning(
                 f"[postgres_cleanup] {sweep.name} DELETE failed: {exc}"
             )
             raise
 
-        # We can't get the row count back from ``DELETE ... LIMIT`` on
-        # asyncpg without RETURNING; report 0 on the assumption that
-        # the daily cron will get the rest tomorrow. Operators who
-        # need an exact count can run ``SELECT COUNT(*)`` manually.
-        return 0
+        return len(deleted or [])
 
     async def _sweep_schema_ready(self, client: Any, sweep: _Sweep) -> bool:
         """Return True iff ``sweep.table`` exists and has the columns

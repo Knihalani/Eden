@@ -138,8 +138,9 @@ class FilterConfig:
 # designed to catch obvious PII before it leaves the process when
 # the gateway is down, misconfigured, or simply not present in a
 # local-dev setup. The gateway remains the authoritative redaction
-# layer; this is a belt-and-suspenders safety net. Disable via
-# ``EdenConfig(redact_on_client=False)`` when the gateway is the
+# layer; this is a belt-and-suspenders safety net. Enable via
+# ``EdenConfig(redact_on_client=True)`` when you want the client-side
+# safety net (default is off — gateway is authoritative).
 # trusted redaction point and you don't want false positives.
 
 # legitimate payloads (hex digests, model IDs, version strings).

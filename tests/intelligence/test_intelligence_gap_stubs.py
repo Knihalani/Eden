@@ -159,11 +159,10 @@ def test_envelope_shape(client, mod, method, path, body) -> None:
         )
 
 
-# ─── 5. Guardrail default — must allow in stub mode ───────────────
-def test_guardrail_evaluate_defaults_to_allow(client) -> None:
-    """``POST /guardrails/evaluate`` must return ``verdict: allow``
-    with ``live: false`` so production flows don't break before a
-    real policy exists.
+# ─── 5. Guardrail default — fail closed when no policies ───────────
+def test_guardrail_evaluate_fails_closed_without_policies(client) -> None:
+    """``POST /guardrails/evaluate`` must fail closed
+    (``verdict: block``, ``live: false``) when no real policies exist.
     """
     resp = client.post(
         "/orgs/org_x/intelligence/guardrails/evaluate",
@@ -172,14 +171,11 @@ def test_guardrail_evaluate_defaults_to_allow(client) -> None:
     if resp.status_code == 200:
         data = resp.json()
         assert data.get("status") == "ok", f"guardrail should be ok, got {data}"
-        assert data.get("data", {}).get("verdict") == "allow", (
-            f"guardrail default must be allow, got {data}"
+        assert data.get("data", {}).get("verdict") == "block", (
+            f"guardrail incomplete policy must fail closed, got {data}"
         )
-        # The data-level ``live`` flag is False when no real
-        # policies exist (i.e. the engine returned the safe
-        # default). The envelope-level ``live`` is True
-        # because the engine actually ran.
         assert data.get("data", {}).get("live") is False
+        assert data.get("live") is False
 
 
 # ─── 6. Closed-loop hooks are no-ops in stub mode ─────────────────

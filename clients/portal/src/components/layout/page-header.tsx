@@ -11,6 +11,11 @@ export interface PageHeaderProps {
   subtitle?: React.ReactNode;
   eyebrow?: string;
   actions?: React.ReactNode;
+  /**
+   * Optional decorative icon. Prefer omitting — AppShell breadcrumbs
+   * already locate the page. When passed, renders as a quiet glyph
+   * (no accent chip) so dual chrome stays light.
+   */
   icon?: React.ComponentType<{ className?: string }>;
   className?: string;
   /** Optional "Welcome back, X" badge shown above the title. */
@@ -45,39 +50,37 @@ export function PageHeader({
   if (hideChrome) {
     if (!actions) return null;
     return (
-      <div className={cn("mb-4 flex flex-wrap items-center justify-end gap-2", className)}>
+      <div className={cn("mb-3 flex flex-wrap items-center justify-end gap-2", className)}>
         {actions}
       </div>
     );
   }
 
   return (
-    // `flex-col sm:flex-row sm:items-start` so the actions slot
-    // wraps below the title on narrow viewports instead of
-    // overflowing horizontally. June 2026 layout-pass fix.
-    <div className={cn("flex flex-col sm:flex-row sm:items-start justify-between gap-4 mb-8", className)}>
-      <div className="min-w-0 flex items-start gap-3">
+    // Compact title row — location lives in AppShell breadcrumbs;
+    // this is page identity + actions only. Actions wrap below on
+    // narrow viewports instead of overflowing horizontally.
+    <div className={cn("flex flex-col sm:flex-row sm:items-start justify-between gap-3 mb-4", className)}>
+      <div className="min-w-0 flex items-start gap-2.5">
         {Icon && (
-          <div className="w-10 h-10 rounded-xl bg-[var(--accent-faint)] border border-[var(--accent)]/20 flex items-center justify-center shrink-0">
-            <Icon className="w-5 h-5 text-[var(--accent)]" />
-          </div>
+          <Icon
+            className="mt-0.5 w-4 h-4 shrink-0 text-[var(--text-muted)]"
+            aria-hidden
+          />
         )}
         <div className="min-w-0">
           {greeting && (
-            <p className="text-xs text-[var(--text-secondary)] mb-1.5 leading-relaxed">
+            <p className="text-xs text-[var(--text-secondary)] mb-1 leading-relaxed">
               {greeting}
             </p>
           )}
           {eyebrow && (
-            <p className="text-xs font-mono font-semibold uppercase tracking-widest text-[var(--accent)] mb-1.5">
+            <p className="text-[10px] font-mono font-semibold uppercase tracking-widest text-[var(--text-muted)] mb-1">
               {eyebrow}
             </p>
           )}
-          {/* Title scales from `text-2xl` (mobile) to `text-3xl`
-              (lg+) so a long page name doesn't dominate small
-              screens. June 2026 layout-pass fix. */}
-          <div className="flex items-center gap-2">
-            <h1 className="text-2xl lg:text-3xl font-bold text-[var(--text-primary)] tracking-tight">
+          <div className="flex items-center gap-1.5">
+            <h1 className="text-xl lg:text-2xl font-semibold text-[var(--text-primary)] tracking-tight">
               {title}
             </h1>
             {description && (
@@ -88,7 +91,7 @@ export function PageHeader({
                     aria-label={`About ${title}`}
                     className="p-1 rounded text-[var(--text-muted)] hover:text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)] transition-colors"
                   >
-                    <Info className="w-4 h-4" />
+                    <Info className="w-3.5 h-3.5" />
                   </button>
                 </TooltipTrigger>
                 <TooltipContent side="right" sideOffset={6} className="max-w-[280px]">
@@ -101,7 +104,7 @@ export function PageHeader({
             )}
           </div>
           {subtitle && (
-            <p className="text-sm text-[var(--text-muted)] mt-1">{subtitle}</p>
+            <p className="text-sm text-[var(--text-muted)] mt-0.5">{subtitle}</p>
           )}
         </div>
       </div>

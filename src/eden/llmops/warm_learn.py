@@ -24,27 +24,47 @@ async def warm_learn_caches(
 
     Returns a proof dict so callers (EvidenceGate / gateway) can assert
     warm-cache completed for F39 promote inject.
+
+    The three warmers are independent I/O — run concurrently.
     """
     from eden.kb.ledger.retrieve import LedgerRetriever
     from eden.nudges.engine import NudgeEngine
     from eden.preview.gates import warm_org_flags
 
     proof = {"flags": False, "nudges": False, "ledger": False}
-    try:
-        await warm_org_flags(org_id)
-        proof["flags"] = True
-    except Exception as exc:
-        logger.debug("warm flags failed: %s", exc)
-    try:
-        await NudgeEngine().warm_cache(org_id, agent_id)
-        proof["nudges"] = True
-    except Exception as exc:
-        logger.debug("warm nudges failed: %s", exc)
-    try:
-        await LedgerRetriever().pack_for_request(org_id, agent_id, task_text=task_text)
-        proof["ledger"] = True
-    except Exception as exc:
-        logger.debug("warm ledger failed: %s", exc)
+
+    async def _flags() -> bool:
+        try:
+            await warm_org_flags(org_id)
+            return True
+        except Exception as exc:
+            logger.debug("warm flags failed: %s", exc)
+            return False
+
+    async def _nudges() -> bool:
+        try:
+            await NudgeEngine().warm_cache(org_id, agent_id)
+            return True
+        except Exception as exc:
+            logger.debug("warm nudges failed: %s", exc)
+            return False
+
+    async def _ledger() -> bool:
+        try:
+            await LedgerRetriever().pack_for_request(
+                org_id, agent_id, task_text=task_text
+            )
+            return True
+        except Exception as exc:
+            logger.debug("warm ledger failed: %s", exc)
+            return False
+
+    flags_ok, nudges_ok, ledger_ok = await asyncio.gather(
+        _flags(), _nudges(), _ledger()
+    )
+    proof["flags"] = flags_ok
+    proof["nudges"] = nudges_ok
+    proof["ledger"] = ledger_ok
     return proof
 
 
@@ -64,7 +84,9 @@ def schedule_warm_learn(org_id: str, agent_id: str, *, task_text: str = "") -> N
             _WARM_INFLIGHT.discard(cache_key)
 
     try:
-        loop = asyncio.get_running_loop()
-        loop.create_task(_run())
+        asyncio.get_running_loop()
+        from eden.async_tasks import bounded_create_task
+
+        bounded_create_task(_run(), name="warm-learn")
     except RuntimeError:
         asyncio.run(_run())

@@ -112,6 +112,7 @@ class EdenApiClient(Protocol):
         change_id: str,
         changed_files: list[str],
         agent_id: str | None = None,
+        prompt_override: str | None = None,
     ) -> dict[str, Any]: ...
 
     async def export_fixture(
@@ -120,17 +121,26 @@ class EdenApiClient(Protocol):
 
 
 class HttpEdenClient:
-    """HTTPS client against Eden FastAPI routes."""
+    """HTTPS client against Eden FastAPI routes.
+
+    Reuses a long-lived ``httpx.AsyncClient`` connection pool across
+    tool calls. Call :meth:`aclose` on shutdown (stdio/process exit).
+    """
 
     def __init__(self, auth: McpAuthContext, *, timeout: float = 30.0) -> None:
         self._auth = auth
         self._timeout = timeout
+        self._http = httpx.AsyncClient(timeout=timeout)
 
     def _headers(self) -> dict[str, str]:
         headers = {"Accept": "application/json"}
         if self._auth.api_key:
             headers["Authorization"] = f"Bearer {self._auth.api_key}"
         return headers
+
+    async def aclose(self) -> None:
+        """Close the shared HTTP client."""
+        await self._http.aclose()
 
     async def _request(
         self,
@@ -141,27 +151,26 @@ class HttpEdenClient:
         params: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         url = f"{self._auth.base_url}{path}"
-        async with httpx.AsyncClient(timeout=self._timeout) as client:
-            resp = await client.request(
-                method,
-                url,
-                headers=self._headers(),
-                json=json_body,
-                params=params,
-            )
-            try:
-                data = resp.json()
-            except Exception:
-                data = {"raw": resp.text[:2000]}
-            if resp.status_code >= 400:
-                return {
-                    "status": "error",
-                    "http_status": resp.status_code,
-                    "data": data,
-                }
-            if isinstance(data, dict):
-                return data
-            return {"status": "ok", "data": data}
+        resp = await self._http.request(
+            method,
+            url,
+            headers=self._headers(),
+            json=json_body,
+            params=params,
+        )
+        try:
+            data = resp.json()
+        except Exception:
+            data = {"raw": resp.text[:2000]}
+        if resp.status_code >= 400:
+            return {
+                "status": "error",
+                "http_status": resp.status_code,
+                "data": data,
+            }
+        if isinstance(data, dict):
+            return data
+        return {"status": "ok", "data": data}
 
     async def search_traces(
         self,
@@ -343,6 +352,7 @@ class HttpEdenClient:
         change_id: str,
         changed_files: list[str],
         agent_id: str | None = None,
+        prompt_override: str | None = None,
     ) -> dict[str, Any]:
         body: dict[str, Any] = {
             "change_id": change_id,
@@ -350,6 +360,8 @@ class HttpEdenClient:
         }
         if agent_id:
             body["agent_id"] = agent_id
+        if prompt_override is not None:
+            body["prompt_override"] = prompt_override
         return await self._request(
             "POST",
             f"/orgs/{org_id}/change-impact/preview",

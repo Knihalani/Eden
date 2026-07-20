@@ -1,8 +1,16 @@
 #!/usr/bin/env node
 /**
- * F85 — 8 golden paths (Playwright). Set GOLDEN_CI=1 in CI.
+ * F85 — 8 golden paths (Playwright).
  *
- * Requires e2e/.auth-state.json — run seed-auth.mjs first.
+ * Exit honesty:
+ *   Path failures exit non-zero by default (local and CI).
+ *   Set GOLDEN_ALLOW_FAIL=1 only when you intentionally want a soft report
+ *   (e.g. exploratory local runs). GOLDEN_CI=1 still requires auth state.
+ *
+ * Requires e2e/.auth-state.json — run seed-auth.mjs (local) or
+ * wait-for-signin.mjs (prod) first. Auth cookies must match BASE origin;
+ * see helpers.mjs loadAuthState docs. Do not invent prod credentials.
+ *
  * Screenshots → e2e/golden/screenshots/
  *
  * Required env vars (for seed-auth, sourced before this script):
@@ -30,6 +38,7 @@ import {
 } from "./helpers.mjs";
 
 const GOLDEN_CI = process.env.GOLDEN_CI === "1";
+const GOLDEN_ALLOW_FAIL = process.env.GOLDEN_ALLOW_FAIL === "1";
 
 // ── Path definitions ────────────────────────────────────────────────────────
 const PATHS = [
@@ -382,9 +391,18 @@ async function main() {
 
   if (failed > 0) {
     console.error(`\n[golden] ${failed}/${PATHS.length} paths FAILED`);
-    if (GOLDEN_CI) process.exit(1);
+    if (GOLDEN_ALLOW_FAIL) {
+      console.warn(
+        "[golden] GOLDEN_ALLOW_FAIL=1 — reporting failures but exiting 0 (local soft report only; never set in CI)",
+      );
+      console.log("EXIT:0");
+    } else {
+      console.log("EXIT:1");
+      process.exit(1);
+    }
   } else {
     console.log(`\n[golden] ${PATHS.length}/${PATHS.length} paths PASSED`);
+    console.log("EXIT:0");
   }
 }
 

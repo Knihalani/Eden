@@ -13,41 +13,42 @@ costs predictable.
 
 ## Sampling
 
+### Soft-launch default (100% keep)
+
+API Settings and SDKs default to **`EDEN_SAMPLING_PROFILE=full`** so
+soft-launch traffic is never dropped. Server-side N16
+`decide()` runs on every ingest event but is a no-op under `full`.
+
+For cost reduction after soft-launch:
+
+```bash
+# ~15% keep of non-signal traces; errors / loops / stumbles always kept
+export EDEN_SAMPLING_PROFILE=balanced
+# or ~5%:
+# export EDEN_SAMPLING_PROFILE=aggressive
+```
+
+Rollback: `EDEN_SAMPLING_ENABLED=false` (forces 100% keep).
+
 ### Where it lives
 
-The sampling policy is in `src/eden/apm_depth/sampling.py`. It runs
-in the API process after PII scan but before Postgres write.
+In-process policy: `src/eden/observability/sampling/policy.py`.
+Ingest gate: `src/eden/observability/sampling/apply.py`
+(`should_route_event`, called from `TelemetryCollector.ingest` after
+enrich / before sink routing). Sampled-out events record a
+metrics-only row via `trace_sampling_summaries`.
+
+OTel edge sampling (optional): `deploy/otel-collector-config.yaml`.
 
 ### Keep rules (default)
 
 | Rule | Effect |
 |------|--------|
-| `error` | Keep all traces with `outcome != "success"` |
-| `slow` | Keep traces with `duration_ms > p95 * 1.5` |
-| `loop` | Keep traces with > N LLM calls (default 10) |
-| `force_trace` | Keep traces that opt in via `attributes.force_trace = true` |
-| `probabilistic` | Keep `min(1.0, sample_rate)` of the rest |
-
-Default sample rate: 1.0 (keep everything). For cost reduction,
-tune per org:
-
-```bash
-curl -X PUT https://api.edenobservability.com/orgs/org_abc/sampling \
-  -H "Authorization: Bearer sk_eden_admin_..." \
-  -H "Content-Type: application/json" \
-  -d '{
-    "rules": {
-      "error": true,
-      "slow": true,
-      "loop": true,
-      "force_trace": true,
-      "probabilistic": 0.10
-    }
-  }'
-```
-
-The 90% of "successful fast traces" get dropped — but errors,
-outliers, and opt-in traces are always kept.
+| `error` / failure outcomes | Keep |
+| `loop` / `tool_error` / `stumble` / judge / stat-gate / MCP auth | Keep |
+| `force_trace` attribute | Keep |
+| `slow` (`duration_ms` > threshold, default 5s) | Keep |
+| `probabilistic` | Keep `profile` rate of the rest (`full`=1.0, `balanced`=0.15, `aggressive`=0.05) |
 
 ### Tail sampling
 

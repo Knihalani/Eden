@@ -70,6 +70,25 @@ async def check_qdrant() -> str:
     return "ok"
 
 
+async def check_typesense() -> str:
+    """Verify Typesense health when enabled (soft dep).
+
+    Disabled / unconfigured Typesense is ``ok`` — not an outage.
+    When enabled, an unreachable node soft-fails like Redis/Qdrant
+    (Wave 1.3 / 8.5): never gates ``/ready``; feature search uses
+    Postgres fallback with ``fallback=True`` for the unavailable banner.
+    """
+    from eden.observability.typesense_client import get_typesense_client
+
+    client = get_typesense_client()
+    if client is None:
+        return "ok"
+    ok = await client.health()
+    if not ok:
+        return "error: typesense unreachable"
+    return "ok"
+
+
 async def check_openrouter(settings: Settings | None = None) -> str:
     """Verify OpenRouter credentials via the /models endpoint."""
     settings = settings or get_settings()
@@ -107,6 +126,28 @@ def is_ready(checks: dict[str, str] | None) -> bool:
     return True
 
 
+def health_probe_http_status(overall: str, mode: str = "auto") -> int:
+    """Map `/health` body status → HTTP status code.
+
+    Probe contract (Wave 1.3 / July 2026):
+      * ``/live``  — process up (LB liveness).
+      * ``/ready`` — Postgres only; soft deps never gate ingress.
+      * ``/health``— detailed report for monitors. Soft-dep degradation
+        (Qdrant Errno 99, quality worker, etc.) keeps
+        ``status: "degraded"`` and HTTP **503** so status pages that
+        key off the status code still page. Ingress / Railway / Helm
+        MUST probe ``/ready`` or ``/live`` — never ``/health`` — or a
+        Qdrant blip removes every pod (``no healthy upstream``).
+      * Portal UX parses the JSON body and treats ``degraded`` as a
+        soft warning even when HTTP is 503.
+    """
+    if mode == "200":
+        return 200
+    if mode == "503":
+        return 503
+    return 200 if overall == "healthy" else 503
+
+
 async def run_startup_checks(
     *,
     settings: Settings | None = None,
@@ -128,6 +169,7 @@ async def run_startup_checks(
         "postgres": check_postgres,
         "redis": check_redis,
         "qdrant": check_qdrant,
+        "typesense": check_typesense,
         "openrouter": lambda: check_openrouter(settings),
     }
 

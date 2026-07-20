@@ -339,8 +339,11 @@ async def record_spend(
     if redis is not None:
         key = f"{_SPEND_PREFIX}{org_id}:{_today()}"
         try:
-            new_total = float(await redis.incrbyfloat(key, float(usd)))
-            await redis.expire(key, 172_800)  # keep 2 days for reporting
+            pipe = redis.pipeline(transaction=False)
+            pipe.incrbyfloat(key, float(usd))
+            pipe.expire(key, 172_800)  # keep 2 days for reporting
+            new_total_raw, _ = await pipe.execute()
+            new_total = float(new_total_raw)
         except Exception as exc:
             logger.debug("autonomy_policy: record_spend failed: %s", exc)
             new_total = 0.0

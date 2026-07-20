@@ -1,11 +1,15 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
+import { useOrgQuery } from "@/hooks/use-api-query";
+import { queryKeys } from "@/lib/query-keys";
 import { usePermissions } from "@/hooks/use-permissions";
 import { api } from "@/lib/api";
 import { Loader2, Shield, RefreshCw, Copy, Check, Key, AlertTriangle, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { errorFromCaught } from "@/lib/safe-error-message";
+import { Button } from "@/components/ui/button";
+import { ErrorState } from "@/components/ui/error-state";
 
 interface ScimConfig {
   scim_enabled: boolean;
@@ -17,8 +21,6 @@ interface ScimConfig {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function ScimTab({ org }: { org: any }) {
   const { hasPermission } = usePermissions();
-  const [config, setConfig] = useState<ScimConfig | null>(null);
-  const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [newToken, setNewToken] = useState<string | null>(null);
@@ -26,28 +28,17 @@ export function ScimTab({ org }: { org: any }) {
 
   const canManageScim = hasPermission("settings:edit");
   const currentOrg = org;
-
-  useEffect(() => {
-    if (!currentOrg) {
-      setLoading(false);
-      return;
-    }
-
-    async function fetchConfig() {
-      setLoading(true);
-      setError(null);
-      try {
-        const data = await api.getScimConfig(currentOrg.id);
-        setConfig(data);
-      } catch (e) {
-        setError(errorFromCaught(e, "Failed to load SCIM configuration"));
-      } finally {
-        setLoading(false);
-      }
-    }
-
-    fetchConfig();
-  }, [currentOrg]);
+  const orgId = currentOrg?.id ?? null;
+  const configQuery = useOrgQuery(
+    queryKeys.scim.config(orgId),
+    orgId,
+    () => api.getScimConfig(orgId!),
+  );
+  const config = configQuery.data ?? null;
+  const loading = configQuery.isLoading;
+  const queryError = configQuery.error
+    ? errorFromCaught(configQuery.error, "Failed to load SCIM configuration")
+    : null;
 
   const handleToggle = async (enabled: boolean) => {
     if (!currentOrg) return;
@@ -56,11 +47,7 @@ export function ScimTab({ org }: { org: any }) {
     setNewToken(null);
     try {
       const result = await api.configureScim(currentOrg.id, enabled);
-      setConfig({
-        ...config!,
-        scim_enabled: result.scim_enabled,
-        has_token: !!result.bearer_token,
-      });
+      await configQuery.refetch();
       if (result.bearer_token) {
         setNewToken(result.bearer_token);
       }
@@ -79,11 +66,7 @@ export function ScimTab({ org }: { org: any }) {
     try {
       const result = await api.rotateScimToken(currentOrg.id);
       setNewToken(result.bearer_token);
-      setConfig({
-        ...config!,
-        scim_enabled: true,
-        has_token: true,
-      });
+      await configQuery.refetch();
     } catch (e) {
       setError(errorFromCaught(e, "Failed to rotate token"));
     } finally {
@@ -132,6 +115,27 @@ export function ScimTab({ org }: { org: any }) {
     );
   }
 
+  // Load failure with no config — do not paint a false "Disabled" toggle.
+  if (queryError && !config) {
+    return (
+      <ErrorState
+        title="Could not load SCIM configuration"
+        message={queryError}
+        action={
+          <Button
+            type="button"
+            variant="outline"
+            size="default"
+            onClick={() => void configQuery.refetch()}
+          >
+            <RefreshCw className="h-4 w-4" />
+            Try again
+          </Button>
+        }
+      />
+    );
+  }
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -147,11 +151,13 @@ export function ScimTab({ org }: { org: any }) {
         </div>
       </div>
 
-      {/* Error */}
+      {/* Mutation / rotate errors (load errors are gated above) */}
       {error && (
-        <div className="p-4 bg-[var(--error-dim)] rounded-lg border border-[var(--error)]">
-          <p className="text-sm text-[var(--error)]">{error}</p>
-        </div>
+        <ErrorState
+          title="SCIM action failed"
+          message={error}
+          size="sm"
+        />
       )}
 
       {/* New Token Display */}
@@ -200,8 +206,11 @@ export function ScimTab({ org }: { org: any }) {
             </div>
           </div>
           <button
+            type="button"
             onClick={() => handleToggle(!config?.scim_enabled)}
             disabled={saving}
+            aria-label={config?.scim_enabled ? "Disable SCIM provisioning" : "Enable SCIM provisioning"}
+            aria-pressed={Boolean(config?.scim_enabled)}
             className={cn(
               "relative w-12 h-6 rounded-full transition-colors",
               config?.scim_enabled ? "bg-[var(--accent)]" : "bg-[var(--border-default)]"

@@ -3,8 +3,13 @@
 import { useState, useEffect, useCallback } from "react";
 import { useOrg } from "@/hooks/use-org";
 import { api } from "@/lib/api";
-import { Loader2, AlertCircle, Check } from "lucide-react";
+import { Loader2, AlertCircle, Check, Info } from "lucide-react";
 import { cn } from "@/lib/utils";
+import {
+  featureGatedErrorCopy,
+  isPaidPlansDisabledError,
+  isRetryableIntelligenceError,
+} from "@/lib/feature-flag-error";
 import {
   type BillingUsage,
 } from "./billing-types";
@@ -16,7 +21,7 @@ interface BillingOverviewProps {
 export function BillingOverview({ variant = "page" }: BillingOverviewProps) {
   const { currentOrg } = useOrg();
   const [loading, setLoading] = useState(true);
-  const [fetchError, setFetchError] = useState<string | null>(null);
+  const [fetchError, setFetchError] = useState<unknown | null>(null);
   // ``api.getPlans`` returns a wider shape than BillingUsage; cast at
   // the assignment site to bridge the gap (same reason as
   // billing-tab.tsx — kept UI types as read-side contracts).
@@ -28,11 +33,13 @@ export function BillingOverview({ variant = "page" }: BillingOverviewProps) {
     setFetchError(null);
     try {
       // Ponytail: only ``/billing/plans`` matters in free-only mode.
-      const usageData = await api.getPlans(currentOrg.id).catch(() => null);
-      setUsage(usageData as Partial<BillingUsage> | null);
+      // Do not swallow failures into a false $0 healthy card.
+      const usageData = await api.getPlans(currentOrg.id);
+      setUsage(usageData as Partial<BillingUsage>);
     } catch (err) {
       console.error("Failed to load billing data", err);
-      setFetchError("Could not load billing data. Please try again.");
+      setUsage(null);
+      setFetchError(err);
     } finally {
       setLoading(false);
     }
@@ -67,18 +74,52 @@ export function BillingOverview({ variant = "page" }: BillingOverviewProps) {
   const costPct =
     costHard > 0 ? Math.min(100, (costUsed / costHard) * 100) : 0;
   const costStatus = usage?.cost_status ?? "ok";
+  const errorCopy = fetchError
+    ? featureGatedErrorCopy(fetchError, "Could not load billing data")
+    : null;
+  const freeOnlyError = fetchError
+    ? isPaidPlansDisabledError(fetchError)
+    : false;
+  // Don't paint a false-healthy $0 card when plans failed to load.
+  const showUsage = usage != null && !fetchError;
 
   return (
     <div className={cn(variant === "page" ? "space-y-8" : "space-y-6")}>
-      {fetchError && (
-        <div className="p-4 rounded-xl border border-[var(--error)]/30 bg-[var(--error-bg)] text-sm text-[var(--error)] flex items-center justify-between gap-3">
-          <span>{fetchError}</span>
-          <button type="button" onClick={() => loadData()} className="font-medium underline shrink-0">
-            Retry
-          </button>
+      {errorCopy && (
+        <div
+          role="status"
+          className={cn(
+            "p-4 rounded-xl border text-sm flex items-start justify-between gap-3",
+            freeOnlyError
+              ? "border-[var(--border-default)] bg-[var(--bg-tertiary)] text-[var(--text-secondary)]"
+              : "border-[var(--error)]/30 bg-[var(--error-bg)] text-[var(--error)]",
+          )}
+        >
+          <div className="flex items-start gap-2 min-w-0">
+            {freeOnlyError ? (
+              <Info className="w-4 h-4 shrink-0 mt-0.5" aria-hidden />
+            ) : (
+              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" aria-hidden />
+            )}
+            <div className="min-w-0">
+              <p className="font-medium text-[var(--text-primary)]">{errorCopy.title}</p>
+              <p className="mt-0.5">{errorCopy.message}</p>
+            </div>
+          </div>
+          {fetchError && isRetryableIntelligenceError(fetchError) && (
+            <button
+              type="button"
+              onClick={() => loadData()}
+              className="font-medium underline shrink-0"
+            >
+              Retry
+            </button>
+          )}
         </div>
       )}
 
+      {showUsage && (
+      <>
       {/* Primary card: spend this month vs cap */}
       <div className="bg-[var(--bg-primary)] rounded-xl border border-[var(--border-default)] p-6">
         <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
@@ -207,8 +248,11 @@ export function BillingOverview({ variant = "page" }: BillingOverviewProps) {
           />
         </div>
       </div>
+      </>
+      )}
 
-      {/* Free plan notice */}
+      {/* Free plan notice — always shown in free-only; explains intentional dormancy */}
+      {(!fetchError || freeOnlyError) && (
       <div className="bg-[var(--bg-primary)] rounded-xl border border-[var(--border-default)] p-6">
         <div className="flex items-start gap-3">
           <Check className="w-5 h-5 text-[var(--success)] flex-shrink-0 mt-0.5" />
@@ -227,6 +271,7 @@ export function BillingOverview({ variant = "page" }: BillingOverviewProps) {
           </div>
         </div>
       </div>
+      )}
     </div>
   );
 }

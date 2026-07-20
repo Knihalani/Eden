@@ -28,15 +28,17 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from fastapi import APIRouter, Body, Depends, Path
+from fastapi import APIRouter, Body, Depends, HTTPException, Path
 from pydantic import BaseModel
 
 from eden.api.deps import (
     get_current_user,
     require_feature_flag,
     require_org_admin,
+    require_path_org_access,
 )
 from eden.api.utils.redact import redact_all
+from eden.api.utils.safe_error import safe_detail
 from eden.autonomous import (
     InvestigationAgent,
     NLReportGenerator,
@@ -58,6 +60,7 @@ router = APIRouter(
     dependencies=[
         Depends(require_feature_flag(_UMBRELLA_FLAG)),
         Depends(get_current_user),
+        Depends(require_path_org_access),
     ],
 )
 
@@ -128,7 +131,7 @@ async def _resolve_investigate_trigger(
 
         client = await get_postgres_client()
         if client is None:
-            return None
+            raise HTTPException(status_code=503, detail="Postgres unavailable")
         row = await client.fetchrow(
             "SELECT cluster_id FROM incident_cluster_members "
             "WHERE org_id = $1 AND trace_id = $2 "
@@ -136,12 +139,17 @@ async def _resolve_investigate_trigger(
             org_id,
             body.trace_id,
         )
+    except HTTPException:
+        raise
     except Exception as exc:  # pragma: no cover - defensive
         logger.debug(
             "investigate: trace→cluster lookup failed: %s",
             redact_all(str(exc)),
         )
-        return None
+        raise HTTPException(
+            status_code=503,
+            detail=safe_detail(exc, fallback="Failed to resolve investigation trigger"),
+        ) from exc
     if row and row.get("cluster_id"):
         return f"incident:{row['cluster_id']}"
     return None
@@ -149,7 +157,7 @@ async def _resolve_investigate_trigger(
 
 @router.post("/investigate")
 async def investigate(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     body: InvestigateRequest = Body(...),
 ) -> dict[str, Any]:
     trigger = await _resolve_investigate_trigger(org_id, body)
@@ -173,33 +181,31 @@ async def investigate(
 
 @router.post("/report")
 async def report(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     body: ReportRequest = Body(...),
 ) -> dict[str, Any]:
     return await _investigator.report(org_id, period=body.period)
 
 
 @router.get("/recommendations")
-async def recommendations(org_id: str = Path(...)) -> dict[str, Any]:
+async def recommendations(org_id: str = Depends(require_path_org_access)) -> dict[str, Any]:
     return await _investigator.recommend(org_id)
 
 
 @router.post(
     "/heal",
-    # The heal endpoint is the only destructive route in
-    # Cat 14. We override the router-level ``get_current_user``
-    # dependency with ``require_org_admin`` so a non-admin
-    # member can hit the other 6 routes but not this one.
-    # The destructive-flag check happens inside the service
-    # itself (so the test suite can exercise the queue path
-    # without the flag).
+    # Destructive surface: org admin + ``autonomous_actions_v0``.
+    # Router-level ``get_current_user`` is overridden by
+    # ``require_org_admin`` so non-admins can still hit read-only
+    # Cat 14 routes but not heal/approve/deny/execute.
     dependencies=[
         Depends(require_feature_flag(_UMBRELLA_FLAG)),
+        Depends(require_feature_flag(_DESTRUCTIVE_FLAG)),
         Depends(require_org_admin),
     ],
 )
 async def heal(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     body: HealRequest = Body(...),
 ) -> dict[str, Any]:
     return await _healer.heal(org_id, action_type=body.action_type)
@@ -209,11 +215,12 @@ async def heal(
     "/heal/{action_id}/approve",
     dependencies=[
         Depends(require_feature_flag(_UMBRELLA_FLAG)),
+        Depends(require_feature_flag(_DESTRUCTIVE_FLAG)),
         Depends(require_org_admin),
     ],
 )
 async def heal_approve(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     action_id: str = Path(...),
     body: HealApproveRequest = Body(...),
 ) -> dict[str, Any]:
@@ -227,11 +234,12 @@ async def heal_approve(
     "/heal/{action_id}/deny",
     dependencies=[
         Depends(require_feature_flag(_UMBRELLA_FLAG)),
+        Depends(require_feature_flag(_DESTRUCTIVE_FLAG)),
         Depends(require_org_admin),
     ],
 )
 async def heal_deny(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     action_id: str = Path(...),
     body: HealDenyRequest = Body(...),
 ) -> dict[str, Any]:
@@ -252,11 +260,12 @@ async def heal_deny(
     "/heal/{action_id}/execute",
     dependencies=[
         Depends(require_feature_flag(_UMBRELLA_FLAG)),
+        Depends(require_feature_flag(_DESTRUCTIVE_FLAG)),
         Depends(require_org_admin),
     ],
 )
 async def heal_execute(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     action_id: str = Path(...),
     body: HealExecuteRequest = Body(...),
 ) -> dict[str, Any]:
@@ -268,7 +277,7 @@ async def heal_execute(
 
 @router.post("/nl/report")
 async def nl_report(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     body: NLReportRequest = Body(...),
 ) -> dict[str, Any]:
     return await _nl_report.generate(org_id, request=body.request)

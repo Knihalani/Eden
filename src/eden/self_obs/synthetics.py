@@ -65,6 +65,11 @@ async def probe_sign_in_home(org_id: str) -> dict[str, Any]:
 
 
 async def probe_traces_list(org_id: str) -> dict[str, Any]:
+    """Count distinct traces the same way observability ``list_traces`` does.
+
+    Trace rows live in ``telemetry_events`` (grouped by ``trace_id`` /
+    scoped by ``tenant_id``). There is no ``telemetry_traces`` table.
+    """
     try:
         from eden.storage.postgres import get_postgres_client
 
@@ -72,7 +77,13 @@ async def probe_traces_list(org_id: str) -> dict[str, Any]:
         if client is None:
             return {"status": "degraded", "error": "no postgres"}
         n = await client.fetchval(
-            "SELECT count(*)::int FROM telemetry_traces WHERE org_id = $1 LIMIT 1",
+            """
+            SELECT count(*)::int FROM (
+                SELECT trace_id FROM telemetry_events
+                WHERE tenant_id = $1
+                GROUP BY trace_id
+            ) AS _traces
+            """,
             org_id,
         )
         return {"status": "ok", "trace_count_sample": int(n or 0)}

@@ -11,10 +11,10 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from fastapi import APIRouter, Depends, Path
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
-from eden.api.deps import get_current_user, require_org_member
+from eden.api.deps import get_current_user, require_path_org_access
 from eden.api.utils.redact import redact_all
 from eden.integrations import INTEGRATION_API_VERSION, SUPPORTED_INTEGRATIONS
 from eden.integrations.github import is_configured as github_is_configured
@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(
     prefix="/orgs/{org_id}/integrations",
     tags=["integrations"],
-    dependencies=[Depends(get_current_user)],
+    dependencies=[Depends(get_current_user), Depends(require_path_org_access)],
 )
 
 
@@ -148,8 +148,7 @@ _LABELS: dict[str, str] = {
 
 @router.get("/status", response_model=IntegrationsStatusResponse)
 async def org_integrations_status(
-    org_id: str = Path(...),
-    _member: dict = Depends(require_org_member),
+    org_id: str = Depends(require_path_org_access),
 ) -> IntegrationsStatusResponse:
     flags = _instance_flags()
     github_org = await _org_github_connected(org_id)
@@ -256,8 +255,7 @@ async def _load_slack_config(org_id: str) -> dict[str, Any]:
 
 @router.get("/slack")
 async def get_slack_settings(
-    org_id: str = Path(...),
-    _member: dict = Depends(require_org_member),
+    org_id: str = Depends(require_path_org_access),
 ) -> dict[str, Any]:
     cfg = await _load_slack_config(org_id)
     return {
@@ -271,9 +269,8 @@ async def get_slack_settings(
 
 @router.patch("/slack")
 async def patch_slack_settings(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     body: SlackSettingsIn = ...,
-    _member: dict = Depends(require_org_member),
 ) -> dict[str, Any]:
     import json
 
@@ -302,17 +299,35 @@ async def patch_slack_settings(
             bool(enabled),
         )
     except Exception as exc:
-        logger.warning("slack settings: save failed: %s", redact_all(str(exc)))
         from fastapi import HTTPException
 
-        raise HTTPException(status_code=500, detail="Failed to save Slack settings") from exc
-    return await get_slack_settings(org_id, _member=_member)
+        msg = str(exc).lower()
+        if "unique" in msg or "duplicate" in msg:
+            raise HTTPException(
+                status_code=409,
+                detail="Slack integration already configured",
+            ) from exc
+        if "invalid input syntax for type uuid" in msg:
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid organization id",
+            ) from exc
+        if "foreign key" in msg:
+            raise HTTPException(
+                status_code=404,
+                detail="Organization not found",
+            ) from exc
+        logger.warning("slack settings: save failed: %s", redact_all(str(exc)))
+        raise HTTPException(
+            status_code=503,
+            detail="Failed to save Slack settings",
+        ) from exc
+    return await get_slack_settings(org_id)
 
 
 @router.post("/slack/test")
 async def test_slack_webhook(
-    org_id: str = Path(...),
-    _member: dict = Depends(require_org_member),
+    org_id: str = Depends(require_path_org_access),
 ) -> dict[str, Any]:
     """Send a Block Kit test message to the org's configured webhook."""
     from eden.integrations.slack.alerts import (

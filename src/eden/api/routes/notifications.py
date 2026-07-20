@@ -7,6 +7,7 @@ from pydantic import BaseModel
 
 from eden.api.deps import eden_user_id_from_auth, get_current_user
 from eden.storage.postgres import get_postgres_client
+from eden.api.utils.redact import redact_all
 
 logger = logging.getLogger(__name__)
 
@@ -162,11 +163,24 @@ async def create_notification(
     client = await get_postgres_client()
 
     if request.org_id:
-        membership = await client.fetchrow(
-            "SELECT role FROM org_members WHERE org_id = $1 AND user_id = $2",
-            request.org_id,
-            user_id,
-        )
+        try:
+            membership = await client.fetchrow(
+                "SELECT role FROM org_members WHERE org_id = $1 AND user_id = $2",
+                request.org_id,
+                user_id,
+            )
+        except Exception as exc:
+            msg = str(exc).lower()
+            if "invalid input syntax for type uuid" in msg:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Invalid organization id",
+                ) from exc
+            logger.warning("create_notification membership check failed: %s", redact_all(str(exc)))
+            raise HTTPException(
+                status_code=503,
+                detail="Failed to create notification",
+            ) from exc
         if not membership:
             raise HTTPException(
                 status_code=403,
@@ -175,17 +189,40 @@ async def create_notification(
 
     # Schema is migration 001: body / data / read_at (not the legacy
     # 015_notifications.sql shape message / metadata / is_read).
-    row = await client.fetchrow(
-        """
-        INSERT INTO notifications (user_id, org_id, type, title, body, data)
-        VALUES ($1, $2, $3, $4, $5, $6)
-        RETURNING id
-        """,
-        user_id, request.org_id, request.type, request.title, request.message, request.metadata
-    )
+    try:
+        row = await client.fetchrow(
+            """
+            INSERT INTO notifications (user_id, org_id, type, title, body, data)
+            VALUES ($1, $2, $3, $4, $5, $6)
+            RETURNING id
+            """,
+            user_id, request.org_id, request.type, request.title, request.message, request.metadata
+        )
+    except Exception as exc:
+        msg = str(exc).lower()
+        if "invalid input syntax for type uuid" in msg:
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid organization id",
+            ) from exc
+        if "foreign key" in msg:
+            raise HTTPException(
+                status_code=404,
+                detail="Organization not found",
+            ) from exc
+        if "unique" in msg or "duplicate" in msg:
+            raise HTTPException(
+                status_code=409,
+                detail="Notification already exists",
+            ) from exc
+        logger.warning("create_notification INSERT failed: %s", redact_all(str(exc)))
+        raise HTTPException(
+            status_code=503,
+            detail="Failed to create notification",
+        ) from exc
     if row is None:
         raise HTTPException(
-            status_code=500,
+            status_code=409,
             detail="Failed to create notification",
         )
     return NotificationResponse(

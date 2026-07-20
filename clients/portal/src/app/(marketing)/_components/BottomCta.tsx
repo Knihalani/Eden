@@ -17,7 +17,7 @@ const STEPS = [
     n: 2,
     k: "CAPTURE",
     v: "gateway or wrap",
-    sub: "one base_url · or configure → instrument",
+    sub: "base_url + org headers · or configure → instrument",
   },
   {
     n: 3,
@@ -46,10 +46,7 @@ export function BottomCta({ signedIn }: { signedIn: boolean }) {
               <p className="text-[11px] font-mono uppercase tracking-[0.18em] text-[var(--text-muted)]">
                 Get started
               </p>
-              <h2
-                className="text-3xl md:text-4xl font-bold text-[var(--text-primary)] tracking-tight"
-                style={{ letterSpacing: "-0.03em", lineHeight: 1.08 }}
-              >
+              <h2 className="marketing-h2">
                 {signedIn ? "Welcome back." : "Ship better agents, faster."}
               </h2>
               <p className="text-sm md:text-base text-[var(--text-secondary)] leading-relaxed">

@@ -9,16 +9,22 @@ from collections import deque
 from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query, Response, status
+from fastapi import APIRouter, Body, Depends, Header, HTTPException, Path, Query, Response, status
 from pydantic import BaseModel, Field
 
-from eden.api.deps import get_current_user, log_audit_event, require_org_admin
+from eden.api.deps import (
+    _try_resolve_token_payload,
+    get_current_user,
+    log_audit_event,
+    require_org_admin,
+    require_path_org_access,
+)
 from eden.api.utils.redact import redact_all
 from eden.storage.postgres import get_postgres_client
 from eden.storage.redis import get_redis_client
 
 logger = logging.getLogger(__name__)
-router = APIRouter(prefix="/orgs/{org_id}/api-keys", tags=["api-keys"])
+router = APIRouter(prefix="/orgs/{org_id}/api-keys", tags=["api-keys"], dependencies=[Depends(require_path_org_access)])
 
 # Valid scopes for API keys
 VALID_SCOPES = [
@@ -181,16 +187,19 @@ def get_key_prefix(key: str) -> str:
 
 @router.post("", response_model=dict)
 async def create_api_key(
-    org_id: str,
-    body: CreateApiKeyBody,
+    org_id: str = Depends(require_path_org_access),
+    body: CreateApiKeyBody = Body(...),
     user: dict = Depends(get_current_user),
+    payload: dict | None = Depends(_try_resolve_token_payload),
 ):
     """Create a new API key for an organization.
 
     Returns the raw key once - it cannot be retrieved again.
     The user must save the raw key securely.
     """
-    await require_org_admin(org_id)
+    # Must pass JWT payload — bare ``require_org_admin(org_id)`` leaves
+    # FastAPI's Depends() sentinel and 500s on prod (AttributeError).
+    await require_org_admin(org_id, payload)
 
     # B-11 (Session 24): per-(org, user) sliding window throttle.
     # Audit 2026-07-03 — now async (Redis-backed distributed counter).
@@ -241,19 +250,42 @@ async def create_api_key(
 
     # Store the key metadata (NOT the raw key)
     key_id = str(uuid4())
-    await client.execute(
-        """
-        INSERT INTO org_api_keys (id, org_id, name, key_hash, key_prefix, scopes, created_by)
-        VALUES ($1, $2, $3, $4, $5, $6, $7)
-        """,
-        key_id,
-        org_id,
-        name,
-        key_hash,
-        key_prefix,
-        scopes,
-        user["user_id"],
-    )
+    try:
+        await client.execute(
+            """
+            INSERT INTO org_api_keys (id, org_id, name, key_hash, key_prefix, scopes, created_by)
+            VALUES ($1, $2, $3, $4, $5, $6, $7)
+            """,
+            key_id,
+            org_id,
+            name,
+            key_hash,
+            key_prefix,
+            scopes,
+            user["user_id"],
+        )
+    except Exception as exc:
+        msg = str(exc).lower()
+        if "unique" in msg or "duplicate" in msg:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="API key already exists",
+            ) from exc
+        if "invalid input syntax for type uuid" in msg:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid organization or user id",
+            ) from exc
+        if "foreign key" in msg:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Organization or user not found",
+            ) from exc
+        logger.warning("create_api_key INSERT failed: %s", redact_all(str(exc)))
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Failed to create API key",
+        ) from exc
 
     # N06 / Wave 1 — key lifecycle audit
     try:
@@ -281,17 +313,12 @@ async def create_api_key(
 
 @router.get("", response_model=list[dict])
 async def list_api_keys(
-    org_id: str,
+    org_id: str = Depends(require_path_org_access),
     limit: int = Query(50, ge=1, le=200),
-    cursor: str | None = Query(
-        None,
-        description=(
-            "Opaque pagination cursor from the ``X-Next-Cursor`` "
-            "response header. Omit for the first page."
-        ),
-    ),
+    cursor: str | None = Query(None, description='Opaque pagination cursor from the ``X-Next-Cursor`` response header. Omit for the first page.'),
     response: Response = None,
     user: dict = Depends(get_current_user),
+    payload: dict | None = Depends(_try_resolve_token_payload),
 ):
     """List all API keys for an organization (without raw keys).
 
@@ -307,7 +334,7 @@ async def list_api_keys(
     # B-12 (Session 24): admin/owner only. Pre-fix any org member
     # could enumerate key prefixes — enough to fingerprint the
     # stack + craft targeted social-engineering follow-ups.
-    await require_org_admin(org_id)
+    await require_org_admin(org_id, payload)
 
     client = await get_postgres_client()
 
@@ -395,12 +422,13 @@ async def list_api_keys(
 
 @router.delete("/{key_id}", response_model=dict)
 async def revoke_api_key(
-    org_id: str,
-    key_id: str,
+    org_id: str = Depends(require_path_org_access),
+    key_id: str = Path(...),
     user: dict = Depends(get_current_user),
+    payload: dict | None = Depends(_try_resolve_token_payload),
 ):
     """Revoke (delete) an API key."""
-    await require_org_admin(org_id)
+    await require_org_admin(org_id, payload)
 
     client = await get_postgres_client()
 
@@ -442,10 +470,17 @@ async def validate_org_api_key(org_id: str, key: str) -> dict | None:
 
     Returns None if key is invalid or doesn't match the org.
     Updates last_used_at timestamp (B-10 debounced to >60s).
-    """
-    client = await get_postgres_client()
 
-    key_hash = hashlib.sha256(key.encode()).hexdigest()
+    Lookup errors (non-UUID org id, DB blip) return None so callers
+    surface HTTP 401 — never an unhandled 500.
+    """
+    if not key or not org_id:
+        return None
+    try:
+        key_hash = hashlib.sha256(key.encode("utf-8")).hexdigest()
+    except (AttributeError, TypeError, UnicodeError):
+        return None
+
     # B-10 (Session 24): also read ``last_used_at`` so we can skip
     # the UPDATE when the row was stamped < 60s ago. Pre-fix this
     # fired on every successful auth → ~3.6M UPDATEs/hour for a
@@ -455,9 +490,20 @@ async def validate_org_api_key(org_id: str, key: str) -> dict | None:
                oak.last_used_at
         FROM org_api_keys oak
         JOIN organizations o ON o.id = oak.org_id
-        WHERE oak.key_hash = $1 AND oak.org_id = $2
+        WHERE oak.key_hash = $1 AND oak.org_id::text = $2
     """
-    row = await client.fetchrow(query, key_hash, org_id)
+    try:
+        client = await get_postgres_client()
+        if client is None:
+            return None
+        row = await client.fetchrow(query, key_hash, org_id)
+    except Exception as exc:
+        logger.warning(
+            "validate_org_api_key: lookup failed for org=%s: %s",
+            org_id,
+            redact_all(str(exc)),
+        )
+        return None
     if not row:
         return None
 
@@ -497,12 +543,15 @@ async def validate_org_api_key(org_id: str, key: str) -> dict | None:
         except Exception as exc:
             logger.debug("last_used_at UPDATE failed (non-fatal): %s", redact_all(str(exc)))
 
+    key_id = str(row["key_id"])
     return {
         "org_id": str(row["org_id"]),
         "name": row["name"],
         "slug": row["slug"],
         "scopes": row["scopes"],
-        "key_id": str(row["key_id"]),
+        "key_id": key_id,
+        "api_key_id": key_id,
+        "auth_method": "api_key",
     }
 
 

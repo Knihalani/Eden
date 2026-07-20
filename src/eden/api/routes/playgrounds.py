@@ -7,11 +7,17 @@ from typing import Any
 
 import json
 
-from fastapi import APIRouter, Depends, HTTPException, Path
+from fastapi import APIRouter, Depends, HTTPException, Path, Query
 from pydantic import BaseModel, Field
 from starlette.responses import StreamingResponse
 
-from eden.api.routes.auth import get_current_user
+from eden.api.deps import (
+    _try_resolve_token_payload,
+    get_current_user,
+    resolve_path_org_access,
+)
+from eden.api.utils.redact import redact_all
+from eden.api.utils.safe_error import raise_mapped_db_error
 from eden.playground.service import PlaygroundService
 
 try:
@@ -21,9 +27,27 @@ except ImportError:  # pragma: no cover
 
 logger = logging.getLogger(__name__)
 
+
+def _value_error_status(exc: ValueError) -> int:
+    msg = str(exc).lower()
+    if "not found" in msg:
+        return 404
+    return 400
+
+
+async def _require_path_org(
+    org_id: str = Path(..., description="Organization ID"),
+    user: dict = Depends(get_current_user),
+    payload: dict | None = Depends(_try_resolve_token_payload),
+) -> str:
+    _, eden_org = await resolve_path_org_access(org_id, user, payload)
+    return eden_org
+
+
 router = APIRouter(
     prefix="/orgs/{org_id}/playgrounds",
     tags=["playgrounds"],
+    dependencies=[Depends(_require_path_org)],
 )
 
 
@@ -57,56 +81,92 @@ class PromoteExperimentRequest(BaseModel):
 
 @router.get("")
 async def list_playgrounds(
-    org_id: str = Path(...),
+    org_id: str = Depends(_require_path_org),
     user: dict = Depends(get_current_user),
+    limit: int = Query(50, ge=1, le=100),
 ) -> dict[str, Any]:
     svc = PlaygroundService()
-    items = await svc.list(org_id)
+    try:
+        items = await svc.list(org_id, limit=limit)
+    except Exception as exc:
+        logger.warning("list_playgrounds failed: %s", redact_all(str(exc)))
+        raise_mapped_db_error(
+            exc,
+            fallback="playgrounds unavailable",
+            uuid_detail="Invalid organization id",
+        )
     return {"playgrounds": [p.to_dict() for p in items], "total": len(items)}
 
 
 @router.post("")
 async def create_playground(
     body: CreatePlaygroundRequest,
-    org_id: str = Path(...),
+    org_id: str = Depends(_require_path_org),
     user: dict = Depends(get_current_user),
 ) -> dict[str, Any]:
     svc = PlaygroundService()
     created_by = str(user.get("user_id") or user.get("id") or "")
-    rec = await svc.create(
-        org_id, name=body.name, config=body.config or None, created_by=created_by or None
-    )
+    try:
+        rec = await svc.create(
+            org_id, name=body.name, config=body.config or None, created_by=created_by or None
+        )
+    except Exception as exc:
+        logger.warning("create_playground failed: %s", redact_all(str(exc)))
+        raise_mapped_db_error(
+            exc,
+            fallback="playground create failed",
+            unique_detail="playground already exists",
+            uuid_detail="Invalid organization id",
+            fk_detail="Organization not found",
+        )
     return {"playground": rec.to_dict()}
 
 
 @router.post("/from-span")
 async def playground_from_span(
     body: FromSpanRequest,
-    org_id: str = Path(...),
+    org_id: str = Depends(_require_path_org),
     user: dict = Depends(get_current_user),
 ) -> dict[str, Any]:
     svc = PlaygroundService()
     created_by = str(user.get("user_id") or user.get("id") or "")
-    rec = await svc.from_span(
-        org_id,
-        trace_id=body.trace_id,
-        span_id=body.span_id,
-        messages=body.messages,
-        model=body.model,
-        tools=body.tools,
-        created_by=created_by or None,
-    )
+    try:
+        rec = await svc.from_span(
+            org_id,
+            trace_id=body.trace_id,
+            span_id=body.span_id,
+            messages=body.messages,
+            model=body.model,
+            tools=body.tools,
+            created_by=created_by or None,
+        )
+    except Exception as exc:
+        logger.warning("playground_from_span failed: %s", redact_all(str(exc)))
+        raise_mapped_db_error(
+            exc,
+            fallback="playground from-span failed",
+            uuid_detail="Invalid organization id",
+            fk_detail="Organization not found",
+        )
     return {"playground": rec.to_dict()}
 
 
 @router.get("/{playground_id}")
 async def get_playground(
-    org_id: str = Path(...),
+    org_id: str = Depends(_require_path_org),
     playground_id: str = Path(...),
     user: dict = Depends(get_current_user),
 ) -> dict[str, Any]:
     svc = PlaygroundService()
-    rec = await svc.get(org_id, playground_id)
+    try:
+        rec = await svc.get(org_id, playground_id)
+    except Exception as exc:
+        logger.warning("get_playground failed: %s", redact_all(str(exc)))
+        raise_mapped_db_error(
+            exc,
+            fallback="playground unavailable",
+            uuid_detail="Invalid playground id",
+        )
     if rec is None:
         raise HTTPException(status_code=404, detail="playground not found")
     return {"playground": rec.to_dict()}
@@ -115,14 +175,23 @@ async def get_playground(
 @router.patch("/{playground_id}")
 async def patch_playground(
     body: PatchPlaygroundRequest,
-    org_id: str = Path(...),
+    org_id: str = Depends(_require_path_org),
     playground_id: str = Path(...),
     user: dict = Depends(get_current_user),
 ) -> dict[str, Any]:
     svc = PlaygroundService()
-    rec = await svc.update(
-        org_id, playground_id, name=body.name, config=body.config
-    )
+    try:
+        rec = await svc.update(
+            org_id, playground_id, name=body.name, config=body.config
+        )
+    except Exception as exc:
+        logger.warning("patch_playground failed: %s", redact_all(str(exc)))
+        raise_mapped_db_error(
+            exc,
+            fallback="playground update failed",
+            uuid_detail="Invalid playground id",
+            fk_detail="Playground not found",
+        )
     if rec is None:
         raise HTTPException(status_code=404, detail="playground not found")
     return {"playground": rec.to_dict()}
@@ -131,7 +200,7 @@ async def patch_playground(
 @router.post("/{playground_id}/run")
 async def run_playground(
     body: RunPlaygroundRequest,
-    org_id: str = Path(...),
+    org_id: str = Depends(_require_path_org),
     playground_id: str = Path(...),
     user: dict = Depends(get_current_user),
 ) -> dict[str, Any]:
@@ -144,14 +213,23 @@ async def run_playground(
             dataset_rows=body.dataset_rows,
         )
     except ValueError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
+        raise HTTPException(status_code=_value_error_status(exc), detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.warning("run_playground failed: %s", redact_all(str(exc)))
+        raise_mapped_db_error(
+            exc,
+            fallback="playground run failed",
+            uuid_detail="Invalid playground id",
+        )
     return {"status": "ok", "run": result}
 
 
 @router.post("/{playground_id}/run/stream")
 async def run_playground_stream(
     body: RunPlaygroundRequest,
-    org_id: str = Path(...),
+    org_id: str = Depends(_require_path_org),
     playground_id: str = Path(...),
     user: dict = Depends(get_current_user),
 ) -> Any:
@@ -194,7 +272,7 @@ async def run_playground_stream(
 @router.post("/{playground_id}/promote-experiment")
 async def promote_playground_experiment(
     body: PromoteExperimentRequest,
-    org_id: str = Path(...),
+    org_id: str = Depends(_require_path_org),
     playground_id: str = Path(...),
     user: dict = Depends(get_current_user),
 ) -> dict[str, Any]:
@@ -207,5 +285,15 @@ async def promote_playground_experiment(
             dataset_id=body.dataset_id,
         )
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        raise HTTPException(status_code=_value_error_status(exc), detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.warning("promote_playground_experiment failed: %s", redact_all(str(exc)))
+        raise_mapped_db_error(
+            exc,
+            fallback="playground promote failed",
+            uuid_detail="Invalid playground or dataset id",
+            fk_detail="Playground or dataset not found",
+        )
     return {"status": "ok", **result}

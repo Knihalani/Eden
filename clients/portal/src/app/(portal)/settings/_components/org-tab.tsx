@@ -8,36 +8,48 @@
  * new <SettingsCard> + <DangerZone> primitives.
  */
 import { useMemo, useState } from "react";
+import { useOrganizationList } from "@clerk/nextjs";
 import { Archive, Building2, Copy, Loader2, Plus, RefreshCw } from "lucide-react";
 import { useOrg } from "@/hooks/use-org";
+import { usePermissions } from "@/hooks/use-permissions";
 import { useToast } from "@/components/ui/toast";
 import { useConfirm } from "@/hooks/use-confirm";
 import { api } from "@/lib/api";
+import {
+  CREATE_ORG_DEGRADED_DESCRIPTION,
+  CREATE_ORG_DEGRADED_TITLE,
+  clerkOrgIdToActivate,
+  isCreateOrgDegraded,
+  organizationFromCreate,
+} from "@/lib/create-org";
+import { isAdminOrOwner, isOwnerRole } from "@/lib/roles";
 import { useOrgQuery } from "@/hooks/use-api-query";
 import { queryKeys } from "@/lib/query-keys";
 import { cn } from "@/lib/utils";
 import { SettingsCard } from "@/components/settings/settings-card";
 import { DangerZone } from "@/components/settings/danger-zone";
 import { EmptyState } from "@/components/ui/empty-state";
+import { ErrorState } from "@/components/ui/error-state";
 import { Button } from "@/components/ui/button";
 import { DeleteOrgDialog } from "./delete-org-dialog";
 import { TransferOwnershipDialog } from "./transfer-ownership-dialog";
 import { DataExportPanel } from "./data-export-panel";
 import { Card } from "@/components/ui/card";
+import type { Organization } from "@/lib/types";
+import { errorFromCaught } from "@/lib/safe-error-message";
+
 interface OrgTabProps {
-  org: {
-    id: string;
-    name: string;
-    slug: string;
-    role: string;
-  } | null;
+  org: Organization | null;
 }
 export function OrgTab({
   org
 }: OrgTabProps) {
   const {
-    refreshOrgs
+    refreshOrgs,
+    setCurrentOrg,
   } = useOrg();
+  const { role: resolvedRole } = usePermissions();
+  const { setActive: setActiveOrg } = useOrganizationList();
   const toast = useToast();
   const {
     confirm,
@@ -46,8 +58,8 @@ export function OrgTab({
   const [loading, setLoading] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
   const [newOrgName, setNewOrgName] = useState("");
-  const [name, setName] = useState(org?.name || "");
   const orgId = org?.id ?? null;
+  const isPersonal = Boolean(org?.is_personal);
 
   // Transfer-ownership sub-state
   const [isTransferExpanded, setIsTransferExpanded] = useState(false);
@@ -76,14 +88,33 @@ export function OrgTab({
     [membersQuery.data],
   );
   const loadingMembers = membersQuery.isLoading;
+  const membersError = membersQuery.error
+    ? errorFromCaught(membersQuery.error, "Could not load members")
+    : null;
   const handleCreateOrg = async () => {
     if (!newOrgName.trim()) return;
     setLoading(true);
     try {
-      await api.createOrg(newOrgName);
+      const created = await api.createOrg(newOrgName);
+      // Activate the new Clerk org so the proxy forwards X-Org-Id and
+      // JWT claims include org:admin — otherwise API-key / admin routes
+      // see no session org and treat the creator as a non-admin.
+      const clerkId = clerkOrgIdToActivate(created);
+      if (clerkId && setActiveOrg) {
+        await setActiveOrg({ organization: clerkId });
+      }
       setNewOrgName("");
       setShowCreate(false);
       await refreshOrgs();
+      // Always select the Eden org we just created. When clerk_org_id is
+      // null, setActive was skipped and applyMeToOrgState may keep the
+      // previous Clerk-active org — leaving the creator without owner UX.
+      setCurrentOrg(organizationFromCreate(created));
+      if (isCreateOrgDegraded(created)) {
+        toast.warning(CREATE_ORG_DEGRADED_TITLE, CREATE_ORG_DEGRADED_DESCRIPTION);
+      } else {
+        toast.success("Organization created");
+      }
     } catch {
       toast.error("Failed to create organization");
     } finally {
@@ -110,7 +141,10 @@ export function OrgTab({
   }
   if (showCreate) {
     return <SettingsCard title="Create Organization">
-        <input type="text" value={newOrgName} onChange={e => setNewOrgName(e.target.value)} placeholder="Organization name" className="w-full px-3 py-2 rounded-lg border border-[var(--border-default)] mb-4 bg-[var(--bg-secondary)] text-[var(--text-primary)]" />
+        <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1" htmlFor="create-org-name">
+          Organization name
+        </label>
+        <input id="create-org-name" type="text" value={newOrgName} onChange={e => setNewOrgName(e.target.value)} placeholder="Organization name" className="w-full px-3 py-2 rounded-lg border border-[var(--border-default)] mb-4 bg-[var(--bg-secondary)] text-[var(--text-primary)]" />
         <div className="flex gap-2 justify-end">
           <button type="button" onClick={() => setShowCreate(false)} className="min-h-11 px-4 py-2 text-sm text-[var(--text-muted)]">
             Cancel
@@ -122,16 +156,31 @@ export function OrgTab({
       </SettingsCard>;
   }
   if (!org) return null;
-  const isAdmin = org.role === "owner" || org.role === "admin";
-  const isOwner = org.role === "owner";
+  // Prefer W2-D resolveRole so creators keep admin/owner during Clerk sync lag.
+  const isAdmin =
+    isAdminOrOwner(resolvedRole) || isAdminOrOwner(org.role);
+  const isOwner =
+    isOwnerRole(resolvedRole) ||
+    isOwnerRole(org.role) ||
+    Boolean(org.is_owner);
   return <div className="space-y-4">
       <SettingsCard title="Organization details">
         <div className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1">
+            <label htmlFor="org-name" className="block text-sm font-medium text-[var(--text-secondary)] mb-1">
               Name
             </label>
-            <input type="text" value={name} onChange={e => setName(e.target.value)} className="w-full px-3 py-2 rounded-lg border border-[var(--border-default)] bg-[var(--bg-secondary)] text-[var(--text-primary)]" />
+            <input
+              id="org-name"
+              type="text"
+              value={org.name}
+              readOnly
+              aria-readonly="true"
+              className="w-full px-3 py-2 rounded-lg border border-[var(--border-default)] bg-[var(--bg-tertiary)] text-[var(--text-secondary)] cursor-default"
+            />
+            <p className="mt-1 text-xs text-[var(--text-muted)]">
+              Rename not available in portal yet
+            </p>
           </div>
           <div>
             <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1">
@@ -177,8 +226,9 @@ export function OrgTab({
           </div>
         </SettingsCard>}
 
-      {isOwner && <DangerZone title="Permanent actions" description="Deleting or transferring an organization is irreversible. Make sure all admins have a backup plan.">
+      {isOwner && <DangerZone title="Permanent actions" description={isPersonal ? "Deleting a personal workspace is irreversible." : "Deleting or transferring an organization is irreversible. Make sure all admins have a backup plan."}>
           <div className="space-y-3">
+            {!isPersonal && <>
             <button onClick={toggleTransfer} className="px-3 py-1.5 text-sm border border-[var(--error)]/40 rounded-lg hover:bg-[var(--error-dim)] flex items-center gap-1.5 text-[var(--error)]">
               <RefreshCw className={cn("w-4 h-4", isTransferExpanded && "animate-spin")} />
               Transfer Ownership
@@ -186,7 +236,24 @@ export function OrgTab({
             {isTransferExpanded && <Card padding="md">
                 {loadingMembers ? <div className="flex items-center justify-center py-8">
                     <Loader2 className="w-6 h-6 animate-spin text-[var(--text-muted)]" />
-                  </div> : members.length > 0 ? <>
+                  </div> : membersError ? (
+                  <ErrorState
+                    title="Could not load members"
+                    message={membersError}
+                    size="sm"
+                    action={
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="default"
+                        onClick={() => void membersQuery.refetch()}
+                      >
+                        <RefreshCw className="h-4 w-4" />
+                        Try again
+                      </Button>
+                    }
+                  />
+                ) : members.length > 0 ? <>
                     <p className="text-sm text-[var(--text-secondary)] mb-3">
                       Select a member to transfer ownership to. You will become an admin after the transfer.
                     </p>
@@ -214,8 +281,9 @@ export function OrgTab({
                     No other members to transfer to.
                   </p>}
               </Card>}
+            </>}
 
-            <div className="pt-3 border-t border-[var(--error)]/20">
+            <div className={cn(!isPersonal && "pt-3 border-t border-[var(--error)]/20")}>
               <DeleteOrgDialog orgId={org.id} orgName={org.name} onDeleted={async () => {
             await refreshOrgs();
           }} />
@@ -223,7 +291,7 @@ export function OrgTab({
           </div>
         </DangerZone>}
 
-      {selectedMember && org && <TransferOwnershipDialog org={org} member={selectedMember} onClose={() => setSelectedMember(null)} onTransferred={async () => {
+      {!isPersonal && selectedMember && org && <TransferOwnershipDialog org={org} member={selectedMember} onClose={() => setSelectedMember(null)} onTransferred={async () => {
       await refreshOrgs();
     }} />}
 

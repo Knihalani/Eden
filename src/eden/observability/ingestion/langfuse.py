@@ -47,10 +47,10 @@ list are accepted.
 from __future__ import annotations
 
 import contextlib
-import json
 import logging
 from typing import Any
 
+from eden.observability.ingestion.json_body import loads_body
 from eden.observability.ingestion.attribution import Attribution
 from eden.observability.ingestion.errors import SchemaInvalidError
 from eden.observability.ingestion.normalizer import normalize_to_telemetry_event
@@ -79,7 +79,7 @@ class LangfuseDecoder:
 
     def detect(self, body: bytes, content_type: str | None) -> bool:
         try:
-            parsed = json.loads(body)
+            parsed = loads_body(body)
         except (ValueError, UnicodeDecodeError):
             return False
         if isinstance(parsed, list):
@@ -99,7 +99,7 @@ class LangfuseDecoder:
         self, body: bytes, attribution: Attribution
     ) -> list[TelemetryEvent]:
         try:
-            payload = json.loads(body)
+            payload = loads_body(body)
         except (ValueError, UnicodeDecodeError) as exc:
             raise SchemaInvalidError(
                 f"Langfuse body is not valid JSON: {exc}",

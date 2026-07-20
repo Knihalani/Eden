@@ -26,7 +26,12 @@ import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query
 
-from eden.api.deps import get_current_user, require_org_member
+from eden.api.deps import (
+    _try_resolve_token_payload,
+    get_current_user,
+    require_judges_run,
+    resolve_path_org_access,
+)
 from eden.llmops.judges.base import JudgeScore
 from eden.llmops.judges.registry import get_judge_registry
 from eden.llmops.judges.runner import JudgeRunner
@@ -39,13 +44,20 @@ from eden.llmops.judges.schema import (
 
 logger = logging.getLogger(__name__)
 
+
+async def _require_path_org(
+    org_id: str = Path(..., description="Organization ID"),
+    user: dict = Depends(get_current_user),
+    payload: dict | None = Depends(_try_resolve_token_payload),
+) -> str:
+    _, eden_org = await resolve_path_org_access(org_id, user, payload)
+    return eden_org
+
+
 router = APIRouter(
     prefix="/orgs/{org_id}/observability/judges",
     tags=["judges"],
-    dependencies=[
-        Depends(get_current_user),
-        Depends(require_org_member),
-    ],
+    dependencies=[Depends(_require_path_org)],
 )
 
 
@@ -89,7 +101,7 @@ async def _fetch_events_for_trace(tenant_id: str, trace_id: str) -> list:
 
     client = await get_postgres_client()
     if client is None:
-        return []
+        raise HTTPException(status_code=503, detail="Postgres unavailable")
     rows = await client.fetch(
         """
         SELECT event_id, trace_id, span_id, event_type, payload,
@@ -110,14 +122,17 @@ async def _fetch_events_for_trace(tenant_id: str, trace_id: str) -> list:
 @router.post("/run", response_model=JudgeRunResponse)
 async def run_judges(
     body: JudgeRunRequest,
-    org_id: str = Path(..., description="Organization ID"),
+    org_id: str = Depends(_require_path_org),
     user: dict = Depends(get_current_user),
+    payload: dict | None = Depends(_try_resolve_token_payload),
 ) -> JudgeRunResponse:
     """Run the registered judges on a trace.
 
     Sync path: returns the resulting scores inline.
     Async path: queues the work and returns a job id.
     """
+    await require_judges_run(org_id, payload)
+
     registry = get_judge_registry()
 
     # Restrict to the named judges if the caller asked.
@@ -189,7 +204,7 @@ async def run_judges(
 
 @router.get("", response_model=JudgeListResponse)
 async def list_judge_scores(
-    org_id: str = Path(..., description="Organization ID"),
+    org_id: str = Depends(_require_path_org),
     trace_id: str | None = Query(None),
     judge_name: str | None = Query(None),
     limit: int = Query(100, ge=1, le=1000),
@@ -202,7 +217,7 @@ async def list_judge_scores(
 
     client = await get_postgres_client()
     if client is None:
-        return JudgeListResponse(scores=[], total=0, limit=limit, offset=offset)
+        raise HTTPException(status_code=503, detail="Postgres unavailable")
 
     where = "tenant_id = $1"
     params: list = [org_id]
@@ -258,7 +273,7 @@ async def list_judge_scores(
 
 @router.get("/{judge_run_id}", response_model=JudgeScoreResponse)
 async def get_judge_score(
-    org_id: str = Path(..., description="Organization ID"),
+    org_id: str = Depends(_require_path_org),
     judge_run_id: str = Path(..., description="The judge score id"),
     user: dict = Depends(get_current_user),
 ) -> JudgeScoreResponse:

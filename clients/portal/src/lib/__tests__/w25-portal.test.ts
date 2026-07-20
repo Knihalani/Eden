@@ -71,10 +71,13 @@ describe("W25 backend EvidenceGate non-optional", () => {
     expect(cost).toContain('"promote"');
   });
 
-  it("evolution spend writes CostEvent tag", () => {
+  it("evolution spend writes evolution_ops_spend only", () => {
     const spend = py("eden/llmops/evolution_spend.py");
-    expect(spend).toContain('feature="evolution"');
-    expect(spend).toContain("record_cost_event");
+    expect(spend).toContain("evolution_ops_spend");
+    expect(spend).toContain("INSERT INTO evolution_ops_spend");
+    expect(spend).toContain("no customer CostEvent");
+    expect(spend).not.toContain("record_cost_event");
+    expect(spend).not.toContain('feature="evolution"');
   });
 });
 

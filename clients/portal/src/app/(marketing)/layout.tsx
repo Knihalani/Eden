@@ -1,8 +1,7 @@
 import type { Metadata } from "next";
 
-// Avoid statically caching marketing HTML with a stale signed-out CTA.
-// Child pages use Clerk client hooks; force-dynamic keeps SSR fresh.
-export const dynamic = "force-dynamic";
+// K12: marketing HTML is statically cacheable. Signed-in CTAs come from
+// a tiny SignedInGate client leaf on the landing page — no force-dynamic.
 
 const PORTAL = process.env.NEXT_PUBLIC_PORTAL_URL || "https://edenobservability.com";
 
@@ -17,21 +16,23 @@ export const metadata: Metadata = {
     siteName: "Eden",
     title: "Eden — Observability + improvement for AI agents",
     description:
-      "Drop-in LLM observability, evaluation, and reviewable PR suggestions. Capture every call. Ship every fix.",
+      "Drop-in LLM observability, evaluation, and human-reviewed PR suggestions. Capture every call. Review every patch.",
     url: PORTAL,
   },
   twitter: {
     card: "summary_large_image",
     title: "Eden — Observability + improvement for AI agents",
     description:
-      "Drop-in LLM observability, evaluation, and reviewable PR suggestions.",
+      "Drop-in LLM observability, evaluation, and human-reviewed PR suggestions.",
   },
   metadataBase: new URL(PORTAL),
 };
 
 export default function MarketingLayout({ children }: { children: React.ReactNode }) {
+  // P23: grain texture is marketing-only (not portal chrome).
+  // ``marketing-surface`` scopes display type recipes from globals.css.
   return (
-    <div className="min-h-screen bg-[var(--bg-primary)]">
+    <div className="marketing-surface grain-overlay min-h-screen bg-[var(--bg-primary)]">
       {children}
     </div>
   );

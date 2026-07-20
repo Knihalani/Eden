@@ -9,7 +9,7 @@ from typing import Any
 from fastapi import APIRouter, Body, Depends, Path
 from pydantic import BaseModel
 
-from eden.api.deps import get_current_user, require_feature_flag
+from eden.api.deps import get_current_user, require_feature_flag, require_path_org_access
 from eden.fleet.service import FleetHealthService
 
 _FLAG = "fleet_health_v1"
@@ -19,6 +19,7 @@ router = APIRouter(
     dependencies=[
         Depends(require_feature_flag(_FLAG)),
         Depends(get_current_user),
+        Depends(require_path_org_access),
     ],
 )
 _fleet = FleetHealthService()
@@ -41,28 +42,28 @@ class AgentPatch(BaseModel):
 
 
 @router.get("/sla-breaches")
-async def fleet_sla_breaches(org_id: str = Path(...)) -> dict[str, Any]:
+async def fleet_sla_breaches(org_id: str = Depends(require_path_org_access)) -> dict[str, Any]:
     return _ok("fleet_health", await _fleet.sla_breaches(org_id))
 
 
 @router.get("/summary")
-async def fleet_summary(org_id: str = Path(...)) -> dict[str, Any]:
+async def fleet_summary(org_id: str = Depends(require_path_org_access)) -> dict[str, Any]:
     return _ok("fleet_health", await _fleet.summary(org_id))
 
 
 @router.get("/heatmap")
-async def fleet_heatmap(org_id: str = Path(...)) -> dict[str, Any]:
+async def fleet_heatmap(org_id: str = Depends(require_path_org_access)) -> dict[str, Any]:
     return _ok("fleet_health", await _fleet.heatmap(org_id))
 
 
 @router.get("/delegation")
-async def fleet_delegation(org_id: str = Path(...)) -> dict[str, Any]:
+async def fleet_delegation(org_id: str = Depends(require_path_org_access)) -> dict[str, Any]:
     return _ok("fleet_health", await _fleet.delegation_graph(org_id))
 
 
 @router.get("/agents/{agent_id}")
 async def get_agent(
-    org_id: str = Path(...), agent_id: str = Path(...)
+    org_id: str = Depends(require_path_org_access), agent_id: str = Path(...)
 ) -> dict[str, Any]:
     summary = await _fleet.summary(org_id)
     agents = summary.get("agents") or []
@@ -79,7 +80,7 @@ async def get_agent(
 
 @router.patch("/agents/{agent_id}")
 async def patch_agent(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     agent_id: str = Path(...),
     body: AgentPatch = Body(...),
 ) -> dict[str, Any]:

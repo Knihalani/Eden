@@ -176,29 +176,41 @@ class ColumnarAggregator:
         # aggregation via a single ``fetch()`` against the
         # whitelisted source table.
         t0 = time.monotonic()
-        payload, n_rows = await self._pg_aggregate(
-            org_id=org_id,
-            table=table,
-            granularity=granularity,
-            window_start=window_start,
-            window_end=window_end,
-        )
-        duration_ms = int((time.monotonic() - t0) * 1000)
-        # Postgres has no equivalent of ClickHouse's
-        # "compressed_bytes" — we estimate from the bucket
-        # count and an average bucket size.
-        compressed_bytes = max(len(payload.get("buckets", [])) * 256, 0)
-        await _delete_then_insert_rollup(
-            org_id=org_id,
-            rollup_id=rollup_id,
-            source_table=table,
-            granularity=granularity,
-            window_start=window_start,
-            window_end=window_end,
-            payload_json=_json_dumps(payload),
-            n_rows=n_rows,
-            compressed_bytes=compressed_bytes,
-        )
+        try:
+            payload, n_rows = await self._pg_aggregate(
+                org_id=org_id,
+                table=table,
+                granularity=granularity,
+                window_start=window_start,
+                window_end=window_end,
+            )
+            duration_ms = int((time.monotonic() - t0) * 1000)
+            # Postgres has no equivalent of ClickHouse's
+            # "compressed_bytes" — we estimate from the bucket
+            # count and an average bucket size.
+            compressed_bytes = max(len(payload.get("buckets", [])) * 256, 0)
+            await _delete_then_insert_rollup(
+                org_id=org_id,
+                rollup_id=rollup_id,
+                source_table=table,
+                granularity=granularity,
+                window_start=window_start,
+                window_end=window_end,
+                payload_json=_json_dumps(payload),
+                n_rows=n_rows,
+                compressed_bytes=compressed_bytes,
+            )
+        except Exception as exc:  # noqa: BLE001 - soft-fail; avoid portal 500
+            logger.warning(
+                "Postgres rollup failed for org=%s table=%s: %s",
+                org_id,
+                table,
+                exc,
+            )
+            return _not_implemented_envelope(
+                "ColumnarAggregator",
+                f"rollup unavailable (ClickHouse + Postgres failed): {exc}",
+            )
         return _ok_fallback_envelope(
             "ColumnarAggregator",
             {
@@ -268,7 +280,7 @@ class ColumnarAggregator:
         )
         query = (
             f"SELECT {select_clause} "
-            f"FROM {sink.config.database}.{table} "
+            f"FROM {sink.config.qualified_table(table)} "
             f"WHERE org_id = '{_escape_org_id(org_id)}' "
             f"AND created >= '{window_start.isoformat()}' "
             f"AND created < '{window_end.isoformat()}' "

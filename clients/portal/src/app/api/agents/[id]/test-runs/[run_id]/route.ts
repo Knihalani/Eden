@@ -1,7 +1,7 @@
 /** Phase 3 — Proxy GET /api/agents/[id]/test/runs/[run_id]. */
 
-import { NextRequest } from "next/server";
-import { forwardToBackend } from "@/lib/proxy";
+import { NextRequest, NextResponse } from "next/server";
+import { forwardToBackend, proxyError } from "@/lib/proxy";
 import { bearerHeader } from "@/lib/server/clerk-bearer";
 
 /**
@@ -14,19 +14,23 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string; run_id: string }> }
 ) {
-  const { id, run_id } = await params;
-  const agentId = decodeURIComponent(id);
-  const runId = decodeURIComponent(run_id);
-  const orgId = request.nextUrl.searchParams.get("org_id");
-  if (!orgId) {
-    return new Response(
-      JSON.stringify({ detail: "Missing org_id query parameter" }),
-      { status: 400, headers: { "Content-Type": "application/json" } }
+  try {
+    const { id, run_id } = await params;
+    const agentId = decodeURIComponent(id);
+    const runId = decodeURIComponent(run_id);
+    const orgId = request.nextUrl.searchParams.get("org_id");
+    if (!orgId) {
+      return NextResponse.json(
+        { detail: "Missing org_id query parameter" },
+        { status: 400 },
+      );
+    }
+    const extraHeaders = await bearerHeader();
+    return await forwardToBackend(
+      `/orgs/${encodeURIComponent(orgId)}/agents/${encodeURIComponent(agentId)}/test/runs/${encodeURIComponent(runId)}`,
+      { method: "GET", extraHeaders },
     );
+  } catch (err) {
+    return proxyError(err, "Failed to fetch test run");
   }
-  const extraHeaders = await bearerHeader();
-  return forwardToBackend(
-    `/orgs/${encodeURIComponent(orgId)}/agents/${encodeURIComponent(agentId)}/test/runs/${encodeURIComponent(runId)}`,
-    { extraHeaders }
-  );
 }

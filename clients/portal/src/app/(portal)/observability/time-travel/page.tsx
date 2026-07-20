@@ -3,52 +3,32 @@
 import { useState } from "react";
 import { useOrg } from "@/hooks/use-org";
 import { cn } from "@/lib/utils";
-import { api } from "@/lib/api";
+import {
+  timeTravelApi,
+  type TimeTravelEnvelope,
+  type TimeTravelForkData,
+  type TimeTravelReplayData,
+} from "@/lib/api";
 import { useToast } from "@/components/ui/toast";
-import { Alert } from "@/components/ui/alert";
+import { ErrorState } from "@/components/ui/error-state";
+import { Button } from "@/components/ui/button";
 import { NoOrgState } from "@/components/ui/no-org-state";
 import { PageHeader } from "@/components/layout/page-header";
 import { PageContent } from "@/components/layout/page-content";
 import { History, Loader2, Play, GitBranch, RotateCcw, Info, Circle, CheckCircle2, Code2 } from "lucide-react";
-import { motion } from "framer-motion";
 import { errorFromCaught } from "@/lib/safe-error-message";
 
-const DEFAULT_EDITED_STATE = `{
-  "messages": [
-    {"role": "user", "content": "Hello, world!"}
-  ]
-}`;
+/** Default empty edits — BE expects ``step_<n>.<key>`` dotted paths. */
+const DEFAULT_EDITS = `{}`;
 
-interface RecordResult {
-  recording_id: string;
-  trace_id: string;
-  steps: number;
-}
-interface ForkResult {
-  fork_id: string;
-  from_step: number;
-  new_state: Record<string, unknown>;
-}
-interface ReplayResult {
-  replay_id: string;
-  final_state: Record<string, unknown>;
-  steps_replayed: number;
-  outcome: string;
-}
-
-function ttRecord(orgId: string, trace_id: string): Promise<RecordResult> {
-  return api.post<RecordResult>(`/orgs/${orgId}/intelligence/time-travel/record`, { trace_id });
-}
-function ttFork(
-  orgId: string,
-  recording_id: string,
-  at_step: number,
-  edited_state: Record<string, unknown>
-): Promise<ForkResult> {
-  return api.post<ForkResult>(`/orgs/${orgId}/intelligence/time-travel/fork`, { recording_id, at_step, edited_state });
-}
-function ttReplay(orgId: string, fork_id: string): Promise<ReplayResult> {
-  return api.post<ReplayResult>(`/orgs/${orgId}/intelligence/time-travel/replay`, { fork_id });
+function unwrapEnvelope<T>(
+  res: TimeTravelEnvelope<T>,
+  fallback: string,
+): T {
+  if (res.status === "not_implemented" || res.data == null) {
+    throw new Error(res.message || fallback);
+  }
+  return res.data;
 }
 
 export default function TimeTravelPage() {
@@ -57,29 +37,28 @@ export default function TimeTravelPage() {
 
   // Record
   const [traceId, setTraceId] = useState("");
-  const [recordingId, setRecordingId] = useState<string | null>(null);
-  const [recordedSteps, setRecordedSteps] = useState<number | null>(null);
+  const [snapshotId, setSnapshotId] = useState<string | null>(null);
   const [recording, setRecording] = useState(false);
 
   // Fork
   const [atStep, setAtStep] = useState(0);
-  const [editedState, setEditedState] = useState(DEFAULT_EDITED_STATE);
+  const [editsJson, setEditsJson] = useState(DEFAULT_EDITS);
   const [forkId, setForkId] = useState<string | null>(null);
-  const [forkFromStep, setForkFromStep] = useState<number | null>(null);
-  const [forksNewState, setForksNewState] = useState<Record<string, unknown> | null>(null);
+  const [forkAtStep, setForkAtStep] = useState<number | null>(null);
+  const [forkMeta, setForkMeta] = useState<TimeTravelForkData | null>(null);
   const [forking, setForking] = useState(false);
 
   // Replay
   const [replayId, setReplayId] = useState<string | null>(null);
-  const [replayFinalState, setReplayFinalState] = useState<Record<string, unknown> | null>(null);
-  const [replayStepsReplayed, setReplayStepsReplayed] = useState<number | null>(null);
-  const [replayOutcome, setReplayOutcome] = useState<string | null>(null);
+  const [replayData, setReplayData] = useState<TimeTravelReplayData | null>(null);
   const [replaying, setReplaying] = useState(false);
 
   const [error, setError] = useState("");
+  const [lastAction, setLastAction] = useState<"record" | "fork" | "replay" | null>(null);
 
   async function handleRecord() {
     if (!currentOrg) return;
+    setLastAction("record");
     if (!traceId.trim()) {
       setError("Trace ID is required");
       return;
@@ -87,14 +66,19 @@ export default function TimeTravelPage() {
     setRecording(true);
     setError("");
     try {
-      const res = await ttRecord(currentOrg.id, traceId);
-      setRecordingId(res.recording_id);
-      setRecordedSteps(res.steps);
+      const res = await timeTravelApi.record(currentOrg.id, {
+        trace_id: traceId.trim(),
+      });
+      setSnapshotId(res.snapshot_id);
       setForkId(null);
+      setForkMeta(null);
       setReplayId(null);
-      toast.success(`Recorded ${res.steps} steps — ${res.recording_id.slice(0, 12)}…`);
+      setReplayData(null);
+      toast.success(`Snapshot ${res.snapshot_id.slice(0, 12)}…`);
     } catch (err) {
-      toast.error(errorFromCaught(err, "Recording failed"));
+      const msg = errorFromCaught(err, "Recording failed");
+      setError(msg);
+      toast.error(msg);
     } finally {
       setRecording(false);
     }
@@ -102,25 +86,42 @@ export default function TimeTravelPage() {
 
   async function handleFork() {
     if (!currentOrg) return;
-    if (!recordingId) return;
-    let parsed: Record<string, unknown>;
+    setLastAction("fork");
+    if (!traceId.trim()) {
+      setError("Trace ID is required");
+      return;
+    }
+    let edits: Record<string, unknown>;
     try {
-      parsed = JSON.parse(editedState);
+      edits = JSON.parse(editsJson);
+      if (edits === null || typeof edits !== "object" || Array.isArray(edits)) {
+        throw new Error("edits must be a JSON object");
+      }
     } catch (_e) {
-      toast.error("edited_state is not valid JSON");
+      toast.error("edits is not valid JSON object (expected step_<n>.<key> keys)");
       return;
     }
     setForking(true);
     setError("");
     try {
-      const res = await ttFork(currentOrg.id, recordingId, atStep, parsed);
-      setForkId(res.fork_id);
-      setForkFromStep(res.from_step);
-      setForksNewState(res.new_state);
+      const res = await timeTravelApi.fork(currentOrg.id, {
+        parent_trace_id: traceId.trim(),
+        fork_at_step: atStep,
+        name: `fork @ step ${atStep}`,
+        parent_fork_id: snapshotId,
+        edits,
+      });
+      const data = unwrapEnvelope(res, "Fork failed");
+      setForkId(data.fork_id);
+      setForkAtStep(data.fork_at_step);
+      setForkMeta(data);
       setReplayId(null);
-      toast.success(`Forked at step ${res.from_step} — ${res.fork_id.slice(0, 12)}…`);
+      setReplayData(null);
+      toast.success(`Forked at step ${data.fork_at_step} — ${data.fork_id.slice(0, 12)}…`);
     } catch (err) {
-      toast.error(errorFromCaught(err, "Fork failed"));
+      const msg = errorFromCaught(err, "Fork failed");
+      setError(msg);
+      toast.error(msg);
     } finally {
       setForking(false);
     }
@@ -128,32 +129,41 @@ export default function TimeTravelPage() {
 
   async function handleReplay() {
     if (!currentOrg || !forkId) return;
+    setLastAction("replay");
     setReplaying(true);
     setError("");
     try {
-      const res = await ttReplay(currentOrg.id, forkId);
-      setReplayId(res.replay_id);
-      setReplayFinalState(res.final_state);
-      setReplayStepsReplayed(res.steps_replayed);
-      setReplayOutcome(res.outcome);
-      toast.success(`Replayed ${res.steps_replayed} steps — ${res.outcome}`);
+      const res = await timeTravelApi.replay(currentOrg.id, { fork_id: forkId });
+      const data = unwrapEnvelope(res, "Replay failed");
+      setReplayId(data.replay_id);
+      setReplayData(data);
+      if (res.message) {
+        toast.success(`Replayed — ${data.new_outcome} (${res.message})`);
+      } else {
+        toast.success(`Replayed ${data.n_steps} steps — ${data.new_outcome}`);
+      }
     } catch (err) {
-      toast.error(errorFromCaught(err, "Replay failed"));
+      const msg = errorFromCaught(err, "Replay failed");
+      setError(msg);
+      toast.error(msg);
     } finally {
       setReplaying(false);
     }
   }
 
+  function retryLast() {
+    if (lastAction === "record") void handleRecord();
+    else if (lastAction === "fork") void handleFork();
+    else if (lastAction === "replay") void handleReplay();
+  }
+
   function resetAll() {
-    setRecordingId(null);
-    setRecordedSteps(null);
+    setSnapshotId(null);
     setForkId(null);
-    setForkFromStep(null);
-    setForksNewState(null);
+    setForkAtStep(null);
+    setForkMeta(null);
     setReplayId(null);
-    setReplayFinalState(null);
-    setReplayStepsReplayed(null);
-    setReplayOutcome(null);
+    setReplayData(null);
   }
 
   if (!currentOrg) {
@@ -174,7 +184,7 @@ export default function TimeTravelPage() {
         icon={History}
         eyebrow="Observe"
         actions={
-          recordingId ? (
+          snapshotId ? (
             <button
               onClick={resetAll}
               aria-label="Reset all time-travel state"
@@ -192,14 +202,19 @@ export default function TimeTravelPage() {
         Fork at any step, edit state, replay from that point. Non-destructive — original trace unchanged.
       </div>
 
-      {error && (
-        <Alert
-          variant="error"
-          title="Request failed"
-          description={error}
-          onDismiss={() => setError("")}
+      {error ? (
+        <ErrorState
+          title="Could not complete time-travel step"
+          message={error}
+          action={
+            lastAction ? (
+              <Button size="sm" variant="outline" onClick={retryLast}>
+                Try again
+              </Button>
+            ) : undefined
+          }
         />
-      )}
+      ) : null}
 
       {/* Stepper indicator */}
       <div className="flex items-center gap-2">
@@ -209,7 +224,7 @@ export default function TimeTravelPage() {
           { key: "replay", label: "Replay" },
         ].map((s, i, arr) => {
           const active =
-            s.key === "record" ? !!recordingId : s.key === "fork" ? !!forkId : !!replayId;
+            s.key === "record" ? !!snapshotId : s.key === "fork" ? !!forkId : !!replayId;
           return (
             <div key={s.key} className="flex items-center gap-2">
               <div
@@ -234,8 +249,8 @@ export default function TimeTravelPage() {
         step={1}
         title="Record"
         icon={History}
-        active={!recordingId}
-        done={!!recordingId}
+        active={!snapshotId}
+        done={!!snapshotId}
       >
         <div className="grid sm:grid-cols-[1fr_auto] gap-3">
           <div>
@@ -260,18 +275,11 @@ export default function TimeTravelPage() {
             Record
           </button>
         </div>
-        {recordingId && (
-          <motion.div
-            initial={{ opacity: 0, y: 4 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="mt-3 px-3 py-2 rounded-lg bg-[var(--terminal-faint)] text-xs"
-          >
-            <p className="text-[var(--text-muted)] uppercase tracking-wide text-[10px] mb-0.5">Recording</p>
-            <p className="font-mono text-[var(--terminal)]">{recordingId}</p>
-            <p className="text-[var(--text-secondary)] mt-1">
-              {recordedSteps} step{recordedSteps === 1 ? "" : "s"} captured
-            </p>
-          </motion.div>
+        {snapshotId && (
+          <div className="mt-3 px-3 py-2 rounded-lg bg-[var(--terminal-faint)] text-xs">
+            <p className="text-[var(--text-muted)] uppercase tracking-wide text-[10px] mb-0.5">Snapshot</p>
+            <p className="font-mono text-[var(--terminal)]">{snapshotId}</p>
+          </div>
         )}
       </Panel>
 
@@ -280,9 +288,9 @@ export default function TimeTravelPage() {
         step={2}
         title="Fork"
         icon={GitBranch}
-        active={!!recordingId && !forkId}
+        active={!!snapshotId && !forkId}
         done={!!forkId}
-        disabled={!recordingId}
+        disabled={!snapshotId}
       >
         <div className="grid sm:grid-cols-[160px_1fr] gap-3 mb-3">
           <div>
@@ -300,20 +308,21 @@ export default function TimeTravelPage() {
           </div>
           <div>
             <label className="text-[11px] font-medium text-[var(--text-muted)] mb-1 block uppercase tracking-wide">
-              Edited state (JSON)
+              Edits JSON (step_N.key)
             </label>
             <textarea
-              value={editedState}
-              onChange={(e) => setEditedState(e.target.value)}
+              value={editsJson}
+              onChange={(e) => setEditsJson(e.target.value)}
               spellCheck={false}
-              aria-label="Edited state JSON"
+              aria-label="Edits JSON"
+              placeholder='{"step_0.system_prompt": "..."}'
               className="w-full min-h-[120px] px-3 py-2 bg-[var(--bg-secondary)] border border-[var(--border-default)] rounded-lg font-mono text-xs text-[var(--text-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)]"
             />
           </div>
         </div>
         <button
           onClick={handleFork}
-          disabled={forking || !recordingId}
+          disabled={forking || !snapshotId}
           className="inline-flex items-center gap-2 px-4 py-2 bg-[var(--accent)] text-[var(--bg-base)] rounded-lg text-sm font-medium hover:bg-[var(--accent-hover)] disabled:opacity-50 transition-colors"
         >
           {forking ? <Loader2 className="w-4 h-4 animate-spin" /> : <GitBranch className="w-4 h-4" />}
@@ -321,25 +330,26 @@ export default function TimeTravelPage() {
         </button>
 
         {forkId && (
-          <motion.div
-            initial={{ opacity: 0, y: 4 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="mt-3 space-y-2"
-          >
+          <div className="mt-3 space-y-2">
             <div className="px-3 py-2 rounded-lg bg-[var(--terminal-faint)] text-xs">
               <p className="text-[var(--text-muted)] uppercase tracking-wide text-[10px] mb-0.5">Fork</p>
               <p className="font-mono text-[var(--terminal)]">{forkId}</p>
-              <p className="text-[var(--text-secondary)] mt-1">From step {forkFromStep}</p>
+              <p className="text-[var(--text-secondary)] mt-1">
+                At step {forkAtStep}
+                {forkMeta ? ` · ${forkMeta.n_parent_steps} parent steps` : ""}
+              </p>
             </div>
-            <details className="text-xs">
-              <summary className="cursor-pointer text-[var(--text-muted)] hover:text-[var(--text-primary)] flex items-center gap-1.5">
-                <Code2 className="w-3.5 h-3.5" /> New state
-              </summary>
-              <pre className="mt-2 text-[11px] font-mono text-[var(--text-secondary)] bg-[var(--bg-secondary)] rounded-lg p-3 overflow-x-auto max-h-[200px]">
-                {JSON.stringify(forksNewState, null, 2)}
-              </pre>
-            </details>
-          </motion.div>
+            {forkMeta && (
+              <details className="text-xs">
+                <summary className="cursor-pointer text-[var(--text-muted)] hover:text-[var(--text-primary)] flex items-center gap-1.5">
+                  <Code2 className="w-3.5 h-3.5" /> Fork metadata
+                </summary>
+                <pre className="mt-2 text-[11px] font-mono text-[var(--text-secondary)] bg-[var(--bg-secondary)] rounded-lg p-3 overflow-x-auto max-h-[200px]">
+                  {JSON.stringify(forkMeta, null, 2)}
+                </pre>
+              </details>
+            )}
+          </div>
         )}
       </Panel>
 
@@ -361,38 +371,38 @@ export default function TimeTravelPage() {
           Replay
         </button>
 
-        {replayId && (
-          <motion.div
-            initial={{ opacity: 0, y: 4 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="mt-3 space-y-3"
-          >
+        {replayId && replayData && (
+          <div className="mt-3 space-y-3">
             <div className="flex flex-wrap items-center gap-3 px-3 py-2 rounded-lg bg-[var(--terminal-faint)] text-xs">
               <span className="text-[var(--text-muted)] uppercase tracking-wide text-[10px]">Replay</span>
               <span className="font-mono text-[var(--terminal)]">{replayId}</span>
               <span
                 className={cn(
                   "px-2 py-0.5 rounded-full font-medium uppercase tracking-wide text-[10px]",
-                  replayOutcome === "success"
+                  replayData.new_outcome === "success"
                     ? "bg-[var(--terminal-faint)] text-[var(--terminal)]"
                     : "bg-[var(--error-bg)] text-[var(--error)]"
                 )}
               >
-                {replayOutcome ?? "unknown"}
+                {replayData.new_outcome}
               </span>
               <span className="text-[var(--text-secondary)]">
-                {replayStepsReplayed} step{replayStepsReplayed === 1 ? "" : "s"}
+                {replayData.n_steps} step{replayData.n_steps === 1 ? "" : "s"}
+                {" · "}
+                {replayData.n_served_from_cache} cached
+                {" · "}
+                {replayData.n_re_executed} live
               </span>
             </div>
             <div>
               <p className="text-[11px] font-medium text-[var(--text-muted)] mb-1.5 uppercase tracking-wide">
-                Final state
+                Replay result
               </p>
               <pre className="text-[11px] font-mono text-[var(--text-secondary)] bg-[var(--bg-secondary)] rounded-lg p-3 overflow-x-auto max-h-[280px]">
-                {JSON.stringify(replayFinalState, null, 2)}
+                {JSON.stringify(replayData, null, 2)}
               </pre>
             </div>
-          </motion.div>
+          </div>
         )}
       </Panel>
     </PageContent>
@@ -416,9 +426,7 @@ function Panel({
   children: React.ReactNode;
 }) {
   return (
-    <motion.div
-      initial={false}
-      animate={{ opacity: disabled ? 0.5 : 1 }}
+    <div
       className={cn(
         "bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-xl p-4 space-y-2",
         active && "ring-1 ring-[var(--accent)]/30"
@@ -439,6 +447,6 @@ function Panel({
         {title}
       </h3>
       <div className={cn(disabled && "pointer-events-none")}>{children}</div>
-    </motion.div>
+    </div>
   );
 }

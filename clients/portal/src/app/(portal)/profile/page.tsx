@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import Image from "next/image";
 import { useAuth } from "@/hooks/use-auth";
 import { api } from "@/lib/api";
 import { Button } from "@/components/ui/button";
@@ -9,6 +10,8 @@ import { cn } from "@/lib/utils";
 import { PageHeader } from "@/components/layout/page-header";
 import { PageContent } from "@/components/layout/page-content";
 import { useToast } from "@/components/ui/toast";
+import { ErrorState } from "@/components/ui/error-state";
+import { LoadingSkeleton } from "@/components/ui/skeleton";
 import { useConfirm } from "@/hooks/use-confirm";
 import { TwoFASetupDialog } from "../settings/_components/2fa-setup-dialog";
 import { Card } from "@/components/ui/card";
@@ -17,6 +20,8 @@ import { IntegrationStatusBanners } from "@/components/integration-status-banner
 export default function ProfilePage() {
   const {
     user,
+    loading: authLoading,
+    error: authError,
     refreshUser
   } = useAuth();
   const toast = useToast();
@@ -40,6 +45,7 @@ export default function ProfilePage() {
   // 2FA
   const [twoFactorEnabled, setTwoFactorEnabled] = useState(false);
   const [loading2FA, setLoading2FA] = useState(true);
+  const [twoFaError, setTwoFaError] = useState<string | null>(null);
   const [showSetupDialog, setShowSetupDialog] = useState(false);
   const [showDisableDialog, setShowDisableDialog] = useState(false);
 
@@ -64,11 +70,12 @@ export default function ProfilePage() {
   }, []);
   const load2FAStatus = async () => {
     setLoading2FA(true);
+    setTwoFaError(null);
     try {
       const status = await api.get2FAStatus();
       setTwoFactorEnabled(status.two_factor_enabled);
     } catch (e) {
-      toast.error("Could not load 2FA status", e instanceof Error ? e.message : undefined);
+      setTwoFaError(errorFromCaught(e, "Could not load 2FA status"));
     } finally {
       setLoading2FA(false);
     }
@@ -164,6 +171,25 @@ export default function ProfilePage() {
       setDeleting(false);
     }
   };
+  if (authLoading) {
+    return <LoadingSkeleton size="narrow" />;
+  }
+  if (authError && !user) {
+    return (
+      <PageContent size="narrow">
+        <PageHeader eyebrow="Account" title="Profile" subtitle="Manage your account settings, security, and authentication." icon={User} />
+        <ErrorState
+          title="Could not load profile"
+          message={authError}
+          action={
+            <Button variant="outline" size="sm" onClick={() => void refreshUser()}>
+              Try again
+            </Button>
+          }
+        />
+      </PageContent>
+    );
+  }
   if (!user) return null;
   return <PageContent size="narrow">
       <PageHeader eyebrow="Account" title="Profile" subtitle="Manage your account settings, security, and authentication." icon={User} />
@@ -178,9 +204,18 @@ export default function ProfilePage() {
         <div className="flex items-center gap-4 mb-6">
           <div className="relative">
             <div className="user-avatar w-20 h-20 rounded-full flex items-center justify-center text-2xl overflow-hidden bg-[var(--bg-tertiary)]">
-              {avatarUrl ?
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={avatarUrl} alt="Your profile photo" loading="lazy" decoding="async" width={80} height={80} className="w-full h-full object-cover" /> : name.charAt(0).toUpperCase()}
+              {avatarUrl ? (
+                <Image
+                  src={avatarUrl}
+                  alt="Your profile photo"
+                  width={80}
+                  height={80}
+                  unoptimized
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                name.charAt(0).toUpperCase()
+              )}
             </div>
             <button type="button" onClick={() => fileInputRef.current?.click()} disabled={uploadingAvatar} aria-label={uploadingAvatar ? "Uploading avatar" : "Upload avatar"} className="absolute bottom-0 right-0 w-8 h-8 bg-[var(--bg-primary)] border border-[var(--border)] rounded-full flex items-center justify-center hover:bg-[var(--bg-muted)] transition-colors">
               {uploadingAvatar ? <Loader2 className="w-4 h-4 animate-spin" aria-hidden /> : <Camera className="w-4 h-4" aria-hidden />}
@@ -205,15 +240,25 @@ export default function ProfilePage() {
             </div>
           </div>
 
-          {/* Email Input */}
+          {/* Email — read-only; updateProfile only accepts name/avatar_url */}
           <div>
             <label htmlFor="profile-email" className="block text-sm font-medium text-[var(--text-secondary)] mb-1">
               Email
             </label>
             <div className="relative">
               <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-muted)]" aria-hidden />
-              <input id="profile-email" type="email" value={email} onChange={e => setEmail(e.target.value)} className="w-full pl-10 pr-3 py-2 rounded-lg border border-[var(--border)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/40" />
+              <input
+                id="profile-email"
+                type="email"
+                value={email}
+                readOnly
+                aria-readonly="true"
+                className="w-full pl-10 pr-3 py-2 rounded-lg border border-[var(--border)] bg-[var(--bg-muted)] text-[var(--text-secondary)] cursor-default"
+              />
             </div>
+            <p className="mt-1 text-xs text-[var(--text-muted)]">
+              Email cannot be changed from this page.
+            </p>
           </div>
 
           {/* User ID (read-only) */}
@@ -298,7 +343,18 @@ export default function ProfilePage() {
         {loading2FA ? <div className="flex items-center gap-2" aria-live="polite">
             <Loader2 className="w-4 h-4 animate-spin" aria-hidden />
             <span className="text-sm text-[var(--text-muted)]">Loading…</span>
-          </div> : <div className="flex items-center justify-between">
+          </div> : twoFaError ? (
+            <ErrorState
+              title="Could not load 2FA status"
+              message={twoFaError}
+              size="sm"
+              action={
+                <Button variant="outline" size="sm" onClick={() => void load2FAStatus()}>
+                  Try again
+                </Button>
+              }
+            />
+          ) : <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               {twoFactorEnabled ? <>
                   <span className="px-3 py-1 bg-[var(--terminal-faint)] text-[var(--terminal)] text-sm font-medium rounded-full flex items-center gap-1">

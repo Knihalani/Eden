@@ -38,10 +38,11 @@ Span fields consumed:
 from __future__ import annotations
 
 import contextlib
-import json
 import logging
 from datetime import UTC
 from typing import Any
+
+from eden.observability.ingestion.json_body import loads_body
 
 from eden.observability.ingestion.attribution import Attribution
 from eden.observability.ingestion.errors import SchemaInvalidError
@@ -526,7 +527,7 @@ class OtelDecoder:
         if content_type and "otel" in content_type.lower():
             return True
         try:
-            parsed = json.loads(body)
+            parsed = loads_body(body)
         except (ValueError, UnicodeDecodeError):
             return False
         if not isinstance(parsed, dict):
@@ -537,7 +538,7 @@ class OtelDecoder:
         self, body: bytes, attribution: Attribution
     ) -> list[TelemetryEvent]:
         try:
-            payload = json.loads(body)
+            payload = loads_body(body)
         except (ValueError, UnicodeDecodeError) as exc:
             raise SchemaInvalidError(
                 f"OTel body is not valid JSON: {exc}",

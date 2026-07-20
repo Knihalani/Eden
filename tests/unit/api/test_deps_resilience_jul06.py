@@ -152,6 +152,23 @@ async def test_require_org_member_raises_403_without_clerk_claim(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_require_org_member_raises_401_when_payload_is_none(monkeypatch):
+    """Unauthenticated callers (payload=None) must be 401, not 403."""
+    from fastapi import HTTPException
+
+    monkeypatch.setattr(
+        "eden.api.deps.get_current_org",
+        AsyncMock(return_value=None),
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        await require_org_member(x_org_id="org-123", payload=None)
+
+    assert exc_info.value.status_code == 401
+    assert "Authentication required" in exc_info.value.detail
+
+
+@pytest.mark.asyncio
 async def test_require_org_member_returns_normal_synth_when_db_missing_row(monkeypatch):
     """Happy path: get_current_org returns None (no org_members row,
     Clerk trust active) and the synthesis path inside get_current_org

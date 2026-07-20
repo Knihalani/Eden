@@ -110,7 +110,7 @@
   --info: #22D3EE;
   --info-bg: rgba(34, 211, 238, 0.10);
 
-  /* Category tokens (used by hilt-panel + clerk-theme) */
+  /* Category tokens (used by clerk-theme) */
   --cat-success-fg:  #5FE5A8;
   --cat-warning-dim: rgba(255, 181, 71, 0.10);
   --cat-warning-fg:  #FFB547;
@@ -193,7 +193,7 @@
    *         JSON tool inputs, SDK code samples, version strings,
    *         error codes, currency + token counts).
    *   20% — the "terminal micro-label" pattern (PageHeader
-   *         eyebrow + greeting; banner badges; hilt-panel status
+   *         eyebrow + greeting; banner badges
    *         indicators). font-mono + uppercase + tracking-widest.
    *         INTENTIONAL — leans into the terminal aesthetic.
    *   10% — identifier-shaped labels (tool/agent/span names like
@@ -243,12 +243,12 @@
    * floating overlays (ChatSidebar, notifications, command palette).
    * The grain overlay uses z-[9999] but is pointer-events:none +
    * aria-hidden, so it can't trap clicks. */
-  /* ui-audit 2026-07-06 M7: extended ladder. Cookie consent and
-   * toast notifications use the slots below the grain texture
-   * but above page content. Anything truly full-viewport
+  /* ui-audit 2026-07-06 M7: extended ladder. Cookie consent sits
+   * below dialogs/sheets (z-50) so modals are never occluded;
+   * toast stays above dialogs. Anything truly full-viewport
    * decorative (grain, marketing grid) sits at --z-grain. */
+  --z-cookie: 40;
   --z-toast: 60;
-  --z-cookie: 70;
   --z-grain: 9999;
 
   /* shadcn / legacy compatibility aliases (map to canonical tokens) */
@@ -355,12 +355,18 @@
   --shadow-xl: var(--shadow-xl);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
-  /* Inter Display for headings (free, ships well, terminal-adjacent
-   * character). Body stays on Geist Sans — Inter Display's
-   * tighter optical sizes give the heading tier real contrast.
-   * To swap again, just point --font-display at a new variable. */
+  /* Display slot: same family as body (Geist), differentiated by
+   * weight + fluid scale on marketing. One deliberate family beats a
+   * timid second face that fights the dark-terminal brand. */
+  --font-display: var(--font-geist-sans);
 
-  --font-display: var(--font-inter-display);
+  /* Marketing modular scale (major third ≈ 1.25). Portal UI keeps
+   * the denser rem ladder above; these drive .marketing-* utilities. */
+  --marketing-display: clamp(3.75rem, 2.6rem + 5.5vw, 6rem);
+  --marketing-h1: clamp(1.25rem, 1.05rem + 0.9vw, 1.625rem);
+  --marketing-h2: clamp(1.75rem, 1.35rem + 1.8vw, 2.75rem);
+  --marketing-h3: clamp(1.125rem, 1rem + 0.6vw, 1.375rem);
+  --marketing-lede: clamp(1.05rem, 0.95rem + 0.45vw, 1.25rem);
 }
 
 /* ==================== Base Styles ==================== */
@@ -373,9 +379,11 @@ body {
   background: var(--bg-base);
   color: var(--text-primary);
   font-family: var(--font-sans);
-  line-height: var(--line-height-normal);
+  /* Dark UI: light type reads thinner — slightly looser leading. */
+  line-height: 1.55;
   letter-spacing: var(--letter-spacing-normal);
   -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
   -moz-osx-font-smoothing: grayscale;
   /* ui-audit prompt 29: enable kerning + ligatures for crisp text
    * rendering. optimizeLegibility turns on OpenType kerning and
@@ -489,10 +497,12 @@ body {
 
 /* FIX-COOKIE: keep the cookie-consent banner from covering the
  * last viewport of content on long pages (/privacy, /docs, the
- * marketing FAQ, the 404 destination cards). CookieConsent
+ * marketing FAQ, the 404 destination cards) and from occluding
+ * primary CTAs on short pages. CookieConsent
  * (``src/components/cookie-consent.tsx``) sets the
  * ``--cookie-banner-offset`` CSS custom property on the html
- * element when the banner is visible, and resets it to ``0px``
+ * element when the banner is visible (full height while expanded,
+ * pill height while collapsed), and resets it to ``0px``
  * once the user makes a choice. We apply it as a body padding
  * so the document grows below the fixed banner, and the banner
  * is the only thing rendered in that reserved strip. The auth
@@ -649,30 +659,6 @@ body {
   animation: fade-slide-up var(--duration-normal) var(--ease-out);
 }
 
-/* Stage pulse */
-@keyframes stage-pulse {
-  0%, 100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.6;
-  }
-}
-
-.stage-active {
-  animation: stage-pulse 2s ease-in-out infinite;
-}
-
-/* Border pulse for running/pending job cards */
-@keyframes border-pulse {
-  0%, 100% { border-left-color: var(--terminal); box-shadow: 0 0 8px var(--terminal-glow); }
-  50% { border-left-color: var(--accent); box-shadow: none; }
-}
-
-.animate-border-pulse {
-  animation: border-pulse 2s ease-in-out infinite;
-}
-
 /* Fade up — used by auth screens and inline error reveals */
 @keyframes fadeUp {
   from {
@@ -689,10 +675,8 @@ body {
   animation: fadeUp var(--duration-normal) var(--ease-out) forwards;
 }
 
-/* Glow pulse — terminal active states */
+/* Glow pulse — marketing TracesExplorerMock terminal active states */
 @keyframes glow-pulse {
-  /* reserved — no .animate-glow-pulse class right now; keep keyframe
-     for future use so the terminal-glow token is already wired. */
   0%, 100% { box-shadow: 0 0 0 0 var(--terminal-glow); }
   50% { box-shadow: 0 0 12px 2px var(--terminal-glow); }
 }
@@ -848,11 +832,13 @@ body {
 }
 
 .auth-hero-line {
-  font-size: clamp(36px, 4.5vw, 54px);
-  font-weight: 700;
+  font-family: var(--font-display);
+  font-size: clamp(2.25rem, 1.75rem + 2.2vw, 3.375rem);
+  font-weight: 600;
   line-height: 1.05;
-  letter-spacing: -0.04em;
+  letter-spacing: -0.035em;
   color: var(--text-primary);
+  text-wrap: balance;
 }
 
 .auth-feature-icon {
@@ -1099,34 +1085,86 @@ h1, h2, h3, h4, h5, h6 {
   color: var(--text-primary);
   font-weight: 600;
   line-height: var(--line-height-tight);
-  /* ui-audit 2026-07-06: headings use --font-display (Inter Display)
-   * for tighter optical sizes than the body face. Body still on
-   * Geist Sans via --font-sans, so the page has a clear two-tier
-   * type system. */
   font-family: var(--font-display);
+  text-wrap: balance;
 }
 
 h1 {
   font-size: var(--font-size-4xl);
-  letter-spacing: -0.035em;
-  line-height: 1.2;
+  letter-spacing: -0.03em;
+  line-height: 1.15;
 }
 
-/* ui-audit prompt 22: fluid display headings. Marketing heroes +
- * landing sections need headings that scale smoothly between
- * mobile (≥36px readable) and desktop (up to 72px dramatic) without
- * jumping at sm/md/lg breakpoints. Body text stays at the static
- * --font-size-base so reading rhythm is preserved. */
+/* Fluid display utilities — marketing heroes + long-form pages.
+ * Letter-spacing floor −0.04em (never tighter). */
 .h1-fluid {
-  font-size: clamp(2.25rem, 4.5vw + 0.5rem, 4.5rem);
-  line-height: 1.05;
-  letter-spacing: -0.04em;
+  font-size: clamp(2.25rem, 1.6rem + 2.8vw, 4rem);
+  line-height: 1.08;
+  letter-spacing: -0.035em;
+  font-weight: 600;
 }
 
 .h2-fluid {
-  font-size: clamp(1.75rem, 3vw + 0.5rem, 3rem);
-  line-height: 1.1;
+  font-size: clamp(1.625rem, 1.25rem + 1.6vw, 2.75rem);
+  line-height: 1.12;
   letter-spacing: -0.03em;
+  font-weight: 600;
+}
+
+/* Marketing surface type recipes (scoped via .marketing-surface). */
+.marketing-surface .marketing-brand {
+  font-family: var(--font-display);
+  font-size: var(--marketing-display);
+  font-weight: 700;
+  line-height: 0.96;
+  letter-spacing: -0.035em;
+  color: var(--text-primary);
+  text-wrap: balance;
+}
+
+.marketing-surface .marketing-lede {
+  font-family: var(--font-display);
+  font-size: var(--marketing-h1);
+  font-weight: 500;
+  line-height: 1.35;
+  letter-spacing: -0.02em;
+  color: var(--text-primary);
+  text-wrap: balance;
+  max-width: 28ch;
+}
+
+.marketing-surface .marketing-support {
+  font-size: var(--marketing-lede);
+  font-weight: 400;
+  line-height: 1.55;
+  color: var(--text-secondary);
+  max-width: 38ch;
+  text-wrap: pretty;
+}
+
+.marketing-surface .marketing-h2 {
+  font-family: var(--font-display);
+  font-size: var(--marketing-h2);
+  font-weight: 600;
+  line-height: 1.12;
+  letter-spacing: -0.03em;
+  color: var(--text-primary);
+  text-wrap: balance;
+}
+
+.marketing-surface .marketing-h3 {
+  font-family: var(--font-display);
+  font-size: var(--marketing-h3);
+  font-weight: 600;
+  line-height: 1.25;
+  letter-spacing: -0.02em;
+  color: var(--text-primary);
+  text-wrap: balance;
+}
+
+.marketing-surface {
+  /* Slightly roomier body measure on marketing vs dense portal. */
+  --line-height-relaxed: 1.65;
 }
 
 /* ui-audit prompt 23: optimized reading measure for long-form
@@ -1136,8 +1174,11 @@ h1 {
  * default <p> margin to keep the rhythm. */
 .prose {
   max-width: 65ch;
-  line-height: 1.6;
+  line-height: 1.65;
   color: var(--text-secondary);
+}
+.prose p {
+  text-wrap: pretty;
 }
 .prose p + p {
   margin-top: 1rem;
@@ -1151,43 +1192,24 @@ h1 {
   margin-bottom: 0.5rem;
 }
 
-/* ui-audit prompt 29: text-wrap balance for headings prevents
- * widows/orphans by equalizing line lengths. text-wrap pretty for
- * body avoids short last lines. Both are progressive — no-op on
- * browsers without the CSS Text Level 4 spec. */
-h1, h2, h3, h4, h5, h6 {
-  text-wrap: balance;
-}
-.prose p {
-  text-wrap: pretty;
-}
-
-/* ui-audit prompt 30: casing convention.
- *
- *   h1, h2 page section headings → Title Case ("Retention Policy",
- *     "Two-Factor Authentication", "SCIM Provisioning")
- *   h2 nav/sidebar labels       → Sentence case ("Documentation",
- *     "Density", "Group order")
- *   h3, h4 component labels     → Sentence case ("PII scrub after
- *     (days)", "New destination", "Per-table overrides")
- *   Buttons / form labels       → Sentence case ("Create new key",
- *     "Permanently delete organization")
+/* Casing convention (ui-audit prompt 30):
+ *   h1, h2 page section headings → Title Case
+ *   h2 nav/sidebar labels       → Sentence case
+ *   h3, h4 component labels     → Sentence case
+ *   Buttons / form labels       → Sentence case
  *   Terminal micro-labels       → UPPERCASE (font-mono + tracking)
- *
- * Acronyms (SCIM, SSO, SAML, 2FA, PII) keep their canonical form
- * regardless of surrounding casing. Migrate existing h2 page
- * headings ("Autonomous features" → "Autonomous Features") as a
- * follow-up; this comment establishes the rule first.
+ * Acronyms (SCIM, SSO, SAML, 2FA, PII) keep canonical form.
+ */
 
 h2 {
   font-size: var(--font-size-3xl);
-  letter-spacing: var(--letter-spacing-tight);
+  letter-spacing: -0.025em;
   line-height: var(--line-height-tight);
 }
 
 h3 {
   font-size: var(--font-size-2xl);
-  letter-spacing: var(--letter-spacing-tight);
+  letter-spacing: -0.02em;
   line-height: 1.3;
 }
 
@@ -1317,14 +1339,6 @@ input::placeholder, textarea::placeholder {
   animation: fade-slide-up 2s var(--ease-out);
 } /* reserved — no call site yet, retained for the file-upload reveal */
 
-.code-streaming {
-  border-left: 2px solid var(--accent);
-}
-
-.logo-animate {
-  animation: fade-slide-up 0.6s var(--ease-out) forwards;
-}
-
 /* Grain texture overlay */
 .grain-overlay::before {
   content: "";
@@ -1379,9 +1393,9 @@ input::placeholder, textarea::placeholder {
   top: -100px;
   left: var(--space-4);
   /* ui-audit 2026-07-06 M7: skip-link is a focus-only emergency
-   * target that must beat the grain texture (--z-grain). One
-   * tier above the cookie banner keeps keyboard users first. */
-  z-index: calc(var(--z-cookie) + 1);
+   * target that must beat the grain texture (--z-grain) so
+   * keyboard users always land above decorative overlays. */
+  z-index: calc(var(--z-grain) + 1);
   padding: var(--space-2) var(--space-4);
   background: var(--accent);
   color: var(--bg-base);

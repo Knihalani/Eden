@@ -323,13 +323,18 @@ async def test_dedup_returns_no_issue_and_records_metric() -> None:
 
 
 def _client(pg: _FakePG) -> TestClient:
-    from eden.api.deps import get_current_user
+    from eden.api.deps import get_current_user, require_path_org_access
 
     app = FastAPI()
     app.dependency_overrides[get_current_user] = lambda: {
         "sub": "u1",
         "org_id": "org_test",
     }
+
+    async def _path_org(org_id: str = "org_test") -> str:
+        return org_id
+
+    app.dependency_overrides[require_path_org_access] = _path_org
     import eden.api.routes.agent_issues as mod
 
     async def _flag_on() -> None:

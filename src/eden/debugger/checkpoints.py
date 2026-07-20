@@ -213,16 +213,24 @@ class CheckpointStore:
         trace_id: str,
         org_id: str | None = None,
     ) -> list[Checkpoint]:
-        """Load every checkpoint for a trace, in step order."""
+        """Load every checkpoint for a trace, in step order.
+
+        Always scoped by ``tenant_id`` (derived from ``org_id``, or
+        ``"default"`` when absent) so a caller cannot read another
+        org's checkpoints by guessing ``trace_id``.
+        """
+        tenant_id = org_id or "default"
         rows = await self._pg.fetch(
             """
             SELECT payload
             FROM telemetry_events
             WHERE trace_id = $1
               AND event_type = 'debugger.checkpoint'
+              AND tenant_id = $2
             ORDER BY (payload->>'step_number')::int ASC
             """,
             trace_id,
+            tenant_id,
         )
         out: list[Checkpoint] = []
         for row in rows:
@@ -237,8 +245,15 @@ class CheckpointStore:
         self,
         trace_id: str,
         step_number: int,
+        org_id: str | None = None,
     ) -> Checkpoint | None:
-        """Load one specific checkpoint."""
+        """Load one specific checkpoint.
+
+        Always scoped by ``tenant_id`` (derived from ``org_id``, or
+        ``"default"`` when absent) so a caller cannot read another
+        org's checkpoint by guessing ``trace_id``.
+        """
+        tenant_id = org_id or "default"
         rows = await self._pg.fetch(
             """
             SELECT payload
@@ -246,9 +261,10 @@ class CheckpointStore:
             WHERE trace_id = $1
               AND event_type = 'debugger.checkpoint'
               AND (payload->>'step_number')::int = $2
+              AND tenant_id = $3
             LIMIT 1
             """,
-            trace_id, step_number,
+            trace_id, step_number, tenant_id,
         )
         if not rows:
             return None
@@ -280,6 +296,7 @@ class ReRunEngine:
         *,
         from_step: int = 0,
         prompt_override: str | None = None,
+        org_id: str | None = None,
     ) -> ReRunResult:
         """Replay the trace from ``from_step`` onwards.
 
@@ -299,12 +316,11 @@ class ReRunEngine:
                 override. When set, the first replayed
                 step's input messages have the system
                 message replaced with this string.
-
-        Returns:
-            :class:`ReRunResult` with the replayed
-            checkpoints + the diff vs the original.
+            org_id: Tenant scope for checkpoint load.
         """
-        all_checkpoints = await self._store.list_for_trace(trace_id)
+        all_checkpoints = await self._store.list_for_trace(
+            trace_id, org_id=org_id
+        )
         # Filter to steps >= from_step.
         replayed = [c for c in all_checkpoints if c.step_number >= from_step]
         # If a prompt override is set, apply it to the first

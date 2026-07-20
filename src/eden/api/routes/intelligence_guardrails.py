@@ -1,9 +1,8 @@
 """Intelligence Gap — Runtime Protection & Guardrails (Cat 15) routes.
 
-Default behaviour for ``/guardrails/evaluate`` is
-``verdict: "allow"`` with ``live: false`` so production flows
-don't break before a real policy exists. A real policy is
-what flips the verdict.
+Incomplete / unevaluable policy sets fail closed on
+``/guardrails/evaluate`` (``verdict: "block"``, ``live: false``).
+Enforced detector policies flip the envelope to ``live: true``.
 """
 
 from __future__ import annotations
@@ -11,11 +10,12 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from fastapi import APIRouter, Body, Depends, Path, Query
+from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from pydantic import BaseModel
 
-from eden.api.deps import get_current_user, require_feature_flag
+from eden.api.deps import require_feature_flag, require_org_member, require_path_org_access
 from eden.api.utils.redact import redact_all
+from eden.api.utils.safe_error import safe_detail
 from eden.guardrails import (
     ContentPolicyEnforcer,
     EvalToGuardrailLink,
@@ -36,7 +36,8 @@ router = APIRouter(
     tags=["intelligence-guardrails"],
     dependencies=[
         Depends(require_feature_flag("intelligence_gap_v0")),
-        Depends(get_current_user),
+        Depends(require_org_member),
+        Depends(require_path_org_access),
     ],
 )
 
@@ -92,7 +93,7 @@ class FirewallRequest(BaseModel):
 
 @router.post("/policies")
 async def create_policy(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     body: PolicyCreateRequest = Body(...),
 ) -> dict[str, Any]:
     return await _policy.create(
@@ -105,21 +106,22 @@ async def create_policy(
 
 
 @router.get("/policies")
-async def list_policies(org_id: str = Path(...)) -> dict[str, Any]:
+async def list_policies(
+    org_id: str = Depends(require_path_org_access),
+) -> dict[str, Any]:
     return await _policy.list(org_id)
 
 
 @router.post("/evaluate")
 async def evaluate(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     body: EvaluateRequest = Body(...),
     trace_id: str | None = Query(None),
 ) -> dict[str, Any]:
     """Evaluate all active policies for ``text`` and return a verdict.
 
-    Default is ``verdict: "allow"`` with ``live: false`` so
-    production flows don't break before a real policy exists.
-    A real policy is what flips the verdict to ``live: true``.
+    Incomplete policy sets fail closed (``block``, ``live: false``).
+    Enforced detector policies flip the envelope to ``live: true``.
     """
     return await _engine.evaluate_and_act(
         org_id, text=body.text, context=body.context,
@@ -129,7 +131,7 @@ async def evaluate(
 
 @router.post("/injection/scan")
 async def injection_scan(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     body: InjectScanRequest = Body(...),
 ) -> dict[str, Any]:
     return await _injection.scan(org_id, text=body.text)
@@ -137,7 +139,7 @@ async def injection_scan(
 
 @router.post("/pii/redact")
 async def pii_redact(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     body: PIIRedactRequest = Body(...),
 ) -> dict[str, Any]:
     return await _pii.redact(org_id, text=body.text)
@@ -145,7 +147,7 @@ async def pii_redact(
 
 @router.post("/hallucination/check")
 async def hallucination_check(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     body: HallucinationCheckRequest = Body(...),
 ) -> dict[str, Any]:
     return await _hallu.check(
@@ -155,7 +157,7 @@ async def hallucination_check(
 
 @router.post("/content/enforce")
 async def content_enforce(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     body: ContentEnforceRequest = Body(...),
 ) -> dict[str, Any]:
     return await _content.enforce(org_id, text=body.text)
@@ -163,7 +165,7 @@ async def content_enforce(
 
 @router.post("/promote-judge")
 async def promote_judge(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     body: PromoteRequest = Body(...),
 ) -> dict[str, Any]:
     return await _promote.promote(
@@ -173,7 +175,7 @@ async def promote_judge(
 
 @router.post("/firewall")
 async def firewall(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     body: FirewallRequest = Body(...),
 ) -> dict[str, Any]:
     return await _firewall.firewall(org_id, prompt=body.prompt)
@@ -181,7 +183,7 @@ async def firewall(
 
 @router.get("/log")
 async def log(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     limit: int = Query(50, ge=1, le=500),
     since: str | None = Query(None),
 ) -> dict[str, Any]:
@@ -189,7 +191,9 @@ async def log(
 
 
 @router.get("/metrics")
-async def metrics(org_id: str = Path(...)) -> dict[str, Any]:
+async def metrics(
+    org_id: str = Depends(require_path_org_access),
+) -> dict[str, Any]:
     return await _metrics.dashboard(org_id)
 
 
@@ -208,7 +212,7 @@ async def metrics(org_id: str = Path(...)) -> dict[str, Any]:
 
 @router.get("/scan-history")
 async def scan_history(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     limit: int = Query(100, ge=1, le=500),
     action_prefix: str | None = Query(
         None,
@@ -224,15 +228,38 @@ async def scan_history(
     the "Recent injection attempts" and "PII redactions" feeds.
     """
     from eden.guardrails.intervention import _fetch_intervention_log
+    from eden.storage.postgres import get_postgres_client
+
+    if await get_postgres_client() is None:
+        raise HTTPException(status_code=503, detail="Postgres unavailable")
 
     try:
         rows = await _fetch_intervention_log(org_id, limit=limit, since=None)
     except Exception as exc:  # pragma: no cover - defensive
         logger.debug("guardrails: scan-history fetch failed: %s", redact_all(str(exc)))
-        rows = []
+        raise HTTPException(
+            status_code=503,
+            detail=safe_detail(exc, fallback="Failed to load scan history"),
+        ) from exc
     if action_prefix:
-        rows = [
-            r for r in rows
-            if str(r.get("action", "")).startswith(action_prefix)
-        ]
+        prefix = action_prefix.lower()
+        filtered: list[dict[str, Any]] = []
+        for r in rows:
+            action = str(r.get("action") or "").lower()
+            reason = str(r.get("reason") or "").lower()
+            verdict = str(r.get("verdict") or "").lower()
+            if action.startswith(prefix):
+                filtered.append(r)
+                continue
+            # Legacy rows: action was not persisted — match reason/verdict.
+            if prefix == "injection" and "injection" in reason:
+                filtered.append(r)
+            elif prefix == "pii" and (
+                "pii" in reason
+                or (r.get("edited_text") and verdict in ("redact", "warn", "block"))
+            ):
+                filtered.append(r)
+            elif reason.startswith(f"action={prefix}"):
+                filtered.append(r)
+        rows = filtered
     return {"scans": rows, "count": len(rows)}

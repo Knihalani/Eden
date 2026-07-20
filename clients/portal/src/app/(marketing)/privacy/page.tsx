@@ -9,7 +9,7 @@ export const metadata: Metadata = {
     "How Eden collects, uses, retains, and protects your data. GDPR + CCPA compliant. EU residency available.",
 };
 
-{/* TODO: legal review — every clause below needs counsel sign-off before launch. */}
+// TODO: legal review — every clause below needs counsel sign-off before launch.
 
 const SECTIONS = [
   {
@@ -42,7 +42,14 @@ const SECTIONS = [
       <>
         <p>
           Before persistence, every captured body passes through the PII redaction filter
-          declared in your <Link href="/settings?tab=pii" className="text-[var(--accent)] hover:underline">PII policy</Link>.
+          declared in your{" "}
+          <Link
+            href="/sign-in?redirect_url=%2Fsettings%3Ftab%3Dpii"
+            className="text-[var(--accent)] hover:underline"
+          >
+            PII policy
+          </Link>
+          .
           The default policy masks emails, phone numbers, credit-card numbers, SSNs, and IP
           addresses. You can extend the policy with custom regex patterns or disable
           redaction per category.
@@ -85,7 +92,12 @@ const SECTIONS = [
       <>
         <p>
           Trace events and judge scores retain for the period configured in your{" "}
-          <Link href="/settings?tab=retention" className="text-[var(--accent)] hover:underline">retention policy</Link>
+          <Link
+            href="/sign-in?redirect_url=%2Fsettings%3Ftab%3Dretention"
+            className="text-[var(--accent)] hover:underline"
+          >
+            retention policy
+          </Link>
           {" "}(default 90 days for trace events, 365 days for eval aggregates). On request we
           will hard-delete an entire organisation or a specific sub-tree of resources
           within 30 days — contact <a href="mailto:privacy@eden.dev" className="text-[var(--accent)] hover:underline">privacy@eden.dev</a>.

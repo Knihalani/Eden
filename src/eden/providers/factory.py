@@ -76,6 +76,26 @@ async def active_repo_connection(org_id: str) -> dict[str, Any] | None:
         return None
 
 
+async def resolve_active_repo_id(org_id: str) -> str | None:
+    """Return the org's active ``repo_connections`` id (or full name), else None.
+
+    Intentionally does **not** fall back to an Eden ``agent_id`` — that field
+    is an agent identifier, not a GitHub/repo connection id.
+    """
+    try:
+        conn = await active_repo_connection(org_id)
+    except Exception as exc:
+        logger.debug("resolve_active_repo_id: lookup failed: %s", exc)
+        return None
+    if not conn:
+        return None
+    rid = conn.get("id")
+    if rid is not None and str(rid).strip():
+        return str(rid)
+    name = (conn.get("repo_full_name") or "").strip()
+    return name or None
+
+
 def _force_local() -> bool:
     """True when ops explicitly force the offline / local provider path."""
     return os.environ.get("EDEN_PR_PROVIDER", "").strip().lower() == "local"
@@ -173,6 +193,7 @@ async def get_repo_provider_for_org(org_id: str) -> RepoProvider:
 
 __all__ = [
     "active_repo_connection",
+    "resolve_active_repo_id",
     "get_pr_provider_for_org",
     "get_repo_provider_for_org",
 ]

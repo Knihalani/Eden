@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useEffect, useCallback, Suspense } from "react";
+import { useState, useEffect, useCallback, useRef, Suspense } from "react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useOrg } from "@/hooks/use-org";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -26,7 +26,9 @@ function DatasetsPageInner() {
   const { currentOrg } = useOrg();
   usePagePerf("/datasets");
   const toast = useToast();
+  const router = useRouter();
   const searchParams = useSearchParams();
+  const nameInputRef = useRef<HTMLInputElement>(null);
   const [datasets, setDatasets] = useState<Dataset[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -44,11 +46,10 @@ function DatasetsPageInner() {
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Failed to load datasets";
       setError(msg);
-      toast.error(msg);
     } finally {
       setLoading(false);
     }
-  }, [currentOrg?.id, toast]);
+  }, [currentOrg?.id]);
 
   useEffect(() => {
     load();
@@ -65,13 +66,13 @@ function DatasetsPageInner() {
         });
         toast.success("Trace promoted into dataset");
         const dsId = res.data?.dataset_id;
-        if (dsId) window.location.href = `/datasets/${dsId}`;
+        if (dsId) router.push(`/datasets/${dsId}`);
         else await load();
       } catch (e) {
         toast.error(e instanceof Error ? e.message : "Promote failed");
       }
     })();
-  }, [searchParams, currentOrg?.id]);
+  }, [searchParams, currentOrg?.id, load, router, toast]);
 
   if (!currentOrg) return <NoOrgState feature="Datasets" />;
 
@@ -82,7 +83,7 @@ function DatasetsPageInner() {
       const ds = await datasetsApi.create(currentOrg.id, { name: newName.trim() });
       toast.success("Dataset created");
       setNewName("");
-      window.location.href = `/datasets/${ds.id}`;
+      router.push(`/datasets/${ds.id}`);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Create failed");
     } finally {
@@ -93,6 +94,9 @@ function DatasetsPageInner() {
   const filtered = datasets.filter((d) =>
     d.name.toLowerCase().includes(filter.toLowerCase()),
   );
+  const filterActive = Boolean(filter.trim());
+  const filterMiss =
+    filterActive && !loading && !error && datasets.length > 0 && filtered.length === 0;
 
   return (
     <CoreResourcePage
@@ -128,10 +132,14 @@ function DatasetsPageInner() {
         <div className="mb-2 space-y-3">
           <div className="flex flex-wrap gap-2">
             <Input
+              ref={nameInputRef}
               placeholder="New dataset name"
               value={newName}
               onChange={(e) => setNewName(e.target.value)}
               className="max-w-xs"
+              onKeyDown={(e) => {
+                if (e.key === "Enter") void createDataset();
+              }}
             />
             <Button
               size="sm"
@@ -178,23 +186,53 @@ function DatasetsPageInner() {
               loading={loading}
               rows={filtered}
               rowKey={(r) => r.id}
-              emptyTitle="No datasets"
-              emptyDescription="Start the eval loop: resolve an issue → promote traces here → playground → experiment → regression gate."
+              emptyTitle={filterMiss ? "No matching datasets" : "No datasets"}
+              emptyDescription={
+                filterMiss
+                  ? `Nothing matches “${filter.trim()}”. Clear the filter or create a new dataset.`
+                  : "Start the eval loop: resolve an issue → promote traces here → playground → experiment → regression gate."
+              }
               emptyIcon={Database}
               emptyAction={
-                <div className="flex flex-wrap justify-center gap-2 text-sm">
-                  <Link href="/issues" className="text-[var(--accent)] hover:underline">
-                    Issues
-                  </Link>
-                  <span className="text-[var(--text-muted)]">→</span>
-                  <Link href="/evals?tab=playgrounds" className="text-[var(--accent)] hover:underline">
-                    Playground
-                  </Link>
-                  <span className="text-[var(--text-muted)]">→</span>
-                  <Link href="/evals?tab=experiments" className="text-[var(--accent)] hover:underline">
-                    Experiments
-                  </Link>
-                </div>
+                filterMiss ? (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    data-testid="datasets-clear-filter"
+                    onClick={() => setFilter("")}
+                  >
+                    Clear filter
+                  </Button>
+                ) : (
+                  <div className="flex flex-wrap items-center justify-center gap-3 text-sm">
+                    <Button
+                      size="sm"
+                      data-testid="datasets-empty-create"
+                      onClick={() => nameInputRef.current?.focus()}
+                    >
+                      <Plus className="h-3.5 w-3.5" /> Create dataset
+                    </Button>
+                    <div className="flex flex-wrap justify-center gap-2">
+                      <Link href="/issues" className="text-[var(--accent)] hover:underline">
+                        Issues
+                      </Link>
+                      <span className="text-[var(--text-muted)]">→</span>
+                      <Link
+                        href="/evals?tab=playgrounds"
+                        className="text-[var(--accent)] hover:underline"
+                      >
+                        Playground
+                      </Link>
+                      <span className="text-[var(--text-muted)]">→</span>
+                      <Link
+                        href="/evals?tab=experiments"
+                        className="text-[var(--accent)] hover:underline"
+                      >
+                        Experiments
+                      </Link>
+                    </div>
+                  </div>
+                )
               }
               columns={[
                 {

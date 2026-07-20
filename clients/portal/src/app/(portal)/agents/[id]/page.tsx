@@ -15,9 +15,9 @@
  * Now: this file is a client component that reads the active org
  * from ``useOrg()`` (which already handles Clerk → Eden
  * resolution) and fetches via the same ``agentsApi`` client the
- * rest of the portal uses. Data is loaded in a ``useEffect`` so
- * the page can render the chrome immediately and show a loading
- * skeleton while the agent list comes back.
+ * rest of the portal uses. Data is loaded via React Query so the
+ * page can render the chrome immediately and show a loading
+ * skeleton while the agent comes back.
  */
 
 import Link from "next/link";
@@ -31,7 +31,7 @@ import {
   Loader2,
 } from "lucide-react";
 import { useOrg } from "@/hooks/use-org";
-import { agentsApi } from "@/lib/api";
+import { agentsApi, ApiError } from "@/lib/api";
 import { useOrgQuery } from "@/hooks/use-api-query";
 import { queryKeys } from "@/lib/query-keys";
 import { Card } from "@/components/ui/card";
@@ -62,14 +62,6 @@ const FRAMEWORK_BADGE: Record<string, string> = {
   none: "bg-[var(--bg-tertiary)] text-[var(--text-secondary)]",
 };
 
-interface AgentRecord {
-  agent_id: string;
-  name?: string;
-  framework?: string;
-  last_seen_at?: string | null;
-  repo_url?: string | null;
-}
-
 export default function AgentDetailPage() {
   const params = useParams<{ id: string }>();
   const agentId = useMemo(
@@ -79,18 +71,22 @@ export default function AgentDetailPage() {
   const { currentOrg } = useOrg();
   const orgId = currentOrg?.id ?? null;
 
-  const agentsQuery = useOrgQuery(
-    queryKeys.agents.list(orgId, { limit: 200 }),
+  const agentQuery = useOrgQuery(
+    queryKeys.agents.detail(orgId, agentId),
     orgId,
-    () => agentsApi.list(orgId!, { limit: 200 }),
+    () => agentsApi.get(orgId!, agentId),
+    { enabled: Boolean(agentId) },
   );
 
-  const agent = useMemo(() => {
-    const list = (agentsQuery.data?.agents ?? []) as AgentRecord[];
-    return list.find((a) => a.agent_id === agentId) ?? null;
-  }, [agentsQuery.data, agentId]);
-  const loading = agentsQuery.isLoading;
-  const loadError = agentsQuery.error?.message ?? null;
+  const agent = agentQuery.data ?? null;
+  const loading = agentQuery.isLoading || agentQuery.isPending;
+  const loadError = agentQuery.error?.message ?? null;
+  const isNotFound =
+    (agentQuery.error instanceof ApiError && agentQuery.error.status === 404) ||
+    (typeof agentQuery.error === "object" &&
+      agentQuery.error !== null &&
+      "status" in agentQuery.error &&
+      (agentQuery.error as { status: number }).status === 404);
 
   const isLive = agent?.last_seen_at
     ? Date.now() - new Date(agent.last_seen_at).getTime() < 1000 * 60 * 60 * 24
@@ -114,11 +110,7 @@ export default function AgentDetailPage() {
     );
   }
 
-  if (loading && !agent) {
-    return <PageLoading size="wide" message="Loading agent…" />;
-  }
-
-  if (loadError) {
+  if (!agentId) {
     return (
       <PageContent size="narrow" className="space-y-4">
         <Link
@@ -128,28 +120,29 @@ export default function AgentDetailPage() {
           <ArrowLeft className="w-3 h-3" />
           All agents
         </Link>
-        <ErrorState
-          title="Could not load agent"
-          message={loadError}
+        <EmptyState
+          icon={Bot}
+          title="Invalid agent"
+          description="This URL is missing an agent id. Pick an agent from the list."
+          size="lg"
           action={
-            <button
-              type="button"
-              onClick={() => void agentsQuery.refetch()}
-              disabled={loading}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-[var(--accent)] text-[var(--bg-base)] rounded-lg text-sm font-medium hover:bg-[var(--accent-hover)] disabled:opacity-50 transition-colors"
+            <Link
+              href="/agents"
+              className="inline-flex min-h-11 items-center text-sm text-[var(--accent)] hover:underline"
             >
-              {loading ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : null}
-              Try again
-            </button>
+              Back to agents
+            </Link>
           }
         />
       </PageContent>
     );
   }
 
-  if (!agent) {
+  if (loading && !agent) {
+    return <PageLoading size="wide" message="Loading agent…" />;
+  }
+
+  if (isNotFound) {
     return (
       <PageContent size="narrow" className="space-y-4">
         <Link
@@ -169,6 +162,41 @@ export default function AgentDetailPage() {
     );
   }
 
+  if (loadError) {
+    return (
+      <PageContent size="narrow" className="space-y-4">
+        <Link
+          href="/agents"
+          className="inline-flex items-center gap-1 text-xs text-[var(--text-muted)] hover:text-[var(--accent)] transition-colors"
+        >
+          <ArrowLeft className="w-3 h-3" />
+          All agents
+        </Link>
+        <ErrorState
+          title="Could not load agent"
+          message={loadError}
+          action={
+            <button
+              type="button"
+              onClick={() => void agentQuery.refetch()}
+              disabled={loading}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-[var(--accent)] text-[var(--bg-base)] rounded-lg text-sm font-medium hover:bg-[var(--accent-hover)] disabled:opacity-50 transition-colors"
+            >
+              {loading ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : null}
+              Try again
+            </button>
+          }
+        />
+      </PageContent>
+    );
+  }
+
+  if (!agent) {
+    return <PageLoading size="wide" message="Loading agent…" />;
+  }
+
   return (
     <PageContent size="wide">
       <Link
@@ -181,12 +209,12 @@ export default function AgentDetailPage() {
 
       <PageHeader
         eyebrow="Agent"
-        title={agent?.name ?? agentId}
+        title={agent.name ?? agentId}
         icon={Bot}
         subtitle={
           <>
             <span className="font-mono">{agentId}</span>
-            {agent?.repo_url && repoHost ? (
+            {agent.repo_url && repoHost ? (
               <>
                 {" · "}
                 <a
@@ -204,7 +232,7 @@ export default function AgentDetailPage() {
         }
         actions={
           <div className="flex items-center gap-2">
-            {agent?.framework && (
+            {agent.framework && (
               <span
                 className={`text-[10px] font-medium uppercase tracking-wide px-2 py-1 rounded ${
                   FRAMEWORK_BADGE[agent.framework] ?? FRAMEWORK_BADGE.none
@@ -228,12 +256,12 @@ export default function AgentDetailPage() {
           <Stat
             icon={Clock}
             label="Last seen"
-            value={formatRelative(agent?.last_seen_at)}
+            value={formatRelative(agent.last_seen_at)}
           />
           <Stat
             icon={Bot}
             label="Framework"
-            value={agent?.framework ?? "—"}
+            value={agent.framework ?? "—"}
           />
           <Stat
             icon={ExternalLink}
@@ -244,6 +272,18 @@ export default function AgentDetailPage() {
       </Card>
 
       <div className="mt-4 flex flex-wrap gap-3">
+        <Link
+          href={`/agents/${encodeURIComponent(agentId)}/ledger`}
+          className="text-sm text-[var(--accent)] hover:underline"
+        >
+          Ledger →
+        </Link>
+        <Link
+          href={`/agents/${encodeURIComponent(agentId)}/artifacts`}
+          className="text-sm text-[var(--accent)] hover:underline"
+        >
+          Artifacts →
+        </Link>
         <Link
           href={`/agents/${encodeURIComponent(agentId)}/book`}
           className="text-sm text-[var(--accent)] hover:underline"

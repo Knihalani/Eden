@@ -106,7 +106,13 @@ async def _initialize_postgres_schema() -> None:
 
 
 def _initialize_qdrant_collections() -> None:
-    """Initialize Qdrant collections."""
+    """Initialize Qdrant collections.
+
+    Soft on failure: Qdrant is not required for non-vector portal paths
+    (auth, traces list via Postgres, etc.). Raising here under
+    ``EDEN_PRODUCTION=1`` previously risked taking the whole API down
+    for an Errno-99 Cloud misconfig while Postgres was healthy.
+    """
     get_qdrant_client = _get_qdrant_client()
     client = get_qdrant_client()
 
@@ -114,8 +120,10 @@ def _initialize_qdrant_collections() -> None:
         client.initialize_collections()
         logger.info("Qdrant collections initialized")
     except Exception as e:
-        logger.error(f"Failed to initialize Qdrant collections: {e}")
-        raise
+        logger.error(
+            "Failed to initialize Qdrant collections (soft — API continues): %s",
+            e,
+        )
 
 
 async def health_check() -> dict:

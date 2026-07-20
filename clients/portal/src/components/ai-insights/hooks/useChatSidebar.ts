@@ -10,11 +10,10 @@ import {
   type ToolCall,
   type ChatChart,
   type ChatCitation,
-  type ChatModelOptionId,
+  CHAT_PREFERRED_TIER,
   newMessageId,
   SIDEBAR_WIDTH,
   buildPageContext,
-  resolvePreferredTier,
 } from "../types";
 import { executeClientToolAction } from "../clientToolExecutors";
 import { expandSlashInput } from "../slashCommands";
@@ -35,7 +34,8 @@ export function useChatSidebar() {
     if (typeof window === "undefined") return false;
     return window.sessionStorage.getItem("eden:ai-sidebar:open") === "1";
   });
-  const [f70Enabled, setF70Enabled] = useState(true);
+  // Fail-closed until the public flag probe confirms f70=true.
+  const [f70Enabled, setF70Enabled] = useState(false);
   const [sessions, setSessions] = useState<Session[]>([]);
   const [sessionsError, setSessionsError] = useState<string | null>(null);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
@@ -43,7 +43,6 @@ export function useChatSidebar() {
   const [input, setInput] = useState("");
   const [streaming, setStreaming] = useState(false);
   const [sessionCostUsd, setSessionCostUsd] = useState(0);
-  const [modelOption, setModelOption] = useState<ChatModelOptionId>("auto");
   const [costEstimateUsd, setCostEstimateUsd] = useState<number | null>(null);
   const [lastTtftMs, setLastTtftMs] = useState<number | null>(null);
   const [ttftBudgetMs, setTtftBudgetMs] = useState<number | null>(null);
@@ -53,13 +52,14 @@ export function useChatSidebar() {
   const [isMobile, setIsMobile] = useState(false);
   const [showCoach, setShowCoach] = useState(false);
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  const stickToBottomRef = useRef(true);
   const panelRef = useRef<HTMLElement | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const streamingRef = useRef(false);
   const pendingPromptRef = useRef<string | null>(null);
   const submitRef = useRef<(override?: string) => Promise<void>>(async () => {});
   const navigateRef = useRef<(href: string) => void>((href) => {
-    if (typeof window !== "undefined") window.location.assign(href);
+    router.push(href);
   });
 
   const orgId = currentOrg?.id;
@@ -134,7 +134,7 @@ export function useChatSidebar() {
     return () => mq.removeEventListener("change", apply);
   }, []);
 
-  // features.f70 — public flag; fail-open so chat stays available if probe fails.
+  // features.f70 — public flag; fail-closed (hide) when probe fails or f70=false.
   useEffect(() => {
     let cancelled = false;
     fetch("/api/proxy/feature-flags", { credentials: "include" })
@@ -143,10 +143,16 @@ export function useChatSidebar() {
         return (await r.json()) as { f70?: boolean };
       })
       .then((data) => {
-        if (cancelled || !data) return;
-        if (typeof data.f70 === "boolean") setF70Enabled(data.f70);
+        if (cancelled) return;
+        if (data && typeof data.f70 === "boolean") {
+          setF70Enabled(data.f70);
+          return;
+        }
+        setF70Enabled(false);
       })
-      .catch(() => {});
+      .catch(() => {
+        if (!cancelled) setF70Enabled(false);
+      });
     return () => {
       cancelled = true;
     };
@@ -170,17 +176,26 @@ export function useChatSidebar() {
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        e.preventDefault();
-        setOpen(false);
-        stopStreaming();
+      if (e.key !== "Escape") return;
+      // Slash/mention picker owns Escape while open — don't close the sidebar.
+      const t = e.target as HTMLElement | null;
+      if (
+        t?.closest?.('[role="listbox"]') ||
+        t?.closest?.("[data-ai-picker-open]")
+      ) {
+        return;
       }
+      e.preventDefault();
+      setOpen(false);
+      stopStreaming();
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
   }, [open, stopStreaming]);
 
   // Focus trap when open (desktop aside; Sheet handles mobile via Radix).
+  // Only (re)focus session chrome when the panel opens — not on every
+  // messages.length change after send (that steals focus from the composer).
   useEffect(() => {
     if (!open || isMobile) return;
     const root = panelRef.current;
@@ -209,7 +224,7 @@ export function useChatSidebar() {
     };
     root.addEventListener("keydown", onTab);
     return () => root.removeEventListener("keydown", onTab);
-  }, [open, isMobile, messages.length]);
+  }, [open, isMobile]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -255,12 +270,19 @@ export function useChatSidebar() {
   }, [orgId]);
 
   useEffect(() => {
+    // Abort in-flight stream and clear session binding on org change to
+    // prevent cross-org contamination (session_id / messages from prior org).
+    abortRef.current?.abort();
+    abortRef.current = null;
+    streamingRef.current = false;
+    setStreaming(false);
+    setSessionsError(null);
+    setActiveSessionId((id) => (id === null ? id : null));
+    setMessages((m) => (m.length === 0 ? m : []));
+    setSessionCostUsd(0);
     if (!orgId) {
       // Guarded setters: bare setX([]) re-renders forever (new [] !== prev []).
       setSessions((s) => (s.length === 0 ? s : []));
-      setSessionsError(null);
-      setActiveSessionId((id) => (id === null ? id : null));
-      setMessages((m) => (m.length === 0 ? m : []));
       return;
     }
     refreshSessions();
@@ -344,11 +366,24 @@ export function useChatSidebar() {
     };
   }, [orgId, activeSessionId]);
 
+  // Sticky scroll: track whether the user is near the bottom. If they
+  // scrolled up to read history, do not force scrollTop on new tokens.
+  // Re-bind on open/session/messages so the listener attaches after the
+  // panel mounts (scrollRef is null while the aside is unmounted).
   useEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
-    el.scrollTop = el.scrollHeight;
-  }, [messages, streaming]);
+    const NEAR_BOTTOM_PX = 80;
+    const onScroll = () => {
+      stickToBottomRef.current =
+        el.scrollHeight - el.scrollTop - el.clientHeight < NEAR_BOTTOM_PX;
+    };
+    el.addEventListener("scroll", onScroll, { passive: true });
+    if (stickToBottomRef.current) {
+      el.scrollTop = el.scrollHeight;
+    }
+    return () => el.removeEventListener("scroll", onScroll);
+  }, [messages, streaming, open, activeSessionId]);
 
   useEffect(() => {
     return () => {
@@ -402,6 +437,7 @@ export function useChatSidebar() {
     const raw = (overrideText ?? input).trim();
     const text = expandSlashInput(raw) ?? raw;
     if (!text || streaming || !orgId) return;
+    stickToBottomRef.current = true;
     setInput("");
     dismissCoach();
     setTtftWarning(null);
@@ -428,7 +464,6 @@ export function useChatSidebar() {
     abortRef.current = controller;
     let response: Response;
     try {
-      const prefs = resolvePreferredTier(modelOption);
       response = await fetch(`/api/ai-insights/chat?org_id=${orgId}`, {
         method: "POST",
         credentials: "include",
@@ -437,8 +472,7 @@ export function useChatSidebar() {
           message: text,
           session_id: activeSessionId,
           page_context: buildPageContext(pathname),
-          preferred_model: prefs.preferred_model ?? modelOption,
-          preferred_tier: prefs.preferred_tier,
+          preferred_tier: CHAT_PREFERRED_TIER,
         }),
         signal: controller.signal,
       });
@@ -446,6 +480,15 @@ export function useChatSidebar() {
       if (controller.signal.aborted) {
         streamingRef.current = false;
         setStreaming(false);
+        setMessages((prev) => {
+          const next = prev.slice();
+          const last = next[next.length - 1];
+          if (last && last.role === "assistant" && last.streaming) {
+            next[next.length - 1] = { ...last, streaming: false };
+            return next;
+          }
+          return prev;
+        });
         return;
       }
       streamingRef.current = false;
@@ -762,6 +805,17 @@ export function useChatSidebar() {
       streamingRef.current = false;
       setStreaming(false);
       abortRef.current = null;
+      // Clear message.streaming on every stream-exit path (abort, error,
+      // premature close), not only done/stop — otherwise the cursor sticks.
+      setMessages((prev) => {
+        const next = prev.slice();
+        const last = next[next.length - 1];
+        if (last && last.role === "assistant" && last.streaming) {
+          next[next.length - 1] = { ...last, streaming: false };
+          return next;
+        }
+        return prev;
+      });
       if (orgId && !controller.signal.aborted) {
         refreshSessions();
       }
@@ -774,7 +828,6 @@ export function useChatSidebar() {
     streaming,
     refreshSessions,
     dismissCoach,
-    modelOption,
   ]);
 
   submitRef.current = submit;
@@ -811,8 +864,6 @@ export function useChatSidebar() {
     setInput,
     streaming,
     sessionCostUsd,
-    modelOption,
-    setModelOption,
     costEstimateUsd,
     lastTtftMs,
     ttftBudgetMs,

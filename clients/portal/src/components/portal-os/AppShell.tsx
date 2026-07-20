@@ -21,6 +21,9 @@ export interface AppShellProps {
  * U18 AppShell — single structural chrome for the logged-in portal.
  * Auth, org sync, and sidebar state live in `(portal)/layout.tsx`;
  * this component owns the DOM scaffold and density tokens only.
+ *
+ * Content column uses `--bg-primary` so page body reads as a clear
+ * work surface against the secondary shell / sidebar rail.
  */
 export function AppShell({
   density = "comfortable",
@@ -50,7 +53,7 @@ export function AppShell({
         <main
           id="main-content"
           className={cn(
-            "flex-1 min-w-0 flex flex-col",
+            "flex-1 min-w-0 flex flex-col bg-[var(--bg-primary)]",
             hideChrome ? "pb-0" : "pb-20 lg:pb-0",
           )}
           tabIndex={-1}

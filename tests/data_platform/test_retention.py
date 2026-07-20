@@ -89,3 +89,85 @@ class TestDataRetentionManager:
         assert report.pii_redacted_rows == 10
         assert report.archived_rows == 100
         assert len(report.errors) == 1
+
+
+@pytest.mark.asyncio
+async def test_non_trace_policies_do_not_archive_silver_events():
+    """debug_dumps / error_logs must not call archive_to_cold(silver_events)."""
+    from unittest.mock import AsyncMock, patch
+
+    mgr = DataRetentionManager(dry_run=False)
+    archive = AsyncMock(return_value=(0, 0))
+    purge_pii = AsyncMock(return_value=0)
+    cleanup_dumps = AsyncMock(return_value=0)
+    with (
+        patch.object(mgr, "archive_to_cold", archive),
+        patch.object(mgr, "purge_pii_fields", purge_pii),
+        patch.object(mgr, "cleanup_debug_dumps", cleanup_dumps),
+        patch.object(mgr, "purge_archived_telemetry", AsyncMock(return_value=0)),
+    ):
+        for data_type in ("debug_dumps", "error_logs", "audit_logs"):
+            policy = next(p for p in DEFAULT_POLICIES if p.data_type == data_type)
+            await mgr.run_retention_policy(policy)
+
+    archive.assert_not_called()
+    cleanup_dumps.assert_awaited()
+
+
+@pytest.mark.asyncio
+async def test_raw_traces_archives_silver_events_only():
+    from unittest.mock import AsyncMock, patch
+
+    mgr = DataRetentionManager(dry_run=False)
+    archive = AsyncMock(return_value=(3, 1))
+    with (
+        patch.object(mgr, "archive_to_cold", archive),
+        patch.object(mgr, "purge_pii_fields", AsyncMock(return_value=0)),
+        patch.object(mgr, "purge_archived_telemetry", AsyncMock(return_value=0)),
+    ):
+        policy = next(p for p in DEFAULT_POLICIES if p.data_type == "raw_traces")
+        report = await mgr.run_retention_policy(policy)
+
+    archive.assert_awaited()
+    assert archive.await_args.kwargs.get("table") == "silver_events"
+    assert report.archived_rows == 3
+
+
+@pytest.mark.asyncio
+async def test_archive_to_cold_skips_delete_when_s3_fails():
+    from unittest.mock import AsyncMock, MagicMock, patch
+
+    mgr = DataRetentionManager(dry_run=False)
+    fake_client = MagicMock()
+    row = {
+        "silver_event_id": "00000000-0000-0000-0000-000000000001",
+        "timestamp": datetime.now(UTC),
+    }
+    fake_client.fetch = AsyncMock(return_value=[row])
+    fake_client.execute = AsyncMock()
+    with (
+        patch.object(mgr, "_get_postgres", AsyncMock(return_value=fake_client)),
+        patch.object(mgr, "_write_s3_archive", AsyncMock(return_value=0)),
+    ):
+        archived, s3_objs = await mgr.archive_to_cold(datetime.now(UTC))
+
+    assert archived == 0
+    assert s3_objs == 0
+    fake_client.execute.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_purge_pii_passes_datetime_not_isoformat():
+    from unittest.mock import AsyncMock, MagicMock, patch
+
+    mgr = DataRetentionManager(dry_run=True)
+    fake_client = MagicMock()
+    fake_client.fetchval = AsyncMock(return_value=0)
+    before = datetime.now(UTC) - timedelta(days=30)
+    with patch.object(mgr, "_get_postgres", AsyncMock(return_value=fake_client)):
+        await mgr.purge_pii_fields(before)
+
+    arg = fake_client.fetchval.await_args.args[1]
+    assert isinstance(arg, datetime)
+    assert not isinstance(arg, str)
+

@@ -1,6 +1,13 @@
 "use client";
 
-import { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import {
+  useState,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useCallback,
+  useRef,
+} from "react";
 import { Command as Cmnd } from "cmdk";
 import { useRouter, usePathname } from "next/navigation";
 import { Search, X, ChevronRight } from "lucide-react";
@@ -10,6 +17,10 @@ import {
   COMMAND_PALETTE_RECENT_LIMIT,
 } from "@/lib/constants";
 import { buildNavCommands, type NavCommand } from "@/lib/nav-commands";
+
+/** Focusable controls inside the palette dialog (Tab trap). */
+const FOCUSABLE_SELECTOR =
+  'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
 interface CommandPaletteProps {
   open: boolean;
@@ -62,48 +73,79 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
   const pathname = usePathname();
   const [search, setSearch] = useState("");
   const [recentHrefs, setRecentHrefs] = useState<string[]>([]);
+  const lastFocusRef = useRef<HTMLElement | null>(null);
+  const wasOpenRef = useRef(false);
+  const dialogRef = useRef<HTMLDivElement | null>(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
 
+  // Track focus while closed so Esc/close restores the pre-open trigger.
+  // Capturing on open (useEffect after paint) stores the cmdk input —
+  // which unmounts on close — so focus would drop to <body> (F4).
   useEffect(() => {
-    const down = (e: KeyboardEvent) => {
-      // Cmd/Ctrl+K toggling is owned by the (portal) layout
-      // (so it lives next to the other global shortcuts like
-      // Cmd/Ctrl+B and \). Re-implementing it here would
-      // double-fire on every keystroke — the layout's
-      // setCommandPaletteOpen((prev) => !prev) and the palette's
-      // stale-closure onOpenChange(!open) both reach for the
-      // same toggle and race. The palette only owns its own
-      // Escape-close path because that's intrinsic to the
-      // popover — pressing Esc inside the input needs to bubble
-      // here even when the layout isn't paying attention.
-      if (e.key === "Escape" && open) {
+    if (open) return;
+    const track = () => {
+      const el = document.activeElement;
+      if (!(el instanceof HTMLElement) || el === document.body) return;
+      if (el.closest('[aria-label="Command palette"]')) return;
+      lastFocusRef.current = el;
+    };
+    track();
+    document.addEventListener("focusin", track);
+    return () => document.removeEventListener("focusin", track);
+  }, [open]);
+
+  // On open: move focus into the search field. On close: restore prior focus.
+  useLayoutEffect(() => {
+    if (open) {
+      wasOpenRef.current = true;
+      setRecentHrefs(readRecent());
+      const input =
+        inputRef.current ??
+        dialogRef.current?.querySelector<HTMLInputElement>("[cmdk-input]");
+      input?.focus();
+      return;
+    }
+    if (!wasOpenRef.current) return;
+    wasOpenRef.current = false;
+    const el = lastFocusRef.current;
+    if (!el || typeof el.focus !== "function") return;
+    const t = window.setTimeout(() => {
+      try {
+        if (el.isConnected) el.focus();
+      } catch {
+        /* node unmounted */
+      }
+    }, 0);
+    return () => window.clearTimeout(t);
+  }, [open]);
+
+  // Esc close + Tab focus trap. Cmd/Ctrl+K stays owned by portal chrome
+  // (dedup — do not register K here).
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
         e.preventDefault();
         onOpenChange(false);
+        return;
+      }
+      if (e.key !== "Tab" || !dialogRef.current) return;
+      const focusables =
+        dialogRef.current.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR);
+      if (focusables.length === 0) return;
+      const first = focusables[0];
+      const last = focusables[focusables.length - 1];
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
       }
     };
-
-    document.addEventListener("keydown", down);
-    return () => document.removeEventListener("keydown", down);
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
   }, [open, onOpenChange]);
-
-  // Re-read recent items each time the palette opens.
-  // F4: also capture the previously-focused element so we can restore
-  // focus to it after the palette closes (it isn't a Radix Dialog, so
-  // Radix's auto-restore doesn't apply).
-  const lastFocusRef = useRef<HTMLElement | null>(null);
-  useEffect(() => {
-    if (open) {
-      lastFocusRef.current = (document.activeElement as HTMLElement) ?? null;
-      setRecentHrefs(readRecent());
-    } else if (lastFocusRef.current && typeof lastFocusRef.current.focus === "function") {
-      // Defer to the next tick so we don't fight with anything else
-      // closing at the same time (e.g. the ⌘K handler that toggled
-      // us off also tries to refocus its trigger).
-      const t = window.setTimeout(() => {
-        try { lastFocusRef.current?.focus(); } catch { /* node unmounted */ }
-      }, 0);
-      return () => window.clearTimeout(t);
-    }
-  }, [open]);
 
   // Track the current route as recently visited (only for routes the
   // command palette knows about — random 404s shouldn't pollute the list).
@@ -176,6 +218,7 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
         onClick={() => onOpenChange(false)}
       />
       <Cmnd
+        ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-label="Command palette"
@@ -196,15 +239,17 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
         <div className="flex items-center gap-3 px-4 border-b border-[var(--border-subtle)]">
           <Search className="w-5 h-5 text-[var(--text-muted)] flex-shrink-0" />
           <Cmnd.Input
+            ref={inputRef}
             value={search}
             onValueChange={setSearch}
             placeholder="Search pages, observability, settings…"
             className="flex-1 py-4 text-sm outline-none bg-transparent placeholder:text-[var(--text-muted)]"
           />
           <button
+            type="button"
             onClick={() => onOpenChange(false)}
             aria-label="Close command palette"
-            className="p-1 hover:bg-[var(--bg-tertiary)] rounded transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--accent)]"
+            className="inline-flex items-center justify-center min-h-[44px] min-w-[44px] p-1 hover:bg-[var(--bg-tertiary)] rounded transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--accent)]"
           >
             <X className="w-4 h-4 text-[var(--text-muted)]" />
           </button>

@@ -14,14 +14,17 @@ from typing import Any
 from fastapi import APIRouter, Depends, Path, Query, Response
 from pydantic import BaseModel, Field
 
-from eden.api.deps import get_current_user, require_org_owner
+from eden.api.deps import get_current_user, require_org_owner, require_path_org_access
+from eden.api.utils.redact import redact_all
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(
     prefix="/orgs/{org_id}/finops",
     tags=["finops"],
-    dependencies=[Depends(get_current_user)],
+    dependencies=[Depends(get_current_user),
+        Depends(require_path_org_access),
+    ],
 )
 
 # Customer-facing feature kills (not Eden internal COGS).
@@ -42,7 +45,7 @@ CUSTOMER_FEATURE_KILLS: tuple[str, ...] = (
 
 @router.get("/explorer")
 async def cost_explorer(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     window_hours: int = Query(24, ge=1, le=720),
 ) -> dict[str, Any]:
     """Cost explorer: model/agent/session/feature/day + compare_previous."""
@@ -67,7 +70,7 @@ async def cost_explorer(
 
 @router.get("/export")
 async def export_cost_report(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     window_hours: int = Query(168, ge=1, le=2160),
     fmt: str = Query("csv", pattern="^(csv|jsonl)$"),
 ) -> Response:
@@ -120,7 +123,7 @@ async def export_cost_report(
 
 
 @router.get("/kill-switches")
-async def list_kill_switches(org_id: str = Path(...)) -> dict[str, Any]:
+async def list_kill_switches(org_id: str = Depends(require_path_org_access)) -> dict[str, Any]:
     """Customer feature kill-switch matrix (fail-closed unknown)."""
     from eden.llmops.feature_kills import list_feature_kills
 
@@ -140,7 +143,7 @@ class KillSwitchBody(BaseModel):
 
 @router.post("/kill-switches")
 async def upsert_kill_switch(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     body: KillSwitchBody = ...,
     user: dict = Depends(require_org_owner),
 ) -> dict[str, Any]:
@@ -187,7 +190,7 @@ async def _gateway_cache_savings(org_id: str, window_hours: int) -> float:
         )
         return float(row["saved"] or 0) if row else 0.0
     except Exception as exc:
-        logger.debug("finops: cache savings failed: %s", exc)
+        logger.debug("finops: cache savings failed: %s", redact_all(str(exc)))
         return 0.0
 
 
@@ -237,5 +240,5 @@ async def _list_events(
             )
         return out
     except Exception as exc:
-        logger.debug("finops: list events failed: %s", exc)
+        logger.debug("finops: list events failed: %s", redact_all(str(exc)))
         return []

@@ -3,14 +3,14 @@
 import Link from "next/link";
 import {
   Activity,
+  AlertTriangle,
   Zap,
   ArrowRight,
-  Key,
   BookOpen,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { Card } from "@/components/ui/card";
+import { Panel } from "@/components/ui/panel";
 import { AgentIcon } from "@/components/icons/eden-nav-icons";
 import { DOCS_QUICKSTART_URL } from "@/lib/constants";
 
@@ -25,29 +25,21 @@ type QuickLinkItem = {
   external?: boolean;
 };
 
-/** Install-forward first; secondary surfaces after. */
-const QUICK_LINKS: QuickLinkItem[] = [
-  {
-    label: "API keys",
-    description: "Create a key for SDK or gateway",
-    href: "/settings?tab=api-keys",
-    icon: Key,
-    accent: "key",
-  },
-  {
-    label: "Docs quickstart",
-    description: "Install SDK or gateway, run eden-doctor",
-    href: DOCS_QUICKSTART_URL,
-    icon: BookOpen,
-    accent: "key",
-    external: true,
-  },
+/** Post-setup surfaces — install CTAs live on the first-run checklist. */
+export const QUICK_LINKS: QuickLinkItem[] = [
   {
     label: "Traces",
     description: "Inspect every AI call",
     href: "/traces",
     icon: Activity,
     accent: "trace",
+  },
+  {
+    label: "Issues",
+    description: "Failures and regressions",
+    href: "/issues",
+    icon: AlertTriangle,
+    accent: "alert",
   },
   {
     label: "Agents",
@@ -65,7 +57,7 @@ const QUICK_LINKS: QuickLinkItem[] = [
   },
   {
     label: "Scorecard",
-    description: "Evolution lift & cost gates",
+    description: "Synthetic process gates (not org KPIs)",
     href: "/improve/scorecard",
     icon: Zap,
     accent: "cost",
@@ -76,6 +68,14 @@ const QUICK_LINKS: QuickLinkItem[] = [
     href: "/optimization",
     icon: Zap,
     accent: "cost",
+  },
+  {
+    label: "Docs",
+    description: "SDK, gateway, doctor",
+    href: DOCS_QUICKSTART_URL,
+    icon: BookOpen,
+    accent: "key",
+    external: true,
   },
 ];
 
@@ -90,8 +90,8 @@ const ACCENT_MAP: Record<Accent, string> = {
 function LinkTile({ item }: { item: QuickLinkItem }) {
   const Icon = item.icon;
   const className = cn(
-    "group flex items-start gap-3 rounded-xl border border-[var(--border-default)]",
-    "bg-[var(--bg-primary)] p-3 min-h-[44px] transition-colors hover:border-[var(--accent)]/40 hover:bg-[var(--bg-secondary)]",
+    "group flex items-start gap-3 rounded-lg",
+    "p-3 min-h-[44px] transition-colors hover:bg-[var(--bg-tertiary)]/50",
   );
   const body = (
     <>
@@ -135,15 +135,15 @@ function LinkTile({ item }: { item: QuickLinkItem }) {
 
 export function QuickLinks() {
   return (
-    <Card padding="md" className="space-y-3">
-      <h3 className="text-sm font-semibold text-[var(--text-primary)]">
+    <Panel tone="flat" padding="md" className="space-y-2">
+      <h3 className="text-sm font-semibold text-[var(--text-primary)] px-1">
         Quick links
       </h3>
-      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-1">
+      <div className="grid grid-cols-1 gap-0.5 sm:grid-cols-2 xl:grid-cols-1">
         {QUICK_LINKS.map((item) => (
           <LinkTile key={item.href} item={item} />
         ))}
       </div>
-    </Card>
+    </Panel>
   );
 }

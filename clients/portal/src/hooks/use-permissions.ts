@@ -2,6 +2,7 @@
 
 import { useMemo } from "react";
 import { useOrg } from "@/hooks/use-org";
+import { clerkRoleToEden } from "@/lib/roles";
 
 export type Permission =
   | "references:read"
@@ -16,7 +17,12 @@ export type Permission =
   | "jobs:read"
   | "jobs:write"
   | "integrations:write"
-  | "org:transfer";
+  | "org:transfer"
+  // Phase 7.3d — mirrors src/eden/api/deps.py PERMISSION_MAP
+  | "pii:edit"
+  | "judges:run"
+  | "gdpr:execute"
+  | "retention:override";
 
 const PERMISSION_MAP: Record<string, Permission[]> = {
   owner: [
@@ -33,6 +39,10 @@ const PERMISSION_MAP: Record<string, Permission[]> = {
     "jobs:write",
     "integrations:write",
     "org:transfer",
+    "pii:edit",
+    "judges:run",
+    "gdpr:execute",
+    "retention:override",
   ],
   admin: [
     "references:read",
@@ -46,8 +56,10 @@ const PERMISSION_MAP: Record<string, Permission[]> = {
     "jobs:read",
     "jobs:write",
     "integrations:write",
+    "pii:edit",
+    "judges:run",
   ],
-  member: ["references:read", "jobs:read", "jobs:write"],
+  member: ["references:read", "jobs:read", "jobs:write", "judges:run"],
   viewer: ["references:read", "jobs:read"],
 };
 
@@ -60,20 +72,23 @@ export interface UsePermissionsResult {
 /**
  * Resolve Eden role with Clerk / owner fallbacks.
  *
- * Org creators briefly have a Clerk `org:admin` membership while Eden
- * `/auth/me` still omits `role` (id mismatch or webhook lag). Without
- * these fallbacks, Connect-repo CTAs lock out the person who just
- * created the workspace.
+ * Prefer the Eden DB role from ``/auth/me`` when present. Clerk's
+ * membership role is only a fallback for sync lag (e.g. org creators
+ * briefly have Clerk ``org:admin`` while ``/auth/me`` still omits
+ * ``role``). Without the Clerk map, Connect-repo CTAs and owner-only
+ * actions lock out the person who just created the workspace.
  */
-function resolveRole(
+export function resolveRole(
   currentOrg: { role?: string; is_owner?: boolean } | null,
   clerkOrgRole: string | null,
 ): string | null {
   const edenRole = currentOrg?.role;
   if (edenRole && PERMISSION_MAP[edenRole]) return edenRole;
   if (currentOrg?.is_owner) return "owner";
-  if (clerkOrgRole === "org:admin") return "admin";
-  if (clerkOrgRole === "org:member") return "member";
+  if (clerkOrgRole) {
+    const mapped = clerkRoleToEden(clerkOrgRole);
+    if (PERMISSION_MAP[mapped]) return mapped;
+  }
   return edenRole || null;
 }
 

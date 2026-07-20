@@ -17,15 +17,22 @@ Depends on:
   - org_resource_limits (soft / hard limits per org)
   - usage_events (actual usage, aggregated in real time)
   - plan_tiers (fallback defaults when DB limits are missing)
+
+Audit 2026-07-06 — converted from BaseHTTPMiddleware to pure ASGI.
+B32 path-skip: OPTIONS, health/docs/metrics/ready, and
+``/v1/internal/health*`` short-circuit before any org/DB work.
 """
 
+from __future__ import annotations
+
 import logging
+import re
 import time
 from typing import Any
 
 from fastapi import Request
-from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.responses import JSONResponse, Response
+from starlette.responses import JSONResponse
+from starlette.types import ASGIApp, Receive, Scope, Send
 
 from eden.api.middleware.security_headers import apply_security_headers
 from eden.api.utils.auth import decode_access_token
@@ -38,8 +45,6 @@ logger = logging.getLogger(__name__)
 # matched with ``re.fullmatch`` against the *normalized* path
 # ``/orgs/{org_id}/...`` so ``/orgs/foo/redteam-references`` does NOT
 # match ``/orgs/{org_id}/references``.
-import re
-
 _PATH_PATTERNS: list[tuple[re.Pattern[str], list[str]]] = [
     (re.compile(r"^/orgs/[^/]+/invitations(?:/|$)"), ["seats"]),
     (re.compile(r"^/orgs/[^/]+/invites(?:/|$)"), ["seats"]),
@@ -64,6 +69,30 @@ GLOBAL_MUTATING_RESOURCES: list[str] = [
 # HTTP methods considered "mutating"
 MUTATING_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
 
+# B32 — paths that skip quota entirely (no org resolve, no DB).
+_SKIP_EXACT_PATHS = frozenset({
+    "/health",
+    "/docs",
+    "/openapi.json",
+    "/redoc",
+    "/metrics",
+    "/ready",
+})
+_SKIP_PATH_PREFIXES = (
+    "/docs/",
+    "/redoc/",
+    "/v1/internal/health",
+)
+
+
+def _should_skip_quota(method: str, path: str) -> bool:
+    """Return True for paths/methods that must not pay quota work."""
+    if method == "OPTIONS":
+        return True
+    if path in _SKIP_EXACT_PATHS:
+        return True
+    return path.startswith(_SKIP_PATH_PREFIXES)
+
 
 class _BudgetView:
     """Wraps the cached budget dict so ``view["cost_usd"]`` returns
@@ -87,13 +116,15 @@ class _BudgetView:
         return resource in self.budget
 
 
-class QuotaEnforcementMiddleware(BaseHTTPMiddleware):
+class QuotaEnforcementMiddleware:
     """Middleware that enforces tenant quota limits.
 
     This middleware must be registered *after* TenantRateLimitMiddleware in
     the FastAPI stack so that the request already has the org resolved and
     rate-limit headers set.  It does NOT replace rate limiting — it adds
     quota/budget enforcement on top.
+
+    Audit 2026-07-06 — pure ASGI ``__call__`` (no ``BaseHTTPMiddleware``).
     """
 
     # Staleness budget (seconds) for the cached hard-limit snapshot.
@@ -101,8 +132,8 @@ class QuotaEnforcementMiddleware(BaseHTTPMiddleware):
     # enforce safely (DL-14 Fail-closed).
     _BUDGET_STALENESS_LIMIT_S: float = 60.0
 
-    def __init__(self, app):
-        super().__init__(app)
+    def __init__(self, app: ASGIApp):
+        self.app = app
         self._usage_service: UsageService | None = None
         # Cache of the most-recent budget snapshot per org, used when
         # the DB fetch fails. The cache is Fail-closed: a snapshot
@@ -124,7 +155,7 @@ class QuotaEnforcementMiddleware(BaseHTTPMiddleware):
 
     @staticmethod
     async def _resolve_org_id(request: Request) -> str | None:
-        """Extract org_id from headers, cookies, or API key."""
+        """Extract org_id from headers, cookies, or Clerk Bearer."""
         # 1. Header (used by API keys and some cookie flows)
         org_id = request.headers.get("x-org-id")
         if org_id:
@@ -133,7 +164,24 @@ class QuotaEnforcementMiddleware(BaseHTTPMiddleware):
         # 2. API key path (x-org-api-key implies org_id is in the path or header)
         #    Already tried header above; fall through.
 
-        # 3. JWT cookie
+        # 3. Clerk Bearer — portal path; JWT carries ``o.id``.
+        auth_header = request.headers.get("authorization")
+        if auth_header and auth_header.lower().startswith("bearer "):
+            try:
+                from eden.api.utils.clerk_auth import (
+                    extract_org_id,
+                    verify_clerk_token,
+                )
+
+                clerk_payload = await verify_clerk_token(auth_header[7:].strip())
+                if clerk_payload:
+                    clerk_org = extract_org_id(clerk_payload)
+                    if clerk_org:
+                        return clerk_org
+            except Exception:
+                pass
+
+        # 4. Legacy Eden JWT cookie
         token = request.cookies.get("authorization")
         if token:
             payload = decode_access_token(token)
@@ -156,10 +204,20 @@ class QuotaEnforcementMiddleware(BaseHTTPMiddleware):
                 return resources
         return []  # ponytail: no match → no resource check on this path
 
-    async def dispatch(self, request: Request, call_next) -> Response:
-        # ── Skip for preflight, health, and docs ──
-        if request.method == "OPTIONS" or request.url.path == "/health":
-            return await call_next(request)
+    async def __call__(
+        self, scope: Scope, receive: Receive, send: Send
+    ) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        method = scope.get("method", "GET")
+        path = scope.get("path", "")
+
+        # ── Skip for preflight, health, docs, metrics, ready ──
+        if _should_skip_quota(method, path):
+            await self.app(scope, receive, send)
+            return
 
         # ── Test bypass ──
         # Integration tests mock Postgres but can't realistically
@@ -181,14 +239,25 @@ class QuotaEnforcementMiddleware(BaseHTTPMiddleware):
         from eden import config as _eden_config
 
         if not _eden_config.get_settings().quota_enabled:
-            return await call_next(request)
+            await self.app(scope, receive, send)
+            return
+
+        # Build a starlette ``Request`` shim so helpers still see
+        # headers / cookies the same way they always have.
+        request = Request(scope, receive)
 
         org_id = await self._resolve_org_id(request)
         if not org_id:
-            # Unauthenticated — let the route handler deal with auth
-            return await call_next(request)
+            # Unauthenticated — let the route handler deal with auth.
+            # Anonymous GET/HEAD short-circuit here (no DB).
+            await self.app(scope, receive, send)
+            return
 
         # ── Build quota headers (always added when we can resolve org) ──
+        # GET/HEAD: headers-only — no hard-limit enforcement below.
+        # Mutating: this warm also feeds ``_cached_block_check`` so we
+        # can skip a second ``get_budget_status`` round-trip when the
+        # snapshot is already fresh (same data, same decision).
         try:
             quota_headers = await self._build_quota_headers(org_id)
         except Exception as exc:
@@ -196,10 +265,11 @@ class QuotaEnforcementMiddleware(BaseHTTPMiddleware):
             quota_headers = {}
 
         # ── For mutating methods, enforce hard limits ──
-        if request.method in MUTATING_METHODS:
+        # GET/HEAD skip this branch entirely (B32).
+        if method in MUTATING_METHODS:
             # Path-specific resources + global (cost_usd) checked
             # together. Cost cap fires regardless of path.
-            resources = list(GLOBAL_MUTATING_RESOURCES) + self._resources_for_path(request.url.path)
+            resources = list(GLOBAL_MUTATING_RESOURCES) + self._resources_for_path(path)
             if resources:
                 # DL-14: ALWAYS check the cached snapshot first. If the
                 # cache is stale (>60s), fail closed — the cap may
@@ -209,7 +279,7 @@ class QuotaEnforcementMiddleware(BaseHTTPMiddleware):
                     org_id, resources
                 )
                 if cached_blocked:
-                    return JSONResponse(
+                    response = JSONResponse(
                         status_code=429,
                         content={
                             "detail": cached_detail,
@@ -220,35 +290,59 @@ class QuotaEnforcementMiddleware(BaseHTTPMiddleware):
                         # rate-limit policy + retry-after are preserved.
                         headers=apply_security_headers(quota_headers),
                     )
-                try:
-                    blocked, detail = await self._check_hard_limits(org_id, resources)
-                    if blocked:
-                        return JSONResponse(
-                            status_code=429,
-                            content={
-                                "detail": detail,
-                                "type": "quota_exceeded",
-                            },
-                            # F69 — apply OWASP security headers.
-                            headers=apply_security_headers(quota_headers),
+                    await response(scope, receive, send)
+                    return
+                # Headers path just warmed a fresh under-cap snapshot —
+                # re-fetching would double Postgres load without
+                # changing the admission decision. Live-check only when
+                # the cache is missing/stale (header build failed).
+                need_live = True
+                staleness = self._budget_staleness(org_id)
+                if (
+                    staleness is not None
+                    and staleness <= self._BUDGET_STALENESS_LIMIT_S
+                ):
+                    need_live = False
+                if need_live:
+                    try:
+                        blocked, detail = await self._check_hard_limits(
+                            org_id, resources
                         )
-                except Exception as exc:
-                    # Live check failed but cache says we're under the
-                    # cap. Log + proceed (graceful degrade) since the
-                    # cache is recent enough to be trustworthy.
-                    logger.warning(
-                        f"Hard-limit check failed for org {org_id}, "
-                        f"proceeding with cached snapshot: {exc}"
-                    )
+                        if blocked:
+                            response = JSONResponse(
+                                status_code=429,
+                                content={
+                                    "detail": detail,
+                                    "type": "quota_exceeded",
+                                },
+                                # F69 — apply OWASP security headers.
+                                headers=apply_security_headers(quota_headers),
+                            )
+                            await response(scope, receive, send)
+                            return
+                    except Exception as exc:
+                        # Live check failed but cache says we're under the
+                        # cap. Log + proceed (graceful degrade) since the
+                        # cache is recent enough to be trustworthy.
+                        logger.warning(
+                            f"Hard-limit check failed for org {org_id}, "
+                            f"proceeding with cached snapshot: {exc}"
+                        )
 
-        # ── Proceed to handler ──
-        response = await call_next(request)
+        # ── Proceed to handler; inject quota headers via send-wrapper ──
+        header_pairs = [
+            (k.lower().encode("latin1"), str(v).encode("latin1"))
+            for k, v in quota_headers.items()
+        ]
 
-        # ── Attach quota headers ──
-        for key, value in quota_headers.items():
-            response.headers[key] = str(value)
+        async def send_wrapper(message: dict) -> None:
+            if message["type"] == "http.response.start" and header_pairs:
+                headers = message.get("headers") or []
+                headers.extend(header_pairs)
+                message["headers"] = headers
+            await send(message)
 
-        return response
+        await self.app(scope, receive, send_wrapper)
 
     async def _build_quota_headers(self, org_id: str) -> dict[str, str]:
         """Fetch budget status and return as HTTP headers.
@@ -369,7 +463,7 @@ class QuotaEnforcementMiddleware(BaseHTTPMiddleware):
         """Check hard limits using the cached budget snapshot.
 
         LP-10 Fail-open on missing/stale cache: return
-        ``(False, "")`` so ``dispatch`` proceeds to the live
+        ``(False, "")`` so ``__call__`` proceeds to the live
         ``_check_hard_limits`` path (which warms the cache on
         success). Only block when a *fresh* snapshot shows the
         org is over / near a hard cap.

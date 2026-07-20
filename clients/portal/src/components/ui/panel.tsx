@@ -5,12 +5,12 @@ import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/utils";
 
 /**
- * Panel — flat surface with no border. Used for grouping related
- * content that doesn't need a card affordance: list-section dividers,
- * data groupings, status containers. Differentiates from Card by
- * absence of border + shadow so the visual hierarchy isn't flat
- * (every card looking the same). Adds rhythm by varying surface
- * recipes across a page.
+ * Panel — flat surface with no outer border. Use for grouping related
+ * content that does not need a card affordance: list sections, data
+ * wells, status blocks. Prefer Panel over Card when nesting or when
+ * the page already has bordered tables — avoids border-stack chrome.
+ *
+ * Card = interactive / true container. Panel = grouping without a box.
  */
 const panelVariants = cva(
   "rounded-xl overflow-hidden",

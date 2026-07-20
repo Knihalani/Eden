@@ -14,13 +14,6 @@ import { notFound } from "next/navigation";
  * doesn't resolve to a real route under (marketing) / (portal) /
  * (auth). It calls notFound(), which renders the global
  * not-found.tsx without requiring auth.
- *
- * (portal) has its own [...notFound] catch-all for unknown paths
- * inside (portal). The two work together: a route like
- * /this-route-does-not-exist at the root falls through the
- * root-level matcher to this file (because it's not under
- * (portal)); a route like /portal/whatever-typo under (portal)
- * falls through to (portal)'s [...notFound] instead.
  */
 export default function GlobalCatchAllNotFound() {
   notFound();

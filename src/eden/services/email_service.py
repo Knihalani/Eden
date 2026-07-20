@@ -11,6 +11,16 @@ from eden.config import get_settings
 
 logger = logging.getLogger(__name__)
 
+_HTTPX: httpx.AsyncClient | None = None
+
+
+def _shared_httpx(timeout: float = 30.0) -> httpx.AsyncClient:
+    global _HTTPX
+    if _HTTPX is None or _HTTPX.is_closed:
+        _HTTPX = httpx.AsyncClient(timeout=timeout)
+    return _HTTPX
+
+
 # SendGrid API endpoint
 SENDGRID_API_URL = "https://api.sendgrid.com/v3/mail/send"
 
@@ -95,36 +105,36 @@ class EmailService:
         }
 
         try:
-            async with httpx.AsyncClient() as client:
-                response = await client.post(
-                    SENDGRID_API_URL,
-                    json=payload,
-                    headers={
-                        "Authorization": f"Bearer {api_key}",
-                        "Content-Type": "application/json",
-                    },
-                    timeout=30.0,
-                )
+            # Do NOT ``async with`` the shared client — that acloses it.
+            client = _shared_httpx(30.0)
+            response = await client.post(
+                SENDGRID_API_URL,
+                json=payload,
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json",
+                },
+            )
 
-                if response.status_code == 202:
-                    # F65 — recipient email is PII. Keep the
-                    # domain so the operator can still
-                    # attribute the log line, but redact the
-                    # local-part.
-                    recipient_domain = to_email.rsplit("@", 1)[-1] if "@" in to_email else "unknown"
-                    logger.info(f"Email sent successfully to ***@{recipient_domain}")
-                    return EmailResult(status="sent")
-                else:
-                    # F65 — recipient email is PII. The
-                    # SendGrid error body is logged as-is —
-                    # SendGrid does not echo the recipient
-                    # in error bodies so it's safe to leave.
-                    recipient_domain = to_email.rsplit("@", 1)[-1] if "@" in to_email else "unknown"
-                    logger.error(
-                        f"Failed to send email to ***@{recipient_domain}. "
-                        f"Status: {response.status_code}, Body: {response.text}"
-                    )
-                    return EmailResult(status="failed")
+            if response.status_code == 202:
+                # F65 — recipient email is PII. Keep the
+                # domain so the operator can still
+                # attribute the log line, but redact the
+                # local-part.
+                recipient_domain = to_email.rsplit("@", 1)[-1] if "@" in to_email else "unknown"
+                logger.info(f"Email sent successfully to ***@{recipient_domain}")
+                return EmailResult(status="sent")
+            else:
+                # F65 — recipient email is PII. The
+                # SendGrid error body is logged as-is —
+                # SendGrid does not echo the recipient
+                # in error bodies so it's safe to leave.
+                recipient_domain = to_email.rsplit("@", 1)[-1] if "@" in to_email else "unknown"
+                logger.error(
+                    f"Failed to send email to ***@{recipient_domain}. "
+                    f"Status: {response.status_code}, Body: {response.text}"
+                )
+                return EmailResult(status="failed")
 
         except httpx.TimeoutException:
             # F65 — recipient email is PII.

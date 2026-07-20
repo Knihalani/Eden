@@ -285,7 +285,15 @@ async def openai_fine_tuning_webhook(
         raise HTTPException(status_code=401, detail="invalid webhook signature")
 
     import json
-    payload = json.loads(body) if body else {}
+    try:
+        payload = json.loads(body) if body else {}
+    except (json.JSONDecodeError, UnicodeDecodeError, TypeError, ValueError) as exc:
+        raise HTTPException(
+            status_code=400,
+            detail="invalid webhook JSON body",
+        ) from exc
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=400, detail="webhook body must be a JSON object")
     parsed = parse_openai_webhook_payload(payload)
     if parsed["ignored"] or not parsed["fine_tune_id"]:
         return _ok({"ignored": True, "event_type": parsed["event_type"]})

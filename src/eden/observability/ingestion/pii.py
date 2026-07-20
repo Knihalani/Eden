@@ -36,6 +36,84 @@ from eden.observability.ingestion.pii_policy import resolve_policy
 logger = logging.getLogger(__name__)
 
 
+def _fail_closed(policy: PIIPolicy) -> bool:
+    return bool(
+        policy.fail_closed_on_credentials
+        or getattr(policy, "mode", None) == "fail_closed"
+    )
+
+
+def _mask_value_sync(
+    masker: PIIMasker,
+    value: Any,
+    *,
+    policy: PIIPolicy,
+    fail_open_log: str,
+) -> Any:
+    """Synchronous mask helper used inside ``to_thread`` workers."""
+    try:
+        return masker.mask(value)
+    except PIIMaskingError:
+        raise
+    except Exception as exc:
+        if _fail_closed(policy):
+            raise
+        logger.warning(fail_open_log.format(exc=exc))
+        return value
+
+
+def _mask_list_sync(
+    items: list[Any],
+    *,
+    masker: PIIMasker,
+    policy: PIIPolicy,
+) -> list[Any]:
+    """Mask a list in one thread (avoids N sequential ``to_thread`` awaits)."""
+    out: list[Any] = []
+    for item in items:
+        if item is None:
+            out.append(item)
+        elif isinstance(item, list):
+            out.append(_mask_list_sync(item, masker=masker, policy=policy))
+        elif isinstance(item, (str, dict)):
+            out.append(
+                _mask_value_sync(
+                    masker,
+                    item,
+                    policy=policy,
+                    fail_open_log=(
+                        "PII pre-mask failed on list item; "
+                        "persisting unmasked: {exc}"
+                    ),
+                )
+            )
+        else:
+            out.append(item)
+    return out
+
+
+def _mask_attributes_sync(
+    attributes: dict[str, Any],
+    *,
+    masker: PIIMasker,
+) -> dict[str, Any]:
+    """Mask all string attribute values in one thread hop."""
+    out: dict[str, Any] = {}
+    for key, value in attributes.items():
+        if not isinstance(value, str):
+            out[key] = value
+            continue
+        try:
+            masked = masker.mask(value)
+            out[key] = masked if isinstance(masked, str) else str(masked)
+        except PIIMaskingError:
+            raise
+        except Exception as exc:
+            logger.debug(f"attribute {key} PII mask failed: {exc}")
+            out[key] = value
+    return out
+
+
 async def mask_payload(
     payload: Any,
     *,
@@ -54,31 +132,24 @@ async def mask_payload(
         if tenant_id is not None
         else PIIPolicy()
     )
+    masker = PIIMasker(policy=policy)
 
-    if isinstance(payload, str):
-        masker = PIIMasker(policy=policy)
-        try:
-            return await asyncio.to_thread(masker.mask, payload)
-        except PIIMaskingError:
-            raise
-        except Exception as exc:
-            if policy.fail_closed_on_credentials or getattr(policy, "mode", None) == "fail_closed":
-                raise
-            logger.warning(f"PII pre-mask failed on string; persisting unmasked: {exc}")
-            return payload
     if isinstance(payload, list):
-        return [await mask_payload(item, tenant_id=tenant_id) for item in payload]
-    if isinstance(payload, dict):
-        masker = PIIMasker(policy=policy)
-        try:
-            return await asyncio.to_thread(masker.mask, payload)
-        except PIIMaskingError:
-            raise
-        except Exception as exc:
-            if policy.fail_closed_on_credentials or getattr(policy, "mode", None) == "fail_closed":
-                raise
-            logger.warning(f"PII pre-mask failed; persisting unmasked: {exc}")
-            return payload
+        return await asyncio.to_thread(
+            _mask_list_sync, payload, masker=masker, policy=policy
+        )
+    if isinstance(payload, (str, dict)):
+        return await asyncio.to_thread(
+            _mask_value_sync,
+            masker,
+            payload,
+            policy=policy,
+            fail_open_log=(
+                "PII pre-mask failed; persisting unmasked: {exc}"
+                if isinstance(payload, dict)
+                else "PII pre-mask failed on string; persisting unmasked: {exc}"
+            ),
+        )
     return payload
 
 
@@ -100,18 +171,6 @@ async def mask_attributes(
         else PIIPolicy()
     )
     masker = PIIMasker(policy=policy)
-
-    out: dict[str, str] = {}
-    for key, value in attributes.items():
-        if not isinstance(value, str):
-            out[key] = value
-            continue
-        try:
-            masked = await asyncio.to_thread(masker.mask, value)
-            out[key] = masked if isinstance(masked, str) else str(masked)
-        except PIIMaskingError:
-            raise
-        except Exception as exc:
-            logger.debug(f"attribute {key} PII mask failed: {exc}")
-            out[key] = value
-    return out
+    return await asyncio.to_thread(
+        _mask_attributes_sync, attributes, masker=masker
+    )

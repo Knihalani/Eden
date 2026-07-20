@@ -11,6 +11,7 @@ import asyncio
 import logging
 import time
 from collections import OrderedDict
+from typing import Any
 
 from eden.api.utils.redact import redact_all
 
@@ -21,6 +22,10 @@ logger = logging.getLogger(__name__)
 _MAX_TRACKED_KEYS = 50_000
 
 _AUTH_REDIS_PREFIX = "eden:auth-ratelimit"
+# Cached Script handle (EVALSHA). Avoids shipping the full Lua source
+# on every auth rate-limit check once Redis has the SHA.
+_auth_sliding_window_script: Any | None = None
+_AUTH_REDIS_TIMEOUT_S = 2.0
 
 _SLIDING_WINDOW_LUA = """
 local key = KEYS[1]
@@ -51,49 +56,80 @@ async def _redis_sliding_window_check(
     key: str,
     max_requests: int,
     window_seconds: float,
-) -> float | None:
+) -> tuple[bool, float | None]:
     """Distributed auth rate-limit check.
 
-    Returns ``None`` when the request is allowed, a positive
-    ``retry_after`` seconds value when denied, or raises no exception
-    on Redis failure (caller should fall back to in-memory).
+    Returns ``(handled, retry_after)``:
+      * ``(True, None)`` — Redis allowed the request (already counted)
+      * ``(True, float)`` — Redis denied; ``retry_after`` seconds
+      * ``(False, None)`` — Redis unavailable; caller must use in-memory
     """
+    global _auth_sliding_window_script
+
     try:
         from eden.storage.redis import get_redis_client
     except Exception:
-        return None
+        return False, None
 
     try:
         client = await get_redis_client()
     except Exception:
-        return None
+        return False, None
 
     if client is None:
-        return None
+        return False, None
 
     now = time.time()
     window_start = now - window_seconds
     redis_key = f"{_AUTH_REDIS_PREFIX}:{key}"
 
     try:
-        result = await client.eval(
-            _SLIDING_WINDOW_LUA,
-            1,
-            redis_key,
-            now,
-            window_start,
-            max_requests,
-            int(window_seconds) + 1,
-        )
+        script = _auth_sliding_window_script
+        if script is None:
+            # Prefer register_script (EVALSHA) when available; fall
+            # back to eval for fakes / older clients.
+            register = getattr(client, "register_script", None)
+            if callable(register):
+                script = register(_SLIDING_WINDOW_LUA)
+                _auth_sliding_window_script = script
+            else:
+                script = None
+
+        if script is not None:
+            result = await asyncio.wait_for(
+                script(
+                    keys=[redis_key],
+                    args=[
+                        now,
+                        window_start,
+                        max_requests,
+                        int(window_seconds) + 1,
+                    ],
+                ),
+                timeout=_AUTH_REDIS_TIMEOUT_S,
+            )
+        else:
+            result = await asyncio.wait_for(
+                client.eval(
+                    _SLIDING_WINDOW_LUA,
+                    1,
+                    redis_key,
+                    now,
+                    window_start,
+                    max_requests,
+                    int(window_seconds) + 1,
+                ),
+                timeout=_AUTH_REDIS_TIMEOUT_S,
+            )
         if isinstance(result, list) and len(result) == 2 and result[0] == -1:
-            return float(result[1])
-        return None
+            return True, float(result[1])
+        return True, None
     except Exception as exc:
         logger.debug(
             "auth rate limit Redis path failed: %s",
             redact_all(str(exc)),
         )
-        return None
+        return False, None
 
 
 class RateLimitExceeded(Exception):
@@ -142,11 +178,16 @@ class SlidingWindowRateLimiter:
             use_redis = False
 
         if use_redis:
-            retry_after = await _redis_sliding_window_check(
+            handled, retry_after = await _redis_sliding_window_check(
                 key, self.max_requests, self.window_seconds,
             )
-            if retry_after is not None:
-                raise RateLimitExceeded(retry_after=retry_after)
+            if handled:
+                # Redis owned the decision — do not also bump the
+                # in-memory window (that previously doubled work and
+                # desynced multi-worker counters when distributed).
+                if retry_after is not None:
+                    raise RateLimitExceeded(retry_after=retry_after)
+                return
 
         now = time.monotonic()
         cutoff = now - self.window_seconds

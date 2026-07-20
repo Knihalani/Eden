@@ -21,7 +21,7 @@ from typing import Any
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from pydantic import BaseModel, EmailStr, Field
 
-from eden.api.deps import get_current_user
+from eden.api.deps import get_current_user, require_path_org_access
 from eden.api.utils.redact import redact_all
 from eden.services import compliance_jobs as jobs
 
@@ -162,8 +162,8 @@ class OrgDeleteAccepted(BaseModel):
     summary="Hard-delete an org's data (offboarding)",
 )
 async def delete_org_data(
-    org_id: str,
     background_tasks: BackgroundTasks,
+    org_id: str = Depends(require_path_org_access),
     user: dict[str, Any] = Depends(get_current_user),
 ) -> OrgDeleteAccepted:
     """Delete an org's data for offboarding. Requires org owner."""

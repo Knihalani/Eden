@@ -26,11 +26,16 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from fastapi import APIRouter, Body, Depends, Path
+from fastapi import APIRouter, Body, Depends, HTTPException, Path
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
-from eden.api.deps import get_current_user, require_feature_flag
+from eden.api.deps import (
+    _try_resolve_token_payload,
+    get_current_user,
+    require_feature_flag,
+    resolve_path_org_access,
+)
 from eden.observability.checkpoint.rewind import CheckpointService
 from eden.observability.custom_properties.service import CustomPropertiesService
 from eden.observability.live_tail.service import LiveTailService
@@ -40,12 +45,22 @@ from eden.observability.workflow.graph_builder import WorkflowGraphBuilder
 
 logger = logging.getLogger(__name__)
 
+
+async def _require_path_org(
+    org_id: str = Path(..., description="Organization ID"),
+    user: dict = Depends(get_current_user),
+    payload: dict | None = Depends(_try_resolve_token_payload),
+) -> str:
+    _, eden_org = await resolve_path_org_access(org_id, user, payload)
+    return eden_org
+
+
 router = APIRouter(
     prefix="/orgs/{org_id}/intelligence/replay",
     tags=["intelligence-replay"],
     dependencies=[
         Depends(require_feature_flag("intelligence_gap_v0")),
-        Depends(get_current_user),
+        Depends(_require_path_org),
     ],
 )
 
@@ -109,7 +124,7 @@ class CreateReplaySessionRequest(BaseModel):
 # ─── Routes ────────────────────────────────────────────────────────
 @router.post("/sessions")
 async def create_replay_session(
-    org_id: str = Path(...),
+    org_id: str = Depends(_require_path_org),
     body: CreateReplaySessionRequest = Body(...),
 ) -> dict[str, Any]:
     """Create a new replay session anchored to ``trace_id``.
@@ -129,9 +144,30 @@ async def create_replay_session(
     from eden.storage.postgres import get_postgres_client
 
     client = await get_postgres_client()
+    if client is None:
+        raise HTTPException(status_code=503, detail="Postgres unavailable")
 
     # Find-or-create pattern. If (org, trace, name) already exists,
     # return the existing id; otherwise insert a new row.
+    try:
+        return await _create_replay_session_row(client, org_id, body)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        msg = str(exc).lower()
+        if "invalid input syntax for type uuid" in msg:
+            raise HTTPException(status_code=400, detail="Invalid organization id") from exc
+        if "foreign key" in msg:
+            raise HTTPException(status_code=404, detail="Organization not found") from exc
+        if "unique" in msg or "duplicate" in msg:
+            raise HTTPException(status_code=409, detail="Replay session conflict") from exc
+        logger.warning("create_replay_session failed: %s", exc)
+        raise HTTPException(status_code=503, detail="Failed to create replay session") from exc
+
+
+async def _create_replay_session_row(client: Any, org_id: str, body: CreateReplaySessionRequest) -> dict[str, Any]:
+    import uuid as _uuid
+
     if body.name is not None:
         existing = await client.fetchrow(
             """
@@ -170,7 +206,7 @@ async def create_replay_session(
 
 @router.post("/{trace_id}/replay")
 async def replay_trace(
-    org_id: str = Path(...),
+    org_id: str = Depends(_require_path_org),
     trace_id: str = Path(...),
     body: ReplayRequest = ReplayRequest(),
 ) -> dict[str, Any]:
@@ -181,7 +217,7 @@ async def replay_trace(
 
 @router.post("/diff")
 async def diff_traces(
-    org_id: str = Path(...),
+    org_id: str = Depends(_require_path_org),
     body: DiffRequest = Body(...),
 ) -> dict[str, Any]:
     return await _replay.diff_traces(
@@ -191,7 +227,7 @@ async def diff_traces(
 
 @router.get("/{trace_id}/workflow")
 async def workflow_graph(
-    org_id: str = Path(...),
+    org_id: str = Depends(_require_path_org),
     trace_id: str = Path(...),
 ) -> dict[str, Any]:
     return await _workflow.build(org_id, trace_id)
@@ -199,7 +235,7 @@ async def workflow_graph(
 
 @router.post("/{trace_id}/subgraph")
 async def workflow_subgraph(
-    org_id: str = Path(...),
+    org_id: str = Depends(_require_path_org),
     trace_id: str = Path(...),
     body: SubgraphRequest = Body(...),
 ) -> dict[str, Any]:
@@ -210,7 +246,7 @@ async def workflow_subgraph(
 
 @router.get("/live-tail")
 async def live_tail(
-    org_id: str = Path(...),
+    org_id: str = Depends(_require_path_org),
     filter_agent_id: str | None = None,
     filter_event_type: str | None = None,
 ) -> StreamingResponse:
@@ -239,7 +275,7 @@ async def live_tail(
 
 @router.post("/{trace_id}/checkpoint/rewind")
 async def rewind_checkpoint(
-    org_id: str = Path(...),
+    org_id: str = Depends(_require_path_org),
     trace_id: str = Path(...),
     body: RewindRequest = Body(...),
 ) -> dict[str, Any]:
@@ -250,7 +286,7 @@ async def rewind_checkpoint(
 
 @router.get("/{trace_id}/checkpoints")
 async def list_checkpoints(
-    org_id: str = Path(...),
+    org_id: str = Depends(_require_path_org),
     trace_id: str = Path(...),
 ) -> dict[str, Any]:
     return await _checkpoint.list_checkpoints(org_id, trace_id)
@@ -268,7 +304,7 @@ async def list_checkpoints(
 # themselves are stateless and safe to instantiate per request.
 @router.post("/{trace_id}/decision/path")
 async def decision_path(
-    org_id: str = Path(...),
+    org_id: str = Depends(_require_path_org),
     trace_id: str = Path(...),
 ) -> dict[str, Any]:
     from eden.decision.path_reconstructor import DecisionPathReconstructor
@@ -278,7 +314,7 @@ async def decision_path(
 
 @router.post("/{trace_id}/decision/explain")
 async def decision_explain(
-    org_id: str = Path(...),
+    org_id: str = Depends(_require_path_org),
     trace_id: str = Path(...),
 ) -> dict[str, Any]:
     from eden.decision.reasoning_explainer import ReasoningTraceExplainer
@@ -288,7 +324,7 @@ async def decision_explain(
 
 @router.get("/{trace_id}/decision/alternatives")
 async def decision_alternatives(
-    org_id: str = Path(...),
+    org_id: str = Depends(_require_path_org),
     trace_id: str = Path(...),
 ) -> dict[str, Any]:
     from eden.decision.alternatives import DecisionAlternatives
@@ -298,7 +334,7 @@ async def decision_alternatives(
 
 @router.post("/{trace_id}/decision/score")
 async def decision_score(
-    org_id: str = Path(...),
+    org_id: str = Depends(_require_path_org),
     trace_id: str = Path(...),
 ) -> dict[str, Any]:
     from eden.decision.decision_scorer import DecisionScorer
@@ -308,7 +344,7 @@ async def decision_score(
 
 @router.get("/{trace_id}/decision/trajectory")
 async def decision_trajectory(
-    org_id: str = Path(...),
+    org_id: str = Depends(_require_path_org),
     trace_id: str = Path(...),
 ) -> dict[str, Any]:
     from eden.decision.trajectory_analyzer import AgentTrajectoryAnalyzer
@@ -318,7 +354,7 @@ async def decision_trajectory(
 
 @router.get("/conversation/{session_id}")
 async def conversation_history(
-    org_id: str = Path(...),
+    org_id: str = Depends(_require_path_org),
     session_id: str = Path(...),
     limit: int = 100,
     conversation_id: str | None = None,
@@ -330,7 +366,7 @@ async def conversation_history(
 
 @router.post("/conversation/message")
 async def add_message(
-    org_id: str = Path(...),
+    org_id: str = Depends(_require_path_org),
     body: AddMessageRequest = Body(...),
 ) -> dict[str, Any]:
     return await _messages.add_message(
@@ -344,7 +380,7 @@ async def add_message(
 
 @router.post("/{trace_id}/properties")
 async def set_custom_properties(
-    org_id: str = Path(...),
+    org_id: str = Depends(_require_path_org),
     trace_id: str = Path(...),
     body: CustomPropertiesRequest = Body(...),
 ) -> dict[str, Any]:
@@ -355,7 +391,7 @@ async def set_custom_properties(
 
 @router.get("/{trace_id}/properties")
 async def list_custom_properties(
-    org_id: str = Path(...),
+    org_id: str = Depends(_require_path_org),
     trace_id: str = Path(...),
 ) -> dict[str, Any]:
     return await _custom_props.list(org_id, trace_id=trace_id)

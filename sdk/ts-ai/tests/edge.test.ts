@@ -117,4 +117,70 @@ describe("EdenSDK edge cases", () => {
       globalThis.fetch = originalFetch;
     }
   });
+
+  it("await flush() during in-flight drain waits then ships events emitted mid-flush", async () => {
+    // Regression: concurrent flush() used to return immediately
+    // while another POST was in flight, so await flush() after
+    // emit-during-flush could resolve before the new events shipped.
+    let resolveFirst: (() => void) | null = null;
+    let firstPosted = false;
+    const bodies: unknown[] = [];
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async (_input: RequestInfo | URL, init?: RequestInit) => {
+      if (!firstPosted) {
+        firstPosted = true;
+        await new Promise<void>((r) => {
+          resolveFirst = r;
+        });
+      }
+      try {
+        const { parseFetchBody } = await import("./_parseBody.js");
+        bodies.push(parseFetchBody(init));
+      } catch {
+        bodies.push(init?.body);
+      }
+      return new Response("{}", { status: 200 });
+    }) as unknown as typeof fetch;
+
+    try {
+      const sdk = new EdenSDK({
+        orgId: "x",
+        apiKey: "k",
+        flushIntervalMs: 60_000,
+        maxBatchSize: 100,
+      });
+      sdk.emit({
+        eventId: "evt_0",
+        tenantId: "x",
+        projectId: "default",
+        traceId: "trc_0",
+        realm: "production",
+        eventType: "agent.run",
+        timestamp: new Date().toISOString(),
+        sourceFormat: "openai",
+        payload: { i: 0 },
+      });
+      const first = sdk.flush();
+      await Promise.resolve();
+      sdk.emit({
+        eventId: "evt_1",
+        tenantId: "x",
+        projectId: "default",
+        traceId: "trc_1",
+        realm: "production",
+        eventType: "agent.run",
+        timestamp: new Date().toISOString(),
+        sourceFormat: "openai",
+        payload: { i: 1 },
+      });
+      const second = sdk.flush();
+      resolveFirst!();
+      await Promise.all([first, second]);
+      // First POST had evt_0; second drain should POST evt_1.
+      expect(bodies.length).toBe(2);
+      await sdk.dispose();
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
 });

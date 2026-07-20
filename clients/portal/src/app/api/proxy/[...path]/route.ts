@@ -18,7 +18,16 @@
  */
 import { type NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
-import { forwardToBackend, proxyError, retryAfterMs, RETRY_AFTER_DEFAULT_MS } from "@/lib/proxy";
+import {
+  forwardToBackend,
+  pipeSseUpstream,
+  proxyError,
+  proxyRequestId,
+  retryAfterMs,
+  RETRY_AFTER_DEFAULT_MS,
+  streamHandshakeFailure,
+  streamHandshakeFromUpstream,
+} from "@/lib/proxy";
 
 /** Must be ≥ proxy ``AbortSignal.timeout(25_000)`` so the platform
  *  does not kill the isolate mid-forward (would surface as 504 and
@@ -169,6 +178,11 @@ async function handle(
         if (authorization) upstreamHeaders.authorization = authorization;
         const cookieHeader = request.headers.get("cookie");
         if (cookieHeader) upstreamHeaders.cookie = cookieHeader;
+        // Stamp the same request id FastAPI / streamHandshakeFailure
+        // will echo so SSE failures stay correlatable.
+        if (!upstreamHeaders["x-request-id"] && !upstreamHeaders["X-Request-ID"]) {
+          upstreamHeaders["X-Request-ID"] = proxyRequestId(request);
+        }
         return fetch(
           `${FASTAPI_URL}${upstreamPath}${search}`,
           {
@@ -186,70 +200,31 @@ async function handle(
         upstream = await dialUpstream();
       }
 
-      if (!upstream.ok || !upstream.body) {
-        // Hard failure after the single permitted handshake
-        // retry. Surface the upstream status (429, 502, 503,
-        // …) verbatim with a small JSON envelope so client-side
-        // SSE consumers see a structured error instead of a bare
-        // text body. ``EventSource`` will only auto-reconnect on
-        // a status we explicitly opt out of by setting
-        // ``readyState`` ourselves — the consumer-side reconnect
-        // policy is owned by the SSE hook, not the proxy.
-        //
-        // Forward Retry-After from the still-throttled upstream so
-        // a caller that inspects headers (not just the JSON body)
-        // sees the real cooldown instead of nothing.
-        const failureHeaders: Record<string, string> = {
-          "Content-Type": "application/json",
-          "Cache-Control": "no-store",
-        };
-        const retryAfter = upstream.headers.get("Retry-After");
-        if (retryAfter) failureHeaders["Retry-After"] = retryAfter;
-        return new Response(
-          JSON.stringify({
-            detail: "Upstream stream error",
-            upstream_status: upstream.status,
-          }),
-          {
-            status: upstream.status || 502,
-            headers: failureHeaders,
-          },
-        );
+      if (!upstream.ok) {
+        // Preserve FastAPI ``{error, detail, request_id}`` envelopes
+        // (Wave 1.5) — shared with dedicated org stream proxies.
+        return streamHandshakeFromUpstream({
+          request,
+          upstream,
+          fallbackDetail: "Upstream stream error",
+        });
       }
-      // Pipe upstream.body through unchanged. No buffering, no
-      // transform — the SSE protocol is byte-stable and any
-      // ``JSON.parse`` here would corrupt multi-byte UTF-8 events.
-      const stream = new ReadableStream({
-        start(controller) {
-          const reader = upstream.body!.getReader();
-          const pump = async () => {
-            try {
-              while (true) {
-                const { done, value } = await reader.read();
-                if (done) {
-                  controller.close();
-                  return;
-                }
-                controller.enqueue(value);
-              }
-            } catch {
-              controller.close();
-            }
-          };
-          pump();
-        },
-      });
-      return new Response(stream, {
-        status: upstream.status,
-        headers: {
-          "Content-Type": "text/event-stream",
-          "Cache-Control": "no-cache, no-transform",
-          Connection: "keep-alive",
-          "X-Accel-Buffering": "no",
-        },
+
+      if (!upstream.body) {
+        return streamHandshakeFailure({
+          request,
+          upstreamStatus: upstream.status || 502,
+          fallbackDetail: "Upstream stream error",
+        });
+      }
+      // Pipe upstream.body through with abort-aware cleanup so a
+      // client disconnect cancels the FastAPI reader (Wave 9.4).
+      return pipeSseUpstream(upstream, {
+        heartbeatMs: 15_000,
+        signal: request.signal,
       });
     }
-    return await forwardToBackend(upstreamPath + search, {
+    const upstreamRes = await forwardToBackend(upstreamPath + search, {
       method: request.method as "GET" | "POST" | "PUT" | "PATCH" | "DELETE",
       body,
       cookieHeader: request.headers.get("cookie") ?? undefined,
@@ -265,8 +240,13 @@ async function handle(
         undefined,
       stream: false,
     });
+    return upstreamRes;
   } catch (error) {
-    return proxyError(error, `Proxy request to ${upstreamPath} failed`);
+    return proxyError(
+      error,
+      `Proxy request to ${upstreamPath} failed`,
+      request,
+    );
   }
 }
 

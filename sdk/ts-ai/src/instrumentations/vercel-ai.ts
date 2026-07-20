@@ -26,7 +26,9 @@ import {
 
 type AnyModule = Record<string, unknown>;
 
-const _wrapped = new WeakSet<object>();
+// original → proxy (and proxy → proxy) so re-wrapping the same
+// module returns the instrumented Proxy, not the bare original.
+const _proxies = new WeakMap<object, object>();
 
 const STREAMING_HELPERS = new Set(["streamText", "streamObject"]);
 
@@ -39,10 +41,10 @@ export function wrapVercelAI<T extends AnyModule>(
   opts: TraceOptions = {},
 ): T {
   if (!mod || typeof mod !== "object") return mod;
-  if (_wrapped.has(mod)) return mod;
-  _wrapped.add(mod);
+  const existing = _proxies.get(mod);
+  if (existing) return existing as T;
 
-  return new Proxy(mod, {
+  const proxy = new Proxy(mod, {
     get(target, prop, receiver) {
       const value = Reflect.get(target, prop, receiver);
       if (
@@ -55,6 +57,9 @@ export function wrapVercelAI<T extends AnyModule>(
       return value;
     },
   });
+  _proxies.set(mod, proxy);
+  _proxies.set(proxy, proxy);
+  return proxy;
 }
 
 function _isVercelHelper(name: string): boolean {
@@ -104,15 +109,20 @@ function _wrapHelper(
     try {
       const result = original.apply(this, args);
       if (result instanceof Promise) {
-        return result
-          .catch((err: unknown) => {
-            _finishCall(ctx, { status: "error", errorType: err });
-            throw err;
-          })
-          .then((value: unknown) => {
+        // Use then/onRejected: a rethrow from ``.catch`` skips
+        // the subsequent ``.then`` fulfillment handler. Error
+        // path already finished inside onRejected; success path
+        // finishes in onFulfilled — never both.
+        return result.then(
+          (value: unknown) => {
             _finishCall(ctx, { status: "success" });
             return value;
-          });
+          },
+          (err: unknown) => {
+            _finishCall(ctx, { status: "error", errorType: err });
+            throw err;
+          },
+        );
       }
       _finishCall(ctx, { status: "success" });
       return result;
@@ -208,6 +218,7 @@ function _wrapVercelStream(result: unknown, ctx: _CallCtx): unknown {
   const fullStream = stream.fullStream ?? stream.textStream;
   if (fullStream && typeof fullStream[Symbol.asyncIterator] === "function") {
     const client = getDefaultClient();
+    const captureChunkText = client.getConfig().captureChunkText;
     const consumer = (async () => {
       try {
         for await (const chunk of fullStream) {
@@ -243,7 +254,7 @@ function _wrapVercelStream(result: unknown, ctx: _CallCtx): unknown {
             eventId: ctx.eventId,
             traceId: ctx.traceId,
             chunkIndex: ctx.chunkCount - 1,
-            deltaText: text ?? null,
+            deltaText: captureChunkText ? (text ?? null) : null,
             ttftMs: ctx.tFirst !== null ? ctx.tFirst - ctx.start : null,
             itlMs: prev !== null ? now - prev : null,
             tpotMs,
@@ -263,6 +274,11 @@ function _wrapVercelStream(result: unknown, ctx: _CallCtx): unknown {
     // Best-effort: keep the consumer alive; unhandled rejection
     // is silenced because we already record the error.
     consumer.catch(() => undefined);
+  } else {
+    // No attachable ``fullStream`` / ``textStream`` — still emit
+    // an aggregate event so streamText/streamObject calls are
+    // not silently dropped from telemetry.
+    _finishCall(ctx, { status: "success" });
   }
   return result;
 }
@@ -270,8 +286,10 @@ function _wrapVercelStream(result: unknown, ctx: _CallCtx): unknown {
 function _extractTextFromVercelChunk(chunk: unknown): string | undefined {
   if (!chunk || typeof chunk !== "object") return undefined;
   const c = chunk as Record<string, unknown>;
-  if (c.type === "text-delta" && typeof c.textDelta === "string") {
-    return c.textDelta;
+  if (c.type === "text-delta") {
+    // AI SDK v3 used ``textDelta``; v4+ often uses ``text``.
+    if (typeof c.textDelta === "string") return c.textDelta;
+    if (typeof c.text === "string") return c.text;
   }
   if (typeof c.text === "string") return c.text;
   if (typeof c.delta === "string") return c.delta;

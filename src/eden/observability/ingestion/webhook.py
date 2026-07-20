@@ -25,10 +25,10 @@ Strict limits:
 
 from __future__ import annotations
 
-import json
 import logging
 
 from eden.config import get_settings
+from eden.observability.ingestion.json_body import loads_body
 from eden.observability.ingestion.attribution import Attribution
 from eden.observability.ingestion.errors import (
     BodyTooLargeError,
@@ -60,7 +60,7 @@ class WebhookDecoder:
         # decoders first (otel / helicone / langfuse / etc.) and only
         # use webhook when nothing else matched.
         try:
-            parsed = json.loads(body)
+            parsed = loads_body(body)
         except (ValueError, UnicodeDecodeError):
             return False
         return isinstance(parsed, (dict, list))
@@ -85,7 +85,7 @@ class WebhookDecoder:
             )
 
         try:
-            payload = json.loads(body)
+            payload = loads_body(body)
         except (ValueError, UnicodeDecodeError) as exc:
             raise SchemaInvalidError(
                 f"webhook body is not valid JSON: {exc}",

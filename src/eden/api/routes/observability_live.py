@@ -5,11 +5,15 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from fastapi import APIRouter, Body, Depends, Path, Query
+from fastapi import APIRouter, Body, Depends, HTTPException, Path, Query
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
-from eden.api.deps import get_ingest_auth, require_feature_flag, require_org_member
+from eden.api.deps import (
+    get_ingest_auth,
+    require_feature_flag,
+    require_path_org_access,
+)
 from eden.observability.live.publisher import LiveTracePublisher
 from eden.observability.live.subscriber import LiveTraceSubscriber
 
@@ -43,6 +47,15 @@ class FinalizeBody(BaseModel):
     step_count: int | None = None
 
 
+def _assert_ingest_org(auth: dict, org_id: str) -> None:
+    auth_org = auth.get("org_id")
+    if not auth_org or str(auth_org) != str(org_id):
+        raise HTTPException(
+            status_code=403,
+            detail="Path org_id does not match authenticated org",
+        )
+
+
 @router.post("/{session_id}/publish")
 async def publish_live_event(
     org_id: str = Path(...),
@@ -51,30 +64,34 @@ async def publish_live_event(
     auth: dict = Depends(get_ingest_auth),
 ) -> dict[str, Any]:
     """SDK ingest for in-flight live events (X-Org-Api-Key)."""
-    resolved_org = str(auth.get("org_id") or org_id)
-    if resolved_org != org_id:
-        return {
-            "status": "error",
-            "code": "org_mismatch",
-            "message": "Path org_id does not match auth org",
-        }
+    _assert_ingest_org(auth, org_id)
     result = await _publisher.publish(org_id, session_id, body.model_dump(exclude_none=True))
+    if result.get("status") == "error":
+        code = str(result.get("code") or "")
+        if code in {"rate_limited", "session_cap"}:
+            raise HTTPException(
+                status_code=429,
+                detail=result.get("message") or code,
+                headers={"Retry-After": "60"},
+            )
+        raise HTTPException(
+            status_code=400,
+            detail=result.get("message") or "Live publish rejected",
+        )
     return {"feature": "live_trace_streaming", "live": True, **result}
 
 
 @router.get("/{session_id}/events")
 async def stream_live_events(
-    org_id: str = Path(...),
     session_id: str = Path(...),
     from_event_id: int = Query(0, ge=0),
-    member: dict = Depends(require_org_member),
+    org_id: str = Depends(require_path_org_access),
 ) -> StreamingResponse:
     """SSE live tail for a session (portal / MCP)."""
-    resolved = str(member.get("org_id") or org_id)
 
     async def gen():
         async for chunk in _subscriber.stream(
-            resolved, session_id, from_event_id=from_event_id
+            org_id, session_id, from_event_id=from_event_id
         ):
             yield chunk
 
@@ -97,13 +114,7 @@ async def finalize_live_session(
     auth: dict = Depends(get_ingest_auth),
 ) -> dict[str, Any]:
     """Upgrade live buffer → single persisted finalize signal."""
-    resolved_org = str(auth.get("org_id") or org_id)
-    if resolved_org != org_id:
-        return {
-            "status": "error",
-            "code": "org_mismatch",
-            "message": "Path org_id does not match auth org",
-        }
+    _assert_ingest_org(auth, org_id)
     payload = body or FinalizeBody()
     result = await _publisher.finalize(
         org_id,

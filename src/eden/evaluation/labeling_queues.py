@@ -94,30 +94,43 @@ class LabelingQueueService:
         )
         return _row_to_queue(dict(row))
 
-    async def list_queues(self, org_id: str) -> list[LabelingQueue]:
+    async def list_queues(self, org_id: str, *, limit: int = 100) -> list[LabelingQueue]:
         client = await self._client()
+        capped = max(1, min(int(limit), 100))
         if client is None:
-            return [q for q in self._memory.values() if q.org_id == org_id]
+            return [q for q in self._memory.values() if q.org_id == org_id][:capped]
         rows = await client.fetch(
-            "SELECT * FROM labeling_queues WHERE org_id = $1 ORDER BY created_at DESC",
+            """
+            SELECT id, org_id, name, description, schema, status, created_at
+            FROM labeling_queues
+            WHERE org_id = $1
+            ORDER BY created_at DESC
+            LIMIT $2
+            """,
             org_id,
+            capped,
         )
         return [_row_to_queue(dict(r)) for r in rows]
 
-    async def kanban_board(self, org_id: str, queue_id: str) -> dict[str, list[dict[str, Any]]]:
+    async def kanban_board(
+        self, org_id: str, queue_id: str, *, limit: int = 100
+    ) -> dict[str, list[dict[str, Any]]]:
         client = await self._client()
         board = {col: [] for col in KANBAN_COLUMNS}
         if client is None:
             return board
+        capped = max(1, min(int(limit), 100))
         rows = await client.fetch(
             """
             SELECT id, prompt, payload, kanban_status, tags, created_at
             FROM labeling_items
             WHERE org_id = $1 AND queue_id = $2::uuid
             ORDER BY created_at ASC
+            LIMIT $3
             """,
             org_id,
             queue_id,
+            capped,
         )
         for r in rows:
             status = str(r.get("kanban_status") or "todo")
@@ -195,6 +208,9 @@ class LabelingQueueService:
             queue_id,
         )
         hub = DatasetHub(client)
+        owned = await hub.get_dataset(org_id, dataset_id)
+        if owned is None:
+            raise ValueError("dataset not found")
         pushed = 0
         for r in rows:
             payload = r.get("payload")

@@ -335,9 +335,10 @@ class TriageAgent:
             if redis is None:
                 return True
             key = f"triage_manual:{org_id}:{datetime.now(UTC).strftime('%Y%m%d%H')}"
-            count = await redis.incr(key)
-            if count == 1:
-                await redis.expire(key, 3600)
+            pipe = redis.pipeline(transaction=False)
+            pipe.incr(key)
+            pipe.expire(key, 3600)
+            count, _ = await pipe.execute()
             return int(count) <= _MANUAL_TRIAGE_PER_HOUR
         except Exception:  # pragma: no cover - redis optional
             return True
@@ -465,10 +466,13 @@ class TriageAgent:
             if redis is None:
                 return
             key = self._budget_key(org_id)
-            new_val = await redis.incrbyfloat(key, amount)
-            # Expire at ~36h so the counter resets daily.
-            if float(new_val) <= amount + 1e-9:
-                await redis.expire(key, 129_600)
+            # Always refresh TTL in the same round-trip as the debit so
+            # we never leave a counter without expiry (and avoid a second
+            # command on the common path).
+            pipe = redis.pipeline(transaction=False)
+            pipe.incrbyfloat(key, amount)
+            pipe.expire(key, 129_600)
+            await pipe.execute()
         except Exception:  # pragma: no cover - redis optional
             pass
 

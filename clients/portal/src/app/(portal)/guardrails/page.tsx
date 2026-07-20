@@ -16,10 +16,12 @@ import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/ui/toast";
 import { NoOrgState } from "@/components/ui/no-org-state";
+import { ErrorState } from "@/components/ui/error-state";
+import { featureGatedMessage, FEATURE_NOT_ENABLED_MESSAGE, FEATURE_NOT_ENABLED_TITLE, NOT_IMPLEMENTED_MESSAGE, NOT_IMPLEMENTED_TITLE } from "@/lib/feature-flag-error";
 import { Shield, ShieldCheck, ShieldAlert, Lock, AlertTriangle, AlertOctagon, CheckCircle2, XCircle, Zap, Loader2, Plus, Sparkles, Eye, FileLock2, ScanLine, Eraser, Activity, TestTube2, Bug, History, Swords } from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
 import { DataTable } from "@/components/ui/data-table";
-import { Card } from "@/components/ui/card";
+import { Panel } from "@/components/ui/panel";
+import { Button } from "@/components/ui/button";
 import { useQueryTab } from "@/hooks/use-query-tab";
 
 const RedteamView = dynamic(() => import("@/app/(portal)/redteam/page"), {
@@ -46,6 +48,9 @@ interface Violation {
 interface EvaluateResult {
   passed: boolean;
   violations: Violation[];
+  live?: boolean;
+  verdict?: string;
+  reason?: string;
 }
 interface InjectionResult {
   injection_score: number;
@@ -136,9 +141,11 @@ function GuardrailsPageInner() {
   const toast = useToast();
   const [activeTab, setActiveTab] = useQueryTab("tab", ["test", "policies", "injections", "pii", "redteam"] as const, "test");
 
-  // Policies state
+  // Policies state — loaded on mount so the always-visible stat strip
+  // never shows false zeros before the Policies tab is opened.
   const [policies, setPolicies] = useState<Policy[]>([]);
-  const [policiesLoading, setPoliciesLoading] = useState(false);
+  const [policiesLoading, setPoliciesLoading] = useState(true);
+  const [policiesReady, setPoliciesReady] = useState(false);
   const [policiesError, setPoliciesError] = useState("");
   const [showAddPolicy, setShowAddPolicy] = useState(false);
 
@@ -167,6 +174,8 @@ function GuardrailsPageInner() {
     edited_text: string | null;
     created_at: string;
   }>>([]);
+  const [scanHistoryUnavailable, setScanHistoryUnavailable] = useState(false);
+  const [scanHistoryError, setScanHistoryError] = useState("");
   const loadPolicies = useCallback(async () => {
     if (!currentOrg) return;
     setPoliciesLoading(true);
@@ -175,41 +184,44 @@ function GuardrailsPageInner() {
       const data = await guardrailsApi.listPolicies(currentOrg.id);
       setPolicies(data.policies ?? []);
     } catch (err) {
-      setPoliciesError(err instanceof Error ? err.message : "Failed to load policies");
+      setPoliciesError(featureGatedMessage(err, "Failed to load policies"));
     } finally {
       setPoliciesLoading(false);
+      setPoliciesReady(true);
     }
   }, [currentOrg]);
   useEffect(() => {
-    if (currentOrg && activeTab === "policies") loadPolicies();
-  }, [currentOrg, activeTab, loadPolicies]);
+    if (currentOrg) void loadPolicies();
+  }, [currentOrg, loadPolicies]);
 
   // Phase A.9 / B.2: load real scan history when the injection / PII
   // tabs are first viewed. Replaces MOCK_INJECTIONS / MOCK_PII_REDACTIONS.
   const loadScanHistory = useCallback(async () => {
     if (!currentOrg) return;
+    setScanHistoryUnavailable(false);
+    setScanHistoryError("");
     try {
-      const [inj, pii] = await Promise.all([guardrailsApi.scanHistory(currentOrg.id, {
-        limit: 50,
-        action_prefix: "injection"
-      }).catch(() => ({
-        scans: [],
-        count: 0
-      })), guardrailsApi.scanHistory(currentOrg.id, {
-        limit: 50,
-        action_prefix: "pii"
-      }).catch(() => ({
-        scans: [],
-        count: 0
-      }))]);
+      const [inj, pii] = await Promise.all([
+        guardrailsApi.scanHistory(currentOrg.id, {
+          limit: 50,
+          action_prefix: "injection",
+        }),
+        guardrailsApi.scanHistory(currentOrg.id, {
+          limit: 50,
+          action_prefix: "pii",
+        }),
+      ]);
       setInjectionHistory(inj.scans ?? []);
       setPiiHistory(pii.scans ?? []);
     } catch (e) {
-      // Non-fatal: keep the empty arrays and let the empty state render.
-      const message = e instanceof Error ? e.message : "Failed to load scan history";
-      toast.error("Couldn't load scan history", message);
+      // Do not render API failure as an empty "secure" feed.
+      setInjectionHistory([]);
+      setPiiHistory([]);
+      setScanHistoryUnavailable(true);
+      const message = featureGatedMessage(e, "Failed to load scan history");
+      setScanHistoryError(message);
     }
-  }, [currentOrg, toast]);
+  }, [currentOrg]);
   useEffect(() => {
     if (currentOrg && (activeTab === "injections" || activeTab === "pii")) {
       loadScanHistory();
@@ -222,11 +234,11 @@ function GuardrailsPageInner() {
     setEvaluateResult(null);
     try {
       const data = await guardrailsApi.evaluate(currentOrg.id, {
-        content: testContent
+        text: testContent,
       });
       setEvaluateResult(data);
     } catch (err) {
-      setTestError(err instanceof Error ? err.message : "Evaluation failed");
+      setTestError(featureGatedMessage(err, "Evaluation failed"));
     } finally {
       setEvaluating(false);
     }
@@ -238,11 +250,11 @@ function GuardrailsPageInner() {
     setInjectionResult(null);
     try {
       const data = await guardrailsApi.scanInjection(currentOrg.id, {
-        content: testContent
+        text: testContent,
       });
       setInjectionResult(data);
     } catch (err) {
-      setTestError(err instanceof Error ? err.message : "Injection scan failed");
+      setTestError(featureGatedMessage(err, "Injection scan failed"));
     } finally {
       setScanning(false);
     }
@@ -254,11 +266,11 @@ function GuardrailsPageInner() {
     setRedactResult(null);
     try {
       const data = await guardrailsApi.redactPii(currentOrg.id, {
-        content: testContent
+        text: testContent,
       });
       setRedactResult(data);
     } catch (err) {
-      setTestError(err instanceof Error ? err.message : "Redaction failed");
+      setTestError(featureGatedMessage(err, "Redaction failed"));
     } finally {
       setRedacting(false);
     }
@@ -267,29 +279,42 @@ function GuardrailsPageInner() {
     return <NoOrgState icon={Shield} feature="Guardrails" description="Enterprise-critical content safety, prompt-injection defense, and PII redaction are configured per organization." />;
   }
 
-  // Stats — derived live from the policies list + a heuristic for "today's evals".
-  // evalTodayEstimate is explicitly labelled as an estimate (no live counter for it yet).
+  // Stats — derived from the policies list. No fabricated eval counts.
   const enabledCount = policies.filter(p => p.enabled).length;
-  const evalTodayEstimate = policies.length > 0 ? `~${Math.max(policies.length * 47, 12)}` : "—";
-  // blockRate would come from scanHistory aggregate; until that lands we render "—".
+  const statsPending = !policiesReady || policiesLoading;
+  const evalTodayEstimate = "—";
   const blockRate = "—";
   return <PageContent size="wide">
-      <PageHeader title="Guardrails" eyebrow="Security" subtitle="Content safety, prompt-injection defense, and PII redaction — live test bench and policy management" icon={ShieldCheck} actions={<button onClick={() => setActiveTab("test")} aria-label="Switch to Test tab" className="inline-flex items-center gap-2 px-4 py-2 bg-[var(--accent)] text-[var(--bg-base)] rounded-lg text-sm font-medium hover:bg-[var(--accent-hover)] transition-colors">
-            <TestTube2 className="w-4 h-4" aria-hidden />
-            Test content
-          </button>} />
+      <PageHeader
+        title="Guardrails"
+        subtitle="Content safety, injection defense, and PII redaction."
+        description="Live test bench and policy management for gateway content gates."
+        actions={
+          activeTab === "policies" ? (
+            <Button size="sm" onClick={() => setShowAddPolicy(true)} aria-label="Add new policy">
+              <Plus className="w-4 h-4" />
+              Add policy
+            </Button>
+          ) : activeTab !== "test" ? (
+            <Button size="sm" variant="outline" onClick={() => setActiveTab("test")} aria-label="Switch to Test tab">
+              <TestTube2 className="w-4 h-4" />
+              Test content
+            </Button>
+          ) : undefined
+        }
+      />
 
-      {/* Stat strip — always visible, security-flavored */}
+      {/* Stat strip — always visible; show em-dash until policies load */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <StatCard title="Total policies" value={policiesLoading ? "—" : policies.length} subtitle={`${enabledCount} enabled`} icon={Shield} accent="accent" />
-        <StatCard title="Enabled" value={policiesLoading ? "—" : enabledCount} subtitle={`${policies.length - enabledCount} disabled`} icon={ShieldCheck} accent="terminal" />
-        <StatCard title="Evaluations today" value={evalTodayEstimate} subtitle="estimate, rolling 24h" icon={Activity} accent="info" />
-        <StatCard title="Block rate" value={blockRate} subtitle="last 24h" icon={ShieldAlert} accent="warning" trendValue="0.4%" />
+        <StatCard title="Total policies" value={statsPending ? "—" : policies.length} subtitle={statsPending ? "Loading…" : `${enabledCount} enabled`} icon={Shield} accent="accent" />
+        <StatCard title="Enabled" value={statsPending ? "—" : enabledCount} subtitle={statsPending ? "Loading…" : `${policies.length - enabledCount} disabled`} icon={ShieldCheck} accent="terminal" />
+        <StatCard title="Evaluations today" value={evalTodayEstimate} subtitle="unavailable" icon={Activity} accent="info" />
+        <StatCard title="Block rate" value={blockRate} subtitle="last 24h" icon={ShieldAlert} accent="warning" />
       </div>
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as Tab)}>
-        <TabsList aria-label="Guardrails sections" className="bg-[var(--bg-tertiary)] rounded-xl h-auto flex-wrap w-fit">
+        <TabsList variant="underline" aria-label="Guardrails sections" className="w-full justify-start h-auto flex-wrap bg-transparent">
           {([{
           key: "test" as Tab,
           label: "Test",
@@ -311,7 +336,7 @@ function GuardrailsPageInner() {
           label: "Red team",
           icon: Swords
         }] as const).map(({ key, label, icon: Icon }) => (
-            <TabsTrigger key={key} value={key} className="flex items-center gap-2 data-[state=active]:text-[var(--text-primary)]">
+            <TabsTrigger key={key} value={key} variant="underline" className="flex items-center gap-2">
               <Icon className="w-4 h-4" aria-hidden />
               {label}
             </TabsTrigger>
@@ -319,37 +344,25 @@ function GuardrailsPageInner() {
         </TabsList>
 
       {/* Content */}
-      <AnimatePresence mode="wait">
-        <motion.div key={activeTab} initial={{
-        opacity: 0,
-        y: 8
-      }} animate={{
-        opacity: 1,
-        y: 0
-      }} exit={{
-        opacity: 0,
-        y: -6
-      }} transition={{
-        duration: 0.2
-      }}>
+      <>
+        <div key={activeTab}>
           {activeTab === "test" && <TestTab testContent={testContent} onTestContentChange={setTestContent} evaluating={evaluating} scanning={scanning} redacting={redacting} onEvaluate={handleEvaluate} onScan={handleInjectionScan} onRedact={handleRedact} evaluateResult={evaluateResult} injectionResult={injectionResult} redactResult={redactResult} error={testError} />}
           {activeTab === "policies" && <PoliciesTab policies={policies} loading={policiesLoading} error={policiesError} onAddPolicy={() => setShowAddPolicy(true)} onRefresh={loadPolicies} orgId={currentOrg.id} onPolicyCreated={loadPolicies} />}
-          {activeTab === "injections" && <InjectionsTab history={injectionHistory} />}
-          {activeTab === "pii" && <PiiTab history={piiHistory} />}
+          {activeTab === "injections" && <InjectionsTab history={injectionHistory} unavailable={scanHistoryUnavailable} error={scanHistoryError} onRetry={loadScanHistory} />}
+          {activeTab === "pii" && <PiiTab history={piiHistory} unavailable={scanHistoryUnavailable} error={scanHistoryError} onRetry={loadScanHistory} />}
           {activeTab === "redteam" && (
             <EmbeddedSurface>
               <RedteamView />
             </EmbeddedSurface>
           )}
-        </motion.div>
-      </AnimatePresence>
+        </div>
+      </>
 
       </Tabs>
 
       <AddPolicyDialog open={showAddPolicy} onOpenChange={setShowAddPolicy} orgId={currentOrg.id} onCreated={() => {
       setShowAddPolicy(false);
       loadPolicies();
-      toast.success("Policy created");
     }} />
     </PageContent>;
 }
@@ -388,8 +401,7 @@ function TestTab({
   const isBusy = evaluating || scanning || redacting;
   const canRun = testContent.trim().length > 0 && !isBusy;
   return <div className="space-y-4">
-      {/* Hero input card */}
-      <Card padding="lg" className="space-y-4">
+      <Panel tone="flat" padding="lg" className="space-y-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <TestTube2 className="w-4 h-4 text-[var(--accent)]" />
@@ -397,7 +409,7 @@ function TestTab({
                 Live evaluation bench
               </h3>
             </div>
-            <div className="text-[10px] uppercase tracking-wider text-[var(--text-muted)] font-medium">
+            <div className="text-[10px] uppercase tracking-wider text-[var(--text-muted)] font-medium font-mono">
               {testContent.length} chars
             </div>
           </div>
@@ -410,26 +422,26 @@ function TestTab({
             </div>}
 
           <div className="flex flex-wrap items-center gap-2">
-            <button onClick={onEvaluate} disabled={!canRun} aria-label="Evaluate content against enabled policies" className="inline-flex items-center gap-2 px-5 py-2.5 bg-[var(--accent)] text-[var(--bg-base)] rounded-lg text-sm font-semibold hover:bg-[var(--accent-hover)] disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
+            <Button onClick={onEvaluate} disabled={!canRun} aria-label="Evaluate content against enabled policies">
               {evaluating ? <Loader2 className="w-4 h-4 animate-spin" aria-hidden /> : <ShieldCheck className="w-4 h-4" aria-hidden />}
               Evaluate
-            </button>
-            <button onClick={onScan} disabled={!canRun} aria-label="Scan content for prompt injection" className="inline-flex items-center gap-2 px-5 py-2.5 bg-[var(--error)] text-[var(--bg-primary)] rounded-lg text-sm font-semibold hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
+            </Button>
+            <Button onClick={onScan} disabled={!canRun} variant="outline" aria-label="Scan content for prompt injection">
               {scanning ? <Loader2 className="w-4 h-4 animate-spin" aria-hidden /> : <ScanLine className="w-4 h-4" aria-hidden />}
               Injection scan
-            </button>
-            <button onClick={onRedact} disabled={!canRun} aria-label="Redact PII from content" className="inline-flex items-center gap-2 px-5 py-2.5 bg-[var(--bg-tertiary)] text-[var(--text-primary)] border border-[var(--border-default)] rounded-lg text-sm font-semibold hover:bg-[var(--border-default)] disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
+            </Button>
+            <Button onClick={onRedact} disabled={!canRun} variant="outline" aria-label="Redact PII from content">
               {redacting ? <Loader2 className="w-4 h-4 animate-spin" aria-hidden /> : <Eraser className="w-4 h-4" aria-hidden />}
               PII redact
-            </button>
-            {testContent && <button onClick={() => {
+            </Button>
+            {testContent && <Button onClick={() => {
           onTestContentChange("");
-        }} aria-label="Clear test content" className="ml-auto inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors">
+        }} variant="ghost" size="sm" aria-label="Clear test content" className="ml-auto">
                 <XCircle className="w-3.5 h-3.5" aria-hidden />
                 Clear
-              </button>}
+              </Button>}
           </div>
-      </Card>
+      </Panel>
 
       {/* Results — three columns side by side when present */}
       <div className="grid lg:grid-cols-3 gap-4">
@@ -445,30 +457,51 @@ function EvaluateResultCard({
   result: EvaluateResult | null;
 }) {
   if (!result) {
-    return <Card padding="lg" className="-dashed min-h-[200px] flex items-center justify-center">
+    return <Panel tone="inset" padding="lg" className="min-h-[200px] flex items-center justify-center">
         <EmptyState icon={ShieldCheck} title="No evaluation yet" description="Click Evaluate to run all enabled policies against your content." size="sm" />
-      </Card>;
+      </Panel>;
   }
-  return <motion.div initial={{
-    opacity: 0,
-    y: 8
-  }} animate={{
-    opacity: 1,
-    y: 0
-  }} className="bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-xl overflow-hidden">
-      <div className={cn("p-4 border-b border-[var(--border-default)] flex items-center justify-between", result.passed ? "bg-[var(--terminal-faint)]" : "bg-[var(--error-bg)]")}>
+  const enforced = result.live === true;
+  const blocked = result.verdict === "block" || result.verdict === "escalate";
+  const headerTone = !enforced
+    ? "bg-[var(--warning-bg)]"
+    : result.passed
+      ? "bg-[var(--terminal-faint)]"
+      : "bg-[var(--error-bg)]";
+  const badgeLabel = !enforced
+    ? "Not enforced"
+    : result.passed
+      ? "Passed"
+      : `${result.violations.length} violation${result.violations.length === 1 ? "" : "s"}`;
+  const badgeTone = !enforced
+    ? "bg-[var(--warning)]/20 text-[var(--warning)]"
+    : result.passed
+      ? "bg-[var(--terminal)]/20 text-[var(--terminal)]"
+      : "bg-[var(--error)]/20 text-[var(--error)]";
+  return <div className="bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-xl overflow-hidden">
+      <div className={cn("p-4 border-b border-[var(--border-default)] flex items-center justify-between", headerTone)}>
         <div className="flex items-center gap-2">
-          {result.passed ? <CheckCircle2 className="w-4 h-4 text-[var(--terminal)]" /> : <XCircle className="w-4 h-4 text-[var(--error)]" />}
+          {!enforced ? <AlertTriangle className="w-4 h-4 text-[var(--warning)]" /> : result.passed ? <CheckCircle2 className="w-4 h-4 text-[var(--terminal)]" /> : <XCircle className="w-4 h-4 text-[var(--error)]" />}
           <h3 className="text-sm font-semibold text-[var(--text-primary)]">
             Policy evaluation
           </h3>
         </div>
-        <span className={cn("text-[10px] uppercase tracking-wider font-bold px-2 py-0.5 rounded-full", result.passed ? "bg-[var(--terminal)]/20 text-[var(--terminal)]" : "bg-[var(--error)]/20 text-[var(--error)]")}>
-          {result.passed ? "Passed" : `${result.violations.length} violation${result.violations.length === 1 ? "" : "s"}`}
+        <span className={cn("text-[10px] uppercase tracking-wider font-bold px-2 py-0.5 rounded-full", badgeTone)}>
+          {badgeLabel}
         </span>
       </div>
       <div className="p-4">
-        {result.violations.length === 0 ? <div className="text-center py-6">
+        {!enforced ? <div className="text-center py-6">
+            <AlertTriangle className="w-10 h-10 mx-auto mb-2 text-[var(--warning)]" />
+            <p className="text-sm font-medium text-[var(--text-primary)]">
+              {blocked ? "Fail closed — not live-evaluated" : "Not live-evaluated"}
+            </p>
+            <p className="text-xs text-[var(--text-muted)] mt-0.5">
+              {result.reason
+                ? result.reason.replace(/_/g, " ")
+                : "Incomplete or unevaluated policies — result is not a live pass"}
+            </p>
+          </div> : result.violations.length === 0 ? <div className="text-center py-6">
             <ShieldCheck className="w-10 h-10 mx-auto mb-2 text-[var(--terminal)]" />
             <p className="text-sm font-medium text-[var(--text-primary)]">All policies passed</p>
             <p className="text-xs text-[var(--text-muted)] mt-0.5">No violations detected</p>
@@ -489,7 +522,7 @@ function EvaluateResultCard({
         })}
           </div>}
       </div>
-    </motion.div>;
+    </div>;
 }
 function InjectionResultCard({
   result
@@ -497,20 +530,14 @@ function InjectionResultCard({
   result: InjectionResult | null;
 }) {
   if (!result) {
-    return <Card padding="lg" className="-dashed min-h-[200px] flex items-center justify-center">
+    return <Panel tone="inset" padding="lg" className="min-h-[200px] flex items-center justify-center">
         <EmptyState icon={ScanLine} title="No scan yet" description="Click Injection scan to detect prompt-injection patterns." size="sm" />
-      </Card>;
+      </Panel>;
   }
   const scorePct = Math.round((result.injection_score ?? 0) * 100);
   const isHot = result.is_injection || scorePct >= 50;
   const ringColor = isHot ? "text-[var(--error)]" : scorePct >= 25 ? "text-[var(--warning)]" : "text-[var(--terminal)]";
-  return <motion.div initial={{
-    opacity: 0,
-    y: 8
-  }} animate={{
-    opacity: 1,
-    y: 0
-  }} className="bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-xl overflow-hidden">
+  return <div className="bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-xl overflow-hidden">
       <div className={cn("p-4 border-b border-[var(--border-default)] flex items-center justify-between", isHot ? "bg-[var(--error-bg)]" : "bg-[var(--terminal-faint)]")}>
         <div className="flex items-center gap-2">
           {isHot ? <Bug className="w-4 h-4 text-[var(--error)]" /> : <ShieldCheck className="w-4 h-4 text-[var(--terminal)]" />}
@@ -546,7 +573,7 @@ function InjectionResultCard({
             </div>
           </div> : <p className="text-xs text-[var(--text-muted)] italic">No patterns matched</p>}
       </div>
-    </motion.div>;
+    </div>;
 }
 function RedactResultCard({
   result
@@ -554,18 +581,12 @@ function RedactResultCard({
   result: RedactResult | null;
 }) {
   if (!result) {
-    return <Card padding="lg" className="-dashed min-h-[200px] flex items-center justify-center">
+    return <Panel tone="inset" padding="lg" className="min-h-[200px] flex items-center justify-center">
         <EmptyState icon={Eraser} title="No redaction yet" description="Click PII redact to mask sensitive content." size="sm" />
-      </Card>;
+      </Panel>;
   }
   const totalCount = result.redactions.reduce((sum, r) => sum + r.count, 0);
-  return <motion.div initial={{
-    opacity: 0,
-    y: 8
-  }} animate={{
-    opacity: 1,
-    y: 0
-  }} className="bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-xl overflow-hidden">
+  return <div className="bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-xl overflow-hidden">
       <div className="p-4 border-b border-[var(--border-default)] bg-[var(--warning-bg)]/30 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <FileLock2 className="w-4 h-4 text-[var(--warning)]" />
@@ -600,7 +621,7 @@ function RedactResultCard({
             </div>
           </div>}
       </div>
-    </motion.div>;
+    </div>;
 }
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -634,30 +655,49 @@ function PoliciesTab({
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={onRefresh} disabled={loading} aria-label="Refresh policies" className="inline-flex items-center gap-2 px-3 py-1.5 bg-[var(--bg-tertiary)] text-[var(--text-primary)] rounded-lg text-xs font-medium hover:bg-[var(--border-default)] disabled:opacity-50 transition-colors">
+          <Button onClick={onRefresh} disabled={loading} variant="ghost" size="sm" aria-label="Refresh policies">
             <Zap className="w-3.5 h-3.5" aria-hidden />
             Refresh
-          </button>
-          <button onClick={onAddPolicy} aria-label="Add new policy" className="inline-flex items-center gap-2 px-3 py-1.5 bg-[var(--accent)] text-[var(--bg-base)] rounded-lg text-xs font-medium hover:bg-[var(--accent-hover)] transition-colors">
+          </Button>
+          <Button onClick={onAddPolicy} size="sm" aria-label="Add new policy">
             <Plus className="w-3.5 h-3.5" aria-hidden />
             Add policy
-          </button>
+          </Button>
         </div>
       </div>
 
-      {error && <div className="bg-[var(--error-bg)] text-[var(--error)] text-sm px-4 py-3 rounded-xl flex items-center gap-2.5 border border-[var(--error)]/20">
-          <AlertTriangle className="w-4 h-4 flex-shrink-0" />
-          {error}
-        </div>}
-
-      {loading && policies.length === 0 ? <div className="flex items-center justify-center py-20">
+      {error ? (
+        <ErrorState
+          title={
+            error === FEATURE_NOT_ENABLED_TITLE
+              ? FEATURE_NOT_ENABLED_TITLE
+              : error === NOT_IMPLEMENTED_TITLE
+                ? NOT_IMPLEMENTED_TITLE
+                : "Could not load policies"
+          }
+          message={
+            error === FEATURE_NOT_ENABLED_TITLE
+              ? FEATURE_NOT_ENABLED_MESSAGE
+              : error === NOT_IMPLEMENTED_TITLE
+                ? NOT_IMPLEMENTED_MESSAGE
+                : error
+          }
+          action={
+            error === FEATURE_NOT_ENABLED_TITLE || error === NOT_IMPLEMENTED_TITLE ? undefined : (
+              <Button onClick={onRefresh} variant="outline" size="sm">
+                Try again
+              </Button>
+            )
+          }
+        />
+      ) : loading && policies.length === 0 ? <div className="flex items-center justify-center py-20">
           <Loader2 className="w-8 h-8 animate-spin text-[var(--accent)]" />
-        </div> : policies.length === 0 ? <Card padding="lg">
-          <EmptyState icon={Shield} title="No policies configured" description="Add a policy to start gating content at the gateway." size="lg" action={<button onClick={onAddPolicy} aria-label="Add your first policy" className="inline-flex items-center gap-2 px-4 py-2 bg-[var(--accent)] text-[var(--bg-base)] rounded-lg text-sm font-medium hover:bg-[var(--accent-hover)] transition-colors">
+        </div> : policies.length === 0 ? (
+          <EmptyState icon={Shield} title="No policies configured" description="Add a policy to start gating content at the gateway." size="lg" action={<Button onClick={onAddPolicy} aria-label="Add your first policy">
                 <Plus className="w-4 h-4" aria-hidden />
                 Add your first policy
-              </button>} />
-        </Card> : <Card padding="lg" className="overflow-hidden">
+              </Button>} />
+        ) : (
           <DataTable columns={[{
         key: "name",
         header: "Name",
@@ -710,7 +750,7 @@ function PoliciesTab({
         key: "name",
         direction: "asc"
       }} emptyTitle="No policies yet" emptyDescription="Add your first policy to enforce guardrails." emptyIcon={Shield} pageSize={25} />
-        </Card>}
+        )}
     </div>;
 }
 
@@ -732,7 +772,7 @@ function AddPolicyDialog({
   const toast = useToast();
   const [name, setName] = useState("");
   const [kind, setKind] = useState("injection");
-  const [enabled, setEnabled] = useState(true);
+  const [action, setAction] = useState("block");
   const [configText, setConfigText] = useState("{}");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
@@ -740,18 +780,18 @@ function AddPolicyDialog({
     if (!open) {
       setName("");
       setKind("injection");
-      setEnabled(true);
+      setAction("block");
       setConfigText("{}");
       setError("");
     }
   }, [open]);
   async function handleSubmit() {
     setError("");
-    let parsedConfig: Record<string, unknown> = {};
+    let parsedSpec: Record<string, unknown> = {};
     try {
-      parsedConfig = configText.trim() ? JSON.parse(configText) : {};
+      parsedSpec = configText.trim() ? JSON.parse(configText) : {};
     } catch {
-      setError("Config must be valid JSON");
+      setError("Spec must be valid JSON");
       return;
     }
     if (!name.trim()) {
@@ -763,15 +803,22 @@ function AddPolicyDialog({
       await guardrailsApi.createPolicy(orgId, {
         name: name.trim(),
         kind,
-        enabled,
-        config: parsedConfig
+        spec: parsedSpec,
+        action,
       });
       toast.success("Policy created");
       onCreated();
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Failed to create policy";
+      const message = featureGatedMessage(err, "Failed to create policy");
       setError(message);
-      toast.error("Couldn't create policy", message);
+      toast.error(
+        message === FEATURE_NOT_ENABLED_TITLE
+          ? FEATURE_NOT_ENABLED_TITLE
+          : "Couldn't create policy",
+        message === FEATURE_NOT_ENABLED_TITLE
+          ? FEATURE_NOT_ENABLED_MESSAGE
+          : message,
+      );
     } finally {
       setSubmitting(false);
     }
@@ -784,7 +831,7 @@ function AddPolicyDialog({
             Add guardrail policy
           </DialogTitle>
           <DialogDescription>
-            Define a rule that gates content at the gateway. The config object is passed to the policy implementation.
+            Define a rule that gates content at the gateway. Spec is passed to the policy implementation; kind maps to the API type.
           </DialogDescription>
         </DialogHeader>
 
@@ -800,7 +847,17 @@ function AddPolicyDialog({
             <label htmlFor="policy-kind" className="text-xs font-medium text-[var(--text-muted)] mb-1.5 block">
               Kind
             </label>
-            <select id="policy-kind" value={kind} onChange={e => setKind(e.target.value)} aria-label="Policy kind" className="w-full px-3 py-2 bg-[var(--bg-secondary)] border border-[var(--border-default)] rounded-lg text-sm text-[var(--text-primary)]">
+            <select
+              id="policy-kind"
+              value={kind}
+              onChange={e => {
+                const next = e.target.value;
+                setKind(next);
+                setAction(next === "pii" ? "redact" : "block");
+              }}
+              aria-label="Policy kind"
+              className="w-full px-3 py-2 bg-[var(--bg-secondary)] border border-[var(--border-default)] rounded-lg text-sm text-[var(--text-primary)]"
+            >
               <option value="injection">Injection</option>
               <option value="pii">PII</option>
               <option value="hallucination">Hallucination</option>
@@ -808,16 +865,30 @@ function AddPolicyDialog({
             </select>
           </div>
 
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input type="checkbox" checked={enabled} onChange={e => setEnabled(e.target.checked)} aria-label="Enable policy on creation" className="w-4 h-4 rounded border-[var(--border-default)] bg-[var(--bg-secondary)] accent-[var(--accent)]" />
-            <span className="text-sm text-[var(--text-primary)]">Enabled</span>
-          </label>
+          <div>
+            <label htmlFor="policy-action" className="text-xs font-medium text-[var(--text-muted)] mb-1.5 block">
+              Action
+            </label>
+            <select
+              id="policy-action"
+              value={action}
+              onChange={e => setAction(e.target.value)}
+              aria-label="Policy action"
+              className="w-full px-3 py-2 bg-[var(--bg-secondary)] border border-[var(--border-default)] rounded-lg text-sm text-[var(--text-primary)]"
+            >
+              <option value="allow">Allow</option>
+              <option value="warn">Warn</option>
+              <option value="redact">Redact</option>
+              <option value="block">Block</option>
+              <option value="escalate">Escalate</option>
+            </select>
+          </div>
 
           <div>
-            <label htmlFor="policy-config" className="text-xs font-medium text-[var(--text-muted)] mb-1.5 block">
-              Config (JSON)
+            <label htmlFor="policy-spec" className="text-xs font-medium text-[var(--text-muted)] mb-1.5 block">
+              Spec (JSON)
             </label>
-            <Textarea id="policy-config" value={configText} onChange={e => setConfigText(e.target.value)} placeholder='{"threshold": 0.8, "categories": ["email", "ssn"]}' aria-label="Policy config (JSON)" className="min-h-[100px] font-mono text-xs" />
+            <Textarea id="policy-spec" value={configText} onChange={e => setConfigText(e.target.value)} placeholder='{"patterns": ["ssn", "email"]}' aria-label="Policy spec (JSON)" className="min-h-[100px] font-mono text-xs" />
           </div>
 
           {error && <div className="bg-[var(--error-bg)] text-[var(--error)] text-sm px-3 py-2 rounded-lg flex items-center gap-2 border border-[var(--error)]/20">
@@ -844,7 +915,10 @@ function AddPolicyDialog({
 // ──────────────────────────────────────────────────────────────────────────
 
 function InjectionsTab({
-  history
+  history,
+  unavailable = false,
+  error = "",
+  onRetry,
 }: {
   history: Array<{
     id: string;
@@ -853,6 +927,9 @@ function InjectionsTab({
     reason: string | null;
     created_at: string;
   }>;
+  unavailable?: boolean;
+  error?: string;
+  onRetry?: () => void;
 }) {
   return <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -871,8 +948,35 @@ function InjectionsTab({
         </div>
       </div>
 
-      <Card padding="lg" className="overflow-hidden">
-        <DataTable columns={[{
+      {unavailable ? (
+        <ErrorState
+          title={
+            error === FEATURE_NOT_ENABLED_TITLE
+              ? FEATURE_NOT_ENABLED_TITLE
+              : error === NOT_IMPLEMENTED_TITLE
+                ? NOT_IMPLEMENTED_TITLE
+                : "Could not load injection history"
+          }
+          message={
+            error === FEATURE_NOT_ENABLED_TITLE
+              ? FEATURE_NOT_ENABLED_MESSAGE
+              : error === NOT_IMPLEMENTED_TITLE
+                ? NOT_IMPLEMENTED_MESSAGE
+                : error || "Could not load injection history."
+          }
+          action={
+            onRetry &&
+            error !== FEATURE_NOT_ENABLED_TITLE &&
+            error !== NOT_IMPLEMENTED_TITLE ? (
+              <Button size="sm" variant="outline" onClick={onRetry}>
+                Try again
+              </Button>
+            ) : undefined
+          }
+        />
+      ) : null}
+
+      {!unavailable && <DataTable columns={[{
         key: "verdict",
         header: "Severity",
         sortable: true,
@@ -907,15 +1011,14 @@ function InjectionsTab({
       }]} rows={history} rowKey={inj => inj.id} defaultSort={{
         key: "created_at",
         direction: "desc"
-      }} emptyTitle="No injection attempts recorded yet" emptyDescription="Run a scan in the Test tab to populate this log." emptyIcon={Shield} pageSize={25} />
-      </Card>
+      }} emptyTitle="No injection attempts recorded yet" emptyDescription="Run a scan in the Test tab to populate this log." emptyIcon={Shield} pageSize={25} />}
 
-      <div className="bg-[var(--bg-secondary)] border border-[var(--border-subtle)] rounded-lg p-3 text-xs text-[var(--text-muted)] flex items-start gap-2">
+      {!unavailable && <Panel tone="inset" padding="sm" className="text-xs text-[var(--text-muted)] flex items-start gap-2">
         <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5 text-[var(--warning)]" />
         <p>
           Each scan in the Test tab writes a new attempt to this log automatically.
         </p>
-      </div>
+      </Panel>}
     </div>;
 }
 
@@ -924,7 +1027,10 @@ function InjectionsTab({
 // ──────────────────────────────────────────────────────────────────────────
 
 function PiiTab({
-  history
+  history,
+  unavailable = false,
+  error = "",
+  onRetry,
 }: {
   history: Array<{
     id: string;
@@ -934,11 +1040,14 @@ function PiiTab({
     edited_text: string | null;
     created_at: string;
   }>;
+  unavailable?: boolean;
+  error?: string;
+  onRetry?: () => void;
 }) {
   const totalCategories = history.reduce<Record<string, number>>((acc, r) => {
     if (!r.reason) return acc;
     // Heuristic: try to extract category from "pii: <category> detected" reason
-    const m = r.reason.match(/^pii:\s*([\w-]+)/i);
+    const m = r.reason.match(/pii:\s*([\w-]+)/i);
     if (m) {
       acc[m[1]] = (acc[m[1]] || 0) + 1;
     }
@@ -961,20 +1070,50 @@ function PiiTab({
         </div>
       </div>
 
+      {unavailable ? (
+        <ErrorState
+          title={
+            error === FEATURE_NOT_ENABLED_TITLE
+              ? FEATURE_NOT_ENABLED_TITLE
+              : error === NOT_IMPLEMENTED_TITLE
+                ? NOT_IMPLEMENTED_TITLE
+                : "Could not load PII history"
+          }
+          message={
+            error === FEATURE_NOT_ENABLED_TITLE
+              ? FEATURE_NOT_ENABLED_MESSAGE
+              : error === NOT_IMPLEMENTED_TITLE
+                ? NOT_IMPLEMENTED_MESSAGE
+                : error || "Could not load PII history."
+          }
+          action={
+            onRetry &&
+            error !== FEATURE_NOT_ENABLED_TITLE &&
+            error !== NOT_IMPLEMENTED_TITLE ? (
+              <Button size="sm" variant="outline" onClick={onRetry}>
+                Try again
+              </Button>
+            ) : undefined
+          }
+        />
+      ) : null}
+
+      {!unavailable && <>
       {/* Category rollup strip */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-        {Object.entries(totalCategories).map(([cat, count]) => <div key={cat} className="bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-lg px-3 py-2.5">
-            <p className="text-[10px] uppercase tracking-wider text-[var(--text-muted)] font-semibold">
+        {Object.entries(totalCategories).map(([cat, count]) => (
+          <Panel key={cat} tone="flat" padding="sm">
+            <p className="text-[10px] uppercase tracking-wider text-[var(--text-muted)] font-semibold font-mono">
               {cat.replace(/_/g, " ")}
             </p>
             <p className="text-lg font-bold text-[var(--warning)] tabular-nums mt-0.5">
               {count}
             </p>
-          </div>)}
+          </Panel>
+        ))}
       </div>
 
-      <Card padding="lg" className="overflow-hidden">
-        <DataTable columns={[{
+      <DataTable columns={[{
         key: "created_at",
         header: "When",
         sortable: true,
@@ -998,14 +1137,14 @@ function PiiTab({
         key: "created_at",
         direction: "desc"
       }} emptyTitle="No PII redactions recorded yet" emptyDescription="Run a redact in the Test tab to populate this log." emptyIcon={Lock} pageSize={25} />
-      </Card>
 
-      <div className="bg-[var(--bg-secondary)] border border-[var(--border-subtle)] rounded-lg p-3 text-xs text-[var(--text-muted)] flex items-start gap-2">
+      <Panel tone="inset" padding="sm" className="text-xs text-[var(--text-muted)] flex items-start gap-2">
         <Lock className="w-3.5 h-3.5 flex-shrink-0 mt-0.5 text-[var(--accent)]" />
         <p>
           Redactions are irreversible at write time. Configure the PII policy under Settings →
           Compliance to customize which categories are masked.
         </p>
-      </div>
+      </Panel>
+      </>}
     </div>;
 }

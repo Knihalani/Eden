@@ -31,7 +31,7 @@ from typing import Any
 from fastapi import APIRouter, Body, Depends, Path
 from pydantic import BaseModel, Field
 
-from eden.api.deps import get_current_user, require_feature_flag
+from eden.api.deps import get_current_user, require_feature_flag, require_path_org_access
 
 router = APIRouter(
     prefix="/orgs/{org_id}/intelligence/columnar",
@@ -39,6 +39,7 @@ router = APIRouter(
     dependencies=[
         Depends(require_feature_flag("intelligence_gap_v0")),
         Depends(get_current_user),
+        Depends(require_path_org_access),
     ],
 )
 
@@ -82,7 +83,7 @@ class QueryRequest(BaseModel):
 
 @router.post("/partitions/ensure")
 async def ensure_partition(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     body: EnsurePartitionRequest = Body(...),
 ) -> dict[str, Any]:
     """Materialise the org's ClickHouse partition and return its metadata.
@@ -101,7 +102,7 @@ async def ensure_partition(
 
 @router.post("/rollups/precompute")
 async def precompute_rollups(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     body: PrecomputeRollupsRequest = Body(...),
 ) -> dict[str, Any]:
     """Compute the rollup for the given window.
@@ -123,7 +124,7 @@ async def precompute_rollups(
 
 @router.post("/compact")
 async def compact(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     body: CompactRequest = Body(...),
 ) -> dict[str, Any]:
     """Run one compaction cycle for the given partition.
@@ -143,7 +144,7 @@ async def compact(
 
 @router.post("/query")
 async def query(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     body: QueryRequest = Body(...),
 ) -> dict[str, Any]:
     """Execute a read-only SQL query against the columnar engine.

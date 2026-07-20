@@ -8,7 +8,7 @@ from typing import Any
 
 from eden.improvement import plans_repo
 from eden.patches.pr_creator import _parse_unified_diff
-from eden.providers import PRCreateRequest, PRProvider, get_default_pr_provider
+from eden.providers import PRCreateRequest, PRProvider
 
 logger = logging.getLogger(__name__)
 
@@ -17,6 +17,17 @@ class ApproveBlocked(Exception):
     def __init__(self, reason: str) -> None:
         self.reason = reason
         super().__init__(reason)
+
+
+async def _resolve_repo_id(org_id: str) -> str | None:
+    """Return the org's active repo_connections id (or full name), else None.
+
+    Intentionally does **not** fall back to ``plan.agent_id`` — that field is
+    an Eden agent identifier, not a GitHub/repo connection id.
+    """
+    from eden.providers.factory import resolve_active_repo_id
+
+    return await resolve_active_repo_id(org_id)
 
 
 async def approve_plan(
@@ -49,7 +60,8 @@ async def approve_plan(
     if not diff.strip():
         return {"status": "error", "plan_id": plan_id, "error": "empty_diff"}
 
-    repo_id = plan.get("agent_id") or ""
+    # Resolve real repo_connections row — never treat plan.agent_id as repo_id.
+    repo_id = await _resolve_repo_id(org_id)
     if not repo_id:
         return {
             "status": "error",
@@ -62,7 +74,12 @@ async def approve_plan(
     if not files:
         return {"status": "error", "plan_id": plan_id, "error": "unparseable_diff"}
 
-    pr_provider = provider or get_default_pr_provider()
+    if provider is not None:
+        pr_provider = provider
+    else:
+        from eden.providers.factory import get_pr_provider_for_org
+
+        pr_provider = await get_pr_provider_for_org(org_id)
     branch = f"eden/improve-{plan_id[:12]}"
     title = f"[Eden] {plan.get('title', 'Improvement plan')[:120]}"
     body = plan.get("summary") or f"Eden improvement plan `{plan_id}`"
@@ -178,9 +195,24 @@ async def _approve_non_code(
             "message": f"Unknown non-code plan kind: {plan_kind}",
         }
 
+    if plan_kind in ("prompt_update", "guardrail_tune"):
+        # F68 gateway deploy is not wired for improve approve — fail closed
+        # so the portal cannot toast success on a no-op.
+        return {
+            "plan_id": plan_id,
+            "status": "not_implemented",
+            "supported": False,
+            "plan_kind": plan_kind,
+            "error": "f68_gateway_deploy_not_implemented",
+            "message": (
+                "Gateway deploy is not live (F68). "
+                "Prompt update / guardrail tune approve is not implemented yet."
+            ),
+        }
+
     candidate_id: str | None = None
     route_status = "promotion_queued"
-    message = "Queued in F41 promotion pipeline (gateway deploy stub v1)"
+    message = "Queued in F41 promotion pipeline"
 
     try:
         from eden.promotion.evidence_gate import EvidenceGate
@@ -197,14 +229,26 @@ async def _approve_non_code(
             if report.passed:
                 route_status = "promoted"
                 message = "Nudge promoted via F41 evidence gate"
-        elif candidate_id and plan_kind == "guardrail_tune":
-            message = "Guardrail tune queued — gateway filter update pending (F68 stub)"
-        elif candidate_id and plan_kind == "prompt_update":
-            message = "Prompt update queued — gateway deploy pending (F68 stub)"
     except Exception as exc:
         logger.warning("approve non-code: F41 enqueue failed: %s", exc)
-        route_status = "approved"
-        message = f"F41 enqueue unavailable: {exc}"
+        return {
+            "plan_id": plan_id,
+            "status": "error",
+            "supported": False,
+            "plan_kind": plan_kind,
+            "error": "promotion_enqueue_failed",
+            "message": f"F41 enqueue unavailable: {exc}",
+        }
+
+    if not candidate_id:
+        return {
+            "plan_id": plan_id,
+            "status": "error",
+            "supported": False,
+            "plan_kind": plan_kind,
+            "error": "promotion_enqueue_empty",
+            "message": "F41 enqueue returned no candidate id",
+        }
 
     updated = await plans_repo.mark_approved(
         org_id,

@@ -10,6 +10,7 @@
 - `docs/docs/operations/oncall.md` — the on-call paging protocol
 - `docs/docs/operations/disaster-recovery-drill.md` — the quarterly DR drill (postgres-restore + ClickHouse-failover + migration-rollback procedures live here)
 - `docs/docs/operations/clerk-eden-org-sync.md` — the Clerk ↔ Eden org-sync ops guide
+- `docs/deploy/INGEST-AUTH-DEPLOY-NOTES.md` — Wave 2/3 ingest auth ship (non-UUID 500 → 401, telemetry 403 → 401)
 
 ---
 

@@ -59,21 +59,27 @@ async def test_dry_run_reports_counts_without_delete():
 
 @pytest.mark.asyncio
 async def test_live_run_issues_delete_with_limit():
-    """dry_run=False issues DELETE ... LIMIT on each sweep."""
+    """dry_run=False issues batched DELETE via ctid subquery + LIMIT."""
     from datetime import datetime, timezone
 
     from eden.data_platform.cleanup import PostgresCleanupService
 
     client = MagicMock()
     client.fetchval = AsyncMock(return_value=0)
+    # First call(s): schema introspection; later: DELETE RETURNING rows.
+    schema_cols = [
+        {"column_name": "completed_at"},
+        {"column_name": "created_at"},
+        {"column_name": "read_at"},
+        {"column_name": "status"},
+        {"column_name": "expires_at"},
+    ]
     client.fetch = AsyncMock(
-        return_value=[
-            # Pretend every sweep's table has the columns it needs.
-            {"column_name": "completed_at"},
-            {"column_name": "created_at"},
-            {"column_name": "read_at"},
-            {"column_name": "status"},
-            {"column_name": "expires_at"},
+        side_effect=[
+            schema_cols,  # sweep 0 schema
+            [{"?column?": 1}, {"?column?": 1}],  # sweep 0 delete returning
+            schema_cols,  # sweep 1 schema
+            [{"?column?": 1}],  # sweep 1 delete returning
         ]
     )
     client.execute = AsyncMock(return_value="DELETE 0")
@@ -85,19 +91,30 @@ async def test_live_run_issues_delete_with_limit():
         )
         report = await svc.run()
 
-    # All sweeps that survived the schema check get a DELETE.
-    assert client.execute.await_count == 2
-    sqls = [c.args[0] for c in client.execute.await_args_list]
-    for sql in sqls:
+    # Live path uses fetch() for DELETE … RETURNING (not execute).
+    delete_sqls = [
+        c.args[0]
+        for c in client.fetch.await_args_list
+        if "DELETE FROM" in c.args[0]
+    ]
+    assert len(delete_sqls) == 2
+    for sql in delete_sqls:
         assert "DELETE FROM" in sql
+        assert "ctid IN" in sql
         assert "LIMIT 500" in sql
+        assert "RETURNING" in sql
     # Cutoff is passed as a real datetime (not a string), so asyncpg
     # doesn't reject it with "expected datetime.date/datetime".
-    for call in client.execute.await_args_list:
-        arg = call.args[1] if len(call.args) > 1 else call.kwargs.get("$1")
+    for call in client.fetch.await_args_list:
+        if "DELETE FROM" not in call.args[0]:
+            continue
+        arg = call.args[1] if len(call.args) > 1 else None
         assert isinstance(arg, datetime)
         assert arg.tzinfo is not None
     assert set(report.runs) == {"completed_jobs", "read_notifications"}
+    assert report.runs["completed_jobs"] == 2
+    assert report.runs["read_notifications"] == 1
+    assert report.total_deleted == 3
 
 
 @pytest.mark.asyncio
@@ -175,18 +192,20 @@ async def test_one_sweep_failure_doesnt_break_others():
     from eden.data_platform.cleanup import PostgresCleanupService
 
     client = MagicMock()
-    # Schema check passes (every default sweep has its expected cols).
-    client.fetch = AsyncMock(
-        return_value=[
-            {"column_name": "completed_at"},
-            {"column_name": "status"},
-            {"column_name": "created_at"},
-            {"column_name": "read_at"},
-            {"column_name": "expires_at"},
-        ]
-    )
-    # Live path uses execute() (DELETE ... LIMIT); make it throw.
-    client.execute = AsyncMock(side_effect=Exception("boom"))
+    schema_cols = [
+        {"column_name": "completed_at"},
+        {"column_name": "status"},
+        {"column_name": "created_at"},
+        {"column_name": "read_at"},
+        {"column_name": "expires_at"},
+    ]
+
+    async def _fetch(sql: str, *args: object):
+        if "information_schema" in sql:
+            return schema_cols
+        raise Exception("boom")
+
+    client.fetch = AsyncMock(side_effect=_fetch)
     with _patched_client(client):
         svc = PostgresCleanupService(
             sweeps=PostgresCleanupService.DEFAULT_SWEEPS[:3],

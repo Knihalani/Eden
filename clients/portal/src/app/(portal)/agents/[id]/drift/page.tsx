@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorState } from "@/components/ui/error-state";
+import { NoOrgState } from "@/components/ui/no-org-state";
 import { useOrg } from "@/hooks/use-org";
 import { useKeyboardShortcuts } from "@/hooks/use-keyboard-shortcuts";
 import { learnApi } from "@/lib/api";
@@ -61,7 +62,10 @@ function AgentDriftPageInner() {
   const [focusedIdx, setFocusedIdx] = useState(0);
 
   const load = useCallback(async () => {
-    if (!currentOrg || !agentId) return;
+    if (!currentOrg || !agentId) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     setError(null);
     try {
@@ -117,6 +121,10 @@ function AgentDriftPageInner() {
   const flagged = dimensions.filter((d) => d.flagged);
   const focused = dimensions[focusedIdx];
 
+  if (!currentOrg) {
+    return <NoOrgState feature="Behavioral drift" icon={Activity} />;
+  }
+
   return (
     <PageContent>
       <PageHeader
@@ -146,6 +154,7 @@ function AgentDriftPageInner() {
 
       {error ? (
         <ErrorState
+          title="Could not load drift report"
           message={error}
           action={
             <Button variant="outline" size="sm" onClick={() => void load()}>
@@ -155,7 +164,7 @@ function AgentDriftPageInner() {
         />
       ) : null}
 
-      {summary ? (
+      {!error && summary ? (
         <Card className="mb-4 p-4">
           <div className="flex items-start gap-2">
             <Activity className="mt-0.5 h-5 w-5 text-[var(--accent)]" />
@@ -164,7 +173,7 @@ function AgentDriftPageInner() {
         </Card>
       ) : null}
 
-      {loading ? (
+      {error ? null : loading ? (
         <div className="flex justify-center py-12">
           <Loader2 className="h-8 w-8 animate-spin text-[var(--text-muted)]" />
         </div>
@@ -244,7 +253,7 @@ function AgentDriftPageInner() {
           ) : null}
         </div>
       )}
-      {focused ? (
+      {!error && focused ? (
         <p className="mt-4 text-center text-xs text-[var(--text-muted)]">
           Focused: {focused.dimension} · Press 1–7 to switch · <kbd>c</kbd> recompute ·{" "}
           <Link href={driftHref(agentId, focused.dimension)} className="text-[var(--accent)] hover:underline">

@@ -41,10 +41,10 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from fastapi import APIRouter, Body, Depends, Path
+from fastapi import APIRouter, Body, Depends
 from pydantic import BaseModel, Field
 
-from eden.api.deps import get_current_user, require_feature_flag
+from eden.api.deps import get_current_user, require_feature_flag, require_path_org_access
 from eden.experiments.experiment_intel import (
     AutoEvaluator,
     ExperimentRecommender,
@@ -61,6 +61,7 @@ router = APIRouter(
     dependencies=[
         Depends(require_feature_flag("intelligence_gap_v0")),
         Depends(get_current_user),
+        Depends(require_path_org_access),
     ],
 )
 
@@ -92,7 +93,7 @@ class TrafficSplitCreateRequest(BaseModel):
 
 @router.post("/split")
 async def split(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     body: SplitRequest = Body(...),
 ) -> dict[str, Any]:
     return await _splitter.split(
@@ -105,7 +106,7 @@ async def split(
 
 @router.post("/traffic-split")
 async def traffic_split_create(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     body: TrafficSplitCreateRequest = Body(...),
 ) -> dict[str, Any]:
     return await _splitter.create_split(
@@ -122,7 +123,7 @@ async def traffic_split_create(
 
 @router.get("/traffic-split")
 async def traffic_split_list(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     experiment_id: str | None = None,
     name: str | None = None,
 ) -> dict[str, Any]:
@@ -141,7 +142,7 @@ class AutoEvalRequest(BaseModel):
 
 @router.post("/auto-evaluate")
 async def auto_evaluate(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     body: AutoEvalRequest = Body(...),
 ) -> dict[str, Any]:
     return await _auto.evaluate(
@@ -153,7 +154,7 @@ async def auto_evaluate(
 
 @router.get("/auto-evaluate/latest")
 async def auto_evaluate_latest(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     experiment_id: str = ...,
 ) -> dict[str, Any]:
     return await _auto.latest(org_id, experiment_id=experiment_id)
@@ -168,7 +169,7 @@ class RecommendRequest(BaseModel):
 
 @router.post("/recommend")
 async def recommend(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     body: RecommendRequest = Body(...),
 ) -> dict[str, Any]:
     return await _rec.recommend(
@@ -185,7 +186,7 @@ class WinnerRequest(BaseModel):
 
 @router.post("/winner")
 async def winner(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     body: WinnerRequest = Body(...),
 ) -> dict[str, Any]:
     return await _winner.detect(
@@ -224,7 +225,7 @@ class LoadSimRequest(BaseModel):
 
 @router.post("/simulate")
 async def simulate(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     body: ScenarioRequest = Body(...),
 ) -> dict[str, Any]:
     return await _sim.simulate_scenario(
@@ -237,7 +238,7 @@ async def simulate(
 
 @router.post("/simulate/replay")
 async def simulate_replay(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     body: ReplayRequest = Body(...),
 ) -> dict[str, Any]:
     return await _sim.replay_production_in_staging(
@@ -253,7 +254,7 @@ async def simulate_replay(
 
 @router.post("/simulate/whatif")
 async def whatif(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     body: WhatIfRequest = Body(...),
 ) -> dict[str, Any]:
     return await _sim.what_if_analysis(
@@ -266,7 +267,7 @@ async def whatif(
 
 @router.post("/simulate/load")
 async def load(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     body: LoadSimRequest = Body(...),
 ) -> dict[str, Any]:
     return await _sim.load_simulation(

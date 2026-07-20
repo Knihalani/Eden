@@ -3,6 +3,18 @@
  * Portal E2E audit — visits portal + public routes (excl. /docs).
  * Uses @clerk/testing; persists auth in storageState to avoid re-sign-in.
  *
+ * BASE / BASE_URL:
+ *   Honors env BASE (or BASE_URL) for prod audits, e.g.
+ *     BASE=https://edenobservability.com node e2e/portal-audit.mjs
+ *   Defaults to http://127.0.0.1:$PORT when unset.
+ *
+ * Auth for non-local BASE:
+ *   Do not invent prod credentials. Use wait-for-signin.mjs (real Chrome) or
+ *   Playwright codegen --channel=chrome to write e2e/.auth-state.json against
+ *   the same origin. Localhost-seeded auth-state is invalid on prod.
+ *   See e2e/README-auth.md and e2e/golden/helpers.mjs domain comments.
+ *   PUBLIC_ONLY=1 skips signed-in portal routes (public smoke only).
+ *
  * Routes follow the July 2026 12-item IA. Cut paths are audited as
  * redirect smoke checks (Playwright follows to the consolidated target).
  */
@@ -14,18 +26,29 @@ import { fileURLToPath } from "node:url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PORT = process.env.PORT || "3000";
-const BASE = `http://127.0.0.1:${PORT}`;
+const BASE = (process.env.BASE || process.env.BASE_URL || `http://127.0.0.1:${PORT}`).replace(
+  /\/$/,
+  "",
+);
+const PUBLIC_ONLY = process.env.PUBLIC_ONLY === "1";
 const TEST_EMAIL = process.env.E2E_EMAIL || "kaiav.nihalani@gmail.com";
 const TEST_PASSWORD = process.env.E2E_PASSWORD || "Happydays1!2345";
 const STORAGE = join(__dirname, ".auth-state.json");
 const ROUTE_DELAY_MS = Number(process.env.E2E_ROUTE_DELAY_MS || "2500");
 
-process.env.CLERK_SECRET_KEY =
-  process.env.CLERK_SECRET_KEY ||
-  "sk_test_PXZfewH5OceW7H1BFN2mRSvkouyt0EgprOzjq0cBWm";
-process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY =
-  process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY ||
-  "pk_test_bW9kZXN0LWJ1Zy03LmNsZXJrLmFjY291bnRzLmRldiQ";
+const isLocal =
+  /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(BASE) ||
+  BASE.includes("localhost");
+
+// Test Clerk keys only apply to local portal — never inject them for prod audits.
+if (isLocal) {
+  process.env.CLERK_SECRET_KEY =
+    process.env.CLERK_SECRET_KEY ||
+    "sk_test_PXZfewH5OceW7H1BFN2mRSvkouyt0EgprOzjq0cBWm";
+  process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY =
+    process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY ||
+    "pk_test_bW9kZXN0LWJ1Zy03LmNsZXJrLmFjY291bnRzLmRldiQ";
+}
 
 const PUBLIC_ROUTES = ["/login", "/signup", "/sign-in", "/sign-up", "/privacy", "/security", "/terms"];
 
@@ -48,6 +71,7 @@ const PORTAL_ROUTES = [
   "/alerts?tab=signals",
   "/analytics",
   "/analytics?tab=insights",
+  "/analytics?tab=topics",
   "/analytics?tab=tools",
   "/analytics?tab=users",
   "/evals",
@@ -219,6 +243,17 @@ async function ensureAuth(browser) {
     if (me?.status() === 200 && !/\/(login|sign-in)/.test(url)) return;
   }
 
+  // Non-local: never auto-fill credentials or inject Clerk testing tokens.
+  // Capture storageState with wait-for-signin.mjs against the same BASE.
+  if (!isLocal) {
+    throw new Error(
+      `ensureAuth: no valid e2e/.auth-state.json for BASE=${BASE}.\n` +
+        "  Prod audits require cookies seeded against that origin.\n" +
+        "  Run: BASE=<same> node e2e/wait-for-signin.mjs (real Chrome; manual sign-in).\n" +
+        "  Do not invent production credentials; localhost auth-state is not valid on prod.",
+    );
+  }
+
   const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
   const page = await ctx.newPage();
   await setupClerkTestingToken({ page });
@@ -252,39 +287,44 @@ async function ensureAuth(browser) {
 }
 
 async function main() {
-  await clerkSetup();
+  console.log(`→ BASE=${BASE}${PUBLIC_ONLY ? " (PUBLIC_ONLY)" : ""}`);
+  if (isLocal) await clerkSetup();
   const browser = await chromium.launch({ headless: true });
   const results = [];
 
   console.log("→ Public routes…");
   const pub = await browser.newContext({ viewport: { width: 1440, height: 900 } });
   const pubPage = await pub.newPage();
-  await setupClerkTestingToken({ page: pubPage });
+  if (isLocal) await setupClerkTestingToken({ page: pubPage });
   for (const route of PUBLIC_ROUTES) {
-    results.push(await auditRoute(pubPage, route, false));
-    await sleep(ROUTE_DELAY_MS);
-  }
-  await pub.close();
-
-  console.log("→ Auth + portal routes…");
-  await ensureAuth(browser);
-  const ctx = await browser.newContext({ storageState: STORAGE, viewport: { width: 1440, height: 900 } });
-  const page = await ctx.newPage();
-
-  for (const route of PORTAL_ROUTES) {
-    const r = await auditRoute(page, route, true);
+    const r = await auditRoute(pubPage, route, false);
     results.push(r);
     console.log(r.ok ? "  ✓" : "  ✗", route);
     await sleep(ROUTE_DELAY_MS);
   }
-  await ctx.close();
+  await pub.close();
+
+  if (!PUBLIC_ONLY) {
+    console.log("→ Auth + portal routes…");
+    await ensureAuth(browser);
+    const ctx = await browser.newContext({ storageState: STORAGE, viewport: { width: 1440, height: 900 } });
+    const page = await ctx.newPage();
+
+    for (const route of PORTAL_ROUTES) {
+      const r = await auditRoute(page, route, true);
+      results.push(r);
+      console.log(r.ok ? "  ✓" : "  ✗", route);
+      await sleep(ROUTE_DELAY_MS);
+    }
+    await ctx.close();
+  }
   await browser.close();
 
   const failed = results.filter((r) => !r.ok);
   const outDir = join(__dirname, "reports");
   mkdirSync(outDir, { recursive: true });
   const reportPath = join(outDir, `audit-${Date.now()}.json`);
-  writeFileSync(reportPath, JSON.stringify({ failed: failed.length, total: results.length, results }, null, 2));
+  writeFileSync(reportPath, JSON.stringify({ base: BASE, failed: failed.length, total: results.length, results }, null, 2));
   console.log(`\n${results.length - failed.length}/${results.length} OK — ${reportPath}`);
   process.exit(failed.length ? 1 : 0);
 }

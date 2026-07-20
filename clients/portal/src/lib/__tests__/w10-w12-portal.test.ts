@@ -12,6 +12,7 @@ import {
 import {
   PALETTE_ACTIONS,
   OPEN_AI_CHAT_HREF,
+  GROUP_LABEL,
   buildNavCommands,
 } from "@/lib/nav-commands";
 import { MOBILE_CORE_NAV, MOBILE_MORE_LINKS } from "@/components/portal-os/MobileBottomNav";
@@ -65,6 +66,35 @@ describe("W10 shell + design system", () => {
       expect(BREADCRUMB_LABELS[key]?.label).toBeTruthy();
     }
     expect(buildBreadcrumbs("/artifacts").at(-1)?.label).toBe("Artifacts");
+  });
+
+  it("maps breadcrumb categories to sidebar IA groups", () => {
+    expect(BREADCRUMB_LABELS.issues?.category).toBe("observe");
+    expect(BREADCRUMB_LABELS.issues?.label).toBe("Agent Issues");
+    expect(BREADCRUMB_LABELS.improve?.category).toBe("optimize");
+    expect(BREADCRUMB_LABELS.ledger?.category).toBe("optimize");
+    expect(BREADCRUMB_LABELS.agents?.category).toBe("observe");
+    expect(BREADCRUMB_LABELS.artifacts?.category).toBe("optimize");
+    expect(BREADCRUMB_LABELS.promotions?.category).toBe("optimize");
+    expect(BREADCRUMB_LABELS["debugger-sessions"]?.label).toBe("Debug sessions");
+    expect(BREADCRUMB_LABELS.dashboard?.label).toBe("Home");
+    expect(BREADCRUMB_LABELS.dashboard?.category).toBeUndefined();
+    expect(GROUP_LABEL.build).toBe("Home");
+    expect(GROUP_LABEL.observe).toBe("Observe");
+    expect(GROUP_LABEL.automate).toBe("Evaluate");
+    expect(GROUP_LABEL.optimize).toBe("Improve");
+    expect(GROUP_LABEL.workspace).toBe("Workspace");
+    expect(src("app/(portal)/portal-chrome.tsx")).toContain("GROUP_LABEL[crumb.category]");
+  });
+
+  it("folds Topic clusters into Analytics hub", () => {
+    expect(PALETTE_ACTIONS.some((a) => a.href === "/analytics?tab=topics")).toBe(true);
+    expect(PALETTE_ACTIONS.every((a) => a.href !== "/insights/topics")).toBe(true);
+    expect(src("app/(portal)/analytics/page.tsx")).toMatch(/"topics"/);
+    expect(src("app/(portal)/insights/page.tsx")).toContain("/analytics?tab=topics");
+    expect(src("../next.config.ts")).toContain(
+      'source: "/insights/topics", destination: "/analytics?tab=topics"',
+    );
   });
 
   it("toast supports warning + pause + queue cap", () => {

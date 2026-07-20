@@ -21,6 +21,7 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 TRACE_FINALIZED_STREAM = "trace.finalized"
+TRACE_FINALIZED_DLQ_STREAM = "trace.finalized.dlq"
 _STREAM_MAXLEN = 100_000
 
 # Event types that unambiguously mark the end of a trace/session/run.

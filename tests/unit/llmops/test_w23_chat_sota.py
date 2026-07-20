@@ -1,4 +1,4 @@
-"""Wave 23 — ChatSidebar SOTA pure helpers."""
+"""Wave 23 — ChatSidebar SOTA pure helpers (T2-only)."""
 
 from __future__ import annotations
 
@@ -14,20 +14,20 @@ from eden.llmops.chat_sota import (
 from eden.optimization.model_router import ModelTier
 
 
-def test_classify_t1_for_short_question() -> None:
-    assert classify_chat_tier("what is p95?") == ModelTier.T1
+def test_classify_always_t2() -> None:
+    assert classify_chat_tier("what is p95?") == ModelTier.T2
+    assert classify_chat_tier("export slow traces as csv") == ModelTier.T2
+    assert classify_chat_tier("/filter latency > 2s", preferred_tier="t1") == ModelTier.T2
 
 
-def test_classify_t3_for_filter_or_export() -> None:
-    assert classify_chat_tier("export slow traces as csv") == ModelTier.T3
-    assert classify_chat_tier("/filter latency > 2s") == ModelTier.T3
-
-
-def test_resolve_picker_explicit_t1() -> None:
+def test_resolve_picker_always_t2() -> None:
     model, tier = resolve_picker_model(preferred_tier="t1")
     assert model is None
-    assert tier == "t1"
-    assert model_for_tier(ModelTier.T1)
+    assert tier == "t2"
+    model2, tier2 = resolve_picker_model(preferred_tier="t3", preferred_model="auto")
+    assert model2 is None
+    assert tier2 == "t2"
+    assert model_for_tier(ModelTier.T2)
 
 
 def test_cite_before_claim_flags_uncited_ids() -> None:
@@ -48,9 +48,9 @@ def test_cite_before_claim_ok_when_cited() -> None:
 
 
 def test_ttft_budget_and_warning() -> None:
-    assert ttft_budget_ms("t1") == 1500
-    assert ttft_warning(2000, "t1")
-    assert ttft_warning(500, "t1") is None
+    assert ttft_budget_ms("t2") == 3000
+    assert ttft_warning(4000, "t2")
+    assert ttft_warning(500, "t2") is None
 
 
 def test_estimate_turn_cost_shape() -> None:

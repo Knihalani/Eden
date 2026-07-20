@@ -1,8 +1,10 @@
 "use client";
 
-import { useEffect, useState, useMemo } from "react";
+import { useMemo } from "react";
 import { cn } from "@/lib/utils";
-import { API_BASE } from "@/lib/api";
+import { fetchApi } from "@/lib/api/core";
+import { useOrgQuery } from "@/hooks/use-api-query";
+import { queryKeys } from "@/lib/query-keys";
 import { Loader2, AlertTriangle } from "lucide-react";
 
 interface StreamingToken {
@@ -35,34 +37,21 @@ export function StreamingSparkline({
   orgId,
   showText = false,
 }: SparklineProps) {
-  const [tokens, setTokens] = useState<StreamingToken[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const tokensQuery = useOrgQuery(
+    queryKeys.observability.tokens(orgId, traceId),
+    orgId,
+    async () => {
+      const d = await fetchApi<{ data?: { tokens?: StreamingToken[] } }>(
+        `/orgs/${orgId}/traces/${traceId}/tokens`,
+      );
+      return d.data?.tokens ?? [];
+    },
+    { enabled: Boolean(traceId) },
+  );
 
-  useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    fetch(`${API_BASE}/orgs/${orgId}/traces/${traceId}/tokens`, {
-      credentials: "include",
-    })
-      .then(async (res) => {
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const d = await res.json();
-        if (!cancelled) {
-          setTokens(d.data?.tokens || []);
-          setLoading(false);
-        }
-      })
-      .catch((err) => {
-        if (!cancelled) {
-          setError(String(err));
-          setLoading(false);
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [traceId, orgId]);
+  const tokens = tokensQuery.data ?? [];
+  const loading = tokensQuery.isLoading;
+  const error = tokensQuery.error?.message ?? null;
 
   const { p50, stalls, totalBytes, spanCount } = useMemo(() => {
     if (tokens.length === 0) {
@@ -131,11 +120,6 @@ export function StreamingSparkline({
         )}
       </div>
 
-      {/* ui-audit 2026-07-06 M4: the bar chart is informational
-          (per-token delta_ms series; stalls >5×p50 in red). Wrap
-          in role="img" + aria-label so AT users hear what the
-          bars represent. Per-bar title attrs already expose
-          individual token details on hover. */}
       <div
         className="flex h-12 items-end gap-px"
         role="img"

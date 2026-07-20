@@ -1,22 +1,30 @@
 #!/usr/bin/env node
 /**
- * F85 / U20 — Headless Clerk auth seed (CI-safe).
+ * F85 / U20 — Headless Clerk auth seed (CI-safe, local only).
  *
  * Uses @clerk/testing/playwright's clerkSetup() + setupClerkTestingToken() +
  * clerk.signIn() to authenticate programmatically without any UI form filling
- * or Turnstile interaction. Requires CLERK_SECRET_KEY to be set.
+ * or Turnstile interaction.
  *
  * On success: writes e2e/.auth-state.json (Playwright storageState).
  * On failure: exits non-zero with a clear message naming the exact required
- * env vars.
+ * env vars — CI must treat this as a hard fail (portal-ci golden-paths job).
  *
- * Required env vars:
- *   CLERK_SECRET_KEY                    — Clerk secret key (sk_test_… or sk_live_…)
- *   NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY   — Clerk publishable key (pk_test_… or pk_live_…)
+ * Required env vars (local / CI localhost):
+ *   CLERK_SECRET_KEY                    — Clerk secret key (sk_test_…)
+ *   NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY   — Clerk publishable key (pk_test_…)
+ * Optional:
+ *   BASE / BASE_URL                     — portal origin (default http://127.0.0.1:3000)
+ *   CLERK_TEST_EMAIL                    — test user email for ticket sign-in
+ *   CLERK_TEST_KEY_FALLBACK=1           — allow committed pk_test/sk_test fallback
  *
- * The test-mode keys below are ONLY used as a fallback when neither is set in
- * the environment (local dev convenience). In CI, GitHub Actions secrets should
- * always supply these values and take precedence.
+ * Production / real domains:
+ *   Do NOT use this script against edenobservability.com. Clerk testing tokens
+ *   and Playwright Chromium are blocked on live. Capture auth with:
+ *     BASE=https://edenobservability.com node e2e/wait-for-signin.mjs
+ *   Do not invent or commit production credentials.
+ *
+ * See e2e/README-auth.md.
  */
 import { chromium } from "playwright";
 import { clerkSetup, clerk, setupClerkTestingToken } from "@clerk/testing/playwright";
@@ -53,13 +61,15 @@ function requireClerkKeys() {
     }
     const missing = [];
     if (!process.env.CLERK_SECRET_KEY) missing.push("CLERK_SECRET_KEY");
-    if (!process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY) missing.push("NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY");
+    if (!process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY) {
+      missing.push("NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY");
+    }
     console.error(
       `[seed-auth] FATAL: missing required Clerk env var(s): ${missing.join(", ")}\n` +
-      "  Set both CLERK_SECRET_KEY and NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY in .env.local\n" +
-      "  (or export them) before running golden paths.\n" +
-      "  Build and start must use the SAME publishable key — rebuild if you changed keys:\n" +
-      "    cd clients/portal && bun run build",
+        "  Set both CLERK_SECRET_KEY and NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY in .env.local\n" +
+        "  (or export them) before running golden paths.\n" +
+        "  Build and start must use the SAME publishable key — rebuild if you changed keys:\n" +
+        "    cd clients/portal && bun run build",
     );
     process.exit(1);
   }
@@ -71,14 +81,39 @@ requireClerkKeys();
 if (process.env.NEXT_PUBLIC_CLERK_SIGN_IN_URL === "/login") {
   console.warn(
     "[seed-auth] WARNING: NEXT_PUBLIC_CLERK_SIGN_IN_URL=/login causes redirect loops.\n" +
-    "  Set NEXT_PUBLIC_CLERK_SIGN_IN_URL=/sign-in in .env.local",
+      "  Set NEXT_PUBLIC_CLERK_SIGN_IN_URL=/sign-in in .env.local",
   );
 }
 
-const BASE = (process.env.BASE_URL || process.env.BASE || "http://127.0.0.1:3000").replace(/\/$/, "");
+const BASE = (process.env.BASE_URL || process.env.BASE || "http://127.0.0.1:3000").replace(
+  /\/$/,
+  "",
+);
 const EMAIL = process.env.CLERK_TEST_EMAIL || "kaiav.nihalani@gmail.com";
 const STATE_PATH = resolve(__dirname, "../.auth-state.json");
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+function assertLocalBase() {
+  let host = "";
+  try {
+    host = new URL(BASE).hostname;
+  } catch {
+    console.error(`[seed-auth] FATAL: invalid BASE/BASE_URL: ${BASE}`);
+    process.exit(1);
+  }
+  if (!/^(localhost|127\.0\.0\.1)$/i.test(host)) {
+    console.error(
+      `[seed-auth] FATAL: seed-auth.mjs only supports local BASE (got ${BASE}).\n` +
+        "  Headless Clerk testing tokens do not work on production domains.\n" +
+        "  For real domains, capture storageState manually:\n" +
+        "    BASE=https://edenobservability.com node e2e/wait-for-signin.mjs\n" +
+        "  Do not invent or commit production credentials.",
+    );
+    process.exit(1);
+  }
+}
+
+assertLocalBase();
 
 /** Poll until Clerk is loadable (v7 may expose `loaded` late). */
 async function waitForClerk(page) {

@@ -28,6 +28,8 @@ from eden.api.deps import (
     require_feature_flag,
     require_org_admin,
     require_org_member,
+    resolve_eden_org_id,
+    require_path_org_access,
 )
 from eden.services.observability import get_a2a_service
 
@@ -35,11 +37,22 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(
     tags=["observability-a2a"],
-    dependencies=[
-        Depends(require_feature_flag("intelligence_gap_v0")),
+    dependencies=[Depends(require_feature_flag("intelligence_gap_v0")),
         Depends(get_current_user),
     ],
 )
+
+
+async def _assert_path_org(org_id: str, member: dict) -> str:
+    from fastapi import HTTPException
+
+    eden_path = await resolve_eden_org_id(org_id) or org_id
+    if str(member["org_id"]) != str(eden_path):
+        raise HTTPException(
+            status_code=403,
+            detail="Path org_id does not match authenticated org",
+        )
+    return str(member["org_id"])
 
 
 class RegisterLinkRequest(BaseModel):
@@ -62,10 +75,11 @@ class MarkFailedRequest(BaseModel):
 @router.get("/v1/traces/{trace_id}/a2a")
 async def get_trace_a2a(
     trace_id: str = Path(...),
+    member: dict = Depends(require_org_member),
 ) -> dict[str, Any]:
     """Return the parent + children A2A links for this trace."""
     svc = get_a2a_service()
-    data = await svc.get_links_for_trace(trace_id)
+    data = await svc.get_links_for_trace(trace_id, org_id=member["org_id"])
     return {
         "status": "ok",
         "feature": "a2a_links",
@@ -80,15 +94,16 @@ async def get_trace_a2a(
 
 @router.post("/v1/a2a/{org_id}/links")
 async def register_link(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     body: RegisterLinkRequest = Body(...),
-    _member: dict = Depends(require_org_member),
+    member: dict = Depends(require_org_member),
 ) -> dict[str, Any]:
     """Register a new A2A link. Idempotent on
     (parent_trace_id, parent_span_id, child_trace_id)."""
+    scoped = await _assert_path_org(org_id, member)
     svc = get_a2a_service()
     link_id = await svc.register_link(
-        org_id,
+        scoped,
         parent_trace_id=body.parent_trace_id,
         child_trace_id=body.child_trace_id,
         parent_agent_id=body.parent_agent_id,
@@ -110,15 +125,16 @@ async def register_link(
 
 @router.get("/v1/a2a/{org_id}/invocations/{trace_id}")
 async def get_invocation_graph(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     trace_id: str = Path(...),
     max_depth: int = Query(4, ge=1, le=16),
-    _member: dict = Depends(require_org_member),
+    member: dict = Depends(require_org_member),
 ) -> dict[str, Any]:
     """Return the BFS invocation graph (nodes + edges) for a trace."""
+    scoped = await _assert_path_org(org_id, member)
     svc = get_a2a_service()
     graph = await svc.get_invocation_graph(
-        trace_id, org_id=org_id, max_depth=max_depth,
+        trace_id, org_id=scoped, max_depth=max_depth,
     )
     return {
         "status": "ok",
@@ -135,14 +151,15 @@ async def get_invocation_graph(
 
 @router.post("/v1/a2a/{org_id}/links/{link_id}/fail")
 async def mark_link_failed(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     link_id: str = Path(...),
     body: MarkFailedRequest = Body(...),
-    _admin: dict = Depends(require_org_admin),
+    admin: dict = Depends(require_org_admin),
 ) -> dict[str, Any]:
     """Mark a link as failed. Fires the ``on_a2a_invocation_failed``
     hook (per spec §E.1).
     """
+    await _assert_path_org(org_id, admin)
     svc = get_a2a_service()
     ok = await svc.mark_failed(link_id, error_kind=body.error_kind)
     return {

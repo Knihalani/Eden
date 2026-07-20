@@ -7,7 +7,7 @@ import { useEffect, useRef } from "react";
  * exponential backoff on errors + auth-error bail.
  *
  * The five polling components in the portal (alerts, budget-ticker,
- * replay, hilt-panel, inspector, use-notifications) used to repeat
+ * replay, inspector, use-notifications) used to repeat
  * the same setInterval pattern individually, and most of them had
  * at least one of three cost-spiral bugs:
  *
@@ -197,6 +197,13 @@ export function usePolling(
       try {
         await fetchRef.current?.();
         currentDelay = intervalMs; // reset backoff on success
+        // Always re-arm after a successful tick. Without this the poll
+        // fires once on mount/visibility and then goes quiet forever
+        // (BudgetTicker + notifications + auth health all stalled).
+        // Cost envelope is the caller's intervalMs (≥30s for chrome).
+        if (!paused && !authFailed) {
+          schedule(currentDelay);
+        }
       } catch (err) {
         if (isAuthError(err)) {
           // Permanent bail — the dashboard's auth-error path

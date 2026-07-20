@@ -214,20 +214,19 @@ class TestGatewayURLField:
         assert cfg.resolved_gateway_url() == "https://api.example.com/v1"
 
 
-def test_configure_redact_on_client_default_is_true() -> None:
-    """The client-side PII safety net is on by default."""
+def test_configure_redact_on_client_default_is_false() -> None:
+    """Client-side PII redact is off by default (gateway authoritative)."""
     eden.reset_config()
     eden.configure(org_id="o", api_key="k")
     cfg = eden.get_config()
-    assert cfg.redact_on_client is True
+    assert cfg.redact_on_client is False
 
 
-def test_configure_redact_on_client_can_be_disabled() -> None:
-    """Operators can turn the redactor off when the gateway is
-    the trusted redaction point."""
+def test_configure_redact_on_client_can_be_enabled() -> None:
+    """Operators can opt into client-side redact via configure()."""
     eden.reset_config()
-    eden.configure(org_id="o", api_key="k", redact_on_client=False)
-    assert eden.get_config().redact_on_client is False
+    eden.configure(org_id="o", api_key="k", redact_on_client=True)
+    assert eden.get_config().redact_on_client is True
 
 
 def test_configure_redact_on_client_incremental_update() -> None:
@@ -235,11 +234,23 @@ def test_configure_redact_on_client_incremental_update() -> None:
     require a reset_config() in between."""
     eden.reset_config()
     eden.configure(org_id="o", api_key="k")
-    assert eden.get_config().redact_on_client is True
-    eden.configure(redact_on_client=False)
     assert eden.get_config().redact_on_client is False
     eden.configure(redact_on_client=True)
     assert eden.get_config().redact_on_client is True
+    eden.configure(redact_on_client=False)
+    assert eden.get_config().redact_on_client is False
+
+
+def test_configure_batch_size_default_is_50() -> None:
+    eden.reset_config()
+    eden.configure(org_id="o", api_key="k")
+    assert eden.get_config().batch_size == 50
+
+
+def test_configure_capture_chunk_text_default_is_false() -> None:
+    eden.reset_config()
+    eden.configure(org_id="o", api_key="k")
+    assert eden.get_config().capture_chunk_text is False
 
 
 def test_configure_accepts_transport_field():

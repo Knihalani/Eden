@@ -3,10 +3,9 @@
 Four services:
 
 * :class:`InterventionEngine` — the headline guardrail route.
-  Default :func:`evaluate_and_act` returns
-  ``verdict: "allow"`` with ``live: false`` so production
-  flows don't break before a real policy exists. A real policy
-  is what flips the verdict.
+  Incomplete / unevaluable policy sets fail closed
+  (``verdict: "block"``, ``live: false``). Only enforced
+  detector policies flip the envelope to ``live: true``.
 
 * :class:`EvalToGuardrailLink` — promote a Cat 3 judge into a
   production guardrail (Galileo's eval-to-guardrail
@@ -88,6 +87,14 @@ async def _log_intervention(
     if client is None:
         return None
     int_id = str(uuid.uuid4())
+    # Schema has no dedicated ``action`` column; persist action_taken
+    # as a reason prefix so scan-history can filter honestly.
+    action = (action_taken or verdict or "allow")[:64]
+    reason_raw = (reason or "").strip()
+    if reason_raw.startswith("action="):
+        reason_out = reason_raw[:2000] or None
+    else:
+        reason_out = f"action={action}|{reason_raw}"[:2000] or None
     try:
         row = await client.fetchrow(
             """
@@ -104,14 +111,16 @@ async def _log_intervention(
             (trace_id or "")[:128] or None,
             (verdict or "allow")[:16],
             (edited_text or "")[:4000] or None,
-            (reason or "")[:2000] or None,
+            reason_out,
         )
     except Exception as exc:
         logger.debug("guardrails: intervention_log insert failed: %s", exc)
         return None
     if row is None:
         return None
-    return _row_to_dict(row)
+    out = _row_to_dict(row)
+    out["action"] = action
+    return out
 
 
 async def _log_evaluation(
@@ -187,7 +196,28 @@ async def _fetch_intervention_log(
     except Exception as exc:
         logger.debug("guardrails: log fetch failed: %s", exc)
         return []
-    return [_row_to_dict(r) for r in (rows or [])]
+    return [_enrich_intervention_row(_row_to_dict(r)) for r in (rows or [])]
+
+
+def _enrich_intervention_row(d: dict[str, Any]) -> dict[str, Any]:
+    """Synthesize ``action`` from reason prefix or verdict/reason heuristics."""
+    if not d:
+        return d
+    if d.get("action"):
+        return d
+    reason = str(d.get("reason") or "")
+    if reason.startswith("action="):
+        d["action"] = reason[7:].split("|", 1)[0][:64]
+        return d
+    rl = reason.lower()
+    verdict = str(d.get("verdict") or "allow")
+    if "injection" in rl:
+        d["action"] = f"injection_{verdict}"
+    elif "pii" in rl or (d.get("edited_text") and verdict in ("redact", "warn", "block")):
+        d["action"] = f"pii_{verdict}" if "pii" in rl else f"pii_redact"
+    else:
+        d["action"] = verdict
+    return d
 
 
 async def _insert_eval_to_guardrail_link(
@@ -351,11 +381,12 @@ class InterventionEngine:
     has the PII / injection match replaced with a
     placeholder.
 
-    **Default behaviour in v0:** when the org has zero active
-    policies, the engine returns
-    ``verdict: "allow"`` with ``live: false`` so production
-    flows don't break. A real policy is what flips the verdict
-    to a real ``live: true`` response.
+    **Fail-closed behaviour:** when the org has zero active
+    policies, policy fetch fails, or only unevaluated types
+    (e.g. ``judge_link``) exist, the engine returns
+    ``verdict: "block"`` with ``live: false``. Enforced
+    detector policies are what flip the envelope to
+    ``live: true``.
     """
 
     name = "intervention_engine"
@@ -385,6 +416,7 @@ class InterventionEngine:
                     "matched_policies": [],
                     "action_breakdown": {},
                     "live": False,
+                    "reason": "empty_text",
                 },
             )
 
@@ -392,18 +424,59 @@ class InterventionEngine:
             policies = await _fetch_policies(org_id, status="active")
         except Exception as exc:  # pragma: no cover - defensive
             logger.debug("intervention: fetch failed: %s", exc)
-            policies = []
-        if not policies:
-            # v0 default-allow — no policies = no enforcement
             return _ok_envelope(
                 self.name,
                 {
-                    "verdict": "allow",
+                    "verdict": "block",
+                    "edited_text": text,
+                    "matched_policies": [],
+                    "action_breakdown": {},
+                    "live": False,
+                    "reason": "policy_fetch_failed",
+                },
+            )
+        if not policies:
+            # Fail closed — no policies means enforcement incomplete.
+            return _ok_envelope(
+                self.name,
+                {
+                    "verdict": "block",
                     "edited_text": text,
                     "matched_policies": [],
                     "action_breakdown": {},
                     "live": False,
                     "reason": "no_active_policies",
+                },
+            )
+
+        # judge_link policies are declared but not evaluated here —
+        # do not advertise live enforcement solely because they exist.
+        _ENFORCED_TYPES = frozenset(
+            {
+                "prompt_injection",
+                "pii_redaction",
+                "hallucination",
+                "content_policy",
+            }
+        )
+        enforced_policies = [
+            p for p in policies if p.get("type") in _ENFORCED_TYPES
+        ]
+        if not enforced_policies:
+            has_judge = any(p.get("type") == "judge_link" for p in policies)
+            return _ok_envelope(
+                self.name,
+                {
+                    "verdict": "block",
+                    "edited_text": text,
+                    "matched_policies": [],
+                    "action_breakdown": {},
+                    "live": False,
+                    "reason": (
+                        "judge_link_not_enforced"
+                        if has_judge
+                        else "no_enforced_policies"
+                    ),
                 },
             )
 
@@ -671,13 +744,10 @@ class EvalToGuardrailLink:
                     import asyncio
 
                     try:
-                        loop = asyncio.get_running_loop()
-                        # We're inside a running loop — the
-                        # caller will see the await chain.
-                        # Since we can't await here without
-                        # making this method async, schedule
-                        # the coroutine.
-                        loop.create_task(coro)
+                        asyncio.get_running_loop()
+                        from eden.async_tasks import bounded_create_task
+
+                        bounded_create_task(coro, name="guardrail-judge-breach")
                     except RuntimeError:
                         # No running loop — likely a sync
                         # caller. Close the coroutine to

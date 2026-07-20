@@ -14,6 +14,7 @@ cache to invalidate).
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 import time
@@ -256,16 +257,21 @@ async def internal_health() -> dict[str, Any]:
     informational — operators read the body, not the status code).
     The overall status is the worst-case across components.
     """
+    names = list(PROBES.keys())
+    raw = await asyncio.gather(
+        *(probe() for probe in PROBES.values()),
+        return_exceptions=True,
+    )
     components: dict[str, Any] = {}
-    for name, probe in PROBES.items():
-        try:
-            components[name] = await probe()
-        except Exception as exc:
+    for name, result in zip(names, raw, strict=True):
+        if isinstance(result, Exception):
             components[name] = {
                 "status": "error",
-                "error": str(exc),
+                "error": str(result),
                 "probe_ms": None,
             }
+        else:
+            components[name] = result
 
     status_priority = {
         "healthy": 0,

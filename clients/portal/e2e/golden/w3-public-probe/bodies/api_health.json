@@ -1,0 +1,10 @@
+{
+  "status": "degraded",
+  "version": "0.1.0",
+  "postgres": "connected",
+  "qdrant": "error: [Errno 99] Cannot assign requested address",
+  "quality_worker_running": true,
+  "statgate_installed": true,
+  "evolution_loop_running": false,
+  "request_id": "30c00705-a16c-4c3c-8cda-21cf3670faba"
+}

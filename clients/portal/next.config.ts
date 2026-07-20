@@ -8,11 +8,75 @@ const nextConfig: NextConfig = {
   allowedDevOrigins: ["127.0.0.1", "localhost"],
   // Monorepo: trace deps from the portal package, not a parent lockfile.
   outputFileTracingRoot: import.meta.dirname,
+  // Turbopack duplicates recharts (~412KB) per async island. Webpack + a
+  // shared cacheGroup keeps one copy and maxSize splits it under the
+  // 400KB/chunk budget gate (`bun run check:bundle`).
+  webpack: (config, { isServer }) => {
+    if (isServer) return config;
+    const split = config.optimization?.splitChunks;
+    if (!split || typeof split !== "object") return config;
+    config.optimization = {
+      ...config.optimization,
+      splitChunks: {
+        ...split,
+        chunks: "all",
+        maxSize: 350 * 1024,
+        cacheGroups: {
+          ...(split.cacheGroups ?? {}),
+          recharts: {
+            test: /[\\/]node_modules[\\/](recharts|victory-vendor|d3-[^\\/]+)[\\/]/,
+            name: "recharts-vendor",
+            chunks: "all",
+            priority: 40,
+            reuseExistingChunk: true,
+            enforce: true,
+            maxSize: 350 * 1024,
+          },
+        },
+      },
+    };
+    return config;
+  },
   experimental: {
-    optimizePackageImports: ["recharts", "lucide-react", "@xyflow/react", "framer-motion"],
+    // P34: include cmdk / radix / clerk; drop unused @xyflow (K9).
+    optimizePackageImports: [
+      "recharts",
+      "lucide-react",
+      "framer-motion",
+      "cmdk",
+      "@clerk/nextjs",
+      "@radix-ui/react-avatar",
+      "@radix-ui/react-dialog",
+      "@radix-ui/react-dropdown-menu",
+      "@radix-ui/react-label",
+      "@radix-ui/react-select",
+      "@radix-ui/react-separator",
+      "@radix-ui/react-slot",
+      "@radix-ui/react-tabs",
+      "@radix-ui/react-tooltip",
+    ],
+  },
+  images: {
+    // P13–P14: Clerk CDN + same-origin avatars. Arbitrary transcript
+    // URLs use next/image with ``unoptimized`` at the call site.
+    remotePatterns: [
+      { protocol: "https", hostname: "img.clerk.com" },
+      { protocol: "https", hostname: "images.clerk.dev" },
+      { protocol: "https", hostname: "edenobservability.com" },
+      { protocol: "http", hostname: "localhost" },
+      { protocol: "http", hostname: "127.0.0.1" },
+    ],
   },
   async redirects() {
     return [
+      // P32: settings deep-links → unified ?tab= (server redirect).
+      { source: "/settings/gateway", destination: "/settings?tab=gateway", permanent: false },
+      { source: "/settings/exports", destination: "/settings?tab=exports", permanent: false },
+      { source: "/settings/pii", destination: "/settings?tab=pii", permanent: false },
+      { source: "/settings/retention", destination: "/settings?tab=retention", permanent: false },
+      { source: "/settings/sidebar", destination: "/settings?tab=sidebar", permanent: false },
+      { source: "/settings/status", destination: "/settings?tab=status", permanent: false },
+      // /settings/webhooks-dlq is a real filesystem route — do not redirect.
       // Dead /jobs and /eval-harnesses surfaces → dashboard.
       { source: "/jobs", destination: "/dashboard", permanent: false },
       { source: "/jobs/:path*", destination: "/dashboard", permanent: false },
@@ -24,10 +88,15 @@ const nextConfig: NextConfig = {
       { source: "/marketplace/:path*", destination: "/dashboard", permanent: false },
       { source: "/multi-agent", destination: "/dashboard", permanent: false },
       { source: "/multi-agent/:path*", destination: "/dashboard", permanent: false },
+      { source: "/sandbox", destination: "/dashboard", permanent: false },
+      { source: "/sandbox/:path*", destination: "/dashboard", permanent: false },
       { source: "/agents/:id/sim-runs", destination: "/dashboard", permanent: false },
       { source: "/agents/:id/sim-runs/:path*", destination: "/dashboard", permanent: false },
       { source: "/agents/:id/test-runs", destination: "/dashboard", permanent: false },
       { source: "/agents/:id/test-runs/:path*", destination: "/dashboard", permanent: false },
+      // FinOps UI lives under Cost + Settings — bare /finops never had a page.
+      { source: "/finops", destination: "/settings?tab=finops", permanent: false },
+      { source: "/finops/:path*", destination: "/settings?tab=finops", permanent: false },
       // Auth cutover to Clerk
       { source: "/login", destination: "/sign-in", permanent: false },
       { source: "/login/:path*", destination: "/sign-in/:path*", permanent: false },
@@ -56,20 +125,33 @@ const nextConfig: NextConfig = {
       { source: "/apm/:path*", destination: "/traces", permanent: true },
       { source: "/playgrounds", destination: "/evals?tab=playgrounds", permanent: true },
       { source: "/experiments", destination: "/evals?tab=experiments", permanent: true },
+      // Query-aware /observability deep links must precede the bare redirect
+      // so ?trace_id= / ?traceId= are preserved for bookmarks.
+      {
+        source: "/observability",
+        has: [{ type: "query", key: "trace_id" }],
+        destination: "/traces?traceId=:trace_id&view=traces",
+        permanent: false,
+      },
+      {
+        source: "/observability",
+        has: [{ type: "query", key: "traceId" }],
+        destination: "/traces?traceId=:traceId&view=traces",
+        permanent: false,
+      },
       { source: "/observability", destination: "/traces", permanent: true },
       { source: "/observability/apm", destination: "/traces", permanent: true },
       { source: "/observability/apm/:path*", destination: "/traces", permanent: true },
       { source: "/inspector", destination: "/traces?view=inspect", permanent: true },
       { source: "/replay", destination: "/traces?view=replay", permanent: true },
       { source: "/debugger", destination: "/traces?view=debug", permanent: true },
-      { source: "/observability/time-travel", destination: "/traces?view=debug", permanent: true },
+      // Time-travel + columnar pages are live — do not soft-land them on
+      // debugger/query (that orphaned the real UIs and looped Cohorts→Query).
       { source: "/observability/query", destination: "/traces?view=query", permanent: true },
-      { source: "/observability/mcp", destination: "/traces?facet=mcp", permanent: true },
-      { source: "/observability/decisions", destination: "/traces?facet=decisions", permanent: true },
-      { source: "/observability/memory", destination: "/traces?facet=memory", permanent: true },
-      { source: "/observability/retrieval", destination: "/traces?facet=retrieval", permanent: true },
+      // Facet soft-landings removed: dedicated /observability/{mcp,decisions,
+      // memory,retrieval} pages exist. Old /traces?facet=* bookmarks still
+      // embed those pages via the traces hub (see traces/page.tsx).
       { source: "/observability/eval", destination: "/evals?tab=eval", permanent: true },
-      { source: "/observability/cohorts", destination: "/traces?view=query", permanent: true },
 
       { source: "/fleet", destination: "/agents?tab=fleet", permanent: true },
       { source: "/llmops", destination: "/optimization", permanent: true },
@@ -77,6 +159,7 @@ const nextConfig: NextConfig = {
       { source: "/profile", destination: "/settings?tab=account", permanent: true },
       { source: "/billing", destination: "/settings?tab=billing", permanent: true },
       { source: "/users", destination: "/analytics?tab=users", permanent: true },
+      { source: "/insights/topics", destination: "/analytics?tab=topics", permanent: true },
       { source: "/insights", destination: "/analytics?tab=insights", permanent: true },
       { source: "/tools", destination: "/analytics?tab=tools", permanent: true },
       { source: "/signals", destination: "/alerts?tab=signals", permanent: true },
@@ -99,18 +182,10 @@ const nextConfig: NextConfig = {
       // U01 trace deep links
       { source: "/traces/:traceId", destination: "/traces?traceId=:traceId&view=traces", permanent: false },
       { source: "/observability/traces/:traceId", destination: "/traces?traceId=:traceId&view=traces", permanent: true },
-      {
-        source: "/observability",
-        has: [{ type: "query", key: "trace_id" }],
-        destination: "/traces?traceId=:trace_id&view=traces",
-        permanent: false,
-      },
-      {
-        source: "/observability",
-        has: [{ type: "query", key: "traceId" }],
-        destination: "/traces?traceId=:traceId&view=traces",
-        permanent: false,
-      },
+
+      // Public status: keep /health as an alias (also handled by
+      // (marketing)/health → redirect("/status") for App Router).
+      { source: "/health", destination: "/status", permanent: false },
     ];
   },
 };

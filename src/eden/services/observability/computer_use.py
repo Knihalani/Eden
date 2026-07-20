@@ -231,22 +231,38 @@ class ComputerUseService:
     async def list_tombstoned_for_trace(
         self,
         trace_id: str,
+        *,
+        org_id: str | None = None,
     ) -> list[dict[str, Any]]:
         """List every tombstoned screenshot for a trace."""
         client = await _get_client()
         if client is None:
             return []
         try:
-            rows = await client.fetch(
-                """
-                SELECT s3_uri, org_id, trace_id, tombstoned_at,
-                       tombstoned_by, reason
-                  FROM computer_use_screenshots_tombstoned
-                 WHERE trace_id = $1::uuid
-                 ORDER BY tombstoned_at DESC
-                """,
-                trace_id,
-            )
+            if org_id:
+                rows = await client.fetch(
+                    """
+                    SELECT s3_uri, org_id, trace_id, tombstoned_at,
+                           tombstoned_by, reason
+                      FROM computer_use_screenshots_tombstoned
+                     WHERE trace_id = $1::uuid
+                       AND org_id = $2
+                     ORDER BY tombstoned_at DESC
+                    """,
+                    trace_id,
+                    org_id,
+                )
+            else:
+                rows = await client.fetch(
+                    """
+                    SELECT s3_uri, org_id, trace_id, tombstoned_at,
+                           tombstoned_by, reason
+                      FROM computer_use_screenshots_tombstoned
+                     WHERE trace_id = $1::uuid
+                     ORDER BY tombstoned_at DESC
+                    """,
+                    trace_id,
+                )
         except Exception as exc:
             logger.debug("cu.list_tombstoned_for_trace failed: %s", exc)
             return []

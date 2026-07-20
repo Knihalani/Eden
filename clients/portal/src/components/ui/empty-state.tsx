@@ -96,7 +96,7 @@ export function EmptyState({
       )}
       <p
         id={headingId}
-        className={cn("font-medium text-[var(--text-secondary)]", s.title)}
+        className={cn("font-medium text-[var(--text-primary)]", s.title)}
       >
         {title}
       </p>

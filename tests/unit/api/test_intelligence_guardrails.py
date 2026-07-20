@@ -67,9 +67,19 @@ def app(stub_pg, monkeypatch):
     async def _get_user():
         return {"user_id": "u-test", "email": "t@test.io", "org_id": "org-test"}
 
+    async def _get_member():
+        return {"sub": "u-test", "org_id": "org-test"}
+
+    async def _path_org(org_id: str = "org-test"):
+        return org_id
+
     app = FastAPI()
     app.include_router(intelligence_guardrails.router)
-    app.dependency_overrides[intelligence_guardrails.get_current_user] = _get_user
+    app.dependency_overrides[eden_deps.get_current_user] = _get_user
+    app.dependency_overrides[eden_deps.require_org_member] = _get_member
+    app.dependency_overrides[eden_deps.require_path_org_access] = _path_org
+    app.dependency_overrides[intelligence_guardrails.require_org_member] = _get_member
+    app.dependency_overrides[intelligence_guardrails.require_path_org_access] = _path_org
     return app
 
 
@@ -107,10 +117,7 @@ def test_scan_history_returns_rows(client, stub_pg):
 
 
 def test_scan_history_filters_by_action_prefix_via_reason(client, stub_pg):
-    """action_prefix is applied to the row's verdict+reason (since the
-    underlying schema doesn't have a dedicated 'action' column).
-    Filtering by 'injection' returns rows whose reason contains
-    'injection'."""
+    """action_prefix matches synthesized ``action`` or reason/verdict heuristics."""
     stub_pg.rows.extend([
         {"id": str(uuid4()), "org_id": "org-test", "trace_id": "t1",
          "verdict": "block", "reason": "injection match",
@@ -119,17 +126,21 @@ def test_scan_history_filters_by_action_prefix_via_reason(client, stub_pg):
          "verdict": "redact", "reason": "pii SSN",
          "policy_id": None, "edited_text": "***", "created_at": "t"},
     ])
-    # Note: the action_prefix filter is a starting-with match on the
-    # 'action' field. Since the underlying rows don't have an 'action'
-    # field, this would normally return 0 rows. The endpoint is
-    # defensive — it returns 0 when no match.
     resp = client.get(
         "/orgs/org-test/intelligence/guardrails/scan-history?action_prefix=injection",
     )
     assert resp.status_code == 200
-    # The endpoint applies the prefix filter on r.get("action", "")
-    # which isn't present in the row, so we expect 0 results here.
-    assert resp.json()["count"] == 0
+    body = resp.json()
+    assert body["count"] == 1
+    assert "injection" in (body["scans"][0].get("reason") or "").lower()
+
+    resp_pii = client.get(
+        "/orgs/org-test/intelligence/guardrails/scan-history?action_prefix=pii",
+    )
+    assert resp_pii.status_code == 200
+    pii_body = resp_pii.json()
+    assert pii_body["count"] == 1
+    assert "pii" in (pii_body["scans"][0].get("reason") or "").lower()
 
 
 def test_scan_history_respects_limit(client, stub_pg):

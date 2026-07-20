@@ -2,9 +2,7 @@
 
 import { use, useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { AnimatePresence, motion } from "framer-motion";
 import {
-  AlertCircle,
   AlertTriangle,
   ArrowLeft,
   CheckCircle2,
@@ -26,11 +24,26 @@ import { Card } from "@/components/ui/card";
 import { PageHeader } from "@/components/layout/page-header";
 import { PageContent } from "@/components/layout/page-content";
 import { ImprovePlanStatusBadge } from "@/components/ui/status-badge";
+import { ErrorState } from "@/components/ui/error-state";
 import { useToast } from "@/components/ui/toast";
 import { NoOrgState } from "@/components/ui/no-org-state";
 import { DiffViewer } from "@/components/improve/diff-viewer";
 import { PlanKindBadge } from "@/components/improve/plan-kind-badge";
+import { ImproveFeatureDisabledState } from "@/components/improve/feature-disabled-state";
 import { errorFromCaught } from "@/lib/safe-error-message";
+import {
+  isImprovementAgentDisabled,
+  isRepoNotConnected,
+  REPO_NOT_CONNECTED_MESSAGE,
+} from "@/lib/improve-feature";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 function ConfirmDialog({
   title,
@@ -50,33 +63,29 @@ function ConfirmDialog({
   onCancel: () => void;
 }) {
   return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      className="fixed inset-0 bg-[var(--bg-base)]/70 z-50 flex items-center justify-center p-4"
-      onClick={onCancel}
+    <Dialog
+      open
+      onOpenChange={(open) => {
+        if (!open && !busy) onCancel();
+      }}
     >
-      <motion.div
-        initial={{ scale: 0.95, y: 10 }}
-        animate={{ scale: 1, y: 0 }}
-        exit={{ scale: 0.95, y: 10 }}
-        className="bg-[var(--bg-base)] border border-[var(--border-default)] rounded-lg w-full max-w-md p-5 space-y-4"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-start gap-3">
-          <AlertTriangle
-            className={cn(
-              "h-5 w-5 mt-0.5 flex-shrink-0",
-              variant === "danger" ? "text-[var(--error)]" : "text-[var(--accent)]",
-            )}
-          />
-          <div className="flex-1">
-            <h3 className="text-base font-semibold text-[var(--text-primary)]">{title}</h3>
-            <p className="text-sm text-[var(--text-muted)] mt-1">{description}</p>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <div className="flex items-start gap-3">
+            <AlertTriangle
+              className={cn(
+                "h-5 w-5 mt-0.5 flex-shrink-0",
+                variant === "danger" ? "text-[var(--error)]" : "text-[var(--accent)]",
+              )}
+              aria-hidden
+            />
+            <div className="flex-1 space-y-1.5">
+              <DialogTitle>{title}</DialogTitle>
+              <DialogDescription>{description}</DialogDescription>
+            </div>
           </div>
-        </div>
-        <div className="flex justify-end gap-2 pt-2">
+        </DialogHeader>
+        <DialogFooter>
           <Button variant="ghost" onClick={onCancel} disabled={busy}>
             Cancel
           </Button>
@@ -85,15 +94,15 @@ function ConfirmDialog({
             disabled={busy}
             className={cn(
               variant === "danger" &&
-                "bg-[var(--error)] hover:bg-[var(--error)]/600 text-[var(--bg-primary)]",
+                "bg-[var(--error)] hover:bg-[var(--error)]/90 text-[var(--bg-primary)]",
             )}
           >
-            {busy && <RefreshCw className="h-4 w-4 animate-spin mr-1" />}
+            {busy && <RefreshCw className="h-4 w-4 animate-spin mr-1" aria-hidden />}
             {confirmLabel}
           </Button>
-        </div>
-      </motion.div>
-    </motion.div>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -109,6 +118,7 @@ export default function ImprovementPlanDetailPage({
   const [plan, setPlan] = useState<ImprovementPlan | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [featureDisabled, setFeatureDisabled] = useState(false);
   const [diffMode, setDiffMode] = useState<"unified" | "split">("unified");
   const [editDiff, setEditDiff] = useState("");
   const [editTitle, setEditTitle] = useState("");
@@ -122,6 +132,7 @@ export default function ImprovementPlanDetailPage({
     if (!currentOrg) return;
     setLoading(true);
     setError("");
+    setFeatureDisabled(false);
     try {
       const data = await improvePlansApi.getPlan(currentOrg.id, id);
       const p = data.data.plan;
@@ -131,7 +142,13 @@ export default function ImprovementPlanDetailPage({
       setEditSummary(p.summary ?? "");
       setDirty(false);
     } catch (err) {
-      setError(errorFromCaught(err, "Failed to load plan"));
+      if (isImprovementAgentDisabled(err)) {
+        setFeatureDisabled(true);
+        setPlan(null);
+        setError("");
+      } else {
+        setError(errorFromCaught(err, "Failed to load plan"));
+      }
     } finally {
       setLoading(false);
     }
@@ -141,10 +158,11 @@ export default function ImprovementPlanDetailPage({
     void load();
   }, [load]);
 
+  // Backend approve only accepts draft / pending_review / approved.
+  // Hide actions for terminal + snoozed so operators do not hit 409s.
   const canAct =
     plan &&
-    !["rejected", "merged", "superseded"].includes(plan.status) &&
-    plan.status !== "pr_opened";
+    ["draft", "pending_review", "approved"].includes(plan.status);
 
   async function handleSaveDraft() {
     if (!currentOrg || !plan) return;
@@ -177,16 +195,45 @@ export default function ImprovementPlanDetailPage({
         });
       }
       const data = await improvePlansApi.approvePlan(currentOrg.id, plan.id);
+      const status = data.data.status;
+      const message = data.data.message;
       const prUrl = data.data.pr_url;
       const prNum = data.data.pr_number;
-      toast.success(
-        prNum ? `PR #${prNum} opened` : "Plan approved — PR opened",
-      );
+      // F68 prompt/guardrail stubs return 501; do not treat bare
+      // "approved" as success (that was the old no-op toast path).
+      const realSuccess =
+        status === "pr_opened" ||
+        status === "promoted" ||
+        status === "promotion_queued";
+      if (!realSuccess) {
+        const failMsg =
+          message ||
+          (status ? `Approve returned ${status}` : "Approve did not succeed");
+        toast.error(
+          isRepoNotConnected(failMsg) ? REPO_NOT_CONNECTED_MESSAGE : failMsg,
+        );
+        setConfirmAction(null);
+        await load();
+        return;
+      }
+      if (status === "pr_opened") {
+        toast.success(prNum ? `PR #${prNum} opened` : "PR opened");
+        setConfirmAction(null);
+        await load();
+        if (prUrl) window.open(prUrl, "_blank", "noopener,noreferrer");
+        return;
+      }
+      toast.success(message || "Plan approved");
       setConfirmAction(null);
       await load();
-      if (prUrl) window.open(prUrl, "_blank", "noopener,noreferrer");
     } catch (err) {
-      toast.error(errorFromCaught(err, "Approve failed"));
+      if (isRepoNotConnected(err)) {
+        toast.error(REPO_NOT_CONNECTED_MESSAGE);
+      } else if (isImprovementAgentDisabled(err)) {
+        toast.error(errorFromCaught(err, "Feature disabled — ask an admin"));
+      } else {
+        toast.error(errorFromCaught(err, "Approve failed"));
+      }
     } finally {
       setBusyAction(null);
     }
@@ -245,6 +292,18 @@ export default function ImprovementPlanDetailPage({
     );
   }
 
+  if (featureDisabled) {
+    return (
+      <div className="p-6">
+        <Button variant="ghost" onClick={() => router.push("/improve/plans")} className="mb-4">
+          <ArrowLeft className="h-4 w-4 mr-1" />
+          Back
+        </Button>
+        <ImproveFeatureDisabledState />
+      </div>
+    );
+  }
+
   if (error || !plan) {
     return (
       <div className="p-6">
@@ -252,24 +311,15 @@ export default function ImprovementPlanDetailPage({
           <ArrowLeft className="h-4 w-4 mr-1" />
           Back
         </Button>
-        <Card className="border-[var(--error)]/20 bg-[var(--error)]/5">
-          <div
-            role="alert"
-            className="p-4 text-sm text-[var(--error)] flex items-center justify-between gap-2"
-          >
-            <span className="flex items-center gap-2">
-              <AlertCircle className="h-4 w-4" />
-              {error || "Plan not found."}
-            </span>
-            <button
-              type="button"
-              onClick={() => void load()}
-              className="text-xs font-medium underline underline-offset-2"
-            >
-              Retry
-            </button>
-          </div>
-        </Card>
+        <ErrorState
+          title="Could not load plan"
+          message={error || "Plan not found."}
+          action={
+            <Button onClick={() => void load()} variant="outline" size="sm">
+              Try again
+            </Button>
+          }
+        />
       </div>
     );
   }
@@ -334,12 +384,12 @@ export default function ImprovementPlanDetailPage({
               </>
             )}
             {plan.pr_url && (
-              <a href={plan.pr_url} target="_blank" rel="noreferrer">
-                <Button variant="outline" size="sm">
+              <Button asChild variant="outline" size="sm">
+                <a href={plan.pr_url} target="_blank" rel="noreferrer">
                   <ExternalLink className="h-4 w-4 mr-1" />
                   View PR #{plan.pr_number ?? ""}
-                </Button>
-              </a>
+                </a>
+              </Button>
             )}
           </div>
         }
@@ -458,7 +508,7 @@ export default function ImprovementPlanDetailPage({
         </div>
       </div>
 
-      <AnimatePresence>
+      <>
         {confirmAction === "approve" && (
           <ConfirmDialog
             title="Approve and open PR?"
@@ -471,22 +521,16 @@ export default function ImprovementPlanDetailPage({
           />
         )}
         {confirmAction === "reject" && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-[var(--bg-base)]/70 z-50 flex items-center justify-center p-4"
-            onClick={() => setConfirmAction(null)}
+          <Dialog
+            open
+            onOpenChange={(open) => {
+              if (!open && busyAction !== "reject") setConfirmAction(null);
+            }}
           >
-            <motion.div
-              initial={{ scale: 0.95, y: 10 }}
-              animate={{ scale: 1, y: 0 }}
-              className="bg-[var(--bg-base)] border border-[var(--border-default)] rounded-lg w-full max-w-md p-5 space-y-4"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <h3 className="text-base font-semibold text-[var(--text-primary)]">
-                Reject this plan?
-              </h3>
+            <DialogContent className="max-w-md" aria-describedby={undefined}>
+              <DialogHeader>
+                <DialogTitle>Reject this plan?</DialogTitle>
+              </DialogHeader>
               <textarea
                 value={rejectReason}
                 onChange={(e) => setRejectReason(e.target.value)}
@@ -494,22 +538,26 @@ export default function ImprovementPlanDetailPage({
                 aria-label="Rejection reason"
                 className="w-full h-20 bg-[var(--bg-base)] border border-[var(--border-default)] rounded px-3 py-2 text-sm"
               />
-              <div className="flex justify-end gap-2">
-                <Button variant="ghost" onClick={() => setConfirmAction(null)}>
+              <DialogFooter>
+                <Button
+                  variant="ghost"
+                  onClick={() => setConfirmAction(null)}
+                  disabled={busyAction === "reject"}
+                >
                   Cancel
                 </Button>
                 <Button
                   onClick={() => void handleReject()}
                   disabled={busyAction === "reject"}
-                  className="bg-[var(--error)] hover:bg-[var(--error)]/600 text-[var(--bg-primary)]"
+                  className="bg-[var(--error)] hover:bg-[var(--error)]/90 text-[var(--bg-primary)]"
                 >
                   Reject
                 </Button>
-              </div>
-            </motion.div>
-          </motion.div>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         )}
-      </AnimatePresence>
+      </>
     </PageContent>
   );
 }

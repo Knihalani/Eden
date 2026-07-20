@@ -8,7 +8,15 @@ from unittest.mock import patch
 
 import pytest
 
+from eden.mcp_server.auth import McpAuthContext
 from eden.mcp_server.server import call_tool, list_tools
+
+_DEBUG_AUTH = McpAuthContext(
+    api_key="test-key",
+    base_url="http://127.0.0.1:8000",
+    scopes=("mcp:read", "mcp:debug", "mcp:fix"),
+)
+
 
 
 # ── Fake client ────────────────────────────────────────────────────
@@ -253,6 +261,7 @@ async def test_rerun_debugger_passes_rerun_mode_and_live_prefix() -> None:
             "live_prefix": True,
         },
         client=client,
+        auth=_DEBUG_AUTH,
     )
 
     assert out["status"] == "ok"
@@ -271,6 +280,7 @@ async def test_rerun_debugger_defaults_no_rerun_mode() -> None:
         "rerun_debugger",
         {"org_id": "org_1", "trace_id": "trc_def"},
         client=client,
+        auth=_DEBUG_AUTH,
     )
 
     assert out["status"] == "ok"
@@ -291,6 +301,7 @@ async def test_rerun_debugger_returns_cache_stats() -> None:
             "live_prefix": True,
         },
         client=client,
+        auth=_DEBUG_AUTH,
     )
 
     assert out["status"] == "ok"

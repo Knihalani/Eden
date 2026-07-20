@@ -78,6 +78,7 @@ class FakePg:
                 payload = json.loads(payload)
             self._rows.append({
                 "trace_id": args[3],
+                "tenant_id": args[1],
                 "event_type": args[5],
                 "payload": payload,
             })
@@ -87,17 +88,21 @@ class FakePg:
     async def fetch(self, query: str, *args: Any) -> list[dict[str, Any]]:
         sql = " ".join(query.strip().lower().split())
         rows = [
-            {"payload": r["payload"]} for r in self._rows
+            r for r in self._rows
             if r["trace_id"] == args[0]
             and r["event_type"] == "debugger.checkpoint"
         ]
+        if "tenant_id" in sql and len(args) > 1:
+            tenant = args[1]
+            rows = [r for r in rows if r.get("tenant_id") == tenant]
+        out = [{"payload": r["payload"]} for r in rows]
         # get_at_step: filter by step_number (args[1]) and LIMIT 1.
-        if "step_number" in sql and len(args) > 1:
-            rows = [
-                r for r in rows
+        if "step_number" in sql and "tenant_id" not in sql and len(args) > 1:
+            out = [
+                r for r in out
                 if r["payload"].get("step_number") == args[1]
             ][:1]
-        return rows
+        return out
 
     async def fetchrow(self, query: str, *args: Any) -> dict[str, Any] | None:
         for r in self._rows:

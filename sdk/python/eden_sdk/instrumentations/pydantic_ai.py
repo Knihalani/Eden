@@ -2,7 +2,7 @@
 
 Patches :class:`pydantic_ai.Agent` ``run`` / ``run_sync`` so every agent
 invocation emits an ``agent.run`` framework event with
-``source_format: pydantic-ai``.
+``source_format: pydantic-ai`` (path remapped to ``webhook``).
 """
 
 from __future__ import annotations
@@ -57,7 +57,7 @@ def _emit(
         "tags": ["pydantic-ai", "framework"],
         "source_format": "pydantic-ai",
     }
-    get_default_client().enqueue(TraceEvent(payload=payload, source_format="pydantic-ai"))
+    get_default_client().enqueue(TraceEvent(payload=payload, source_format="webhook"))
 
 
 def _agent_name(agent: Any) -> str:

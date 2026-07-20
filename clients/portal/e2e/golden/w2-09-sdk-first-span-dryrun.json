@@ -1,0 +1,79 @@
+{
+  "agent": "W2-EXPLORER-PROBE-3",
+  "title": "SDK first-span dry-run + mock verification",
+  "timestamp_utc": "2026-07-20T05:10:28.813572+00:00",
+  "allow_list": [
+    "otel",
+    "helicone",
+    "langfuse",
+    "openai",
+    "anthropic",
+    "bedrock",
+    "gemini",
+    "framework",
+    "webhook"
+  ],
+  "format_remap": {
+    "module_py": "sdk/python/eden_sdk/ingest_format.py",
+    "module_ts": "sdk/ts-ai/src/ingest-format.ts",
+    "wired_py_client": true,
+    "wired_ts_client": true,
+    "custom": "webhook",
+    "eden-sdk-doctor": "webhook",
+    "vercel-ai": "webhook"
+  },
+  "unit_tests": {
+    "python_sdk_ingest_related": "PASS \u2014 test_config::test_ingest_url_shape + test_ws6_sdk + test_gzip_ingest + test_client (36)",
+    "python_ingest_format": "PASS \u2014 tests/test_ingest_format.py (15)",
+    "ts_client_gzip_wire": "PASS \u2014 48",
+    "ts_ingest_format": "PASS \u2014 tests/ingest-format.test.ts (13)",
+    "remap_selfcheck": "PASS"
+  },
+  "mock_dry_run": {
+    "base": "http://127.0.0.1:57817",
+    "python_doctor_ok": true,
+    "python_sent_events": 5,
+    "python_failed": 0,
+    "sdk_posts_all_allowlisted": true,
+    "sdk_post_formats": [
+      "webhook",
+      "openai",
+      "anthropic",
+      "webhook",
+      "webhook",
+      "openai"
+    ],
+    "sdk_paths": [
+      "/orgs/org_dryrun/ingest/webhook",
+      "/orgs/org_dryrun/ingest/openai",
+      "/orgs/org_dryrun/ingest/anthropic",
+      "/orgs/org_dryrun/ingest/webhook",
+      "/orgs/org_dryrun/ingest/webhook",
+      "/orgs/org_dryrun/ingest/openai"
+    ],
+    "direct_curl_custom_http": 415,
+    "direct_curl_webhook_http": 200,
+    "note": "Doctor/custom/vercel-ai remapped to /ingest/webhook; openai/anthropic identity; payload retains original source_format label"
+  },
+  "live_prod": {
+    "status": "BLOCKED",
+    "reason": "EDEN_ORG_ID and EDEN_API_KEY/EDEN_ORG_API_KEY absent from process env and checked .env files",
+    "health_http": 503,
+    "health_body_status": "degraded",
+    "negative_openai_no_key_http": 401
+  },
+  "commands_once_keys_provided": {
+    "export": [
+      "export EDEN_ORG_ID='org_...'",
+      "export EDEN_ORG_API_KEY='sk_eden_...'",
+      "export EDEN_BASE_URL='https://api.edenobservability.com'"
+    ],
+    "python_doctor": "cd sdk/python && uv run python -m eden_sdk.doctor",
+    "python_doctor_alt": "cd sdk/python && uv run eden-doctor",
+    "ts_doctor": "cd sdk/ts-ai && bun run src/doctor.ts",
+    "ts_doctor_alt": "npx @eden-ai/sdk doctor",
+    "curl_first_span_openai": "curl -sS -w '\\nhttp:%{http_code}\\n' -X POST \"$EDEN_BASE_URL/orgs/$EDEN_ORG_ID/ingest/openai\" -H \"X-Org-Id: $EDEN_ORG_ID\" -H \"X-Org-Api-Key: ${EDEN_ORG_API_KEY:-$EDEN_API_KEY}\" -H 'Content-Type: application/json' -d '[{\"event_id\":\"live_probe_1\",\"event_type\":\"agent.run\",\"name\":\"eden.live-probe\",\"trace_id\":\"'\"$(uuidgen | tr -d - | tr A-Z a-z)\"'\",\"outcome\":\"success\",\"duration_ms\":0,\"attributes\":{\"probe\":true},\"tags\":[\"probe\"],\"source_format\":\"openai\"}]'",
+    "curl_first_span_webhook_doctor_shape": "curl -sS -w '\\nhttp:%{http_code}\\n' -X POST \"$EDEN_BASE_URL/orgs/$EDEN_ORG_ID/ingest/webhook\" -H \"X-Org-Id: $EDEN_ORG_ID\" -H \"X-Org-Api-Key: ${EDEN_ORG_API_KEY:-$EDEN_API_KEY}\" -H 'Content-Type: application/json' -d '[{\"event_id\":\"live_doctor_1\",\"event_type\":\"agent.run\",\"name\":\"eden.doctor\",\"trace_id\":\"'\"$(uuidgen | tr -d - | tr A-Z a-z)\"'\",\"outcome\":\"success\",\"duration_ms\":0,\"attributes\":{\"doctor\":true},\"tags\":[\"doctor\",\"sdk\"],\"source_format\":\"eden-sdk-doctor\"}]'",
+    "expect": "Doctor report.ok=true with test_event HTTP 2xx; curl openai/webhook \u2192 2xx accepted; do NOT POST /ingest/custom (415)"
+  }
+}

@@ -1010,8 +1010,10 @@ def _fire_drift_alert(
         )
         if asyncio.iscoroutine(result):
             try:
-                loop = asyncio.get_running_loop()
-                loop.create_task(result)
+                asyncio.get_running_loop()
+                from eden.async_tasks import bounded_create_task
+
+                bounded_create_task(result, name="predictive-drift-alert")
             except RuntimeError:
                 # No running loop (sync context). Drop the
                 # coroutine with a debug log so we don't

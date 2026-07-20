@@ -22,8 +22,23 @@ def configure_exporter(
 
   Requires optional deps: ``opentelemetry-sdk`` and
   ``opentelemetry-exporter-otlp-proto-http``.
+
+  Mutually exclusive with native ``eden.instrument()`` — if any
+  native instrumentation is already installed, this raises
+  ``RuntimeError`` (set ``allow_dual=True`` to override).
   """
     global _configured
+    allow_dual = bool(kwargs.pop("allow_dual", False))
+    try:
+        from eden_sdk import INSTRUMENTED
+    except Exception:  # noqa: BLE001
+        INSTRUMENTED = set()
+    if INSTRUMENTED and not allow_dual:
+        raise RuntimeError(
+            "eden: native instrument() is already active — refuse to also "
+            "configure the OTel exporter (dual ingest). Pass allow_dual=True "
+            "to override, or call uninstrument() first."
+        )
     cfg = get_config()
     if not cfg.org_id:
         raise RuntimeError("eden.configure(org_id=...) is required before configure_exporter()")
@@ -41,7 +56,10 @@ def configure_exporter(
         ) from exc
 
     endpoint = f"{cfg.base_url.rstrip('/')}/orgs/{cfg.org_id}/ingest/otel"
-    headers: dict[str, str] = {}
+    # Match ``EdenConfig.auth_headers``: the gateway requires
+    # ``X-Org-Id`` whenever ``X-Org-Api-Key`` is present
+    # (``_ingestion_auth_impl`` returns 401 without it).
+    headers: dict[str, str] = {"X-Org-Id": cfg.org_id}
     if cfg.api_key:
         headers["X-Org-Api-Key"] = cfg.api_key
     if cfg.project_id:

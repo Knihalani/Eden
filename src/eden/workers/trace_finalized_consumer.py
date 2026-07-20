@@ -12,8 +12,10 @@ Follows the module-level start/stop lifecycle used by the quality
 pipeline sidecar so it plugs into the API lifespan.
 
 Concurrency: up to ``_MAX_CONCURRENT_SCANS`` scans in flight (a semaphore
-bounds fan-out); messages are XACK'd only after the scan completes so a
-crash re-delivers unprocessed traces.
+bounds fan-out). Messages are XACK'd only after success **or** after the
+message is dead-lettered (poison / retries exhausted). Transient failures
+retry in-process so the PEL is never left unacked forever (the reader
+only claims ``>`` new ids plus idle pending via XAUTOCLAIM).
 """
 
 from __future__ import annotations
@@ -24,7 +26,10 @@ import logging
 import socket
 from typing import Any
 
-from eden.observability.trace_finalized import TRACE_FINALIZED_STREAM
+from eden.observability.trace_finalized import (
+    TRACE_FINALIZED_DLQ_STREAM,
+    TRACE_FINALIZED_STREAM,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -35,9 +40,30 @@ _BATCH = 32
 # Upstash Free counts every blocked XREADGROUP as 1 cmd. 2s → ~1.3M/mo
 # idle; 30s → ~86k/mo.
 _BLOCK_MS = 30_000
+# In-process retries before poison/DLQ. Keeps the PEL clean (no bare
+# XACK-skip that would permanently drop a transient blip, and no
+# unacked stuck entries that ``>`` alone would never reclaim).
+_MAX_HANDLE_ATTEMPTS = 3
+_RETRY_BASE_DELAY_S = 0.25
+# Idle pending reclaim window — crash mid-handle leaves entries in the
+# PEL; reclaim after this idle so another consumer finishes them.
+_PENDING_IDLE_MS = 60_000
+_DLQ_MAXLEN = 10_000
 
 _TASK: asyncio.Task | None = None
 _STOP: asyncio.Event | None = None
+
+# Process-local counters (tests + ops).
+_STATS: dict[str, int] = {
+    "handled_ok": 0,
+    "poison_total": 0,
+    "dlq_total": 0,
+    "retry_total": 0,
+}
+
+
+class PoisonMessageError(ValueError):
+    """Malformed or permanently unprocessable ``trace.finalized`` payload."""
 
 
 class TraceFinalizedConsumer:
@@ -67,80 +93,174 @@ class TraceFinalizedConsumer:
         await self._ensure_group(redis)
         logger.info("trace_finalized consumer: started (group=%s)", _GROUP)
         while not stop.is_set():
-            try:
-                resp = await redis.xreadgroup(
-                    _GROUP,
-                    _CONSUMER,
-                    {TRACE_FINALIZED_STREAM: ">"},
-                    count=_BATCH,
-                    block=_BLOCK_MS,
-                )
-            except Exception as exc:
-                logger.debug("trace_finalized: xreadgroup failed: %s", exc)
-                await asyncio.sleep(1.0)
+            entries = await self._read_batch(redis)
+            if not entries:
                 continue
-            if not resp:
-                continue
-            for _stream, entries in resp:
-                await asyncio.gather(
-                    *(self._handle(redis, mid, fields) for mid, fields in entries),
-                    return_exceptions=True,
-                )
+            await asyncio.gather(
+                *(self._handle(redis, mid, fields) for mid, fields in entries),
+                return_exceptions=True,
+            )
         logger.info("trace_finalized consumer: stopped")
+
+    async def _read_batch(self, redis: Any) -> list[tuple[Any, Any]]:
+        """Claim idle pending first, then read new messages.
+
+        Crash mid-handle leaves entries in the PEL. Reading only ``>``
+        would never finish them; XAUTOCLAIM reclaims idle ones.
+        """
+        out: list[tuple[Any, Any]] = []
+        try:
+            claimed = await redis.xautoclaim(
+                TRACE_FINALIZED_STREAM,
+                _GROUP,
+                _CONSUMER,
+                min_idle_time=_PENDING_IDLE_MS,
+                start_id="0-0",
+                count=_BATCH,
+            )
+            # redis-py: (next_id, [(id, fields), ...], deleted_ids?)
+            if isinstance(claimed, (list, tuple)) and len(claimed) >= 2:
+                messages = claimed[1] or []
+                for item in messages:
+                    if isinstance(item, (list, tuple)) and len(item) >= 2:
+                        out.append((item[0], item[1]))
+        except Exception as exc:
+            # Older Redis / Upstash without XAUTOCLAIM — fall through.
+            logger.debug("trace_finalized: xautoclaim: %s", exc)
+
+        remaining = max(0, _BATCH - len(out))
+        if remaining == 0:
+            return out
+        try:
+            resp = await redis.xreadgroup(
+                _GROUP,
+                _CONSUMER,
+                {TRACE_FINALIZED_STREAM: ">"},
+                count=remaining,
+                block=_BLOCK_MS if not out else 1,
+            )
+        except Exception as exc:
+            logger.debug("trace_finalized: xreadgroup failed: %s", exc)
+            if not out:
+                await asyncio.sleep(1.0)
+            return out
+        if not resp:
+            return out
+        for _stream, entries in resp:
+            for mid, fields in entries:
+                out.append((mid, fields))
+        return out
 
     async def _handle(self, redis: Any, message_id: Any, fields: Any) -> None:
         async with self._sem:
+            dlq_reason: str | None = None
             try:
                 data = _decode(fields)
-                org_id = data.get("org_id")
-                trace_id = data.get("trace_id")
-                if org_id and trace_id:
-                    _record_queue_lag(message_id)
-                    layer_a_report = await self._run_layer_a(
-                        org_id,
-                        trace_id,
-                        agent_id=data.get("agent_id") or None,
-                        session_id=data.get("session_id") or None,
-                        user_id=data.get("user_id") or None,
+                org_id = (data.get("org_id") or "").strip()
+                trace_id = (data.get("trace_id") or "").strip()
+                if not org_id or not trace_id:
+                    raise PoisonMessageError(
+                        f"missing org_id/trace_id (org={org_id!r} trace={trace_id!r})"
                     )
-                    await self._run_annotator(org_id, trace_id, layer_a_report)
-                    scan_results = await self._scanner.scan(
-                        org_id,
-                        trace_id,
-                        agent_id=data.get("agent_id") or None,
-                        session_id=data.get("session_id") or None,
-                        user_id=data.get("user_id") or None,
-                        detection_profile=await _resolve_profile(org_id),
-                    )
-                    # D1 — StatGate P0 rail before orchestrator LLM triage.
-                    try:
-                        from eden.issues.statgate_p0_rail import (
-                            apply_statgate_p0_rail,
-                            collect_issue_ids_from_scan,
-                        )
 
-                        issue_ids = collect_issue_ids_from_scan(scan_results)
-                        if issue_ids:
-                            await apply_statgate_p0_rail(org_id, issue_ids)
-                    except Exception as rail_exc:
-                        logger.debug(
-                            "trace_finalized: statgate_p0_rail: %s", rail_exc
+                last_exc: BaseException | None = None
+                for attempt in range(1, _MAX_HANDLE_ATTEMPTS + 1):
+                    try:
+                        await self._process_trace(message_id, data, org_id, trace_id)
+                        _STATS["handled_ok"] += 1
+                        last_exc = None
+                        break
+                    except PoisonMessageError:
+                        raise
+                    except Exception as exc:
+                        last_exc = exc
+                        if not _is_transient(exc) or attempt >= _MAX_HANDLE_ATTEMPTS:
+                            break
+                        _STATS["retry_total"] += 1
+                        logger.warning(
+                            "trace_finalized: transient fail attempt=%d/%d "
+                            "org=%s trace=%s: %s",
+                            attempt,
+                            _MAX_HANDLE_ATTEMPTS,
+                            org_id,
+                            trace_id,
+                            exc,
                         )
-                    if not _layer_a_primary_hit(layer_a_report):
-                        # F34: classifiers before F06 investigator.
-                        skip_inv = await _run_signal_classifiers(org_id, trace_id)
-                        if not skip_inv:
-                            await _run_signal_investigator(org_id, trace_id)
-                    await self._maybe_prod_eval(
+                        await asyncio.sleep(_RETRY_BASE_DELAY_S * attempt)
+
+                if last_exc is not None:
+                    dlq_reason = f"scan_failed:{type(last_exc).__name__}:{last_exc}"
+                    logger.warning(
+                        "trace_finalized: giving up org=%s trace=%s: %s",
                         org_id,
                         trace_id,
-                        agent_id=data.get("agent_id") or None,
+                        last_exc,
                     )
+            except PoisonMessageError as exc:
+                dlq_reason = f"poison:{exc}"
+                _STATS["poison_total"] += 1
+                logger.warning("trace_finalized: poison message %s: %s", message_id, exc)
             except Exception as exc:
+                dlq_reason = f"unexpected:{type(exc).__name__}:{exc}"
                 logger.warning("trace_finalized: scan failed: %s", exc)
-            finally:
-                with contextlib.suppress(Exception):
-                    await redis.xack(TRACE_FINALIZED_STREAM, _GROUP, message_id)
+
+            if dlq_reason is not None:
+                await _dead_letter(redis, message_id, fields, dlq_reason)
+            with contextlib.suppress(Exception):
+                await redis.xack(TRACE_FINALIZED_STREAM, _GROUP, message_id)
+
+    async def _process_trace(
+        self,
+        message_id: Any,
+        data: dict[str, str],
+        org_id: str,
+        trace_id: str,
+    ) -> None:
+        """Run the full detection pipeline for one finalized trace.
+
+        Downstream writers (stumbles, tags) are idempotent so a retry after
+        a partial write is safe. Layer A judge_scores skip already-written
+        axes to avoid duplicate partial rows.
+        """
+        _record_queue_lag(message_id)
+        layer_a_report = await self._run_layer_a(
+            org_id,
+            trace_id,
+            agent_id=data.get("agent_id") or None,
+            session_id=data.get("session_id") or None,
+            user_id=data.get("user_id") or None,
+        )
+        await self._run_annotator(org_id, trace_id, layer_a_report)
+        scan_results = await self._scanner.scan(
+            org_id,
+            trace_id,
+            agent_id=data.get("agent_id") or None,
+            session_id=data.get("session_id") or None,
+            user_id=data.get("user_id") or None,
+            detection_profile=await _resolve_profile(org_id),
+        )
+        # D1 — StatGate P0 rail before orchestrator LLM triage.
+        try:
+            from eden.issues.statgate_p0_rail import (
+                apply_statgate_p0_rail,
+                collect_issue_ids_from_scan,
+            )
+
+            issue_ids = collect_issue_ids_from_scan(scan_results)
+            if issue_ids:
+                await apply_statgate_p0_rail(org_id, issue_ids)
+        except Exception as rail_exc:
+            logger.debug("trace_finalized: statgate_p0_rail: %s", rail_exc)
+        if not _layer_a_primary_hit(layer_a_report):
+            # F34: classifiers before F06 investigator.
+            skip_inv = await _run_signal_classifiers(org_id, trace_id)
+            if not skip_inv:
+                await _run_signal_investigator(org_id, trace_id)
+        await self._maybe_prod_eval(
+            org_id,
+            trace_id,
+            agent_id=data.get("agent_id") or None,
+        )
 
     async def _run_layer_a(
         self,
@@ -172,6 +292,10 @@ class TraceFinalizedConsumer:
             try:
                 await persist_layer_a_judge_scores(org_id, trace_id, report)
             except Exception as score_exc:
+                # Transient score failures should bubble for handle-retry so
+                # we do not ACK a half-written Layer A score set.
+                if _is_transient(score_exc):
+                    raise
                 logger.debug("layer_a judge_scores: %s", score_exc)
             if report.descriptors:
                 logger.info(
@@ -215,6 +339,8 @@ class TraceFinalizedConsumer:
                             )
                         )
                     except Exception as stumble_exc:
+                        if _is_transient(stumble_exc):
+                            raise
                         logger.debug(
                             "layer_a stumble write failed: %s", stumble_exc
                         )
@@ -225,6 +351,8 @@ class TraceFinalizedConsumer:
             )
             return report
         except Exception as exc:
+            if _is_transient(exc):
+                raise
             logger.debug("trace_finalized: layer_a skipped: %s", exc)
             return None
 
@@ -262,6 +390,8 @@ class TraceFinalizedConsumer:
                     result.cost_usd,
                 )
         except Exception as exc:
+            if _is_transient(exc):
+                raise
             logger.debug("trace_finalized: annotator skipped: %s", exc)
 
     async def _maybe_prod_eval(
@@ -275,7 +405,9 @@ class TraceFinalizedConsumer:
                 org_id, trace_id, agent_id=agent_id, is_stumble=False
             )
         except Exception as exc:
+            # Prod eval is optional; never poison the main scan path.
             logger.debug("trace_finalized: prod_eval skipped: %s", exc)
+
 
 def _layer_a_primary_hit(report: Any | None) -> bool:
     """True when Layer A matched a primary descriptor (skip F06)."""
@@ -292,14 +424,78 @@ def _layer_a_primary_hit(report: Any | None) -> bool:
 
 
 def _decode(fields: Any) -> dict[str, str]:
+    """Normalize Redis stream field payloads (dict or list-of-pairs)."""
     out: dict[str, str] = {}
-    if not isinstance(fields, dict):
+    pairs: list[tuple[Any, Any]] = []
+    if isinstance(fields, dict):
+        pairs = list(fields.items())
+    elif isinstance(fields, (list, tuple)):
+        for pair in fields:
+            if isinstance(pair, (list, tuple)) and len(pair) >= 2:
+                pairs.append((pair[0], pair[1]))
+    else:
         return out
-    for k, v in fields.items():
+    for k, v in pairs:
         key = k.decode() if isinstance(k, bytes) else str(k)
         val = v.decode() if isinstance(v, bytes) else str(v)
         out[key] = val
     return out
+
+
+def _is_transient(exc: BaseException) -> bool:
+    """True when the failure is worth an in-process retry."""
+    if isinstance(exc, PoisonMessageError):
+        return False
+    if isinstance(
+        exc,
+        (ConnectionError, TimeoutError, OSError, asyncio.TimeoutError, BrokenPipeError),
+    ):
+        return True
+    name = type(exc).__name__.lower()
+    if any(tok in name for tok in ("timeout", "connection", "unavailable", "busy")):
+        return True
+    msg = str(exc).lower()
+    return any(
+        tok in msg
+        for tok in (
+            "connection",
+            "timeout",
+            "temporarily",
+            "reset by peer",
+            "broken pipe",
+            "server closed",
+            "too many connections",
+        )
+    )
+
+
+async def _dead_letter(
+    redis: Any,
+    message_id: Any,
+    fields: Any,
+    reason: str,
+) -> None:
+    """Park a poison / exhausted message on the DLQ stream, then caller ACKs."""
+    _STATS["dlq_total"] += 1
+    mid = message_id.decode() if isinstance(message_id, bytes) else str(message_id)
+    payload = _decode(fields)
+    try:
+        await redis.xadd(
+            TRACE_FINALIZED_DLQ_STREAM,
+            {
+                "source_id": mid,
+                "reason": reason[:500],
+                "org_id": payload.get("org_id", ""),
+                "trace_id": payload.get("trace_id", ""),
+                "agent_id": payload.get("agent_id", ""),
+                "session_id": payload.get("session_id", ""),
+                "user_id": payload.get("user_id", ""),
+            },
+            maxlen=_DLQ_MAXLEN,
+            approximate=True,
+        )
+    except Exception as exc:
+        logger.warning("trace_finalized: dlq write failed: %s", exc)
 
 
 async def _resolve_profile(org_id: str) -> str:
@@ -421,3 +617,14 @@ async def stop_consumer() -> None:
 
 def is_consumer_running() -> bool:
     return _TASK is not None and not _TASK.done()
+
+
+def get_consumer_stats() -> dict[str, int]:
+    """Return a copy of process-local handle / DLQ counters."""
+    return dict(_STATS)
+
+
+def reset_consumer_stats() -> None:
+    """Test helper — zero process-local counters."""
+    for k in _STATS:
+        _STATS[k] = 0

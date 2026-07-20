@@ -1,5 +1,5 @@
 import "@testing-library/jest-dom/vitest";
-import { ApiError } from "@/lib/api";
+import { ApiError } from "@/lib/api/core";
 
 // fetchApi negative-path tests can reject before vitest attaches `.catch`.
 // Swallow expected ApiError rejections so the suite stays clean.

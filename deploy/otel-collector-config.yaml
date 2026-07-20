@@ -8,10 +8,11 @@
 #           force_trace / probabilistic) → k8sattributes → batch → otlp/eden
 #
 # Honest note: edge sampling_percentage below is the *fallback* for traces
-# that do not match a keep policy. Eden's in-process N16 policy
-# (``sampling_profile=balanced`` → ~15%) is the product default; keep this
-# collector fallback aligned or set EDEN_SAMPLING_PROFILE=full when the
-# collector is the only sampler.
+# that do not match a keep policy. Eden's in-process N16 soft-launch default
+# is ``sampling_profile=full`` (100% keep). For cost reduction set
+# ``EDEN_SAMPLING_PROFILE=balanced`` (~15%) on the API (and optionally align
+# this collector fallback) — or keep ``full`` when the collector is the only
+# sampler and you want edge-only decisions.
 
 processors:
   tail_sampling:

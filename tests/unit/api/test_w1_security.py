@@ -18,9 +18,14 @@ from eden.api.deps import (
 # ── Scope helper ────────────────────────────────────────────────────
 
 
-def test_api_key_has_scope_legacy_grandfathered() -> None:
-    assert api_key_has_scope(["references:read", "jobs:write"], INGEST_SCOPES)
-    assert api_key_has_scope(["references:read"], GATEWAY_SCOPES)
+def test_api_key_has_scope_empty_fail_closed() -> None:
+    assert not api_key_has_scope(None, INGEST_SCOPES)
+    assert not api_key_has_scope([], GATEWAY_SCOPES)
+
+
+def test_api_key_has_scope_legacy_no_grandfather() -> None:
+    assert not api_key_has_scope(["references:read", "jobs:write"], INGEST_SCOPES)
+    assert not api_key_has_scope(["references:read"], GATEWAY_SCOPES)
 
 
 def test_api_key_has_scope_strict_when_family_present() -> None:

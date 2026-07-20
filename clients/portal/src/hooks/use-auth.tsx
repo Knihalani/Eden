@@ -3,22 +3,24 @@
 import {
   createContext,
   useContext,
-  useState,
   useCallback,
-  type ReactNode } from "react";
+  useMemo,
+  type ReactNode,
+} from "react";
 import { useUser } from "@clerk/nextjs";
-import { api } from "@/lib/api";
+import { useQueryClient } from "@tanstack/react-query";
 import type { User, Organization } from "@/lib/types";
+import { fetchMeQuery, isUserNotFoundRace, useMeQuery } from "@/hooks/use-me-query";
 
 interface AuthContextType {
   user: User | null;
   loading: boolean;
   error: string | null;
   /** Re-fetch the Eden-side profile (orgs + current org) from FastAPI.
-   *  Returns ``{ ok: boolean; error?: string }`` so the retry wrapper
-   *  can distinguish the transient "User not found" race (retryable)
-   *  from a real auth failure (terminal). */
-  refreshUser: () => Promise<{ ok: boolean; error?: string }>;
+   *  Returns ``{ ok: boolean; error?: string; err?: unknown }`` so the
+   *  retry wrapper can distinguish the transient "User not found" race
+   *  (retryable via status+detail) from a real auth failure (terminal). */
+  refreshUser: () => Promise<{ ok: boolean; error?: string; err?: unknown }>;
   /** Same as ``refreshUser`` but with built-in retry on the transient
    *  "User not found" race that surfaces on the first /auth/me call
    *  after Clerk signup. */
@@ -61,47 +63,37 @@ function buildEdenUser(
     email,
     name,
     organizations,
-    current_org_id: currentOrgId };
+    current_org_id: currentOrgId,
+  };
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const { user: clerkUser, isLoaded: clerkLoaded } = useUser();
-  const [organizations, setOrganizations] = useState<Organization[]>([]);
-  const [currentOrgId, setCurrentOrgId] = useState<string | null>(null);
-  const [_profileLoading, setProfileLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const queryClient = useQueryClient();
+  const meEnabled = clerkLoaded && Boolean(clerkUser);
+  const meQuery = useMeQuery(meEnabled);
 
-  // Fetch the Eden-side profile (orgs + current org) once Clerk is ready
-  // and we have a signed-in user. Failures are non-fatal — the user
-  // can still see the portal shell.
-  //
-  // Returns ``true`` on success, ``false`` if the call failed (so the
-  // retry wrapper can detect the transient "User not found" race that
-  // shows up on the very first /auth/me after Clerk signup, when the
-  // backend's auto-provision hasn't completed yet).
-  const refreshUser = useCallback(async (): Promise<{ ok: boolean; error?: string }> => {
+  const organizations: Organization[] = (meQuery.data?.organizations ??
+    []) as Organization[];
+  const currentOrgId = meQuery.data?.current_org_id ?? null;
+
+  const refreshUser = useCallback(async (): Promise<{
+    ok: boolean;
+    error?: string;
+    /** Present on failure — use for status/detail machine matching. */
+    err?: unknown;
+  }> => {
     if (!clerkUser) {
-      setOrganizations([]);
-      setCurrentOrgId(null);
       return { ok: true };
     }
-    setProfileLoading(true);
     try {
-      const me = await api.getMe();
-      setOrganizations(me.organizations ?? []);
-      setCurrentOrgId(me.current_org_id ?? null);
-      setError(null);
+      await fetchMeQuery(queryClient);
       return { ok: true };
     } catch (err) {
-      // Surface as a soft error — the user is signed in, they just
-      // don't have an Eden org yet (typical on first signup).
       const msg = err instanceof Error ? err.message : "Failed to load profile";
-      setError(msg);
-      return { ok: false, error: msg };
-    } finally {
-      setProfileLoading(false);
+      return { ok: false, error: msg, err };
     }
-  }, [clerkUser]);
+  }, [clerkUser, queryClient]);
 
   /**
    * Re-fetch the Eden-side profile, retrying on the transient
@@ -121,17 +113,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
    * outer AuthProvider's `error` state is set so the caller can
    * show a banner, and the layout's retry button is the user's
    * escape hatch once the upstream cools down.
+   *
+   * Wave 4: key the race retry on ``status===404`` + raw ApiError
+   * detail — sanitized ``message`` is never ``User not found``.
    */
   const refreshUserWithRetry = useCallback(async () => {
     const delays = [0, 250, 500];
     for (const ms of delays) {
       if (ms > 0) await new Promise((r) => setTimeout(r, ms));
-      const { ok, error: errMsg } = await refreshUser();
+      const { ok, err } = await refreshUser();
       if (ok) return;
-      const isUserNotFound = /user\s*not\s*found/i.test(errMsg ?? "");
-      if (!isUserNotFound) return; // non-retryable — state already set
+      if (!isUserNotFoundRace(err)) return;
     }
-    // Final attempt to refresh the (now stuck) error state.
     await refreshUser();
   }, [refreshUser]);
 
@@ -139,24 +132,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     ? buildEdenUser(clerkUser, organizations, currentOrgId)
     : null;
 
+  const error =
+    meQuery.error instanceof Error
+      ? meQuery.error.message
+      : meQuery.error
+        ? "Failed to load profile"
+        : null;
+
+  // Wait for Clerk *and* the first /auth/me resolve so portal chrome
+  // does not treat empty orgs as "orgless" before the profile lands.
+  const loading =
+    !clerkLoaded || (meEnabled && meQuery.isLoading);
+
+  const contextValue = useMemo<AuthContextType>(
+    () => ({
+      user,
+      loading,
+      error,
+      refreshUser,
+      refreshUserWithRetry,
+    }),
+    [user, loading, error, refreshUser, refreshUserWithRetry],
+  );
+
   return (
-    <AuthContext.Provider
-      value={{
-        user,
-        // ``loading`` is true only while Clerk is resolving session
-        // state. Profile loading (the /auth/me round-trip) is reported
-        // separately via ``error`` (null = loaded fine). The previous
-        // ``profileLoading && organizations.length === 0`` guard held
-        // the chrome in its skeleton forever on the first /auth/me
-        // 404 (the auto-provision race), which is exactly the
-        // window where the user perceives "nothing is clickable".
-        loading: !clerkLoaded,
-        error,
-        refreshUser,
-        refreshUserWithRetry }}
-    >
-      {children}
-    </AuthContext.Provider>
+    <AuthContext.Provider value={contextValue}>{children}</AuthContext.Provider>
   );
 }
 

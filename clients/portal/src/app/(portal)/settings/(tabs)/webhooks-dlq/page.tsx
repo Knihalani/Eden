@@ -1,22 +1,27 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useState, useCallback } from "react";
+import { useOrgQuery } from "@/hooks/use-api-query";
+import { queryKeys } from "@/lib/query-keys";
 import { useOrg } from "@/hooks/use-org";
+import { usePermissions } from "@/hooks/use-permissions";
 import { cn } from "@/lib/utils";
 import { api, ApiError } from "@/lib/api";
 import { PageHeader } from "@/components/layout/page-header";
 import { PageContent } from "@/components/layout/page-content";
 import { NoOrgState } from "@/components/ui/no-org-state";
 import { EmptyState } from "@/components/ui/empty-state";
-import { ErrorState } from "@/components/ui/error-state";
 import { useToast } from "@/components/ui/toast";
 import {
-  Webhook,
   RefreshCw,
   Loader2,
   AlertOctagon,
   CheckCircle2,
+  ShieldOff,
 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { QueryState } from "@/components/ui/query-state";
+import { Skeleton } from "@/components/ui/skeleton";
 
 interface DlqEntry {
   id: string;
@@ -39,42 +44,48 @@ interface DlqEntry {
  * deliveries (exceeded the 7-attempt retry budget) land
  * here for replay. The "Replay" button re-fires the
  * delivery via the same path the initial ingest used.
+ *
+ * Admin-gated: settings:edit (owner/admin) or role owner/admin.
+ * Replay is hidden for non-admins (BE replay requires org admin).
  */
 export default function WebhooksDlqPage() {
   const { currentOrg } = useOrg();
+  const { hasPermission, role } = usePermissions();
   const toast = useToast();
-  const [entries, setEntries] = useState<DlqEntry[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const orgId = currentOrg?.id ?? null;
   const [replaying, setReplaying] = useState<string | null>(null);
 
-  const fetchData = useCallback(async () => {
-    if (!currentOrg?.id) return;
-    setError(null);
-    try {
-      const res = await api.listWebhookDlq(currentOrg.id, 50);
-      setEntries(res.data?.entries || []);
-    } catch (err) {
-      const message =
-        err instanceof ApiError
-          ? `Failed to load DLQ entries (HTTP ${err.status}).`
-          : err instanceof Error
-            ? err.message
-            : "Network error loading DLQ entries.";
-      setError(message);
-    } finally {
-      setLoading(false);
-    }
-  }, [currentOrg?.id]);
+  const isAdmin =
+    hasPermission("settings:edit") ||
+    role === "owner" ||
+    role === "admin" ||
+    currentOrg?.role === "owner" ||
+    currentOrg?.role === "admin";
 
-  useEffect(() => {
-    if (!currentOrg?.id) return;
-    fetchData();
-  }, [currentOrg?.id, fetchData]);
+  const dlqQuery = useOrgQuery(
+    queryKeys.webhookDlq.list(orgId),
+    orgId,
+    async () => {
+      const res = await api.listWebhookDlq(orgId!, 50);
+      return (res.data?.entries || []) as DlqEntry[];
+    },
+    { enabled: isAdmin },
+  );
+  const loading = dlqQuery.isLoading;
+  const error = dlqQuery.error
+    ? (
+        dlqQuery.error instanceof ApiError
+          ? `Failed to load DLQ entries (HTTP ${dlqQuery.error.status}).`
+          : dlqQuery.error.message || "Network error loading DLQ entries."
+      )
+    : null;
+  const fetchData = useCallback(async () => {
+    await dlqQuery.refetch();
+  }, [dlqQuery]);
 
   const handleReplay = useCallback(
     async (dlqId: string) => {
-      if (!currentOrg?.id) return;
+      if (!currentOrg?.id || !isAdmin) return;
       setReplaying(dlqId);
       try {
         await api.replayWebhookDlq(currentOrg.id, dlqId);
@@ -92,84 +103,83 @@ export default function WebhooksDlqPage() {
         setReplaying(null);
       }
     },
-    [currentOrg?.id, toast, fetchData]
+    [currentOrg?.id, isAdmin, toast, fetchData]
   );
 
   if (!currentOrg) return <NoOrgState feature="Webhook DLQ" />;
 
+  if (!isAdmin) {
+    return (
+      <PageContent>
+        <PageHeader
+          eyebrow="Settings"
+          title="Webhook Dead-Letter Queue"
+          subtitle="Terminal-state deliveries awaiting replay"
+        />
+        <div className="p-6 bg-[var(--error-dim)] rounded-lg border border-[var(--error)]/20 text-center">
+          <ShieldOff className="w-8 h-8 mx-auto mb-3 text-[var(--text-muted)]" aria-hidden="true" />
+          <p className="text-sm text-[var(--error)]">
+            You do not have permission to manage the webhook DLQ. Contact your organization admin.
+          </p>
+        </div>
+      </PageContent>
+    );
+  }
+
   return (
     <PageContent>
       <PageHeader
-        icon={Webhook}
         eyebrow="Settings"
         title="Webhook Dead-Letter Queue"
-        subtitle="D.13 — Terminal-state deliveries awaiting replay"
-      />
-
-      <div className="rounded-lg border border-[var(--border-default)] bg-[var(--bg-primary)]">
-        <div className="flex items-center justify-between border-b border-[var(--border-default)] p-4">
-          <div>
-            <h2 className="text-lg font-semibold text-[var(--text-primary)]">
-              Recent DLQ entries
-            </h2>
-            <p className="mt-1 text-xs text-[var(--text-secondary)]">
-              Backoff ladder: 1s, 5s, 25s, 2m, 10m, 1h, then DLQ. Each replay
-              re-fires the delivery with a fresh attempt budget.
-            </p>
-          </div>
-          <button
+        subtitle="Terminal-state deliveries awaiting replay"
+        actions={
+          <Button
             type="button"
+            variant="ghost"
+            size="sm"
             onClick={fetchData}
             aria-label="Refresh DLQ entries"
             disabled={loading}
-            className="inline-flex items-center gap-2 rounded-md border border-[var(--border-default)] bg-[var(--bg-secondary)] px-3 py-1.5 text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)] disabled:opacity-50"
           >
-            <RefreshCw className={`h-3 w-3 ${loading ? "animate-spin" : ""}`} aria-hidden="true" />
+            <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} aria-hidden="true" />
             Refresh
-          </button>
-        </div>
+          </Button>
+        }
+      />
 
-        <div className="divide-y divide-[var(--border-default)]">
-          {loading ? (
-            <div
-              className="flex items-center justify-center gap-2 p-8 text-sm text-[var(--text-secondary)]"
-              aria-busy="true"
-              aria-live="polite"
-            >
-              <Loader2 className="h-5 w-5 animate-spin" aria-hidden="true" />
-              Loading DLQ entries…
-            </div>
-          ) : error ? (
-            <div className="p-6">
-              <ErrorState
-                title="Could not load DLQ entries"
-                message={error}
-                action={
-                  <button
-                    type="button"
-                    onClick={fetchData}
-                    className="inline-flex items-center gap-2 rounded-md border border-[var(--border-default)] bg-[var(--bg-secondary)] px-3 py-1.5 text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)]"
-                  >
-                    <RefreshCw className="h-3 w-3" aria-hidden="true" />
-                    Try again
-                  </button>
-                }
-              />
-            </div>
-          ) : entries.length === 0 ? (
-            <div className="p-6">
-              <EmptyState
-                icon={CheckCircle2}
-                title="DLQ is clear"
-                description="Every webhook delivery is succeeding within the retry budget."
-              />
-            </div>
-          ) : (
-            <ul className="divide-y divide-[var(--border-default)]" aria-label="Dead-letter entries">
-              {entries.map((e) => (
+      <p className="mb-4 text-xs text-[var(--text-muted)]">
+        Backoff ladder: 1s, 5s, 25s, 2m, 10m, 1h, then DLQ. Each replay
+        re-fires the delivery with a fresh attempt budget.
+      </p>
+
+      <QueryState
+        loading={loading}
+        error={error ? new Error(error) : null}
+        data={dlqQuery.data}
+        onRetry={() => void fetchData()}
+        errorTitle="Could not load DLQ entries"
+        isEmpty={(d) => (d?.length ?? 0) === 0}
+        loadingSlot={
+          <div className="space-y-2 py-4" aria-busy="true">
+            <Skeleton className="h-4 w-1/3" />
+            <Skeleton className="h-4 w-2/3" />
+          </div>
+        }
+        emptySlot={
+          <EmptyState
+            variant="plain"
+            icon={CheckCircle2}
+            title="DLQ is clear"
+            description="Every webhook delivery is succeeding within the retry budget."
+          />
+        }
+      >
+        {(rows) => (
+            <ul className="divide-y divide-[var(--border-subtle)]" aria-label="Dead-letter entries">
+              {rows.map((e) => (
                 <li
                   key={e.id}
-                  className="flex items-center justify-between gap-4 p-4"
+                  className="flex items-center justify-between gap-4 py-4"
                 >
                   <div className="flex-1 min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
@@ -205,32 +215,33 @@ export default function WebhooksDlqPage() {
                       </div>
                     )}
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => handleReplay(e.id)}
-                    disabled={replaying === e.id}
-                    aria-busy={replaying === e.id}
-                    aria-label={`Replay ${e.event_type} delivery`}
-                    className="inline-flex items-center gap-2 rounded-md bg-[var(--accent)] px-3 py-1.5 text-xs font-medium text-[var(--accent-foreground)] hover:opacity-90 disabled:opacity-50"
-                  >
-                    {replaying === e.id ? (
-                      <>
-                        <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />
-                        Replaying…
-                      </>
-                    ) : (
-                      <>
-                        <RefreshCw className="h-3 w-3" aria-hidden="true" />
-                        Replay
-                      </>
-                    )}
-                  </button>
+                  {isAdmin && (
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={() => handleReplay(e.id)}
+                      disabled={replaying === e.id}
+                      aria-busy={replaying === e.id}
+                      aria-label={`Replay ${e.event_type} delivery`}
+                    >
+                      {replaying === e.id ? (
+                        <>
+                          <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />
+                          Replaying…
+                        </>
+                      ) : (
+                        <>
+                          <RefreshCw className="h-3 w-3" aria-hidden="true" />
+                          Replay
+                        </>
+                      )}
+                    </Button>
+                  )}
                 </li>
               ))}
             </ul>
-          )}
-        </div>
-      </div>
+        )}
+      </QueryState>
     </PageContent>
   );
 }

@@ -111,11 +111,15 @@ describe("W14 spans / query language", () => {
     expect(tab).toContain("setPage");
   });
 
-  it("QueryFilterBar exposes autocomplete + error underline", () => {
+  it("QueryFilterBar exposes autocomplete + error underline + query draft sync", () => {
     const bar = src("components/portal-os/QueryFilterBar.tsx");
     expect(bar).toContain("suggestQueryCompletions");
     expect(bar).toContain("Unknown field");
-    expect(bar).toContain("Save as signal");
+    expect(bar).toContain("setQueryDraft(query)");
+    expect(bar).toContain("clearedFilters");
+    // Save-as-signal lives on SpanSearchBar, not a dead QueryFilterBar affordance.
+    expect(bar).not.toContain("onSaveAsSignal");
+    expect(bar).not.toContain("Save as signal");
   });
 
   it("SpanSearchBar saves signal with cost preview", () => {
@@ -129,9 +133,17 @@ describe("W14 spans / query language", () => {
 describe("W15 sessions + RRWeb", () => {
   it("BrowserReplayPanel uses rrweb-player not JSON iframe", () => {
     const panel = src("components/browser/BrowserReplayPanel.tsx");
-    expect(panel).toContain('from "rrweb-player"');
-    expect(panel).not.toContain("srcDoc");
-    expect(panel).not.toContain("sandbox=");
+    // K10: parent must not pull rrweb into the first-load graph — UMD
+    // loads only inside the sandboxed iframe via /api/rrweb-player.
+    expect(panel).not.toMatch(/import\(["']rrweb-player["']\)/);
+    expect(panel).not.toMatch(/import RrwebPlayer from ["']rrweb-player["']/);
+    expect(panel).toContain("/api/rrweb-player/");
+    // F09: replay must run in sandboxed srcDoc iframe (no parent origin access).
+    expect(panel).toContain("srcDoc");
+    expect(panel).toContain("sandbox=");
+    expect(panel).toContain('sandbox="allow-scripts"');
+    expect(panel).not.toMatch(/sandbox="[^"]*allow-same-origin/);
+    expect(panel).not.toMatch(/sandbox=\{[^}]*allow-same-origin/);
     const pkg = JSON.parse(readFileSync(resolve(ROOT, "package.json"), "utf8"));
     expect(pkg.dependencies["rrweb-player"]).toBeTruthy();
   });

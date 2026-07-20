@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Annotated
 
-from fastapi import Cookie, Depends, Header, HTTPException, status
+from fastapi import Cookie, Depends, Header, HTTPException, Path, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from eden.api.utils.auth import decode_access_token
@@ -26,14 +26,46 @@ from eden.storage.postgres import get_postgres_client
 logger = logging.getLogger(__name__)
 security = HTTPBearer(auto_error=False)
 
-# API-key scope families (Wave 1). Legacy references/jobs-only keys are
-# grandfathered for ingest/gateway until callers mint scoped keys.
-_LEGACY_API_KEY_SCOPES = frozenset({
-    "references:read",
-    "references:write",
-    "jobs:read",
-    "jobs:write",
-})
+# B1 — debounce last_seen_at UPDATEs (≥60s) so auth does not write on every request.
+_LAST_SEEN_DEBOUNCE_S = 60.0
+_last_seen_bumped_at: dict[str, float] = {}
+
+# B2 — TTL cache for resolve_eden_org_id (Clerk id / Eden UUID → Eden UUID).
+_ORG_ID_CACHE_TTL_S = 60.0
+_org_id_cache: dict[str, tuple[float, str | None]] = {}
+
+# Mirror B2 for resolve_eden_user_id (Clerk sub / Eden UUID → Eden UUID).
+# Auth deps hit this on nearly every request; a 60s hit avoids a users
+# round-trip without stretching stale membership beyond org-id cache.
+_USER_ID_CACHE_TTL_S = 60.0
+_user_id_cache: dict[str, tuple[float, str | None]] = {}
+
+# Bound in-process id caches so long-lived workers cannot grow without limit
+# under org/user churn (cache stampede memory, not correctness).
+_ID_CACHE_MAX = 4096
+
+
+def _cache_put(
+    cache: dict[str, tuple[float, str | None]],
+    key: str,
+    expires_at: float,
+    value: str | None,
+) -> None:
+    """Insert into a TTL id-cache, evicting expired/oldest entries when full."""
+    if len(cache) >= _ID_CACHE_MAX and key not in cache:
+        import time as _time
+
+        now = _time.monotonic()
+        expired = [k for k, (exp, _) in cache.items() if exp <= now]
+        for k in expired:
+            cache.pop(k, None)
+        # Still full after expiry sweep — drop oldest insertion-order keys.
+        while len(cache) >= _ID_CACHE_MAX:
+            cache.pop(next(iter(cache)), None)
+    cache[key] = (expires_at, value)
+
+# API-key scope families (Wave 1). Empty / legacy references-jobs-only
+# keys fail closed — callers must mint explicit ingest/gateway scopes.
 INGEST_SCOPES = frozenset({"ingest:write", "ingest:read", "ingest:*", "*"})
 GATEWAY_SCOPES = frozenset({"gateway:write", "gateway:read", "gateway:*", "*"})
 MCP_SCOPES = frozenset({"mcp:read", "mcp:debug", "mcp:fix", "mcp:*", "*"})
@@ -42,15 +74,13 @@ MCP_SCOPES = frozenset({"mcp:read", "mcp:debug", "mcp:fix", "mcp:*", "*"})
 def api_key_has_scope(scopes: list[str] | None, allowed: frozenset[str]) -> bool:
     """Return True when the key grants at least one scope in ``allowed``.
 
-    Empty scopes → allow (defensive). Keys whose scopes are *only* the
-    pre-Wave-1 references/jobs set are grandfathered. Once a key includes
-    any ingest/gateway/mcp family scope, enforcement is strict.
+    Empty / missing scopes fail closed. No legacy grandfathering —
+    ``ingest:write`` / ``gateway:write`` (or family ``*`` / bare ``*``)
+    must be present explicitly.
     """
     s = set(scopes or [])
     if not s:
-        return True
-    if s <= _LEGACY_API_KEY_SCOPES:
-        return True
+        return False
     if s & allowed:
         return True
     # Family wildcards already included in ``allowed``; also accept bare "*".
@@ -81,8 +111,17 @@ async def _assert_org_header_matches_session(
             detail="No active organization",
         )
 
-    jwt_org = await resolve_eden_org_id(jwt_org_raw) if jwt_org_raw else None
-    header_org = await resolve_eden_org_id(x_org_id) if x_org_id else None
+    # Parallelize the two independent id resolutions (cold-cache auth path).
+    import asyncio as _asyncio
+
+    if jwt_org_raw and x_org_id:
+        jwt_org, header_org = await _asyncio.gather(
+            resolve_eden_org_id(jwt_org_raw),
+            resolve_eden_org_id(x_org_id),
+        )
+    else:
+        jwt_org = await resolve_eden_org_id(jwt_org_raw) if jwt_org_raw else None
+        header_org = await resolve_eden_org_id(x_org_id) if x_org_id else None
 
     if jwt_org and header_org and jwt_org != header_org:
         raise HTTPException(
@@ -208,6 +247,38 @@ def has_permission(role: str, permission: str) -> bool:
     return permission in get_role_permissions(role)
 
 
+# Higher rank = more privilege. Used so a Clerk JWT claim cannot demote
+# a stronger Eden DB membership during sync lag (solo creator = owner).
+_EDEN_ROLE_RANK: dict[str, int] = {
+    "owner": 3,
+    "admin": 2,
+    "member": 1,
+    "viewer": 0,
+}
+
+
+def prefer_higher_eden_role(
+    db_role: str | None,
+    jwt_mapped_role: str | None,
+) -> str:
+    """Pick the stronger of DB membership vs JWT-mapped Clerk role.
+
+    JWT may omit ``o.rol`` or briefly carry a weaker claim after
+    create-org / setActive. Never return a role weaker than the DB row.
+    """
+    db = db_role if db_role in _EDEN_ROLE_RANK else None
+    jwt = jwt_mapped_role if jwt_mapped_role in _EDEN_ROLE_RANK else None
+    if db is None and jwt is None:
+        return "viewer"
+    if db is None:
+        return jwt or "viewer"
+    if jwt is None:
+        return db
+    if _EDEN_ROLE_RANK[db] >= _EDEN_ROLE_RANK[jwt]:
+        return db
+    return jwt
+
+
 async def check_resource_permission(
     user_id: str,
     org_id: str,
@@ -257,16 +328,21 @@ async def check_resource_permission(
     if resource_type is None or resource_id is None:
         return False
 
-    # Custom-role assignment on the specific resource.
+    # Custom-role assignment on the specific resource (migration 020:
+    # role_assignments + role_permissions + role_definitions).
     assignment = await client.fetchval(
         """
         SELECT 1
-        FROM custom_role_assignments
-        WHERE user_id = $1
-          AND org_id = $2
-          AND resource_type = $3
-          AND resource_id = $4
-          AND permission = $5
+        FROM role_assignments ra
+        JOIN role_definitions rd ON rd.id = ra.role_id
+        JOIN role_permissions rp
+          ON rp.role_id = ra.role_id
+         AND rp.granted = TRUE
+        WHERE ra.user_id = $1
+          AND rd.org_id = $2
+          AND ra.resource_type = $3
+          AND ra.resource_id = $4
+          AND rp.permission_key = $5
         LIMIT 1
         """,
         resolved_user_id,
@@ -383,10 +459,18 @@ async def get_current_org_member(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not a member of this organization",
         )
+    # Prefer the stronger of JWT-mapped and DB roles when the session
+    # org matches and a role claim is present. A weaker JWT claim
+    # (or sync lag) must not demote a DB ``owner`` to viewer/member.
+    # Missing ``o.rol`` always uses the DB membership role.
+    if is_clerk and session_matches and clerk_role:
+        role = prefer_higher_eden_role(row["role"], eden_role)
+    else:
+        role = row["role"] or eden_role
     return OrgMember(
         user_id=eden_user_id or clerk_user_id,
         org_id=eden_org_id,
-        role=row["role"] if not (is_clerk and session_matches) else (eden_role or row["role"]),
+        role=role,
         email=row.get("email") or "",
         name=row.get("user_name") or "",
     )
@@ -479,15 +563,20 @@ async def get_current_user(
                     detail="Session expired due to inactivity. Please sign in again.",
                 )
 
-        # Slide the window: best-effort update. A failure here
-        # must not break the auth flow.
-        try:
-            await client.execute(
-                "UPDATE users SET last_seen_at = NOW() WHERE id = $1",
-                user_id,
-            )
-        except Exception:
-            pass  # noqa: BLE001 — best-effort, never block auth
+        # Slide the window: best-effort update, debounced ≥60s (B1).
+        # A failure here must not break the auth flow.
+        import time as _time
+        now_mono = _time.monotonic()
+        last_bump = _last_seen_bumped_at.get(user_id, 0.0)
+        if now_mono - last_bump >= _LAST_SEEN_DEBOUNCE_S:
+            try:
+                await client.execute(
+                    "UPDATE users SET last_seen_at = NOW() WHERE id = $1",
+                    user_id,
+                )
+                _last_seen_bumped_at[user_id] = now_mono
+            except Exception:
+                pass  # noqa: BLE001 — best-effort, never block auth
 
     # Clerk JWTs carry the Clerk string id in ``sub``; downstream
     # org_members / sidebar_prefs lookups need Eden ``users.id``.
@@ -526,16 +615,35 @@ async def resolve_eden_user_id(user_id: str | None) -> str | None:
     ``org_members.user_id`` and most FK columns reference ``users.id``,
     not ``users.clerk_id``. Clerk session JWTs carry the Clerk string
     id in ``sub`` — callers must resolve before any membership lookup.
+
+    Results are cached in-process for ``_USER_ID_CACHE_TTL_S`` (same
+    shape as :func:`resolve_eden_org_id`).
     """
     if not user_id:
         return None
+    import time as _time
+    now_mono = _time.monotonic()
+    cached = _user_id_cache.get(user_id)
+    if cached is not None:
+        expires_at, value = cached
+        if now_mono < expires_at:
+            return value
     try:
         client = await get_postgres_client()
         row = await client.fetchrow(
             "SELECT id FROM users WHERE id::text = $1 OR clerk_id::text = $1 LIMIT 1",
             user_id,
         )
-        return str(row["id"]) if row else None
+        value = str(row["id"]) if row else None
+        # Only cache definitive lookups. A DB exception must not poison
+        # the cache with ``None`` for 60s (false "user not found").
+        _cache_put(
+            _user_id_cache,
+            user_id,
+            now_mono + _USER_ID_CACHE_TTL_S,
+            value,
+        )
+        return value
     except Exception as exc:
         logger.warning(
             "resolve_eden_user_id failed for user=%s: %s",
@@ -551,9 +659,18 @@ async def resolve_eden_org_id(org_id: str | None) -> str | None:
     New rows store a generated UUID in ``organizations.id`` and the
     Clerk id in ``clerk_org_id``; legacy webhook rows may use the
     Clerk id as ``id`` directly. Accept both shapes.
+
+    Results are cached in-process for ``_ORG_ID_CACHE_TTL_S`` (B2).
     """
     if not org_id:
         return None
+    import time as _time
+    now_mono = _time.monotonic()
+    cached = _org_id_cache.get(org_id)
+    if cached is not None:
+        expires_at, value = cached
+        if now_mono < expires_at:
+            return value
     try:
         client = await get_postgres_client()
         row = await client.fetchrow(
@@ -564,7 +681,16 @@ async def resolve_eden_org_id(org_id: str | None) -> str | None:
             """,
             org_id,
         )
-        return str(row["id"]) if row else None
+        value = str(row["id"]) if row else None
+        # Only cache definitive lookups. A DB exception must not poison
+        # the cache with ``None`` for 60s (false "Organization not found").
+        _cache_put(
+            _org_id_cache,
+            org_id,
+            now_mono + _ORG_ID_CACHE_TTL_S,
+            value,
+        )
+        return value
     except Exception as exc:
         logger.warning(
             "resolve_eden_org_id failed for org=%s: %s",
@@ -572,6 +698,169 @@ async def resolve_eden_org_id(org_id: str | None) -> str | None:
             exc,
         )
         return None
+
+
+async def resolve_path_org_access(
+    org_id: str,
+    user: dict,
+    payload: dict | None = None,
+) -> tuple[str, str]:
+    """Resolve ``(eden_user_id, eden_org_id)`` for path-scoped org routes.
+
+    Used by alerts / replay endpoints that take ``/orgs/{org_id}/...``
+    and must not 404 during Clerk webhook lag for org creators.
+
+    Behaviour:
+    1. Resolve Eden user id from the auth dict (Clerk ``user_…`` or UUID).
+    2. Prefer :func:`get_current_org` with the path id (self-heals
+       membership when the JWT session matches; uses DB role when the
+       JWT has no ``o.rol`` claim yet).
+    3. Otherwise resolve the org row in-line (503 on DB blip, not a
+       cached false 404). Clerk membership upsert runs only when the
+       JWT session Eden org matches the path org — never for a foreign
+       path ``org_id``.
+
+    Raises:
+        401 — authenticated but Eden ``users`` row missing (still provisioning)
+        404 — organization truly does not exist
+        403 — path org mismatches session org, or not a member after heal
+        503 — database unavailable / transient lookup failure
+    """
+    try:
+        user_id = await eden_user_id_from_auth(user)
+    except Exception as exc:
+        logger.warning("resolve_path_org_access user resolve failed: %s", exc)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="User lookup failed",
+        ) from exc
+    if not user_id:
+        # Distinct from "resource missing" — portal maps 401 to re-auth /
+        # provisioning UX instead of the generic 404 copy.
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User account is still provisioning. Please refresh.",
+        )
+
+    # Fast path: get_current_org already self-heals Clerk membership and
+    # (as of Jul 2026) falls back to DB role when JWT omits o.rol.
+    if isinstance(payload, dict) or payload is None:
+        try:
+            org = await get_current_org(org_id, payload)
+        except Exception as exc:
+            logger.warning(
+                "resolve_path_org_access get_current_org failed org=%s: %s",
+                org_id,
+                exc,
+            )
+            org = None
+        if org and org.get("org_id"):
+            return user_id, str(org["org_id"])
+
+    client = await get_postgres_client()
+    if client is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Database unavailable",
+        )
+
+    try:
+        org_row = await client.fetchrow(
+            """
+            SELECT id FROM organizations
+            WHERE id::text = $1 OR clerk_org_id::text = $1
+            LIMIT 1
+            """,
+            org_id,
+        )
+    except Exception as exc:
+        logger.warning(
+            "resolve_path_org_access org resolve failed org=%s: %s",
+            org_id,
+            exc,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Organization lookup failed",
+        ) from exc
+
+    if not org_row and payload and _is_clerk_payload_public(payload):
+        # Path id may be a Clerk org that Eden hasn't ingested yet.
+        clerk_org = extract_org_id(payload) or (
+            org_id if str(org_id).startswith("org_") else None
+        )
+        if clerk_org:
+            healed = await ensure_clerk_org_from_session(
+                clerk_org,
+                user_id,
+                extract_org_role(payload),
+            )
+            if healed:
+                # Accept healed org when path was the Clerk id or already
+                # resolves to the same Eden UUID.
+                path_resolved = await resolve_eden_org_id(org_id)
+                if path_resolved == healed or clerk_org == org_id or org_id == healed:
+                    return user_id, healed
+
+    if not org_row:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Organization not found",
+        )
+
+    eden_org_id = str(org_row["id"])
+
+    # Upsert only when Clerk session org matches path org — never invent
+    # membership for a foreign path org_id (IDOR).
+    if payload and _is_clerk_payload_public(payload):
+        jwt_org_raw = extract_org_id(payload)
+        jwt_org = await resolve_eden_org_id(jwt_org_raw) if jwt_org_raw else None
+        if jwt_org is not None and jwt_org != eden_org_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Path org_id does not match session organization",
+            )
+        if jwt_org == eden_org_id:
+            await ensure_clerk_membership(
+                user_id, eden_org_id, extract_org_role(payload)
+            )
+
+    try:
+        membership = await client.fetchrow(
+            "SELECT role FROM org_members WHERE org_id = $1 AND user_id = $2",
+            eden_org_id,
+            user_id,
+        )
+    except Exception as exc:
+        logger.warning(
+            "resolve_path_org_access membership query failed: %s", exc
+        )
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Membership lookup failed",
+        ) from exc
+
+    if not membership:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not a member of this organization",
+        )
+    return user_id, eden_org_id
+
+
+async def require_path_org_access(
+    org_id: str = Path(..., description="Organization ID"),
+    user: dict = Depends(get_current_user),
+    payload: dict | None = Depends(_try_resolve_token_payload),
+) -> str:
+    """FastAPI dep: path-org membership → Eden org UUID.
+
+    Use as a router ``dependencies=[Depends(...)]`` gate and/or as
+    ``org_id: str = Depends(require_path_org_access)`` so SQL uses the
+    resolved Eden id rather than a raw Clerk path id.
+    """
+    _, eden_org = await resolve_path_org_access(org_id, user, payload)
+    return eden_org
 
 
 async def ensure_clerk_org_from_session(
@@ -660,38 +949,40 @@ async def ensure_clerk_membership(
     eden_org_id: str,
     clerk_role: str | None,
 ) -> bool:
-    """Best-effort upsert of ``org_members`` when Clerk JWT is trusted.
+    """Best-effort insert of ``org_members`` when Clerk JWT is trusted.
 
-    Mirrors ``clerk_webhooks._upsert_membership`` so the portal can
-    self-heal when the webhook is delayed or misconfigured.
+    Self-heal only fills a *missing* membership when the webhook is
+    delayed. It must never overwrite an existing role or flip
+    ``last_writer_source``: a prior ``DO UPDATE`` that always set
+    ``last_writer_source = 'clerk'`` (even while preserving a local
+    ``owner``) let a second heal with a weaker JWT claim demote the
+    row. Role authority stays with ``clerk_webhooks._upsert_membership``
+    and local writers (``create_org`` / ``accept_invitation``).
+
+    When ``clerk_role`` is missing/empty, skip the write entirely —
+    mapping ``None`` → ``viewer`` must not insert a spurious viewer row.
     """
+    if not clerk_role:
+        return False
     eden_role = clerk_role_to_eden_role(clerk_role)
     client = await get_postgres_client()
     # Column is ``joined_at`` (migration 001), not ``created_at``.
-    upsert_with_writer = """
+    # ``ON CONFLICT DO NOTHING``: never demote via self-heal.
+    insert_with_writer = """
         INSERT INTO org_members (
             org_id, user_id, role, last_active_at, joined_at, last_writer_source
         )
         VALUES ($1, $2, $3, NOW(), NOW(), 'clerk')
-        ON CONFLICT (org_id, user_id) DO UPDATE
-        SET role = CASE
-                WHEN org_members.last_writer_source = 'clerk'
-                    THEN EXCLUDED.role
-                ELSE org_members.role
-            END,
-            last_writer_source = 'clerk',
-            last_active_at = NOW()
+        ON CONFLICT (org_id, user_id) DO NOTHING
     """
-    upsert_legacy = """
+    insert_legacy = """
         INSERT INTO org_members (org_id, user_id, role, last_active_at, joined_at)
         VALUES ($1, $2, $3, NOW(), NOW())
-        ON CONFLICT (org_id, user_id) DO UPDATE
-        SET role = EXCLUDED.role,
-            last_active_at = NOW()
+        ON CONFLICT (org_id, user_id) DO NOTHING
     """
     try:
         await client.execute(
-            upsert_with_writer,
+            insert_with_writer,
             eden_org_id,
             eden_user_id,
             eden_role,
@@ -708,7 +999,7 @@ async def ensure_clerk_membership(
             return False
         try:
             await client.execute(
-                upsert_legacy,
+                insert_legacy,
                 eden_org_id,
                 eden_user_id,
                 eden_role,
@@ -809,7 +1100,17 @@ async def get_current_org(
     bookkeeping, but the role is trusted from Clerk (single source
     of truth).
     """
-    if not payload:
+    # Direct ``await require_org_*(org_id)`` leaves ``payload`` as an
+    # unresolved FastAPI ``Depends(...)`` sentinel (truthy, not a dict).
+    # Treat that as unauthenticated so we 403 instead of AttributeError → 500.
+    if not isinstance(payload, dict):
+        if payload is not None:
+            logger.error(
+                "get_current_org received non-dict payload (%s); "
+                "caller likely awaited a Depends-backed guard without "
+                "resolving the JWT — returning None (403 upstream)",
+                type(payload).__name__,
+            )
         return None
 
     user_id = payload.get("sub") or extract_user_id(payload)
@@ -894,9 +1195,17 @@ async def get_current_org(
                 "archived_at": None,
                 "_pending_sync": True,
             }
+        # Prefer the stronger of JWT-mapped and DB roles when session
+        # matches and a role claim is present. Never demote a DB owner
+        # via a weaker JWT claim during sync. Missing ``o.rol`` uses DB
+        # (post-create before setActive must keep creator as owner).
+        if session_matches and clerk_role:
+            role = prefer_higher_eden_role(row["role"], eden_role)
+        else:
+            role = row["role"] or eden_role
         return {
             "org_id": eden_org_id,
-            "role": eden_role,
+            "role": role,
             "name": row["name"],
             "slug": row["slug"],
             "archived_at": row.get("archived_at"),
@@ -961,14 +1270,18 @@ async def require_org_member(
     x_org_id: str | None = Header(None, alias="X-Org-Id"),
     payload: dict | None = Depends(_try_resolve_token_payload),
 ) -> dict:
-    """Require user to be an org member, otherwise raise 403.
+    """Require user to be an org member.
+
+    Status codes:
+      * **401** when there is no resolved session payload (unauthenticated)
+      * **403** when authenticated but not a member of the requested org
 
     Defensive: any DB blip inside get_current_org (which itself has
     inner try/except per the May 2026 hardening) MUST NOT 500 the
     request. If the membership lookup fails AND the JWT carries a
     valid Clerk ``org_id`` claim, fall through to a synthesized
     pending_sync entry the same way get_current_org does; otherwise
-    403 (not 500). 2026-07-06 site-wide fix: the previous unguarded
+    401/403 (not 500). 2026-07-06 site-wide fix: the previous unguarded
     chain caused 500s on /orgs/{org_id}/ai-insights/sessions and
     similar org-scoped routes during a Postgres reconnect window.
     """
@@ -981,8 +1294,8 @@ async def require_org_member(
             x_org_id, exc,
         )
         # Try the synthesize path so Clerk-trusted users still pass.
-        clerk_org = extract_org_id(payload) if payload else None
-        if payload and clerk_org:
+        clerk_org = extract_org_id(payload) if isinstance(payload, dict) else None
+        if isinstance(payload, dict) and clerk_org:
             eden_org_id = await resolve_eden_org_id(clerk_org)
             clerk_role = extract_org_role(payload)
             return {
@@ -995,11 +1308,38 @@ async def require_org_member(
             }
         org = None
     if not org:
+        # Unauthenticated (no JWT/cookie) → 401. Authenticated but not a
+        # member → 403. Collapsing both to 403 made portal/SDK probes look
+        # like membership failures when the session was simply missing.
+        if not isinstance(payload, dict):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Authentication required",
+            )
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not a member of this organization",
         )
     return org
+
+
+async def require_path_org_member(
+    org_id: str = Path(..., description="Organization ID"),
+    member: dict = Depends(require_org_member),
+) -> dict:
+    """Gate path ``org_id`` against the authenticated member org.
+
+    Prefer :func:`require_path_org_access` when handlers need the
+    resolved Eden UUID for SQL. This variant keeps the member dict
+    (role / name) for routes already wired to ``require_org_member``.
+    """
+    eden_path = await resolve_eden_org_id(org_id) or org_id
+    if str(member["org_id"]) != str(eden_path):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Path org_id does not match authenticated org",
+        )
+    return member
 
 
 
@@ -1133,7 +1473,11 @@ async def require_org_owner(
     x_org_id: str | None = Header(None, alias="X-Org-Id"),
     payload: dict | None = Depends(_try_resolve_token_payload),
 ) -> dict:
-    """Require user to be an org owner, otherwise raise 403."""
+    """Require user to be an org owner, otherwise raise 403.
+
+    Owner-only (not admin). Clerk ``org:admin`` maps to Eden ``owner``
+    via :func:`clerk_role_to_eden_role`, so Clerk org admins still pass.
+    """
     org = await get_current_org(x_org_id, payload)
     if not org:
         raise HTTPException(
@@ -1141,7 +1485,7 @@ async def require_org_owner(
             detail="Not a member of this organization",
         )
     # is_owner field removed in S-6 — gate on role instead.
-    if org.get("role") not in ("owner", "admin"):
+    if org.get("role") != "owner":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Owner role required",
@@ -1288,24 +1632,77 @@ async def get_current_org_api_key(
 
     This is an alternative to cookie-based auth for programmatic access.
     Returns org context with scopes if valid.
+
+    Auth failures (missing / malformed / unknown key, bad org id) are
+    always HTTP 401 — never an unhandled 500. Only a true DB outage
+    surfaces as 503.
     """
     if not x_org_api_key:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="X-Org-Api-Key header required",
         )
+    if not x_org_id:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="X-Org-Id header required with API key",
+        )
 
-    client = await get_postgres_client()
-    key_hash = hashlib.sha256(x_org_api_key.encode()).hexdigest()
+    # Malformed keys (non-str, undecodable) must be 401, not TypeError 500.
+    try:
+        key_hash = hashlib.sha256(x_org_api_key.encode("utf-8")).hexdigest()
+    except (AttributeError, TypeError, UnicodeError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid API key",
+        ) from exc
 
+    # Compare org_id as text so a non-UUID ``X-Org-Id`` (Clerk-style
+    # ``org_…``, typo, placeholder) cannot crash asyncpg with
+    # ``invalid input syntax for type uuid`` → unhandled 500.
     query = """
         SELECT o.name, o.slug, o.owner_id, o.id as org_id, oak.scopes, oak.id as key_id,
                oak.active, oak.revoked_at, oak.expires_at
         FROM org_api_keys oak
         JOIN organizations o ON o.id = oak.org_id
-        WHERE oak.key_hash = $1 AND oak.org_id = $2
+        WHERE oak.key_hash = $1 AND oak.org_id::text = $2
     """
-    row = await client.fetchrow(query, key_hash, x_org_id)
+    try:
+        client = await get_postgres_client()
+        if client is None:
+            raise RuntimeError("postgres client unavailable")
+        row = await client.fetchrow(query, key_hash, x_org_id)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        # Auth-input faults (e.g. leftover UUID cast on a non-UUID
+        # ``X-Org-Id``) must be 401, never an unhandled 500. True DB
+        # outages stay 503 so clients can Retry-After.
+        exc_name = type(exc).__name__
+        msg = str(exc).lower()
+        if (
+            "invalid input syntax for type uuid" in msg
+            or exc_name in ("DataError", "InvalidTextRepresentation")
+        ):
+            logger.warning(
+                "get_current_org_api_key: auth-input fault for org=%s: %s",
+                x_org_id,
+                exc,
+            )
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid API key",
+            ) from exc
+        logger.warning(
+            "get_current_org_api_key: lookup failed for org=%s: %s",
+            x_org_id,
+            exc,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Authentication temporarily unavailable",
+            headers={"Retry-After": "5"},
+        ) from exc
     if not row:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -1356,24 +1753,33 @@ async def get_current_org_api_key(
     except Exception as exc:
         logger.debug("last_used_at UPDATE failed (non-fatal): %s", exc)
 
+    key_id = str(row["key_id"])
     return {
         "org_id": str(row["org_id"]),
         "name": row["name"],
         "slug": row["slug"],
         "scopes": row["scopes"],
-        "key_id": str(row["key_id"]),
+        "key_id": key_id,
+        # Attribution / ingest routes historically read ``api_key_id``.
+        "api_key_id": key_id,
+        "auth_method": "api_key",
     }
 
 
 async def get_optional_org(
     x_org_id: str | None = Header(None, alias="X-Org-Id"),
     x_org_api_key: str | None = Header(None, alias="X-Org-Api-Key"),
-    authorization: str | None = Cookie(None),
+    payload: dict | None = Depends(_try_resolve_token_payload),
 ) -> dict | None:
-    """Get org context from either API key or JWT cookie.
+    """Get org context from either API key or JWT (Bearer / cookie).
 
-    Tries API key first, then falls back to cookie auth.
+    Tries API key first, then falls back to the resolved session payload.
     Returns None if neither is valid.
+
+    NOTE: Do not pass the raw cookie string into
+    :func:`get_current_org` — that expects a payload dict. A string
+    used to AttributeError → 500; after the non-dict guard it
+    silently returned None and broke cookie auth entirely.
     """
     # Try API key first
     if x_org_api_key:
@@ -1382,8 +1788,9 @@ async def get_optional_org(
         except HTTPException:
             pass
 
-    # Fall back to cookie auth
-    return await get_current_org(x_org_id, authorization)
+    if not isinstance(payload, dict):
+        return None
+    return await get_current_org(x_org_id, payload)
 
 
 # ============================================================================

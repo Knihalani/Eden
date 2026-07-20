@@ -28,11 +28,16 @@ afterEach(async () => {
 });
 
 describe("instrument()", () => {
-  it("returns wrap helpers and enables http capture by default", () => {
+  it("returns wrap helpers and leaves http capture off by default", () => {
     const result = instrument();
     expect(result.wrapOpenAI).toBeFunction();
     expect(result.wrapMastra).toBeFunction();
     expect(result.detected).toHaveProperty("openai");
+    expect(isHttpCaptureInstalled()).toBe(false);
+  });
+
+  it("enables http capture when httpCapture: true", () => {
+    instrument({ httpCapture: true });
     expect(isHttpCaptureInstalled()).toBe(true);
   });
 });

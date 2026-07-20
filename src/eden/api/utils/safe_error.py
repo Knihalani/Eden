@@ -38,7 +38,7 @@ canary redactors landed on July 6).
 
 from __future__ import annotations
 
-from typing import Final
+from typing import Final, NoReturn
 
 # Default safe detail text when the caller doesn't pass a
 # domain-specific fallback. Keep this short, neutral, and free
@@ -86,3 +86,47 @@ def redact_upstream_error(exc: BaseException) -> str:
     """
     del exc
     return _DEFAULT_UPSTREAM
+
+
+def map_db_exception(
+    exc: BaseException,
+    *,
+    fallback: str,
+    unique_detail: str = "Conflict",
+    uuid_detail: str = "Invalid id",
+    fk_detail: str = "Referenced resource not found",
+) -> tuple[int, str]:
+    """Classify a DB / infra failure into (status_code, detail).
+
+    Client-shaped Postgres errors become 4xx; everything else is 503
+    so routes do not leak unintended 500s on bad input or soft infra.
+    """
+    msg = str(exc).lower()
+    if "unique" in msg or "duplicate" in msg:
+        return 409, unique_detail
+    if "invalid input syntax for type uuid" in msg:
+        return 400, uuid_detail
+    if "foreign key" in msg:
+        return 404, fk_detail
+    return 503, safe_detail(exc, fallback=fallback)
+
+
+def raise_mapped_db_error(
+    exc: BaseException,
+    *,
+    fallback: str,
+    unique_detail: str = "Conflict",
+    uuid_detail: str = "Invalid id",
+    fk_detail: str = "Referenced resource not found",
+) -> NoReturn:
+    """Raise ``HTTPException`` from a DB/infra exception. Never returns."""
+    from fastapi import HTTPException
+
+    status, detail = map_db_exception(
+        exc,
+        fallback=fallback,
+        unique_detail=unique_detail,
+        uuid_detail=uuid_detail,
+        fk_detail=fk_detail,
+    )
+    raise HTTPException(status_code=status, detail=detail) from exc

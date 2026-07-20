@@ -15,6 +15,11 @@ import { FormField } from "@/components/ui/form-field";
 import { useOrg } from "@/hooks/use-org";
 import { useToast } from "@/components/ui/toast";
 import { changeImpactApi } from "@/lib/api";
+import {
+  FEATURE_NOT_ENABLED_MESSAGE,
+  FEATURE_NOT_ENABLED_TITLE,
+  isFeatureFlagOffError,
+} from "@/lib/feature-flag-error";
 import { errorFromCaught } from "@/lib/safe-error-message";
 import { cn } from "@/lib/utils";
 
@@ -24,8 +29,8 @@ type ImpactReport = {
   traces_replayed?: number;
   trajectory_divergence_rate?: number;
   new_predicted_stumbles?: number;
-  cost_delta_pct?: number;
-  latency_delta_pct?: number;
+  cost_delta_pct?: number | null;
+  latency_delta_pct?: number | null;
   regression_eval?: Record<string, unknown>;
   top_divergences?: Array<Record<string, unknown>>;
   policy_tier?: string;
@@ -51,6 +56,11 @@ const REC_META: Record<
     tone: "text-[var(--warning)] border-[var(--warning)]/40 bg-[var(--warning)]/5",
     icon: AlertTriangle,
   },
+  unknown: {
+    label: "Needs review",
+    tone: "text-[var(--warning)] border-[var(--warning)]/40 bg-[var(--warning)]/5",
+    icon: AlertTriangle,
+  },
   block: {
     label: "Block merge",
     tone: "text-[var(--error)] border-[var(--error)]/40 bg-[var(--error)]/5",
@@ -65,7 +75,7 @@ function pct(n: unknown): string {
 }
 
 export default function ChangeImpactPage() {
-  const { currentOrg } = useOrg();
+  const { currentOrg, authError } = useOrg();
   const toast = useToast();
   const [changeId, setChangeId] = useState("local-preview-1");
   const [agentId, setAgentId] = useState("");
@@ -87,15 +97,21 @@ export default function ChangeImpactPage() {
       setReport((res.data?.report as ImpactReport) || null);
       toast.success("Impact preview generated");
     } catch (e) {
-      const msg = errorFromCaught(e, "Preview failed");
-      setError(msg);
-      toast.error(msg);
+      if (isFeatureFlagOffError(e)) {
+        setError(FEATURE_NOT_ENABLED_TITLE);
+        toast.error(FEATURE_NOT_ENABLED_TITLE, FEATURE_NOT_ENABLED_MESSAGE);
+      } else {
+        const msg = errorFromCaught(e, "Preview failed");
+        setError(msg);
+        toast.error(msg);
+      }
     } finally {
       setBusy(false);
     }
   };
 
-  if (!currentOrg) return <NoOrgState feature="Change impact" />;
+  if (!currentOrg && !authError) return <NoOrgState feature="Change impact" />;
+  if (!currentOrg) return null;
 
   const rec = String(report?.recommendation ?? "review_required");
   const meta = REC_META[rec] ?? REC_META.review_required;
@@ -156,20 +172,48 @@ export default function ChangeImpactPage() {
           {error ? (
             <ErrorState
               className="mb-4"
-              title="Preview failed"
-              message={error}
+              title={
+                error === FEATURE_NOT_ENABLED_TITLE
+                  ? FEATURE_NOT_ENABLED_TITLE
+                  : "Preview failed"
+              }
+              message={
+                error === FEATURE_NOT_ENABLED_TITLE
+                  ? FEATURE_NOT_ENABLED_MESSAGE
+                  : error
+              }
               action={
-                <Button variant="outline" size="sm" onClick={() => void run()}>
-                  Try again
-                </Button>
+                error === FEATURE_NOT_ENABLED_TITLE ? undefined : (
+                  <Button variant="outline" size="sm" onClick={() => void run()}>
+                    Try again
+                  </Button>
+                )
               }
             />
           ) : null}
 
-          {!report && !error ? (
+          {!report && !error && !busy ? (
             <EmptyState
               title="No preview yet"
-              description="Generate a preview to see divergence, cost Δ, and a ship/block recommendation."
+              description="Generate a preview to see divergence, cost Δ, and a ship/block recommendation. Needs production traces for meaningful replay."
+              action={
+                <div className="flex flex-wrap items-center justify-center gap-2">
+                  <Button
+                    className="min-h-11"
+                    onClick={() => void run()}
+                    disabled={busy}
+                    loading={busy}
+                  >
+                    <Play className="h-3.5 w-3.5" /> Generate preview
+                  </Button>
+                  <Button asChild variant="outline" className="min-h-11">
+                    <Link href="/traces">Open Traces</Link>
+                  </Button>
+                  <Button asChild variant="ghost" className="min-h-11">
+                    <Link href="/improve">Improve queue</Link>
+                  </Button>
+                </div>
+              }
             />
           ) : null}
 

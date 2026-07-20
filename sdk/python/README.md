@@ -64,7 +64,7 @@ by `eden.configure(...)`:
 | `EDEN_API_KEY`         | (required)                | Programmatic key (`X-Org-Api-Key`). `EDEN_ORG_API_KEY` accepted as an alias for parity with the TypeScript SDK. |
 | `EDEN_BASE_URL`        | `https://api.edenobservability.com`   | Gateway / ingestion base URL             |
 | `EDEN_PROJECT_ID`      | `default`                 | Multi-tenant project label               |
-| `EDEN_BATCH_SIZE`      | `32`                      | Max events per HTTP POST                 |
+| `EDEN_BATCH_SIZE`      | `50`                      | Max events per HTTP POST                 |
 | `EDEN_FLUSH_INTERVAL_MS` | `250`                   | Max time to buffer a batch               |
 | `EDEN_MAX_QUEUE`       | `4096`                    | Backpressure cap (oldest dropped first)  |
 | `EDEN_DISABLED`        | `0`                       | Turn the SDK into a complete no-op       |

@@ -2,27 +2,48 @@
 
 import logging
 from datetime import UTC, datetime, timedelta
+from typing import NoReturn
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from eden.api.deps import (  # noqa: F401  (monkeypatched by tests/api/test_analytics_routes.py)
     get_current_user,
     require_org_permission,
     require_org_permission_dep,
+    require_path_org_access,
 )
+from eden.api.utils.redact import redact_all
+from eden.api.utils.safe_error import raise_mapped_db_error
 from eden.storage.postgres import get_postgres_client
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/orgs/{org_id}/analytics", tags=["analytics"])
+router = APIRouter(prefix="/orgs/{org_id}/analytics", tags=["analytics"], dependencies=[Depends(require_path_org_access)])
+
+
+async def _analytics_client():
+    client = await get_postgres_client()
+    if client is None:
+        raise HTTPException(status_code=503, detail="database unavailable")
+    return client
+
+
+def _reraise_analytics(exc: Exception, *, fallback: str) -> NoReturn:
+    logger.warning("analytics query failed: %s", redact_all(str(exc)))
+    raise_mapped_db_error(
+        exc,
+        fallback=fallback,
+        uuid_detail="Invalid organization id",
+        fk_detail="Organization not found",
+    )
 
 
 @router.get("", response_model=dict)
 async def get_org_analytics(
-    org_id: str,
+    org_id: str = Depends(require_path_org_access),
     days: int = Query(default=30, ge=1, le=365),
     user: dict = Depends(get_current_user),
-        _check_audit_view: dict = Depends(require_org_permission_dep('audit:view')),
+        _check_audit_view: dict = Depends(require_org_permission_dep('audit:view'))
 ):
     """Get analytics for an organization.
 
@@ -31,7 +52,7 @@ async def get_org_analytics(
     """
     # Require audit:view permission (owner/admin)
 
-    client = await get_postgres_client()
+    client = await _analytics_client()
     now = datetime.now(UTC)
     start_date = now - timedelta(days=days)
 
@@ -43,46 +64,52 @@ async def get_org_analytics(
         GROUP BY DATE(created_at)
         ORDER BY day ASC
     """
-    ref_uploads_rows = await client.fetch(ref_uploads_query, org_id, start_date)
-    reference_uploads_by_day = [
-        {"date": row["day"].isoformat(), "count": row["count"]}
-        for row in ref_uploads_rows
-    ]
+    try:
+        ref_uploads_rows = await client.fetch(ref_uploads_query, org_id, start_date)
+        reference_uploads_by_day = [
+            {"date": row["day"].isoformat(), "count": row["count"]}
+            for row in ref_uploads_rows
+        ]
 
-    # Active members count (members with activity in the period)
-    active_members_query = """
-        SELECT COUNT(DISTINCT user_id) as count
-        FROM org_members
-        WHERE org_id = $1 AND last_active_at >= $2
-    """
-    active_members_count = await client.fetchval(active_members_query, org_id, start_date) or 0
+        # Active members count (members with activity in the period)
+        active_members_query = """
+            SELECT COUNT(DISTINCT user_id) as count
+            FROM org_members
+            WHERE org_id = $1 AND last_active_at >= $2
+        """
+        active_members_count = await client.fetchval(active_members_query, org_id, start_date) or 0
 
-    # Total references count
-    total_references_query = """
-        SELECT COUNT(*) as count
-        FROM code_references
-        WHERE org_id = $1
-    """
-    total_references = await client.fetchval(total_references_query, org_id) or 0
+        # Total references count
+        total_references_query = """
+            SELECT COUNT(*) as count
+            FROM code_references
+            WHERE org_id = $1
+        """
+        total_references = await client.fetchval(total_references_query, org_id) or 0
 
-    # Storage bytes used (estimated from content length)
-    storage_query = """
-        SELECT COALESCE(SUM(LENGTH(content)), 0) as bytes
-        FROM code_references
-        WHERE org_id = $1
-    """
-    storage_bytes_used = await client.fetchval(storage_query, org_id) or 0
+        # Storage bytes used (estimated from content length)
+        storage_query = """
+            SELECT COALESCE(SUM(LENGTH(content)), 0) as bytes
+            FROM code_references
+            WHERE org_id = $1
+        """
+        storage_bytes_used = await client.fetchval(storage_query, org_id) or 0
 
-    # Member activity (last_active_at for all members)
-    member_activity_query = """
-        SELECT om.user_id, om.role, om.joined_at, om.last_active_at,
-               u.email, u.name
-        FROM org_members om
-        JOIN users u ON u.id = om.user_id
-        WHERE om.org_id = $1
-        ORDER BY om.last_active_at DESC NULLS LAST
-    """
-    member_activity_rows = await client.fetch(member_activity_query, org_id)
+        # Member activity (last_active_at) — bounded so a large roster
+        # cannot dump the full org_members × users join on every analytics
+        # page load. UI shows a "recent activity" table, not a full census.
+        member_activity_query = """
+            SELECT om.user_id, om.role, om.joined_at, om.last_active_at,
+                   u.email, u.name
+            FROM org_members om
+            JOIN users u ON u.id = om.user_id
+            WHERE om.org_id = $1
+            ORDER BY om.last_active_at DESC NULLS LAST
+            LIMIT 100
+        """
+        member_activity_rows = await client.fetch(member_activity_query, org_id)
+    except Exception as exc:
+        _reraise_analytics(exc, fallback="analytics unavailable")
     member_activity = [
         {
             "user_id": str(row["user_id"]),
@@ -114,27 +141,30 @@ async def get_org_analytics(
 
 @router.get("/token-usage", response_model=dict)
 async def token_usage(
-    org_id: str,
+    org_id: str = Depends(require_path_org_access),
     days: int = Query(default=30, ge=1, le=365),
     _user: dict = Depends(get_current_user),
 ):
     """Sum input/output tokens per day from ``usage_events``."""
     start = datetime.now(UTC) - timedelta(days=days)
-    client = await get_postgres_client()
-    rows = await client.fetch(
-        """
-        SELECT DATE(created_at) AS day,
-               SUM(COALESCE((metadata->>'input_tokens')::int, 0))  AS input_tokens,
-               SUM(COALESCE((metadata->>'output_tokens')::int, 0)) AS output_tokens
-        FROM usage_events
-        WHERE org_id = $1
-          AND event_type = 'llm_call'
-          AND created_at >= $2
-        GROUP BY DATE(created_at)
-        ORDER BY day
-        """,
-        org_id, start,
-    )
+    client = await _analytics_client()
+    try:
+        rows = await client.fetch(
+            """
+            SELECT DATE(created_at) AS day,
+                   SUM(COALESCE((metadata->>'input_tokens')::int, 0))  AS input_tokens,
+                   SUM(COALESCE((metadata->>'output_tokens')::int, 0)) AS output_tokens
+            FROM usage_events
+            WHERE org_id = $1
+              AND event_type = 'llm_call'
+              AND created_at >= $2
+            GROUP BY DATE(created_at)
+            ORDER BY day
+            """,
+            org_id, start,
+        )
+    except Exception as exc:
+        _reraise_analytics(exc, fallback="token usage unavailable")
     return {
         "by_day": [
             {"day": r["day"].isoformat() if hasattr(r["day"], "isoformat") else r["day"],
@@ -147,28 +177,31 @@ async def token_usage(
 
 @router.get("/latency", response_model=dict)
 async def latency(
-    org_id: str,
+    org_id: str = Depends(require_path_org_access),
     days: int = Query(default=30, ge=1, le=365),
     _user: dict = Depends(get_current_user),
 ):
     """Per-day latency percentiles from ``telemetry_events``."""
     start = datetime.now(UTC) - timedelta(days=days)
-    client = await get_postgres_client()
-    rows = await client.fetch(
-        """
-        SELECT DATE(timestamp) AS day,
-               percentile_cont(0.50) WITHIN GROUP (ORDER BY duration_ms) AS p50_ms,
-               percentile_cont(0.95) WITHIN GROUP (ORDER BY duration_ms) AS p95_ms,
-               percentile_cont(0.99) WITHIN GROUP (ORDER BY duration_ms) AS p99_ms
-        FROM telemetry_events
-        WHERE tenant_id = $1
-          AND duration_ms IS NOT NULL
-          AND timestamp >= $2
-        GROUP BY DATE(timestamp)
-        ORDER BY day
-        """,
-        org_id, start,
-    )
+    client = await _analytics_client()
+    try:
+        rows = await client.fetch(
+            """
+            SELECT DATE(timestamp) AS day,
+                   percentile_cont(0.50) WITHIN GROUP (ORDER BY duration_ms) AS p50_ms,
+                   percentile_cont(0.95) WITHIN GROUP (ORDER BY duration_ms) AS p95_ms,
+                   percentile_cont(0.99) WITHIN GROUP (ORDER BY duration_ms) AS p99_ms
+            FROM telemetry_events
+            WHERE tenant_id = $1
+              AND duration_ms IS NOT NULL
+              AND timestamp >= $2
+            GROUP BY DATE(timestamp)
+            ORDER BY day
+            """,
+            org_id, start,
+        )
+    except Exception as exc:
+        _reraise_analytics(exc, fallback="latency analytics unavailable")
     return {
         "by_day": [
             {"day": r["day"].isoformat() if hasattr(r["day"], "isoformat") else r["day"],
@@ -182,26 +215,29 @@ async def latency(
 
 @router.get("/throughput", response_model=dict)
 async def throughput(
-    org_id: str,
+    org_id: str = Depends(require_path_org_access),
     days: int = Query(default=30, ge=1, le=365),
     _user: dict = Depends(get_current_user),
 ):
     """Request counts per (weekday, hour-of-day) bucket for heatmap viz."""
     start = datetime.now(UTC) - timedelta(days=days)
-    client = await get_postgres_client()
-    rows = await client.fetch(
-        """
-        SELECT EXTRACT(HOUR FROM timestamp)::int AS hour,
-               EXTRACT(DOW FROM timestamp)::int AS weekday,
-               COUNT(*) AS requests
-        FROM telemetry_events
-        WHERE tenant_id = $1
-          AND timestamp >= $2
-        GROUP BY EXTRACT(HOUR FROM timestamp), EXTRACT(DOW FROM timestamp)
-        ORDER BY weekday, hour
-        """,
-        org_id, start,
-    )
+    client = await _analytics_client()
+    try:
+        rows = await client.fetch(
+            """
+            SELECT EXTRACT(HOUR FROM timestamp)::int AS hour,
+                   EXTRACT(DOW FROM timestamp)::int AS weekday,
+                   COUNT(*) AS requests
+            FROM telemetry_events
+            WHERE tenant_id = $1
+              AND timestamp >= $2
+            GROUP BY EXTRACT(HOUR FROM timestamp), EXTRACT(DOW FROM timestamp)
+            ORDER BY weekday, hour
+            """,
+            org_id, start,
+        )
+    except Exception as exc:
+        _reraise_analytics(exc, fallback="throughput analytics unavailable")
     return {
         "by_hour": [
             {"hour": int(r["hour"]), "weekday": int(r["weekday"]),
@@ -213,7 +249,7 @@ async def throughput(
 
 @router.get("/top-agents", response_model=dict)
 async def top_agents(
-    org_id: str,
+    org_id: str = Depends(require_path_org_access),
     days: int = Query(default=30, ge=1, le=365),
     _user: dict = Depends(get_current_user),
 ):
@@ -221,24 +257,27 @@ async def top_agents(
     canonical proxy for "what model was called" until we get a
     proper agent_id column on ``usage_events``."""
     start = datetime.now(UTC) - timedelta(days=days)
-    client = await get_postgres_client()
-    rows = await client.fetch(
-        """
-        SELECT model AS agent,
-               COUNT(*) AS requests,
-               COALESCE(SUM(cost_usd), 0) AS cost_usd,
-               COALESCE(AVG((metadata->>'latency_ms')::float), 0) AS avg_latency_ms
-        FROM usage_events
-        WHERE org_id = $1
-          AND event_type = 'llm_call'
-          AND model IS NOT NULL
-          AND created_at >= $2
-        GROUP BY model
-        ORDER BY cost_usd DESC
-        LIMIT 25
-        """,
-        org_id, start,
-    )
+    client = await _analytics_client()
+    try:
+        rows = await client.fetch(
+            """
+            SELECT model AS agent,
+                   COUNT(*) AS requests,
+                   COALESCE(SUM(cost_usd), 0) AS cost_usd,
+                   COALESCE(AVG((metadata->>'latency_ms')::float), 0) AS avg_latency_ms
+            FROM usage_events
+            WHERE org_id = $1
+              AND event_type = 'llm_call'
+              AND model IS NOT NULL
+              AND created_at >= $2
+            GROUP BY model
+            ORDER BY cost_usd DESC
+            LIMIT 25
+            """,
+            org_id, start,
+        )
+    except Exception as exc:
+        _reraise_analytics(exc, fallback="top-agents analytics unavailable")
     return {
         "agents": [
             {"agent": r["agent"],

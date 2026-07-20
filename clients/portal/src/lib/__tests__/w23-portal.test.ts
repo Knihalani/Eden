@@ -1,6 +1,6 @@
 /**
  * Wave 23 — ChatSidebar SOTA (Loop-class): datasets/experiments/playgrounds,
- * T1/T3 routing, model picker, cite-before-claim, rate limits, TTFT, golden paths.
+ * T2-only routing (no model picker), cite-before-claim, rate limits, TTFT, golden paths.
  */
 import { readFileSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
@@ -14,9 +14,8 @@ import {
   SLASH_COMMANDS,
 } from "@/components/ai-insights/slashCommands";
 import {
-  CHAT_MODEL_OPTIONS,
+  CHAT_PREFERRED_TIER,
   needsApproval,
-  resolvePreferredTier,
   type ToolCall,
 } from "@/components/ai-insights/types";
 
@@ -73,7 +72,7 @@ describe("W23 dataset / experiment / playground tools", () => {
   });
 });
 
-describe("W23 T1/T3 routing + model picker + cost / TTFT", () => {
+describe("W23 T2 routing + cost / TTFT (no model picker)", () => {
   it("ships chat_sota helpers and ChatService wiring", () => {
     expect(existsSync(resolve(ROOT, "../../src/eden/llmops/chat_sota.py"))).toBe(
       true,
@@ -84,12 +83,15 @@ describe("W23 T1/T3 routing + model picker + cost / TTFT", () => {
     expect(sota).toContain("ttft_budget_ms");
     expect(sota).toContain("estimate_turn_cost_usd");
     expect(sota).toContain("MODEL_PICKER");
+    expect(sota).toContain('return ModelTier.T2');
 
     const agent = py("eden/autonomous/agent.py");
     expect(agent).toContain("preferred_tier");
     expect(agent).toContain("cite_before_claim");
     expect(agent).toContain("ttft_ms");
     expect(agent).toContain('type="meta"');
+    expect(agent).toContain("model_for_tier(ModelTier.T2)");
+    expect(agent).not.toContain('slot="reasoning"');
   });
 
   it("ChatRequest + rate limit on ai_insights chat", () => {
@@ -101,22 +103,25 @@ describe("W23 T1/T3 routing + model picker + cost / TTFT", () => {
     expect(routes).toContain("429");
   });
 
-  it("Composer model picker + session spend meter", () => {
-    expect(CHAT_MODEL_OPTIONS.map((o) => o.id)).toEqual(["auto", "t1", "t3"]);
-    expect(resolvePreferredTier("t1")).toEqual({ preferred_tier: "t1" });
-    expect(resolvePreferredTier("auto").preferred_tier).toBe("auto");
+  it("Composer has no model picker; hook always POSTs t2", () => {
+    expect(CHAT_PREFERRED_TIER).toBe("t2");
 
     const composer = src("components/ai-insights/Composer.tsx");
-    expect(composer).toContain("CHAT_MODEL_OPTIONS");
+    expect(composer).not.toContain("CHAT_MODEL_OPTIONS");
+    expect(composer).not.toContain("aria-label=\"Chat model tier\"");
     expect(composer).toContain("data-session-spend");
     expect(composer).toContain("data-ttft");
-    expect(composer).toContain("aria-label=\"Chat model tier\"");
 
     const hook = src("components/ai-insights/hooks/useChatSidebar.ts");
-    expect(hook).toContain("preferred_model");
+    expect(hook).toContain("CHAT_PREFERRED_TIER");
     expect(hook).toContain("preferred_tier");
-    expect(hook).toContain("resolvePreferredTier");
+    expect(hook).not.toContain("resolvePreferredTier");
+    expect(hook).not.toContain("modelOption");
     expect(hook).toContain('case "meta"');
+
+    const shell = src("components/ai-insights/ChatSidebar.tsx");
+    expect(shell).toContain("MessageSquare");
+    expect(shell).not.toMatch(/\bTerminal\b/);
   });
 });
 

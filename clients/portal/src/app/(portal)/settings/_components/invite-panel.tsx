@@ -71,7 +71,7 @@ export function InvitePanel({
 
       {error && <div className="text-sm text-[var(--error)] py-2">{error}</div>}
 
-      {!loading && invitations.length === 0 && <p className="text-sm text-[var(--text-muted)] py-4 text-center">
+      {!loading && !error && invitations.length === 0 && <p className="text-sm text-[var(--text-muted)] py-4 text-center">
           No pending invitations
         </p>}
 

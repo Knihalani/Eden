@@ -9,8 +9,9 @@
  *
  * Non-essential cookies (analytics, marketing) are NOT set until the
  * user accepts. The default state is "declined" — accepting
- * explicitly opts the user in. Withdraw is one click from the
- * settings page.
+ * explicitly opts the user in. After a choice, a compact
+ * "Cookie preferences" control re-opens the banner so the user can
+ * accept, decline, or withdraw consent without leaving the page.
  *
  * Layout / reading flow:
  *
@@ -24,7 +25,7 @@
  * events-none wrapper meant the user couldn't even scroll past the
  * hidden content.
  *
- * The fix is two-fold:
+ * The fix is three-fold:
  *
  * 1. The banner auto-collapses to a small floating pill after the
  *    user scrolls past ~30% of the document. Reading flow is no
@@ -33,61 +34,87 @@
  *    expands it back to the full banner for users who want the
  *    longer copy.
  *
- * 2. ``--cookie-banner-offset`` is set to the pill height (~52px
- *    including breathing room) so the very end of long pages is
- *    still readable after the user has scrolled to the bottom.
+ * 2. On short pages (little or no scroll room), the banner starts
+ *    collapsed as a pill immediately — the full banner would
+ *    otherwise sit on top of primary CTAs (Start free, Open email,
+ *    BottomCta) with nowhere to scroll them clear.
+ *
+ * 3. ``--cookie-banner-offset`` tracks the *visible* chrome: full
+ *    banner height while expanded, pill height while collapsed, so
+ *    the document end (and short-page CTAs) stay above the overlay.
  *
  * Accessibility: the banner is a ``role="dialog"`` with
  * ``aria-live="polite"`` and an "Accept" button as the primary
  * focusable element on mount.
  *
  * Ponytail: useState + useEffect + localStorage + a rAF-throttled
- * scroll listener for the auto-collapse. No external consent library.
+ * scroll/resize listener for the auto-collapse. No external consent library.
  */
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
+import { usePathname } from "next/navigation";
 import {
   applyAnalyticsConsent,
   bootAnalyticsFromStoredConsent,
   COOKIE_CONSENT_KEY,
   type ConsentValue,
 } from "@/lib/analytics";
+import { isAuthPath } from "@/lib/auth-redirect";
+import {
+  CHROME_BANNER_ATTR,
+  ERROR_STATE_ATTR,
+  shouldDeferBlockingOverlays,
+} from "@/lib/overlay-defer";
 
 const STORAGE_KEY = COOKIE_CONSENT_KEY;
-// Pill (collapsed) reserves a slim strip so the bottom edge of the
-// document isn't flush against the pill.
+/** Pill (collapsed) reserves a slim strip so the bottom edge of the
+ * document isn't flush against the pill. */
 const PILL_OFFSET_PX = 56;
-// Auto-collapse once the user has scrolled past this fraction of
-// the document. 30% reads as "engaged but not yet at the bottom"
-// — earlier than that the user is still orienting themselves and
-// should see the full banner; later than that they should be able
-// to read without the banner blocking anything.
-//
-// ``COLLAPSE_MIN_PX`` is an absolute floor: on short pages (e.g.
-// a docs section that's only 200px taller than the viewport) the
-// 30% threshold would mean collapsing only after 60px of scroll,
-// which is barely a "decision" the user has made. The floor of
-// 240px of scroll means the user has actually moved their reading
-// position into the body of the page, regardless of the
-// document's total height.
+/**
+ * Full banner + safe breathing room (stacked copy + actions on
+ * mobile can exceed ~120px). Used while the expanded dialog is
+ * showing so short-page CTAs aren't trapped under it.
+ */
+const FULL_BANNER_OFFSET_PX = 168;
+/**
+ * Auto-collapse once the user has scrolled past this fraction of
+ * the document. 30% reads as "engaged but not yet at the bottom"
+ * — earlier than that the user is still orienting themselves and
+ * should see the full banner; later than that they should be able
+ * to read without the banner blocking anything.
+ *
+ * ``COLLAPSE_MIN_PX`` is an absolute floor on *long* pages: on short
+ * pages the 30% threshold would mean collapsing only after a tiny
+ * scroll. Short pages are handled separately via
+ * ``SHORT_PAGE_MAX_SCROLLABLE_PX`` (collapse immediately).
+ */
 const COLLAPSE_SCROLL_FRACTION = 0.3;
 const COLLAPSE_MIN_PX = 240;
+/**
+ * If the document has this little (or less) scroll room, treat it
+ * as a short page and start in pill mode so primary CTAs stay
+ * clickable without requiring scroll the page doesn't have.
+ */
+const SHORT_PAGE_MAX_SCROLLABLE_PX = 320;
 
 export function CookieConsent() {
+  const pathname = usePathname() ?? "";
+  const onAuthRoute = isAuthPath(pathname);
+  const [ready, setReady] = useState(false);
   const [visible, setVisible] = useState(false);
+  const [hasChoice, setHasChoice] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
   const [expanded, setExpanded] = useState(false);
 
-  // Apply/remove the bottom padding that keeps page content
-  // visible above the pill. Reads `visible` as a dependency so
-  // the effect re-runs on dismiss.
+  const showFull = !collapsed || expanded;
+
+  // Reserve body padding for whichever chrome is actually showing.
   useEffect(() => {
     if (typeof document === "undefined") return;
     if (visible) {
       document.documentElement.style.setProperty(
         "--cookie-banner-offset",
-        `${PILL_OFFSET_PX}px`,
+        `${showFull ? FULL_BANNER_OFFSET_PX : PILL_OFFSET_PX}px`,
       );
     } else {
       document.documentElement.style.setProperty(
@@ -101,14 +128,11 @@ export function CookieConsent() {
         "0px",
       );
     };
-  }, [visible]);
+  }, [visible, showFull]);
 
-  // Scroll-driven collapse: once the user has scrolled past
-  // COLLAPSE_SCROLL_FRACTION of the document, the full banner
-  // collapses into a compact pill. The pill can be re-expanded
-  // via the chevron button for users who want the longer copy.
-  // A rAF-throttled scroll handler keeps the listener cheap on
-  // long pages.
+  // Scroll/resize-driven collapse: long pages collapse after the
+  // user scrolls; short pages collapse immediately so CTAs aren't
+  // occluded. Expanded state always wins for showFull via OR.
   useEffect(() => {
     if (!visible) return;
     let frame = 0;
@@ -116,30 +140,29 @@ export function CookieConsent() {
       frame = 0;
       const doc = document.documentElement;
       const scrollable = doc.scrollHeight - window.innerHeight;
-      if (scrollable <= 0) {
-        // Page is shorter than the viewport — no collapse needed.
-        setCollapsed(false);
+      // Short page (including no-scroll): auto-collapse to pill.
+      // Previously this branch forced collapsed=false, which left
+      // the full banner covering primary CTAs with nowhere to go.
+      if (scrollable <= SHORT_PAGE_MAX_SCROLLABLE_PX) {
+        setCollapsed(true);
         return;
       }
       const ratio = window.scrollY / scrollable;
-      // Collapse on either the fractional threshold OR the
-      // absolute-pixel floor — whichever the page satisfies
-      // first. This handles short pages (small scrollable) and
-      // long pages (large scrollable) with the same intent: the
-      // user has read past the top of the page.
       setCollapsed(
         ratio > COLLAPSE_SCROLL_FRACTION ||
-        window.scrollY > COLLAPSE_MIN_PX
+          window.scrollY > COLLAPSE_MIN_PX,
       );
     };
-    const onScroll = () => {
+    const onScrollOrResize = () => {
       if (frame) return;
       frame = window.requestAnimationFrame(update);
     };
     update();
-    window.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("scroll", onScrollOrResize, { passive: true });
+    window.addEventListener("resize", onScrollOrResize, { passive: true });
     return () => {
-      window.removeEventListener("scroll", onScroll);
+      window.removeEventListener("scroll", onScrollOrResize);
+      window.removeEventListener("resize", onScrollOrResize);
       if (frame) window.cancelAnimationFrame(frame);
     };
   }, [visible]);
@@ -147,37 +170,75 @@ export function CookieConsent() {
   useEffect(() => {
     // F3: don't show the banner on auth routes — the cookie choice
     // belongs to the portal, not the sign-in/sign-up surface.
-    if (typeof window !== "undefined") {
-      const p = window.location.pathname;
-      if (
-        p.startsWith("/sign-in") ||
-        p.startsWith("/sign-up") ||
-        p.startsWith("/login") ||
-        p.startsWith("/signup") ||
-        p.startsWith("/forgot-password") ||
-        p.startsWith("/reset-password") ||
-        p.startsWith("/invite")
-      ) {
-        // Still boot analytics if they previously consented on another route.
-        bootAnalyticsFromStoredConsent();
-        return;
-      }
+    // Re-run on pathname so client navigations into/out of auth
+    // (marketing → /sign-in) hide/show correctly.
+    if (onAuthRoute) {
+      bootAnalyticsFromStoredConsent();
+      setVisible(false);
+      setExpanded(false);
+      setReady(true);
+      return;
     }
     try {
       const stored = window.localStorage.getItem(STORAGE_KEY);
-      if (!stored) {
-        // No prior choice → show the banner. Slight delay so the
-        // banner slides in after the page paints (avoids CLS).
-        const t = window.setTimeout(() => setVisible(true), 600);
-        return () => window.clearTimeout(t);
+      if (stored === "accepted" || stored === "declined") {
+        setHasChoice(true);
+        bootAnalyticsFromStoredConsent();
+        setReady(true);
+        return;
       }
-      // Prior choice — hydrate analytics if they accepted.
-      bootAnalyticsFromStoredConsent();
+      // No prior choice → show the banner after paint, but defer while
+      // session / ErrorState chrome owns attention (avoids overlay pile-up).
+      let cancelled = false;
+      let showTimer: number | undefined;
+      const tryShow = () => {
+        if (cancelled) return;
+        if (shouldDeferBlockingOverlays()) {
+          setReady(true);
+          setVisible(false);
+          return;
+        }
+        if (showTimer != null) window.clearTimeout(showTimer);
+        showTimer = window.setTimeout(() => {
+          if (cancelled || shouldDeferBlockingOverlays()) return;
+          setVisible(true);
+          setReady(true);
+        }, 600);
+      };
+      tryShow();
+      const observer = new MutationObserver(() => {
+        if (cancelled) return;
+        if (shouldDeferBlockingOverlays()) {
+          if (showTimer != null) window.clearTimeout(showTimer);
+          setVisible(false);
+          return;
+        }
+        // Banner was deferred — reveal once blockers clear (if still undecided).
+        if (!window.localStorage.getItem(STORAGE_KEY)) {
+          tryShow();
+        }
+      });
+      observer.observe(document.documentElement, {
+        attributes: true,
+        attributeFilter: [CHROME_BANNER_ATTR],
+      });
+      observer.observe(document.body, {
+        childList: true,
+        subtree: true,
+        attributes: true,
+        attributeFilter: [ERROR_STATE_ATTR],
+      });
+      return () => {
+        cancelled = true;
+        if (showTimer != null) window.clearTimeout(showTimer);
+        observer.disconnect();
+      };
     } catch {
       // localStorage blocked (private mode, etc.) → don't show
       // the banner (we can't persist the choice either way).
+      setReady(true);
     }
-  }, []);
+  }, [onAuthRoute]);
 
   const set = (value: ConsentValue) => {
     try {
@@ -186,24 +247,52 @@ export function CookieConsent() {
       // ignored
     }
     applyAnalyticsConsent(value);
+    setHasChoice(true);
     setVisible(false);
+    setExpanded(false);
   };
 
-  if (!visible) return null;
+  const openPreferences = () => {
+    setCollapsed(false);
+    setExpanded(true);
+    setVisible(true);
+  };
 
-  const showFull = !collapsed || expanded;
+  // Auth routes: nothing to render (choice deferred to portal).
+  if (onAuthRoute) return null;
+
+  // Compact re-open control after a choice — honest withdraw path.
+  if (ready && hasChoice && !visible) {
+    return (
+      <div
+        className="pointer-events-none fixed inset-x-0 bottom-[calc(4rem+env(safe-area-inset-bottom)+0.75rem)] lg:bottom-4 flex justify-end px-4"
+        style={{ zIndex: "var(--z-cookie)" }}
+      >
+        <button
+          type="button"
+          onClick={openPreferences}
+          className="pointer-events-auto inline-flex items-center gap-2 rounded-full border border-[var(--border-default)] bg-[var(--bg-elevated)]/95 px-3 min-h-[44px] text-[11px] font-medium text-[var(--text-secondary)] shadow-lg backdrop-blur transition-colors hover:text-[var(--text-primary)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
+        >
+          <span className="inline-flex h-1.5 w-1.5 rounded-full bg-[var(--text-muted)]" />
+          Cookie preferences
+        </button>
+      </div>
+    );
+  }
+
+  if (!visible) return null;
 
   // Pointer-events-none on the wrapper preserves page scroll;
   // the inner card opts back in so the buttons + link remain
   // clickable. The banner is a sibling of the page chrome (root
-  // layout) and z-[var(--z-cookie)] so it floats above everything
-  // except a critical modal.
+  // layout) and uses --z-cookie (below dialogs at z-50) so
+  // modals are never occluded by the consent chrome.
   return (
     <div
       role="dialog"
       aria-live="polite"
       aria-label="Cookie consent"
-      className="pointer-events-none fixed inset-x-0 bottom-3 md:bottom-4 flex justify-center px-4"
+      className="pointer-events-none fixed inset-x-0 bottom-[calc(4rem+env(safe-area-inset-bottom)+0.75rem)] lg:bottom-4 flex justify-center px-4"
       style={{ zIndex: "var(--z-cookie)" }}
     >
       <div
@@ -226,14 +315,14 @@ export function CookieConsent() {
             <button
               type="button"
               onClick={() => set("declined")}
-              className="rounded-full px-2 py-0.5 text-[11px] font-medium text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
+              className="rounded-full px-3 min-h-[44px] text-[11px] font-medium text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
             >
               Decline
             </button>
             <button
               type="button"
               onClick={() => set("accepted")}
-              className="rounded-full border border-[var(--accent)] bg-[var(--accent)] px-2 py-0.5 text-[11px] font-medium text-[var(--bg-base)] transition-colors hover:bg-[var(--accent-hover)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
+              className="rounded-full border border-[var(--accent)] bg-[var(--accent)] px-3 min-h-[44px] text-[11px] font-medium text-[var(--bg-base)] transition-colors hover:bg-[var(--accent-hover)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
             >
               Accept
             </button>
@@ -241,7 +330,7 @@ export function CookieConsent() {
               type="button"
               onClick={() => setExpanded(true)}
               aria-label="Show cookie details"
-              className="ml-1 rounded-full p-1 text-[var(--text-muted)] transition-colors hover:text-[var(--text-primary)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
+              className="ml-1 inline-flex items-center justify-center rounded-full min-h-[44px] min-w-[44px] p-1 text-[var(--text-muted)] transition-colors hover:text-[var(--text-primary)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
             >
               <svg
                 width="12"
@@ -269,14 +358,8 @@ export function CookieConsent() {
               <p className="mt-0.5 leading-relaxed text-[13px]">
                 Eden uses essential cookies to keep you signed in. With
                 your consent we also use analytics cookies to understand
-                how the portal is used. You can change this any time in{" "}
-                <Link
-                  href="/settings/privacy"
-                  className="underline underline-offset-2 hover:text-[var(--text-primary)]"
-                >
-                  privacy settings
-                </Link>
-                .
+                how the portal is used. You can change or withdraw this
+                any time via Cookie preferences.
               </p>
             </div>
             <div className="flex items-center gap-2 md:flex-shrink-0">
@@ -285,7 +368,7 @@ export function CookieConsent() {
                   type="button"
                   onClick={() => setExpanded(false)}
                   aria-label="Collapse cookie details"
-                  className="rounded-md p-1 text-[var(--text-muted)] transition-colors hover:text-[var(--text-primary)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
+                  className="inline-flex items-center justify-center rounded-md min-h-[44px] min-w-[44px] p-1 text-[var(--text-muted)] transition-colors hover:text-[var(--text-primary)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
                 >
                   <svg
                     width="14"
@@ -305,14 +388,14 @@ export function CookieConsent() {
               <button
                 type="button"
                 onClick={() => set("declined")}
-                className="rounded-md border border-[var(--border-subtle)] px-3 py-1.5 text-xs font-medium text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-secondary)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-base)]"
+                className="rounded-md border border-[var(--border-subtle)] px-3 min-h-[44px] text-xs font-medium text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-secondary)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-base)]"
               >
                 Decline
               </button>
               <button
                 type="button"
                 onClick={() => set("accepted")}
-                className="rounded-md border border-[var(--accent)] bg-[var(--accent)] px-3 py-1.5 text-xs font-medium text-[var(--bg-base)] transition-colors hover:bg-[var(--accent-hover)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-base)]"
+                className="rounded-md border border-[var(--accent)] bg-[var(--accent)] px-3 min-h-[44px] text-xs font-medium text-[var(--bg-base)] transition-colors hover:bg-[var(--accent-hover)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-base)]"
               >
                 Accept
               </button>

@@ -4,7 +4,7 @@ import { api } from "@/lib/api";
 import { useOrg } from "@/hooks/use-org";
 import { useOrgQuery } from "@/hooks/use-api-query";
 import { queryKeys } from "@/lib/query-keys";
-import { Loader2, CreditCard, Users, Code, Briefcase, AlertCircle } from "lucide-react";
+import { RefreshCw, CreditCard, Users, Code, Briefcase, Info } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { BillingUsage } from "@/components/billing/billing-types";
 
@@ -14,7 +14,15 @@ import type { BillingUsage } from "@/components/billing/billing-types";
 // and the cost_used_usd fields — kept in sync to one source of truth
 // so the build doesn't fail.
 import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { ErrorState } from "@/components/ui/error-state";
 import { IntegrationStatusBanners } from "@/components/integration-status-banners";
+import {
+  featureGatedErrorCopy,
+  isPaidPlansDisabledError,
+  isRetryableIntelligenceError,
+} from "@/lib/feature-flag-error";
+
 export function BillingTab() {
   const {
     currentOrg
@@ -31,30 +39,72 @@ export function BillingTab() {
   );
   const plan = planQuery.data ?? null;
   const loading = planQuery.isLoading;
-  const error = planQuery.error?.message ?? null;
+  const planError = planQuery.error ?? null;
   if (!currentOrg) {
     return <div className="text-center py-12 text-[var(--text-secondary)]">
         Select an organization to manage billing
       </div>;
   }
   if (loading) {
-    return <div className="flex justify-center py-12">
-        <Loader2 className="w-6 h-6 animate-spin text-[var(--text-muted)]" />
-      </div>;
+    return (
+      <div className="space-y-3 py-4" aria-busy="true" aria-live="polite">
+        <div className="h-40 rounded-xl bg-[var(--bg-muted)] animate-pulse" />
+        <div className="h-32 rounded-xl bg-[var(--bg-muted)] animate-pulse" />
+      </div>
+    );
   }
+  const errorCopy = planError
+    ? featureGatedErrorCopy(planError, "Could not load billing")
+    : null;
+  const freeOnlyError = planError ? isPaidPlansDisabledError(planError) : false;
+  // Match billing-overview: never paint false $0 Free KPIs on load failure.
+  const showUsage = plan != null && !planError;
   const costUsed = plan?.cost_used_usd ?? 0;
   const costSoft = plan?.cost_soft_limit_usd ?? 0;
   const costHard = plan?.cost_hard_limit_usd ?? 0;
-  const costPct = costHard > 0 ? Math.min(100, costUsed / costHard * 100) : 0;
+  const costPct = costHard > 0 ? Math.min(100, (costUsed / costHard) * 100) : 0;
   const costStatus = plan?.cost_status ?? "ok";
+
   return <div className="space-y-6">
+      {/* Stripe probe: free-only 503 is treated as available so this
+          banner stays hidden; true Stripe misconfig still surfaces. */}
       <IntegrationStatusBanners integration="stripe" orgId={currentOrg.id} />
 
-      {error && <div className="p-4 bg-[var(--error-dim)] border border-[var(--error)] rounded-lg flex items-center gap-2 text-[var(--error)]">
-          <AlertCircle className="w-5 h-5 flex-shrink-0" />
-          <span className="text-sm">{error}</span>
-        </div>}
+      {errorCopy && freeOnlyError && (
+        <div
+          className="p-4 rounded-lg flex items-start gap-2 text-sm bg-[var(--bg-muted)] border border-[var(--border-default)] text-[var(--text-secondary)]"
+          role="status"
+        >
+          <Info className="w-5 h-5 flex-shrink-0 mt-0.5" aria-hidden />
+          <div className="min-w-0 flex-1">
+            <p className="font-medium text-[var(--text-primary)]">{errorCopy.title}</p>
+            <p className="mt-0.5">{errorCopy.message}</p>
+          </div>
+        </div>
+      )}
 
+      {errorCopy && !freeOnlyError && (
+        <ErrorState
+          title={errorCopy.title}
+          message={errorCopy.message}
+          action={
+            isRetryableIntelligenceError(planError) ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="default"
+                onClick={() => void planQuery.refetch()}
+              >
+                <RefreshCw className="h-4 w-4" />
+                Try again
+              </Button>
+            ) : undefined
+          }
+        />
+      )}
+
+      {showUsage && (
+      <>
       {/* PRIMARY: Spending this month */}
       <Card padding="xl">
         <div className="flex items-center justify-between mb-4">
@@ -134,6 +184,8 @@ export function BillingTab() {
             </div>
           </div>
         </Card>}
+      </>
+      )}
     </div>;
 }
 function UsageMeter({
@@ -166,12 +218,12 @@ function UsageMeter({
         </div>
         {limit > 0 ? <div className="h-2 bg-[var(--bg-muted)] rounded-full overflow-hidden">
             <div className={cn("h-full rounded-full transition-all", isAtLimit ? "bg-[var(--error)]" : isNearLimit ? "bg-[var(--warning)]" : "bg-[var(--accent)]")} style={{
-          width: `${percentage}%`
-        }} />
+            width: `${percentage}%`
+          }} />
           </div> : <div className="h-2 bg-[var(--bg-muted)] rounded-full overflow-hidden">
             <div className="h-full rounded-full bg-[var(--accent)]/30" style={{
-          width: "100%"
-        }} />
+            width: "100%"
+          }} />
           </div>}
       </div>
     </div>;

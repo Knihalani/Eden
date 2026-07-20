@@ -75,8 +75,10 @@ The manifest (`northflank.yml`) lists every non-secret env var. Below is the *ch
 | Var | Find in | Replace with |
 |---|---|---|
 | `CORS_ORIGINS_RAW` (under `eden-api`) | Vercel dashboard → portal project → "Domains" | `https://<your-portal>.vercel.app` (or custom domain) |
-| `QDRANT_HOST` | Qdrant Cloud dashboard | `https://<cluster-id>.us-east4-0.gcp.cloud.qdrant.io` (drop the scheme for the env var) |
-| `QDRANT_API_KEY` | Qdrant Cloud dashboard | The cluster API key |
+| `QDRANT_HOST` | Qdrant Cloud dashboard | Hostname only: `<cluster-id>.us-east4-0.gcp.cloud.qdrant.io` (drop `https://`) |
+| `QDRANT_HTTPS` | (plain env, not secret) | Must be `true` for Qdrant Cloud — missing/false used to cause Errno 99 |
+| `QDRANT_PORT` | (plain env) | `6333` (Cloud REST/TLS port) |
+| `QDRANT_API_KEY` | Secret group `eden-required` | The cluster API key (key name must be exactly `QDRANT_API_KEY`) |
 | `REDIS_URL` | Upstash dashboard | `rediss://default:<token>@<host>.upstash.io:6379` |
 
 For Postgres, the addon name `eden-postgres` is referenced in the env vars of `eden-api`, `eden-worker`, and `eden-cron`. The password is auto-injected by Northflank as `eden-postgres.eden.PGPASSWORD` into the linked service — but Eden's code reads `POSTGRES_PASSWORD`, not `PGPASSWORD`. **Add this override under `eden-api` env (and the others) before applying:**

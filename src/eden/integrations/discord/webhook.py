@@ -42,7 +42,7 @@ async def post_to_discord(webhook_url: str, *, title: str, body: str, severity: 
         ]
     }
     try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
+        async with httpx.AsyncClient(timeout=10.0, follow_redirects=False) as client:
             response = await client.post(webhook_url, json=payload)
         if response.status_code in (200, 204):
             return True

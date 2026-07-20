@@ -34,7 +34,7 @@ from eden.analytics.outcomes import (
     OutcomeRollup,
     OutcomeTracker,
 )
-from eden.api.deps import get_current_user, require_feature_flag
+from eden.api.deps import get_current_user, require_feature_flag, require_path_org_access
 
 logger = logging.getLogger(__name__)
 
@@ -44,6 +44,7 @@ router = APIRouter(
     dependencies=[
         Depends(require_feature_flag("intelligence_gap_v0")),
         Depends(get_current_user),
+        Depends(require_path_org_access),
     ],
 )
 
@@ -75,7 +76,7 @@ class TrackOutcomeRequest(BaseModel):
 
 @router.post("")
 async def track_outcome(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     body: TrackOutcomeRequest = Body(...),
 ) -> dict[str, Any]:
     return await _tracker.track(
@@ -89,7 +90,7 @@ async def track_outcome(
 
 @router.get("/departments")
 async def departments(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     window: str = Query(
         "30d",
         description=(
@@ -115,7 +116,7 @@ async def departments(
 
 @router.get("/analytics")
 async def analytics(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     window: str = Query(
         "30d",
         description=(

@@ -10,10 +10,10 @@ import uuid
 from datetime import UTC, datetime
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Body, Depends, HTTPException, Path, Query
 from pydantic import BaseModel, Field
 
-from eden.api.deps import get_current_user
+from eden.api.deps import get_current_user, require_path_org_access
 from eden.llmops import (
     AIGateway,
     ArtifactEvaluation,
@@ -31,7 +31,7 @@ from eden.llmops import (
     SemanticCache,
 )
 
-router = APIRouter(prefix="/orgs/{org_id}/llmops", tags=["llmops"])
+router = APIRouter(prefix="/orgs/{org_id}/llmops", tags=["llmops"], dependencies=[Depends(require_path_org_access)])
 
 # ──────────────────────────────────────────────────────────────────────────
 # Shared registries (in-memory; production would use DB-backed services)
@@ -236,8 +236,8 @@ class CacheSetRequest(BaseModel):
 
 @router.post("/artifacts", response_model=dict[str, Any])
 async def create_artifact(
-    org_id: str,
-    body: ModelArtifactCreate,
+    org_id: str = Depends(require_path_org_access),
+    body: ModelArtifactCreate = Body(...),
     user: dict = Depends(get_current_user),
 ):
     _check_org_access(org_id, user)
@@ -259,7 +259,7 @@ async def create_artifact(
 
 @router.get("/artifacts", response_model=dict[str, Any])
 async def list_artifacts(
-    org_id: str,
+    org_id: str = Depends(require_path_org_access),
     model_family: str | None = None,
     artifact_type: str | None = None,
     user: dict = Depends(get_current_user),
@@ -278,8 +278,8 @@ async def list_artifacts(
 
 @router.get("/artifacts/{artifact_id}", response_model=dict[str, Any])
 async def get_artifact(
-    org_id: str,
-    artifact_id: str,
+    org_id: str = Depends(require_path_org_access),
+    artifact_id: str = Path(...),
     user: dict = Depends(get_current_user),
 ):
     _check_org_access(org_id, user)
@@ -295,9 +295,9 @@ async def get_artifact(
 
 @router.post("/artifacts/{artifact_id}/evaluations", response_model=dict[str, Any])
 async def add_evaluation(
-    org_id: str,
-    artifact_id: str,
-    body: ArtifactEvaluationCreate,
+    org_id: str = Depends(require_path_org_access),
+    artifact_id: str = Path(...),
+    body: ArtifactEvaluationCreate = Body(...),
     user: dict = Depends(get_current_user),
 ):
     _check_org_access(org_id, user)
@@ -319,9 +319,9 @@ async def add_evaluation(
 
 @router.get("/artifacts/best", response_model=dict[str, Any])
 async def get_best_artifact(
-    org_id: str,
-    model_family: str,
-    metric: str = "pass_rate",
+    org_id: str = Depends(require_path_org_access),
+    model_family: str = Query(...),
+    metric: str = 'pass_rate',
     user: dict = Depends(get_current_user),
 ):
     _check_org_access(org_id, user)
@@ -337,8 +337,8 @@ async def get_best_artifact(
 
 @router.post("/prompts", response_model=dict[str, Any])
 async def create_prompt(
-    org_id: str,
-    body: PromptTemplateCreate,
+    org_id: str = Depends(require_path_org_access),
+    body: PromptTemplateCreate = Body(...),
     user: dict = Depends(get_current_user),
 ):
     _check_org_access(org_id, user)
@@ -359,7 +359,7 @@ async def create_prompt(
 
 @router.get("/prompts", response_model=dict[str, Any])
 async def list_prompts(
-    org_id: str,
+    org_id: str = Depends(require_path_org_access),
     agent_scope: str | None = None,
     user: dict = Depends(get_current_user),
 ):
@@ -373,8 +373,8 @@ async def list_prompts(
 
 @router.get("/prompts/{prompt_id}", response_model=dict[str, Any])
 async def get_prompt(
-    org_id: str,
-    prompt_id: str,
+    org_id: str = Depends(require_path_org_access),
+    prompt_id: str = Path(...),
     user: dict = Depends(get_current_user),
 ):
     _check_org_access(org_id, user)
@@ -386,9 +386,9 @@ async def get_prompt(
 
 @router.post("/prompts/{prompt_name}/default", response_model=dict[str, Any])
 async def set_default_prompt(
-    org_id: str,
-    prompt_name: str,
-    version: int,
+    org_id: str = Depends(require_path_org_access),
+    prompt_name: str = Path(...),
+    version: int = Query(...),
     user: dict = Depends(get_current_user),
 ):
     _check_org_access(org_id, user)
@@ -400,9 +400,9 @@ async def set_default_prompt(
 
 @router.post("/prompts/{prompt_id}/render", response_model=dict[str, Any])
 async def render_prompt(
-    org_id: str,
-    prompt_id: str,
-    variables: dict[str, Any],
+    org_id: str = Depends(require_path_org_access),
+    prompt_id: str = Path(...),
+    variables: dict[str, Any] = Body(...),
     user: dict = Depends(get_current_user),
 ):
     _check_org_access(org_id, user)
@@ -422,8 +422,8 @@ async def render_prompt(
 
 @router.post("/ab-tests", response_model=dict[str, Any])
 async def create_ab_test(
-    org_id: str,
-    body: PromptABTestCreate,
+    org_id: str = Depends(require_path_org_access),
+    body: PromptABTestCreate = Body(...),
     user: dict = Depends(get_current_user),
 ):
     _check_org_access(org_id, user)
@@ -442,7 +442,7 @@ async def create_ab_test(
 
 @router.get("/ab-tests", response_model=dict[str, Any])
 async def list_ab_tests(
-    org_id: str,
+    org_id: str = Depends(require_path_org_access),
     user: dict = Depends(get_current_user),
 ):
     _check_org_access(org_id, user)
@@ -452,8 +452,8 @@ async def list_ab_tests(
 
 @router.post("/ab-tests/{test_id}/promote", response_model=dict[str, Any])
 async def promote_ab_winner(
-    org_id: str,
-    test_id: str,
+    org_id: str = Depends(require_path_org_access),
+    test_id: str = Path(...),
     user: dict = Depends(get_current_user),
 ):
     _check_org_access(org_id, user)
@@ -469,8 +469,8 @@ async def promote_ab_winner(
 
 @router.post("/experiments", response_model=dict[str, Any])
 async def create_experiment(
-    org_id: str,
-    body: ExperimentCreate,
+    org_id: str = Depends(require_path_org_access),
+    body: ExperimentCreate = Body(...),
     user: dict = Depends(get_current_user),
 ):
     _check_org_access(org_id, user)
@@ -492,7 +492,7 @@ async def create_experiment(
 
 @router.get("/experiments", response_model=dict[str, Any])
 async def list_experiments(
-    org_id: str,
+    org_id: str = Depends(require_path_org_access),
     experiment_type: str | None = None,
     status: str | None = None,
     user: dict = Depends(get_current_user),
@@ -507,8 +507,8 @@ async def list_experiments(
 
 @router.get("/experiments/{experiment_id}", response_model=dict[str, Any])
 async def get_experiment(
-    org_id: str,
-    experiment_id: str,
+    org_id: str = Depends(require_path_org_access),
+    experiment_id: str = Path(...),
     user: dict = Depends(get_current_user),
 ):
     _check_org_access(org_id, user)
@@ -526,9 +526,9 @@ async def get_experiment(
 
 @router.post("/experiments/{experiment_id}/runs", response_model=dict[str, Any])
 async def add_experiment_run(
-    org_id: str,
-    experiment_id: str,
-    body: ExperimentRunCreate,
+    org_id: str = Depends(require_path_org_access),
+    experiment_id: str = Path(...),
+    body: ExperimentRunCreate = Body(...),
     user: dict = Depends(get_current_user),
 ):
     _check_org_access(org_id, user)
@@ -549,9 +549,9 @@ async def add_experiment_run(
 
 @router.post("/experiments/{experiment_id}/complete", response_model=dict[str, Any])
 async def complete_experiment(
-    org_id: str,
-    experiment_id: str,
-    status: str = "completed",
+    org_id: str = Depends(require_path_org_access),
+    experiment_id: str = Path(...),
+    status: str = 'completed',
     user: dict = Depends(get_current_user),
 ):
     _check_org_access(org_id, user)
@@ -563,8 +563,8 @@ async def complete_experiment(
 
 @router.get("/experiments/{experiment_id}/regression", response_model=dict[str, Any])
 async def check_regression(
-    org_id: str,
-    experiment_id: str,
+    org_id: str = Depends(require_path_org_access),
+    experiment_id: str = Path(...),
     user: dict = Depends(get_current_user),
 ):
     _check_org_access(org_id, user)
@@ -582,8 +582,8 @@ async def check_regression(
 
 @router.post("/gateway/complete", response_model=dict[str, Any])
 async def gateway_complete(
-    org_id: str,
-    body: GatewayRequest,
+    org_id: str = Depends(require_path_org_access),
+    body: GatewayRequest = Body(...),
     user: dict = Depends(get_current_user),
 ):
     _check_org_access(org_id, user)
@@ -604,7 +604,7 @@ async def gateway_complete(
 
 @router.get("/gateway/metrics", response_model=dict[str, Any])
 async def gateway_metrics(
-    org_id: str,
+    org_id: str = Depends(require_path_org_access),
     limit: int = 100,
     user: dict = Depends(get_current_user),
 ):
@@ -615,7 +615,7 @@ async def gateway_metrics(
 
 @router.get("/gateway/health", response_model=dict[str, Any])
 async def gateway_health(
-    org_id: str,
+    org_id: str = Depends(require_path_org_access),
     user: dict = Depends(get_current_user),
 ):
     _check_org_access(org_id, user)
@@ -629,8 +629,8 @@ async def gateway_health(
 
 @router.post("/monitoring/snapshots", response_model=dict[str, Any])
 async def record_health_snapshot(
-    org_id: str,
-    body: HealthSnapshotCreate,
+    org_id: str = Depends(require_path_org_access),
+    body: HealthSnapshotCreate = Body(...),
     user: dict = Depends(get_current_user),
 ):
     _check_org_access(org_id, user)
@@ -656,7 +656,7 @@ async def record_health_snapshot(
 
 @router.get("/monitoring/health", response_model=dict[str, Any])
 async def get_overall_health(
-    org_id: str,
+    org_id: str = Depends(require_path_org_access),
     user: dict = Depends(get_current_user),
 ):
     _check_org_access(org_id, user)
@@ -665,8 +665,8 @@ async def get_overall_health(
 
 @router.get("/monitoring/models/{model_family}", response_model=dict[str, Any])
 async def get_model_health(
-    org_id: str,
-    model_family: str,
+    org_id: str = Depends(require_path_org_access),
+    model_family: str = Path(...),
     hours: int = 24,
     user: dict = Depends(get_current_user),
 ):
@@ -682,7 +682,7 @@ async def get_model_health(
 
 @router.get("/monitoring/alerts", response_model=dict[str, Any])
 async def list_alerts(
-    org_id: str,
+    org_id: str = Depends(require_path_org_access),
     model_family: str | None = None,
     severity: str | None = None,
     acknowledged: bool | None = None,
@@ -701,8 +701,8 @@ async def list_alerts(
 
 @router.post("/monitoring/alerts/{alert_id}/acknowledge", response_model=dict[str, Any])
 async def acknowledge_alert(
-    org_id: str,
-    alert_id: str,
+    org_id: str = Depends(require_path_org_access),
+    alert_id: str = Path(...),
     user: dict = Depends(get_current_user),
 ):
     _check_org_access(org_id, user)
@@ -718,9 +718,9 @@ async def acknowledge_alert(
 
 @router.post("/cache/get", response_model=dict[str, Any])
 async def cache_get(
-    org_id: str,
-    query: str,
-    model_version: str,
+    org_id: str = Depends(require_path_org_access),
+    query: str = Query(...),
+    model_version: str = Query(...),
     threshold: float = 0.95,
     user: dict = Depends(get_current_user),
 ):
@@ -731,8 +731,8 @@ async def cache_get(
 
 @router.post("/cache/set", response_model=dict[str, Any])
 async def cache_set(
-    org_id: str,
-    body: CacheSetRequest,
+    org_id: str = Depends(require_path_org_access),
+    body: CacheSetRequest = Body(...),
     user: dict = Depends(get_current_user),
 ):
     _check_org_access(org_id, user)
@@ -747,7 +747,7 @@ async def cache_set(
 
 @router.get("/cache/stats", response_model=dict[str, Any])
 async def cache_stats(
-    org_id: str,
+    org_id: str = Depends(require_path_org_access),
     user: dict = Depends(get_current_user),
 ):
     _check_org_access(org_id, user)
@@ -756,8 +756,8 @@ async def cache_stats(
 
 @router.post("/cache/invalidate", response_model=dict[str, Any])
 async def cache_invalidate(
-    org_id: str,
-    pattern: str = "*",
+    org_id: str = Depends(require_path_org_access),
+    pattern: str = '*',
     user: dict = Depends(get_current_user),
 ):
     _check_org_access(org_id, user)

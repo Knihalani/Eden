@@ -33,6 +33,15 @@ _TOKEN_KV_RE = re.compile(
 )
 
 
+# Cheap probe before running the heavier credential regexes. Most hot-path
+# exception strings have neither form; skipping the two ``sub`` scans matters
+# when redact_all runs on every gateway error log line.
+_CRED_PROBE_RE = re.compile(
+    r"(?i)(?:bearer\s+\S)|(?:\b(?:token|access_token|api_key|apikey|secret|"
+    r"password|authorization|x-org-api-key|x-clerk-auth|x-api-key)\s*[=:])"
+)
+
+
 def redact_email(value: str) -> str:
     """Return ``value`` with email addresses replaced by ``***``.
 
@@ -41,7 +50,7 @@ def redact_email(value: str) -> str:
     >>> redact_email("no email here")
     'no email here'
     """
-    if not value:
+    if not value or "@" not in value:
         return value
     return _EMAIL_RE.sub("***", value)
 
@@ -59,7 +68,7 @@ def redact_credentials(value: str) -> str:
     >>> redact_credentials("token=sk-live-abcdef")
     'token=***'
     """
-    if not value:
+    if not value or _CRED_PROBE_RE.search(value) is None:
         return value
     value = _BEARER_RE.sub(r"\1***", value)
     value = _TOKEN_KV_RE.sub(r"\1=***", value)
@@ -70,6 +79,6 @@ def redact_all(value: str) -> str:
     """Apply every redaction: emails + credentials."""
     if not value:
         return value
-    value = redact_email(value)
-    value = redact_credentials(value)
-    return value
+    if "@" in value:
+        value = _EMAIL_RE.sub("***", value)
+    return redact_credentials(value)

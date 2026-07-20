@@ -31,19 +31,28 @@ from eden.api.utils import clerk_auth
 
 @pytest.fixture
 def clerk_settings(monkeypatch):
-    """Patch the cached ``_settings`` object on clerk_auth.
+    """Patch ``get_settings()`` return value used by clerk_auth helpers.
 
-    The helper reads ``get_settings()`` at import time and caches the
-    result on the module — patching ``clerk_auth._settings`` directly
-    is the only reliable way to exercise both the "no keys" path and
-    the "with secret key" path without spinning up a real Clerk
-    instance.
+    clerk_auth reads settings lazily via ``get_settings()`` (B27/B28) —
+    monkeypatch the module binding so JWKS / verify paths can be exercised
+    without a real Clerk instance.
     """
+    from types import SimpleNamespace
+
+    base = SimpleNamespace(
+        clerk_jwks_url="",
+        clerk_publishable_key="",
+        clerk_jwt_key="",
+        clerk_secret_key="",
+    )
 
     def _set(**overrides):
         for key, value in overrides.items():
-            monkeypatch.setattr(clerk_auth._settings, key, value)
+            setattr(base, key, value)
+        monkeypatch.setattr(clerk_auth, "get_settings", lambda: base)
 
+    # Default: unconfigured; individual tests override as needed.
+    monkeypatch.setattr(clerk_auth, "get_settings", lambda: base)
     return _set
 
 

@@ -26,10 +26,10 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, Body, Depends, Path, Query
+from fastapi import APIRouter, Body, Depends, HTTPException, Path, Query
 from pydantic import BaseModel, Field
 
-from eden.api.deps import get_current_user, require_feature_flag
+from eden.api.deps import get_current_user, require_feature_flag, require_path_org_access
 from eden.time_travel._common import _json_dumps, _upsert_fork_branch
 
 router = APIRouter(
@@ -38,6 +38,7 @@ router = APIRouter(
     dependencies=[
         Depends(require_feature_flag("intelligence_gap_v0")),
         Depends(get_current_user),
+        Depends(require_path_org_access),
     ],
 )
 
@@ -98,7 +99,7 @@ class ReplayRequest(BaseModel):
 
 @router.post("/record")
 async def record_snapshot(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     body: RecordSnapshotRequest = Body(...),
 ) -> dict[str, Any]:
     """Record a snapshot of ``trace_id`` so it can be replayed later.
@@ -115,17 +116,32 @@ async def record_snapshot(
     import uuid as _uuid
     from datetime import UTC, datetime
 
+    from eden.storage.postgres import get_postgres_client
+
+    if await get_postgres_client() is None:
+        raise HTTPException(status_code=503, detail="Postgres unavailable")
+
     snapshot_id = f"ttrec_{_uuid.uuid4().hex[:16]}"
     label = body.label or f"snapshot:{body.trace_id}"
-    await _upsert_fork_branch(
-        org_id=org_id,
-        fork_id=snapshot_id,
-        parent_trace_id=body.trace_id,
-        parent_fork_id=body.parent_fork_id,
-        fork_at_step=-1,
-        name=label,
-        edits_json=_json_dumps(body.edits or {}),
-    )
+    try:
+        await _upsert_fork_branch(
+            org_id=org_id,
+            fork_id=snapshot_id,
+            parent_trace_id=body.trace_id,
+            parent_fork_id=body.parent_fork_id,
+            fork_at_step=-1,
+            name=label,
+            edits_json=_json_dumps(body.edits or {}),
+        )
+    except AttributeError as exc:
+        raise HTTPException(status_code=503, detail="Postgres unavailable") from exc
+    except Exception as exc:
+        msg = str(exc).lower()
+        if "invalid input syntax for type uuid" in msg:
+            raise HTTPException(status_code=400, detail="Invalid organization id") from exc
+        if "foreign key" in msg:
+            raise HTTPException(status_code=404, detail="Organization not found") from exc
+        raise HTTPException(status_code=503, detail="Failed to record snapshot") from exc
     created_at = datetime.now(UTC)
     return {
         "snapshot_id": snapshot_id,
@@ -139,7 +155,7 @@ async def record_snapshot(
 
 @router.post("/fork")
 async def fork(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     body: ForkRequest = Body(...),
 ) -> dict[str, Any]:
     """Branch a trace at step N, producing a new fork_id.
@@ -163,7 +179,7 @@ async def fork(
 
 @router.post("/replay")
 async def replay(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     body: ReplayRequest = Body(...),
 ) -> dict[str, Any]:
     """Replay the fork with per-step edits.
@@ -184,7 +200,7 @@ async def replay(
 
 @router.get("/diff/{fork_id}/{replay_id}")
 async def diff(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     fork_id: str = Path(...),
     replay_id: str = Path(...),
 ) -> dict[str, Any]:
@@ -207,7 +223,7 @@ async def diff(
 
 @router.get("/forks")
 async def list_forks(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     parent_trace_id: str = Query(..., description="The parent trace id."),
 ) -> dict[str, Any]:
     """List the org's forks for a given parent trace.
@@ -216,10 +232,19 @@ async def list_forks(
     ``created_at DESC`` (newest first).
     """
     from eden.time_travel._common import _list_forks_for_trace
+    from eden.storage.postgres import get_postgres_client
 
-    forks = await _list_forks_for_trace(
-        parent_trace_id=parent_trace_id, org_id=org_id
-    )
+    if await get_postgres_client() is None:
+        raise HTTPException(status_code=503, detail="Postgres unavailable")
+
+    try:
+        forks = await _list_forks_for_trace(
+            parent_trace_id=parent_trace_id, org_id=org_id
+        )
+    except AttributeError as exc:
+        raise HTTPException(status_code=503, detail="Postgres unavailable") from exc
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail="Failed to list forks") from exc
     # Always return the live envelope shape (mirrors the
     # rest of the intelligence surface).
     return {

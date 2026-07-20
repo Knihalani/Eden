@@ -53,6 +53,41 @@ async def test_record_cost_event_writes_pg_and_budget() -> None:
 
 
 @pytest.mark.asyncio
+async def test_record_cost_event_skips_budget_on_zero_cost() -> None:
+    """$0 events still write the ledger row but skip budget I/O."""
+    client = AsyncMock()
+    client.execute = AsyncMock(return_value=None)
+    with (
+        patch(
+            "eden.storage.postgres.get_postgres_client",
+            new=AsyncMock(return_value=client),
+        ),
+        patch(
+            "eden.services.budget_service.record_usage",
+            new=AsyncMock(return_value=True),
+        ) as usage,
+        patch(
+            "eden.services.budget_service.evaluate_budget_alerts",
+            new=AsyncMock(return_value=[]),
+        ) as alerts,
+    ):
+        ok = await record_cost_event(
+            CostEvent(
+                org_id="org_test",
+                feature="embeddings",
+                model="text-embedding-3-small",
+                cost_usd=0.0,
+                input_tokens=10,
+                output_tokens=0,
+            )
+        )
+    assert ok is True
+    client.execute.assert_awaited()
+    usage.assert_not_awaited()
+    alerts.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_record_cost_event_normalizes_unknown_feature() -> None:
     client = AsyncMock()
     client.execute = AsyncMock(return_value=None)
@@ -113,10 +148,6 @@ async def test_scorer_cascade_llm_fallback_when_flag_on() -> None:
         patch(
             "eden.closed_loop.autonomy_policy.check_budget",
             new=AsyncMock(return_value=(True, 0.0, 25.0)),
-        ),
-        patch(
-            "eden.closed_loop.autonomy_policy.record_spend",
-            new=AsyncMock(return_value=0.02),
         ),
         patch(
             "eden.llm.internal_router.route_async",

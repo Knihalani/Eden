@@ -157,26 +157,26 @@ def test_real_world_error_messages():
 
 def test_actual_use_org_hook_uses_same_mapping():
     """Read the live use-org.tsx file and confirm its catch block
-    uses the same branches the test pins. This is a guard against
-    accidental drift if someone refactors the hook.
+    uses status + raw-detail branches (Wave 4 sanitize-race fix).
     """
     from pathlib import Path
 
-    # tests/unit/portal/test_*.py → repo root → clients/portal/src/hooks/
-    src = (
-        Path(__file__).resolve().parents[3]
-        / "clients"
-        / "portal"
-        / "src"
-        / "hooks"
-        / "use-org.tsx"
-    )
-    text = src.read_text()
-    # The four canonical error branches must all be present.
+    root = Path(__file__).resolve().parents[3]
+    use_org = (
+        root / "clients" / "portal" / "src" / "hooks" / "use-org.tsx"
+    ).read_text()
+    use_me = (
+        root / "clients" / "portal" / "src" / "hooks" / "use-me-query.ts"
+    ).read_text()
+    # Status-keyed auth branches + provision-race helper must remain.
     for token in [
-        "401|not\\s*authenticated|authentication\\s*required|unauthorized",
-        "user\\s*not\\s*found",
-        "404|not\\s*found",
-        "5\\d\\d|server\\s*error",
+        "status === 401 || status === 403",
+        "isUserNotFoundRace",
+        "status === 404",
+        "status === 429",
+        "status >= 500",
     ]:
-        assert token in text, f"use-org.tsx missing {token!r} branch"
+        assert token in use_org, f"use-org.tsx missing {token!r} branch"
+    assert "user\\s*not\\s*found" in use_me
+    assert "isUserNotFoundRace" in use_me
+

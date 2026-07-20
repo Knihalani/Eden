@@ -1,4 +1,5 @@
 import type { ComponentType, ReactNode } from "react";
+import Link from "next/link";
 import { Building2, Loader2, RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -16,6 +17,8 @@ interface NoOrgStateProps {
   secondaryAction?: ReactNode;
 }
 
+const CREATE_ORG_HREF = "/settings?tab=org";
+
 export function NoOrgState({
   feature,
   description,
@@ -26,10 +29,10 @@ export function NoOrgState({
   onRetrySync,
   secondaryAction,
 }: NoOrgStateProps) {
-  const setupDescription =
-    "Your workspace is being set up. This usually takes a few seconds after signup.";
+  const orglessDescription =
+    "Create an organization in Settings → Organization to unlock this feature. The product tour does not create or sync your workspace.";
   const timeoutDescription =
-    "Workspace sync is taking longer than expected. Refresh to try again — the product tour does not create or sync your organization.";
+    "Workspace sync is taking longer than expected. Refresh to retry linking, or create an organization in Settings → Organization. The product tour does not create or sync your workspace.";
 
   if (syncing && !syncTimedOut) {
     return (
@@ -55,6 +58,25 @@ export function NoOrgState({
     );
   }
 
+  const createOrgPrimary =
+    secondaryAction ?? (
+      <Link
+        href={CREATE_ORG_HREF}
+        className="inline-flex min-h-11 items-center gap-2 px-4 py-2 bg-[var(--accent)] text-[var(--bg-base)] rounded-lg text-sm font-medium hover:bg-[var(--accent-hover)] transition-colors"
+      >
+        Create organization
+      </Link>
+    );
+
+  const createOrgSecondary = (
+    <Link
+      href={CREATE_ORG_HREF}
+      className="inline-flex min-h-11 items-center text-sm text-[var(--accent)] hover:underline"
+    >
+      Open Organization settings
+    </Link>
+  );
+
   return (
     <div className={cn("flex flex-col items-center justify-center min-h-[50vh] p-6 text-center", className)}>
       <div className="w-14 h-14 rounded-2xl bg-[var(--bg-tertiary)] border border-[var(--border-default)] flex items-center justify-center mb-5">
@@ -63,32 +85,42 @@ export function NoOrgState({
       <h2 className="text-lg font-semibold text-[var(--text-primary)] mb-2">
         {syncTimedOut ? "Workspace sync timed out" : "No workspace yet"}
       </h2>
-      <p className="text-sm text-[var(--text-secondary)] max-w-sm mb-5">
+      <p className="text-sm text-[var(--text-secondary)] max-w-md mb-5">
         {syncTimedOut
           ? (description ?? timeoutDescription)
-          : (description ?? setupDescription)}
+          : (description ?? orglessDescription)}
       </p>
-      {onRetrySync ? (
-        <div className="flex flex-col items-center gap-3">
-          <button
-            type="button"
-            onClick={onRetrySync}
-            className="inline-flex min-h-11 items-center gap-2 px-4 py-2 bg-[var(--accent)] text-[var(--bg-base)] rounded-lg text-sm font-medium hover:bg-[var(--accent-hover)] transition-colors"
-          >
-            <RefreshCw className="w-4 h-4" />
-            Refresh workspace
-          </button>
-          {secondaryAction}
-        </div>
-      ) : (
-        <div className="flex flex-col items-center gap-3">
-          <p className="text-sm text-[var(--text-muted)] max-w-sm">
-            Select or create an organization in the account menu, then refresh. Do not use the
-            product tour to create an org — it does not sync your workspace.
-          </p>
-          {secondaryAction}
-        </div>
-      )}
+      <div className="flex flex-col items-center gap-3">
+        {syncTimedOut ? (
+          <>
+            {onRetrySync ? (
+              <button
+                type="button"
+                onClick={onRetrySync}
+                className="inline-flex min-h-11 items-center gap-2 px-4 py-2 bg-[var(--accent)] text-[var(--bg-base)] rounded-lg text-sm font-medium hover:bg-[var(--accent-hover)] transition-colors"
+              >
+                <RefreshCw className="w-4 h-4" />
+                Retry sync
+              </button>
+            ) : null}
+            {secondaryAction ?? createOrgSecondary}
+          </>
+        ) : (
+          <>
+            {createOrgPrimary}
+            {onRetrySync ? (
+              <button
+                type="button"
+                onClick={onRetrySync}
+                className="inline-flex min-h-11 items-center gap-2 px-4 py-2 border border-[var(--border-default)] rounded-lg text-sm text-[var(--text-secondary)] hover:bg-[var(--bg-secondary)]"
+              >
+                <RefreshCw className="w-4 h-4" />
+                Refresh
+              </button>
+            ) : null}
+          </>
+        )}
+      </div>
       <p className="text-xs text-[var(--text-muted)] mt-3">
         {feature} is unavailable until your workspace is linked.
       </p>

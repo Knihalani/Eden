@@ -1,7 +1,13 @@
 #!/usr/bin/env node
 /**
- * F82 — measure LCP/INP on Home + Traces after production build.
+ * F82 / A10 — measure LCP/INP/CLS/FCP/TTFB on Home + Traces after production build.
  * Exits non-zero when samples exceed budgets in lib/perf/budgets.ts.
+ *
+ * Docs: docs/specs/SOTA-PERF-COST-SCORECARD.md §6
+ * CI:   .github/workflows/web-vitals.yml
+ * Usage:
+ *   AUTH_STATE=e2e/.auth-state.json BASE_URL=http://127.0.0.1:3000 \
+ *     node scripts/measure-web-vitals.mjs
  */
 import { chromium } from "playwright";
 import { readFileSync } from "node:fs";
@@ -13,8 +19,11 @@ const ROOT = resolve(__dirname, "..");
 const BASE = process.env.BASE_URL || "http://127.0.0.1:3000";
 
 const BUDGETS = {
-  LCP: 2800,
-  INP: 250,
+  LCP: 2600,
+  INP: 220,
+  CLS: 0.1,
+  FCP: 1800,
+  TTFB: 800,
 };
 
 const ROUTES = ["/dashboard", "/traces"];
@@ -22,19 +31,24 @@ const ROUTES = ["/dashboard", "/traces"];
 function loadBudgetsFromSource() {
   try {
     const src = readFileSync(resolve(ROOT, "src/lib/perf/budgets.ts"), "utf8");
-    const lcp = src.match(/LCP:\s*\{\s*max:\s*(\d+)/);
-    const inp = src.match(/INP:\s*\{\s*max:\s*(\d+)/);
+    const num = (name) => {
+      const m = src.match(new RegExp(`${name}:\\s*\\{\\s*max:\\s*([\\d.]+)`));
+      return m ? Number(m[1]) : BUDGETS[name];
+    };
     return {
-      LCP: lcp ? Number(lcp[1]) : BUDGETS.LCP,
-      INP: inp ? Number(inp[1]) : BUDGETS.INP,
+      LCP: num("LCP"),
+      INP: num("INP"),
+      CLS: num("CLS"),
+      FCP: num("FCP"),
+      TTFB: num("TTFB"),
     };
   } catch {
-    return BUDGETS;
+    return { ...BUDGETS };
   }
 }
 
 async function measureRoute(page, route, budgets) {
-  const samples = { LCP: null, INP: null };
+  const samples = { LCP: null, INP: null, CLS: null, FCP: null, TTFB: null };
   await page.addInitScript(() => {
     window.__edenVitals = [];
     try {
@@ -54,6 +68,24 @@ async function measureRoute(page, route, budgets) {
         }
       }).observe({ type: "event", buffered: true, durationThreshold: 16 });
     } catch {}
+    try {
+      new PerformanceObserver((list) => {
+        for (const e of list.getEntries()) {
+          if (e.name === "first-contentful-paint") {
+            window.__edenVitals.push({ name: "FCP", value: e.startTime });
+          }
+        }
+      }).observe({ type: "paint", buffered: true });
+    } catch {}
+    try {
+      let cls = 0;
+      new PerformanceObserver((list) => {
+        for (const e of list.getEntries()) {
+          if (!e.hadRecentInput) cls += e.value;
+        }
+        window.__edenVitals.push({ name: "CLS", value: cls });
+      }).observe({ type: "layout-shift", buffered: true });
+    } catch {}
   });
 
   await page.goto(`${BASE}${route}`, { waitUntil: "networkidle", timeout: 60_000 });
@@ -66,19 +98,30 @@ async function measureRoute(page, route, budgets) {
   for (const v of vitals) {
     if (v.name === "LCP" && samples.LCP == null) samples.LCP = v.value;
     if (v.name === "INP") samples.INP = Math.max(samples.INP ?? 0, v.value);
+    if (v.name === "FCP" && samples.FCP == null) samples.FCP = v.value;
+    // CLS observer pushes cumulative totals — keep the latest.
+    if (v.name === "CLS") samples.CLS = v.value;
   }
 
   const nav = await page.evaluate(() => {
     const n = performance.getEntriesByType("navigation")[0];
-    return n ? { domContentLoaded: n.domContentLoadedEventEnd } : null;
+    return n
+      ? {
+          domContentLoaded: n.domContentLoadedEventEnd,
+          // TTFB ≈ responseStart on Navigation Timing
+          ttfb: n.responseStart,
+        }
+      : null;
   });
+  if (nav?.ttfb != null) samples.TTFB = nav.ttfb;
 
   const failures = [];
-  if (samples.LCP != null && samples.LCP > budgets.LCP) {
-    failures.push({ route, name: "LCP", value: samples.LCP, max: budgets.LCP });
-  }
-  if (samples.INP != null && samples.INP > budgets.INP) {
-    failures.push({ route, name: "INP", value: samples.INP, max: budgets.INP });
+  for (const name of ["LCP", "INP", "CLS", "FCP", "TTFB"]) {
+    const value = samples[name];
+    const max = budgets[name];
+    if (value != null && max != null && value > max) {
+      failures.push({ route, name, value, max });
+    }
   }
 
   return { route, samples, nav, failures };
@@ -114,6 +157,9 @@ async function main() {
         route: result.route,
         LCP: result.samples.LCP,
         INP: result.samples.INP,
+        CLS: result.samples.CLS,
+        FCP: result.samples.FCP,
+        TTFB: result.samples.TTFB,
         domContentLoaded: result.nav?.domContentLoaded,
         budgets,
       }),
@@ -142,7 +188,7 @@ async function main() {
     console.error("✗ Web Vitals budget failures:", JSON.stringify(allFailures, null, 2));
     process.exit(1);
   }
-  console.log("✓ Web Vitals budgets OK");
+  console.log("✓ Web Vitals budgets OK (LCP/INP/CLS/FCP/TTFB)");
 }
 
 main().catch((err) => {

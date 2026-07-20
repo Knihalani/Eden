@@ -1,77 +1,76 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState } from "react";
+import { useOrgQuery } from "@/hooks/use-api-query";
+import { queryKeys } from "@/lib/query-keys";
 import { useOrg } from "@/hooks/use-org";
-import { api } from "@/lib/api";
+import { memoryApi, type MemoryAttributionData, type MemoryImpactData, type MemoryReaverData } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { Alert } from "@/components/ui/alert";
 import { EmptyState } from "@/components/ui/empty-state";
+import { ErrorState } from "@/components/ui/error-state";
 import { NoOrgState } from "@/components/ui/no-org-state";
+import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import { PageHeader } from "@/components/layout/page-header";
 import { PageContent } from "@/components/layout/page-content";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Archive, Brain, Combine, Loader2, Search, TrendingDown, Zap } from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
 import { DataTable } from "@/components/ui/data-table";
 import { Card } from "@/components/ui/card";
 import { errorFromCaught } from "@/lib/safe-error-message";
-const memoryApi = {
-  attribute: (orgId: string, traceId: string) => api.post<{
-    trace_id: string;
-    memories: Array<{
-      memory_id: string;
-      influence: number;
-    }>;
-  }>(`/orgs/${orgId}/intelligence/memory/${traceId}/attribute`),
-  impact: (orgId: string, traceId: string) => api.post<{
-    trace_id: string;
-    impact_score: number;
-    components: Record<string, number>;
-  }>(`/orgs/${orgId}/intelligence/memory/${traceId}/impact`),
-  reaverSuggest: (orgId: string) => api.post<{
-    suggestions: Array<{
-      memory_id: string;
-      action: "merge" | "archive" | "demote";
-      reason: string;
-    }>;
-  }>(`/orgs/${orgId}/intelligence/memory/reaver/suggest`)
-};
+
 type SubTab = "attribution" | "impact" | "reaver";
-interface AttributionResult {
-  trace_id: string;
-  memories: Array<{
-    memory_id: string;
-    influence: number;
-  }>;
-}
-interface ImpactResult {
-  trace_id: string;
-  impact_score: number;
-  components: Record<string, number>;
-}
-interface ReaverSuggestion {
-  memory_id: string;
-  action: "merge" | "archive" | "demote";
-  reason: string;
-}
+type ReaverSuggestion = MemoryReaverData["suggestions"][number];
+
 export default function MemoryIntelligencePage() {
-  const {
-    currentOrg
-  } = useOrg();
+  const { currentOrg } = useOrg();
   const [activeTab, setActiveTab] = useState<SubTab>("attribution");
   const [error, setError] = useState("");
   if (!currentOrg) {
-    return <NoOrgState icon={Brain} feature="Memory Intelligence" description="Memory attribution, impact scoring, and reweaver suggestions will appear once your organization is configured." />;
+    return (
+      <NoOrgState
+        icon={Brain}
+        feature="Memory Intelligence"
+        description="Memory attribution, impact scoring, and reweaver suggestions will appear once your organization is configured."
+      />
+    );
   }
-  return <PageContent size="wide">
-      <PageHeader title="Memory" subtitle="Episodic + semantic memory attribution and reweaving" icon={Brain} eyebrow="Observe" />
+  return (
+    <PageContent size="wide">
+      <PageHeader
+        title="Memory"
+        subtitle="Episodic + semantic memory attribution and reweaving"
+        icon={Brain}
+        eyebrow="Observe"
+      />
 
-      {error && <Alert variant="error" title="Request failed" description={error} onDismiss={() => setError("")} />}
+      <Alert
+        variant="info"
+        title="Cat 5 memory intelligence"
+        description="This page attributes and scores memories that influenced a trace — it is not a full knowledge-base browser."
+        className="mb-4"
+      />
 
-      <Tabs value={activeTab} onValueChange={v => {
-      setActiveTab(v as SubTab);
-      setError("");
-    }}>
+      {error ? (
+        <ErrorState
+          title="Could not load memory data"
+          message={error}
+          action={
+            <Button size="sm" variant="outline" onClick={() => setError("")}>
+              Dismiss
+            </Button>
+          }
+        />
+      ) : null}
+
+      <Tabs
+        value={activeTab}
+        onValueChange={(v) => {
+          setActiveTab(v as SubTab);
+          setError("");
+        }}
+      >
         <TabsList variant="underline" className="border-b border-[var(--border-default)] w-full justify-start">
           <TabsTrigger value="attribution" variant="underline" className="flex items-center gap-2">
             <Search className="w-4 h-4" />
@@ -87,42 +86,29 @@ export default function MemoryIntelligencePage() {
           </TabsTrigger>
         </TabsList>
 
-        <AnimatePresence mode="wait">
-          <motion.div key={activeTab} initial={{
-          opacity: 0,
-          y: 8
-        }} animate={{
-          opacity: 1,
-          y: 0
-        }} exit={{
-          opacity: 0,
-          y: -6
-        }} transition={{
-          duration: 0.2
-        }}>
-            <TabsContent value="attribution" className="mt-6">
-              <AttributionTab orgId={currentOrg.id} setError={setError} />
-            </TabsContent>
-            <TabsContent value="impact" className="mt-6">
-              <ImpactTab orgId={currentOrg.id} setError={setError} />
-            </TabsContent>
-            <TabsContent value="reaver" className="mt-6">
-              <ReaverTab orgId={currentOrg.id} setError={setError} />
-            </TabsContent>
-          </motion.div>
-        </AnimatePresence>
+        <TabsContent value="attribution" className="mt-6">
+          <AttributionTab orgId={currentOrg.id} setError={setError} />
+        </TabsContent>
+        <TabsContent value="impact" className="mt-6">
+          <ImpactTab orgId={currentOrg.id} setError={setError} />
+        </TabsContent>
+        <TabsContent value="reaver" className="mt-6">
+          <ReaverTab orgId={currentOrg.id} setError={setError} />
+        </TabsContent>
       </Tabs>
-    </PageContent>;
+    </PageContent>
+  );
 }
+
 function AttributionTab({
   orgId,
-  setError
+  setError,
 }: {
   orgId: string;
   setError: (e: string) => void;
 }) {
   const [traceId, setTraceId] = useState("");
-  const [result, setResult] = useState<AttributionResult | null>(null);
+  const [result, setResult] = useState<MemoryAttributionData | null>(null);
   const [loading, setLoading] = useState(false);
   async function handleRun() {
     if (!traceId.trim()) return;
@@ -138,72 +124,111 @@ function AttributionTab({
       setLoading(false);
     }
   }
-  return <div className="space-y-4">
+  const memories = result?.per_memory ?? [];
+  return (
+    <div className="space-y-4">
       <Card padding="lg">
         <h3 className="text-sm font-semibold text-[var(--text-primary)] mb-3 flex items-center gap-2">
           <Search className="w-4 h-4 text-[var(--accent)]" />
           Trace attribution
         </h3>
         <div className="flex flex-col sm:flex-row gap-3">
-          <input type="text" value={traceId} onChange={e => setTraceId(e.target.value)} placeholder="Enter trace ID..." className="flex-1 px-3 py-2 bg-[var(--bg-secondary)] border border-[var(--border-default)] rounded-lg text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)]" />
-          <button onClick={handleRun} disabled={loading || !traceId.trim()} className="inline-flex items-center gap-2 px-4 py-2 bg-[var(--accent)] text-[var(--bg-base)] rounded-lg text-sm font-medium hover:bg-[var(--accent-hover)] disabled:opacity-50 transition-colors">
+          <input
+            type="text"
+            value={traceId}
+            onChange={(e) => setTraceId(e.target.value)}
+            placeholder="Enter trace ID..."
+            className="flex-1 px-3 py-2 bg-[var(--bg-secondary)] border border-[var(--border-default)] rounded-lg text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)]"
+          />
+          <button
+            onClick={handleRun}
+            disabled={loading || !traceId.trim()}
+            className="inline-flex items-center gap-2 px-4 py-2 bg-[var(--accent)] text-[var(--bg-base)] rounded-lg text-sm font-medium hover:bg-[var(--accent-hover)] disabled:opacity-50 transition-colors"
+          >
             {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Brain className="w-4 h-4" />}
             Attribute
           </button>
         </div>
       </Card>
 
-      {loading && <div className="flex items-center justify-center py-12">
-          <Loader2 className="w-6 h-6 animate-spin text-[var(--accent)]" />
-        </div>}
+      {loading ? (
+        <div className="space-y-3 py-4" aria-busy="true" aria-live="polite">
+          <Skeleton className="h-5 w-56" />
+          <Skeleton className="h-16 w-full rounded-lg" />
+          <Skeleton className="h-16 w-full rounded-lg" />
+        </div>
+      ) : null}
 
-      {result && <motion.div initial={{
-      opacity: 0,
-      y: 8
-    }} animate={{
-      opacity: 1,
-      y: 0
-    }} className="space-y-3">
+      {result && (
+        <div className="space-y-3">
           <Card padding="lg">
             <h3 className="text-sm font-semibold text-[var(--text-primary)] mb-3">
               Memories that influenced this trace
             </h3>
-            {result.memories.length === 0 ? <p className="text-xs text-[var(--text-muted)]">
-                No memories influenced this trace.
-              </p> : <ul className="space-y-2">
-                {result.memories.map(m => <li key={m.memory_id} className="flex items-center gap-3 p-2.5 rounded-lg bg-[var(--bg-secondary)]">
+            {result.message && (
+              <p className="text-xs text-[var(--text-muted)] mb-3">{result.message}</p>
+            )}
+            {memories.length === 0 ? (
+              <p className="text-xs text-[var(--text-muted)]">No memories influenced this trace.</p>
+            ) : (
+              <ul className="space-y-2">
+                {memories.map((m) => (
+                  <li
+                    key={m.memory_id}
+                    className="flex items-center gap-3 p-2.5 rounded-lg bg-[var(--bg-secondary)]"
+                  >
                     <span className="font-mono text-xs text-[var(--text-primary)] flex-1 truncate">
                       {m.memory_id}
                     </span>
+                    {m.role && (
+                      <span className="text-[10px] uppercase tracking-wide text-[var(--text-muted)]">
+                        {m.role}
+                      </span>
+                    )}
                     <div className="w-40 flex-shrink-0">
                       <div className="h-2 bg-[var(--bg-tertiary)] rounded-full overflow-hidden">
-                        <div className="h-full bg-[var(--accent)] rounded-full" style={{
-                  width: `${Math.max(0, Math.min(1, m.influence)) * 100}%`
-                }} />
+                        <div
+                          className="h-full bg-[var(--accent)] rounded-full"
+                          style={{
+                            width: `${Math.max(0, Math.min(1, m.influence_score)) * 100}%`,
+                          }}
+                        />
                       </div>
                     </div>
                     <span className="text-xs text-[var(--text-muted)] w-12 text-right tabular-nums">
-                      {(m.influence * 100).toFixed(0)}%
+                      {(m.influence_score * 100).toFixed(0)}%
                     </span>
-                  </li>)}
-              </ul>}
+                  </li>
+                ))}
+              </ul>
+            )}
           </Card>
-        </motion.div>}
+        </div>
+      )}
 
-      {!result && !loading && <Card padding="lg">
-          <EmptyState icon={Brain} title="Enter a trace ID" description="See which memories contributed to a response" size="md" />
-        </Card>}
-    </div>;
+      {!result && !loading && (
+        <Card padding="lg">
+          <EmptyState
+            icon={Brain}
+            title="Enter a trace ID"
+            description="See which memories contributed to a response"
+            size="md"
+          />
+        </Card>
+      )}
+    </div>
+  );
 }
+
 function ImpactTab({
   orgId,
-  setError
+  setError,
 }: {
   orgId: string;
   setError: (e: string) => void;
 }) {
   const [traceId, setTraceId] = useState("");
-  const [result, setResult] = useState<ImpactResult | null>(null);
+  const [result, setResult] = useState<MemoryImpactData | null>(null);
   const [loading, setLoading] = useState(false);
   async function handleRun() {
     if (!traceId.trim()) return;
@@ -219,164 +244,245 @@ function ImpactTab({
       setLoading(false);
     }
   }
-  const componentEntries = result ? Object.entries(result.components).sort((a, b) => b[1] - a[1]) : [];
-  return <div className="space-y-4">
+  const memories = result?.per_memory ?? [];
+  const topScore = memories[0]?.score ?? 0;
+  return (
+    <div className="space-y-4">
       <Card padding="lg">
         <h3 className="text-sm font-semibold text-[var(--text-primary)] mb-3 flex items-center gap-2">
           <Zap className="w-4 h-4 text-[var(--accent)]" />
           Trace impact score
         </h3>
         <div className="flex flex-col sm:flex-row gap-3">
-          <input type="text" value={traceId} onChange={e => setTraceId(e.target.value)} placeholder="Enter trace ID..." className="flex-1 px-3 py-2 bg-[var(--bg-secondary)] border border-[var(--border-default)] rounded-lg text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)]" />
-          <button onClick={handleRun} disabled={loading || !traceId.trim()} className="inline-flex items-center gap-2 px-4 py-2 bg-[var(--accent)] text-[var(--bg-base)] rounded-lg text-sm font-medium hover:bg-[var(--accent-hover)] disabled:opacity-50 transition-colors">
+          <input
+            type="text"
+            value={traceId}
+            onChange={(e) => setTraceId(e.target.value)}
+            placeholder="Enter trace ID..."
+            className="flex-1 px-3 py-2 bg-[var(--bg-secondary)] border border-[var(--border-default)] rounded-lg text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)]"
+          />
+          <button
+            onClick={handleRun}
+            disabled={loading || !traceId.trim()}
+            className="inline-flex items-center gap-2 px-4 py-2 bg-[var(--accent)] text-[var(--bg-base)] rounded-lg text-sm font-medium hover:bg-[var(--accent-hover)] disabled:opacity-50 transition-colors"
+          >
             {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />}
             Score
           </button>
         </div>
       </Card>
 
-      {loading && <div className="flex items-center justify-center py-12">
-          <Loader2 className="w-6 h-6 animate-spin text-[var(--accent)]" />
-        </div>}
+      {loading ? (
+        <div className="space-y-3 py-4" aria-busy="true" aria-live="polite">
+          <Skeleton className="h-5 w-40" />
+          <Skeleton className="h-24 w-full rounded-xl" />
+          <Skeleton className="h-16 w-full rounded-lg" />
+        </div>
+      ) : null}
 
-      {result && <motion.div initial={{
-      opacity: 0,
-      y: 8
-    }} animate={{
-      opacity: 1,
-      y: 0
-    }} className="space-y-4">
+      {result && (
+        <div className="space-y-4">
           <Card padding="lg">
             <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-semibold text-[var(--text-primary)]">
-                Impact score
-              </h3>
-              <span className={cn("text-2xl font-bold", result.impact_score > 0.7 ? "text-[var(--terminal)]" : result.impact_score > 0.4 ? "text-[var(--warning)]" : "text-[var(--text-muted)]")}>
-                {(result.impact_score * 100).toFixed(1)}%
+              <h3 className="text-sm font-semibold text-[var(--text-primary)]">Top impact</h3>
+              <span
+                className={cn(
+                  "text-2xl font-bold",
+                  topScore > 0.7
+                    ? "text-[var(--terminal)]"
+                    : topScore > 0.4
+                      ? "text-[var(--warning)]"
+                      : "text-[var(--text-muted)]",
+                )}
+              >
+                {(topScore * 100).toFixed(1)}%
               </span>
             </div>
-            <div className="h-3 bg-[var(--bg-tertiary)] rounded-full overflow-hidden">
-              <div className={cn("h-full rounded-full transition-all", result.impact_score > 0.7 ? "bg-[var(--terminal)]" : result.impact_score > 0.4 ? "bg-[var(--warning)]" : "bg-[var(--text-muted)]")} style={{
-            width: `${Math.max(0, Math.min(1, result.impact_score)) * 100}%`
-          }} />
-            </div>
+            {result.message && (
+              <p className="text-xs text-[var(--text-muted)] mb-3">{result.message}</p>
+            )}
+            {result.primary_memory_id && (
+              <p className="text-xs text-[var(--text-secondary)] font-mono mb-3">
+                Primary: {result.primary_memory_id}
+              </p>
+            )}
           </Card>
 
-          {componentEntries.length > 0 && <Card padding="lg">
+          {memories.length > 0 ? (
+            <Card padding="lg">
               <h3 className="text-sm font-semibold text-[var(--text-primary)] mb-3">
-                Component breakdown
+                Per-memory impact
               </h3>
               <ul className="space-y-2">
-                {componentEntries.map(([name, value]) => {
-            const pct = Math.max(0, Math.min(1, value));
-            return <li key={name} className="flex items-center gap-3">
-                      <span className="text-xs text-[var(--text-secondary)] w-32 flex-shrink-0 truncate">
-                        {name.replace(/_/g, " ")}
+                {memories.map((m) => {
+                  const pct = Math.max(0, Math.min(1, m.score));
+                  return (
+                    <li key={m.memory_id} className="flex items-center gap-3">
+                      <span className="text-xs font-mono text-[var(--text-secondary)] w-40 flex-shrink-0 truncate">
+                        {m.memory_id}
                       </span>
                       <div className="flex-1 h-2.5 bg-[var(--bg-tertiary)] rounded-full overflow-hidden">
-                        <div className="h-full bg-[var(--accent)] rounded-full" style={{
-                  width: `${pct * 100}%`
-                }} />
+                        <div
+                          className="h-full bg-[var(--accent)] rounded-full"
+                          style={{ width: `${pct * 100}%` }}
+                        />
                       </div>
                       <span className="text-xs text-[var(--text-muted)] w-12 text-right tabular-nums">
                         {(pct * 100).toFixed(0)}%
                       </span>
-                    </li>;
-          })}
+                    </li>
+                  );
+                })}
               </ul>
-            </Card>}
-        </motion.div>}
+            </Card>
+          ) : (
+            <Card padding="lg">
+              <EmptyState
+                icon={Zap}
+                title="No memory impact"
+                description="No memories were used in this trace."
+                size="md"
+              />
+            </Card>
+          )}
+        </div>
+      )}
 
-      {!result && !loading && <Card padding="lg">
-          <EmptyState icon={Zap} title="Enter a trace ID" description="See the composite impact score and component breakdown for a trace" size="md" />
-        </Card>}
-    </div>;
+      {!result && !loading && (
+        <Card padding="lg">
+          <EmptyState
+            icon={Zap}
+            title="Enter a trace ID"
+            description="See per-memory impact scores for a trace"
+            size="md"
+          />
+        </Card>
+      )}
+    </div>
+  );
 }
+
 function ReaverTab({
   orgId,
-  setError
+  setError,
 }: {
   orgId: string;
   setError: (e: string) => void;
 }) {
-  const [suggestions, setSuggestions] = useState<ReaverSuggestion[]>([]);
-  const [loading, setLoading] = useState(false);
-  const load = useCallback(async () => {
-    setLoading(true);
+  const reaverQuery = useOrgQuery(
+    queryKeys.memory.reaver(orgId),
+    orgId,
+    async () => (await memoryApi.reweaverSuggest(orgId, { memory_id: "", window: "30d" })).suggestions ?? [],
+  );
+  const suggestions = reaverQuery.data ?? [];
+  const loading = reaverQuery.isLoading || reaverQuery.isFetching;
+  const load = async () => {
     setError("");
-    try {
-      const data = await memoryApi.reaverSuggest(orgId);
-      setSuggestions(data.suggestions ?? []);
-    } catch (err) {
-      setError(errorFromCaught(err, "Failed to load suggestions"));
-    } finally {
-      setLoading(false);
-    }
-  }, [orgId, setError]);
-  useEffect(() => {
-    load();
-  }, [load]);
-  return <div className="space-y-4">
+    const res = await reaverQuery.refetch();
+    if (res.error) setError(errorFromCaught(res.error, "Failed to load suggestions"));
+  };
+  return (
+    <div className="space-y-4">
       <div className="flex items-center justify-between">
         <p className="text-xs text-[var(--text-muted)]">
           Reweaver suggestions — merge duplicates, archive dead memories, demote low-influence ones
         </p>
-        <button onClick={load} disabled={loading} className="inline-flex items-center gap-2 px-3 py-1.5 bg-[var(--bg-tertiary)] text-[var(--text-primary)] rounded-lg text-xs font-medium hover:bg-[var(--border-default)] disabled:opacity-50 transition-colors">
+        <button
+          onClick={load}
+          disabled={loading}
+          className="inline-flex items-center gap-2 px-3 py-1.5 bg-[var(--bg-tertiary)] text-[var(--text-primary)] rounded-lg text-xs font-medium hover:bg-[var(--border-default)] disabled:opacity-50 transition-colors"
+        >
           {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Combine className="w-3.5 h-3.5" />}
           Refresh
         </button>
       </div>
 
-      {loading && suggestions.length === 0 ? <div className="flex items-center justify-center py-20">
-          <Loader2 className="w-8 h-8 animate-spin text-[var(--accent)]" />
-        </div> : <Card padding="lg" className="overflow-hidden">
-          <DataTable columns={[{
-        key: "memory_id",
-        header: "Memory ID",
-        sortable: true,
-        cell: s => <span className="font-mono text-xs text-[var(--text-primary)]">{s.memory_id}</span>
-      }, {
-        key: "action",
-        header: "Action",
-        sortable: true,
-        cell: s => <ActionBadge action={s.action} />
-      }, {
-        key: "reason",
-        header: "Reason",
-        cell: s => <span className="text-[var(--text-secondary)] text-xs">{s.reason}</span>
-      }]} rows={suggestions} rowKey={s => s.memory_id} loading={loading} defaultSort={{
-        key: "action",
-        direction: "asc"
-      }} emptyTitle="No reweaver suggestions" emptyDescription="Your memory store is already clean — nothing to merge, archive, or demote" emptyIcon={Combine} pageSize={25} />
-        </Card>}
-    </div>;
+      {reaverQuery.isError && suggestions.length === 0 ? (
+        <ErrorState
+          title="Could not load reweaver suggestions"
+          message={errorFromCaught(reaverQuery.error, "Failed to load suggestions")}
+          action={
+            <Button size="sm" variant="outline" onClick={() => void load()}>
+              Try again
+            </Button>
+          }
+        />
+      ) : loading && suggestions.length === 0 ? (
+        <div className="space-y-3 py-6" aria-busy="true" aria-live="polite">
+          <Skeleton className="h-10 w-full rounded-lg" />
+          <Skeleton className="h-10 w-full rounded-lg" />
+          <Skeleton className="h-10 w-full rounded-lg" />
+        </div>
+      ) : (
+        <Card padding="lg" className="overflow-hidden">
+          <DataTable
+            columns={[
+              {
+                key: "memory_id",
+                header: "Memory ID",
+                sortable: true,
+                cell: (s) => (
+                  <span className="font-mono text-xs text-[var(--text-primary)]">{s.memory_id}</span>
+                ),
+              },
+              {
+                key: "action",
+                header: "Action",
+                sortable: true,
+                cell: (s) => <ActionBadge action={s.action} />,
+              },
+              {
+                key: "rationale",
+                header: "Rationale",
+                cell: (s) => (
+                  <span className="text-[var(--text-secondary)] text-xs">{s.rationale}</span>
+                ),
+              },
+            ]}
+            rows={suggestions}
+            rowKey={(s) => `${s.memory_id}:${s.action}:${s.with_memory_id ?? ""}`}
+            loading={loading}
+            defaultSort={{ key: "action", direction: "asc" }}
+            emptyTitle="No reweaver suggestions"
+            emptyDescription="Your memory store is already clean — nothing to merge, archive, or demote"
+            emptyIcon={Combine}
+            pageSize={25}
+          />
+        </Card>
+      )}
+    </div>
+  );
 }
-function ActionBadge({
-  action
-}: {
-  action: ReaverSuggestion["action"];
-}) {
-  const map: Record<ReaverSuggestion["action"], {
-    classes: string;
-    icon: typeof Combine;
-  }> = {
+
+function ActionBadge({ action }: { action: ReaverSuggestion["action"] }) {
+  const map: Record<
+    ReaverSuggestion["action"],
+    { classes: string; icon: typeof Combine }
+  > = {
     merge: {
       classes: "bg-[var(--accent-faint)] text-[var(--accent)]",
-      icon: Combine
+      icon: Combine,
     },
     archive: {
       classes: "bg-[var(--bg-tertiary)] text-[var(--text-secondary)]",
-      icon: Archive
+      icon: Archive,
     },
     demote: {
       classes: "bg-[var(--warning-bg)] text-[var(--warning)]",
-      icon: TrendingDown
-    }
+      icon: TrendingDown,
+    },
   };
   const cfg = map[action] || map.archive;
   const Icon = cfg.icon;
-  return <span className={cn("inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-medium", cfg.classes)}>
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-medium",
+        cfg.classes,
+      )}
+    >
       <Icon className="w-3 h-3" />
       {action}
-    </span>;
+    </span>
+  );
 }

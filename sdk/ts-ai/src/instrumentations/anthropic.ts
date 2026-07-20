@@ -17,7 +17,9 @@ import { errorClass, errorMessage, randomId } from "../ids.js";
 import { extractUsage, normalizeModelName } from "../tokens.js";
 import { SOURCE_FORMATS, type StreamChunk, type TraceOptions } from "../types.js";
 
-const _wrapped = new WeakSet<object>();
+// original → proxy (and proxy → proxy) so re-wrapping the same
+// client returns the instrumented Proxy, not the bare original.
+const _proxies = new WeakMap<object, object>();
 const WRAP_MARKER = Symbol.for("@eden-ai/sdk.wrapAnthropic");
 
 /**
@@ -34,10 +36,10 @@ export function wrapAnthropic<T extends object>(
   ) {
     return client;
   }
-  if (_wrapped.has(client as object)) return client;
+  const existing = _proxies.get(client as object);
+  if (existing) return existing as T;
   const marked = (client as unknown as { [k: symbol]: unknown })[WRAP_MARKER];
   if (marked === true) return client;
-  _wrapped.add(client as object);
 
   const proxy = new Proxy(client, {
     get(target, prop, receiver) {
@@ -89,6 +91,8 @@ export function wrapAnthropic<T extends object>(
   } catch {
     // ignore
   }
+  _proxies.set(client as object, proxy);
+  _proxies.set(proxy, proxy);
   return proxy;
 }
 
@@ -252,6 +256,9 @@ async function* _wrapAnthropicStream(
   // metrics on the wire — parity bug with the Python SDK.
   const chunkBuffer: StreamChunk[] = [];
   const eventId = `stream_anthropic_${traceId}`;
+  // Snapshot once per stream — avoid getDefaultClient()+getConfig()
+  // on every chunk tick (hot path for token-level streaming).
+  const captureChunkText = getDefaultClient().getConfig().captureChunkText;
 
   try {
     const upstream: AsyncIterable<any> = await originalCreate.apply(self, args);
@@ -329,7 +336,7 @@ async function* _wrapAnthropicStream(
         eventId,
         traceId,
         chunkIndex: chunkCount - 1,
-        deltaText,
+        deltaText: captureChunkText ? deltaText : null,
         ttftMs: tFirst !== null ? tFirst - start : null,
         itlMs: prev !== null ? now - prev : null,
         tpotMs,

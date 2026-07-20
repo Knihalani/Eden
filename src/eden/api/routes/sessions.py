@@ -20,7 +20,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Path
 from pydantic import BaseModel, Field
 
-from eden.api.deps import get_current_user
+from eden.api.deps import get_current_user, require_path_org_access
 from eden.services.app_intel import DEFAULT_TTL_HOURS, SessionIdentityService
 
 logger = logging.getLogger(__name__)
@@ -28,7 +28,9 @@ logger = logging.getLogger(__name__)
 router = APIRouter(
     prefix="/orgs/{org_id}/intelligence/user",
     tags=["intelligence-user-sessions"],
-    dependencies=[Depends(get_current_user)],
+    dependencies=[Depends(get_current_user),
+        Depends(require_path_org_access),
+    ],
 )
 
 
@@ -56,7 +58,7 @@ class IdentifyRequest(BaseModel):
 @router.post("/sessions/start", response_model=SessionStartResponse)
 async def sessions_start(
     body: SessionStartRequest,
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
 ) -> SessionStartResponse:
     svc = SessionIdentityService()
     result = await svc.start(
@@ -72,7 +74,7 @@ async def sessions_start(
 
 @router.post("/sessions/{session_id}/end")
 async def sessions_end(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     session_id: str = Path(..., min_length=1, max_length=64),
 ) -> dict:
     svc = SessionIdentityService()
@@ -85,7 +87,7 @@ async def sessions_end(
 @router.post("/sessions/{session_id}/identify")
 async def sessions_identify(
     body: SessionIdentifyRequest,
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     session_id: str = Path(..., min_length=1, max_length=64),
 ) -> dict:
     svc = SessionIdentityService()
@@ -97,7 +99,7 @@ async def sessions_identify(
 
 @router.get("/sessions/{session_id}")
 async def sessions_get(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     session_id: str = Path(..., min_length=1, max_length=64),
 ) -> dict:
     svc = SessionIdentityService()
@@ -110,7 +112,7 @@ async def sessions_get(
 @router.post("/identify")
 async def identify(
     body: IdentifyRequest,
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
 ) -> dict:
     """Top-level identify (no session). Records the user→org
     association but does not open a session.

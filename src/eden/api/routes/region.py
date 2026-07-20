@@ -14,9 +14,15 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException, Path
 from pydantic import BaseModel, Field
 
-from eden.api.deps import get_current_user
+from eden.api.deps import (
+    _try_resolve_token_payload,
+    get_current_user,
+    require_org_permission,
+    require_path_org_access,
+)
 from eden.api.utils.safe_error import safe_detail
 from eden.storage.postgres import get_postgres_client
+from eden.api.utils.redact import redact_all
 
 logger = logging.getLogger(__name__)
 
@@ -46,8 +52,8 @@ class RegionOut(BaseModel):
 
 @router.get("", response_model=RegionOut)
 async def get_region(
-    org_id: str = Path(...),
-    user: dict = Depends(get_current_user),
+    org_id: str = Depends(require_path_org_access),
+    user: dict = Depends(get_current_user)
 ) -> RegionOut:
     client = await get_postgres_client()
     if not client:
@@ -64,11 +70,14 @@ async def get_region(
 @router.put("", response_model=RegionOut)
 async def put_region(
     body: RegionIn,
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     user: dict = Depends(get_current_user),
+    payload: dict | None = Depends(_try_resolve_token_payload),
 ) -> RegionOut:
-    from eden.api.deps import require_org_permission
-    await require_org_permission("settings:edit", x_org_id=org_id)
+    # Pass path org_id + resolved JWT explicitly. A bare
+    # ``await require_org_permission(..., x_org_id=org_id)`` leaves
+    # ``payload`` as an unresolved ``Depends(...)`` sentinel → 500.
+    await require_org_permission("settings:edit", org_id, payload)
 
     if body.region not in ALLOWED_REGIONS:
         raise HTTPException(
@@ -84,8 +93,27 @@ async def put_region(
             body.region, org_id,
         )
     except Exception as exc:
-        logger.warning(f"put_region failed: {exc}")
-        raise HTTPException(status_code=500, detail=safe_detail(exc, fallback="Internal error while updating region")) from exc
+        msg = str(exc).lower()
+        if "unique" in msg or "duplicate" in msg:
+            raise HTTPException(
+                status_code=409,
+                detail="Region update conflict",
+            ) from exc
+        if "invalid input syntax for type uuid" in msg:
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid organization id",
+            ) from exc
+        if "foreign key" in msg:
+            raise HTTPException(
+                status_code=404,
+                detail="Organization not found",
+            ) from exc
+        logger.warning("put_region failed: %s", redact_all(str(exc)))
+        raise HTTPException(
+            status_code=503,
+            detail=safe_detail(exc, fallback="Failed to update region"),
+        ) from exc
 
     # Audit log
     try:

@@ -4,11 +4,12 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams, useSearchParams } from "next/navigation";
 import { useOrg } from "@/hooks/use-org";
-import { agentIssuesApi, type AgentStumble } from "@/lib/api";
+import { agentIssuesApi, ApiError, type AgentStumble } from "@/lib/api";
 import { useOrgQuery, useOrgMutation } from "@/hooks/use-api-query";
 import { queryKeys } from "@/lib/query-keys";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { ErrorState } from "@/components/ui/error-state";
 import { NoOrgState } from "@/components/ui/no-org-state";
 import { useToast } from "@/components/ui/toast";
 import {
@@ -41,7 +42,6 @@ export default function IssueDetailPage() {
 
   const [tab, setTab] = useState<Tab>("overview");
   const [busy, setBusy] = useState<string | null>(null);
-  const [regressionCases, setRegressionCases] = useState<Record<string, unknown>[]>([]);
 
   useEffect(() => {
     const qTab = searchParams?.get("tab");
@@ -59,18 +59,21 @@ export default function IssueDetailPage() {
   const issue = issueQuery.data?.data?.issue ?? null;
   const loading = issueQuery.isLoading;
   const error = issueQuery.error?.message ?? null;
+  const isNotFound =
+    issueQuery.error instanceof ApiError && issueQuery.error.status === 404;
 
+  // Fail closed: 5xx must surface as ErrorState, not a false-empty panel.
   const stumblesQuery = useOrgQuery(
     queryKeys.issues.stumbles(orgId, { fingerprint: issue?.fingerprint, limit: 20 }),
     orgId,
     () =>
       agentIssuesApi
         .stumbles(orgId!, { fingerprint: issue!.fingerprint, limit: 20 })
-        .then((res) => res.data?.stumbles ?? [])
-        .catch(() => []),
+        .then((res) => res.data?.stumbles ?? []),
     { enabled: Boolean(orgId) && Boolean(issue?.fingerprint) },
   );
   const stumbles = stumblesQuery.data ?? [];
+  const stumblesError = stumblesQuery.error?.message ?? null;
 
   const experimentsQuery = useOrgQuery(
     queryKeys.issues.experiments(orgId, issueId),
@@ -78,24 +81,29 @@ export default function IssueDetailPage() {
     () =>
       agentIssuesApi
         .listExperiments(orgId!, issueId!)
-        .then((res) => res.data?.experiments ?? [])
-        .catch(() => []),
+        .then((res) => res.data?.experiments ?? []),
     { enabled: Boolean(orgId) && Boolean(issueId) },
   );
   const experiments = experimentsQuery.data ?? [];
+  const experimentsError = experimentsQuery.error?.message ?? null;
 
-  useEffect(() => {
-    if (!orgId || !issueId) return;
-    void agentIssuesApi
-      .listRegressionCases(orgId, issueId)
-      .then((res) => setRegressionCases((res.data?.cases as Record<string, unknown>[]) ?? []))
-      .catch(() => setRegressionCases([]));
-  }, [orgId, issueId, issue?.status, issue?.regression_case_id]);
+  const regressionQuery = useOrgQuery(
+    queryKeys.issues.regressionCases(orgId, issueId),
+    orgId,
+    () =>
+      agentIssuesApi
+        .listRegressionCases(orgId!, issueId!)
+        .then((res) => (res.data?.cases as Record<string, unknown>[]) ?? []),
+    { enabled: Boolean(orgId) && Boolean(issueId) },
+  );
+  const regressionCases = regressionQuery.data ?? [];
+  const regressionError = regressionQuery.error?.message ?? null;
 
   const invalidateIssue = [
     queryKeys.issues.detail(orgId, issueId),
     queryKeys.issues.list(orgId),
     queryKeys.issues.experiments(orgId, issueId),
+    queryKeys.issues.regressionCases(orgId, issueId),
   ];
 
   const triageMutation = useOrgMutation(
@@ -166,10 +174,10 @@ export default function IssueDetailPage() {
     if (!orgId || !issueId) return;
     setBusy("regression");
     try {
-      const res = await agentIssuesApi.createRegressionCases(orgId, issueId, { auto: true });
-      setRegressionCases((res.data?.cases as Record<string, unknown>[]) ?? []);
+      await agentIssuesApi.createRegressionCases(orgId, issueId, { auto: true });
       toast.success("Regression case saved to permanent memory");
       void issueQuery.refetch();
+      void regressionQuery.refetch();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Regression save failed");
     } finally {
@@ -228,10 +236,18 @@ export default function IssueDetailPage() {
         <div role="status" aria-busy="true" className="flex items-center justify-center p-12 text-sm text-[var(--text-muted)]">
           <Loader2 className="h-4 w-4 mr-2 animate-spin" /> Loading…
         </div>
-      ) : error ? (
-        <Card padding="lg"><p className="text-sm text-[var(--error)]">{error}</p></Card>
-      ) : !issue ? (
+      ) : isNotFound || (!issue && !error) ? (
         <Card padding="lg"><p className="text-sm text-[var(--text-muted)]">Issue not found.</p></Card>
+      ) : error || !issue ? (
+        <ErrorState
+          title="Could not load issue"
+          message={error ?? "Could not load issue."}
+          action={
+            <Button variant="outline" size="sm" onClick={() => void issueQuery.refetch()}>
+              Try again
+            </Button>
+          }
+        />
       ) : (
         <div className="space-y-4">
           <div className="rounded-lg border border-[var(--border-default)] bg-[var(--bg-primary)] p-4">
@@ -253,7 +269,7 @@ export default function IssueDetailPage() {
                     role="tab"
                     href={t.href}
                     className={cn(
-                      "px-3 py-2 text-sm font-medium border-b-2 -mb-px",
+                      "min-h-11 px-3 py-2 text-sm font-medium border-b-2 -mb-px",
                       tab === t.id
                         ? "border-[var(--accent)] text-[var(--accent)]"
                         : "border-transparent text-[var(--text-muted)] hover:text-[var(--text-primary)]",
@@ -268,7 +284,7 @@ export default function IssueDetailPage() {
                     aria-selected={tab === t.id}
                     onClick={() => setTab(t.id)}
                     className={cn(
-                      "px-3 py-2 text-sm font-medium border-b-2 -mb-px",
+                      "min-h-11 px-3 py-2 text-sm font-medium border-b-2 -mb-px",
                       tab === t.id
                         ? "border-[var(--accent)] text-[var(--accent)]"
                         : "border-transparent text-[var(--text-muted)] hover:text-[var(--text-primary)]",
@@ -281,17 +297,17 @@ export default function IssueDetailPage() {
             </div>
 
             <div className="mt-4 flex flex-wrap gap-2">
-              <Button size="sm" variant="default" disabled={busy !== null} onClick={onTriage}>
+              <Button size="sm" variant="default" className="min-h-11" disabled={busy !== null} onClick={onTriage}>
                 {busy === "triage" ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <Stethoscope className="h-3 w-3 mr-1" />}
                 Re-triage
               </Button>
-              <Button size="sm" variant="secondary" disabled={busy !== null} onClick={onExportFixture}>
+              <Button size="sm" variant="secondary" className="min-h-11" disabled={busy !== null} onClick={onExportFixture}>
                 <Download className="h-3 w-3 mr-1" /> Export fixture
               </Button>
-              <Button size="sm" variant="secondary" disabled={busy !== null} onClick={() => void onSaveRegression()}>
+              <Button size="sm" variant="secondary" className="min-h-11" disabled={busy !== null} onClick={() => void onSaveRegression()}>
                 <Database className="h-3 w-3 mr-1" /> Save regression
               </Button>
-              <Button size="sm" variant="outline" asChild>
+              <Button size="sm" variant="outline" className="min-h-11" asChild>
                 <Link href={`/improve?issue=${issueId}`}>
                   <Bug className="h-3 w-3 mr-1" /> View improvement plan
                 </Link>
@@ -299,14 +315,15 @@ export default function IssueDetailPage() {
               <Button
                 size="sm"
                 variant="outline"
+                className="min-h-11"
                 onClick={() => setTab("handoff")}
               >
                 <Wrench className="h-3 w-3 mr-1" /> Open in coding agent
               </Button>
-              <Button size="sm" variant="secondary" disabled={busy !== null || issue.status === "resolved"} onClick={() => onResolve("resolved")}>
+              <Button size="sm" variant="secondary" className="min-h-11" disabled={busy !== null || issue.status === "resolved"} onClick={() => onResolve("resolved")}>
                 <CheckCircle2 className="h-3 w-3 mr-1" /> Resolve
               </Button>
-              <Button size="sm" variant="outline" disabled={busy !== null || issue.status === "ignored"} onClick={() => onResolve("ignored")}>
+              <Button size="sm" variant="outline" className="min-h-11" disabled={busy !== null || issue.status === "ignored"} onClick={() => onResolve("ignored")}>
                 <Ban className="h-3 w-3 mr-1" /> Ignore
               </Button>
             </div>
@@ -325,6 +342,8 @@ export default function IssueDetailPage() {
                 caseId={issue.regression_case_id}
                 onSave={() => void onSaveRegression()}
                 busy={busy === "regression"}
+                error={regressionError}
+                onRetry={() => void regressionQuery.refetch()}
               />
               {issue.triage_result && Object.keys(issue.triage_result).length > 0 && (
                 <div className="rounded-lg border border-[var(--border-default)] bg-[var(--bg-primary)] p-4">
@@ -334,25 +353,34 @@ export default function IssueDetailPage() {
                   </pre>
                 </div>
               )}
-              <StumblesList stumbles={stumbles} />
+              <StumblesList
+                stumbles={stumbles}
+                error={stumblesError}
+                onRetry={() => void stumblesQuery.refetch()}
+              />
             </>
           )}
 
           {tab === "triage" && (
-            <TriagePanel triageResult={issue.triage_result} stumbles={stumbles} />
+            <TriagePanel
+              triageResult={issue.triage_result}
+              stumbles={stumbles}
+              stumblesError={stumblesError}
+              onStumblesRetry={() => void stumblesQuery.refetch()}
+            />
           )}
 
           {tab === "handoff" && (
             <div className="rounded-lg border border-[var(--border-default)] bg-[var(--bg-primary)] p-4 space-y-4">
               <p className="text-sm text-[var(--text-secondary)]">
-                Fixes ship via Improve queue (N20), coding-agent handoff, or fixture export.
-                In-portal fix chat (F22) was deleted.
+                Ship a fix via the Improve queue, coding-agent handoff, or fixture export.
+                Copy the handoff prompt below into your coding agent.
               </p>
               <div className="flex flex-wrap gap-2">
-                <Button size="sm" asChild>
+                <Button size="sm" className="min-h-11" asChild>
                   <Link href={`/improve?issue=${issueId}`}>View improvement plan</Link>
                 </Button>
-                <Button size="sm" variant="outline" disabled={busy !== null} onClick={onExportFixture}>
+                <Button size="sm" variant="outline" className="min-h-11" disabled={busy !== null} onClick={onExportFixture}>
                   <Download className="h-3 w-3 mr-1" /> Export fixture
                 </Button>
               </div>
@@ -380,7 +408,18 @@ export default function IssueDetailPage() {
               {issue.experiment_result && (
                 <ExperimentReportBanner report={issue.experiment_result as Record<string, unknown>} />
               )}
-              {experiments.length === 0 ? (
+              {experimentsError ? (
+                <ErrorState
+                  size="sm"
+                  title="Experiments unavailable"
+                  message={experimentsError}
+                  action={
+                    <Button variant="outline" size="sm" onClick={() => void experimentsQuery.refetch()}>
+                      Try again
+                    </Button>
+                  }
+                />
+              ) : experiments.length === 0 ? (
                 <p className="text-sm text-[var(--text-muted)]">No experiments yet. Start one to measure if a fix reduced stumble rate.</p>
               ) : (
                 <ul className="space-y-2">
@@ -450,9 +489,13 @@ function ExperimentReportBanner({ report }: { report: Record<string, unknown> })
 function TriagePanel({
   triageResult,
   stumbles,
+  stumblesError,
+  onStumblesRetry,
 }: {
   triageResult?: Record<string, unknown> | null;
   stumbles: AgentStumble[];
+  stumblesError?: string | null;
+  onStumblesRetry?: () => void;
 }) {
   const tr = (triageResult ?? {}) as Record<string, unknown>;
   const hasTriage = Object.keys(tr).length > 0;
@@ -477,16 +520,46 @@ function TriagePanel({
 
   if (!hasTriage) {
     return (
-      <div className="rounded-lg border border-[var(--border-default)] bg-[var(--bg-primary)] p-4">
-        <p className="text-sm text-[var(--text-muted)]">
-          No triage result yet. Run “Re-triage” to investigate the root cause.
-        </p>
+      <div className="space-y-4">
+        <div className="rounded-lg border border-[var(--border-default)] bg-[var(--bg-primary)] p-4">
+          <p className="text-sm text-[var(--text-muted)]">
+            No triage result yet. Run “Re-triage” to investigate the root cause.
+          </p>
+        </div>
+        {stumblesError ? (
+          <ErrorState
+            size="sm"
+            title="Stumbles unavailable"
+            message={stumblesError}
+            action={
+              onStumblesRetry ? (
+                <Button variant="outline" size="sm" onClick={onStumblesRetry}>
+                  Try again
+                </Button>
+              ) : undefined
+            }
+          />
+        ) : null}
       </div>
     );
   }
 
   return (
     <div className="space-y-4">
+      {stumblesError ? (
+        <ErrorState
+          size="sm"
+          title="Stumbles unavailable"
+          message={stumblesError}
+          action={
+            onStumblesRetry ? (
+              <Button variant="outline" size="sm" onClick={onStumblesRetry}>
+                Try again
+              </Button>
+            ) : undefined
+          }
+        />
+      ) : null}
       <div className="rounded-lg border border-[var(--border-default)] bg-[var(--bg-primary)] p-4 space-y-3">
         <div className="flex items-center gap-2 flex-wrap">
           <h2 className="text-sm font-semibold">Root cause</h2>
@@ -511,7 +584,9 @@ function TriagePanel({
         </p>
         {debuggerTraceId ? (
           <Button size="sm" variant="secondary" asChild className="mt-2">
-            <Link href={`/debugger?trace_id=${encodeURIComponent(debuggerTraceId)}`}>
+            <Link
+              href={`/traces?view=debug&trace_id=${encodeURIComponent(debuggerTraceId)}`}
+            >
               <Bug className="h-3 w-3 mr-1" /> Open debugger
             </Link>
           </Button>
@@ -541,7 +616,7 @@ function TriagePanel({
                 </span>
                 {actionType === "debugger_rerun" && traceForDebugger ? (
                   <Link
-                    href={`/debugger?trace_id=${encodeURIComponent(traceForDebugger)}`}
+                    href={`/traces?view=debug&trace_id=${encodeURIComponent(traceForDebugger)}`}
                     className="text-xs text-[var(--accent)] hover:underline"
                   >
                     Open debugger
@@ -595,7 +670,31 @@ function TriagePanel({
   );
 }
 
-function StumblesList({ stumbles }: { stumbles: AgentStumble[] }) {
+function StumblesList({
+  stumbles,
+  error,
+  onRetry,
+}: {
+  stumbles: AgentStumble[];
+  error?: string | null;
+  onRetry?: () => void;
+}) {
+  if (error) {
+    return (
+      <ErrorState
+        size="sm"
+        title="Stumbles unavailable"
+        message={error}
+        action={
+          onRetry ? (
+            <Button variant="outline" size="sm" onClick={onRetry}>
+              Try again
+            </Button>
+          ) : undefined
+        }
+      />
+    );
+  }
   return (
     <div className="rounded-lg border border-[var(--border-default)] bg-[var(--bg-primary)] p-4">
       <h2 className="text-sm font-semibold mb-3">Recent stumbles ({stumbles.length})</h2>
@@ -637,12 +736,32 @@ function RegressionMemoryPanel({
   caseId,
   onSave,
   busy,
+  error,
+  onRetry,
 }: {
   cases: Record<string, unknown>[];
   caseId?: string | null;
   onSave: () => void;
   busy: boolean;
+  error?: string | null;
+  onRetry?: () => void;
 }) {
+  if (error) {
+    return (
+      <ErrorState
+        size="sm"
+        title="Regression memory unavailable"
+        message={error}
+        action={
+          onRetry ? (
+            <Button variant="outline" size="sm" onClick={onRetry}>
+              Try again
+            </Button>
+          ) : undefined
+        }
+      />
+    );
+  }
   return (
     <div className="rounded-lg border border-[var(--border-default)] bg-[var(--bg-primary)] p-4">
       <div className="flex items-center justify-between gap-2 mb-2">
@@ -717,6 +836,7 @@ function CodingAgentHandoff({
         <Button
           size="sm"
           variant="secondary"
+          className="min-h-11"
           onClick={() => {
             void navigator.clipboard.writeText(prompt).then(onCopy);
           }}

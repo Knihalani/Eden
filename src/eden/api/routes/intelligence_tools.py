@@ -23,10 +23,10 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from fastapi import APIRouter, Body, Depends, Path
+from fastapi import APIRouter, Body, Depends
 from pydantic import BaseModel, Field
 
-from eden.api.deps import get_current_user, require_feature_flag
+from eden.api.deps import get_current_user, require_feature_flag, require_path_org_access
 from eden.services.tool_intel.services import (
     ToolAttributionScorer,
     ToolComparator,
@@ -42,6 +42,7 @@ router = APIRouter(
     dependencies=[
         Depends(require_feature_flag("intelligence_gap_v0")),
         Depends(get_current_user),
+        Depends(require_path_org_access),
     ],
 )
 
@@ -84,7 +85,7 @@ class RecommendRequest(BaseModel):
 
 @router.post("/attribution")
 async def attribution(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     body: AttributionRequest = Body(...),
 ) -> dict[str, Any]:
     """Per-tool attribution: success rate, latency,
@@ -101,7 +102,7 @@ async def attribution(
 
 @router.post("/compare")
 async def compare(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     body: CompareRequest = Body(...),
 ) -> dict[str, Any]:
     """Two-tool comparison: success-rate / latency / cost
@@ -117,7 +118,7 @@ async def compare(
 
 @router.post("/recommend")
 async def recommend(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     body: RecommendRequest = Body(...),
 ) -> dict[str, Any]:
     """Top-K tool recommendations for a given task type +
@@ -131,7 +132,7 @@ async def recommend(
 
 
 @router.get("/taxonomy")
-async def taxonomy(org_id: str = Path(...)) -> dict[str, Any]:
+async def taxonomy(org_id: str = Depends(require_path_org_access)) -> dict[str, Any]:
     """The org's tool catalog + co-occurrence matrix
     (which tools tend to be called together)."""
     return await _taxonomy.taxonomy(org_id)

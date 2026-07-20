@@ -9,3 +9,4 @@ export { AssistantPreview } from "./AssistantPreview";
 export { Faq } from "./Faq";
 export { BottomCta } from "./BottomCta";
 export { MarketingFooter } from "./MarketingFooter";
+export { SignedInGate } from "./SignedInGate";

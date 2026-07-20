@@ -14,14 +14,9 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from fastapi.routing import APIRoute
 
-PORTAL_API = (
-    Path(__file__).resolve().parents[3]
-    / "clients"
-    / "portal"
-    / "src"
-    / "lib"
-    / "api.ts"
-)
+from tests._portal_api_source import portal_api_dir, portal_api_source
+
+PORTAL_API_DIR = portal_api_dir()
 SIDEBAR = (
     Path(__file__).resolve().parents[3]
     / "clients"
@@ -33,11 +28,12 @@ SIDEBAR = (
 
 
 def test_portal_api_ts_exists() -> None:
-    assert PORTAL_API.is_file(), f"missing {PORTAL_API}"
+    assert PORTAL_API_DIR.is_dir(), f"missing {PORTAL_API_DIR}"
+    assert any(PORTAL_API_DIR.glob("*.ts")), f"empty {PORTAL_API_DIR}"
 
 
 def test_debugger_portal_paths_match_backend() -> None:
-    src = PORTAL_API.read_text(encoding="utf-8")
+    src = portal_api_source()
     assert "/debugger/checkpoints/${encodeURIComponent(traceId)}" in src
     assert "debugger/rewind" not in src
     assert "step_number" in src
@@ -49,7 +45,7 @@ def test_debugger_portal_paths_match_backend() -> None:
 
 
 def test_signals_portal_paths_match_backend() -> None:
-    src = PORTAL_API.read_text(encoding="utf-8")
+    src = portal_api_source()
     block = src.split("const signalsApi")[1].split("const debuggerApi")[0]
     assert "/signals" in block
     assert "description: string" in block
@@ -60,7 +56,7 @@ def test_signals_portal_paths_match_backend() -> None:
 
 
 def test_agent_issues_portal_paths_match_backend() -> None:
-    src = PORTAL_API.read_text(encoding="utf-8")
+    src = portal_api_source()
     block = src.split("export const agentIssuesApi")[1].split(
         "// ── Intelligence: Eval"
     )[0]
@@ -100,7 +96,7 @@ def test_backend_agent_issues_routes_are_mounted() -> None:
 
 
 def test_nl_alerts_portal_paths_match_backend() -> None:
-    src = PORTAL_API.read_text(encoding="utf-8")
+    src = portal_api_source()
     assert "/alerts/compile" in src
     assert "/nl-alert-rules" in src
     assert "/alert-events" in src
@@ -133,8 +129,9 @@ async def test_debugger_list_checkpoints_path_form() -> None:
     from eden.api.routes import debugger as dbg
 
     class _Store:
-        async def list_for_trace(self, trace_id: str):  # noqa: ANN001
+        async def list_for_trace(self, trace_id: str, org_id: str | None = None):  # noqa: ANN001
             assert trace_id == "trc_1"
+            assert org_id == "org_1"
             return []
 
     with (
@@ -150,7 +147,7 @@ async def test_debugger_list_checkpoints_path_form() -> None:
 
 
 def test_improve_portal_paths_in_api_ts() -> None:
-    src = PORTAL_API.read_text(encoding="utf-8")
+    src = portal_api_source()
     assert "/improve/plans" in src or "improveApi" in src or "/improve/" in src
 
 
@@ -166,7 +163,7 @@ def test_backend_improve_routes_are_mounted() -> None:
 
 
 def test_phase2_agent_sessions_portal_paths() -> None:
-    src = PORTAL_API.read_text(encoding="utf-8")
+    src = portal_api_source()
     block = src.split("export const agentSessionsApi")[1].split(
         "// ── F58"
     )[0]
@@ -177,7 +174,7 @@ def test_phase2_agent_sessions_portal_paths() -> None:
 
 
 def test_phase2_saved_views_portal_paths() -> None:
-    src = PORTAL_API.read_text(encoding="utf-8")
+    src = portal_api_source()
     assert "savedViewsApi" in src
     assert "/saved-searches" in src
 

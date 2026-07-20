@@ -96,14 +96,15 @@ class EdenConfig:
     extra_headers
         Additional headers to send on every request (e.g. routing tags).
     redact_on_client
-        If ``True`` (the default), the SDK runs a small regex pass
-        over every outgoing payload to mask obvious emails, phone
-        numbers, US SSNs, and credit-card numbers. This is a
-        *safety net* — the gateway is the authoritative redaction
-        layer and the source of truth for tenant policy. Disable
-        only when the gateway is configured to handle redaction
-        and you have verified the patterns the regex catches are
-        not legitimate values in your payloads.
+        If ``True``, the SDK runs a small regex pass over every
+        outgoing payload to mask obvious emails, phone numbers,
+        US SSNs, and credit-card numbers. Default is ``False``
+        (gateway is the authoritative PII layer). Set
+        ``EDEN_REDACT_ON_CLIENT=1`` to restore the pre-0.3.2
+        client-side default.
+    capture_chunk_text
+        When ``False`` (default), streaming chunk events omit
+        ``delta_text`` and ship metrics-only (TTFT/ITL/TPOT).
     """
 
     org_id: str | None = None
@@ -116,14 +117,15 @@ class EdenConfig:
     # right thing without a second URL.
     gateway_url: str | None = None
     project_id: str = "default"
-    batch_size: int = 32
+    batch_size: int = 50
     flush_interval_ms: int = 250
     timeout_s: float = 5.0
     dry_run: bool = False
     disabled: bool = False
     max_queue: int = 4096
     extra_headers: dict[str, str] = field(default_factory=dict)
-    redact_on_client: bool = True
+    redact_on_client: bool = False
+    capture_chunk_text: bool = False
     # Per-filter configuration. When unset, the gateway applies
     # the tenant's :class:`org_pii_policies` defaults. When set,
     # the values override the tenant policy on a per-call basis
@@ -322,10 +324,12 @@ def _from_env() -> EdenConfig:
         ),
         base_url=os.getenv(_ENV_BASE_URL, "https://api.edenobservability.com"),
         project_id=os.getenv(_ENV_PROJECT, "default"),
-        batch_size=int(os.getenv(_ENV_BATCH_SIZE, "32")),
+        batch_size=int(os.getenv(_ENV_BATCH_SIZE, "50")),
         flush_interval_ms=int(os.getenv(_ENV_FLUSH_INTERVAL_MS, "250")),
         disabled=os.getenv(_ENV_DISABLED, "").lower() in {"1", "true", "yes"},
         dry_run=dry_run,
+        redact_on_client=_env_opt_bool("EDEN_REDACT_ON_CLIENT", default=False),
+        capture_chunk_text=_env_opt_bool("EDEN_CAPTURE_CHUNK_TEXT", default=False),
         exact_cache=_env_opt_bool("EDEN_EXACT_CACHE"),
         coalesce=_env_opt_bool("EDEN_COALESCE"),
         provider_cache_layout=_env_opt_bool("EDEN_PROVIDER_CACHE_LAYOUT"),

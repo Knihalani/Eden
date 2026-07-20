@@ -51,17 +51,18 @@ def _billing_client(monkeypatch, *, stripe_secret_key: str) -> TestClient:
 
 
 class TestBillingStubsRaise:
-    def test_invoices_unconfigured_returns_503(self, monkeypatch):
-        """Without Stripe config, the invoices route must return 503 or []."""
+    def test_invoices_free_only_returns_503(self, monkeypatch):
+        """While PAID_PLANS_ENABLED is False, invoices must 503 (not [])."""
         client = _billing_client(monkeypatch, stripe_secret_key="")
         r = client.get("/orgs/test-org/billing/invoices")
-        assert r.status_code in (200, 503), r.text
-        if r.status_code == 200:
-            assert r.json() == []
+        assert r.status_code == 503, r.text
+        assert "Paid plans are not available" in r.json()["detail"]
 
     def test_invoices_stripe_import_missing_returns_503(self, monkeypatch):
-        """When stripe package is missing, invoices must 503, not silently []."""
+        """When paid plans are on but stripe package is missing, invoices 503."""
         import builtins
+
+        from eden.api.routes import billing as billing_mod
 
         real_import = builtins.__import__
 
@@ -72,7 +73,7 @@ class TestBillingStubsRaise:
 
         monkeypatch.setattr(builtins, "__import__", fake_import)
         monkeypatch.setattr(
-            billing,
+            billing_mod,
             "get_postgres_client",
             AsyncMock(
                 return_value=MagicMock(
@@ -82,7 +83,16 @@ class TestBillingStubsRaise:
                 ),
             ),
         )
+        monkeypatch.setattr(billing_mod, "PAID_PLANS_ENABLED", True)
+        monkeypatch.setattr(
+            billing_mod,
+            "get_settings",
+            lambda: MagicMock(stripe_secret_key="sk_test_x"),
+        )
 
         client = _billing_client(monkeypatch, stripe_secret_key="sk_test_x")
-        r = client.get("/orgs/test-org/billing/invoices")
-        assert r.status_code == 503, r.text
+        try:
+            r = client.get("/orgs/test-org/billing/invoices")
+            assert r.status_code == 503, r.text
+        finally:
+            monkeypatch.setattr(billing_mod, "PAID_PLANS_ENABLED", False)

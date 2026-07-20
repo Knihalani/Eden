@@ -63,6 +63,7 @@ class PlaygroundService:
             return None
 
     async def list(self, org_id: str, *, limit: int = 50) -> list[PlaygroundRecord]:
+        limit = max(1, min(int(limit), 100))
         client = await self._client()
         if client is None:
             return [p for p in self._memory.values() if p.org_id == org_id][:limit]

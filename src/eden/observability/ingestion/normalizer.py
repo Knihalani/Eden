@@ -13,6 +13,7 @@ is impossible to forget for a new format.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import uuid
 from datetime import UTC, datetime
@@ -145,21 +146,33 @@ async def normalize_to_telemetry_event(
     tags = list(raw.get("tags") or [])
 
     if settings.ingestion_pii_pre_mask:
-        payload = await mask_payload(payload, tenant_id=attribution.tenant_id)
-        attributes = await mask_attributes(attributes, tenant_id=attribution.tenant_id)
+        # Mask payload + attributes concurrently (policy resolve is cached).
+        payload, attributes = await asyncio.gather(
+            mask_payload(payload, tenant_id=attribution.tenant_id),
+            mask_attributes(attributes, tenant_id=attribution.tenant_id),
+        )
         # PII mask the new capture fields too (reasoning, request_body,
         # response_body) — these can leak credentials via example
         # tool-call arguments or seeded user data.
-        for pii_field in (
+        pii_fields = (
             "request_body",
             "response_body",
             "reasoning",
             "logprobs",
-        ):
+        )
+        to_mask: list[tuple[str, dict]] = []
+        for pii_field in pii_fields:
             value = raw.get(pii_field)
             if isinstance(value, dict):
-                masked = await mask_payload(value, tenant_id=attribution.tenant_id)
-                raw = {**raw, pii_field: masked}
+                to_mask.append((pii_field, value))
+        if to_mask:
+            masked_vals = await asyncio.gather(
+                *(
+                    mask_payload(value, tenant_id=attribution.tenant_id)
+                    for _, value in to_mask
+                )
+            )
+            raw = {**raw, **{k: m for (k, _), m in zip(to_mask, masked_vals)}}
 
     return TelemetryEvent(
         event_id=event_id,

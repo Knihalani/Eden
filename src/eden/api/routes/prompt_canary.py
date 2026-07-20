@@ -16,14 +16,15 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Path
 from pydantic import BaseModel, Field
 
-from eden.api.deps import get_current_user
+from eden.api.deps import get_current_user, require_path_org_access
 from eden.api.utils.safe_error import safe_detail
 from eden.storage.postgres import get_postgres_client
+from eden.api.utils.redact import redact_all
 
 logger = logging.getLogger(__name__)
 
 
-router = APIRouter(prefix="/orgs/{org_id}/prompts", tags=["prompts"])
+router = APIRouter(prefix="/orgs/{org_id}/prompts", tags=["prompts"], dependencies=[Depends(require_path_org_access)])
 
 
 class CanaryCreateRequest(BaseModel):
@@ -39,7 +40,7 @@ class CanaryPromoteRequest(BaseModel):
 
 @router.post("/{agent}/canary")
 async def create_canary(
-    org_id: str,
+    org_id: str = Depends(require_path_org_access),
     agent: str = Path(..., description="Agent name, e.g. 'planner'"),
     body: CanaryCreateRequest = ...,
     user: dict = Depends(get_current_user),
@@ -99,8 +100,27 @@ async def create_canary(
             body.notes,
         )
     except Exception as exc:
-        logger.warning(f"canary create failed: {exc}")
-        raise HTTPException(status_code=500, detail=safe_detail(exc, fallback="Internal error while persisting canary experiment")) from exc
+        msg = str(exc).lower()
+        if "unique" in msg or "duplicate" in msg:
+            raise HTTPException(
+                status_code=409,
+                detail="Canary experiment already exists for this agent",
+            ) from exc
+        if "invalid input syntax for type uuid" in msg:
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid organization id",
+            ) from exc
+        if "foreign key" in msg:
+            raise HTTPException(
+                status_code=404,
+                detail="Organization not found",
+            ) from exc
+        logger.warning("canary create failed: %s", redact_all(str(exc)))
+        raise HTTPException(
+            status_code=503,
+            detail=safe_detail(exc, fallback="Failed to persist canary experiment"),
+        ) from exc
 
     return {
         "experiment_id": experiment_id,
@@ -114,7 +134,7 @@ async def create_canary(
 
 @router.get("/{agent}/canary")
 async def list_canaries(
-    org_id: str,
+    org_id: str = Depends(require_path_org_access),
     agent: str = Path(...),
     user: dict = Depends(get_current_user),
 ) -> list[dict[str, Any]]:
@@ -139,7 +159,7 @@ async def list_canaries(
 
 @router.post("/{agent}/canary/{experiment_id}/promote")
 async def promote_canary(
-    org_id: str,
+    org_id: str = Depends(require_path_org_access),
     agent: str = Path(...),
     experiment_id: str = Path(...),
     user: dict = Depends(get_current_user),
@@ -235,8 +255,27 @@ async def promote_canary(
     except HTTPException:
         raise
     except Exception as exc:
-        logger.warning(f"canary promote failed: {exc}")
-        raise HTTPException(status_code=500, detail=safe_detail(exc, fallback="Internal error while persisting canary experiment")) from exc
+        msg = str(exc).lower()
+        if "unique" in msg or "duplicate" in msg:
+            raise HTTPException(
+                status_code=409,
+                detail="Canary promote conflict",
+            ) from exc
+        if "invalid input syntax for type uuid" in msg:
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid organization id",
+            ) from exc
+        if "foreign key" in msg:
+            raise HTTPException(
+                status_code=404,
+                detail="Organization not found",
+            ) from exc
+        logger.warning("canary promote failed: %s", redact_all(str(exc)))
+        raise HTTPException(
+            status_code=503,
+            detail=safe_detail(exc, fallback="Failed to promote canary experiment"),
+        ) from exc
 
     # Audit log
     try:
@@ -264,7 +303,7 @@ async def promote_canary(
 
 @router.post("/{agent}/canary/{experiment_id}/rollback")
 async def rollback_canary(
-    org_id: str,
+    org_id: str = Depends(require_path_org_access),
     agent: str = Path(...),
     experiment_id: str = Path(...),
     user: dict = Depends(get_current_user),
@@ -293,8 +332,27 @@ async def rollback_canary(
             now, experiment_id,
         )
     except Exception as exc:
-        logger.warning(f"canary rollback failed: {exc}")
-        raise HTTPException(status_code=500, detail=safe_detail(exc, fallback="Internal error while persisting canary experiment")) from exc
+        msg = str(exc).lower()
+        if "unique" in msg or "duplicate" in msg:
+            raise HTTPException(
+                status_code=409,
+                detail="Canary rollback conflict",
+            ) from exc
+        if "invalid input syntax for type uuid" in msg:
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid organization id",
+            ) from exc
+        if "foreign key" in msg:
+            raise HTTPException(
+                status_code=404,
+                detail="Organization not found",
+            ) from exc
+        logger.warning("canary rollback failed: %s", redact_all(str(exc)))
+        raise HTTPException(
+            status_code=503,
+            detail=safe_detail(exc, fallback="Failed to roll back canary experiment"),
+        ) from exc
 
     try:
         from eden.api.deps import log_audit_event

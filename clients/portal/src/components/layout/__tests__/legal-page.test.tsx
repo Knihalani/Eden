@@ -10,6 +10,10 @@ vi.mock("next/link", () => ({
   ),
 }));
 
+vi.mock("@clerk/nextjs", () => ({
+  useUser: () => ({ isSignedIn: false, isLoaded: true }),
+}));
+
 import { LegalPage } from "@/components/layout/legal-page";
 
 describe("LegalPage", () => {

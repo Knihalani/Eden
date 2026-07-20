@@ -11,6 +11,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { useOrg } from "@/hooks/use-org";
 import { useToast } from "@/components/ui/toast";
 import { offlineExperimentsApi } from "@/lib/api";
+import { U20_EMPTY_COPY } from "@/lib/portal-polish";
 import {
   CoreResourcePage,
   DetailPanelShell,
@@ -22,7 +23,11 @@ import { usePagePerf } from "@/lib/perf";
 import { CrossLinkBar } from "@/components/portal-os/CrossLinkBar";
 import { datasetHref, issueHref, playgroundHref } from "@/lib/portal-cross-links";
 import { charDiff } from "@/lib/char-diff";
-import { EmptyState } from "@/components/ui/empty-state";
+import { ErrorState } from "@/components/ui/error-state";
+import {
+  interpretOfflineRunResult,
+  isTerminalExperimentStatus,
+} from "@/lib/eval-run-outcome";
 
 type ExperimentRow = {
   id: string;
@@ -65,25 +70,36 @@ function ExperimentsPageInner() {
   const { state: urlState, setState: setUrlState } = useResourceUrlState();
   const experimentId = urlState.experimentId;
   const [rows, setRows] = useState<ExperimentRow[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [summary, setSummary] = useState<Record<string, number> | null>(null);
   const [datapoints, setDatapoints] = useState<Datapoint[]>([]);
+  const [compareMeta, setCompareMeta] = useState<{
+    synthetic?: boolean;
+    method?: string;
+  } | null>(null);
   const [summaryLoading, setSummaryLoading] = useState(false);
+  const [compareError, setCompareError] = useState<string | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [diffOpen, setDiffOpen] = useState<string | null>(null);
+  const [runningId, setRunningId] = useState<string | null>(null);
+  const [runError, setRunError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!currentOrg?.id) return;
     setLoading(true);
+    setLoadError(null);
     try {
       const res = await offlineExperimentsApi.list(currentOrg.id);
       setRows((res.experiments as ExperimentRow[]) || []);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Failed to load experiments");
+      const message = e instanceof Error ? e.message : "Failed to load experiments";
+      setLoadError(message);
+      setRows([]);
     } finally {
       setLoading(false);
     }
-  }, [currentOrg?.id, toast]);
+  }, [currentOrg?.id]);
 
   useEffect(() => {
     load();
@@ -93,25 +109,34 @@ function ExperimentsPageInner() {
     async (id: string, baselineId?: string) => {
       if (!currentOrg?.id) return;
       setSummaryLoading(true);
+      setCompareError(null);
       try {
         const res = await offlineExperimentsApi.compare(currentOrg.id, id, baselineId);
         setSummary((res.compare?.summary as Record<string, number>) || null);
         setDatapoints((res.compare?.datapoints as Datapoint[]) || []);
+        setCompareMeta({
+          synthetic: Boolean(res.compare?.synthetic),
+          method: typeof res.compare?.method === "string" ? res.compare.method : undefined,
+        });
       } catch (e) {
-        toast.error(e instanceof Error ? e.message : "Compare failed");
+        const message = e instanceof Error ? e.message : "Compare failed";
+        setCompareError(message);
         setSummary(null);
         setDatapoints([]);
+        setCompareMeta(null);
       } finally {
         setSummaryLoading(false);
       }
     },
-    [currentOrg?.id, toast],
+    [currentOrg?.id],
   );
 
   useEffect(() => {
     if (!experimentId || !currentOrg?.id) {
       setSummary(null);
       setDatapoints([]);
+      setCompareMeta(null);
+      setCompareError(null);
       return;
     }
     const baseline =
@@ -121,15 +146,70 @@ function ExperimentsPageInner() {
     void loadCompare(experimentId, baseline);
   }, [experimentId, currentOrg?.id, loadCompare, selected]);
 
+  const pollUntilTerminal = useCallback(
+    async (id: string): Promise<"completed" | "failed" | "timeout"> => {
+      if (!currentOrg?.id) return "timeout";
+      const maxAttempts = 30;
+      for (let attempt = 0; attempt < maxAttempts; attempt++) {
+        await new Promise((r) => setTimeout(r, 1000));
+        const res = await offlineExperimentsApi.list(currentOrg.id);
+        const experiments = (res.experiments as ExperimentRow[]) || [];
+        setRows(experiments);
+        const row = experiments.find((e) => e.id === id);
+        if (!row) continue;
+        if (row.status === "completed") return "completed";
+        if (row.status === "failed") return "failed";
+        if (isTerminalExperimentStatus(row.status)) {
+          return "failed";
+        }
+      }
+      return "timeout";
+    },
+    [currentOrg?.id],
+  );
+
   const runExperiment = async (id: string) => {
-    if (!currentOrg?.id) return;
+    if (!currentOrg?.id || runningId) return;
+    setRunningId(id);
+    setRunError(null);
+    setRows((prev) =>
+      prev.map((r) => (r.id === id ? { ...r, status: "running" } : r)),
+    );
     try {
-      await offlineExperimentsApi.run(currentOrg.id, id);
-      toast.success("Experiment completed");
+      const res = await offlineExperimentsApi.run(currentOrg.id, id);
+      const outcome = interpretOfflineRunResult(res.result);
+      if (outcome.kind === "in_progress") {
+        const terminal = await pollUntilTerminal(id);
+        if (terminal === "completed") {
+          toast.success(
+            outcome.synthetic
+              ? "Heuristic stub run finished — not a live model eval"
+              : "Experiment completed",
+          );
+        } else if (terminal === "failed") {
+          const message = "Experiment run failed";
+          setRunError(message);
+          toast.error(message);
+        } else {
+          const message = "Timed out waiting for experiment status";
+          setRunError(message);
+          toast.error(message);
+        }
+      } else if (outcome.kind === "completed") {
+        toast.success(outcome.message);
+      } else {
+        setRunError(outcome.message);
+        toast.error(outcome.message);
+      }
       await load();
       setUrlState({ experimentId: id });
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Run failed");
+      const message = e instanceof Error ? e.message : "Run failed";
+      setRunError(message);
+      toast.error(message);
+      await load();
+    } finally {
+      setRunningId(null);
     }
   };
 
@@ -202,66 +282,93 @@ function ExperimentsPageInner() {
       }
       table={
         <Card className="p-2">
-          <InfiniteDataTable
-            loading={loading}
-            rows={rows}
-            rowKey={(r) => r.id}
-            emptyTitle="No experiments yet"
-            emptyDescription="Create one from a dataset snapshot or playground promote."
-            emptyIcon={FlaskConical}
-            emptyAction={
-              <EmptyState
-                icon={FlaskConical}
-                title="Start the eval loop"
-                description="Datasets → Playground → Experiment → grades."
-                variant="plain"
-                action={
-                  <Link href="/evals?tab=datasets" className="text-sm text-[var(--accent)] hover:underline">
-                    Open datasets →
-                  </Link>
-                }
-              />
-            }
-            columns={[
-              {
-                key: "select",
-                header: "",
-                cell: (r) => (
-                  <Checkbox
-                    checked={selected.has(r.id)}
-                    onCheckedChange={() => toggleSelect(r.id)}
-                    aria-label={`Select ${r.name}`}
-                  />
-                ),
-              },
-              { key: "name", header: "Name", cell: (r) => r.name },
-              { key: "status", header: "Status", cell: (r) => r.status },
-              {
-                key: "dataset",
-                header: "Dataset",
-                cell: (r) => (
-                  <Link href={`/datasets/${r.dataset_id}`} className="text-[var(--accent)] hover:underline">
-                    {r.dataset_id.slice(0, 8)}…
-                  </Link>
-                ),
-              },
-              {
-                key: "actions",
-                header: "",
-                align: "right",
-                cell: (r) => (
-                  <div className="flex justify-end gap-1">
-                    <Button size="sm" variant="outline" onClick={() => runExperiment(r.id)}>
-                      <Play className="h-3 w-3" /> Run
-                    </Button>
-                    <Button size="sm" variant="ghost" onClick={() => setUrlState({ experimentId: r.id })}>
-                      Compare
-                    </Button>
-                  </div>
-                ),
-              },
-            ]}
-          />
+          {runError && !loading ? (
+            <ErrorState
+              title="Could not start run"
+              message={runError}
+              className="mb-2"
+              action={
+                <Button onClick={() => setRunError(null)} variant="outline" size="sm">
+                  Dismiss
+                </Button>
+              }
+            />
+          ) : null}
+          {loadError && !loading ? (
+            <ErrorState
+              title="Could not load experiments"
+              message={loadError}
+              action={
+                <Button onClick={load} variant="outline" size="sm">
+                  Try again
+                </Button>
+              }
+            />
+          ) : (
+            <InfiniteDataTable
+              loading={loading}
+              rows={rows}
+              rowKey={(r) => r.id}
+              emptyTitle="No experiments yet"
+              emptyDescription={U20_EMPTY_COPY.experiments}
+              emptyIcon={FlaskConical}
+              emptyAction={
+                <div className="flex flex-wrap items-center justify-center gap-2">
+                  <Button asChild size="sm">
+                    <Link href="/evals?tab=datasets">Open datasets</Link>
+                  </Button>
+                  <Button asChild size="sm" variant="outline">
+                    <Link href="/evals?tab=playgrounds">Open playground</Link>
+                  </Button>
+                </div>
+              }
+              columns={[
+                {
+                  key: "select",
+                  header: "",
+                  cell: (r) => (
+                    <Checkbox
+                      checked={selected.has(r.id)}
+                      onCheckedChange={() => toggleSelect(r.id)}
+                      aria-label={`Select ${r.name}`}
+                    />
+                  ),
+                },
+                { key: "name", header: "Name", cell: (r) => r.name },
+                { key: "status", header: "Status", cell: (r) => r.status },
+                {
+                  key: "dataset",
+                  header: "Dataset",
+                  cell: (r) => (
+                    <Link href={`/datasets/${r.dataset_id}`} className="text-[var(--accent)] hover:underline">
+                      {r.dataset_id.slice(0, 8)}…
+                    </Link>
+                  ),
+                },
+                {
+                  key: "actions",
+                  header: "",
+                  align: "right",
+                  cell: (r) => (
+                    <div className="flex justify-end gap-1">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={Boolean(runningId)}
+                        loading={runningId === r.id}
+                        onClick={() => runExperiment(r.id)}
+                      >
+                        <Play className="h-3 w-3" /> {runningId === r.id ? "Running…" : "Run"}
+                      </Button>
+                      <Button size="sm" variant="ghost" onClick={() => setUrlState({ experimentId: r.id })}>
+                        Compare
+                      </Button>
+                    </div>
+                  ),
+                },
+              ]}
+            />
+          )}
         </Card>
       }
       detail={
@@ -272,6 +379,8 @@ function ExperimentsPageInner() {
               setUrlState({ experimentId: undefined });
               setSummary(null);
               setDatapoints([]);
+              setCompareMeta(null);
+              setCompareError(null);
             }}
             title={selectedRow?.name ?? "Experiment"}
             onPrev={
@@ -289,6 +398,28 @@ function ExperimentsPageInner() {
               <div className="flex items-center justify-center p-8 text-sm text-[var(--text-muted)]">
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Loading compare…
               </div>
+            ) : compareError ? (
+              <ErrorState
+                title="Could not load compare"
+                message={compareError}
+                className="m-4"
+                action={
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      if (!experimentId) return;
+                      const baseline =
+                        selected.size === 2
+                          ? [...selected].find((id) => id !== experimentId)
+                          : undefined;
+                      void loadCompare(experimentId, baseline);
+                    }}
+                  >
+                    Try again
+                  </Button>
+                }
+              />
             ) : summary ? (
               <div className="flex h-full flex-col">
                 <CrossLinkBar
@@ -303,6 +434,15 @@ function ExperimentsPageInner() {
                   ]}
                 />
                 <div className="p-4">
+                  {compareMeta?.synthetic ? (
+                    <div
+                      className="mb-3 rounded border border-[var(--warning)]/40 bg-[var(--warning-bg)] px-3 py-2 text-xs text-[var(--warning)]"
+                      role="status"
+                    >
+                      Heuristic stub scores — not a live model eval
+                      {compareMeta.method ? ` (${compareMeta.method})` : ""}.
+                    </div>
+                  ) : null}
                   <h3 className="mb-3 text-sm font-medium">Compare summary</h3>
                   <div className="mb-4 grid grid-cols-2 gap-2 text-sm md:grid-cols-4">
                     {Object.entries(summary).map(([grade, count]) => (
@@ -340,8 +480,8 @@ function ExperimentsPageInner() {
                           {diffOpen === key && !diff.equal ? (
                             <pre className="mt-1 overflow-auto whitespace-pre-wrap rounded bg-[var(--surface-raised)] p-2">
                               <span className="text-[var(--text-muted)]">{diff.commonPrefix}</span>
-                              <span className="bg-red-500/20 line-through">{diff.leftOnly}</span>
-                              <span className="bg-emerald-500/20">{diff.rightOnly}</span>
+                              <span className="bg-[var(--error-bg)] line-through">{diff.leftOnly}</span>
+                              <span className="bg-[var(--success-bg)]">{diff.rightOnly}</span>
                               <span className="text-[var(--text-muted)]">{diff.commonSuffix}</span>
                             </pre>
                           ) : null}

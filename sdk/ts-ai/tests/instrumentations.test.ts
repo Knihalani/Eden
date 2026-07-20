@@ -9,6 +9,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import { parseFetchBody } from "./_parseBody.js";
 import { wireToEvent } from "../src/wire.js";
 import { resetDefaultClient, getDefaultClient } from "../src/client.js";
 import { configure } from "../src/trace.js";
@@ -33,7 +34,7 @@ beforeEach(() => {
     const url = typeof input === "string" ? input : input.toString();
     let body: unknown = init?.body;
     try {
-      body = init?.body ? JSON.parse(init.body as string) : null;
+      body = parseFetchBody(init);
     } catch {
       // keep raw
     }
@@ -41,7 +42,7 @@ beforeEach(() => {
     return new Response("{}", { status: 200 });
   }) as unknown) as typeof fetch;
   resetDefaultClient();
-  configure({ orgId: "org_test", apiKey: "key_test" });
+  configure({ orgId: "org_test", apiKey: "key_test", captureChunkText: true });
 });
 
 afterEach(async () => {
@@ -127,6 +128,16 @@ describe("wrapOpenAI", () => {
     const a = wrapOpenAI(fake);
     const b = wrapOpenAI(a);
     expect(a).toBe(b);
+  });
+
+  it("re-wrapping the original client returns the same Proxy (not the bare original)", () => {
+    // Regression: WeakSet tracked the original and returned it
+    // on the second wrapOpenAI(original), stripping instrumentation.
+    const fake = _fakeOpenAIClient({ completion: { id: "x" } });
+    const a = wrapOpenAI(fake);
+    const b = wrapOpenAI(fake);
+    expect(a).toBe(b);
+    expect(a).not.toBe(fake);
   });
 
   it("captures errors without breaking the call", async () => {
@@ -299,7 +310,7 @@ describe("wrapAnthropic", () => {
     globalThis.fetch = (async (url: RequestInfo | URL, init?: RequestInit) => {
       const u = String(url);
       let body: any = {};
-      try { body = init?.body ? JSON.parse(init.body as string) : {}; } catch {}
+      try { body = parseFetchBody(init) ?? {}; } catch {}
       localCaptured.push({ url: u, body });
       return new Response("{}", { status: 200 });
     }) as unknown as typeof fetch;
@@ -417,7 +428,7 @@ describe("wrapVercelAI", () => {
     globalThis.fetch = (async (url: RequestInfo | URL, init?: RequestInit) => {
       const u = String(url);
       let body: any = {};
-      try { body = init?.body ? JSON.parse(init.body as string) : {}; } catch {}
+      try { body = parseFetchBody(init) ?? {}; } catch {}
       localCaptured.push({ url: u, body });
       return new Response("{}", { status: 200 });
     }) as unknown as typeof fetch;
@@ -453,6 +464,62 @@ describe("wrapVercelAI", () => {
     expect(new Set(allChunks.map((c: any) => c.trace_id)).size).toBe(1);
     expect(allChunks.map((c: any) => c.chunk_index)).toEqual([0, 1]);
   });
+
+  it("emits llm_completion_stream when streamText has no fullStream/textStream", async () => {
+    // Regression: without an attachable iterable the wrapper
+    // previously never called _finishCall, so streamText was
+    // silent on the wire.
+    const fakeAi = {
+      generateText: async () => ({}),
+      streamText: async () => ({ text: "no stream fields" }),
+    };
+    const wrapped = wrapVercelAI(fakeAi);
+    await wrapped.streamText({ model: "openai:gpt-4o-mini", prompt: "hi" });
+    await new Promise((r) => setTimeout(r, 10));
+    await getDefaultClient().flush();
+    const events = _flattenEvents();
+    const stream_ = events.find((e) => e.eventType === "llm_completion_stream");
+    expect(stream_?.sourceFormat).toBe("vercel-ai");
+    expect(stream_?.payload.status).toBe("success");
+  });
+
+  it("reads AI SDK v4 text-delta.text (not only textDelta)", async () => {
+    async function* stream() {
+      yield { type: "text-delta", text: "Hi" };
+      yield { type: "text-delta", text: " v4" };
+    }
+    const localCaptured: Array<{ url: string; body: any }> = [];
+    globalThis.fetch = (async (url: RequestInfo | URL, init?: RequestInit) => {
+      const u = String(url);
+      let body: any = {};
+      try { body = parseFetchBody(init) ?? {}; } catch {}
+      localCaptured.push({ url: u, body });
+      return new Response("{}", { status: 200 });
+    }) as unknown as typeof fetch;
+
+    const fakeAi = {
+      generateText: async () => ({}),
+      streamText: async () => ({ fullStream: stream() }),
+    };
+    const wrapped = wrapVercelAI(fakeAi);
+    await wrapped.streamText({ model: "openai:gpt-4o-mini", prompt: "hi" });
+    await new Promise((r) => setTimeout(r, 30));
+    await getDefaultClient().flushChunks();
+    await new Promise((r) => setTimeout(r, 30));
+    const chunkPosts = localCaptured.filter(
+      (c) => c.url.includes("/ingest/chunks") && Array.isArray(c.body?.chunks),
+    );
+    const allChunks = chunkPosts.flatMap((c) => c.body.chunks);
+    expect(allChunks.map((c: any) => c.delta_text)).toEqual(["Hi", " v4"]);
+  });
+
+  it("re-wrapping the original module returns the same Proxy", () => {
+    const fakeAi = { generateText: async () => ({}), streamText: async () => ({}) };
+    const a = wrapVercelAI(fakeAi);
+    const b = wrapVercelAI(fakeAi);
+    expect(a).toBe(b);
+    expect(a).not.toBe(fakeAi);
+  });
 });
 
 // ── LangChain ─────────────────────────────────────────────────────
@@ -470,6 +537,32 @@ describe("wrapLangChain", () => {
     const completion = events.find((e) => e.eventType === "llm_completion");
     expect(completion?.sourceFormat).toBe("langchain");
     expect(completion?.payload.method).toBe("invoke");
+  });
+
+  it("emits llm_completion with error_message on async invoke failure", async () => {
+    // Regression: ``.catch(rethrow).then(emit)`` skipped emit on
+    // rejection, so async LangChain errors never reached ingest.
+    const fakeModel = {
+      invoke: async () => {
+        throw new Error("lc boom");
+      },
+    };
+    const wrapped = wrapLangChain(fakeModel);
+    await expect(wrapped.invoke([{ content: "hi" }])).rejects.toThrow("lc boom");
+    await getDefaultClient().flush();
+    const events = _flattenEvents();
+    const completion = events.find((e) => e.eventType === "llm_completion");
+    expect(completion?.payload.status).toBe("error");
+    expect(completion?.payload.error_type).toBe("Error");
+    expect(completion?.payload.error_message).toBe("lc boom");
+  });
+
+  it("re-wrapping the original model returns the same Proxy", () => {
+    const fakeModel = { invoke: async () => ({ content: "x" }) };
+    const a = wrapLangChain(fakeModel);
+    const b = wrapLangChain(fakeModel);
+    expect(a).toBe(b);
+    expect(a).not.toBe(fakeModel);
   });
 
   it("emits llm_completion_stream for stream", async () => {
@@ -511,7 +604,7 @@ describe("wrapLangChain", () => {
     globalThis.fetch = (async (url: RequestInfo | URL, init?: RequestInit) => {
       const u = String(url);
       let body: any = {};
-      try { body = init?.body ? JSON.parse(init.body as string) : {}; } catch {}
+      try { body = parseFetchBody(init) ?? {}; } catch {}
       localCaptured.push({ url: u, body });
       captured.push({ url: u, body });
       return new Response("{}", { status: 200 });
@@ -581,7 +674,7 @@ describe("wrapLangChain", () => {
     globalThis.fetch = (async (url: RequestInfo | URL, init?: RequestInit) => {
       const u = String(url);
       let body: any = {};
-      try { body = init?.body ? JSON.parse(init.body as string) : {}; } catch {}
+      try { body = parseFetchBody(init) ?? {}; } catch {}
       localCaptured.push({ url: u, body });
       return new Response("{}", { status: 200 });
     }) as unknown as typeof fetch;
@@ -610,6 +703,17 @@ describe("wrapLangChain", () => {
     // 1 chunk consumed before break → 1 chunk pushed.
     expect(allChunks.length).toBe(1);
     expect(allChunks[0].delta_text).toBe("Hello");
+
+    // Aggregate stream event must also ship on early break.
+    await getDefaultClient().flush();
+    const eventPosts = localCaptured.filter((c) => Array.isArray(c.body));
+    const streamEvents = eventPosts
+      .flatMap((c) => c.body as Record<string, unknown>[])
+      .map((w) => wireToEvent(w));
+    const stream_ = streamEvents.find((e) => e.eventType === "llm_completion_stream");
+    expect(stream_).toBeDefined();
+    expect(stream_?.payload.chunk_count).toBe(1);
+    expect(stream_?.payload.status).toBe("success");
   });
 });
 
@@ -684,7 +788,7 @@ describe("wrapOpenAI per-chunk tpotMs semantics", () => {
     globalThis.fetch = (async (url: RequestInfo | URL, init?: RequestInit) => {
       const u = String(url);
       let body: any = {};
-      try { body = init?.body ? JSON.parse(init.body as string) : {}; } catch {}
+      try { body = parseFetchBody(init) ?? {}; } catch {}
       localCaptured.push({ url: u, body });
       if (u.includes("/chat/completions") && init?.method === "POST") {
         const stream = [

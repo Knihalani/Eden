@@ -1,0 +1,33 @@
+/** Domain facade (observability) — K13. */
+export type {
+  ComputerUseScreenshotTombstone,
+  ComputerUseStep,
+  FineTuneDriftSummary,
+  FineTuneLineage,
+  FineTuneRun,
+  McpAuthFailureRow,
+  McpGraphEdge,
+  McpServerRow,
+  McpToolStatRow,
+  McpTraceRow,
+  McpTrendRow,
+  ObservabilityStreamingMetrics,
+  ObservabilityTrace,
+  ProviderRoutingAttempt,
+  ProviderRoutingDecision,
+  ProviderRoutingFailureRate,
+  ProviderRoutingSpikeSummary,
+} from "./resources";
+export {
+  aiInsightsChat,
+  apmApi,
+  columnarApi,
+  computerUseApi,
+  dslApi,
+  fineTuneApi,
+  mcpApi,
+  providerRoutingApi,
+  replayApi,
+  timeTravelApi,
+  voiceApi,
+} from "./resources";

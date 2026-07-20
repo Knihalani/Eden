@@ -1,0 +1,24 @@
+route	http_code	final_url	bytes	elapsed_s	content_type	title	soft_404	crash_markers	verdict	notes
+/	200	https://edenobservability.com/	145106	7.121	text/html	Eden — Observability + improvement for AI agents	false		PASS	i18n-false-positive-ok
+/about	200	https://edenobservability.com/about	35884	1.136	text/html	About · Eden	false		PASS	i18n-false-positive-ok
+/pricing	200	https://edenobservability.com/pricing	35792	0.132	text/html	Pricing · Eden	false		PASS	i18n-false-positive-ok
+/contact	200	https://edenobservability.com/contact	35637	0.547	text/html	Eden — Observability + improvement for AI agents	false		PASS	i18n-false-positive-ok
+/changelog	200	https://edenobservability.com/changelog	36812	0.597	text/html	Changelog · Eden	false		PASS	i18n-false-positive-ok
+/privacy	200	https://edenobservability.com/privacy	51511	0.727	text/html	Privacy · Eden	false		PASS	i18n-false-positive-ok
+/terms	200	https://edenobservability.com/terms	50191	0.73	text/html	Terms of Service · Eden	false		PASS	i18n-false-positive-ok
+/dpa	200	https://edenobservability.com/dpa	55889	1.087	text/html	Data Processing Addendum · Eden	false		PASS	i18n-false-positive-ok
+/security	200	https://edenobservability.com/security	46660	0.812	text/html	Security · Eden	false		PASS	i18n-false-positive-ok
+/subprocessors	200	https://edenobservability.com/subprocessors	40562	0.667	text/html	Eden — Observability + improvement for AI agents	false		PASS	i18n-false-positive-ok
+/do-not-sell	200	https://edenobservability.com/do-not-sell	32572	0.194	text/html	Eden — Observability + improvement for AI agents	false		PASS	i18n-false-positive-ok
+/sign-in	200	https://edenobservability.com/sign-in	53177	0.72	text/html	Eden — Observability + improvement for AI agents	false		PASS	i18n-false-positive-ok
+/sign-up	200	https://edenobservability.com/sign-up	53321	0.484	text/html	Eden — Observability + improvement for AI agents	false		PASS	i18n-false-positive-ok
+/login	200	https://edenobservability.com/sign-in	53177	0.806	text/html	Eden — Observability + improvement for AI agents	false		PASS	i18n-false-positive-ok
+/signup	200	https://edenobservability.com/sign-up	53321	1.141	text/html	Eden — Observability + improvement for AI agents	false		PASS	i18n-false-positive-ok
+/forgot-password	200	https://edenobservability.com/forgot-password	42784	0.498	text/html	Eden — Observability + improvement for AI agents	false		PASS	i18n-false-positive-ok
+/reset-password	200	https://edenobservability.com/reset-password	28204	0.638	text/html	Eden — Observability + improvement for AI agents	false		PASS	i18n-false-positive-ok
+/invite/probe-token-w3	200	https://edenobservability.com/invite/probe-token-w3	42822	1.497	text/html	Eden — Observability + improvement for AI agents	false		PASS	i18n-false-positive-ok
+/status	200	https://edenobservability.com/status	21570	0.553	text/html	Eden — Observability + improvement for AI agents	true		PASS	i18n-false-positive-ok; PROD_SOFT_404_vs_EXPECT_REAL_STATUS (W2 status undeployed); http200_soft404_shell
+/health	200	https://edenobservability.com/health	21570	0.499	text/html	Eden — Observability + improvement for AI agents	true		PASS	i18n-false-positive-ok; PROD_SOFT_404_vs_EXPECT_REAL_STATUS (W2 status undeployed); http200_soft404_shell
+/api/health	503	https://edenobservability.com/api/health	262	0.279	application/json	json:status=degraded	false		PASS	intentional soft-degraded 503 JSON; health=degraded; postgres=connected; qdrant=error: [Errno 99] Cannot assign requested address
+/robots.txt	200	https://edenobservability.com/robots.txt	433	0.497	text/plain	User-Agent: *	false		PASS	
+/sitemap.xml	200	https://edenobservability.com/sitemap.xml	1909	0.431	application/xml		false		PASS	

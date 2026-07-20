@@ -23,11 +23,14 @@ const DOCS_ORIGINS = new Set([
   "http://127.0.0.1:3001",
 ]);
 
+/** Match ApiKeysTab SDK_DEFAULT_SCOPES — ingest/gateway required for SDK. */
 const SDK_SCOPES = [
   "references:read",
   "references:write",
   "jobs:read",
   "jobs:write",
+  "ingest:write",
+  "gateway:write",
 ];
 
 function corsHeaders(request: NextRequest): Record<string, string> {
@@ -86,6 +89,17 @@ function pickOrg(orgs: OrgRow[]): OrgRow | null {
     pool.find((o) => o.role === "owner" || o.role === "admin") ??
     pool[0] ??
     null
+  );
+}
+
+/** Eden owner/admin, plus Clerk-shaped roles if they ever appear on /orgs. */
+function roleCanCreateKeys(role: string | undefined | null): boolean {
+  if (!role) return false;
+  return (
+    role === "owner" ||
+    role === "admin" ||
+    role === "org:admin" ||
+    role === "org:owner"
   );
 }
 
@@ -152,12 +166,38 @@ export async function GET(request: NextRequest) {
     });
   }
 
+  const canCreateKeys = roleCanCreateKeys(org.role);
+  // #region agent log
+  fetch("http://127.0.0.1:7819/ingest/be99124d-5675-4c32-b51e-365b8208f1ed", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Debug-Session-Id": "323321",
+    },
+    body: JSON.stringify({
+      sessionId: "323321",
+      runId: "post-fix",
+      hypothesisId: "B",
+      location: "docs/route.ts:GET",
+      message: "docs session role gate",
+      data: {
+        orgIdSuffix: String(org.id).slice(-8),
+        role: org.role,
+        canCreateKeys,
+        orgCount: loaded.orgs.length,
+        roles: loaded.orgs.map((o) => o.role),
+      },
+      timestamp: Date.now(),
+    }),
+  }).catch(() => {});
+  // #endregion
+
   return json(request, {
     loggedIn: true,
     orgId: org.id,
     orgName: org.name,
     role: org.role,
-    canCreateKeys: org.role === "owner" || org.role === "admin",
+    canCreateKeys,
   });
 }
 
@@ -189,7 +229,7 @@ export async function POST(request: NextRequest) {
     if (!org) {
       return json(request, { error: "No organization found" }, 400);
     }
-    if (org.role !== "owner" && org.role !== "admin") {
+    if (org.role !== "owner" && org.role !== "admin" && org.role !== "org:admin") {
       return json(
         request,
         { error: "Only org owners and admins can create API keys." },
@@ -224,7 +264,13 @@ export async function POST(request: NextRequest) {
     return json(request, { error: detail }, createRes.status);
   }
 
-  const created = await createRes.json();
+  let created: { raw_key?: unknown; data?: { raw_key?: unknown }; message?: unknown } | null =
+    null;
+  try {
+    created = await createRes.json();
+  } catch {
+    return json(request, { error: "Invalid create response" }, 502);
+  }
   const raw = created?.raw_key ?? created?.data?.raw_key;
   if (!raw || typeof raw !== "string") {
     return json(request, { error: "No raw_key in create response" }, 502);

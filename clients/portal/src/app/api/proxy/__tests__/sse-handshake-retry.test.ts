@@ -150,8 +150,35 @@ describe("F36: SSE handshake honours Retry-After on a 429", () => {
     // SSE hook can decide whether to reconnect.
     expect(res.status).toBe(429);
     const body = await res.json();
-    expect(body.upstream_status).toBe(429);
+    expect(body.detail).toBe("throttled");
+    expect(body.request_id).toBeTruthy();
     expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("preserves FastAPI internal_error body on SSE handshake 500", async () => {
+    fetchMock.mockResolvedValueOnce(
+      jsonError(500, {
+        error: "internal_error",
+        detail: "An unexpected error occurred",
+        request_id: "sse-fastapi-rid",
+      }),
+    );
+
+    const route = await importProxy();
+    const res = await route.GET(
+      sseRequest(["v1", "observability", "stream"]),
+      { params: Promise.resolve({ path: ["v1", "observability", "stream"] }) },
+    );
+    expect(res.status).toBe(500);
+    const body = await res.json();
+    expect(body).toEqual({
+      error: "internal_error",
+      detail: "An unexpected error occurred",
+      request_id: "sse-fastapi-rid",
+    });
+    expect(res.headers.get("X-Request-ID")).toBe("sse-fastapi-rid");
+    // Must not double-wrap into opaque "Upstream stream error".
+    expect(body.detail).not.toBe("Upstream stream error");
   });
 });
 

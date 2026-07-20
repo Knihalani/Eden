@@ -46,11 +46,17 @@ class BackgroundWorkers:
 
     async def start(self, settings: Settings | None = None) -> None:
         """Start the leader supervisor (idempotent)."""
+        cfg = settings or get_settings()
+        if not getattr(cfg, "run_background_workers", False):
+            logger.info(
+                "background: run_background_workers disabled; supervisor not started"
+            )
+            return
         if self.running:
             return
         self._stop.clear()
         self._task = asyncio.create_task(
-            self._supervise(settings or get_settings()),
+            self._supervise(cfg),
             name="background-leader-supervisor",
         )
         logger.info("background: leader supervisor started")
@@ -134,7 +140,7 @@ class BackgroundWorkers:
             except Exception as exc:
                 logger.warning("background: anomaly_loop skipped: %s", exc)
 
-        if getattr(settings, "evolution_loop_enabled", True):
+        if getattr(settings, "evolution_loop_enabled", False):
             try:
                 from eden.agents.evolution.loop import start_evolution_loop
 

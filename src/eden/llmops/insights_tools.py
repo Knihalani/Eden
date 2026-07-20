@@ -492,10 +492,9 @@ async def search_traces(
           AND timestamp >= $2
           AND (
             name ILIKE $3
-            OR COALESCE(error_type, '') ILIKE $3
-            OR COALESCE(model_name, '') ILIKE $3
-            OR COALESCE(agent_id, '') ILIKE $3
-            OR COALESCE(attributes->>'agent_id', '') ILIKE $3
+            OR agent_id ILIKE $3
+            OR error_type ILIKE $3
+            OR model_name ILIKE $3
           )
         GROUP BY trace_id
         ORDER BY started_at DESC
@@ -1811,6 +1810,18 @@ _PORTAL_PATH_PREFIXES: tuple[str, ...] = (
     "/settings",
     "/studio",
     "/audit-trail",
+    "/analytics",
+    "/guardrails",
+)
+
+# Removed portal surfaces — soft-land via next.config; never AI-navigate.
+_REMOVED_PORTAL_PATH_PREFIXES: tuple[str, ...] = (
+    "/marketplace",
+    "/multi-agent",
+    "/builder",
+    "/jobs",
+    "/eval-harnesses",
+    "/sandbox",
     "/finops",
 )
 
@@ -1827,6 +1838,8 @@ def _safe_portal_href(path: str) -> str | None:
     base = href.split("?", 1)[0].split("#", 1)[0]
     if base == "/":
         return href
+    if any(base == p or base.startswith(p + "/") for p in _REMOVED_PORTAL_PATH_PREFIXES):
+        return None
     if any(base == p or base.startswith(p + "/") for p in _PORTAL_PATH_PREFIXES):
         return href
     return None
@@ -2477,7 +2490,7 @@ async def playground_from_span(
             "model": {"type": "string"},
             "prompt_tokens": {"type": "integer"},
             "completion_tokens": {"type": "integer"},
-            "tier": {"type": "string", "description": "t1 | t3 | auto"},
+            "tier": {"type": "string", "description": "ignored — chat is always t2"},
         },
     },
 )
@@ -2486,27 +2499,18 @@ async def estimate_chat_cost(
     model: str | None = None,
     prompt_tokens: int = 2500,
     completion_tokens: int = 800,
-    tier: str = "auto",
+    tier: str = "t2",
 ) -> dict[str, Any]:
-    _ = org_id
+    _ = org_id, model, tier
     from eden.llmops.chat_sota import (
-        classify_chat_tier,
         estimate_turn_cost_usd,
         model_for_tier,
-        resolve_picker_model,
         ttft_budget_ms,
     )
+    from eden.optimization.model_router import ModelTier
 
-    explicit, tier_key = resolve_picker_model(
-        preferred_model=model, preferred_tier=tier
-    )
-    if explicit:
-        chosen = explicit
-        used_tier = tier_key if tier_key != "auto" else "t3"
-    else:
-        mt = classify_chat_tier("", preferred_tier=tier_key)
-        chosen = model_for_tier(mt)
-        used_tier = mt.value
+    chosen = model_for_tier(ModelTier.T2)
+    used_tier = "t2"
     est = estimate_turn_cost_usd(
         chosen,
         prompt_tokens=prompt_tokens,

@@ -28,7 +28,7 @@ export interface ResourceOsToolbarProps {
 
 /**
  * Shared Filter + Views + optional CSV/JSONL export for resource hubs.
- * Syncs `?q=` / `?view=` via useResourceUrlState.
+ * Syncs `?q=` / `?savedView=` via useResourceUrlState (`view` reserved for hub tabs).
  */
 export function ResourceOsToolbar({
   resourceKey,
@@ -42,7 +42,7 @@ export function ResourceOsToolbar({
 }: ResourceOsToolbarProps) {
   const searchParams = useSearchParams();
   const { state, setState } = useResourceUrlState();
-  const savedViewId = searchParams.get("view") ?? undefined;
+  const savedViewId = searchParams.get("savedView") ?? undefined;
   const { views, save, remove, resolveView } = useSavedViews(resourceKey);
 
   const [mode, setMode] = useState<FilterMode>("basic");
@@ -53,8 +53,8 @@ export function ResourceOsToolbar({
 
   const applyView = (viewId: string) => {
     const params = new URLSearchParams(searchParams.toString());
-    if (!viewId) params.delete("view");
-    else params.set("view", viewId);
+    if (!viewId) params.delete("savedView");
+    else params.set("savedView", viewId);
     const vs = resolveView(viewId);
     if (vs?.q) {
       setQuery(vs.q);

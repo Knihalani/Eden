@@ -8,10 +8,7 @@ export function ImproveSpotlight() {
       <div className="max-w-7xl mx-auto">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
           <div className="lg:col-span-5">
-            <h2
-              className="text-3xl md:text-4xl font-bold text-[var(--text-primary)] tracking-tight mb-4"
-              style={{ letterSpacing: "-0.03em", lineHeight: 1.08 }}
-            >
+            <h2 className="marketing-h2 mb-4">
               From regression detected to{" "}
               <span className="text-[var(--accent)]">patch ready for review</span>
             </h2>

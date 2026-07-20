@@ -380,7 +380,9 @@ class EdenLoggingHandler(logging.Handler):
             return
         batch = self._queue
         self._queue = []
-        loop.create_task(self._ingest_batch(batch))
+        from eden.async_tasks import bounded_create_task
+
+        bounded_create_task(self._ingest_batch(batch), name="logging-shim-ingest")
 
     def _drain_sync(self) -> None:
         """Drain the queue synchronously (no event loop available).
@@ -400,7 +402,9 @@ class EdenLoggingHandler(logging.Handler):
         try:
             loop = asyncio.get_event_loop()
             if loop.is_running():
-                loop.create_task(self._ingest_batch(batch))
+                from eden.async_tasks import bounded_create_task
+
+                bounded_create_task(self._ingest_batch(batch), name="logging-shim-ingest")
                 return
         except RuntimeError:
             pass
@@ -411,7 +415,7 @@ class EdenLoggingHandler(logging.Handler):
             self.dropped += len(batch)
 
     async def _ingest_batch(self, batch: list[dict[str, Any]]) -> None:
-        """Submit all queued events to the TelemetryCollector."""
+        """Submit all queued events to the TelemetryCollector concurrently."""
         try:
             from eden.observability.telemetry_collector import (
                 TelemetryEvent,
@@ -425,16 +429,22 @@ class EdenLoggingHandler(logging.Handler):
         except Exception:
             self.failed += len(batch)
             return
-        for event_dict in batch:
-            try:
-                event = TelemetryEvent(**event_dict)
-                ok = await collector.ingest(event)
-                if ok:
-                    self.ingested += 1
-                else:
-                    self.dropped += 1
-            except Exception:
-                self.failed += 1
+
+        sem = asyncio.Semaphore(16)
+
+        async def _one(event_dict: dict[str, Any]) -> None:
+            async with sem:
+                try:
+                    event = TelemetryEvent(**event_dict)
+                    ok = await collector.ingest(event)
+                    if ok:
+                        self.ingested += 1
+                    else:
+                        self.dropped += 1
+                except Exception:
+                    self.failed += 1
+
+        await asyncio.gather(*(_one(ev) for ev in batch))
 
     # ── Diagnostics ─────────────────────────────────────────────────
 

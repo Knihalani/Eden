@@ -24,6 +24,7 @@ import { type FilterConfig, redactPayload, redactString } from "./filters.js";
 import { optimizationOptOutHeaders } from "./gateway_optimizations.js";
 import { ClientSampler, type SamplingProfile } from "./sampling.js";
 import { OfflineQueue } from "./offline-queue.js";
+import { resolveIngestPath } from "./ingest-format.js";
 
 const DEFAULT_BASE_URL = "https://api.edenobservability.com";
 const DEFAULT_REALM = "production";
@@ -33,6 +34,28 @@ const DEFAULT_MAX_QUEUE_SIZE = 4096;
 const DEFAULT_TIMEOUT_S = 5;
 const DEFAULT_FLUSH_INTERVAL_MS = 250;
 const DEFAULT_MAX_CHUNK_BUFFER = 4096;
+/** Match BE ``settings.ingestion_chunks_max_per_request`` (default 1000). */
+const INGEST_CHUNKS_MAX_PER_REQUEST = 1000;
+
+/**
+ * Lazily-cached ``gzipSync`` so each ingest POST does not pay for
+ * a fresh ``import("node:zlib")``. Dynamic import is kept (not a
+ * static top-level import) so edge/bundler builds that tree-shake
+ * unused Node builtins still resolve at runtime only when posting.
+ * ``level: 1`` matches the Python SDK's ``compresslevel=1`` —
+ * fastest deflate for telemetry payloads where wire size is already
+ * dominated by JSON structure, not archive ratio.
+ */
+type GzipSync = typeof import("node:zlib").gzipSync;
+let _gzipSync: GzipSync | null = null;
+
+async function gzipJsonBody(body: unknown): Promise<Buffer> {
+  if (_gzipSync === null) {
+    const zlib = await import("node:zlib");
+    _gzipSync = zlib.gzipSync;
+  }
+  return _gzipSync(Buffer.from(JSON.stringify(body), "utf8"), { level: 1 });
+}
 
 
 // ── Configuration ─────────────────────────────────────────────────
@@ -84,13 +107,18 @@ export interface ResolvedConfig {
    */
   disabled: boolean;
   /**
-   * If true (default), the SDK runs a small regex pass over every
+   * If true, the SDK runs a small regex pass over every
    * outgoing payload to mask obvious emails, phone numbers, US SSNs,
-   * and credit-card numbers. This is a *safety net* — the gateway
-   * remains the authoritative redaction layer. Mirrors Python's
-   * ``redact_on_client`` flag.
+   * and credit-card numbers. Default is false — the gateway remains
+   * the authoritative redaction layer. Set ``redactOnClient: true``
+   * or ``EDEN_REDACT_ON_CLIENT=1`` to restore the pre-0.3.2 default.
    */
   redactOnClient: boolean;
+  /**
+   * When true, streaming chunk events include ``deltaText``.
+   * Default false (metrics-only chunks).
+   */
+  captureChunkText: boolean;
   debug: boolean;
   strict: boolean;
   exactCache: boolean;
@@ -128,7 +156,10 @@ export function resolveConfig(opts: EdenSDKOptions = {}): ResolvedConfig {
   const flushIntervalMs = opts.flushIntervalMs ?? DEFAULT_FLUSH_INTERVAL_MS;
   const timeoutS = opts.timeoutS ?? DEFAULT_TIMEOUT_S;
   const disabled = opts.disabled ?? false;
-  const redactOnClient = opts.redactOnClient ?? true;
+  const redactOnClient =
+    opts.redactOnClient ?? envOptBool("EDEN_REDACT_ON_CLIENT") ?? false;
+  const captureChunkText =
+    opts.captureChunkText ?? envOptBool("EDEN_CAPTURE_CHUNK_TEXT") ?? false;
   const gatewayUrl = opts.gatewayUrl ?? readEnv("EDEN_GATEWAY_URL");
   const filters = opts.filters;
   const exactCache = opts.exactCache ?? envOptBool("EDEN_EXACT_CACHE") ?? true;
@@ -173,6 +204,7 @@ export function resolveConfig(opts: EdenSDKOptions = {}): ResolvedConfig {
     timeoutS,
     disabled,
     redactOnClient,
+    captureChunkText,
     debug,
     strict,
     exactCache,
@@ -276,6 +308,12 @@ export class EdenSDK {
   private disposed = false;
   private sampler: ClientSampler;
   sampledOut = 0;
+  /**
+   * Last HTTP status from an ingest POST. ``null`` until the first
+   * attempt, or after a network failure with no response. Used by
+   * ``runDoctor`` to surface bad-key (401/403) without throwing.
+   */
+  lastIngestHttpStatus: number | null = null;
   private offline: OfflineQueue | null = null;
 
   constructor(opts: EdenSDKOptions = {}) {
@@ -372,9 +410,13 @@ export class EdenSDK {
     if (this.disposed) return;
     if (this.config.disabled) return;
     const sampler = this.sampler;
+    // Single payload read — avoid double cast / property walk on
+    // the emit hot path (every instrumented LLM call).
+    const payload = event.payload as
+      | { error?: unknown; outcome?: string }
+      | undefined;
     const hasError = Boolean(
-      (event.payload as { error?: unknown; outcome?: string } | undefined)?.error ||
-        (event.payload as { outcome?: string } | undefined)?.outcome === "error",
+      payload?.error || payload?.outcome === "error",
     );
     const durationMs = event.durationMs ?? 0;
     if (!sampler.shouldKeep({ hasError, durationMs })) {
@@ -446,50 +488,63 @@ export class EdenSDK {
 
   /**
    * Flush queued events. Returns a promise that resolves when the
-   * batch POST completes (or fails silently). Always safe to call
-   * concurrently; later calls become no-ops while a flush is
-   * in-flight.
+   * batch POST completes (or fails silently). Concurrent callers
+   * wait for the in-flight POST, then drain any events that
+   * arrived during it — same contract as {@link flushChunks}.
    */
-  async flush(): Promise<void> {
-    // Atomically claim the in-flight slot so concurrent flush()
-    // calls can''t both pass the inflight check and grab the
-    // batch (race that previously produced >1 POST). The check +
-    // set has to be a single statement — anything in between lets
-    // a second caller slip through.
-    if (this.inflight) return;
-    this.inflight = true;
-    if (this.queue.length === 0) {
-      this.inflight = false;
-      return;
-    }
-    if (this.flushTimer !== null) {
-      clearTimeout(this.flushTimer);
-      this.flushTimer = null;
-    }
-    const batch = this.queue;
-    this.queue = [];
-    // Track the in-flight POST so ``dispose()`` can await it
-    // before releasing ``this.inflight``. Without this the
-    // ``dispose() → flush()`` chain could start a second
-    // concurrent POST while the first was still in flight.
-    this.inflightPromise = (async () => {
-      try {
-        await this.postBatch(batch);
-      } catch (err) {
-        if (this.config.debug) {
-          // eslint-disable-next-line no-console
-          console.debug("[eden-ai] flush failed (swallowed)", err);
-        }
-      } finally {
-        this.inflight = false;
-        this.inflightPromise = null;
-        // Re-arm the timer if events accumulated while we were
-        // in-flight; otherwise a callback that runs synchronously
-        // after a flush would sit in the queue forever.
-        this.scheduleFlush();
+  async flush(): Promise<boolean> {
+    // Loop until the queue is fully drained. A concurrent
+    // ``flush()`` used to return immediately while another POST
+    // was in flight, so ``await flush()`` after emit-during-flush
+    // could resolve before the newly queued events shipped.
+    // Waiting on ``inflightPromise`` then draining again matches
+    // the chunk-path contract.
+    //
+    // Returns ``true`` only when every batch POST completed with
+    // HTTP 2xx (or the queue was already empty).
+    let allOk = true;
+    while (true) {
+      if (this.inflight) {
+        await this.inflightPromise;
+        continue;
       }
-    })();
-    await this.inflightPromise;
+      if (this.queue.length === 0) return allOk;
+      // Atomically claim the in-flight slot so concurrent flush()
+      // callers can't both grab the same batch (race that
+      // previously produced >1 POST). The check + set must be
+      // synchronous before the first await.
+      this.inflight = true;
+      if (this.flushTimer !== null) {
+        clearTimeout(this.flushTimer);
+        this.flushTimer = null;
+      }
+      const batch = this.queue;
+      this.queue = [];
+      // Track the in-flight POST so ``dispose()`` can await it
+      // before releasing ``this.inflight``. Without this the
+      // ``dispose() → flush()`` chain could start a second
+      // concurrent POST while the first was still in flight.
+      this.inflightPromise = (async () => {
+        try {
+          const batchOk = await this.postBatch(batch);
+          if (!batchOk) allOk = false;
+        } catch (err) {
+          allOk = false;
+          if (this.config.debug) {
+            // eslint-disable-next-line no-console
+            console.debug("[eden-ai] flush failed (swallowed)", err);
+          }
+        } finally {
+          this.inflight = false;
+          this.inflightPromise = null;
+          // Re-arm the timer if events accumulated while we were
+          // in-flight and no waiter is draining the loop (e.g.
+          // ``void this.flush()`` from ``emit`` overflow).
+          this.scheduleFlush();
+        }
+      })();
+      await this.inflightPromise;
+    }
   }
 
   /**
@@ -638,11 +693,12 @@ export class EdenSDK {
     return `${this.config.baseUrl}/orgs/${this.config.orgId}/ingest/chunks`;
   }
 
-  private buildHeaders(): Record<string, string> {
+  private buildHeaders(extra?: Record<string, string>): Record<string, string> {
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
       Accept: "application/json",
       "User-Agent": SDK_USER_AGENT,
+      ...extra,
     };
     if (this.config.orgId) headers["X-Org-Id"] = this.config.orgId;
     if (this.config.apiKey) headers["X-Org-Api-Key"] = this.config.apiKey;
@@ -650,50 +706,73 @@ export class EdenSDK {
     return headers;
   }
 
-  private async postBatch(events: TelemetryEvent[]): Promise<void> {
-    // Group by source_format — the gateway expects one POST per
-    // format. The Python SDK serialises via `source_format`
-    // column; we keep one network round-trip per format instead.
+  private async postBatch(events: TelemetryEvent[]): Promise<boolean> {
+    // Group by remapped ingest path — gateway allow-list is narrow;
+    // resolveIngestPath collapses custom/framework aliases to webhook.
     const byFormat = new Map<string, TelemetryEvent[]>();
     for (const ev of events) {
-      const list = byFormat.get(ev.sourceFormat) ?? [];
+      const pathFmt = resolveIngestPath(ev.sourceFormat);
+      let list = byFormat.get(pathFmt);
+      if (list === undefined) {
+        list = [];
+        byFormat.set(pathFmt, list);
+      }
       list.push(ev);
-      byFormat.set(ev.sourceFormat, list);
     }
 
+    let allOk = true;
+    const tasks: Promise<void>[] = [];
     for (const [format, items] of byFormat) {
-      const url = this.buildIngestUrl(format);
-      if (!url) {
-        if (this.config.debug) {
-          // eslint-disable-next-line no-console
-          console.debug("[eden-ai] no orgId; dropping", items.length, "events");
-        }
-        continue;
-      }
-      // Apply the client-side safety-net PII redactor to every
-      // payload before it leaves the process. Mirrors the Python
-      // SDK's `redact_on_client` path; the gateway remains the
-      // source of truth for tenant redaction policy.
-      const redacted = this.config.redactOnClient
-        ? items.map((e) => ({ ...e, payload: redactPayload(e.payload) as never }))
-        : items;
-      // Translate the TS SDK's camelCase types to the server's
-      // snake_case ingestion schema at the wire boundary. Without
-      // this the gateway falls back to event_type:
-      // ingest.event and every TS trace misses the
-      // agent.run / llm_completion SQL filters.
-      const wired = redacted.map(eventToWire);
-      const ok = await this.postJson(url, wired);
-      if (!ok && this.offline) {
-        for (const item of redacted) {
-          try {
-            this.offline.enqueue(format, (item.payload ?? {}) as Record<string, unknown>);
-          } catch {
-            // ignore spill errors
+      tasks.push(
+        (async () => {
+          const url = this.buildIngestUrl(format);
+          if (!url) {
+            if (this.config.debug) {
+              // eslint-disable-next-line no-console
+              console.debug("[eden-ai] no orgId; dropping", items.length, "events");
+            }
+            allOk = false;
+            return;
           }
-        }
-      }
+          // Apply the client-side safety-net PII redactor to every
+          // nested payload before it leaves the process. Mirrors the
+          // Python SDK's ``redact_on_client`` path; the gateway remains
+          // the source of truth for tenant redaction policy.
+          //
+          // Note on Python "parity": Python ``TraceEvent.payload`` *is*
+          // the wire body (often already containing ``event_type``).
+          // The TS SDK keeps a camelCase ``TelemetryEvent`` with a
+          // nested ``payload``, so the wire body must be produced by
+          // ``eventToWire`` — posting ``e.payload`` alone drops
+          // ``event_type`` / ``trace_id`` and breaks gateway SQL filters.
+          const redacted = this.config.redactOnClient
+            ? items.map((e) => ({
+                ...e,
+                payload: redactPayload(e.payload ?? {}) as never,
+              }))
+            : items;
+          const wired = redacted.map(eventToWire);
+          const outcome = await this.postJson(url, wired);
+          if (outcome !== "ok") allOk = false;
+          // Only spill transient failures. Permanent 4xx would poison
+          // the offline queue with payloads that can never succeed.
+          if (outcome === "spill" && this.offline) {
+            for (const item of redacted) {
+              try {
+                this.offline.enqueue(
+                  format,
+                  (item.payload ?? {}) as Record<string, unknown>,
+                );
+              } catch {
+                // ignore spill errors
+              }
+            }
+          }
+        })(),
+      );
     }
+    await Promise.all(tasks);
+    return allOk;
   }
 
   private async postChunks(chunks: StreamChunk[]): Promise<void> {
@@ -721,20 +800,74 @@ export class EdenSDK {
     // wire boundary. Without this the gateway would store
     // ``deltaText``/``tpotMs`` as NULL and the per-chunk
     // dashboards would always render empty.
-    const body = { chunks: prepared.map(chunkToWire) };
-    await this.postJson(url, body);
+    // Cap each POST at ``INGEST_CHUNKS_MAX_PER_REQUEST`` (BE
+    // default 1000). A full ``maxChunkBuffer`` drain (≤4096)
+    // must not ship as one request — Python ``_send_chunks``
+    // does the same split.
+    const wire = prepared.map(chunkToWire);
+    for (let i = 0; i < wire.length; i += INGEST_CHUNKS_MAX_PER_REQUEST) {
+      await this.postChunkBatch(
+        url,
+        wire.slice(i, i + INGEST_CHUNKS_MAX_PER_REQUEST),
+      );
+    }
   }
 
-  private async postJson(url: string, body: unknown): Promise<boolean> {
+  /**
+   * POST one chunk batch (≤1000). On 413, bisect and retry —
+   * mirrors Python ``TelemetryCollector._post_chunk_batch``.
+   */
+  private async postChunkBatch(
+    url: string,
+    batch: ReturnType<typeof chunkToWire>[],
+  ): Promise<void> {
+    if (batch.length === 0) return;
+    const outcome = await this.postJson(url, { chunks: batch });
+    if (outcome === "too_large" && batch.length > 1) {
+      const mid = Math.floor(batch.length / 2);
+      if (this.config.debug) {
+        // eslint-disable-next-line no-console
+        console.debug(
+          "[eden-ai] ingest chunks returned 413; splitting",
+          batch.length,
+          "->",
+          mid,
+          "+",
+          batch.length - mid,
+        );
+      }
+      await this.postChunkBatch(url, batch.slice(0, mid));
+      await this.postChunkBatch(url, batch.slice(mid));
+    }
+  }
+
+  /**
+   * POST gzip JSON to an ingest URL.
+   * @returns ``"ok"`` on 2xx; ``"spill"`` after exhausting retryable
+   * failures (408/429/5xx/network) for offline queue; ``"drop"`` on
+   * permanent 4xx (auth/validation) — do not spill; ``"too_large"``
+   * on 413 so chunk ingest can bisect and retry.
+   */
+  private async postJson(
+    url: string,
+    body: unknown,
+  ): Promise<"ok" | "spill" | "drop" | "too_large"> {
     if (typeof fetch === "undefined") {
       throw new Error(
         "[eden-ai] global fetch is not available; " +
           "use Node 18+ or a fetch polyfill (e.g. undici).",
       );
     }
+    // Gzip once per call (not per retry). Cached zlib + level 1
+    // matches Python SDK ingest; body Buffer is reused across
+    // attempts so a 429/5xx retry does not re-serialize.
+    const compressed = await gzipJsonBody(body);
+    const headers = this.buildHeaders({ "Content-Encoding": "gzip" });
     // Retry transient failures with exponential backoff. 4xx other
     // than 408/429 are treated as permanent and not retried. Honours
-    // the ``Retry-After`` response header up to 30s.
+    // the ``Retry-After`` response header up to 30s. 413 is returned
+    // as ``"too_large"`` (not retried here) so ``postChunkBatch`` can
+    // bisect — matching Python ``_post_chunk_batch``.
     const MAX_ATTEMPTS = 3;
     const BASE_DELAY_MS = 200;
     for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
@@ -744,29 +877,23 @@ export class EdenSDK {
       try {
         const res = await fetch(url, {
           method: "POST",
-          headers: this.buildHeaders(),
-          body: JSON.stringify(body),
+          headers,
+          // Buffer is a Uint8Array subclass — cast for DOM BodyInit typings.
+          body: compressed as BodyInit,
           signal: controller.signal,
         });
-        if (res.ok) return true; // success
+        this.lastIngestHttpStatus = res.status;
+        if (res.ok) return "ok";
         const status = res.status;
+        if (status === 413) return "too_large";
         const retryable = status === 429 || status === 408 || status >= 500;
         if (!retryable || attempt >= MAX_ATTEMPTS) {
           if (this.config.debug) {
             // eslint-disable-next-line no-console
             console.debug("[eden-ai] non-2xx from gateway", status, url);
           }
-          return false;
+          return retryable ? "spill" : "drop";
         }
-        // Honour Retry-After if present. RFC 7231 allows either a
-        // delta-seconds integer ("5") or an HTTP-date
-        // ("Wed, 21 Oct 2015 07:28:00 GMT"); the previous code only
-        // handled the former (parseFloat on the HTTP-date form
-        // returned NaN, Number.isFinite(NaN) was false, so the
-        // retry skipped the wait entirely -- hammering the
-        // server instead of backing off). Delegate to the shared
-        // helper so the TS and Python SDKs surface identical
-        // behaviour for both header forms.
         const ra = res.headers.get("retry-after");
         const fallbackMs = Math.min(BASE_DELAY_MS * 2 ** (attempt - 1), 5_000);
         const delayMs = ra ? parseRetryAfterMs(ra, fallbackMs) : fallbackMs;
@@ -779,7 +906,7 @@ export class EdenSDK {
             // eslint-disable-next-line no-console
             console.debug("[eden-ai] fetch failed", err);
           }
-          return false;
+          return "spill";
         }
         const delayMs = Math.min(BASE_DELAY_MS * 2 ** (attempt - 1), 5_000);
         await new Promise((r) => setTimeout(r, delayMs));
@@ -787,7 +914,7 @@ export class EdenSDK {
         clearTimeout(timeout);
       }
     }
-    return false;
+    return "spill";
   }
 }
 
@@ -805,7 +932,13 @@ export function setDefaultClient(client: EdenSDK): void {
 }
 
 export function resetDefaultClient(): void {
+  const prev = _default;
   _default = undefined;
+  // Disarm timers / mark disposed so an abandoned singleton cannot
+  // POST into a later test's fetch stub (or a live process after
+  // reconfigure). ``dispose`` is async; fire-and-forget is fine —
+  // timer clear + ``disposed`` flag run synchronously at the start.
+  if (prev) void prev.dispose();
 }
 
 

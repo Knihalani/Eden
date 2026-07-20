@@ -7,10 +7,10 @@ and comparative analysis (environment vs production disparity).
 import logging
 from typing import Any
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Query
+from fastapi import APIRouter, Body, Depends, HTTPException, Path, Query
 from pydantic import BaseModel, Field
 
-from eden.api.deps import OrgMember, get_current_org_member
+from eden.api.deps import OrgMember, get_current_org_member, require_path_org_access
 from eden.insights import (
     DetectorRegistry,
     InsightsService,
@@ -18,7 +18,7 @@ from eden.insights import (
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/orgs/{org_id}", tags=["insights"])
+router = APIRouter(prefix="/orgs/{org_id}", tags=["insights"], dependencies=[Depends(require_path_org_access)])
 
 # Global singletons (production: dependency-injected)
 _insights_service: InsightsService | None = None
@@ -156,8 +156,8 @@ class ExportDatasetRequest(BaseModel):
 
 @router.post("/insights/traces/ingest", response_model=dict[str, Any])
 async def ingest_trace(
-    org_id: str,
-    req: TraceIngestRequest,
+    org_id: str = Depends(require_path_org_access),
+    req: TraceIngestRequest = Body(...),
     member: OrgMember = Depends(get_current_org_member),
 ) -> dict[str, Any]:
     """Ingest a raw trace into the Insights Engine."""
@@ -193,7 +193,7 @@ async def ingest_trace(
 
 @router.get("/insights/traces", response_model=list[dict[str, Any]])
 async def list_traces(
-    org_id: str,
+    org_id: str = Depends(require_path_org_access),
     realm: str | None = Query(None),
     limit: int = Query(100, ge=1, le=1000),
     offset: int = Query(0, ge=0),
@@ -212,8 +212,8 @@ async def list_traces(
 
 @router.get("/insights/traces/{trace_id}", response_model=dict[str, Any])
 async def get_trace(
-    org_id: str,
-    trace_id: str,
+    org_id: str = Depends(require_path_org_access),
+    trace_id: str = Path(...),
     member: OrgMember = Depends(get_current_org_member),
 ) -> dict[str, Any]:
     """Get a single trace by ID."""
@@ -230,18 +230,24 @@ async def get_trace(
 
 @router.get("/insights/overview", response_model=OverviewResponse)
 async def get_insights_overview(
-    org_id: str,
+    org_id: str = Depends(require_path_org_access),
     member: OrgMember = Depends(get_current_org_member),
 ) -> OverviewResponse:
-    """Get the insights dashboard overview."""
+    """Get the insights dashboard overview.
+
+    Prefer Postgres-backed overview (detector_loop writes). Fall back to
+    the in-memory store when Postgres is unavailable.
+    """
     service = _get_service()
-    overview = service.get_overview(member.org_id)
+    overview = await service.get_overview_from_postgres(member.org_id)
+    if overview is None:
+        overview = service.get_overview(member.org_id)
     return OverviewResponse(**overview)
 
 
 @router.get("/insights/trends", response_model=TrendsResponse)
 async def get_insights_trends(
-    org_id: str,
+    org_id: str = Depends(require_path_org_access),
     days: int = Query(30, ge=1, le=365),
     member: OrgMember = Depends(get_current_org_member),
 ) -> TrendsResponse:
@@ -253,14 +259,17 @@ async def get_insights_trends(
 
 @router.post("/insights/detectors/run", response_model=list[InsightResponse])
 async def run_detectors(
-    org_id: str,
-    req: RunDetectorsRequest,
+    org_id: str = Depends(require_path_org_access),
+    req: RunDetectorsRequest = Body(...),
     member: OrgMember = Depends(get_current_org_member),
 ) -> list[InsightResponse]:
     """Run detectors on traces and return insights."""
     service = _get_service()
     from eden.insights.unified_trace_model import Realm
-    realm_enum = Realm(req.realm) if req.realm else None
+    try:
+        realm_enum = Realm(req.realm) if req.realm else None
+    except ValueError:
+        raise HTTPException(status_code=422, detail=f"Invalid realm: {req.realm}") from None
     insights = service.run_detectors(
         member.org_id,
         detector_names=req.detector_names,
@@ -271,7 +280,7 @@ async def run_detectors(
 
 @router.get("/insights/detectors", response_model=DetectorsResponse)
 async def list_detectors(
-    org_id: str,
+    org_id: str = Depends(require_path_org_access),
     member: OrgMember = Depends(get_current_org_member),
 ) -> DetectorsResponse:
     """List available detectors."""
@@ -288,7 +297,7 @@ async def list_detectors(
 
 @router.get("/insights", response_model=list[InsightResponse])
 async def list_insights(
-    org_id: str,
+    org_id: str = Depends(require_path_org_access),
     detector: str | None = Query(None),
     severity: str | None = Query(None),
     limit: int = Query(100, ge=1, le=500),
@@ -307,8 +316,8 @@ async def list_insights(
 
 @router.get("/insights/{insight_id}", response_model=InsightResponse)
 async def get_insight(
-    org_id: str,
-    insight_id: str,
+    org_id: str = Depends(require_path_org_access),
+    insight_id: str = Path(...),
     member: OrgMember = Depends(get_current_org_member),
 ) -> InsightResponse:
     """Get a single insight by ID."""
@@ -325,7 +334,7 @@ async def get_insight(
 
 @router.post("/insights/datasets/generate", response_model=dict[str, Any])
 async def generate_datasets(
-    org_id: str,
+    org_id: str = Depends(require_path_org_access),
     trace_ids: list[str] | None = Body(None),
     member: OrgMember = Depends(get_current_org_member),
 ) -> dict[str, Any]:
@@ -342,7 +351,7 @@ async def generate_datasets(
 
 @router.get("/insights/datasets", response_model=list[DatasetResponse])
 async def list_datasets(
-    org_id: str,
+    org_id: str = Depends(require_path_org_access),
     member: OrgMember = Depends(get_current_org_member),
 ) -> list[DatasetResponse]:
     """List all datasets for the organization."""
@@ -353,8 +362,8 @@ async def list_datasets(
 
 @router.get("/insights/datasets/{dataset_id}", response_model=DatasetResponse)
 async def get_dataset(
-    org_id: str,
-    dataset_id: str,
+    org_id: str = Depends(require_path_org_access),
+    dataset_id: str = Path(...),
     member: OrgMember = Depends(get_current_org_member),
 ) -> DatasetResponse:
     """Get a single dataset by ID."""
@@ -367,8 +376,8 @@ async def get_dataset(
 
 @router.get("/insights/datasets/{dataset_id}/entries", response_model=list[DatasetEntryResponse])
 async def get_dataset_entries(
-    org_id: str,
-    dataset_id: str,
+    org_id: str = Depends(require_path_org_access),
+    dataset_id: str = Path(...),
     limit: int = Query(100, ge=1, le=1000),
     offset: int = Query(0, ge=0),
     member: OrgMember = Depends(get_current_org_member),
@@ -381,9 +390,9 @@ async def get_dataset_entries(
 
 @router.post("/insights/datasets/{dataset_id}/export", response_model=dict[str, Any])
 async def export_dataset(
-    org_id: str,
-    dataset_id: str,
-    req: ExportDatasetRequest,
+    org_id: str = Depends(require_path_org_access),
+    dataset_id: str = Path(...),
+    req: ExportDatasetRequest = Body(...),
     member: OrgMember = Depends(get_current_org_member),
 ) -> dict[str, Any]:
     """Export a dataset to a portable format."""
@@ -402,7 +411,7 @@ async def export_dataset(
 
 @router.get("/insights/datasets/stats", response_model=dict[str, Any])
 async def get_dataset_stats(
-    org_id: str,
+    org_id: str = Depends(require_path_org_access),
     member: OrgMember = Depends(get_current_org_member),
 ) -> dict[str, Any]:
     """Get dataset engine statistics."""
@@ -416,8 +425,8 @@ async def get_dataset_stats(
 
 @router.post("/insights/disparity/compare", response_model=DisparityReportResponse)
 async def compare_traces(
-    org_id: str,
-    req: CompareRequest,
+    org_id: str = Depends(require_path_org_access),
+    req: CompareRequest = Body(...),
     member: OrgMember = Depends(get_current_org_member),
 ) -> DisparityReportResponse:
     """Compare an environment trace against a production trace."""
@@ -431,8 +440,8 @@ async def compare_traces(
 
 @router.post("/insights/disparity/batch-compare", response_model=list[DisparityReportResponse])
 async def batch_compare_traces(
-    org_id: str,
-    req: BatchCompareRequest,
+    org_id: str = Depends(require_path_org_access),
+    req: BatchCompareRequest = Body(...),
     member: OrgMember = Depends(get_current_org_member),
 ) -> list[DisparityReportResponse]:
     """Batch compare multiple trace pairs."""
@@ -443,7 +452,7 @@ async def batch_compare_traces(
 
 @router.get("/insights/disparity/reports", response_model=list[DisparityReportResponse])
 async def list_disparity_reports(
-    org_id: str,
+    org_id: str = Depends(require_path_org_access),
     min_score: float | None = Query(None, ge=0.0, le=1.0),
     limit: int = Query(100, ge=1, le=500),
     member: OrgMember = Depends(get_current_org_member),
@@ -456,8 +465,8 @@ async def list_disparity_reports(
 
 @router.get("/insights/disparity/reports/{report_id}", response_model=DisparityReportResponse)
 async def get_disparity_report(
-    org_id: str,
-    report_id: str,
+    org_id: str = Depends(require_path_org_access),
+    report_id: str = Path(...),
     member: OrgMember = Depends(get_current_org_member),
 ) -> DisparityReportResponse:
     """Get a single disparity report by ID."""
@@ -495,8 +504,8 @@ class CorrelationReportResponse(BaseModel):
 
 @router.get("/insights/correlation", response_model=CorrelationReportResponse)
 async def get_insights_correlation(
-    org_id: str,
-    days: int = Query(30, ge=7, le=180, description="Lookback window in days"),
+    org_id: str = Depends(require_path_org_access),
+    days: int = Query(30, ge=7, le=180, description='Lookback window in days'),
     member: OrgMember = Depends(get_current_org_member),
 ) -> CorrelationReportResponse:
     """Closed-loop correlation report (Insights → KB → env quality).

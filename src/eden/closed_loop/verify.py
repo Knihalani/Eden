@@ -152,25 +152,39 @@ async def run_due_verifications(limit: int = 50) -> dict[str, int]:
     summary = {"checked": 0, "passed": 0, "failed": 0, "retried": 0}
     if client is None:
         return summary
+
+    # Claim due rows atomically so concurrent workers cannot double-process.
+    # Lease via scheduled_at bump (status CHECK has no 'running' value).
+    poll = _cfg("verify_poll_interval_seconds", 60)
+    lease_secs = max(int(poll) * 3, 180)
     try:
         rows = await client.fetch(
             """
-            SELECT id, org_id, issue_id, fingerprint, ref, attempts
-            FROM issue_verifications
-            WHERE status = 'pending' AND scheduled_at <= NOW()
-            ORDER BY scheduled_at ASC
-            LIMIT $1
+            WITH due AS (
+                SELECT id
+                FROM issue_verifications
+                WHERE status = 'pending' AND scheduled_at <= NOW()
+                ORDER BY scheduled_at ASC
+                FOR UPDATE SKIP LOCKED
+                LIMIT $1
+            )
+            UPDATE issue_verifications iv
+            SET scheduled_at = NOW() + ($2 || ' seconds')::interval
+            FROM due
+            WHERE iv.id = due.id
+            RETURNING iv.id, iv.org_id, iv.issue_id, iv.fingerprint, iv.ref, iv.attempts
             """,
             int(limit),
+            str(lease_secs),
         )
     except Exception as exc:
-        logger.debug("verify: due query failed: %s", exc)
+        logger.debug("verify: due claim failed: %s", exc)
         return summary
 
     max_attempts = _cfg("verify_max_attempts", 3)
-    for row in rows or []:
+
+    async def _handle(row: Any) -> str:
         r = dict(row)
-        summary["checked"] += 1
         org_id = r["org_id"]
         issue_id = str(r["issue_id"])
         fingerprint = r.get("fingerprint") or ""
@@ -178,17 +192,27 @@ async def run_due_verifications(limit: int = 50) -> dict[str, int]:
 
         passed, detail = await _verify_issue(org_id, issue_id, fingerprint)
         if passed:
-            await _complete(client, r["id"], "passed", detail)
-            summary["passed"] += 1
+            await _complete(client, r["id"], "passed", detail, attempts)
             await _emit(org_id, issue_id, r.get("ref") or fingerprint, True, detail)
-        elif attempts >= max_attempts:
-            await _complete(client, r["id"], "failed", detail)
-            summary["failed"] += 1
+            return "passed"
+        if attempts >= max_attempts:
+            await _complete(client, r["id"], "failed", detail, attempts)
             await _emit(org_id, issue_id, r.get("ref") or fingerprint, False, detail)
-        else:
-            # Not settled yet — bump attempts + push the next check out.
-            await _reschedule(client, r["id"], attempts)
-            summary["retried"] += 1
+            return "failed"
+        await _reschedule(client, r["id"], attempts)
+        return "retried"
+
+    if rows:
+        sem = asyncio.Semaphore(8)
+
+        async def _bounded(row: Any) -> str:
+            async with sem:
+                return await _handle(row)
+
+        outcomes = await asyncio.gather(*(_bounded(row) for row in rows))
+        for outcome in outcomes:
+            summary["checked"] += 1
+            summary[outcome] += 1
     return summary
 
 
@@ -216,16 +240,17 @@ async def _emit(
 
 
 async def _complete(
-    client: Any, row_id: Any, status: str, detail: dict[str, Any]
+    client: Any, row_id: Any, status: str, detail: dict[str, Any], attempts: int
 ) -> None:
     with contextlib.suppress(Exception):
         await client.execute(
             "UPDATE issue_verifications "
-            "SET status = $2, detail = $3::jsonb, attempts = attempts + 1, "
+            "SET status = $2, detail = $3::jsonb, attempts = $4, "
             "completed_at = NOW() WHERE id = $1",
             row_id,
             status,
             json.dumps(detail, default=str),
+            int(attempts),
         )
 
 

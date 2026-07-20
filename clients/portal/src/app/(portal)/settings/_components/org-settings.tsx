@@ -1,11 +1,21 @@
 "use client";
 
 import { useState } from "react";
+import { useOrganizationList } from "@clerk/nextjs";
 import { Building2, Plus, Copy, Archive, Loader2 } from "lucide-react";
 import { useOrg } from "@/hooks/use-org";
+import { usePermissions } from "@/hooks/use-permissions";
 import { useToast } from "@/components/ui/toast";
 import { useConfirm } from "@/hooks/use-confirm";
 import { api } from "@/lib/api";
+import {
+  CREATE_ORG_DEGRADED_DESCRIPTION,
+  CREATE_ORG_DEGRADED_TITLE,
+  clerkOrgIdToActivate,
+  isCreateOrgDegraded,
+  organizationFromCreate,
+} from "@/lib/create-org";
+import { isAdminOrOwner, isOwnerRole } from "@/lib/roles";
 import { cn } from "@/lib/utils";
 import { SettingsCard } from "@/components/settings/settings-card";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -19,22 +29,41 @@ interface OrgSettingsProps {
 }
 
 export function OrgSettings({ org }: OrgSettingsProps) {
-  const { refreshOrgs } = useOrg();
+  const { refreshOrgs, setCurrentOrg } = useOrg();
+  const { role: resolvedRole } = usePermissions();
+  const { setActive: setActiveOrg } = useOrganizationList();
   const toast = useToast();
   const { confirm, ConfirmDialog } = useConfirm();
   const [loading, setLoading] = useState(false);
   const [name, setName] = useState(org?.name || "");
   const [showCreate, setShowCreate] = useState(false);
   const [newOrgName, setNewOrgName] = useState("");
+  const isPersonal = Boolean(org?.is_personal);
+  const isAdmin =
+    isAdminOrOwner(resolvedRole) || isAdminOrOwner(org?.role);
+  const isOwner =
+    isOwnerRole(resolvedRole) ||
+    isOwnerRole(org?.role) ||
+    Boolean(org?.is_owner);
 
   const handleCreateOrg = async () => {
     if (!newOrgName.trim()) return;
     setLoading(true);
     try {
-      await api.createOrg(newOrgName);
+      const created = await api.createOrg(newOrgName);
+      const clerkId = clerkOrgIdToActivate(created);
+      if (clerkId && setActiveOrg) {
+        await setActiveOrg({ organization: clerkId });
+      }
       setNewOrgName("");
       setShowCreate(false);
       await refreshOrgs();
+      setCurrentOrg(organizationFromCreate(created));
+      if (isCreateOrgDegraded(created)) {
+        toast.warning(CREATE_ORG_DEGRADED_TITLE, CREATE_ORG_DEGRADED_DESCRIPTION);
+      } else {
+        toast.success("Organization created");
+      }
     } catch {
       toast.error("Failed to create organization");
     } finally {
@@ -132,7 +161,7 @@ export function OrgSettings({ org }: OrgSettingsProps) {
             <span
               className={cn(
                 "px-2 py-1 rounded-md text-sm font-medium",
-                org?.role === "owner"
+                isOwner
                   ? "bg-[var(--warning-bg)] text-[var(--warning)]"
                   : org?.role === "admin"
                     ? "bg-[var(--accent-bg)] text-[var(--accent)]"
@@ -143,7 +172,7 @@ export function OrgSettings({ org }: OrgSettingsProps) {
             </span>
           </div>
 
-          {(org?.role === "owner" || org?.role === "admin") && (
+          {isAdmin && (
             <div className="pt-4 border-t border-[var(--border-default)] flex flex-wrap items-center gap-3">
               <button
                 onClick={async () => {
@@ -171,19 +200,19 @@ export function OrgSettings({ org }: OrgSettingsProps) {
                 <Archive className="w-4 h-4" />
                 Archive
               </button>
-              {org?.role === "owner" && (
+              {isOwner && (
                 <>
                   <DeleteOrgDialog
-                    orgId={org.id}
-                    orgName={org.name}
+                    orgId={org!.id}
+                    orgName={org!.name}
                     onDeleted={async () => {
                       await refreshOrgs();
                     }}
                   />
-                  <TransferOwnershipSection org={org} />
+                  {!isPersonal && <TransferOwnershipSection org={org!} />}
                 </>
               )}
-              <DataExportPanel orgId={org.id} canExport={true} />
+              <DataExportPanel orgId={org!.id} canExport={true} />
             </div>
           )}
         </div>

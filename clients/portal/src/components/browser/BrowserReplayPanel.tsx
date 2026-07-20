@@ -3,8 +3,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { Loader2, MonitorPlay } from "lucide-react";
-import RrwebPlayer from "rrweb-player";
-import "rrweb-player/dist/style.css";
 import { browserSessionsApi } from "@/lib/api";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -17,23 +15,95 @@ type Props = {
 
 type RrwebEvent = Record<string, unknown> & { type?: number; timestamp?: number; data?: unknown };
 
+const RRWEB_CHANNEL = "eden-rrweb";
+
+function buildReplaySrcDoc(origin: string): string {
+  const umdSrc = `${origin}/api/rrweb-player/rrweb-player.umd.min.cjs`;
+  const cssHref = `${origin}/api/rrweb-player/style.css`;
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="color-scheme" content="dark light"/>
+<link rel="stylesheet" href="${cssHref}"/>
+<style>
+  html, body { margin: 0; height: 100%; background: #0b0b0c; }
+  #root { width: 100%; min-height: 360px; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script src="${umdSrc}"><\/script>
+<script>
+(function () {
+  var CHANNEL = ${JSON.stringify(RRWEB_CHANNEL)};
+  var player = null;
+  var root = document.getElementById("root");
+  var mod = window.rrwebPlayer;
+  var Ctor = mod && (mod.default || mod.Player || mod);
+  function destroy() {
+    try { if (player && player.$destroy) player.$destroy(); } catch (e) {}
+    player = null;
+    if (root) root.innerHTML = "";
+  }
+  window.addEventListener("message", function (ev) {
+    var data = ev.data;
+    if (!data || data.channel !== CHANNEL) return;
+    if (ev.source !== parent) return;
+    if (data.type === "init") {
+      destroy();
+      if (typeof Ctor !== "function" || !root) return;
+      try {
+        player = new Ctor({
+          target: root,
+          props: {
+            events: data.events || [],
+            width: data.width || 640,
+            height: data.height || 360,
+            autoPlay: false,
+            showController: true,
+          },
+        });
+      } catch (e) {}
+    } else if (data.type === "goto" && player && player.goto) {
+      try { player.goto(data.ms); } catch (e) {}
+    } else if (data.type === "destroy") {
+      destroy();
+    }
+  });
+  parent.postMessage({ channel: CHANNEL, type: "ready" }, "*");
+})();
+<\/script>
+</body>
+</html>`;
+}
+
 /**
- * F09 — real rrweb-player (npm; plan name @rrweb/player). Replaces JSON iframe.
+ * F09 / K10 — rrweb-player stays out of the parent first-load graph.
+ * Replay loads UMD + CSS only inside a srcDoc iframe via `/api/rrweb-player/*`
+ * with sandbox="allow-scripts" (opaque unique origin) so recorded DOM/script
+ * cannot touch the parent. Parent ↔ player via postMessage only.
  */
 export function BrowserReplayPanel({ orgId, traceId, activeStep }: Props) {
   const [bundle, setBundle] = useState<Record<string, unknown> | null>(null);
   const [loading, setLoading] = useState(true);
   const [scrubStep, setScrubStep] = useState(activeStep ?? 0);
   const [playerError, setPlayerError] = useState<string | null>(null);
-  const hostRef = useRef<HTMLDivElement | null>(null);
-  const playerRef = useRef<{ $destroy?: () => void; goto?: (ms: number) => void } | null>(null);
+  const [srcDoc, setSrcDoc] = useState<string>("");
+  const iframeRef = useRef<HTMLIFrameElement | null>(null);
+  const iframeReadyRef = useRef(false);
+  const pendingInitRef = useRef<{
+    events: RrwebEvent[];
+    width: number;
+    height: number;
+  } | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
     browserSessionsApi
       .replayForTrace(orgId, traceId)
-      .then((res) => {
+      .then((res: Record<string, unknown>) => {
         if (!cancelled) setBundle(res);
       })
       .catch(() => {
@@ -76,51 +146,85 @@ export function BrowserReplayPanel({ orgId, traceId, activeStep }: Props) {
     [eventsByStep],
   );
 
-  useEffect(() => {
-    const host = hostRef.current;
-    if (!host || flatEvents.length === 0) return;
+  const postToPlayer = (msg: Record<string, unknown>) => {
+    const win = iframeRef.current?.contentWindow;
+    if (!win) return;
+    win.postMessage({ channel: RRWEB_CHANNEL, ...msg }, "*");
+  };
 
+  const sendInit = (payload: { events: RrwebEvent[]; width: number; height: number }) => {
+    postToPlayer({ type: "init", ...payload });
+  };
+
+  useEffect(() => {
+    if (flatEvents.length === 0) return;
+
+    let cancelled = false;
     setPlayerError(null);
-    host.innerHTML = "";
+    iframeReadyRef.current = false;
+    pendingInitRef.current = null;
 
     try {
-      const player = new RrwebPlayer({
-        target: host,
-        props: {
-          events: flatEvents,
-          width: host.clientWidth || 640,
-          height: 360,
-          autoPlay: false,
-          showController: true,
-        },
-      }) as { $destroy?: () => void; goto?: (ms: number) => void };
-      playerRef.current = player;
+      // K10: parent must not import rrweb-player — iframe loads UMD only.
+      const origin = window.location.origin;
+      const width = iframeRef.current?.clientWidth || 640;
+      pendingInitRef.current = {
+        events: flatEvents,
+        width,
+        height: 360,
+      };
+      setSrcDoc(buildReplaySrcDoc(origin));
     } catch (err) {
-      setPlayerError(err instanceof Error ? err.message : "Failed to load rrweb player");
+      if (!cancelled) {
+        setPlayerError(err instanceof Error ? err.message : "Failed to load rrweb player");
+      }
     }
 
     return () => {
+      cancelled = true;
       try {
-        playerRef.current?.$destroy?.();
+        postToPlayer({ type: "destroy" });
       } catch {
         /* ignore */
       }
-      playerRef.current = null;
-      if (host) host.innerHTML = "";
+      pendingInitRef.current = null;
+      iframeReadyRef.current = false;
     };
+    // postToPlayer closes over iframeRef; intentional for teardown only
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [flatEvents]);
 
   useEffect(() => {
-    if (stepKeys.length === 0 || !playerRef.current?.goto) return;
+    const onMessage = (ev: MessageEvent) => {
+      const data = ev.data;
+      if (!data || data.channel !== RRWEB_CHANNEL) return;
+      if (data.type !== "ready") return;
+      // Opaque sandbox origin is "null"; bind by source window, not origin string.
+      if (ev.source !== iframeRef.current?.contentWindow) return;
+      iframeReadyRef.current = true;
+      const pending = pendingInitRef.current;
+      if (pending) {
+        sendInit(pending);
+        pendingInitRef.current = null;
+      }
+    };
+    window.addEventListener("message", onMessage);
+    return () => window.removeEventListener("message", onMessage);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (stepKeys.length === 0 || !iframeReadyRef.current) return;
     const eventsAt = eventsByStep[String(scrubStep)] as RrwebEvent[] | undefined;
     const ts = eventsAt?.[0]?.timestamp;
     if (typeof ts === "number") {
       try {
-        playerRef.current.goto(ts);
+        postToPlayer({ type: "goto", ms: ts });
       } catch {
         /* ignore scrub errors */
       }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scrubStep, stepKeys, eventsByStep]);
 
   if (loading) {
@@ -139,7 +243,7 @@ export function BrowserReplayPanel({ orgId, traceId, activeStep }: Props) {
           to sync RRWeb events to the timeline.
         </p>
         <Button variant="outline" size="sm" asChild>
-          <Link href="/settings?tab=sdk">Connect browser instrumentation</Link>
+          <Link href="/settings?tab=api-keys">Connect browser instrumentation</Link>
         </Button>
       </Card>
     );
@@ -185,8 +289,11 @@ export function BrowserReplayPanel({ orgId, traceId, activeStep }: Props) {
       {playerError ? (
         <p className="text-xs text-[var(--error)]">{playerError}</p>
       ) : (
-        <div
-          ref={hostRef}
+        <iframe
+          ref={iframeRef}
+          title="Browser session replay"
+          sandbox="allow-scripts"
+          srcDoc={srcDoc}
           className="w-full min-h-[360px] rounded border border-[var(--border-subtle)] bg-[var(--bg-tertiary)] overflow-hidden"
         />
       )}

@@ -58,7 +58,19 @@ import time
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
+import httpx
+
 logger = logging.getLogger(__name__)
+
+_HTTPX: httpx.AsyncClient | None = None
+
+
+def _shared_httpx(timeout: float) -> httpx.AsyncClient:
+    """Process-wide httpx client — never ``async with`` this instance."""
+    global _HTTPX
+    if _HTTPX is None or _HTTPX.is_closed:
+        _HTTPX = httpx.AsyncClient(timeout=timeout)
+    return _HTTPX
 
 # OpenRouter exposes ``pricing`` as USD **per token** strings (e.g.
 # "0.000003"). We convert to USD per 1K tokens inside the parser.
@@ -382,12 +394,10 @@ class PricingCatalog:
                 if callable(aclose):
                     await aclose()
         else:
-            import httpx
-
-            async with httpx.AsyncClient(timeout=timeout) as c:
-                r = await c.get(url, headers=headers)
-                r.raise_for_status()
-                payload = r.json()
+            client = _shared_httpx(timeout)
+            r = await client.get(url, headers=headers)
+            r.raise_for_status()
+            payload = r.json()
 
         data = payload.get("data") if isinstance(payload, dict) else None
         if not isinstance(data, list):
@@ -532,12 +542,10 @@ class PricingCatalog:
         Returns the number of rows updated.
         """
         if client is None:
-            import httpx
-
-            async with httpx.AsyncClient(timeout=timeout) as c:
-                r = await c.get(url)
-                r.raise_for_status()
-                payload = r.json()
+            c = _shared_httpx(timeout)
+            r = await c.get(url)
+            r.raise_for_status()
+            payload = r.json()
         else:
             r = await client.get(url)
             try:
@@ -668,6 +676,26 @@ class PricingCatalog:
 # ─────────────────────────────────────────────────────────────────────
 
 
+# Process-wide seed cache. ``PricingRow`` is frozen, so callers get a
+# shallow ``dict`` copy and can mutate the mapping without rebuilding
+# ~40 row objects on every ``PricingCatalog.default()`` / lookup.
+_SEED_ROWS: dict[str, PricingRow] | None = None
+_LOOKUP_CATALOG: PricingCatalog | None = None
+
+
+def lookup_seed_row(model_id: str) -> PricingRow | None:
+    """Read-only lookup against the cached default seed catalog.
+
+    Prefer this on hot paths that only need a cost estimate and never
+    mutate the catalog (avoids allocating a new ``PricingCatalog`` +
+    seed dict copy per call).
+    """
+    global _LOOKUP_CATALOG
+    if _LOOKUP_CATALOG is None:
+        _LOOKUP_CATALOG = PricingCatalog.from_seed(default_seed_rows())
+    return _LOOKUP_CATALOG.lookup(model_id)
+
+
 def default_seed_rows() -> dict[str, PricingRow]:
     """Return the in-tree pricing seed.
 
@@ -680,7 +708,18 @@ def default_seed_rows() -> dict[str, PricingRow]:
 
     Self-hosted / open-weights rows have ``cost = 0.0`` - running
     on the user's own GPU has no per-token price.
+
+    Returns a shallow copy of the cached seed so catalog mutations
+    (merge/refresh) never poison the process-wide seed.
     """
+    global _SEED_ROWS
+    if _SEED_ROWS is None:
+        _SEED_ROWS = _build_default_seed_rows()
+    return dict(_SEED_ROWS)
+
+
+def _build_default_seed_rows() -> dict[str, PricingRow]:
+    """Build the static seed once (see :func:`default_seed_rows`)."""
     rows: dict[str, PricingRow] = {}
 
     def add(

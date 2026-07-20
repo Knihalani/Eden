@@ -244,7 +244,17 @@ async def propose_plan_for_issue(
     except Exception as exc:
         logger.debug("issue_patch_trigger: efficiency check failed: %s", exc)
 
-    linked_files = await _linked_files(org_id, rca_id, ctx)
+    # Resolve real repo_connections row — never treat issue.agent_id as repo_id.
+    repo_id = await _resolve_repo_id(org_id)
+    if not repo_id:
+        return {
+            "status": "error",
+            "reason": "repo_not_connected",
+            "issue_id": issue_id,
+            "message": "Connect GitHub App in Settings",
+        }
+
+    linked_files = await _linked_files(org_id, rca_id, ctx, repo_id=repo_id)
 
     try:
         from eden.patches.patch_generator import PatchGenerator
@@ -253,7 +263,7 @@ async def propose_plan_for_issue(
             org_id=org_id,
             rca_id=rca_id,
             trace_id=rca_id,
-            repo_id=ctx["agent_id"],
+            repo_id=repo_id,
             rca_summary=ctx["rca_summary"],
             test_plan=[],
             linked_files=linked_files,
@@ -305,8 +315,23 @@ async def propose_plan_for_issue(
     }
 
 
+async def _resolve_repo_id(org_id: str) -> str | None:
+    """Return the org's active repo_connections id (or full name), else None.
+
+    Intentionally does **not** fall back to ``issue.agent_id`` — that field is
+    an Eden agent identifier, not a GitHub/repo connection id.
+    """
+    from eden.providers.factory import resolve_active_repo_id
+
+    return await resolve_active_repo_id(org_id)
+
+
 async def _linked_files(
-    org_id: str, rca_id: str, ctx: dict[str, Any]
+    org_id: str,
+    rca_id: str,
+    ctx: dict[str, Any],
+    *,
+    repo_id: str,
 ) -> list[dict[str, str]]:
     """Resolve linked files via RCA linker (salvaged Cat 23)."""
     from eden.patches.rca_linker import CodeRootCauseLinker, _stack_trace_files
@@ -326,7 +351,7 @@ async def _linked_files(
         link_result = await linker.link(
             org_id=org_id,
             rca_id=rca_id,
-            repo_id=ctx.get("agent_id") or "",
+            repo_id=repo_id,
             rca_description=ctx.get("rca_summary") or "",
             stack_trace=inputs["stack_trace"],
             request_path=inputs["request_path"],

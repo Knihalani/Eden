@@ -330,31 +330,21 @@ class TestSystemPrompt:
 
 class TestModelSelection:
     @pytest.mark.asyncio
-    async def test_picks_t3_when_unset(self, monkeypatch):
-        # Clear the override so the TIER_MODELS[T3] lookup fires.
+    async def test_always_t2_ignores_preferred_tier(self, monkeypatch):
         monkeypatch.setattr(
             "eden.autonomous.agent.get_settings",
             lambda: _FakeSettings(ai_agent_t3_model=""),
-        )
-
-        async def _boom(*_a, **_k):
-            raise RuntimeError("no router")
-
-        monkeypatch.setattr(
-            "eden.llm.internal_router.resolve_models",
-            _boom,
-            raising=False,
         )
         service = ChatService()
         model, tier = await service._pick_model(
             user_message="investigate cost spike and export traces",
             preferred_tier="t3",
         )
-        assert model == "x-ai/grok-4.5"
-        assert tier == "t3"
+        assert tier == "t2"
+        assert model == "minimax/minimax-m3"
 
     @pytest.mark.asyncio
-    async def test_override_takes_precedence(self, monkeypatch):
+    async def test_always_t2_ignores_t3_override(self, monkeypatch):
         monkeypatch.setattr(
             "eden.autonomous.agent.get_settings",
             lambda: _FakeSettings(ai_agent_t3_model="anthropic/claude-sonnet-4.6"),
@@ -364,19 +354,19 @@ class TestModelSelection:
             user_message="investigate root cause",
             preferred_tier="t3",
         )
-        assert model == "anthropic/claude-sonnet-4.6"
-        assert tier == "t3"
+        assert tier == "t2"
+        assert model == "minimax/minimax-m3"
 
     @pytest.mark.asyncio
-    async def test_picks_t1_for_short_question(self, monkeypatch):
+    async def test_always_t2_for_short_question(self, monkeypatch):
         monkeypatch.setattr(
             "eden.autonomous.agent.get_settings",
             lambda: _FakeSettings(ai_agent_t3_model=""),
         )
         service = ChatService()
         model, tier = await service._pick_model(user_message="what is p95?")
-        assert tier == "t1"
-        assert model  # non-empty SLM id
+        assert tier == "t2"
+        assert model == "minimax/minimax-m3"
 
 
 

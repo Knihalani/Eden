@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { useOrg } from "@/hooks/use-org";
 import { useToast } from "@/components/ui/toast";
-import { api, datasetsApi } from "@/lib/api";
+import { api, datasetsApi, type InsightsOverviewResponse } from "@/lib/api";
 import { useOrgQuery } from "@/hooks/use-api-query";
 import { queryKeys } from "@/lib/query-keys";
 import { cn } from "@/lib/utils";
@@ -16,81 +16,20 @@ import { PageHeader } from "@/components/layout/page-header";
 import { PageContent } from "@/components/layout/page-content";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
-import { Lightbulb, Activity, AlertTriangle, BarChart3, Database, Layers, ChevronRight, Loader2, Zap, TrendingUp, Sparkles, FileJson, Download, Play, CheckCircle2 } from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
+import { Lightbulb, Activity, BarChart3, Database, Layers, ChevronRight, Loader2, Zap, TrendingUp, Sparkles, FileJson, Download, Play, CheckCircle2 } from "lucide-react";
 import { DataTable } from "@/components/ui/data-table";
 import { NoOrgState } from "@/components/ui/no-org-state";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Card } from "@/components/ui/card";
-interface OverviewData {
-  summary: {
-    total_traces: number;
-    total_insights: number;
-    total_disparity_reports: number;
-    total_datasets: number;
-    high_disparity_count: number;
-    avg_disparity_score: number;
-  };
-  traces: {
-    by_realm: Record<string, number>;
-    by_outcome: Record<string, number>;
-  };
-  insights: {
-    by_detector: Record<string, number>;
-    by_severity: Record<string, number>;
-    recent: Array<{
-      insight_id: string;
-      detector: string;
-      severity: string;
-      confidence: number;
-      summary: string;
-      affected_trace_ids: string[];
-      pattern: Record<string, unknown>;
-      recommended_action: string;
-      auto_created_dataset: string | null;
-      metadata: Record<string, unknown>;
-    }>;
-  };
-  disparity: {
-    reports: Array<{
-      report_id: string;
-      tenant_id: string;
-      env_trace_id: string;
-      prod_trace_id: string;
-      generated_at: string;
-      overall_score: number;
-      dimensions: Array<{
-        name: string;
-        env_value: number;
-        prod_value: number;
-        gap: number;
-        severity: string;
-        explanation: string;
-      }>;
-      recommendations: string[];
-      metadata: Record<string, unknown>;
-    }>;
-    high_disparity_count: number;
-    avg_score: number;
-  };
-  datasets: {
-    count: number;
-    items: Array<{
-      dataset_id: string;
-      name: string;
-      dataset_type: string;
-      version: string;
-      tenant_id: string;
-      project_id: string;
-      created_at: string;
-      updated_at: string;
-      entry_count: number;
-      tags: string[];
-      metadata: Record<string, unknown>;
-    }>;
-  };
-}
+import { Alert } from "@/components/ui/alert";
+
+type OverviewData = InsightsOverviewResponse;
 type Tab = "overview" | "insights" | "closed-loop";
+
+/** True when overview would render zeroed StatCards / empty recent — prefer onboarding EmptyState. */
+function isOverviewEmpty(data: OverviewData): boolean {
+  return data.summary.total_insights === 0 && data.insights.recent.length === 0;
+}
 
 // §3.2 — Closed-loop correlation report (Insights → KB → env quality).
 interface CorrelationWeekBucket {
@@ -124,18 +63,35 @@ export default function InsightsPage() {
   const overviewQuery = useOrgQuery(
     queryKeys.insights.overview(orgId),
     orgId,
-    () => api.getInsightsOverview(orgId!) as unknown as Promise<OverviewData>,
+    () => api.getInsightsOverview(orgId!),
   );
   const overview = overviewQuery.data ?? null;
   const loading = overviewQuery.isLoading;
-  const error = overviewQuery.error?.message ?? "";
+  const isError = overviewQuery.isError;
+  const error = overviewQuery.error?.message ?? "Could not load insights overview.";
   const loadOverview = () => overviewQuery.refetch();
   async function handleRunDetectors() {
     if (!currentOrg) return;
+    // Overview prefers Postgres (detector_loop). Manual run only mutates
+    // the in-memory store — refuse when the UI is bound to PG so we don't
+    // toast a fake success that never appears in the overview.
+    if (overview?.summary?.source === "postgres") {
+      toast.error(
+        "Detectors run via background loop",
+        "This overview reads Postgres. Manual Run Detectors only updates the in-memory demo store.",
+      );
+      return;
+    }
     setRunningDetectors(true);
     try {
-      await api.runDetectors(currentOrg.id);
-      toast.success("Detectors finished", "Latest insights are now available below.");
+      const insights = await api.runDetectors(currentOrg.id, {});
+      const n = insights.length;
+      toast.success(
+        "Detectors finished",
+        n === 0
+          ? "No new insights this run."
+          : `${n} insight${n === 1 ? "" : "s"} ready below.`,
+      );
       await loadOverview();
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Failed to run detectors";
@@ -150,7 +106,7 @@ export default function InsightsPage() {
   return <PageContent size="wide">
       <PageHeader title="Insights" subtitle="Automatic pattern detection and closed-loop improvement signals" icon={Lightbulb} actions={<div className="flex items-center gap-2">
             <Button asChild variant="outline">
-              <Link href="/insights/topics">Topic clusters</Link>
+              <Link href="/analytics?tab=topics">Topic clusters</Link>
             </Button>
             <Button variant="default" onClick={handleRunDetectors} loading={runningDetectors} aria-label="Run insight detectors now">
               <Play className="w-4 h-4" />
@@ -162,10 +118,16 @@ export default function InsightsPage() {
             </Button>
           </div>} />
 
-      {error && <div className="bg-[var(--error-bg)] text-[var(--error)] text-sm px-4 py-3 rounded-xl flex items-center gap-2.5 border border-[var(--error)]/20">
-          <AlertTriangle className="w-4 h-4 flex-shrink-0" />
-          {error}
-        </div>}
+      {overview?.summary?.source === "in_memory" && (
+        <Alert
+          variant="warning"
+          title="demo/in-memory — production detector loop writes separately"
+          description={
+            overview.summary.honesty_banner ??
+            "This overview is from the process-local InsightsService store, not the Postgres table the detector loop persists to."
+          }
+        />
+      )}
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as Tab)}>
@@ -182,64 +144,47 @@ export default function InsightsPage() {
         </TabsList>
       </Tabs>
 
-      {/* Content */}
+      {/* Content — prefer ErrorState over false empty on load failure */}
       {loading && !overview ? <div className="flex items-center justify-center py-20">
           <Loader2 className="w-8 h-8 animate-spin text-[var(--accent)]" />
-        </div> : overview ? <AnimatePresence mode="wait">
-          <motion.div key={activeTab} initial={{
-        opacity: 0,
-        y: 8
-      }} animate={{
-        opacity: 1,
-        y: 0
-      }} exit={{
-        opacity: 0,
-        y: -6
-      }} transition={{
-        duration: 0.2
-      }}>
-            {activeTab === "overview" && <OverviewTab data={overview} />}
+        </div> : isError && !overview ? (
+          <ErrorState
+            size="lg"
+            title="Could not load insights"
+            message={error}
+            action={
+              <Button variant="outline" onClick={loadOverview}>
+                Try again
+              </Button>
+            }
+          />
+        ) : overview ? <>
+          <div key={activeTab}>
+            {activeTab === "overview" && (
+              isOverviewEmpty(overview) ? (
+                <InsightsEmptyOnboarding
+                  runningDetectors={runningDetectors}
+                  onRunDetectors={handleRunDetectors}
+                />
+              ) : (
+                <OverviewTab
+                  data={overview}
+                  onOpenInsight={(insight) => {
+                    setActiveTab("insights");
+                    setSelectedInsight(insight);
+                  }}
+                />
+              )
+            )}
             {activeTab === "insights" && <InsightsTab data={overview.insights} onSelectInsight={setSelectedInsight} />}
             {activeTab === "closed-loop" && <ClosedLoopTab />}
-          </motion.div>
-        </AnimatePresence> : <EmptyState
-            title="No insights yet"
-            description="Insights appear after detectors run over your traces. Hit Run Detectors to scan now — this takes about a minute on a fresh dataset."
-            size="lg"
-            variant="terminal"
-            terminal={
-              <div className="rounded-lg overflow-hidden border border-[var(--border-default)] bg-[var(--bg-base)] text-left shadow-[0_24px_60px_-24px_rgba(0,0,0,0.6)]">
-                <div className="flex items-center gap-1.5 px-3 py-1.5 bg-[var(--bg-secondary)] border-b border-[var(--border-subtle)]">
-                  <span className="w-2 h-2 rounded-full bg-[var(--traffic-close)]" />
-                  <span className="w-2 h-2 rounded-full bg-[var(--traffic-minimize)]" />
-                  <span className="w-2 h-2 rounded-full bg-[var(--traffic-zoom)]" />
-                  <span className="ml-2 text-[10px] font-mono text-[var(--text-muted)] tracking-wider">
-                    insight.preview
-                  </span>
-                  <span className="ml-auto inline-flex items-center gap-1 text-[10px] font-mono uppercase tracking-[0.18em] text-[var(--terminal)]">
-                    <span className="w-1 h-1 rounded-full bg-[var(--terminal)]" />
-                    preview
-                  </span>
-                </div>
-                <div className="p-4 space-y-3">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-mono font-bold px-2 py-0.5 rounded-full bg-[var(--error-bg)] text-[var(--error)]">CRITICAL</span>
-                    <span className="text-xs font-mono text-[var(--text-muted)]">latency_regression · conf 0.91</span>
-                  </div>
-                  <p className="text-sm text-[var(--text-primary)]">
-                    p95 latency on <span className="font-mono text-[var(--accent)]">tool.search</span> jumped 4.2× in the last 6h across 31 traces.
-                  </p>
-                  <div className="text-xs text-[var(--text-muted)] font-mono">
-                    open_dataset → <span className="text-[var(--terminal)]">/datasets/latency-regression-2026-07-07</span>
-                  </div>
-                </div>
-              </div>
-            }
-            action={<Button variant="default" onClick={handleRunDetectors} loading={runningDetectors} aria-label="Run insight detectors">
-              <Play className="w-4 h-4" />
-              Run Detectors
-            </Button>}
-          />}
+          </div>
+        </> : (
+          <InsightsEmptyOnboarding
+            runningDetectors={runningDetectors}
+            onRunDetectors={handleRunDetectors}
+          />
+        )}
 
       {/* Insight Detail Modal — Radix Dialog (focus trap + ESC + ARIA) */}
       <Dialog open={selectedInsight !== null} onOpenChange={open => !open && setSelectedInsight(null)}>
@@ -249,13 +194,70 @@ export default function InsightsPage() {
 }
 
 // ──────────────────────────────────────────────────────────────────────────
+// Empty / onboarding (replaces zeroed OverviewTab theater)
+// ──────────────────────────────────────────────────────────────────────────
+
+function InsightsEmptyOnboarding({
+  runningDetectors,
+  onRunDetectors,
+}: {
+  runningDetectors: boolean;
+  onRunDetectors: () => void;
+}) {
+  return (
+    <EmptyState
+      title="No insights yet"
+      description="Insights appear after detectors run over your traces. Hit Run Detectors to scan now — this takes about a minute on a fresh dataset."
+      size="lg"
+      variant="terminal"
+      terminal={
+        <div className="rounded-lg overflow-hidden border border-[var(--border-default)] bg-[var(--bg-base)] text-left shadow-[0_24px_60px_-24px_rgba(0,0,0,0.6)]">
+          <div className="flex items-center gap-1.5 px-3 py-1.5 bg-[var(--bg-secondary)] border-b border-[var(--border-subtle)]">
+            <span className="w-2 h-2 rounded-full bg-[var(--traffic-close)]" />
+            <span className="w-2 h-2 rounded-full bg-[var(--traffic-minimize)]" />
+            <span className="w-2 h-2 rounded-full bg-[var(--traffic-zoom)]" />
+            <span className="ml-2 text-[10px] font-mono text-[var(--text-muted)] tracking-wider">
+              insight.preview
+            </span>
+            <span className="ml-auto inline-flex items-center gap-1 text-[10px] font-mono uppercase tracking-[0.18em] text-[var(--terminal)]">
+              <span className="w-1 h-1 rounded-full bg-[var(--terminal)]" />
+              preview
+            </span>
+          </div>
+          <div className="p-4 space-y-3">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-mono font-bold px-2 py-0.5 rounded-full bg-[var(--error-bg)] text-[var(--error)]">CRITICAL</span>
+              <span className="text-xs font-mono text-[var(--text-muted)]">latency_regression · conf 0.91</span>
+            </div>
+            <p className="text-sm text-[var(--text-primary)]">
+              p95 latency on <span className="font-mono text-[var(--accent)]">tool.search</span> jumped 4.2× in the last 6h across 31 traces.
+            </p>
+            <div className="text-xs text-[var(--text-muted)] font-mono">
+              open_dataset → <span className="text-[var(--terminal)]">/datasets/latency-regression-2026-07-07</span>
+            </div>
+          </div>
+        </div>
+      }
+      action={
+        <Button variant="default" onClick={onRunDetectors} loading={runningDetectors} aria-label="Run insight detectors">
+          <Play className="w-4 h-4" />
+          Run Detectors
+        </Button>
+      }
+    />
+  );
+}
+
+// ──────────────────────────────────────────────────────────────────────────
 // Overview Tab
 // ──────────────────────────────────────────────────────────────────────────
 
 function OverviewTab({
-  data
+  data,
+  onOpenInsight,
 }: {
   data: OverviewData;
+  onOpenInsight: (insight: OverviewData["insights"]["recent"][0]) => void;
 }) {
   const {
     summary,
@@ -335,7 +337,13 @@ function OverviewTab({
           Recent Insights
         </h3>
         {insights.recent.length > 0 ? <div className="space-y-3">
-            {insights.recent.slice(0, 5).map(insight => <div key={insight.insight_id} className="flex items-start gap-3 p-3 rounded-lg bg-[var(--bg-secondary)] hover:bg-[var(--bg-tertiary)] transition-colors">
+            {insights.recent.slice(0, 5).map(insight => (
+              <button
+                key={insight.insight_id}
+                type="button"
+                onClick={() => onOpenInsight(insight)}
+                className="w-full text-left flex items-start gap-3 p-3 rounded-lg bg-[var(--bg-secondary)] hover:bg-[var(--bg-tertiary)] transition-colors"
+              >
                 <SeverityIcon severity={insight.severity} />
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-[var(--text-primary)] truncate">
@@ -350,7 +358,9 @@ function OverviewTab({
                     </span>
                   </div>
                 </div>
-              </div>)}
+                <ChevronRight className="w-4 h-4 text-[var(--text-muted)] flex-shrink-0 mt-1" />
+              </button>
+            ))}
           </div> : <EmptyState icon={Sparkles} title="No insights yet" description="Run detectors to discover patterns and quality trends in your outputs." size="md" />}
       </Card>
     </div>;
@@ -495,16 +505,38 @@ function ClosedLoopTab() {
   );
   const report = correlationQuery.data ?? null;
   const loading = correlationQuery.isLoading;
-  const error = correlationQuery.error
-    ? "Could not load the correlation report. " + "For pending closed-loop actions, visit /closed-loop."
-    : null;
+  const isError = correlationQuery.isError;
+  const errorMessage =
+    correlationQuery.error instanceof Error
+      ? correlationQuery.error.message
+      : "Could not load the correlation report.";
   if (loading) {
     return <div className="flex items-center justify-center py-20">
         <Loader2 className="w-8 h-8 animate-spin text-[var(--accent)]" />
       </div>;
   }
-  if (error || !report) {
-    return <ErrorState size="lg" title="No correlation data yet" message={error ?? "Once the closed-loop is established, this view shows whether insight-driven KB entries correlate with downstream gold-tier jobs."} />;
+  if (isError) {
+    return (
+      <ErrorState
+        size="lg"
+        title="Could not load correlation data"
+        message={`${errorMessage} For pending closed-loop actions, visit /improve.`}
+        action={
+          <Button variant="outline" size="sm" onClick={() => void correlationQuery.refetch()}>
+            Try again
+          </Button>
+        }
+      />
+    );
+  }
+  if (!report) {
+    return (
+      <EmptyState
+        size="lg"
+        title="No correlation data yet"
+        description="Once the closed-loop is established, this view shows whether insight-driven KB entries correlate with downstream gold-tier jobs."
+      />
+    );
   }
   const ratePct = report.aggregate_post_rate ? (report.aggregate_post_rate * 100).toFixed(1) : "—";
   const targetPct = (report.target_slo * 100).toFixed(0);

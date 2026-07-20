@@ -46,7 +46,7 @@ def mock_auth(api_client: TestClient, mock_collector, monkeypatch):
     which captures a separate local reference at import time.
     """
     from eden.api.app import app
-    from eden.api.deps import get_ingestion_auth
+    from eden.api.deps import get_ingest_auth
     from eden.api.routes import ingestion as ingestion_module
     from eden.observability import telemetry_collector as tc_module
 
@@ -56,7 +56,9 @@ def mock_auth(api_client: TestClient, mock_collector, monkeypatch):
         "api_key_id": "key-abc",
         "auth_method": "api_key",
     }
-    app.dependency_overrides[get_ingestion_auth] = lambda: fake_auth
+    # Ingest routes use ``get_ingest_auth`` (scoped), not the legacy
+    # ``get_ingestion_auth`` alias — override the dep the route Depends on.
+    app.dependency_overrides[get_ingest_auth] = lambda: fake_auth
 
     async def _get():
         return mock_collector
@@ -67,7 +69,7 @@ def mock_auth(api_client: TestClient, mock_collector, monkeypatch):
     try:
         yield fake_auth
     finally:
-        app.dependency_overrides.pop(get_ingestion_auth, None)
+        app.dependency_overrides.pop(get_ingest_auth, None)
 
 
 # ── Per-format happy path ──────────────────────────────────────────

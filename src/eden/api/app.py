@@ -144,27 +144,6 @@ from eden.api.routes import (
     integrations_runloop,
     integrations_status,
     integrations_wandb,
-    intelligence_agents,
-    intelligence_apm_depth,
-    intelligence_autonomous,
-    intelligence_closed_loop,
-    intelligence_columnar,
-    intelligence_cost,
-    intelligence_dsl,
-    intelligence_eval,
-    intelligence_experiments,
-    intelligence_governance,
-    intelligence_guardrails,
-    intelligence_memory,
-    intelligence_metric_studio,
-    intelligence_outcomes,
-    intelligence_predictive,
-    intelligence_rca,
-    intelligence_replay,
-    intelligence_retrieval,
-    intelligence_time_travel,
-    intelligence_tools,
-    intelligence_user,
     internal_health,
     judges,
     kb,
@@ -232,6 +211,55 @@ from eden.observability.metrics_endpoint import router as metrics_endpoint_route
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
+
+# B26 — intelligence_* routers are feature-flag gated and numpy-heavy.
+# Defer import+include until lifespan (or explicit ``mount_deferred_routers``)
+# so cold ``import eden.api.app`` does not pay for them. OpenAPI is complete
+# once lifespan has run (uvicorn always does before accepting traffic).
+_DEFERRED_INTELLIGENCE_ROUTERS: tuple[str, ...] = (
+    "intelligence_agents",
+    "intelligence_apm_depth",
+    "intelligence_autonomous",
+    "intelligence_closed_loop",
+    "intelligence_columnar",
+    "intelligence_cost",
+    "intelligence_dsl",
+    "intelligence_eval",
+    "intelligence_experiments",
+    "intelligence_governance",
+    "intelligence_guardrails",
+    "intelligence_memory",
+    "intelligence_metric_studio",
+    "intelligence_outcomes",
+    "intelligence_predictive",
+    "intelligence_rca",
+    "intelligence_replay",
+    "intelligence_retrieval",
+    "intelligence_time_travel",
+    "intelligence_tools",
+    "intelligence_user",
+)
+
+
+def mount_deferred_routers(application: FastAPI | None = None) -> int:
+    """Import and include B26 deferred intelligence routers. Idempotent.
+
+    Returns the number of routers newly mounted (0 if already mounted).
+    """
+    import importlib
+
+    target = application if application is not None else app
+    if getattr(target.state, "_b26_deferred_mounted", False):
+        return 0
+    mounted = 0
+    for name in _DEFERRED_INTELLIGENCE_ROUTERS:
+        mod = importlib.import_module(f"eden.api.routes.{name}")
+        target.include_router(mod.router)
+        mounted += 1
+    target.state._b26_deferred_mounted = True
+    # Invalidate any cached OpenAPI so deferred paths appear.
+    target.openapi_schema = None
+    return mounted
 
 
 def _cors_origins_list() -> list[str]:
@@ -344,6 +372,17 @@ async def lifespan(app: FastAPI):
 
     logger.info("Starting Eden API...")
 
+    # B26 — mount deferred intelligence routers before accepting traffic
+    # so OpenAPI and route tables are complete for the first request.
+    try:
+        n = mount_deferred_routers(app)
+        if n:
+            logger.info("B26: mounted %s deferred intelligence routers", n)
+    except Exception as exc:  # noqa: BLE001
+        logger.error("B26: deferred router mount failed: %s", exc)
+        if settings.eden_production or settings.strict_startup_checks:
+            raise
+
     # Schema must lead code on every deploy. Production uses the
     # dedicated ``eden-migrate`` init job (SKIP_MIGRATIONS=1 on API).
     try:
@@ -420,7 +459,7 @@ async def lifespan(app: FastAPI):
     # When enabled, a Redis leader lock ensures only one API replica runs
     # the singleton tasks (insights, anomaly, evolution, consumers, etc.).
     background_workers = False
-    if getattr(settings, "run_background_workers", True):
+    if getattr(settings, "run_background_workers", False):
         try:
             from eden.workers.background import start_background_workers
 
@@ -827,6 +866,7 @@ app.include_router(export.router)  # /orgs/{org_id}/export
 app.include_router(export_destinations.router)  # /orgs/{org_id}/export/{destinations,schedules,run-now}
 app.include_router(ingestion.router)  # /orgs/{org_id}/ingest (multi-format observability ingestion)
 app.include_router(ingest_agent_sessions.router)  # /orgs/{org_id}/ingest/agent-sessions (F23 SDK, X-Org-Api-Key)
+app.include_router(observability.ingest_router)  # /orgs/{org_id}/observability/telemetry/ingest* (API key)
 app.include_router(observability.router)  # /orgs/{org_id}/observability/{traces,summary,spans/search,...}
 app.include_router(agents.router)  # /orgs/{org_id}/agents (Phase 2 surface — list + register + get)
 app.include_router(llmops.router)  # /orgs/{org_id}/llmops/{artifacts,prompts,ab-tests,experiments,gateway,monitoring,cache}
@@ -870,8 +910,10 @@ app.include_router(datasets_hub.router)  # /orgs/{org_id}/datasets (F53 hub list
 app.include_router(datasets_spreadsheet.router)  # /orgs/{org_id}/datasets/{dataset_id} (Phase S spreadsheet)
 app.include_router(experiments_offline.router)  # /orgs/{org_id}/experiments/offline (F51)
 app.include_router(playgrounds.router)  # /orgs/{org_id}/playgrounds (W18 U03/F49)
-app.include_router(prompts.router)  # /orgs/{org_id}/prompts (Phase I prompt management + playground)
-app.include_router(prompts_v2.router)  # /orgs/{org_id}/prompts/* (D.9 versioning: /{name}/versions + /eval-runs)
+# prompts_v2 first: FastAPI first-match wins. D.9 owns GET/POST "" and
+# GET /{name}; Phase I keeps PATCH, playground, rollback, etc.
+app.include_router(prompts_v2.router)  # /orgs/{org_id}/prompts (D.9 list/create/get + versions)
+app.include_router(prompts.router)  # /orgs/{org_id}/prompts (Phase I playground/rollback; shadowed list/create/get)
 app.include_router(pii_policy.router)  # /orgs/{org_id}/pii-policy
 app.include_router(cost_overrides.router)  # /orgs/{org_id}/cost-overrides (per-tenant contract rates)  # /orgs/{org_id}/retention-policy
 app.include_router(region.router)  # /orgs/{org_id}/region
@@ -899,27 +941,7 @@ app.include_router(observability_live.router)  # /orgs/{org_id}/stream/traces/* 
 app.include_router(mcp_keys.router)  # /orgs/{org_id}/mcp/keys (W28)
 app.include_router(agentic_metrics.router)  # F64 agentic metrics pack
 app.include_router(autonomy.router)  # /orgs/{org_id}/settings/autonomy (N22, gated by closed_loop_orchestrator_v1)
-app.include_router(intelligence_agents.router)
-app.include_router(intelligence_apm_depth.router)
-app.include_router(intelligence_autonomous.router)
-app.include_router(intelligence_closed_loop.router)
-app.include_router(intelligence_columnar.router)
-app.include_router(intelligence_cost.router)
-app.include_router(intelligence_dsl.router)
-app.include_router(intelligence_eval.router)
-app.include_router(intelligence_experiments.router)
-app.include_router(intelligence_governance.router)
-app.include_router(intelligence_guardrails.router)
-app.include_router(intelligence_memory.router)
-app.include_router(intelligence_metric_studio.router)
-app.include_router(intelligence_outcomes.router)
-app.include_router(intelligence_predictive.router)
-app.include_router(intelligence_rca.router)
-app.include_router(intelligence_replay.router)
-app.include_router(intelligence_retrieval.router)
-app.include_router(intelligence_time_travel.router)
-app.include_router(intelligence_tools.router)
-app.include_router(intelligence_user.router)
+# B26: intelligence_* routers mounted via mount_deferred_routers() in lifespan
 app.include_router(metrics_endpoint_router)  # /metrics (Prometheus, bearer-token auth)
 app.include_router(feature_flags.router)  # /feature-flags (public)
 
@@ -941,7 +963,7 @@ app.include_router(observability_stream.router)
 app.include_router(insights.router)
 # Judges (Phase 7.1b) — /orgs/{org_id}/observability/judges/...
 app.include_router(judges.router)
-# Alert replay/ack — /alerts/... (mounted at root, not under /orgs)
+# Alert replay/ack — /orgs/{org_id}/alerts/... (path-scoped, auth via resolve_path_org_access)
 app.include_router(replay.router)
 # Media blob storage (Phase 7.2a) — /orgs/{org_id}/media/{blob_id}
 app.include_router(media.router)
@@ -1076,18 +1098,18 @@ async def readiness_probe(request: Request):
 
 @app.get("/health", response_model=HealthResponse)
 async def health_check():
-    """Check system health.
+    """Detailed system health for monitors and the portal badge.
 
-    Phase 2 audit (2026-06-23) — return HTTP 503 when degraded so
-    Northflank's ``httpHealthCheck`` actually restarts the container.
-    The previous version always returned 200, which meant a broken
-    Postgres connection (Neon project deleted, bad pool, etc.) would
-    only be surfaced via the body, not the status code — Northflank
-    keeps traffic pointed at a half-dead container. The
-    ``HEALTH_PROBE_MODE`` setting lets operators force a 200 response
-    (e.g. local dev with an in-memory db).
+    Soft deps (Qdrant, quality worker) mark the body ``degraded`` and,
+    in ``auto`` mode, return HTTP 503 so monitors can alert. This is
+    intentional and is **not** the ingress readiness probe — use
+    ``/ready`` for that (Postgres-only). ``HEALTH_PROBE_MODE=200``
+    forces a 200 so local/dev probes can read the body without
+    tripping restart loops.
     """
     from fastapi.responses import JSONResponse
+
+    from eden.api.startup_checks import health_probe_http_status
 
     kb_health = await kb_health_check()
 
@@ -1173,19 +1195,11 @@ async def health_check():
         evolution_loop_running=evolution_loop_running,
     )
 
-    # HEALH_PROBE_MODE controls the status code:
-    #   "auto"  — 200 if healthy, 503 if degraded (production default)
-    #   "200"   — always 200 (local dev / debug; lets you probe the body
-    #             without tripping Northflank's restart loop)
-    #   "503"   — always 503 (manual chaos testing)
     mode = getattr(settings, "health_probe_mode", "auto")
-    if mode == "200":
+    status_code = health_probe_http_status(overall, mode)
+    if status_code == 200:
         return body
-    if mode == "503":
-        return JSONResponse(status_code=503, content=body.model_dump())
-    if overall == "healthy":
-        return body
-    return JSONResponse(status_code=503, content=body.model_dump())
+    return JSONResponse(status_code=status_code, content=body.model_dump())
 
 
 def _get_sandbox_health() -> str:

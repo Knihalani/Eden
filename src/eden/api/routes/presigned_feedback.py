@@ -25,7 +25,7 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException, Path
 from pydantic import BaseModel, Field
 
-from eden.api.deps import get_current_user
+from eden.api.deps import get_current_user, require_path_org_access
 from eden.services.app_intel import DEFAULT_TTL_SECONDS, PresignedFeedbackService
 
 logger = logging.getLogger(__name__)
@@ -35,7 +35,9 @@ logger = logging.getLogger(__name__)
 auth_router = APIRouter(
     prefix="/orgs/{org_id}/intelligence/user/feedback",
     tags=["presigned-feedback"],
-    dependencies=[Depends(get_current_user)],
+    dependencies=[Depends(get_current_user),
+        Depends(require_path_org_access),
+    ],
 )
 
 
@@ -89,7 +91,7 @@ class SubmitFeedbackResponse(BaseModel):
     response_model=IssueTokenResponse,
 )
 async def issue_presigned_token(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     body: IssueTokenRequest = ...,
 ) -> IssueTokenResponse:
     svc = PresignedFeedbackService()

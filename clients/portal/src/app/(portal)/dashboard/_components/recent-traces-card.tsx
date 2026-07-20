@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils";
 import { U20_EMPTY_COPY } from "@/lib/portal-polish";
 import { EmptyState } from "@/components/ui/empty-state";
 import { buttonVariants } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
+import { Panel } from "@/components/ui/panel";
 import { Skeleton } from "@/components/ui/skeleton";
 import { DOCS_QUICKSTART_URL } from "@/lib/constants";
 
@@ -42,8 +42,8 @@ export function RecentTracesCard({
   const empty = !loading && !unavailable && top.length === 0;
 
   return (
-    <Card padding="lg">
-      <div className="flex items-center justify-between p-5 pb-3">
+    <Panel tone="flat" padding="none">
+      <div className="flex items-center justify-between px-5 pt-5 pb-3">
         <div>
           <h2 className="text-base font-semibold text-[var(--text-primary)]">
             Recent Traces
@@ -122,7 +122,7 @@ export function RecentTracesCard({
             <li key={t.trace_id}>
               <Link
                 href={`/traces?traceId=${encodeURIComponent(t.trace_id)}&view=traces`}
-                className="flex items-center gap-3 px-5 py-2.5 min-h-[44px] hover:bg-[var(--bg-secondary)] transition-colors group"
+                className="flex items-center gap-3 px-5 py-2.5 min-h-[44px] hover:bg-[var(--bg-tertiary)]/40 transition-colors group"
               >
                 <OutcomeDot outcome={t.outcome} />
                 <div className="flex-1 min-w-0">
@@ -150,7 +150,7 @@ export function RecentTracesCard({
           ))}
         </ul>
       )}
-    </Card>
+    </Panel>
   );
 }
 
@@ -166,7 +166,7 @@ function OutcomeDot({ outcome }: { outcome: string | null }) {
   return (
     <div
       className={cn(
-        "w-2 h-2 rounded-full shrink-0 ring-2 ring-[var(--bg-primary)]",
+        "w-2 h-2 rounded-full shrink-0 ring-2 ring-[var(--bg-secondary)]",
         color,
       )}
     />

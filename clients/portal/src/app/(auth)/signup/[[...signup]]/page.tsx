@@ -1,6 +1,7 @@
 import { SignUp } from "@clerk/nextjs";
 import { AuthSplitLayout, AuthBrandPanel, ClerkAuthFallback } from "@/components/auth";
 import { clerkAppearance } from "@/components/auth/clerk-theme";
+import { buildAuthClerkRedirectProps } from "@/lib/auth-redirect";
 
 // Legacy /signup alias. next.config.ts 307s /signup → /sign-up, so
 // this page is a belt-and-suspenders mirror of the canonical route
@@ -11,7 +12,17 @@ import { clerkAppearance } from "@/components/auth/clerk-theme";
 // ClerkAuthFallback wraps the <SignUp /> component. If the Clerk
 // SDK fails to mount, the fallback shows a designed empty state
 // instead of a blank right column.
-export default function SignupPage() {
+export default async function SignupPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ redirect_url?: string | string[] }>;
+}) {
+  const params = await searchParams;
+  const raw = Array.isArray(params.redirect_url)
+    ? params.redirect_url[0]
+    : params.redirect_url;
+  const redirects = buildAuthClerkRedirectProps(raw, "sign-up");
+
   return (
     <AuthSplitLayout brandPanel={<AuthBrandPanel />}>
       <div className="w-full max-w-md space-y-6">
@@ -23,17 +34,20 @@ export default function SignupPage() {
             Create your account
           </h1>
           <p className="text-sm text-[var(--text-muted)]">
-            Then take the product tour, create an API key, and send your first
-            trace from the docs quickstart.
+            Create or join an organization first, then take the product tour,
+            create an API key, and send your first trace.
           </p>
         </div>
         <ClerkAuthFallback formLabel="sign-up">
           <SignUp
             path="/signup"
             routing="path"
-            signInUrl="/sign-in"
-            fallbackRedirectUrl="/dashboard?onboarding=1"
-            signInForceRedirectUrl="/dashboard"
+            signInUrl={redirects.crossLinkUrl}
+            {...(redirects.forceRedirectUrl
+              ? { forceRedirectUrl: redirects.forceRedirectUrl }
+              : {})}
+            fallbackRedirectUrl={redirects.fallbackRedirectUrl}
+            signInFallbackRedirectUrl={redirects.crossLinkFallbackRedirectUrl}
             appearance={clerkAppearance}
           />
         </ClerkAuthFallback>

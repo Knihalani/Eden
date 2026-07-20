@@ -12,9 +12,10 @@ from eden.alerts.compiler import AlertCompiler
 from eden.alerts import repo
 from eden.alerts.triage_judge import AlertTriageJudge
 from eden.api.deps import (
+    _try_resolve_token_payload,
     eden_user_id_from_auth,
     get_current_user,
-    resolve_eden_org_id,
+    resolve_path_org_access,
 )
 from eden.api.utils.safe_error import safe_detail
 from eden.dsl import AlertAsCode
@@ -61,38 +62,31 @@ class OverrideRequest(BaseModel):
     verdict: str = Field(..., pattern="^(real_incident|benign|duplicate)$")
 
 
-async def _require_org_member(org_id: str, user: dict[str, Any]) -> str:
-    user_id = await eden_user_id_from_auth(user)
-    if not user_id:
-        raise HTTPException(status_code=404, detail="User not found")
-    eden_org_id = await resolve_eden_org_id(org_id)
-    if not eden_org_id:
-        raise HTTPException(status_code=404, detail="Organization not found")
-    from eden.storage.postgres import get_postgres_client
-
-    client = await get_postgres_client()
-    membership = await client.fetchrow(
-        "SELECT role FROM org_members WHERE org_id = $1 AND user_id = $2",
-        eden_org_id,
-        user_id,
-    )
-    if not membership:
-        raise HTTPException(status_code=403, detail="Not a member of this organization")
+async def _require_org_member(
+    org_id: str,
+    user: dict[str, Any],
+    payload: dict[str, Any] | None = None,
+) -> str:
+    """Return Eden org id after membership check (Clerk self-heal aware)."""
+    _user_id, eden_org_id = await resolve_path_org_access(org_id, user, payload)
     return eden_org_id
 
 
-async def _require_org_admin(org_id: str, user: dict[str, Any]) -> str:
-    eden_org_id = await _require_org_member(org_id, user)
+async def _require_org_admin(
+    org_id: str,
+    user: dict[str, Any],
+    payload: dict[str, Any] | None = None,
+) -> str:
     from eden.storage.postgres import get_postgres_client
 
+    user_id, eden_org_id = await resolve_path_org_access(org_id, user, payload)
     client = await get_postgres_client()
-    user_id = await eden_user_id_from_auth(user)
     membership = await client.fetchrow(
         "SELECT role FROM org_members WHERE org_id = $1 AND user_id = $2",
         eden_org_id,
         user_id,
     )
-    if membership and membership["role"] not in ("owner", "admin"):
+    if not membership or membership["role"] not in ("owner", "admin"):
         raise HTTPException(status_code=403, detail="Admin role required")
     return eden_org_id
 
@@ -102,8 +96,9 @@ async def compile_nl_alert(
     body: CompileRequest,
     org_id: str = Path(...),
     user: dict = Depends(get_current_user),
+    payload: dict | None = Depends(_try_resolve_token_payload),
 ) -> CompileResponse:
-    eden_org_id = await _require_org_member(org_id, user)
+    eden_org_id = await _require_org_member(org_id, user, payload)
     try:
         result = await AlertCompiler().compile(
             eden_org_id,
@@ -131,8 +126,9 @@ async def compile_nl_alert(
 async def list_nl_alert_rules(
     org_id: str = Path(...),
     user: dict = Depends(get_current_user),
+    payload: dict | None = Depends(_try_resolve_token_payload),
 ) -> dict[str, Any]:
-    eden_org_id = await _require_org_member(org_id, user)
+    eden_org_id = await _require_org_member(org_id, user, payload)
     rules = await repo.list_nl_rules(eden_org_id)
     return {"rules": rules, "total": len(rules)}
 
@@ -142,8 +138,9 @@ async def create_nl_alert_rule(
     body: NLRuleCreate,
     org_id: str = Path(...),
     user: dict = Depends(get_current_user),
+    payload: dict | None = Depends(_try_resolve_token_payload),
 ) -> dict[str, Any]:
-    eden_org_id = await _require_org_admin(org_id, user)
+    eden_org_id = await _require_org_admin(org_id, user, payload)
     user_id = await eden_user_id_from_auth(user)
     try:
         rule = await repo.create_nl_rule(
@@ -177,8 +174,9 @@ async def get_nl_alert_rule(
     org_id: str = Path(...),
     rule_id: str = Path(...),
     user: dict = Depends(get_current_user),
+    payload: dict | None = Depends(_try_resolve_token_payload),
 ) -> dict[str, Any]:
-    eden_org_id = await _require_org_member(org_id, user)
+    eden_org_id = await _require_org_member(org_id, user, payload)
     rule = await repo.get_nl_rule(eden_org_id, rule_id)
     if not rule:
         raise HTTPException(status_code=404, detail="Rule not found")
@@ -191,8 +189,9 @@ async def update_nl_alert_rule(
     org_id: str = Path(...),
     rule_id: str = Path(...),
     user: dict = Depends(get_current_user),
+    payload: dict | None = Depends(_try_resolve_token_payload),
 ) -> dict[str, Any]:
-    eden_org_id = await _require_org_admin(org_id, user)
+    eden_org_id = await _require_org_admin(org_id, user, payload)
     rule = await repo.update_nl_rule(
         eden_org_id,
         rule_id,
@@ -213,8 +212,9 @@ async def delete_nl_alert_rule(
     org_id: str = Path(...),
     rule_id: str = Path(...),
     user: dict = Depends(get_current_user),
+    payload: dict | None = Depends(_try_resolve_token_payload),
 ) -> dict[str, Any]:
-    eden_org_id = await _require_org_admin(org_id, user)
+    eden_org_id = await _require_org_admin(org_id, user, payload)
     deleted = await repo.delete_nl_rule(eden_org_id, rule_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="Rule not found")
@@ -228,8 +228,9 @@ async def list_alert_events(
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
     user: dict = Depends(get_current_user),
+    payload: dict | None = Depends(_try_resolve_token_payload),
 ) -> dict[str, Any]:
-    eden_org_id = await _require_org_member(org_id, user)
+    eden_org_id = await _require_org_member(org_id, user, payload)
     events, total = await repo.list_alert_events(
         eden_org_id,
         verdict=verdict,
@@ -245,12 +246,16 @@ async def override_alert_verdict(
     org_id: str = Path(...),
     alert_id: str = Path(...),
     user: dict = Depends(get_current_user),
+    payload: dict | None = Depends(_try_resolve_token_payload),
 ) -> dict[str, Any]:
-    eden_org_id = await _require_org_member(org_id, user)
+    eden_org_id = await _require_org_member(org_id, user, payload)
     user_id = await eden_user_id_from_auth(user)
     feedback = await repo.record_triage_feedback(
         alert_event_id=alert_id,
         human_verdict=body.verdict,
         created_by=user_id,
+        org_id=eden_org_id,
     )
+    if not feedback:
+        raise HTTPException(status_code=404, detail="Alert not found")
     return {"status": "ok", **feedback}

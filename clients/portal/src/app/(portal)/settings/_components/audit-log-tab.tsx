@@ -1,14 +1,18 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useOrgQuery } from "@/hooks/use-api-query";
+import { queryKeys } from "@/lib/query-keys";
 import { usePermissions } from "@/hooks/use-permissions";
 import { api } from "@/lib/api";
 import { AuditEvent, type Organization } from "@/lib/types";
 import { Loader2, Filter, FileText } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
-import { useToast } from "@/components/ui/toast";
 import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { ErrorState } from "@/components/ui/error-state";
+import { errorFromCaught } from "@/lib/safe-error-message";
 const ACTION_LABELS: Record<string, string> = {
   "member.invited": "Member invited",
   "member.joined": "Member joined",
@@ -32,10 +36,9 @@ export function AuditLogTab({
   const {
     hasPermission
   } = usePermissions();
-  const toast = useToast();
-  const [events, setEvents] = useState<AuditEvent[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [total, setTotal] = useState(0);
+  const orgId = org?.id ?? null;
+  const [extraEvents, setExtraEvents] = useState<AuditEvent[]>([]);
+  const [appendError, setAppendError] = useState<string | null>(null);
   const [filter, setFilter] = useState<{
     action?: string;
     user_id?: string;
@@ -43,31 +46,43 @@ export function AuditLogTab({
     to?: string;
   }>({});
   const [showFilters, setShowFilters] = useState(false);
+  const logQuery = useOrgQuery(
+    queryKeys.auditLog.list(orgId, filter),
+    orgId,
+    () => api.getAuditLog(orgId!, { ...filter, limit: 50, offset: 0 }),
+  );
+  const baseEvents = logQuery.data?.entries ?? [];
+  const events = extraEvents.length ? [...baseEvents, ...extraEvents] : baseEvents;
+  const total = logQuery.data?.total ?? 0;
+  const loading = logQuery.isLoading;
+  const loadError = logQuery.error
+    ? errorFromCaught(logQuery.error, "Failed to load audit log")
+    : null;
   const loadEvents = async (append = false) => {
-    if (!org) return;
-    setLoading(true);
+    if (!orgId) return;
+    setAppendError(null);
+    if (!append) {
+      setExtraEvents([]);
+      await logQuery.refetch();
+      return;
+    }
     try {
-      const data = await api.getAuditLog(org.id, {
+      const data = await api.getAuditLog(orgId, {
         ...filter,
         limit: 50,
-        offset: append ? events.length : 0
+        offset: baseEvents.length + extraEvents.length,
       });
-      if (append) {
-        setEvents(prev => [...prev, ...data.entries]);
-      } else {
-        setEvents(data.entries);
-      }
-      setTotal(data.total);
+      setExtraEvents((prev) => [...prev, ...data.entries]);
     } catch (e) {
       console.error("Failed to load audit log", e);
-      toast.error(e instanceof Error ? e.message : "Failed to load audit log");
-    } finally {
-      setLoading(false);
+      setAppendError(errorFromCaught(e, "Failed to load audit log"));
     }
   };
   useEffect(() => {
-    loadEvents();
-  }, [org?.id, filter]);
+    setExtraEvents([]);
+    setAppendError(null);
+  }, [orgId, filter]);
+
   const formatDate = (dateStr: string) => {
     const date = new Date(dateStr);
     return date.toLocaleString();
@@ -179,8 +194,17 @@ export function AuditLogTab({
           </div>}
       </Card>
 
-      {/* Events List */}
-      {loading && events.length === 0 ? <div className="flex justify-center py-12">
+      {loadError ? (
+        <ErrorState
+          title="Could not load audit log"
+          message={loadError}
+          action={
+            <Button variant="outline" size="sm" onClick={() => void loadEvents(false)}>
+              Try again
+            </Button>
+          }
+        />
+      ) : loading && events.length === 0 ? <div className="flex justify-center py-12">
           <Loader2 className="w-6 h-6 animate-spin" />
         </div> : <Card padding="lg" className="overflow-hidden">
           <DataTable columns={columns} rows={events} rowKey={e => e.id} loading={loading} defaultSort={{
@@ -188,14 +212,29 @@ export function AuditLogTab({
         direction: "desc"
       }} emptyTitle="No audit events found" emptyDescription="Events will appear here as actions are taken" emptyIcon={FileText} pageSize={1000} />
 
-          {events.length < total && <div className="p-4 border-t border-[var(--border)] text-center">
+          {appendError ? (
+            <div className="p-4 border-t border-[var(--border)]">
+              <ErrorState
+                title="Could not load more events"
+                message={appendError}
+                size="sm"
+                action={
+                  <Button variant="outline" size="sm" onClick={() => void loadEvents(true)}>
+                    Try again
+                  </Button>
+                }
+              />
+            </div>
+          ) : events.length < total ? (
+            <div className="p-4 border-t border-[var(--border)] text-center">
               <button onClick={() => loadEvents(true)} disabled={loading} className="px-4 py-2 text-sm text-[var(--accent)] hover:underline disabled:opacity-50">
                 {loading ? <span className="flex items-center gap-2 justify-center">
                     <Loader2 className="w-4 h-4 animate-spin" />
                     Loading...
                   </span> : `Load more (${total - events.length} remaining)`}
               </button>
-            </div>}
+            </div>
+          ) : null}
         </Card>}
     </div>;
 }

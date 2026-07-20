@@ -9,6 +9,8 @@ import { useOrgQuery } from "@/hooks/use-api-query";
 import { queryKeys } from "@/lib/query-keys";
 import { TraceOutcomeBadge } from "@/components/ui/status-badge";
 import { parseQueryLanguage, parsedToSpanSearchParams } from "@/lib/query-language";
+import { ErrorState } from "@/components/ui/error-state";
+import { Button } from "@/components/ui/button";
 
 export interface SpansTabProps {
   orgId: string;
@@ -118,10 +120,12 @@ export function SpansTab({ orgId, query, onSelectTrace }: SpansTabProps) {
   const total = spansQuery.data?.total ?? 0;
   const isFallback = spansQuery.data?.fallback === true;
   const alertHref = `/alerts?tab=rules&q=${encodeURIComponent(query ?? "")}`;
+  const listError = spansQuery.isError;
+  const errorMessage = spansQuery.error?.message ?? null;
 
   return (
     <div className="space-y-2">
-      {isFallback && (
+      {isFallback && !listError && (
         <p className="text-[11px] text-[var(--warning)] px-1">
           Search index offline (PG fallback) — results may lag Typesense.
         </p>
@@ -135,17 +139,33 @@ export function SpansTab({ orgId, query, onSelectTrace }: SpansTabProps) {
           {searchParams.q}
         </span>
       </div>
-      <InfiniteDataTable
-        columns={columns}
-        rows={hits}
-        loading={spansQuery.isLoading && page === 1}
-        rowKey={(r) => hitKey(r)}
-        onRowClick={(r) => onSelectTrace(r.trace_id, r.span_id)}
-        emptyTitle="No spans match"
-        emptyDescription="Try widening your query or time range. Use agent: / status: / text: tokens."
-        hasMore={total > hits.length}
-        onLoadMore={loadMore}
-      />
+      {listError ? (
+        <ErrorState
+          title="Could not load spans"
+          message={errorMessage ?? "Unknown error"}
+          action={
+            <Button
+              variant="outline"
+              onClick={() => void spansQuery.refetch()}
+              loading={spansQuery.isFetching}
+            >
+              Try again
+            </Button>
+          }
+        />
+      ) : (
+        <InfiniteDataTable
+          columns={columns}
+          rows={hits}
+          loading={spansQuery.isLoading && page === 1}
+          rowKey={(r) => hitKey(r)}
+          onRowClick={(r) => onSelectTrace(r.trace_id, r.span_id)}
+          emptyTitle="No spans match"
+          emptyDescription="Try widening your query or time range. Use agent: / status: / text: tokens."
+          hasMore={total > hits.length}
+          onLoadMore={loadMore}
+        />
+      )}
     </div>
   );
 }

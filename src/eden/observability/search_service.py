@@ -214,7 +214,29 @@ class SearchService:
             return self._client
         return get_typesense_client()
 
+    # Default PG fallback window when callers omit time bounds
+    # (prevents unbounded tenant-wide ILIKE scans).
+    DEFAULT_FALLBACK_WINDOW_S: int = 7 * 24 * 3600
+
     # ── Postgres ILIKE fallback ────────────────────────────────────
+
+    @classmethod
+    def _bounded_time_range(
+        cls,
+        from_ts: int | None,
+        to_ts: int | None,
+    ) -> tuple[int, int]:
+        """Force a closed [from_ts, to_ts] window for search fallback."""
+        now = int(time.time())
+        end = int(to_ts) if to_ts is not None else now
+        start = (
+            int(from_ts)
+            if from_ts is not None
+            else end - cls.DEFAULT_FALLBACK_WINDOW_S
+        )
+        if start > end:
+            start, end = end - cls.DEFAULT_FALLBACK_WINDOW_S, end
+        return start, end
 
     async def _pg_fallback_search(
         self,
@@ -235,14 +257,22 @@ class SearchService:
         shape as the Typesense path so callers see the same response
         structure. Returns an empty response (not an error) if the
         Postgres client is unavailable.
+
+        Always applies tenant + time bounds (default last 7 days when
+        ``from_ts``/``to_ts`` are omitted) so fallback never does an
+        unbounded tenant scan.
         """
         start = time.perf_counter()
         try:
             from eden.storage.postgres import get_postgres_client
-            pg = get_postgres_client()
+            pg = await get_postgres_client()
         except Exception as exc:
             logger.debug("PG fallback: postgres unavailable: %s", exc)
             return SearchResponse(query=query, fallback=True)
+        if pg is None:
+            return SearchResponse(query=query, fallback=True)
+
+        bound_from, bound_to = self._bounded_time_range(from_ts, to_ts)
 
         pattern = f"%{query.strip()}%" if query.strip() else "%"
         conditions: list[str] = ["tenant_id = $1"]
@@ -250,11 +280,14 @@ class SearchService:
         idx = 2
 
         if query.strip():
+            # Prefer bare-column ILIKE so mig 113 gin_trgm indexes
+            # (name, agent_id) can be used. COALESCE(...) wrappers are
+            # expression-index-hostile; NULL ILIKE is already false.
             conditions.append(
                 f"(name ILIKE ${idx}"
-                f" OR COALESCE(agent_id, '') ILIKE ${idx}"
-                f" OR COALESCE(outcome, '') ILIKE ${idx}"
-                f" OR COALESCE(event_type, '') ILIKE ${idx})"
+                f" OR agent_id ILIKE ${idx}"
+                f" OR outcome ILIKE ${idx}"
+                f" OR event_type ILIKE ${idx})"
             )
             params.append(pattern)
             idx += 1
@@ -270,14 +303,15 @@ class SearchService:
             conditions.append(f"event_type = ${idx}")
             params.append(event_type)
             idx += 1
-        if from_ts is not None:
-            conditions.append(f"EXTRACT(EPOCH FROM timestamp) >= ${idx}")
-            params.append(float(from_ts))
-            idx += 1
-        if to_ts is not None:
-            conditions.append(f"EXTRACT(EPOCH FROM timestamp) <= ${idx}")
-            params.append(float(to_ts))
-            idx += 1
+        # Compare against the timestamp column directly so the
+        # (tenant_id, timestamp) btree can be used — EXTRACT(EPOCH FROM
+        # timestamp) is not sargable.
+        conditions.append(f"timestamp >= to_timestamp(${idx})")
+        params.append(float(bound_from))
+        idx += 1
+        conditions.append(f"timestamp <= to_timestamp(${idx})")
+        params.append(float(bound_to))
+        idx += 1
 
         limit = max(1, min(per_page, 100))
         offset = max(0, (max(1, page) - 1) * limit)

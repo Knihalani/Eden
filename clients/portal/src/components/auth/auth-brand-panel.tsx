@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import {
   Activity,
   Terminal,
@@ -17,23 +17,11 @@ import {
   DOCS_URL,
 } from "@/lib/constants";
 import { cn } from "@/lib/utils";
-
-type HealthState = "ok" | "degraded" | "down" | "unknown";
-
-/**
- * Map a backend `/health` response into one of four UI states.
- * The backend returns `{ status: "healthy" | "degraded" | "unhealthy" }`
- * but we treat anything that isn't a clear 2xx with a known status as
- * `unknown` rather than alarming the user.
- */
-function mapHealth(body: unknown): HealthState {
-  if (!body || typeof body !== "object") return "unknown";
-  const status = (body as { status?: string }).status?.toLowerCase();
-  if (status === "healthy" || status === "ok") return "ok";
-  if (status === "degraded") return "degraded";
-  if (status === "unhealthy" || status === "down") return "down";
-  return "unknown";
-}
+import { usePolling } from "@/hooks/use-polling";
+import {
+  mapHealthResponse,
+  type HealthState,
+} from "@/lib/health-status";
 
 // Pipeline nodes mirror the current product surface:
 //   Gateway → Workspace → PR-suggestions → Review
@@ -92,36 +80,33 @@ export function AuthBrandPanel() {
     return () => mq.removeEventListener("change", sync);
   }, []);
 
-  useEffect(() => {
-    let cancelled = false;
-    const load = async () => {
-      try {
-        // The portal doesn't expose a bare /health route — the
-        // catch-all proxy at /api/proxy forwards to FastAPI's
-        // /health. Calling the bare path returns Next's 404 page
-        // (HTML, not JSON), which would otherwise flip the badge
-        // to "Status unknown" on the auth card.
-        const res = await fetch("/api/proxy/health", {
-          credentials: "include",
-          headers: { Accept: "application/json" },
-        });
-        if (!res.ok) {
-          if (!cancelled) setHealth("unknown");
-          return;
-        }
-        const body = await res.json().catch(() => null);
-        if (!cancelled) setHealth(mapHealth(body));
-      } catch {
-        if (!cancelled) setHealth("unknown");
-      }
-    };
-    load();
-    const id = window.setInterval(load, HEALTH_REFRESH_INTERVAL_MS);
-    return () => {
-      cancelled = true;
-      window.clearInterval(id);
-    };
+  const loadHealth = useCallback(async () => {
+    try {
+      // Prefer dedicated ``/api/health`` (public probe) over the
+      // catch-all proxy path. The proxy always calls Clerk
+      // ``auth().getToken()`` before forwarding — wasted session
+      // work on every login-panel poll. ``/api/health`` skips Clerk
+      // and still forwards to FastAPI ``/health``.
+      //
+      // Degraded Qdrant (prod Errno 99) returns HTTP 503 with
+      // ``status: "degraded"`` and ``postgres: "connected"``. Parse
+      // the JSON body even when !res.ok so the login panel shows
+      // "Partial degradation", not a broken/auth-failure badge.
+      const res = await fetch("/api/health", {
+        headers: { Accept: "application/json" },
+      });
+      const body = await res.json().catch(() => null);
+      setHealth(mapHealthResponse(res.status, body));
+    } catch {
+      setHealth("unknown");
+    }
   }, []);
+
+  usePolling({
+    fetch: loadHealth,
+    intervalMs: HEALTH_REFRESH_INTERVAL_MS,
+    enabled: true,
+  });
 
   const STATUS_LABEL: Record<HealthState, string> = {
     ok: "All systems operational",

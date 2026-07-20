@@ -59,7 +59,13 @@ a dedicated tenancy.
 | `EDEN_DEBUG` | `false` | Python SDK | |
 | `EDEN_ENV` | `default` | SDKs | |
 | `EDEN_ORG_ID` | unset | SDKs | |
-| `EDEN_SAMPLING_*` | see ops defaults | API | Ingest sampling |
+| `EDEN_SAMPLING_PROFILE` | `full` | API + SDKs | Soft-launch default: **100% keep**. Cost win after soft-launch: set `balanced` (~15% non-signal keep; errors/loops/stumbles always kept) or `aggressive` (~5%). Applied server-side via N16 `decide()` on ingest; SDKs also honour the same env for client-side enqueue filtering. |
+| `EDEN_SAMPLING_ENABLED` | `true` / `1` | API + SDKs | `false` / `0` forces 100% keep (safe rollback). |
+| `EDEN_SAMPLE_KEEP_ERRORS` | `1` | SDKs | Client sampler always keeps error signals when on. |
+| `EDEN_PROBABILISTIC_SAMPLE_RATE` | `1.0` | API | When `< 1.0`, overrides profile fallback rate only. |
+
+Maps to Settings: `sampling_profile`, `sampling_enabled`, `probabilistic_sample_rate`
+(`src/eden/config.py`). Ingest gate: `eden.observability.sampling.apply.should_route_event`.
 
 ### Remaining platform vars
 

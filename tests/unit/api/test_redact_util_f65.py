@@ -100,6 +100,13 @@ class TestF65RedactCredentials:
     def test_preserves_non_credential_text(self) -> None:
         assert redact_credentials("hello world") == "hello world"
 
+    def test_fast_path_skips_clean_strings(self) -> None:
+        # No probe markers → identity (no regex rewrite).
+        clean = "upstream timeout after 30s status=502"
+        assert redact_credentials(clean) is clean
+        assert redact_all(clean) is clean
+        assert redact_email("no email here") == "no email here"
+
 
 class TestF65RedactAll:
     """``redact_all`` combines both redactions."""

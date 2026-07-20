@@ -96,11 +96,18 @@ export interface EdenSDKOptions {
   disabled?: boolean;
 
   /**
-   * If true (default), the SDK runs a small regex pass over every
-   * outgoing payload to mask obvious PII before posting. Mirrors
-   * Python's ``redact_on_client`` flag.
+   * If true, the SDK runs a small regex pass over every
+   * outgoing payload to mask obvious PII before posting.
+   * Default false (gateway is authoritative). Set true or
+   * ``EDEN_REDACT_ON_CLIENT=1`` to restore the pre-0.3.2 default.
    */
   redactOnClient?: boolean;
+
+  /**
+   * When true, streaming chunks include ``deltaText``.
+   * Default false (metrics-only).
+   */
+  captureChunkText?: boolean;
 
   /**
    * Maximum time (ms) to wait before flushing a partial batch.

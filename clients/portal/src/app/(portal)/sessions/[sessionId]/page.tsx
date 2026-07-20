@@ -13,7 +13,8 @@ import { SessionTurnTimeline } from "@/components/sessions/SessionTurnTimeline";
 import { TraceDetailPanel } from "@/components/traces/TraceDetailPanel";
 import { BrowserReplayPanel } from "@/components/browser/BrowserReplayPanel";
 import { useOrg } from "@/hooks/use-org";
-import { agentSessionsApi, api } from "@/lib/api";
+import { agentSessionsApi } from "@/lib/api";
+import { fetchApi } from "@/lib/api/core";
 import { useOrgQuery } from "@/hooks/use-api-query";
 import { queryKeys } from "@/lib/query-keys";
 
@@ -34,19 +35,27 @@ function SessionPageInner() {
   const session = sessionQuery.data;
 
   const tracesQuery = useOrgQuery(
-    ["session-traces", orgId, sessionId, session?.trace_ids?.join(",")],
+    queryKeys.agents.sessionTraces(
+      orgId,
+      sessionId,
+      session?.trace_ids?.join(",") ?? null,
+    ),
     orgId && session?.trace_ids?.length ? orgId : null,
     async () => {
-      const ids = session!.trace_ids ?? [];
-      const results = await Promise.all(
-        ids.map((tid) =>
-          api
-            .listObservabilityTraces(orgId!, { trace_id: tid, limit: 1 })
-            .then((res) => res.traces?.[0] ?? null)
-            .catch(() => null),
-        ),
-      );
-      return results.filter((t): t is NonNullable<typeof t> => t != null);
+      const ids = (session!.trace_ids ?? []).slice(0, 100);
+      if (ids.length === 0) return [];
+      // K5: one batch request for all session traces (not N× listObservabilityTraces).
+      const q = new URLSearchParams();
+      for (const tid of ids) q.append("trace_ids", tid);
+      q.set("limit", String(Math.min(100, Math.max(ids.length, 1))));
+      const res = await fetchApi<{ traces: Array<{
+        trace_id: string;
+        duration_ms?: number;
+        cost_cents?: number | null;
+        outcome?: string | null;
+        realm?: string | null;
+      }> }>(`/orgs/${orgId}/observability/traces?${q.toString()}`);
+      return res.traces ?? [];
     },
   );
 

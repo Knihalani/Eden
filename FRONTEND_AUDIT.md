@@ -120,7 +120,7 @@ The July 2026 WS7 pass promotes **Agent Issues**, **Improve**, and **Debugger** 
 | # | Page/Component | Issue | Status |
 |---|---|---|---|
 | P0-1 | `/fleet` | Stub only — N05 fleet health API not wired | **Open** (expected until WS4) |
-| P0-2 | `onboarding/install` | TS SDK `instrument()` snippet may not match real exports (WS6) | **Open** (WS6 dependency) |
+| P0-2 | `onboarding/install` | TS SDK `instrument()` snippet may not match real exports (WS6) | **Closed** (Wave 9.2 — `instrument` + `TraceController` exported; portal install snippet uses `instrument()`) |
 
 ## P1 — High Priority (WS7, open)
 

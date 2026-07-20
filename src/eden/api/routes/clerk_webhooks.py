@@ -338,14 +338,18 @@ async def _upsert_membership(data: dict[str, Any]) -> None:
 
     Role-write conflict resolution: the initial ``organizationMembership.created``
     webhook can fire within milliseconds of Eden's local
-    ``accept_invitation`` insert. If Eden wrote the row first with
-    ``last_writer_source = 'local'`` (e.g. an invitee accepted as
-    ``viewer``), the role mapping ``org:member → member`` in
-    ``clerk_role_to_eden_role`` would silently demote them. The
-    conditional in the ``DO UPDATE`` below skips the role overwrite
-    on the FIRST webhook arrival when Eden wrote the row first, then
-    flips ``last_writer_source`` to ``'clerk'`` so subsequent Clerk
-    role changes (admin promotions, etc.) propagate normally.
+    ``accept_invitation`` / ``create_org`` insert. If Eden wrote the
+    row first with ``last_writer_source = 'local'`` (e.g. owner or
+    invitee ``viewer``), the role mapping ``org:member → member`` in
+    ``clerk_role_to_eden_role`` would overwrite the local role. The
+    ``DO UPDATE`` below:
+
+    1. Skips role overwrite while ``last_writer_source = 'local'``.
+    2. Only flips ``last_writer_source`` to ``'clerk'`` once Clerk's
+       mapped role *agrees* with the local row (or Clerk already owns
+       the row). Flipping on every arrival while preserving a stronger
+       local role previously let a second webhook / self-heal with a
+       weaker claim demote ``owner`` → ``member``.
     """
     clerk_org_id = data.get("organization", {}).get("id") or data.get("organization_id")
     clerk_user_id = data.get("public_user_data", {}).get("user_id") or data.get("user_id")
@@ -397,7 +401,13 @@ async def _upsert_membership(data: dict[str, Any]) -> None:
                     THEN EXCLUDED.role
                 ELSE org_members.role
             END,
-            last_writer_source = 'clerk',
+            last_writer_source = CASE
+                WHEN org_members.last_writer_source = 'clerk'
+                    THEN 'clerk'
+                WHEN org_members.role = EXCLUDED.role
+                    THEN 'clerk'
+                ELSE org_members.last_writer_source
+            END,
             last_active_at = NOW()
         """,
         eden_org_id,
@@ -485,9 +495,33 @@ async def clerk_webhook(
             clerk_id = payload.get("id") if isinstance(payload, dict) else None
             if clerk_id:
                 invalidate_user_cache(clerk_id)
+    except (ValueError, TypeError, KeyError) as exc:
+        # Malformed Clerk payload / missing required fields — client error.
+        logger.warning(
+            "Clerk webhook bad payload for %s: %s",
+            event_type,
+            redact_all(str(exc)),
+        )
+        from eden.api.utils.safe_error import safe_detail
+
+        raise HTTPException(
+            status_code=400,
+            detail=safe_detail(exc, fallback="Invalid webhook payload"),
+        ) from exc
     except Exception as exc:  # noqa: BLE001
-        logger.exception("Clerk webhook handler failed for %s: %s", event_type, redact_all(str(exc)))
-        raise HTTPException(status_code=500, detail=f"Handler failed: {exc}") from exc
+        # True infra / DB failure — 503 so Clerk retries; never leak
+        # exception text (schema / constraint names) in the body.
+        logger.exception(
+            "Clerk webhook handler failed for %s: %s",
+            event_type,
+            redact_all(str(exc)),
+        )
+        from eden.api.utils.safe_error import safe_detail
+
+        raise HTTPException(
+            status_code=503,
+            detail=safe_detail(exc, fallback="Webhook handler unavailable"),
+        ) from exc
 
     return {
         "status": "ok",

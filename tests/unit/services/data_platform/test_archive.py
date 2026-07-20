@@ -328,7 +328,7 @@ class TestTraceTreeArchiveFallback:
                 return_value=[{"event_id": "evt_cold", "trace_id": "trace_cold"}]
             ),
         ):
-            rows = await collector._load_from_archive("trace_cold")
+            rows = await collector._load_from_archive("org_1", "trace_cold")
         assert len(rows) == 1
         assert rows[0]["event_id"] == "evt_cold"
 
@@ -343,7 +343,7 @@ class TestTraceTreeArchiveFallback:
             "eden.services.data_platform.ArchiveService.rehydrate",
             new=AsyncMock(side_effect=RuntimeError("boom")),
         ):
-            rows = await collector._load_from_archive("trace_x")
+            rows = await collector._load_from_archive("org_1", "trace_x")
         assert rows == []
 
 

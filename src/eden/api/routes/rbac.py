@@ -13,7 +13,7 @@ import re
 from typing import Any
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Body, Depends, HTTPException, Path
 from pydantic import BaseModel, Field, field_validator
 
 from eden.api.deps import (
@@ -21,12 +21,14 @@ from eden.api.deps import (
     OrgMember,
     get_current_org_member,
     require_org_permission,
+    require_path_org_access,
 )
 from eden.storage.postgres import get_postgres_client
+from eden.api.utils.redact import redact_all
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/orgs/{org_id}/roles", tags=["rbac"])
+router = APIRouter(prefix="/orgs/{org_id}/roles", tags=["rbac"], dependencies=[Depends(require_path_org_access)])
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -162,7 +164,7 @@ async def _require_rbac_admin(org_id: str, authorization_cookie) -> None:
 
 @router.get("", response_model=list[RoleResponse])
 async def list_roles(
-    org_id: str,
+    org_id: str = Depends(require_path_org_access),
     member: OrgMember = Depends(get_current_org_member),
 ) -> list[RoleResponse]:
     """List all custom roles for the org (any member can read)."""
@@ -172,16 +174,30 @@ async def list_roles(
         "FROM role_definitions WHERE org_id = $1 ORDER BY name ASC",
         org_id,
     )
+    # One permissions query for all roles — avoids N+1
+    # (1 SELECT per role) on every settings RBAC load.
+    role_ids = [str(r["id"]) for r in rows]
+    perms_by_role: dict[str, list[str]] = {rid: [] for rid in role_ids}
+    if role_ids:
+        perm_rows = await client.fetch(
+            "SELECT role_id, permission_key FROM role_permissions "
+            "WHERE role_id = ANY($1::uuid[]) AND granted = TRUE",
+            role_ids,
+        )
+        for pr in perm_rows:
+            perms_by_role.setdefault(str(pr["role_id"]), []).append(
+                pr["permission_key"]
+            )
     out: list[RoleResponse] = []
     for r in rows:
-        perms = await _fetch_permissions(str(r["id"]))
+        rid = str(r["id"])
         out.append(RoleResponse(
-            id=str(r["id"]),
+            id=rid,
             org_id=str(r["org_id"]),
             name=r["name"],
             base_role=r["base_role"],
             description=r.get("description"),
-            permissions=perms,
+            permissions=perms_by_role.get(rid, []),
             created_at=r["created_at"].isoformat(),
         ))
     return out
@@ -189,8 +205,8 @@ async def list_roles(
 
 @router.post("", response_model=RoleResponse, status_code=201)
 async def create_role(
-    org_id: str,
-    req: RoleCreateRequest,
+    org_id: str = Depends(require_path_org_access),
+    req: RoleCreateRequest = Body(...),
     member: OrgMember = Depends(get_current_org_member),
 ) -> RoleResponse:
     """Create a new custom role. Requires ``settings:edit``."""
@@ -211,20 +227,34 @@ async def create_role(
             req.description,
         )
     except Exception as exc:
+        msg = str(exc).lower()
         # Unique violation on (org_id, name)
-        if "unique" in str(exc).lower() or "duplicate" in str(exc).lower():
+        if "unique" in msg or "duplicate" in msg:
             raise HTTPException(
                 status_code=409,
                 detail=f"Role {req.name!r} already exists",
             ) from exc
-        raise
+        if "invalid input syntax for type uuid" in msg:
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid organization id",
+            ) from exc
+        if "foreign key" in msg:
+            raise HTTPException(
+                status_code=404,
+                detail="Organization not found",
+            ) from exc
+        logger.warning("create_role INSERT failed: %s", redact_all(str(exc)))
+        raise HTTPException(
+            status_code=503,
+            detail="Failed to create role",
+        ) from exc
 
     if row is None:
         # ``INSERT ... RETURNING`` returning None signals a non-
-        # exception failure (shouldn't happen for unique-violations,
-        # which raise). Surface as a 500 to avoid ``NoneType`` 500s.
+        # exception constraint failure — surface as 409.
         raise HTTPException(
-            status_code=500,
+            status_code=409,
             detail="Failed to create role",
         )
     role_id = str(row["id"])
@@ -251,8 +281,8 @@ async def create_role(
 
 @router.get("/{role_id}", response_model=RoleResponse)
 async def get_role(
-    org_id: str,
-    role_id: str,
+    org_id: str = Depends(require_path_org_access),
+    role_id: str = Path(...),
     member: OrgMember = Depends(get_current_org_member),
 ) -> RoleResponse:
     row = await _fetch_role(role_id, org_id)
@@ -270,9 +300,9 @@ async def get_role(
 
 @router.put("/{role_id}", response_model=RoleResponse)
 async def update_role(
-    org_id: str,
-    role_id: str,
-    req: RoleUpdateRequest,
+    org_id: str = Depends(require_path_org_access),
+    role_id: str = Path(...),
+    req: RoleUpdateRequest = Body(...),
     member: OrgMember = Depends(get_current_org_member),
 ) -> RoleResponse:
     """Update a custom role's description and/or permission set."""
@@ -313,8 +343,8 @@ async def update_role(
 
 @router.delete("/{role_id}", status_code=204)
 async def delete_role(
-    org_id: str,
-    role_id: str,
+    org_id: str = Depends(require_path_org_access),
+    role_id: str = Path(...),
     member: OrgMember = Depends(get_current_org_member),
 ):
     """Delete a custom role and all of its assignments."""
@@ -331,8 +361,8 @@ async def delete_role(
 
 @router.get("/{role_id}/assignments", response_model=list[AssignmentResponse])
 async def list_assignments(
-    org_id: str,
-    role_id: str,
+    org_id: str = Depends(require_path_org_access),
+    role_id: str = Path(...),
     member: OrgMember = Depends(get_current_org_member),
 ) -> list[AssignmentResponse]:
     await _fetch_role(role_id, org_id)
@@ -358,9 +388,9 @@ async def list_assignments(
 
 @router.post("/{role_id}/assignments", response_model=AssignmentResponse, status_code=201)
 async def create_assignment(
-    org_id: str,
-    role_id: str,
-    req: AssignmentCreateRequest,
+    org_id: str = Depends(require_path_org_access),
+    role_id: str = Path(...),
+    req: AssignmentCreateRequest = Body(...),
     member: OrgMember = Depends(get_current_org_member),
 ) -> AssignmentResponse:
     if member.role not in ("owner", "admin"):
@@ -375,18 +405,46 @@ async def create_assignment(
         )
     await _fetch_role(role_id, org_id)
     client = await get_postgres_client()
-    row = await client.fetchrow(
-        """
-        INSERT INTO role_assignments (role_id, user_id, resource_type, resource_id, granted_by)
-        VALUES ($1, $2, $3, $4, $5)
-        RETURNING id, role_id, user_id, resource_type, resource_id, granted_by, created_at
-        """,
-        role_id,
-        req.user_id,
-        req.resource_type,
-        req.resource_id,
-        member.user_id,
-    )
+    try:
+        row = await client.fetchrow(
+            """
+            INSERT INTO role_assignments (role_id, user_id, resource_type, resource_id, granted_by)
+            VALUES ($1, $2, $3, $4, $5)
+            RETURNING id, role_id, user_id, resource_type, resource_id, granted_by, created_at
+            """,
+            role_id,
+            req.user_id,
+            req.resource_type,
+            req.resource_id,
+            member.user_id,
+        )
+    except Exception as exc:
+        msg = str(exc).lower()
+        if "unique" in msg or "duplicate" in msg:
+            raise HTTPException(
+                status_code=409,
+                detail="Role assignment already exists",
+            ) from exc
+        if "invalid input syntax for type uuid" in msg:
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid role, user, or organization id",
+            ) from exc
+        if "foreign key" in msg or "check constraint" in msg:
+            raise HTTPException(
+                status_code=404,
+                detail="Role or user not found",
+            ) from exc
+        logger.warning("create_assignment INSERT failed: %s", redact_all(str(exc)))
+        raise HTTPException(
+            status_code=503,
+            detail="Failed to create role assignment",
+        ) from exc
+    if row is None:
+        raise HTTPException(
+            status_code=409,
+            detail="Failed to create role assignment",
+        )
     return AssignmentResponse(
         id=str(row["id"]),
         role_id=str(row["role_id"]),
@@ -400,9 +458,9 @@ async def create_assignment(
 
 @router.delete("/{role_id}/assignments/{assignment_id}", status_code=204)
 async def delete_assignment(
-    org_id: str,
-    role_id: str,
-    assignment_id: str,
+    org_id: str = Depends(require_path_org_access),
+    role_id: str = Path(...),
+    assignment_id: str = Path(...),
     member: OrgMember = Depends(get_current_org_member),
 ):
     if member.role not in ("owner", "admin"):
@@ -431,12 +489,16 @@ async def delete_assignment(
 # Permissions catalogue (Phase 7.3d)
 # ─────────────────────────────────────────────────────────────────────────────
 
-permissions_router = APIRouter(prefix="/orgs/{org_id}", tags=["rbac"])
+permissions_router = APIRouter(
+    prefix="/orgs/{org_id}",
+    tags=["rbac"],
+    dependencies=[Depends(require_path_org_access)],
+)
 
 
 @permissions_router.get("/permissions")
 async def get_permissions_catalogue(
-    org_id: str,
+    org_id: str = Depends(require_path_org_access),
     member: OrgMember = Depends(get_current_org_member),
 ) -> dict:
     """Return the full permissions catalogue for the org.
@@ -532,8 +594,8 @@ class _PermissionAssignmentResponse(BaseModel):
 
 @router.post("/assign", response_model=_PermissionAssignmentResponse, status_code=201)
 async def assign_permission(
-    org_id: str,
-    req: _PermissionAssignRequest,
+    org_id: str = Depends(require_path_org_access),
+    req: _PermissionAssignRequest = Body(...),
     member: OrgMember = Depends(get_current_org_member),
 ) -> _PermissionAssignmentResponse:
     """Idempotently grant a single permission to a user.
@@ -625,8 +687,8 @@ async def assign_permission(
 
 @router.post("/unassign", status_code=204)
 async def unassign_permission(
-    org_id: str,
-    req: _PermissionAssignRequest,
+    org_id: str = Depends(require_path_org_access),
+    req: _PermissionAssignRequest = Body(...),
     member: OrgMember = Depends(get_current_org_member),
 ):
     """Idempotently revoke a single permission from a user.

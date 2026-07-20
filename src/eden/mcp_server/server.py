@@ -12,7 +12,12 @@ import time
 from collections.abc import Awaitable, Callable
 from typing import Any
 
-from eden.mcp_server.auth import McpAuthContext, require_scope, resolve_auth
+from eden.mcp_server.auth import (
+    McpAuthContext,
+    pin_org_id,
+    require_scope,
+    resolve_auth,
+)
 from eden.mcp_server.client import EdenApiClient, HttpEdenClient
 from eden.mcp_server import tools as tool_fns
 
@@ -292,6 +297,7 @@ TOOL_CATALOG: list[dict[str, Any]] = [
                 "change_id": {"type": "string"},
                 "changed_files": {"type": "array", "items": {"type": "string"}},
                 "agent_id": {"type": "string"},
+                "prompt_override": {"type": "string"},
             },
             "required": ["org_id", "change_id", "changed_files"],
         },
@@ -498,26 +504,25 @@ async def call_tool(
 
     ctx = auth or resolve_auth(org_id=args.get("org_id"))
     scope = _SCOPE_BY_NAME.get(name, "mcp:read")
-    # Dev/smoke: empty key with default scopes still allows read tools.
-    if ctx.api_key or scope == "mcp:read":
+    # Empty API key: smoke/dev read-only. Write/debug tools require a key.
+    if not ctx.api_key and scope != "mcp:read":
+        return {
+            "status": "error",
+            "error": "API key required for this MCP tool",
+        }
+    if ctx.api_key:
         try:
-            require_scope(
-                McpAuthContext(
-                    api_key=ctx.api_key or "smoke",
-                    base_url=ctx.base_url,
-                    org_id=ctx.org_id,
-                    scopes=ctx.scopes
-                    if ctx.api_key
-                    else ("mcp:read", "mcp:debug", "mcp:fix"),
-                ),
-                scope,
-            )
+            require_scope(ctx, scope)
         except PermissionError as exc:
             return {"status": "error", "error": str(exc)}
 
-    org_id = args.pop("org_id", None) or ctx.org_id
-    if not org_id:
-        return {"status": "error", "error": "org_id required"}
+    argument_org = args.pop("org_id", None)
+    try:
+        org_id = pin_org_id(ctx, argument_org)
+    except PermissionError as exc:
+        return {"status": "error", "error": str(exc)}
+    except ValueError as exc:
+        return {"status": "error", "error": str(exc)}
 
     api = client or HttpEdenClient(ctx)
     t0 = time.monotonic()
@@ -532,6 +537,7 @@ async def call_tool(
         status = "error"
         logger.debug("mcp tool %s failed: %s", name, exc)
         _emit_tool_telemetry(name, org_id, status, (time.monotonic() - t0) * 1000)
-        return {"status": "error", "error": str(exc)}
+        # Do not echo raw exception text to clients (paths, SQL, stack crumbs).
+        return {"status": "error", "error": "tool execution failed"}
     _emit_tool_telemetry(name, org_id, status, (time.monotonic() - t0) * 1000)
     return {"status": "ok", "tool": name, "result": result}

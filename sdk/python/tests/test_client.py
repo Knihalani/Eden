@@ -9,6 +9,7 @@ import httpx
 
 import eden
 from eden_sdk.client import EdenClient, TraceEvent, get_default_client
+from _http_body import decode_ingest_body
 from eden_sdk.config import EdenConfig
 
 
@@ -409,7 +410,7 @@ async def test_send_chunks_redacts_pii_in_delta_text() -> None:
     PII (an email the user put in the prompt that the model
     repeated in its reply) would leak to the gateway unmasked.
     """
-    config = EdenConfig(org_id="o", api_key="k")
+    config = EdenConfig(org_id="o", api_key="k", redact_on_client=True)
     client = EdenClient(config)
 
     class _FakeResp:
@@ -420,7 +421,7 @@ async def test_send_chunks_redacts_pii_in_delta_text() -> None:
 
     class _FakeHttp:
         async def post(self, url, content=None, headers=None):
-            captured["body"] = json.loads(content)
+            captured["body"] = decode_ingest_body(content, headers)
             return _FakeResp()
 
     client._http = _FakeHttp()
@@ -467,7 +468,7 @@ async def test_send_chunks_no_redaction_when_disabled() -> None:
 
     class _FakeHttp:
         async def post(self, url, content=None, headers=None):
-            captured["body"] = json.loads(content)
+            captured["body"] = decode_ingest_body(content, headers)
             return _FakeResp()
 
     client._http = _FakeHttp()
@@ -882,7 +883,7 @@ def test_chunk_buffer_defensive_trim_in_send_chunks() -> None:
 
     class _FakeHttp:
         async def post(self, url, content=None, headers=None):
-            captured["body"] = json.loads(content)
+            captured["body"] = decode_ingest_body(content, headers)
             return _FakeResp()
 
     config = EdenConfig(org_id="o", api_key="k")

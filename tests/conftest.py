@@ -1,10 +1,28 @@
 """Pytest fixtures and configuration for Eden test suite."""
 
+from __future__ import annotations
+
 import asyncio
 import json
+import sys
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager, suppress
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
+
+# Prefer ``src/eden`` over the editable install / ``sdk/python/eden``
+# that would otherwise shadow the API under test. Always move ``src``
+# to the front — it may already be on ``sys.path`` but after sdk.
+_SRC = Path(__file__).resolve().parents[1] / "src"
+_src_str = str(_SRC)
+while _src_str in sys.path:
+    sys.path.remove(_src_str)
+sys.path.insert(0, _src_str)
+# Drop a premature ``eden`` import that resolved to the SDK stub.
+for _mod in list(sys.modules):
+    if _mod == "eden" or _mod.startswith("eden."):
+        del sys.modules[_mod]
+del _mod
 
 # Pre-existing passlib 1.7.4 + bcrypt 5.x incompatibility: passlib's
 # ``_finalize_backend_mixin`` runs a wrap-bug-detection probe that

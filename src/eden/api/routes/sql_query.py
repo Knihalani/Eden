@@ -18,7 +18,9 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Path
 from pydantic import BaseModel, Field
 
-from eden.api.routes.auth import get_current_user
+from eden.api.deps import get_current_user, require_path_org_access
+from eden.api.utils.redact import redact_all
+from eden.api.utils.safe_error import raise_mapped_db_error
 from eden.observability.sql_executor import (
     DEFAULT_MAX_ROWS,
     DEFAULT_MAX_SECONDS,
@@ -44,6 +46,7 @@ _SCHEMA_CACHE_TTL = 300
 router = APIRouter(
     prefix="/orgs/{org_id}/sql",
     tags=["sql"],
+    dependencies=[Depends(require_path_org_access)],
 )
 
 
@@ -113,7 +116,7 @@ class SqlLimitsResponse(BaseModel):
 )
 async def execute_sql(
     body: SqlExecuteRequest,
-    org_id: str = Path(..., description="Organization ID"),
+    org_id: str = Depends(require_path_org_access),
     user: dict = Depends(get_current_user),
 ) -> SqlExecuteResponse:
     """Execute a single SELECT against the allowlisted tables.
@@ -131,6 +134,8 @@ async def execute_sql(
     at the row cap, ``truncated=true`` and ``cap_hit="row_limit"``.
     """
     pg = await get_postgres_client()
+    if pg is None:
+        raise HTTPException(status_code=503, detail="database unavailable")
     executor = SqlExecutor(
         pg,
         max_rows=body.max_rows or DEFAULT_MAX_ROWS,
@@ -187,6 +192,13 @@ async def execute_sql(
                 "detail": str(exc),
             },
         ) from exc
+    except Exception as exc:
+        logger.warning("execute_sql failed: %s", redact_all(str(exc)))
+        raise_mapped_db_error(
+            exc,
+            fallback="sql execute failed",
+            uuid_detail="Invalid organization id",
+        )
 
     return SqlExecuteResponse(
         columns=result.columns,
@@ -204,7 +216,7 @@ async def execute_sql(
     summary="List the tables + columns available to the SQL executor",
 )
 async def get_sql_schema(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     user: dict = Depends(get_current_user),
 ) -> SqlSchemaResponse:
     """Return the schema of every allowlisted table.
@@ -219,7 +231,17 @@ async def get_sql_schema(
         return SqlSchemaResponse(tables=cached)
 
     pg = await get_postgres_client()
-    tables = await get_schema_summary(pg)
+    if pg is None:
+        raise HTTPException(status_code=503, detail="database unavailable")
+    try:
+        tables = await get_schema_summary(pg)
+    except Exception as exc:
+        logger.warning("get_sql_schema failed: %s", redact_all(str(exc)))
+        raise_mapped_db_error(
+            exc,
+            fallback="sql schema unavailable",
+            uuid_detail="Invalid organization id",
+        )
     await _schema_cache.set(cache_key, tables, ttl=_SCHEMA_CACHE_TTL)
     return SqlSchemaResponse(tables=tables)
 
@@ -230,7 +252,7 @@ async def get_sql_schema(
     summary="Return the per-query row + time caps",
 )
 async def get_sql_limits(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     user: dict = Depends(get_current_user),
 ) -> SqlLimitsResponse:
     """Surface the current org's caps. Admins can override

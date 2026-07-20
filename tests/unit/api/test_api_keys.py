@@ -165,6 +165,26 @@ class TestS5ActiveRevokedExpiredFilter:
         assert resp.status_code == 401
         assert "invalid" in resp.text.lower()
 
+    def test_non_uuid_org_id_is_401_not_500(
+        self, client: TestClient, mock_postgres_client,
+    ) -> None:
+        """W2-08 — Clerk-style / placeholder X-Org-Id must not 500.
+
+        Pre-fix ``oak.org_id = $2`` cast non-UUID strings into a UUID
+        column and asyncpg raised → unhandled 500. Lookup now compares
+        ``org_id::text`` so a miss is a clean 401.
+        """
+        _stub_key_query(mock_postgres_client, None)
+        resp = client.get(
+            "/probe",
+            headers={
+                "X-Org-Id": "org_clerk_style_placeholder",
+                "X-Org-Api-Key": "sk_bad_key_0000",
+            },
+        )
+        assert resp.status_code == 401, resp.text
+        assert "invalid" in resp.text.lower()
+
     def test_missing_header_rejected(self, client: TestClient) -> None:
         resp = client.get("/probe", headers={"X-Org-Id": "org-123"})
         assert resp.status_code == 401

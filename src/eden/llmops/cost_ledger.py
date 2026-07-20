@@ -18,6 +18,8 @@ from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
 from typing import Any, Iterator
 
+from eden.util.jsonx import dumps as json_dumps
+
 logger = logging.getLogger(__name__)
 
 KNOWN_FEATURES: frozenset[str] = frozenset(
@@ -36,6 +38,7 @@ KNOWN_FEATURES: frozenset[str] = frozenset(
         "autonomy",
         "signal_classifier",
         "signal_investigator",
+        "playground",
         "unknown",
     }
 )
@@ -168,7 +171,9 @@ def schedule_record_from_usage(
         loop = asyncio.get_running_loop()
     except RuntimeError:
         return
-    loop.create_task(_safe_record(event))
+    from eden.async_tasks import bounded_create_task
+
+    bounded_create_task(_safe_record(event), name="cost-ledger-record")
 
 
 async def _safe_record(event: CostEvent) -> None:
@@ -231,12 +236,14 @@ async def record_cost_event(event: CostEvent) -> bool:
             event.agent_id,
             event.session_id,
             event.user_id,
-            __import__("json").dumps(event.metadata or {}),
+            json_dumps(event.metadata or {}),
         )
     except Exception as exc:
         logger.debug("cost_ledger: insert failed: %s", exc)
         return False
 
+    # $0 events do not change budget consumption — skip usage + alert
+    # round-trips on the LLM hot path.
     if cost > 0:
         try:
             from eden.services.budget_service import record_usage
@@ -245,12 +252,12 @@ async def record_cost_event(event: CostEvent) -> bool:
         except Exception as exc:
             logger.debug("cost_ledger: budget record_usage failed: %s", exc)
 
-    try:
-        from eden.services.budget_service import evaluate_budget_alerts
+        try:
+            from eden.services.budget_service import evaluate_budget_alerts
 
-        await evaluate_budget_alerts(event.org_id)
-    except Exception as exc:
-        logger.debug("cost_ledger: alert eval failed: %s", exc)
+            await evaluate_budget_alerts(event.org_id)
+        except Exception as exc:
+            logger.debug("cost_ledger: alert eval failed: %s", exc)
 
     return True
 
@@ -446,30 +453,34 @@ async def explorer_summary(
     delta = cost - prev_cost
     delta_pct = round((delta / prev_cost) * 100, 2) if prev_cost else None
 
+    (
+        by_feature,
+        by_model,
+        by_agent,
+        by_session,
+        by_day,
+        classifier_savings,
+    ) = await asyncio.gather(
+        sum_by_dimension(org_id, dimension="feature", window_hours=window_hours),
+        sum_by_dimension(org_id, dimension="model", window_hours=window_hours),
+        sum_by_dimension(org_id, dimension="agent", window_hours=window_hours),
+        sum_by_dimension(org_id, dimension="session", window_hours=window_hours),
+        sum_by_dimension(org_id, dimension="day", window_hours=window_hours),
+        classifier_savings_usd(org_id, window_hours=window_hours),
+    )
+
     return {
         "total_cost_usd": cost,
         "previous_cost_usd": prev_cost,
         "delta_usd": delta,
         "delta_pct": delta_pct,
-        "by_feature": await sum_by_dimension(
-            org_id, dimension="feature", window_hours=window_hours
-        ),
-        "by_model": await sum_by_dimension(
-            org_id, dimension="model", window_hours=window_hours
-        ),
-        "by_agent": await sum_by_dimension(
-            org_id, dimension="agent", window_hours=window_hours
-        ),
-        "by_session": await sum_by_dimension(
-            org_id, dimension="session", window_hours=window_hours
-        ),
-        "by_day": await sum_by_dimension(
-            org_id, dimension="day", window_hours=window_hours
-        ),
+        "by_feature": by_feature,
+        "by_model": by_model,
+        "by_agent": by_agent,
+        "by_session": by_session,
+        "by_day": by_day,
         "untagged_events": int(cur["untagged"] or 0) if cur else 0,
-        "classifier_savings_usd": await classifier_savings_usd(
-            org_id, window_hours=window_hours
-        ),
+        "classifier_savings_usd": classifier_savings,
     }
 
 

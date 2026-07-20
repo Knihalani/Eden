@@ -1,0 +1,79 @@
+=== GOLDEN PATHS ===
+◇ injected env (9) from .env.local // tip: ◈ secrets for agents [www.dotenvx.com]
+◇ injected env (1) from .env // tip: ⌘ override existing { override: true }
+[golden] storageState loaded — running with Clerk session
+[dotenv@17.2.2] injecting env (0) from .env.local,.env -- tip: ⚙️  specify custom .env file path with { path: '/custom/path/.env' }
+✗ Sign-in → Home (/dashboard): Error: Auth shell not visible — browser is on sign-in page (https://edenobservability.com/sign-in?redirect_url=https%3A%2F%2Fedenobservability.com%2Fdashboard).
+  The storageState may have expired. Re
+✗ Traces hub: Error: Auth shell not visible — browser is on sign-in page (https://edenobservability.com/sign-in?redirect_url=https%3A%2F%2Fedenobservability.com%2Ftraces).
+  The storageState may have expired. Re-ru
+✗ Issues list: Error: Auth shell not visible — browser is on sign-in page (https://edenobservability.com/sign-in?redirect_url=https%3A%2F%2Fedenobservability.com%2Fissues).
+  The storageState may have expired. Re-ru
+✗ Artifacts: Error: Auth shell not visible — browser is on sign-in page (https://edenobservability.com/sign-in?redirect_url=https%3A%2F%2Fedenobservability.com%2Fartifacts).
+  The storageState may have expired. Re
+✗ Playground: Error: Auth shell not visible — browser is on sign-in page (https://edenobservability.com/sign-in?redirect_url=https%3A%2F%2Fedenobservability.com%2Fevals%3Ftab%3Dplaygrounds).
+  The storageState may 
+✗ Alerts: Error: Auth shell not visible — browser is on sign-in page (https://edenobservability.com/sign-in?redirect_url=https%3A%2F%2Fedenobservability.com%2Falerts).
+  The storageState may have expired. Re-ru
+✗ Experiments compare: Error: Auth shell not visible — browser is on sign-in page (https://edenobservability.com/sign-in?redirect_url=https%3A%2F%2Fedenobservability.com%2Fevals%3Ftab%3Dexperiments).
+  The storageState may 
+✗ Debugger sessions: Error: Auth shell not visible — browser is on sign-in page (https://edenobservability.com/sign-in?redirect_url=https%3A%2F%2Fedenobservability.com%2Fdebugger-sessions).
+  The storageState may have exp
+
+{
+  "paths": [
+    {
+      "id": "01-sign-in-home",
+      "label": "Sign-in → Home (/dashboard)",
+      "ok": false,
+      "error": "Error: Auth shell not visible — browser is on sign-in page (https://edenobservability.com/sign-in?redirect_url=https%3A%2F%2Fedenobservability.com%2Fdashboard).\n  The storageState may have expired. Re-run seed-auth.mjs."
+    },
+    {
+      "id": "02-traces-hub",
+      "label": "Traces hub",
+      "ok": false,
+      "error": "Error: Auth shell not visible — browser is on sign-in page (https://edenobservability.com/sign-in?redirect_url=https%3A%2F%2Fedenobservability.com%2Ftraces).\n  The storageState may have expired. Re-run seed-auth.mjs."
+    },
+    {
+      "id": "03-issues",
+      "label": "Issues list",
+      "ok": false,
+      "error": "Error: Auth shell not visible — browser is on sign-in page (https://edenobservability.com/sign-in?redirect_url=https%3A%2F%2Fedenobservability.com%2Fissues).\n  The storageState may have expired. Re-run seed-auth.mjs."
+    },
+    {
+      "id": "04-artifacts",
+      "label": "Artifacts",
+      "ok": false,
+      "error": "Error: Auth shell not visible — browser is on sign-in page (https://edenobservability.com/sign-in?redirect_url=https%3A%2F%2Fedenobservability.com%2Fartifacts).\n  The storageState may have expired. Re-run seed-auth.mjs."
+    },
+    {
+      "id": "05-playgrounds",
+      "label": "Playground",
+      "ok": false,
+      "error": "Error: Auth shell not visible — browser is on sign-in page (https://edenobservability.com/sign-in?redirect_url=https%3A%2F%2Fedenobservability.com%2Fevals%3Ftab%3Dplaygrounds).\n  The storageState may have expired. Re-run seed-auth.mjs."
+    },
+    {
+      "id": "06-alerts",
+      "label": "Alerts",
+      "ok": false,
+      "error": "Error: Auth shell not visible — browser is on sign-in page (https://edenobservability.com/sign-in?redirect_url=https%3A%2F%2Fedenobservability.com%2Falerts).\n  The storageState may have expired. Re-run seed-auth.mjs."
+    },
+    {
+      "id": "07-experiments",
+      "label": "Experiments compare",
+      "ok": false,
+      "error": "Error: Auth shell not visible — browser is on sign-in page (https://edenobservability.com/sign-in?redirect_url=https%3A%2F%2Fedenobservability.com%2Fevals%3Ftab%3Dexperiments).\n  The storageState may have expired. Re-run seed-auth.mjs."
+    },
+    {
+      "id": "08-debugger-sessions",
+      "label": "Debugger sessions",
+      "ok": false,
+      "error": "Error: Auth shell not visible — browser is on sign-in page (https://edenobservability.com/sign-in?redirect_url=https%3A%2F%2Fedenobservability.com%2Fdebugger-sessions).\n  The storageState may have expired. Re-run seed-auth.mjs."
+    }
+  ],
+  "failed": 8,
+  "total": 8
+}
+
+[golden] 8/8 paths FAILED
+EXIT:0

@@ -41,35 +41,11 @@ logger = logging.getLogger(__name__)
 #: May 2026); the v0.1 ship covers the most-used attributes
 #: and the ones Cat 16 + Cat 22 read from.
 V141_TO_V136: dict[str, str] = {
-    # Token usage
+    # Token usage — real renames only (identity pairs dropped to avoid
+    # redundant JSONB keys on dual-emit).
     "gen_ai.client.token.usage": "gen_ai.usage.input_tokens",  # input
     "gen_ai.client.output.token.usage": "gen_ai.usage.output_tokens",  # output
     "gen_ai.client.input.token.usage": "gen_ai.usage.input_tokens",  # input (alt)
-    # Agent / tool / workflow
-    "gen_ai.agent.name": "gen_ai.agent.name",  # same in both
-    "gen_ai.agent.id": "gen_ai.agent.id",  # same
-    "gen_ai.agent.description": "gen_ai.agent.description",  # same
-    "gen_ai.tool.name": "gen_ai.tool.name",  # same
-    "gen_ai.tool.call.id": "gen_ai.tool.call.id",  # same
-    "gen_ai.tool.description": "gen_ai.tool.description",  # same
-    "gen_ai.workflow.name": "gen_ai.workflow.name",  # same
-    # Operation
-    "gen_ai.operation.name": "gen_ai.operation.name",  # same
-    # Model
-    "gen_ai.request.model": "gen_ai.request.model",  # same
-    "gen_ai.response.model": "gen_ai.response.model",  # same
-    # Conversation
-    "gen_ai.conversation.id": "gen_ai.conversation.id",  # same
-    # System / provider
-    "gen_ai.system": "gen_ai.system",  # same
-    # Error
-    "error.type": "error.type",  # same
-    # Finish reasons
-    "gen_ai.response.finish_reasons": "gen_ai.response.finish_reasons",  # same
-    # MCP-specific
-    "mcp.method.name": "mcp.method.name",
-    "mcp.resource.uri": "mcp.resource.uri",
-    "mcp.prompt.name": "mcp.prompt.name",
 }
 
 #: v1.36 → v1.41 reverse map (computed from V141_TO_V136).

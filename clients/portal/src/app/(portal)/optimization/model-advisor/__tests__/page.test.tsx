@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 /**
  * Smoke tests for the Model Advisor page.
  *
@@ -19,11 +20,13 @@ const recommendMock = vi.fn();
 const compareMock = vi.fn();
 const projectMock = vi.fn();
 
-vi.mock("@/hooks/use-org", () => ({
-  useOrg: () => ({
-    currentOrg: { id: "org_test", name: "Acme", slug: "acme" },
-  }),
-}));
+vi.mock("@/hooks/use-org", () => {
+  // Stable across renders — a fresh object each call retriggers effects forever.
+  const currentOrg = { id: "org_test", name: "Acme", slug: "acme" };
+  return {
+    useOrg: () => ({ currentOrg }),
+  };
+});
 
 vi.mock("@/lib/api", () => ({
   modelAdvisorApi: {

@@ -30,6 +30,16 @@ import httpx
 
 logger = logging.getLogger(__name__)
 
+_HTTPX: httpx.AsyncClient | None = None
+
+
+def _shared_httpx(timeout: float) -> httpx.AsyncClient:
+    """Process-wide httpx client — never ``async with`` this instance."""
+    global _HTTPX
+    if _HTTPX is None or _HTTPX.is_closed:
+        _HTTPX = httpx.AsyncClient(timeout=timeout)
+    return _HTTPX
+
 # Events that are allowed to page. Issue creation only pages for P0/P1
 # (enforced separately on severity); verify_failed / human_escalation
 # always page.
@@ -149,12 +159,13 @@ async def _pass_storm_caps(
     except Exception:
         pass
 
-    # Rate cap: per-org rolling hour.
+    # Rate cap: per-org rolling hour (INCR + EXPIRE in one pipeline).
     try:
         key = f"alert:rate:{org_id}"
-        count = await redis.incr(key)
-        if count == 1:
-            await redis.expire(key, 3600)
+        pipe = redis.pipeline(transaction=False)
+        pipe.incr(key)
+        pipe.expire(key, 3600)
+        count, _ = await pipe.execute()
         if count > max_hr:
             if count == max_hr + 1:
                 logger.warning(
@@ -371,8 +382,8 @@ async def _post(
     fallback = f"[{severity.upper()}] {event}"
     body = {"text": fallback, "blocks": blocks}
     try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            resp = await client.post(webhook, json=body)
+        client = _shared_httpx(10.0)
+        resp = await client.post(webhook, json=body)
         if resp.status_code in (200, 204):
             return True
         logger.warning(
@@ -469,9 +480,9 @@ async def alert_nl_event(
                 },
             },
         ]
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            resp = await client.post(webhook, json={"blocks": blocks})
-            resp.raise_for_status()
+        client = _shared_httpx(10.0)
+        resp = await client.post(webhook, json={"blocks": blocks})
+        resp.raise_for_status()
         return True
     except Exception as exc:  # pragma: no cover - defensive
         logger.debug("slack alerts: alert_nl_event failed: %s", exc)

@@ -25,13 +25,28 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Path
 from pydantic import BaseModel, Field, field_validator
 
-from eden.api.deps import get_ingestion_auth
+from eden.api.deps import get_ingest_auth
 from eden.config import get_settings
 from eden.services.app_intel import MAX_BATCH, AppEventsService
 
 logger = logging.getLogger(__name__)
 
+# Auth is ``get_ingest_auth`` only (API key or session cookie) — not
+# ``require_path_org_access``, which depends on Clerk ``get_current_user``
+# and would 401 valid ``X-Org-Api-Key`` browser-SDK callers before
+# ingest auth runs. Mirrors ``ingestion.py`` / telemetry ingest.
 router = APIRouter(prefix="/orgs/{org_id}/ingest", tags=["app-ingest"])
+
+
+def _assert_ingest_org(auth_ctx: dict, org_id: str) -> str:
+    """Reject path/auth org mismatches; return the authenticated org id."""
+    auth_org = auth_ctx.get("org_id")
+    if not auth_org or str(auth_org) != str(org_id):
+        raise HTTPException(
+            status_code=403,
+            detail="Path org_id does not match authenticated org",
+        )
+    return str(auth_org)
 
 
 # ── Per-tenant rate limiter ───────────────────────────────────────────
@@ -174,15 +189,12 @@ class IngestResponse(BaseModel):
 
 @router.post("/app", response_model=IngestResponse)
 async def ingest_app_events(
-    org_id: str = Path(...),
+    org_id: str = Path(..., description="Organization ID"),
     body: AppEventsBatch = ...,
-    auth_ctx: dict = Depends(get_ingestion_auth),
+    auth_ctx: dict = Depends(get_ingest_auth),
 ) -> IngestResponse:
+    org_id = _assert_ingest_org(auth_ctx, org_id)
     _check_rate_limit(org_id)
-
-    # Defence in depth — the path is the source of truth.
-    if auth_ctx.get("org_id") and auth_ctx["org_id"] != org_id:
-        raise HTTPException(status_code=403, detail="org mismatch")
 
     if len(body.events) > MAX_BATCH:
         raise HTTPException(
@@ -197,5 +209,20 @@ async def ingest_app_events(
             e["ts"] = e["ts"].isoformat()
 
     svc = AppEventsService()
-    result = await svc.ingest_batch(org_id, events_dicts)
+    try:
+        result = await svc.ingest_batch(org_id, events_dicts)
+    except Exception as exc:
+        # Service normally soft-rejects rows; unexpected faults → 503
+        # so SDKs retry instead of treating a bare 500 as fatal.
+        from eden.api.utils.safe_error import safe_detail
+
+        logger.exception("app ingest failed for org %s: %s", org_id, exc)
+        raise HTTPException(
+            status_code=503,
+            detail=safe_detail(
+                exc,
+                fallback="App ingest temporarily unavailable; retry after backoff",
+            ),
+            headers={"Retry-After": "5"},
+        ) from exc
     return IngestResponse(**result)

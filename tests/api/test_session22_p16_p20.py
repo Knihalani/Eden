@@ -43,39 +43,40 @@ import pytest
 
 
 class TestP16ReltuplesTraceCount:
-    """``list_traces`` total uses ``pg_class.reltuples`` —
-    the planner's per-table row estimate — instead of a
-    seq-scanning ``count(DISTINCT trace_id)``.
+    """``list_traces`` total is a per-tenant distinct-trace count.
 
-    Ponytail: this is the planner's estimate (refreshed by
-    ANALYZE) so it can be ±30–50% stale; trade exact count
-    for ~0ms latency on a 100M-row table.
+    ``pg_class.reltuples`` was abandoned — it is table-level and
+    leaked cross-tenant pagination totals. Event-row ``count(*)``
+    was also wrong (inflated vs grouped traces). The GROUP BY
+    subquery stays filterable by tenant + time indexes.
     """
 
-    def test_list_traces_total_uses_pg_class(self) -> None:
-        """Static check: ``list_traces`` queries pg_class
-        for the estimate (not ``count(DISTINCT …)``)."""
+    def test_list_traces_total_counts_distinct_traces(self) -> None:
+        """Static check: total uses a grouped subquery, not
+        ``pg_class.reltuples`` and not a bare event ``count(*)``."""
         from eden.api.routes import observability
 
         source = textwrap.dedent(
             inspect.getsource(observability.list_traces)
         )
-        assert "pg_class" in source, (
-            "P-16 regression: list_traces doesn't query pg_class"
-        )
-        assert "reltuples" in source, (
-            "P-16 regression: list_traces doesn't read reltuples"
-        )
-        # Old slow path is gone. Strip comments before the
-        # assertion — the surrounding ``# P-16 fix`` comment
-        # string contains the very phrase we're checking for.
         non_comment_lines = "\n".join(
             line for line in source.splitlines()
             if not line.lstrip().startswith("#")
         )
-        assert "count(DISTINCT trace_id)" not in non_comment_lines, (
-            "P-16 regression: list_traces still issues "
-            "count(DISTINCT trace_id) — the seq scan"
+        assert "pg_class" not in non_comment_lines, (
+            "P-16 regression: list_traces must not use pg_class "
+            "(cross-tenant estimate)"
+        )
+        assert "GROUP BY trace_id" in non_comment_lines, (
+            "P-16 regression: list_traces total must group by trace_id"
+        )
+        assert "AS _traces" in non_comment_lines, (
+            "P-16 regression: list_traces total subquery missing"
+        )
+        # LATERAL unnest must not sit in the main aggregate FROM
+        # (it multiplies span_count / token sums by tag cardinality).
+        assert "WITH page AS" in non_comment_lines, (
+            "list_traces should page aggregates before tag attach"
         )
 
 

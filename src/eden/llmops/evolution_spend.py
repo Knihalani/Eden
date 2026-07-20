@@ -21,6 +21,7 @@ class EvolutionSpendBudget:
         return float(get_settings().max_evolution_ops_usd_per_org_day)
 
     async def spent_today_usd(self) -> float:
+        """Sum today's ledgered OpenRouter spend for evolution-adjacent features."""
         try:
             from eden.storage.postgres import get_postgres_client
 
@@ -33,10 +34,13 @@ class EvolutionSpendBudget:
             val = await client.fetchval(
                 """
                 SELECT COALESCE(SUM(cost_usd), 0)
-                FROM evolution_ops_spend
-                WHERE org_id = $1 AND recorded_at >= $2
+                FROM customer_cost_events
+                WHERE org_id = $1
+                  AND feature = ANY($2::text[])
+                  AND recorded_at >= $3
                 """,
                 self.org_id,
+                ["evolution", "nudge_author"],
                 day_start,
             )
             return float(val or 0.0)
@@ -50,6 +54,7 @@ class EvolutionSpendBudget:
         return (spent + estimated_usd) <= cap
 
     async def record(self, cost_usd: float, *, kind: str, ref_id: str = "") -> None:
+        """Insert into evolution_ops_spend only (no customer CostEvent)."""
         if cost_usd <= 0:
             return
         try:
@@ -74,20 +79,6 @@ class EvolutionSpendBudget:
             )
         except Exception as exc:
             logger.debug("evolution_spend: record failed: %s", exc)
-        try:
-            from eden.llmops.cost_ledger import CostEvent, record_cost_event
-
-            await record_cost_event(
-                CostEvent(
-                    org_id=self.org_id,
-                    feature="evolution",
-                    model="evolution_loop",
-                    cost_usd=float(cost_usd),
-                    metadata={"kind": kind, "ref_id": ref_id},
-                )
-            )
-        except Exception as exc:
-            logger.debug("evolution_spend: CostEvent tag failed: %s", exc)
 
     async def status(self) -> dict[str, Any]:
         cap = await self.daily_cap_usd()

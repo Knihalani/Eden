@@ -18,11 +18,17 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Path
 from pydantic import BaseModel, Field
 
-from eden.api.deps import get_current_user
+from eden.api.deps import (
+    _try_resolve_token_payload,
+    get_current_user,
+    require_org_permission,
+    require_path_org_access,
+)
 from eden.api.utils.safe_error import safe_detail
 from eden.data_platform.pii import _DEFAULT_CATEGORIES
 from eden.observability.ingestion.pii_policy import invalidate_policy
 from eden.storage.postgres import get_postgres_client
+from eden.api.utils.redact import redact_all
 
 logger = logging.getLogger(__name__)
 
@@ -60,8 +66,8 @@ class PIIPolicyOut(BaseModel):
 
 @router.get("", response_model=PIIPolicyOut)
 async def get_pii_policy(
-    org_id: str = Path(...),
-    user: dict = Depends(get_current_user),
+    org_id: str = Depends(require_path_org_access),
+    user: dict = Depends(get_current_user)
 ) -> PIIPolicyOut:
     """Return the current PII policy for the org, or the default
     policy if no override is set."""
@@ -131,8 +137,9 @@ def _derive_mode_from_row(row: dict[str, Any]) -> str:
 @router.put("", response_model=PIIPolicyOut)
 async def put_pii_policy(
     body: PIIPolicyIn,
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     user: dict = Depends(get_current_user),
+    payload: dict | None = Depends(_try_resolve_token_payload),
 ) -> PIIPolicyOut:
     """Replace the active PII policy. The previous policy row is
     closed (effective_until = NOW()) and a new one is inserted.
@@ -140,8 +147,10 @@ async def put_pii_policy(
     Gated by the ``pii:edit`` permission. Owners and admins can
     change the policy; viewers and members get 403.
     """
-    from eden.api.deps import require_org_permission
-    await require_org_permission("pii:edit", x_org_id=org_id)
+    # Pass path org_id + resolved JWT explicitly. A bare
+    # ``await require_org_permission(..., x_org_id=org_id)`` leaves
+    # ``payload`` as an unresolved ``Depends(...)`` sentinel → 500.
+    await require_org_permission("pii:edit", org_id, payload)
     client = await get_postgres_client()
     if not client:
         raise HTTPException(status_code=503, detail="Database unavailable")
@@ -214,8 +223,27 @@ async def put_pii_policy(
             else:
                 raise
     except Exception as exc:
-        logger.warning(f"put_pii_policy failed: {exc}")
-        raise HTTPException(status_code=500, detail=safe_detail(exc, fallback="Internal error while saving PII policy")) from exc
+        msg = str(exc).lower()
+        if "unique" in msg or "duplicate" in msg:
+            raise HTTPException(
+                status_code=409,
+                detail="PII policy already exists for this organization",
+            ) from exc
+        if "invalid input syntax for type uuid" in msg:
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid organization id",
+            ) from exc
+        if "foreign key" in msg:
+            raise HTTPException(
+                status_code=404,
+                detail="Organization not found",
+            ) from exc
+        logger.warning("put_pii_policy failed: %s", redact_all(str(exc)))
+        raise HTTPException(
+            status_code=503,
+            detail=safe_detail(exc, fallback="Failed to save PII policy"),
+        ) from exc
 
     # Drop the in-process cache so the new policy takes effect
     # immediately on the next ingest event.

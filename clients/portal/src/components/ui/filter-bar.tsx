@@ -20,6 +20,21 @@ interface FilterBarProps {
 }
 
 /**
+ * Reset every key in `filters` plus any select keys not yet present.
+ * Prevents filter-only keys (e.g. agent_id) from surviving Clear when
+ * they are not represented as selects.
+ */
+export function clearedFilters(
+  filters: Record<string, string>,
+  selectKeys: string[] = [],
+): Record<string, string> {
+  const cleared: Record<string, string> = {};
+  for (const key of Object.keys(filters)) cleared[key] = "";
+  for (const key of selectKeys) cleared[key] = "";
+  return cleared;
+}
+
+/**
  * FilterBar — search input + filter dropdowns + clear-all button.
  * Replaces the "flex flex-wrap items-center gap-3 bg-[var(--bg-primary)]
  * border border-[var(--border-default)] rounded-xl p-3" pattern
@@ -35,9 +50,7 @@ export function FilterBar({ filters, onChange, selects = [], search, className }
   }
 
   function clearAll() {
-    const cleared: Record<string, string> = {};
-    for (const s of selects) cleared[s.key] = "";
-    onChange(cleared);
+    onChange(clearedFilters(filters, selects.map((s) => s.key)));
     search?.onChange("");
   }
 

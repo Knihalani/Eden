@@ -915,7 +915,10 @@ class TestAdapterUnit:
         msg = sse_format({"x": 1})
         assert msg.startswith(b"data: ")
         assert msg.endswith(b"\n\n")
-        assert b"\"x\": 1" in msg
+        import json as _json
+
+        payload = _json.loads(msg[len(b"data: ") : -2])
+        assert payload == {"x": 1}
         assert sse_done() == b"data: [DONE]\n\n"
 
     def test_shape_models_response(self):

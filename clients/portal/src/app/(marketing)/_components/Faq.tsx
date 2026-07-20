@@ -18,8 +18,7 @@ export function Faq() {
       <div className="max-w-3xl mx-auto">
         <h2
           id={`${baseId}-heading`}
-          className="text-3xl md:text-4xl font-bold text-[var(--text-primary)] tracking-tight mb-10 text-center"
-          style={{ letterSpacing: "-0.03em", lineHeight: 1.08 }}
+          className="marketing-h2 mb-10 text-center"
         >
           Questions before the first trace.
         </h2>

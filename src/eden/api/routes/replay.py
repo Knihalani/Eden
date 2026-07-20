@@ -22,14 +22,18 @@ from pydantic import BaseModel
 from eden.api.deps import (
     eden_user_id_from_auth,
     get_current_user,
-    resolve_eden_org_id,
+    require_path_org_access,
 )
 from eden.realtime.alert_stream import get_alert_processor
 from eden.storage.postgres import get_postgres_client
+from eden.api.utils.redact import redact_all
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(tags=["alerts"])
+router = APIRouter(
+    tags=["alerts"],
+    dependencies=[Depends(require_path_org_access)],
+)
 
 
 # ── Pydantic schemas ──────────────────────────────────────────────────────
@@ -44,67 +48,35 @@ class AlertAcknowledgeRequest(BaseModel):
     alert_ids: list[str]
 
 
+async def _eden_user_id(user: dict[str, Any] = Depends(get_current_user)) -> str:
+    user_id = await eden_user_id_from_auth(user)
+    if not user_id:
+        raise HTTPException(status_code=401, detail="User not found")
+    return user_id
+
+
 # ── Alert endpoints ────────────────────────────────────────────────────────
 
 @router.get("/orgs/{org_id}/alerts")
 async def list_alerts(
-    org_id: str,
+    org_id: str = Depends(require_path_org_access),
     severity: str | None = Query(None),
     acknowledged: bool | None = Query(None),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
-    user: dict[str, Any] = Depends(get_current_user),
+    user_id: str = Depends(_eden_user_id),
 ):
     """List in-app alerts for an organization (scoped to the caller)."""
     client = await get_postgres_client()
     if client is None:
         raise HTTPException(status_code=503, detail="Database unavailable")
 
-    try:
-        user_id = await eden_user_id_from_auth(user)
-    except Exception as exc:
-        logger.warning("list_alerts user resolve failed: %s", exc)
-        raise HTTPException(status_code=503, detail="User lookup failed") from exc
-    if not user_id:
-        raise HTTPException(status_code=404, detail="User not found")
-
-    # Resolve org in-line so DB blips become 503, not a fake "Organization not found".
-    try:
-        org_row = await client.fetchrow(
-            """
-            SELECT id FROM organizations
-            WHERE id::text = $1 OR clerk_org_id::text = $1
-            LIMIT 1
-            """,
-            org_id,
-        )
-    except Exception as exc:
-        logger.warning("list_alerts org resolve failed org=%s: %s", org_id, exc)
-        raise HTTPException(
-            status_code=503, detail="Organization lookup failed"
-        ) from exc
-    if not org_row:
-        raise HTTPException(status_code=404, detail="Organization not found")
-    eden_org_id = str(org_row["id"])
-
-    try:
-        membership = await client.fetchrow(
-            "SELECT role FROM org_members WHERE org_id = $1 AND user_id = $2",
-            eden_org_id,
-            user_id,
-        )
-    except Exception as exc:
-        logger.warning("list_alerts membership query failed: %s", exc)
-        raise HTTPException(status_code=503, detail="Membership lookup failed") from exc
-    if not membership:
-        raise HTTPException(status_code=403, detail="Not a member of this organization")
-
     conditions = [
         "user_id = $1",
         "org_id = $2",
         "(data->>'is_alert')::boolean = true",
     ]
-    params: list[Any] = [user_id, eden_org_id]
+    params: list[Any] = [user_id, org_id]
     param_idx = 3
 
     if severity:
@@ -147,7 +119,7 @@ async def list_alerts(
         )
     except Exception as exc:
         # Missing notifications table / schema drift → empty feed, not a hard 500/404.
-        logger.warning("list_alerts query failed org=%s: %s", eden_org_id, exc)
+        logger.warning("list_alerts query failed org=%s: %s", org_id, redact_all(str(exc)))
         return {
             "alerts": [],
             "total": 0,
@@ -181,19 +153,12 @@ async def list_alerts(
 
 @router.post("/orgs/{org_id}/alerts/{alert_id}/acknowledge")
 async def acknowledge_alert(
-    org_id: str,
     alert_id: str,
-    user: dict[str, Any] = Depends(get_current_user),
+    org_id: str = Depends(require_path_org_access),
+    user_id: str = Depends(_eden_user_id),
 ):
     """Acknowledge a single alert (IDOR-safe)."""
     client = await get_postgres_client()
-    user_id = await eden_user_id_from_auth(user)
-    if not user_id:
-        raise HTTPException(status_code=404, detail="User not found")
-
-    eden_org_id = await resolve_eden_org_id(org_id)
-    if not eden_org_id:
-        raise HTTPException(status_code=404, detail="Organization not found")
 
     result = await client.execute(
         """
@@ -207,7 +172,7 @@ async def acknowledge_alert(
         """,
         alert_id,
         user_id,
-        eden_org_id,
+        org_id,
     )
     if result == "UPDATE 0":
         raise HTTPException(status_code=404, detail="Alert not found")
@@ -220,67 +185,54 @@ async def acknowledge_alert(
 
 @router.post("/orgs/{org_id}/alerts/acknowledge-batch")
 async def acknowledge_alerts_batch(
-    org_id: str,
     req: AlertAcknowledgeRequest,
-    user: dict[str, Any] = Depends(get_current_user),
+    org_id: str = Depends(require_path_org_access),
+    user_id: str = Depends(_eden_user_id),
 ):
     """Acknowledge multiple alerts at once (IDOR-safe)."""
     client = await get_postgres_client()
-    user_id = await eden_user_id_from_auth(user)
-    if not user_id:
-        raise HTTPException(status_code=404, detail="User not found")
 
-    eden_org_id = await resolve_eden_org_id(org_id)
-    if not eden_org_id:
-        raise HTTPException(status_code=404, detail="Organization not found")
+    if not req.alert_ids:
+        return {"status": "ok", "acknowledged_count": 0, "alert_ids": []}
+
+    # notifications.id is UUID; cast via uuid[] so string alert_ids bind cleanly.
+    rows = await client.fetch(
+        """
+        UPDATE notifications
+        SET read_at = NOW()
+        WHERE id = ANY($1::uuid[])
+          AND user_id = $2
+          AND org_id = $3
+          AND (data->>'is_alert')::boolean = true
+          AND read_at IS NULL
+        RETURNING id
+        """,
+        req.alert_ids,
+        user_id,
+        org_id,
+    )
+    acknowledged = [str(row["id"]) for row in rows]
 
     processor = await get_alert_processor()
-    acknowledged: list[str] = []
+    for alert_id in acknowledged:
+        await processor.acknowledge_alert(alert_id)
 
-    for alert_id in req.alert_ids:
-        result = await client.execute(
-            """
-            UPDATE notifications
-            SET read_at = NOW()
-            WHERE id = $1
-              AND user_id = $2
-              AND org_id = $3
-              AND (data->>'is_alert')::boolean = true
-              AND read_at IS NULL
-            """,
-            alert_id,
-            user_id,
-            eden_org_id,
-        )
-        if result != "UPDATE 0":
-            await processor.acknowledge_alert(alert_id)
-            acknowledged.append(alert_id)
-
-    return {"status": "ok", "acknowledged_count": len(acknowledged), "alert_ids": acknowledged}
+    return {
+        "status": "ok",
+        "acknowledged_count": len(acknowledged),
+        "alert_ids": acknowledged,
+    }
 
 
 @router.get("/orgs/{org_id}/alerts/rules")
 async def list_alert_rules(
-    org_id: str,
-    user: dict[str, Any] = Depends(get_current_user),
+    org_id: str = Depends(require_path_org_access),
+    _user_id: str = Depends(_eden_user_id),
 ):
     """List configured alert rules for an organization."""
-    client = await get_postgres_client()
-    user_id = await eden_user_id_from_auth(user)
-    if not user_id:
-        raise HTTPException(status_code=404, detail="User not found")
-
-    eden_org_id = await resolve_eden_org_id(org_id)
-    if not eden_org_id:
-        raise HTTPException(status_code=404, detail="Organization not found")
-
-    membership = await client.fetchrow(
-        "SELECT role FROM org_members WHERE org_id = $1 AND user_id = $2",
-        eden_org_id,
-        user_id,
-    )
-    if not membership:
-        raise HTTPException(status_code=403, detail="Not a member of this organization")
+    # Membership gate via require_path_org_access (rules are currently
+    # processor-global, not org-filtered).
+    _ = org_id
 
     processor = await get_alert_processor()
     rules = processor.get_rules()

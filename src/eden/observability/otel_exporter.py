@@ -18,6 +18,7 @@ and dropped. This matches the collector's overall best-effort posture.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Any
 
@@ -50,44 +51,117 @@ _OPERATION_NAME_MAP: dict[str, str] = {
 class OTelDualExporter:
     """Forwards TelemetryEvent rows to an OTLP/HTTP backend.
 
-    Stateless — every event is sent immediately. There's no batching
-    yet (the OTel SDK's BatchSpanProcessor would be the proper path for
-    high-volume tenants; deferred until the gateway-proxy work lands
-    and a real SDK auto-instrumentation path is needed).
+    Buffers spans and flushes on size or timer. Message content is
+    gated off by default (``otel_dual_emit_include_content``).
+    Settings are cached on the exporter instance.
     """
+
+    FLUSH_SIZE = 50
+    FLUSH_INTERVAL_S = 5.0
 
     def __init__(self) -> None:
         self._session: aiohttp.ClientSession | None = None
+        self._settings: Any | None = None
+        self._buffer: list[TelemetryEvent] = []
+        self._flush_task: asyncio.Task[None] | None = None
+        self._lock = asyncio.Lock()
+
+    def _cached_settings(self) -> Any:
+        if self._settings is None:
+            self._settings = get_settings()
+        return self._settings
 
     async def _get_session(self) -> aiohttp.ClientSession:
         if self._session is None or self._session.closed:
             timeout = aiohttp.ClientTimeout(
-                total=get_settings().otel_exporter_otlp_timeout_seconds
+                total=float(
+                    getattr(
+                        self._cached_settings(),
+                        "otel_exporter_otlp_timeout_seconds",
+                        10,
+                    )
+                )
             )
             self._session = aiohttp.ClientSession(timeout=timeout)
         return self._session
 
     async def close(self) -> None:
+        try:
+            await self.flush()
+        except Exception:
+            pass
+        if self._flush_task and not self._flush_task.done():
+            self._flush_task.cancel()
         if self._session and not self._session.closed:
             await self._session.close()
         self._session = None
 
-    async def export_event(self, event: TelemetryEvent) -> bool:
-        """Convert one TelemetryEvent to OTel JSON and POST it.
+    def _ensure_flush_loop(self) -> None:
+        if self._flush_task is not None and not self._flush_task.done():
+            return
+        try:
+            self._flush_task = asyncio.create_task(self._flush_loop())
+        except RuntimeError:
+            self._flush_task = None
 
-        Returns True on a 2xx, False on any failure. Never raises.
+    async def _flush_loop(self) -> None:
+        while True:
+            await asyncio.sleep(self.FLUSH_INTERVAL_S)
+            try:
+                await self.flush()
+            except Exception as exc:
+                logger.debug("OTel dual-emit timer flush failed: %s", exc)
+
+    async def export_event(self, event: TelemetryEvent) -> bool:
+        """Buffer one TelemetryEvent for batched OTLP export.
+
+        Returns True when dual-emit is enabled and the event was
+        accepted into the buffer. Never raises.
         """
-        if not get_settings().otel_dual_emit_enabled:
+        settings = self._cached_settings()
+        if not bool(getattr(settings, "otel_dual_emit_enabled", False)):
             return False
         try:
-            span = self._event_to_otlp_span(event)
+            async with self._lock:
+                self._buffer.append(event)
+                should_flush = len(self._buffer) >= self.FLUSH_SIZE
+            self._ensure_flush_loop()
+            if should_flush:
+                await self.flush()
+            return True
+        except Exception as exc:
+            logger.debug(f"OTel dual-emit failed for {event.event_id}: {exc}")
+            return False
+
+    async def flush(self) -> int:
+        """Flush the in-process span buffer as one OTLP/HTTP POST."""
+        async with self._lock:
+            if not self._buffer:
+                return 0
+            batch = list(self._buffer)
+            self._buffer = []
+        settings = self._cached_settings()
+        endpoint = getattr(settings, "otel_exporter_otlp_endpoint", "") or ""
+        if not endpoint:
+            return 0
+        include_content = bool(
+            getattr(settings, "otel_dual_emit_include_content", False)
+        )
+        try:
+            spans = [
+                self._event_to_otlp_span(ev, include_content=include_content)
+                for ev in batch
+            ]
+            # Group by tenant for resource attributes (first event wins
+            # for the batch resource; per-span attrs still carry ids).
+            tenant_id = batch[0].tenant_id if batch else ""
             payload = {
                 "resourceSpans": [{
                     "resource": {
                         "attributes": [
                             {"key": "service.name", "value": {"stringValue": "eden"}},
                             {"key": "eden.tenant_id",
-                             "value": {"stringValue": event.tenant_id}},
+                             "value": {"stringValue": tenant_id}},
                         ]
                     },
                     "scopeSpans": [{
@@ -95,12 +169,11 @@ class OTelDualExporter:
                             "name": "eden.otel_dual_emit",
                             "version": "7.2.0",
                         },
-                        "spans": [span],
+                        "spans": spans,
                     }],
                 }]
             }
-            settings = get_settings()
-            url = settings.otel_exporter_otlp_endpoint.rstrip("/") + "/v1/traces"
+            url = endpoint.rstrip("/") + "/v1/traces"
             session = await self._get_session()
             async with session.post(
                 url,
@@ -110,15 +183,20 @@ class OTelDualExporter:
                 if resp.status >= 300:
                     logger.debug(
                         f"OTel dual-emit non-2xx ({resp.status}) for "
-                        f"event {event.event_id}"
+                        f"batch size {len(batch)}"
                     )
-                    return False
-                return True
+                    return 0
+                return len(batch)
         except Exception as exc:
-            logger.debug(f"OTel dual-emit failed for {event.event_id}: {exc}")
-            return False
+            logger.debug(f"OTel dual-emit flush failed: {exc}")
+            return 0
 
-    def _event_to_otlp_span(self, event: TelemetryEvent) -> dict[str, Any]:
+    def _event_to_otlp_span(
+        self,
+        event: TelemetryEvent,
+        *,
+        include_content: bool = False,
+    ) -> dict[str, Any]:
         """Convert a TelemetryEvent to an OTLP/HTTP JSON Span dict.
 
         Maps Eden's capture columns onto OTel GenAI semantic conventions:
@@ -184,23 +262,18 @@ class OTelDualExporter:
         add("eden.outcome", event.outcome)
 
         # ── pass-through Eden custom attributes ──
-        # Anything in event.attributes with the `acme.eden.*` namespace
-        # flows through to the OTel backend unchanged. This lets users
-        # add tenant_id, user_id, delegation_chain, etc. as OTel
-        # attributes without Eden changing.
         for k, v in event.attributes.items():
             if k.startswith("acme.eden."):
                 add(k, v)
 
         # ── span timing ──
-        # Use timestamp + duration_ms; OTLP wants nanoseconds.
         start_ns = _iso_to_ns(event.timestamp)
         duration_ns = int((event.duration_ms or 0.0) * 1_000_000)
         end_ns = start_ns + duration_ns if start_ns else 0
 
-        # ── span events for full content ──
+        # ── span events for full content (gated off by default) ──
         span_events: list[dict[str, Any]] = []
-        if event.request_body:
+        if include_content and event.request_body:
             for msg in (event.request_body.get("messages") or []):
                 if not isinstance(msg, dict):
                     continue
@@ -223,31 +296,32 @@ class OTelDualExporter:
                     "name": ev_name,
                     "attributes": ev_attrs,
                 })
-        for tc in event.tool_calls_full or []:
-            if not isinstance(tc, dict):
-                continue
-            ev_attrs = []
-            if tc.get("id"):
-                ev_attrs.append({"key": "id",
-                                 "value": {"stringValue": str(tc["id"])}})
-            if tc.get("name") or (tc.get("function") or {}).get("name"):
-                name = tc.get("name") or tc["function"]["name"]
-                ev_attrs.append({"key": "name",
-                                 "value": {"stringValue": str(name)}})
-            if tc.get("function"):
-                args = tc["function"].get("arguments")
-                if args is not None:
+        if include_content:
+            for tc in event.tool_calls_full or []:
+                if not isinstance(tc, dict):
+                    continue
+                ev_attrs = []
+                if tc.get("id"):
+                    ev_attrs.append({"key": "id",
+                                     "value": {"stringValue": str(tc["id"])}})
+                if tc.get("name") or (tc.get("function") or {}).get("name"):
+                    name = tc.get("name") or tc["function"]["name"]
+                    ev_attrs.append({"key": "name",
+                                     "value": {"stringValue": str(name)}})
+                if tc.get("function"):
+                    args = tc["function"].get("arguments")
+                    if args is not None:
+                        ev_attrs.append({"key": "arguments",
+                                         "value": {"stringValue": str(args)}})
+                elif tc.get("arguments") is not None or tc.get("input") is not None:
+                    args = tc.get("arguments") or tc.get("input")
                     ev_attrs.append({"key": "arguments",
                                      "value": {"stringValue": str(args)}})
-            elif tc.get("arguments") is not None or tc.get("input") is not None:
-                args = tc.get("arguments") or tc.get("input")
-                ev_attrs.append({"key": "arguments",
-                                 "value": {"stringValue": str(args)}})
-            span_events.append({
-                "timeUnixNano": str(end_ns),
-                "name": "gen_ai.tool.message",
-                "attributes": ev_attrs,
-            })
+                span_events.append({
+                    "timeUnixNano": str(end_ns),
+                    "name": "gen_ai.tool.message",
+                    "attributes": ev_attrs,
+                })
 
         return {
             "traceId": _hex_trace_id(event.trace_id),

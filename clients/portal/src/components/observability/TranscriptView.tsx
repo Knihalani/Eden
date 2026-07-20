@@ -22,10 +22,46 @@
  */
 
 import * as React from "react";
+import Image from "next/image";
 import { ChevronRight, ChevronDown, Wrench, Bot, MessageSquare, Brain, Image as ImageIcon, AlertCircle, CheckCircle2, Clock, Copy } from "lucide-react";
 import { isInternalFrameworkSpan } from "@/lib/observability/elide";
 import { cn } from "@/lib/utils";
 import type { TranscriptRow as TR, TranscriptMessage, TranscriptToolCall, TranscriptToolResult } from "@/lib/observability/types";
+
+/** P16 — pretty-print JSON only after explicit expand (memoized). */
+function LazyJson({ value, maxChars = 4_000 }: { value: unknown; maxChars?: number }) {
+  const [open, setOpen] = React.useState(false);
+  const pretty = React.useMemo(() => {
+    if (!open) return null;
+    try {
+      const raw = typeof value === "string" ? value : JSON.stringify(value, null, 2);
+      return raw.length > maxChars ? `${raw.slice(0, maxChars)}\n…` : raw;
+    } catch {
+      return String(value);
+    }
+  }, [open, value, maxChars]);
+
+  if (typeof value === "string" && value.length < 120) {
+    return <span className="font-mono text-[11px]">{value}</span>;
+  }
+
+  return (
+    <div className="space-y-1">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="text-[10px] font-mono uppercase tracking-wider text-[var(--accent)] hover:underline"
+      >
+        {open ? "Hide JSON" : "Show JSON"}
+      </button>
+      {open && pretty != null && (
+        <pre className="overflow-x-auto whitespace-pre-wrap font-mono text-[11px] text-[var(--text-secondary)]">
+          {pretty}
+        </pre>
+      )}
+    </div>
+  );
+}
 
 // ── Public entry ────────────────────────────────────────────────────
 
@@ -168,7 +204,7 @@ export function TranscriptView({
                 <TranscriptRowItem
                   key={row.span_id}
                   row={row}
-                  selected={selectedSpanId === row.span_id}
+                  selectedSpanId={selectedSpanId}
                   onSelect={setSelectedSpanId}
                   orgId={orgId}
                   traceId={traceId}
@@ -268,18 +304,19 @@ function SummaryCard({
 
 function TranscriptRowItem({
   row,
-  selected,
+  selectedSpanId,
   onSelect,
   orgId,
   traceId,
   depth }: {
   row: TR;
-  selected: boolean;
+  selectedSpanId: string | null;
   onSelect: (id: string) => void;
   orgId?: string;
   traceId: string;
   depth: number;
 }) {
+  const selected = selectedSpanId === row.span_id;
   const [expanded, setExpanded] = React.useState(true);
   const isLlm = !!row.request_body || !!row.response_body || (row.event_type?.includes("chat") ?? false);
   const isTool = (row.event_type?.includes("tool") ?? false) || (row.tool_calls?.length ?? 0) > 0 || (row.tool_results?.length ?? 0) > 0;
@@ -371,7 +408,7 @@ function TranscriptRowItem({
               <div className="rounded border border-[var(--border-default)] bg-[var(--bg-primary)] px-2 py-1.5 text-xs">
                 {typeof row.request_body.system === "string"
                   ? row.request_body.system
-                  : <pre className="overflow-x-auto whitespace-pre-wrap font-mono text-[11px]">{JSON.stringify(row.request_body.system, null, 2)}</pre>}
+                  : <LazyJson value={row.request_body.system} />}
               </div>
             </div>
           ) : null}
@@ -434,7 +471,7 @@ function TranscriptRowItem({
             <TranscriptRowItem
               key={c.span_id}
               row={c}
-              selected={selected}
+              selectedSpanId={selectedSpanId}
               onSelect={onSelect}
               orgId={orgId}
               traceId={traceId}
@@ -506,7 +543,7 @@ function MessagesPanel({ title, messages }: { title: string; messages: Transcrip
               {m.name && <span className="text-[var(--text-muted)]">({m.name})</span>}
             </div>
             <div className="whitespace-pre-wrap text-[var(--text-primary)]">
-              {typeof m.content === "string" ? m.content : <pre className="overflow-x-auto font-mono text-[11px]">{JSON.stringify(m.content, null, 2)}</pre>}
+              {typeof m.content === "string" ? m.content : <LazyJson value={m.content} />}
             </div>
           </div>
         ))}
@@ -610,7 +647,7 @@ function ToolCallsList({
             )}
             {tc.arguments !== undefined && (
               <pre className="overflow-x-auto whitespace-pre-wrap font-mono text-[10px] text-[var(--text-secondary)]">
-                {typeof tc.arguments === "string" ? tc.arguments : JSON.stringify(tc.arguments ?? null, null, 2)}
+                {typeof tc.arguments === "string" ? tc.arguments : <LazyJson value={tc.arguments ?? null} />}
               </pre>
             )}
           </div>
@@ -641,7 +678,7 @@ function ToolResultsPanel({ results }: { results: TranscriptToolResult[] }) {
               </div>
             )}
             <pre className="overflow-x-auto whitespace-pre-wrap font-mono text-[10px] text-[var(--text-secondary)]">
-              {typeof tr.content === "string" ? tr.content : JSON.stringify(tr.content ?? null, null, 2)}
+              {typeof tr.content === "string" ? tr.content : <LazyJson value={tr.content ?? null} />}
             </pre>
           </div>
         ))}
@@ -661,14 +698,12 @@ function ImagesPanel({ images }: { images: NonNullable<TR["images"]>; orgId?: st
             className="rounded border border-[var(--border-default)] bg-[var(--bg-secondary)] p-1"
           >
             {img.url ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
+              <Image
                 src={img.url}
                 alt={img.content_type?.startsWith("image/") ? "transcript image" : img.content_type || "transcript image"}
                 width={128}
                 height={128}
-                loading="lazy"
-                decoding="async"
+                unoptimized
                 className="h-32 w-32 rounded object-cover"
               />
             ) : (
@@ -689,9 +724,9 @@ function ResponsePanel({ response }: { response: unknown }) {
   return (
     <div>
       <SectionHeader>Response</SectionHeader>
-      <pre className="overflow-x-auto rounded border border-[var(--border-default)] bg-[var(--bg-primary)] p-2 text-[10px] font-mono text-[var(--text-secondary)]">
-        {JSON.stringify(response, null, 2)}
-      </pre>
+      <div className="overflow-x-auto rounded border border-[var(--border-default)] bg-[var(--bg-primary)] p-2 text-[10px]">
+        <LazyJson value={response} />
+      </div>
     </div>
   );
 }

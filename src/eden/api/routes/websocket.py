@@ -30,8 +30,212 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["websocket"])
 
+# Idle WS: wait on Redis pub/sub (or sleep) ≥10s between get_job calls.
+# Replaces the previous fixed 2s Postgres poll loop (K29).
+_JOB_WAKE_TIMEOUT_S: float = 10.0
+_JOB_EVENT_CHANNEL_PREFIX = "eden:job:"
+# code_fragment payloads are truncated to 32 KiB on the wire (K30).
+_CODE_FRAGMENT_MAX_BYTES: int = 32 * 1024
+
 # Track active WebSocket connections per job
 _job_connections: dict[str, set[WebSocket]] = {}
+
+
+def job_event_channel(job_id: str) -> str:
+    """Redis pub/sub channel for a job's live updates."""
+    return f"{_JOB_EVENT_CHANNEL_PREFIX}{job_id}"
+
+
+async def publish_job_event(
+    job_id: str,
+    payload: dict[str, Any] | None = None,
+) -> None:
+    """Wake job WebSocket / mobile SSE waiters after a job mutation.
+
+    Fire-and-forget safe: Redis missing or publish failure is ignored.
+    Called from job update paths (status / checkpoint blob writes).
+    """
+    try:
+        redis = await get_redis_client()
+    except Exception:
+        return
+    if redis is None:
+        return
+    body = json.dumps(payload or {"job_id": job_id}, default=str)
+    try:
+        await redis.publish(job_event_channel(job_id), body)
+    except Exception as exc:
+        logger.debug(
+            "publish_job_event failed for %s: %s",
+            job_id,
+            redact_all(str(exc)),
+        )
+
+
+def _truncate_code_fragment(code: str) -> str:
+    """Truncate code_fragment payloads to ≤32 KiB UTF-8 bytes."""
+    if not isinstance(code, str) or not code:
+        return ""
+    raw = code.encode("utf-8")
+    if len(raw) <= _CODE_FRAGMENT_MAX_BYTES:
+        return code
+    return raw[:_CODE_FRAGMENT_MAX_BYTES].decode("utf-8", errors="ignore")
+
+
+async def _wait_for_job_wake(
+    job_id: str,
+    *,
+    timeout: float = _JOB_WAKE_TIMEOUT_S,
+    hilt: Any | None = None,
+) -> bool:
+    """Block until a job event, HILT resume, or ``timeout`` elapses.
+
+    Returns True when woken by Redis pub/sub (or HILT), False on timeout
+    / Redis-unavailable sleep. Guarantees at most one wake per call so
+    the caller can issue ≤1 ``get_job`` per cycle.
+    """
+    timeout = max(float(timeout), _JOB_WAKE_TIMEOUT_S)
+
+    async def _hilt_wait() -> bool:
+        if hilt is None:
+            await asyncio.sleep(timeout)
+            return False
+        try:
+            await asyncio.wait_for(
+                hilt.wait_for_resume(timeout=timeout),
+                timeout=timeout,
+            )
+            return True
+        except TimeoutError:
+            return False
+
+    redis = None
+    with contextlib.suppress(Exception):
+        redis = await get_redis_client()
+    if redis is None:
+        return await _hilt_wait()
+
+    pubsub = redis.pubsub()
+    channel = job_event_channel(job_id)
+    try:
+        await pubsub.subscribe(channel)
+    except Exception:
+        with contextlib.suppress(Exception):
+            await pubsub.close()
+        return await _hilt_wait()
+
+    async def _pubsub_wait() -> bool:
+        deadline = time.monotonic() + timeout
+        try:
+            while True:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    return False
+                try:
+                    msg = await pubsub.get_message(
+                        ignore_subscribe_messages=True,
+                        timeout=min(remaining, 1.0),
+                    )
+                except TypeError:
+                    # Older redis-py: no timeout kw — fall back to wait_for.
+                    try:
+                        msg = await asyncio.wait_for(
+                            pubsub.get_message(
+                                ignore_subscribe_messages=True
+                            ),
+                            timeout=min(remaining, 1.0),
+                        )
+                    except TimeoutError:
+                        continue
+                if msg is not None and msg.get("type") == "message":
+                    return True
+        except Exception:
+            return False
+
+    try:
+        if hilt is None:
+            return await _pubsub_wait()
+        pub_task = asyncio.create_task(_pubsub_wait())
+        hilt_task = asyncio.create_task(_hilt_wait())
+        done, pending = await asyncio.wait(
+            {pub_task, hilt_task},
+            return_when=asyncio.FIRST_COMPLETED,
+        )
+        for t in pending:
+            t.cancel()
+            with contextlib.suppress(asyncio.CancelledError, Exception):
+                await t
+        woken = False
+        for t in done:
+            with contextlib.suppress(Exception):
+                if t.result():
+                    woken = True
+        return woken
+    finally:
+        with contextlib.suppress(Exception):
+            await pubsub.unsubscribe(channel)
+            await pubsub.close()
+
+
+async def _latest_blob_created_at(client: Any, job_id: str) -> str | None:
+    """Return MAX(created_at) for checkpoint blobs without loading values."""
+    try:
+        return await client.fetchval(
+            """
+            SELECT MAX(created_at)::text
+            FROM checkpoint_blobs
+            WHERE job_id = $1
+            """,
+            job_id,
+        )
+    except Exception:
+        return None
+
+
+async def _fetch_blobs_after(
+    client: Any,
+    job_id: str,
+    after_created_at: str | None,
+) -> list[dict[str, Any]]:
+    """Fetch checkpoint blobs newer than ``after_created_at`` (incremental)."""
+    try:
+        if after_created_at is None:
+            rows = await client.fetch(
+                """
+                SELECT field, value, created_at
+                FROM checkpoint_blobs
+                WHERE job_id = $1
+                ORDER BY created_at ASC
+                """,
+                job_id,
+            )
+        else:
+            rows = await client.fetch(
+                """
+                SELECT field, value, created_at
+                FROM checkpoint_blobs
+                WHERE job_id = $1 AND created_at > $2
+                ORDER BY created_at ASC
+                """,
+                job_id,
+                after_created_at,
+            )
+    except Exception:
+        return []
+    out: list[dict[str, Any]] = []
+    for r in rows:
+        value = r["value"]
+        if isinstance(value, str):
+            with contextlib.suppress(Exception):
+                value = json.loads(value)
+        out.append(
+            {
+                "field": r["field"],
+                "value": value,
+                "created_at": r.get("created_at"),
+            }
+        )
+    return out
 
 # Audit 2026-07-03 — bounded TTL role cache. Pre-fix the cache was
 # a plain ``dict[(user_id, job_id), bool]`` with no eviction: a
@@ -405,18 +609,18 @@ async def job_trace_websocket(
         })
         last_stage = job["current_stage"]
         last_status = job["status"]
-        last_blob_keys: set[tuple[str, str]] = set()
+        # Cursor for incremental blob fetch — skip historical blobs on connect.
+        last_blob_at = await _latest_blob_created_at(client, job_id)
 
         while True:
             # If the receive task died (e.g. malformed JSON), stop
             if receive_task.done() and receive_task.exception():
                 break
 
-            # Poll for updates every 2 seconds (or break early if HILT paused)
-            with contextlib.suppress(TimeoutError):
-                await asyncio.wait_for(hilt.wait_for_resume(timeout=2.0), timeout=2.0)
+            # Idle wait: Redis pub/sub or ≥10s timeout (≤1 get_job per cycle).
+            await _wait_for_job_wake(job_id, timeout=_JOB_WAKE_TIMEOUT_S, hilt=hilt)
 
-            # Fetch latest job state
+            # Fetch latest job state (at most once per wake/timeout).
             job = await client.get_job(job_id, user_id=user["user_id"])
             if not job:
                 await websocket.send_json({
@@ -452,25 +656,45 @@ async def job_trace_websocket(
                 last_stage = current_stage
                 last_status = current_status
 
-            # Check for new checkpoint blobs
+            # Incremental checkpoint blobs (only rows newer than cursor).
             try:
-                blobs = await client.get_checkpoint_blobs(job_id)
-                current_blob_keys = {(b["field"], b.get("created_at", "")) for b in blobs}
-                new_blob_keys = current_blob_keys - last_blob_keys
-
-                for field, ts in new_blob_keys:
-                    blob_map = {b["field"]: b["value"] for b in blobs}
-                    value = blob_map.get(field)
+                blobs = await _fetch_blobs_after(client, job_id, last_blob_at)
+                for blob in blobs:
+                    field = blob["field"]
+                    ts = blob.get("created_at", "")
+                    value = blob.get("value")
+                    if ts:
+                        last_blob_at = (
+                            ts if isinstance(ts, str) else str(ts)
+                        )
 
                     if field.startswith("code:"):
+                        if isinstance(value, dict):
+                            code = value.get("code") or value.get("text") or ""
+                        else:
+                            code = value if isinstance(value, str) else ""
                         await websocket.send_json({
                             "type": "code_fragment",
                             "job_id": job_id,
                             "field": field,
-                            "code": value if isinstance(value, str) else "",
+                            "code": _truncate_code_fragment(
+                                code if isinstance(code, str) else ""
+                            ),
+                            "truncated": bool(
+                                isinstance(code, str)
+                                and len(code.encode("utf-8"))
+                                > _CODE_FRAGMENT_MAX_BYTES
+                            ),
                             "timestamp": ts,
                         })
-                    elif field in ("edp", "edp_history", "res", "final_res", "quality_report", "tester_results"):
+                    elif field in (
+                        "edp",
+                        "edp_history",
+                        "res",
+                        "final_res",
+                        "quality_report",
+                        "tester_results",
+                    ):
                         await websocket.send_json({
                             "type": "message",
                             "job_id": job_id,
@@ -478,8 +702,6 @@ async def job_trace_websocket(
                             "field": field,
                             "timestamp": ts,
                         })
-
-                last_blob_keys = current_blob_keys
             except Exception:
                 pass  # Non-fatal during streaming
 
@@ -548,7 +770,8 @@ async def job_logs_websocket(
         last_status = job["status"]
 
         while True:
-            await asyncio.sleep(2)
+            # Same idle contract as /trace: ≥10s wake, ≤1 get_job.
+            await _wait_for_job_wake(job_id, timeout=_JOB_WAKE_TIMEOUT_S)
 
             job = await client.get_job(job_id, user_id=user["user_id"])
             if not job:

@@ -28,9 +28,27 @@ def test_verify_slack_signature_valid() -> None:
 
 @pytest.mark.asyncio
 async def test_slash_command_unknown() -> None:
-    out = await slack.handle_slash_command({"text": "nope"})
+    with patch(
+        "eden.integrations.slack.interactive.resolve_eden_org_for_slack_team",
+        new=AsyncMock(return_value="org-eden"),
+    ):
+        out = await slack.handle_slash_command(
+            {"text": "nope", "team_id": "T1"}
+        )
     assert out["response_type"] == "ephemeral"
     assert "Unknown command" in out["text"]
+
+
+def test_verify_slack_signature_rejects_empty_secret() -> None:
+    assert (
+        slack.verify_slack_signature(
+            signing_secret="",
+            timestamp=str(int(time.time())),
+            body=b"x",
+            signature="v0=abc",
+        )
+        is False
+    )
 
 
 @pytest.mark.asyncio

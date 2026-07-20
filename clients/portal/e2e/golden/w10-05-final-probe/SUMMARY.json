@@ -1,0 +1,109 @@
+{
+  "agent": "W10-5-final-prod-probe",
+  "timestamp_utc": "2026-07-20T05:47:00Z",
+  "base_api": "https://api.edenobservability.com",
+  "base_web": "https://edenobservability.com",
+  "positive_path": "BLOCKED_NEEDS_KEYS",
+  "secrets_committed": false,
+  "health": {
+    "GET /live": {
+      "http": 200,
+      "pass": true
+    },
+    "GET /ready": {
+      "http": 200,
+      "pass": true,
+      "qdrant": "soft-fail"
+    },
+    "GET /health": {
+      "http": 503,
+      "status": "degraded",
+      "pass": true,
+      "note": "intentional soft-degraded"
+    },
+    "GET portal /api/health": {
+      "http": 503,
+      "status": "degraded",
+      "pass": true
+    },
+    "GET portal /api/proxy/health": {
+      "http": 503,
+      "status": "degraded",
+      "pass": true
+    }
+  },
+  "marketing": {
+    "routes_200": [
+      "/",
+      "/about",
+      "/pricing",
+      "/contact",
+      "/privacy",
+      "/terms",
+      "/security",
+      "/changelog",
+      "/sign-in",
+      "/sign-up",
+      "/dpa",
+      "/subprocessors",
+      "/do-not-sell"
+    ],
+    "health_status_html_shell_200": true,
+    "status_health_soft404_vs_repo": "still soft-404 shells (undeployed real status page)"
+  },
+  "negative_auth": {
+    "openai_missing": {
+      "http": 401,
+      "pass": true
+    },
+    "openai_empty": {
+      "http": 401,
+      "pass": true
+    },
+    "openai_bad_no_org": {
+      "http": 401,
+      "pass": true
+    },
+    "openai_bad_uuid_org": {
+      "http": 401,
+      "pass": true,
+      "vs_w2_08": "was 500"
+    },
+    "openai_malformed_uuid_org": {
+      "http": 401,
+      "pass": true,
+      "vs_w2_08": "was 500"
+    },
+    "framework_bad_uuid_org": {
+      "http": 401,
+      "pass": true,
+      "vs_w2_08": "was 500"
+    },
+    "openai_bad_nonuuid_org": {
+      "http": 500,
+      "pass": false,
+      "expect": 401,
+      "note": "code-fixed-not-deployed"
+    },
+    "webhook_bad_nonuuid_org": {
+      "http": 500,
+      "pass": false,
+      "expect": 401
+    },
+    "telemetry_bad_uuid_org": {
+      "http": 403,
+      "pass": false,
+      "expect": 401,
+      "note": "code-fixed-not-deployed"
+    },
+    "telemetry_bad_nonuuid_org": {
+      "http": 403,
+      "pass": false,
+      "expect": 401
+    },
+    "ingest_custom": {
+      "http": 404,
+      "pass": "wontfix-doc"
+    }
+  }
+}

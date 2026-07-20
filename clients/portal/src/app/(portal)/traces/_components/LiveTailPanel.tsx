@@ -3,27 +3,47 @@
 /**
  * LiveTailPanel — N11 live trace streaming on /traces.
  * Uses the existing SSE hook + org stream proxy.
+ * Default off (K6); pauses when the document is hidden.
  */
 
 import { Pause, Play, Radio, RefreshCw, Trash2 } from "lucide-react";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useObservabilityStream } from "@/hooks/use-observability-stream";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 interface LiveTailPanelProps {
   orgId: string;
+  /** When omitted, stream starts off until the user clicks Start. */
   enabled?: boolean;
   onSelectTrace?: (traceId: string) => void;
 }
 
 export function LiveTailPanel({
   orgId,
-  enabled = true,
+  enabled: enabledProp,
   onSelectTrace,
 }: LiveTailPanelProps) {
+  const [userEnabled, setUserEnabled] = useState(enabledProp ?? false);
+  const [visible, setVisible] = useState(
+    typeof document === "undefined" ? true : document.visibilityState === "visible",
+  );
+
+  useEffect(() => {
+    if (enabledProp !== undefined) setUserEnabled(enabledProp);
+  }, [enabledProp]);
+
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    const sync = () => setVisible(document.visibilityState === "visible");
+    sync();
+    document.addEventListener("visibilitychange", sync);
+    return () => document.removeEventListener("visibilitychange", sync);
+  }, []);
+
+  const streamEnabled = userEnabled && visible;
   const { connected, events, paused, failed, pause, resume, clear, retry } =
-    useObservabilityStream({ orgId, maxEvents: 40, enabled });
+    useObservabilityStream({ orgId, maxEvents: 40, enabled: streamEnabled });
   const listRef = useRef<HTMLUListElement>(null);
   const prevLen = useRef(events.length);
 
@@ -35,6 +55,20 @@ export function LiveTailPanel({
     }
     prevLen.current = events.length;
   }, [events.length]);
+
+  const statusText = !userEnabled
+    ? "Off — start to stream"
+    : !visible
+      ? "Paused while tab hidden"
+      : failed
+        ? "Connection lost — giving up"
+        : connected
+          ? paused
+            ? "Paused — new events held"
+            : events.length === 0
+              ? "Live tail idle — waiting for first ingest"
+              : "Streaming new traces"
+          : "Connecting…";
 
   return (
     <section
@@ -64,18 +98,23 @@ export function LiveTailPanel({
                 failed ? "text-[var(--error)]" : "text-[var(--text-muted)]",
               )}
             >
-              {failed
-                ? "Connection lost — giving up"
-                : connected
-                  ? paused
-                    ? "Paused — new events held"
-                    : "Streaming new traces"
-                  : "Connecting…"}
+              {statusText}
             </p>
           </div>
         </div>
         <div className="flex items-center gap-1">
-          {failed ? (
+          {!userEnabled ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              aria-label="Start live tail"
+              onClick={() => setUserEnabled(true)}
+            >
+              <Play className="h-3.5 w-3.5" />
+              Start
+            </Button>
+          ) : failed ? (
             <Button
               type="button"
               variant="outline"
@@ -108,13 +147,19 @@ export function LiveTailPanel({
         </div>
       </header>
 
-      {failed ? (
+      {!userEnabled ? (
+        <p className="text-xs text-[var(--text-muted)] py-2">
+          Live streaming is off by default. Click Start when you need a live feed.
+        </p>
+      ) : failed ? (
         <p className="text-xs text-[var(--text-muted)] py-2">
           Gave up after repeated reconnect failures. Click Retry to reconnect.
         </p>
       ) : events.length === 0 ? (
         <p className="text-xs text-[var(--text-muted)] py-2">
-          Waiting for ingest — gateway, SDK, or eden-doctor hello-world.
+          {connected
+            ? "Live tail idle — waiting for first ingest."
+            : "Waiting for ingest — gateway, SDK, or eden-doctor (`eden.doctor`)."}
         </p>
       ) : (
         <ul

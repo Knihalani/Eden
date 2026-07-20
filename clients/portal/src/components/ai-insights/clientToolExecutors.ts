@@ -4,6 +4,7 @@
  */
 
 import { downloadCsv, downloadXlsx } from "@/lib/export";
+import { isRemovedPortalPath } from "@/lib/portal-routes";
 
 export type ClientToolAction =
   | { client_action: "navigate"; href: string }
@@ -42,7 +43,8 @@ const SAFE_PREFIXES = [
   "/settings",
   "/studio",
   "/audit-trail",
-  "/finops",
+  "/analytics",
+  "/guardrails",
 ] as const;
 
 export function isSafePortalHref(href: string): boolean {
@@ -52,6 +54,10 @@ export function isSafePortalHref(href: string): boolean {
   if (h.includes("://") || h.includes("\\")) return false;
   const base = h.split("?")[0]?.split("#")[0] ?? "";
   if (base === "/") return true;
+  // Removed surfaces soft-land via next.config; never treat as AI navigate targets.
+  if (isRemovedPortalPath(base) || base === "/finops" || base.startsWith("/finops/")) {
+    return false;
+  }
   return SAFE_PREFIXES.some((p) => base === p || base.startsWith(`${p}/`));
 }
 

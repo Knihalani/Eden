@@ -14,6 +14,7 @@ import { PageContent } from "@/components/layout/page-content";
 import { useToast } from "@/components/ui/toast";
 import { useOrgQuery } from "@/hooks/use-api-query";
 import { queryKeys } from "@/lib/query-keys";
+import { interpretRedteamScan } from "@/lib/eval-run-outcome";
 import { Loader2, RefreshCw, ShieldAlert } from "lucide-react";
 import { redteamApi } from "@/lib/api";
 
@@ -23,6 +24,7 @@ export default function RedteamPage() {
   const toast = useToast();
   const [targetEndpoint, setTargetEndpoint] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [scanError, setScanError] = useState<string | null>(null);
 
   const {
     data: findings,
@@ -43,16 +45,32 @@ export default function RedteamPage() {
   const submit = async () => {
     if (!targetEndpoint.trim() || !orgId) return;
     setSubmitting(true);
+    setScanError(null);
     try {
-      await redteamApi.runScan(orgId, {
+      const res = await redteamApi.runScan(orgId, {
         target_endpoint: targetEndpoint.trim(),
         target_label: "portal-scan",
       });
-      toast.success("Scan complete");
+      const outcome = interpretRedteamScan(res);
+      if (outcome.kind === "empty") {
+        setScanError(outcome.message);
+        toast.error("Scan did not run", outcome.message);
+        return;
+      }
+      if (outcome.kind === "findings") {
+        toast.success(
+          "Scan complete",
+          `${outcome.findingCount} finding${outcome.findingCount === 1 ? "" : "s"} detected`,
+        );
+      } else {
+        toast.success("Scan complete", "No findings — target resisted probes");
+      }
       setTargetEndpoint("");
       refetch();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Failed to run scan");
+      const message = e instanceof Error ? e.message : "Failed to run scan";
+      setScanError(message);
+      toast.error(message);
     } finally {
       setSubmitting(false);
     }
@@ -101,6 +119,22 @@ export default function RedteamPage() {
           </Button>
         </div>
       </Card>
+
+      {scanError ? (
+        <ErrorState
+          title="Could not start scan"
+          message={scanError}
+          action={
+            <Button
+              onClick={() => setScanError(null)}
+              variant="outline"
+              size="sm"
+            >
+              Dismiss
+            </Button>
+          }
+        />
+      ) : null}
 
       {error ? (
         <ErrorState

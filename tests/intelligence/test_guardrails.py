@@ -521,15 +521,41 @@ class TestContentPolicyEnforcer:
 
 
 class TestInterventionEngine:
-    async def test_no_policies_defaults_allow(self) -> None:
+    async def test_no_policies_fails_closed(self) -> None:
         from eden.guardrails import InterventionEngine
 
         r = await InterventionEngine().evaluate_and_act(
             "org_t", text="Hello world"
         )
-        assert r["data"]["verdict"] == "allow"
+        assert r["data"]["verdict"] == "block"
         assert r["data"]["live"] is False
+        assert r["live"] is False
         assert r["data"]["reason"] == "no_active_policies"
+
+    async def test_judge_link_only_fails_closed(self) -> None:
+        from eden.guardrails import InterventionEngine
+
+        with patch(
+            "eden.guardrails.intervention._fetch_policies",
+            AsyncMock(
+                return_value=[
+                    {
+                        "id": "p1",
+                        "name": "judge_link:foo",
+                        "type": "judge_link",
+                        "spec": {"judge_name": "foo", "threshold": 0.5},
+                        "action": "block",
+                    }
+                ]
+            ),
+        ):
+            r = await InterventionEngine().evaluate_and_act(
+                "org_t", text="Hello world"
+            )
+        assert r["data"]["verdict"] == "block"
+        assert r["data"]["live"] is False
+        assert r["live"] is False
+        assert r["data"]["reason"] == "judge_link_not_enforced"
 
     async def test_empty_text_defaults_allow(self) -> None:
         from eden.guardrails import InterventionEngine
@@ -537,6 +563,7 @@ class TestInterventionEngine:
         r = await InterventionEngine().evaluate_and_act("org_t", text="")
         assert r["data"]["verdict"] == "allow"
         assert r["data"]["live"] is False
+        assert r["live"] is False
 
     async def test_pii_policy_redacts(self) -> None:
         from eden.guardrails import InterventionEngine
@@ -790,7 +817,11 @@ def _fake_user() -> dict:
 
 @pytest.fixture(scope="module")
 def guardrails_app() -> FastAPI:
-    from eden.api.deps import get_current_user, require_org_member
+    from eden.api.deps import (
+        get_current_user,
+        require_org_member,
+        require_path_org_access,
+    )
     from eden.api.routes.intelligence_guardrails import router
     from eden.config import get_settings
 
@@ -799,7 +830,13 @@ def guardrails_app() -> FastAPI:
 
     app = FastAPI(title="eden-guardrails-test")
     app.dependency_overrides[get_current_user] = _fake_user
-    app.dependency_overrides[require_org_member] = lambda: {"sub": "test-user", "org_id": "org_test"}
+    app.dependency_overrides[require_org_member] = lambda: {
+        "sub": "test-user",
+        "org_id": "org_test",
+    }
+    app.dependency_overrides[require_path_org_access] = (
+        lambda org_id: org_id
+    )
     app.include_router(router)
     return app
 
@@ -854,10 +891,15 @@ class TestGuardrailsRoutes:
         body = r.json()
         assert body["data"]["count"] == 1
 
-    def test_evaluate_default_allow(self, guardrails_app: FastAPI) -> None:
+    def test_evaluate_fails_closed_without_policies(
+        self, guardrails_app: FastAPI
+    ) -> None:
         client = TestClient(guardrails_app)
         with patch(
             "eden.guardrails.policy._fetch_policies",
+            AsyncMock(return_value=[]),
+        ), patch(
+            "eden.guardrails.intervention._fetch_policies",
             AsyncMock(return_value=[]),
         ):
             r = client.post(
@@ -866,8 +908,10 @@ class TestGuardrailsRoutes:
             )
         assert r.status_code == 200
         body = r.json()
-        assert body["data"]["verdict"] == "allow"
+        assert body["data"]["verdict"] == "block"
         assert body["data"]["live"] is False
+        assert body["live"] is False
+        assert body["data"]["reason"] == "no_active_policies"
 
     def test_evaluate_with_pii_redacts(
         self, guardrails_app: FastAPI

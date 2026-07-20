@@ -1,6 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
+import { useOrgQuery } from "@/hooks/use-api-query";
+import { queryKeys } from "@/lib/query-keys";
 import { Loader2, Wallet } from "lucide-react";
 
 import { Card } from "@/components/ui/card";
@@ -22,31 +24,30 @@ type KillRow = { feature_key: string; enabled: boolean; source?: string };
 export function FinOpsKillsTab() {
   const { currentOrg } = useOrg();
   const toast = useToast();
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [matrix, setMatrix] = useState<KillRow[]>([]);
-  const [keys, setKeys] = useState<string[]>([]);
+  const orgId = currentOrg?.id ?? null;
   const [filter, setFilter] = useState("");
   const [busyKey, setBusyKey] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
-    if (!currentOrg) return;
-    setLoading(true);
-    setError(null);
-    try {
-      const res = await api.finopsKillSwitches(currentOrg.id);
-      setMatrix(res.data?.matrix ?? []);
-      setKeys(res.data?.keys ?? []);
-    } catch (e) {
-      setError(errorFromCaught(e, "Failed to load FinOps kill switches"));
-    } finally {
-      setLoading(false);
-    }
-  }, [currentOrg]);
-
-  useEffect(() => {
-    void load();
-  }, [load]);
+  const killsQuery = useOrgQuery(
+    queryKeys.finopsKills.matrix(orgId),
+    orgId,
+    async () => {
+      const res = await api.finopsKillSwitches(orgId!);
+      return {
+        matrix: (res.data?.matrix ?? []) as KillRow[],
+        keys: res.data?.keys ?? [],
+      };
+    },
+  );
+  const matrix = killsQuery.data?.matrix ?? [];
+  const keys = killsQuery.data?.keys ?? [];
+  const loading = killsQuery.isLoading;
+  const error = killsQuery.error
+    ? errorFromCaught(killsQuery.error, "Failed to load FinOps kill switches")
+    : null;
+  const load = async () => {
+    await killsQuery.refetch();
+  };
 
   const rows = useMemo(() => {
     const byKey = new Map(matrix.map((m) => [m.feature_key, m]));
@@ -61,7 +62,16 @@ export function FinOpsKillsTab() {
     if (!currentOrg) return;
     setBusyKey(feature_key);
     try {
-      await api.setFinopsKillSwitch(currentOrg.id, { feature_key, enabled });
+      const res = await api.setFinopsKillSwitch(currentOrg.id, {
+        feature_key,
+        enabled,
+      });
+      // Backend returns HTTP 200 with envelope status "error" for
+      // unknown feature keys — treat that as failure, not success.
+      if (res.status === "error") {
+        toast.error(res.detail ?? res.error ?? "Update failed");
+        return;
+      }
       toast.success(`${feature_key} ${enabled ? "enabled" : "disabled"}`);
       await load();
     } catch (e) {

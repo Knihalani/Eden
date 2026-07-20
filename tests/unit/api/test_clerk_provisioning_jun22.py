@@ -166,6 +166,107 @@ class TestAuthMeClerkProvisioning:
         response = api_client.get("/auth/me")
         assert response.status_code in (401, 403)
 
+    def test_me_relinks_stale_clerk_id_on_active_email_match(
+        self, mock_postgres_client: MagicMock, api_client: TestClient
+    ):
+        """Active Eden row with stale clerk_id + matching email must
+        re-link so org routes can resolve the JWT sub.
+
+        Regression (Jul 2026 W2 residual): /auth/me returned 200 via
+        email fallback without updating clerk_id, then
+        ``resolve_path_org_access`` 401'd "still provisioning".
+        """
+        old_clerk = "user_OLD_stale_clerk_id"
+        new_clerk = "user_NEW_session_clerk_id"
+        eden_id = "00000000-0000-0000-0000-000000000099"
+        email = "kaiav@example.com"
+        stale_row = {
+            "id": eden_id,
+            "email": email,
+            "name": "Kaiav",
+            "avatar_url": "",
+            "created_at": None,
+            "preferred_org_id": None,
+            "clerk_id": old_clerk,
+            "deleted_at": None,
+            "two_factor_enabled": False,
+        }
+        relinked_row = {**stale_row, "clerk_id": new_clerk}
+
+        # get_current_user clerk lookup miss
+        mock_postgres_client._fetchrow_overrides.append(
+            ("WHERE clerk_id::text", None)
+        )
+        # get_me get_eden_user_row_from_auth miss
+        mock_postgres_client._fetchrow_overrides.append(
+            ("WHERE clerk_id::text", None)
+        )
+        # INSERT ON CONFLICT returns None (active row, different clerk_id)
+        mock_postgres_client._fetchrow_overrides.append(
+            ("INSERT INTO users", None)
+        )
+        # re-read by clerk_id miss
+        mock_postgres_client._fetchrow_overrides.append(
+            ("WHERE clerk_id::text", None)
+        )
+        # email lookup finds stale active row
+        mock_postgres_client._fetchrow_overrides.append(
+            ("WHERE email = $1", stale_row)
+        )
+        # UPDATE re-link
+        mock_postgres_client._fetchrow_overrides.append(
+            ("UPDATE users SET", relinked_row)
+        )
+
+        with patch(
+            "eden.api.deps.verify_clerk_token",
+            return_value={"sub": new_clerk, "email": email},
+        ), patch(
+            "eden.api.routes.auth.clerk_get_user",
+            new_callable=AsyncMock,
+            return_value={
+                "id": new_clerk,
+                "email_addresses": [
+                    {"email_address": email, "id": "idn_1"},
+                ],
+                "primary_email_address_id": "idn_1",
+                "first_name": "Kaiav",
+                "last_name": "",
+                "image_url": "",
+            },
+        ), patch(
+            "eden.api.routes.auth.extract_user_profile",
+            return_value={
+                "email": email,
+                "name": "Kaiav",
+                "avatar_url": "",
+            },
+        ), patch(
+            "eden.api.routes.auth.organizations_have_is_personal",
+            new_callable=AsyncMock,
+            return_value=False,
+        ), patch(
+            "eden.api.routes.auth.is_clerk_payload",
+            return_value=True,
+        ), patch(
+            "eden.api.routes.auth.extract_org_id",
+            return_value=None,
+        ):
+            response = api_client.get(
+                "/auth/me",
+                headers={"Authorization": "Bearer fake-clerk-jwt"},
+            )
+
+        assert response.status_code == 200, response.text
+        assert response.json()["user_id"] == eden_id
+        update_calls = [
+            c for c in mock_postgres_client.fetchrow.call_args_list
+            if c.args and "UPDATE users SET" in c.args[0] and "clerk_id" in c.args[0]
+        ]
+        assert update_calls, "expected clerk_id re-link UPDATE"
+        assert update_calls[-1].args[1] == new_clerk
+        assert update_calls[-1].args[4] == eden_id
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # get_user_by_id lookup_column arg
