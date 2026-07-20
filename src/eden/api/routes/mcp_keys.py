@@ -7,13 +7,23 @@ from typing import Any
 from fastapi import APIRouter, Depends, Path
 from pydantic import BaseModel, Field
 
-from eden.api.deps import get_current_user, require_org_admin
+from eden.api.deps import (
+    _try_resolve_token_payload,
+    get_current_user,
+    require_org_admin,
+    require_path_org_access,
+)
 from eden.api.routes import api_keys as api_keys_mod
 
 router = APIRouter(
     prefix="/orgs/{org_id}/mcp/keys",
     tags=["mcp-keys"],
-    dependencies=[Depends(get_current_user), Depends(require_org_admin)],
+    # Auth is path-scoped inside each handler. Router-level
+    # ``Depends(require_org_admin)`` only reads ``X-Org-Id`` / JWT and
+    # ignores path ``org_id`` → IDOR across tenants.
+    dependencies=[Depends(get_current_user),
+        Depends(require_path_org_access),
+    ],
 )
 
 _MCP_DEFAULT_SCOPES = ["mcp:read", "mcp:debug", "mcp:fix"]
@@ -29,11 +39,13 @@ class CreateMcpKeyBody(BaseModel):
 
 @router.post("")
 async def create_mcp_key(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     body: CreateMcpKeyBody | None = None,
     user: dict = Depends(get_current_user),
+    payload: dict | None = Depends(_try_resolve_token_payload),
 ) -> dict[str, Any]:
     """Create an org API key pre-scoped for MCP (org-tenanted)."""
+    await require_org_admin(org_id, payload)
     scopes = list((body.scopes if body else None) or _MCP_DEFAULT_SCOPES)
     for s in scopes:
         if s not in api_keys_mod.VALID_SCOPES:
@@ -47,22 +59,30 @@ async def create_mcp_key(
         name=(body.name if body else "MCP"),
         scopes=scopes,
     )
-    return await api_keys_mod.create_api_key(org_id, create_body, user=user)
+    return await api_keys_mod.create_api_key(
+        org_id, create_body, user=user, payload=payload
+    )
 
 
 @router.get("")
 async def list_mcp_keys(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     user: dict = Depends(get_current_user),
+    payload: dict | None = Depends(_try_resolve_token_payload),
 ) -> list[dict[str, Any]]:
     """List keys that include at least one mcp:* scope."""
-    await require_org_admin(org_id)
+    await require_org_admin(org_id, payload)
     _ = user
     from eden.storage.postgres import get_postgres_client
 
+    from fastapi import HTTPException
+
     client = await get_postgres_client()
     if client is None:
-        return []
+        raise HTTPException(
+            status_code=503,
+            detail="Database unavailable",
+        )
     try:
         rows = await client.fetch(
             """
@@ -75,7 +95,14 @@ async def list_mcp_keys(
             """,
             org_id,
         )
-    except Exception:
+    except Exception as primary_exc:
+        msg = str(primary_exc).lower()
+        if "invalid input syntax for type uuid" in msg:
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid organization id",
+            ) from primary_exc
+        # Legacy table name fallback (pre-rename schema).
         try:
             rows = await client.fetch(
                 """
@@ -88,8 +115,17 @@ async def list_mcp_keys(
                 """,
                 org_id,
             )
-        except Exception:
-            return []
+        except Exception as fallback_exc:
+            fb = str(fallback_exc).lower()
+            if "invalid input syntax for type uuid" in fb:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Invalid organization id",
+                ) from fallback_exc
+            raise HTTPException(
+                status_code=503,
+                detail="Failed to list MCP keys",
+            ) from fallback_exc
     out: list[dict[str, Any]] = []
     for r in rows:
         scopes = r["scopes"] or []

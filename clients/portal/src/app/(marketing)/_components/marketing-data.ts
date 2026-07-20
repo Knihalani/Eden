@@ -10,11 +10,14 @@ import {
   GATEWAY_URL,
 } from "@/lib/constants";
 
+/** Homepage marketing nav — trimmed to primary destinations.
+ * In-page section anchors (Pillars / Improve) stay discoverable by
+ * scroll; keeping them in the sticky bar crowded the row on md+. */
 export const NAV_LINKS = [
   { label: "Install", href: "#install" },
-  { label: "Pillars", href: "#pillars" },
-  { label: "Improve", href: "#improve" },
   { label: "Pricing", href: "/pricing" },
+  { label: "About", href: "/about" },
+  { label: "Contact", href: "/contact" },
   { label: "Quickstart", href: DOCS_QUICKSTART_URL },
 ] as const;
 
@@ -27,7 +30,7 @@ export const PILLARS = [
     description:
       "Drop-in SDKs and an OpenAI-compatible HTTP gateway. Point traffic at Eden once — every LLM call to OpenAI, Anthropic, Bedrock, or any OpenAI-compatible endpoint is captured, with PII pre-masked at ingest.",
     bullets: [
-      "OpenAI-compatible gateway — change one base_url",
+      "OpenAI-compatible gateway — base_url + org headers",
       "Native SDKs for Python and TypeScript (eden-sdk / @eden-ai/sdk)",
       "Decoders for OpenAI, Anthropic, Gemini, Bedrock, LangChain, LlamaIndex, Vercel AI SDK",
     ],
@@ -64,13 +67,17 @@ export const INSTALL_BLOCKS = [
   {
     id: "gateway",
     label: "Gateway",
-    hint: "Fastest path — swap one base_url",
+    hint: "Fastest path — base_url + X-Org-Id / X-Org-Api-Key",
     code: `import os
 from openai import OpenAI
 
 client = OpenAI(
     base_url="${GATEWAY_URL}",  # Eden gateway
-    api_key=os.environ["EDEN_API_KEY"],
+    api_key=os.environ["EDEN_API_KEY"],  # OpenAI SDK requires a value
+    default_headers={
+        "X-Org-Id": os.environ["EDEN_ORG_ID"],
+        "X-Org-Api-Key": os.environ["EDEN_API_KEY"],
+    },
 )
 
 resp = client.chat.completions.create(
@@ -99,22 +106,24 @@ eden.instrument()
   {
     id: "typescript",
     label: "TypeScript",
-    hint: "npm install @eden-ai/sdk · configure → wrap",
+    hint: "npm install @eden-ai/sdk · configure → instrument",
     code: `npm install @eden-ai/sdk openai
 
 import OpenAI from "openai";
-import { configure, wrapOpenAI } from "@eden-ai/sdk";
+import { configure, instrument, getDefaultClient } from "@eden-ai/sdk";
 
 configure({
   orgId: process.env.EDEN_ORG_ID!,
   apiKey: process.env.EDEN_API_KEY!,
 });
 
+const { wrapOpenAI } = instrument();
 const openai = wrapOpenAI(new OpenAI());
 await openai.chat.completions.create({
   model: "gpt-4o-mini",
   messages: [{ role: "user", content: "Hello" }],
 });
+await getDefaultClient().flush();
 
 // Validate: npx eden-doctor`,
   },
@@ -147,7 +156,7 @@ export const FAQS = [
   },
   {
     q: "Gateway vs SDK — which do I use?",
-    a: "Use the gateway when you can set one base_url on an OpenAI-compatible client — no package install required. Use the SDK (eden-sdk / @eden-ai/sdk) when you want native instrumentation for Python or TypeScript frameworks. Both write the same traces; pick one path to first capture.",
+    a: "Use the gateway when you can point an OpenAI-compatible client at Eden's base_url and send X-Org-Id + X-Org-Api-Key (default_headers, or eden_sdk.openai_client()) — no separate instrumentation package required. Use the SDK (eden-sdk / @eden-ai/sdk) when you want native spans for Python or TypeScript frameworks. Both write the same traces; pick one path to first capture.",
   },
   {
     q: "What does the free tier include?",

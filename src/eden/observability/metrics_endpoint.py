@@ -291,5 +291,33 @@ async def metrics() -> Response:
     except Exception as exc:  # noqa: BLE001
         logger.debug("metrics: failed to read platform activation stats: %s", exc)
 
+    # A10 / A5 — ingest hot-path series (stable names).
+    try:
+        from eden.observability.ingest_hot_path_metrics import (
+            get_ingest_hot_path_metrics,
+        )
+
+        hm = get_ingest_hot_path_metrics()
+        lines.append(
+            "# HELP eden_ingest_redis_commands Redis commands on ingest publish path.\n"
+            "# TYPE eden_ingest_redis_commands counter\n"
+            f"eden_ingest_redis_commands {int(hm.get('eden_ingest_redis_commands', 0))}\n"
+        )
+        ch_sum = float(hm.get("eden_ch_flush_batch_size_sum", 0.0) or 0.0)
+        ch_count = int(hm.get("eden_ch_flush_batch_size_count", 0) or 0)
+        lines.append(
+            "# HELP eden_ch_flush_batch_size ClickHouse flush batch size samples.\n"
+            "# TYPE eden_ch_flush_batch_size summary\n"
+            f"eden_ch_flush_batch_size_sum {ch_sum}\n"
+            f"eden_ch_flush_batch_size_count {ch_count}\n"
+        )
+        lines.append(
+            "# HELP eden_sse_publish_skipped SSE publishes skipped when no subscribers.\n"
+            "# TYPE eden_sse_publish_skipped counter\n"
+            f"eden_sse_publish_skipped {int(hm.get('eden_sse_publish_skipped', 0))}\n"
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("metrics: failed to read ingest hot-path stats: %s", exc)
+
     body = "".join(lines)
     return Response(content=body, media_type="text/plain; version=0.0.4; charset=utf-8")

@@ -110,7 +110,14 @@ export function ClerkAuthFallback({ children, formLabel }: ClerkAuthFallbackProp
                 right now. The auth service may be temporarily unreachable, or
                 the deployment is missing a configuration value.
               </p>
-              <div className="mt-4 flex flex-col gap-2">
+              <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:items-center">
+                <button
+                  type="button"
+                  onClick={() => window.location.reload()}
+                  className="inline-flex min-h-11 items-center justify-center rounded-lg border border-[var(--border-default)] bg-[var(--bg-secondary)] px-4 text-sm font-medium text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)]"
+                >
+                  Try again
+                </button>
                 <a
                   href="mailto:security@eden.dev?subject=Auth%20provider%20unavailable"
                   className="inline-flex items-center gap-1.5 text-sm font-medium text-[var(--accent)] hover:text-[var(--accent-hover)]"
@@ -139,7 +146,7 @@ export function ClerkAuthFallback({ children, formLabel }: ClerkAuthFallbackProp
               <span className="text-[var(--accent)]">$</span>{" "}
               <span className="text-[var(--text-primary)]">pip install eden-sdk</span>
             </div>
-            <div className="mt-3 text-[var(--text-faint)]"># after you have an API key from Settings</div>
+            <div className="text-[var(--text-faint)]"># create or join an org, then get an API key</div>
             <div className="mt-1.5 break-all">
               <span className="text-[var(--accent)]">$</span>{" "}
               <span className="text-[var(--text-primary)]">export EDEN_API_KEY=…</span>

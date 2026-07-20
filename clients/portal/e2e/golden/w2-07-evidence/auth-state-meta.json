@@ -1,0 +1,13 @@
+{
+  "exists": true,
+  "cookie_count": 11,
+  "domains": [
+    ".img.clerk.com",
+    ".modest-bug-7.clerk.accounts.dev",
+    "localhost"
+  ],
+  "origins": [
+    "http://localhost:3000"
+  ],
+  "note": "Cookies are localhost + Clerk test domain; not valid for edenobservability.com prod"
+}

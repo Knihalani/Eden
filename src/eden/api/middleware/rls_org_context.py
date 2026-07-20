@@ -43,23 +43,25 @@ Request-scoped connection helper — see
 RLS-protected tables should use it instead of
 ``client.execute(...)`` so the same pooled connection that
 holds the GUC is the one issuing the query.
+
+Audit 2026-07-06 — converted from BaseHTTPMiddleware to pure ASGI.
+Still constructs ``Request(scope, receive)`` so helpers and
+``request.state.pg_conn`` pinning keep working.
 """
 
 from __future__ import annotations
 
 import contextlib
 import logging
-from collections.abc import Awaitable, Callable
 from typing import Any
 
 from fastapi import Request
-from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.responses import Response
+from starlette.types import ASGIApp, Receive, Scope, Send
 
 logger = logging.getLogger(__name__)
 
 
-class RLSOrgContextMiddleware(BaseHTTPMiddleware):
+class RLSOrgContextMiddleware:
     """Set the RLS ``app.current_org_id`` GUC for the current
     request transaction.
 
@@ -68,13 +70,24 @@ class RLSOrgContextMiddleware(BaseHTTPMiddleware):
     the GUC set, so even if a new route forgets to filter by
     ``org_id`` in its WHERE clause the migration-015 RLS
     policies will.
+
+    Audit 2026-07-06 — pure ASGI ``__call__`` (no ``BaseHTTPMiddleware``).
     """
 
-    async def dispatch(
-        self,
-        request: Request,
-        call_next: Callable[[Request], Awaitable[Response]],
-    ) -> Response:
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(
+        self, scope: Scope, receive: Receive, send: Send
+    ) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        # Request shim — same pattern as TenantRateLimitMiddleware.
+        # Helpers and ``request.state.pg_conn`` pin need a Request.
+        request = Request(scope, receive)
+
         org_id = await self._resolve_org_id(request)
         conn_ctx = None
         tx = None
@@ -132,7 +145,7 @@ class RLSOrgContextMiddleware(BaseHTTPMiddleware):
                         await conn_ctx.__aexit__(None, None, None)
 
         try:
-            return await call_next(request)
+            await self.app(scope, receive, send)
         finally:
             # Commit the transaction so the SET LOCAL GUC reverts
             # and the connection is returned to the pool clean.
@@ -171,9 +184,7 @@ class RLSOrgContextMiddleware(BaseHTTPMiddleware):
 
         # 3. ``authorization`` cookie — decode via the legacy
         # JWT helper; the cookie has ``current_org_id`` set
-        # during login. We avoid Clerk here — the dual-mode
-        # Clerk+JWT path lives in ``deps.py``, and Clerk
-        # tokens don't carry an org context.
+        # during login.
         cookie = request.cookies.get("authorization")
         if cookie:
             try:
@@ -182,6 +193,21 @@ class RLSOrgContextMiddleware(BaseHTTPMiddleware):
                 payload = decode_access_token(cookie)
                 if payload:
                     return payload.get("current_org_id")
+            except Exception:
+                pass
+
+        # 4. Clerk Bearer — portal forwards session JWT; carries ``o.id``.
+        auth_header = request.headers.get("authorization")
+        if auth_header and auth_header.lower().startswith("bearer "):
+            try:
+                from eden.api.utils.clerk_auth import (
+                    extract_org_id,
+                    verify_clerk_token,
+                )
+
+                clerk_payload = await verify_clerk_token(auth_header[7:].strip())
+                if clerk_payload:
+                    return extract_org_id(clerk_payload)
             except Exception:
                 pass
 

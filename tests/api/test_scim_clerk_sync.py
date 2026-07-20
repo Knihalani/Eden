@@ -235,9 +235,7 @@ class TestServiceProviderConfigPatch:
             new_callable=AsyncMock,
             return_value={"org_id": "o1"},
         ):
-            cfg = await get_service_provider_config(
-                "o1", authorization="Bearer unused"
-            )
+            cfg = await get_service_provider_config("o1")
         assert cfg["patch"]["supported"] is True
 
 

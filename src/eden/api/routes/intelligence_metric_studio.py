@@ -39,6 +39,7 @@ from eden.api.deps import (
     get_current_user,
     require_feature_flag,
     require_org_admin,
+    require_path_org_access,
 )
 
 logger = logging.getLogger(__name__)
@@ -49,6 +50,7 @@ router = APIRouter(
     dependencies=[
         Depends(require_feature_flag("intelligence_gap_v0")),
         Depends(get_current_user),
+        Depends(require_path_org_access),
     ],
 )
 
@@ -117,7 +119,7 @@ class RunMetricRequest(BaseModel):
 
 @router.get("/templates")
 async def list_templates(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     domain: str | None = Query(None, description="Filter by domain"),
 ) -> dict[str, Any]:
     """List the curated rubric template catalog.
@@ -143,7 +145,7 @@ async def list_templates(
 
 @router.post("/from-examples")
 async def synthesise_rubric(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     body: FromExamplesRequest = Body(...),
 ) -> dict[str, Any]:
     """Synthesise a rubric prompt from 2-5 user-labelled examples.
@@ -168,7 +170,7 @@ async def synthesise_rubric(
 
 @router.post("/metrics")
 async def register_metric(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     body: RegisterMetricRequest = Body(...),
 ) -> dict[str, Any]:
     """Register a custom metric from an approved rubric.
@@ -194,7 +196,7 @@ async def register_metric(
 
 @router.get("/metrics")
 async def list_metrics(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
 ) -> dict[str, Any]:
     """List the org's custom metrics with 30-day score stats.
 
@@ -209,7 +211,7 @@ async def list_metrics(
 
 @router.get("/metrics/{metric_id}")
 async def get_metric(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     metric_id: str = Path(...),
 ) -> dict[str, Any]:
     """Return a single metric entry (no score stats)."""
@@ -220,7 +222,7 @@ async def get_metric(
 
 @router.post("/metrics/{metric_id}/run")
 async def run_metric(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     metric_id: str = Path(...),
     body: RunMetricRequest = Body(...),
 ) -> dict[str, Any]:
@@ -243,7 +245,7 @@ async def run_metric(
 
 @router.post("/metrics/{metric_id}/approve")
 async def approve_metric(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     metric_id: str = Path(...),
     body: ApproveMetricRequest = Body(...),
     # DESTRUCTIVE — admin only. A non-admin calling this

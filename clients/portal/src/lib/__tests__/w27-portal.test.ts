@@ -28,7 +28,7 @@ describe("W27 N11 live streaming", () => {
     expect(route).toContain("/{session_id}/finalize");
     expect(route).toContain("live_trace_streaming_v1");
     expect(route).toContain("get_ingest_auth");
-    expect(route).toContain("require_org_member");
+    expect(route).toContain("require_path_org_access");
   });
 
   it("registers feature flags", () => {
@@ -59,6 +59,9 @@ describe("W27 N11 live streaming", () => {
     const hook = src("hooks/use-live-trace-stream.ts");
     expect(hook).toContain("stream/traces/");
     expect(hook).toContain("/events");
+    expect(hook).toContain("MAX_RECONNECT_ATTEMPTS");
+    expect(hook).toContain("retry");
+    expect(panel).toContain("live-trace-retry");
   });
 
   it("MCP tail_trace registered", () => {

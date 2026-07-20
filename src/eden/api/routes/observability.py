@@ -12,22 +12,25 @@ Provides endpoints for:
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
 from typing import Any
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Path, Query
 from pydantic import BaseModel, Field
 
-from eden.api.deps import get_current_user, require_org_member
+from eden.api.deps import get_current_user, get_ingest_auth, require_path_org_access
 from eden.api.utils.redact import redact_all
+from eden.observability.errors import IngestionUnavailable
 from eden.observability.telemetry_collector import (  # noqa: F401
     TelemetryCollector,
     TelemetryEvent,
     get_telemetry_collector,
 )
+from eden.util.jsonx import dumps as json_dumps
 
 logger = logging.getLogger(__name__)
+
+
 # Audit 2026-07-03 — every observability route MUST validate that the
 # caller is a member of the ``org_id`` in the path. Previously the
 # router only carried ``Depends(get_current_user)`` which validates a
@@ -37,10 +40,22 @@ logger = logging.getLogger(__name__)
 # ``WHERE org_id = $1`` on a new endpoint would have cross-leaked
 # tenant data silently. The dep at the router level makes "you're not
 # a member" a hard 403, so a forgotten filter can't leak.
+# 2026-07-19 — also require path org == authenticated org (require_org_member
+# alone only checks X-Org-Id / JWT org, not the URL path).
 router = APIRouter(
     prefix="/orgs/{org_id}/observability",
     tags=["observability"],
-    dependencies=[Depends(require_org_member)],
+    dependencies=[Depends(require_path_org_access)],
+)
+
+# Telemetry ingest is SDK/API-key traffic (mirrors ``ingestion.py``).
+# Do NOT gate on ``require_path_org_access`` / ``get_current_user``:
+# those Clerk deps map a present-but-invalid ``X-Org-Api-Key`` to
+# 403 "Not a member" when a session cookie is also present, and 401
+# valid key-only callers before ingest auth runs. Use ``get_ingest_auth``.
+ingest_router = APIRouter(
+    prefix="/orgs/{org_id}/observability",
+    tags=["observability"],
 )
 
 
@@ -201,15 +216,27 @@ async def _get_collector() -> TelemetryCollector:
     return await get_telemetry_collector()
 
 
-# ── Routes ───────────────────────────────────────────────────────────────────
+def _assert_ingest_org(auth_ctx: dict, org_id: str) -> str:
+    """Reject path/auth org mismatches; return the authenticated org id."""
+    auth_org = auth_ctx.get("org_id")
+    if not auth_org or str(auth_org) != str(org_id):
+        raise HTTPException(
+            status_code=403,
+            detail="Path org_id does not match authenticated org",
+        )
+    return str(auth_org)
 
-@router.post("/telemetry/ingest", response_model=TelemetryIngestResponse)
+
+# ── Telemetry ingest (API-key / session cookie via get_ingest_auth) ───────────
+
+@ingest_router.post("/telemetry/ingest", response_model=TelemetryIngestResponse)
 async def ingest_telemetry_event(
     org_id: str = Path(..., description="Organization ID"),
     body: TelemetryEventIngest = Body(...),
-    user: dict = Depends(get_current_user),
+    auth_ctx: dict = Depends(get_ingest_auth),
 ) -> TelemetryIngestResponse:
     """Ingest a single telemetry event."""
+    org_id = _assert_ingest_org(auth_ctx, org_id)
     try:
         collector = await _get_collector()
         event = _to_telemetry_event(body, org_id)
@@ -222,18 +249,37 @@ async def ingest_telemetry_event(
         )
     except HTTPException:
         raise
+    except IngestionUnavailable as exc:
+        raise HTTPException(
+            status_code=503,
+            detail=str(exc.message) if hasattr(exc, "message") else str(exc),
+            headers={"Retry-After": "5"},
+        ) from exc
+    except (ValueError, TypeError, KeyError) as exc:
+        logger.warning("Telemetry ingest client error for org %s: %s", org_id, exc)
+        raise HTTPException(status_code=400, detail=str(exc) or "Invalid telemetry event") from exc
     except Exception as exc:
-        logger.warning(f"Telemetry ingest failed for org {org_id}: {exc}")
-        raise HTTPException(status_code=500, detail="Telemetry ingestion failed") from exc
+        from eden.api.utils.safe_error import safe_detail
+
+        logger.warning("Telemetry ingest failed for org %s: %s", org_id, exc)
+        raise HTTPException(
+            status_code=503,
+            detail=safe_detail(
+                exc,
+                fallback="Telemetry ingestion temporarily unavailable",
+            ),
+            headers={"Retry-After": "5"},
+        ) from exc
 
 
-@router.post("/telemetry/ingest/batch", response_model=TelemetryIngestResponse)
+@ingest_router.post("/telemetry/ingest/batch", response_model=TelemetryIngestResponse)
 async def ingest_telemetry_batch(
     org_id: str = Path(..., description="Organization ID"),
     body: TelemetryBatchIngest = Body(...),
-    user: dict = Depends(get_current_user),
+    auth_ctx: dict = Depends(get_ingest_auth),
 ) -> TelemetryIngestResponse:
     """Ingest a batch of telemetry events."""
+    org_id = _assert_ingest_org(auth_ctx, org_id)
     try:
         collector = await _get_collector()
         events = [_to_telemetry_event(ev, org_id) for ev in body.events]
@@ -241,14 +287,34 @@ async def ingest_telemetry_batch(
         return TelemetryIngestResponse(**result)
     except HTTPException:
         raise
+    except IngestionUnavailable as exc:
+        raise HTTPException(
+            status_code=503,
+            detail=str(exc.message) if hasattr(exc, "message") else str(exc),
+            headers={"Retry-After": "5"},
+        ) from exc
+    except (ValueError, TypeError, KeyError) as exc:
+        logger.warning("Telemetry batch ingest client error for org %s: %s", org_id, exc)
+        raise HTTPException(
+            status_code=400, detail=str(exc) or "Invalid telemetry batch"
+        ) from exc
     except Exception as exc:
-        logger.warning(f"Telemetry batch ingest failed for org {org_id}: {exc}")
-        raise HTTPException(status_code=500, detail="Batch telemetry ingestion failed") from exc
+        from eden.api.utils.safe_error import safe_detail
+
+        logger.warning("Telemetry batch ingest failed for org %s: %s", org_id, exc)
+        raise HTTPException(
+            status_code=503,
+            detail=safe_detail(
+                exc,
+                fallback="Batch telemetry ingestion temporarily unavailable",
+            ),
+            headers={"Retry-After": "5"},
+        ) from exc
 
 
 @router.get("/traces", response_model=TraceListResponse)
 async def list_traces(
-    org_id: str = Path(..., description="Organization ID"),
+    org_id: str = Depends(require_path_org_access),
     realm: str | None = Query(None, pattern="^(environment|production)$"),
     outcome: str | None = Query(None),
     agent_id: str | None = Query(None),
@@ -258,6 +324,13 @@ async def list_traces(
             "Exact-match a single trace by id — powers deep links "
             "(e.g. /observability?trace_id=...) without the client "
             "having to scan the unfiltered page for a match."
+        ),
+    ),
+    trace_ids: list[str] | None = Query(
+        None,
+        description=(
+            "Batch exact-match by trace id (cap 100). Independent of "
+            "the days window, same as single ``trace_id``."
         ),
     ),
     limit: int = Query(50, ge=1, le=500),
@@ -272,9 +345,11 @@ async def list_traces(
         - span_count, duration_ms (max event duration, not sum),
           started_at (min timestamp), outcome, error, model, provider,
           token totals, cost (sum cost_usd → cents).
-    Filters: realm, outcome, agent_id, trace_id, days.
-    Falls back to an empty list if Postgres is unavailable (same
-    defensive pattern Cat 1 uses).
+    Filters: realm, outcome, agent_id, trace_id, trace_ids, days.
+
+    Postgres unavailable / query failure → **503** (not a fake empty
+    list). Soft-empty hid outages from the portal and broke Wave-1
+    correctness for traces hub.
     """
     from datetime import UTC, datetime, timedelta
     try:
@@ -282,18 +357,32 @@ async def list_traces(
         client = await _pg_module.get_postgres_client()
     except Exception as exc:
         logger.warning("list_traces: postgres unavailable: %s", redact_all(str(exc)))
-        return TraceListResponse(traces=[], total=0, limit=limit, offset=offset)
+        raise HTTPException(
+            status_code=503,
+            detail="Traces temporarily unavailable",
+            headers={"Retry-After": "5"},
+        ) from exc
     if client is None:
-        return TraceListResponse(traces=[], total=0, limit=limit, offset=offset)
+        raise HTTPException(
+            status_code=503,
+            detail="Traces temporarily unavailable",
+            headers={"Retry-After": "5"},
+        )
 
-    if trace_id:
+    batch_ids = [t for t in (trace_ids or []) if t][:100]
+    if batch_ids:
+        # Batch id lookup — independent of the days window (like
+        # single ``trace_id``) so deep-linked older traces resolve.
+        where = "tenant_id = $1 AND trace_id = ANY($2::text[])"
+        args: list[Any] = [org_id, batch_ids]
+    elif trace_id:
         # Exact trace lookup — deliberately independent of the
         # `days` window (and the realm/agent_id filters below) so a
         # deep link to an older trace still resolves. Unlike the
         # list view, a single-trace fetch has no reason to silently
         # 404 just because it's outside the default 7-day window.
         where = "tenant_id = $1 AND trace_id = $2"
-        args: list[Any] = [org_id, trace_id]
+        args = [org_id, trace_id]
     else:
         since = datetime.now(UTC) - timedelta(days=days)
         where = "tenant_id = $1 AND timestamp >= $2"
@@ -302,7 +391,10 @@ async def list_traces(
             where += f" AND realm = ${len(args) + 1}"
             args.append(realm)
         if agent_id:
-            where += f" AND attributes->>'agent_id' = ${len(args) + 1}"
+            where += (
+                f" AND (agent_id = ${len(args) + 1}"
+                f" OR attributes->>'agent_id' = ${len(args) + 1})"
+            )
             args.append(agent_id)
     # outcome filters on the rollup; we drop traces that have no
     # matching outcome event so the count is stable.
@@ -314,57 +406,99 @@ async def list_traces(
         args.append(outcome)
 
     try:
-        # P-16 (2026-07-02): total comes from a per-tenant COUNT(*)
-        # narrowed to the same ``where`` clause as the rows query.
-        # Pre-fix this used ``pg_class.reltuples`` (O(1) planner
-        # estimate) but that's a *table-level* statistic — tenant A
-        # would see tenant B's row count. The two queries run
-        # concurrently so per-tenant total cost is one extra round-trip
-        # overlapped with the rows fetch.
+        # Total = distinct traces matching ``where`` (not event rows).
+        # ``pg_class.reltuples`` was abandoned — table-level estimate
+        # leaks cross-tenant counts. GROUP BY subquery stays filterable
+        # by tenant_id + timestamp indexes.
+        # Rows query: aggregate spans first (no LATERAL unnest) so
+        # count/sum/tokens stay correct, then attach tags only for the
+        # page of traces (avoids multiplying every event by tag count).
+        lim_idx = len(args) + 1
+        off_idx = len(args) + 2
         rows_coro = client.fetch(
             f"""
-            SELECT trace_id,
-                   min(timestamp) AS started_at,
-                   max(realm) AS realm,
-                   max(attributes->>'agent_id') AS agent_id,
-                   max(attributes->>'model') AS model,
-                   max(attributes->>'provider') AS provider,
-                   max(attributes->>'session_id') AS session_id,
+            WITH page AS (
+                SELECT trace_id,
+                       min(timestamp) AS started_at,
+                       max(realm) AS realm,
+                       coalesce(
+                           max(agent_id),
+                           max(attributes->>'agent_id')
+                       ) AS agent_id,
+                       max(attributes->>'model') AS model,
+                       max(attributes->>'provider') AS provider,
+                       max(attributes->>'session_id') AS session_id,
+                       max(attributes->>'agent_session_id') AS attr_agent_session_id,
+                       max(outcome) AS outcome,
+                       max(error) AS error,
+                       sum((payload->>'input_tokens')::int) AS input_tokens,
+                       sum((payload->>'output_tokens')::int) AS output_tokens,
+                       coalesce(sum(cost_usd), 0) AS cost_usd,
+                       count(*) AS span_count,
+                       max(duration_ms) AS duration_ms
+                FROM telemetry_events
+                WHERE {where}
+                GROUP BY trace_id
+                ORDER BY started_at DESC
+                LIMIT ${lim_idx} OFFSET ${off_idx}
+            )
+            SELECT p.trace_id,
+                   p.started_at,
+                   p.realm,
+                   p.agent_id,
+                   p.model,
+                   p.provider,
+                   p.session_id,
+                   p.outcome,
+                   p.error,
+                   p.input_tokens,
+                   p.output_tokens,
+                   p.cost_usd,
+                   p.span_count,
+                   p.duration_ms,
+                   (
+                       SELECT array_agg(DISTINCT tag)
+                       FROM telemetry_events e2
+                       CROSS JOIN LATERAL unnest(e2.tags) AS tag
+                       WHERE e2.tenant_id = $1
+                         AND e2.trace_id = p.trace_id
+                         AND tag IS NOT NULL
+                   ) AS tags,
                    coalesce(
-                       max(attributes->>'agent_session_id'),
-                       max(
-                           CASE
-                               WHEN tag LIKE 'agent_session_id:%'
-                               THEN split_part(tag, ':', 2)
-                               ELSE NULL
-                           END
+                       p.attr_agent_session_id,
+                       (
+                           SELECT split_part(tag, ':', 2)
+                           FROM telemetry_events e3
+                           CROSS JOIN LATERAL unnest(e3.tags) AS tag
+                           WHERE e3.tenant_id = $1
+                             AND e3.trace_id = p.trace_id
+                             AND tag LIKE 'agent_session_id:%'
+                           LIMIT 1
                        )
-                   ) AS agent_session_id,
-                   max(outcome) AS outcome,
-                   max(error) AS error,
-                   sum((payload->>'input_tokens')::int) AS input_tokens,
-                   sum((payload->>'output_tokens')::int) AS output_tokens,
-                   coalesce(sum(cost_usd), 0) AS cost_usd,
-                   count(*) AS span_count,
-                   max(duration_ms) AS duration_ms,
-                   array_agg(DISTINCT tag) FILTER (WHERE tag IS NOT NULL) AS tags
-            FROM telemetry_events
-            LEFT JOIN LATERAL unnest(tags) AS tag ON TRUE
-            WHERE {where}
-            GROUP BY trace_id
-            ORDER BY started_at DESC
-            LIMIT ${len(args) + 1} OFFSET ${len(args) + 2}
+                   ) AS agent_session_id
+            FROM page p
+            ORDER BY p.started_at DESC
             """,
             *args, limit, offset,
         )
         total_coro = client.fetchval(
-            f"SELECT count(*) FROM telemetry_events WHERE {where}",
+            f"""
+            SELECT count(*) FROM (
+                SELECT trace_id FROM telemetry_events
+                WHERE {where}
+                GROUP BY trace_id
+            ) AS _traces
+            """,
             *args,
         )
         rows, total = await asyncio.gather(rows_coro, total_coro)
     except Exception as exc:
         logger.warning("list_traces: query failed: %s", redact_all(str(exc)))
-        return TraceListResponse(traces=[], total=0, limit=limit, offset=offset)
+        raise HTTPException(
+            status_code=503,
+            detail="Traces temporarily unavailable",
+            headers={"Retry-After": "5"},
+        ) from exc
 
     items = [
         TraceListItem(
@@ -394,7 +528,7 @@ async def list_traces(
 
 @router.get("/traces/{trace_id}/tree", response_model=TraceTreeResponse)
 async def get_trace_tree_route(
-    org_id: str = Path(..., description="Organization ID"),
+    org_id: str = Depends(require_path_org_access),
     trace_id: str = Path(..., description="Trace ID"),
     user: dict = Depends(get_current_user),
 ) -> TraceTreeResponse:
@@ -416,7 +550,7 @@ async def get_trace_tree_route(
 
 @router.get("/traces/{trace_id}/timeline", response_model=TimelineResponse)
 async def get_trace_timeline_route(
-    org_id: str = Path(..., description="Organization ID"),
+    org_id: str = Depends(require_path_org_access),
     trace_id: str = Path(..., description="Trace ID"),
     user: dict = Depends(get_current_user),
 ) -> TimelineResponse:
@@ -435,7 +569,7 @@ async def get_trace_timeline_route(
 
 @router.get("/heatmaps/{metric_name}", response_model=HeatmapResponse)
 async def get_heatmap_route(
-    org_id: str = Path(..., description="Organization ID"),
+    org_id: str = Depends(require_path_org_access),
     metric_name: str = Path(..., description="Metric name to visualize"),
     x_axis: str = Query("name", description="Field to use for X-axis"),
     days: int = Query(7, ge=1, le=30),
@@ -458,7 +592,7 @@ async def get_heatmap_route(
 
 @router.post("/traces/compare", response_model=ComparativeResponse)
 async def compare_traces_route(
-    org_id: str = Path(..., description="Organization ID"),
+    org_id: str = Depends(require_path_org_access),
     body: ComparativeRequest = Body(...),
     user: dict = Depends(get_current_user),
 ) -> ComparativeResponse:
@@ -494,7 +628,7 @@ async def compare_traces_route(
 
 @router.post("/traces/{trace_id}/export", response_model=TraceExportResponse)
 async def export_trace_route(
-    org_id: str = Path(..., description="Organization ID"),
+    org_id: str = Depends(require_path_org_access),
     trace_id: str = Path(..., description="Trace ID"),
     body: ExportFormatRequest = Body(...),
     user: dict = Depends(get_current_user),
@@ -507,9 +641,8 @@ async def export_trace_route(
 
     fmt = body.format_type
     if fmt == "jsonl":
-        lines = []
-        for _span_id, span in tree.span_map.items():
-            lines.append(json.dumps(span, default=str))
+        # Compact orjson — same fields as stdlib dumps(default=str).
+        lines = [json_dumps(span) for _span_id, span in tree.span_map.items()]
         data = "\n".join(lines)
     elif fmt == "csv":
         import csv
@@ -528,7 +661,10 @@ async def export_trace_route(
             ])
         data = buf.getvalue()
     else:
-        data = json.dumps(
+        # Pretty JSON for human download — keep indent=2 for format contract.
+        import json as _json
+
+        data = _json.dumps(
             {
                 "trace_id": tree.trace_id,
                 "realm": tree.realm,
@@ -584,7 +720,7 @@ class SpanSuggestResponse(BaseModel):
 
 @router.get("/spans/search", response_model=SpanSearchResponse)
 async def search_spans_route(
-    org_id: str = Path(..., description="Organization ID"),
+    org_id: str = Depends(require_path_org_access),
     q: str = Query("", description="Full-text query (matches input/output text + tool names + agent id)"),
     agent: str | None = Query(None, description="Filter to one agent_id"),
     tool: str | None = Query(None, description="Filter to one tool name"),
@@ -629,7 +765,7 @@ async def search_spans_route(
 
 @router.get("/spans/search/suggest", response_model=SpanSuggestResponse)
 async def suggest_spans_route(
-    org_id: str = Path(..., description="Organization ID"),
+    org_id: str = Depends(require_path_org_access),
     q: str = Query(..., min_length=1, description="Prefix query for Cmd-K autocomplete"),
     limit: int = Query(5, ge=1, le=20),
     user: dict = Depends(get_current_user),
@@ -662,7 +798,7 @@ async def suggest_spans_route(
 
 @router.get("/summary", response_model=dict)
 async def observability_summary(
-    org_id: str,
+    org_id: str = Depends(require_path_org_access),
     _user: dict = Depends(get_current_user),  # Audit 2026-06-22 B1.6 — require login
     window_hours: int = Query(24, ge=1, le=720),
     agent_id: str | None = Query(None),
@@ -901,7 +1037,7 @@ async def observability_summary(
             logger.warning(
                 "observability_summary compare_previous failed org=%s: %s",
                 org_id,
-                exc,
+                redact_all(str(exc)),
             )
             result["previous"] = {
                 "total_traces": 0,

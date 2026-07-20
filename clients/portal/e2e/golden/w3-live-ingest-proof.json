@@ -1,0 +1,188 @@
+{
+  "agent": "W3-DEBUG-2",
+  "title": "WAVE 3 live positive ingest proof",
+  "timestamp_utc": "2026-07-20T05:22:00Z",
+  "base_url": "https://api.edenobservability.com",
+  "portal_health_url": "https://edenobservability.com/api/health",
+  "env_check": {
+    "process.EDEN_ORG_ID": "absent",
+    "process.EDEN_API_KEY": "absent",
+    "process.EDEN_ORG_API_KEY": "absent",
+    "root/.env": "present; EDEN_ORG_ID / EDEN_API_KEY / EDEN_ORG_API_KEY absent",
+    "root/.env.local": "missing",
+    "root/.env.production": "present; EDEN org/api key vars absent",
+    "clients/portal/.env": "present; EDEN org/api key vars absent",
+    "clients/portal/.env.local": "present; EDEN org/api key vars absent",
+    "clients/portal/.env.example": "EDEN_API_KEY empty placeholder",
+    "examples/openrouter-smoke-agent/.env": "missing",
+    "examples/openrouter-smoke-agent/.env.example": "EDEN_ORG_ID / EDEN_ORG_API_KEY placeholders only",
+    "sdk/python/.env": "missing",
+    "shell_rc_exports": "none found",
+    "direnv": "no .envrc",
+    "secrets_printed": false
+  },
+  "positive_path": "BLOCKED_NEEDS_KEYS",
+  "one_line_ask": "export EDEN_ORG_ID='org_…' EDEN_ORG_API_KEY='sk_eden_…' (or EDEN_API_KEY) EDEN_BASE_URL='https://api.edenobservability.com' then re-run W3 live ingest proof",
+  "required_env_vars": {
+    "EDEN_ORG_ID": "required",
+    "EDEN_ORG_API_KEY_or_EDEN_API_KEY": "required (either; org key sk_eden_…)"
+  },
+  "blocked_positive_cases": [
+    "python eden-doctor against prod",
+    "POST /orgs/{org}/ingest/openai with unique trace_id (valid key)",
+    "POST /orgs/{org}/ingest/webhook with unique trace_id (valid key)",
+    "list traces by trace_id (Clerk session or API-key list if supported)"
+  ],
+  "health": {
+    "GET /live": {
+      "http": 200,
+      "expect": 200,
+      "pass": true,
+      "body": { "status": "alive", "version": "0.1.0" }
+    },
+    "GET /ready": {
+      "http": 200,
+      "expect": 200,
+      "pass": true,
+      "body": {
+        "status": "ready",
+        "version": "0.1.0",
+        "checks": {
+          "postgres": "ok",
+          "redis": "ok",
+          "qdrant": "error: [Errno 99] Cannot assign requested address",
+          "openrouter": "ok"
+        }
+      },
+      "note": "Ready is Postgres-gated; Qdrant soft-fail does not fail readiness"
+    },
+    "GET /health": {
+      "http": 503,
+      "expect": "200 or 503-degraded",
+      "pass": true,
+      "body": {
+        "status": "degraded",
+        "version": "0.1.0",
+        "postgres": "connected",
+        "qdrant": "error: [Errno 99] Cannot assign requested address",
+        "quality_worker_running": true,
+        "statgate_installed": true,
+        "evolution_loop_running": false
+      },
+      "note": "Qdrant Errno 99 degrades overall health → HTTP 503"
+    },
+    "GET portal /api/health": {
+      "http": 503,
+      "url": "https://edenobservability.com/api/health",
+      "body": {
+        "status": "degraded",
+        "version": "0.1.0",
+        "postgres": "connected",
+        "qdrant": "error: [Errno 99] Cannot assign requested address",
+        "quality_worker_running": true,
+        "statgate_installed": true,
+        "evolution_loop_running": false,
+        "request_id": "96748bf1-9c8c-4bbe-9d3b-500fa0a301b5"
+      }
+    }
+  },
+  "negative_auth_reprobe": {
+    "openai_bad_key_uuid_org": {
+      "method": "POST",
+      "path": "/orgs/00000000-0000-0000-0000-000000000099/ingest/openai",
+      "headers": ["X-Org-Id", "X-Org-Api-Key: sk_bad_key_0000"],
+      "http": 401,
+      "expect": 401,
+      "pass": true,
+      "body": {
+        "error": "unauthorized",
+        "detail": "Invalid API key",
+        "request_id": "e9185287-59f2-4263-b1d6-e16ab6476a34"
+      },
+      "bad_key_masked": "****0000"
+    },
+    "openai_bad_key_non_uuid_org": {
+      "method": "POST",
+      "path": "/orgs/org_clerk_style_placeholder/ingest/openai",
+      "headers": ["X-Org-Id: org_clerk_style_placeholder", "X-Org-Api-Key: sk_bad_key_0000"],
+      "http": 500,
+      "expect": 401,
+      "pass": false,
+      "note": "PROD STILL 500: non-UUID X-Org-Id + bad key → internal_error (same as W2; Wave 1.1 unit-test fix not reflected on prod for this path)",
+      "body": {
+        "error": "internal_error",
+        "detail": "An unexpected error occurred",
+        "request_id": "30163d22-4ed6-4523-b1ad-5489c9275862"
+      },
+      "confirm_request_id": "ac69899d-2ae4-4a6e-a36e-daf380908e0d"
+    },
+    "webhook_bad_key_non_uuid_org": {
+      "method": "POST",
+      "path": "/orgs/org_clerk_style_placeholder/ingest/webhook",
+      "headers": ["X-Org-Id: org_clerk_style_placeholder", "X-Org-Api-Key: sk_bad_key_0000"],
+      "http": 500,
+      "expect": 401,
+      "pass": false,
+      "note": "Same non-UUID org 500 as openai ingest",
+      "body": {
+        "error": "internal_error",
+        "detail": "An unexpected error occurred",
+        "request_id": "7b2613a8-4913-4ad0-853c-5b3743e2dfe7"
+      }
+    },
+    "telemetry_ingest_bad_key_uuid_org": {
+      "method": "POST",
+      "path": "/orgs/00000000-0000-0000-0000-000000000099/observability/telemetry/ingest",
+      "headers": ["X-Org-Id", "X-Org-Api-Key: sk_bad_key_0000"],
+      "http": 403,
+      "expect": "401 preferred; 403 observed",
+      "pass": false,
+      "note": "Returns forbidden (Not a member) rather than unauthorized",
+      "body": {
+        "error": "forbidden",
+        "detail": "Not a member of this organization",
+        "request_id": "7030425d-682d-4301-b480-c81c2d387bdc"
+      }
+    },
+    "telemetry_ingest_bad_key_non_uuid_org": {
+      "method": "POST",
+      "path": "/orgs/org_clerk_style_placeholder/observability/telemetry/ingest",
+      "headers": ["X-Org-Id: org_clerk_style_placeholder", "X-Org-Api-Key: sk_bad_key_0000"],
+      "http": 403,
+      "expect": "401 preferred; 403 observed",
+      "pass": false,
+      "note": "403 member check — does NOT 500 (unlike openai/webhook non-uuid)",
+      "body": {
+        "error": "forbidden",
+        "detail": "Not a member of this organization",
+        "request_id": "45059fec-7471-41c8-b2be-3735ad48d450"
+      }
+    }
+  },
+  "matrix": {
+    "GET /live": { "http": 200, "pass": true },
+    "GET /ready": { "http": 200, "pass": true, "qdrant": "soft-fail" },
+    "GET /health": { "http": 503, "status": "degraded", "pass": true },
+    "GET portal /api/health": { "http": 503, "status": "degraded", "pass": true },
+    "POST ingest/openai bad_key uuid_org": { "http": 401, "pass": true },
+    "POST ingest/openai bad_key non_uuid_org": { "http": 500, "pass": false, "regression": "STILL_500" },
+    "POST ingest/webhook bad_key non_uuid_org": { "http": 500, "pass": false, "regression": "STILL_500" },
+    "POST telemetry/ingest bad_key uuid_org": { "http": 403, "pass": false, "note": "403 not 401" },
+    "POST telemetry/ingest bad_key non_uuid_org": { "http": 403, "pass": false, "note": "403 not 500" },
+    "positive openai ingest": "BLOCKED_NEEDS_KEYS",
+    "positive webhook ingest": "BLOCKED_NEEDS_KEYS",
+    "eden-doctor prod": "BLOCKED_NEEDS_KEYS",
+    "list traces": "BLOCKED_NEEDS_KEYS"
+  },
+  "vs_w2": {
+    "openai_bad_key_non_uuid_org": "UNCHANGED still 500",
+    "telemetry_bad_key": "UNCHANGED still 403",
+    "health_degraded_qdrant": "UNCHANGED 503",
+    "positive_ingest": "still blocked — no keys in env"
+  },
+  "trace_ids_used_in_neg_probes": [
+    "w3-live-20260720T051605Z-50742",
+    "w3-live-webhook-neg"
+  ],
+  "secrets_committed": false
+}

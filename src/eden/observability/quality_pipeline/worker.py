@@ -955,6 +955,7 @@ class SidecarWorker:
     poll_interval_s: float = 1.0
     batch_size: int = 100
     max_retries: int = 3
+    concurrency: int = 8
 
     async def _poll_events(
         self,
@@ -1056,23 +1057,40 @@ class SidecarWorker:
                 for ev in events:
                     key = (str(ev.get("tenant_id")), str(ev.get("trace_id")))
                     groups.setdefault(key, []).append(ev)
+                ready: list[tuple[str, str, list[dict[str, Any]]]] = []
                 for (tid, trace_id), evs in groups.items():
                     if not any(self._is_span_end(e) for e in evs):
                         # Not yet complete — skip; will pick up
                         # next iteration when span.end arrives.
                         continue
-                    for attempt in range(self.max_retries):
-                        try:
-                            await self._process_one(tid, trace_id, evs)
-                            break
-                        except Exception as exc:
-                            logger.debug(
-                                "worker attempt %d: %s", attempt, exc,
-                            )
-                            await asyncio.sleep(0.05 * (2 ** attempt))
-                    last_event_id = str(evs[-1].get("id") or last_event_id)
-                    if last_event_id:
-                        await save_watermark(tid, last_event_id)
+                    ready.append((tid, trace_id, evs))
+
+                sem = asyncio.Semaphore(max(8, int(self.concurrency)))
+
+                async def _process_ready(
+                    tid: str,
+                    trace_id: str,
+                    evs: list[dict[str, Any]],
+                ) -> str | None:
+                    async with sem:
+                        for attempt in range(self.max_retries):
+                            try:
+                                await self._process_one(tid, trace_id, evs)
+                                break
+                            except Exception as exc:
+                                logger.debug(
+                                    "worker attempt %d: %s", attempt, exc,
+                                )
+                                await asyncio.sleep(0.05 * (2 ** attempt))
+                    return str(evs[-1].get("id") or "") or None
+
+                results = await asyncio.gather(
+                    *(_process_ready(tid, tid_trace, evs) for tid, tid_trace, evs in ready)
+                )
+                for (tid, _trace_id, _evs), event_id in zip(ready, results, strict=False):
+                    if event_id:
+                        await save_watermark(tid, event_id)
+                        last_event_id = event_id
         finally:
             _STATE.running = False
             _STATE.stopped_at = datetime.now(UTC)
@@ -1108,9 +1126,11 @@ async def start_worker() -> None:
     if _WORKER_TASK is not None and not _WORKER_TASK.done():
         return
     _STOP_EVENT = asyncio.Event()
+    workers = max(8, int(getattr(s, "quality_pipeline_workers", 8) or 8))
     worker = SidecarWorker(
         poll_interval_s=float(s.quality_pipeline_watermark_poll_ms) / 1000.0,
         batch_size=int(s.quality_pipeline_batch_size),
+        concurrency=workers,
     )
     _WORKER_TASK = asyncio.create_task(
         worker.run(_STOP_EVENT),

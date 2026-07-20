@@ -1041,22 +1041,21 @@ class AIGateway:
         # estimate from the catalog row directly.
         no_cache = cost
         cache_cost = 0.0
-        if has_cache and model_version:
-            row = self.pricing.lookup(model_version)
-            if row is not None:
-                no_cache = (
-                    (input_tokens / 1000.0) * row.cost_per_1k_input
-                    + (output_tokens / 1000.0) * row.cost_per_1k_output
-                )
-                cost = row.cost_for_request(
-                    input_tokens=input_tokens,
-                    output_tokens=output_tokens,
-                    cache_read_tokens=cache_read_tokens,
-                    cache_write_tokens=cache_write_tokens,
-                )
-                cache_cost = max(0.0, no_cache - cost)
-        if model_version and self.pricing.lookup(model_version) is not None:
-            row_source = self.pricing.lookup(model_version).source
+        row = self.pricing.lookup(model_version) if model_version else None
+        if has_cache and row is not None:
+            no_cache = (
+                (input_tokens / 1000.0) * row.cost_per_1k_input
+                + (output_tokens / 1000.0) * row.cost_per_1k_output
+            )
+            cost = row.cost_for_request(
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+                cache_read_tokens=cache_read_tokens,
+                cache_write_tokens=cache_write_tokens,
+            )
+            cache_cost = max(0.0, no_cache - cost)
+        if row is not None:
+            row_source = row.source
             if row_source == "openrouter":
                 source = "openrouter"
             elif row_source == "models_dev":

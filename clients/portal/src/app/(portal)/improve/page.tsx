@@ -6,23 +6,32 @@ import dynamic from "next/dynamic";
 import { Check, Clock, Loader2, RefreshCw } from "lucide-react";
 
 import { PageHeader } from "@/components/layout/page-header";
-import { CoreResourcePage, CrossLinkBar } from "@/components/portal-os";
+import { CoreResourcePage, CrossLinkBar, VirtualizedList } from "@/components/portal-os";
 import { EmbeddedSurface } from "@/components/layout/embedded-surface";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorState } from "@/components/ui/error-state";
 import { NoOrgState } from "@/components/ui/no-org-state";
+import { Panel } from "@/components/ui/panel";
 import { useOrg } from "@/hooks/use-org";
+import { usePermissions } from "@/hooks/use-permissions";
 import { useToast } from "@/components/ui/toast";
 import {
   improveApi,
+  improvePlansApi,
   type ImproveQueueItem,
 } from "@/lib/api";
 import { useOrgMutation, useOrgQuery } from "@/hooks/use-api-query";
 import { queryKeys } from "@/lib/query-keys";
 import { cn } from "@/lib/utils";
 import { errorFromCaught } from "@/lib/safe-error-message";
+import {
+  isImprovementAgentDisabled,
+  isRepoNotConnected,
+  REPO_NOT_CONNECTED_MESSAGE,
+} from "@/lib/improve-feature";
 import { PlanKindBadge } from "@/components/improve/plan-kind-badge";
+import { ImproveFeatureDisabledState } from "@/components/improve/feature-disabled-state";
 import type { ImprovementPlanKind } from "@/lib/api";
 import { useQueryTab } from "@/hooks/use-query-tab";
 import { DOCS_QUICKSTART_URL } from "@/lib/constants";
@@ -76,21 +85,37 @@ function severityClass(sev: string): string {
   return "text-[var(--text-muted)]";
 }
 
+function isN23PlanRef(item: ImproveQueueItem): boolean {
+  return (
+    item.ref.startsWith("improvement_plan:") ||
+    item.item_type === "improvement_plan" ||
+    item.source === "improvement_plans"
+  );
+}
+
+function isLegacyProposedPatch(item: ImproveQueueItem): boolean {
+  return (
+    item.ref.startsWith("proposed_patch:") || item.source === "proposed_patches"
+  );
+}
+
+/** Detail URL for N23 plans only — never invent /improve/plans/{legacyPatchId}. */
 function planHref(item: ImproveQueueItem): string | null {
-  if (item.item_type === "improvement_plan" || item.ref.startsWith("improvement_plan:")) {
-    const id = item.ref.includes(":") ? item.ref.split(":").slice(1).join(":") : item.ref;
-    return `/improve/plans/${id}`;
+  if (item.ref.startsWith("improvement_plan:")) {
+    const id = item.ref.split(":").slice(1).join(":");
+    return id ? `/improve/plans/${id}` : null;
   }
-  if (item.item_type === "proposed_patch" || item.ref.startsWith("proposed_patch:")) {
-    const id = item.ref.split(":")[1];
-    if (id) return `/improve/plans/${id}`;
+  const planId = item.payload?.plan_id;
+  if (
+    typeof planId === "string" &&
+    planId &&
+    (item.source === "improvement_plans" || item.item_type === "improvement_plan")
+  ) {
+    return `/improve/plans/${planId}`;
   }
-  const payloadPlanId = item.payload?.plan_id ?? item.payload?.patch_id;
-  if (typeof payloadPlanId === "string" && payloadPlanId) {
-    return `/improve/plans/${payloadPlanId}`;
-  }
-  if (item.href?.startsWith("/pr-suggestions")) {
-    return item.href.replace("/pr-suggestions", "/improve/plans");
+  // Cat 23 proposed_patches are read-only; send operators to the N23 inbox.
+  if (isLegacyProposedPatch(item) || item.href?.startsWith("/pr-suggestions")) {
+    return "/improve/plans";
   }
   return item.href ?? null;
 }
@@ -98,10 +123,16 @@ function planHref(item: ImproveQueueItem): string | null {
 function planKindFromItem(item: ImproveQueueItem): ImprovementPlanKind | null {
   const kind = item.payload?.plan_kind;
   if (typeof kind === "string" && kind) return kind as ImprovementPlanKind;
-  if (item.item_type === "improvement_plan" || item.item_type === "proposed_patch") {
-    return "code_patch";
-  }
+  if (isN23PlanRef(item)) return "code_patch";
   return null;
+}
+
+function canApproveQueueItem(item: ImproveQueueItem): boolean {
+  if (item.blocked_reason) return false;
+  if (item.column !== "proposed" && item.column !== "needs_you") return false;
+  return (
+    item.ref.startsWith("closed_loop:") || item.ref.startsWith("improvement_plan:")
+  );
 }
 
 export default function ImprovePage() {
@@ -113,7 +144,9 @@ export default function ImprovePage() {
 }
 
 function ImprovePageInner() {
-  const { currentOrg } = useOrg();
+  const { currentOrg, authError } = useOrg();
+  const { hasPermission } = usePermissions();
+  const canManageKeys = hasPermission("settings:edit");
   const toast = useToast();
   const orgId = currentOrg?.id ?? null;
   const [busyRef, setBusyRef] = useState<string | null>(null);
@@ -128,10 +161,29 @@ function ImprovePageInner() {
     },
   );
 
+  // Plans list is gated by improvement_agent_v1 — probe so queue is not a silent empty when flag is off.
+  const featureGateQuery = useOrgQuery(
+    queryKeys.improve.featureGate(orgId),
+    orgId,
+    async () => {
+      try {
+        await improvePlansApi.listPlans(orgId!, "limit=1");
+        return { enabled: true as const };
+      } catch (e) {
+        if (isImprovementAgentDisabled(e)) {
+          return { enabled: false as const };
+        }
+        // Other errors (network, 5xx) are not "flag off" — leave queue usable.
+        return { enabled: true as const };
+      }
+    },
+  );
+
   const items = queueQuery.data?.items ?? [];
   const refreshedAt = queueQuery.data?.refreshed_at ?? null;
-  const loading = queueQuery.isLoading;
+  const loading = queueQuery.isLoading || featureGateQuery.isLoading;
   const error = queueQuery.error?.message ?? null;
+  const featureDisabled = featureGateQuery.data?.enabled === false;
 
   const load = () => queueQuery.refetch();
 
@@ -168,10 +220,46 @@ function ImprovePageInner() {
     if (!currentOrg) return;
     setBusyRef(item.ref);
     try {
-      await approveMutation.mutateAsync(item);
-      toast.success("Approved");
+      const res = await approveMutation.mutateAsync(item);
+      const payload = res.data ?? {};
+      const nested =
+        payload.result && typeof payload.result === "object"
+          ? (payload.result as { status?: string; pr_url?: string; message?: string })
+          : null;
+      const status =
+        (typeof payload.status === "string" ? payload.status : null) ??
+        nested?.status ??
+        null;
+      const prUrl = nested?.pr_url;
+      // Real success only — F68 stubs return 501/not_implemented;
+      // never toast "Approved" on unsupported/no-op responses.
+      const realSuccess =
+        status === "pr_opened" ||
+        status === "promoted" ||
+        status === "promotion_queued";
+      if (!realSuccess) {
+        const reason =
+          (typeof payload.message === "string" && payload.message) ||
+          nested?.message ||
+          (status ? `Approve returned ${status}` : "Approve did not succeed");
+        toast.error(
+          isRepoNotConnected(reason) ? REPO_NOT_CONNECTED_MESSAGE : reason,
+        );
+        return;
+      }
+      if (status === "pr_opened") {
+        toast.success(prUrl ? "PR opened" : "Approved — PR opened");
+      } else {
+        toast.success(nested?.message || payload.message || "Approved");
+      }
     } catch (e) {
-      toast.error(errorFromCaught(e, "Approve failed"));
+      if (isRepoNotConnected(e)) {
+        toast.error(REPO_NOT_CONNECTED_MESSAGE);
+      } else if (isImprovementAgentDisabled(e)) {
+        toast.error(errorFromCaught(e, "Feature disabled — ask an admin"));
+      } else {
+        toast.error(errorFromCaught(e, "Approve failed"));
+      }
     } finally {
       setBusyRef(null);
     }
@@ -190,7 +278,8 @@ function ImprovePageInner() {
     }
   };
 
-  if (!currentOrg) return <NoOrgState feature="Improve" />;
+  if (!currentOrg && !authError) return <NoOrgState feature="Improve" />;
+  if (!currentOrg) return null;
 
   return (
     <CoreResourcePage
@@ -217,19 +306,16 @@ function ImprovePageInner() {
         />
       }
       toolbar={
-        <div className="mb-4 space-y-3">
+        <div className="space-y-3">
           <CrossLinkBar
             links={[
               { label: "Issues", href: "/issues" },
               { label: "Artifacts", href: "/artifacts" },
               { label: "Promotions", href: "/promotions" },
               { label: "Scorecard", href: "/improve/scorecard" },
-              { label: "Change impact", href: "/improve/change-impact" },
-              { label: "Online scoring", href: "/improve/online-scoring" },
-              { label: "Book / Drift", href: "/agents" },
             ]}
           />
-          <div role="tablist" aria-label="Improve sections" className="flex gap-1 border-b border-[var(--border-default)]">
+          <div role="tablist" aria-label="Improve sections" className="flex gap-1 border-b border-[var(--border-subtle)]">
           {IMPROVE_TABS.map((t) => (
             <button
               key={t}
@@ -264,6 +350,10 @@ function ImprovePageInner() {
         )}
         {tab === "queue" && (
           <>
+        {featureDisabled ? (
+          <ImproveFeatureDisabledState />
+        ) : (
+          <>
         {error && (
           <ErrorState
             className="mb-4"
@@ -287,33 +377,48 @@ function ImprovePageInner() {
             <Loader2 className="h-4 w-4 animate-spin" />
             Loading queue…
           </div>
-        ) : items.length === 0 ? (
+        ) : !error && items.length === 0 ? (
           <EmptyState
+            variant="plain"
             title="Nothing in the queue"
-            description="Needs production traces and Agent Issues first. Create an API key, install the SDK or gateway from the docs, then return when Eden has signals to triage."
+            description={
+              canManageKeys
+                ? "Needs production traces and Agent Issues first. Create an API key, install the SDK or gateway from the docs, then return when Eden has signals to triage."
+                : "Needs production traces and Agent Issues first. Ask an admin for an API key, or open Traces once data is flowing."
+            }
             action={
               <div className="flex flex-wrap items-center justify-center gap-2">
-                <a href={DOCS_QUICKSTART_URL} target="_blank" rel="noopener noreferrer">
-                  <Button className="min-h-11">Docs quickstart</Button>
-                </a>
-                <Link href="/settings?tab=api-keys">
-                  <Button variant="outline" className="min-h-11">Create API key</Button>
-                </Link>
-                <Link href="/issues">
-                  <Button variant="outline" className="min-h-11">View Issues</Button>
-                </Link>
+                <Button asChild className="min-h-11">
+                  <a href={DOCS_QUICKSTART_URL} target="_blank" rel="noopener noreferrer">
+                    Docs quickstart
+                  </a>
+                </Button>
+                {canManageKeys ? (
+                  <Button asChild variant="outline" className="min-h-11">
+                    <Link href="/settings?tab=api-keys">Create API key</Link>
+                  </Button>
+                ) : (
+                  <Button asChild variant="outline" className="min-h-11">
+                    <Link href="/traces">Open Traces</Link>
+                  </Button>
+                )}
+                <Button asChild variant="ghost" className="min-h-11">
+                  <Link href="/issues">View Issues</Link>
+                </Button>
               </div>
             }
           />
-        ) : (
-          <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5">
+        ) : items.length === 0 ? null : (
+          <div className="grid gap-3 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5">
             {COLUMNS.map((col) => (
-              <section
+              <Panel
                 key={col.id}
+                tone="flat"
+                padding="sm"
                 aria-label={col.label}
-                className="min-h-[12rem] rounded-lg border border-[var(--border-default)] bg-[var(--bg-secondary)] p-3"
+                className="min-h-[12rem]"
               >
-                <header className="mb-3">
+                <header className="mb-3 px-1">
                   <h2 className="text-sm font-semibold text-[var(--text-primary)]">
                     {col.label}
                     <span className="ml-2 text-xs font-normal text-[var(--text-muted)]">
@@ -322,14 +427,19 @@ function ImprovePageInner() {
                   </h2>
                   <p className="text-xs text-[var(--text-muted)]">{col.hint}</p>
                 </header>
-                <ul className="space-y-2">
-                  {(byColumn[col.id] ?? []).map((item) => {
+                <VirtualizedList
+                  items={byColumn[col.id] ?? []}
+                  rowKey={(item) => item.ref}
+                  rowHeight={120}
+                  className="max-h-[28rem] space-y-1.5"
+                >
+                  {(item) => {
                     const href = planHref(item);
                     const kind = planKindFromItem(item);
                     return (
-                    <li
+                    <div
                       key={item.ref}
-                      className="rounded-md border border-[var(--border-subtle)] bg-[var(--bg-primary)] p-2.5"
+                      className="rounded-md bg-[var(--bg-primary)]/60 p-2.5"
                     >
                       <div className="flex items-start justify-between gap-2">
                         <div className="min-w-0">
@@ -391,17 +501,37 @@ function ImprovePageInner() {
                         </div>
                       </div>
                       <div className="mt-2 flex gap-1">
+                        {canApproveQueueItem(item) ? (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-7 px-2 text-xs"
+                            disabled={busyRef === item.ref}
+                            onClick={() => void onApprove(item)}
+                          >
+                            <Check className="mr-1 h-3 w-3" />
+                            Approve
+                          </Button>
+                        ) : null}
                         {(item.column === "proposed" ||
                           item.column === "needs_you") &&
-                          (item.ref.startsWith("closed_loop:") ||
+                          !canApproveQueueItem(item) &&
+                          (item.blocked_reason ||
+                            isLegacyProposedPatch(item) ||
                             item.ref.startsWith("promotion:") ||
                             item.item_type === "nudge_shadow") && (
                             <Button
                               size="sm"
                               variant="ghost"
                               className="h-7 px-2 text-xs"
-                              disabled={busyRef === item.ref}
-                              onClick={() => void onApprove(item)}
+                              disabled
+                              title={
+                                item.blocked_reason
+                                  ? `Approve disabled: ${item.blocked_reason}`
+                                  : isLegacyProposedPatch(item)
+                                    ? "Legacy Cat 23 patches are read-only — open Improvement plans"
+                                    : "Approve not supported for this item type"
+                              }
                             >
                               <Check className="mr-1 h-3 w-3" />
                               Approve
@@ -418,13 +548,15 @@ function ImprovePageInner() {
                           Snooze
                         </Button>
                       </div>
-                    </li>
+                    </div>
                     );
-                  })}
-                </ul>
-              </section>
+                  }}
+                </VirtualizedList>
+              </Panel>
             ))}
           </div>
+        )}
+          </>
         )}
           </>
         )}

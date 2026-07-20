@@ -102,13 +102,12 @@ class TestF71LegalPageFooter:
         # rather than directly to the backend API route — Next.js
         # <Link> only ever issues navigations/prefetch GETs, so a
         # POST-only endpoint can never be linked to directly without
-        # breaking (the original motivation for this test). Pin that
-        # the dedicated page still exists and actually POSTs to the
-        # canonical CCPA endpoint instead of silently regressing to
-        # a dead link or a GET.
+        # breaking (the original motivation for this test). The POST
+        # lives in the client island ``do-not-sell-form.tsx`` (P19 RSC
+        # shell + form split); pin that island, not the page shell.
         from pathlib import Path
 
-        page_src = (
+        form_src = (
             Path(__file__).parent.parent.parent.parent
             / "clients"
             / "portal"
@@ -116,13 +115,13 @@ class TestF71LegalPageFooter:
             / "app"
             / "(marketing)"
             / "do-not-sell"
-            / "page.tsx"
+            / "do-not-sell-form.tsx"
         ).read_text()
-        assert re.search(r'method:\s*"POST"', page_src), (
-            "F71 regression: /do-not-sell page no longer POSTs — a GET "
+        assert re.search(r'method:\s*"POST"', form_src), (
+            "F71 regression: /do-not-sell form no longer POSTs — a GET "
             "against the CCPA endpoint will be rejected by the backend."
         )
-        assert "/api/v1/me/do-not-sell" in page_src, (
-            "F71 regression: /do-not-sell page no longer targets the "
+        assert "/api/v1/me/do-not-sell" in form_src, (
+            "F71 regression: /do-not-sell form no longer targets the "
             "canonical CCPA endpoint (/api/v1/me/do-not-sell)."
         )

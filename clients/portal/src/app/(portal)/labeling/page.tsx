@@ -1,6 +1,8 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useOrg } from "@/hooks/use-org";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -10,6 +12,8 @@ import { ErrorState } from "@/components/ui/error-state";
 import { PageHeader } from "@/components/layout/page-header";
 import { PageContent } from "@/components/layout/page-content";
 import { useToast } from "@/components/ui/toast";
+import { useOrgQuery } from "@/hooks/use-api-query";
+import { queryKeys } from "@/lib/query-keys";
 import {
   Dialog,
   DialogContent,
@@ -18,40 +22,67 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Tag, RefreshCw, Plus, Tag as TagIcon, CheckCircle2, SkipForward } from "lucide-react";
-import { labelingApi, type LabelingItem } from "@/lib/api";
+import { Tag as TagIcon, RefreshCw, Plus, CheckCircle2, SkipForward, Columns3 } from "lucide-react";
+import { Tag } from "@/components/ui/tag";
+import { labelingApi, labelingQueuesApi, type LabelingItem } from "@/lib/api";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
+
+type QueueRow = {
+  id: string;
+  name?: string;
+  description?: string;
+  status?: string;
+  created_at?: string;
+};
 
 export default function LabelingPage() {
   const { currentOrg } = useOrg();
+  const orgId = currentOrg?.id ?? null;
+  const router = useRouter();
   const toast = useToast();
-  const [items, setItems] = useState<LabelingItem[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState("");
   const [reviewItem, setReviewItem] = useState<LabelingItem | null>(null);
   const [label, setLabel] = useState("approved");
   const [notes, setNotes] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [creatingQueue, setCreatingQueue] = useState(false);
 
-  const load = useCallback(async () => {
-    if (!currentOrg?.id) return;
-    setLoading(true);
-    setError(null);
-    try {
-      const res = await labelingApi.listItems(currentOrg.id);
-      setItems(res.items || []);
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : "Failed to load labeling queue";
-      setError(msg);
-      toast.error(msg);
-    } finally {
-      setLoading(false);
-    }
-  }, [currentOrg?.id, toast]);
+  const itemsQuery = useOrgQuery(
+    queryKeys.labeling.items(orgId),
+    orgId,
+    async () => {
+      // B12: request a bounded page from the API (A7 owns server default).
+      const { fetchApi } = await import("@/lib/api/core");
+      const res = await fetchApi<{ items: LabelingItem[]; total: number }>(
+        `/orgs/${orgId}/labeling/items?limit=100`,
+        { headers: { "X-Org-Id": orgId! } },
+      );
+      return res.items || [];
+    },
+  );
+  const items = itemsQuery.data ?? [];
+  const loading = itemsQuery.isLoading;
+  const error = itemsQuery.error?.message ?? null;
+  const load = () => void itemsQuery.refetch();
 
-  useEffect(() => {
-    load();
-  }, [load]);
+  const queuesQuery = useOrgQuery(
+    queryKeys.labeling.queues(orgId),
+    orgId,
+    async () => {
+      const res = await labelingQueuesApi.list(orgId!);
+      return (res.queues || []) as QueueRow[];
+    },
+  );
+  const queues = queuesQuery.data ?? [];
+  const queuesError = queuesQuery.error?.message ?? null;
+  const queuesLoading = queuesQuery.isLoading;
 
   const openReview = (item: LabelingItem) => {
     setReviewItem(item);
@@ -75,7 +106,7 @@ export default function LabelingPage() {
       });
       toast.success(nextLabel === "approved" ? "Item approved" : "Annotation saved");
       setReviewItem(null);
-      await load();
+      load();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Failed to submit annotation");
     } finally {
@@ -90,11 +121,41 @@ export default function LabelingPage() {
       await labelingApi.skip(currentOrg.id, { item_id: item.id });
       toast.success("Item skipped");
       if (reviewItem?.id === item.id) setReviewItem(null);
-      await load();
+      load();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Failed to skip item");
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const seedItem = async () => {
+    const prompt = window.prompt("Seed item prompt:");
+    if (!prompt?.trim() || !currentOrg?.id) return;
+    try {
+      await labelingApi.seedItem(currentOrg.id, { prompt: prompt.trim() });
+      toast.success("Item seeded");
+      load();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to seed item");
+    }
+  };
+
+  const createQueue = async () => {
+    if (!currentOrg?.id) return;
+    const name = window.prompt("New labeling queue name:");
+    if (!name?.trim()) return;
+    setCreatingQueue(true);
+    try {
+      const res = await labelingQueuesApi.create(currentOrg.id, { name: name.trim() });
+      const qid = String(res.queue?.id || "");
+      toast.success("Queue created");
+      void queuesQuery.refetch();
+      if (qid) router.push(`/labeling/queues/${qid}`);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to create queue");
+    } finally {
+      setCreatingQueue(false);
     }
   };
 
@@ -103,8 +164,15 @@ export default function LabelingPage() {
   const filtered = items.filter((i) => {
     if (!filter) return true;
     const q = filter.toLowerCase();
-    return i.prompt.toLowerCase().includes(q) || i.tags.some((t) => t.toLowerCase().includes(q));
+    const tags = i.tags ?? [];
+    return (
+      (i.prompt ?? "").toLowerCase().includes(q) ||
+      tags.some((t) => t.toLowerCase().includes(q))
+    );
   });
+  const filterActive = Boolean(filter.trim());
+  const filterMiss =
+    filterActive && !loading && !error && items.length > 0 && filtered.length === 0;
 
   return (
     <PageContent size="wide">
@@ -126,26 +194,80 @@ export default function LabelingPage() {
             >
               <RefreshCw className="h-3.5 w-3.5" /> Refresh
             </Button>
-            <Button
-              size="sm"
-              onClick={async () => {
-                const prompt = window.prompt("Seed item prompt:");
-                if (!prompt?.trim() || !currentOrg?.id) return;
-                try {
-                  await labelingApi.seedItem(currentOrg.id, { prompt: prompt.trim() });
-                  toast.success("Item seeded");
-                  await load();
-                } catch (e) {
-                  toast.error(e instanceof Error ? e.message : "Failed to seed item");
-                }
-              }}
-              aria-label="Seed labeling item"
-            >
+            <Button size="sm" onClick={() => void seedItem()} aria-label="Seed labeling item">
               <Plus className="h-3.5 w-3.5" /> Seed item
             </Button>
           </>
         }
       />
+
+      <Card className="mb-4 space-y-3 p-4">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h2 className="text-sm font-medium text-[var(--text-primary)]">Annotation queues</h2>
+            <p className="text-xs text-[var(--text-muted)]">
+              Kanban workstations with hotkeys — export done items to a dataset.
+            </p>
+          </div>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => void createQueue()}
+            disabled={creatingQueue}
+            loading={creatingQueue}
+            data-testid="labeling-create-queue"
+          >
+            <Columns3 className="h-3.5 w-3.5" /> New queue
+          </Button>
+        </div>
+        {queuesError ? (
+          <ErrorState
+            title="Could not load labeling queues"
+            message={queuesError}
+            size="sm"
+            action={
+              <Button
+                onClick={() => void queuesQuery.refetch()}
+                variant="outline"
+                size="sm"
+                disabled={queuesLoading}
+              >
+                <RefreshCw className="h-3.5 w-3.5" /> Try again
+              </Button>
+            }
+          />
+        ) : queuesLoading && queues.length === 0 ? (
+          <p className="text-sm text-[var(--text-muted)]">Loading queues…</p>
+        ) : queues.length === 0 ? (
+          <div className="flex flex-wrap items-center gap-2 text-sm text-[var(--text-muted)]">
+            <span>No queues yet.</span>
+            <Button size="sm" onClick={() => void createQueue()} disabled={creatingQueue}>
+              <Plus className="h-3.5 w-3.5" /> Create queue
+            </Button>
+          </div>
+        ) : (
+          <ul className="divide-y divide-[var(--border-subtle)]">
+            {queues.map((q) => (
+              <li key={q.id} className="flex items-center justify-between gap-2 py-2 text-sm">
+                <div className="min-w-0">
+                  <Link
+                    href={`/labeling/queues/${q.id}`}
+                    className="font-medium text-[var(--accent)] hover:underline"
+                  >
+                    {q.name || q.id}
+                  </Link>
+                  {q.description ? (
+                    <p className="truncate text-xs text-[var(--text-muted)]">{q.description}</p>
+                  ) : null}
+                </div>
+                <Button asChild size="sm" variant="ghost">
+                  <Link href={`/labeling/queues/${q.id}`}>Open board</Link>
+                </Button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Card>
 
       {error ? (
         <ErrorState
@@ -163,9 +285,34 @@ export default function LabelingPage() {
             loading={loading}
             rows={filtered}
             rowKey={(r) => r.id}
-            emptyTitle="No items in queue"
-            emptyDescription="When the eval pipeline flags low-confidence items, they appear here for human review."
+            emptyTitle={filterMiss ? "No matching items" : "No items in queue"}
+            emptyDescription={
+              filterMiss
+                ? `Nothing matches “${filter.trim()}”. Clear the filter or seed a new item.`
+                : "When the eval pipeline flags low-confidence items, they appear here for human review — or seed one now."
+            }
             emptyIcon={TagIcon}
+            emptyAction={
+              filterMiss ? (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  data-testid="labeling-clear-filter"
+                  onClick={() => setFilter("")}
+                >
+                  Clear filter
+                </Button>
+              ) : (
+                <div className="flex flex-wrap justify-center gap-2">
+                  <Button size="sm" data-testid="labeling-empty-seed" onClick={() => void seedItem()}>
+                    <Plus className="h-3.5 w-3.5" /> Seed item
+                  </Button>
+                  <Button asChild size="sm" variant="outline">
+                    <Link href="/evals?tab=datasets">Open datasets</Link>
+                  </Button>
+                </div>
+              )
+            }
             columns={[
               {
                 key: "prompt",
@@ -177,8 +324,8 @@ export default function LabelingPage() {
                     onClick={() => openReview(r)}
                     className="text-left font-mono text-xs hover:text-[var(--accent)] transition-colors"
                   >
-                    {r.prompt.slice(0, 120)}
-                    {r.prompt.length > 120 ? "…" : ""}
+                    {(r.prompt ?? "").slice(0, 120)}
+                    {(r.prompt ?? "").length > 120 ? "…" : ""}
                   </button>
                 ),
               },
@@ -187,7 +334,7 @@ export default function LabelingPage() {
                 header: "Tags",
                 cell: (r) => (
                   <span className="flex flex-wrap gap-1">
-                    {r.tags.map((t) => (
+                    {(r.tags ?? []).map((t) => (
                       <Tag key={t} className="text-[10px]">
                         {t}
                       </Tag>
@@ -255,28 +402,28 @@ export default function LabelingPage() {
                 <label htmlFor="labeling-label" className="text-xs font-medium text-[var(--text-secondary)]">
                   Label
                 </label>
-                <select
-                  id="labeling-label"
-                  value={label}
-                  onChange={(e) => setLabel(e.target.value)}
-                  className="w-full rounded-md border border-[var(--border-default)] bg-[var(--bg-secondary)] px-3 py-2 text-sm"
-                >
-                  <option value="approved">approved</option>
-                  <option value="rejected">rejected</option>
-                  <option value="needs_review">needs_review</option>
-                </select>
+                <Select value={label} onValueChange={setLabel}>
+                  <SelectTrigger id="labeling-label" className="bg-[var(--bg-secondary)]">
+                    <SelectValue placeholder="Select label" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="approved">approved</SelectItem>
+                    <SelectItem value="rejected">rejected</SelectItem>
+                    <SelectItem value="needs_review">needs_review</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
               <div className="space-y-2">
                 <label htmlFor="labeling-notes" className="text-xs font-medium text-[var(--text-secondary)]">
                   Notes (optional)
                 </label>
-                <textarea
+                <Textarea
                   id="labeling-notes"
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
                   rows={3}
                   placeholder="Why this label?"
-                  className="w-full rounded-md border border-[var(--border-default)] bg-[var(--bg-secondary)] px-3 py-2 text-sm"
+                  className="bg-[var(--bg-secondary)]"
                 />
               </div>
             </div>

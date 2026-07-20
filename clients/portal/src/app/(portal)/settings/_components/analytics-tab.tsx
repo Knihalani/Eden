@@ -1,52 +1,42 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useOrgQuery } from "@/hooks/use-api-query";
+import { queryKeys } from "@/lib/query-keys";
 import { useOrg } from "@/hooks/use-org";
 import { usePermissions } from "@/hooks/use-permissions";
 import { api } from "@/lib/api";
 import type { OrgAnalytics } from "@/lib/types";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, PieChart, Pie, Cell } from "recharts";
-import { Loader2, TrendingUp, Users, Database, Code } from "lucide-react";
+import { RefreshCw, TrendingUp, Users, Database, Code, BarChart2 } from "lucide-react";
 // ui-audit 2026-07-06 H1: centralized SSR-safe chart palette.
 // The hex SSR fallback + var() resolver now live in
 // @/lib/chart-colors so every chart in the portal uses the
 // same single source of truth.
 import { getStorageColorsResolved } from "@/lib/chart-colors";
 import { errorFromCaught } from "@/lib/safe-error-message";
+import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
+import { ErrorState } from "@/components/ui/error-state";
+import { Skeleton } from "@/components/ui/skeleton";
 
 const STORAGE_COLORS = getStorageColorsResolved();
 
 export function AnalyticsTab() {
   const { currentOrg } = useOrg();
   const { hasPermission } = usePermissions();
-  const [analytics, setAnalytics] = useState<OrgAnalytics | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
   const canViewAnalytics = hasPermission("audit:view");
-
-  useEffect(() => {
-    if (!currentOrg || !canViewAnalytics) {
-      setLoading(false);
-      return;
-    }
-
-    async function fetchAnalytics() {
-      if (!currentOrg) return;
-      setLoading(true);
-      setError(null);
-      try {
-        const data = await api.getOrgAnalytics(currentOrg.id);
-        setAnalytics(data);
-      } catch (e) {
-        setError(errorFromCaught(e, "Failed to load analytics"));
-      } finally {
-        setLoading(false);
-      }
-    }
-
-    fetchAnalytics();
-  }, [currentOrg, canViewAnalytics]);
+  const orgId = currentOrg?.id ?? null;
+  const analyticsQuery = useOrgQuery(
+    queryKeys.orgAnalytics.detail(orgId),
+    orgId,
+    () => api.getOrgAnalytics(orgId!),
+    { enabled: canViewAnalytics },
+  );
+  const analytics = analyticsQuery.data ?? null;
+  const loading = analyticsQuery.isLoading;
+  const error = analyticsQuery.error
+    ? errorFromCaught(analyticsQuery.error, "Failed to load analytics")
+    : null;
 
   if (!canViewAnalytics) {
     return (
@@ -60,26 +50,41 @@ export function AnalyticsTab() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-12">
-        <Loader2 className="w-6 h-6 animate-spin text-[var(--accent)]" />
-        <span className="ml-2 text-[var(--text-muted)]">Loading analytics...</span>
+      <div className="space-y-3 py-4" aria-busy="true" aria-live="polite">
+        <Skeleton className="h-20 w-full" />
+        <Skeleton className="h-20 w-full" />
+        <Skeleton className="h-48 w-full" />
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="p-4 bg-[var(--error-dim)] rounded-lg border border-[var(--error)]">
-        <p className="text-sm text-[var(--error)]">{error}</p>
-      </div>
+      <ErrorState
+        title="Could not load analytics"
+        message={error}
+        action={
+          <Button
+            type="button"
+            variant="outline"
+            size="default"
+            onClick={() => void analyticsQuery.refetch()}
+          >
+            <RefreshCw className="h-4 w-4" />
+            Try again
+          </Button>
+        }
+      />
     );
   }
 
   if (!analytics) {
     return (
-      <div className="p-6 bg-[var(--bg-secondary)] rounded-lg border border-[var(--border-default)]">
-        <p className="text-sm text-[var(--text-muted)]">No analytics data available.</p>
-      </div>
+      <EmptyState
+        icon={BarChart2}
+        title="No analytics data yet"
+        description="Usage charts appear once the workspace has members, references, or storage activity."
+      />
     );
   }
 

@@ -37,7 +37,7 @@ async def get_feature_flags() -> FeatureFlagsResponse:
       routes are enabled. When false (default), the corresponding routes
       return 404 and the portal hides the "Eval Harnesses" navigation entry.
     - `f70`: when true, ChatSidebar (in-product AI copilot) is shown.
-      Maps to ``features.f70`` / ``FEATURES_F70`` (default true).
+      Maps to ``features.f70`` / ``FEATURES_F70`` (default false).
 
     Settings are read at request time (not at module load time) so that
     tests can monkeypatch EXPERIMENTS_V1 between requests.
@@ -45,5 +45,5 @@ async def get_feature_flags() -> FeatureFlagsResponse:
     settings = get_settings()
     return FeatureFlagsResponse(
         experiments_v1=bool(settings.experiments_v1),
-        f70=bool(getattr(settings, "features_f70", True)),
+        f70=bool(getattr(settings, "features_f70", False)),
     )

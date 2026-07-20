@@ -1,6 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useState, Suspense } from "react";
+import { useOrgQuery } from "@/hooks/use-api-query";
+import { queryKeys } from "@/lib/query-keys";
 import Link from "next/link";
 import { useSearchParams, useRouter } from "next/navigation";
 import { FlaskConical, Play, Loader2, ArrowUpRight, ExternalLink } from "lucide-react";
@@ -22,6 +24,15 @@ import { U20_EMPTY_COPY } from "@/lib/portal-polish";
 import { useEmbeddedSurface } from "@/components/layout/embedded-surface";
 import { CoreResourcePage } from "@/components/portal-os";
 import { EmptyState } from "@/components/ui/empty-state";
+import { ErrorState } from "@/components/ui/error-state";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 type RunMatrix = {
   run_id?: string;
@@ -41,28 +52,54 @@ function PlaygroundsInner() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const embedded = useEmbeddedSurface();
-  const [playgrounds, setPlaygrounds] = useState<PersistedPlayground[]>([]);
+  const orgId = currentOrg?.id ?? null;
   const [active, setActive] = useState<PersistedPlayground | null>(null);
-  const [datasets, setDatasets] = useState<Dataset[]>([]);
   const [userPrompt, setUserPrompt] = useState("");
   const [busy, setBusy] = useState(false);
   const [run, setRun] = useState<RunMatrix | null>(null);
 
-  const load = useCallback(async () => {
-    if (!currentOrg?.id) return;
-    const [pg, ds] = await Promise.all([
-      playgroundApi.list(currentOrg.id),
-      datasetsApi.list(currentOrg.id),
-    ]);
-    setPlaygrounds(pg.playgrounds || []);
-    setDatasets(ds.datasets || []);
-    if (!active && pg.playgrounds?.[0]) setActive(pg.playgrounds[0]);
-  }, [currentOrg?.id, active]);
-
+  const listQuery = useOrgQuery(
+    queryKeys.playgrounds.list(orgId),
+    orgId,
+    async () => {
+      const { fetchApi } = await import("@/lib/api/core");
+      // Playgrounds list is authoritative; datasets are soft-fail so a
+      // datasets outage cannot false-empty / false-error the playground list.
+      const pg = await fetchApi<{ playgrounds: PersistedPlayground[]; total: number }>(
+        `/orgs/${orgId}/playgrounds?limit=100`,
+        { headers: { "X-Org-Id": orgId! } },
+      );
+      let datasets: Dataset[] = [];
+      try {
+        const ds = await datasetsApi.list(orgId!);
+        datasets = (ds.datasets || []).slice(0, 100) as Dataset[];
+      } catch {
+        datasets = [];
+      }
+      // B13: portal requests bounded playground lists (A7 owns API defaults).
+      return {
+        playgrounds: pg.playgrounds || [],
+        datasets,
+      };
+    },
+  );
+  const playgrounds = listQuery.data?.playgrounds ?? [];
+  const datasets = listQuery.data?.datasets ?? [];
+  const loading =
+    (listQuery.isLoading || listQuery.isPending) && playgrounds.length === 0;
+  const listError = listQuery.isError
+    ? (listQuery.error?.message ?? "Load failed")
+    : null;
   useEffect(() => {
-    void load().catch((e) => toast.error(e instanceof Error ? e.message : "Load failed"));
-    // Intentionally org-scoped only — `load` closes over `active` and would loop.
-  }, [currentOrg?.id]);
+    if (!active && playgrounds[0]) setActive(playgrounds[0]);
+  }, [playgrounds, active]);
+  const load = useCallback(async () => {
+    try {
+      await listQuery.refetch();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Load failed");
+    }
+  }, [listQuery, toast]);
 
   // Open-from-span: ?trace_id=&span_id=
   useEffect(() => {
@@ -77,7 +114,7 @@ function PlaygroundsInner() {
           messages: [{ role: "user", content: `Replay from trace ${traceId}` }],
         });
         setActive(res.playground);
-        setPlaygrounds((prev) => [res.playground, ...prev]);
+        await listQuery.refetch();
         toast.success("Playground created from span");
         router.replace("/evals?tab=playgrounds");
       } catch (e) {
@@ -179,7 +216,7 @@ function PlaygroundsInner() {
     : undefined;
 
   const primaryActions =
-    playgrounds.length === 0 && !busy ? null : (
+    !loading && !listError && playgrounds.length === 0 ? null : (
       <>
         <Button className="min-h-11" onClick={createNew} disabled={busy} loading={busy}>
           New playground
@@ -229,7 +266,32 @@ function PlaygroundsInner() {
             </p>
           ) : null}
 
-          {!playgrounds.length && !busy ? (
+          {loading ? (
+            <div className="mb-4 flex flex-col items-center justify-center gap-3 py-16">
+              <Loader2 className="h-6 w-6 animate-spin text-[var(--text-muted)]" />
+              <p className="text-sm text-[var(--text-muted)]">Loading playgrounds…</p>
+            </div>
+          ) : null}
+
+          {listError && !loading ? (
+            <ErrorState
+              title="Could not load playgrounds"
+              message={listError}
+              className="mb-4"
+              action={
+                <Button
+                  onClick={() => void load()}
+                  variant="outline"
+                  size="sm"
+                  loading={listQuery.isFetching}
+                >
+                  Try again
+                </Button>
+              }
+            />
+          ) : null}
+
+          {!loading && !listError && playgrounds.length === 0 ? (
             <EmptyState
               icon={FlaskConical}
               title="No playgrounds yet"
@@ -275,28 +337,31 @@ function PlaygroundsInner() {
           {active ? (
             <Card className="mb-4 space-y-3 p-4">
               <FormField label="User message" htmlFor="pg-user">
-                <textarea
+                <Textarea
                   id="pg-user"
-                  className="mt-1 min-h-[100px] w-full rounded-md border border-[var(--border-default)] bg-[var(--surface-raised)] p-2 text-sm"
+                  className="mt-1 min-h-[100px]"
                   value={userPrompt}
                   onChange={(e) => setUserPrompt(e.target.value)}
                   placeholder="Paste span input or draft prompt…"
                 />
               </FormField>
               <FormField label="Bind dataset" htmlFor="pg-ds">
-                <select
-                  id="pg-ds"
-                  className="mt-1 min-h-11 w-full rounded-md border border-[var(--border-default)] bg-[var(--surface-raised)] p-2 text-sm"
-                  value={boundDatasetId}
-                  onChange={(e) => void bindDataset(e.target.value)}
+                <Select
+                  value={boundDatasetId || "none"}
+                  onValueChange={(v) => void bindDataset(v === "none" ? "" : v)}
                 >
-                  <option value="">None (adhoc run)</option>
-                  {datasets.map((d) => (
-                    <option key={d.id} value={d.id}>
-                      {d.name}
-                    </option>
-                  ))}
-                </select>
+                  <SelectTrigger id="pg-ds" className="mt-1 min-h-11">
+                    <SelectValue placeholder="None (adhoc run)" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">None (adhoc run)</SelectItem>
+                    {datasets.map((d) => (
+                      <SelectItem key={d.id} value={d.id}>
+                        {d.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
                 {datasets.length === 0 ? (
                   <p className="mt-1.5 text-xs text-[var(--text-muted)]">
                     <Link

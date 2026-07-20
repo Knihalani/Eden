@@ -17,6 +17,8 @@ export interface CoreResourcePageProps {
 
 /**
  * U18 migration helper — PageContent + ResourcePageShell on one contract.
+ * Header and toolbar are separate slots so list hubs do not double-pad
+ * (PageHeader margin stacked inside a shared toolbar space-y).
  */
 export function CoreResourcePage({
   size = "default",
@@ -31,12 +33,8 @@ export function CoreResourcePage({
   return (
     <PageContent size={size} className={className}>
       <ResourcePageShell
-        toolbar={
-          <>
-            {header}
-            {toolbar}
-          </>
-        }
+        header={header}
+        toolbar={toolbar}
         kpiStrip={kpiStrip}
         table={table}
         detail={detail}

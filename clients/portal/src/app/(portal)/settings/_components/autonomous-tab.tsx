@@ -6,8 +6,9 @@
  * surface per-org. Defaults to ON (matches the Settings default
  * since June 2026). Only org admins can change.
  *
- * Also configures the recurring optimization schedule via the
- * Cat 23 code-change ``/policy`` API (default weekly).
+ * Improvement sweep cadence uses the live N23 ``improveRunsApi``
+ * schedule endpoints. The retired Cat 23 ``/intelligence/code-change/*``
+ * policy API (410 Gone) is not called from this tab.
  */
 import { useEffect, useState } from "react";
 import Link from "next/link";
@@ -15,39 +16,26 @@ import {
   Bot,
   CalendarClock,
   Loader2,
+  RefreshCw,
   ShieldAlert,
   ShieldCheck,
   ShieldOff,
   Wrench,
 } from "lucide-react";
-import { api, codeChangePolicyApi, improveRunsApi, type AutonomyPolicy, type CodeChangePolicy, type ImprovementSchedule, type OptimizationSchedule } from "@/lib/api";
+import { api, improveRunsApi, type AutonomyPolicy, type ImprovementSchedule } from "@/lib/api";
 import { useOrg } from "@/hooks/use-org";
 import { usePermissions } from "@/hooks/use-permissions";
 import { useToast } from "@/components/ui/toast";
+import { Button } from "@/components/ui/button";
+import { ErrorState } from "@/components/ui/error-state";
 import { IntegrationStatusBanners } from "@/components/integration-status-banners";
+import { NoOrgState } from "@/components/ui/no-org-state";
+import { errorFromCaught } from "@/lib/safe-error-message";
 
 type Flags = {
   intelligence_gap_v0: boolean;
   autonomous_actions_v0: boolean;
 };
-
-const WEEKDAYS = [
-  "Monday",
-  "Tuesday",
-  "Wednesday",
-  "Thursday",
-  "Friday",
-  "Saturday",
-  "Sunday",
-] as const;
-
-const SCHEDULE_OPTIONS: { value: OptimizationSchedule; label: string }[] = [
-  { value: "off", label: "Off" },
-  { value: "daily", label: "Daily" },
-  { value: "weekly", label: "Weekly" },
-  { value: "biweekly", label: "Every two weeks" },
-  { value: "monthly", label: "Monthly" },
-];
 
 const N23_CRON_PRESETS: { id: "daily" | "weekly" | "biweekly"; label: string; cron: string }[] = [
   { id: "daily", label: "Daily (03:00 UTC)", cron: "0 3 * * *" },
@@ -65,14 +53,6 @@ const DEFAULT_N23_SCHEDULE: ImprovementSchedule = {
   improvement_max_plans_per_sweep: 10,
 };
 
-const DEFAULT_SCHEDULE: CodeChangePolicy = {
-  optimization_schedule: "weekly",
-  optimization_weekday: 0,
-  optimization_hour_utc: 9,
-  optimization_day_of_month: 1,
-  max_prs_per_run: 2,
-};
-
 export default function AutonomousTab() {
   const { currentOrg, refreshOrgs } = useOrg();
   const { hasPermission } = usePermissions();
@@ -81,19 +61,19 @@ export default function AutonomousTab() {
     intelligence_gap_v0: true,
     autonomous_actions_v0: true,
   });
-  const [schedule, setSchedule] = useState<CodeChangePolicy>(DEFAULT_SCHEDULE);
   const [n23Schedule, setN23Schedule] = useState<ImprovementSchedule>(DEFAULT_N23_SCHEDULE);
   const [n23Preset, setN23Preset] = useState<"daily" | "weekly" | "biweekly" | "custom">("weekly");
-  const [autoPrEnabled, setAutoPrEnabled] = useState(false);
-  const [codeChangeEnabled, setCodeChangeEnabled] = useState(false);
   const [busy, setBusy] = useState(false);
   const [scheduleBusy, setScheduleBusy] = useState(false);
   const [loaded, setLoaded] = useState(false);
-  const [scheduleLoaded, setScheduleLoaded] = useState(false);
   const [n23ScheduleLoaded, setN23ScheduleLoaded] = useState(false);
+  const [n23ScheduleError, setN23ScheduleError] = useState<string | null>(null);
   const [n22Policy, setN22Policy] = useState<AutonomyPolicy | null>(null);
   const [n22Busy, setN22Busy] = useState(false);
   const [n22Loaded, setN22Loaded] = useState(false);
+  const [n22PolicyError, setN22PolicyError] = useState<string | null>(null);
+  const [scheduleRetryKey, setScheduleRetryKey] = useState(0);
+  const [policyRetryKey, setPolicyRetryKey] = useState(0);
 
   // Seed from the org's current settings JSONB.
   useEffect(() => {
@@ -111,6 +91,8 @@ export default function AutonomousTab() {
     if (!currentOrg) return;
     let cancelled = false;
     (async () => {
+      setN23ScheduleLoaded(false);
+      setN23ScheduleError(null);
       try {
         const res = await improveRunsApi.getSchedule(currentOrg.id);
         const data = res?.data ?? DEFAULT_N23_SCHEDULE;
@@ -133,9 +115,11 @@ export default function AutonomousTab() {
           setN23Preset(cronToPreset(data.improvement_schedule_cron ?? ""));
           setN23ScheduleLoaded(true);
         }
-      } catch {
+      } catch (err) {
         if (!cancelled) {
-          setN23Schedule(DEFAULT_N23_SCHEDULE);
+          setN23ScheduleError(
+            errorFromCaught(err, "Could not load improvement schedule"),
+          );
           setN23ScheduleLoaded(true);
         }
       }
@@ -143,22 +127,27 @@ export default function AutonomousTab() {
     return () => {
       cancelled = true;
     };
-  }, [currentOrg]);
+  }, [currentOrg, scheduleRetryKey]);
 
   // N22 autonomy policy bounds (maintenance mode + daily caps).
   useEffect(() => {
     if (!currentOrg) return;
     let cancelled = false;
     (async () => {
+      setN22Loaded(false);
+      setN22PolicyError(null);
       try {
         const res = await api.getAutonomyPolicy(currentOrg.id);
         if (!cancelled) {
           setN22Policy(res?.data ?? null);
           setN22Loaded(true);
         }
-      } catch {
+      } catch (err) {
         if (!cancelled) {
           setN22Policy(null);
+          setN22PolicyError(
+            errorFromCaught(err, "Could not load autonomy policy"),
+          );
           setN22Loaded(true);
         }
       }
@@ -166,53 +155,7 @@ export default function AutonomousTab() {
     return () => {
       cancelled = true;
     };
-  }, [currentOrg]);
-
-  // Load Cat 23 code-change policy (legacy schedule fields).
-  useEffect(() => {
-    if (!currentOrg) return;
-    let cancelled = false;
-    (async () => {
-      try {
-        const res = await codeChangePolicyApi.get(currentOrg.id);
-        const policy = res?.data?.policy ?? {};
-        if (!cancelled) {
-          setSchedule({
-            optimization_schedule:
-              (policy.optimization_schedule as OptimizationSchedule) || "weekly",
-            optimization_weekday:
-              typeof policy.optimization_weekday === "number"
-                ? policy.optimization_weekday
-                : 0,
-            optimization_hour_utc:
-              typeof policy.optimization_hour_utc === "number"
-                ? policy.optimization_hour_utc
-                : 9,
-            optimization_day_of_month:
-              typeof policy.optimization_day_of_month === "number"
-                ? policy.optimization_day_of_month
-                : 1,
-            max_prs_per_run:
-              typeof policy.max_prs_per_run === "number"
-                ? policy.max_prs_per_run
-                : 2,
-            last_optimization_run_at: policy.last_optimization_run_at ?? null,
-          });
-          setAutoPrEnabled(Boolean(policy.auto_pr_enabled));
-          setCodeChangeEnabled(Boolean(policy.code_change_enabled));
-          setScheduleLoaded(true);
-        }
-      } catch {
-        if (!cancelled) {
-          setSchedule(DEFAULT_SCHEDULE);
-          setScheduleLoaded(true);
-        }
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [currentOrg]);
+  }, [currentOrg, policyRetryKey]);
 
   const isAdmin = hasPermission("settings:edit");
 
@@ -232,54 +175,6 @@ export default function AutonomousTab() {
       toast.error(err instanceof Error ? err.message : String(err));
     } finally {
       setBusy(false);
-    }
-  }
-
-  async function persistSchedule(next: CodeChangePolicy) {
-    if (!currentOrg) return;
-    setScheduleBusy(true);
-    try {
-      const res = await codeChangePolicyApi.update(currentOrg.id, {
-        optimization_schedule: next.optimization_schedule,
-        optimization_weekday: next.optimization_weekday,
-        optimization_hour_utc: next.optimization_hour_utc,
-        optimization_day_of_month: next.optimization_day_of_month,
-        max_prs_per_run: next.max_prs_per_run,
-      });
-      if (res.status === "bad_request") {
-        toast.error(res.message || "Invalid schedule settings");
-        return;
-      }
-      const policy = res?.data?.policy ?? next;
-      setSchedule((prev) => ({
-        ...prev,
-        optimization_schedule:
-          (policy.optimization_schedule as OptimizationSchedule) ||
-          next.optimization_schedule,
-        optimization_weekday:
-          typeof policy.optimization_weekday === "number"
-            ? policy.optimization_weekday
-            : next.optimization_weekday,
-        optimization_hour_utc:
-          typeof policy.optimization_hour_utc === "number"
-            ? policy.optimization_hour_utc
-            : next.optimization_hour_utc,
-        optimization_day_of_month:
-          typeof policy.optimization_day_of_month === "number"
-            ? policy.optimization_day_of_month
-            : next.optimization_day_of_month,
-        max_prs_per_run:
-          typeof policy.max_prs_per_run === "number"
-            ? policy.max_prs_per_run
-            : next.max_prs_per_run,
-        last_optimization_run_at:
-          policy.last_optimization_run_at ?? prev.last_optimization_run_at,
-      }));
-      toast.success("Optimization schedule saved.");
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : String(err));
-    } finally {
-      setScheduleBusy(false);
     }
   }
 
@@ -331,35 +226,9 @@ export default function AutonomousTab() {
     }
   }
 
-  async function persistAutoPr(next: boolean) {
-    if (!currentOrg) return;
-    setScheduleBusy(true);
-    try {
-      const res = await codeChangePolicyApi.update(currentOrg.id, {
-        auto_pr_enabled: next,
-        code_change_enabled: next ? true : codeChangeEnabled,
-      });
-      const policy = res?.data?.policy ?? {};
-      setAutoPrEnabled(Boolean(policy.auto_pr_enabled ?? next));
-      setCodeChangeEnabled(Boolean(policy.code_change_enabled ?? codeChangeEnabled));
-      toast.success(
-        next
-          ? "Auto-PR enabled — approved patches can open PRs without manual click."
-          : "Auto-PR disabled — patches stay in inbox until you open a PR.",
-      );
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : String(err));
-    } finally {
-      setScheduleBusy(false);
-    }
+  if (!currentOrg) {
+    return <NoOrgState feature="Autonomous features" icon={Bot} />;
   }
-
-  if (!currentOrg) return null;
-
-  const sched = schedule.optimization_schedule || "weekly";
-  const showWeekday = sched === "weekly" || sched === "biweekly";
-  const showMonthDay = sched === "monthly";
-  const scheduleDisabled = !isAdmin || scheduleBusy || sched === "off";
 
   return (
     <div className="space-y-6">
@@ -405,6 +274,24 @@ export default function AutonomousTab() {
           kill switches for rollback / reweight / cache_bust live under Settings → FinOps.
         </p>
       </div>
+
+      {n22Loaded && n22PolicyError && (
+        <ErrorState
+          title="Could not load autonomy policy"
+          message={n22PolicyError}
+          action={
+            <Button
+              type="button"
+              variant="outline"
+              size="default"
+              onClick={() => setPolicyRetryKey((k) => k + 1)}
+            >
+              <RefreshCw className="h-4 w-4" />
+              Try again
+            </Button>
+          }
+        />
+      )}
 
       {n22Loaded && n22Policy && (
         <div className="rounded-xl border border-[var(--border-default)] bg-[var(--bg-secondary)]/30 p-4 space-y-4">
@@ -576,16 +463,6 @@ export default function AutonomousTab() {
         onChange={(v) => persist({ ...flags, autonomous_actions_v0: v })}
       />
 
-      <FlagRow
-        title="Auto-open PRs (N20)"
-        description="When enabled, approved issue patches can automatically open GitHub PRs (requires code-change + GitHub App). Off by default for safety."
-        icon={autoPrEnabled ? ShieldCheck : ShieldOff}
-        enabled={autoPrEnabled}
-        disabled={!isAdmin || scheduleBusy || !flags.intelligence_gap_v0}
-        warn={autoPrEnabled}
-        onChange={(v) => void persistAutoPr(v)}
-      />
-
       <div className="rounded-xl border border-[var(--border-default)] bg-[var(--bg-secondary)]/30 p-4 space-y-4">
         <div className="flex items-start gap-4">
           <div className="rounded-lg bg-[var(--accent-faint)] p-2 shrink-0">
@@ -598,11 +475,38 @@ export default function AutonomousTab() {
               <Link href="/improve/plans" className="text-[var(--accent)] hover:underline">
                 Improvement plans
               </Link>
-              . Approve always opens a GitHub PR.
+              . Approve always opens a GitHub PR. The agent defaults on for new
+              orgs; this tab sets cadence only. Kill-switches live in env / org
+              features (<code className="text-[10px]">improvement_agent_v1</code>
+              ) — not toggled here.
             </p>
           </div>
         </div>
 
+        {n23ScheduleError ? (
+          <ErrorState
+            title="Could not load improvement schedule"
+            message={n23ScheduleError}
+            size="sm"
+            action={
+              <Button
+                type="button"
+                variant="outline"
+                size="default"
+                onClick={() => setScheduleRetryKey((k) => k + 1)}
+              >
+                <RefreshCw className="h-4 w-4" />
+                Try again
+              </Button>
+            }
+          />
+        ) : !n23ScheduleLoaded ? (
+          <div className="flex items-center gap-2 py-4 text-sm text-[var(--text-muted)]">
+            <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+            Loading schedule…
+          </div>
+        ) : (
+        <>
         <div className="grid gap-3 sm:grid-cols-2">
           <label className="block text-xs space-y-1">
             <span className="text-[var(--text-secondary)]">Sweep cadence</span>
@@ -687,152 +591,14 @@ export default function AutonomousTab() {
             </p>
           </div>
         )}
-      </div>
 
-      <div className="rounded-xl border border-[var(--border-default)] bg-[var(--bg-secondary)]/30 p-4 space-y-4 opacity-80">
-        <div className="flex items-start gap-4">
-          <div className="rounded-lg bg-[var(--accent-faint)] p-2 shrink-0">
-            <CalendarClock className="w-5 h-5 text-[var(--accent)]" />
-          </div>
-          <div className="min-w-0 flex-1">
-            <div className="text-sm font-medium">Legacy optimization schedule (Cat 23)</div>
-            <p className="text-xs text-[var(--text-secondary)] mt-0.5 leading-relaxed">
-              Deprecated — superseded by N23 above. Kept for orgs still on code-change policy.
-            </p>
-          </div>
-        </div>
-
-        <div className="grid gap-3 sm:grid-cols-2">
-          <label className="block text-xs space-y-1">
-            <span className="text-[var(--text-secondary)]">Cadence</span>
-            <select
-              className="w-full rounded-md border border-[var(--border-default)] bg-[var(--bg-base)] px-2 py-1.5 text-sm"
-              value={sched}
-              disabled={!isAdmin || scheduleBusy}
-              onChange={(e) => {
-                const next = {
-                  ...schedule,
-                  optimization_schedule: e.target.value as OptimizationSchedule,
-                };
-                setSchedule(next);
-                void persistSchedule(next);
-              }}
-            >
-              {SCHEDULE_OPTIONS.map((o) => (
-                <option key={o.value} value={o.value}>
-                  {o.label}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <label className="block text-xs space-y-1">
-            <span className="text-[var(--text-secondary)]">Hour (UTC)</span>
-            <select
-              className="w-full rounded-md border border-[var(--border-default)] bg-[var(--bg-base)] px-2 py-1.5 text-sm"
-              value={schedule.optimization_hour_utc ?? 9}
-              disabled={scheduleDisabled}
-              onChange={(e) => {
-                const next = {
-                  ...schedule,
-                  optimization_hour_utc: Number(e.target.value),
-                };
-                setSchedule(next);
-                void persistSchedule(next);
-              }}
-            >
-              {Array.from({ length: 24 }, (_, h) => (
-                <option key={h} value={h}>
-                  {String(h).padStart(2, "0")}:00 UTC
-                </option>
-              ))}
-            </select>
-          </label>
-
-          {showWeekday && (
-            <label className="block text-xs space-y-1">
-              <span className="text-[var(--text-secondary)]">Weekday</span>
-              <select
-                className="w-full rounded-md border border-[var(--border-default)] bg-[var(--bg-base)] px-2 py-1.5 text-sm"
-                value={schedule.optimization_weekday ?? 0}
-                disabled={scheduleDisabled}
-                onChange={(e) => {
-                  const next = {
-                    ...schedule,
-                    optimization_weekday: Number(e.target.value),
-                  };
-                  setSchedule(next);
-                  void persistSchedule(next);
-                }}
-              >
-                {WEEKDAYS.map((name, i) => (
-                  <option key={name} value={i}>
-                    {name}
-                  </option>
-                ))}
-              </select>
-            </label>
-          )}
-
-          {showMonthDay && (
-            <label className="block text-xs space-y-1">
-              <span className="text-[var(--text-secondary)]">Day of month</span>
-              <select
-                className="w-full rounded-md border border-[var(--border-default)] bg-[var(--bg-base)] px-2 py-1.5 text-sm"
-                value={schedule.optimization_day_of_month ?? 1}
-                disabled={scheduleDisabled}
-                onChange={(e) => {
-                  const next = {
-                    ...schedule,
-                    optimization_day_of_month: Number(e.target.value),
-                  };
-                  setSchedule(next);
-                  void persistSchedule(next);
-                }}
-              >
-                {Array.from({ length: 28 }, (_, i) => i + 1).map((d) => (
-                  <option key={d} value={d}>
-                    {d}
-                  </option>
-                ))}
-              </select>
-            </label>
-          )}
-
-          <label className="block text-xs space-y-1">
-            <span className="text-[var(--text-secondary)]">Max PRs per run</span>
-            <select
-              className="w-full rounded-md border border-[var(--border-default)] bg-[var(--bg-base)] px-2 py-1.5 text-sm"
-              value={schedule.max_prs_per_run ?? 2}
-              disabled={scheduleDisabled}
-              onChange={(e) => {
-                const next = {
-                  ...schedule,
-                  max_prs_per_run: Number(e.target.value),
-                };
-                setSchedule(next);
-                void persistSchedule(next);
-              }}
-            >
-              {[1, 2, 3, 5].map((n) => (
-                <option key={n} value={n}>
-                  {n}
-                </option>
-              ))}
-            </select>
-          </label>
-        </div>
-
-        {scheduleLoaded && schedule.last_optimization_run_at && (
-          <p className="text-[11px] text-[var(--text-muted)]">
-            Last run: {schedule.last_optimization_run_at}
-          </p>
-        )}
         {scheduleBusy && (
           <div className="flex items-center gap-2 text-xs text-[var(--text-muted)]">
             <Loader2 className="w-3 h-3 animate-spin" />
             Saving schedule…
           </div>
+        )}
+        </>
         )}
       </div>
 
@@ -859,7 +625,7 @@ export default function AutonomousTab() {
           backend; the corresponding env vars
           (<code>INTELLIGENCE_GAP_V0</code>,{" "}
           <code>AUTONOMOUS_ACTIONS_V0</code>) override per-deployment.
-          Schedule lives in <code>code_change_policy</code>.
+          Improvement sweep cadence uses the N23 schedule API.
         </p>
       )}
     </div>
@@ -898,7 +664,7 @@ function FlagRow({
       >
         <Icon
           className={`w-5 h-5 ${
-            enabled ? "text-emerald-400" : "text-[var(--text-muted)]"
+            enabled ? "text-[var(--success)]" : "text-[var(--text-muted)]"
           }`}
         />
       </div>

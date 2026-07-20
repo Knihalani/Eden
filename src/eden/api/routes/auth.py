@@ -27,6 +27,7 @@ from eden.api.deps import (
     resolve_eden_org_id,
 )
 from eden.api.middleware.security_headers import apply_security_headers
+from eden.api.utils.org_schema import organizations_have_is_personal
 from eden.api.utils.auth import (
     create_access_token,
     hash_password,
@@ -64,12 +65,14 @@ from eden.services.invitation_service import (
 from eden.storage.postgres import get_postgres_client
 
 logger = logging.getLogger(__name__)
-settings = get_settings()
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 COOKIE_NAME = "authorization"
-COOKIE_MAX_AGE = settings.jwt_exp_days * 24 * 60 * 60
+
+
+def _cookie_max_age() -> int:
+    return get_settings().jwt_exp_days * 24 * 60 * 60
 
 
 def _set_session_cookie(response: Response, value: str) -> None:
@@ -95,10 +98,11 @@ def _set_session_cookie(response: Response, value: str) -> None:
     a future policy change (e.g., SameSite=strict, Secure=true
     always) only needs to be made in one place.
     """
+    settings = get_settings()
     response.set_cookie(
         key=COOKIE_NAME,
         value=value,
-        max_age=COOKIE_MAX_AGE,
+        max_age=_cookie_max_age(),
         httponly=True,
         secure=not settings.debug,
         samesite="lax",
@@ -302,10 +306,32 @@ async def signup(request: SignupRequest, response: Response, req: Request):
         VALUES ($1, $2, $3, FALSE)
         RETURNING id
     """
-    row = await client.fetchrow(query, request.email, password_hash, request.name)
+    try:
+        row = await client.fetchrow(query, request.email, password_hash, request.name)
+    except Exception as exc:
+        msg = str(exc).lower()
+        # Race with the pre-check above — same enumeration-safe 202.
+        if "unique" in msg or "duplicate" in msg:
+            from fastapi.responses import JSONResponse
+            return JSONResponse(
+                status_code=status.HTTP_202_ACCEPTED,
+                content={
+                    "message": (
+                        "If that email is not already registered, an account "
+                        "has been created. Check your email to verify before "
+                        "signing in."
+                    ),
+                },
+                headers=apply_security_headers(),
+            )
+        logger.warning("signup INSERT failed: %s", redact_email(str(exc)))
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Failed to create user",
+        ) from exc
     if not row:
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Failed to create user",
         )
 
@@ -659,10 +685,25 @@ async def signup_from_invite(request: SignupFromInviteRequest, response: Respons
         VALUES ($1, $2, $3)
         RETURNING id
     """
-    row = await client.fetchrow(query, invite_email, password_hash, request.name)
+    try:
+        row = await client.fetchrow(query, invite_email, password_hash, request.name)
+    except Exception as exc:
+        msg = str(exc).lower()
+        if "unique" in msg or "duplicate" in msg:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="An account with this email already exists",
+            ) from exc
+        logger.warning(
+            "signup_from_invite INSERT failed: %s", redact_email(str(exc))
+        )
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Failed to create user",
+        ) from exc
     if not row:
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Failed to create user",
         )
 
@@ -811,7 +852,7 @@ async def logout(
         key=COOKIE_NAME,
         path="/",
         httponly=True,
-        secure=not settings.debug,
+        secure=not get_settings().debug,
         samesite="lax",
     )
     return {"message": "Logged out successfully"}
@@ -844,7 +885,7 @@ async def logout_all(
         key=COOKIE_NAME,
         path="/",
         httponly=True,
-        secure=not settings.debug,
+        secure=not get_settings().debug,
         samesite="lax",
     )
     return {"message": "All sessions have been terminated"}
@@ -883,10 +924,10 @@ async def get_me(
     # Resolve by clerk_id OR Eden id (same helper notifications use).
     db_user = await get_eden_user_row_from_auth(user)
     if db_user:
-        logger.info(
+        logger.debug(
             "/auth/me HIT user_id=%s clerk_id=%s",
             user["user_id"], db_user.get("clerk_id"),
-        )    # Audit 2026-06-22 B1.7 — drop email from log (PII)
+        )  # Audit 2026-06-22 B1.7 — drop email from log (PII)
     else:
         logger.warning(
             "/auth/me MISS user_id=%s — auto-provisioning",
@@ -1015,35 +1056,40 @@ async def get_me(
                 # a previously-deleted email).
                 db_user = await client.fetchrow(
                     "SELECT id, email, name, avatar_url, created_at, "
-                    "preferred_org_id, clerk_id FROM users WHERE email = $1",
+                    "preferred_org_id, clerk_id, deleted_at FROM users WHERE email = $1",
                     email,
                 )
                 if db_user and db_user.get("clerk_id") != clerk_id:
-                    # Re-claim the row: the existing email matches
-                    # but the clerk_id is stale (either from a prior
-                    # signup that got soft-deleted, or because the
-                    # webhook hasn't re-pointed yet). Update clerk_id
-                    # + clear deleted_at + refresh avatar_url.
-                    if db_user.get("deleted_at") is not None:
-                        db_user = await client.fetchrow(
-                            """
-                            UPDATE users SET
-                                clerk_id   = $1,
-                                avatar_url = COALESCE(NULLIF($2, ''), users.avatar_url),
-                                name       = COALESCE(NULLIF($3, ''), users.name),
-                                deleted_at = NULL
-                            WHERE id = $4
-                            RETURNING id, email, name, avatar_url, created_at,
-                                      preferred_org_id, clerk_id
-                            """,
-                            clerk_id, avatar_url, name, db_user["id"],
-                        )
-                        logger.info(
-                            "auto-provision re-claimed soft-deleted row %s "
-                            "for new clerk_id=%s (was %s)",
-                            db_user["id"] if db_user else "?", clerk_id,
-                            "stale",
-                        )
+                    # Re-link clerk_id whenever Clerk session email owns
+                    # this Eden row. Previously we only reclaimed
+                    # soft-deleted rows, so an active row with a stale
+                    # clerk_id made /auth/me return 200 (email match)
+                    # while org routes 401'd ("still provisioning")
+                    # because eden_user_id_from_auth keys on clerk_id.
+                    # Safe: JWT sub was verified by Clerk, and email
+                    # was loaded from Clerk Backend API for that sub.
+                    stale_clerk = db_user.get("clerk_id")
+                    db_user = await client.fetchrow(
+                        """
+                        UPDATE users SET
+                            clerk_id   = $1,
+                            avatar_url = COALESCE(NULLIF($2, ''), users.avatar_url),
+                            name       = COALESCE(NULLIF($3, ''), users.name),
+                            deleted_at = NULL
+                        WHERE id = $4
+                        RETURNING id, email, name, avatar_url, created_at,
+                                  preferred_org_id, clerk_id
+                        """,
+                        clerk_id, avatar_url, name, db_user["id"],
+                    )
+                    logger.info(
+                        "auto-provision re-linked clerk_id on row %s "
+                        "for session clerk_id=%s (was %s, soft_deleted=%s)",
+                        db_user["id"] if db_user else "?",
+                        clerk_id,
+                        stale_clerk,
+                        "yes" if stale_clerk is not None else "n/a",
+                    )
             if not db_user:
                 logger.warning(
                     "auto-provision /auth/me re-read MISS for clerk_id=%s; "
@@ -1100,15 +1146,28 @@ async def get_me(
 
     client = await get_postgres_client()
 
+    # Canonical Clerk user id for session-org heal (may be unset when
+    # get_eden_user_row_from_auth hit on the first try with an Eden UUID).
+    session_clerk_id = (
+        (payload.get("sub") if isinstance(payload, dict) else None)
+        or (
+            user.get("user_id")
+            if str(user.get("user_id") or "").startswith("user_")
+            else None
+        )
+        or db_user.get("clerk_id")
+    )
+
     # Self-heal Clerk org + membership when the webhook is delayed or
     # skipped a non-UUID Clerk org id during signup.
+    healed_org_id: str | None = None
     if is_clerk_payload(payload):
         clerk_org = extract_org_id(payload)
         clerk_role = extract_org_role(payload)
-        if not clerk_org and clerk_id:
+        if not clerk_org and session_clerk_id:
             from eden.api.utils.clerk_client import list_user_organization_memberships
 
-            memberships = await list_user_organization_memberships(clerk_id)
+            memberships = await list_user_organization_memberships(session_clerk_id)
             if memberships:
                 first = memberships[0]
                 org_obj = first.get("organization") if isinstance(first, dict) else {}
@@ -1121,19 +1180,28 @@ async def get_me(
                 str(db_user["id"]),
                 clerk_role,
             )
-            if healed_org_id and not db_user.get("preferred_org_id"):
+            # Keep preferred_org aligned with the Clerk session org so
+            # SSR dehydrate (/traces layout) and clients that key off
+            # current_org_id do not call org routes with a stale
+            # preferred UUID while the JWT ``o.id`` points elsewhere.
+            if healed_org_id and str(db_user.get("preferred_org_id") or "") != healed_org_id:
                 await client.execute(
                     """
                     UPDATE users SET preferred_org_id = $1
-                    WHERE id = $2 AND preferred_org_id IS NULL
+                    WHERE id = $2
                     """,
                     healed_org_id,
                     str(db_user["id"]),
                 )
+                db_user = dict(db_user)
+                db_user["preferred_org_id"] = healed_org_id
 
-    # Fetch user's organizations
-    orgs_query = """
+    # Fetch user's organizations (include is_personal when migration 046 applied)
+    personal_col = await organizations_have_is_personal(client)
+    personal_select = ", o.is_personal" if personal_col else ""
+    orgs_query = f"""
         SELECT o.id, o.name, o.slug, om.role, o.clerk_org_id
+               {personal_select}
         FROM organizations o
         JOIN org_members om ON om.org_id = o.id
         WHERE om.user_id = $1
@@ -1141,16 +1209,33 @@ async def get_me(
     """
     orgs_rows = await client.fetch(orgs_query, str(db_user["id"]))
 
-    organizations = [
-        {
+    organizations = []
+    for r in orgs_rows:
+        org = {
             "id": str(r["id"]),
             "name": r["name"],
             "slug": r["slug"],
             "role": r["role"],
             "clerk_org_id": str(r["clerk_org_id"]) if r.get("clerk_org_id") else None,
         }
-        for r in orgs_rows
-    ]
+        if personal_col:
+            org["is_personal"] = bool(r["is_personal"])
+        organizations.append(org)
+
+    # Prefer Clerk session org, then preferred_org if still a member,
+    # then first membership — never advertise a preferred id the user
+    # cannot load on org-scoped routes.
+    org_ids = {o["id"] for o in organizations}
+    preferred = (
+        str(db_user["preferred_org_id"]) if db_user.get("preferred_org_id") else None
+    )
+    current_org_id = None
+    if healed_org_id and healed_org_id in org_ids:
+        current_org_id = healed_org_id
+    elif preferred and preferred in org_ids:
+        current_org_id = preferred
+    elif organizations:
+        current_org_id = organizations[0]["id"]
 
     return UserResponse(
         user_id=str(db_user["id"]),
@@ -1158,7 +1243,7 @@ async def get_me(
         name=db_user.get("name") or "Eden user",
         two_factor_enabled=bool(db_user.get("two_factor_enabled", False)),
         organizations=organizations,
-        current_org_id=str(db_user["preferred_org_id"]) if db_user.get("preferred_org_id") else None,
+        current_org_id=current_org_id,
     )
 
 

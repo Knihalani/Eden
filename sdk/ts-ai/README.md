@@ -2,7 +2,7 @@
 
 Eden TypeScript runtime SDK — drop-in auto-instrumentation for OpenAI, Anthropic, Vercel AI, and LangChain with fire-and-forget telemetry to the [Eden](https://eden.dev) gateway.
 
-The SDK mirrors the surface of Eden's Python SDK (`@eden/sdk`-equivalent `eden.sdk.trace`) so existing agent code can be ported by changing the import.
+The SDK mirrors the surface of Eden's Python SDK (`eden-sdk` / `eden.trace`) so existing agent code can be ported by changing the import.
 
 ## Install
 
@@ -264,12 +264,24 @@ const result = await trace("myAgent", async (ctx) => {
 ## Auto-instrument everything
 
 ```ts
-import { autoInstrument } from "@eden-ai/sdk";
+import { configure, instrument, autoInstrument } from "@eden-ai/sdk";
+import OpenAI from "openai";
+
+configure({ orgId: "org_abc", apiKey: "sk_..." });
+
+// Convenience helper — returns wrap* factories + detection (does not
+// auto-patch modules; call wrapOpenAI yourself, same as the portal snippet).
+const { wrapOpenAI, detected } = instrument();
+if (detected.openai) {
+  const openai = wrapOpenAI(new OpenAI());
+}
+
+// Detection-only alias (does not wrap):
 const status = autoInstrument({ tags: ["prod"] });
-// { openai: true, anthropic: true, vercelAi: true, langchain: false }
+// { openai: true, anthropic: true, vercelAi: true, langchain: false, mastra: false }
 ```
 
-The result tells you which frameworks were detected and wrapped; missing modules return `false` (the SDK never hard-imports them).
+Missing modules return `false` (the SDK never hard-imports them).
 
 ## Batching & flush
 

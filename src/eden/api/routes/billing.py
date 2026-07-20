@@ -8,8 +8,11 @@ subscribe / cancel / webhook endpoints (kept dormant in free-only mode).
 running USD cost against its tier cap (the primary free-tier lever).
 """
 
+import asyncio
 import json
 import logging
+from collections.abc import Callable
+from typing import Any, TypeVar
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel
@@ -19,6 +22,7 @@ from eden.api.deps import (
     get_postgres_client,
     require_org_permission,  # noqa: F401  (monkeypatched by tests/api/test_billing_routes.py)
     require_org_permission_dep,
+    require_path_org_access,
 )
 from eden.api.utils.redact import redact_all
 from eden.api.utils.safe_error import safe_detail
@@ -27,9 +31,29 @@ from eden.services.plan_tiers import get_plan_tier
 from eden.services.usage_service import UsageService
 
 logger = logging.getLogger(__name__)
-settings = get_settings()
 
-router = APIRouter(prefix="/orgs/{org_id}/billing", tags=["billing"])
+router = APIRouter(prefix="/orgs/{org_id}/billing", tags=["billing"], dependencies=[Depends(require_path_org_access)])
+
+_T = TypeVar("_T")
+
+
+async def _stripe_call(fn: Callable[..., _T], *args: Any, **kwargs: Any) -> _T:
+    """Run a sync Stripe SDK call off the event loop (K16 / A4)."""
+    return await asyncio.to_thread(fn, *args, **kwargs)
+
+
+def _is_stripe_client_error(exc: BaseException) -> bool:
+    """True when Stripe rejected the call as a client/4xx error.
+
+    Maps ``InvalidRequestError`` (and siblings with ``http_status`` in
+    400–499) to HTTP 400 instead of leaking them through a bare
+    ``except Exception → 500``.
+    """
+    name = type(exc).__name__
+    if name in ("InvalidRequestError", "CardError", "AuthenticationError"):
+        return True
+    http_status = getattr(exc, "http_status", None)
+    return isinstance(http_status, int) and 400 <= http_status < 500
 
 # Ponytail: paid plans are off. The Stripe-backed routes below return
 # 503 until this flips. The constants they reference (PLAN_DEFINITIONS,
@@ -249,7 +273,7 @@ def _require_paid_plans_enabled() -> None:
 # ============================================================================
 
 @router.get("/plans", response_model=PlanLimits)
-async def get_plans(org_id: str, user: dict = Depends(get_current_user),
+async def get_plans(org_id: str = Depends(require_path_org_access), user: dict = Depends(get_current_user),
         _check_billing_view: dict = Depends(require_org_permission_dep('billing:view')),
 ):
     """Get current plan and usage for the organization.
@@ -314,8 +338,8 @@ async def get_plans(org_id: str, user: dict = Depends(get_current_user),
 
 @router.post("/subscribe", response_model=dict)
 async def subscribe(
-    org_id: str,
     request: SubscribeRequest,
+    org_id: str = Depends(require_path_org_access),
     user: dict = Depends(get_current_user),
         _check_billing_edit: dict = Depends(require_org_permission_dep('billing:edit')),
 ):
@@ -323,7 +347,7 @@ async def subscribe(
     _require_paid_plans_enabled()
 
     # Check if Stripe is configured
-    stripe_api_key = getattr(settings, "stripe_secret_key", None) or ""
+    stripe_api_key = getattr(get_settings(), "stripe_secret_key", None) or ""
     if not stripe_api_key or stripe_api_key == "":
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -347,9 +371,14 @@ async def subscribe(
             "SELECT name, settings FROM organizations WHERE id = $1",
             org_id,
         )
+        if not org:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Organization not found",
+            )
 
         stripe_customer_id = None
-        if org and org.get("settings"):
+        if org.get("settings"):
             settings_data = _get_settings_data(org["settings"])
             stripe_customer_id = settings_data.get("stripe_customer_id")
 
@@ -358,14 +387,15 @@ async def subscribe(
         async with client.transaction():
             if not stripe_customer_id:
                 # Create Stripe customer
-                customer = stripe.Customer.create(
+                customer = await _stripe_call(
+                    stripe.Customer.create,
                     name=org["name"],
                     metadata={"org_id": org_id},
                 )
                 stripe_customer_id = customer.id
 
                 # Save customer ID to org settings
-                settings_data = _get_settings_data(org["settings"]) if org and org.get("settings") else {}
+                settings_data = _get_settings_data(org["settings"]) if org.get("settings") else {}
                 settings_data["stripe_customer_id"] = stripe_customer_id
 
                 await client.execute(
@@ -375,7 +405,8 @@ async def subscribe(
                 )
 
         # Create checkout session
-        session = stripe.checkout.Session.create(
+        session = await _stripe_call(
+            stripe.checkout.Session.create,
             customer=stripe_customer_id,
             payment_method_types=["card"],
             line_items=[{
@@ -404,12 +435,19 @@ async def subscribe(
             "session_id": session.id,
         }
 
+    except HTTPException:
+        raise
     except ImportError:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Stripe SDK not installed. Run: pip install stripe",
         ) from None
     except Exception as e:
+        if _is_stripe_client_error(e):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=safe_detail(e, fallback="Invalid Stripe request"),
+            ) from e
         logger.error(f"Stripe checkout error: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -418,12 +456,18 @@ async def subscribe(
 
 
 @router.get("/invoices", response_model=list[InvoiceResponse])
-async def get_invoices(org_id: str, user: dict = Depends(get_current_user),
+async def get_invoices(org_id: str = Depends(require_path_org_access), user: dict = Depends(get_current_user),
         _check_billing_view: dict = Depends(require_org_permission_dep('billing:view')),
 ):
-    """Get billing invoices for the organization."""
+    """Get billing invoices for the organization.
 
-    stripe_api_key = getattr(settings, "stripe_secret_key", None) or ""
+    Free-only mode: paid Stripe invoice history is dormant — return the
+    same intentional 503 as subscribe/cancel so the portal can show
+    not-available copy instead of a false empty invoice list.
+    """
+    _require_paid_plans_enabled()
+
+    stripe_api_key = getattr(get_settings(), "stripe_secret_key", None) or ""
     if not stripe_api_key or stripe_api_key == "":
         return []  # Return empty if Stripe not configured
 
@@ -447,7 +491,8 @@ async def get_invoices(org_id: str, user: dict = Depends(get_current_user),
             return []
 
         # Get invoices from Stripe
-        invoices = stripe.Invoice.list(
+        invoices = await _stripe_call(
+            stripe.Invoice.list,
             customer=stripe_customer_id,
             limit=10,
         )
@@ -478,13 +523,13 @@ async def get_invoices(org_id: str, user: dict = Depends(get_current_user),
 
 
 @router.post("/cancel", response_model=dict)
-async def cancel_subscription(org_id: str, user: dict = Depends(get_current_user),
+async def cancel_subscription(org_id: str = Depends(require_path_org_access), user: dict = Depends(get_current_user),
         _check_billing_edit: dict = Depends(require_org_permission_dep('billing:edit')),
 ):
     """Cancel the current subscription."""
     _require_paid_plans_enabled()
 
-    stripe_api_key = getattr(settings, "stripe_secret_key", None) or ""
+    stripe_api_key = getattr(get_settings(), "stripe_secret_key", None) or ""
     if not stripe_api_key or stripe_api_key == "":
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -503,7 +548,8 @@ async def cancel_subscription(org_id: str, user: dict = Depends(get_current_user
             )
 
         # Cancel at period end
-        subscription = stripe.Subscription.modify(
+        subscription = await _stripe_call(
+            stripe.Subscription.modify,
             plan["stripe_subscription_id"],
             cancel_at_period_end=True,
         )
@@ -520,12 +566,19 @@ async def cancel_subscription(org_id: str, user: dict = Depends(get_current_user
             "cancel_at": subscription.cancel_at,
         }
 
+    except HTTPException:
+        raise
     except ImportError:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Stripe SDK not installed.",
         ) from None
     except Exception as e:
+        if _is_stripe_client_error(e):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=safe_detail(e, fallback="Invalid Stripe request"),
+            ) from e
         logger.error(f"Stripe cancel error: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -539,8 +592,8 @@ async def cancel_subscription(org_id: str, user: dict = Depends(get_current_user
 
 @router.post("/webhook")
 async def stripe_webhook(
-    org_id: str,
     request: Request,
+    org_id: str = Depends(require_path_org_access),
 ):
     """Handle Stripe webhook events.
 
@@ -558,7 +611,7 @@ async def stripe_webhook(
             detail="Missing Stripe signature",
         )
 
-    webhook_secret = getattr(settings, "stripe_webhook_secret", "") or ""
+    webhook_secret = getattr(get_settings(), "stripe_webhook_secret", "") or ""
     if not webhook_secret:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -575,7 +628,8 @@ async def stripe_webhook(
 
     # Always verify — never parse unverified JSON on failure.
     try:
-        event = stripe.Webhook.construct_event(
+        event = await _stripe_call(
+            stripe.Webhook.construct_event,
             payload,
             sig_header,
             webhook_secret,
@@ -596,7 +650,7 @@ async def stripe_webhook(
     # webhook itself only processes events when paid plans + Stripe
     # keys are live.
     _require_paid_plans_enabled()
-    stripe_api_key = getattr(settings, "stripe_secret_key", None) or ""
+    stripe_api_key = getattr(get_settings(), "stripe_secret_key", None) or ""
     if not stripe_api_key:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -748,16 +802,20 @@ class _PaymentMethodResponse(BaseModel):
 
 @router.get("/payment-method", response_model=_PaymentMethodResponse | None)
 async def get_payment_method(
-    org_id: str,
+    org_id: str = Depends(require_path_org_access),
     _user: dict = Depends(get_current_user),
 ):
     """Return the org's default Stripe payment method, or None.
 
-    Returns null (not 404) when no method is on file so the
-    portal can render a "Add a card" CTA without a separate
-    not-found state.
+    Free-only mode: paid card-on-file is dormant — same intentional 503
+    as other Stripe paid endpoints. Returns null (not 404) when paid
+    plans are enabled but no method is on file so the portal can render
+    an "Add a card" CTA without a separate not-found state.
     """
-    if not getattr(settings, "stripe_secret_key", None):
+    _require_paid_plans_enabled()
+
+    app_settings = get_settings()
+    if not getattr(app_settings, "stripe_secret_key", None):
         return None
 
     client = await get_postgres_client()
@@ -781,14 +839,14 @@ async def get_payment_method(
     # is actually called. Avoids a hard dep for the rest of the app.
     try:
         import stripe
-        stripe.api_key = settings.stripe_secret_key
-        customer = stripe.Customer.retrieve(customer_id)
+        stripe.api_key = app_settings.stripe_secret_key
+        customer = await _stripe_call(stripe.Customer.retrieve, customer_id)
         default_pm = getattr(
             customer.invoice_settings.default_payment_method, "id", None
         )
         if not default_pm:
             return None
-        pm = stripe.PaymentMethod.retrieve(default_pm)
+        pm = await _stripe_call(stripe.PaymentMethod.retrieve, default_pm)
         return _PaymentMethodResponse(
             brand=pm.card.brand,
             last4=pm.card.last4,

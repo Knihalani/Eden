@@ -6,7 +6,7 @@ When ``framework=="ollama"`` the integrator must:
      ``.eden/config.yaml``.
   2. Emit the ollama-specific bootstrap that sets
      ``OPENAI_BASE_URL=http://localhost:11434/v1`` and
-     ``OPENAI_API_KEY=ollama`` *before* ``eden.init()`` — otherwise
+     ``OPENAI_API_KEY=ollama`` *before* ``eden.configure()`` — otherwise
      the OpenAI-compatible instrumentor points at api.openai.com and
      misses every local call.
 """
@@ -68,16 +68,30 @@ def test_ollama_plan_sets_llm_provider_in_config(tmp_path: Path):
     assert "ollama_base_url: http://localhost:11434" in cfg_change.content
 
 
+def test_python_plan_installs_eden_sdk_not_eden_ai(tmp_path: Path):
+    plan = build_integration_plan(tmp_path, _detection("openai", "python"))
+    assert "eden-sdk" in plan.dependencies
+    assert "eden-ai" not in plan.dependencies
+    assert any("eden-sdk" in cmd for cmd in plan.install_commands)
+    boot = next(c for c in plan.changes if c.path.startswith("eden_bootstrap"))
+    assert "eden.configure" in boot.content
+    assert "eden.init(" not in boot.content
+    assert 'eden.instrument("openai")' in boot.content
+
+
 def test_ollama_plan_uses_ollama_bootstrap_template(tmp_path: Path):
     plan = build_integration_plan(tmp_path, _detection("ollama", "python"))
     bootstrap = next(c for c in plan.changes if c.path.startswith("eden_bootstrap"))
     assert "OPENAI_BASE_URL" in bootstrap.content
     assert "http://localhost:11434/v1" in bootstrap.content
     assert "OPENAI_API_KEY" in bootstrap.content
-    # Must set env vars BEFORE eden.init so the openai patch picks them up.
-    init_idx = bootstrap.content.find("eden.init(")
+    # Must set env vars BEFORE configure/instrument so the openai patch picks them up.
+    cfg_idx = bootstrap.content.find("eden.configure")
     env_idx = bootstrap.content.find("OPENAI_BASE_URL")
-    assert env_idx < init_idx, "env vars must be set before eden.init()"
+    assert env_idx < cfg_idx, "env vars must be set before eden.configure()"
+    assert 'eden.instrument("openai")' in bootstrap.content
+    assert "eden.init(" not in bootstrap.content
+    assert "pip install eden-sdk" in " ".join(plan.install_commands) or "eden-sdk" in plan.dependencies
 
 
 def test_openai_plan_does_not_set_ollama_env(tmp_path: Path):
@@ -133,13 +147,15 @@ def test_ollama_plan_from_files_sets_provider():
 def test_python_ollama_template_format_renders_cleanly():
     env_setup = _render_python_env_setup("ollama")
     rendered = PYTHON_INSTRUMENT_PROVIDER_TEMPLATE.format(
-        env_setup=env_setup, framework_repr="'ollama'"
+        env_setup=env_setup, instrument_call='eden.instrument("openai")'
     )
     # The format should not raise, and the framework slot + env-setup should land.
-    assert "'ollama'" in rendered
+    assert 'eden.instrument("openai")' in rendered
+    assert "eden.configure" in rendered
     assert "OPENAI_BASE_URL" in rendered
     assert "OPENAI_API_KEY" in rendered
     assert "OLLAMA_HOST" in rendered
+    assert "eden.init(" not in rendered
 
 
 def test_provider_bootstrap_envs_includes_all_documented_providers():

@@ -10,7 +10,12 @@ from typing import Any
 from fastapi import APIRouter, Body, Depends, HTTPException, Path, Query
 from pydantic import BaseModel, Field
 
-from eden.api.deps import get_current_user, resolve_eden_org_id
+from eden.api.deps import (
+    _try_resolve_token_payload,
+    get_current_user,
+    resolve_eden_org_id,
+    resolve_path_org_access,
+)
 from eden.automations.engine import AutomationsEngine
 from eden.evaluation.categorical_classifier import CategoricalClassifierService
 from eden.evaluation.code_evaluator import CodeEvaluatorRunner
@@ -22,13 +27,24 @@ from eden.monitoring.dashboards import MonitoringDashboardService
 from eden.observability.custom_properties.service import CustomPropertiesService
 from eden.prompts.deploy import PromptDeployService
 from eden.prompts.workspace import PromptWorkspaceService
+from eden.api.utils.redact import redact_all
 
 logger = logging.getLogger(__name__)
+
+
+async def _require_path_org(
+    org_id: str = Path(..., description="Organization ID"),
+    user: dict = Depends(get_current_user),
+    payload: dict | None = Depends(_try_resolve_token_payload),
+) -> str:
+    _, eden_org = await resolve_path_org_access(org_id, user, payload)
+    return eden_org
+
 
 router = APIRouter(
     prefix="/orgs/{org_id}",
     tags=["wave6-online-quality"],
-    dependencies=[Depends(get_current_user)],
+    dependencies=[Depends(_require_path_org)],
 )
 
 
@@ -69,14 +85,14 @@ class RulePatch(BaseModel):
 
 
 @router.get("/online-scoring/rules")
-async def list_scoring_rules(org_id: str = Path(...)) -> dict[str, Any]:
+async def list_scoring_rules(org_id: str = Depends(_require_path_org)) -> dict[str, Any]:
     rules = await OnlineScoringRulesEngine().list_rules(org_id)
     return _ok("f52", {"rules": [r.to_dict() for r in rules]})
 
 
 @router.post("/online-scoring/rules")
 async def create_scoring_rule(
-    org_id: str = Path(...), body: RuleCreate = Body(...)
+    org_id: str = Depends(_require_path_org), body: RuleCreate = Body(...)
 ) -> dict[str, Any]:
     rule = await OnlineScoringRulesEngine().create_rule(org_id, **body.model_dump())
     if rule is None:
@@ -86,7 +102,7 @@ async def create_scoring_rule(
 
 @router.patch("/online-scoring/rules/{rule_id}")
 async def patch_scoring_rule(
-    org_id: str = Path(...),
+    org_id: str = Depends(_require_path_org),
     rule_id: str = Path(...),
     body: RulePatch = Body(...),
 ) -> dict[str, Any]:
@@ -99,7 +115,7 @@ async def patch_scoring_rule(
 
 @router.post("/online-scoring/rules/{rule_id}/rewind")
 async def rewind_scoring_rule(
-    org_id: str = Path(...), rule_id: str = Path(...)
+    org_id: str = Depends(_require_path_org), rule_id: str = Path(...)
 ) -> dict[str, Any]:
     job_id = await OnlineScoringRulesEngine().rewind(org_id, rule_id)
     return _ok("f52", {"job_id": job_id})
@@ -107,7 +123,7 @@ async def rewind_scoring_rule(
 
 @router.post("/online-scoring/apply/{trace_id}")
 async def apply_scoring(
-    org_id: str = Path(...),
+    org_id: str = Depends(_require_path_org),
     trace_id: str = Path(...),
     agent_id: str | None = Query(None),
     span_id: str | None = Query(None),
@@ -122,14 +138,14 @@ async def apply_scoring(
 
 
 @router.get("/spans/{span_id}/scores")
-async def span_scores(org_id: str = Path(...), span_id: str = Path(...)) -> dict[str, Any]:
+async def span_scores(org_id: str = Depends(_require_path_org), span_id: str = Path(...)) -> dict[str, Any]:
     scores = await SpanScoreStore().list_for_span(org_id, span_id)
     return _ok("f79", {"span_id": span_id, "scores": scores})
 
 
 @router.get("/traces/{trace_id}/span-scores")
 async def trace_span_scores(
-    org_id: str = Path(...),
+    org_id: str = Depends(_require_path_org),
     trace_id: str = Path(...),
     span_id: str | None = Query(None),
 ) -> dict[str, Any]:
@@ -148,14 +164,14 @@ class CodeEvaluatorCreate(BaseModel):
 
 
 @router.get("/code-evaluators")
-async def list_code_evaluators(org_id: str = Path(...)) -> dict[str, Any]:
+async def list_code_evaluators(org_id: str = Depends(_require_path_org)) -> dict[str, Any]:
     rows = await CodeEvaluatorRunner().list_evaluators(org_id)
     return _ok("f54", {"evaluators": rows})
 
 
 @router.post("/code-evaluators")
 async def create_code_evaluator(
-    org_id: str = Path(...), body: CodeEvaluatorCreate = Body(...)
+    org_id: str = Depends(_require_path_org), body: CodeEvaluatorCreate = Body(...)
 ) -> dict[str, Any]:
     try:
         rec = await CodeEvaluatorRunner().register(org_id, **body.model_dump())
@@ -176,14 +192,14 @@ class ClassifierCreate(BaseModel):
 
 
 @router.get("/categorical-classifiers")
-async def list_classifiers(org_id: str = Path(...)) -> dict[str, Any]:
+async def list_classifiers(org_id: str = Depends(_require_path_org)) -> dict[str, Any]:
     rows = await CategoricalClassifierService().list_classifiers(org_id)
     return _ok("f55", {"classifiers": rows})
 
 
 @router.post("/categorical-classifiers")
 async def create_classifier(
-    org_id: str = Path(...), body: ClassifierCreate = Body(...)
+    org_id: str = Depends(_require_path_org), body: ClassifierCreate = Body(...)
 ) -> dict[str, Any]:
     rec = await CategoricalClassifierService().register(org_id, **body.model_dump())
     return _ok("f55", {"classifier": rec})
@@ -191,7 +207,7 @@ async def create_classifier(
 
 @router.post("/categorical-classifiers/{classifier_id}/classify/{trace_id}")
 async def classify_trace(
-    org_id: str = Path(...),
+    org_id: str = Depends(_require_path_org),
     classifier_id: str = Path(...),
     trace_id: str = Path(...),
 ) -> dict[str, Any]:
@@ -213,14 +229,17 @@ class AutomationCreate(BaseModel):
 
 
 @router.get("/automations")
-async def list_automations(org_id: str = Path(...)) -> dict[str, Any]:
-    rows = await AutomationsEngine().list_automations(org_id)
+async def list_automations(
+    org_id: str = Depends(_require_path_org),
+    limit: int = Query(100, ge=1, le=100),
+) -> dict[str, Any]:
+    rows = await AutomationsEngine().list_automations(org_id, limit=limit)
     return _ok("f61", {"automations": rows})
 
 
 @router.post("/automations")
 async def create_automation(
-    org_id: str = Path(...), body: AutomationCreate = Body(...)
+    org_id: str = Depends(_require_path_org), body: AutomationCreate = Body(...)
 ) -> dict[str, Any]:
     rec = await AutomationsEngine().create(org_id, **body.model_dump())
     return _ok("f61", {"automation": rec})
@@ -250,13 +269,13 @@ async def _resolved_org(org_id: str) -> str:
 
 
 @router.get("/dashboards/home")
-async def get_home_dashboard(org_id: str = Path(...)) -> dict[str, Any]:
+async def get_home_dashboard(org_id: str = Depends(_require_path_org)) -> dict[str, Any]:
     dash = await MonitoringDashboardService().get_home(await _resolved_org(org_id))
     return _ok("f57", {"dashboard": dash})
 
 
 @router.get("/dashboards")
-async def list_dashboards(org_id: str = Path(...)) -> dict[str, Any]:
+async def list_dashboards(org_id: str = Depends(_require_path_org)) -> dict[str, Any]:
     rows = await MonitoringDashboardService().list_dashboards(
         await _resolved_org(org_id)
     )
@@ -265,7 +284,7 @@ async def list_dashboards(org_id: str = Path(...)) -> dict[str, Any]:
 
 @router.post("/dashboards")
 async def create_dashboard(
-    org_id: str = Path(...), body: DashboardCreate = Body(...)
+    org_id: str = Depends(_require_path_org), body: DashboardCreate = Body(...)
 ) -> dict[str, Any]:
     rec = await MonitoringDashboardService().create_dashboard(
         await _resolved_org(org_id), name=body.name, is_home=body.is_home
@@ -275,7 +294,7 @@ async def create_dashboard(
 
 @router.post("/dashboards/{dashboard_id}/widgets")
 async def upsert_widget(
-    org_id: str = Path(...),
+    org_id: str = Depends(_require_path_org),
     dashboard_id: str = Path(...),
     body: WidgetUpsert = Body(...),
 ) -> dict[str, Any]:
@@ -287,7 +306,7 @@ async def upsert_widget(
 
 @router.post("/dashboards/widgets/execute")
 async def execute_widget_query(
-    org_id: str = Path(...),
+    org_id: str = Depends(_require_path_org),
     query: str = Body(..., embed=True),
     agent_id: str | None = Body(None, embed=True),
 ) -> dict[str, Any]:
@@ -302,13 +321,13 @@ async def execute_widget_query(
 
 @router.get("/cost-analytics/kpi")
 async def cost_kpi(
-    org_id: str = Path(...),
+    org_id: str = Depends(_require_path_org),
     window_hours: int = Query(24, ge=1, le=720),
     agent_id: str | None = Query(None),
     property_key: str | None = Query(None),
     property_value: str | None = Query(None),
 ) -> dict[str, Any]:
-    """F60 KPI tiles — prefer customer_cost_events ledger; telemetry fallback."""
+    """F60 KPI tiles — prefer CH/Tinybird when configured; PG fallback."""
     from eden.llmops.cost_ledger import explorer_summary
     from eden.storage.postgres import get_postgres_client
 
@@ -316,11 +335,22 @@ async def cost_kpi(
     ledger_cost = float(summary.get("total_cost_usd") or 0.0)
     prev_cost = float(summary.get("previous_cost_usd") or 0.0)
 
-    client = await get_postgres_client()
     traces = 0
     prev_traces = 0
     cache_savings = 0.0
-    if client is not None:
+    data_source = "postgres"
+
+    # Prefer ClickHouse / Tinybird rollups when clickhouse_url is set.
+    ch_tiles = await _home_kpi_from_clickhouse(org_id, window_hours=window_hours)
+    if ch_tiles is not None:
+        traces = int(ch_tiles.get("event_count") or 0)
+        prev_traces = int(ch_tiles.get("prev_event_count") or 0)
+        data_source = "clickhouse"
+        if ledger_cost <= 0 and ch_tiles.get("cost_usd") is not None:
+            ledger_cost = float(ch_tiles["cost_usd"] or 0)
+
+    client = await get_postgres_client()
+    if client is not None and data_source == "postgres":
         where = "tenant_id = $1 AND timestamp > NOW() - ($2 || ' hours')::interval"
         args: list[Any] = [org_id, str(window_hours)]
         if agent_id:
@@ -389,15 +419,34 @@ async def cost_kpi(
                 "by_agent": summary.get("by_agent") or [],
             },
             "segment": {"agent_id": agent_id, "property_key": property_key},
+            "data_source": data_source,
         },
     )
+
+
+async def _home_kpi_from_clickhouse(
+    org_id: str, *, window_hours: int
+) -> dict[str, Any] | None:
+    """Read Home KPI aggregates from CH/Tinybird; soft-fail to None."""
+    try:
+        from eden.config import get_settings
+        from eden.data_platform.clickhouse_sink import get_clickhouse_sink
+
+        url = getattr(get_settings(), "clickhouse_url", "") or ""
+        if not url.strip():
+            return None
+        sink = await get_clickhouse_sink()
+        return await sink.query_home_kpis(org_id, window_hours=window_hours)
+    except Exception as exc:
+        logger.debug("home KPI CH read failed; using PG: %s", redact_all(str(exc)))
+        return None
 
 
 # ── F66 prompt workspace ────────────────────────────────────────────
 
 
 @router.get("/prompts/{name}/workspace")
-async def prompt_workspace(org_id: str = Path(...), name: str = Path(...)) -> dict[str, Any]:
+async def prompt_workspace(org_id: str = Depends(_require_path_org), name: str = Path(...)) -> dict[str, Any]:
     ws = await PromptWorkspaceService().get_workspace(org_id, name)
     return _ok("f66", {"workspace": ws})
 
@@ -409,7 +458,7 @@ class CollaboratorAdd(BaseModel):
 
 @router.post("/prompts/{name}/collaborators")
 async def add_collaborator(
-    org_id: str = Path(...), name: str = Path(...), body: CollaboratorAdd = Body(...)
+    org_id: str = Depends(_require_path_org), name: str = Path(...), body: CollaboratorAdd = Body(...)
 ) -> dict[str, Any]:
     rec = await PromptWorkspaceService().add_collaborator(
         org_id, prompt_name=name, user_id=body.user_id, role=body.role
@@ -426,14 +475,14 @@ class PromptDeployBody(BaseModel):
 
 
 @router.get("/prompts/{name}/environments")
-async def list_prompt_envs(org_id: str = Path(...), name: str = Path(...)) -> dict[str, Any]:
+async def list_prompt_envs(org_id: str = Depends(_require_path_org), name: str = Path(...)) -> dict[str, Any]:
     envs = await PromptDeployService().list_environments(org_id, name)
     return _ok("f68", {"environments": envs})
 
 
 @router.post("/prompts/{name}/deploy")
 async def deploy_prompt(
-    org_id: str = Path(...),
+    org_id: str = Depends(_require_path_org),
     name: str = Path(...),
     body: PromptDeployBody = Body(...),
     user: dict = Depends(get_current_user),
@@ -450,7 +499,7 @@ async def deploy_prompt(
 
 @router.get("/prompts/{name}/resolve")
 async def resolve_prompt(
-    org_id: str = Path(...),
+    org_id: str = Depends(_require_path_org),
     name: str = Path(...),
     env: str = Query("production"),
 ) -> dict[str, Any]:
@@ -469,7 +518,7 @@ class CIEvalRequest(BaseModel):
 
 
 @router.post("/ci-eval/run")
-async def ci_eval_run(org_id: str = Path(...), body: CIEvalRequest = Body(...)) -> dict[str, Any]:
+async def ci_eval_run(org_id: str = Depends(_require_path_org), body: CIEvalRequest = Body(...)) -> dict[str, Any]:
     result = await CIWebhookHandler().on_prompt_change(
         org_id,
         changed_files=body.changed_files,
@@ -496,7 +545,7 @@ class SqlExportQueue(BaseModel):
 
 @router.post("/sql/export/dataset")
 async def sql_export_dataset(
-    org_id: str = Path(...), body: SqlExportDataset = Body(...)
+    org_id: str = Depends(_require_path_org), body: SqlExportDataset = Body(...)
 ) -> dict[str, Any]:
     result = await SqlExportService().export_to_dataset(org_id, **body.model_dump())
     return _ok("f76", result)
@@ -504,7 +553,7 @@ async def sql_export_dataset(
 
 @router.post("/sql/export/queue")
 async def sql_export_queue(
-    org_id: str = Path(...), body: SqlExportQueue = Body(...)
+    org_id: str = Depends(_require_path_org), body: SqlExportQueue = Body(...)
 ) -> dict[str, Any]:
     result = await SqlExportService().export_to_queue(org_id, **body.model_dump())
     return _ok("f76", result)
@@ -519,7 +568,7 @@ class LateMetadataBody(BaseModel):
 
 @router.post("/traces/{trace_id}/metadata")
 async def late_trace_metadata(
-    org_id: str = Path(...),
+    org_id: str = Depends(_require_path_org),
     trace_id: str = Path(...),
     body: LateMetadataBody = Body(...),
 ) -> dict[str, Any]:
@@ -538,7 +587,7 @@ class ShadowPromoteBody(BaseModel):
 
 @router.post("/eval/promote-to-shadow-guardrail")
 async def promote_shadow_guardrail(
-    org_id: str = Path(...), body: ShadowPromoteBody = Body(...)
+    org_id: str = Depends(_require_path_org), body: ShadowPromoteBody = Body(...)
 ) -> dict[str, Any]:
     from eden.evaluation.eval_intel.integration import EvalToGuardrailLink
 

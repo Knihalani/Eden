@@ -390,11 +390,11 @@ Compliance `hipaa` → sweep runs in `observe` mode (plans created as `draft` on
 
 | Flag | Default | Purpose |
 |---|---|---|
-| `improvement_agent_v1` | `false` | Master gate for sweep + new routes |
-| `improvement_schedule_enabled` | `false` | Cron enqueue (manual `/runs` still works when agent on) |
+| `improvement_agent_v1` | `true` | Master gate for sweep + new routes (GA; kill via env / org features) |
+| `improvement_schedule_enabled` | `true` | Cron enqueue (weekly seed for new orgs; cadence editable in Settings → Autonomous) |
 | `code_change_enabled` | `false` (existing) | Hard kill-switch — inherited from N20 |
 
-Rollout: internal dogfood → 3 design partners with GitHub App → GA when N01 verify pass rate >90% on opened PRs.
+Rollout: GA default-on for new orgs + global settings. Kill via `IMPROVEMENT_AGENT_V1=false` or org `features` when needed.
 
 ---
 

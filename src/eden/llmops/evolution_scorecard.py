@@ -4,6 +4,9 @@ Kept in ``eden.llmops`` (not ``bench/``) so production containers can serve
 ``GET /orgs/{id}/improve/scorecard`` without copying the bench tree into the
 Docker image. ``bench.evolution.scorecard`` re-exports this module for the
 nightly evolution runner.
+
+Honesty: this is a **synthetic process-gate microbench** (inject budget +
+hot-path p95), not org production KPIs. ``org_id`` is unused on purpose.
 """
 
 from __future__ import annotations
@@ -53,6 +56,16 @@ def run_scorecard(suite: str = "smoke") -> dict[str, Any]:
     }
     if suite == "full":
         metrics["full_suite"] = True
-        metrics["lift_gate_pp"] = 0.0
-        metrics["cost_gate_usd"] = 0.0
-    return {"metrics": metrics, "failed": failed}
+        # Placeholders — not org production lift/cost; omit fake 0.0 KPIs.
+        metrics["lift_gate_pp"] = None
+        metrics["cost_gate_usd"] = None
+    return {
+        "metrics": metrics,
+        "failed": failed,
+        "synthetic": True,
+        "kind": "process_gate_microbench",
+        "disclaimer": (
+            "Synthetic engineering microbench / process gate — "
+            "not org production KPIs."
+        ),
+    }

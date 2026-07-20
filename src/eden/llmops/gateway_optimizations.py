@@ -7,15 +7,15 @@ layout. Each feature defaults ON and can be opted out per request.
 from __future__ import annotations
 
 import asyncio
-import copy
 import hashlib
-import json
 import logging
 import time
 from dataclasses import dataclass
 from typing import Any
 
 from eden.storage.redis import get_redis_client
+from eden.util.jsonx import dumps as json_dumps
+from eden.util.jsonx import loads as json_loads
 
 logger = logging.getLogger(__name__)
 
@@ -209,8 +209,9 @@ def _stable_json(value: Any) -> Any:
     if value is None:
         return None
     if hasattr(value, "model_dump"):
-        value = value.model_dump(exclude_none=True)
-    return json.loads(json.dumps(value, sort_keys=True, default=str))
+        return value.model_dump(exclude_none=True)
+    # Outer cache-key dump uses sort_keys=True; no need to round-trip here.
+    return value
 
 
 def cache_key_for_chat(
@@ -253,7 +254,10 @@ def cache_key_for_chat(
         "presence_penalty": presence_penalty,
         "frequency_penalty": frequency_penalty,
     }
-    canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"))
+    # sort_keys via stdlib for cross-orjson deterministic digests.
+    import json as _json
+
+    canonical = _json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str)
     digest = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
     return f"{_EXACT_CACHE_PREFIX}:{org_id}:{digest}"
 
@@ -261,6 +265,25 @@ def cache_key_for_chat(
 def _is_anthropic_provider(provider: str) -> bool:
     p = (provider or "").lower()
     return "anthropic" in p
+
+
+def _copy_messages_for_layout(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Shallow-copy message dicts (and list content) for safe mutation.
+
+    Cheaper than ``copy.deepcopy`` on large multimodal message trees;
+    nested dict parts are copied only when the Anthropic cache path
+    mutates list content.
+    """
+    out: list[dict[str, Any]] = []
+    for msg in messages:
+        copied = dict(msg)
+        content = copied.get("content")
+        if isinstance(content, list):
+            copied["content"] = [
+                dict(part) if isinstance(part, dict) else part for part in content
+            ]
+        out.append(copied)
+    return out
 
 
 def layout_for_provider_cache(
@@ -275,7 +298,7 @@ def layout_for_provider_cache(
     if not messages:
         return messages, False
 
-    out = copy.deepcopy(messages)
+    out = _copy_messages_for_layout(messages)
     applied = False
 
     # Stable ordering: system messages first (preserve relative order).
@@ -327,7 +350,7 @@ async def get_exact_cached_response(cache_key: str) -> dict[str, Any] | None:
         raw = await client.get(cache_key)
         if raw is None:
             return None
-        data = json.loads(raw)
+        data = json_loads(raw)
         if isinstance(data, dict):
             return data
     except Exception as exc:  # noqa: BLE001
@@ -345,7 +368,7 @@ async def set_exact_cached_response(
     if client is None:
         return
     try:
-        await client.set(cache_key, json.dumps(response), ex=ttl)
+        await client.set(cache_key, json_dumps(response), ex=ttl)
     except Exception as exc:  # noqa: BLE001
         logger.debug("gateway exact cache set failed: %s", exc)
 

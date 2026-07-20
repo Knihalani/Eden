@@ -21,7 +21,13 @@ from fastapi import APIRouter, Depends, HTTPException, Path, Query
 from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel, Field
 
-from eden.api.routes.auth import get_current_user
+from eden.api.deps import (
+    _try_resolve_token_payload,
+    get_current_user,
+    resolve_path_org_access,
+)
+from eden.api.utils.redact import redact_all
+from eden.api.utils.safe_error import raise_mapped_db_error
 from eden.evaluation.labeling import (
     Annotation,
     LabelingItem,
@@ -30,6 +36,22 @@ from eden.evaluation.labeling import (
 from eden.storage.postgres import get_postgres_client
 
 logger = logging.getLogger(__name__)
+
+
+def _annotation_value_error_status(exc: ValueError) -> int:
+    msg = str(exc).lower()
+    if "not found" in msg:
+        return 404
+    return 400
+
+
+async def _require_path_org(
+    org_id: str = Path(..., description="Organization ID"),
+    user: dict = Depends(get_current_user),
+    payload: dict | None = Depends(_try_resolve_token_payload),
+) -> str:
+    _, eden_org = await resolve_path_org_access(org_id, user, payload)
+    return eden_org
 
 
 router = APIRouter(
@@ -185,10 +207,9 @@ def _user_skills(uid: str) -> list[str]:
     summary="List labeling queue items with annotation counts",
 )
 async def list_items(
-    org_id: str = Path(...),
-    limit: int = Query(default=100, ge=1, le=500),
+    org_id: str = Depends(_require_path_org),
+    limit: int = Query(default=100, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
-    user: dict = Depends(get_current_user),
 ) -> LabelingItemsListResponse:
     pg = await get_postgres_client()
     svc = LabelingService(pg, user_skills=_user_skills)
@@ -206,24 +227,32 @@ async def list_items(
 )
 async def seed_item(
     body: SeedItemRequest,
-    org_id: str = Path(...),
-    user: dict = Depends(get_current_user),
+    org_id: str = Depends(_require_path_org),
 ) -> SeedItemResponse:
     pg = await get_postgres_client()
     svc = LabelingService(pg, user_skills=_user_skills)
-    item_id = await svc.seed(
-        org_id=org_id,
-        payload=body.payload,
-        label_schema=body.label_schema,
-        prompt=body.prompt,
-        tags=body.tags,
-        required_skills=body.required_skills,
-        annotations_required=body.annotations_required,
-        source_trace_id=body.source_trace_id,
-        source_span_id=body.source_span_id,
-        source_dataset_id=body.source_dataset_id,
-        source_synthetic_qa_id=body.source_synthetic_qa_id,
-    )
+    try:
+        item_id = await svc.seed(
+            org_id=org_id,
+            payload=body.payload,
+            label_schema=body.label_schema,
+            prompt=body.prompt,
+            tags=body.tags,
+            required_skills=body.required_skills,
+            annotations_required=body.annotations_required,
+            source_trace_id=body.source_trace_id,
+            source_span_id=body.source_span_id,
+            source_dataset_id=body.source_dataset_id,
+            source_synthetic_qa_id=body.source_synthetic_qa_id,
+        )
+    except Exception as exc:
+        logger.warning("seed_item failed: %s", redact_all(str(exc)))
+        raise_mapped_db_error(
+            exc,
+            fallback="labeling seed failed",
+            uuid_detail="Invalid organization id",
+            fk_detail="Organization not found",
+        )
     return SeedItemResponse(item_id=item_id)
 
 
@@ -234,7 +263,7 @@ async def seed_item(
 )
 async def annotate_trace(
     body: TraceAnnotateRequest,
-    org_id: str = Path(...),
+    org_id: str = Depends(_require_path_org),
     trace_id: str = Path(...),
     user: dict = Depends(get_current_user),
 ) -> AnnotationResponse:
@@ -255,9 +284,18 @@ async def annotate_trace(
         )
     except ValueError as exc:
         raise HTTPException(
-            status_code=400,
+            status_code=_annotation_value_error_status(exc),
             detail={"error": "invalid_annotation", "detail": str(exc)},
         ) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.warning("annotate_trace failed: %s", redact_all(str(exc)))
+        raise_mapped_db_error(
+            exc,
+            fallback="annotation failed",
+            uuid_detail="Invalid item or organization id",
+        )
     return _annotation_to_response(ann)
 
 
@@ -267,10 +305,9 @@ async def annotate_trace(
     summary="Pop the next N items for an annotator",
 )
 async def pop_queue(
-    org_id: str = Path(...),
+    org_id: str = Depends(_require_path_org),
     user_id: str = Path(...),
     limit: int = Query(default=5, ge=1, le=50),
-    user: dict = Depends(get_current_user),
 ) -> QueueResponse:
     pg = await get_postgres_client()
     svc = LabelingService(pg, user_skills=_user_skills)
@@ -287,7 +324,7 @@ async def pop_queue(
 )
 async def annotate(
     body: AnnotateRequest,
-    org_id: str = Path(...),
+    org_id: str = Depends(_require_path_org),
     user: dict = Depends(get_current_user),
 ) -> AnnotationResponse:
     user_id = str(user.get("id") or user.get("user_id") or user.get("sub"))
@@ -308,9 +345,18 @@ async def annotate(
         )
     except ValueError as exc:
         raise HTTPException(
-            status_code=400,
+            status_code=_annotation_value_error_status(exc),
             detail={"error": "invalid_annotation", "detail": str(exc)},
         ) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.warning("annotate failed: %s", redact_all(str(exc)))
+        raise_mapped_db_error(
+            exc,
+            fallback="annotation failed",
+            uuid_detail="Invalid item or organization id",
+        )
     return _annotation_to_response(ann)
 
 
@@ -320,7 +366,7 @@ async def annotate(
 )
 async def skip(
     body: SkipRequest,
-    org_id: str = Path(...),
+    org_id: str = Depends(_require_path_org),
     user: dict = Depends(get_current_user),
 ) -> dict[str, bool]:
     user_id = str(user.get("id") or user.get("user_id") or user.get("sub"))
@@ -341,9 +387,8 @@ async def skip(
     summary="Compute inter-annotator agreement (Cohen's kappa + Krippendorff's alpha)",
 )
 async def compute_iia(
-    org_id: str = Path(...),
+    org_id: str = Depends(_require_path_org),
     item_ids: list[str] | None = Query(default=None),
-    user: dict = Depends(get_current_user),
 ) -> IIAResponse:
     pg = await get_postgres_client()
     svc = LabelingService(pg, user_skills=_user_skills)
@@ -358,10 +403,9 @@ async def compute_iia(
     summary="Export approved annotations as JSONL",
 )
 async def export(
-    org_id: str = Path(...),
+    org_id: str = Depends(_require_path_org),
     status: str = Query(default="completed", pattern="^(pending|in_progress|completed|skipped)$"),
     limit: int = Query(default=10_000, ge=1, le=100_000),
-    user: dict = Depends(get_current_user),
 ) -> str:
     pg = await get_postgres_client()
     svc = LabelingService(pg, user_skills=_user_skills)
@@ -388,8 +432,7 @@ class PushDatasetRequest(BaseModel):
 
 @router.get("/queues")
 async def list_queues(
-    org_id: str = Path(...),
-    user: dict = Depends(get_current_user),
+    org_id: str = Depends(_require_path_org),
 ) -> dict[str, Any]:
     from eden.evaluation.labeling_queues import LabelingQueueService
 
@@ -400,22 +443,30 @@ async def list_queues(
 @router.post("/queues")
 async def create_queue(
     body: CreateQueueRequest,
-    org_id: str = Path(...),
-    user: dict = Depends(get_current_user),
+    org_id: str = Depends(_require_path_org),
 ) -> dict[str, Any]:
     from eden.evaluation.labeling_queues import LabelingQueueService
 
-    q = await LabelingQueueService().create_queue(
-        org_id, name=body.name, description=body.description, schema=body.label_schema
-    )
+    try:
+        q = await LabelingQueueService().create_queue(
+            org_id, name=body.name, description=body.description, schema=body.label_schema
+        )
+    except Exception as exc:
+        logger.warning("create_queue failed: %s", redact_all(str(exc)))
+        raise_mapped_db_error(
+            exc,
+            fallback="labeling queue create failed",
+            unique_detail="queue already exists",
+            uuid_detail="Invalid organization id",
+            fk_detail="Organization not found",
+        )
     return {"queue": q.to_dict()}
 
 
 @router.get("/queues/{queue_id}")
 async def get_queue(
-    org_id: str = Path(...),
+    org_id: str = Depends(_require_path_org),
     queue_id: str = Path(...),
-    user: dict = Depends(get_current_user),
 ) -> dict[str, Any]:
     from eden.evaluation.labeling_queues import LabelingQueueService
 
@@ -428,21 +479,20 @@ async def get_queue(
 
 @router.get("/queues/{queue_id}/board")
 async def queue_board(
-    org_id: str = Path(...),
+    org_id: str = Depends(_require_path_org),
     queue_id: str = Path(...),
-    user: dict = Depends(get_current_user),
+    limit: int = Query(100, ge=1, le=100),
 ) -> dict[str, Any]:
     from eden.evaluation.labeling_queues import LabelingQueueService
 
-    board = await LabelingQueueService().kanban_board(org_id, queue_id)
+    board = await LabelingQueueService().kanban_board(org_id, queue_id, limit=limit)
     return {"queue_id": queue_id, "board": board}
 
 
 @router.get("/queues/{queue_id}/iaa")
 async def queue_iaa(
-    org_id: str = Path(...),
+    org_id: str = Depends(_require_path_org),
     queue_id: str = Path(...),
-    user: dict = Depends(get_current_user),
 ) -> dict[str, Any]:
     """Cohen's κ from dual labels in item payload when present."""
     from eden.evaluation.iaa import iaa_from_annotation_pairs
@@ -470,9 +520,8 @@ async def queue_iaa(
 @router.post("/queues/{queue_id}/move")
 async def move_queue_item(
     body: MoveItemRequest,
-    org_id: str = Path(...),
+    org_id: str = Depends(_require_path_org),
     queue_id: str = Path(...),
-    user: dict = Depends(get_current_user),
 ) -> dict[str, Any]:
     from eden.evaluation.labeling_queues import LabelingQueueService
 
@@ -487,13 +536,15 @@ async def move_queue_item(
 @router.post("/queues/{queue_id}/push-to-dataset")
 async def push_queue_to_dataset(
     body: PushDatasetRequest,
-    org_id: str = Path(...),
+    org_id: str = Depends(_require_path_org),
     queue_id: str = Path(...),
-    user: dict = Depends(get_current_user),
 ) -> dict[str, Any]:
     from eden.evaluation.labeling_queues import LabelingQueueService
 
-    result = await LabelingQueueService().push_to_dataset(
-        org_id, queue_id, dataset_id=body.dataset_id
-    )
+    try:
+        result = await LabelingQueueService().push_to_dataset(
+            org_id, queue_id, dataset_id=body.dataset_id
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
     return result

@@ -9,16 +9,32 @@ from typing import Any
 from fastapi import APIRouter, Body, Depends, Path, Query
 from pydantic import BaseModel, Field
 
-from eden.api.deps import get_current_user, require_feature_flag
+from eden.api.deps import (
+    _try_resolve_token_payload,
+    get_current_user,
+    require_feature_flag,
+    resolve_path_org_access,
+)
 from eden.evaluation.production.sampler import ProductionEvalSampler
 
 _FLAG = "production_eval_sampling_v1"
+
+
+async def _require_path_org(
+    org_id: str = Path(..., description="Organization ID"),
+    user: dict = Depends(get_current_user),
+    payload: dict | None = Depends(_try_resolve_token_payload),
+) -> str:
+    _, eden_org = await resolve_path_org_access(org_id, user, payload)
+    return eden_org
+
+
 router = APIRouter(
     prefix="/orgs/{org_id}",
     tags=["production-eval"],
     dependencies=[
         Depends(require_feature_flag(_FLAG)),
-        Depends(get_current_user),
+        Depends(_require_path_org),
     ],
 )
 _sampler = ProductionEvalSampler()
@@ -43,14 +59,14 @@ class PolicyPatch(BaseModel):
 
 
 @router.get("/production-eval/policies")
-async def get_policies(org_id: str = Path(...)) -> dict[str, Any]:
+async def get_policies(org_id: str = Depends(_require_path_org)) -> dict[str, Any]:
     policy = await _sampler._resolve_policy(org_id, None)
     return _ok("production_eval", {"policy": policy})
 
 
 @router.patch("/production-eval/policies")
 async def patch_policy(
-    org_id: str = Path(...), body: PolicyPatch = Body(...)
+    org_id: str = Depends(_require_path_org), body: PolicyPatch = Body(...)
 ) -> dict[str, Any]:
     from eden.storage.postgres import get_postgres_client
 
@@ -94,7 +110,7 @@ async def patch_policy(
 
 @router.get("/agents/{agent_id}/quality/trend")
 async def quality_trend(
-    org_id: str = Path(...),
+    org_id: str = Depends(_require_path_org),
     agent_id: str = Path(...),
     hours: int = Query(168, ge=1, le=720),
 ) -> dict[str, Any]:
@@ -104,7 +120,7 @@ async def quality_trend(
 
 @router.post("/production-eval/score/{trace_id}")
 async def manual_score(
-    org_id: str = Path(...),
+    org_id: str = Depends(_require_path_org),
     trace_id: str = Path(...),
     agent_id: str | None = Query(None),
 ) -> dict[str, Any]:

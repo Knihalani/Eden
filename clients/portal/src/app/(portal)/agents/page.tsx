@@ -25,9 +25,11 @@ import { QueryState } from "@/components/ui/query-state";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card } from "@/components/ui/card";
+import { Panel } from "@/components/ui/panel";
 import { Button } from "@/components/ui/button";
 import { agentsApi, type AgentSummary } from "@/lib/api";
 import { useOrg } from "@/hooks/use-org";
+import { usePermissions } from "@/hooks/use-permissions";
 import { useState, useMemo, Suspense } from "react";
 import Link from "next/link";
 import dynamic from "next/dynamic";
@@ -82,6 +84,11 @@ export default function AgentsPage() {
 
 function AgentsPageInner() {
   const { currentOrg } = useOrg();
+  const { hasPermission } = usePermissions();
+  const canLinkRepo = hasPermission("integrations:write");
+  // API key create/revoke is owner/admin only (settings:edit). Members
+  // and viewers must not get a primary "API keys" first-run CTA.
+  const canManageKeys = hasPermission("settings:edit");
   const orgId = currentOrg?.id ?? null;
   const [tab, setTab] = useQueryTab("tab", AGENT_TABS, "agents");
   const [limit, setLimit] = useState(PAGE_SIZE);
@@ -132,45 +139,44 @@ function AgentsPageInner() {
       size="wide"
       header={
         <PageHeader
-          eyebrow="Build"
           title="Agents"
           subtitle={
             loading
               ? "Loading…"
               : `${total} registered · SDK first; link a repo only when you need GitHub listing.`
           }
-          icon={Bot}
           description="Agents appear after SDK/CLI registration. Linking a GitHub repo is optional."
           actions={
-            <div className="flex items-center gap-2">
-              <a
-                href={DOCS_QUICKSTART_URL}
-                target="_blank"
-                rel="noopener noreferrer"
-                aria-label="Open docs quickstart"
-                className="inline-flex min-h-11 items-center gap-1.5 rounded-lg bg-[var(--accent)] px-3 py-2 text-sm font-medium text-[var(--bg-primary)] transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]/40"
-              >
-                Docs quickstart
-              </a>
-              <Link
-                href="/agents/connect"
-                aria-label="Link a repository (optional)"
-                className="inline-flex min-h-11 items-center gap-1.5 rounded-lg border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-2 text-sm font-medium text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-tertiary)] hover:text-[var(--text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]/40"
-              >
-                <Plus className="w-4 h-4" />
-                Link repo
-              </Link>
-              {tab === "agents" && (
-              <Button
-                onClick={() => void agentsQuery.refetch()}
-                variant="outline"
-                size="default"
-                disabled={refreshing}
-                loading={refreshing}
-                aria-label="Refresh agents"
-              >
-                <RefreshCw className="h-4 w-4" /> Refresh
+            <div className="flex flex-wrap items-center gap-2">
+              <Button asChild className="min-h-11">
+                <a
+                  href={DOCS_QUICKSTART_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label="Open docs quickstart"
+                >
+                  Docs quickstart
+                </a>
               </Button>
+              {canLinkRepo ? (
+                <Button asChild variant="outline" className="min-h-11">
+                  <Link href="/agents/connect" aria-label="Link a repository (optional)">
+                    <Plus className="w-4 h-4" />
+                    Link repo
+                  </Link>
+                </Button>
+              ) : null}
+              {tab === "agents" && (
+                <Button
+                  onClick={() => void agentsQuery.refetch()}
+                  variant="ghost"
+                  size="default"
+                  disabled={refreshing}
+                  loading={refreshing}
+                  aria-label="Refresh agents"
+                >
+                  <RefreshCw className="h-4 w-4" /> Refresh
+                </Button>
               )}
             </div>
           }
@@ -223,44 +229,56 @@ function AgentsPageInner() {
         loadingSlot={
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
             {Array.from({ length: 6 }).map((_, i) => (
-              <Card key={i} className="p-5 space-y-3">
+              <Panel key={i} tone="flat" padding="md" className="space-y-3">
                 <Skeleton className="h-5 w-32" />
                 <Skeleton className="h-3 w-full" />
                 <Skeleton className="h-3 w-2/3" />
-              </Card>
+              </Panel>
             ))}
           </div>
         }
         emptySlot={
-          <Card className="p-8">
-            <EmptyState
-              icon={Bot}
-              title="No agents yet"
-              description="Register via the SDK or CLI after you create an API key. Linking a GitHub repo is optional and does not install the SDK."
-              size="lg"
-              action={
-                <div className="flex flex-col items-center gap-3 text-sm">
-                  <div className="flex flex-wrap items-center justify-center gap-2">
+          <EmptyState
+            icon={Bot}
+            title="No agents yet"
+            description={
+              canManageKeys
+                ? "Register via the SDK or CLI after you create an API key. Linking a GitHub repo is optional and does not install the SDK."
+                : "Register via the SDK or CLI after an admin shares an API key. Linking a GitHub repo is optional and requires an admin."
+            }
+            size="lg"
+            action={
+              <div className="flex flex-col items-center gap-3 text-sm">
+                <div className="flex flex-wrap items-center justify-center gap-2">
+                  <Button asChild className="min-h-11">
                     <a href={DOCS_QUICKSTART_URL} target="_blank" rel="noopener noreferrer">
-                      <Button className="min-h-11">Docs quickstart</Button>
+                      Docs quickstart
                     </a>
-                    <Link href="/settings?tab=api-keys">
-                      <Button variant="outline" className="min-h-11">Create API key</Button>
-                    </Link>
-                    <Link href="/agents/connect">
-                      <Button variant="outline" className="min-h-11">Link repo (optional)</Button>
-                    </Link>
-                  </div>
-                  <code className="px-3 py-1.5 rounded bg-[var(--bg-tertiary)] font-mono text-xs text-[var(--text-secondary)]">
-                    eden config discover-agents
-                  </code>
-                  <span className="text-xs text-[var(--text-muted)]">
-                    or call <code className="font-mono">register_agent()</code> at agent startup.
-                  </span>
+                  </Button>
+                  {canManageKeys ? (
+                    <Button asChild variant="outline" className="min-h-11">
+                      <Link href="/settings?tab=api-keys">Create API key</Link>
+                    </Button>
+                  ) : (
+                    <span className="text-xs text-[var(--text-muted)] px-3 py-2">
+                      Ask an admin for an API key
+                    </span>
+                  )}
+                  {canLinkRepo ? (
+                    <Button asChild variant="outline" className="min-h-11">
+                      <Link href="/agents/connect">Link repo (optional)</Link>
+                    </Button>
+                  ) : null}
                 </div>
-              }
-            />
-          </Card>
+                <code className="px-3 py-1.5 rounded bg-[var(--bg-tertiary)] font-mono text-xs text-[var(--text-secondary)]">
+                  eden config discover-agents
+                </code>
+                <span className="text-xs text-[var(--text-muted)]">
+                  or call <code className="font-mono">register_agent()</code> at agent startup.
+                </span>
+              </div>
+            }
+          />
         }
       >
         {() => (
@@ -313,7 +331,7 @@ function AgentsPageInner() {
             </div>
 
             {filtered.length === 0 ? (
-              <Card className="p-8 mt-3">
+              <div className="mt-3">
                 <EmptyState
                   icon={Search}
                   title="No matches"
@@ -321,6 +339,7 @@ function AgentsPageInner() {
                   size="sm"
                   action={
                     <button
+                      type="button"
                       onClick={() => {
                         setSearch("");
                         setFrameworkFilter("");
@@ -331,7 +350,7 @@ function AgentsPageInner() {
                     </button>
                   }
                 />
-              </Card>
+              </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3 mt-3">
                 {filtered.map((a) => (

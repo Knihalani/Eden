@@ -19,10 +19,7 @@ function ImprovePillar({ pillar }: { pillar: (typeof PILLARS)[number] }) {
           <div className="w-10 h-10 rounded-lg bg-[var(--bg-tertiary)] border border-[var(--border-subtle)] flex items-center justify-center mb-5">
             <Icon className="w-5 h-5 text-[var(--accent)]" aria-hidden />
           </div>
-          <h3
-            className="text-xl font-semibold text-[var(--text-primary)] mb-3 tracking-tight"
-            style={{ letterSpacing: "-0.02em" }}
-          >
+          <h3 className="marketing-h3 mb-3">
             {pillar.title}
           </h3>
           <p className="text-sm text-[var(--text-secondary)] leading-relaxed mb-6">
@@ -100,13 +97,10 @@ export function Pillars() {
     >
       <div className="max-w-7xl mx-auto">
         <div className="max-w-2xl mb-14">
-          <h2
-            className="text-3xl md:text-4xl font-bold text-[var(--text-primary)] tracking-tight mb-4"
-            style={{ letterSpacing: "-0.03em", lineHeight: 1.08 }}
-          >
+          <h2 className="marketing-h2 mb-4">
             Capture. Analyse. Improve.
           </h2>
-          <p className="text-[var(--text-secondary)] leading-relaxed">
+          <p className="text-[var(--text-secondary)] leading-relaxed max-w-[42ch]">
             Instrument once, read every call, then close the loop when evals
             regress — with a human still on the open-PR decision.
           </p>
@@ -126,10 +120,7 @@ export function Pillars() {
                 <div className="w-10 h-10 rounded-lg bg-[var(--bg-tertiary)] border border-[var(--border-subtle)] flex items-center justify-center mb-5">
                   <Icon className="w-5 h-5 text-[var(--accent)]" aria-hidden />
                 </div>
-                <h3
-                  className="text-lg font-semibold text-[var(--text-primary)] mb-2 tracking-tight"
-                  style={{ letterSpacing: "-0.015em" }}
-                >
+                <h3 className="marketing-h3 mb-2">
                   {p.title}
                 </h3>
                 <p className="text-sm text-[var(--text-secondary)] leading-relaxed mb-5">

@@ -5,6 +5,8 @@ Provides connection pooling via PgBouncer and typed clients for each KB layer.
 
 from __future__ import annotations
 
+import asyncio
+import contextlib
 import json
 import logging
 from collections.abc import AsyncIterator, Iterable, Sequence
@@ -18,6 +20,7 @@ from asyncpg import Connection, Pool
 from asyncpg.transaction import Transaction
 
 from eden.config import get_settings
+from eden.util.jsonx import dumps as _jsonx_dumps
 
 logger = logging.getLogger(__name__)
 
@@ -25,14 +28,14 @@ logger = logging.getLogger(__name__)
 def _dump_jsonb(value):
     """Compact JSON serialiser used by every JSONB column in this module.
 
-    Returns ``None`` for ``None`` so the DB sees NULL. Compact
-    separators save ~10% vs the stdlib default; ``default=str``
+    Returns ``None`` for ``None`` so the DB sees NULL. Uses
+    ``eden.util.jsonx`` (orjson) on the hot path; ``default=str``
     matches the convention used by ``telemetry_collector._route_postgres``
     so the round-trip is identical.
     """
     if value is None:
         return None
-    return json.dumps(value, default=str, separators=(",", ":"))
+    return _jsonx_dumps(value, default=str)
 # Note: ``settings`` is intentionally NOT bound to a module-level
 # reference — every method that needs a setting calls ``get_settings()``
 # (lru_cache'd, so the cost is one dict lookup) so that tests can
@@ -516,6 +519,22 @@ class PostgresClient:
             RETURNING job_id
         """
         result = await self.fetchval(query, job_id, status, current_stage, outcome_tier, updated_at)
+        if result is not None:
+            # A6: wake job WS / mobile SSE waiters (fire-and-forget).
+            with contextlib.suppress(Exception):
+                from eden.api.routes.websocket import publish_job_event
+
+                asyncio.create_task(
+                    publish_job_event(
+                        job_id,
+                        {
+                            "job_id": job_id,
+                            "status": status,
+                            "current_stage": current_stage,
+                            "outcome_tier": outcome_tier,
+                        },
+                    )
+                )
         return result is not None
 
     async def list_jobs(
@@ -549,7 +568,11 @@ class PostgresClient:
             param_idx += 1
 
         if q:
-            conditions.append(f"(job_id ILIKE ${param_idx} OR request::text ILIKE ${param_idx})")
+            # Prefer expression-index-friendly predicates (migration 113
+            # adds gin_trgm on job_id and request::text).
+            conditions.append(
+                f"(job_id ILIKE ${param_idx} OR request::text ILIKE ${param_idx})"
+            )
             params.append(f"%{q}%")
             param_idx += 1
 
@@ -638,6 +661,16 @@ class PostgresClient:
             RETURNING job_id
         """
         result = await self.fetchval(query, job_id, field, _dump_jsonb(value))
+        if result is not None:
+            with contextlib.suppress(Exception):
+                from eden.api.routes.websocket import publish_job_event
+
+                asyncio.create_task(
+                    publish_job_event(
+                        job_id,
+                        {"job_id": job_id, "blob_field": field},
+                    )
+                )
         return result is not None
 
     async def get_checkpoint_blob(self, job_id: str, field: str) -> dict | None:

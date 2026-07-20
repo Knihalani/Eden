@@ -110,12 +110,14 @@ export default function ImprovementLoopOnboardingPage() {
               description="Send traces via SDK or gateway first. Linking a GitHub repo is optional — Connect is not required to teach the loop."
               action={
                 <div className="flex flex-wrap items-center justify-center gap-2">
-                  <a href={DOCS_QUICKSTART_URL} target="_blank" rel="noopener noreferrer">
-                    <Button className="min-h-11">Docs quickstart</Button>
-                  </a>
-                  <Link href="/settings?tab=api-keys">
-                    <Button variant="outline" className="min-h-11">Create API key</Button>
-                  </Link>
+                  <Button asChild className="min-h-11">
+                    <a href={DOCS_QUICKSTART_URL} target="_blank" rel="noopener noreferrer">
+                      Docs quickstart
+                    </a>
+                  </Button>
+                  <Button asChild variant="outline" className="min-h-11">
+                    <Link href="/settings?tab=api-keys">Create API key</Link>
+                  </Button>
                 </div>
               }
             />

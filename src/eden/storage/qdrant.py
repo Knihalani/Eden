@@ -3,6 +3,7 @@
 Provides hybrid dense+sparse vector search for semantic memory retrieval.
 """
 
+import asyncio
 import logging
 import re
 from dataclasses import dataclass
@@ -54,10 +55,64 @@ class SearchResult:
 
 @dataclass
 class SearchResults:
-    """Collection of search results."""
+    """Collection of search results.
+
+    ``unavailable=True`` means Qdrant soft-failed (transport / 5xx).
+    Callers should treat that as a "search unavailable" banner, not an
+    empty index — aligned with Wave 1.3 soft-dep + Typesense fallback.
+    """
 
     results: list[SearchResult]
     total: int
+    unavailable: bool = False
+
+
+def _empty_unavailable(op: str, exc: BaseException) -> SearchResults:
+    """Soft-degrade: log and return empty results instead of raising 500."""
+    logger.warning("Qdrant %s soft-failed (feature degrade): %s", op, exc)
+    return SearchResults(results=[], total=0, unavailable=True)
+
+
+def resolve_qdrant_client_kwargs(
+    *,
+    host: str,
+    port: int,
+    https: bool,
+    api_key: str = "",
+) -> dict[str, Any]:
+    """Resolve QdrantClient constructor kwargs from settings-like inputs.
+
+    Prod Errno 99 root cause (July 2026): when ``QDRANT_HTTPS`` was unset
+    **or** ``QDRANT_API_KEY`` was empty, the old client path used plain
+    ``host=``/``port=`` (HTTP) against Qdrant Cloud. That surfaces as
+    ``[Errno 99] Cannot assign requested address``. HTTPS must not be
+    gated on the API key; Cloud hostnames auto-upgrade to HTTPS when the
+    flag is missing.
+    """
+    host = (host or "").strip()
+    key = (api_key or "").strip()
+    use_https = bool(https)
+    if not use_https and host.endswith(".cloud.qdrant.io"):
+        use_https = True
+        logger.warning(
+            "QDRANT_HTTPS unset/false but host %r looks like Qdrant Cloud; "
+            "forcing HTTPS url= construction to avoid Errno 99",
+            host,
+        )
+    if use_https:
+        kwargs: dict[str, Any] = {"url": f"https://{host}:{port}"}
+        if key:
+            kwargs["api_key"] = key
+        else:
+            logger.warning(
+                "Qdrant HTTPS enabled but QDRANT_API_KEY is empty — "
+                "Cloud clusters will reject unauthenticated requests"
+            )
+        return kwargs
+    kwargs = {"host": host, "port": port}
+    if key:
+        kwargs["api_key"] = key
+    return kwargs
 
 
 class QdrantClientWrapper:
@@ -90,20 +145,20 @@ class QdrantClientWrapper:
         requested address`` on the cloud cluster because the gateway
         redirects to HTTPS on a different port. Using ``url=https://...``
         avoids that and matches the qdrant-client docs' Cloud recipe.
+
+        ``QDRANT_HTTPS`` alone selects the HTTPS url path — the API key
+        is optional at construction time (warned if missing) so a missing
+        secret no longer silently falls back to plain HTTP.
         """
         if self._client is None:
-            if _get_settings().qdrant_https and _get_settings().qdrant_api_key:
-                url = f"https://{self.host}:{self.port}"
-                self._client = QdrantClient(
-                    url=url,
-                    api_key=_get_settings().qdrant_api_key,
-                )
-            else:
-                # Legacy path: plain HTTP Qdrant on host/port (local dev).
-                self._client = QdrantClient(
-                    host=self.host,
-                    port=self.port,
-                )
+            settings = _get_settings()
+            kwargs = resolve_qdrant_client_kwargs(
+                host=self.host,
+                port=self.port,
+                https=bool(settings.qdrant_https),
+                api_key=settings.qdrant_api_key or "",
+            )
+            self._client = QdrantClient(**kwargs)
         return self._client
 
     def initialize_collections(self) -> None:
@@ -116,9 +171,12 @@ class QdrantClientWrapper:
         index in RAM while pushing the (usually large) payload to
         disk. For existing collections, run
         ``scripts/qdrant_enable_quantization.py`` to reindex.
-        """
-        client = self._get_client()
 
+        Soft on transport failure: Qdrant is a soft dep (Wave 1.3 /
+        8.5). Raising here would turn startup / admin paths into 500s
+        while Postgres is healthy; ``/health`` still sees Errno 99 via
+        direct ``get_collections`` probes.
+        """
         collections_to_create = {
             f"{self.collection_prefix}semantic_memory": {
                 "vector_size": 1536,
@@ -134,29 +192,36 @@ class QdrantClientWrapper:
             },
         }
 
-        existing = {c.name for c in client.get_collections().collections}
-        for name, config in collections_to_create.items():
-            if name not in existing:
-                # ``config`` is built from a literal above, so the values
-                # are concrete (not Any). Cast through the static types so
-                # mypy is happy.
-                client.create_collection(
-                    collection_name=name,
-                    vectors_config=models.VectorParams(
-                        size=int(config["vector_size"]),
-                        distance=models.Distance(config["distance"]),
-                        on_disk=True,
-                    ),
-                    quantization_config=models.ScalarQuantization(
-                        scalar=models.ScalarQuantizationConfig(
-                            type=models.ScalarType.INT8,
-                            quantile=0.99,
-                            always_ram=True,
+        try:
+            client = self._get_client()
+            existing = {c.name for c in client.get_collections().collections}
+            for name, config in collections_to_create.items():
+                if name not in existing:
+                    # ``config`` is built from a literal above, so the values
+                    # are concrete (not Any). Cast through the static types so
+                    # mypy is happy.
+                    client.create_collection(
+                        collection_name=name,
+                        vectors_config=models.VectorParams(
+                            size=int(config["vector_size"]),
+                            distance=models.Distance(config["distance"]),
+                            on_disk=True,
                         ),
-                    ),
-                    on_disk_payload=True,
-                )
-                logger.info(f"Created Qdrant collection: {name}")
+                        quantization_config=models.ScalarQuantization(
+                            scalar=models.ScalarQuantizationConfig(
+                                type=models.ScalarType.INT8,
+                                quantile=0.99,
+                                always_ram=True,
+                            ),
+                        ),
+                        on_disk_payload=True,
+                    )
+                    logger.info(f"Created Qdrant collection: {name}")
+        except Exception as e:
+            logger.warning(
+                "Qdrant initialize_collections soft-failed (feature degrade): %s",
+                e,
+            )
 
     def search(
         self,
@@ -176,9 +241,11 @@ class QdrantClientWrapper:
             score_threshold: Minimum score threshold
 
         Returns:
-            SearchResults with matched points
+            SearchResults with matched points. On soft-dep failure
+            (Errno 99, timeout, upstream 5xx) returns empty results
+            with ``unavailable=True`` instead of raising — feature
+            paths show a banner; ``/health`` still reports degraded.
         """
-        client = self._get_client()
         collection_name = f"{self.collection_prefix}{collection}"
 
         filter_condition = None
@@ -186,6 +253,7 @@ class QdrantClientWrapper:
             filter_condition = self._build_filter(query_filter)
 
         try:
+            client = self._get_client()
             results = client.search(
                 collection_name=collection_name,
                 query_vector=query_vector,
@@ -211,7 +279,9 @@ class QdrantClientWrapper:
             if e.status_code == 404:
                 logger.warning(f"Collection not found: {collection_name}")
                 return SearchResults(results=[], total=0)
-            raise
+            return _empty_unavailable("search", e)
+        except Exception as e:
+            return _empty_unavailable("search", e)
 
     def search_hybrid(
         self,
@@ -235,9 +305,9 @@ class QdrantClientWrapper:
             sparse_weight: Weight for sparse/keyword results (0.0-1.0)
 
         Returns:
-            SearchResults with fused ranked results
+            SearchResults with fused ranked results. Propagates
+            ``unavailable`` when dense search soft-failed.
         """
-        self._get_client()
         collection_name = f"{self.collection_prefix}{collection}"
 
         # Perform dense vector search
@@ -255,7 +325,11 @@ class QdrantClientWrapper:
             sparse_weight=sparse_weight,
         )
 
-        return SearchResults(results=fused[:limit], total=len(fused))
+        return SearchResults(
+            results=fused[:limit],
+            total=len(fused),
+            unavailable=bool(dense_results.unavailable),
+        )
 
     def _sparse_search(
         self,
@@ -402,7 +476,7 @@ class QdrantClientWrapper:
             points: List of points with id, vector, payload
 
         Returns:
-            True if successful
+            True if successful, False on soft-dep failure (do not 500).
 
         v1.8 (storage-optimisation pass): chunks the call to
         ``_UPSERT_BATCH_SIZE`` so a 10K-point batch doesn't time
@@ -413,21 +487,25 @@ class QdrantClientWrapper:
         """
         if not points:
             return True
-        client = self._get_client()
         collection_name = f"{self.collection_prefix}{collection}"
-        for i in range(0, len(points), self._UPSERT_BATCH_SIZE):
-            chunk = points[i : i + self._UPSERT_BATCH_SIZE]
-            qdrant_points = [
-                models.PointStruct(
-                    id=p["id"],
-                    vector=p["vector"],
-                    payload=p.get("payload", {}),
-                )
-                for p in chunk
-            ]
-            client.upsert(collection_name=collection_name, points=qdrant_points)
-        logger.debug(f"Upserted {len(points)} points to {collection_name}")
-        return True
+        try:
+            client = self._get_client()
+            for i in range(0, len(points), self._UPSERT_BATCH_SIZE):
+                chunk = points[i : i + self._UPSERT_BATCH_SIZE]
+                qdrant_points = [
+                    models.PointStruct(
+                        id=p["id"],
+                        vector=p["vector"],
+                        payload=p.get("payload", {}),
+                    )
+                    for p in chunk
+                ]
+                client.upsert(collection_name=collection_name, points=qdrant_points)
+            logger.debug(f"Upserted {len(points)} points to {collection_name}")
+            return True
+        except Exception as e:
+            logger.warning("Qdrant upsert soft-failed (feature degrade): %s", e)
+            return False
 
     def scroll_all(
         self,
@@ -446,54 +524,69 @@ class QdrantClientWrapper:
 
         Mirrors the ``tests/unit/storage/test_qdrant_quantization.py::
         TestScrollAll`` shape so callers can rely on a uniform API
-        across the SDK.
+        across the SDK. Soft-dep failure returns ``[]``.
         """
-        client = self._get_client()
         collection_name = f"{self.collection_prefix}{collection}"
         out: list[dict] = []
         offset: Any = None
-        while True:
-            points, next_offset = client.scroll(
-                collection_name=collection_name,
-                limit=limit,
-                offset=offset,
-                with_vectors=with_vectors,
-                with_payload=with_payload,
-            )
-            for p in points:
-                out.append({
-                    "id": str(p.id),
-                    "vector": getattr(p, "vector", None) if with_vectors else None,
-                    "payload": p.payload or {},
-                })
-            if next_offset is None or not points:
-                break
-            offset = next_offset
-        return out
+        try:
+            client = self._get_client()
+            while True:
+                points, next_offset = client.scroll(
+                    collection_name=collection_name,
+                    limit=limit,
+                    offset=offset,
+                    with_vectors=with_vectors,
+                    with_payload=with_payload,
+                )
+                for p in points:
+                    out.append({
+                        "id": str(p.id),
+                        "vector": getattr(p, "vector", None) if with_vectors else None,
+                        "payload": p.payload or {},
+                    })
+                if next_offset is None or not points:
+                    break
+                offset = next_offset
+            return out
+        except Exception as e:
+            logger.warning("Qdrant scroll_all soft-failed (feature degrade): %s", e)
+            return []
 
     def delete(self, collection: str, point_ids: list[str]) -> bool:
-        """Delete points from a collection."""
-        client = self._get_client()
-        collection_name = f"{self.collection_prefix}{collection}"
+        """Delete points from a collection.
 
-        client.delete(
-            collection_name=collection_name,
-            points_selector=models.PointIdsList(points=point_ids),
-        )
-        return True
+        Returns False on soft-dep failure instead of raising.
+        """
+        collection_name = f"{self.collection_prefix}{collection}"
+        try:
+            client = self._get_client()
+            client.delete(
+                collection_name=collection_name,
+                points_selector=models.PointIdsList(points=point_ids),
+            )
+            return True
+        except Exception as e:
+            logger.warning("Qdrant delete soft-failed (feature degrade): %s", e)
+            return False
 
     def count(self, collection: str, filter_cond: dict | None = None) -> int:
-        """Count points in a collection."""
-        client = self._get_client()
+        """Count points in a collection.
+
+        Returns 0 on soft-dep failure instead of raising.
+        """
         collection_name = f"{self.collection_prefix}{collection}"
-
-        filter_condition = self._build_filter(filter_cond) if filter_cond else None
-
-        result = client.count(
-            collection_name=collection_name,
-            count_filter=filter_condition,
-        )
-        return result.count
+        try:
+            client = self._get_client()
+            filter_condition = self._build_filter(filter_cond) if filter_cond else None
+            result = client.count(
+                collection_name=collection_name,
+                count_filter=filter_condition,
+            )
+            return result.count
+        except Exception as e:
+            logger.warning("Qdrant count soft-failed (feature degrade): %s", e)
+            return 0
 
     def _build_filter(self, filter_dict: dict) -> models.Filter:
         """Build a Qdrant filter from a dict.
@@ -559,6 +652,31 @@ class QdrantClientWrapper:
                 ))
 
         return models.Filter(must=must) if must else None
+
+    # ── Async wrappers (Wave-1 A4 / K17) ──────────────────────────────
+    # Sync qdrant-client calls block the event loop; route them via
+    # ``asyncio.to_thread`` so async callers (vector_client) stay non-blocking.
+
+    async def search_async(self, *args, **kwargs):
+        return await asyncio.to_thread(self.search, *args, **kwargs)
+
+    async def search_hybrid_async(self, *args, **kwargs):
+        return await asyncio.to_thread(self.search_hybrid, *args, **kwargs)
+
+    async def upsert_async(self, *args, **kwargs):
+        return await asyncio.to_thread(self.upsert, *args, **kwargs)
+
+    async def delete_async(self, *args, **kwargs):
+        return await asyncio.to_thread(self.delete, *args, **kwargs)
+
+    async def count_async(self, *args, **kwargs):
+        return await asyncio.to_thread(self.count, *args, **kwargs)
+
+    async def scroll_all_async(self, *args, **kwargs):
+        return await asyncio.to_thread(self.scroll_all, *args, **kwargs)
+
+    async def initialize_collections_async(self, *args, **kwargs):
+        return await asyncio.to_thread(self.initialize_collections, *args, **kwargs)
 
 
 # Singleton instance

@@ -104,8 +104,8 @@ class ExactMatchCache:
             )
             self._hits += 1
             latency_ms = (time.monotonic() - t0) * 1000.0
-            # Update hit counter in Redis
-            await client.incr(f"{self.prefix}:stats:hits")
+            # In-process counters only — avoid a Redis INCR on every hit
+            # (that doubled Upstash command volume on the cache hot path).
             # Phase 7.1a.4 — emit cache-hit telemetry so the cache's
             # contribution to overall latency is visible. Best-effort.
             await _maybe_emit_cache_hit(
@@ -121,6 +121,77 @@ class ExactMatchCache:
             logger.warning(f"Exact cache read error: {e}")
             self._misses += 1
             return None
+
+    async def set(
+        self,
+        prompt: str,
+        model: str,
+        response: LLMResponse,
+        temperature: float = 0.7,
+        max_tokens: int = 4096,
+        system_prompt: str | None = None,
+        ttl: int | None = None,
+    ) -> bool:
+        """Cache a response."""
+        key = self._make_key(prompt, model, temperature, max_tokens, system_prompt)
+        client = await get_redis_client()
+        if client is None:
+            return False
+
+        try:
+            data = {
+                "content": response.content,
+                "usage": {
+                    "prompt_tokens": response.usage.prompt_tokens,
+                    "completion_tokens": response.usage.completion_tokens,
+                    "total_tokens": response.usage.total_tokens,
+                    "cost": response.usage.cost,
+                    "cache_reads": response.usage.cache_reads,
+                    "cache_writes": response.usage.cache_writes,
+                },
+                "model": response.model,
+                "finish_reason": response.finish_reason,
+            }
+            await client.setex(key, ttl or self.ttl, json.dumps(data))
+            return True
+        except Exception as e:
+            logger.warning(f"Exact cache write error: {e}")
+            return False
+
+    async def invalidate(self, pattern: str = "*") -> int:
+        """Invalidate cache entries matching a pattern.
+
+        Uses SCAN (not KEYS) so invalidation does not block Redis or
+        burn Upstash quota on a full keyspace walk.
+        """
+        client = await get_redis_client()
+        if client is None:
+            return 0
+        try:
+            deleted = 0
+            match = f"{self.prefix}:{pattern}"
+            batch: list[str] = []
+            async for key in client.scan_iter(match=match, count=200):
+                batch.append(key.decode() if isinstance(key, bytes) else str(key))
+                if len(batch) >= 200:
+                    deleted += int(await client.delete(*batch))
+                    batch.clear()
+            if batch:
+                deleted += int(await client.delete(*batch))
+            return deleted
+        except Exception as e:
+            logger.warning(f"Cache invalidation error: {e}")
+        return 0
+
+    def get_stats(self) -> dict:
+        """Return cache statistics."""
+        total = self._hits + self._misses
+        return {
+            "hits": self._hits,
+            "misses": self._misses,
+            "hit_rate": round(self._hits / total, 4) if total else 0.0,
+            "ttl_seconds": self.ttl,
+        }
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -167,66 +238,6 @@ async def _maybe_emit_cache_hit(
         )
     except Exception as exc:
         logger.debug("cache-hit telemetry emit failed: %s", exc)
-
-    async def set(
-        self,
-        prompt: str,
-        model: str,
-        response: LLMResponse,
-        temperature: float = 0.7,
-        max_tokens: int = 4096,
-        system_prompt: str | None = None,
-        ttl: int | None = None,
-    ) -> bool:
-        """Cache a response."""
-        key = self._make_key(prompt, model, temperature, max_tokens, system_prompt)
-        client = await get_redis_client()
-        if client is None:
-            return False
-
-        try:
-            data = {
-                "content": response.content,
-                "usage": {
-                    "prompt_tokens": response.usage.prompt_tokens,
-                    "completion_tokens": response.usage.completion_tokens,
-                    "total_tokens": response.usage.total_tokens,
-                    "cost": response.usage.cost,
-                    "cache_reads": response.usage.cache_reads,
-                    "cache_writes": response.usage.cache_writes,
-                },
-                "model": response.model,
-                "finish_reason": response.finish_reason,
-            }
-            await client.setex(key, ttl or self.ttl, json.dumps(data))
-            await client.incr(f"{self.prefix}:stats:sets")
-            return True
-        except Exception as e:
-            logger.warning(f"Exact cache write error: {e}")
-            return False
-
-    async def invalidate(self, pattern: str = "*") -> int:
-        """Invalidate cache entries matching a pattern."""
-        client = await get_redis_client()
-        if client is None:
-            return 0
-        try:
-            keys = await client.keys(f"{self.prefix}:{pattern}")
-            if keys:
-                return await client.delete(*keys)
-        except Exception as e:
-            logger.warning(f"Cache invalidation error: {e}")
-        return 0
-
-    def get_stats(self) -> dict:
-        """Return cache statistics."""
-        total = self._hits + self._misses
-        return {
-            "hits": self._hits,
-            "misses": self._misses,
-            "hit_rate": round(self._hits / total, 4) if total else 0.0,
-            "ttl_seconds": self.ttl,
-        }
 
 
 class SemanticCache:

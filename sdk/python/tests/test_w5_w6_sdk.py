@@ -49,6 +49,19 @@ def test_offline_queue_roundtrip(tmp_path: Path) -> None:
     assert q.size() == 0
 
 
+def test_offline_queue_enqueue_many_single_txn(tmp_path: Path) -> None:
+    """Batch spill inserts N rows with one commit (not N commits)."""
+    q = OfflineQueue(tmp_path / "q_batch.sqlite3", max_rows=1000)
+    items = [("openai", {"event_id": f"e{i}"}) for i in range(50)]
+    q.enqueue_many(items)
+    assert q.size() == 50
+    drained = q.drain(limit=100)
+    assert [p["event_id"] for _, _, p in drained] == [f"e{i}" for i in range(50)]
+    q.ack([rid for rid, _, _ in drained])
+    assert q.size() == 0
+    q.close()
+
+
 def test_detect_includes_bedrock_gemini_keys() -> None:
     detected = eden.detect_installed_frameworks()
     assert "bedrock" in detected

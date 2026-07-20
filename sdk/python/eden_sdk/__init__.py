@@ -35,17 +35,6 @@ from eden_sdk._tokens import extract_usage, normalize_model_name
 from eden_sdk.client import EdenClient, get_default_client
 from eden_sdk.config import EdenConfig, configure, get_config, reset_config
 from eden_sdk.filters import FilterConfig, PIIConfig, redact_payload
-from eden_sdk.gateway_session import chat_completion, openai_client
-from eden_sdk.stumbles import record_stumble
-from eden_sdk.model_advisor import (
-    ModelAdvisor,
-    ModelAdvisorError,
-    ModelComparison,
-    ModelSpec,
-    Recommendation,
-    RunnerUp,
-    SwitchProjection,
-)
 from eden_sdk.trace import (
     Span,
     TraceContext,
@@ -54,12 +43,27 @@ from eden_sdk.trace import (
     trace,
     trace_agent,
 )
-from eden_sdk.live import (
-    LiveSpanPublisher,
-    emit_span_live,
-    get_live_publisher,
-    live_mode_enabled,
-)
+
+# Heavy / rarely-needed surfaces are lazy (PEP 562) — see ``__getattr__``.
+# Eager-importing gateway_session / stumbles / live / model_advisor
+# pulled httpx.Client helpers and optional OpenAI wiring on every
+# ``import eden_sdk``, even for enqueue-only users.
+_LAZY_EXPORTS: dict[str, tuple[str, str]] = {
+    "chat_completion": ("eden_sdk.gateway_session", "chat_completion"),
+    "openai_client": ("eden_sdk.gateway_session", "openai_client"),
+    "record_stumble": ("eden_sdk.stumbles", "record_stumble"),
+    "LiveSpanPublisher": ("eden_sdk.live", "LiveSpanPublisher"),
+    "emit_span_live": ("eden_sdk.live", "emit_span_live"),
+    "get_live_publisher": ("eden_sdk.live", "get_live_publisher"),
+    "live_mode_enabled": ("eden_sdk.live", "live_mode_enabled"),
+    "ModelAdvisor": ("eden_sdk.model_advisor", "ModelAdvisor"),
+    "ModelAdvisorError": ("eden_sdk.model_advisor", "ModelAdvisorError"),
+    "ModelComparison": ("eden_sdk.model_advisor", "ModelComparison"),
+    "ModelSpec": ("eden_sdk.model_advisor", "ModelSpec"),
+    "Recommendation": ("eden_sdk.model_advisor", "Recommendation"),
+    "RunnerUp": ("eden_sdk.model_advisor", "RunnerUp"),
+    "SwitchProjection": ("eden_sdk.model_advisor", "SwitchProjection"),
+}
 
 __all__ = [
     # Configuration
@@ -85,6 +89,7 @@ __all__ = [
     # Auto-instrumentation
     "instrument",
     "uninstrument",
+    "init",
     "autoInstrument",
     "detect_installed_frameworks",
     # Tier-2 universal fallback
@@ -125,12 +130,54 @@ __all__ = [
     "AgentSession",
 ]
 
-__version__ = "0.3.1"
+__version__ = "0.3.2"
 
 
 # Lazy instrumentation registry — the per-framework modules are
 # imported on demand so the SDK works for users that only need a subset.
 INSTRUMENTED: set[str] = set()
+
+# Docs / PyPI extras / DEPLOY notes often use hyphenated names
+# (``pydantic-ai``, ``llama-index``). Canonical module keys use
+# underscores. Map both so ``eden.instrument("pydantic-ai")`` works.
+_FRAMEWORK_ALIASES: dict[str, str] = {
+    "pydantic-ai": "pydantic_ai",
+    "llama-index": "llama_index",
+    "llamaindex": "llama_index",
+    "http-capture": "http_capture",
+}
+
+# OpenAI-compatible providers → native openai instrumentor.
+_PROVIDER_INSTRUMENT_TARGETS: dict[str, str] = {
+    "ollama": "openai",
+    "ollama_cloud": "openai",
+    "vllm": "openai",
+    "lmstudio": "openai",
+    "llamacpp": "openai",
+    "openrouter": "openai",
+    "minimax": "openai",
+}
+
+
+def _canonical_framework(name: str) -> str | None:
+    """Resolve a user-facing framework name to an instrumentations key.
+
+    Returns ``None`` when the name is not a known target (caller may
+    warn). Accepts underscore form, hyphen form, and OpenAI-compat
+    provider ids used by onboarding.
+    """
+    if name in ("http_capture", "http-capture"):
+        return "http_capture"
+    mapped = _FRAMEWORK_ALIASES.get(name, name)
+    mapped = _PROVIDER_INSTRUMENT_TARGETS.get(mapped, mapped)
+    from eden_sdk import instrumentations
+
+    if mapped in instrumentations.__all__ or mapped == "http_capture":
+        return mapped
+    underscored = name.replace("-", "_")
+    if underscored != name and underscored in instrumentations.__all__:
+        return underscored
+    return None
 
 
 def instrument(*frameworks: str) -> None:
@@ -141,14 +188,44 @@ def instrument(*frameworks: str) -> None:
     *frameworks
         Names of frameworks to instrument. Allowed values:
         ``"openai"``, ``"anthropic"``, ``"langchain"``, ``"llama_index"``,
-        ``"crewai"``, ``"autogen"``, ``"mastra"``, ``"pydantic_ai"``.
+        ``"crewai"``, ``"autogen"``, ``"mastra"``, ``"pydantic_ai"``,
+        ``"bedrock"``, ``"gemini"``. Hyphenated aliases
+        (``"pydantic-ai"``, ``"llama-index"``) and OpenAI-compat
+        provider ids (``"ollama"``, ``"vllm"``, …) are accepted.
         Pass ``"http_capture"`` to enable universal httpx patching.
         If no name is given, all currently-importable frameworks are instrumented.
+
+    Note
+    ----
+    OTel bridge and native ``instrument()`` are mutually exclusive
+    (XOR). If :func:`configure_otel_exporter` is already active,
+    native instrumentation is skipped with a warning.
     """
     from eden_sdk import instrumentations  # local import to avoid cycles
+    from eden_sdk.otel import is_configured as _otel_configured
+
+    if _otel_configured():
+        import logging
+
+        logging.getLogger("eden_sdk").warning(
+            "eden: OTel exporter is configured — skipping native instrument() "
+            "(use one or the other to avoid dual ingest)"
+        )
+        return
 
     targets = frameworks or tuple(instrumentations.__all__)
-    for name in targets:
+    for raw in targets:
+        name = _canonical_framework(raw) if frameworks else raw
+        if frameworks and name is None:
+            import logging
+
+            logging.getLogger("eden_sdk").warning(
+                "eden: unknown framework %r — skipping (known: %s)",
+                raw,
+                ", ".join(instrumentations.__all__),
+            )
+            continue
+        assert name is not None
         if name == "http_capture":
             install_http_capture()
             continue
@@ -175,7 +252,10 @@ def uninstrument(*frameworks: str) -> None:
     from eden_sdk import instrumentations
 
     targets = frameworks or tuple(INSTRUMENTED)
-    for name in targets:
+    for raw in targets:
+        name = _canonical_framework(raw) if frameworks else raw
+        if name is None:
+            name = raw
         if name == "http_capture":
             uninstall_http_capture()
             continue
@@ -188,6 +268,47 @@ def uninstrument(*frameworks: str) -> None:
             except Exception:  # noqa: BLE001
                 pass
         INSTRUMENTED.discard(name)
+
+
+def init(
+    *,
+    api_key: str | None = None,
+    org_id: str | None = None,
+    base_url: str | None = None,
+    framework: str | None = None,
+    auto_instrument: bool = True,
+    **kwargs: Any,
+) -> None:
+    """Back-compat onboarding entry point → :func:`configure` + :func:`instrument`.
+
+    Older generated snippets called ``eden.init(...)``. Prefer
+    ``eden.configure(...)`` then ``eden.instrument(...)`` in new code.
+    Empty credentials are ignored (no crash); incomplete configs log a
+    warning so bootstrapping without env vars stays safe.
+    """
+    cfg_kwargs: dict[str, Any] = {}
+    if api_key:
+        cfg_kwargs["api_key"] = api_key
+    if org_id:
+        cfg_kwargs["org_id"] = org_id
+    if base_url:
+        cfg_kwargs["base_url"] = base_url
+    for key, value in kwargs.items():
+        if value is not None and value != "":
+            cfg_kwargs[key] = value
+    if cfg_kwargs:
+        try:
+            configure(**cfg_kwargs)
+        except ValueError as exc:
+            import logging
+
+            logging.getLogger("eden_sdk").warning("eden.init: %s", exc)
+    if not auto_instrument:
+        return
+    if framework:
+        instrument(framework)
+    else:
+        instrument()
 
 
 
@@ -276,7 +397,7 @@ def uninstall_http_capture() -> None:
     INSTRUMENTED.discard("http_capture")
 
 
-def install_logging(level: int | str = "INFO") -> None:
+def install_logging(level: int | str = "WARNING") -> None:
     """Forward stdlib logging records to Eden as ``event_type: log`` events."""
     from eden_sdk.logging_forwarder import install_logging as _install
 
@@ -333,4 +454,13 @@ def __getattr__(name: str) -> Any:
         from eden_sdk.session import AgentSession
 
         return AgentSession
+    target = _LAZY_EXPORTS.get(name)
+    if target is not None:
+        import importlib
+
+        mod = importlib.import_module(target[0])
+        value = getattr(mod, target[1])
+        # Cache on the module so subsequent lookups skip __getattr__.
+        globals()[name] = value
+        return value
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

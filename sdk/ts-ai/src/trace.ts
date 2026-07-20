@@ -96,7 +96,8 @@ export function trace<T>(
 
 // ── Implementation ──────────────────────────────────────────────────
 
-class TraceController implements TraceContext {
+/** Imperative span handle returned by ``trace(name)`` (also used by docs). */
+export class TraceController implements TraceContext {
   public readonly traceId: string;
   public readonly spanId: string;
   public readonly parentSpanId?: string;

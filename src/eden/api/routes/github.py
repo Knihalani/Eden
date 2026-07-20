@@ -52,6 +52,7 @@ from eden.api.deps import (
     require_org_permission_dep,
     resolve_eden_org_id,
     resolve_eden_user_id,
+    require_path_org_access,
 )
 from eden.api.utils.redact import redact_all
 from eden.config import get_settings
@@ -70,11 +71,19 @@ settings = get_settings()
 # Two routers — one for the public integration surface, one for the
 # per-org surface. Both registered in app.py.
 public_router = APIRouter(prefix="/integrations/github", tags=["integrations"])
-org_router = APIRouter(prefix="/orgs/{org_id}", tags=["onboarding"])
+org_router = APIRouter(
+    prefix="/orgs/{org_id}",
+    tags=["onboarding"],
+    dependencies=[Depends(require_path_org_access)],
+)
 
 # Installation tokens are minted on demand. Cache for the token's
 # lifetime so we don't hammer the GitHub App JWT endpoint.
 _token_cache: dict[int, Any] = {}
+
+# Per-installation repo list cache: installation_id → (expires_monotonic, repos)
+_repos_cache: dict[int, tuple[float, list[Any]]] = {}
+_REPOS_CACHE_TTL_S = 60.0
 
 # Manifest files the integration flow inspects. Stays small so we
 # don't blow REST quota — the SDK integrator only needs these.
@@ -84,7 +93,7 @@ _MANIFEST_FILES = (
     "package.json",
     "setup.py",
     "tsconfig.json",
-    ".eden/config.yaml",
+    ".eden/config.yaml"
 )
 
 
@@ -337,15 +346,7 @@ async def _enqueue_change_impact_preview(
     head = (pr.get("head") or {}).get("sha", "")
     if not pr_number:
         return
-    changed: list[str] = []
-    for f in payload.get("commits") or []:
-        for key in ("added", "modified", "removed"):
-            changed.extend(list(f.get(key) or []))
-    from eden.change_impact.preview import ChangeDetector, ImpactPreviewOrchestrator
 
-    agent_files = ChangeDetector.detect_changed_files(changed)
-    if not agent_files:
-        return
     row = await pg.fetchrow(
         """
         SELECT org_id, installation_id FROM onboarding_pr_runs
@@ -356,7 +357,30 @@ async def _enqueue_change_impact_preview(
         repo_full,
     )
     org_id = str(row["org_id"]) if row and row.get("org_id") else "default"
-    installation_id = int(row["installation_id"]) if row and row.get("installation_id") else None
+    installation_id = (
+        int(row["installation_id"])
+        if row and row.get("installation_id")
+        else None
+    )
+
+    # pull_request webhooks are not push-shaped — do not read payload["commits"].
+    changed = await _pr_changed_filenames(
+        installation_id=installation_id,
+        repo_full=repo_full,
+        pr_number=int(pr_number),
+    )
+    from eden.change_impact.preview import ChangeDetector, ImpactPreviewOrchestrator
+
+    agent_files = ChangeDetector.detect_changed_files(changed)
+    if not agent_files:
+        return
+
+    prompt_override = await _pr_prompt_override(
+        installation_id=installation_id,
+        repo_full=repo_full,
+        head_sha=str(head or ""),
+        agent_files=agent_files,
+    )
     change_id = f"pr-{repo_full}-{pr_number}"
     orchestrator = ImpactPreviewOrchestrator(pg=pg)
     report = await orchestrator.generate_report(
@@ -364,6 +388,7 @@ async def _enqueue_change_impact_preview(
         change_id=change_id,
         changed_files=agent_files,
         agent_id=ChangeDetector.resolve_agent_id(agent_files),
+        prompt_override=prompt_override,
     )
     try:
         from eden.evaluation.ci_webhook import CIWebhookHandler
@@ -399,6 +424,82 @@ async def _enqueue_change_impact_preview(
             pr_number,
             gh_result.get("posted") or gh_result.get("skipped"),
         )
+
+
+async def _pr_changed_filenames(
+    *,
+    installation_id: int | None,
+    repo_full: str,
+    pr_number: int,
+) -> list[str]:
+    """Resolve PR changed paths via GitHub pulls/.../files API."""
+    if not installation_id:
+        return []
+    parts = repo_full.split("/", 1)
+    if len(parts) != 2:
+        return []
+    owner, repo = parts[0], parts[1]
+    try:
+        from eden.integrations.github import GitHubOAuthClient, is_configured
+
+        if not is_configured():
+            return []
+        oauth = GitHubOAuthClient()
+        token = await oauth.installation_token(installation_id)
+        return await oauth.list_pull_request_files(
+            token, owner=owner, repo=repo, pr_number=pr_number
+        )
+    except Exception as exc:
+        logger.debug(
+            "change_impact pr files fetch failed repo=%s pr=%s: %s",
+            repo_full,
+            pr_number,
+            redact_all(str(exc)),
+        )
+        return []
+
+
+async def _pr_prompt_override(
+    *,
+    installation_id: int | None,
+    repo_full: str,
+    head_sha: str,
+    agent_files: list[str],
+) -> str | None:
+    """Load first prompt/config file content at PR head for replay override."""
+    if not installation_id or not head_sha or not agent_files:
+        return None
+    parts = repo_full.split("/", 1)
+    if len(parts) != 2:
+        return None
+    owner, repo = parts[0], parts[1]
+    target = next(
+        (
+            p
+            for p in agent_files
+            if p.startswith("prompts/") or "prompt" in p.lower()
+        ),
+        agent_files[0],
+    )
+    try:
+        from eden.integrations.github import GitHubOAuthClient, is_configured
+
+        if not is_configured():
+            return None
+        oauth = GitHubOAuthClient()
+        token = await oauth.installation_token(installation_id)
+        content = await oauth.get_file_at_ref(
+            token, owner=owner, repo=repo, path=target, ref=head_sha
+        )
+        if content and content.strip():
+            return content.strip()
+    except Exception as exc:
+        logger.debug(
+            "change_impact prompt fetch failed path=%s: %s",
+            target,
+            redact_all(str(exc)),
+        )
+    return None
 
 
 # ── Public integration routes ───────────────────────────────────────
@@ -614,8 +715,8 @@ async def github_webhook(request: Request) -> dict[str, str]:
 
 @org_router.post("/github/installations/claim", response_model=InstallationOut)
 async def claim_github_installation(
-    org_id: str,
     req: ClaimInstallationRequest,
+    org_id: str = Depends(require_path_org_access),
     user: dict = Depends(get_current_user),
     org: dict = Depends(require_org_permission_dep("integrations:write")),
 ) -> InstallationOut:
@@ -629,6 +730,22 @@ async def claim_github_installation(
     eden_org_id = await _eden_org_or_404(org_id)
     pg = await get_postgres_client()
     installation_id = int(req.installation_id)
+
+    # Refuse claiming an installation already bound to a different Eden org.
+    foreign = await pg.fetchrow(
+        """
+        SELECT org_id FROM org_github_installations
+        WHERE installation_id = $1 AND org_id <> $2
+        LIMIT 1
+        """,
+        installation_id,
+        eden_org_id,
+    )
+    if foreign:
+        raise HTTPException(
+            409,
+            "GitHub installation is already claimed by another organization.",
+        )
 
     existing = await pg.fetchrow(
         """
@@ -673,7 +790,7 @@ async def claim_github_installation(
 
 @org_router.get("/github/installations", response_model=list[InstallationOut])
 async def list_org_installations(
-    org_id: str,
+    org_id: str = Depends(require_path_org_access),
     org: dict = Depends(require_org_member),
 ) -> list[InstallationOut]:
     eden_org_id = str(org["org_id"])
@@ -702,7 +819,7 @@ async def list_org_installations(
 
 @org_router.get("/github/repos", response_model=list[RepoOut])
 async def list_org_repos(
-    org_id: str,
+    org_id: str = Depends(require_path_org_access),
     org: dict = Depends(require_org_permission_dep("integrations:write")),
 ) -> list[RepoOut]:
     """List repos all the org's installations have access to.
@@ -710,6 +827,9 @@ async def list_org_repos(
     Admin-only (`integrations:write`). Member/viewer roles see the
     sidebar entry but the page tells them to ask an admin.
     """
+    import asyncio
+    import time as _time
+
     eden_org_id = str(org["org_id"])
     pg = await get_postgres_client()
     inst_rows = await pg.fetch(
@@ -719,17 +839,37 @@ async def list_org_repos(
         """,
         eden_org_id,
     )
-    out: list[RepoOut] = []
-    for r in inst_rows:
-        installation_id = int(r["installation_id"])
+
+    async def _repos_for(installation_id: int) -> list[RepoOut]:
+        now = _time.monotonic()
+        cached = _repos_cache.get(installation_id)
+        if cached is not None and cached[0] > now:
+            return [
+                RepoOut(
+                    full_name=repo.full_name,
+                    name=repo.name,
+                    owner=repo.owner,
+                    default_branch=repo.default_branch,
+                    private=repo.private,
+                    description=repo.description or "",
+                    html_url=repo.html_url,
+                    installation_id=installation_id,
+                )
+                for repo in cached[1]
+            ]
         try:
             _, token = await _client_for(installation_id)
             repos = await GitHubOAuthClient().list_installation_repos(token)
         except (GitHubConfigError, GitHubAPIError) as exc:
-            logger.warning("list_org_repos installation %s: %s", installation_id, redact_all(str(exc)))
-            continue
-        for repo in repos:
-            out.append(RepoOut(
+            logger.warning(
+                "list_org_repos installation %s: %s",
+                installation_id,
+                redact_all(str(exc)),
+            )
+            return []
+        _repos_cache[installation_id] = (now + _REPOS_CACHE_TTL_S, repos)
+        return [
+            RepoOut(
                 full_name=repo.full_name,
                 name=repo.name,
                 owner=repo.owner,
@@ -738,13 +878,22 @@ async def list_org_repos(
                 description=repo.description or "",
                 html_url=repo.html_url,
                 installation_id=installation_id,
-            ))
+            )
+            for repo in repos
+        ]
+
+    results = await asyncio.gather(
+        *[_repos_for(int(r["installation_id"])) for r in inst_rows]
+    )
+    out: list[RepoOut] = []
+    for batch in results:
+        out.extend(batch)
     return out
 
 
 @org_router.post("/github/integrate")
 async def integrate_repo(
-    org_id: str,
+    org_id: str = Depends(require_path_org_access),
     org: dict = Depends(require_org_permission_dep("integrations:write")),
 ) -> None:
     """Retired: auto-integration PRs are no longer opened.
@@ -764,7 +913,7 @@ async def integrate_repo(
 
 @org_router.get("/onboarding/pr-runs", response_model=list[PRRunOut])
 async def list_onboarding_pr_runs(
-    org_id: str,
+    org_id: str = Depends(require_path_org_access),
     limit: int = Query(50, ge=1, le=200),
     org: dict = Depends(require_org_member),
 ) -> list[PRRunOut]:
@@ -784,7 +933,7 @@ async def list_onboarding_pr_runs(
 
 @org_router.get("/onboarding/state", response_model=OnboardingStateOut)
 async def get_onboarding_state(
-    org_id: str,
+    org_id: str = Depends(require_path_org_access),
     org: dict = Depends(require_org_member),
 ) -> OnboardingStateOut:
     eden_org_id = str(org["org_id"])
@@ -794,8 +943,8 @@ async def get_onboarding_state(
 
 @org_router.post("/onboarding/state", response_model=OnboardingStateOut)
 async def patch_onboarding_state(
-    org_id: str,
     patch: OnboardingStatePatch,
+    org_id: str = Depends(require_path_org_access),
     user: dict = Depends(get_current_user),
     org: dict = Depends(require_org_member),
 ) -> OnboardingStateOut:

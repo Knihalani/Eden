@@ -6,7 +6,9 @@ import { useOrg } from "@/hooks/use-org";
 import { adminStatusApi } from "@/lib/api";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { ErrorState } from "@/components/ui/error-state";
 import { useToast } from "@/components/ui/toast";
+import { errorFromCaught } from "@/lib/safe-error-message";
 
 type EdenStatus = Awaited<ReturnType<typeof adminStatusApi.edenStatus>>;
 
@@ -15,6 +17,7 @@ export function StatusTab() {
   const toast = useToast();
   const [loading, setLoading] = useState(true);
   const [running, setRunning] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<EdenStatus | null>(null);
   const [flags, setFlags] = useState<Record<string, unknown> | null>(null);
   const [synthetics, setSynthetics] = useState<
@@ -24,6 +27,7 @@ export function StatusTab() {
   const load = useCallback(async () => {
     if (!currentOrg?.id) return;
     setLoading(true);
+    setError(null);
     try {
       const [s, last, f] = await Promise.all([
         adminStatusApi.edenStatus(currentOrg.id),
@@ -34,11 +38,11 @@ export function StatusTab() {
       setSynthetics(last.runs ?? []);
       setFlags(f?.flags ?? null);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Failed to load status");
+      setError(errorFromCaught(e, "Failed to load status"));
     } finally {
       setLoading(false);
     }
-  }, [currentOrg?.id, toast]);
+  }, [currentOrg?.id]);
 
   useEffect(() => {
     void load();
@@ -49,7 +53,14 @@ export function StatusTab() {
     setRunning(true);
     try {
       const res = await adminStatusApi.runSynthetics(currentOrg.id);
-      toast.success(`Synthetics complete (${res.failed} failed)`);
+      if (res.failed > 0) {
+        toast.error(
+          "Synthetics finished with failures",
+          `${res.failed} probe(s) failed — review recent runs below.`,
+        );
+      } else {
+        toast.success("Synthetics complete", "All probes passed.");
+      }
       await load();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Synthetics failed");
@@ -58,11 +69,25 @@ export function StatusTab() {
     }
   };
 
-  if (loading && !status) {
+  if (loading && !status && !error) {
     return (
       <div className="flex items-center justify-center p-12 text-sm text-[var(--text-muted)]">
         <Loader2 className="h-4 w-4 mr-2 animate-spin" /> Loading platform status…
       </div>
+    );
+  }
+
+  if (error && !status) {
+    return (
+      <ErrorState
+        title="Could not load status"
+        message={error}
+        action={
+          <Button variant="outline" size="sm" onClick={() => void load()}>
+            <RefreshCw className="h-3.5 w-3.5" /> Try again
+          </Button>
+        }
+      />
     );
   }
 
@@ -89,6 +114,18 @@ export function StatusTab() {
           </Button>
         </div>
       </div>
+
+      {error ? (
+        <ErrorState
+          title="Could not load status"
+          message={error}
+          action={
+            <Button variant="outline" size="sm" onClick={() => void load()}>
+              <RefreshCw className="h-3.5 w-3.5" /> Try again
+            </Button>
+          }
+        />
+      ) : null}
 
       <Card className="p-4">
         <div className="flex items-center gap-2 mb-3">

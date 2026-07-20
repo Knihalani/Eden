@@ -148,6 +148,64 @@ class _StubPostgresClient:
 
     async def fetchrow(self, query: str, *args, **kwargs):
         q = " ".join(query.split())
+        if "UPDATE agent_registrations" in q and "RETURNING" in q:
+            org, aid, name, framework, repo_url, register_token = args
+            key = (org, aid)
+            from datetime import datetime
+            now = datetime.now(UTC).isoformat()
+            if key not in self.agents:
+                return None
+            self.agents[key].update({
+                "name": name,
+                "framework": framework,
+                "repo_url": repo_url,
+                "register_token": register_token or self.agents[key].get("register_token"),
+                "last_seen_at": now,
+            })
+            v = self.agents[key]
+            return {
+                "agent_id": aid,
+                "name": v["name"],
+                "framework": v.get("framework"),
+                "repo_url": v.get("repo_url"),
+                "last_seen_at": v.get("last_seen_at", now),
+                "created_at": v.get("created_at", now),
+                "updated_at": v.get("updated_at", now),
+            }
+        if "INSERT INTO agent_registrations" in q and "RETURNING" in q:
+            org, aid, name, framework, repo_url, register_token = args
+            key = (org, aid)
+            from datetime import datetime
+            now = datetime.now(UTC).isoformat()
+            existing = self.agents.get(key)
+            if existing:
+                self.agents[key].update({
+                    "name": name,
+                    "framework": framework,
+                    "repo_url": repo_url,
+                    "register_token": register_token or existing.get("register_token"),
+                    "last_seen_at": now,
+                })
+            else:
+                self.agents[key] = {
+                    "name": name,
+                    "framework": framework,
+                    "repo_url": repo_url,
+                    "register_token": register_token,
+                    "last_seen_at": now,
+                    "created_at": now,
+                    "updated_at": now,
+                }
+            v = self.agents[key]
+            return {
+                "agent_id": aid,
+                "name": v["name"],
+                "framework": v.get("framework"),
+                "repo_url": v.get("repo_url"),
+                "last_seen_at": v.get("last_seen_at", now),
+                "created_at": v.get("created_at", now),
+                "updated_at": v.get("updated_at", now),
+            }
         if "FROM agent_registrations" in q and "WHERE org_id = $1 AND agent_id = $2" in q:
             org, aid = args[0], args[1]
             key = (org, aid)

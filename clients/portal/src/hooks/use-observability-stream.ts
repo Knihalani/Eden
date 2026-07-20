@@ -69,10 +69,16 @@ export function useObservabilityStream({
   const [connected, setConnected] = React.useState(false);
   const [paused, setPaused] = React.useState(false);
   const [failed, setFailed] = React.useState(false);
-  const [lastEventId, setLastEventId] = React.useState<string | null>(null);
+  // lastEventId lives in a ref so reconnect URL can resume via
+  // Last-Event-ID without putting it in connect's useCallback deps
+  // (state updates would recreate EventSource on every event).
+  const lastEventIdRef = React.useRef<string | null>(null);
   const reconnectAttemptsRef = React.useRef(0);
   const sourceRef = React.useRef<EventSource | null>(null);
   const reconnectTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Terminal BE ``event: error`` (redis_unavailable, last_event_id_too_old)
+  // must not fall through to the connection onerror reconnect loop.
+  const terminalErrorRef = React.useRef(false);
   const pausedRef = React.useRef(false);
   pausedRef.current = paused;
   // PQ-5: capture onError via ref so the ``connect`` useCallback
@@ -89,9 +95,12 @@ export function useObservabilityStream({
       sourceRef.current.close();
       sourceRef.current = null;
     }
+    terminalErrorRef.current = false;
 
     const params = new URLSearchParams();
-    if (lastEventId) params.set("last_event_id", lastEventId);
+    if (lastEventIdRef.current) {
+      params.set("last_event_id", lastEventIdRef.current);
+    }
     const qs = params.toString();
     const url = `/api/orgs/${orgId}/observability/stream${qs ? `?${qs}` : ""}`;
 
@@ -101,6 +110,7 @@ export function useObservabilityStream({
     source.onopen = () => {
       setConnected(true);
       setFailed(false);
+      terminalErrorRef.current = false;
       reconnectAttemptsRef.current = 0;
     };
 
@@ -108,7 +118,7 @@ export function useObservabilityStream({
       try {
         const data = JSON.parse((e as MessageEvent).data) as LiveTrace;
         if ((e as MessageEvent).lastEventId) {
-          setLastEventId((e as MessageEvent).lastEventId);
+          lastEventIdRef.current = (e as MessageEvent).lastEventId;
         }
         setEvents((prev) => {
           // Skip buffer updates while paused so "pause" freezes the view.
@@ -125,18 +135,44 @@ export function useObservabilityStream({
       // Keep-alive; do nothing.
     });
 
+    // Named SSE ``event: error`` from the backend (e.g. redis_unavailable,
+    // last_event_id_too_old). These are terminal — fail open to REST,
+    // do not silent-reconnect. Distinguish from connection-level errors
+    // via MessageEvent.data presence.
+    source.addEventListener("error", (e) => {
+      const me = e as MessageEvent;
+      if (typeof me.data !== "string" || me.data.length === 0) return;
+      terminalErrorRef.current = true;
+      setConnected(false);
+      setFailed(true);
+      onErrorRef.current?.(e);
+      if (reconnectTimerRef.current) {
+        clearTimeout(reconnectTimerRef.current);
+        reconnectTimerRef.current = null;
+      }
+      source.close();
+      sourceRef.current = null;
+    });
+
     source.onerror = (err) => {
       setConnected(false);
       // Read via ref so a fresh onError closure doesn't invalidate
       // the connect useCallback identity (PQ-5).
       onErrorRef.current?.(err);
-      // PQ-6: cap reconnect attempts. EventSource auto-reconnects,
-      // but if the upstream is permanently down the browser keeps
-      // hammering indefinitely — bounded at MAX_RECONNECT_ATTEMPTS
-      // (default 6) by closing the source on the cap.
+      // Close before scheduling custom reconnect. Leaving the source
+      // open lets the browser's built-in EventSource auto-reconnect
+      // race our backoff timer (dual reconnect / thundering herd).
+      source.close();
+      sourceRef.current = null;
+      // BE named ``event: error`` already marked terminal — do not
+      // treat the subsequent close as a transient disconnect.
+      if (terminalErrorRef.current) {
+        setFailed(true);
+        return;
+      }
+      // PQ-6: cap reconnect attempts. Without a hard close the
+      // browser keeps hammering indefinitely when upstream is down.
       if (reconnectAttemptsRef.current >= MAX_RECONNECT_ATTEMPTS) {
-        source.close();
-        sourceRef.current = null;
         setFailed(true);
         return;
       }
@@ -152,10 +188,14 @@ export function useObservabilityStream({
         if (enabled) connect();
       }, backoff);
     };
-  }, [orgId, lastEventId, maxEvents, enabled]);
+  }, [orgId, maxEvents, enabled]);
 
   React.useEffect(() => {
     if (!enabled) return;
+    // Drop prior-org buffer + resume cursor before reconnect so a
+    // switch never replays another tenant's Last-Event-ID or events.
+    setEvents([]);
+    lastEventIdRef.current = null;
     connect();
     return () => {
       if (sourceRef.current) {
@@ -177,6 +217,7 @@ export function useObservabilityStream({
    *  hammering) and re-dials immediately. */
   const retry = React.useCallback(() => {
     reconnectAttemptsRef.current = 0;
+    terminalErrorRef.current = false;
     setFailed(false);
     connect();
   }, [connect]);

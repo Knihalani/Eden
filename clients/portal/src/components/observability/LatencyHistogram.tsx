@@ -13,7 +13,6 @@
  */
 
 import * as React from "react";
-import { motion } from "framer-motion";
 
 interface LatencyHistogramProps {
   durations: number[];
@@ -57,8 +56,28 @@ export function LatencyHistogram({
     const hi = sorted[sorted.length - 1];
     const logLo = Math.log10(lo);
     const logHi = Math.log10(hi);
+    const logSpan = logHi - logLo;
+    // Degenerate range (all equal): avoid /0 → NaN bar heights and markers.
+    if (!Number.isFinite(logSpan) || logSpan <= 0) {
+      return {
+        buckets: [
+          {
+            x: `${Math.round(lo)}ms`,
+            lo,
+            hi: lo,
+            count: sorted.length,
+          },
+        ],
+        maxCount: sorted.length,
+        p50: p50v,
+        p95: p95v,
+        p99: p99v,
+        minMs: lo,
+        maxMs: hi,
+      };
+    }
     const nBuckets = 30;
-    const width = (logHi - logLo) / nBuckets;
+    const width = logSpan / nBuckets;
     const counts = new Array(nBuckets).fill(0);
     for (const v of sorted) {
       const idx = Math.min(
@@ -78,7 +97,7 @@ export function LatencyHistogram({
     });
     return {
       buckets,
-      maxCount: Math.max(...counts),
+      maxCount: Math.max(...counts, 1),
       p50: p50v,
       p95: p95v,
       p99: p99v,
@@ -113,12 +132,10 @@ export function LatencyHistogram({
         {buckets.map((b, i) => {
           const heightPct = (b.count / maxCount) * 100;
           return (
-            <motion.div
+            <div
               key={b.x ?? i}
-              initial={{ height: 0 }}
-              animate={{ height: `${heightPct}%` }}
-              transition={{ delay: i * 0.005, duration: 0.3 }}
-              className="flex-1 rounded-t-sm bg-[var(--terminal)]/60 hover:bg-[var(--terminal)] transition-colors"
+              className="flex-1 rounded-t-sm bg-[var(--terminal)]/60 hover:bg-[var(--terminal)] transition-[height,background-color] duration-300"
+              style={{ height: `${heightPct}%` }}
               title={`${b.x}: ${b.count} traces`}
             />
           );
@@ -180,10 +197,14 @@ function PercentileMarker({
   minMs: number;
   height: number;
 }) {
-  // Position on log scale.
+  // Position on log scale; center when min===max (avoids NaN %).
   const lo = Math.log10(minMs);
   const hi = Math.log10(maxMs);
-  const pct = ((Math.log10(value) - lo) / (hi - lo)) * 100;
+  const span = hi - lo;
+  const pct =
+    !Number.isFinite(span) || span <= 0
+      ? 50
+      : ((Math.log10(value) - lo) / span) * 100;
   return (
     <div
       className="absolute top-0 bottom-0 pointer-events-none"

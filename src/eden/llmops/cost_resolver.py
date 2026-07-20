@@ -57,7 +57,7 @@ import asyncio
 import logging
 import time
 from collections import OrderedDict
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any, Literal
@@ -301,17 +301,10 @@ class CostResolver:
         # most-recent (common case) keeps the per-hit cost at one
         # dict re-insert.
         self._cache.move_to_end(key)
-        # Mark as cached without re-resolving.
-        return CostResolution(
-            cost_per_1k_input=resolution.cost_per_1k_input,
-            cost_per_1k_output=resolution.cost_per_1k_output,
-            source=resolution.source,
-            provider=resolution.provider,
-            model_id=resolution.model_id,
-            cached=True,
-            as_of=resolution.as_of,
-            notes=resolution.notes,
-        )
+        # Mark as cached without re-resolving. Preserve cache-token
+        # rates so a hit does not silently fall back to full input
+        # pricing on Anthropic/OpenAI/Gemini cached tokens.
+        return replace(resolution, cached=True)
 
     def _cache_put(self, key: tuple[str, str, str], resolution: CostResolution) -> None:
         # Bounded LRU via insertion-order dict: drop the oldest

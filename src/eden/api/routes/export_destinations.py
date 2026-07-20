@@ -33,13 +33,15 @@ from eden.api.deps import (
     get_current_user,
     log_audit_event,
     require_org_permission,
+    require_path_org_access,
 )
 from eden.api.utils.encryption import decrypt_value, encrypt_value
 from eden.storage.postgres import get_postgres_client
+from eden.api.utils.redact import redact_all
 
 
 async def _require_export_admin(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     payload: dict | None = Depends(_try_resolve_token_payload),
 ) -> dict:
     """Verify the caller is an org admin (settings:edit).
@@ -56,7 +58,7 @@ async def _require_export_admin(
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/orgs/{org_id}/export", tags=["export-destinations"])
+router = APIRouter(prefix="/orgs/{org_id}/export", tags=["export-destinations"], dependencies=[Depends(require_path_org_access)])
 
 
 # ────────────────────────────────────────────────────────────────────
@@ -215,7 +217,7 @@ def _row_to_schedule(row: Any) -> ScheduleOut:
 
 @router.get("/destinations", response_model=list[DestinationOut])
 async def list_destinations(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     member: dict = Depends(get_current_user),
     _admin: dict = Depends(_require_export_admin),
     authorization: str | None = Cookie(None),
@@ -240,7 +242,7 @@ async def list_destinations(
 @router.post("/destinations", response_model=DestinationOut, status_code=201)
 async def create_destination(
     body: DestinationIn,
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     member: dict = Depends(get_current_user),
     _admin: dict = Depends(_require_export_admin),
     authorization: str | None = Cookie(None),
@@ -273,12 +275,27 @@ async def create_destination(
     except Exception as exc:  # unique-violation, etc.
         # asyncpg raises UniqueViolationError — match by message
         # so we don't import a private exception class here.
-        if "unique" in str(exc).lower() or "duplicate" in str(exc).lower():
+        msg = str(exc).lower()
+        if "unique" in msg or "duplicate" in msg:
             raise HTTPException(
                 status_code=409,
                 detail=f"A destination named {body.name!r} already exists for this org",
             ) from exc
-        raise
+        if "invalid input syntax for type uuid" in msg:
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid organization id",
+            ) from exc
+        if "foreign key" in msg:
+            raise HTTPException(
+                status_code=404,
+                detail="Organization not found",
+            ) from exc
+        logger.warning("create_destination failed: %s", redact_all(str(exc)))
+        raise HTTPException(
+            status_code=503,
+            detail="Failed to create export destination",
+        ) from exc
 
     await log_audit_event(
         client=client,
@@ -296,7 +313,7 @@ async def create_destination(
 @router.delete("/destinations/{destination_id}", status_code=200)
 async def delete_destination(
     destination_id: str,
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     member: dict = Depends(get_current_user),
     _admin: dict = Depends(_require_export_admin),
     authorization: str | None = Cookie(None),
@@ -351,7 +368,7 @@ async def delete_destination(
 
 @router.get("/schedules", response_model=list[ScheduleOut])
 async def list_schedules(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     member: dict = Depends(get_current_user),
     _admin: dict = Depends(_require_export_admin),
     authorization: str | None = Cookie(None),
@@ -376,7 +393,7 @@ async def list_schedules(
 @router.post("/schedules", response_model=ScheduleOut, status_code=201)
 async def create_schedule(
     body: ScheduleIn,
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     member: dict = Depends(get_current_user),
     _admin: dict = Depends(_require_export_admin),
     authorization: str | None = Cookie(None),
@@ -440,7 +457,7 @@ async def create_schedule(
 @router.delete("/schedules/{schedule_id}", status_code=200)
 async def delete_schedule(
     schedule_id: str,
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     member: dict = Depends(get_current_user),
     _admin: dict = Depends(_require_export_admin),
     authorization: str | None = Cookie(None),
@@ -474,7 +491,7 @@ async def delete_schedule(
 @router.post("/run-now/{schedule_id}", response_model=RunNowResult)
 async def run_export_now(
     schedule_id: str,
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     member: dict = Depends(get_current_user),
     _admin: dict = Depends(_require_export_admin),
     authorization: str | None = Cookie(None),

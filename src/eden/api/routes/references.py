@@ -9,18 +9,20 @@ import logging
 import os  # Audit 2026-06-22 B1.22 — for filename sanitization
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Path, Query, UploadFile, status
 
 from eden.api.deps import (
     get_current_user,
     require_org_permission_dep,
+    require_path_org_access,
 )
 from eden.api.routes.billing import check_limit
 from eden.storage.postgres import get_postgres_client
+from eden.api.utils.redact import redact_all
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/orgs/{org_id}/references", tags=["code-references"])
+router = APIRouter(prefix="/orgs/{org_id}/references", tags=["code-references"], dependencies=[Depends(require_path_org_access)])
 
 
 async def generate_embedding(text: str) -> list[float]:
@@ -113,9 +115,9 @@ class CodeReferenceResponse:
 
 @router.post("", response_model=dict)
 async def upload_reference(
-    org_id: str,
-    name: str = Form(..., max_length=200),
     # Audit 2026-06-22 B1.22 — cap purpose length to prevent 5MB form fields.
+    org_id: str = Depends(require_path_org_access),
+    name: str = Form(..., max_length=200),
     purpose: str = Form(..., max_length=64),
     description: str | None = Form(None, max_length=2_000),
     file: UploadFile = File(...),
@@ -189,23 +191,46 @@ async def upload_reference(
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, '{}')
         RETURNING id
     """
-    row = await client.fetchrow(
-        query,
-        ref_id,
-        org_id,
-        user_id,
-        name,
-        description,
-        purpose,
-        file.filename,
-        language,
-        text_content,
-        content_hash,
-        embedding,
-    )
+    try:
+        row = await client.fetchrow(
+            query,
+            ref_id,
+            org_id,
+            user_id,
+            name,
+            description,
+            purpose,
+            file.filename,
+            language,
+            text_content,
+            content_hash,
+            embedding,
+        )
+    except Exception as exc:
+        msg = str(exc).lower()
+        if "unique" in msg or "duplicate" in msg:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Code reference already exists",
+            ) from exc
+        if "invalid input syntax for type uuid" in msg:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid organization or user id",
+            ) from exc
+        if "foreign key" in msg:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Organization or user not found",
+            ) from exc
+        logger.warning("upload_reference INSERT failed: %s", redact_all(str(exc)))
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Failed to create code reference",
+        ) from exc
     if row is None:
         raise HTTPException(
-            status_code=500,
+            status_code=409,
             detail="Failed to create code reference",
         )
 
@@ -221,7 +246,7 @@ async def upload_reference(
 
 @router.get("", response_model=list[dict])
 async def list_references(
-    org_id: str,
+    org_id: str = Depends(require_path_org_access),
     purpose: str | None = None,
     language: str | None = None,
     user: dict | None = None,
@@ -278,7 +303,8 @@ async def list_references(
 
 @router.get("/{ref_id}", response_model=dict)
 async def get_reference(
-    org_id: str, ref_id: str,
+    org_id: str = Depends(require_path_org_access),
+    ref_id: str = Path(...),
     user: dict | None = None,
     _check: dict = Depends(require_org_permission_dep("references:read")),
 ):
@@ -324,8 +350,8 @@ async def get_reference(
 
 @router.get("/search/by-text", response_model=list[dict])
 async def search_references(
-    org_id: str,
     # Audit 2026-06-22 B1.14 — cap query length to prevent 1MB embedding requests.
+    org_id: str = Depends(require_path_org_access),
     q: str = Query(..., max_length=2_000),
     user: dict = Depends(get_current_user),
     _check: dict = Depends(require_org_permission_dep("references:read")),
@@ -366,7 +392,7 @@ async def search_references(
 
 @router.get("/purposes", response_model=list[str])
 async def list_purposes(
-    org_id: str,
+    org_id: str = Depends(require_path_org_access),
     user: dict | None = None,
     _check: dict = Depends(require_org_permission_dep("references:read")),
 ):
@@ -384,8 +410,11 @@ async def list_purposes(
     return [r["purpose"] for r in rows]
 
 @router.delete("/{ref_id}", response_model=dict)
-async def delete_reference(org_id: str, ref_id: str, user: dict = Depends(get_current_user),
-        _check_references_delete: dict = Depends(require_org_permission_dep('references:delete')),
+async def delete_reference(
+    org_id: str = Depends(require_path_org_access),
+    ref_id: str = Path(...),
+    user: dict = Depends(get_current_user),
+    _check_references_delete: dict = Depends(require_org_permission_dep('references:delete')),
 ):
     """Delete a code reference (requires references:delete permission or be the uploader)."""
     # Audit 2026-06-22 B1.10 — drop dead try/except, add user dep.

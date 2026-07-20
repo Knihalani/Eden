@@ -21,3 +21,26 @@ async def test_session_lifecycle_memory() -> None:
     loaded = await svc.get("org-1", started.id)
     assert loaded is not None
     assert loaded.failure_reason == "abandoned"
+
+
+@pytest.mark.asyncio
+async def test_attach_traces_single_persist() -> None:
+    svc = AgentSessionService()
+    started = await svc.start("org-1", agent_id="bot")
+    persist_calls = 0
+    orig = svc._persist
+
+    async def _count(session: object) -> None:
+        nonlocal persist_calls
+        persist_calls += 1
+        await orig(session)
+
+    svc._persist = _count  # type: ignore[method-assign]
+    added = await svc.attach_traces(
+        "org-1", started.id, ["a", "b", "a", "c"]
+    )
+    assert added == 3
+    assert persist_calls == 1
+    loaded = await svc.get("org-1", started.id)
+    assert loaded is not None
+    assert loaded.trace_ids == ["a", "b", "c"]

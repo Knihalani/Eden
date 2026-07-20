@@ -107,7 +107,7 @@ class OnlineScorerCascade:
             pass
 
         try:
-            from eden.closed_loop.autonomy_policy import check_budget, record_spend
+            from eden.closed_loop.autonomy_policy import check_budget
             from eden.llm.internal_router import route_async
             from eden.llmops.cost_ledger import cost_context
 
@@ -167,7 +167,6 @@ class OnlineScorerCascade:
             )
             usage = getattr(resp, "usage", None)
             cost_usd = float(getattr(usage, "cost", None) or 0.01)
-            await record_spend(org_id, cost_usd)
             return {
                 "score": score,
                 "passed": bool(parsed.get("passed", score >= 0.7)),

@@ -47,7 +47,7 @@ from typing import Any
 from fastapi import APIRouter, Body, Depends, Path, Query
 from pydantic import BaseModel, Field
 
-from eden.api.deps import get_current_user, require_feature_flag, require_org_member
+from eden.api.deps import get_current_user, require_feature_flag, require_path_org_access
 from eden.services.user_intel import (
     AbandonmentTracker,
     BehaviouralDashboard,
@@ -70,7 +70,7 @@ router = APIRouter(
     dependencies=[
         Depends(require_feature_flag("intelligence_gap_v0")),
         Depends(get_current_user),
-        Depends(require_org_member),
+        Depends(require_path_org_access),
     ],
 )
 
@@ -127,20 +127,20 @@ class FeedbackRequest(BaseModel):
 
 class RegenerationRequest(BaseModel):
     trace_id: str = Field(..., min_length=1, max_length=128)
-    user_id: str = Field(..., min_length=1, max_length=128)
+    user_id: str | None = Field(default=None, min_length=1, max_length=128)
     regenerated: bool = True
 
 
 class EditDistanceRequest(BaseModel):
     trace_id: str = Field(..., min_length=1, max_length=128)
-    user_id: str = Field(..., min_length=1, max_length=128)
+    user_id: str | None = Field(default=None, min_length=1, max_length=128)
     model_response: str = Field(..., min_length=0, max_length=16384)
     final_text: str = Field(..., min_length=0, max_length=16384)
 
 
 class AbandonmentRequest(BaseModel):
     trace_id: str = Field(..., min_length=1, max_length=128)
-    user_id: str = Field(..., min_length=1, max_length=128)
+    user_id: str | None = Field(default=None, min_length=1, max_length=128)
     abandoned: bool = True
 
 
@@ -149,7 +149,7 @@ class AbandonmentRequest(BaseModel):
 
 @router.post("/sessions/aggregate")
 async def sessions_aggregate(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     window: str = Query(
         "7d",
         description=(
@@ -174,7 +174,7 @@ async def sessions_aggregate(
 
 @router.post("/goals")
 async def track_goal(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     body: GoalRequest = Body(...),
     user: dict = Depends(get_current_user),
 ) -> dict[str, Any]:
@@ -190,7 +190,7 @@ async def track_goal(
 
 @router.patch("/goals/{goal_id}")
 async def update_goal_status(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     goal_id: str = Path(..., min_length=1, max_length=64),
     body: GoalStatusRequest = Body(...),
 ) -> dict[str, Any]:
@@ -203,7 +203,7 @@ async def update_goal_status(
 
 @router.get("/goals")
 async def list_user_goals(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     user: dict = Depends(get_current_user),
 ) -> dict[str, Any]:
     # Audit 2026-06-22 B1.33 — derive user_id from session; self-only.
@@ -212,7 +212,7 @@ async def list_user_goals(
 
 @router.get("/conversation/{session_id}")
 async def conversation_history(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     session_id: str = Path(..., min_length=1, max_length=128),
     limit: int = Query(100, ge=1, le=1000),
 ) -> dict[str, Any]:
@@ -223,7 +223,7 @@ async def conversation_history(
 
 @router.post("/conversation/message")
 async def add_conversation_message(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     body: ConversationMessageRequest = Body(...),
 ) -> dict[str, Any]:
     return await _conversations.add_message(
@@ -236,7 +236,7 @@ async def add_conversation_message(
 
 @router.post("/feedback")
 async def submit_feedback(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     body: FeedbackRequest = Body(...),
     user: dict = Depends(get_current_user),
 ) -> dict[str, Any]:
@@ -253,7 +253,7 @@ async def submit_feedback(
 
 @router.get("/feedback/{trace_id}")
 async def get_feedback_for_trace(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     trace_id: str = Path(..., min_length=1, max_length=128),
 ) -> dict[str, Any]:
     return await _feedback.get_feedback_for_trace(
@@ -263,7 +263,7 @@ async def get_feedback_for_trace(
 
 @router.get("/satisfaction/{trace_id}")
 async def satisfaction(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     trace_id: str = Path(..., min_length=1, max_length=128),
     user_id: str | None = Query(
         None,
@@ -282,7 +282,7 @@ async def satisfaction(
 
 @router.get("/segment")
 async def segment(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     user_id: str = Query(..., min_length=1, max_length=128),
 ) -> dict[str, Any]:
     return await _segments.segment(org_id, user_id=user_id)
@@ -293,7 +293,7 @@ async def segment(
 
 @router.post("/signals/regeneration")
 async def signal_regeneration(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     body: RegenerationRequest = Body(...),
     user: dict = Depends(get_current_user),
 ) -> dict[str, Any]:
@@ -308,7 +308,7 @@ async def signal_regeneration(
 
 @router.post("/signals/edit-distance")
 async def signal_edit_distance(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     body: EditDistanceRequest = Body(...),
     user: dict = Depends(get_current_user),
 ) -> dict[str, Any]:
@@ -323,7 +323,7 @@ async def signal_edit_distance(
 
 @router.post("/signals/abandonment")
 async def signal_abandonment(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     body: AbandonmentRequest = Body(...),
     user: dict = Depends(get_current_user),
 ) -> dict[str, Any]:
@@ -340,7 +340,7 @@ async def signal_abandonment(
 
 @router.get("/dashboard/cohort")
 async def cohort_dashboard(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     cohort: str | None = Query(
         None,
         max_length=64,
@@ -366,7 +366,7 @@ async def cohort_dashboard(
 
 @router.get("/correction/{trace_id}")
 async def bias_correction(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     trace_id: str = Path(..., min_length=1, max_length=128),
     user_id: str | None = Query(None, max_length=128),
 ) -> dict[str, Any]:

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { api, ApiError, API_BASE, githubApi } from "@/lib/api";
+import { isPaidPlansDisabledError } from "@/lib/feature-flag-error";
 
 export type IntegrationId =
   | "stripe"
@@ -39,6 +40,58 @@ const DEFAULT_UNAVAILABLE: Record<IntegrationId, string> = {
   security: "SSO security features are temporarily unavailable.",
 };
 
+/**
+ * Map probe exceptions onto available vs unavailable.
+ *
+ * 503 → not configured / soft-dep down (show banner), except Stripe
+ * free-only paid-plans-disabled which must stay silent (billing tab).
+ * Client auth/validation 4xx → do not claim the integration is missing.
+ * 5xx / network → never claim "connected"/available.
+ */
+export function interpretProbeFailure(
+  integration: IntegrationId,
+  error: unknown,
+): { available: boolean; message?: string } {
+  if (error instanceof ApiError) {
+    if (integration === "stripe" && isPaidPlansDisabledError(error)) {
+      return { available: true };
+    }
+    if (error.status === 503) {
+      return {
+        available: false,
+        message: error.detail || DEFAULT_UNAVAILABLE[integration],
+      };
+    }
+    // Exports list is admin-gated; 403 means the feature exists but is blocked.
+    if (integration === "exports" && error.status === 403) {
+      return {
+        available: false,
+        message: error.detail || DEFAULT_UNAVAILABLE.exports,
+      };
+    }
+    if (
+      error.status === 400 ||
+      error.status === 401 ||
+      error.status === 403 ||
+      error.status === 404
+    ) {
+      return { available: true };
+    }
+    if (error.status >= 500) {
+      return {
+        available: false,
+        message:
+          error.detail ||
+          `Could not verify ${LABELS[integration]} status. Try again.`,
+      };
+    }
+  }
+  return {
+    available: false,
+    message: `Could not verify ${LABELS[integration]} status. Try again.`,
+  };
+}
+
 async function probeIntegration(
   integration: IntegrationId,
   orgId?: string | null,
@@ -63,18 +116,16 @@ async function probeIntegration(
         });
         return { available: true };
       } catch (e) {
-        if (e instanceof ApiError) {
-          if (e.status === 400 && /unknown plan/i.test(e.detail)) {
-            return { available: true };
-          }
-          if (e.status === 503) {
-            return {
-              available: false,
-              message: e.detail || DEFAULT_UNAVAILABLE.stripe,
-            };
-          }
+        if (e instanceof ApiError && e.status === 400 && /unknown plan/i.test(e.detail)) {
+          return { available: true };
         }
-        return { available: true };
+        // Free-only mode: subscribe intentionally 503s. Do not paint
+        // "Stripe billing unavailable" — the Free plan card already
+        // explains paid plans are not open yet.
+        if (isPaidPlansDisabledError(e)) {
+          return { available: true };
+        }
+        return interpretProbeFailure("stripe", e);
       }
     }
     case "storage": {
@@ -90,9 +141,15 @@ async function probeIntegration(
             message: body.detail || DEFAULT_UNAVAILABLE.storage,
           };
         }
+        if (res.status >= 500) {
+          return {
+            available: false,
+            message: `Could not verify ${LABELS.storage} status. Try again.`,
+          };
+        }
         return { available: true };
-      } catch {
-        return { available: true };
+      } catch (e) {
+        return interpretProbeFailure("storage", e);
       }
     }
     case "gateway": {
@@ -103,13 +160,7 @@ async function probeIntegration(
         await api.listGatewayModels(orgId);
         return { available: true };
       } catch (e) {
-        if (e instanceof ApiError && e.status === 503) {
-          return {
-            available: false,
-            message: e.detail || DEFAULT_UNAVAILABLE.gateway,
-          };
-        }
-        return { available: true };
+        return interpretProbeFailure("gateway", e);
       }
     }
     case "exports": {
@@ -120,13 +171,7 @@ async function probeIntegration(
         await api.listExportDestinations(orgId);
         return { available: true };
       } catch (e) {
-        if (e instanceof ApiError && (e.status === 503 || e.status === 403)) {
-          return {
-            available: false,
-            message: e.detail || DEFAULT_UNAVAILABLE.exports,
-          };
-        }
-        return { available: true };
+        return interpretProbeFailure("exports", e);
       }
     }
     case "security": {
@@ -137,13 +182,7 @@ async function probeIntegration(
         await api.listSSOProviders(orgId);
         return { available: true };
       } catch (e) {
-        if (e instanceof ApiError && e.status === 503) {
-          return {
-            available: false,
-            message: e.detail || DEFAULT_UNAVAILABLE.security,
-          };
-        }
-        return { available: true };
+        return interpretProbeFailure("security", e);
       }
     }
     default:
@@ -173,8 +212,9 @@ export function useIntegrationStatus(
           (result.available ? null : DEFAULT_UNAVAILABLE[integration]),
       );
     } catch {
-      setStatus("available");
-      setMessage(null);
+      // Never treat an unexpected throw as "connected"/available.
+      setStatus("unavailable");
+      setMessage(`Could not verify ${LABELS[integration]} status. Try again.`);
     }
   }, [integration, orgId]);
 

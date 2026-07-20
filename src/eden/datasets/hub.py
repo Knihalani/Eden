@@ -190,6 +190,10 @@ class DatasetHub:
                     source_ref=trace_id,
                 )
                 dataset_id = created.id
+        else:
+            owned = await self.get_dataset(org_id, dataset_id)
+            if owned is None:
+                raise ValueError("dataset not found")
 
         payload = await self._trace_payload(trace_id)
         input_text = json.dumps(payload.get("messages", payload), default=str)[:100_000]

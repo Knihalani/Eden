@@ -136,7 +136,7 @@ class AgentAuditLedgerWriter:
     ) -> list[dict[str, Any]]:
         client = await self._client()
         if client is None:
-            return []
+            raise RuntimeError("postgres unavailable")
         clauses = ["org_id = $1"]
         args: list[Any] = [org_id]
         if agent_id:
@@ -170,8 +170,9 @@ class AgentAuditLedgerWriter:
                 out.append(d)
             return out
         except Exception as exc:
-            logger.debug("agent_audit_ledger.query failed: %s", exc)
-            return []
+            # Do not swallow as [] — portal would show a false empty state.
+            logger.warning("agent_audit_ledger.query failed: %s", exc)
+            raise
 
     async def _client(self) -> Any | None:
         try:

@@ -116,7 +116,7 @@ class TenantRateLimitMiddleware:
         self._buckets: dict[str, TokenBucket] = {}
         self._bucket_lock = asyncio.Lock()
         self._tier_cache: dict[str, tuple[int, int, str, float]] = {}  # org_id -> (limit, window, tier, expires_at)
-        self._tier_cache_ttl = 5.0  # seconds
+        self._tier_cache_ttl = 60.0  # seconds — avoid per-request DB tier lookups
         self._region_cache: dict[str, str | None] = {}  # org_id -> region
         self._redis = None  # Lazy-load Redis if available
         self._cleanup_task: asyncio.Task | None = None
@@ -187,15 +187,19 @@ class TenantRateLimitMiddleware:
                 logger.warning(f"Rate-limit bucket cleanup error: {exc}")
 
     async def _get_bucket(self, key: str, capacity: int, refill_rate: float) -> TokenBucket:
+        """Return (or create) the in-memory bucket for ``key``.
+
+        Stale eviction is handled by ``_periodic_bucket_cleanup`` —
+        scanning every bucket under the global lock on each request
+        was O(n) per admission and contended with every other
+        concurrent request. Hot path is now O(1) dict get/set.
+        """
         async with self._bucket_lock:
-            # Evict stale buckets (> 5 min idle) to prevent unbounded growth
-            cutoff = time.monotonic() - 300
-            stale = [k for k, b in self._buckets.items() if b.last_access < cutoff]
-            for k in stale:
-                del self._buckets[k]
-            if key not in self._buckets:
-                self._buckets[key] = TokenBucket(capacity, refill_rate)
-            return self._buckets[key]
+            bucket = self._buckets.get(key)
+            if bucket is None:
+                bucket = TokenBucket(capacity, refill_rate)
+                self._buckets[key] = bucket
+            return bucket
 
     def reset_buckets(self) -> None:
         """Clear ALL per-tenant rate-limit buckets.
@@ -211,13 +215,17 @@ class TenantRateLimitMiddleware:
         """
         self._buckets.clear()
 
-    async def _resolve_org_from_request(self, request: Request) -> str | None:
-        """Parse JWT cookie or API key header to extract org_id.
+    async def _resolve_org_and_api_key(
+        self, request: Request
+    ) -> tuple[str | None, str | None]:
+        """Resolve ``(org_id, api_key_id)`` with at most one DB round-trip.
 
-        Mirrors the logic in eden.api.deps but without depending on
-        route-level dependency injection.
+        API-key auth previously hit Postgres twice per request
+        (``_resolve_org_from_request`` then ``_resolve_api_key_id``)
+        for the same ``key_hash``. A single ``SELECT id, org_id``
+        preserves the same admission rules while cutting the
+        middleware's DB cost in half on the API-key hot path.
         """
-        # Try API key first (programmatic access)
         api_key = request.headers.get("x-org-api-key")
         org_id_header = request.headers.get("x-org-id")
         if api_key and org_id_header:
@@ -225,26 +233,59 @@ class TenantRateLimitMiddleware:
                 key_hash = hashlib.sha256(api_key.encode()).hexdigest()
                 client = await get_postgres_client()
                 row = await client.fetchrow(
-                    "SELECT org_id FROM org_api_keys WHERE key_hash = $1 AND org_id = $2",
+                    "SELECT id, org_id FROM org_api_keys "
+                    "WHERE key_hash = $1 AND org_id::text = $2",
                     key_hash,
                     org_id_header,
                 )
                 if row:
-                    return str(row["org_id"])
+                    return str(row["org_id"]), str(row["id"])
             except Exception:
                 logger.warning(
                     "tenant_rate_limit: API-key lookup failed; falling back",
                     exc_info=True,
                 )
 
-        # Try JWT cookie
         token = request.cookies.get("authorization")
         if token:
             payload = decode_access_token(token)
             if payload:
-                return payload.get("current_org_id")
+                return payload.get("current_org_id"), None
 
-        return None
+        # Clerk Bearer (portal) — session JWT carries ``o.id``.
+        # Only trust ``X-Org-Id`` after the Bearer verifies, so an
+        # unauthenticated client cannot burn another org's rate budget.
+        auth_header = request.headers.get("authorization")
+        if auth_header and auth_header.lower().startswith("bearer "):
+            try:
+                from eden.api.utils.clerk_auth import (
+                    extract_org_id,
+                    verify_clerk_token,
+                )
+
+                clerk_payload = await verify_clerk_token(auth_header[7:].strip())
+                if clerk_payload:
+                    clerk_org = extract_org_id(clerk_payload)
+                    if clerk_org:
+                        return clerk_org, None
+                    if org_id_header:
+                        return org_id_header, None
+            except Exception:
+                logger.debug(
+                    "tenant_rate_limit: Clerk Bearer resolve failed; falling back",
+                    exc_info=True,
+                )
+
+        return None, None
+
+    async def _resolve_org_from_request(self, request: Request) -> str | None:
+        """Parse JWT cookie or API key header to extract org_id.
+
+        Mirrors the logic in eden.api.deps but without depending on
+        route-level dependency injection.
+        """
+        org_id, _key_id = await self._resolve_org_and_api_key(request)
+        return org_id
 
     async def _get_tier_limits(self, org_id: str) -> tuple[int, int, str]:
         """Fetch rate limits for an org. Cached for a few seconds."""
@@ -310,9 +351,14 @@ class TenantRateLimitMiddleware:
         if script is None:
             script = redis.register_script(sliding_window_script)
             self._sliding_window_script = script
-        results = await script(
-            keys=[redis_key],
-            args=[window_start, limit, now, int(window) + 1],
+        # Bound the Redis RTT so a hung Upstash socket cannot stall
+        # every request behind this middleware.
+        results = await asyncio.wait_for(
+            script(
+                keys=[redis_key],
+                args=[window_start, limit, now, int(window) + 1],
+            ),
+            timeout=2.0,
         )
         allowed_int, current_count = results[0], results[1]
         allowed = bool(int(allowed_int))
@@ -378,28 +424,12 @@ class TenantRateLimitMiddleware:
     async def _resolve_api_key_id(self, request: Request) -> str | None:
         """Resolve the API key id from the X-Org-Api-Key header.
 
-        Returns the key's UUID (suitable for ``key:{id}`` rate limit
-        bucketing) or ``None`` if the request isn't using API-key auth
-        or the key is invalid. Never raises — the org-level limit
-        applies as a fallback.
+        Prefer :meth:`_resolve_org_and_api_key` on the hot path so
+        org + key id share one query. This helper remains for callers
+        that only need the key id.
         """
-        api_key = request.headers.get("x-org-api-key")
-        org_id = request.headers.get("x-org-id")
-        if not api_key or not org_id:
-            return None
-        try:
-            import hashlib
-            key_hash = hashlib.sha256(api_key.encode()).hexdigest()
-            client = await get_postgres_client()
-            row = await client.fetchrow(
-                "SELECT id FROM org_api_keys WHERE key_hash = $1 AND org_id = $2",
-                key_hash,
-                org_id,
-            )
-            return str(row["id"]) if row else None
-        except Exception as exc:
-            logger.debug(f"Could not resolve API key id for rate limit: {exc}")
-            return None
+        _org_id, api_key_id = await self._resolve_org_and_api_key(request)
+        return api_key_id
 
     async def __call__(
         self, scope: Scope, receive: Receive, send: Send
@@ -464,13 +494,11 @@ class TenantRateLimitMiddleware:
 
         # ── Identify the limit key ──
         # Phase 5.1.4: per-API-key limits are tighter than per-org so a
-        # single key can't burn the whole org budget. We look up the
-        # key_id by hashing the X-Org-Api-Key header (the same hash
+        # single key can't burn the whole org budget. One Postgres
+        # round-trip resolves both org_id and api_key_id (same hash
         # used at auth time). Falls back to per-org, then per-IP.
-        org_id = await self._resolve_org_from_request(request)
-        api_key_id: str | None = None
+        org_id, api_key_id = await self._resolve_org_and_api_key(request)
         if org_id:
-            api_key_id = await self._resolve_api_key_id(request)
             limit_key = f"key:{api_key_id}" if api_key_id else f"org:{org_id}"
         else:
             # Phase X: delegate to the trusted-proxy-aware client-IP
@@ -498,6 +526,7 @@ class TenantRateLimitMiddleware:
 
         # Prefer in-memory buckets unless RATE_LIMIT_DISTRIBUTED=true.
         # Per-request Redis Lua was the dominant Upstash Free burn.
+        # Single get_settings() hop (same source as rate_limit_enabled).
         use_redis = bool(getattr(get_settings(), "rate_limit_distributed", False))
         if use_redis:
             try:

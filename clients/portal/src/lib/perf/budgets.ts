@@ -1,4 +1,4 @@
-/** F82 — Web Vitals budgets for Home + Traces (CI gate). */
+/** F82 / A10 — Web Vitals budgets for Home + Traces (CI gate). */
 
 export type WebVitalName = "LCP" | "INP" | "CLS" | "FCP" | "TTFB";
 
@@ -8,13 +8,16 @@ export interface VitalBudget {
   unit: "ms" | "score";
 }
 
-/** Baseline from July 2026 dogfood; adjust only with scorecard evidence. */
+/**
+ * Tightened July 2026 (A10 K43) from F82 dogfood baselines.
+ * Adjust only with scorecard evidence.
+ */
 export const WEB_VITAL_BUDGETS: Record<WebVitalName, VitalBudget> = {
-  LCP: { max: 2800, unit: "ms" },
-  INP: { max: 250, unit: "ms" },
-  CLS: { max: 0.12, unit: "score" },
-  FCP: { max: 2000, unit: "ms" },
-  TTFB: { max: 900, unit: "ms" },
+  LCP: { max: 2600, unit: "ms" },
+  INP: { max: 220, unit: "ms" },
+  CLS: { max: 0.1, unit: "score" },
+  FCP: { max: 1800, unit: "ms" },
+  TTFB: { max: 800, unit: "ms" },
 };
 
 export const F82_CORE_ROUTES = ["/dashboard", "/traces"] as const;

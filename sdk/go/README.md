@@ -84,7 +84,7 @@ func main() {
 
 | Variable             | Default                  | Notes                                |
 |----------------------|--------------------------|--------------------------------------|
-| `EDEN_BASE_URL`      | `http://localhost:8000`  | Root of the Eden backend             |
+| `EDEN_BASE_URL`      | `http://localhost:8000`  | Root of the Eden backend. **Prod risk:** the default targets localhost — set this (or `Config.BaseURL`) to your real API URL in production or events silently miss the backend. |
 | `EDEN_ORG_ID`        | _(unset)_                | Sent as `X-Org-Id` header            |
 | `EDEN_ORG_API_KEY`   | _(unset)_                | Sent as `X-Org-Api-Key` header       |
 | `EDEN_PROJECT_ID`    | `default`                | Sent as `X-Project-Id` header        |
@@ -96,11 +96,15 @@ the host application** — observability is best-effort.
 ## Wire format
 
 The SDK POSTs the same `Event` struct (see `client.go`) to the
-`/orgs/{org_id}/ingest/{format}` endpoint, where `format` is one of
-`openai`, `anthropic`, or `custom`. The field-by-field mapping is
-documented in `src/eden/observability/ingestion/providers.py` in
-the Eden backend — `_openai_to_raw` and `_anthropic_to_raw` are the
-authoritative decoders.
+`/orgs/{org_id}/ingest/{format}` endpoint. Allow-listed formats are
+`otel`, `helicone`, `langfuse`, `openai`, `anthropic`, `bedrock`,
+`gemini`, `framework`, and `webhook`. Non-allowlisted labels (including
+legacy `custom`, framework aliases like `langchain` / `vercel-ai`) are
+remapped to `webhook` via `ResolveIngestPath` so the gateway does not
+return HTTP 415. The field-by-field mapping is documented in
+`src/eden/observability/ingestion/providers.py` in the Eden backend —
+`_openai_to_raw` and `_anthropic_to_raw` are the authoritative
+decoders.
 
 The minimum viable event shape is:
 

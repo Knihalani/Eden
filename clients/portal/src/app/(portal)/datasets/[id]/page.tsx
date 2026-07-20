@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { useOrg } from "@/hooks/use-org";
 import { Card } from "@/components/ui/card";
@@ -33,9 +33,60 @@ interface DatasetDetail {
   snapshots?: Array<{ id: string; version: number; row_count: number; created_at: string }>;
 }
 
+type ColDef = { key: string; label: string };
+
+function cellValue(row: DatasetRow, key: string): string {
+  if (key === "input" && row.input != null && String(row.input).length > 0) {
+    return String(row.input);
+  }
+  if (
+    key === "expected_output" &&
+    row.expected_output != null &&
+    String(row.expected_output).length > 0
+  ) {
+    return String(row.expected_output);
+  }
+  const fromValues = row.values?.[key];
+  if (fromValues != null && String(fromValues).length > 0) return String(fromValues);
+  if (key === "input") return String(row.input ?? "");
+  if (key === "expected_output") return String(row.expected_output ?? "");
+  return "";
+}
+
+function resolveColumns(data: DatasetDetail | null): ColDef[] {
+  if (data?.columns?.length) {
+    return data.columns.map((c) => ({
+      key: c.id || c.name || "col",
+      label: c.name || c.id || "col",
+    }));
+  }
+  const first = data?.rows?.[0];
+  if (first?.values && Object.keys(first.values).length > 0) {
+    const keys = Object.keys(first.values);
+    const hasTopLevel =
+      (first.input != null && String(first.input).length > 0) ||
+      (first.expected_output != null && String(first.expected_output).length > 0);
+    if (hasTopLevel) {
+      return [
+        { key: "input", label: "input" },
+        { key: "expected_output", label: "expected_output" },
+        ...keys
+          .filter((k) => k !== "input" && k !== "expected_output")
+          .map((k) => ({ key: k, label: k })),
+      ];
+    }
+    return keys.map((k) => ({ key: k, label: k }));
+  }
+  return [
+    { key: "input", label: "input" },
+    { key: "expected_output", label: "expected_output" },
+  ];
+}
+
 export default function DatasetDetailPage() {
   const { id } = useParams<{ id: string }>();
   const { currentOrg } = useOrg();
+  const router = useRouter();
   const toast = useToast();
   const fileRef = useRef<HTMLInputElement>(null);
   const [data, setData] = useState<DatasetDetail | null>(null);
@@ -57,11 +108,10 @@ export default function DatasetDetailPage() {
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Failed to load dataset";
       setError(msg);
-      toast.error(msg);
     } finally {
       setLoading(false);
     }
-  }, [currentOrg?.id, id, toast]);
+  }, [currentOrg?.id, id]);
 
   useEffect(() => {
     load();
@@ -93,9 +143,21 @@ export default function DatasetDetailPage() {
   const saveCell = async (row: DatasetRow, key: string, value: string) => {
     if (!currentOrg?.id || !id) return;
     try {
-      await datasetsApi.updateRow(currentOrg.id, id, row.id, {
-        values: { ...(row.values || {}), [key]: value },
-      });
+      if (key === "input") {
+        await datasetsApi.updateRow(currentOrg.id, id, row.id, {
+          input: value,
+          values: { ...(row.values || {}) },
+        });
+      } else if (key === "expected_output") {
+        await datasetsApi.updateRow(currentOrg.id, id, row.id, {
+          expected_output: value,
+          values: { ...(row.values || {}) },
+        });
+      } else {
+        await datasetsApi.updateRow(currentOrg.id, id, row.id, {
+          values: { ...(row.values || {}), [key]: value },
+        });
+      }
       setEditing(null);
       toast.success("Cell saved");
       load();
@@ -105,7 +167,7 @@ export default function DatasetDetailPage() {
   };
 
   const snapshot = async () => {
-    if (!currentOrg?.id || !id) return;
+    if (!currentOrg?.id || !id || error) return;
     try {
       await datasetsApi.createSnapshot(currentOrg.id, id);
       toast.success("Snapshot created");
@@ -116,7 +178,7 @@ export default function DatasetDetailPage() {
   };
 
   const runExperiment = async () => {
-    if (!currentOrg?.id || !id || !data) return;
+    if (!currentOrg?.id || !id || !data || error) return;
     try {
       const res = await offlineExperimentsApi.create(currentOrg.id, {
         name: `Exp · ${data.name}`,
@@ -124,16 +186,18 @@ export default function DatasetDetailPage() {
       });
       const expId = String(res.experiment?.id || "");
       toast.success("Experiment created from dataset");
-      window.location.href = expId
-        ? `/evals?tab=experiments&experimentId=${expId}`
-        : "/evals?tab=experiments";
+      router.push(
+        expId
+          ? `/evals?tab=experiments&experimentId=${expId}`
+          : "/evals?tab=experiments",
+      );
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Create experiment failed");
     }
   };
 
   const onImportFile = async (file: File) => {
-    if (!currentOrg?.id || !id) return;
+    if (!currentOrg?.id || !id || error) return;
     setImportProgress("Reading file…");
     try {
       const text = await file.text();
@@ -151,7 +215,6 @@ export default function DatasetDetailPage() {
             .map((l) => JSON.parse(l) as Record<string, unknown>);
         }
       } else {
-        // CSV: header row + values
         const lines = text.split(/\r?\n/).filter((l) => l.trim());
         const headers = (lines[0] || "").split(",").map((h) => h.trim().replace(/^"|"$/g, ""));
         headers.forEach((h) => {
@@ -180,19 +243,19 @@ export default function DatasetDetailPage() {
     }
   };
 
-  const colKeys =
-    data?.columns?.length
-      ? data.columns.map((c) => c.id || (c as { name?: string }).name || "col")
-      : data?.rows?.[0]?.values
-        ? Object.keys(data.rows[0].values)
-        : ["input", "expected_output"];
+  const columns = resolveColumns(data);
+  const canMutate = !error && !loading && Boolean(data);
 
   return (
     <PageContent size="wide">
       <PageHeader
         eyebrow="Data · Dataset"
-        title={data?.name || "Dataset"}
-        subtitle={data?.description || (loading ? "Loading…" : "Spreadsheet edit · import · snapshots.")}
+        title={data?.name || (error ? "Dataset" : loading ? "Loading…" : "Dataset")}
+        subtitle={
+          error
+            ? "Load failed — retry below."
+            : data?.description || (loading ? "Loading…" : "Spreadsheet edit · import · snapshots.")
+        }
         icon={Database}
         actions={
           <>
@@ -203,12 +266,13 @@ export default function DatasetDetailPage() {
             >
               <ArrowLeft className="h-3.5 w-3.5" /> Back
             </Link>
-            <Button onClick={snapshot} variant="outline" size="sm">
+            <Button onClick={snapshot} variant="outline" size="sm" disabled={!canMutate}>
               <Camera className="h-3.5 w-3.5" /> Snapshot
             </Button>
             <Button
               variant="outline"
               size="sm"
+              disabled={!canMutate}
               onClick={() => fileRef.current?.click()}
             >
               <Upload className="h-3.5 w-3.5" /> Import
@@ -224,7 +288,7 @@ export default function DatasetDetailPage() {
                 e.target.value = "";
               }}
             />
-            <Button onClick={runExperiment} variant="outline" size="sm">
+            <Button onClick={runExperiment} variant="outline" size="sm" disabled={!canMutate}>
               <FlaskConical className="h-3.5 w-3.5" /> New experiment
             </Button>
             <Button onClick={load} variant="outline" size="sm" disabled={loading} loading={loading}>
@@ -243,7 +307,7 @@ export default function DatasetDetailPage() {
           title="Could not load dataset"
           message={error}
           action={
-            <Button onClick={load} variant="outline" size="sm">
+            <Button onClick={load} variant="outline" size="sm" disabled={loading} loading={loading}>
               Try again
             </Button>
           }
@@ -281,9 +345,13 @@ export default function DatasetDetailPage() {
                 value={newRow}
                 onChange={(e) => setNewRow(e.target.value)}
                 className="flex-1 font-mono text-xs"
-                disabled={submitting}
+                disabled={submitting || loading}
               />
-              <Button onClick={addRow} disabled={!newRow.trim() || submitting} loading={submitting}>
+              <Button
+                onClick={addRow}
+                disabled={!newRow.trim() || submitting || loading}
+                loading={submitting}
+              >
                 <Plus className="h-3.5 w-3.5" /> Add
               </Button>
             </div>
@@ -300,9 +368,9 @@ export default function DatasetDetailPage() {
                 {(data?.rows?.length ?? 0) > 40 ? " · virtualized" : ""}
               </span>
               <div className="hidden min-w-0 flex-1 gap-2 overflow-hidden sm:flex">
-                {colKeys.map((k) => (
-                  <span key={k} className="truncate font-medium">
-                    {k}
+                {columns.map((c) => (
+                  <span key={c.key} className="truncate font-medium">
+                    {c.label}
                   </span>
                 ))}
               </div>
@@ -316,20 +384,20 @@ export default function DatasetDetailPage() {
               >
                 {(r) => (
                   <div className="flex items-stretch gap-1 border-b border-[var(--border-subtle)] px-1 py-0.5 text-sm">
-                    {colKeys.map((k) => {
-                      const isEdit = editing?.rowId === r.id && editing.key === k;
-                      const val = String(r.values?.[k] ?? "");
+                    {columns.map((c) => {
+                      const isEdit = editing?.rowId === r.id && editing.key === c.key;
+                      const val = cellValue(r, c.key);
                       return (
-                        <div key={k} className="min-w-0 flex-1 p-0.5">
+                        <div key={c.key} className="min-w-0 flex-1 p-0.5">
                           {isEdit ? (
                             <Input
                               autoFocus
                               className="h-8 font-mono text-xs"
                               value={editValue}
                               onChange={(e) => setEditValue(e.target.value)}
-                              onBlur={() => void saveCell(r, k, editValue)}
+                              onBlur={() => void saveCell(r, c.key, editValue)}
                               onKeyDown={(e) => {
-                                if (e.key === "Enter") void saveCell(r, k, editValue);
+                                if (e.key === "Enter") void saveCell(r, c.key, editValue);
                                 if (e.key === "Escape") setEditing(null);
                               }}
                             />
@@ -338,7 +406,7 @@ export default function DatasetDetailPage() {
                               type="button"
                               className="w-full truncate rounded px-1 py-1 text-left font-mono text-xs hover:bg-[var(--surface-raised)]"
                               onClick={() => {
-                                setEditing({ rowId: r.id, key: k });
+                                setEditing({ rowId: r.id, key: c.key });
                                 setEditValue(val);
                               }}
                             >
@@ -356,9 +424,22 @@ export default function DatasetDetailPage() {
               </VirtualizedList>
             ) : null}
             {!loading && !(data?.rows?.length) ? (
-              <p className="p-4 text-sm text-[var(--text-muted)]">
-                No rows yet. Import CSV/JSONL or add a row above.
-              </p>
+              <div className="space-y-3 p-4 text-sm text-[var(--text-muted)]">
+                <p>No rows yet. Import CSV/JSONL or add a row above.</p>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={!canMutate}
+                    onClick={() => fileRef.current?.click()}
+                  >
+                    <Upload className="h-3.5 w-3.5" /> Import file
+                  </Button>
+                  <Button asChild size="sm" variant="ghost">
+                    <Link href="/evals?tab=labeling">Labeling → push to dataset</Link>
+                  </Button>
+                </div>
+              </div>
             ) : null}
           </Card>
         </>

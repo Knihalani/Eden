@@ -412,7 +412,8 @@ class ImprovementCockpitAggregator:
             out.append(
                 ImprovementItem(
                     ref=f"improvement_plan:{pid}",
-                    item_type="proposed_patch",
+                    # N23 inbox — never label as Cat 23 proposed_patch (breaks approve wiring).
+                    item_type="improvement_plan",
                     title=title,
                     column=column,
                     severity="medium",
@@ -471,7 +472,8 @@ class ImprovementCockpitAggregator:
                     severity="medium",
                     agent_id=repo,
                     status=status,
-                    href="/pr-suggestions",
+                    # Legacy Cat 23 — no detail page; portal maps to N23 inbox.
+                    href="/improve/plans",
                     payload={
                         "patch_id": pid,
                         "rca_id": r.get("rca_id"),
@@ -656,13 +658,20 @@ class ImprovementCockpitAggregator:
             client = await get_postgres_client()
             if client is None:
                 return []
+            # Read prompt_canary_experiments (PromotionLoop + evolver
+            # auto-canary). Do not claim prompt_canaries here — that
+            # table is not written by PromptEvolvers._auto_create_canary.
             if agent_id:
                 rows = await client.fetch(
                     """
-                    SELECT id, agent_id, name, status, current_version
-                    FROM prompt_canaries
-                    WHERE org_id = $1 AND agent_id = $2 AND status = 'active'
-                    ORDER BY created_at DESC
+                    SELECT experiment_id::text AS id,
+                           agent AS agent_id,
+                           COALESCE(notes, 'Prompt canary') AS name,
+                           status,
+                           candidate_version AS current_version
+                    FROM prompt_canary_experiments
+                    WHERE tenant_id = $1 AND agent = $2 AND status = 'active'
+                    ORDER BY started_at DESC
                     LIMIT 15
                     """,
                     org_id,
@@ -671,10 +680,14 @@ class ImprovementCockpitAggregator:
             else:
                 rows = await client.fetch(
                     """
-                    SELECT id, agent_id, name, status, current_version
-                    FROM prompt_canaries
-                    WHERE org_id = $1 AND status = 'active'
-                    ORDER BY created_at DESC
+                    SELECT experiment_id::text AS id,
+                           agent AS agent_id,
+                           COALESCE(notes, 'Prompt canary') AS name,
+                           status,
+                           candidate_version AS current_version
+                    FROM prompt_canary_experiments
+                    WHERE tenant_id = $1 AND status = 'active'
+                    ORDER BY started_at DESC
                     LIMIT 15
                     """,
                     org_id,

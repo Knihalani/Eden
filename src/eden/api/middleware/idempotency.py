@@ -10,7 +10,14 @@ Storage backend:
 - PostgreSQL: durable fallback (if Redis is unavailable)
 
 Non-mutating requests (GET, HEAD, OPTIONS) are ignored.
+
+Audit 2026-07-06 — converted from BaseHTTPMiddleware to pure ASGI.
+The body is buffered ONLY when an ``Idempotency-Key`` is present on a
+mutating ``/v1/`` request; without the key the request passes through
+without reading the body.
 """
+
+from __future__ import annotations
 
 import hashlib
 import json
@@ -18,18 +25,18 @@ import logging
 from datetime import UTC, datetime, timedelta
 
 from fastapi import Request
-from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.responses import JSONResponse, Response
+from starlette.responses import JSONResponse
+from starlette.types import ASGIApp, Receive, Scope, Send
 
 from eden.api.middleware.correlation_id import get_correlation_id
 from eden.api.middleware.security_headers import apply_security_headers
-from eden.config import get_settings
+from eden.async_tasks import bounded_gather
 from eden.storage.redis import get_redis_client
 
 logger = logging.getLogger(__name__)
-settings = get_settings()
 
 _IDEMPOTENCY_HEADER = "Idempotency-Key"
+_IDEMPOTENCY_HEADER_BYTES = b"idempotency-key"
 _IDEMPOTENCY_REPLAY_HEADER = "Idempotency-Replay"
 _TTL_SECONDS = 86400  # 24 hours
 
@@ -57,7 +64,28 @@ def _get_request_identity(request: Request) -> str:
     return f"anon:{request.client.host if request.client else 'unknown'}"
 
 
-class IdempotencyMiddleware(BaseHTTPMiddleware):
+def _header_value(scope: Scope, name_bytes: bytes) -> str | None:
+    """Return a single header value from the ASGI scope (latin-1)."""
+    for name, value in scope.get("headers") or ():
+        if name == name_bytes:
+            return value.decode("latin1")
+    return None
+
+
+async def _buffer_body(receive: Receive) -> bytes:
+    """Drain the full request body from the ASGI receive channel."""
+    body = b""
+    while True:
+        message = await receive()
+        if message["type"] != "http.request":
+            continue
+        body += message.get("body", b"")
+        if not message.get("more_body", False):
+            break
+    return body
+
+
+class IdempotencyMiddleware:
     """Middleware that intercepts mutating requests and enforces idempotency keys.
 
     If a request has an ``Idempotency-Key`` header:
@@ -68,23 +96,34 @@ class IdempotencyMiddleware(BaseHTTPMiddleware):
     If a mutating request is missing the header, the request proceeds
     unchanged (header is optional). Pass ``require_key=True`` to reject
     missing keys with 400 (used by F69 unit tests / strict tenants).
+
+    Audit 2026-07-06 — pure ASGI ``__call__`` (no ``BaseHTTPMiddleware``).
+    Body buffering happens only when the Idempotency-Key is present.
     """
 
-    def __init__(self, app, require_key: bool = False) -> None:
-        super().__init__(app)
+    def __init__(self, app: ASGIApp, require_key: bool = False) -> None:
+        self.app = app
         self.require_key = require_key
 
-    async def dispatch(self, request: Request, call_next) -> Response:
-        method = request.method.upper()
+    async def __call__(
+        self, scope: Scope, receive: Receive, send: Send
+    ) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        method = (scope.get("method") or "GET").upper()
+        path = scope.get("path", "")
 
         # Only enforce idempotency on mutating methods under /v1/
-        if method not in _MUTATING_METHODS or not request.url.path.startswith("/v1"):
-            return await call_next(request)
+        if method not in _MUTATING_METHODS or not path.startswith("/v1"):
+            await self.app(scope, receive, send)
+            return
 
-        idempotency_key = request.headers.get(_IDEMPOTENCY_HEADER)
+        idempotency_key = _header_value(scope, _IDEMPOTENCY_HEADER_BYTES)
         if not idempotency_key:
             if self.require_key:
-                return JSONResponse(
+                response = JSONResponse(
                     status_code=400,
                     content={
                         "detail": f"Idempotency-Key header is required for {method} requests",
@@ -93,50 +132,95 @@ class IdempotencyMiddleware(BaseHTTPMiddleware):
                     # F69 — apply OWASP security headers to the 400 envelope.
                     headers=apply_security_headers(),
                 )
-            return await call_next(request)
+                await response(scope, receive, send)
+                return
+            # No key — pass through WITHOUT reading the body.
+            await self.app(scope, receive, send)
+            return
 
         # Sanitize key
         key_raw = idempotency_key.strip()
         if len(key_raw) > 256:
             key_raw = key_raw[:256]
 
-        # Read request body to include in the composite key
-        body_bytes = await request.body()
+        # Buffer body only when the Idempotency-Key is present.
+        body_bytes = await _buffer_body(receive)
         body_hash = hashlib.sha256(body_bytes).hexdigest()
+
+        # Request shim for identity helpers (cookies / headers / client).
+        body_sent = False
+
+        async def receive_replay() -> dict:
+            nonlocal body_sent
+            if not body_sent:
+                body_sent = True
+                return {"type": "http.request", "body": body_bytes, "more_body": False}
+            return {"type": "http.request", "body": b"", "more_body": False}
+
+        request = Request(scope, receive_replay)
+        request.state.idempotency_body = body_bytes
 
         identity = _get_request_identity(request)
 
         # Composite cache key: method + path + idempotency_key + body_hash + identity
-        composite = f"{method}:{request.url.path}:{key_raw}:{body_hash}:{identity}"
+        composite = f"{method}:{path}:{key_raw}:{body_hash}:{identity}"
         cache_key = f"eden:idempotency:{hashlib.sha256(composite.encode()).hexdigest()}"
 
         # Try fast-path Redis lookup
         cached = await self._lookup_redis(cache_key)
         if cached:
-            return self._build_replay_response(cached)
+            response = self._build_replay_response(cached)
+            await response(scope, receive_replay, send)
+            return
 
         # Try durable Postgres fallback (also scoped by identity)
-        cached = await self._lookup_postgres(key_raw, method, request.url.path, body_hash, identity)
+        cached = await self._lookup_postgres(key_raw, method, path, body_hash, identity)
         if cached:
             # Backfill Redis for next time
             await self._store_redis(cache_key, cached)
-            return self._build_replay_response(cached)
+            response = self._build_replay_response(cached)
+            await response(scope, receive_replay, send)
+            return
 
-        # No cache hit — proceed with request
-        # Re-inject body so downstream handlers can still read it
-        async def receive():
-            return {"type": "http.request", "body": body_bytes, "more_body": False}
+        # No cache hit — proceed with request; capture response for caching.
+        captured: dict = {
+            "status": None,
+            "headers": [],
+            "body": bytearray(),
+            "more_body": False,
+        }
 
-        request._receive = receive  # type: ignore[attr-defined]
-        # Store body in state as a fallback for frameworks that don't honour _receive
-        request.state.idempotency_body = body_bytes
+        async def send_wrapper(message: dict) -> None:
+            if message["type"] == "http.response.start":
+                captured["status"] = message.get("status", 500)
+                captured["headers"] = list(message.get("headers") or [])
+                return
+            if message["type"] == "http.response.body":
+                captured["body"].extend(message.get("body", b""))
+                if message.get("more_body", False):
+                    captured["more_body"] = True
+                    return
+                # Final body chunk — cache then pass through start + body.
+                status = captured["status"] or 500
+                body = bytes(captured["body"])
+                await self._cache_response(
+                    cache_key, key_raw, method, path, body_hash, identity,
+                    status, body,
+                )
+                await send({
+                    "type": "http.response.start",
+                    "status": status,
+                    "headers": captured["headers"],
+                })
+                await send({
+                    "type": "http.response.body",
+                    "body": body,
+                    "more_body": False,
+                })
+                return
+            await send(message)
 
-        response = await call_next(request)
-
-        # Cache the response for future replays
-        await self._cache_response(cache_key, key_raw, method, request.url.path, body_hash, identity, response)
-
-        return response
+        await self.app(scope, receive_replay, send_wrapper)
 
     async def _lookup_redis(self, cache_key: str) -> dict | None:
         try:
@@ -184,26 +268,20 @@ class IdempotencyMiddleware(BaseHTTPMiddleware):
         except Exception as exc:
             logger.warning(f"Redis idempotency store failed: {exc}")
 
-    async def _cache_response(self, cache_key: str, key: str, method: str, path: str, body_hash: str, identity: str, response: Response) -> None:
+    async def _cache_response(
+        self,
+        cache_key: str,
+        key: str,
+        method: str,
+        path: str,
+        body_hash: str,
+        identity: str,
+        status_code: int,
+        body: bytes,
+    ) -> None:
         # Only cache successful responses (2xx)
-        if response.status_code < 200 or response.status_code >= 300:
+        if status_code < 200 or status_code >= 300:
             return
-
-        # Read response body
-        body = b""
-        # body_iterator is an async iterator on Starlette Response subclasses
-        try:
-            async for chunk in response.body_iterator:
-                body += chunk
-        except Exception as exc:
-            logger.warning(f"Could not read response body for idempotency caching: {exc}")
-            return
-
-        # Rebuild response so it can still be returned
-        async def _replay():
-            yield body
-
-        response.body_iterator = _replay()
 
         # Try to parse body as JSON; fall back to storing raw string if not JSON
         try:
@@ -212,14 +290,32 @@ class IdempotencyMiddleware(BaseHTTPMiddleware):
             body_json = {"raw_body": body.decode("utf-8", errors="replace")}
 
         payload = {
-            "status_code": response.status_code,
+            "status_code": status_code,
             "body": body_json,
         }
 
-        # Store in Redis
-        await self._store_redis(cache_key, payload)
+        # Redis + Postgres are independent durability layers —
+        # store in parallel so a slow Postgres insert doesn't
+        # serialize behind Redis (and vice versa).
+        await bounded_gather(
+            self._store_redis(cache_key, payload),
+            self._store_postgres(
+                key, method, path, body_hash, identity,
+                status_code, payload,
+            ),
+            limit=2,
+        )
 
-        # Store in Postgres as durable fallback
+    async def _store_postgres(
+        self,
+        key: str,
+        method: str,
+        path: str,
+        body_hash: str,
+        identity: str,
+        status_code: int,
+        payload: dict,
+    ) -> None:
         try:
             from eden.storage.postgres import get_postgres_client
             client = await get_postgres_client()
@@ -237,7 +333,7 @@ class IdempotencyMiddleware(BaseHTTPMiddleware):
                     expires_at = EXCLUDED.expires_at
                 """,
                 key, method, path, body_hash, identity,
-                response.status_code, json.dumps(payload["body"]), expires_at,
+                status_code, json.dumps(payload["body"]), expires_at,
             )
         except Exception as exc:
             logger.warning(f"Postgres idempotency cache failed: {exc}")

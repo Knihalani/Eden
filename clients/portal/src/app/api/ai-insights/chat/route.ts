@@ -26,6 +26,9 @@ import { auth } from "@clerk/nextjs/server";
 // In dev: falls back to localhost:8000.
 const FASTAPI_URL = process.env.API_INTERNAL_URL || "http://localhost:8000";
 
+/** SSE chat can run for minutes; raise the fluid/Vercel timeout. */
+export const maxDuration = 300;
+
 export async function POST(request: Request) {
   const url = new URL(request.url);
   const orgId = url.searchParams.get("org_id");

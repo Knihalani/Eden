@@ -1,6 +1,7 @@
 """Wave 23 — ChatSidebar SOTA helpers (tier routing, cost, cite, TTFT).
 
 Pure / lightly-coupled helpers used by ChatService + ai-insights routes.
+Chat is locked to T2 — no operator model picker.
 """
 
 from __future__ import annotations
@@ -10,27 +11,15 @@ from typing import Any, Literal
 
 from eden.optimization.model_router import TIER_MODELS, ModelTier
 
-ChatTier = Literal["t1", "t2", "t3"]
+ChatTier = Literal["t2"]
 
-# Operator-facing model picker (Loop-class). Values are OpenRouter model ids.
+# Fixed T2 catalog entry (no Auto/T1/T3 operator picker).
 MODEL_PICKER: list[dict[str, str]] = [
     {
-        "id": "auto",
-        "label": "Auto (T1/T3)",
-        "tier": "auto",
-        "description": "SLM for simple asks; T3 for tools / deep reasoning",
-    },
-    {
-        "id": TIER_MODELS[ModelTier.T1][0],
-        "label": "Fast (T1/SLM)",
-        "tier": "t1",
-        "description": "Cheapest / lowest TTFT",
-    },
-    {
-        "id": TIER_MODELS[ModelTier.T3][0],
-        "label": "Expert (T3)",
-        "tier": "t3",
-        "description": "Multi-tool observability copilot",
+        "id": TIER_MODELS[ModelTier.T2][0],
+        "label": "Standard (T2)",
+        "tier": "t2",
+        "description": "Fixed chat tier — no operator picker",
     },
 ]
 
@@ -49,81 +38,28 @@ _CLAIM_ID_RE = re.compile(
 )
 _BARE_TRACE_RE = re.compile(r"\b(?:trc_|trace_)[a-zA-Z0-9_-]{6,}\b", re.IGNORECASE)
 
-_COMPLEX_HINTS = (
-    "compare",
-    "investigate",
-    "root cause",
-    "why did",
-    "correlate",
-    "export",
-    "alert",
-    "signal",
-    "sql",
-    "dataset",
-    "experiment",
-    "playground",
-    "filter",
-    "similar",
-    "navigate",
-    "create ",
-    "promote",
-)
-
 
 def resolve_picker_model(
     *,
     preferred_model: str | None = None,
     preferred_tier: str | None = None,
 ) -> tuple[str | None, str]:
-    """Return (explicit_model_or_None, tier_key).
+    """Always T2 — chat has no operator model picker.
 
-    ``auto`` / empty → model None (caller classifies), tier ``auto``.
+    Returns ``(None, "t2")``; callers use :func:`model_for_tier`.
     """
-    model = (preferred_model or "").strip() or None
-    tier = (preferred_tier or "").strip().lower() or "auto"
-    if model and model.lower() == "auto":
-        model = None
-        tier = "auto"
-    if model:
-        for row in MODEL_PICKER:
-            if row["id"] == model:
-                tier = row.get("tier") or tier
-                break
-        if tier == "auto":
-            tier = "t3"
-    if tier not in ("t1", "t2", "t3", "auto"):
-        tier = "auto"
-    return model, tier
+    _ = preferred_model, preferred_tier
+    return None, "t2"
 
 
 def classify_chat_tier(message: str, *, preferred_tier: str = "auto") -> ModelTier:
-    """T1/SLM for short factual asks; T3 for tool-heavy / complex turns."""
-    if preferred_tier == "t1":
-        return ModelTier.T1
-    if preferred_tier == "t2":
-        return ModelTier.T2
-    if preferred_tier == "t3":
-        return ModelTier.T3
-
-    text = (message or "").strip().lower()
-    if not text:
-        return ModelTier.T1
-    if len(text) > 280:
-        return ModelTier.T3
-    if any(h in text for h in _COMPLEX_HINTS):
-        return ModelTier.T3
-    if text.startswith("/"):
-        return ModelTier.T3
-    # Short Q&A → SLM
-    if len(text) < 120 and "?" in text:
-        return ModelTier.T1
-    if len(text) < 80:
-        return ModelTier.T1
-    return ModelTier.T3
+    """Always T2 — chat has no Auto/T1/T3 routing."""
+    _ = message, preferred_tier
+    return ModelTier.T2
 
 
 def model_for_tier(tier: ModelTier) -> str:
-    models = TIER_MODELS.get(tier) or TIER_MODELS[ModelTier.T3]
+    models = TIER_MODELS.get(tier) or TIER_MODELS[ModelTier.T2]
     return models[0]
 
 
@@ -137,9 +73,9 @@ def estimate_turn_cost_usd(
     cost_usd = 0.0
     source = "heuristic"
     try:
-        from eden.llmops.pricing import PricingCatalog
+        from eden.llmops.pricing import lookup_seed_row
 
-        row = PricingCatalog.default().lookup(model)
+        row = lookup_seed_row(model)
         if row is not None:
             cost_usd = float(
                 row.cost_for_request(
@@ -165,7 +101,7 @@ def estimate_turn_cost_usd(
 
 
 def ttft_budget_ms(tier: str) -> int:
-    return TTFT_BUDGET_MS.get((tier or "auto").lower(), TTFT_BUDGET_MS["auto"])
+    return TTFT_BUDGET_MS.get((tier or "t2").lower(), TTFT_BUDGET_MS["t2"])
 
 
 def ttft_warning(ttft_ms: int | None, tier: str) -> str | None:
@@ -174,8 +110,7 @@ def ttft_warning(ttft_ms: int | None, tier: str) -> str | None:
     budget = ttft_budget_ms(tier)
     if ttft_ms > budget:
         return (
-            f"TTFT {ttft_ms}ms exceeded {tier.upper()} budget {budget}ms "
-            "(consider Fast/T1 for simple asks)."
+            f"TTFT {ttft_ms}ms exceeded {tier.upper()} budget {budget}ms."
         )
     return None
 

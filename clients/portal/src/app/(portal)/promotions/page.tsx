@@ -6,7 +6,6 @@ import { Loader2 } from "lucide-react";
 
 import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorState } from "@/components/ui/error-state";
@@ -161,9 +160,28 @@ function PromotionsPageInner() {
   const act = async (id: string, action: "approve" | "reject") => {
     if (!currentOrg) return;
     try {
-      if (action === "approve") await learnApi.approvePromotion(currentOrg.id, id);
-      else await learnApi.rejectPromotion(currentOrg.id, id);
-      toast.success(action === "approve" ? "Promotion approved" : "Promotion rejected");
+      if (action === "approve") {
+        const res = await learnApi.approvePromotion(currentOrg.id, id);
+        const report = res.data?.report as Record<string, unknown> | undefined;
+        if (report?.passed) {
+          toast.success("Promotion approved");
+        } else {
+          const held = String(
+            report?.explanation ||
+              report?.recommendation ||
+              report?.gate_verdict ||
+              "hold",
+          );
+          toast.error(`Promotion held: ${held}`);
+        }
+      } else {
+        const res = await learnApi.rejectPromotion(currentOrg.id, id);
+        if (res.data?.rejected) {
+          toast.success("Promotion rejected");
+        } else {
+          toast.error("Rejection failed");
+        }
+      }
       await load();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : `${action} failed`);
@@ -176,14 +194,20 @@ function PromotionsPageInner() {
     let ok = 0;
     for (const id of selected) {
       try {
-        await learnApi.approvePromotion(currentOrg.id, id);
-        ok += 1;
+        const res = await learnApi.approvePromotion(currentOrg.id, id);
+        if (res.data?.report && (res.data.report as Record<string, unknown>).passed) {
+          ok += 1;
+        }
       } catch {
         /* continue */
       }
     }
     setBulkBusy(false);
-    toast.success(`Approved ${ok}/${selected.size}`);
+    if (ok === 0) {
+      toast.error(`Approved 0/${selected.size}`);
+    } else {
+      toast.success(`Approved ${ok}/${selected.size}`);
+    }
     await load();
   };
 
@@ -214,13 +238,13 @@ function PromotionsPageInner() {
         />
       }
       toolbar={
-        <div className="mb-4 space-y-3">
-          <div className="flex gap-2">
+        <div className="space-y-3">
+          <div className="flex flex-wrap gap-1">
             {["shadow", "promoted", "demoted", "all"].map((s) => (
               <Button
                 key={s}
                 size="sm"
-                variant={tab === s ? "default" : "outline"}
+                variant={tab === s ? "default" : "ghost"}
                 onClick={() => {
                   setTab(s);
                   setUrlState({ promotionId: undefined });
@@ -263,22 +287,31 @@ function PromotionsPageInner() {
           <Loader2 className="h-8 w-8 animate-spin" />
         ) : items.length === 0 ? (
           <EmptyState
+            variant="plain"
             title="No promotions"
             description="Shadow Artifacts appear here after detectors or manual create."
           />
         ) : (
-          <div className="space-y-2">
+          <div className="divide-y divide-[var(--border-subtle)]">
             {items.map((p) => {
               const id = String(p.id);
               const active = promotionId === id;
               return (
-                <Card
+                <div
                   key={id}
+                  role="button"
+                  tabIndex={0}
                   className={cn(
-                    "flex cursor-pointer items-center justify-between gap-3 p-4 transition-colors",
-                    active && "ring-1 ring-[var(--accent)] border-[var(--accent)]",
+                    "flex cursor-pointer items-center justify-between gap-3 px-1 py-3.5 transition-colors rounded-lg",
+                    active ? "bg-[var(--accent-faint)]/40 ring-1 ring-[var(--accent)]/30" : "hover:bg-[var(--bg-secondary)]",
                   )}
                   onClick={() => setUrlState({ promotionId: active ? undefined : id })}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      setUrlState({ promotionId: active ? undefined : id });
+                    }
+                  }}
                 >
                   <div className="flex min-w-0 items-center gap-3">
                     {tab === "shadow" ? (
@@ -318,7 +351,7 @@ function PromotionsPageInner() {
                       </Link>
                     </Button>
                   )}
-                </Card>
+                </div>
               );
             })}
           </div>

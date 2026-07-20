@@ -520,33 +520,19 @@ async def _fetch_memories_metadata_for_org(
     try:
         rows = await client.fetch(
             """
-            SELECT DISTINCT ON (memory_id)
-                   attrs->>'memory_id' AS memory_id,
-                   COALESCE(attrs->>'text', attrs->>'content', '') AS memory_text,
-                   created_at
-              FROM telemetry_events,
-                   LATERAL jsonb_path_query(attributes, '$.memory_id') AS mid,
-                   LATERAL jsonb_path_query(attributes, '$.text') AS txt
-              -- no, that's a cartesian — instead we cast attributes to jsonb
-              -- and just project in the SELECT
-              WHERE FALSE
-            """,
-        ) if False else await client.fetch(
-            """
             SELECT DISTINCT ON (memory_id) memory_id, memory_text, created_at
               FROM (
-                SELECT attrs->>'memory_id' AS memory_id,
+                SELECT attributes->>'memory_id' AS memory_id,
                        COALESCE(
-                         attrs->>'text',
-                         attrs->>'content',
+                         attributes->>'text',
+                         attributes->>'content',
                          ''
                        ) AS memory_text,
                        created_at
-                  FROM telemetry_events,
-                       jsonb_each(attributes) AS kv(k, v)
+                  FROM telemetry_events
                  WHERE tenant_id = $1
                    AND event_type LIKE 'memory.%'
-                   AND attrs ? 'memory_id'
+                   AND attributes ? 'memory_id'
             ) s
              WHERE memory_id IS NOT NULL
              ORDER BY memory_id, created_at DESC

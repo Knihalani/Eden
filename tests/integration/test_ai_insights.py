@@ -519,3 +519,26 @@ class TestAiInsightsDefensiveDB:
                 user_id="00000000-0000-0000-0000-000000000001",
                 title="hi",
             )
+
+    @pytest.mark.asyncio
+    async def test_create_session_none_client_raises_503(
+        self, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """None PG client must be HTTP 503, not AttributeError 500."""
+        from fastapi import HTTPException
+
+        ai_mod = _load_ai_insights_module()
+
+        async def _none_client() -> None:
+            return None
+
+        monkeypatch.setattr(ai_mod, "get_postgres_client", _none_client)
+
+        with pytest.raises(HTTPException) as exc_info:
+            await ai_mod._create_session(
+                org_id="00000000-0000-0000-0000-000000000002",
+                user_id="00000000-0000-0000-0000-000000000001",
+                title="hi",
+            )
+        assert exc_info.value.status_code == 503
+        assert "unavailable" in str(exc_info.value.detail).lower()

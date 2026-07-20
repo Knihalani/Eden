@@ -12,6 +12,7 @@ from eden.api.startup_checks import (
     check_postgres,
     check_qdrant,
     check_redis,
+    check_typesense,
     run_startup_checks,
 )
 
@@ -74,6 +75,26 @@ async def test_check_openrouter_unauthorized():
 
 
 @pytest.mark.asyncio
+async def test_check_typesense_disabled_is_ok():
+    with patch(
+        "eden.observability.typesense_client.get_typesense_client",
+        return_value=None,
+    ):
+        assert await check_typesense() == "ok"
+
+
+@pytest.mark.asyncio
+async def test_check_typesense_unreachable_is_soft_error():
+    mock_client = AsyncMock()
+    mock_client.health = AsyncMock(return_value=False)
+    with patch(
+        "eden.observability.typesense_client.get_typesense_client",
+        return_value=mock_client,
+    ):
+        assert await check_typesense() == "error: typesense unreachable"
+
+
+@pytest.mark.asyncio
 async def test_run_startup_checks_strict_raises():
     settings = MagicMock(strict_startup_checks=True, eden_production=False)
 
@@ -84,6 +105,7 @@ async def test_run_startup_checks_strict_raises():
         patch("eden.api.startup_checks.check_postgres", _fail_postgres),
         patch("eden.api.startup_checks.check_redis", AsyncMock(return_value="ok")),
         patch("eden.api.startup_checks.check_qdrant", AsyncMock(return_value="ok")),
+        patch("eden.api.startup_checks.check_typesense", AsyncMock(return_value="ok")),
         patch("eden.api.startup_checks.check_openrouter", AsyncMock(return_value="ok")),
     ):
         with pytest.raises(StartupCheckError, match="postgres"):
@@ -92,7 +114,7 @@ async def test_run_startup_checks_strict_raises():
 
 @pytest.mark.asyncio
 async def test_run_startup_checks_strict_ignores_soft_failures():
-    """Redis/Qdrant/OpenRouter must not fail-closed the process.
+    """Redis/Qdrant/Typesense/OpenRouter must not fail-closed the process.
 
     A soft-dep blip previously marked /ready 503 → Northflank ingress
     returned ``no healthy upstream`` → portal /auth/me + notifications
@@ -104,11 +126,16 @@ async def test_run_startup_checks_strict_ignores_soft_failures():
         patch("eden.api.startup_checks.check_postgres", AsyncMock(return_value="ok")),
         patch("eden.api.startup_checks.check_redis", AsyncMock(return_value="error: down")),
         patch("eden.api.startup_checks.check_qdrant", AsyncMock(return_value="error: down")),
+        patch(
+            "eden.api.startup_checks.check_typesense",
+            AsyncMock(return_value="error: typesense unreachable"),
+        ),
         patch("eden.api.startup_checks.check_openrouter", AsyncMock(return_value="error: down")),
     ):
         results = await run_startup_checks(settings=settings, strict=True)
         assert results["postgres"] == "ok"
         assert results["redis"].startswith("error:")
+        assert results["typesense"].startswith("error:")
 
 
 @pytest.mark.asyncio
@@ -129,6 +156,7 @@ async def test_run_startup_checks_non_strict_returns_errors():
         patch("eden.api.startup_checks.check_postgres", AsyncMock(return_value="ok")),
         patch("eden.api.startup_checks.check_redis", AsyncMock(return_value="error: down")),
         patch("eden.api.startup_checks.check_qdrant", AsyncMock(return_value="ok")),
+        patch("eden.api.startup_checks.check_typesense", AsyncMock(return_value="ok")),
         patch("eden.api.startup_checks.check_openrouter", AsyncMock(return_value="ok")),
     ):
         results = await run_startup_checks(settings=settings, strict=False)

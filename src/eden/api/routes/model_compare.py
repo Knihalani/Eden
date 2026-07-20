@@ -40,7 +40,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, Path
 from pydantic import BaseModel, Field
 
-from eden.api.deps import get_current_user
+from eden.api.deps import get_current_user, require_path_org_access
 from eden.llmops.cost_resolver import CostResolver
 from eden.llmops.model_comparator import ModelComparator
 
@@ -152,8 +152,8 @@ def _spec_to_dict(spec: Any) -> dict[str, Any]:
 @router.post("/compare", response_model=CompareResponse)
 async def compare_models(
     body: CompareRequest,
-    org_id: str = Path(...),
-    _user: dict = Depends(get_current_user),
+    org_id: str = Depends(require_path_org_access),
+    _user: dict = Depends(get_current_user)
 ) -> CompareResponse:
     """Side-by-side compare two models. Honours per-tenant overrides."""
     resolver = CostResolver()
@@ -178,7 +178,7 @@ async def compare_models(
 @router.post("/recommend", response_model=RecommendResponse)
 async def recommend_model(
     body: RecommendRequest,
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     _user: dict = Depends(get_current_user),
 ) -> RecommendResponse:
     """Recommend the best model — either a fresh pick or a switch.
@@ -245,7 +245,7 @@ async def recommend_model(
 @router.post("/project", response_model=ProjectResponse)
 async def project_cost(
     body: ProjectRequest,
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     _user: dict = Depends(get_current_user),
 ) -> ProjectResponse:
     """Project the cost of switching ``current`` to ``candidate``.

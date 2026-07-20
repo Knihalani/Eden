@@ -11,8 +11,10 @@ webhook catch-all. All share the same handler shape::
             X-Source-Format:  <fmt>      (only for /ingest/webhook)
             X-Source-Framework: <name>   (only for /ingest/framework)
             Content-Type:     application/json | application/x-otel-protobuf
+            Content-Encoding: gzip (optional; SDKs compress JSON bodies)
         Body:
-            format-specific JSON (or OTLP protobuf for /ingest/otel)
+            format-specific JSON (or OTLP protobuf for /ingest/otel);
+            may be gzip-compressed when Content-Encoding is gzip
         Response:
             {accepted, rejected, deduplicated, total, source_format}
 
@@ -52,7 +54,21 @@ from eden.observability.telemetry_collector import (
 
 logger = logging.getLogger(__name__)
 
+# Auth is ``get_ingest_auth`` only (API key or session cookie) — not
+# ``require_path_org_access``, which depends on Clerk ``get_current_user``
+# and would 401 valid ``X-Org-Api-Key`` SDK callers before ingest auth runs.
 router = APIRouter(prefix="/orgs/{org_id}/ingest", tags=["ingestion"])
+
+
+def _assert_ingest_org(auth_ctx: dict, org_id: str) -> str:
+    """Reject path/auth org mismatches; return the authenticated org id."""
+    auth_org = auth_ctx.get("org_id")
+    if not auth_org or str(auth_org) != str(org_id):
+        raise HTTPException(
+            status_code=403,
+            detail="Path org_id does not match authenticated org",
+        )
+    return str(auth_org)
 
 
 # ── Per-tenant in-process rate limiter ───────────────────────────────
@@ -88,6 +104,10 @@ router = APIRouter(prefix="/orgs/{org_id}/ingest", tags=["ingestion"])
 _rate_buckets: OrderedDict[str, deque[float]] = OrderedDict()
 _MAX_RATE_BUCKETS: int = 4096
 _RATE_WINDOW_SECONDS: float = 60.0
+# Throttle idle-bucket sweeps so high-RPM tenants do not pay
+# O(buckets) on every request. Cap eviction still runs always.
+_last_idle_evict_at: float = 0.0
+_IDLE_EVICT_MIN_INTERVAL: float = 1.0
 
 
 def _touch_bucket(org_id: str) -> None:
@@ -146,13 +166,14 @@ def _check_rate_limit(org_id: str) -> None:
         return
     now = time.monotonic()
     window = _RATE_WINDOW_SECONDS
-    # F63: opportunistic housekeeping on the hot path. Both
-    # sweeps are O(buckets) and run in microseconds for the
-    # healthy multi-tenant case (< 100 entries). They are
-    # *not* on the latency-critical path of any single
-    # request because they only iterate the dict — they do
-    # not touch Postgres, Redis, or the network.
-    _evict_idle_buckets(now)
+    # F63: opportunistic housekeeping on the hot path. Cap
+    # enforcement is cheap and always runs; idle eviction is
+    # throttled to once per ``_IDLE_EVICT_MIN_INTERVAL`` so a
+    # single hot tenant does not re-walk the dict every RPM tick.
+    global _last_idle_evict_at
+    if now - _last_idle_evict_at >= _IDLE_EVICT_MIN_INTERVAL:
+        _evict_idle_buckets(now)
+        _last_idle_evict_at = now
     _enforce_rate_buckets_cap(org_id)
     bucket = _rate_buckets.get(org_id)
     if bucket is None:
@@ -239,13 +260,31 @@ async def _ingest_handler(
         project_id=project_id,
         source_format=path_format,
         user_id=auth_ctx.get("user_id"),
-        api_key_id=auth_ctx.get("api_key_id"),
+        # ``get_current_org_api_key`` returns ``key_id``; also accept
+        # ``api_key_id`` for overrides / gateway-shaped auth dicts.
+        api_key_id=auth_ctx.get("api_key_id") or auth_ctx.get("key_id"),
         auth_method=auth_ctx.get("auth_method", "api_key"),
     )
 
-    # Decode
+    # Decode — gunzip first (SDKs send Content-Encoding: gzip).
+    # Without this, registry.decode sees binary and fails → SDK retry storms.
     registry = get_format_registry()
     try:
+        from eden.observability.ingestion.providers import maybe_gunzip_body_async
+
+        content_encoding = (headers or {}).get("content-encoding")
+        body = await maybe_gunzip_body_async(body, content_encoding)
+        if (
+            settings.ingestion_max_body_bytes
+            and len(body) > settings.ingestion_max_body_bytes
+        ):
+            raise HTTPException(
+                status_code=413,
+                detail=(
+                    f"Body too large after decompress: {len(body)} bytes > "
+                    f"{settings.ingestion_max_body_bytes}"
+                ),
+            )
         events = await registry.decode(path_format, body, attribution)
     except IngestError as exc:
         status_code = exception_to_http_status(exc)
@@ -254,13 +293,56 @@ async def _ingest_handler(
         if problems:
             detail = {"error": detail, "problems": problems}
         raise HTTPException(status_code=status_code, detail=detail) from exc
+    except HTTPException:
+        raise
+    except (ValueError, TypeError, UnicodeDecodeError, KeyError) as exc:
+        # Client/payload faults (e.g. invalid gzip, unexpected shapes)
+        # must be 4xx — never 500.
+        logger.warning("ingest decode client error: %s", exc)
+        raise HTTPException(
+            status_code=400,
+            detail=str(exc) or "Invalid ingest payload",
+        ) from exc
     except Exception as exc:
-        logger.exception(f"ingest decode failed: {exc}")
-        raise HTTPException(status_code=500, detail="Ingestion failed") from exc
+        # True infra / unexpected decoder faults → 503 so SDKs retry.
+        from eden.api.utils.safe_error import safe_detail
+
+        logger.exception("ingest decode failed: %s", exc)
+        raise HTTPException(
+            status_code=503,
+            detail=safe_detail(
+                exc,
+                fallback="Ingestion temporarily unavailable; retry after backoff",
+            ),
+            headers={"Retry-After": "5"},
+        ) from exc
 
     # Write
+    from eden.observability.errors import IngestionUnavailable
+
     collector: TelemetryCollector = await get_telemetry_collector()
-    result = await collector.ingest_batch(events)
+    try:
+        result = await collector.ingest_batch(events)
+    except IngestionUnavailable as exc:
+        # Mirror /chunks: Postgres-unavailable → 503 + Retry-After so
+        # SDKs buffer and retry instead of treating a 500 as fatal.
+        raise HTTPException(
+            status_code=503,
+            detail=str(exc.message) if hasattr(exc, "message") else str(exc),
+            headers={"Retry-After": "5"},
+        ) from exc
+    except Exception as exc:
+        from eden.api.utils.safe_error import safe_detail
+
+        logger.exception("ingest write failed: %s", exc)
+        raise HTTPException(
+            status_code=503,
+            detail=safe_detail(
+                exc,
+                fallback="Ingestion temporarily unavailable; retry after backoff",
+            ),
+            headers={"Retry-After": "5"},
+        ) from exc
 
     return IngestResponse(
         accepted=result.get("accepted", len(events)),
@@ -286,6 +368,7 @@ def _make_endpoint(path_format: str):
         org_id: str = Path(..., description="Organization ID"),
         auth_ctx: dict = Depends(get_ingest_auth),
     ) -> IngestResponse:
+        org_id = _assert_ingest_org(auth_ctx, org_id)
         # Read raw body — decoders handle their own JSON parsing.
         body = await request.body()
         project_id = request.headers.get("X-Project-Id", "default")
@@ -374,6 +457,7 @@ async def ingest_chunks(
     org_id: str = Path(..., description="Organization ID"),
     auth_ctx: dict = Depends(get_ingest_auth),
 ) -> ChunksIngestResponse:
+    org_id = _assert_ingest_org(auth_ctx, org_id)
     body = await request.body()
     settings = get_settings()
     if (
@@ -386,7 +470,19 @@ async def ingest_chunks(
 
     check_ingest_shed(org_id)
     try:
+        from eden.observability.ingestion.providers import maybe_gunzip_body_async
+
+        body = await maybe_gunzip_body_async(
+            body, request.headers.get("content-encoding")
+        )
+        if (
+            settings.ingestion_max_body_bytes
+            and len(body) > settings.ingestion_max_body_bytes
+        ):
+            raise HTTPException(status_code=413, detail="Body too large")
         payload = ChunksIngestRequest.model_validate_json(body)
+    except HTTPException:
+        raise
     except Exception as exc:
         raise HTTPException(status_code=422, detail=f"Invalid body: {exc}") from exc
 

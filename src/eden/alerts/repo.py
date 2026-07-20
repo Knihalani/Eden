@@ -8,6 +8,17 @@ from typing import Any
 
 from eden.storage.postgres import get_postgres_client
 
+_NL_RULE_COLUMNS = (
+    "id, org_id, name, nl_text, compiled_eql, triage_enabled, "
+    "channels, enabled, created_by, last_fired_at, created_at, updated_at"
+)
+
+_ALERT_EVENT_COLUMNS = (
+    "id, org_id, rule_id, title, severity, payload, triage_verdict, "
+    "triage_reason, triage_confidence, incident_id, acknowledged, "
+    "created_at, updated_at"
+)
+
 
 def _ts(value: Any) -> str:
     if value is None:
@@ -53,7 +64,7 @@ async def create_nl_rule(
 async def get_nl_rule(org_id: str, rule_id: str) -> dict[str, Any] | None:
     client = await get_postgres_client()
     row = await client.fetchrow(
-        "SELECT * FROM nl_alert_rules WHERE org_id = $1 AND id = $2",
+        f"SELECT {_NL_RULE_COLUMNS} FROM nl_alert_rules WHERE org_id = $1 AND id = $2",
         org_id,
         rule_id,
     )
@@ -63,8 +74,8 @@ async def get_nl_rule(org_id: str, rule_id: str) -> dict[str, Any] | None:
 async def list_nl_rules(org_id: str) -> list[dict[str, Any]]:
     client = await get_postgres_client()
     rows = await client.fetch(
-        """
-        SELECT * FROM nl_alert_rules
+        f"""
+        SELECT {_NL_RULE_COLUMNS} FROM nl_alert_rules
         WHERE org_id = $1
         ORDER BY created_at DESC
         """,
@@ -176,7 +187,7 @@ async def list_alert_events(
     total = int(count_row["n"] if count_row else 0)
     rows = await client.fetch(
         f"""
-        SELECT * FROM alert_events
+        SELECT {_ALERT_EVENT_COLUMNS} FROM alert_events
         WHERE {where}
         ORDER BY created_at DESC
         LIMIT ${idx} OFFSET ${idx + 1}
@@ -193,9 +204,19 @@ async def record_triage_feedback(
     alert_event_id: str,
     human_verdict: str,
     created_by: str | None,
-) -> dict[str, Any]:
+    org_id: str | None = None,
+) -> dict[str, Any] | None:
+    """Record human override. When ``org_id`` is set, require event membership."""
     feedback_id = str(uuid.uuid4())
     client = await get_postgres_client()
+    if org_id is not None:
+        owned = await client.fetchrow(
+            "SELECT id FROM alert_events WHERE id = $1 AND org_id = $2",
+            alert_event_id,
+            org_id,
+        )
+        if not owned:
+            return None
     await client.execute(
         """
         INSERT INTO alert_triage_feedback (id, alert_event_id, human_verdict, created_by)
@@ -206,16 +227,29 @@ async def record_triage_feedback(
         human_verdict,
         created_by,
     )
-    await client.execute(
-        """
-        UPDATE alert_events
-        SET triage_verdict = $2, triage_reason = $3, updated_at = NOW()
-        WHERE id = $1
-        """,
-        alert_event_id,
-        human_verdict,
-        "Human override",
-    )
+    if org_id is not None:
+        await client.execute(
+            """
+            UPDATE alert_events
+            SET triage_verdict = $3, triage_reason = $4, updated_at = NOW()
+            WHERE id = $1 AND org_id = $2
+            """,
+            alert_event_id,
+            org_id,
+            human_verdict,
+            "Human override",
+        )
+    else:
+        await client.execute(
+            """
+            UPDATE alert_events
+            SET triage_verdict = $2, triage_reason = $3, updated_at = NOW()
+            WHERE id = $1
+            """,
+            alert_event_id,
+            human_verdict,
+            "Human override",
+        )
     return {
         "id": feedback_id,
         "alert_event_id": alert_event_id,

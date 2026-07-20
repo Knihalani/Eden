@@ -8,9 +8,10 @@ from typing import Any
 from fastapi import APIRouter, Body, Depends, Path
 from pydantic import BaseModel, Field
 
-from eden.api.deps import get_current_user, require_feature_flag, require_org_member
+from eden.api.deps import get_current_user, require_feature_flag, require_path_org_access
 from eden.learning.tool_call_calibrator import list_calibrators, train_and_persist
 from eden.learning.tool_call_labels import ToolCallLabelCreate, ToolCallLabelService
+from eden.api.utils.redact import redact_all
 
 logger = logging.getLogger(__name__)
 
@@ -20,6 +21,7 @@ router = APIRouter(
     dependencies=[
         Depends(get_current_user),
         Depends(require_feature_flag("tool_call_label_learning_v1")),
+        Depends(require_path_org_access),
     ],
 )
 
@@ -37,10 +39,10 @@ class LabelToolCallRequest(BaseModel):
 
 @router.post("/{span_id}/label")
 async def label_tool_call(
-    org_id: str = Path(...),
     span_id: str = Path(...),
     body: LabelToolCallRequest = Body(...),
-    user: dict = Depends(require_org_member),
+    org_id: str = Depends(require_path_org_access),
+    user: dict = Depends(get_current_user),
 ) -> dict[str, Any]:
     labeled_by = str(user.get("sub") or user.get("user_id") or "")
     result = await _svc.create_label(
@@ -61,7 +63,7 @@ async def label_tool_call(
         try:
             train_hint = await train_and_persist(org_id, body.agent_id, body.tool_name)
         except Exception as exc:
-            logger.debug("calibrator train skipped: %s", exc)
+            logger.debug("calibrator train skipped: %s", redact_all(str(exc)))
             train_hint = {"status": "train_error", "error": str(exc)}
     return {
         "status": "ok",
@@ -74,9 +76,8 @@ async def label_tool_call(
 
 @router.delete("/{span_id}/label")
 async def delete_tool_call_label(
-    org_id: str = Path(...),
     span_id: str = Path(...),
-    _member: dict = Depends(require_org_member),
+    org_id: str = Depends(require_path_org_access),
 ) -> dict[str, Any]:
     deleted = await _svc.delete_label(org_id, span_id)
     return {
@@ -89,10 +90,9 @@ async def delete_tool_call_label(
 
 @router.get("/agents/{agent_id}/labels")
 async def list_tool_labels(
-    org_id: str = Path(...),
     agent_id: str = Path(...),
     tool_name: str | None = None,
-    _member: dict = Depends(require_org_member),
+    org_id: str = Depends(require_path_org_access),
 ) -> dict[str, Any]:
     rows = await _svc.list_for_agent(org_id, agent_id, tool_name=tool_name)
     return {
@@ -106,9 +106,8 @@ async def list_tool_labels(
 
 @router.get("/agents/{agent_id}/tool-calibrators")
 async def get_tool_calibrators(
-    org_id: str = Path(...),
     agent_id: str = Path(...),
-    _member: dict = Depends(require_org_member),
+    org_id: str = Depends(require_path_org_access),
 ) -> dict[str, Any]:
     rows = await list_calibrators(org_id, agent_id)
     return {
@@ -122,10 +121,9 @@ async def get_tool_calibrators(
 
 @router.post("/agents/{agent_id}/tool-calibrators/retrain")
 async def retrain_tool_calibrator(
-    org_id: str = Path(...),
     agent_id: str = Path(...),
     body: dict[str, Any] = Body(default_factory=dict),
-    _member: dict = Depends(require_org_member),
+    org_id: str = Depends(require_path_org_access),
 ) -> dict[str, Any]:
     tool_name = str(body.get("tool_name") or "")
     if not tool_name:

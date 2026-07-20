@@ -29,11 +29,16 @@ from pathlib import Path
 
 import pytest
 
+from tests._portal_api_source import portal_api_source
+
 _PORTAL_ROOT = Path(__file__).parent.parent.parent / "clients/portal"
 
 
 def _read(rel: str) -> str:
-    raw = (_PORTAL_ROOT / rel).read_text()
+    if rel in ("src/lib/api.ts", "src/lib/api"):
+        raw = portal_api_source()
+    else:
+        raw = (_PORTAL_ROOT / rel).read_text()
     # Strip ``//`` line comments — the audit-fix comments mention
     # the literal patterns in prose.
     return "\n".join(
@@ -117,6 +122,14 @@ class TestBillingPaymentMethodButton:
     """The orphan ``Add / Update payment method`` button is wired
     through a handler that toasts backend failures.
     """
+
+    @pytest.fixture(autouse=True)
+    def _require_billing_page(self) -> None:
+        path = (
+            _PORTAL_ROOT / "src/app/(portal)/billing/page.tsx"
+        )
+        if not path.is_file():
+            pytest.skip("billing page removed; PQ-9 surface N/A")
 
     def test_button_has_on_click(self) -> None:
         """The button must have an ``onClick`` handler (pre-fix it
@@ -221,17 +234,22 @@ _PQ14_FILES = [
 
 @pytest.mark.parametrize("rel_path", _PQ14_FILES)
 class TestPagesImportCanonicalApiBase:
-    """Each page that previously re-defined API_BASE now imports
-    it from ``@/lib/api``. The local re-definition had a
-    ``localhost:8000`` fallback which silently bypassed the proxy
-    in production (no cookie on cross-origin Fetch).
+    """Each page that previously re-defined API_BASE now uses the
+    canonical client (``API_BASE`` / ``fetchApi`` from ``@/lib/api``
+    or ``@/lib/api/core``). Local ``API_BASE = …localhost:8000``
+    redefinitions silently bypassed the proxy in production.
     """
 
     def test_imports_api_base(self, rel_path: str) -> None:
         source = _read(rel_path)
-        assert 'import { API_BASE } from "@/lib/api"' in source, (
-            f"PQ-14 regression: {rel_path} must import API_BASE "
-            "from @/lib/api (was re-defining locally)"
+        uses_canonical = (
+            'from "@/lib/api"' in source
+            or 'from "@/lib/api/' in source
+            or 'from "@/lib/api/core"' in source
+        )
+        assert uses_canonical, (
+            f"PQ-14 regression: {rel_path} must import from @/lib/api "
+            "(or @/lib/api/core) — was re-defining API_BASE locally"
         )
 
     def test_no_local_re_definition(self, rel_path: str) -> None:
@@ -239,7 +257,7 @@ class TestPagesImportCanonicalApiBase:
         # Pre-fix: ``const API_BASE = process.env.NEXT_PUBLIC_API_URL ||
         # "http://localhost:8000"`` — reject any local re-definition
         # of the constant.
-        assert 'API_BASE =' not in source, (
+        assert "API_BASE =" not in source, (
             f"PQ-14 regression: {rel_path} still has a local "
             "API_BASE = … constant (must import from @/lib/api)"
         )

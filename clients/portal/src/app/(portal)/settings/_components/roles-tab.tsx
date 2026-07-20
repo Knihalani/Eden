@@ -13,10 +13,14 @@
  * to the /orgs/{org_id}/roles endpoints.
  */
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useCallback } from "react";
+import { useOrgQuery } from "@/hooks/use-api-query";
+import { queryKeys } from "@/lib/query-keys";
 import { useOrg } from "@/hooks/use-org";
+import { usePermissions } from "@/hooks/use-permissions";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { isAdminOrOwner } from "@/lib/roles";
 import { useConfirm } from "@/hooks/use-confirm";
 import {
   Loader2,
@@ -29,6 +33,11 @@ import {
   Info,
   ChevronDown,
   ChevronRight } from "lucide-react";
+import { PermissionGate } from "@/components/settings/permission-gate";
+import { NoOrgState } from "@/components/ui/no-org-state";
+import { Button } from "@/components/ui/button";
+import { ErrorState } from "@/components/ui/error-state";
+import { errorFromCaught } from "@/lib/safe-error-message";
 
 // Built-in permission keys. The full set lives in
 // `src/eden/api/deps.py:PERMISSION_MAP`. We mirror a subset here
@@ -53,6 +62,9 @@ const PERMISSION_PRESETS: { category: string; permissions: string[] }[] = [
   {
     category: "Org",
     permissions: ["org:transfer"] },
+  {
+    category: "Compliance",
+    permissions: ["pii:edit", "retention:override", "gdpr:execute", "judges:run"] },
 ];
 
 const BASE_ROLES = ["owner", "admin", "member", "viewer"] as const;
@@ -79,34 +91,37 @@ interface Assignment {
 
 export default function RolesTab() {
   const { currentOrg } = useOrg();
+  const { role: resolvedRole } = usePermissions();
   const { confirm } = useConfirm();
-  const [roles, setRoles] = useState<Role[] | null>(null);
+  const orgId = currentOrg?.id ?? null;
   const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
   const [expandedRoleId, setExpandedRoleId] = useState<string | null>(null);
   const [assignments, setAssignments] = useState<Record<string, Assignment[]>>({});
+  const canManage =
+    isAdminOrOwner(resolvedRole) || isAdminOrOwner(currentOrg?.role);
 
+  const rolesQuery = useOrgQuery(
+    queryKeys.roles.list(orgId),
+    orgId,
+    () => api.get<Role[]>(`/orgs/${orgId}/roles`),
+  );
+  const roles = rolesQuery.data ?? null;
+  const loading = rolesQuery.isLoading;
+  const queryError = rolesQuery.error
+    ? errorFromCaught(rolesQuery.error, "Could not load roles. The RBAC migration (020) may not be applied yet, or your org does not have admin permissions.")
+    : null;
+  const displayError = error ?? queryError;
   const loadRoles = useCallback(async () => {
-    if (!currentOrg) return;
-    setLoading(true);
     setError(null);
     try {
-      const data = await api.get<Role[]>(`/orgs/${currentOrg.id}/roles`);
-      setRoles(data);
+      await rolesQuery.refetch();
     } catch (_e) {
       setError(
         "Could not load roles. The RBAC migration (020) may not be applied yet, or your org does not have admin permissions.",
       );
-      setRoles([]);
-    } finally {
-      setLoading(false);
     }
-  }, [currentOrg]);
-
-  useEffect(() => {
-    loadRoles();
-  }, [loadRoles]);
+  }, [rolesQuery]);
 
   async function loadAssignments(roleId: string) {
     if (!currentOrg) return;
@@ -171,7 +186,15 @@ export default function RolesTab() {
     }
   }
 
-  if (!currentOrg) return null;
+  if (!currentOrg) {
+    return <NoOrgState feature="Custom roles" icon={Shield} />;
+  }
+
+  if (!canManage) {
+    return (
+      <PermissionGate permission="settings:edit" />
+    );
+  }
 
   if (loading && !roles) {
     return (
@@ -205,11 +228,16 @@ export default function RolesTab() {
         </button>
       </div>
 
-      {error && (
-        <div className="bg-[var(--error-bg)] text-[var(--error)] text-sm px-4 py-3 rounded-xl flex items-center gap-2.5 border border-[var(--error)]/20">
-          <Info className="w-4 h-4 flex-shrink-0" />
-          {error}
-        </div>
+      {displayError && (
+        <ErrorState
+          title="Could not load roles"
+          message={displayError}
+          action={
+            <Button variant="outline" size="sm" onClick={() => void loadRoles()}>
+              Try again
+            </Button>
+          }
+        />
       )}
 
       {showCreate && (
@@ -219,7 +247,7 @@ export default function RolesTab() {
         />
       )}
 
-      {roles && roles.length === 0 && (
+      {!displayError && roles && roles.length === 0 && (
         <div className="bg-[var(--bg-secondary)] border border-[var(--border-default)] rounded-xl p-8 text-center">
           <Shield className="w-10 h-10 mx-auto mb-3 text-[var(--text-muted)]" />
           <h3 className="text-sm font-semibold text-[var(--text-primary)] mb-1">
@@ -232,7 +260,7 @@ export default function RolesTab() {
         </div>
       )}
 
-      {roles && roles.length > 0 && (
+      {!displayError && roles && roles.length > 0 && (
         <div className="space-y-2">
           {roles.map((role) => (
             <RoleRow
@@ -373,6 +401,7 @@ function RoleRow({
                 value={assignUserId}
                 onChange={(e) => setAssignUserId(e.target.value)}
                 placeholder="user_id (UUID)"
+                aria-label="User ID to assign"
                 className="flex-1 text-sm border border-[var(--border-default)] rounded-lg px-3 py-1.5 bg-[var(--bg-primary)] text-[var(--text-primary)] font-mono"
               />
               <button
@@ -424,10 +453,12 @@ function CreateRoleForm({
           New custom role
         </h4>
         <button
+          type="button"
           onClick={onCancel}
+          aria-label="Close create role form"
           className="text-[var(--text-muted)] hover:text-[var(--text-primary)]"
         >
-          <X className="w-4 h-4" />
+          <X className="w-4 h-4" aria-hidden />
         </button>
       </div>
 

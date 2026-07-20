@@ -6,29 +6,16 @@ we expose it as a Server-Sent Events (SSE) endpoint so the
 front-end can render a sliding-window dashboard of the most
 recent N events.
 
-Real implementation polls ``telemetry_events`` ordered by
-``created_at DESC`` and yields any new row the caller hasn't
-seen yet. We also yield a heartbeat comment every
-``HEARTBEAT_INTERVAL_S`` so the connection never times out
-through proxies / load balancers.
+Implementation (B7):
 
-Why polling rather than Postgres ``LISTEN/NOTIFY``:
-
-* The existing ``PostgresClient`` doesn't expose
-  ``acquire()`` for opening a long-lived connection
-  (``fetch`` / ``fetchrow`` go through a pool, not a
-  single conn). LISTEN would need a dedicated
-  ``asyncpg.connect()`` and careful lifecycle management.
-* Polling at 1s on the
-  ``idx_telemetry_events_tenant_timestamp`` index is cheap
-  (single-row lookup, indexed) and acceptable for a
-  observability dashboard.
-* The endpoint is per-org, so the polling query is
-  naturally bounded.
-
-The stream is an ``AsyncIterator[dict[str, Any]]`` so the
-router can wrap it in a ``StreamingResponse`` with
-``media_type="text/event-stream"``.
+* Reuses a single Postgres client for the stream lifetime
+  (no ``get_postgres_client()`` per poll).
+* Idle backoff: starts at ``POLL_INTERVAL_S`` and doubles up to
+  ``POLL_INTERVAL_MAX_S`` when polls return empty; resets on
+  activity. Prefer Redis pub/sub wake on
+  ``observability:stream:{org_id}`` when Redis is available so
+  we are not stuck in a fixed 1s PG loop while idle.
+* Hard caps on stream lifetime and events emitted.
 
 See ``docs/observability-gap/01-trace-replay.md``.
 """
@@ -36,6 +23,7 @@ See ``docs/observability-gap/01-trace-replay.md``.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import logging
 import time
@@ -47,11 +35,12 @@ from eden.observability._trace_common import serialise_event
 logger = logging.getLogger(__name__)
 
 
-#: How often we poll Postgres for new events. 1s is a
-#: reasonable trade-off between latency and DB load for a
-#: dashboard view; the SSE heartbeat covers the case where
-#: the consumer just wants to keep the connection alive.
+#: Base poll interval when events are flowing.
 POLL_INTERVAL_S: float = 1.0
+
+#: Idle backoff ceiling — never poll PG more often than this when
+#: the stream is quiet (and Redis wake is unavailable).
+POLL_INTERVAL_MAX_S: float = 5.0
 
 #: Heartbeat interval — proxies / load balancers tend to
 #: kill idle connections after 30-60s, so we send a comment
@@ -67,6 +56,8 @@ MAX_STREAM_LIFETIME_S: float = 60 * 60  # 1 hour
 #: Hard cap on events emitted per connection so a noisy
 #: org doesn't exhaust the connection.
 MAX_EVENTS_PER_STREAM: int = 10_000
+
+_OBS_STREAM_CHANNEL_PREFIX = "observability:stream:"
 
 
 def _sse_data(payload: dict[str, Any]) -> str:
@@ -115,11 +106,15 @@ class LiveTailService:
         last_seen_at: str | None = None
         last_heartbeat = started
         emitted = 0
+        idle_interval = POLL_INTERVAL_S
+
+        # Reuse one Postgres client for the whole stream (B7).
+        client = await _get_pg_client()
 
         # Prime: read the latest event's timestamp so we don't
         # replay the whole table. The consumer asked for
         # *new* events from the moment of subscription.
-        latest = await _fetch_latest_timestamp(org_id)
+        latest = await _fetch_latest_timestamp(org_id, client=client)
         if latest is not None:
             last_seen_at = latest
 
@@ -128,70 +123,158 @@ class LiveTailService:
         yield _sse_heartbeat()
         last_heartbeat = time.monotonic()
 
-        while True:
-            # Bail-out conditions.
-            if (time.monotonic() - started) > MAX_STREAM_LIFETIME_S:
-                logger.debug(
-                    "live_tail: stream lifetime cap reached for org %s",
-                    org_id,
-                )
-                return
-            if emitted >= MAX_EVENTS_PER_STREAM:
-                logger.debug(
-                    "live_tail: event cap reached for org %s", org_id
-                )
-                return
+        # Optional Redis wake — subscribe once, reuse for stream life.
+        pubsub = await _subscribe_obs_stream(org_id)
 
-            # Poll for new events since ``last_seen_at``.
-            try:
-                new_events = await _fetch_events_after(
-                    org_id,
-                    after_timestamp=last_seen_at,
-                    filter_agent_id=filter_agent_id,
-                    filter_event_type=filter_event_type,
-                    limit=200,
-                )
-            except Exception as exc:
-                logger.debug("live_tail: poll failed: %s", exc)
-                new_events = []
-
-            for ev in new_events:
-                ts = ev.get("timestamp")
-                if ts is not None:
-                    last_seen_at = ts
-                yield _sse_data(
-                    {
-                        "type": "event",
-                        "event": serialise_event(ev),
-                    }
-                )
-                emitted += 1
+        try:
+            while True:
+                # Bail-out conditions.
+                if (time.monotonic() - started) > MAX_STREAM_LIFETIME_S:
+                    logger.debug(
+                        "live_tail: stream lifetime cap reached for org %s",
+                        org_id,
+                    )
+                    return
                 if emitted >= MAX_EVENTS_PER_STREAM:
+                    logger.debug(
+                        "live_tail: event cap reached for org %s", org_id
+                    )
                     return
 
-            # Heartbeat.
-            now = time.monotonic()
-            if (now - last_heartbeat) >= HEARTBEAT_INTERVAL_S:
-                yield _sse_heartbeat()
-                last_heartbeat = now
+                # Poll for new events since ``last_seen_at``.
+                try:
+                    new_events = await _fetch_events_after(
+                        org_id,
+                        after_timestamp=last_seen_at,
+                        filter_agent_id=filter_agent_id,
+                        filter_event_type=filter_event_type,
+                        limit=200,
+                        client=client,
+                    )
+                except Exception as exc:
+                    logger.debug("live_tail: poll failed: %s", exc)
+                    new_events = []
 
-            # Sleep with cancellation support so a client
-            # disconnect propagates quickly.
-            try:
-                await asyncio.sleep(POLL_INTERVAL_S)
-            except asyncio.CancelledError:
-                logger.debug("live_tail: stream cancelled for org %s", org_id)
-                raise
+                for ev in new_events:
+                    ts = ev.get("timestamp")
+                    if ts is not None:
+                        last_seen_at = ts
+                    yield _sse_data(
+                        {
+                            "type": "event",
+                            "event": serialise_event(ev),
+                        }
+                    )
+                    emitted += 1
+                    if emitted >= MAX_EVENTS_PER_STREAM:
+                        return
+
+                # Heartbeat.
+                now = time.monotonic()
+                if (now - last_heartbeat) >= HEARTBEAT_INTERVAL_S:
+                    yield _sse_heartbeat()
+                    last_heartbeat = now
+
+                if new_events:
+                    idle_interval = POLL_INTERVAL_S
+                else:
+                    idle_interval = min(
+                        idle_interval * 2.0, POLL_INTERVAL_MAX_S
+                    )
+
+                # Wait: Redis wake (preferred) or idle backoff sleep.
+                try:
+                    await _idle_wait(pubsub, idle_interval)
+                except asyncio.CancelledError:
+                    logger.debug(
+                        "live_tail: stream cancelled for org %s", org_id
+                    )
+                    raise
+        finally:
+            if pubsub is not None:
+                with contextlib.suppress(Exception):
+                    await pubsub.unsubscribe(
+                        f"{_OBS_STREAM_CHANNEL_PREFIX}{org_id}"
+                    )
+                    await pubsub.close()
 
 
-async def _fetch_latest_timestamp(org_id: str) -> str | None:
-    """Return the most recent event's timestamp for ``org_id``."""
+async def _get_pg_client() -> Any | None:
     try:
         from eden.storage.postgres import get_postgres_client
     except Exception as exc:  # pragma: no cover - defensive
         logger.debug("live_tail: postgres import failed: %s", exc)
         return None
-    client = await get_postgres_client()
+    try:
+        return await get_postgres_client()
+    except Exception as exc:
+        logger.debug("live_tail: get_postgres_client failed: %s", exc)
+        return None
+
+
+async def _subscribe_obs_stream(org_id: str) -> Any | None:
+    """Subscribe to the observability SSE Redis channel for wake-ups."""
+    try:
+        from eden.storage.redis import get_redis_client
+    except Exception:
+        return None
+    try:
+        redis = await get_redis_client()
+    except Exception:
+        return None
+    if redis is None:
+        return None
+    pubsub = redis.pubsub()
+    channel = f"{_OBS_STREAM_CHANNEL_PREFIX}{org_id}"
+    try:
+        await pubsub.subscribe(channel)
+        return pubsub
+    except Exception as exc:
+        logger.debug("live_tail: redis subscribe failed: %s", exc)
+        with contextlib.suppress(Exception):
+            await pubsub.close()
+        return None
+
+
+async def _idle_wait(pubsub: Any | None, timeout: float) -> None:
+    """Wait up to ``timeout`` for a Redis message, else sleep."""
+    if pubsub is None:
+        await asyncio.sleep(timeout)
+        return
+    deadline = time.monotonic() + max(timeout, 0.05)
+    while True:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            return
+        try:
+            try:
+                msg = await pubsub.get_message(
+                    ignore_subscribe_messages=True,
+                    timeout=min(remaining, 1.0),
+                )
+            except TypeError:
+                try:
+                    msg = await asyncio.wait_for(
+                        pubsub.get_message(ignore_subscribe_messages=True),
+                        timeout=min(remaining, 1.0),
+                    )
+                except TimeoutError:
+                    continue
+            if msg is not None and msg.get("type") == "message":
+                return
+        except Exception:
+            await asyncio.sleep(min(remaining, timeout))
+            return
+
+
+async def _fetch_latest_timestamp(
+    org_id: str,
+    *,
+    client: Any | None = None,
+) -> str | None:
+    """Return the most recent event's timestamp for ``org_id``."""
+    if client is None:
+        client = await _get_pg_client()
     if client is None:
         return None
     try:
@@ -216,18 +299,15 @@ async def _fetch_events_after(
     filter_agent_id: str | None = None,
     filter_event_type: str | None = None,
     limit: int = 200,
+    client: Any | None = None,
 ) -> list[dict[str, Any]]:
     """Return events newer than ``after_timestamp`` for ``org_id``.
 
     Used by the polling loop. Builds a parameterised query
     so the caller-supplied filter strings can't inject SQL.
     """
-    try:
-        from eden.storage.postgres import get_postgres_client
-    except Exception as exc:  # pragma: no cover - defensive
-        logger.debug("live_tail: postgres import failed: %s", exc)
-        return []
-    client = await get_postgres_client()
+    if client is None:
+        client = await _get_pg_client()
     if client is None:
         return []
     where = ["tenant_id = $1"]

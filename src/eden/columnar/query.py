@@ -301,6 +301,16 @@ class ColumnarQueryEngine:
                 "ColumnarQueryEngine",
                 f"postgres query exceeded {QUERY_TIMEOUT_SECONDS}s timeout",
             )
+        except Exception as exc:  # noqa: BLE001 - soft-fail; avoid portal 500
+            logger.warning(
+                "Postgres query failed for org=%s: %s",
+                org_id,
+                exc,
+            )
+            return _not_implemented_envelope(
+                "ColumnarQueryEngine",
+                f"postgres query unavailable: {exc}",
+            )
         # B-17: the pg-fallback path may return the
         # not-implemented envelope when the SQL references a
         # non-allowlisted table. Surface it directly.

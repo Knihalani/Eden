@@ -6,7 +6,7 @@
   "packageManager": "bun@1.1.42",
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "next build --webpack",
     "start": "next start",
     "lint": "eslint src",
     "typecheck": "tsc --noEmit",
@@ -15,9 +15,10 @@
     "lint:portal-layout": "node scripts/lint-portal-layout.cjs",
     "lint:portal-classes": "node scripts/lint-portal-classes.cjs",
     "check:bundle": "bash scripts/check-bundle-size.sh",
-    "analyze": "ANALYZE=true next build",
+    "analyze": "ANALYZE=true next build --webpack",
     "polish:check": "bash scripts/polish-check.sh",
-    "audit:a11y": "node scripts/audit-a11y.cjs"
+    "audit:a11y": "node scripts/audit-a11y.cjs",
+    "test:golden-helpers": "node --test e2e/golden/helpers-auth-domain.test.mjs"
   },
   "dependencies": {
     "@clerk/nextjs": "^7.5.3",
@@ -32,7 +33,6 @@
     "@radix-ui/react-tooltip": "^1.2.8",
     "@tanstack/react-query": "^5.100.14",
     "@tanstack/react-virtual": "^3.13.12",
-    "@xyflow/react": "^12.11.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",

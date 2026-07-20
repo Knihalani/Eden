@@ -5,9 +5,12 @@ import {
   useContext,
   useState,
   useCallback,
+  useMemo,
   type ReactNode,
 } from "react";
-import { api, ApiError } from "@/lib/api";
+import { useUser } from "@clerk/nextjs";
+import { api } from "@/lib/api/auth-client";
+import { ApiError } from "@/lib/api/core";
 import { usePolling } from "@/hooks/use-polling";
 
 export interface Notification {
@@ -22,30 +25,41 @@ export interface Notification {
   created_at: string;
 }
 
-interface NotificationsContextType {
+interface NotificationsState {
   notifications: Notification[];
   unreadCount: number;
   error: string | null;
+}
+
+interface NotificationsActions {
   refresh: () => Promise<void>;
   markAsRead: (notificationId: string) => Promise<void>;
   markAllAsRead: () => Promise<void>;
   deleteNotification: (notificationId: string) => Promise<void>;
 }
 
-const NotificationsContext = createContext<NotificationsContextType | null>(null);
+type NotificationsContextType = NotificationsState & NotificationsActions;
+
+const NotificationsStateContext = createContext<NotificationsState | null>(
+  null,
+);
+const NotificationsActionsContext = createContext<NotificationsActions | null>(
+  null,
+);
+/** Combined context for existing ``useNotifications()`` consumers. */
+const NotificationsContext = createContext<NotificationsContextType | null>(
+  null,
+);
 
 const POLL_INTERVAL_ACTIVE_MS = 30_000;
 const POLL_INTERVAL_IDLE_MS = 300_000;
 
 export function NotificationsProvider({ children }: { children: ReactNode }) {
+  const { isSignedIn, isLoaded } = useUser();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [error, setError] = useState<string | null>(null);
 
-  // The shared ``usePolling`` hook owns the interval, visibility-pause,
-  // exponential backoff on errors, and auth-error bail. June 2026
-  // cost-pass — was previously a hand-rolled useEffect that lacked
-  // the backoff + auth-bail safety nets.
   const refresh = useCallback(async () => {
     try {
       const data = await api.listNotifications({ limit: 20 });
@@ -55,9 +69,6 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       const status = e instanceof ApiError ? e.status : undefined;
-      // 401/403/404 = missing session or endpoint not deployed —
-      // swallow so the bell stays quiet. 5xx must re-throw so
-      // ``usePolling`` applies exponential backoff (LP-21).
       const isAuthOrMissing =
         status === 401 ||
         status === 403 ||
@@ -89,17 +100,15 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
   usePolling({
     fetch: refresh,
     intervalMs: unreadCount > 0 ? POLL_INTERVAL_ACTIVE_MS : POLL_INTERVAL_IDLE_MS,
-    deps: [unreadCount],
+    deps: [unreadCount, isSignedIn],
+    enabled: Boolean(isLoaded && isSignedIn),
   });
 
   const markAsRead = useCallback(async (notificationId: string) => {
-    // ponytail: optimistic update — flip is_read + decrement unread
-    // immediately so the bell badge updates with zero perceived
-    // latency. Roll back if the server rejects.
     setNotifications((prev) =>
       prev.map((n) =>
-        n.id === notificationId ? { ...n, is_read: true } : n
-      )
+        n.id === notificationId ? { ...n, is_read: true } : n,
+      ),
     );
     let wasUnread = false;
     setUnreadCount((prev) => {
@@ -109,11 +118,10 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
     try {
       await api.markNotificationRead(notificationId);
     } catch (e) {
-      // Roll back on failure.
       setNotifications((prev) =>
         prev.map((n) =>
-          n.id === notificationId ? { ...n, is_read: false } : n
-        )
+          n.id === notificationId ? { ...n, is_read: false } : n,
+        ),
       );
       if (wasUnread) setUnreadCount((c) => c + 1);
       console.error("Failed to mark notification as read:", e);
@@ -123,9 +131,7 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
   const markAllAsRead = useCallback(async () => {
     const prevNotifications = notifications;
     const prevCount = unreadCount;
-    setNotifications((prev) =>
-      prev.map((n) => ({ ...n, is_read: true }))
-    );
+    setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
     setUnreadCount(0);
     try {
       await api.markAllNotificationsRead();
@@ -155,27 +161,43 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const stateValue = useMemo<NotificationsState>(
+    () => ({ notifications, unreadCount, error }),
+    [notifications, unreadCount, error],
+  );
+
+  const actionsValue = useMemo<NotificationsActions>(
+    () => ({
+      refresh,
+      markAsRead,
+      markAllAsRead,
+      deleteNotification,
+    }),
+    [refresh, markAsRead, markAllAsRead, deleteNotification],
+  );
+
+  const combinedValue = useMemo<NotificationsContextType>(
+    () => ({ ...stateValue, ...actionsValue }),
+    [stateValue, actionsValue],
+  );
+
   return (
-    <NotificationsContext.Provider
-      value={{
-        notifications,
-        unreadCount,
-        error,
-        refresh,
-        markAsRead,
-        markAllAsRead,
-        deleteNotification,
-      }}
-    >
-      {children}
-    </NotificationsContext.Provider>
+    <NotificationsActionsContext.Provider value={actionsValue}>
+      <NotificationsStateContext.Provider value={stateValue}>
+        <NotificationsContext.Provider value={combinedValue}>
+          {children}
+        </NotificationsContext.Provider>
+      </NotificationsStateContext.Provider>
+    </NotificationsActionsContext.Provider>
   );
 }
 
 export function useNotifications() {
   const context = useContext(NotificationsContext);
   if (!context) {
-    throw new Error("useNotifications must be used within NotificationsProvider");
+    throw new Error(
+      "useNotifications must be used within NotificationsProvider",
+    );
   }
   return context;
 }

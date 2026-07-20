@@ -1,6 +1,28 @@
 // Known portal path prefixes after July 2026 IA consolidation.
 // Ghost routes redirect via next.config.ts and are intentionally omitted.
 
+/**
+ * Fully removed portal surfaces — must never appear as hrefs in sidebar,
+ * command palette, quick links, or mobile nav. Bookmarks soft-land via
+ * next.config.ts redirects (usually → /dashboard).
+ */
+export const REMOVED_PORTAL_PATH_PREFIXES: readonly string[] = [
+  "/marketplace",
+  "/multi-agent",
+  "/builder",
+  "/jobs",
+  "/eval-harnesses",
+  "/sandbox",
+] as const;
+
+export function isRemovedPortalPath(pathname: string | null | undefined): boolean {
+  if (!pathname) return false;
+  const p = pathname.split("?")[0].split("#")[0];
+  return REMOVED_PORTAL_PATH_PREFIXES.some(
+    (prefix) => p === prefix || p.startsWith(prefix + "/"),
+  );
+}
+
 export const KNOWN_PORTAL_PREFIXES: readonly string[] = [
   "/dashboard",
   "/agents",

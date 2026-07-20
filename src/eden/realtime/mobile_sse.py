@@ -6,6 +6,9 @@ Phase 6.2: Provides an SSE endpoint designed for mobile clients with:
 - Connection state tracking for graceful degradation
 - Automatic reconnection with Last-Event-ID support
 
+B25: one shared poller (or Redis pub/sub wake) per job_id fans out
+to all connected streams — not N independent 3s Postgres loops.
+
 Usage:
     GET /v1/mobile/stream?job_id=abc&fields=status,stage
     Accept: text/event-stream
@@ -30,6 +33,9 @@ from eden.storage.postgres import get_postgres_client
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["mobile-sse"])
+
+# Shared idle wake (≥10s) — matches job WS contract; one get_job per cycle.
+_SHARED_POLL_TIMEOUT_S: float = 10.0
 
 
 class MobileSSEStream:
@@ -156,6 +162,23 @@ class MobileSSEStream:
 # Track active mobile streams per job
 _mobile_streams: dict[str, set[MobileSSEStream]] = {}
 
+# One shared poller task per job_id (B25).
+_shared_pollers: dict[str, asyncio.Task[None]] = {}
+_shared_poller_users: dict[str, dict[str, Any]] = {}
+
+
+def _active_stream_count(job_id: str) -> int:
+    return len(_mobile_streams.get(job_id, ()))
+
+
+def reset_mobile_sse_state() -> None:
+    """Clear in-process stream/poller registries (tests only)."""
+    _mobile_streams.clear()
+    for task in list(_shared_pollers.values()):
+        task.cancel()
+    _shared_pollers.clear()
+    _shared_poller_users.clear()
+
 
 @router.get("/v1/mobile/stream")
 async def mobile_sse_stream(
@@ -219,20 +242,17 @@ async def mobile_sse_stream(
     if last_event_id:
         logger.info(f"Mobile SSE resume requested for {job_id} from {last_event_id}")
 
-    # Start background polling for job updates
-    poll_task = asyncio.create_task(
-        _poll_job_updates(job_id, user, stream),
-        name=f"mobile-poll-{job_id}",
-    )
+    # Ensure a single shared poller for this job (B25).
+    _ensure_shared_poller(job_id, user)
 
     async def cleanup() -> None:
         stream.disconnect()
-        _mobile_streams[job_id].discard(stream)
-        if not _mobile_streams[job_id]:
-            del _mobile_streams[job_id]
-        poll_task.cancel()
-        with contextlib.suppress(asyncio.CancelledError):
-            await poll_task
+        streams = _mobile_streams.get(job_id)
+        if streams is not None:
+            streams.discard(stream)
+            if not streams:
+                del _mobile_streams[job_id]
+                await _stop_shared_poller(job_id)
 
     # Build response headers with reconnect advice
     headers = {
@@ -273,31 +293,69 @@ def _calculate_reconnect_backoff(
     return 60
 
 
-async def _poll_job_updates(
-    job_id: str,
-    user: dict[str, Any],
-    stream: MobileSSEStream,
-) -> None:
-    """Poll job state and emit events to the mobile SSE stream."""
+def _ensure_shared_poller(job_id: str, user: dict[str, Any]) -> None:
+    """Start at most one shared poller task per job_id."""
+    existing = _shared_pollers.get(job_id)
+    if existing is not None and not existing.done():
+        return
+    _shared_poller_users[job_id] = user
+    _shared_pollers[job_id] = asyncio.create_task(
+        _shared_poll_job_updates(job_id),
+        name=f"mobile-shared-poll-{job_id}",
+    )
+
+
+async def _stop_shared_poller(job_id: str) -> None:
+    task = _shared_pollers.pop(job_id, None)
+    _shared_poller_users.pop(job_id, None)
+    if task is None:
+        return
+    task.cancel()
+    with contextlib.suppress(asyncio.CancelledError, Exception):
+        await task
+
+
+async def _wait_job_wake(job_id: str, timeout: float) -> None:
+    """Wait for Redis job-event or sleep ``timeout`` (shared poller)."""
+    try:
+        from eden.api.routes.websocket import (
+            _wait_for_job_wake,
+        )
+    except Exception:
+        await asyncio.sleep(timeout)
+        return
+    await _wait_for_job_wake(job_id, timeout=timeout, hilt=None)
+
+
+async def _shared_poll_job_updates(job_id: str) -> None:
+    """Single Postgres poll loop shared by all mobile SSE streams for a job.
+
+    Wakes on Redis job events (or ≥10s timeout). Emits to every
+    registered ``MobileSSEStream`` via ``broadcast_to_mobile``.
+    """
     client = await get_postgres_client()
+    user = _shared_poller_users.get(job_id) or {}
+    user_id = user.get("user_id")
     last_stage: str | None = None
     last_status: str | None = None
 
     try:
-        while stream._connected:
-            await asyncio.sleep(3)  # Mobile: slightly longer polling interval
+        while _active_stream_count(job_id) > 0:
+            await _wait_job_wake(job_id, _SHARED_POLL_TIMEOUT_S)
+
+            if _active_stream_count(job_id) == 0:
+                break
 
             try:
-                job = await client.get_job(job_id, user_id=user["user_id"])
+                job = await client.get_job(job_id, user_id=user_id)
                 if not job:
                     break
 
                 current_stage = job["current_stage"]
                 current_status = job["status"]
 
-                # Emit stage change
                 if current_stage != last_stage:
-                    await stream.emit({
+                    await broadcast_to_mobile(job_id, {
                         "event_type": "stage_change",
                         "event_id": f"stage_{job_id}_{current_stage}",
                         "payload": {
@@ -309,9 +367,8 @@ async def _poll_job_updates(
                     })
                     last_stage = current_stage
 
-                # Emit status update
                 if current_status != last_status:
-                    await stream.emit({
+                    await broadcast_to_mobile(job_id, {
                         "event_type": "status",
                         "event_id": f"status_{job_id}_{current_status}",
                         "payload": {
@@ -324,9 +381,13 @@ async def _poll_job_updates(
                     })
                     last_status = current_status
 
-                # Terminal state
-                if current_status in {"completed", "failed", "cancelled", "human_review"}:
-                    await stream.emit({
+                if current_status in {
+                    "completed",
+                    "failed",
+                    "cancelled",
+                    "human_review",
+                }:
+                    await broadcast_to_mobile(job_id, {
                         "event_type": "complete",
                         "event_id": f"complete_{job_id}",
                         "payload": {
@@ -339,19 +400,22 @@ async def _poll_job_updates(
                     break
 
             except Exception as exc:
-                logger.debug(f"Mobile poll error for {job_id}: {exc}")
+                logger.debug(f"Mobile shared poll error for {job_id}: {exc}")
                 await asyncio.sleep(5)
 
     except asyncio.CancelledError:
         pass
     except Exception as exc:
-        logger.error(f"Mobile SSE poll task failed for {job_id}: {exc}")
+        logger.error(f"Mobile SSE shared poller failed for {job_id}: {exc}")
+    finally:
+        _shared_pollers.pop(job_id, None)
+        _shared_poller_users.pop(job_id, None)
 
 
 async def broadcast_to_mobile(job_id: str, event: dict[str, Any]) -> None:
     """Broadcast an event to all mobile SSE streams for a job.
 
-    Called by the main WebSocket or job pipeline to push events to
+    Called by the shared poller or job pipeline to push events to
     mobile listeners.
     """
     if job_id not in _mobile_streams:

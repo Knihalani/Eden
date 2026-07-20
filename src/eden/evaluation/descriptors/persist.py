@@ -133,9 +133,34 @@ async def persist_layer_a_judge_scores(
     if client is None:
         return 0
 
+    # Skip axes already written for this trace so a consumer retry after a
+    # partial insert does not duplicate Layer A rows (table is append-only).
+    existing: set[str] = set()
+    try:
+        rows_existing = await client.fetch(
+            """
+            SELECT judge_name FROM judge_scores
+            WHERE tenant_id = $1 AND trace_id = $2
+              AND judge_version = 'layer_a'
+              AND model = 'layer_a'
+            """,
+            org_id,
+            trace_id,
+        )
+        for er in rows_existing or []:
+            try:
+                existing.add(str(er["judge_name"]))
+            except Exception:
+                continue
+    except Exception as exc:
+        logger.debug("layer_a judge_scores: existing lookup failed: %s", exc)
+
     now = datetime.now(UTC)
     written = 0
     for row in axis_rows:
+        judge_name = str(row["judge_id"])
+        if judge_name in existing:
+            continue
         try:
             await client.execute(
                 """
@@ -152,7 +177,7 @@ async def persist_layer_a_judge_scores(
                 """,
                 org_id,
                 trace_id,
-                row["judge_id"],
+                judge_name,
                 "layer_a",
                 float(row["score"]),
                 row.get("rationale") or "",
@@ -163,6 +188,28 @@ async def persist_layer_a_judge_scores(
                 True,
             )
             written += 1
+            existing.add(judge_name)
         except Exception as exc:
             logger.debug("layer_a judge_scores insert failed: %s", exc)
+            # Partial write: surface transient failures so the consumer can
+            # retry the remaining axes instead of ACKing a half-done set.
+            if _is_transient_persist_error(exc):
+                raise
     return written
+
+
+def _is_transient_persist_error(exc: BaseException) -> bool:
+    if isinstance(exc, (ConnectionError, TimeoutError, OSError)):
+        return True
+    msg = str(exc).lower()
+    return any(
+        tok in msg
+        for tok in (
+            "connection",
+            "timeout",
+            "temporarily",
+            "reset by peer",
+            "broken pipe",
+            "too many connections",
+        )
+    )

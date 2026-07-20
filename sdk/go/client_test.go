@@ -139,26 +139,65 @@ func TestIngestUnconfigured(t *testing.T) {
 
 func TestSendFireAndForget(t *testing.T) {
 	var got int32
+	var bodyLen int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&got, 1)
+		b, _ := io.ReadAll(r.Body)
+		atomic.StoreInt32(&bodyLen, int32(len(b)))
+		w.WriteHeader(http.StatusAccepted)
+	}))
+	defer srv.Close()
+
+	c := NewClient(Config{
+		BaseURL:       srv.URL,
+		OrgID:         "o",
+		APIKey:        "k",
+		BatchSize:     50,
+		FlushInterval: time.Hour, // size/Flush-only in this test
+	})
+	defer c.Close()
+	for i := 0; i < 5; i++ {
+		c.Send(FormatCustom, Event{EventID: "x", EventType: "eden.trace"})
+	}
+	if err := c.Flush(context.Background()); err != nil {
+		t.Fatalf("Flush: %v", err)
+	}
+	if got := atomic.LoadInt32(&got); got != 1 {
+		t.Errorf("server hit count = %d, want 1 (batched)", got)
+	}
+	if atomic.LoadInt32(&bodyLen) < 2 {
+		t.Errorf("expected non-empty batch body")
+	}
+}
+
+func TestFlushOnBatchSize(t *testing.T) {
+	var got int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		atomic.AddInt32(&got, 1)
 		w.WriteHeader(http.StatusAccepted)
 	}))
 	defer srv.Close()
 
-	c := NewClient(Config{BaseURL: srv.URL, OrgID: "o", APIKey: "k"})
-	for i := 0; i < 5; i++ {
-		c.Send(FormatCustom, Event{EventID: "x", EventType: "eden.trace"})
+	c := NewClient(Config{
+		BaseURL:       srv.URL,
+		OrgID:         "o",
+		APIKey:        "k",
+		BatchSize:     3,
+		FlushInterval: time.Hour,
+	})
+	defer c.Close()
+	for i := 0; i < 3; i++ {
+		c.Send(FormatOpenAI, Event{EventID: "x", EventType: "openai.chat_completion"})
 	}
-	// Poll briefly for the async sends to land.
 	deadline := time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) {
-		if atomic.LoadInt32(&got) == 5 {
+		if atomic.LoadInt32(&got) >= 1 {
 			break
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
-	if got := atomic.LoadInt32(&got); got != 5 {
-		t.Errorf("server hit count = %d, want 5", got)
+	if got := atomic.LoadInt32(&got); got < 1 {
+		t.Errorf("server hit count = %d, want >=1 after batch size flush", got)
 	}
 }
 

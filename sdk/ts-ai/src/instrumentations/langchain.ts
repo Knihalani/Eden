@@ -27,7 +27,9 @@ import {
   type TraceOptions,
 } from "../types.js";
 
-const _wrapped = new WeakSet<object>();
+// original → proxy (and proxy → proxy) so re-wrapping the same
+// model returns the instrumented Proxy, not the bare original.
+const _proxies = new WeakMap<object, object>();
 const WRAP_MARKER = Symbol.for("@eden-ai/sdk.wrapLangChain");
 
 const METHODS_TO_WRAP = ["invoke", "call", "stream", "batch"] as const;
@@ -38,11 +40,11 @@ export function wrapLangChain<T extends object>(
   opts: TraceOptions = {},
 ): T {
   if (!chatModel || typeof chatModel !== "object") return chatModel;
-  if (_wrapped.has(chatModel)) return chatModel;
+  const existing = _proxies.get(chatModel);
+  if (existing) return existing as T;
   // Marker check for re-wrapping a Proxy we already produced.
   const marked = (chatModel as unknown as { [k: symbol]: unknown })[WRAP_MARKER];
   if (marked === true) return chatModel;
-  _wrapped.add(chatModel);
 
   const proxy = new Proxy(chatModel, {
     get(target, prop, receiver) {
@@ -67,6 +69,8 @@ export function wrapLangChain<T extends object>(
   } catch {
     // ignore
   }
+  _proxies.set(chatModel, proxy);
+  _proxies.set(proxy, proxy);
   return proxy;
 }
 
@@ -103,6 +107,9 @@ function _wrapMethod(
       // per-chunk TTFT / ITL / TPOT dashboards render for
       // LangChain streams too.
       const chunkBuffer: StreamChunk[] = [];
+      // Snapshot once per stream — avoid getDefaultClient()+getConfig()
+      // on every chunk tick.
+      const captureChunkText = getDefaultClient().getConfig().captureChunkText;
 
       // `original` may be sync or async. We need an AsyncIterable
       // to wrap. If sync, `callResult` is the iterable; if async,
@@ -136,6 +143,9 @@ function _wrapMethod(
           let pendingError: unknown = null;
           let inner: AsyncIterable<unknown> | null = null;
           let iterIt: AsyncIterator<unknown> | null = null;
+          // Guard so ``done: true`` and ``return()`` don't both
+          // emit an aggregate event (for-await-of may call both).
+          let aggregateEmitted = false;
           const ready = iterPromise.then(
             (r) => {
               inner = r;
@@ -145,35 +155,57 @@ function _wrapMethod(
             },
           );
 
+          const emitAggregateOnce = (extra?: {
+            status?: "success" | "error";
+            errorType?: string;
+            errorMessage?: string;
+          }) => {
+            if (aggregateEmitted) return;
+            aggregateEmitted = true;
+            if (extra?.status) status = extra.status;
+            if (extra?.errorType !== undefined) errorType = extra.errorType;
+            if (extra?.errorMessage !== undefined) errorMsg = extra.errorMessage;
+            const ttftMs = tFirst !== null ? tFirst - start : 0;
+            const completionDurationMs = tLast - start;
+            const itlCount = Math.max(0, chunkCount - 1);
+            const itlMsAvg =
+              itlCount > 0 ? (tLast - (tFirst ?? start)) / itlCount : 0;
+            const tpotMs =
+              outputTokens > 1
+                ? (completionDurationMs - ttftMs) / (outputTokens - 1)
+                : 0;
+            _emitStream({
+              traceId,
+              method,
+              chunkCount,
+              outputTokens,
+              ttftMs,
+              itlMsAvg,
+              tpotMs,
+              completionDurationMs,
+              status,
+              errorType,
+              errorMessage: errorMsg,
+              inputTokens: inputTokens ?? undefined,
+              cacheReadTokens: cacheReadTokens ?? undefined,
+              cacheCreationTokens: cacheCreationTokens ?? undefined,
+              model: modelName,
+              opts,
+            });
+            _flushChunks(chunkBuffer);
+          };
+
           return {
             async next(): Promise<IteratorResult<unknown>> {
               if (iterIt === null && pendingError === null && inner === null) {
                 await ready;
                 const pendingErr: unknown = pendingError;
                 if (pendingErr) {
-                  status = "error";
-                  errorType =
-                    pendingErr instanceof Error
-                      ? pendingErr.constructor.name
-                      : "Error";
-                  _emitStream({
-                    traceId,
-                    method,
-                    chunkCount: 0,
-                    outputTokens: 0,
-                    ttftMs: 0,
-                    itlMsAvg: 0,
-                    tpotMs: 0,
-                    completionDurationMs: Date.now() - start,
-                    status,
-                    errorType,
-                    inputTokens: inputTokens ?? undefined,
-                    cacheReadTokens: cacheReadTokens ?? undefined,
-                    cacheCreationTokens: cacheCreationTokens ?? undefined,
-                    model: modelName,
-                    opts,
+                  emitAggregateOnce({
+                    status: "error",
+                    errorType: errorClass(pendingErr),
+                    errorMessage: errorMessage(pendingErr),
                   });
-                  _flushChunks(chunkBuffer);
                   throw pendingError;
                 }
                 if (!inner) {
@@ -267,66 +299,22 @@ function _wrapMethod(
                     eventId,
                     traceId,
                     chunkIndex: chunkCount - 1,
-                    deltaText: text ?? null,
+                    deltaText: captureChunkText ? (text ?? null) : null,
                     ttftMs: tFirst !== null ? tFirst - start : null,
                     itlMs: prev !== null ? now - prev : null,
                     tpotMs,
                     receivedAtClientMs: Date.now(),
                   });
                 } else {
-                  const ttftMs = tFirst !== null ? tFirst - start : 0;
-                  const completionDurationMs = tLast - start;
-                  const itlCount = Math.max(0, chunkCount - 1);
-                  const itlMsAvg =
-                    itlCount > 0
-                      ? (tLast - (tFirst ?? start)) / itlCount
-                      : 0;
-                  const tpotMs =
-                    outputTokens > 1
-                      ? (completionDurationMs - ttftMs) / (outputTokens - 1)
-                      : 0;
-                  _emitStream({
-                    traceId,
-                    method,
-                    chunkCount,
-                    outputTokens,
-                    ttftMs,
-                    itlMsAvg,
-                    tpotMs,
-                    completionDurationMs,
-                    status,
-                    errorType,
-                    inputTokens: inputTokens ?? undefined,
-                    cacheReadTokens: cacheReadTokens ?? undefined,
-                    cacheCreationTokens: cacheCreationTokens ?? undefined,
-                    model: modelName,
-                    opts,
-                  });
-                  _flushChunks(chunkBuffer);
+                  emitAggregateOnce();
                 }
                 return r;
               } catch (err) {
-                status = "error";
-                errorType =
-                  err instanceof Error ? err.constructor.name : "Error";
-                _emitStream({
-                  traceId,
-                  method,
-                  chunkCount,
-                  outputTokens,
-                  ttftMs: tFirst !== null ? tFirst - start : 0,
-                  itlMsAvg: 0,
-                  tpotMs: 0,
-                  completionDurationMs: Date.now() - start,
-                  status,
-                  errorType,
-                  inputTokens: inputTokens ?? undefined,
-                  cacheReadTokens: cacheReadTokens ?? undefined,
-                  cacheCreationTokens: cacheCreationTokens ?? undefined,
-                  model: modelName,
-                  opts,
+                emitAggregateOnce({
+                  status: "error",
+                  errorType: errorClass(err),
+                  errorMessage: errorMessage(err),
                 });
-                _flushChunks(chunkBuffer);
                 throw err;
               }
             },
@@ -337,12 +325,10 @@ function _wrapMethod(
               }
               // ``return`` short-circuits the stream without
               // reaching the ``done: true`` branch above, so
-              // there is no aggregate emit and no per-chunk
-              // flush. Flush the buffered chunks now so a
-              // caller that breaks out of the loop early still
-              // ships the partial series.
-              const client = getDefaultClient();
-              for (const c of chunkBuffer) client.bufferChunk(c);
+              // emit the aggregate + flush buffered chunks now
+              // so a caller that breaks out of the loop early
+              // still ships telemetry.
+              emitAggregateOnce();
               return { value: undefined, done: true };
             },
             async throw(err: unknown): Promise<IteratorResult<unknown>> {
@@ -374,14 +360,11 @@ function _wrapMethod(
     try {
       const result = original.apply(this, args);
       if (result instanceof Promise) {
-        return result
-          .catch((err: unknown) => {
-            status = "error";
-            errorType = errorClass(err);
-            errorMsg = errorMessage(err);
-            throw err;
-          })
-          .then((value: unknown) => {
+        // Use then/onRejected (not catch→then): a rethrow from
+        // ``.catch`` skips the subsequent ``.then`` fulfillment
+        // handler, so async errors previously never emitted.
+        return result.then(
+          (value: unknown) => {
             _emit({
               traceId,
               method,
@@ -392,7 +375,23 @@ function _wrapMethod(
               opts,
             });
             return value;
-          });
+          },
+          (err: unknown) => {
+            status = "error";
+            errorType = errorClass(err);
+            errorMsg = errorMessage(err);
+            _emit({
+              traceId,
+              method,
+              durationMs: Date.now() - start,
+              status,
+              errorType,
+              errorMessage: errorMsg,
+              opts,
+            });
+            throw err;
+          },
+        );
       }
       _emit({
         traceId,
@@ -468,6 +467,9 @@ function _emit(args: {
       duration_ms: args.durationMs,
       status: args.status,
       error_type: args.errorType,
+      ...(args.errorMessage !== undefined
+        ? { error_message: args.errorMessage }
+        : {}),
       environment_id: args.opts.environmentId,
     },
     metrics: { duration_ms: args.durationMs },
@@ -522,6 +524,9 @@ function _emitStream(args: {
       chunk_count: args.chunkCount,
       status: args.status,
       error_type: args.errorType,
+      ...(args.errorMessage !== undefined
+        ? { error_message: args.errorMessage }
+        : {}),
       environment_id: args.opts.environmentId,
     },
     metrics: {

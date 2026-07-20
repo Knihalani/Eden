@@ -28,7 +28,7 @@ from typing import Any
 from fastapi import APIRouter, Body, Depends, Path, Query
 from pydantic import BaseModel, Field
 
-from eden.api.deps import get_current_user
+from eden.api.deps import get_current_user, require_path_org_access
 from eden.services.prompt_versioning import PromptService
 
 logger = logging.getLogger(__name__)
@@ -36,7 +36,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(
     prefix="/orgs/{org_id}/prompts",
     tags=["prompts-v2"],
-    dependencies=[Depends(get_current_user)],
+    dependencies=[Depends(get_current_user), Depends(require_path_org_access)],
 )
 
 
@@ -57,7 +57,7 @@ class CreateVersionRequest(BaseModel):
 
 @router.get("")
 async def list_prompts(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     limit: int = Query(100, ge=1, le=500),
 ) -> dict[str, Any]:
     """List the per-org prompt registry."""
@@ -72,7 +72,7 @@ async def list_prompts(
 
 @router.post("")
 async def create_prompt(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     body: CreatePromptRequest = Body(...),
 ) -> dict[str, Any]:
     """Create a new prompt entry in the registry."""
@@ -93,7 +93,7 @@ async def create_prompt(
 
 @router.get("/{name}")
 async def get_prompt(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     name: str = Path(...),
 ) -> dict[str, Any]:
     """Read a prompt + its version timeline."""
@@ -117,7 +117,7 @@ async def get_prompt(
 
 @router.post("/{name}/versions")
 async def create_version(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     name: str = Path(...),
     body: CreateVersionRequest = Body(...),
 ) -> dict[str, Any]:
@@ -141,7 +141,7 @@ async def create_version(
 
 @router.get("/{name}/versions/{version}")
 async def get_version(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     name: str = Path(...),
     version: int = Path(...),
 ) -> dict[str, Any]:
@@ -165,7 +165,7 @@ async def get_version(
 
 @router.get("/{name}/versions/{version}/eval-runs")
 async def list_eval_runs(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     name: str = Path(...),
     version: int = Path(...),
     limit: int = Query(20, ge=1, le=100),

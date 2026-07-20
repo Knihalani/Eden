@@ -138,20 +138,16 @@ class TestB1RLSMiddleware:
         request — RLS policies treat a missing GUC as
         ``NULL`` → empty row set, which is the safe default.
         """
-        from starlette.requests import Request
-
         from eden.api.middleware.rls_org_context import (
             RLSOrgContextMiddleware,
         )
-
-        async def _receive():
-            return {"type": "http.request", "body": b"", "more_body": False}
 
         async def failing_client():
             raise RuntimeError("DB is down")
 
         scope = {
             "type": "http",
+            "asgi": {"version": "3.0", "spec_version": "2.0"},
             "method": "GET",
             "path": "/orgs/org_x/observability/traces",
             "raw_path": b"/orgs/org_x/observability/traces",
@@ -163,27 +159,28 @@ class TestB1RLSMiddleware:
             "scheme": "http",
             "http_version": "1.1",
         }
-        req = Request(scope, _receive)
 
-        async def call_next(r):
-            return _StubResponse()
+        sent: list = []
 
-        class _StubResponse:
-            status_code = 200
+        async def receive():
+            return {"type": "http.request", "body": b"", "more_body": False}
 
-        # BaseHTTPMiddleware needs an ``app`` arg; pass a
-        # no-op stub to satisfy the constructor.
+        async def send(msg):
+            sent.append(msg)
+
         async def _stub_app(scope, receive, send):
-            return None
+            await send({"type": "http.response.start", "status": 200, "headers": []})
+            await send({"type": "http.response.body", "body": b"", "more_body": False})
 
         with patch(
             "eden.storage.postgres.get_postgres_client",
             side_effect=failing_client,
         ):
-            resp = asyncio.run(
-                RLSOrgContextMiddleware(_stub_app).dispatch(req, call_next)
+            asyncio.run(
+                RLSOrgContextMiddleware(_stub_app)(scope, receive, send)
             )
-        assert resp.status_code == 200
+        starts = [m for m in sent if m["type"] == "http.response.start"]
+        assert starts and starts[0]["status"] == 200
 
 
 # ─── B-2: get_org_resource_limits logs on failure ──────────────────────

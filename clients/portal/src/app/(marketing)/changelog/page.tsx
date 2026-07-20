@@ -2,18 +2,22 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 import { LegalPage } from "@/components/layout/legal-page";
+import { SignedInGate } from "../_components/SignedInGate";
 import { DOCS_QUICKSTART_URL } from "@/lib/constants";
+
 
 export const metadata: Metadata = {
   title: "Changelog · Eden",
-  description: "Product updates for Eden — observability, improvement loop, and platform changes.",
+  description:
+    "Product updates for Eden — observability, human-reviewed Improve patches, and platform changes.",
 };
+
 
 const ctaPrimary =
   "inline-flex items-center justify-center gap-2 min-h-11 px-5 py-2.5 text-sm font-medium bg-[var(--accent)] text-[var(--bg-base)] rounded-lg hover:bg-[var(--accent-hover)] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-secondary)]";
 
 const ctaSecondary =
-  "inline-flex items-center justify-center gap-2 min-h-11 px-5 py-2.5 text-sm font-medium text-[var(--text-primary)] bg-[var(--bg-secondary)] border border-[var(--border-default)] rounded-lg hover:bg-[var(--bg-tertiary)] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-secondary)]";
+  "inline-flex items-center justify-center gap-2 min-h-11 px-5 py-2.5 text-sm font-medium text-[var(--text-primary)] bg-[var(--bg-primary)]/80 border border-[var(--border-default)] rounded-lg hover:bg-[var(--bg-tertiary)] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-secondary)]";
 
 const ENTRIES = [
   {
@@ -23,8 +27,8 @@ const ENTRIES = [
   },
   {
     date: "2026-07",
-    title: "Closed-loop improvements",
-    body: "Agent Issues, Improve cockpit, and human-reviewed patch suggestions close the capture → analyse → improve loop. Diffs land in an inbox — you review and open the PR.",
+    title: "Human-reviewed Improve",
+    body: "Agent Issues, Improve cockpit, and human-reviewed patch suggestions close the capture → analyse → improve path. Diffs land in an inbox — you review and open the PR.",
   },
   {
     date: "2026-06",
@@ -38,7 +42,7 @@ export default function ChangelogPage() {
     <LegalPage
       eyebrow="Changelog"
       title="What shipped"
-      description="A calm, chronological record of product changes. Soft launch focuses on reliability and the closed-loop path."
+      description="A calm, chronological record of product changes. Soft launch focuses on reliability and human-reviewed Improve."
       size="medium"
     >
       <ol className="space-y-10">
@@ -57,10 +61,20 @@ export default function ChangelogPage() {
         ))}
       </ol>
       <div className="mt-14 flex flex-wrap items-center gap-3">
-        <Link href="/sign-up" className={ctaPrimary}>
-          Start free
-          <ArrowRight className="w-4 h-4" aria-hidden />
-        </Link>
+        <SignedInGate
+          signedIn={
+            <Link href="/dashboard" className={ctaPrimary}>
+              Open dashboard
+              <ArrowRight className="w-4 h-4" aria-hidden />
+            </Link>
+          }
+          signedOut={
+            <Link href="/sign-up" className={ctaPrimary}>
+              Start free
+              <ArrowRight className="w-4 h-4" aria-hidden />
+            </Link>
+          }
+        />
         <a
           href={DOCS_QUICKSTART_URL}
           target="_blank"
@@ -70,6 +84,7 @@ export default function ChangelogPage() {
           Quickstart
         </a>
       </div>
+
     </LegalPage>
   );
 }

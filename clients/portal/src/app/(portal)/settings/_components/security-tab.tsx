@@ -1,13 +1,19 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
+import * as DialogPrimitive from "@radix-ui/react-dialog";
+import { useOrgQuery } from "@/hooks/use-api-query";
+import { queryKeys } from "@/lib/query-keys";
 import { useOrg } from "@/hooks/use-org";
 import { usePermissions } from "@/hooks/use-permissions";
 import { api } from "@/lib/api";
-import { Loader2, Shield, ShieldCheck, ShieldAlert, AlertTriangle, User as UserIcon } from "lucide-react";
+import { Loader2, Shield, ShieldCheck, ShieldAlert, AlertTriangle, User as UserIcon, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/components/ui/toast";
 import { useConfirm } from "@/hooks/use-confirm";
+import { Button } from "@/components/ui/button";
+import { ErrorState } from "@/components/ui/error-state";
+import { errorFromCaught } from "@/lib/safe-error-message";
 import { TwoFASetupDialog } from "./2fa-setup-dialog";
 import { IntegrationStatusBanners } from "@/components/integration-status-banners";
 
@@ -25,47 +31,51 @@ export function SecurityTab() {
   const { hasPermission } = usePermissions();
   const toast = useToast();
   const { confirm, ConfirmDialog } = useConfirm();
-  const [user2FAEnabled, setUser2FAEnabled] = useState(false);
-  const [enforcementStatus, setEnforcementStatus] = useState(false);
-  const [members2FA, setMembers2FA] = useState<Member2FAStatus[]>([]);
-  const [loading, setLoading] = useState(true);
   const [showSetupDialog, setShowSetupDialog] = useState(false);
   const [showDisableDialog, setShowDisableDialog] = useState(false);
+  const [enforcementOverride, setEnforcementOverride] = useState<boolean | null>(null);
 
   const canManageSecurity = hasPermission("settings:edit");
+  const isPersonalOrg = Boolean(currentOrg?.is_personal);
+  const orgId = currentOrg?.id ?? null;
 
-  const loadData = async () => {
-    if (!currentOrg) {
-      setLoading(false);
-      return;
-    }
-
-    setLoading(true);
-    try {
-      // Get user's own 2FA status
+  const securityQuery = useOrgQuery(
+    queryKeys.security.twoFa(orgId),
+    orgId,
+    async () => {
       const status = await api.get2FAStatus();
-      setUser2FAEnabled(status.two_factor_enabled);
-
-      // Get org enforcement status (admins only)
-      if (canManageSecurity) {
-        const [enforcement, members] = await Promise.all([
-          api.getOrg2FAEnforcementStatus(currentOrg.id).catch(() => ({ two_factor_enforced: false })),
-          api.getOrgMembers2FAStatus(currentOrg.id).catch(() => []),
-        ]);
-        setEnforcementStatus(enforcement.two_factor_enforced);
-        setMembers2FA(members);
+      if (!canManageSecurity) {
+        return {
+          user2FAEnabled: status.two_factor_enabled,
+          enforcementStatus: false,
+          members2FA: [] as Member2FAStatus[],
+        };
       }
-    } catch (e) {
-      console.error("Failed to load 2FA data", e);
-      toast.error(e instanceof Error ? e.message : "Failed to load 2FA data");
-    } finally {
-      setLoading(false);
-    }
+      // Fail closed: enforcement/members errors must surface ErrorState,
+      // not soft-default to false / [] (which hides outages as "not enforced").
+      const [enforcement, members] = await Promise.all([
+        api.getOrg2FAEnforcementStatus(orgId!),
+        api.getOrgMembers2FAStatus(orgId!),
+      ]);
+      return {
+        user2FAEnabled: status.two_factor_enabled,
+        enforcementStatus: enforcement.two_factor_enforced,
+        members2FA: members,
+      };
+    },
+  );
+  const user2FAEnabled = securityQuery.data?.user2FAEnabled ?? false;
+  const members2FA = securityQuery.data?.members2FA ?? [];
+  const enforcementStatus =
+    enforcementOverride ?? securityQuery.data?.enforcementStatus ?? false;
+  const loading = securityQuery.isLoading;
+  const loadError = securityQuery.error
+    ? errorFromCaught(securityQuery.error, "Failed to load 2FA data")
+    : null;
+  const loadData = async () => {
+    setEnforcementOverride(null);
+    await securityQuery.refetch();
   };
-
-  useEffect(() => {
-    loadData();
-  }, [currentOrg?.id, canManageSecurity]);
 
   const handleEnforceToggle = async () => {
     if (!currentOrg) return;
@@ -88,7 +98,7 @@ export function SecurityTab() {
 
     try {
       await api.enforceOrg2FA(currentOrg.id, newEnforce);
-      setEnforcementStatus(newEnforce);
+      setEnforcementOverride(newEnforce);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (e: any) {
       toast.error(e.message || "Failed to update 2FA enforcement");
@@ -101,6 +111,20 @@ export function SecurityTab() {
         <Loader2 className="w-6 h-6 animate-spin text-[var(--accent)]" />
         <span className="ml-2 text-[var(--text-muted)]">Loading security settings...</span>
       </div>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <ErrorState
+        title="Could not load 2FA data"
+        message={loadError}
+        action={
+          <Button variant="outline" size="sm" onClick={() => void loadData()}>
+            Try again
+          </Button>
+        }
+      />
     );
   }
 
@@ -167,8 +191,8 @@ export function SecurityTab() {
         )}
       </div>
 
-      {/* Org 2FA Enforcement Section - Admin/Owner only */}
-      {canManageSecurity && currentOrg && (
+      {/* Org 2FA Enforcement — admin/owner only; soft-hide for personal workspaces */}
+      {canManageSecurity && currentOrg && !isPersonalOrg && (
         <div className="p-4 bg-[var(--bg-primary)] rounded-lg border border-[var(--border-default)]">
           <div className="flex items-center gap-3 mb-4">
             <div className="flex-1">
@@ -262,8 +286,7 @@ export function SecurityTab() {
           onClose={() => setShowSetupDialog(false)}
           onSuccess={() => {
             setShowSetupDialog(false);
-            setUser2FAEnabled(true);
-            loadData();
+            void loadData();
           }}
         />
       )}
@@ -274,7 +297,7 @@ export function SecurityTab() {
           onClose={() => setShowDisableDialog(false)}
           onSuccess={() => {
             setShowDisableDialog(false);
-            setUser2FAEnabled(false);
+            void loadData();
           }}
         />
       )}
@@ -311,50 +334,81 @@ function Disable2FADialog({
   };
 
   return (
-    <div className="fixed inset-0 bg-[var(--bg-base)]/50 flex items-center justify-center z-50">
-      <div className="bg-[var(--bg-primary)] rounded-xl p-6 w-full max-w-md mx-4">
-        <h2 className="text-lg font-semibold mb-4">Disable 2FA</h2>
-        <p className="text-sm text-[var(--text-secondary)] mb-4">
-          Enter the 6-digit code from your authenticator app to disable 2FA.
-        </p>
-
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <input
-              type="text"
-              value={code}
-              onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
-              placeholder="000000"
-              maxLength={6}
-              aria-invalid={Boolean(error)}
-              aria-describedby={error ? "disable-2fa-error" : undefined}
-              className="w-full px-3 py-2 text-center text-2xl tracking-widest border border-[var(--border)] rounded-lg"
-              autoFocus
-            />
-          </div>
-
-          {error && (
-            <p id="disable-2fa-error" className="text-sm text-[var(--error)]">{error}</p>
+    <DialogPrimitive.Root open onOpenChange={(open) => !open && !loading && onClose()}>
+      <DialogPrimitive.Portal>
+        <DialogPrimitive.Overlay
+          className="fixed inset-0 z-50"
+          style={{ backgroundColor: "color-mix(in srgb, var(--bg-base) 50%, transparent)" }}
+        />
+        <DialogPrimitive.Content
+          className={cn(
+            "fixed left-[50%] top-[50%] z-50 grid w-full max-w-md max-h-[90vh] overflow-y-auto translate-x-[-50%] translate-y-[-50%]",
+            "gap-4 border border-[var(--border-default)] bg-[var(--bg-primary)] p-6 shadow-lg rounded-xl",
+            "duration-200"
           )}
+          aria-describedby="disable-2fa-description"
+        >
+          <DialogPrimitive.Title className="text-lg font-semibold mb-4">
+            Disable 2FA
+          </DialogPrimitive.Title>
+          <DialogPrimitive.Description
+            id="disable-2fa-description"
+            className="text-sm text-[var(--text-secondary)] mb-4"
+          >
+            Enter the 6-digit code from your authenticator app to disable 2FA.
+          </DialogPrimitive.Description>
 
-          <div className="flex gap-3 justify-end">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2 text-sm border border-[var(--border)] rounded-lg"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={loading || code.length !== 6}
-              className="px-4 py-2 bg-[var(--error)] text-[var(--bg-primary)] rounded-lg text-sm font-medium disabled:opacity-50"
-            >
-              {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Disable 2FA"}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div>
+              <input
+                type="text"
+                value={code}
+                onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                placeholder="000000"
+                maxLength={6}
+                aria-label="2FA authentication code"
+                aria-invalid={Boolean(error)}
+                aria-describedby={error ? "disable-2fa-error" : undefined}
+                className="w-full px-3 py-2 text-center text-2xl tracking-widest border border-[var(--border)] rounded-lg"
+                autoFocus
+              />
+            </div>
+
+            {error && (
+              <p id="disable-2fa-error" className="text-sm text-[var(--error)]" role="alert">
+                {error}
+              </p>
+            )}
+
+            <div className="flex gap-3 justify-end">
+              <DialogPrimitive.Close asChild>
+                <button
+                  type="button"
+                  className="px-4 py-2 text-sm border border-[var(--border)] rounded-lg"
+                  disabled={loading}
+                >
+                  Cancel
+                </button>
+              </DialogPrimitive.Close>
+              <button
+                type="submit"
+                disabled={loading || code.length !== 6}
+                className="px-4 py-2 bg-[var(--error)] text-[var(--bg-primary)] rounded-lg text-sm font-medium disabled:opacity-50"
+              >
+                {loading ? <Loader2 className="w-4 h-4 animate-spin" aria-hidden /> : "Disable 2FA"}
+              </button>
+            </div>
+          </form>
+
+          <DialogPrimitive.Close
+            className="absolute right-4 top-4 rounded-md p-1 text-[var(--text-muted)] opacity-70 transition-opacity hover:opacity-100 hover:bg-[var(--accent-bg)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]"
+            aria-label="Close dialog"
+            disabled={loading}
+          >
+            <X className="h-4 w-4" aria-hidden />
+          </DialogPrimitive.Close>
+        </DialogPrimitive.Content>
+      </DialogPrimitive.Portal>
+    </DialogPrimitive.Root>
   );
 }

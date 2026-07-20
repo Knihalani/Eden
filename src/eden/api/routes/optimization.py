@@ -18,6 +18,7 @@ from eden.api.deps import (  # noqa: F401  (monkeypatched by tests)
     get_current_user,
     require_org_permission,
     require_org_permission_dep,
+    require_path_org_access,
 )
 from eden.api.utils.redact import redact_all
 from eden.optimization import (
@@ -32,7 +33,7 @@ from eden.optimization.cost_tracker import CostEvent
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/orgs/{org_id}/optimization", tags=["optimization"])
+router = APIRouter(prefix="/orgs/{org_id}/optimization", tags=["optimization"], dependencies=[Depends(require_path_org_access)])
 
 
 # ============================================================================
@@ -179,10 +180,10 @@ def _get_cost_tracker() -> CostTracker:
 
 @router.get("/overview", response_model=OptimizationOverviewResponse)
 async def get_optimization_overview(
-    org_id: str,
+    org_id: str = Depends(require_path_org_access),
     days: int = Query(default=30, ge=1, le=365),
     user: dict = Depends(get_current_user),
-        _check_billing_view: dict = Depends(require_org_permission_dep('billing:view')),
+        _check_billing_view: dict = Depends(require_org_permission_dep('billing:view'))
 ):
     """Get a combined optimization overview for the dashboard.
 
@@ -410,7 +411,7 @@ def _empty_optimization_overview(org_id: str, days: int) -> OptimizationOverview
 
 @router.get("/routing", response_model=RoutingStatsResponse)
 async def get_routing_stats(
-    org_id: str,
+    org_id: str = Depends(require_path_org_access),
     user: dict = Depends(get_current_user),
         _check_billing_view: dict = Depends(require_org_permission_dep('billing:view')),
 ):
@@ -441,7 +442,7 @@ async def get_routing_stats(
 
 @router.get("/cache", response_model=CacheStatsResponse)
 async def get_cache_stats(
-    org_id: str,
+    org_id: str = Depends(require_path_org_access),
     user: dict = Depends(get_current_user),
         _check_billing_view: dict = Depends(require_org_permission_dep('billing:view')),
 ):
@@ -466,8 +467,8 @@ async def get_cache_stats(
 
 @router.post("/cache/invalidate", response_model=CacheInvalidateResponse)
 async def invalidate_cache(
-    org_id: str,
     request: CacheInvalidateRequest,
+    org_id: str = Depends(require_path_org_access),
     user: dict = Depends(get_current_user),
         _check_billing_edit: dict = Depends(require_org_permission_dep('billing:edit')),
 ):
@@ -499,7 +500,7 @@ async def invalidate_cache(
 
 @router.get("/costs", response_model=CostBreakdownResponse)
 async def get_cost_breakdown(
-    org_id: str,
+    org_id: str = Depends(require_path_org_access),
     days: int = Query(default=30, ge=1, le=365),
     user: dict = Depends(get_current_user),
         _check_billing_view: dict = Depends(require_org_permission_dep('billing:view')),
@@ -540,8 +541,8 @@ async def get_cost_breakdown(
 
 @router.post("/costs/track")
 async def track_cost_event(
-    org_id: str,
     payload: CostEventPayload,
+    org_id: str = Depends(require_path_org_access),
     user: dict = Depends(get_current_user),
         _check_billing_edit: dict = Depends(require_org_permission_dep('billing:edit')),
 ):
@@ -579,7 +580,7 @@ async def track_cost_event(
 
 @router.get("/budget", response_model=BudgetStatusResponse)
 async def get_budget_status(
-    org_id: str,
+    org_id: str = Depends(require_path_org_access),
     user: dict = Depends(get_current_user),
         _check_billing_view: dict = Depends(require_org_permission_dep('billing:view')),
 ):
@@ -620,7 +621,7 @@ async def get_budget_status(
 
 @router.post("/budget/check")
 async def check_budget_before_call(
-    org_id: str,
+    org_id: str = Depends(require_path_org_access),
     estimated_cost_cents: float = Query(default=0.0, ge=0.0),
     user: dict = Depends(get_current_user),
         _check_billing_view: dict = Depends(require_org_permission_dep('billing:view')),
@@ -653,7 +654,7 @@ async def check_budget_before_call(
 
 @router.get("/savings", response_model=TokenSavingsResponse)
 async def get_token_savings(
-    org_id: str,
+    org_id: str = Depends(require_path_org_access),
     user: dict = Depends(get_current_user),
         _check_billing_view: dict = Depends(require_org_permission_dep('billing:view')),
 ):
@@ -684,7 +685,7 @@ async def get_token_savings(
 
 @router.get("/cost-per-trace", response_model=dict)
 async def cost_per_trace(
-    org_id: str,
+    org_id: str = Depends(require_path_org_access),
     days: int = Query(default=30, ge=1, le=365),
     _user: dict = Depends(get_current_user),
 ):

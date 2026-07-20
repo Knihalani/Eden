@@ -12,7 +12,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Path, Query
 from pydantic import BaseModel
 
-from eden.api.deps import get_current_user
+from eden.api.deps import get_current_user, require_path_org_access
 from eden.storage.postgres import get_postgres_client
 
 logger = logging.getLogger(__name__)
@@ -45,9 +45,9 @@ def _coverage_from_metadata(metadata: dict | None) -> str:
 
 @router.get("", response_model=list[PatternOut])
 async def list_patterns(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     status: str = Query("active", description="active, archived, all"),
-    user: dict = Depends(get_current_user),
+    user: dict = Depends(get_current_user)
 ) -> list[PatternOut]:
     client = await get_postgres_client()
     if not client:
@@ -85,7 +85,7 @@ async def list_patterns(
 
 @router.get("/{pattern_id}", response_model=PatternOut)
 async def get_pattern(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     pattern_id: str = Path(...),
     user: dict = Depends(get_current_user),
 ) -> PatternOut:

@@ -6,15 +6,15 @@ import uuid
 from datetime import UTC, datetime
 from typing import Any
 
-from fastapi import APIRouter, Depends, Path, Query
+from fastapi import APIRouter, Depends, Query
 
-from eden.api.deps import get_current_user, require_org_member
+from eden.api.deps import get_current_user, require_path_org_access
 from eden.evaluation.agentic_metrics import AgenticMetricsService
 
 router = APIRouter(
     prefix="/orgs/{org_id}/agentic-metrics",
     tags=["agentic-metrics"],
-    dependencies=[Depends(get_current_user), Depends(require_org_member)],
+    dependencies=[Depends(get_current_user), Depends(require_path_org_access)],
 )
 _svc = AgenticMetricsService()
 
@@ -32,7 +32,7 @@ def _ok(data: dict[str, Any]) -> dict[str, Any]:
 
 @router.get("/summary")
 async def agentic_metrics_summary(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     agent_id: str | None = Query(None),
     window_hours: int = Query(24, ge=1, le=720),
 ) -> dict[str, Any]:

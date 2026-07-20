@@ -36,7 +36,8 @@ type Format string
 const (
 	FormatOpenAI    Format = "openai"
 	FormatAnthropic Format = "anthropic"
-	FormatCustom    Format = "custom"
+	FormatWebhook   Format = "webhook"
+	FormatCustom    Format = FormatWebhook // alias; /ingest/custom → 415
 )
 
 // Event is the wire shape that the backend decoders accept. It is
@@ -85,6 +86,14 @@ type Config struct {
 
 	// Debug toggles verbose logging of dropped payloads.
 	Debug bool
+
+	// BatchSize is the max queued events before an automatic flush.
+	// Default 50.
+	BatchSize int
+
+	// FlushInterval is the max time to hold a non-empty batch.
+	// Default 250ms. Zero disables the timer (size-only flush).
+	FlushInterval time.Duration
 }
 
 // ConfigFromEnv builds a Config from environment variables. Missing
@@ -105,13 +114,21 @@ func getenv(k, def string) string {
 	return def
 }
 
+type queuedEvent struct {
+	format Format
+	ev     Event
+}
+
 // EdenClient is the HTTP sender. Use NewClient to construct one; it is
 // safe for concurrent use.
 type EdenClient struct {
-	cfg     Config
-	mu      sync.Mutex
-	buf     []Event
-	flushed bool
+	cfg Config
+	mu  sync.Mutex
+	// queue holds pending events grouped for flush.
+	queue []queuedEvent
+	// stopCh closes when the flush loop should exit.
+	stopCh chan struct{}
+	wg     sync.WaitGroup
 }
 
 // NewClient builds a Client with the given Config. Any unset
@@ -126,7 +143,41 @@ func NewClient(cfg Config) *EdenClient {
 	if cfg.ProjectID == "" {
 		cfg.ProjectID = "default"
 	}
-	return &EdenClient{cfg: cfg}
+	if cfg.BatchSize <= 0 {
+		cfg.BatchSize = 50
+	}
+	if cfg.FlushInterval == 0 {
+		cfg.FlushInterval = 250 * time.Millisecond
+	}
+	c := &EdenClient{cfg: cfg, stopCh: make(chan struct{})}
+	c.wg.Add(1)
+	go c.flushLoop()
+	return c
+}
+
+func (c *EdenClient) flushLoop() {
+	defer c.wg.Done()
+	ticker := time.NewTicker(c.cfg.FlushInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-c.stopCh:
+			return
+		case <-ticker.C:
+			_ = c.Flush(context.Background())
+		}
+	}
+}
+
+// Close stops the background flusher and drains the queue once.
+func (c *EdenClient) Close() {
+	select {
+	case <-c.stopCh:
+	default:
+		close(c.stopCh)
+	}
+	c.wg.Wait()
+	_ = c.Flush(context.Background())
 }
 
 // IsConfigured reports whether the client has both OrgID and APIKey.
@@ -146,15 +197,30 @@ func (c *EdenClient) Cfg() Config { return c.cfg }
 // Returns the HTTP status code and any transport error. A non-2xx
 // status is returned alongside a nil error so the caller can log it.
 func (c *EdenClient) Ingest(ctx context.Context, format Format, ev Event) (int, error) {
+	return c.IngestBatch(ctx, format, []Event{ev})
+}
+
+// IngestBatch posts a JSON array of events to the format endpoint.
+func (c *EdenClient) IngestBatch(ctx context.Context, format Format, events []Event) (int, error) {
 	if !c.IsConfigured() {
 		return 0, ErrNotConfigured
 	}
-	body, err := json.Marshal(ev)
+	if len(events) == 0 {
+		return 200, nil
+	}
+	var body []byte
+	var err error
+	if len(events) == 1 {
+		body, err = json.Marshal(events[0])
+	} else {
+		body, err = json.Marshal(events)
+	}
 	if err != nil {
 		return 0, fmt.Errorf("eden: marshal event: %w", err)
 	}
+	pathFormat := ResolveIngestPath(string(format))
 	url := strings.TrimRight(c.cfg.BaseURL, "/") +
-		"/orgs/" + c.cfg.OrgID + "/ingest/" + string(format)
+		"/orgs/" + c.cfg.OrgID + "/ingest/" + pathFormat
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
@@ -181,20 +247,52 @@ func (c *EdenClient) Ingest(ctx context.Context, format Format, ev Event) (int, 
 	return resp.StatusCode, nil
 }
 
-// Send is the fire-and-forget variant. It launches a goroutine and
-// never blocks the caller; failures are logged only when Debug is
-// on. Safe to call from hot paths.
+// Flush drains the in-memory queue, posting one JSON array per format.
+func (c *EdenClient) Flush(ctx context.Context) error {
+	if !c.IsConfigured() {
+		return nil
+	}
+	c.mu.Lock()
+	batch := c.queue
+	c.queue = nil
+	c.mu.Unlock()
+	if len(batch) == 0 {
+		return nil
+	}
+	byFormat := map[Format][]Event{}
+	for _, q := range batch {
+		byFormat[q.format] = append(byFormat[q.format], q.ev)
+	}
+	var firstErr error
+	for format, events := range byFormat {
+		if status, err := c.IngestBatch(ctx, format, events); err != nil {
+			if firstErr == nil {
+				firstErr = err
+			}
+			if c.cfg.Debug {
+				fmt.Fprintf(os.Stderr, "[eden] flush failed: %v\n", err)
+			}
+		} else if status >= 400 && c.cfg.Debug {
+			fmt.Fprintf(os.Stderr, "[eden] flush non-2xx: %d\n", status)
+		}
+	}
+	return firstErr
+}
+
+// Send is the fire-and-forget variant. Events are queued and flushed
+// when the batch fills or FlushInterval elapses. Safe to call from
+// hot paths.
 func (c *EdenClient) Send(format Format, ev Event) {
 	if !c.IsConfigured() {
 		return
 	}
-	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-		if status, err := c.Ingest(ctx, format, ev); err != nil && c.cfg.Debug {
-			fmt.Fprintf(os.Stderr, "[eden] send failed: %v\n", err)
-		} else if status >= 400 && c.cfg.Debug {
-			fmt.Fprintf(os.Stderr, "[eden] send non-2xx: %d\n", status)
-		}
-	}()
+	c.mu.Lock()
+	c.queue = append(c.queue, queuedEvent{format: format, ev: ev})
+	shouldFlush := len(c.queue) >= c.cfg.BatchSize
+	c.mu.Unlock()
+	if shouldFlush {
+		go func() {
+			_ = c.Flush(context.Background())
+		}()
+	}
 }

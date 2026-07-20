@@ -4,6 +4,31 @@ All notable changes to the Eden TypeScript SDK are documented here. The
 format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## 0.3.2 — 2026-07-18
+
+### Fixed
+- `flush()` waits for in-flight POSTs then drains (parity with `flushChunks`).
+- `wrapOpenAI` / `wrapAnthropic` / `wrapLangChain` / `wrapVercelAI`:
+  re-wrapping the original client returns the same Proxy (WeakMap),
+  not the bare original.
+- LangChain async `invoke`/`call`/`batch` errors emit telemetry
+  (including `error_message`); early stream `return()` emits aggregate.
+- Vercel AI: emit when `streamText` has no attachable stream; read
+  AI SDK v4 `text-delta.text`.
+
+### Changed
+- **Breaking:** `redactOnClient` now defaults to `false`. Restore with
+  `redactOnClient: true` or `EDEN_REDACT_ON_CLIENT=1`.
+- **Breaking:** `instrument()` no longer enables HTTP capture by
+  default (avoids double-emit with `wrap*`). Pass `httpCapture: true`
+  to opt in.
+- Streaming chunks omit `deltaText` unless `captureChunkText: true`
+  (or `EDEN_CAPTURE_CHUNK_TEXT=1`).
+- Ingest POSTs use `Content-Encoding: gzip`; multi-format flush is
+  concurrent (`Promise.all`).
+- Package sets `"sideEffects": false`; `ModelAdvisor` also available
+  via `@eden-ai/sdk/model-advisor`.
+
 ## 0.3.1 — 2026-07-17
 
 ### Added

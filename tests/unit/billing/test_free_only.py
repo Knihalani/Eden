@@ -277,6 +277,16 @@ class TestPaidPlansDisabled:
         finally:
             billing.PAID_PLANS_ENABLED = False  # idempotent reset
 
+    def test_invoices_and_payment_method_are_gated(self):
+        """Stripe invoice history + payment-method must share the free-only
+        gate so the portal never mistakes intentional 503 for outage."""
+        import inspect
+
+        from eden.api.routes import billing
+
+        assert "_require_paid_plans_enabled" in inspect.getsource(billing.get_invoices)
+        assert "_require_paid_plans_enabled" in inspect.getsource(billing.get_payment_method)
+
     def test_legacy_free_alias_maps_to_org_free_for_check_limit(self):
         """The ``check_limit`` fallback (no plan row) must consult
         ``get_plan_tier('org_free')`` — not the removed literal ``free``."""

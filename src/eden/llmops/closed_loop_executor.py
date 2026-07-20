@@ -351,7 +351,7 @@ async def _update_status(
                 new_status, action_id, org_id,
             )
         else:
-            # approved / applied / denied: stamp applied_at + applied_by
+            # applied / denied / failed: stamp applied_at + applied_by
             await client.execute(
                 """
                 UPDATE closed_loop_actions
@@ -476,7 +476,8 @@ class ClosedLoopExecutor:
 
         Fetches the exact action by id, dispatches the real side-effect
         for its ``action_kind`` (investigate / rollback / reweight /
-        cache_bust / propose_patch), then flips status to ``applied``.
+        cache_bust / propose_patch), then flips status to match the
+        outcome (``applied`` / ``denied`` / ``failed`` / ``not_applied``).
         Cat 17 StatGate gating (installed by ``trace_quality.wiring``)
         wraps this method and only delegates here on an APPLY verdict.
         """
@@ -495,24 +496,51 @@ class ClosedLoopExecutor:
 
         applied_action_kind = action.get("action_kind", "unknown")
         side_effect = await _dispatch_side_effect(org_id, action)
+        se_name = side_effect.get("side_effect")
+        se_detail = side_effect.get("detail") or {}
+        if not isinstance(se_detail, dict):
+            se_detail = {"detail": se_detail}
+
+        if se_name == "denied":
+            new_status = "denied"
+            message = str(
+                se_detail.get("reason")
+                or "side effect denied by autonomy policy"
+            )
+        elif se_name == "error":
+            new_status = "failed"
+            message = str(
+                se_detail.get("error") or "side effect failed"
+            )
+        elif se_name == "recorded":
+            # Soft / unknown-kind: do not claim applied.
+            new_status = "not_applied"
+            message = str(
+                se_detail.get("reason")
+                or se_detail.get("kind")
+                or "side effect recorded only (not applied)"
+            )
+        else:
+            new_status = "applied"
+            message = None
 
         ok = await _update_status(
-            org_id, action_id, new_status="applied", applied_by=applied_by
+            org_id, action_id, new_status=new_status, applied_by=applied_by
         )
         if not ok:
             return not_implemented(
                 self.name, message="apply failed (substrate unavailable?)"
             )
-        return _ok_envelope(
-            self.name,
-            {
-                "action_id": action_id,
-                "status": "applied",
-                "action_kind": applied_action_kind,
-                "side_effect": side_effect.get("side_effect"),
-                "side_effect_detail": side_effect.get("detail"),
-            },
-        )
+        data: dict[str, Any] = {
+            "action_id": action_id,
+            "status": new_status,
+            "action_kind": applied_action_kind,
+            "side_effect": se_name,
+            "side_effect_detail": side_effect.get("detail"),
+        }
+        if message is not None:
+            data["message"] = message
+        return _ok_envelope(self.name, data)
 
     async def dashboard(
         self,

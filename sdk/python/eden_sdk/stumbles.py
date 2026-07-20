@@ -26,11 +26,10 @@ from typing import Any
 
 import httpx
 
+from eden_sdk.client import _USER_AGENT
 from eden_sdk.config import EdenConfig, get_config
 
 logger = logging.getLogger("eden_sdk.stumbles")
-
-_USER_AGENT = "eden-sdk/0.3.0 (python)"
 
 _VALID_KINDS = {
     "tool_error",

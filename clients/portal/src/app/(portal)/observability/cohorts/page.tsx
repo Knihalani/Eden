@@ -6,17 +6,22 @@ import { cn } from "@/lib/utils";
 import { api } from "@/lib/api";
 import { useToast } from "@/components/ui/toast";
 import { NoOrgState } from "@/components/ui/no-org-state";
+import { ErrorState } from "@/components/ui/error-state";
+import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/layout/page-header";
 import { PageContent } from "@/components/layout/page-content";
-import { Database, Play, Layers, RefreshCw, Loader2, AlertTriangle, Archive, FileText } from "lucide-react";
-import { motion } from "framer-motion";
+import { Database, Play, Layers, RefreshCw, Loader2, Archive, FileText } from "lucide-react";
 import { Card } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 import { errorFromCaught } from "@/lib/safe-error-message";
 interface ColumnarQueryResult {
-  columns: string[];
-  rows: Array<Array<unknown>>;
-  row_count: number;
-  data_source: string;
+  status: string;
+  message?: string;
+  data: {
+    rows: Array<Record<string, unknown>>;
+    n_rows: number;
+    data_source: string;
+  } | null;
 }
 interface PartitionsResult {
   period: string;
@@ -32,7 +37,7 @@ interface CompactResult {
   duration_ms: number;
 }
 async function columnarQuery(orgId: string, sql: string): Promise<ColumnarQueryResult> {
-  return api.post<ColumnarQueryResult>(`/orgs/${orgId}/intelligence/columnar/query`, { sql });
+  return api.post<ColumnarQueryResult>(`/orgs/${orgId}/intelligence/columnar/query`, { query: sql });
 }
 async function ensurePartitions(orgId: string, period: string): Promise<PartitionsResult> {
   return api.post<PartitionsResult>(`/orgs/${orgId}/intelligence/columnar/partitions/ensure`, { period });
@@ -60,7 +65,7 @@ export default function CohortsPage() {
   const [sql, setSql] = useState(DEFAULT_SQL);
   const [running, setRunning] = useState(false);
   const [columns, setColumns] = useState<string[]>([]);
-  const [rows, setRows] = useState<Array<Array<unknown>>>([]);
+  const [rows, setRows] = useState<Array<Record<string, unknown>>>([]);
   const [dataSource, setDataSource] = useState<string>("");
   const [error, setError] = useState("");
 
@@ -84,9 +89,16 @@ export default function CohortsPage() {
     setError("");
     try {
       const res = await columnarQuery(currentOrg.id, sql);
-      setColumns(res.columns);
-      setRows(res.rows);
-      setDataSource(res.data_source);
+      if ((res.status !== "ok" && res.status !== "ok_fallback") || !res.data) {
+        setError(res.message?.trim() || `Query returned status "${res.status}"`);
+        setColumns([]);
+        setRows([]);
+        return;
+      }
+      const dictRows = res.data.rows ?? [];
+      setColumns(dictRows.length > 0 ? Object.keys(dictRows[0]!) : []);
+      setRows(dictRows);
+      setDataSource(res.data.data_source);
     } catch (err) {
       setError(errorFromCaught(err, "Query failed"));
       setColumns([]);
@@ -178,10 +190,17 @@ export default function CohortsPage() {
         </div>
       </Card>
 
-      {error && <div className="bg-[var(--error-bg)] text-[var(--error)] text-sm px-4 py-3 rounded-xl flex items-center gap-2.5 border border-[var(--error)]/20">
-          <AlertTriangle className="w-4 h-4 flex-shrink-0" />
-          {error}
-        </div>}
+      {error ? (
+        <ErrorState
+          title="Query failed"
+          message={error}
+          action={
+            <Button size="sm" variant="outline" onClick={() => void runQuery()}>
+              Try again
+            </Button>
+          }
+        />
+      ) : null}
 
       {/* SQL editor */}
       <Card padding="md" className="space-y-3">
@@ -207,17 +226,15 @@ export default function CohortsPage() {
       </Card>
 
       {/* Results */}
-      {running ? <div className="flex items-center justify-center py-12">
-          <Loader2 className="w-8 h-8 animate-spin text-[var(--accent)]" />
-        </div> : rows.length > 0 ? <motion.div initial={{
-      opacity: 0,
-      y: 8
-    }} animate={{
-      opacity: 1,
-      y: 0
-    }} transition={{
-      duration: 0.2
-    }} className="bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-xl overflow-hidden">
+      {running ? (
+        <div className="space-y-3 py-6" aria-busy="true" aria-live="polite">
+          <Skeleton className="h-8 w-48" />
+          <Skeleton className="h-10 w-full rounded-lg" />
+          <Skeleton className="h-10 w-full rounded-lg" />
+          <Skeleton className="h-10 w-full rounded-lg" />
+        </div>
+      ) : rows.length > 0 ? (
+        <div className="bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-xl overflow-hidden">
           <div className="px-4 py-2 border-b border-[var(--border-default)] bg-[var(--bg-secondary)] flex items-center justify-between">
             <span className="text-xs text-[var(--text-muted)]">
               {rows.length} row{rows.length === 1 ? "" : "s"} · {columns.length} column{columns.length === 1 ? "" : "s"}
@@ -234,16 +251,22 @@ export default function CohortsPage() {
               </thead>
               <tbody className="divide-y divide-[var(--border-subtle)]">
                 {rows.map((row, idx) => <tr key={idx} className="hover:bg-[var(--bg-tertiary)]/50 transition-colors">
-                    {row.map((cell, ci) => <td key={ci} className="px-4 py-2.5 text-[var(--text-secondary)] font-mono text-xs whitespace-nowrap">
+                    {columns.map((c) => {
+                      const cell = row[c];
+                      return <td key={c} className="px-4 py-2.5 text-[var(--text-secondary)] font-mono text-xs whitespace-nowrap">
                         {cell === null || cell === undefined ? <span className="text-[var(--text-muted)]">null</span> : String(cell)}
-                      </td>)}
+                      </td>;
+                    })}
                   </tr>)}
               </tbody>
             </table>
           </div>
-        </motion.div> : <Card padding="lg" className="py-10 text-center">
+        </div>
+      ) : (
+        <Card padding="lg" className="py-10 text-center">
           <Database className="w-10 h-10 mx-auto mb-2 text-[var(--text-muted)] opacity-40" />
           <p className="text-sm text-[var(--text-muted)]">No results yet. Click Run to execute your query.</p>
-        </Card>}
+        </Card>
+      )}
     </PageContent>;
 }

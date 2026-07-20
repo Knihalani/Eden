@@ -9,8 +9,10 @@ export interface SectionProps extends React.HTMLAttributes<HTMLElement> {
 }
 
 /**
- * Section — a labeled content block. Used as the structural shell for
- * ChartCard, MetricPanel, and other top-level page panels.
+ * Section — labeled content block without a full card border.
+ * Uses Panel-like flat grouping so ChartCard / MetricPanel parents
+ * do not stack border-on-border with surrounding Cards. Prefer
+ * Card only when the block is interactive or a true container.
  */
 export function Section({
   title,
@@ -25,16 +27,16 @@ export function Section({
   return (
     <section
       className={cn(
-        "rounded-xl border border-[var(--border)] bg-[var(--bg-primary)]",
+        "rounded-xl bg-[var(--bg-secondary)] overflow-hidden",
         className
       )}
       {...props}
     >
       {hasHeader && (
-        <header className="flex items-start justify-between gap-3 p-5 pb-3">
+        <header className="flex items-start justify-between gap-3 px-4 pt-4 pb-2">
           <div className="min-w-0">
             {title && (
-              <h3 className="text-base font-semibold text-[var(--text-primary)] tracking-tight">
+              <h3 className="text-sm font-semibold text-[var(--text-primary)] tracking-tight">
                 {title}
               </h3>
             )}
@@ -45,7 +47,7 @@ export function Section({
           {actions && <div className="flex items-center gap-2 shrink-0">{actions}</div>}
         </header>
       )}
-      <div className={cn(hasHeader ? "px-5 pb-5" : "", contentClassName)}>{children}</div>
+      <div className={cn(hasHeader ? "px-4 pb-4" : "", contentClassName)}>{children}</div>
     </section>
   );
 }

@@ -53,7 +53,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 from sse_starlette.sse import EventSourceResponse
 
-from eden.api.deps import get_current_user, log_audit_event, require_org_member
+from eden.api.deps import get_current_user, log_audit_event, require_path_org_access
 from eden.api.utils.rate_limit import RateLimitExceeded, SlidingWindowRateLimiter
 from eden.api.utils.redact import redact_all
 from eden.api.utils.safe_error import safe_detail
@@ -67,6 +67,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(
     prefix="/orgs/{org_id}/ai-insights",
     tags=["ai-insights"],
+    dependencies=[Depends(require_path_org_access)],
 )
 
 # W23: ChatSidebar rate limit — 30 turns / minute / org+user (soft Loop parity).
@@ -397,6 +398,11 @@ async def _create_session(org_id: str, user_id: str, title: str) -> str:
     """
     session_id = str(uuid.uuid4())
     client = await get_postgres_client()
+    if client is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Chat storage temporarily unavailable",
+        )
     await client.execute(
         """
         INSERT INTO ai_conversations (id, org_id, user_id, title, page_context)
@@ -540,9 +546,8 @@ def _summarize_tool_result(name: str, result: dict[str, Any]) -> str:
 
 @router.post("/chat")
 async def chat(
-    org_id: str,
     body: ChatRequest,
-    org: dict = Depends(require_org_member),
+    org_id: str = Depends(require_path_org_access),
     user: dict = Depends(get_current_user),
 ):
     """Stream a chat turn as Server-Sent Events.
@@ -573,24 +578,34 @@ async def chat(
         session_id = body.session_id
         is_new = False
     else:
-        session_id = await _create_session(
-            org_id=org_id,
-            user_id=user_id,
-            title=_derive_title(body.message),
-        )
+        try:
+            session_id = await _create_session(
+                org_id=org_id,
+                user_id=user_id,
+                title=_derive_title(body.message),
+            )
+        except HTTPException:
+            raise
+        except AttributeError as exc:
+            # None PG client used to AttributeError on ``.execute`` → 500.
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Chat storage temporarily unavailable",
+            ) from exc
         is_new = True
         # First message of a new session: write the audit entry.
         try:
             pg = await get_postgres_client()
-            await log_audit_event(
-                client=pg,
-                org_id=org_id,
-                user_id=user_id,
-                action="ai_insights.session.create",
-                target_type="ai_conversation",
-                target_id=session_id,
-                metadata={"title": _derive_title(body.message)},
-            )
+            if pg is not None:
+                await log_audit_event(
+                    client=pg,
+                    org_id=org_id,
+                    user_id=user_id,
+                    action="ai_insights.session.create",
+                    target_type="ai_conversation",
+                    target_id=session_id,
+                    metadata={"title": _derive_title(body.message)},
+                )
         except Exception as exc:  # noqa: BLE001 — audit must not block chat
             logger.warning(f"ai_insights: audit log failed (non-fatal): {exc}")
 
@@ -629,9 +644,8 @@ class ApproveRequest(BaseModel):
 
 @router.post("/approve")
 async def approve_tool(
-    org_id: str,
     body: ApproveRequest,
-    org: dict = Depends(require_org_member),
+    org_id: str = Depends(require_path_org_access),
     user: dict = Depends(get_current_user),
 ):
     """Execute an approval-gated write tool after operator confirm.
@@ -681,7 +695,7 @@ async def approve_tool(
             metadata={"tool": body.tool, "args": body.args or {}},
         )
     except Exception as exc:  # noqa: BLE001
-        logger.warning("ai_insights: approve audit failed (non-fatal): %s", exc)
+        logger.warning("ai_insights: approve audit failed (non-fatal): %s", redact_all(str(exc)))
 
     return {
         "tool": body.tool,
@@ -693,8 +707,7 @@ async def approve_tool(
 
 @router.get("/sessions")
 async def list_sessions(
-    org_id: str,
-    org: dict = Depends(require_org_member),
+    org_id: str = Depends(require_path_org_access),
     user: dict = Depends(get_current_user),
     limit: int = 50,
 ):
@@ -742,9 +755,8 @@ async def list_sessions(
 
 @router.get("/sessions/{session_id}/messages")
 async def list_messages(
-    org_id: str,
     session_id: str,
-    org: dict = Depends(require_org_member),
+    org_id: str = Depends(require_path_org_access),
     user: dict = Depends(get_current_user),
 ):
     """Replay all messages in a session (for sidebar rehydration).
@@ -783,9 +795,8 @@ async def list_messages(
 
 @router.post("/sessions/{session_id}/archive")
 async def archive_session(
-    org_id: str,
     session_id: str,
-    org: dict = Depends(require_org_member),
+    org_id: str = Depends(require_path_org_access),
     user: dict = Depends(get_current_user),
 ):
     """Soft-delete a session (sets ``archived_at``).
@@ -821,8 +832,7 @@ async def archive_session(
 
 @router.get("/health")
 async def health(
-    org_id: str,
-    org: dict = Depends(require_org_member),
+    org_id: str = Depends(require_path_org_access),
     user: dict = Depends(get_current_user),
 ):
     """Probe endpoint: returns whether AI Insights is configured."""

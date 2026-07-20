@@ -5,13 +5,15 @@ import Link from "next/link";
 import { useOrg } from "@/hooks/use-org";
 import { usePolling } from "@/hooks/use-polling";
 import { cn } from "@/lib/utils";
-import { API_BASE } from "@/lib/api";
+import { fetchApi } from "@/lib/api/core";
 import { Wallet, AlertTriangle, CheckCircle2, Loader2 } from "lucide-react";
+import { errorFromCaught } from "@/lib/safe-error-message";
 
 interface TickerData {
   budget: {
     cost_hard_limit_usd: number;
     enforcement_enabled: boolean;
+    threshold_alert_pct: number;
   };
   consumption: {
     cost_usd: number;
@@ -28,55 +30,55 @@ interface TickerData {
 
 /**
  * Compact budget ticker card for the sidebar / dashboard.
- * Polls /budget/ticker every 5s; renders a single
+ * Polls /budget/ticker every 30s; renders a single
  * colour-coded progress bar + recent-event count.
  */
+const BUDGET_TICKER_INTERVAL_MS = 30_000;
+
 export function BudgetTicker() {
   const { currentOrg } = useOrg();
   const [data, setData] = useState<TickerData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
     if (!currentOrg?.id) return;
     try {
-      const res = await fetch(
-        `${API_BASE}/orgs/${currentOrg.id}/budget/ticker`,
-        { credentials: "include" }
+      const d = await fetchApi<{ data?: TickerData }>(
+        `/orgs/${currentOrg.id}/budget/ticker`,
       );
-      // Throw on 5xx/4xx so usePolling backs off instead of
-      // silently re-polling every 5s (LP-21 poll amplification).
-      if (!res.ok) {
-        throw new Error(`HTTP ${res.status}`);
-      }
-      const d = await res.json();
-      setData(d.data);
+      setData(d.data ?? null);
+      setError(null);
     } catch (err) {
       console.error("Ticker fetch failed", err);
+      setError(errorFromCaught(err, "Budget unavailable"));
       throw err;
     } finally {
       setLoading(false);
     }
   }, [currentOrg?.id]);
 
+  // Single poll path: usePolling fires immediately on start + every
+  // intervalMs. A parallel useEffect fetch duplicated the first hit
+  // on every org flip (2× /budget/ticker per switch).
   useEffect(() => {
     if (!currentOrg?.id) return;
-    fetchData();
-  }, [currentOrg?.id, fetchData]);
+    setLoading(true);
+    setError(null);
+  }, [currentOrg?.id]);
 
   // Cost-safe polling — pauses on tab-hidden, backs off on errors,
-  // permanent bail on 401/403. Replaces the raw setInterval that
-  // would have kept firing through all three failure modes. The
-  // hook's ``tick`` fires once on mount + every ``intervalMs`` after
-  // success. June 2026 cost-pass.
+  // permanent bail on 401/403. Interval ≥30s (K2).
   usePolling({
     fetch: fetchData,
-    intervalMs: 5_000,
+    intervalMs: BUDGET_TICKER_INTERVAL_MS,
     enabled: Boolean(currentOrg?.id),
     deps: [currentOrg?.id],
   });
 
   if (!currentOrg) return null;
-  if (loading || !data) {
+
+  if (loading && !data) {
     return (
       <div className="flex items-center gap-2 rounded-md border border-[var(--border-default)] bg-[var(--bg-elev-1)] p-3 text-xs text-[var(--text-secondary)]">
         <Loader2 className="h-3 w-3 animate-spin" />
@@ -85,11 +87,32 @@ export function BudgetTicker() {
     );
   }
 
+  if (error && !data) {
+    return (
+      <div className="flex items-center gap-2 rounded-md border border-[var(--error)]/30 bg-[var(--error-bg)] p-3 text-xs text-[var(--error)]">
+        <AlertTriangle className="h-3 w-3 shrink-0" />
+        {error}
+      </div>
+    );
+  }
+
+  if (!data) {
+    return (
+      <div className="rounded-md border border-[var(--border-default)] bg-[var(--bg-elev-1)] p-3 text-xs text-[var(--text-secondary)]">
+        No budget data
+      </div>
+    );
+  }
+
   const cost = data.consumption.cost_usd;
   const cap = data.budget.cost_hard_limit_usd;
   const pct = cap > 0 ? (cost / cap) * 100 : 0;
+  const alertPct =
+    typeof data.budget.threshold_alert_pct === "number"
+      ? data.budget.threshold_alert_pct
+      : 80;
   const status =
-    pct >= 100 ? "exceeded" : pct >= 80 ? "alert" : "ok";
+    pct >= 100 ? "exceeded" : pct >= alertPct ? "alert" : "ok";
   const highSeverityCount = data.recent_actions.filter(
     (a) => a.severity === "high"
   ).length;

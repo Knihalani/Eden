@@ -7,16 +7,18 @@ it in the standard ``_ok_envelope`` shape).
 
 from __future__ import annotations
 
+import inspect
 import logging
 import uuid
 from datetime import UTC, datetime
 from typing import Any
 
-from fastapi import APIRouter, Body, Depends, Path, Query
+from fastapi import APIRouter, Body, Depends, HTTPException, Path, Query
 from pydantic import BaseModel, Field
 
-from eden.api.deps import get_current_user, require_feature_flag
+from eden.api.deps import get_current_user, require_feature_flag, require_path_org_access
 from eden.api.utils.redact import redact_all
+from eden.api.utils.safe_error import safe_detail
 from eden.issues.models import Issue
 from eden.issues.repo import IssuesRepo
 
@@ -30,10 +32,34 @@ router = APIRouter(
     dependencies=[
         Depends(require_feature_flag(_FLAG)),
         Depends(get_current_user),
+        Depends(require_path_org_access),
     ],
 )
 
 _repo = IssuesRepo()
+
+
+async def _require_postgres() -> Any:
+    from eden.storage.postgres import get_postgres_client
+
+    maybe = get_postgres_client()
+    client = await maybe if inspect.isawaitable(maybe) else maybe
+    if client is None:
+        raise HTTPException(status_code=503, detail="Postgres unavailable")
+    return client
+
+
+def _raise_wizard_error(result: dict[str, Any]) -> None:
+    """Map IssueExperimentWizard error envelopes to HTTP status codes."""
+    if result.get("status") != "error":
+        return
+    message = str(result.get("message") or "")
+    lower = message.lower()
+    if "database unavailable" in lower:
+        raise HTTPException(status_code=503, detail="Postgres unavailable")
+    if "not found" in lower:
+        raise HTTPException(status_code=404, detail=message or "Not found")
+    raise HTTPException(status_code=400, detail=message or "Bad request")
 
 
 def _ok(feature: str, data: dict[str, Any]) -> dict[str, Any]:
@@ -99,12 +125,13 @@ class CreateExperimentRequest(BaseModel):
 
 @router.get("/agent-issues")
 async def list_issues(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     status: str | None = Query(None),
     severity: str | None = Query(None),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
 ) -> dict[str, Any]:
+    await _require_postgres()
     issues = await _repo.list_issues(
         org_id, status=status, severity=severity, limit=limit, offset=offset
     )
@@ -116,8 +143,9 @@ async def list_issues(
 
 @router.get("/agent-issues/{issue_id}")
 async def get_issue(
-    org_id: str = Path(...), issue_id: str = Path(...)
+    org_id: str = Depends(require_path_org_access), issue_id: str = Path(...)
 ) -> dict[str, Any]:
+    await _require_postgres()
     issue = await _repo.get_issue(org_id, issue_id)
     if issue is None:
         return {
@@ -131,10 +159,11 @@ async def get_issue(
 
 @router.post("/agent-issues/{issue_id}/resolve")
 async def resolve_issue(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     issue_id: str = Path(...),
     body: ResolveRequest = Body(default=ResolveRequest()),
 ) -> dict[str, Any]:
+    await _require_postgres()
     target = body.status if body.status in ("resolved", "ignored") else "resolved"
     ok = await _repo.set_status(
         org_id, issue_id, target, set_resolved_at=(target == "resolved")
@@ -201,7 +230,7 @@ async def resolve_issue(
 
 @router.post("/agent-issues/{issue_id}/triage")
 async def triage_issue(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     issue_id: str = Path(...),
     body: TriageRequest = Body(default=TriageRequest()),
 ) -> dict[str, Any]:
@@ -212,7 +241,7 @@ async def triage_issue(
 
 @router.get("/agent-issues/{issue_id}/triage")
 async def get_issue_triage(
-    org_id: str = Path(...), issue_id: str = Path(...)
+    org_id: str = Depends(require_path_org_access), issue_id: str = Path(...)
 ) -> dict[str, Any]:
     """Return the cached triage result (no recompute)."""
     issue = await _repo.get_issue(org_id, issue_id)
@@ -245,7 +274,7 @@ def _serialize_stumble(row: dict[str, Any]) -> dict[str, Any]:
 
 @router.get("/stumbles")
 async def list_stumbles(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     fingerprint: str | None = Query(None),
     trace_id: str | None = Query(None),
     kind: str | None = Query(None),
@@ -270,7 +299,7 @@ async def list_stumbles(
 
 @router.get("/stumbles/{stumble_id}")
 async def get_stumble(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     stumble_id: str = Path(...),
 ) -> dict[str, Any]:
     row = await _repo.get_stumble(org_id, stumble_id)
@@ -301,7 +330,7 @@ class StumbleCreateRequest(BaseModel):
 
 @router.post("/stumbles")
 async def create_stumble(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     body: StumbleCreateRequest = Body(...),
 ) -> dict[str, Any]:
     """SDK / self-diagnostic stumble create (F28).
@@ -310,6 +339,7 @@ async def create_stumble(
     stumble via ``eden.record_stumble()``. Goes through the same
     dedup + promotion path as detector-created stumbles.
     """
+    await _require_postgres()
     from eden.issues.models import StumbleCreate
     from eden.issues.stumble_writer import StumbleWriter
 
@@ -327,6 +357,16 @@ async def create_stumble(
         span_id=body.span_id,
     )
     result = await StumbleWriter().create(sc)
+    # Burst-dedupe intentionally returns stumble_id=None with deduped="burst".
+    # A true write failure (Postgres down) has neither id nor dedupe marker.
+    if result.get("stumble_id") is None and not result.get("deduped"):
+        raise HTTPException(
+            status_code=503,
+            detail=safe_detail(
+                Exception("stumble write failed"),
+                fallback="Failed to create stumble",
+            ),
+        )
     return _ok("agent_stumble_create", result)
 
 
@@ -339,7 +379,7 @@ class DetectionSettingsRequest(BaseModel):
 
 @router.get("/settings/detection")
 async def get_detection_settings_route(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
 ) -> dict[str, Any]:
     from eden.issues.detection_settings import get_detection_settings
 
@@ -349,7 +389,7 @@ async def get_detection_settings_route(
 
 @router.patch("/settings/detection")
 async def patch_detection_settings_route(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     body: DetectionSettingsRequest = Body(default=DetectionSettingsRequest()),
 ) -> dict[str, Any]:
     from eden.issues.detection_settings import set_detection_settings
@@ -361,18 +401,13 @@ async def patch_detection_settings_route(
             slm_enabled=body.slm_enabled,
         )
     except ValueError as exc:
-        return {
-            "status": "invalid",
-            "feature": "detection_settings",
-            "live": True,
-            "data": {"error": str(exc)},
-        }
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     return _ok("detection_settings", settings)
 
 
 @router.post("/agent-issues/{issue_id}/export-fixture")
 async def export_fixture(
-    org_id: str = Path(...), issue_id: str = Path(...)
+    org_id: str = Depends(require_path_org_access), issue_id: str = Path(...)
 ) -> dict[str, Any]:
     from eden.issues.fixture_export import export_issue_fixture
 
@@ -388,24 +423,26 @@ async def export_fixture(
 
 @router.post("/agent-issues/{issue_id}/experiments")
 async def create_issue_experiment(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     issue_id: str = Path(...),
     body: CreateExperimentRequest = Body(default=CreateExperimentRequest()),
 ) -> dict[str, Any]:
     from eden.experiments.issue_link import IssueExperimentWizard
 
-    return await IssueExperimentWizard().create(
+    result = await IssueExperimentWizard().create(
         org_id,
         issue_id,
         control_variant=body.control_variant,
         treatment_variant=body.treatment_variant,
         min_samples=body.min_samples,
     )
+    _raise_wizard_error(result)
+    return result
 
 
 @router.get("/agent-issues/{issue_id}/experiments")
 async def list_issue_experiments(
-    org_id: str = Path(...), issue_id: str = Path(...)
+    org_id: str = Depends(require_path_org_access), issue_id: str = Path(...)
 ) -> dict[str, Any]:
     from eden.experiments.issue_link import IssueExperimentWizard
 
@@ -415,18 +452,20 @@ async def list_issue_experiments(
 
 @router.get("/agent-issues/{issue_id}/experiments/{link_id}/report")
 async def issue_experiment_report(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     issue_id: str = Path(...),
     link_id: str = Path(...),
 ) -> dict[str, Any]:
     from eden.experiments.issue_link import IssueExperimentWizard
 
-    return await IssueExperimentWizard().report(org_id, issue_id, link_id)
+    result = await IssueExperimentWizard().report(org_id, issue_id, link_id)
+    _raise_wizard_error(result)
+    return result
 
 
 @router.get("/agent-issues/{issue_id}/regression-cases")
 async def list_regression_cases(
-    org_id: str = Path(...), issue_id: str = Path(...)
+    org_id: str = Depends(require_path_org_access), issue_id: str = Path(...)
 ) -> dict[str, Any]:
     from eden.evaluation.regression_builder import RegressionCaseBuilder
 
@@ -439,7 +478,7 @@ async def list_regression_cases(
 
 @router.post("/agent-issues/{issue_id}/regression-cases")
 async def create_regression_cases(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     issue_id: str = Path(...),
     body: RegressionCaseRequest = Body(default=RegressionCaseRequest()),
 ) -> dict[str, Any]:
@@ -452,4 +491,3 @@ async def create_regression_cases(
         "regression_eval",
         {"cases": [c.to_dict() for c in cases], "count": len(cases)},
     )
-

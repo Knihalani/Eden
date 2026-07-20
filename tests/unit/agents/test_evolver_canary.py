@@ -152,10 +152,17 @@ class TestAutoCreateCanary:
         assert metrics["ab_test_round"] == 1
         assert "canary_created_at" in metrics
 
-        # Audit log row should be inserted.
-        mock_postgres.execute.assert_awaited_once()
-        exec_args = mock_postgres.execute.await_args
-        assert "INSERT INTO org_audit_log" in exec_args.args[0]
+        # Canary experiment + assignment + audit log rows.
+        assert mock_postgres.execute.await_count == 3
+        sqls = [c.args[0] for c in mock_postgres.execute.await_args_list]
+        assert any("INSERT INTO prompt_canary_experiments" in s for s in sqls)
+        assert any("INSERT INTO prompt_version_assignments" in s for s in sqls)
+        audit_calls = [
+            c for c in mock_postgres.execute.await_args_list
+            if "INSERT INTO org_audit_log" in c.args[0]
+        ]
+        assert len(audit_calls) == 1
+        exec_args = audit_calls[0]
         # Positional args: org_id, user_id, action, target_type, target_id, metadata
         org_id, user_id, action, target_type, target_id, metadata_json = (
             exec_args.args[1:7]
@@ -186,10 +193,12 @@ class TestAutoCreateCanary:
         assert metrics["canary_traffic_pct"] == 100
 
     @pytest.mark.asyncio
-    async def test_returns_false_when_update_fails(
+    async def test_returns_false_when_experiment_insert_fails(
         self, evolver, mock_postgres
     ):
-        evolver.prompt_versions.update_quality_metrics.return_value = False
+        mock_postgres.execute = AsyncMock(
+            side_effect=RuntimeError("prompt_canary_experiments down")
+        )
         with patch(
             "eden.agents.evolution.components.settings"
         ) as mock_settings:
@@ -202,15 +211,43 @@ class TestAutoCreateCanary:
                 result = await evolver._auto_create_canary("planner", 2, 1)
 
         assert result is False
-        # Audit must NOT be written when canary row update fails.
-        mock_postgres.execute.assert_not_called()
+        evolver.prompt_versions.update_quality_metrics.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_metrics_failure_does_not_block_aligned_canary(
+        self, evolver, mock_postgres
+    ):
+        evolver.prompt_versions.update_quality_metrics.side_effect = (
+            RuntimeError("legacy schema gone")
+        )
+        with patch(
+            "eden.agents.evolution.components.settings"
+        ) as mock_settings:
+            mock_settings.evolver_auto_canary_pct = 5
+
+            with patch(
+                "eden.storage.postgres.get_postgres_client",
+                AsyncMock(return_value=mock_postgres),
+            ):
+                result = await evolver._auto_create_canary(
+                    "planner", 2, 1, org_id="org-aaa"
+                )
+
+        assert result is True
+        sqls = [c.args[0] for c in mock_postgres.execute.await_args_list]
+        assert any("INSERT INTO prompt_canary_experiments" in s for s in sqls)
 
     @pytest.mark.asyncio
     async def test_audit_failure_does_not_block_canary(
         self, evolver, mock_postgres
     ):
-        # The canary row succeeds but the audit INSERT throws.
-        mock_postgres.execute.side_effect = RuntimeError("audit db down")
+        # Experiment + assignment succeed; only the audit INSERT throws.
+        async def execute_dispatch(query, *args):
+            if "INSERT INTO org_audit_log" in query:
+                raise RuntimeError("audit db down")
+            return "INSERT 0 1"
+
+        mock_postgres.execute = AsyncMock(side_effect=execute_dispatch)
         with patch(
             "eden.agents.evolution.components.settings"
         ) as mock_settings:
@@ -318,15 +355,15 @@ class TestAuditAttributionTenantSafety:
     That is a tenant-isolation bug in the audit log: Org A's
     evolver would appear to have created a canary for Org B's
     agent. These tests lock in the fix: when ``org_id`` cannot
-    be resolved from the prompt_versions row, the audit insert
-    is skipped and the canary is still created.
+    be resolved from the prompt_versions row, auto-canary fails
+    closed (no fake success) and no cross-tenant INSERT runs.
     """
 
     @pytest.mark.asyncio
     async def test_skips_audit_when_org_id_cannot_be_resolved(
         self, evolver, mock_postgres
     ):
-        """No quality_metrics row → no org_id → skip audit."""
+        """No quality_metrics row → no org_id → fail closed (no fake canary)."""
         mock_postgres.fetchrow = AsyncMock(return_value=None)
 
         with patch(
@@ -339,14 +376,10 @@ class TestAuditAttributionTenantSafety:
             ):
                 result = await evolver._auto_create_canary("planner", 2, 1)
 
-        # The canary was still created even though the audit
-        # insert was skipped — we don't want a tenant-safety
-        # improvement to break the canary itself.
-        assert result is True
-        evolver.prompt_versions.update_quality_metrics.assert_awaited_once()
-        # Critical: the audit INSERT must NOT have been called.
-        # Pre-fix it would have been called with the top-of-table
-        # org/user ids, attributing the canary to the wrong tenant.
+        # Without org_id we cannot write prompt_canary_experiments
+        # (cockpit/PromotionLoop source of truth) — do not claim success.
+        assert result is False
+        evolver.prompt_versions.update_quality_metrics.assert_not_awaited()
         mock_postgres.execute.assert_not_called()
 
     @pytest.mark.asyncio
@@ -385,7 +418,12 @@ class TestAuditAttributionTenantSafety:
                 result = await evolver._auto_create_canary("planner", 2, 1)
 
         assert result is True
-        mock_postgres.execute.assert_not_called()
+        # Experiment/assignment may still write; audit must not.
+        audit_inserts = [
+            c for c in mock_postgres.execute.await_args_list
+            if "INSERT INTO org_audit_log" in c.args[0]
+        ]
+        assert audit_inserts == []
 
     @pytest.mark.asyncio
     async def test_audit_does_not_use_limit_one_on_organizations(

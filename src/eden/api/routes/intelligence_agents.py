@@ -32,7 +32,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from fastapi import APIRouter, Body, Depends, Path, Query
+from fastapi import APIRouter, Body, Depends, Query
 from pydantic import BaseModel, Field
 
 from eden.agents.agent_intel.performance import (
@@ -42,7 +42,7 @@ from eden.agents.agent_intel.performance import (
     AgentRelationshipGraph,
     HandoffAnalyzer,
 )
-from eden.api.deps import get_current_user, require_feature_flag, require_org_member
+from eden.api.deps import get_current_user, require_feature_flag, require_path_org_access
 
 logger = logging.getLogger(__name__)
 
@@ -52,7 +52,7 @@ router = APIRouter(
     dependencies=[
         Depends(require_feature_flag("intelligence_gap_v0")),
         Depends(get_current_user),
-        Depends(require_org_member),
+        Depends(require_path_org_access),
     ],
 )
 
@@ -124,7 +124,7 @@ class FleetPermissionsRequest(BaseModel):
 
 @router.get("/performance")
 async def performance(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     agent_id: str = Query(..., description="Agent to score"),
     window: str = Query("24h", description="e.g. '24h', '7d', '30d'"),
 ) -> dict[str, Any]:
@@ -133,7 +133,7 @@ async def performance(
 
 @router.get("/relationships")
 async def relationships(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     window: str = Query("7d", description="e.g. '7d', '30d'"),
 ) -> dict[str, Any]:
     return await _graph.build(org_id, window=window)
@@ -141,7 +141,7 @@ async def relationships(
 
 @router.post("/handoffs/analyze")
 async def handoffs(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     body: HandoffRequest = Body(...),
 ) -> dict[str, Any]:
     return await _handoff.analyze(
@@ -151,7 +151,7 @@ async def handoffs(
 
 @router.post("/benchmark/run")
 async def benchmark(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     body: BenchmarkRequest = Body(...),
 ) -> dict[str, Any]:
     return await _bench.run(
@@ -161,7 +161,7 @@ async def benchmark(
 
 @router.post("/fleet/identity")
 async def fleet_identity(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     body: FleetIdentityRequest = Body(...),
 ) -> dict[str, Any]:
     return await _fleet.register_agent_identity(
@@ -174,7 +174,7 @@ async def fleet_identity(
 
 @router.post("/fleet/permissions")
 async def fleet_permissions(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     body: FleetPermissionsRequest = Body(...),
 ) -> dict[str, Any]:
     return await _fleet.assign_permissions(

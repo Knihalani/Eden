@@ -15,7 +15,8 @@ import {
 } from "lucide-react";
 import { DEFAULT_SIDEBAR, type SidebarGroup, type SidebarIcon, type SidebarItem } from "@/lib/sidebar-config";
 
-const GROUP_LABEL: Record<SidebarGroup["id"], string> = {
+/** Maps sidebar group IDs → product IA labels (Home/Observe/Evaluate/Improve/Workspace). */
+export const GROUP_LABEL: Record<SidebarGroup["id"], string> = {
   build: "Home",
   observe: "Observe",
   optimize: "Improve",
@@ -95,7 +96,7 @@ export const PALETTE_ACTIONS: NavCommand[] = [
     kind: "action",
   },
   {
-    href: "/insights/topics",
+    href: "/analytics?tab=topics",
     label: "Topic clusters",
     description: "Explore semantic topic clusters from trace traffic.",
     group: "Actions",

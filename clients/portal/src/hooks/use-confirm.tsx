@@ -1,7 +1,15 @@
 "use client";
 
-import { useCallback, useState, useRef, useEffect, useId } from "react";
+import { useCallback, useState, useRef } from "react";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 export interface ConfirmOptions {
   title: string;
@@ -25,6 +33,8 @@ const initialState: DialogState = {
 /**
  * Promise-based confirm dialog hook.
  *
+ * Uses Radix Dialog (focus trap, Escape, aria-modal) via DialogContent.
+ *
  * Usage:
  *   const { confirm, ConfirmDialog } = useConfirm();
  *   if (await confirm({ title: "...", variant: "destructive" })) {
@@ -35,7 +45,6 @@ const initialState: DialogState = {
 export function useConfirm() {
   const [state, setState] = useState<DialogState>(initialState);
   const resolveRef = useRef<((value: boolean) => void) | null>(null);
-  const titleId = useId();
 
   const confirm = useCallback((opts: ConfirmOptions): Promise<boolean> => {
     return new Promise((resolve) => {
@@ -52,49 +61,25 @@ export function useConfirm() {
     setState((s) => ({ ...s, open: false, resolve: null }));
   };
 
-  // Escape closes the dialog (same as Cancel). Without this the
-  // backdrop click is the only way to dismiss the modal with the
-  // keyboard, which fails WCAG 2.1.1 (keyboard accessibility).
-  useEffect(() => {
-    if (!state.open) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        e.stopPropagation();
-        close(false);
-      }
-    };
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-    // close is stable (no deps change), so this effect is gated
-    // purely on open.
-  }, [state.open]);
-
-  const ConfirmDialog = state.open ? (
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby={titleId}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--overlay)] backdrop-blur-sm"
-      onClick={() => close(false)}
+  const ConfirmDialog = (
+    <Dialog
+      open={state.open}
+      onOpenChange={(open) => {
+        if (!open) close(false);
+      }}
     >
-      <div
-        className="w-full max-w-md rounded-lg border border-[var(--border-default)] bg-[var(--bg-primary)] p-6 shadow-2xl"
-        onClick={(e) => e.stopPropagation()}
+      <DialogContent
+        className="max-w-md"
+        {...(state.description ? {} : { "aria-describedby": undefined })}
       >
-        <h2 id={titleId} className="text-lg font-semibold text-[var(--text-primary)]">
-          {state.title}
-        </h2>
-        {state.description && (
-          <p className="mt-2 text-sm text-[var(--text-muted)]">
-            {state.description}
-          </p>
-        )}
-        <div className="mt-6 flex justify-end gap-2">
-          <Button
-            type="button"
-            variant="ghost"
-            onClick={() => close(false)}
-          >
+        <DialogHeader>
+          <DialogTitle>{state.title}</DialogTitle>
+          {state.description ? (
+            <DialogDescription>{state.description}</DialogDescription>
+          ) : null}
+        </DialogHeader>
+        <DialogFooter>
+          <Button type="button" variant="ghost" onClick={() => close(false)}>
             {state.cancelLabel || "Cancel"}
           </Button>
           <Button
@@ -104,10 +89,10 @@ export function useConfirm() {
           >
             {state.confirmLabel || "Confirm"}
           </Button>
-        </div>
-      </div>
-    </div>
-  ) : null;
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
 
   return { confirm, ConfirmDialog };
 }

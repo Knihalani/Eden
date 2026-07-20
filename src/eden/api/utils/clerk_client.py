@@ -26,6 +26,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
+from collections import OrderedDict
 from typing import Any
 
 import httpx
@@ -58,12 +59,37 @@ CLERK_API_BASE = "https://api.clerk.com/v1"
 # the full payload, and expires after ``_USER_CACHE_TTL_SECONDS`` so a
 # profile change in Clerk propagates within minutes without an unbounded
 # cache.
-_USER_CACHE: dict[str, tuple[float, dict[str, Any]]] = {}
+_USER_CACHE: OrderedDict[str, tuple[float, dict[str, Any]]] = OrderedDict()
 _USER_CACHE_TTL_SECONDS = 300.0  # 5 minutes — long enough to absorb page
                                   # navigations, short enough that a user
                                   # updating their email in Clerk sees the
                                   # change on their next visit.
+_USER_CACHE_MAX = 2048
 _USER_CACHE_LOCK = asyncio.Lock()
+
+_ORG_CACHE: OrderedDict[str, tuple[float, dict[str, Any]]] = OrderedDict()
+_ORG_CACHE_TTL_SECONDS = 300.0
+_ORG_CACHE_MAX = 1024
+_ORG_CACHE_LOCK = asyncio.Lock()
+
+
+def _lru_get(cache: OrderedDict, key: str, now: float):
+    cached = cache.get(key)
+    if cached is None:
+        return None
+    expires_at, payload = cached
+    if now >= expires_at:
+        cache.pop(key, None)
+        return None
+    cache.move_to_end(key)
+    return payload
+
+
+def _lru_set(cache: OrderedDict, key: str, payload: dict[str, Any], ttl: float, maxsize: int, now: float) -> None:
+    cache[key] = (now + ttl, payload)
+    cache.move_to_end(key)
+    while len(cache) > maxsize:
+        cache.popitem(last=False)
 
 
 class ClerkAPIError(RuntimeError):
@@ -248,22 +274,19 @@ async def get_user(clerk_id: str) -> dict[str, Any] | None:
     if not clerk_id:
         return None
     # Fast path: cache hit, no lock needed.
-    cached = _USER_CACHE.get(clerk_id)
-    if cached is not None:
-        expires_at, payload = cached
-        if time.monotonic() < expires_at:
-            return payload
+    now = time.monotonic()
+    hit = _lru_get(_USER_CACHE, clerk_id, now)
+    if hit is not None:
+        return hit
     # Slow path: take the lock so concurrent first-call bursts don't
     # stampede the Clerk API. The lock is a per-event-loop asyncio
     # lock — multi-worker deployments each have their own cache, which
     # is fine (the API call is cheap; the cache is a perf optimisation,
     # not a correctness requirement).
     async with _USER_CACHE_LOCK:
-        cached = _USER_CACHE.get(clerk_id)
-        if cached is not None:
-            expires_at, payload = cached
-            if time.monotonic() < expires_at:
-                return payload
+        hit = _lru_get(_USER_CACHE, clerk_id, time.monotonic())
+        if hit is not None:
+            return hit
         try:
             payload = await _get(f"/users/{clerk_id}")
         except ClerkAPIError as exc:
@@ -279,7 +302,14 @@ async def get_user(clerk_id: str) -> dict[str, Any] | None:
             )
             return None
         if payload is not None:
-            _USER_CACHE[clerk_id] = (time.monotonic() + _USER_CACHE_TTL_SECONDS, payload)
+            _lru_set(
+                _USER_CACHE,
+                clerk_id,
+                payload,
+                _USER_CACHE_TTL_SECONDS,
+                _USER_CACHE_MAX,
+                time.monotonic(),
+            )
         return payload
 
 
@@ -358,18 +388,38 @@ async def get_organization(clerk_org_id: str) -> dict[str, Any] | None:
 
   Returns ``None`` when the org was deleted or the API call fails so
   callers can fall back without 500ing the request.
+
+  Results are LRU-cached (B16) for ``_ORG_CACHE_TTL_SECONDS``.
     """
     if not clerk_org_id:
         return None
-    try:
-        return await _get(f"/organizations/{clerk_org_id}")
-    except ClerkAPIError as exc:
-        logger.warning(
-            "get_organization failed for %s: %s",
-            clerk_org_id,
-            redact_all(str(exc)),
-        )
-        return None
+    now = time.monotonic()
+    hit = _lru_get(_ORG_CACHE, clerk_org_id, now)
+    if hit is not None:
+        return hit
+    async with _ORG_CACHE_LOCK:
+        hit = _lru_get(_ORG_CACHE, clerk_org_id, time.monotonic())
+        if hit is not None:
+            return hit
+        try:
+            payload = await _get(f"/organizations/{clerk_org_id}")
+        except ClerkAPIError as exc:
+            logger.warning(
+                "get_organization failed for %s: %s",
+                clerk_org_id,
+                redact_all(str(exc)),
+            )
+            return None
+        if payload is not None:
+            _lru_set(
+                _ORG_CACHE,
+                clerk_org_id,
+                payload,
+                _ORG_CACHE_TTL_SECONDS,
+                _ORG_CACHE_MAX,
+                time.monotonic(),
+            )
+        return payload
 
 
 async def create_membership(clerk_org_id: str, user_id: str, role: str) -> dict[str, Any]:

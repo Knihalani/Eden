@@ -52,8 +52,10 @@ describe("usePolling rate-limit handling", () => {
     expect(fetch).toHaveBeenCalledTimes(1);
 
     // After the 30s rate-limit default cooldown elapses, the next
-    // tick should fire (and succeed).
-    await vi.advanceTimersByTimeAsync(25_000);
+    // tick should fire (and succeed). Advance exactly to the
+    // cooldown boundary — not past the post-success intervalMs —
+    // so we assert one recovery tick, not the steady-state follow-up.
+    await vi.advanceTimersByTimeAsync(20_000);
     expect(fetch).toHaveBeenCalledTimes(2);
   });
 
@@ -75,5 +77,26 @@ describe("usePolling rate-limit handling", () => {
     // 429 is NOT an auth error — the dashboard should not be
     // redirected on a throttle.
     expect(onAuthError).not.toHaveBeenCalled();
+  });
+
+  it("re-arms after a successful tick at intervalMs (no one-shot stall)", async () => {
+    const fetch = vi.fn().mockResolvedValue("ok");
+
+    renderHook(() =>
+      usePolling({
+        fetch,
+        intervalMs: 5_000,
+        deps: [],
+      }),
+    );
+
+    await vi.advanceTimersByTimeAsync(0);
+    expect(fetch).toHaveBeenCalledTimes(1);
+
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(fetch).toHaveBeenCalledTimes(2);
+
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(fetch).toHaveBeenCalledTimes(3);
   });
 });

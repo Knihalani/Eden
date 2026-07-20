@@ -23,10 +23,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
 
-from eden.config import get_settings
-
 logger = logging.getLogger(__name__)
-settings = get_settings()
 
 
 @dataclass
@@ -211,6 +208,23 @@ class TimelineData:
     markers: list[dict[str, Any]]  # [{"at_ms": 500, "label": "failure", "severity": "high"}, ...]
 
 
+def _json_dumps(value: Any, *, sort_keys: bool = False) -> str:
+    """Prefer A4 ``eden.util.jsonx`` when present; else compact stdlib."""
+    try:
+        from eden.util.jsonx import dumps as _jsonx_dumps
+
+        if sort_keys:
+            # jsonx may not accept sort_keys; fall back for hash inputs.
+            return json.dumps(
+                value, default=str, separators=(",", ":"), sort_keys=True
+            )
+        return _jsonx_dumps(value)
+    except Exception:
+        return json.dumps(
+            value, default=str, separators=(",", ":"), sort_keys=sort_keys
+        )
+
+
 def _dump_jsonb(value):
     """Compact JSON serialiser used by the legacy JSONB columns.
 
@@ -222,7 +236,7 @@ def _dump_jsonb(value):
     """
     if value is None or value == {} or value == []:
         return None
-    return json.dumps(value, default=str, separators=(",", ":"))
+    return _json_dumps(value)
 
 
 class TelemetryCollector:
@@ -238,8 +252,16 @@ class TelemetryCollector:
 
     # Hot-path Redis stream maxlen per trace
     STREAM_MAXLEN = 10000
-    # ClickHouse telemetry batch insert size
-    CH_TELEMETRY_BATCH_SIZE = 100
+    # ClickHouse telemetry batch insert size.
+    # Raised 100→250 (2026-07 Wave 2): fewer CH round-trips under SDK
+    # batch flush; still flushed by CH_FLUSH_INTERVAL_S so latency bound
+    # holds. K23 policy unchanged: never flush per-event.
+    CH_TELEMETRY_BATCH_SIZE = 250
+    # ClickHouse time-based flush (never flush after every single event)
+    CH_FLUSH_INTERVAL_S = 5.0
+    # Redis stream TTL + sparse EXPIRE refresh cadence
+    STREAM_TTL_S = 7 * 24 * 3600
+    STREAM_EXPIRE_REFRESH_S = 3600
     # Deduplication window in seconds
     DEDUP_WINDOW_SECONDS = 3600
     # Audit 2026-07-02 P-14 cap; FIFO eviction at this size.
@@ -261,6 +283,9 @@ class TelemetryCollector:
         self._tenant_event_counts: dict[str, int] = defaultdict(int)
         self._ch_telemetry_buffer: list[dict[str, Any]] = []
         self._ch_buffer_lock = asyncio.Lock()
+        self._ch_flush_task: asyncio.Task[None] | None = None
+        self._stream_expire_at: dict[str, float] = {}
+        self._bg_tasks: set[asyncio.Task[Any]] = set()
 
     # ── Sink accessors ────────────────────────────────────────────────────
 
@@ -323,6 +348,21 @@ class TelemetryCollector:
             logger.debug(f"Telemetry event {event.event_id} deduplicated")
             return False
 
+        # 3b. N16 intelligence-aware sampling (soft-launch default: full /
+        # 100% keep). When EDEN_SAMPLING_PROFILE=balanced|aggressive,
+        # sampled-out events get a metrics-only summary and skip sinks.
+        try:
+            from eden.observability.sampling.apply import should_route_event
+
+            if not await should_route_event(event):
+                logger.debug(
+                    "Telemetry event %s sampled out (N16 metrics-only)",
+                    event.event_id,
+                )
+                return True
+        except Exception:  # noqa: BLE001 — never fail ingest for sampling
+            pass
+
         # 4. Per-tenant limit. DL-2: instead of dropping events when
         # the cap is hit, reset the counter to 0 and accept the
         # event. The cap is a soft rate-limit (it bounds the size of
@@ -336,16 +376,15 @@ class TelemetryCollector:
             self._tenant_event_counts[event.tenant_id] = 0
         self._tenant_event_counts[event.tenant_id] += 1
 
-        # 5. Route to sinks
+        # 5. Route to sinks (CH flushes on size≥100 or ≤5s timer — not here)
         await self._route(event)
-        await self._flush_clickhouse_buffer()
-        # F03 — best-effort debugger checkpoint from LLM spans.
+        # F03 — best-effort debugger checkpoint (fire-and-forget).
         try:
             from eden.observability.ingestion.checkpoint_hook import (
                 maybe_persist_checkpoint,
             )
 
-            await maybe_persist_checkpoint(event)
+            self._spawn_bg(maybe_persist_checkpoint(event))
         except Exception:  # noqa: BLE001 — never fail ingest for debugger
             pass
         return True
@@ -384,6 +423,15 @@ class TelemetryCollector:
             if self._is_duplicate(event):
                 deduplicated += 1
                 continue
+            # N16 sampling — see ingest(); sampled-out still counts accepted.
+            try:
+                from eden.observability.sampling.apply import should_route_event
+
+                if not await should_route_event(event):
+                    accepted += 1
+                    continue
+            except Exception:  # noqa: BLE001
+                pass
             if self._tenant_event_counts[event.tenant_id] >= self.MAX_EVENTS_PER_TENANT:
                 # DL-2: reset on cap rather than drop.
                 self._tenant_event_counts[event.tenant_id] = 0
@@ -395,31 +443,18 @@ class TelemetryCollector:
         if to_route:
             await asyncio.gather(*(self._route(event) for event in to_route))
 
-        # Phase 7.x — billing roll-up. Every accepted LLM completion
-        # event feeds :class:`UsageService.track_event` so the
-        # ``usage_events`` table aggregates the SDK-reported token
-        # counts into a USD figure. Without this hook the SDK's
-        # ``input_tokens`` / ``output_tokens`` fields are captured in
-        # ``telemetry_events`` but never contribute to the free-tier
-        # cap or the per-org cost dashboard.
-        #
-        # The lookup is best-effort: a transient Postgres failure
-        # here MUST NOT block ingest. ``track_event`` already
-        # swallows + logs its own errors, so we just call it and
-        # let it do the right thing.
-        await self._emit_billing_events(to_route)
-        # F03 — best-effort debugger checkpoints (non-blocking fail-open).
+        # Phase 7.x — billing roll-up (deferred; must not block ingest).
+        self._spawn_bg(self._emit_billing_events(list(to_route)))
+        # F03 — best-effort debugger checkpoints (fire-and-forget).
         try:
             from eden.observability.ingestion.checkpoint_hook import (
                 maybe_persist_checkpoint,
             )
 
             for ev in to_route:
-                await maybe_persist_checkpoint(ev)
+                self._spawn_bg(maybe_persist_checkpoint(ev))
         except Exception:  # noqa: BLE001
             pass
-
-        await self._flush_clickhouse_buffer()
 
         return {
             "accepted": accepted,
@@ -473,6 +508,7 @@ class TelemetryCollector:
             "otel.llm_completion",
         })
 
+        pending: list[Any] = []
         for event in events:
             if event.event_type not in BILLABLE_EVENT_TYPES:
                 continue
@@ -499,26 +535,39 @@ class TelemetryCollector:
                 or (event.payload or {}).get("model")
                 or "unknown"
             )
-            await service.track_event(
-                org_id=event.tenant_id,
-                event_type="llm_call",
-                resource=str(model),
-                quantity=total,
-                unit="tokens",
-                user_id=None,
-                model=str(model),
-                cost_usd=None,  # computed server-side from model_pricing
-                metadata={
-                    "input_tokens": input_tokens,
-                    "output_tokens": output_tokens,
-                    "cache_read_tokens": cache_read,
-                    "cache_creation_tokens": cache_write,
-                    "source_format": event.source_format,
-                    "event_id": event.event_id,
-                    "trace_id": event.trace_id,
-                },
-                correlation_id=event.event_id,
+            pending.append(
+                service.track_event(
+                    org_id=event.tenant_id,
+                    event_type="llm_call",
+                    resource=str(model),
+                    quantity=total,
+                    unit="tokens",
+                    user_id=None,
+                    model=str(model),
+                    cost_usd=None,  # computed server-side from model_pricing
+                    metadata={
+                        "input_tokens": input_tokens,
+                        "output_tokens": output_tokens,
+                        "cache_read_tokens": cache_read,
+                        "cache_creation_tokens": cache_write,
+                        "source_format": event.source_format,
+                        "event_id": event.event_id,
+                        "trace_id": event.trace_id,
+                    },
+                    correlation_id=event.event_id,
+                )
             )
+        if pending:
+            await asyncio.gather(*pending, return_exceptions=True)
+
+    def _spawn_bg(self, coro: Any) -> None:
+        """Fire-and-forget a coroutine; keep a strong ref until done."""
+        try:
+            task = asyncio.create_task(coro)
+        except RuntimeError:
+            return
+        self._bg_tasks.add(task)
+        task.add_done_callback(self._bg_tasks.discard)
 
     # ── Validation ────────────────────────────────────────────────────────
 
@@ -542,15 +591,15 @@ class TelemetryCollector:
 
     def _enrich(self, event: TelemetryEvent) -> None:
         """Add derived fields to a telemetry event."""
-        # Content hash for deduplication
-        content = json.dumps({
-            "trace_id": event.trace_id,
-            "event_type": event.event_type,
-            "span_id": event.span_id,
-            "timestamp": event.timestamp,
-            "payload": event.payload,
-        }, sort_keys=True, default=str)
-        event.attributes["_content_hash"] = hashlib.sha256(content.encode()).hexdigest()[:16]
+        # Content hash for deduplication — ids + type only (no full
+        # sorted payload dump; payload bodies are huge on LLM spans).
+        content = (
+            f"{event.trace_id}|{event.event_type}|{event.span_id}|"
+            f"{event.timestamp}|{event.event_id}"
+        )
+        event.attributes["_content_hash"] = hashlib.sha256(
+            content.encode()
+        ).hexdigest()[:16]
 
         # Ingestion latency
         try:
@@ -604,10 +653,11 @@ class TelemetryCollector:
         they were awaited serially, so per-event latency was the sum
         of every sink's hot path (PG insert alone can be 10-50ms).
         Using ``asyncio.gather`` with ``return_exceptions=True`` keeps
-        the old fail-soft semantics: a single sink error must never
-        take down the others.
+        fail-soft semantics for secondary sinks, but Postgres is the
+        durable store: ``IngestionUnavailable`` must surface so the
+        route can return 503 and the SDK can retry.
         """
-        await asyncio.gather(
+        results = await asyncio.gather(
             self._route_redis(event),
             self._route_postgres(event),
             self._route_clickhouse(event),
@@ -616,27 +666,48 @@ class TelemetryCollector:
             self._route_typesense(event),
             return_exceptions=True,
         )
+        from eden.observability.errors import IngestionUnavailable
+
+        for result in results:
+            if isinstance(result, IngestionUnavailable):
+                raise result
 
     async def _route_redis(self, event: TelemetryEvent) -> None:
         redis = await self._get_redis()
         if not redis:
             return
         stream_key = f"telemetry:{event.tenant_id}:{event.trace_id}:events"
+        event_dict = event.to_dict()
+        payload_json = _json_dumps(event_dict)
         try:
-            await redis.xadd(
+            from eden.observability.ingest_hot_path_metrics import (
+                record_ingest_redis_commands,
+            )
+
+            now = time.time()
+            need_expire = (
+                stream_key not in self._stream_expire_at
+                or now >= self._stream_expire_at[stream_key]
+            )
+            pipe = redis.pipeline(transaction=False)
+            pipe.xadd(
                 stream_key,
-                fields={"data": json.dumps(event.to_dict(), default=str, separators=(",", ":"))},
+                fields={"data": payload_json},
                 maxlen=self.STREAM_MAXLEN,
             )
+            cmds = 1
+            if need_expire:
+                pipe.expire(stream_key, self.STREAM_TTL_S)
+                cmds += 1
+            await pipe.execute()
+            record_ingest_redis_commands(cmds)
+            if need_expire:
+                self._stream_expire_at[stream_key] = (
+                    now + self.STREAM_EXPIRE_REFRESH_S
+                )
         except Exception as exc:
             logger.warning(f"Redis telemetry xadd failed: {exc}")
             return
-        # Best-effort TTL — must not block SSE fanout after a successful
-        # xadd (expire failures previously short-circuited publish).
-        try:
-            await redis.expire(stream_key, 7 * 24 * 3600)
-        except Exception as exc:
-            logger.debug(f"Redis telemetry expire failed: {exc}")
         # DL-1: after a successful xadd, publish to the SSE fanout
         # channel so live-tail consumers see the event in ~10ms vs
         # the 1s poll the previous design used. The publish is
@@ -647,7 +718,7 @@ class TelemetryCollector:
 
             await publish_trace_event(
                 org_id=event.tenant_id,
-                payload=event.to_dict(),
+                payload=event_dict,
             )
         except Exception as exc:
             logger.debug(f"telemetry: publish_trace_event failed: {exc}")
@@ -667,7 +738,14 @@ class TelemetryCollector:
     async def _route_postgres(self, event: TelemetryEvent) -> None:
         client = await self._get_postgres()
         if not client:
-            return
+            from eden.observability.errors import IngestionUnavailable
+
+            logger.warning(
+                "Postgres unavailable for telemetry; raising IngestionUnavailable",
+            )
+            raise IngestionUnavailable(
+                "Ingestion temporarily unavailable; Postgres unavailable, retry after backoff",
+            )
         try:
             # v1.8 (storage-optimisation pass): dispatch the 8 zstd
             # compress calls via :func:`compress_many` so the work
@@ -690,16 +768,19 @@ class TelemetryCollector:
                 payload_zstd,
                 metrics_zstd,
                 attributes_zstd,
-            ) = compress_many([
-                event.request_body,
-                event.response_body,
-                event.reasoning,
-                event.tool_calls_full,
-                event.tool_results,
-                event.payload,
-                event.metrics,
-                event.attributes,
-            ])
+            ) = await asyncio.to_thread(
+                compress_many,
+                [
+                    event.request_body,
+                    event.response_body,
+                    event.reasoning,
+                    event.tool_calls_full,
+                    event.tool_results,
+                    event.payload,
+                    event.metrics,
+                    event.attributes,
+                ],
+            )
             # Phase A / N09 — content-addressed message dedup (Laminar 20x).
             # Hash every message in request_body / response_body via the
             # canonical-JSON SHA-256 in :mod:`eden.observability.canonical`
@@ -727,6 +808,11 @@ class TelemetryCollector:
                     )
                 except Exception as exc:
                     logger.debug(f"dedup upsert_response failed (non-fatal): {exc}")
+            # Dual-write note (Wave 3 / PERF+COST deferred): plaintext JSONB
+            # columns AND *_zstd are both populated. Primary readers prefer
+            # zstd, but online rules_engine still prefers JSONB first.
+            # Stopping plaintext writes is gated on
+            # scripts/check_zstd_drop_prerequisites.py + mig 033/039.
             await client.execute(
                 """
                 INSERT INTO telemetry_events (
@@ -760,7 +846,13 @@ class TelemetryCollector:
                 event.trace_id,
                 event.realm,
                 event.event_type,
-                event.timestamp,
+                # asyncpg requires datetime for timestamptz — TelemetryEvent
+                # keeps ISO strings on the wire / dataclass.
+                event.timestamp
+                if isinstance(event.timestamp, datetime)
+                else datetime.fromisoformat(
+                    str(event.timestamp).replace("Z", "+00:00")
+                ),
                 event.agent_id,
                 event.agent_version,
                 event.environment_id,
@@ -771,7 +863,7 @@ class TelemetryCollector:
                 _dump_jsonb(event.payload),
                 _dump_jsonb(event.metrics),
                 _dump_jsonb(event.attributes),
-                event.tags,
+                _dump_jsonb(event.tags),
                 event.outcome,
                 event.source_format or "eden_native",
                 _dump_jsonb(event.request_body),
@@ -802,7 +894,12 @@ class TelemetryCollector:
                 event.response_message_hashes or None,
             )
         except Exception as exc:
+            from eden.observability.errors import IngestionUnavailable
+
             logger.warning(f"Postgres telemetry insert failed: {exc}")
+            raise IngestionUnavailable(
+                "Ingestion temporarily unavailable; Postgres write failed, retry after backoff",
+            ) from exc
 
     async def _route_clickhouse(self, event: TelemetryEvent) -> None:
         sink = await self._get_clickhouse()
@@ -823,7 +920,7 @@ class TelemetryCollector:
             "name": event.name or "",
             "duration_ms": event.duration_ms or 0.0,
             "metrics": _dump_jsonb(event.metrics) or "",
-            "tags": json.dumps(event.tags, default=str, separators=(",", ":")),
+            "tags": _json_dumps(event.tags),
             "outcome": event.outcome or "",
             "request_body": _dump_jsonb(event.request_body) or "",
             "response_body": _dump_jsonb(event.response_body) or "",
@@ -847,26 +944,52 @@ class TelemetryCollector:
             if len(self._ch_telemetry_buffer) >= self.CH_TELEMETRY_BATCH_SIZE:
                 batch = self._ch_telemetry_buffer
                 self._ch_telemetry_buffer = []
+        self._ensure_ch_flush_loop()
         if batch:
-            try:
-                await sink.insert("telemetry_events_ch", batch)
-            except Exception as exc:
-                logger.warning("ClickHouse telemetry batch insert failed: %s", exc)
+            await self._insert_ch_batch(batch)
 
-    async def _flush_clickhouse_buffer(self) -> None:
-        """Flush any buffered telemetry_events_ch rows."""
+    def _ensure_ch_flush_loop(self) -> None:
+        """Start the ≤5s ClickHouse time-flush loop once per collector."""
+        if self._ch_flush_task is not None and not self._ch_flush_task.done():
+            return
+        try:
+            self._ch_flush_task = asyncio.create_task(self._ch_flush_loop())
+        except RuntimeError:
+            self._ch_flush_task = None
+
+    async def _ch_flush_loop(self) -> None:
+        while True:
+            await asyncio.sleep(self.CH_FLUSH_INTERVAL_S)
+            try:
+                await self._flush_clickhouse_buffer()
+            except Exception as exc:
+                logger.debug("ClickHouse telemetry timer flush failed: %s", exc)
+
+    async def _insert_ch_batch(self, batch: list[dict[str, Any]]) -> None:
         sink = await self._get_clickhouse()
         if not sink:
             return
+        try:
+            from eden.observability.ingest_hot_path_metrics import (
+                record_ch_flush_batch_size,
+            )
+
+            record_ch_flush_batch_size(len(batch))
+        except Exception:
+            pass
+        try:
+            await sink.insert("telemetry_events_ch", batch)
+        except Exception as exc:
+            logger.warning("ClickHouse telemetry batch insert failed: %s", exc)
+
+    async def _flush_clickhouse_buffer(self) -> None:
+        """Flush any buffered telemetry_events_ch rows."""
         async with self._ch_buffer_lock:
             if not self._ch_telemetry_buffer:
                 return
             batch = self._ch_telemetry_buffer
             self._ch_telemetry_buffer = []
-        try:
-            await sink.insert("telemetry_events_ch", batch)
-        except Exception as exc:
-            logger.warning("ClickHouse telemetry flush failed: %s", exc)
+        await self._insert_ch_batch(batch)
 
     async def _route_websocket(self, event: TelemetryEvent) -> None:
         """Fan out telemetry event to real-time WebSocket subscribers."""
@@ -931,7 +1054,8 @@ class TelemetryCollector:
                 from eden.observability.ingestion.bulk_typesense import enqueue_span_doc
 
                 if bool(getattr(get_settings(), "typesense_bulk_index_enabled", True)):
-                    await enqueue_span_doc(doc)
+                    # Non-blocking from the critical ingest path.
+                    self._spawn_bg(enqueue_span_doc(doc))
                     indexed_via_bulk = True
             except Exception:
                 indexed_via_bulk = False
@@ -959,6 +1083,7 @@ class TelemetryCollector:
 
     async def _load_from_archive(
         self,
+        tenant_id: str,
         trace_id: str,
     ) -> list[dict[str, Any]]:
         """Cold-archive fallback for ``get_trace_tree`` (Phase B3).
@@ -966,6 +1091,9 @@ class TelemetryCollector:
         Called when the Postgres query for ``trace_id`` returns no
         rows. Looks up the trace in ``trace_archive_index`` and
         rehydrates from Impossible Cloud via :class:`ArchiveService`.
+
+        ``tenant_id`` must match the archive index ``org_id``; a
+        mismatch is treated as not found (no cross-tenant IDOR).
 
         Returns a list of row dicts (same shape as the Postgres
         ``SELECT *`` output) or an empty list. Errors are logged
@@ -979,7 +1107,7 @@ class TelemetryCollector:
             return []
         archive = ArchiveService()
         try:
-            return await archive.rehydrate(trace_id)
+            return await archive.rehydrate(trace_id, org_id=tenant_id)
         except Exception as exc:
             logger.warning(f"_load_from_archive: rehydrate failed for {trace_id}: {exc}")
             return []
@@ -1015,7 +1143,7 @@ class TelemetryCollector:
             # and rehydrate from Impossible Cloud. The reader
             # continues with the same shape so the rest of this
             # method doesn't need to branch.
-            rows = await self._load_from_archive(trace_id)
+            rows = await self._load_from_archive(tenant_id, trace_id)
             if not rows:
                 return None
 
@@ -1024,6 +1152,7 @@ class TelemetryCollector:
         # (the columns are kept in sync during the 30-day burn-in;
         # migration 033 drops the originals).
         from eden.storage.compression import decompress_jsonb
+
 
         def _read_payload(row, zstd_col: str, jsonb_col: str) -> Any:
             """Return the decompressed payload, preferring ``*_zstd``."""
@@ -1096,7 +1225,9 @@ class TelemetryCollector:
         for row in rows:
             for col in _zstd_cols:
                 flat.append(row.get(col))
-        decoded = decompress_many(flat) if flat else []
+        decoded = (
+            await asyncio.to_thread(decompress_many, flat) if flat else []
+        )
         # Re-shape into a {row_index: {col: value}} lookup.
         cols_n = len(_zstd_cols)
         per_row: list[dict[str, Any]] = []
@@ -1312,13 +1443,14 @@ class TelemetryCollector:
             return None
 
         if not rows:
-            rows = await self._load_from_archive(trace_id)
+            rows = await self._load_from_archive(tenant_id, trace_id)
             if not rows:
                 return None
 
         steps: list[dict[str, Any]] = []
         markers: list[dict[str, Any]] = []
         base_time: datetime | None = None
+
 
         for row in rows:
             try:

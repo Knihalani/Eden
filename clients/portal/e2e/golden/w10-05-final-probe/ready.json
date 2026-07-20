@@ -1,0 +1,1 @@
+{"status":"ready","version":"0.1.0","checks":{"postgres":"ok","redis":"ok","qdrant":"error: [Errno 99] Cannot assign requested address","openrouter":"ok"}}

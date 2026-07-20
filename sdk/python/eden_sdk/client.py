@@ -26,7 +26,9 @@ the worker. ``atexit`` registers a best-effort flush.
 
 from __future__ import annotations
 
+import asyncio
 import atexit
+import gzip
 import json
 import logging
 import queue as _queue
@@ -39,17 +41,40 @@ from typing import Any
 import httpx
 
 from eden_sdk.config import EdenConfig, get_config
+from eden_sdk.ingest_format import resolve_ingest_path
 from eden_sdk.filters import _redact_string as _redact_text
 from eden_sdk.filters import redact_payload
+
+# Compact JSON for the wire — fewer bytes to gzip, faster dumps.
+_JSON_SEPARATORS = (",", ":")
 
 # ``User-Agent`` for ingestion. Pulled from ``__version__`` at
 # import time; if the package is re-installed the new value
 # takes effect. The gateway logs the SDK version on every POST
 # so version drift across the fleet is visible in one place.
-__version__ = "0.3.0"
+__version__ = "0.3.2"
 _USER_AGENT = f"eden-sdk/{__version__} (python)"
 
+# Match BE ``settings.ingestion_chunks_max_per_request`` (default 1000).
+_INGEST_CHUNKS_MAX_PER_REQUEST = 1000
+
 logger = logging.getLogger("eden_sdk.client")
+
+
+class _ChunkBuffer(deque):
+    """Streaming chunk buffer: O(1) left-eviction + list-compatible slices.
+
+    Instrumentations and tests treat ``_chunk_buffer`` like a list
+    (``append``, ``extend``, ``buf[1:]``). A plain ``deque`` rejects
+    slices; this subclass restores that API without paying O(n)
+    ``list.pop(0)`` on overflow.
+    """
+
+    def __getitem__(self, index):  # type: ignore[override]
+        if isinstance(index, slice):
+            start, stop, step = index.indices(len(self))
+            return [deque.__getitem__(self, i) for i in range(start, stop, step)]
+        return deque.__getitem__(self, index)
 
 
 # ── Public types ──────────────────────────────────────────────────────
@@ -74,7 +99,9 @@ class TraceEvent:
         self.payload = payload
 
     def to_json_bytes(self) -> bytes:
-        return json.dumps(self.payload, default=str).encode("utf-8")
+        return json.dumps(
+            self.payload, default=str, separators=_JSON_SEPARATORS
+        ).encode("utf-8")
 
 
 # ── Sender ────────────────────────────────────────────────────────────
@@ -120,8 +147,9 @@ class EdenClient:
         # Streaming chunks accumulate here and are flushed on the
         # same worker tick (or via :meth:`flush_chunks`). Distinct
         # from the regular queue because they go to ``/ingest/chunks``
-        # with a smaller payload shape.
-        self._chunk_buffer: list[dict[str, Any]] = []
+        # with a smaller payload shape. ``deque`` keeps overflow
+        # eviction O(1) (list ``pop(0)`` was O(n) per drop).
+        self._chunk_buffer: _ChunkBuffer = _ChunkBuffer()
         # Chunk buffer cap. Mirrors ``max_queue`` for the
         # regular event queue: prevents a runaway streaming
         # response (e.g. a model echoing millions of small
@@ -264,11 +292,15 @@ class EdenClient:
 
     # ── Producer API ─────────────────────────────────────────────────
 
-    def enqueue(self, event: TraceEvent) -> None:
+    def enqueue(self, event: TraceEvent, *, skip_sampling: bool = False) -> None:
         """Non-blocking enqueue. Drops oldest on overflow.
 
         Designed to be called from any thread — including the
         framework callbacks running on the user's event loop.
+
+        ``skip_sampling`` is for durable offline replay: events already
+        persisted to SQLite must not be dropped by ClientSampler and
+        then acked away.
         """
         if not self.config.enabled:
             return
@@ -280,7 +312,11 @@ class EdenClient:
         )
         duration_ms = float(payload.get("duration_ms") or 0)
         if not self._sampler.should_keep(
-            self._SampleSignals(has_error=has_error, duration_ms=duration_ms)
+            self._SampleSignals(
+                has_error=has_error,
+                duration_ms=duration_ms,
+                force=skip_sampling,
+            )
         ):
             self._sampled_out_total += 1
             return
@@ -358,8 +394,6 @@ class EdenClient:
         # before _loop_started.set() (e.g. an invalid httpx.AsyncClient
         # transport argument) is logged and surfaces via _loop_failed
         # instead of silently killing the worker.
-        import asyncio
-
         try:
             asyncio.run(self._async_loop())
         except Exception as exc:  # noqa: BLE001
@@ -391,7 +425,10 @@ class EdenClient:
         flush_interval = self.config.flush_interval_ms / 1000.0
         try:
             while not self._stop.is_set():
-                # Wait for the next event or the flush interval.
+                # Sync wait is intentional: this thread's event loop only
+                # runs sender work, and the wait sits *between* batches
+                # (never across in-flight asyncio.gather POSTs). Parking
+                # via run_in_executor on every tick crushed throughput.
                 self._wake.wait(timeout=flush_interval)
                 self._wake.clear()
                 if self._stop.is_set() and self._queue.empty():
@@ -451,6 +488,10 @@ class EdenClient:
         """
         if not self.config.enabled:
             return
+        # The worker loop waits on ``_wake`` (not ``_chunk_wake`` alone),
+        # so both must be signalled or ``flush_chunks`` stalls until the
+        # next flush-interval tick.
+        self._wake.set()
         self._chunk_wake.set()
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline:
@@ -485,19 +526,20 @@ class EdenClient:
         if self.config.dry_run:
             self._sent_total += 1
             return
-        # Drop oldest to make room. This is O(n) for a list,
-        # but n is bounded by _chunk_buffer_max and the
-        # append/drop pair is amortised across the cap, so
-        # total work stays O(max) per overflow cycle.
+        # Drop oldest to make room. deque.popleft is O(1);
+        # the previous list.pop(0) was O(n) per eviction.
         while len(self._chunk_buffer) >= self._chunk_buffer_max:
             try:
-                self._chunk_buffer.pop(0)
+                self._chunk_buffer.popleft()
             except IndexError:
                 break
             self._dropped_total += 1
         self._chunk_buffer.append(chunk)
         # Wake the worker so the chunk ships promptly rather
-        # than waiting for the next batch window.
+        # than waiting for the next batch window. ``_wake`` is
+        # what ``_async_loop`` actually waits on; ``_chunk_wake``
+        # is also set for flush_chunks() polling compatibility.
+        self._wake.set()
         self._chunk_wake.set()
 
     async def _send_chunks(self) -> None:
@@ -505,10 +547,17 @@ class EdenClient:
 
         Best-effort: a transport failure logs a warning and counts
         the chunks as failed, but does not raise (the user's stream
-        already returned to them).
+        already returned to them). Each POST is capped at
+        ``_INGEST_CHUNKS_MAX_PER_REQUEST``; a 413 splits the batch
+        and retries rather than permanently dropping.
         """
         assert self._http is not None
         if not self._chunk_buffer:
+            return
+        if self.config.dry_run:
+            # Mirror ``enqueue``: count as sent, never POST.
+            self._sent_total += len(self._chunk_buffer)
+            self._chunk_buffer.clear()
             return
         # Defensive trim: instrumentations may append directly
         # to ``self._chunk_buffer`` (bypassing the
@@ -520,7 +569,8 @@ class EdenClient:
         # between ticks.
         if len(self._chunk_buffer) > self._chunk_buffer_max:
             overflow = len(self._chunk_buffer) - self._chunk_buffer_max
-            self._chunk_buffer = self._chunk_buffer[overflow:]
+            for _ in range(overflow):
+                self._chunk_buffer.popleft()
             self._dropped_total += overflow
             logger.warning(
                 "eden sdk: chunk buffer overflow, dropped %d oldest",
@@ -531,44 +581,111 @@ class EdenClient:
             # No org id — drop silently.
             self._chunk_buffer.clear()
             return
+        # Ownership swap: avoid copying the chunk dicts.
         chunks = self._chunk_buffer
-        self._chunk_buffer = []
-        # Apply the client-side PII safety net to every chunk's
-        # ``delta_text`` before it leaves the process. Streaming
-        # responses often contain model-echoed PII (an email
-        # address the user put in the prompt that the model then
-        # repeated in its reply) — without this, that PII would
-        # bypass the batched redaction in ``_send_batch``.
+        self._chunk_buffer = _ChunkBuffer()
+        # Apply the client-side PII safety net in-place (we own
+        # ``chunks`` now). Avoid ``{**c, ...}`` which copied every
+        # chunk dict on the hot streaming path.
         if self.config.redact_on_client:
-            chunks = [
-                {
-                    **c,
-                    "delta_text": _redact_text(
-                        c["delta_text"] if isinstance(c.get("delta_text"), str) else ""
-                    ),
-                }
-                for c in chunks
-            ]
+            for c in chunks:
+                dt = c.get("delta_text")
+                c["delta_text"] = _redact_text(dt if isinstance(dt, str) else "")
+        chunk_list = list(chunks)
+        for i in range(0, len(chunk_list), _INGEST_CHUNKS_MAX_PER_REQUEST):
+            await self._post_chunk_batch(
+                url,
+                chunk_list[i : i + _INGEST_CHUNKS_MAX_PER_REQUEST],
+            )
+
+    async def _post_chunk_batch(
+        self, url: str, batch: list[dict]
+    ) -> None:
+        """POST one chunk batch (≤1000). On 413, bisect and retry."""
+        if not batch:
+            return
         try:
-            body = json.dumps({"chunks": chunks}, default=str).encode("utf-8")
+            body = gzip.compress(
+                json.dumps(
+                    {"chunks": batch},
+                    default=str,
+                    separators=_JSON_SEPARATORS,
+                ).encode("utf-8"),
+                compresslevel=1,
+            )
             headers = self.config.auth_headers()
             headers.setdefault("Content-Type", "application/json")
+            headers.setdefault("Content-Encoding", "gzip")
             headers.setdefault("User-Agent", _USER_AGENT)
-            t0 = time.perf_counter()
-            resp = await self._http.post(url, content=body, headers=headers)
-            dt = (time.perf_counter() - t0) * 1000.0
-            self._latency_window.append(dt)
-            if 200 <= resp.status_code < 300:
-                self._sent_total += len(chunks)
-            else:
-                self._failed_total += len(chunks)
+
+            attempt = 0
+            max_attempts = 3
+            base_delay_s = 0.2
+            while True:
+                attempt += 1
+                t0 = time.perf_counter()
+                try:
+                    resp = await self._http.post(url, content=body, headers=headers)
+                    dt = (time.perf_counter() - t0) * 1000.0
+                    self._latency_window.append(dt)
+                except Exception as exc:  # noqa: BLE001
+                    if attempt < max_attempts:
+                        delay = min(base_delay_s * (2 ** (attempt - 1)), 5.0)
+                        logger.warning(
+                            "eden ingest chunks attempt %d/%d failed: %s; retrying in %.2fs",
+                            attempt,
+                            max_attempts,
+                            exc,
+                            delay,
+                        )
+                        await asyncio.sleep(delay)
+                        continue
+                    self._failed_total += len(batch)
+                    logger.warning(
+                        "eden ingest chunks failed after %d attempts: %s",
+                        attempt,
+                        exc,
+                    )
+                    return
+
+                status = resp.status_code
+                if 200 <= status < 300:
+                    self._sent_total += len(batch)
+                    return
+                if status == 413 and len(batch) > 1:
+                    mid = len(batch) // 2
+                    logger.warning(
+                        "eden ingest chunks returned 413; splitting %d -> %d+%d",
+                        len(batch),
+                        mid,
+                        len(batch) - mid,
+                    )
+                    await self._post_chunk_batch(url, batch[:mid])
+                    await self._post_chunk_batch(url, batch[mid:])
+                    return
+                retryable = status == 408 or status == 429 or status >= 500
+                if not retryable or attempt >= max_attempts:
+                    self._failed_total += len(batch)
+                    logger.warning(
+                        "eden ingest chunks returned %s: %s",
+                        status,
+                        resp.text[:200],
+                    )
+                    return
+                delay = min(base_delay_s * (2 ** (attempt - 1)), 5.0)
+                retry_after = resp.headers.get("retry-after")
+                if retry_after is not None:
+                    delay = self._parse_retry_after(retry_after, fallback=delay)
                 logger.warning(
-                    "eden ingest chunks returned %s: %s",
-                    resp.status_code,
-                    resp.text[:200],
+                    "eden ingest chunks returned %s; retrying in %.2fs (attempt %d/%d)",
+                    status,
+                    delay,
+                    attempt,
+                    max_attempts,
                 )
+                await asyncio.sleep(delay)
         except Exception as exc:  # noqa: BLE001
-            self._failed_total += len(chunks)
+            self._failed_total += len(batch)
             logger.warning("eden ingest chunks failed: %s", exc)
 
     def _parse_retry_after(
@@ -618,35 +735,34 @@ class EdenClient:
         # own request. Routes are 1:1 with decoder names.
         groups: dict[str, list[dict[str, Any]]] = {}
         for ev in batch:
-            groups.setdefault(ev.source_format, []).append(ev.payload)
-        for source_format, payloads in groups.items():
+            path_fmt = resolve_ingest_path(ev.source_format)
+            groups.setdefault(path_fmt, []).append(ev.payload)
+
+        # Build auth headers once per batch; each format copies.
+        base_headers = self.config.auth_headers()
+
+        async def _send_format(
+            source_format: str, payloads: list[dict[str, Any]]
+        ) -> None:
             count = len(payloads) if self._BATCH_AS_ARRAY else 1
             try:
                 url = self.config.ingest_url(source_format)
-                headers = self.config.auth_headers()
+                headers = dict(base_headers)
                 headers.setdefault("Content-Type", "application/json")
+                headers.setdefault("Content-Encoding", "gzip")
                 headers.setdefault("User-Agent", _USER_AGENT)
-                # Apply the client-side safety-net PII redactor to
-                # every payload before it leaves the process. The
-                # gateway remains the source of truth; this is a
-                # belt-and-suspenders pass for local dev and as a
-                # backstop if the gateway is down or misconfigured.
                 if self.config.redact_on_client:
                     payloads = [redact_payload(p) for p in payloads]
                 if self._BATCH_AS_ARRAY:
-                    body = json.dumps(payloads, default=str).encode("utf-8")
+                    raw = json.dumps(
+                        payloads, default=str, separators=_JSON_SEPARATORS
+                    ).encode("utf-8")
                 else:
-                    body = json.dumps(payloads[0], default=str).encode("utf-8")
-                    # Single-event mode: we send one event per request,
-                    # so each request only counts one event regardless of
-                    # the size of the drained batch.
+                    raw = json.dumps(
+                        payloads[0], default=str, separators=_JSON_SEPARATORS
+                    ).encode("utf-8")
                     count = 1
-                # Retry transient failures (5xx, 408, 429, network) with
-                # exponential backoff. 4xx other than 408/429 are
-                # considered permanent (auth/validation) and bail out
-                # immediately. Retry-After from the server is honoured
-                # up to a max of 30s per attempt.
-                import asyncio
+                body = gzip.compress(raw, compresslevel=1)
                 attempt = 0
                 max_attempts = 3
                 base_delay_s = 0.2
@@ -660,7 +776,6 @@ class EdenClient:
                         dt = (time.perf_counter() - t0) * 1000.0
                         self._latency_window.append(dt)
                     except Exception as exc:  # noqa: BLE001
-                        # Network-level failure — retryable.
                         if attempt < max_attempts:
                             delay = min(base_delay_s * (2 ** (attempt - 1)), 5.0)
                             logger.warning(
@@ -674,6 +789,7 @@ class EdenClient:
                             "eden ingest %s failed after %d attempts: %s",
                             source_format, attempt, exc,
                         )
+                        # Network exhaustion is retryable later — spill.
                         self._spill_offline(source_format, payloads)
                         break
 
@@ -681,9 +797,6 @@ class EdenClient:
                     if 200 <= status < 300:
                         self._sent_total += count
                         break
-                    # 408 (Request Timeout), 429 (Too Many Requests),
-                    # and any 5xx are retryable; other 4xx are not.
-                    # Mirrors the TS SDK (status === 429 || status === 408 || status >= 500).
                     retryable = status == 408 or status == 429 or status >= 500
                     if not retryable or attempt >= max_attempts:
                         self._failed_total += count
@@ -691,16 +804,12 @@ class EdenClient:
                             "eden ingest %s returned %s: %s",
                             source_format, status, resp.text[:200],
                         )
-                        self._spill_offline(source_format, payloads)
+                        # Only spill transient failures. Permanent 4xx
+                        # (auth/validation) would poison the offline
+                        # queue with payloads that can never succeed.
+                        if retryable:
+                            self._spill_offline(source_format, payloads)
                         break
-                    # Respect Retry-After if present. The spec (RFC 7231)
-                    # allows either a delta-seconds integer or an
-                    # HTTP-date -- the original code only handled the
-                    # former and silently fell back to exponential
-                    # backoff on HTTP-date, ignoring the server's
-                    # intent. Parse both forms; cap the resulting
-                    # delay at 30s so a misconfigured gateway can't
-                    # stall ingestion indefinitely.
                     delay = min(base_delay_s * (2 ** (attempt - 1)), 5.0)
                     retry_after = resp.headers.get("retry-after")
                     if retry_after is not None:
@@ -711,29 +820,60 @@ class EdenClient:
                     )
                     await asyncio.sleep(delay)
             except Exception as exc:  # noqa: BLE001
-                # Outermost catch: anything the retry loop didn't handle.
                 self._failed_total += count
                 logger.warning("eden ingest %s failed: %s", source_format, exc)
                 self._spill_offline(source_format, payloads)
 
+        await asyncio.gather(
+            *(_send_format(fmt, payloads) for fmt, payloads in groups.items())
+        )
+
     def _spill_offline(self, source_format: str, payloads: list[dict[str, Any]]) -> None:
         if self._offline is None:
             return
-        for p in payloads:
-            try:
-                self._offline.enqueue(source_format, p)
-            except Exception as exc:  # noqa: BLE001
-                logger.debug("offline spill failed: %s", exc)
+        try:
+            self._offline.enqueue_many(
+                [(source_format, p) for p in payloads]
+            )
+        except Exception as exc:  # noqa: BLE001
+            # Fall back to per-row so a single bad payload does not
+            # drop the whole spill batch.
+            logger.debug("offline spill batch failed: %s", exc)
+            for p in payloads:
+                try:
+                    self._offline.enqueue(source_format, p)
+                except Exception as row_exc:  # noqa: BLE001
+                    logger.debug("offline spill failed: %s", row_exc)
 
-    def flush_offline(self, limit: int = 100) -> int:
-        """Re-enqueue durable offline events after reconnect. Returns count."""
+    def flush_offline(self, limit: int = 100, *, timeout: float = 5.0) -> int:
+        """Re-enqueue durable offline events after reconnect. Returns count acked.
+
+        Rows stay in SQLite until flush fully succeeds (queue drained and
+        in-flight send completed). On timeout or leftover in-memory events,
+        ids are left unacked so a later replay can retry. Sampling is
+        bypassed on this path so ClientSampler cannot drop durable rows
+        that would then be acked away. Failed sends are re-spilled by
+        ``_send_batch`` when the failure is transient.
+        """
         if self._offline is None:
             return 0
         drained = self._offline.drain(limit=limit)
+        if not drained:
+            return 0
         ids: list[int] = []
         for rid, fmt, payload in drained:
-            self.enqueue(TraceEvent(payload=payload, source_format=fmt))
+            self.enqueue(
+                TraceEvent(payload=payload, source_format=fmt),
+                skip_sampling=True,
+            )
             ids.append(rid)
+        self.flush(timeout=timeout)
+        flushed = (
+            self._queue.empty()
+            and self._processed_generation >= self._generation
+        )
+        if not flushed:
+            return 0
         self._offline.ack(ids)
         return len(ids)
 

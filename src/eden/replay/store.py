@@ -94,6 +94,9 @@ class BrowserSessionStore:
     ) -> int:
         client = await self._client()
         if client is None:
+            sess = self._fallback.get_session(browser_session_id)
+            if sess is None or str(sess.org_id) != str(org_id):
+                return 0
             count = 0
             for ev in events:
                 if self._fallback.append(
@@ -103,6 +106,16 @@ class BrowserSessionStore:
                 ):
                     count += 1
             return count
+        owned = await client.fetchval(
+            """
+            SELECT 1 FROM browser_sessions
+            WHERE org_id = $1 AND id = $2::uuid
+            """,
+            org_id,
+            browser_session_id,
+        )
+        if not owned:
+            return 0
         count = 0
         for ev in events:
             payload = dict(ev.get("payload") or ev)
@@ -139,7 +152,10 @@ class BrowserSessionStore:
     ) -> Session | None:
         client = await self._client()
         if client is None:
-            return self._fallback.get_session(browser_session_id)
+            sess = self._fallback.get_session(browser_session_id)
+            if sess is None or str(sess.org_id) != str(org_id):
+                return None
+            return sess
         row = await client.fetchrow(
             """
             SELECT id, org_id, trace_id, user_agent, viewport_w, viewport_h,

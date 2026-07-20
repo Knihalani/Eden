@@ -40,7 +40,10 @@ class LiveTraceSubscriber:
         session_id: str,
         *,
         from_event_id: int = 0,
-        max_duration_s: float = 3600,
+        # Default matches portal live SSE proxy maxDuration=300 and
+        # observability_stream._STREAM_MAX_DURATION_S so the backend
+        # closes with stream_duration_exceeded before Vercel hard-kills.
+        max_duration_s: float = 300,
     ) -> AsyncIterator[bytes]:
         if not live_enabled():
             yield _sse(

@@ -4,6 +4,7 @@
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
+import { readApiModules } from "./_read-api";
 
 const ROOT = resolve(__dirname, "../../..");
 const REPO = resolve(ROOT, "../..");
@@ -27,7 +28,7 @@ describe("W29 F22 /fix purge still holds", () => {
   });
 
   it("api has no /fix/chat path", () => {
-    const api = src("lib/api.ts");
+    const api = readApiModules(ROOT);
     expect(api).not.toContain("/fix/chat");
   });
 });

@@ -37,7 +37,7 @@ export function AppShellEmptyFixture() {
   return (
     <ShellFrame state="empty">
       <ResourcePageShell
-        toolbar={<p className="text-sm font-medium">Traces</p>}
+        header={<p className="text-sm font-medium">Traces</p>}
         table={
           <div className="py-16 text-center text-sm text-[var(--text-muted)]">
             No traces in this window.
@@ -52,7 +52,7 @@ export function AppShellErrorFixture() {
   return (
     <ShellFrame state="error">
       <ResourcePageShell
-        toolbar={<p className="text-sm font-medium">Issues</p>}
+        header={<p className="text-sm font-medium">Issues</p>}
         table={
           <div
             role="alert"

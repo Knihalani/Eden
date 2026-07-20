@@ -60,7 +60,18 @@ class DiscordTestRequest(BaseModel):
 
 
 @router.post("/integrations/discord/test")
-async def discord_test(req: DiscordTestRequest) -> dict[str, Any]:
+async def discord_test(
+    req: DiscordTestRequest,
+    _user: dict[str, Any] = Depends(get_current_user),
+) -> dict[str, Any]:
+    # Reuse delivery-time SSRF guard (https-only, public IPs).
+    from eden.services.webhook_delivery import _assert_public_ip
+
+    try:
+        _assert_public_ip(req.webhook_url)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
     ok = await post_to_discord(req.webhook_url, title="Test", body=req.message, severity="info")
     if not ok:
         raise HTTPException(status_code=502, detail="Discord webhook did not accept the message")

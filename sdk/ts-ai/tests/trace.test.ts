@@ -7,6 +7,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import { parseFetchBody } from "./_parseBody.js";
 import {
   getDefaultClient,
   resetDefaultClient,
@@ -31,7 +32,7 @@ beforeEach(() => {
     const url = typeof input === "string" ? input : input.toString();
     let body: unknown = init?.body;
     try {
-      body = init?.body ? JSON.parse(init.body as string) : null;
+      body = parseFetchBody(init);
     } catch {
       // keep raw
     }

@@ -8,8 +8,11 @@ import { useConfirm } from "@/hooks/use-confirm";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { SettingsCard } from "@/components/settings/settings-card";
+import { Button } from "@/components/ui/button";
 import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
+import { ErrorState } from "@/components/ui/error-state";
 import { formatRelativeTime } from "@/lib/format";
+import { errorFromCaught } from "@/lib/safe-error-message";
 import type { Organization } from "@/lib/types";
 import { InvitePanel } from "./invite-panel";
 
@@ -32,17 +35,21 @@ export function MembersSettings({ org }: MembersSettingsProps) {
   const { confirm, ConfirmDialog } = useConfirm();
   const [members, setMembers] = useState<Member[]>([]);
   const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState("member");
 
   const loadMembers = async () => {
     if (!org) return;
     setLoading(true);
+    setLoadError(null);
     try {
       const data = await api.listOrgMembers(org.id);
       setMembers(data as Member[]);
-    } catch {
-      // Fall through with empty list
+    } catch (e) {
+      // Fail closed: do not paint an empty members table on 5xx.
+      setLoadError(errorFromCaught(e, "Failed to load members"));
+      setMembers([]);
     } finally {
       setLoading(false);
     }
@@ -96,6 +103,10 @@ export function MembersSettings({ org }: MembersSettingsProps) {
     );
   }
 
+  const isPersonal = Boolean(org.is_personal);
+  const canInvite = hasPermission("members:invite") && !isPersonal;
+  const canRemove = hasPermission("members:remove");
+
   const columns: DataTableColumn<Member>[] = [
     { key: "name", header: "Name", sortable: true, sticky: true, cell: (m) => <span className="font-medium text-[var(--text-primary)]">{m.name}</span> },
     { key: "email", header: "Email", sortable: true, cell: (m) => <span className="text-[var(--text-secondary)]">{m.email}</span> },
@@ -135,7 +146,7 @@ export function MembersSettings({ org }: MembersSettingsProps) {
       header: "",
       align: "right",
       cell: (m) =>
-        m.role !== "owner" ? (
+        canRemove && m.role !== "owner" ? (
           <button
             onClick={() => handleRemove(m.user_id)}
             className="p-2 text-[var(--error)] hover:bg-[var(--error-bg)] rounded-lg"
@@ -149,7 +160,13 @@ export function MembersSettings({ org }: MembersSettingsProps) {
 
   return (
     <div className="space-y-4">
-      {hasPermission("members:invite") && (
+      {isPersonal && (
+        <p className="text-sm text-[var(--text-muted)] rounded-lg border border-[var(--border-default)] bg-[var(--bg-secondary)] px-4 py-3">
+          This is a personal workspace. Invites are unavailable — create a team
+          organization to add members.
+        </p>
+      )}
+      {canInvite && (
         <SettingsCard
           title="Invite a member"
           description="Add teammates by email. They'll get a link to join."
@@ -182,20 +199,32 @@ export function MembersSettings({ org }: MembersSettingsProps) {
       )}
 
       <SettingsCard title="Members" description={`${members.length} active`}>
-        <DataTable
-          columns={columns}
-          rows={members}
-          rowKey={(m) => m.user_id}
-          loading={loading}
-          defaultSort={{ key: "name", direction: "asc" }}
-          emptyTitle="No members yet"
-          emptyDescription="Invite teammates to share traces, alerts, and improvements together."
-          emptyIcon={Users}
-          pageSize={25}
-        />
+        {loadError ? (
+          <ErrorState
+            title="Could not load members"
+            message={loadError}
+            action={
+              <Button variant="outline" className="min-h-11" onClick={() => void loadMembers()}>
+                Try again
+              </Button>
+            }
+          />
+        ) : (
+          <DataTable
+            columns={columns}
+            rows={members}
+            rowKey={(m) => m.user_id}
+            loading={loading}
+            defaultSort={{ key: "name", direction: "asc" }}
+            emptyTitle="No members yet"
+            emptyDescription="Invite teammates to share traces, alerts, and improvements together."
+            emptyIcon={Users}
+            pageSize={25}
+          />
+        )}
       </SettingsCard>
 
-      <InvitePanel orgId={org.id} canManage={hasPermission("members:invite")} />
+      <InvitePanel orgId={org.id} canManage={canInvite} />
       {ConfirmDialog}
     </div>
   );

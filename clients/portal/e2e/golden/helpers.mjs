@@ -1,30 +1,109 @@
 /**
  * F85 golden-path helpers — shared Playwright utilities.
+ *
+ * Auth-state domain requirements (e2e/.auth-state.json):
+ *   - Cookies / origins must match the host you hit via BASE / BASE_URL.
+ *   - Local seed (seed-auth.mjs against 127.0.0.1 / localhost + pk_test Clerk)
+ *     yields cookies for localhost / *.clerk.accounts.dev — NOT valid on
+ *     https://edenobservability.com (prod will redirect to /sign-in).
+ *   - Prod audits: capture storageState with wait-for-signin.mjs (or Playwright
+ *     codegen --channel=chrome) against the same BASE. Do not invent or hardcode
+ *     production credentials in this repo; do not reuse local auth-state on prod.
+ *   - See e2e/README-auth.md for required env + signed-in flows.
+ *
+ * Exit honesty:
+ *   GOLDEN_CI=1 → missing/mismatched auth state exits 1 (never silent pass).
+ *   Path failures exit non-zero unless GOLDEN_ALLOW_FAIL=1 (local only).
  */
 import { readFileSync, existsSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-export const BASE = process.env.BASE_URL || process.env.BASE || "http://127.0.0.1:3000";
+export const BASE = (process.env.BASE_URL || process.env.BASE || "http://127.0.0.1:3000").replace(
+  /\/$/,
+  "",
+);
 export const FIXTURE_TRACE = JSON.parse(
   readFileSync(resolve(__dirname, "../fixtures/traces/sample-redacted.json"), "utf8"),
 );
 
 const STATE_PATH = resolve(__dirname, "../.auth-state.json");
 
+/** True for localhost / 127.0.0.1 (local portal + seed-auth). */
+export function isLocalHost(hostname) {
+  return /^(localhost|127\.0\.0\.1)$/i.test(hostname || "");
+}
+
+/**
+ * Collect hostnames from Playwright storageState origins + cookie domains.
+ * Cookie domains may include a leading dot (e.g. `.example.com`).
+ */
+export function collectAuthStateHosts(state) {
+  const hosts = new Set();
+  const origins = Array.isArray(state?.origins) ? state.origins : [];
+  for (const o of origins) {
+    const raw = typeof o === "string" ? o : o?.origin;
+    if (!raw) continue;
+    try {
+      hosts.add(new URL(raw).hostname);
+    } catch {
+      /* ignore bad origin */
+    }
+  }
+  const cookies = Array.isArray(state?.cookies) ? state.cookies : [];
+  for (const c of cookies) {
+    if (typeof c?.domain === "string" && c.domain.trim()) {
+      hosts.add(c.domain.replace(/^\./, "").toLowerCase());
+    }
+  }
+  return [...hosts];
+}
+
+/**
+ * Whether storageState hosts are compatible with the BASE hostname.
+ * localhost ↔ 127.0.0.1 count as a local pair. Clerk *.accounts.dev alone
+ * never matches a production apex host.
+ */
+export function authStateMatchesBase(state, baseUrl = BASE) {
+  let baseHost = "";
+  try {
+    baseHost = new URL(baseUrl).hostname.toLowerCase();
+  } catch {
+    return { ok: false, baseHost: "", hosts: [], reason: "invalid-base" };
+  }
+  const hosts = collectAuthStateHosts(state).map((h) => h.toLowerCase());
+  if (hosts.length === 0) {
+    return { ok: false, baseHost, hosts, reason: "no-hosts" };
+  }
+
+  const hostMatch = hosts.some(
+    (h) =>
+      h === baseHost ||
+      h === `www.${baseHost}` ||
+      baseHost === `www.${h}` ||
+      baseHost.endsWith(`.${h}`),
+  );
+  const localPair = isLocalHost(baseHost) && hosts.some((h) => isLocalHost(h));
+  if (hostMatch || localPair) {
+    return { ok: true, baseHost, hosts, reason: localPair ? "local-pair" : "host-match" };
+  }
+  return { ok: false, baseHost, hosts, reason: "host-mismatch" };
+}
+
 /**
  * Returns the parsed storageState JSON, or null if not found.
- * Exits non-zero if GOLDEN_CI=1 and no auth state exists — never silently pass
- * without auth in CI mode.
+ * Exits non-zero if GOLDEN_CI=1 and auth state is missing, unparsable, or
+ * domain-mismatched for BASE — never silently pass without usable auth in CI.
  */
 export function loadAuthState() {
   if (!existsSync(STATE_PATH)) {
     if (process.env.GOLDEN_CI === "1") {
       console.error(
         "[golden] FATAL: GOLDEN_CI=1 but e2e/.auth-state.json not found.\n" +
-        "  Run seed-auth.mjs before golden-paths.spec.mjs.\n" +
-        "  Required env vars for seed-auth: CLERK_SECRET_KEY, NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY",
+          "  Run seed-auth.mjs (local) or wait-for-signin.mjs (prod) before golden-paths.\n" +
+          "  Auth cookies must match BASE origin — see helpers.mjs header comments.\n" +
+          "  Required env vars for local seed-auth: CLERK_SECRET_KEY, NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY",
       );
       process.exit(1);
     }
@@ -32,7 +111,21 @@ export function loadAuthState() {
     return null;
   }
   try {
-    return JSON.parse(readFileSync(STATE_PATH, "utf8"));
+    const state = JSON.parse(readFileSync(STATE_PATH, "utf8"));
+    const match = authStateMatchesBase(state, BASE);
+    if (!match.ok) {
+      const msg =
+        `[golden] auth-state hosts (${match.hosts.join(", ") || "none"}) ` +
+        `do not match BASE host (${match.baseHost || "invalid"}).\n` +
+        "  Re-seed against the same origin as BASE (wait-for-signin.mjs for prod).\n" +
+        "  Local Clerk test cookies are not valid on edenobservability.com.";
+      if (process.env.GOLDEN_CI === "1") {
+        console.error(`[golden] FATAL: ${msg}`);
+        process.exit(1);
+      }
+      console.warn(`[golden] WARNING: ${msg}`);
+    }
+    return state;
   } catch (e) {
     console.error("[golden] ERROR: could not parse e2e/.auth-state.json:", String(e).slice(0, 120));
     if (process.env.GOLDEN_CI === "1") process.exit(1);
@@ -58,19 +151,15 @@ export async function assertNoCrash(page) {
  * redirected to /sign-in and no nav links exist.
  */
 export async function assertAuthShell(page) {
-  // The sidebar renders nav links for Dashboard, Traces, Issues etc.
-  // Check for at least one nav anchor inside the sidebar/nav element.
-  const navLinks = page.locator('nav a[href], aside a[href]');
+  const navLinks = page.locator("nav a[href], aside a[href]");
   const count = await navLinks.count();
   if (count === 0) {
-    // Fall back to checking that we're NOT on the sign-in page
     const url = page.url();
-    if (/sign-in|login/.test(url)) {
-      throw new Error(
-        `Auth shell not visible — browser is on sign-in page (${url}).\n` +
-        "  The storageState may have expired. Re-run seed-auth.mjs.",
-      );
-    }
+    throw new Error(
+      `Auth shell not visible — no portal nav links (url: ${url}).\n` +
+        "  storageState may be expired or cookies may not match BASE.\n" +
+        "  Re-run seed-auth.mjs (local) or wait-for-signin.mjs (prod).",
+    );
   }
 }
 
@@ -93,7 +182,6 @@ export async function assertPageLoaded(page, { timeout = 15_000 } = {}) {
     const h1Text = await heading.textContent().catch(() => null);
     return h1Text;
   } catch {
-    // Last-chance: check we're not on an error page
     await assertNoCrash(page);
     const url = page.url();
     if (/sign-in|login/.test(url)) {

@@ -631,8 +631,114 @@ class InsightsService:
     # Dashboard / Overview
     # ──────────────────────────────────────────────────────────────────────
 
+    async def get_overview_from_postgres(
+        self,
+        organization_id: str,
+    ) -> dict[str, Any] | None:
+        """Build overview from the ``insights`` table (detector_loop writes).
+
+        Returns ``None`` when Postgres is unreachable or the table is
+        missing so callers can fall back to the in-memory store with an
+        honesty banner. An empty result set still returns a postgres-
+        sourced overview (honest zero, not a silent in-memory demo).
+        """
+        try:
+            from eden.storage.postgres import get_postgres_client
+
+            client = await get_postgres_client()
+            rows = await client.fetch(
+                """
+                SELECT insight_id, detector, severity, confidence, summary,
+                       recommended_action, affected_trace_ids, payload,
+                       created_at
+                FROM insights
+                WHERE organization_id = $1::uuid
+                ORDER BY created_at DESC
+                LIMIT 500
+                """,
+                organization_id,
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.debug(
+                "get_overview_from_postgres: unavailable (%s)", exc
+            )
+            return None
+
+        by_detector: dict[str, int] = {}
+        by_severity: dict[str, int] = {}
+        recent: list[dict[str, Any]] = []
+        for r in rows:
+            detector = str(r["detector"])
+            severity = str(r["severity"])
+            by_detector[detector] = by_detector.get(detector, 0) + 1
+            by_severity[severity] = by_severity.get(severity, 0) + 1
+
+        for r in rows[:10]:
+            payload = r["payload"] or {}
+            if not isinstance(payload, dict):
+                payload = {}
+            affected = r["affected_trace_ids"] or []
+            if isinstance(affected, str):
+                import json
+
+                try:
+                    affected = json.loads(affected)
+                except Exception:  # noqa: BLE001
+                    affected = []
+            created = r["created_at"]
+            recent.append(
+                {
+                    "insight_id": r["insight_id"],
+                    "detector": r["detector"],
+                    "severity": r["severity"],
+                    "confidence": float(r["confidence"]),
+                    "summary": r["summary"],
+                    "affected_trace_ids": list(affected) if affected else [],
+                    "pattern": payload.get("pattern") or {},
+                    "recommended_action": r["recommended_action"] or "",
+                    "auto_created_dataset": payload.get("auto_created_dataset"),
+                    "metadata": {
+                        **(payload.get("metadata") or {}),
+                        "created_at": (
+                            created.isoformat()
+                            if hasattr(created, "isoformat")
+                            else str(created or "")
+                        ),
+                        "source": "postgres",
+                    },
+                }
+            )
+
+        return {
+            "summary": {
+                "total_traces": 0,
+                "total_insights": len(rows),
+                "total_disparity_reports": 0,
+                "total_datasets": 0,
+                "high_disparity_count": 0,
+                "avg_disparity_score": 0.0,
+                "source": "postgres",
+            },
+            "traces": {"by_realm": {}, "by_outcome": {}},
+            "insights": {
+                "by_detector": by_detector,
+                "by_severity": by_severity,
+                "recent": recent,
+            },
+            "disparity": {
+                "reports": [],
+                "high_disparity_count": 0,
+                "avg_score": 0.0,
+            },
+            "datasets": {"count": 0, "items": []},
+        }
+
     def get_overview(self, tenant_id: str) -> dict[str, Any]:
-        """Get a comprehensive overview for the insights dashboard."""
+        """Get a comprehensive overview for the insights dashboard.
+
+        In-memory only — production detector_loop persists to Postgres
+        separately. Callers should prefer ``get_overview_from_postgres``.
+        """
         traces = self.list_traces(tenant_id, limit=1000)
         insights = self.get_insights(tenant_id, limit=500)
         reports = self.get_disparity_reports(tenant_id, limit=100)
@@ -671,6 +777,10 @@ class InsightsService:
                 "total_datasets": len(datasets),
                 "high_disparity_count": high_disparity_count,
                 "avg_disparity_score": round(avg_disparity, 3),
+                "source": "in_memory",
+                "honesty_banner": (
+                    "demo/in-memory — production detector loop writes separately"
+                ),
             },
             "traces": {
                 "by_realm": by_realm,

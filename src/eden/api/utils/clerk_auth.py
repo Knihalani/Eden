@@ -47,7 +47,6 @@ from eden.api.utils.redact import redact_all
 from eden.config import get_settings
 
 logger = logging.getLogger(__name__)
-_settings = get_settings()
 
 # In-process JWKS cache. Clerk rotates keys rarely (months) so a 1h
 # TTL is more than safe; the per-request ``kid`` lookup still works
@@ -113,9 +112,10 @@ def _derive_jwks_url() -> str | None:
        cookie path, instead of crashing the request thread with
        ``RuntimeError`` like the previous implementation did.
     """
-    if _settings.clerk_jwks_url:
-        return _settings.clerk_jwks_url
-    pk = _settings.clerk_publishable_key
+    settings = get_settings()
+    if settings.clerk_jwks_url:
+        return settings.clerk_jwks_url
+    pk = settings.clerk_publishable_key
     if pk and (pk.startswith("pk_test_") or pk.startswith("pk_live_")):
         # Strip the ``pk_{test,live}_`` prefix; the remainder is a
         # base64-encoded payload whose first (and only, for modern
@@ -203,7 +203,8 @@ async def verify_clerk_token(token: str) -> dict[str, Any] | None:
     stalling the event loop. Production callers (``deps._resolve_token_payload``
     and ``websocket._authenticate_ws``) now await this function.
     """
-    if not _settings.clerk_secret_key and not _settings.clerk_jwt_key:
+    settings = get_settings()
+    if not settings.clerk_secret_key and not settings.clerk_jwt_key:
         return None
 
     try:
@@ -214,13 +215,13 @@ async def verify_clerk_token(token: str) -> dict[str, Any] | None:
     alg = header.get("alg", "RS256")
 
     # Fast path: static PEM (dev / offline). Avoids the JWKS round-trip.
-    if _settings.clerk_jwt_key and (
+    if settings.clerk_jwt_key and (
         alg.startswith("RS") or alg.startswith("ES")
     ):
         try:
             return jwt.decode(
                 token,
-                _settings.clerk_jwt_key,
+                settings.clerk_jwt_key,
                 algorithms=[alg],
                 options={"verify_aud": False},
             )
@@ -371,9 +372,13 @@ def clerk_role_to_eden_role(clerk_role: str | None) -> str:
     """
     if not clerk_role:
         return "viewer"
-    if clerk_role == "org:admin":
+    # Clerk default JWT uses abbreviated ``o.rol`` = ``admin`` /
+    # ``member``; custom templates and Backend API use ``org:admin`` /
+    # ``org:member``. Accept both so creators aren't mapped to
+    # ``viewer`` (missing) or a random fallthrough.
+    if clerk_role in ("org:admin", "admin"):
         return "owner"
-    if clerk_role == "org:member":
+    if clerk_role in ("org:member", "member"):
         return "member"
     # Any custom role defaults to admin so we don't accidentally
     # demote someone who was set up with a non-standard slug.

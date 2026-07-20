@@ -1,8 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { useOrgQuery } from "@/hooks/use-api-query";
+import { queryKeys } from "@/lib/query-keys";
 import { usePermissions } from "@/hooks/use-permissions";
 import { api } from "@/lib/api";
+import { Button } from "@/components/ui/button";
+import { ErrorState } from "@/components/ui/error-state";
 import { errorFromCaught } from "@/lib/safe-error-message";
 
 interface SSOProvider {
@@ -23,8 +27,6 @@ interface SSOTabProps {
 
 export function SSOTab({ orgId }: SSOTabProps) {
   const { hasPermission } = usePermissions();
-  const [providers, setProviders] = useState<SSOProvider[]>([]);
-  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [formData, setFormData] = useState({
@@ -39,22 +41,20 @@ export function SSOTab({ orgId }: SSOTabProps) {
   const canManage = hasPermission("settings:edit");
   const ssoCallbackAvailable = false;
 
+  const providersQuery = useOrgQuery(
+    queryKeys.sso.providers(orgId),
+    orgId,
+    async () => (await api.listSSOProviders(orgId)) as SSOProvider[],
+  );
+  const providers = providersQuery.data ?? [];
+  const loading = providersQuery.isLoading;
+  const loadError = providersQuery.error
+    ? errorFromCaught(providersQuery.error, "Failed to load SSO providers")
+    : null;
   const fetchProviders = async () => {
-    setLoading(true);
     setError(null);
-    try {
-      const data = await api.listSSOProviders(orgId);
-      setProviders(data as SSOProvider[]);
-    } catch (err) {
-      setError(errorFromCaught(err, "Failed to fetch SSO providers"));
-    } finally {
-      setLoading(false);
-    }
+    await providersQuery.refetch();
   };
-
-  useEffect(() => {
-    void fetchProviders();
-  }, [orgId]);
 
   const handleEnable = async (providerId: string, enabled: boolean) => {
     try {
@@ -170,6 +170,16 @@ export function SSOTab({ orgId }: SSOTabProps) {
           <div className="h-16 rounded-lg bg-[var(--bg-tertiary)] animate-pulse" />
           <div className="h-16 rounded-lg bg-[var(--bg-tertiary)] animate-pulse" />
         </div>
+      ) : loadError ? (
+        <ErrorState
+          title="Could not load SSO providers"
+          message={loadError}
+          action={
+            <Button variant="outline" size="sm" onClick={() => void fetchProviders()}>
+              Try again
+            </Button>
+          }
+        />
       ) : providers.length === 0 ? (
         <p className="text-sm text-[var(--text-muted)]">No SSO providers configured.</p>
       ) : (

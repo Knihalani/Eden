@@ -17,7 +17,6 @@ import Link from "next/link";
 import { useEffect, useMemo, useRef } from "react";
 import { Activity, BarChart3, Brain, Compass, History, Network, Sparkles, ArrowRight, TrendingUp, Zap, DollarSign, AlertOctagon, Bot, LineChart, RefreshCw, Radio } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
-import { motion } from "framer-motion";
 import { PageHeader } from "@/components/layout/page-header";
 import { PageContent } from "@/components/layout/page-content";
 import { Card } from "@/components/ui/card";
@@ -63,6 +62,11 @@ const SUBPAGES: SubPage[] = [{
   title: "Query",
   description: "Trace Query DSL with EQL syntax over the columnar engine",
   icon: Sparkles
+}, {
+  href: "/observability/cohorts",
+  title: "Columnar Engine",
+  description: "Read-only SQL across ClickHouse partitions and rollups",
+  icon: Activity
 }, {
   href: "/observability/retrieval",
   title: "Retrieval",
@@ -146,13 +150,16 @@ export default function ObservabilityLanding() {
       });
     }
     const overview = insightsQuery.data ?? null;
-    for (const area of overview?.top_friction_areas?.slice(0, 2) ?? []) {
+    for (const insight of overview?.insights?.recent?.slice(0, 2) ?? []) {
       generated.push({
-        id: `friction-${area.area}`,
-        severity: area.severity === "high" ? "high" : "medium",
+        id: `insight-${insight.insight_id}`,
+        severity:
+          insight.severity === "critical" || insight.severity === "high"
+            ? "high"
+            : "medium",
         kind: "eval",
-        title: area.area,
-        description: `${area.count} friction signals detected`,
+        title: insight.detector,
+        description: insight.summary,
         href: "/insights",
       });
     }
@@ -473,15 +480,7 @@ function InsightCard({
   const sevTone = insight.severity === "high" ? "border-[var(--error)]/30 bg-[var(--error-dim)]/40" : insight.severity === "medium" ? "border-[var(--warning)]/30 bg-[var(--warning-bg)]/40" : "border-[var(--border-default)] bg-[var(--bg-primary)]";
   const sevLabel = insight.severity === "high" ? "High" : insight.severity === "medium" ? "Medium" : "Low";
   const sevColor = insight.severity === "high" ? "text-[var(--error)]" : insight.severity === "medium" ? "text-[var(--warning)]" : "text-[var(--text-muted)]";
-  return <motion.div initial={{
-    opacity: 0,
-    y: 6
-  }} animate={{
-    opacity: 1,
-    y: 0
-  }} transition={{
-    duration: 0.2
-  }} className={cn("snap-start shrink-0 w-72 rounded-xl border p-4 flex flex-col gap-2", sevTone)}>
+  return <div className={cn("snap-start shrink-0 w-72 rounded-xl border p-4 flex flex-col gap-2", sevTone)}>
       <div className="flex items-center justify-between">
         <span className={cn("text-[10px] font-bold uppercase tracking-wider", sevColor)}>
           {sevLabel}
@@ -496,5 +495,5 @@ function InsightCard({
       <p className="text-xs text-[var(--text-secondary)] line-clamp-2">
         {insight.description}
       </p>
-    </motion.div>;
+    </div>;
 }

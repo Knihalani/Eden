@@ -68,6 +68,8 @@ export interface Organization {
   /** Clerk organization id (``org_…``) when synced; used to match
    *  ``useOrganization()`` active org to the Eden row. */
   clerk_org_id?: string | null;
+  /** Solo personal workspace (migration 046). Soft-hides invite/SCIM/transfer. */
+  is_personal?: boolean;
   /** Backend ``organizations.features`` JSONB column. May be
    *  undefined for older ``getOrg`` responses that didn't return it. */
   settings?: Record<string, unknown>;

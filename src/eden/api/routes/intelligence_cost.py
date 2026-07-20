@@ -21,10 +21,10 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from fastapi import APIRouter, Body, Depends, Path, Query
+from fastapi import APIRouter, Body, Depends, Query
 from pydantic import BaseModel
 
-from eden.api.deps import get_current_user, require_feature_flag, require_org_member
+from eden.api.deps import get_current_user, require_feature_flag, require_path_org_access
 from eden.services.cost_intel.efficiency import (
     CostAnomalyDetector,
     CostEfficiencyScorer,
@@ -40,7 +40,7 @@ router = APIRouter(
     dependencies=[
         Depends(require_feature_flag("intelligence_gap_v0")),
         Depends(get_current_user),
-        Depends(require_org_member),
+        Depends(require_path_org_access),
     ],
 )
 
@@ -65,7 +65,7 @@ class AnomalyRequest(BaseModel):
 
 @router.post("/efficiency")
 async def efficiency(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     body: EfficiencyRequest = Body(...),
 ) -> dict[str, Any]:
     return await _eff.score(
@@ -75,7 +75,7 @@ async def efficiency(
 
 @router.post("/roi")
 async def roi(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     body: ROIRequest = Body(...),
 ) -> dict[str, Any]:
     return await _roi.roi(org_id, window=body.window)
@@ -83,7 +83,7 @@ async def roi(
 
 @router.post("/anomalies")
 async def anomalies(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     body: AnomalyRequest = Body(...),
 ) -> dict[str, Any]:
     return await _anom.detect(org_id, window=body.window)
@@ -91,7 +91,7 @@ async def anomalies(
 
 @router.get("/forecast")
 async def forecast(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     horizon_days: int = Query(7, ge=1, le=90),
 ) -> dict[str, Any]:
     return await _forecast.forecast(org_id, horizon_days=horizon_days)

@@ -3,6 +3,38 @@
 use crate::errors::{Error, Result};
 use std::env;
 
+/// Backend allow-list (`settings.ingestion_allowed_formats`).
+const ALLOWED_INGEST_FORMATS: &[&str] = &[
+    "otel",
+    "helicone",
+    "langfuse",
+    "openai",
+    "anthropic",
+    "bedrock",
+    "gemini",
+    "framework",
+    "webhook",
+];
+
+/// Map a source_format label onto an allow-listed `/ingest/{format}` path.
+///
+/// Unknown / SDK-semantic labels (`custom`, `langchain`, …) remap to
+/// `webhook` so the gateway does not return HTTP 415. Mirrors the
+/// Python / TypeScript SDKs.
+pub fn resolve_ingest_path(source_format: &str) -> &'static str {
+    let fmt = source_format.trim().to_ascii_lowercase();
+    if fmt.is_empty() {
+        return "webhook";
+    }
+    for allowed in ALLOWED_INGEST_FORMATS {
+        if *allowed == fmt {
+            // Return the static slice from the allow-list table.
+            return allowed;
+        }
+    }
+    "webhook"
+}
+
 /// Ingest target — which format-specific endpoint to POST to.
 ///
 /// Mirrors the path segment used by the multi-format ingest route
@@ -22,7 +54,7 @@ pub enum IngestTarget {
 }
 
 impl IngestTarget {
-    /// Wire format string used in the URL path.
+    /// Wire format string used in the URL path (already allow-listed).
     pub fn as_path(&self) -> &'static str {
         match self {
             IngestTarget::Openai => "openai",
@@ -80,11 +112,17 @@ impl Config {
 
     /// Build a `Config` from `EDEN_*` environment variables.
     ///
-    /// Required: `EDEN_API_KEY`, `EDEN_DEFAULT_ORG`. Optional:
+    /// Required: `EDEN_API_KEY`, and either `EDEN_DEFAULT_ORG` or
+    /// `EDEN_ORG_ID` (alias for parity with Py/TS/Go). Optional:
     /// `EDEN_BASE_URL` (defaults to `http://localhost:8000`).
     pub fn from_env() -> Result<Self> {
         let org_id = env::var("EDEN_DEFAULT_ORG")
-            .map_err(|_| Error::Config("EDEN_DEFAULT_ORG is not set".into()))?;
+            .or_else(|_| env::var("EDEN_ORG_ID"))
+            .map_err(|_| {
+                Error::Config(
+                    "EDEN_DEFAULT_ORG (or EDEN_ORG_ID) is not set".into(),
+                )
+            })?;
         let api_key = env::var("EDEN_API_KEY")
             .map_err(|_| Error::Config("EDEN_API_KEY is not set".into()))?;
         let base_url = env::var("EDEN_BASE_URL")
@@ -104,13 +142,95 @@ impl Config {
         self
     }
 
-    /// Build the full ingest URL for a given target.
+    /// Build the full ingest URL for a typed target (allow-listed path).
     pub fn ingest_url(&self, target: IngestTarget) -> String {
+        self.ingest_url_for(target.as_path())
+    }
+
+    /// Build the full ingest URL for a free-form source_format label.
+    /// Non-allowlisted labels remap to `webhook`.
+    pub fn ingest_url_for(&self, source_format: &str) -> String {
         format!(
             "{}/orgs/{}/ingest/{}",
             self.base_url.trim_end_matches('/'),
             self.org_id,
-            target.as_path(),
+            resolve_ingest_path(source_format),
         )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::Mutex;
+
+    // Serialise env-mutating tests — process env is shared.
+    static ENV_LOCK: Mutex<()> = Mutex::new(());
+
+    #[test]
+    fn resolve_ingest_path_allowlisted_passthrough() {
+        assert_eq!(resolve_ingest_path("openai"), "openai");
+        assert_eq!(resolve_ingest_path("Anthropic"), "anthropic");
+        assert_eq!(resolve_ingest_path("webhook"), "webhook");
+        assert_eq!(resolve_ingest_path("otel"), "otel");
+    }
+
+    #[test]
+    fn resolve_ingest_path_unknown_to_webhook() {
+        for bad in ["custom", "langchain", "vercel-ai", "eden-sdk-doctor", ""] {
+            assert_eq!(
+                resolve_ingest_path(bad),
+                "webhook",
+                "expected remap for {bad}"
+            );
+        }
+    }
+
+    #[test]
+    fn ingest_url_for_remaps_custom() {
+        let cfg = Config::new("http://localhost:8000", "org_x", "sk_x").unwrap();
+        assert_eq!(
+            cfg.ingest_url_for("custom"),
+            "http://localhost:8000/orgs/org_x/ingest/webhook"
+        );
+        assert_eq!(
+            cfg.ingest_url_for("langchain"),
+            "http://localhost:8000/orgs/org_x/ingest/webhook"
+        );
+        assert_eq!(
+            cfg.ingest_url(IngestTarget::Openai),
+            "http://localhost:8000/orgs/org_x/ingest/openai"
+        );
+    }
+
+    #[test]
+    fn from_env_accepts_eden_org_id_alias() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        env::remove_var("EDEN_DEFAULT_ORG");
+        env::set_var("EDEN_ORG_ID", "org_from_alias");
+        env::set_var("EDEN_API_KEY", "sk_test");
+        env::set_var("EDEN_BASE_URL", "http://localhost:8000");
+
+        let cfg = Config::from_env().expect("EDEN_ORG_ID alias should work");
+        assert_eq!(cfg.org_id, "org_from_alias");
+
+        env::remove_var("EDEN_ORG_ID");
+        env::remove_var("EDEN_API_KEY");
+        env::remove_var("EDEN_BASE_URL");
+    }
+
+    #[test]
+    fn from_env_prefers_eden_default_org() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        env::set_var("EDEN_DEFAULT_ORG", "org_default");
+        env::set_var("EDEN_ORG_ID", "org_alias");
+        env::set_var("EDEN_API_KEY", "sk_test");
+
+        let cfg = Config::from_env().unwrap();
+        assert_eq!(cfg.org_id, "org_default");
+
+        env::remove_var("EDEN_DEFAULT_ORG");
+        env::remove_var("EDEN_ORG_ID");
+        env::remove_var("EDEN_API_KEY");
     }
 }

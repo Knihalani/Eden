@@ -5,10 +5,11 @@ import { readFileSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { charDiff } from "@/lib/char-diff";
+import { readApiModules } from "./_read-api";
 
 const ROOT = resolve(__dirname, "../../..");
 const src = (rel: string) => readFileSync(resolve(ROOT, "src", rel), "utf8");
-const api = () => readFileSync(resolve(ROOT, "src/lib/api.ts"), "utf8");
+const api = () => readApiModules(ROOT);
 
 describe("W18 playgrounds U03/F49", () => {
   it("ships persisted playgroundApi surface", () => {

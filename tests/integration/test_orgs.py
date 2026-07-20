@@ -29,6 +29,11 @@ from fastapi.testclient import TestClient
 
 # ── Shared fixtures ───────────────────────────────────────────────────
 
+# Valid UUID org ids — seat/quota checks bind org_id as UUID.
+ORG_EDEN_1 = "00000000-0000-0000-0000-0000000000e1"
+ORG_EDEN_2 = "00000000-0000-0000-0000-0000000000e2"
+ORG_EDEN_3 = "00000000-0000-0000-0000-0000000000e3"
+
 CLERK_OK_ORG = {
     "id": "org_2xabc123",
     "name": "Acme AI Labs",
@@ -69,11 +74,14 @@ class TestCreateOrgClerkSync:
         call_path = mock_post.call_args.args[0]
         assert call_path == "/organizations"
         # Verify the slug was passed (``Acme Labs`` → ``acme-labs``
-        # via the route's ``slugify()`` helper; single space → single
-        # dash, no consecutive dashes).
+        # via the route's ``slugify()`` helper). Mock postgres treats
+        # ``SELECT id FROM organizations WHERE slug`` as a hit, so the
+        # route may append ``-{8 hex}`` for uniqueness — accept either.
         call_body = mock_post.call_args.args[1]
         assert call_body["name"] == "Acme Labs"
-        assert call_body["slug"] == "acme-labs"
+        assert call_body["slug"] == "acme-labs" or call_body["slug"].startswith(
+            "acme-labs-"
+        )
 
     def test_create_org_degraded_when_clerk_unreachable(
         self, api_client: TestClient, auth_headers: dict
@@ -114,7 +122,7 @@ class TestAcceptInviteClerkSync:
 
         fake_invite = {
             "id": "inv-1",
-            "org_id": "org-eden-1",
+            "org_id": ORG_EDEN_1,
             "org_name": "Acme AI Labs",
             "email": "test@example.com",
             "role": "member",
@@ -125,7 +133,7 @@ class TestAcceptInviteClerkSync:
         }
         # ``resolve_clerk_org_id`` reads from Postgres; prime the
         # conftest's per-test override queue so it returns the
-        # bridge column value for ``org-eden-1``.
+        # bridge column value for ORG_EDEN_1.
         mock_postgres_client._fetchrow_overrides.append(
             ("COALESCE(clerk_org_id", {"clerk_org_id": "org_2xabc123"}),
         )
@@ -135,13 +143,17 @@ class TestAcceptInviteClerkSync:
         mock_postgres_client._fetchrow_overrides.append(
             ("FROM org_invitations", {
                 "id": "inv-1",
-                "org_id": "org-eden-1",
+                "org_id": ORG_EDEN_1,
                 "email": "test@example.com",
                 "role": "member",
                 "status": "pending",
                 "expires_at": datetime.utcnow() + timedelta(days=7),
                 "invited_by": "user-0",
             }),
+        )
+        # Clerk membership side-effect needs users.clerk_id.
+        mock_postgres_client._fetchrow_overrides.append(
+            ("SELECT clerk_id FROM users", {"clerk_id": "user_2xclerk"}),
         )
         with patch.object(
             auth_routes, "verify_invite_token", return_value=fake_invite,
@@ -174,7 +186,7 @@ class TestAcceptInviteClerkSync:
 
         fake_invite = {
             "id": "inv-2",
-            "org_id": "org-eden-2",
+            "org_id": ORG_EDEN_2,
             "org_name": "Beta",
             "email": "test@example.com",
             "role": "viewer",
@@ -189,7 +201,7 @@ class TestAcceptInviteClerkSync:
         mock_postgres_client._fetchrow_overrides.append(
             ("FROM org_invitations", {
                 "id": "inv-2",
-                "org_id": "org-eden-2",
+                "org_id": ORG_EDEN_2,
                 "email": "test@example.com",
                 "role": "viewer",
                 "status": "pending",
@@ -210,29 +222,38 @@ class TestAcceptInviteClerkSync:
         # Local join still succeeds — degraded Clerk sync is logged only
         assert response.status_code == 200, response.text
         body = response.json()
-        assert body["org_id"] == "org-eden-2"
+        assert body["org_id"] == ORG_EDEN_2
         assert body["role"] == "viewer"
         assert "clerk_org_id" in body
 
     def test_accept_per_org_route_includes_clerk_org_id(
-        self, api_client: TestClient, auth_headers: dict
+        self, api_client: TestClient, auth_headers: dict, mock_postgres_client
     ):
         """The per-org accept route mirrors the token route's shape."""
+        # Path-org gate loads the invite before accept_invitation runs.
+        mock_postgres_client._fetchrow_overrides.append(
+            ("FROM org_invitations", {
+                "id": "inv-3",
+                "org_id": ORG_EDEN_3,
+                "email": "test@example.com",
+                "status": "pending",
+            }),
+        )
         with patch(
             "eden.api.routes.orgs.accept_invitation",
-            return_value={
-                "org_id": "org-eden-3",
+            AsyncMock(return_value={
+                "org_id": ORG_EDEN_3,
                 "role": "admin",
                 "clerk_org_id": "org_2xadmin",
-            },
+            }),
         ):
             response = api_client.post(
-                "/orgs/org-eden-3/invites/inv-3/accept",
+                f"/orgs/{ORG_EDEN_3}/invites/inv-3/accept",
                 headers=auth_headers,
             )
         assert response.status_code == 200, response.text
         body = response.json()
-        assert body["org_id"] == "org-eden-3"
+        assert body["org_id"] == ORG_EDEN_3
         assert body["role"] == "admin"
         assert body["clerk_org_id"] == "org_2xadmin"
 
@@ -403,7 +424,8 @@ class TestLastWriterRaceResolution:
         # writer was Clerk. Eden's local row wins on the first race.
         assert "last_writer_source = 'clerk'" in upsert_sql
         assert "CASE" in upsert_sql
-        # The flip: every webhook arrival (even skipped ones) marks
-        # Clerk as the most recent writer so subsequent role changes
-        # propagate normally.
-        assert "last_writer_source = 'clerk'" in upsert_sql
+        # Hand-off: only flip to clerk when roles already agree (or
+        # Clerk already owns the row). Unconditional flip previously
+        # enabled a second weak write to demote owner → member.
+        assert "org_members.role = EXCLUDED.role" in upsert_sql
+        assert "ELSE org_members.last_writer_source" in upsert_sql

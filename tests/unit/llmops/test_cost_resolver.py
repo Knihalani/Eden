@@ -213,6 +213,34 @@ async def test_cache_hit_returns_same_resolution(patch_postgres):
 
 
 @pytest.mark.asyncio
+async def test_cache_hit_preserves_cache_token_rates(patch_postgres):
+    """Cache hit must keep cost_per_1k_cache_read/write (billing accuracy)."""
+    patch_postgres.fetchrow = AsyncMock(return_value=None)
+    resolver = CostResolver(cache_ttl_seconds=60)
+    first = await resolver.resolve(
+        org_id=None, provider="anthropic", model_id="claude-sonnet-4-6",
+    )
+    second = await resolver.resolve(
+        org_id=None, provider="anthropic", model_id="claude-sonnet-4-6",
+    )
+    assert second.cached is True
+    assert second.cost_per_1k_cache_read == first.cost_per_1k_cache_read
+    assert second.cost_per_1k_cache_write == first.cost_per_1k_cache_write
+    assert second.cost_per_1k_cache_read == Decimal("0.0003")
+    assert second.cost_per_1k_cache_write == Decimal("0.00375")
+    # Hit-path estimate must still apply Anthropic cache discount.
+    cost = second.estimate_with_cache(
+        input_tokens=8000, output_tokens=1000, cache_read_tokens=5000,
+    )
+    expected = (
+        Decimal("5000") / Decimal(1000) * Decimal("0.0003")
+        + Decimal("3000") / Decimal(1000) * Decimal("0.003")
+        + Decimal("1000") / Decimal(1000) * Decimal("0.015")
+    )
+    assert cost == expected
+
+
+@pytest.mark.asyncio
 async def test_force_bypasses_cache(patch_postgres):
     patch_postgres.fetchrow = AsyncMock(
         return_value=_fake_override_row(cost_in="0.001", cost_out="0.002")

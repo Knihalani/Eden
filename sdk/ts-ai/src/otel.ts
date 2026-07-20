@@ -31,6 +31,7 @@ export function configureOtelExporter(opts: OtelExporterOptions = {}): void {
     }
     const endpoint = `${cfg.baseUrl.replace(/\/$/, "")}/orgs/${cfg.orgId}/ingest/otel`;
     const headers: Record<string, string> = {};
+    if (cfg.orgId) headers["X-Org-Id"] = cfg.orgId;
     if (cfg.apiKey) headers["X-Org-Api-Key"] = cfg.apiKey;
     if (cfg.projectId) headers["X-Project-Id"] = cfg.projectId;
     if (opts.framework) headers["X-Source-Framework"] = opts.framework;

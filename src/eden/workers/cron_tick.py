@@ -34,8 +34,23 @@ import asyncio
 import logging
 import sys
 from datetime import UTC, datetime
+from typing import Any
 
 logger = logging.getLogger("eden.workers.cron_tick")
+
+
+def _err(exc: BaseException) -> dict[str, object]:
+    """Structured failure payload for tick result dicts."""
+    return {"errors": [str(exc)]}
+
+
+async def _safe_step(name: str, coro: Any) -> dict[str, object] | object:
+    """Await a step; log + return ``{"errors": [...]}`` on failure (never raise)."""
+    try:
+        return await coro
+    except Exception as exc:
+        logger.exception("[cron_tick] %s failed: %s", name, exc)
+        return _err(exc)
 
 
 async def _run_typesense_ttl_cleanup(*, dry_run: bool) -> dict[str, object]:
@@ -55,7 +70,7 @@ async def _run_typesense_ttl_cleanup(*, dry_run: bool) -> dict[str, object]:
         return {"deleted": deleted, "cutoff_epoch": cutoff}
     except Exception as exc:
         logger.exception("[cron_tick] typesense_ttl_cleanup failed: %s", exc)
-        return {"errors": [str(exc)]}
+        return _err(exc)
 
 
 async def _run_daily(now: datetime, *, dry_run: bool) -> dict[str, object]:
@@ -66,18 +81,12 @@ async def _run_daily(now: datetime, *, dry_run: bool) -> dict[str, object]:
         "retention_cron": {},
         "typesense_ttl_cleanup": {},
     }
-    try:
-        out["retention_cron"] = await retention_run(dry_run=dry_run)
-    except Exception as exc:
-        logger.exception("[cron_tick] retention_cron failed: %s", exc)
-        out["retention_cron"] = {"errors": [str(exc)]}
-    try:
-        out["typesense_ttl_cleanup"] = await _run_typesense_ttl_cleanup(
-            dry_run=dry_run
-        )
-    except Exception as exc:
-        logger.exception("[cron_tick] typesense_ttl_cleanup failed: %s", exc)
-        out["typesense_ttl_cleanup"] = {"errors": [str(exc)]}
+    out["retention_cron"] = await _safe_step(
+        "retention_cron", retention_run(dry_run=dry_run)
+    )
+    out["typesense_ttl_cleanup"] = await _safe_step(
+        "typesense_ttl_cleanup", _run_typesense_ttl_cleanup(dry_run=dry_run)
+    )
     return out
 
 
@@ -90,7 +99,7 @@ async def _run_mcp_rollup(*, dry_run: bool) -> dict[str, object]:
         return await get_mcp_service().rollup_registry()
     except Exception as exc:
         logger.exception("[cron_tick] mcp_rollup failed: %s", exc)
-        return {"errors": [str(exc)]}
+        return _err(exc)
 
 
 async def _run_classifier_retrain() -> dict[str, object]:
@@ -100,7 +109,7 @@ async def _run_classifier_retrain() -> dict[str, object]:
         return await ClassifierTrainingPipeline().retrain_due_orgs()
     except Exception as exc:
         logger.exception("[cron_tick] classifier_retrain failed: %s", exc)
-        return {"errors": [str(exc)]}
+        return _err(exc)
 
 
 async def _run_columnar_compaction(*, dry_run: bool) -> dict[str, object]:
@@ -113,7 +122,7 @@ async def _run_columnar_compaction(*, dry_run: bool) -> dict[str, object]:
         return await ColumnarCompactor().compact_due()
     except Exception as exc:
         logger.exception("[cron_tick] columnar_compaction failed: %s", exc)
-        return {"errors": [str(exc)]}
+        return _err(exc)
 
 
 async def _run_eql_alert_watchdog(*, dry_run: bool) -> dict[str, object]:
@@ -126,7 +135,41 @@ async def _run_eql_alert_watchdog(*, dry_run: bool) -> dict[str, object]:
         return await AlertAsCode().fire_due()
     except Exception as exc:
         logger.exception("[cron_tick] eql_alert_watchdog failed: %s", exc)
-        return {"errors": [str(exc)]}
+        return _err(exc)
+
+
+async def _run_auto_curator() -> dict[str, object]:
+    """Per-org auto-curator; one org failure must not abort the rest."""
+    from eden.evaluation.auto_curator import AutoCurator
+    from eden.storage.postgres import get_postgres_client
+
+    pg = await get_postgres_client()
+    if pg is None:
+        return {"skipped": True, "reason": "postgres_unavailable"}
+    org_rows = await pg.fetch(
+        "SELECT id::text AS org_id FROM organizations LIMIT 50"
+    )
+    curator_out: list[dict[str, object]] = []
+    curator = AutoCurator()
+    errors = 0
+    for orow in org_rows:
+        oid = str(orow["org_id"])
+        try:
+            curator_out.append(await curator.run_for_org(oid))
+        except Exception as exc:
+            errors += 1
+            logger.exception(
+                "[cron_tick] auto_curator failed org=%s: %s", oid, exc
+            )
+            curator_out.append({"org_id": oid, "errors": [str(exc)]})
+    result: dict[str, object] = {
+        "orgs": len(curator_out),
+        "runs": curator_out[:5],
+        "error_count": errors,
+    }
+    if errors:
+        result["errors"] = [f"{errors} org(s) failed"]
+    return result
 
 
 async def _tick(*, dry_run: bool) -> dict[str, object]:
@@ -134,91 +177,93 @@ async def _tick(*, dry_run: bool) -> dict[str, object]:
     now = datetime.now(UTC)
     out: dict[str, object] = {"tick_at": now.isoformat(), "dry_run": dry_run}
 
-    try:
-        out["eql_alert_watchdog"] = await _run_eql_alert_watchdog(
-            dry_run=dry_run
-        )
-    except Exception as exc:
-        logger.exception("[cron_tick] eql_alert_watchdog failed: %s", exc)
-        out["eql_alert_watchdog"] = {"errors": [str(exc)]}
+    out["eql_alert_watchdog"] = await _safe_step(
+        "eql_alert_watchdog", _run_eql_alert_watchdog(dry_run=dry_run)
+    )
 
     if now.minute < 10:
-        try:
-            out["columnar_compaction"] = await _run_columnar_compaction(
-                dry_run=dry_run
-            )
-        except Exception as exc:
-            logger.exception("[cron_tick] columnar_compaction failed: %s", exc)
-            out["columnar_compaction"] = {"errors": [str(exc)]}
+        out["columnar_compaction"] = await _safe_step(
+            "columnar_compaction", _run_columnar_compaction(dry_run=dry_run)
+        )
 
     if now.hour == 2 and now.minute < 10 and not dry_run:
-        try:
-            from eden.evaluation.auto_curator import AutoCurator
-            from eden.storage.postgres import get_postgres_client
-
-            pg = await get_postgres_client()
-            if pg is not None:
-                org_rows = await pg.fetch(
-                    "SELECT DISTINCT org_id::text AS org_id FROM organizations LIMIT 50"
-                )
-                curator_out: list[dict[str, object]] = []
-                curator = AutoCurator()
-                for orow in org_rows:
-                    oid = str(orow["org_id"])
-                    curator_out.append(await curator.run_for_org(oid))
-                out["auto_curator"] = {"orgs": len(curator_out), "runs": curator_out[:5]}
-        except Exception as exc:
-            logger.exception("[cron_tick] auto_curator failed: %s", exc)
-            out["auto_curator"] = {"errors": [str(exc)]}
+        out["auto_curator"] = await _safe_step(
+            "auto_curator", _run_auto_curator()
+        )
 
     if now.hour == 3 and now.minute < 10:
         out["daily"] = await _run_daily(now, dry_run=dry_run)
 
     if now.weekday() == 0 and now.hour == 4 and now.minute < 10 and not dry_run:
-        try:
-            from eden.insights.drift_baseline_worker import DriftBaselineWorker
-
-            out["drift_baselines"] = await DriftBaselineWorker().run_once()
-        except Exception as exc:
-            logger.exception("[cron_tick] drift_baselines failed: %s", exc)
-            out["drift_baselines"] = {"errors": [str(exc)]}
+        out["drift_baselines"] = await _safe_step(
+            "drift_baselines",
+            _run_drift_baselines(),
+        )
 
     if now.minute % 15 < 5:
         out["mcp_rollup"] = await _run_mcp_rollup(dry_run=dry_run)
         if not dry_run:
             out["classifier_retrain"] = await _run_classifier_retrain()
 
-    try:
-        from eden.improvement.schedule import run_due_sweeps
-
-        out["improvement_sweeps"] = await run_due_sweeps(dry_run=dry_run)
-    except Exception as exc:
-        logger.exception("[cron_tick] improvement_sweeps failed: %s", exc)
-        out["improvement_sweeps"] = {"errors": [str(exc)]}
+    out["improvement_sweeps"] = await _safe_step(
+        "improvement_sweeps",
+        _run_improvement_sweeps(dry_run=dry_run),
+    )
 
     if not dry_run:
-        try:
-            from eden.nudges.demotion_worker import ArtifactDemotionWorker
-            from eden.nudges.shadow_outcomes import ShadowOutcomeJoiner
-
-            out["artifact_demotion"] = await ArtifactDemotionWorker().run_once()
-            out["shadow_outcome_join"] = await ShadowOutcomeJoiner().run_once()
-        except Exception as exc:
-            logger.exception("[cron_tick] artifacts evolution workers failed: %s", exc)
+        # Isolate each worker so one failure still records the other.
+        out["artifact_demotion"] = await _safe_step(
+            "artifact_demotion", _run_artifact_demotion()
+        )
+        out["shadow_outcome_join"] = await _safe_step(
+            "shadow_outcome_join", _run_shadow_outcome_join()
+        )
 
     if not dry_run and now.minute % 10 < 5:
-        try:
-            from eden.signals.backfill import SignalBackfillWorker
-            from eden.signals.clusterer import SignalEventClusterer
-
-            out["signal_backfill"] = await SignalBackfillWorker().run_once()
-            out["signal_cluster_quiet"] = (
-                await SignalEventClusterer().resolve_quiet_clusters()
-            )
-        except Exception as exc:
-            logger.exception("[cron_tick] signal workers failed: %s", exc)
+        out["signal_backfill"] = await _safe_step(
+            "signal_backfill", _run_signal_backfill()
+        )
+        out["signal_cluster_quiet"] = await _safe_step(
+            "signal_cluster_quiet", _run_signal_cluster_quiet()
+        )
 
     return out
+
+
+async def _run_drift_baselines() -> dict[str, object]:
+    from eden.insights.drift_baseline_worker import DriftBaselineWorker
+
+    return await DriftBaselineWorker().run_once()
+
+
+async def _run_improvement_sweeps(*, dry_run: bool) -> dict[str, object]:
+    from eden.improvement.schedule import run_due_sweeps
+
+    return await run_due_sweeps(dry_run=dry_run)
+
+
+async def _run_artifact_demotion() -> dict[str, object]:
+    from eden.nudges.demotion_worker import ArtifactDemotionWorker
+
+    return await ArtifactDemotionWorker().run_once()
+
+
+async def _run_shadow_outcome_join() -> dict[str, object]:
+    from eden.nudges.shadow_outcomes import ShadowOutcomeJoiner
+
+    return await ShadowOutcomeJoiner().run_once()
+
+
+async def _run_signal_backfill() -> dict[str, object]:
+    from eden.signals.backfill import SignalBackfillWorker
+
+    return await SignalBackfillWorker().run_once()
+
+
+async def _run_signal_cluster_quiet() -> dict[str, object]:
+    from eden.signals.clusterer import SignalEventClusterer
+
+    return await SignalEventClusterer().resolve_quiet_clusters()
 
 
 def main() -> int:
@@ -265,8 +310,13 @@ def main() -> int:
                     logger.exception("[cron_tick] tick failed: %s", exc)
                 await asyncio.sleep(args.loop_seconds)
         else:
-            result = await _tick(dry_run=args.dry_run)
-            logger.info("[cron_tick] %s", result)
+            # Once-mode must also swallow tick failures so Northflank
+            # does not flap; the next schedule is the retry.
+            try:
+                result = await _tick(dry_run=args.dry_run)
+                logger.info("[cron_tick] %s", result)
+            except Exception as exc:
+                logger.exception("[cron_tick] tick failed: %s", exc)
 
     asyncio.run(_go())
     return 0

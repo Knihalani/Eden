@@ -71,54 +71,25 @@ class CostTracker:
             now = datetime.now(UTC)
             day_key = now.strftime("%Y-%m-%d")
             hour_key = now.strftime("%Y-%m-%d-%H")
-
-            # Daily counters per tenant
-            await client.hincrbyfloat(
-                f"eden:cost:{event.tenant_id}:day:{day_key}",
-                "total_cents",
-                float(event.total_cost_cents),
-            )
-            await client.hincrby(
-                f"eden:cost:{event.tenant_id}:day:{day_key}",
-                "tokens",
-                event.total_tokens,
-            )
-
-            # Monthly counter per tenant (used by check_budget)
             month_key = now.strftime("%Y-%m")
-            await client.hincrbyfloat(
-                f"eden:cost:{event.tenant_id}:month:{month_key}",
-                "total_cents",
-                float(event.total_cost_cents),
-            )
-            await client.hincrby(
-                f"eden:cost:{event.tenant_id}:month:{month_key}",
-                "tokens",
-                event.total_tokens,
-            )
 
-            # Hourly counters per model
-            await client.hincrbyfloat(
-                f"eden:cost:model:{event.model}:hour:{hour_key}",
-                "total_cents",
-                float(event.total_cost_cents),
-            )
+            day_hash = f"eden:cost:{event.tenant_id}:day:{day_key}"
+            month_hash = f"eden:cost:{event.tenant_id}:month:{month_key}"
+            model_hash = f"eden:cost:model:{event.model}:hour:{hour_key}"
+            node_hash = f"eden:cost:node:{event.pipeline_node}:day:{day_key}"
+            ttl = 7 * 24 * 3600
 
-            # Pipeline node counters
-            await client.hincrbyfloat(
-                f"eden:cost:node:{event.pipeline_node}:day:{day_key}",
-                "total_cents",
-                float(event.total_cost_cents),
-            )
-
-            # Set TTL on counter keys (7 days)
-            for key in [
-                f"eden:cost:{event.tenant_id}:day:{day_key}",
-                f"eden:cost:{event.tenant_id}:month:{month_key}",
-                f"eden:cost:model:{event.model}:hour:{hour_key}",
-                f"eden:cost:node:{event.pipeline_node}:day:{day_key}",
-            ]:
-                await client.expire(key, 7 * 24 * 3600)
+            # One pipeline = one RTT (was ~10 serial round-trips).
+            pipe = client.pipeline(transaction=False)
+            pipe.hincrbyfloat(day_hash, "total_cents", float(event.total_cost_cents))
+            pipe.hincrby(day_hash, "tokens", event.total_tokens)
+            pipe.hincrbyfloat(month_hash, "total_cents", float(event.total_cost_cents))
+            pipe.hincrby(month_hash, "tokens", event.total_tokens)
+            pipe.hincrbyfloat(model_hash, "total_cents", float(event.total_cost_cents))
+            pipe.hincrbyfloat(node_hash, "total_cents", float(event.total_cost_cents))
+            for key in (day_hash, month_hash, model_hash, node_hash):
+                pipe.expire(key, ttl)
+            await pipe.execute()
 
         except Exception as e:
             logger.warning(f"Cost tracking Redis update failed: {e}")
@@ -140,39 +111,33 @@ class CostTracker:
     ) -> str:
         """Check budget status before incurring new costs.
 
+        Reads org-window consumption from ``budget_service`` (Postgres)
+        so enforcement matches gateway / UsageService caps.
+
         Returns:
             BudgetStatus.OK | SOFT_LIMIT | HARD_LIMIT
 
         Raises:
             BudgetExceededError: If hard limit would be exceeded.
         """
-        client = await get_redis_client()
-        if client is None:
-            return BudgetStatus.OK
-
         try:
-            # Get current month spend from Redis (with fallback to 0)
-            now = datetime.now(UTC)
-            month_key = now.strftime("%Y-%m")
-            current_raw = await client.hget(
-                f"eden:cost:{tenant_id}:month:{month_key}",
-                "total_cents",
-            )
-            current_cents = float(current_raw or 0.0)
+            from eden.services.budget_service import get_budget, get_consumption
 
-            # Get tenant limits from plan tier
-            limits = await self._get_tenant_limits(tenant_id)
-            soft_limit = limits.get("soft_limit_cents", float("inf"))
-            hard_limit = limits.get("hard_limit_cents", float("inf"))
+            budget = await get_budget(tenant_id)
+            window = str(budget.get("window") or "monthly")
+            consumption = await get_consumption(tenant_id, window=window)
+            current_usd = float(consumption.get("cost_usd") or 0.0)
+            soft_usd = float(budget.get("cost_soft_limit_usd") or 0.0)
+            hard_usd = float(budget.get("cost_hard_limit_usd") or 0.0)
+            projected = current_usd + (float(estimated_cost_cents) / 100.0)
 
-            projected = current_cents + estimated_cost_cents
-
-            if projected > hard_limit:
+            if hard_usd > 0 and projected > hard_usd:
                 raise BudgetExceededError(
-                    f"Hard budget limit reached: {current_cents:.2f}c / {hard_limit:.2f}c"
+                    f"Hard budget limit reached: "
+                    f"{current_usd:.4f}$ / {hard_usd:.4f}$"
                 )
 
-            if projected > soft_limit:
+            if soft_usd > 0 and projected > soft_usd:
                 return BudgetStatus.SOFT_LIMIT
 
             return BudgetStatus.OK

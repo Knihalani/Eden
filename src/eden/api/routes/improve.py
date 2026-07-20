@@ -10,7 +10,12 @@ from typing import Any
 from fastapi import APIRouter, Body, Depends, HTTPException, Path, Query
 from pydantic import BaseModel, Field
 
-from eden.api.deps import get_current_user
+from eden.api.deps import (
+    _try_resolve_token_payload,
+    get_current_user,
+    require_org_admin,
+    resolve_path_org_access,
+)
 from eden.api.utils.redact import redact_all
 from eden.improvement.approve import ApproveBlocked, approve_plan, reject_plan_audited
 from eden.improvement.cockpit_aggregator import (
@@ -24,10 +29,20 @@ from eden.improvement.schedule import resolved_schedule
 
 logger = logging.getLogger(__name__)
 
+
+async def _require_path_org(
+    org_id: str = Path(..., description="Organization ID"),
+    user: dict = Depends(get_current_user),
+    payload: dict | None = Depends(_try_resolve_token_payload),
+) -> str:
+    _, eden_org = await resolve_path_org_access(org_id, user, payload)
+    return eden_org
+
+
 router = APIRouter(
     prefix="/orgs/{org_id}/improve",
     tags=["improve"],
-    dependencies=[Depends(get_current_user)],
+    dependencies=[Depends(_require_path_org)],
 )
 
 _aggregator = ImprovementCockpitAggregator()
@@ -102,7 +117,7 @@ class ManualRunRequest(BaseModel):
 
 @router.get("/queue")
 async def get_queue(
-    org_id: str = Path(...),
+    org_id: str = Depends(_require_path_org),
     agent_id: str | None = Query(None),
     limit: int = Query(100, ge=1, le=200),
 ) -> dict[str, Any]:
@@ -112,7 +127,7 @@ async def get_queue(
 
 @router.get("/plans")
 async def list_plans(
-    org_id: str = Path(...),
+    org_id: str = Depends(_require_path_org),
     status: str | None = Query(None),
     plan_kind: str | None = Query(None),
     agent_id: str | None = Query(None),
@@ -131,7 +146,7 @@ async def list_plans(
 
 @router.get("/plans/{plan_id}")
 async def get_plan(
-    org_id: str = Path(...),
+    org_id: str = Depends(_require_path_org),
     plan_id: str = Path(...),
 ) -> dict[str, Any]:
     await _require_agent_v1_async(org_id)
@@ -143,7 +158,7 @@ async def get_plan(
 
 @router.patch("/plans/{plan_id}")
 async def patch_plan(
-    org_id: str = Path(...),
+    org_id: str = Depends(_require_path_org),
     plan_id: str = Path(...),
     body: PlanPatchRequest = Body(...),
 ) -> dict[str, Any]:
@@ -164,7 +179,7 @@ async def patch_plan(
 
 @router.post("/plans/{plan_id}/approve")
 async def approve_plan_route(
-    org_id: str = Path(...),
+    org_id: str = Depends(_require_path_org),
     plan_id: str = Path(...),
     applied_by: str | None = Query(None),
 ) -> dict[str, Any]:
@@ -178,6 +193,12 @@ async def approve_plan_route(
         ) from exc
     if result.get("status") == "not_found":
         raise HTTPException(status_code=404, detail="plan not found")
+    if result.get("status") == "invalid_state":
+        raise HTTPException(status_code=409, detail=result)
+    if result.get("status") in ("stub_pending", "not_implemented"):
+        raise HTTPException(status_code=501, detail=result)
+    if result.get("status") == "unsupported_kind":
+        raise HTTPException(status_code=400, detail=result)
     if result.get("status") == "error":
         raise HTTPException(status_code=503, detail=result)
     return _ok("improvement_plans", result)
@@ -185,7 +206,7 @@ async def approve_plan_route(
 
 @router.post("/plans/{plan_id}/reject")
 async def reject_plan_route(
-    org_id: str = Path(...),
+    org_id: str = Depends(_require_path_org),
     plan_id: str = Path(...),
     body: RejectRequest = Body(default=RejectRequest()),
     rejected_by: str | None = Query(None),
@@ -208,13 +229,19 @@ async def reject_plan_route(
 
 @router.post("/plans/{plan_id}/snooze")
 async def snooze_plan_route(
-    org_id: str = Path(...),
+    org_id: str = Depends(_require_path_org),
     plan_id: str = Path(...),
     body: SnoozePlanRequest = Body(default=SnoozePlanRequest()),
 ) -> dict[str, Any]:
     await _require_agent_v1_async(org_id)
     if body.snoozed_until:
-        until = datetime.fromisoformat(body.snoozed_until.replace("Z", "+00:00"))
+        try:
+            until = datetime.fromisoformat(body.snoozed_until.replace("Z", "+00:00"))
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=422,
+                detail="snoozed_until must be a valid ISO-8601 datetime",
+            ) from exc
     else:
         until = datetime.now(UTC) + timedelta(hours=body.hours)
     plan = await plans_repo.get_plan(org_id, plan_id)
@@ -226,7 +253,7 @@ async def snooze_plan_route(
 
 @router.get("/runs")
 async def list_runs(
-    org_id: str = Path(...),
+    org_id: str = Depends(_require_path_org),
     limit: int = Query(50, ge=1, le=200),
 ) -> dict[str, Any]:
     await _require_agent_v1_async(org_id)
@@ -244,7 +271,7 @@ async def list_runs(
 
 @router.get("/runs/{run_id}")
 async def get_run(
-    org_id: str = Path(...),
+    org_id: str = Depends(_require_path_org),
     run_id: str = Path(...),
 ) -> dict[str, Any]:
     await _require_agent_v1_async(org_id)
@@ -256,7 +283,7 @@ async def get_run(
 
 @router.post("/runs")
 async def trigger_run(
-    org_id: str = Path(...),
+    org_id: str = Depends(_require_path_org),
     body: ManualRunRequest = Body(default=ManualRunRequest()),
 ) -> dict[str, Any]:
     await _require_agent_v1_async(org_id)
@@ -270,7 +297,7 @@ async def trigger_run(
 
 
 @router.get("/schedule")
-async def get_schedule(org_id: str = Path(...)) -> dict[str, Any]:
+async def get_schedule(org_id: str = Depends(_require_path_org)) -> dict[str, Any]:
     await _require_agent_v1_async(org_id)
     sched = await resolved_schedule(org_id)
     return _ok("improvement_schedule", sched)
@@ -278,7 +305,7 @@ async def get_schedule(org_id: str = Path(...)) -> dict[str, Any]:
 
 @router.put("/schedule")
 async def put_schedule(
-    org_id: str = Path(...),
+    org_id: str = Depends(_require_path_org),
     body: ScheduleUpdateRequest = Body(...),
 ) -> dict[str, Any]:
     await _require_agent_v1_async(org_id)
@@ -293,7 +320,7 @@ async def put_schedule(
 
 @router.post("/items/{item_ref:path}/snooze")
 async def snooze(
-    org_id: str = Path(...),
+    org_id: str = Depends(_require_path_org),
     item_ref: str = Path(...),
     body: SnoozeRequest = Body(default=SnoozeRequest()),
 ) -> dict[str, Any]:
@@ -307,12 +334,15 @@ async def snooze(
 
 @router.post("/items/{item_ref:path}/approve")
 async def approve(
-    org_id: str = Path(...),
+    org_id: str = Depends(_require_path_org),
     item_ref: str = Path(...),
     applied_by: str | None = Query(None),
+    payload: dict | None = Depends(_try_resolve_token_payload),
 ) -> dict[str, Any]:
     """Route approve to the underlying closed-loop / patch surface."""
     if item_ref.startswith("closed_loop:"):
+        await require_org_admin(org_id, payload)
+        await _require_agent_v1_async(org_id)
         action_id = item_ref.split(":", 1)[1]
         from eden.llmops.closed_loop_executor import ClosedLoopExecutor
 
@@ -322,19 +352,35 @@ async def approve(
         return _ok("improvement_cockpit", {"item_ref": item_ref, "result": result})
 
     if item_ref.startswith("improvement_plan:"):
+        await _require_agent_v1_async(org_id)
         plan_id = item_ref.split(":", 1)[1]
         try:
             result = await approve_plan(org_id, plan_id, approved_by=applied_by)
         except ApproveBlocked as exc:
-            return _ok(
-                "improvement_cockpit",
-                {"item_ref": item_ref, "status": "blocked", "blocked_reason": exc.reason},
-            )
+            raise HTTPException(
+                status_code=403,
+                detail={
+                    "item_ref": item_ref,
+                    "status": "blocked",
+                    "blocked_reason": exc.reason,
+                },
+            ) from exc
+        status = result.get("status")
+        if status == "not_found":
+            raise HTTPException(status_code=404, detail=result)
+        if status == "invalid_state":
+            raise HTTPException(status_code=409, detail=result)
+        if status in ("stub_pending", "not_implemented"):
+            raise HTTPException(status_code=501, detail=result)
+        if status == "unsupported_kind":
+            raise HTTPException(status_code=400, detail=result)
+        if status == "error":
+            raise HTTPException(status_code=503, detail=result)
         return _ok("improvement_cockpit", {"item_ref": item_ref, "result": result})
 
-    return _ok(
-        "improvement_cockpit",
-        {
+    raise HTTPException(
+        status_code=400,
+        detail={
             "item_ref": item_ref,
             "status": "unsupported",
             "message": "Approve not wired for this item type",
@@ -344,7 +390,7 @@ async def approve(
 
 @router.post("/autofix/{issue_id}")
 async def autofix(
-    org_id: str = Path(...),
+    org_id: str = Depends(_require_path_org),
     issue_id: str = Path(...),
     body: AutofixRequest = Body(default=AutofixRequest()),
 ) -> dict[str, Any]:
@@ -353,12 +399,8 @@ async def autofix(
 
     issue = await IssuesRepo().get_issue(org_id, issue_id)
     if issue is None:
-        return {
-            "status": "not_found",
-            "feature": "improvement_cockpit",
-            "live": True,
-            "data": {"issue_id": issue_id},
-        }
+        raise HTTPException(status_code=404, detail="issue not found")
+
 
     triage = issue.triage_result
     if not triage:

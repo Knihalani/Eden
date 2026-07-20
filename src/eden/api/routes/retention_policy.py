@@ -16,7 +16,12 @@ from datetime import UTC, datetime
 from fastapi import APIRouter, Depends, HTTPException, Path
 from pydantic import BaseModel, Field
 
-from eden.api.deps import get_current_user
+from eden.api.deps import (
+    _try_resolve_token_payload,
+    get_current_user,
+    require_org_permission,
+    require_path_org_access,
+)
 from eden.api.utils.redact import redact_all
 from eden.api.utils.safe_error import safe_detail
 from eden.storage.postgres import get_postgres_client
@@ -52,8 +57,8 @@ class RetentionPolicyOut(BaseModel):
 
 @router.get("", response_model=list[RetentionPolicyOut])
 async def list_retention_policies(
-    org_id: str = Path(...),
-    user: dict = Depends(get_current_user),
+    org_id: str = Depends(require_path_org_access),
+    user: dict = Depends(get_current_user)
 ) -> list[RetentionPolicyOut]:
     client = await get_postgres_client()
     if not client:
@@ -91,12 +96,15 @@ async def list_retention_policies(
 @router.put("", response_model=RetentionPolicyOut)
 async def put_retention_policy(
     body: RetentionPolicyIn,
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     user: dict = Depends(get_current_user),
+    payload: dict | None = Depends(_try_resolve_token_payload),
 ) -> RetentionPolicyOut:
     """Replace the active retention policy for a table. Owner-only."""
-    from eden.api.deps import require_org_permission
-    await require_org_permission("retention:override", x_org_id=org_id)
+    # Pass path org_id + resolved JWT explicitly. A bare
+    # ``await require_org_permission(..., x_org_id=org_id)`` leaves
+    # ``payload`` as an unresolved ``Depends(...)`` sentinel → 500.
+    await require_org_permission("retention:override", org_id, payload)
 
     client = await get_postgres_client()
     if not client:
@@ -126,8 +134,27 @@ async def put_retention_policy(
             str(user.get("user_id") or "system"), body.notes, now,
         )
     except Exception as exc:
-        logger.warning(f"put_retention_policy failed: {exc}")
-        raise HTTPException(status_code=500, detail=safe_detail(exc, fallback="Internal error while saving retention policy")) from exc
+        msg = str(exc).lower()
+        if "unique" in msg or "duplicate" in msg:
+            raise HTTPException(
+                status_code=409,
+                detail="Retention policy already exists for this table",
+            ) from exc
+        if "invalid input syntax for type uuid" in msg:
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid organization id",
+            ) from exc
+        if "foreign key" in msg:
+            raise HTTPException(
+                status_code=404,
+                detail="Organization not found",
+            ) from exc
+        logger.warning("put_retention_policy failed: %s", redact_all(str(exc)))
+        raise HTTPException(
+            status_code=503,
+            detail=safe_detail(exc, fallback="Failed to save retention policy"),
+        ) from exc
 
     try:
         from eden.api.deps import log_audit_event

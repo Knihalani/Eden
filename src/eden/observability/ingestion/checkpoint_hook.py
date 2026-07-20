@@ -169,11 +169,11 @@ async def _resolve_step_number(
     if redis is not None:
         try:
             key = f"trace:{trace_id}:llm_step"
-            step = await redis.incr(key)
-            # TTL 24 h — only set on first INCR (when TTL == -1)
-            ttl = await redis.ttl(key)
-            if ttl < 0:
-                await redis.expire(key, 86400)
+            # INCR + EXPIRE in one RTT (was INCR + TTL + optional EXPIRE).
+            pipe = redis.pipeline(transaction=False)
+            pipe.incr(key)
+            pipe.expire(key, 86400)
+            step, _ = await pipe.execute()
             return int(step) - 1  # zero-based to match SDK convention
         except Exception as exc:  # noqa: BLE001
             logger.debug("checkpoint_hook: redis INCR failed: %s", exc)

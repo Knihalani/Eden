@@ -8,7 +8,6 @@ import { api } from "@/lib/api";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { useToast } from "@/components/ui/toast";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorState } from "@/components/ui/error-state";
 import { NoOrgState } from "@/components/ui/no-org-state";
@@ -27,6 +26,7 @@ import {
   Compass,
   ArrowLeft } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { errorFromCaught } from "@/lib/safe-error-message";
 import {
   TranscriptView as MessageTranscript,
   type TranscriptMessage,
@@ -180,7 +180,6 @@ function SpanNode({ span, depth, query }: SpanNodeProps) {
 
 export default function TraceInspectorPage() {
   const { currentOrg } = useOrg();
-  const toast = useToast();
   const [traceId, setTraceId] = useState<string>("");
   const [spans, setSpans] = useState<Span[]>([]);
   const [loading, setLoading] = useState(false);
@@ -218,21 +217,20 @@ export default function TraceInspectorPage() {
         for (const root of roots) visit(root);
         setSpans(flat);
       } catch (err) {
-        const msg = err instanceof Error ? err.message : "Failed to load trace";
-        setError(msg);
-        toast.error(msg);
+        setSpans([]);
+        setError(errorFromCaught(err, "Failed to load trace"));
       } finally {
         setLoading(false);
       }
     },
-    [currentOrg, toast]
+    [currentOrg]
   );
 
-  // Auto-refresh polling — cost-safe via shared hook (pauses on
-  // tab-hidden, backs off on errors, bails on auth failures).
+  // Auto-refresh — default off; when on, 15s (was 3s) via shared
+  // hook (pauses on tab-hidden, backs off on errors, bails on auth).
   usePolling({
     fetch: () => loadTrace(traceId),
-    intervalMs: 3_000,
+    intervalMs: 15_000,
     enabled: Boolean(autoRefresh && traceId),
     deps: [autoRefresh, traceId, loadTrace] });
 

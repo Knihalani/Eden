@@ -5,7 +5,7 @@
 > SOTA parity with Py/TS SDKs (SOTA program keeps Go/Rust as MVP banners).
 
 Minimum-viable Rust client for Eden's telemetry ingest API. Mirrors the
-Python `eden.sdk` and the `@eden/sdk` packages: send a `TraceEvent` to
+Python `eden-sdk` and the `@eden-ai/sdk` packages: send a `TraceEvent` to
 `POST /orgs/{org_id}/ingest/{format}` and Eden's observability platform
 will record it in `telemetry_events`.
 
@@ -86,8 +86,16 @@ The client reads from environment variables by default:
 | Variable | Required | Default |
 |----------|----------|---------|
 | `EDEN_API_KEY` | yes | — |
-| `EDEN_DEFAULT_ORG` | yes | — |
+| `EDEN_DEFAULT_ORG` | yes* | — |
+| `EDEN_ORG_ID` | alias | — |
 | `EDEN_BASE_URL` | no | `http://localhost:8000` |
+
+\* Either `EDEN_DEFAULT_ORG` or `EDEN_ORG_ID` (Py/TS/Go parity alias) must be set;
+`EDEN_DEFAULT_ORG` wins when both are present.
+
+Non-allowlisted ingest format labels (`custom`, framework aliases, …) are
+remapped to `webhook` via `resolve_ingest_path` / `Config::ingest_url_for`
+so the gateway does not return HTTP 415.
 
 You can also construct a `Config` directly:
 

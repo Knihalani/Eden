@@ -1,9 +1,9 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Filter, X, ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { FilterBar } from "@/components/ui/filter-bar";
+import { clearedFilters, FilterBar } from "@/components/ui/filter-bar";
 import {
   parseQueryLanguage,
   suggestQueryCompletions,
@@ -27,7 +27,6 @@ export interface QueryFilterBarProps {
     value: string;
   }>;
   onCreateAlert?: () => void;
-  onSaveAsSignal?: () => void;
   className?: string;
 }
 
@@ -40,12 +39,16 @@ export function QueryFilterBar({
   onQueryChange,
   selects = [],
   onCreateAlert,
-  onSaveAsSignal,
   className,
 }: QueryFilterBarProps) {
   const density = useDensity();
   const [queryDraft, setQueryDraft] = useState(query);
   const [showSuggest, setShowSuggest] = useState(false);
+
+  // Keep draft in sync when URL / parent `query` prop changes (saved views, back nav).
+  useEffect(() => {
+    setQueryDraft(query);
+  }, [query]);
 
   const suggestions = useMemo(
     () => (showSuggest ? suggestQueryCompletions(queryDraft) : []),
@@ -117,15 +120,6 @@ export function QueryFilterBar({
             Create alert from filters
           </button>
         )}
-        {onSaveAsSignal && (
-          <button
-            type="button"
-            onClick={onSaveAsSignal}
-            className="text-xs text-[var(--accent)] hover:underline"
-          >
-            Save as signal
-          </button>
-        )}
       </div>
 
       {mode === "basic" ? (
@@ -133,12 +127,6 @@ export function QueryFilterBar({
           filters={filters}
           onChange={onFiltersChange}
           selects={selects}
-          search={{
-            value: filters.search ?? "",
-            onChange: (v) => onFiltersChange({ ...filters, search: v }),
-            placeholder: "Search traces…",
-            key: "search",
-          }}
         />
       ) : (
         <div className="relative space-y-1">
@@ -162,6 +150,7 @@ export function QueryFilterBar({
                 if (e.key === "Enter") applyQuery();
               }}
               placeholder='latency:>2 agent:support status:error tag:prod'
+              aria-label="Query language filter"
               aria-invalid={Boolean(parseError)}
               aria-describedby={parseError ? "query-lang-error" : "query-lang-docs"}
               className="flex-1 min-w-[12rem] px-3 py-1.5 bg-[var(--bg-secondary)] border border-[var(--border-default)] rounded-lg text-sm font-mono text-[var(--text-primary)] placeholder:text-[var(--text-muted)]"
@@ -173,12 +162,18 @@ export function QueryFilterBar({
             >
               Apply
             </button>
-            {(query || queryDraft) && (
+            {(query || queryDraft || Object.values(filters).some(Boolean)) && (
               <button
                 type="button"
                 onClick={() => {
                   setQueryDraft("");
                   onQueryChange("");
+                  onFiltersChange(
+                    clearedFilters(
+                      filters,
+                      selects.map((s) => s.key),
+                    ),
+                  );
                 }}
                 className="inline-flex items-center gap-1 px-2 py-1 text-xs text-[var(--text-muted)] hover:text-[var(--text-primary)]"
               >

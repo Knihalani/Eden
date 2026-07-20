@@ -97,6 +97,29 @@ function spanToRow(node: SpanNode, options: BuildTranscriptOptions): TranscriptR
   return row;
 }
 
+/** True when a span carries transcript-worthy payload (LLM/tool content). */
+function nodeHasTranscriptContent(node: SpanNode): boolean {
+  const payload = (node.payload as Record<string, unknown>) ?? {};
+  if (payload.messages != null || payload.input_messages != null) return true;
+  if (payload.response != null || payload.output != null || payload.content != null) {
+    return true;
+  }
+  if (payload.request != null) return true;
+  if (Array.isArray(payload.tool_calls) && payload.tool_calls.length > 0) return true;
+  if (payload.tool_result != null) return true;
+  const spanType = String(node.span_type ?? node.event_type ?? "");
+  if (
+    spanType === "tool_invocation" ||
+    spanType === "tool_result" ||
+    spanType.includes("llm") ||
+    spanType.includes("chat") ||
+    spanType.includes("generation")
+  ) {
+    return true;
+  }
+  return false;
+}
+
 /** Build chronological TranscriptRow list from observability trace tree API. */
 export function buildTranscriptRows(
   rootSpans: SpanNode[],
@@ -106,10 +129,13 @@ export function buildTranscriptRows(
   const visit = (nodes: SpanNode[]) => {
     for (const node of nodes) {
       const childNodes = (node.children as SpanNode[] | undefined) ?? [];
+      // Emit leaves always; also emit parents that carry LLM/tool content.
+      if (childNodes.length === 0 || nodeHasTranscriptContent(node)) {
+        const { children: _omit, ...flat } = node;
+        rows.push(spanToRow(flat, options));
+      }
       if (childNodes.length > 0) {
         visit(childNodes);
-      } else {
-        rows.push(spanToRow(node, options));
       }
     }
   };

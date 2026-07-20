@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import { Loader2, AlertTriangle, CheckCircle2, Building2, Sparkles, TrendingUp, Wallet, Target } from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
@@ -17,6 +16,12 @@ import { useOrg } from "@/hooks/use-org";
 import { useOrgQuery } from "@/hooks/use-api-query";
 import { queryKeys } from "@/lib/query-keys";
 import { outcomesApi } from "@/lib/api";
+import {
+  assertOkEnvelope,
+  featureGatedErrorCopy,
+  featureGatedMessage,
+  isRetryableIntelligenceError,
+} from "@/lib/feature-flag-error";
 import { cn } from "@/lib/utils";
 
 /* ----------------------- Helpers -------------------------------------- */
@@ -30,15 +35,31 @@ function formatCurrency(n: number, opts?: { compact?: boolean }) {
   return `$${n.toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
 }
 
-function roiColor(roi: number): string {
+function roiColor(roi: number | null): string {
+  if (roi == null) return "bg-[var(--bg-tertiary)] text-[var(--text-muted)]";
   if (roi >= 2) return "bg-[var(--success-bg)] text-[var(--success)]";
   if (roi >= 1) return "bg-[var(--warning-bg)] text-[var(--warning)]";
   return "bg-[var(--error-bg)] text-[var(--error)]";
 }
 
+function labelOutcomeType(type: string): string {
+  return type
+    .split("_")
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(" ");
+}
+
 /* ----------------------- Departments tab ------------------------------ */
 
-type Department = { department: string; total_cost: number; total_revenue: number; roi: number; trace_count: number; anomaly: string | null };
+/** UI row mapped from BE ``cost_usd`` / ``outcomes_value_usd`` / ``net_roi``. */
+type Department = {
+  department: string;
+  total_cost: number;
+  total_revenue: number;
+  roi: number | null;
+  trace_count: number;
+  anomaly: string | null;
+};
 
 function DepartmentsTab() {
   const { currentOrg } = useOrg();
@@ -53,7 +74,16 @@ function DepartmentsTab() {
     orgId,
     async () => {
       const res = await outcomesApi.listDepartments(orgId!);
-      return res.departments ?? [];
+      const payload = assertOkEnvelope(res, "Could not load departments");
+      const rows = payload.departments ?? [];
+      return rows.map((d) => ({
+        department: d.department,
+        total_cost: d.cost_usd ?? 0,
+        total_revenue: d.outcomes_value_usd ?? 0,
+        roi: d.net_roi,
+        trace_count: d.outcome_count ?? 0,
+        anomaly: d.alert,
+      }));
     },
   );
   const departments: Department[] = data ?? [];
@@ -67,17 +97,20 @@ function DepartmentsTab() {
   }
 
   if (error) {
+    const copy = featureGatedErrorCopy(error, "Could not load departments");
     return (
       <ErrorState
-        title="Could not load departments"
-        message={error.message}
+        title={copy.title}
+        message={copy.message}
         action={
-          <button
-            onClick={() => refetch()}
-            className="inline-flex items-center gap-2 px-3 py-1.5 rounded-md bg-[var(--accent)] text-[var(--bg-base)] text-xs font-medium hover:bg-[var(--accent-hover)] transition-colors"
-          >
-            Try again
-          </button>
+          isRetryableIntelligenceError(error) ? (
+            <button
+              onClick={() => refetch()}
+              className="inline-flex items-center gap-2 px-3 py-1.5 rounded-md bg-[var(--accent)] text-[var(--bg-base)] text-xs font-medium hover:bg-[var(--accent-hover)] transition-colors"
+            >
+              Try again
+            </button>
+          ) : undefined
         }
       />
     );
@@ -86,26 +119,26 @@ function DepartmentsTab() {
   const columns: DataTableColumn<Department>[] = [
     { key: "department", header: "Department", cell: (d) => <span className="font-medium text-[var(--text-primary)]">{d.department}</span>, sortable: true },
     { key: "total_cost", header: "Cost", align: "right", cell: (d) => formatCurrency(d.total_cost, { compact: true }), sortable: true },
-    { key: "total_revenue", header: "Revenue", align: "right", cell: (d) => formatCurrency(d.total_revenue, { compact: true }), sortable: true },
+    { key: "total_revenue", header: "Value", align: "right", cell: (d) => formatCurrency(d.total_revenue, { compact: true }), sortable: true },
     {
       key: "roi",
       header: "ROI",
       align: "right",
       cell: (d) => (
         <span className={cn("inline-flex rounded-full px-2 py-0.5 text-xs font-medium", roiColor(d.roi))}>
-          {d.roi.toFixed(2)}
+          {d.roi == null ? "—" : d.roi.toFixed(2)}
         </span>
       ),
       sortable: true,
     },
-    { key: "trace_count", header: "Traces", align: "right", cell: (d) => d.trace_count.toLocaleString(), sortable: true },
+    { key: "trace_count", header: "Outcomes", align: "right", cell: (d) => d.trace_count.toLocaleString(), sortable: true },
     {
       key: "anomaly",
-      header: "Anomaly",
+      header: "Alert",
       cell: (d) =>
         d.anomaly ? (
           <span className="inline-flex items-center gap-1 rounded-full bg-[var(--error-bg)] px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-[var(--error)]">
-            <AlertTriangle className="h-3 w-3" /> {d.anomaly}
+            <AlertTriangle className="h-3 w-3" /> low ROI
           </span>
         ) : (
           <span className="text-[var(--text-muted)]">—</span>
@@ -117,7 +150,7 @@ function DepartmentsTab() {
     <Card>
       <CardHeader>
         <CardTitle>Departments</CardTitle>
-        <CardDescription>Cost, revenue, and ROI by department</CardDescription>
+        <CardDescription>Cost, outcome value, and ROI by department</CardDescription>
       </CardHeader>
       <CardContent className="px-0 pb-0">
         <DataTable
@@ -136,46 +169,64 @@ function DepartmentsTab() {
 
 /* ----------------------- Track outcome form --------------------------- */
 
-const OUTCOME_OPTIONS = [
-  { value: "won", label: "Won" },
-  { value: "lost", label: "Lost" },
-  { value: "support_resolved", label: "Support resolved" },
-  { value: "churned", label: "Churned" },
-  { value: "renewed", label: "Renewed" },
-  { value: "expanded", label: "Expanded" },
-];
+/** Matches BE ``KNOWN_OUTCOME_TYPES`` in ``eden.analytics.outcomes.tracker``. */
+const KNOWN_OUTCOME_TYPES = [
+  "conversion",
+  "lead",
+  "revenue",
+  "support_deflection",
+  "feature_velocity",
+  "cost_savings",
+  "user_retention",
+  "nps_lift",
+  "ticket_resolved",
+  "document_drafted",
+] as const;
+
+const OUTCOME_OPTIONS = KNOWN_OUTCOME_TYPES.map((value) => ({
+  value,
+  label: labelOutcomeType(value),
+}));
 
 function TrackTab() {
   const { currentOrg } = useOrg();
   const toast = useToast();
   const [traceId, setTraceId] = useState("");
-  const [outcome, setOutcome] = useState("won");
+  const [outcomeType, setOutcomeType] = useState<string>(KNOWN_OUTCOME_TYPES[0]);
   const [department, setDepartment] = useState("");
-  const [revenue, setRevenue] = useState("");
+  const [value, setValue] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!currentOrg || !traceId.trim()) return;
+    const parsedValue = value.trim() ? Number(value) : 0;
+    if (Number.isNaN(parsedValue) || parsedValue < 0) {
+      toast.error("Invalid value", "Value must be a non-negative number");
+      return;
+    }
     setSubmitting(true);
     try {
       const res = await outcomesApi.track(currentOrg.id, {
         trace_id: traceId.trim(),
-        outcome,
+        outcome_type: outcomeType,
+        value: parsedValue,
         department: department.trim() || undefined,
-        revenue: revenue.trim() ? Number(revenue) : undefined,
       });
+      const payload = res.data;
       toast.success(
         "Outcome tracked",
-        `Trace ${res.trace_id.slice(0, 12)}… · ROI ${res.roi.toFixed(2)}`,
+        payload
+          ? `${payload.outcome_type} · $${payload.value.toFixed(2)} · ${payload.outcome_id.slice(0, 12)}…`
+          : "Saved",
       );
       setTraceId("");
       setDepartment("");
-      setRevenue("");
+      setValue("");
     } catch (e) {
       toast.error(
-        "Track failed",
-        e instanceof Error ? e.message : "Failed to track outcome",
+        featureGatedMessage(e, "Track failed"),
+        featureGatedMessage(e, "Failed to track outcome"),
       );
     } finally {
       setSubmitting(false);
@@ -211,11 +262,11 @@ function TrackTab() {
             </label>
             <label className="block">
               <span className="text-xs font-medium uppercase tracking-wide text-[var(--text-muted)]">
-                Outcome
+                Outcome type
               </span>
               <select
-                value={outcome}
-                onChange={(e) => setOutcome(e.target.value)}
+                value={outcomeType}
+                onChange={(e) => setOutcomeType(e.target.value)}
                 aria-label="Outcome type"
                 disabled={submitting}
                 className="mt-1 w-full rounded-md border border-[var(--border-default)] bg-[var(--bg-tertiary)] px-3 py-2 text-sm text-[var(--text-primary)] focus:border-[var(--accent)] focus:outline-none disabled:opacity-60"
@@ -243,16 +294,16 @@ function TrackTab() {
             </label>
             <label className="block">
               <span className="text-xs font-medium uppercase tracking-wide text-[var(--text-muted)]">
-                Revenue (USD)
+                Value (USD)
               </span>
               <input
                 type="number"
-                value={revenue}
-                onChange={(e) => setRevenue(e.target.value)}
+                value={value}
+                onChange={(e) => setValue(e.target.value)}
                 placeholder="0.00"
                 min="0"
                 step="0.01"
-                aria-label="Revenue in USD"
+                aria-label="Outcome value in USD"
                 disabled={submitting}
                 className="mt-1 w-full rounded-md border border-[var(--border-default)] bg-[var(--bg-tertiary)] px-3 py-2 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:border-[var(--accent)] focus:outline-none disabled:opacity-60"
               />
@@ -289,15 +340,22 @@ export default function OutcomesPage() {
   const { currentOrg } = useOrg();
   const orgId = currentOrg?.id;
   const [tab, setTab] = useState<"departments" | "track">("departments");
-  const { data: analytics, isLoading: analyticsLoading } = useOrgQuery(
+  const {
+    data: analytics,
+    isLoading: analyticsLoading,
+    error: analyticsError,
+    refetch: refetchAnalytics,
+  } = useOrgQuery(
     queryKeys.outcomes.analytics(orgId),
     orgId,
     async () => {
       const res = await outcomesApi.getAnalytics(orgId!);
+      const payload = assertOkEnvelope(res, "Could not load outcomes analytics");
+      const summary = payload.summary;
       return {
-        total_revenue: res.total_revenue ?? 0,
-        total_cost: res.total_cost ?? 0,
-        roi: res.roi ?? 0,
+        total_revenue: summary?.total_value_usd ?? 0,
+        total_cost: summary?.total_cost_usd ?? 0,
+        roi: summary?.net_roi ?? null,
       };
     },
   );
@@ -305,6 +363,11 @@ export default function OutcomesPage() {
   if (!currentOrg) {
     return <NoOrgState feature="Outcomes" />;
   }
+
+  const analyticsUnavailable = Boolean(analyticsError);
+  const analyticsCopy = analyticsError
+    ? featureGatedErrorCopy(analyticsError, "Could not load outcomes analytics")
+    : null;
 
   return (
     <PageContent>
@@ -314,26 +377,62 @@ export default function OutcomesPage() {
         subtitle="See which departments are profitable and attribute wins to specific traces."
         icon={Target}
       />
-      {/* KPI strip */}
+      {analyticsCopy ? (
+        <ErrorState
+          title={analyticsCopy.title}
+          message={analyticsCopy.message}
+          action={
+            isRetryableIntelligenceError(analyticsError) ? (
+              <button
+                onClick={() => refetchAnalytics()}
+                className="inline-flex items-center gap-2 px-3 py-1.5 rounded-md bg-[var(--accent)] text-[var(--bg-base)] text-xs font-medium hover:bg-[var(--accent-hover)] transition-colors"
+              >
+                Try again
+              </button>
+            ) : undefined
+          }
+        />
+      ) : null}
+      {/* KPI strip — em-dash while loading or on error (never false $0) */}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <StatCard
-          title="Total revenue"
-          value={analyticsLoading ? "—" : formatCurrency(analytics?.total_revenue ?? 0, { compact: true })}
-          subtitle="Tracked outcomes"
+          title="Total value"
+          value={
+            analyticsLoading || analyticsUnavailable
+              ? "—"
+              : formatCurrency(analytics?.total_revenue ?? 0, { compact: true })
+          }
+          subtitle={
+            analyticsUnavailable ? "unavailable" : analyticsLoading ? "Loading…" : "Tracked outcomes"
+          }
           icon={TrendingUp}
           accent="terminal"
         />
         <StatCard
           title="Total cost"
-          value={analyticsLoading ? "—" : formatCurrency(analytics?.total_cost ?? 0, { compact: true })}
-          subtitle="Attributed"
+          value={
+            analyticsLoading || analyticsUnavailable
+              ? "—"
+              : formatCurrency(analytics?.total_cost ?? 0, { compact: true })
+          }
+          subtitle={
+            analyticsUnavailable ? "unavailable" : analyticsLoading ? "Loading…" : "Attributed"
+          }
           icon={Wallet}
           accent="warning"
         />
         <StatCard
           title="ROI"
-          value={analyticsLoading ? "—" : (analytics?.roi ?? 0).toFixed(2)}
-          subtitle="Revenue / cost"
+          value={
+            analyticsLoading || analyticsUnavailable
+              ? "—"
+              : analytics?.roi == null
+                ? "—"
+                : analytics.roi.toFixed(2)
+          }
+          subtitle={
+            analyticsUnavailable ? "unavailable" : analyticsLoading ? "Loading…" : "Value / cost"
+          }
           icon={Sparkles}
           accent={(analytics?.roi ?? 0) >= 1 ? "accent" : "warning"}
         />
@@ -349,34 +448,26 @@ export default function OutcomesPage() {
           </TabsTrigger>
         </TabsList>
 
-        <AnimatePresence mode="wait">
+        <>
           {tab === "departments" && (
             <TabsContent value="departments">
-              <motion.div
+              <div
                 key="departments"
-                initial={{ opacity: 0, y: 4 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -4 }}
-                transition={{ duration: 0.15 }}
               >
                 {tab === "departments" && <DepartmentsTab />}
-              </motion.div>
+              </div>
             </TabsContent>
           )}
           {tab === "track" && (
             <TabsContent value="track">
-              <motion.div
+              <div
                 key="track"
-                initial={{ opacity: 0, y: 4 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -4 }}
-                transition={{ duration: 0.15 }}
               >
                 {tab === "track" && <TrackTab />}
-              </motion.div>
+              </div>
             </TabsContent>
           )}
-        </AnimatePresence>
+        </>
       </Tabs>
     </PageContent>
   );

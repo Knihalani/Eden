@@ -257,6 +257,11 @@ class EvidenceGate:
 
             client = await get_postgres_client()
             if client is None:
+                report.passed = False
+                report.recommendation = "hold"
+                report.explanation = (
+                    report.explanation or "promote unavailable: no postgres client"
+                )
                 return report
             await client.execute(
                 """
@@ -289,6 +294,9 @@ class EvidenceGate:
                 await self._record_promote_spend(org_id, kind="kb_skill", ref_id=ref_id)
         except Exception as exc:
             logger.warning("evidence_gate: promote failed: %s", exc)
+            report.passed = False
+            report.recommendation = "hold"
+            report.explanation = f"promote failed: {exc}"
 
         return report
 

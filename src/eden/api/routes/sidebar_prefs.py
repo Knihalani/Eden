@@ -11,7 +11,7 @@ Two endpoints:
   * ``PUT /orgs/{org_id}/sidebar-prefs`` — upsert the row for the
     calling user.
 
-Gated by ``require_org_member`` (any org member can persist their
+Gated by ``require_path_org_access`` (any org member can persist their
 own UI prefs; no admin permission needed).
 """
 from __future__ import annotations
@@ -19,10 +19,10 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from fastapi import APIRouter, Depends, Path
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
 
-from eden.api.deps import get_current_user, require_org_member
+from eden.api.deps import get_current_user, require_path_org_access
 from eden.api.utils.redact import redact_all
 from eden.storage.postgres import get_postgres_client
 
@@ -31,6 +31,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(
     prefix="/orgs/{org_id}/sidebar-prefs",
     tags=["sidebar-prefs"],
+    dependencies=[Depends(get_current_user), Depends(require_path_org_access)],
 )
 
 
@@ -45,9 +46,8 @@ class SidebarPrefs(BaseModel):
 
 @router.get("")
 async def get_sidebar_prefs(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     user: dict = Depends(get_current_user),
-    _member: dict = Depends(require_org_member),
 ) -> SidebarPrefs | None:
     """Return the calling user's saved prefs, or ``null`` if unset.
 
@@ -111,9 +111,8 @@ async def get_sidebar_prefs(
 @router.put("")
 async def set_sidebar_prefs(
     prefs: SidebarPrefs,
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     user: dict = Depends(get_current_user),
-    _member: dict = Depends(require_org_member),
 ) -> dict[str, Any]:
     """Upsert the calling user's sidebar prefs row."""
     user_id = user.get("user_id")

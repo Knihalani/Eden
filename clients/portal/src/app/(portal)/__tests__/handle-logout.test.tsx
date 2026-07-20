@@ -45,6 +45,7 @@ vi.mock("@/hooks/use-auth", () => ({
 vi.mock("@/hooks/use-org", () => ({
   useOrg: () => ({
     authError: null,
+    authErrorKind: null,
     clearAuthError,
     currentOrg: null,
     refreshOrgs,

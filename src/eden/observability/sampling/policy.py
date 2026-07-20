@@ -27,8 +27,12 @@ PROFILE_KEEP_RATES: dict[str, float] = {
 
 
 def profile_keep_rate(profile: str) -> float:
-    """Return the probabilistic keep rate for a named profile."""
-    return PROFILE_KEEP_RATES.get(profile, PROFILE_KEEP_RATES["balanced"])
+    """Return the probabilistic keep rate for a named profile.
+
+    Unknown names fall back to ``full`` (100% keep) so a typo cannot
+    silently start dropping traffic under soft-launch defaults.
+    """
+    return PROFILE_KEEP_RATES.get(profile, PROFILE_KEEP_RATES["full"])
 
 
 @dataclass(frozen=True)
@@ -81,7 +85,7 @@ class IntelligenceAwareSamplingPolicy:
     everything (safe rollback).
     """
 
-    profile: SamplingProfile = "balanced"
+    profile: SamplingProfile = "full"  # soft-launch default; ops set balanced
     enabled: bool = True
     slow_threshold_ms: float = 5_000.0
     keep_rate_override: float | None = None
@@ -187,9 +191,12 @@ def get_sampling_policy() -> IntelligenceAwareSamplingPolicy:
         from eden.config import get_settings
 
         s = get_settings()
-        profile = getattr(s, "sampling_profile", "balanced") or "balanced"
+        # Soft-launch default is full (100% keep). Unknown profiles fall
+        # back to full — never to balanced — so a typo cannot silently
+        # start dropping traffic.
+        profile = getattr(s, "sampling_profile", "full") or "full"
         if profile not in PROFILE_KEEP_RATES:
-            profile = "balanced"
+            profile = "full"
         enabled = bool(getattr(s, "sampling_enabled", True))
         override = getattr(s, "probabilistic_sample_rate", None)
         keep_rate_override = None

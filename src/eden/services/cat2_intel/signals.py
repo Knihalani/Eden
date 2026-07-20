@@ -424,14 +424,22 @@ class SignalClusterer:
       3. For each pair with similarity >= threshold,
          union them.
       4. Return the cluster mapping (signal_id → cluster_id).
+
+    Pairwise clustering is O(n²); ``max_signals`` caps n so large
+    orgs never run an unbounded quadratic pass.
     """
+    DEFAULT_MAX_SIGNALS = 500
+
     def __init__(
         self,
         similarity_threshold: float = 0.4,
         embed_fn: Any | None = None,
+        *,
+        max_signals: int = DEFAULT_MAX_SIGNALS,
     ) -> None:
         self.similarity_threshold = similarity_threshold
         self.embed_fn = embed_fn  # reserved for future use
+        self.max_signals = max(1, int(max_signals))
 
     def cluster(
         self,
@@ -440,10 +448,11 @@ class SignalClusterer:
         """Return a dict mapping signal.id → cluster_id.
 
         Signals with no close neighbors get their own
-        unique cluster.
+        unique cluster. Input is truncated to ``max_signals``.
         """
         if not signals:
             return {}
+        signals = signals[: self.max_signals]
         # Compute token sets.
         token_sets: dict[str, set[str]] = {}
         for s in signals:
@@ -489,6 +498,7 @@ class SignalClusterer:
         pairs that are above the threshold. Used by the
         operator dashboard to surface "you already have a
         signal that says this"."""
+        signals = signals[: self.max_signals]
         token_sets: dict[str, set[str]] = {}
         for s in signals:
             kw_set = set(s.rule.keywords) | _token_set(s.description)

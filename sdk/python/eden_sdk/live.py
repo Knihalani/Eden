@@ -23,12 +23,45 @@ def live_mode_enabled(*, stream: bool | None = None) -> bool:
 
 
 class LiveSpanPublisher:
-    """HTTP fallback publisher for in-flight span events."""
+    """HTTP fallback publisher for in-flight span events.
+
+    Reuses a single ``httpx.Client`` so high-frequency span publishes
+    do not open a TCP connection per event.
+    """
 
     def __init__(self) -> None:
         self._local_buffer: list[dict[str, Any]] = []
         self._max_buffer = 500
         self._dropped = 0
+        self._http: Any | None = None
+        self._http_timeout: float | None = None
+
+    def _client(self, timeout_s: float) -> Any:
+        import httpx
+
+        if self._http is None or self._http_timeout != timeout_s:
+            if self._http is not None:
+                try:
+                    self._http.close()
+                except Exception:  # noqa: BLE001
+                    pass
+            self._http = httpx.Client(
+                timeout=timeout_s,
+                limits=httpx.Limits(
+                    max_connections=4, max_keepalive_connections=2
+                ),
+            )
+            self._http_timeout = timeout_s
+        return self._http
+
+    def close(self) -> None:
+        if self._http is not None:
+            try:
+                self._http.close()
+            except Exception:  # noqa: BLE001
+                pass
+            self._http = None
+            self._http_timeout = None
 
     def publish_event(
         self,
@@ -53,18 +86,16 @@ class LiveSpanPublisher:
             f"/stream/traces/{session_id}/publish"
         )
         try:
-            import httpx
-
-            with httpx.Client(timeout=cfg.timeout_s) as client:
-                resp = client.post(url, json=event, headers=cfg.auth_headers())
-                if resp.status_code >= 400:
-                    self._buffer(event)
-                    return {
-                        "status": "buffered",
-                        "reason": f"http_{resp.status_code}",
-                        "dropped": self._dropped,
-                    }
-                return resp.json() if resp.content else {"status": "ok"}
+            client = self._client(cfg.timeout_s)
+            resp = client.post(url, json=event, headers=cfg.auth_headers())
+            if resp.status_code >= 400:
+                self._buffer(event)
+                return {
+                    "status": "buffered",
+                    "reason": f"http_{resp.status_code}",
+                    "dropped": self._dropped,
+                }
+            return resp.json() if resp.content else {"status": "ok"}
         except Exception as exc:
             logger.debug("live publish failed, buffering: %s", exc)
             self._buffer(event)
@@ -96,12 +127,17 @@ class LiveSpanPublisher:
             "step_count": step_count if step_count is not None else len(self._local_buffer),
         }
         try:
-            import httpx
-
-            with httpx.Client(timeout=cfg.timeout_s) as client:
-                resp = client.post(url, json=body, headers=cfg.auth_headers())
+            client = self._client(cfg.timeout_s)
+            resp = client.post(url, json=body, headers=cfg.auth_headers())
+            if resp.status_code >= 400:
+                return {
+                    "status": "error",
+                    "reason": f"http_{resp.status_code}",
+                    "buffered_local": len(self._local_buffer),
+                }
+            if resp.is_success:
                 self._local_buffer.clear()
-                return resp.json() if resp.content else {"status": "ok"}
+            return resp.json() if resp.content else {"status": "ok"}
         except Exception as exc:
             logger.debug("live finalize failed: %s", exc)
             return {"status": "error", "error": str(exc)}

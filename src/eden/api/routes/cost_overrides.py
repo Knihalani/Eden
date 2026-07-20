@@ -32,7 +32,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Path
 from pydantic import BaseModel, Field
 
-from eden.api.deps import get_current_user
+from eden.api.deps import get_current_user, require_path_org_access
 from eden.api.utils.redact import redact_all
 from eden.storage.postgres import get_postgres_client
 
@@ -100,8 +100,8 @@ class CostResolveOut(BaseModel):
 
 @router.get("", response_model=list[CostOverrideOut])
 async def list_cost_overrides(
-    org_id: str = Path(...),
-    user: dict = Depends(get_current_user),
+    org_id: str = Depends(require_path_org_access),
+    user: dict = Depends(get_current_user)
 ) -> list[CostOverrideOut]:
     """List all overrides for the org, newest first."""
     client = await get_postgres_client()
@@ -150,7 +150,7 @@ async def list_cost_overrides(
 @router.post("", response_model=CostOverrideOut, status_code=201)
 async def create_cost_override(
     body: CostOverrideIn,
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     user: dict = Depends(get_current_user),
 ) -> CostOverrideOut:
     """Insert a new override row.
@@ -170,35 +170,64 @@ async def create_cost_override(
             detail="effective_until must be strictly after effective_from",
         )
     override_id = uuid.uuid4()
-    row = await client.fetchrow(
-        """
-        INSERT INTO org_cost_overrides (
-            override_id, org_id, provider, model_id,
-            cost_per_1k_input, cost_per_1k_output,
-            cost_per_1k_cache_read, cost_per_1k_cache_write,
-            currency, source, effective_from, effective_until, notes, created_by
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9,
-                  COALESCE($10, NOW()), $11, $12, $13)
-        RETURNING override_id, org_id, provider, model_id,
-                  cost_per_1k_input, cost_per_1k_output,
-                  cost_per_1k_cache_read, cost_per_1k_cache_write,
-                  currency, source, effective_from, effective_until, notes
-        """,
-        override_id,
-        org_id,
-        body.provider,
-        body.model_id,
-        body.cost_per_1k_input,
-        body.cost_per_1k_output,
-        body.cost_per_1k_cache_read,
-        body.cost_per_1k_cache_write,
-        body.currency,
-        body.source,
-        body.effective_from,
-        body.effective_until,
-        body.notes,
-        uuid.UUID(user["user_id"]) if user.get("user_id") else None,
-    )
+    try:
+        created_by = uuid.UUID(user["user_id"]) if user.get("user_id") else None
+    except (ValueError, TypeError) as exc:
+        raise HTTPException(status_code=400, detail="Invalid user id") from exc
+    try:
+        row = await client.fetchrow(
+            """
+            INSERT INTO org_cost_overrides (
+                override_id, org_id, provider, model_id,
+                cost_per_1k_input, cost_per_1k_output,
+                cost_per_1k_cache_read, cost_per_1k_cache_write,
+                currency, source, effective_from, effective_until, notes, created_by
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
+                      COALESCE($11, NOW()), $12, $13, $14)
+            RETURNING override_id, org_id, provider, model_id,
+                      cost_per_1k_input, cost_per_1k_output,
+                      cost_per_1k_cache_read, cost_per_1k_cache_write,
+                      currency, source, effective_from, effective_until, notes
+            """,
+            override_id,
+            org_id,
+            body.provider,
+            body.model_id,
+            body.cost_per_1k_input,
+            body.cost_per_1k_output,
+            body.cost_per_1k_cache_read,
+            body.cost_per_1k_cache_write,
+            body.currency,
+            body.source,
+            body.effective_from,
+            body.effective_until,
+            body.notes,
+            created_by,
+        )
+    except Exception as exc:
+        msg = str(exc).lower()
+        if "unique" in msg or "duplicate" in msg:
+            raise HTTPException(
+                status_code=409,
+                detail="Cost override already exists",
+            ) from exc
+        if "invalid input syntax for type uuid" in msg:
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid organization or user id",
+            ) from exc
+        if "foreign key" in msg:
+            raise HTTPException(
+                status_code=404,
+                detail="Organization or user not found",
+            ) from exc
+        logger.warning("create_cost_override INSERT failed: %s", redact_all(str(exc)))
+        raise HTTPException(
+            status_code=503,
+            detail="Failed to create cost override",
+        ) from exc
+    if row is None:
+        raise HTTPException(status_code=409, detail="Failed to create cost override")
     # Invalidate the in-process resolver cache so this tenant's
     # subsequent requests pick up the new rate immediately
     # instead of waiting up to 60s for the cache TTL to expire.
@@ -217,7 +246,7 @@ async def create_cost_override(
 @router.delete("/{override_id}", status_code=204)
 async def expire_cost_override(
     override_id: str = Path(...),
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     user: dict = Depends(get_current_user),
 ) -> None:
     """Expire an override row (set ``effective_until = NOW()``).
@@ -246,7 +275,7 @@ async def expire_cost_override(
 @router.post("/resolve", response_model=CostResolveOut)
 async def resolve_cost(
     body: CostResolveIn,
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     user: dict = Depends(get_current_user),
 ) -> CostResolveOut:
     """Dry-run the resolver without making an LLM call.

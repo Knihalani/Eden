@@ -21,7 +21,11 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Path, Query
 from pydantic import BaseModel, Field
 
-from eden.api.routes.auth import get_current_user
+from eden.api.deps import (
+    _try_resolve_token_payload,
+    get_current_user,
+    resolve_path_org_access,
+)
 from eden.observability.sharing import (
     DEFAULT_EXPIRY_DAYS,
     MAX_EXPIRY_DAYS,
@@ -35,10 +39,20 @@ from eden.storage.postgres import get_postgres_client
 logger = logging.getLogger(__name__)
 
 
+async def _require_path_org(
+    org_id: str = Path(..., description="Organization ID"),
+    user: dict = Depends(get_current_user),
+    payload: dict | None = Depends(_try_resolve_token_payload),
+) -> str:
+    _, eden_org = await resolve_path_org_access(org_id, user, payload)
+    return eden_org
+
+
 # Two routers: ``sharing`` (auth-required) and ``public`` (no auth).
 sharing_router = APIRouter(
     prefix="/orgs/{org_id}",
     tags=["sharing"],
+    dependencies=[Depends(_require_path_org)],
 )
 public_router = APIRouter(
     prefix="/public",
@@ -214,7 +228,7 @@ async def _current_user_id(user: dict = Depends(lambda: None)) -> str:
     summary="Mint a public share link for a trace",
 )
 async def create_share(
-    org_id: str = Path(..., description="Organization ID"),
+    org_id: str = Depends(_require_path_org),
     trace_id: str = Path(..., description="Trace to share"),
     body: CreateShareRequest = ...,
     user: dict = Depends(get_current_user),
@@ -247,7 +261,7 @@ async def create_share(
     summary="List active share links for a trace",
 )
 async def list_shares_for_trace(
-    org_id: str = Path(...),
+    org_id: str = Depends(_require_path_org),
     trace_id: str = Path(...),
     user: dict = Depends(get_current_user),
 ) -> ShareListResponse:
@@ -265,7 +279,7 @@ async def list_shares_for_trace(
     summary="List all share links in the org (admin view)",
 )
 async def list_shares(
-    org_id: str = Path(...),
+    org_id: str = Depends(_require_path_org),
     limit: int = Query(default=50, ge=1, le=200),
     user: dict = Depends(get_current_user),
 ) -> ShareListResponse:
@@ -282,7 +296,7 @@ async def list_shares(
     summary="Revoke a share link",
 )
 async def revoke_share(
-    org_id: str = Path(...),
+    org_id: str = Depends(_require_path_org),
     share_id: str = Path(...),
     user: dict = Depends(get_current_user),
 ) -> dict[str, bool]:
@@ -349,7 +363,7 @@ async def public_trace(
     summary="Save a search query",
 )
 async def create_saved_search(
-    org_id: str = Path(...),
+    org_id: str = Depends(_require_path_org),
     body: CreateSavedSearchRequest = ...,
     user: dict = Depends(get_current_user),
 ) -> SavedSearchResponse:
@@ -378,7 +392,7 @@ async def create_saved_search(
     summary="List my saved searches (incl. org-shared)",
 )
 async def list_saved_searches(
-    org_id: str = Path(...),
+    org_id: str = Depends(_require_path_org),
     scope: str = Query(
         default="personal",
         pattern="^(personal|shared|recent)$",
@@ -409,7 +423,7 @@ async def list_saved_searches(
     summary="Update a saved search (owner or admin)",
 )
 async def update_saved_search(
-    org_id: str = Path(...),
+    org_id: str = Depends(_require_path_org),
     search_id: str = Path(...),
     body: UpdateSavedSearchRequest = ...,
     user: dict = Depends(get_current_user),
@@ -437,7 +451,7 @@ async def update_saved_search(
     summary="Delete a saved search (owner or admin)",
 )
 async def delete_saved_search(
-    org_id: str = Path(...),
+    org_id: str = Depends(_require_path_org),
     search_id: str = Path(...),
     user: dict = Depends(get_current_user),
 ) -> dict[str, bool]:
@@ -454,7 +468,7 @@ async def delete_saved_search(
     summary="Record a use of a saved search (bumps use_count)",
 )
 async def record_saved_search_use(
-    org_id: str = Path(...),
+    org_id: str = Depends(_require_path_org),
     search_id: str = Path(...),
     user: dict = Depends(get_current_user),
 ) -> dict[str, bool]:

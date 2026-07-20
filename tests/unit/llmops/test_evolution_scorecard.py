@@ -23,5 +23,15 @@ def test_run_scorecard_full_adds_gates() -> None:
     metrics = result["metrics"]
     assert metrics["suite"] == "full"
     assert metrics["full_suite"] is True
-    assert "lift_gate_pp" in metrics
-    assert "cost_gate_usd" in metrics
+    assert result.get("synthetic") is True
+    assert result.get("kind") == "process_gate_microbench"
+    # Placeholders must not look like real org KPIs (0.0).
+    assert metrics.get("lift_gate_pp") in (None, "n/a (synthetic)")
+    assert metrics.get("cost_gate_usd") in (None, "n/a (synthetic)")
+
+
+def test_run_scorecard_smoke_declares_synthetic() -> None:
+    result = run_scorecard(suite="smoke")
+    assert result.get("synthetic") is True
+    assert result.get("kind") == "process_gate_microbench"
+    assert "not org production" in (result.get("disclaimer") or "").lower()

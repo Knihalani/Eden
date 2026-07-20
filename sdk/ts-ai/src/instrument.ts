@@ -18,7 +18,11 @@ import {
 import type { TraceOptions } from "./types.js";
 
 export interface InstrumentOptions extends TraceOptions {
-  /** When true (default), patch global fetch for LLM HTTP capture. */
+  /**
+   * When true, patch global fetch for LLM HTTP capture.
+   * Default is false when callers use wrap* helpers (avoids double emit).
+   * Pass ``httpCapture: true`` to opt in.
+   */
   httpCapture?: boolean;
 }
 
@@ -32,7 +36,7 @@ export interface InstrumentResult {
 }
 
 export function instrument(opts: InstrumentOptions = {}): InstrumentResult {
-  if (opts.httpCapture !== false) {
+  if (opts.httpCapture === true) {
     installHttpCapture(opts);
   }
   return {

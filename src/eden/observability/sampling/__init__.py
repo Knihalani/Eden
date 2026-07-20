@@ -1,5 +1,10 @@
 """N16 intelligence-aware tail sampling."""
 
+from eden.observability.sampling.apply import (
+    decide_for_event,
+    keep_signals_for_event,
+    should_route_event,
+)
 from eden.observability.sampling.policy import (
     KeepSignals,
     SamplingDecision,
@@ -16,4 +21,7 @@ __all__ = [
     "IntelligenceAwareSamplingPolicy",
     "profile_keep_rate",
     "get_sampling_policy",
+    "keep_signals_for_event",
+    "decide_for_event",
+    "should_route_event",
 ]

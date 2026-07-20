@@ -5,6 +5,7 @@ import {
   useContext,
   useState,
   useCallback,
+  useMemo,
   useRef,
   type ReactNode,
 } from "react";
@@ -27,8 +28,11 @@ interface Toast {
   exiting?: boolean;
 }
 
-interface ToastContextType {
+interface ToastState {
   toasts: Toast[];
+}
+
+interface ToastActions {
   addToast: (
     type: ToastType,
     message: string,
@@ -38,7 +42,8 @@ interface ToastContextType {
   removeToast: (id: string) => void;
 }
 
-const ToastContext = createContext<ToastContextType | null>(null);
+const ToastStateContext = createContext<ToastState | null>(null);
+const ToastActionsContext = createContext<ToastActions | null>(null);
 const MAX_QUEUE = 5;
 
 export function ToastProvider({ children }: { children: ReactNode }) {
@@ -120,39 +125,53 @@ export function ToastProvider({ children }: { children: ReactNode }) {
         const next = [...prev, { id, type, message, description, action }];
         return next.length > MAX_QUEUE ? next.slice(next.length - MAX_QUEUE) : next;
       });
-      const dismissMs = action ? 6000 : description ? 5000 : type === "warning" ? 5000 : 3000;
+      const dismissMs = action
+        ? 6000
+        : description
+          ? 5000
+          : type === "warning"
+            ? 5000
+            : 3000;
       scheduleDismiss(id, dismissMs);
     },
     [scheduleDismiss],
   );
 
+  const stateValue = useMemo<ToastState>(() => ({ toasts }), [toasts]);
+  const actionsValue = useMemo<ToastActions>(
+    () => ({ addToast, removeToast }),
+    [addToast, removeToast],
+  );
+
   return (
-    <ToastContext.Provider value={{ toasts, addToast, removeToast }}>
-      {children}
-      <ToastContainer
-        toasts={toasts}
-        removeToast={removeToast}
-        onPause={pauseToast}
-        onResume={resumeToast}
-      />
-    </ToastContext.Provider>
+    <ToastActionsContext.Provider value={actionsValue}>
+      <ToastStateContext.Provider value={stateValue}>
+        {children}
+        <ToastContainer
+          toasts={toasts}
+          removeToast={removeToast}
+          onPause={pauseToast}
+          onResume={resumeToast}
+        />
+      </ToastStateContext.Provider>
+    </ToastActionsContext.Provider>
   );
 }
 
 export function useToast() {
-  const context = useContext(ToastContext);
-  if (!context) {
+  const actions = useContext(ToastActionsContext);
+  if (!actions) {
     throw new Error("useToast must be used within ToastProvider");
   }
   return {
     success: (message: string, description?: string, action?: ToastAction) =>
-      context.addToast("success", message, description, action),
+      actions.addToast("success", message, description, action),
     error: (message: string, description?: string, action?: ToastAction) =>
-      context.addToast("error", message, description, action),
+      actions.addToast("error", message, description, action),
     info: (message: string, description?: string, action?: ToastAction) =>
-      context.addToast("info", message, description, action),
+      actions.addToast("info", message, description, action),
     warning: (message: string, description?: string, action?: ToastAction) =>
-      context.addToast("warning", message, description, action),
+      actions.addToast("warning", message, description, action),
   };
 }
 

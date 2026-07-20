@@ -13,17 +13,17 @@ from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends
 
-from eden.api.deps import get_current_user
+from eden.api.deps import get_current_user, require_path_org_access
 from eden.api.utils.redact import redact_all
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/orgs/{org_id}/cost", tags=["cost"])
+router = APIRouter(prefix="/orgs/{org_id}/cost", tags=["cost"], dependencies=[Depends(require_path_org_access)])
 
 
 @router.get("/comparison", response_model=dict)
 async def cost_comparison(
-    org_id: str,
+    org_id: str = Depends(require_path_org_access),
     _user: dict = Depends(get_current_user),
 ) -> dict:
     """Compare this calendar month's spend against the previous month.

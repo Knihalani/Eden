@@ -18,6 +18,8 @@ import {
   labelingQueueHref,
   playgroundHref,
 } from "@/lib/portal-cross-links";
+import { ScoresTab } from "@/app/(portal)/observability/ScoresTab";
+import { LatencyHistogram } from "@/components/observability/LatencyHistogram";
 
 export interface TraceDetailPanelProps {
   traceId: string;
@@ -25,11 +27,11 @@ export interface TraceDetailPanelProps {
   highlightSpanId?: string | null;
 }
 
-type DetailMode = "transcript" | "tree" | "meta";
+type DetailMode = "transcript" | "tree" | "meta" | "scores";
 
 export function TraceDetailPanel({ traceId, onClose, highlightSpanId }: TraceDetailPanelProps) {
   const { currentOrg } = useOrg();
-  const [phase, setPhase] = useState<"meta" | "tree" | "ready" | "error">("meta");
+  const [phase, setPhase] = useState<"meta" | "ready" | "error">("meta");
   const [mode, setMode] = useState<DetailMode>("transcript");
   const [error, setError] = useState<string | null>(null);
   const [meta, setMeta] = useState<{
@@ -57,15 +59,30 @@ export function TraceDetailPanel({ traceId, onClose, highlightSpanId }: TraceDet
     setRows([]);
     markEden("eden:panel_open", "trace");
 
-    api
-      .listObservabilityTraces(currentOrg.id, { trace_id: traceId, limit: 1 })
-      .then((list) => {
+    // K4: fetch meta + tree in parallel (was sequential meta→tree).
+    Promise.all([
+      api.listObservabilityTraces(currentOrg.id, { trace_id: traceId, limit: 1 }),
+      api.getTraceTree(currentOrg.id, traceId),
+    ])
+      .then(([list, tree]) => {
         if (cancelled) return;
         const trace = list.traces?.[0];
+        const roots = Array.isArray(tree?.root_spans) ? tree.root_spans : [];
+        // Deep link honesty: 200 + empty list/tree means the id does not exist.
+        if (!trace && roots.length === 0) {
+          setError("Trace not found");
+          setPhase("error");
+          return;
+        }
+        setRows(
+          buildTranscriptRows(roots as Array<Record<string, unknown>>, {
+            lazyToolPayloads: true,
+          }),
+        );
         setMeta({
-          duration_ms: trace?.duration_ms ?? 0,
-          span_count: trace?.span_count ?? 0,
-          outcome: trace?.outcome ?? null,
+          duration_ms: tree?.total_duration_ms ?? trace?.duration_ms ?? 0,
+          span_count: tree?.span_count ?? trace?.span_count ?? 0,
+          outcome: tree?.outcome ?? trace?.outcome ?? null,
           model: trace?.model ?? undefined,
           cost_cents: trace?.cost_cents ?? null,
           session_id:
@@ -74,25 +91,6 @@ export function TraceDetailPanel({ traceId, onClose, highlightSpanId }: TraceDet
             (trace as { session_id?: string } | undefined)?.session_id ??
             null,
         });
-        setPhase("tree");
-        return api.getTraceTree(currentOrg.id, traceId);
-      })
-      .then((tree) => {
-        if (cancelled || !tree) return;
-        const roots = Array.isArray(tree.root_spans) ? tree.root_spans : [];
-        setRows(
-          buildTranscriptRows(roots as Array<Record<string, unknown>>, {
-            lazyToolPayloads: true,
-          }),
-        );
-        setMeta((m) => ({
-          duration_ms: tree.total_duration_ms ?? m?.duration_ms ?? 0,
-          span_count: tree.span_count ?? m?.span_count ?? 0,
-          outcome: tree.outcome ?? m?.outcome ?? null,
-          model: m?.model,
-          cost_cents: m?.cost_cents ?? null,
-          session_id: m?.session_id ?? null,
-        }));
         setPhase("ready");
       })
       .catch((err) => {
@@ -133,13 +131,11 @@ export function TraceDetailPanel({ traceId, onClose, highlightSpanId }: TraceDet
     });
   }, [liveStream.events, liveStream.live]);
 
-  if (phase === "meta" || (phase === "tree" && rows.length === 0 && !liveStream.live)) {
+  if (phase === "meta") {
     return (
       <div className="flex h-48 flex-col items-center justify-center gap-2">
         <Loader2 className="h-5 w-5 animate-spin text-[var(--text-muted)]" />
-        <p className="text-xs text-[var(--text-muted)]">
-          {phase === "meta" ? "Loading trace summary…" : "Loading transcript…"}
-        </p>
+        <p className="text-xs text-[var(--text-muted)]">Loading trace summary…</p>
       </div>
     );
   }
@@ -177,6 +173,16 @@ export function TraceDetailPanel({ traceId, onClose, highlightSpanId }: TraceDet
             Live
           </span>
         )}
+        {liveStream.failed && !liveStream.finalized && (
+          <button
+            type="button"
+            data-testid="live-trace-retry"
+            onClick={() => liveStream.retry()}
+            className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium text-[var(--error)] border border-[var(--error)]/40 hover:bg-[var(--error)]/10"
+          >
+            Live reconnect failed — Retry
+          </button>
+        )}
         {liveStream.finalized && (
           <span className="text-[10px] text-[var(--text-muted)]">Live → persisted</span>
         )}
@@ -196,7 +202,7 @@ export function TraceDetailPanel({ traceId, onClose, highlightSpanId }: TraceDet
           </Link>
         )}
         <div className="inline-flex rounded-md border border-[var(--border-default)] p-0.5 ml-2">
-          {(["transcript", "tree", "meta"] as const).map((m) => (
+          {(["transcript", "tree", "meta", "scores"] as const).map((m) => (
             <button
               key={m}
               type="button"
@@ -223,27 +229,36 @@ export function TraceDetailPanel({ traceId, onClose, highlightSpanId }: TraceDet
         )}
       </div>
       <div className="flex-1 overflow-y-auto p-2">
-        {mode === "meta" ? (
-          <dl className="space-y-2 p-3 text-xs">
-            <div className="flex justify-between gap-4">
-              <dt className="text-[var(--text-muted)]">Trace</dt>
-              <dd className="font-mono break-all">{traceId}</dd>
-            </div>
-            <div className="flex justify-between gap-4">
-              <dt className="text-[var(--text-muted)]">Model</dt>
-              <dd>{meta?.model ?? "—"}</dd>
-            </div>
-            <div className="flex justify-between gap-4">
-              <dt className="text-[var(--text-muted)]">Cost</dt>
-              <dd className="font-mono">
-                {meta?.cost_cents != null ? `$${(meta.cost_cents / 100).toFixed(4)}` : "—"}
-              </dd>
-            </div>
-            <div className="flex justify-between gap-4">
-              <dt className="text-[var(--text-muted)]">Outcome</dt>
-              <dd>{meta?.outcome ?? "—"}</dd>
-            </div>
-          </dl>
+        {mode === "scores" && currentOrg ? (
+          <ScoresTab orgId={currentOrg.id} traceId={traceId} />
+        ) : mode === "meta" ? (
+          <div className="space-y-4 p-3">
+            <dl className="space-y-2 text-xs">
+              <div className="flex justify-between gap-4">
+                <dt className="text-[var(--text-muted)]">Trace</dt>
+                <dd className="font-mono break-all">{traceId}</dd>
+              </div>
+              <div className="flex justify-between gap-4">
+                <dt className="text-[var(--text-muted)]">Model</dt>
+                <dd>{meta?.model ?? "—"}</dd>
+              </div>
+              <div className="flex justify-between gap-4">
+                <dt className="text-[var(--text-muted)]">Cost</dt>
+                <dd className="font-mono">
+                  {meta?.cost_cents != null ? `$${(meta.cost_cents / 100).toFixed(4)}` : "—"}
+                </dd>
+              </div>
+              <div className="flex justify-between gap-4">
+                <dt className="text-[var(--text-muted)]">Outcome</dt>
+                <dd>{meta?.outcome ?? "—"}</dd>
+              </div>
+            </dl>
+            <LatencyHistogram
+              durations={rows.map((r) => r.duration_ms)}
+              height={120}
+              title="Span latency distribution"
+            />
+          </div>
         ) : mode === "tree" ? (
           <ul className="space-y-1 p-2 font-mono text-[11px] text-[var(--text-secondary)]">
             {rows.map((r) => (

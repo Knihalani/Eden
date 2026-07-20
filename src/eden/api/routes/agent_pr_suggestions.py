@@ -27,7 +27,7 @@ The suggester / provider instances are resolved per-request via
 :func:`eden.providers.factory.get_pr_provider_for_org` /
 :func:`eden.providers.factory.get_repo_provider_for_org` so
 installation tokens stay tenant-scoped. Org membership is
-enforced via ``require_org_member``.
+enforced via ``require_path_org_access``.
 """
 
 from __future__ import annotations
@@ -39,7 +39,7 @@ from fastapi import APIRouter, Body, Depends, Path
 from pydantic import BaseModel, Field
 
 from eden.agent import PRSuggester
-from eden.api.deps import get_current_user, require_feature_flag, require_org_member
+from eden.api.deps import get_current_user, require_feature_flag, require_path_org_access
 from eden.api.utils.redact import redact_all
 from eden.providers import (
     PRCreateRequest,
@@ -60,7 +60,7 @@ router = APIRouter(
     dependencies=[
         Depends(require_feature_flag("intelligence_gap_v0")),
         Depends(get_current_user),
-        Depends(require_org_member),
+        Depends(require_path_org_access),
     ],
 )
 
@@ -130,7 +130,7 @@ class OpenPRRequest(BaseModel):
 
 @router.get("")
 async def list_suggestions(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     status: str | None = None,
     trigger: str | None = None,
     since: str | None = None,
@@ -160,7 +160,7 @@ async def list_suggestions(
 
 @router.post("")
 async def create_suggestion(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     body: SuggestRequest = Body(...),
 ) -> dict[str, Any]:
     """Generate a new PR suggestion from an observability trigger.
@@ -189,7 +189,7 @@ async def create_suggestion(
 
 @router.get("/{suggestion_id}")
 async def get_suggestion(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     suggestion_id: str = Path(...),
 ) -> dict[str, Any]:
     """Read a single suggestion (detail view)."""
@@ -217,7 +217,7 @@ async def get_suggestion(
 
 @router.post("/{suggestion_id}/open-pr")
 async def open_pr(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     suggestion_id: str = Path(...),
     body: OpenPRRequest = Body(...),
 ) -> dict[str, Any]:
@@ -360,7 +360,7 @@ class BulkRegenerateRequest(BaseModel):
 
 @router.post("/bulk/regenerate")
 async def bulk_regenerate_suggestions(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     body: BulkRegenerateRequest = Body(...),
 ) -> dict[str, Any]:
     """Regenerate multiple suggestions in one call.
@@ -393,7 +393,7 @@ async def bulk_regenerate_suggestions(
 
 @router.get("/{suggestion_id}/files/{file_path:path}")
 async def get_suggestion_file(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     suggestion_id: str = Path(...),
     file_path: str = Path(...),
 ) -> dict[str, Any]:
@@ -436,7 +436,7 @@ async def get_suggestion_file(
 
 @router.post("/{suggestion_id}/status")
 async def update_suggestion_status(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     suggestion_id: str = Path(...),
     body: StatusUpdateRequest = Body(...),
 ) -> dict[str, Any]:
@@ -478,7 +478,7 @@ async def update_suggestion_status(
 
 @router.post("/{suggestion_id}/regenerate")
 async def regenerate_suggestion(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     suggestion_id: str = Path(...),
 ) -> dict[str, Any]:
     """Re-run the LLM (or heuristic) against the current file state.

@@ -18,7 +18,12 @@ def _app() -> FastAPI:
     async def _fake_user() -> dict:
         return {"id": "user_1", "email": "t@example.com"}
 
+    async def _path_org(org_id: str = "org_1") -> str:
+        return org_id
+
     app.dependency_overrides[improve_routes.get_current_user] = _fake_user
+    # Router-level membership gate (Phase 3 path-org); bypass for smoke tests.
+    app.dependency_overrides[improve_routes._require_path_org] = _path_org
     app.include_router(improve_routes.router)
     return app
 

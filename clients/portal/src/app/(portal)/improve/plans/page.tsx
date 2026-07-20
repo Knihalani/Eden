@@ -4,7 +4,6 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
-  AlertCircle,
   Clock,
   FileCode,
   Filter,
@@ -15,6 +14,7 @@ import {
   TrendingUp,
 } from "lucide-react";
 import { useOrg } from "@/hooks/use-org";
+import { usePermissions } from "@/hooks/use-permissions";
 import { improvePlansApi, type ImprovementPlan, type ImprovementPlanKind, type ImprovementPlanStatus } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { StatCard } from "@/components/ui/stat-card";
@@ -24,11 +24,14 @@ import { Card } from "@/components/ui/card";
 import { ImprovePlanStatusBadge } from "@/components/ui/status-badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/ui/empty-state";
+import { ErrorState } from "@/components/ui/error-state";
 import { NoOrgState } from "@/components/ui/no-org-state";
 import { PageHeader } from "@/components/layout/page-header";
 import { PageContent } from "@/components/layout/page-content";
 import { PlanKindBadge } from "@/components/improve/plan-kind-badge";
+import { ImproveFeatureDisabledState } from "@/components/improve/feature-disabled-state";
 import { errorFromCaught } from "@/lib/safe-error-message";
+import { isImprovementAgentDisabled } from "@/lib/improve-feature";
 import { DOCS_QUICKSTART_URL } from "@/lib/constants";
 
 const PAGE_SIZE = 50;
@@ -122,11 +125,14 @@ function PlanCard({ plan, onClick }: { plan: ImprovementPlan; onClick: () => voi
 
 export default function ImprovementPlansPage() {
   const router = useRouter();
-  const { currentOrg } = useOrg();
+  const { currentOrg, authError } = useOrg();
+  const { hasPermission } = usePermissions();
+  const canManageKeys = hasPermission("settings:edit");
   const [plans, setPlans] = useState<ImprovementPlan[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState("");
+  const [featureDisabled, setFeatureDisabled] = useState(false);
   const [statusFilter, setStatusFilter] = useState<ImprovementPlanStatus | "all">("all");
   const [kindFilter, setKindFilter] = useState<ImprovementPlanKind | "all">("all");
   const [search, setSearch] = useState("");
@@ -138,6 +144,7 @@ export default function ImprovementPlansPage() {
       if (markLoadingMore) setLoadingMore(true);
       else setLoading(true);
       setError("");
+      setFeatureDisabled(false);
       try {
         const params = new URLSearchParams();
         if (statusFilter !== "all") params.set("status", statusFilter);
@@ -147,7 +154,13 @@ export default function ImprovementPlansPage() {
         const data = await improvePlansApi.listPlans(currentOrg.id, params.toString());
         setPlans(data.data.plans ?? []);
       } catch (err) {
-        setError(errorFromCaught(err, "Failed to load plans"));
+        if (isImprovementAgentDisabled(err)) {
+          setFeatureDisabled(true);
+          setError("");
+          setPlans([]);
+        } else {
+          setError(errorFromCaught(err, "Failed to load plans"));
+        }
       } finally {
         setLoading(false);
         setLoadingMore(false);
@@ -185,7 +198,7 @@ export default function ImprovementPlansPage() {
     [plans],
   );
 
-  if (!currentOrg) {
+  if (!currentOrg && !authError) {
     return (
       <NoOrgState
         feature="Improvement plans"
@@ -193,6 +206,7 @@ export default function ImprovementPlansPage() {
       />
     );
   }
+  if (!currentOrg) return null;
 
   return (
     <PageContent size="wide">
@@ -213,6 +227,31 @@ export default function ImprovementPlansPage() {
         }
       />
 
+      {featureDisabled ? (
+        <ImproveFeatureDisabledState />
+      ) : (
+        <>
+      {error ? (
+        <ErrorState
+          title="Could not load plans"
+          message={error}
+          action={
+            <Button
+              onClick={() => void loadPlans(limit)}
+              variant="outline"
+              size="sm"
+              disabled={loading}
+              loading={loading}
+            >
+              Try again
+            </Button>
+          }
+        />
+      ) : null}
+
+      {/* Gate KPI/filters behind !error so outages do not look like an empty inbox. */}
+      {!error ? (
+        <>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <StatCard title="Pending review" value={stats.pending} icon={Clock} />
         <StatCard title="PRs open" value={stats.prOpened} icon={GitPullRequestArrow} />
@@ -264,30 +303,10 @@ export default function ImprovementPlansPage() {
           </div>
         </div>
       </Card>
+        </>
+      ) : null}
 
-      {error && (
-        <Card className="border-[var(--error)]/20 bg-[var(--error)]/5">
-          <div
-            role="alert"
-            className="p-3 text-sm text-[var(--error)] flex items-center justify-between gap-2"
-          >
-            <span className="flex items-center gap-2">
-              <AlertCircle className="h-4 w-4" />
-              {error}
-            </span>
-            <button
-              type="button"
-              onClick={() => void loadPlans(limit)}
-              disabled={loading}
-              className="text-xs font-medium underline underline-offset-2 hover:opacity-80 disabled:opacity-50"
-            >
-              Retry
-            </button>
-          </div>
-        </Card>
-      )}
-
-      {loading && plans.length === 0 ? (
+      {loading && plans.length === 0 && !error ? (
         <div
           role="status"
           aria-live="polite"
@@ -298,26 +317,41 @@ export default function ImprovementPlansPage() {
             <SkeletonCard key={i} />
           ))}
         </div>
-      ) : plans.length === 0 ? (
+      ) : !error && plans.length === 0 ? (
         <EmptyState
           title="No improvement plans yet"
-          description="Needs production traces and Agent Issues first. Create an API key, install the SDK or gateway, then the improvement agent can land ranked plans here."
+          description={
+            canManageKeys
+              ? "Needs production traces and Agent Issues first. Create an API key, install the SDK or gateway, then the improvement agent can land ranked plans here."
+              : "Needs production traces and Agent Issues first. Ask an admin for an API key, or open Traces once data is flowing."
+          }
           icon={History}
           action={
             <div className="flex flex-wrap items-center justify-center gap-2">
-              <a href={DOCS_QUICKSTART_URL} target="_blank" rel="noopener noreferrer">
-                <Button className="min-h-11">Docs quickstart</Button>
-              </a>
-              <Link href="/settings?tab=api-keys">
-                <Button variant="outline" className="min-h-11">Create API key</Button>
-              </Link>
-              <Link href="/issues">
-                <Button variant="outline" className="min-h-11">View Issues</Button>
-              </Link>
+              <Button asChild className="min-h-11">
+                <a href={DOCS_QUICKSTART_URL} target="_blank" rel="noopener noreferrer">
+                  Docs quickstart
+                </a>
+              </Button>
+              {canManageKeys ? (
+                <Button asChild variant="outline" className="min-h-11">
+                  <Link href="/settings?tab=api-keys">Create API key</Link>
+                </Button>
+              ) : (
+                <Button asChild variant="outline" className="min-h-11">
+                  <Link href="/traces">Open Traces</Link>
+                </Button>
+              )}
+              <Button asChild variant="outline" className="min-h-11">
+                <Link href="/issues">View Issues</Link>
+              </Button>
+              <Button asChild variant="ghost" className="min-h-11">
+                <Link href="/settings?tab=autonomous">Configure schedule</Link>
+              </Button>
             </div>
           }
         />
-      ) : (
+      ) : plans.length === 0 ? null : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           {plans.map((plan) => (
             <PlanCard
@@ -341,6 +375,8 @@ export default function ImprovementPlansPage() {
             Load more plans
           </Button>
         </div>
+      )}
+        </>
       )}
     </PageContent>
   );

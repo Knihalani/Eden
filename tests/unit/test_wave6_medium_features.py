@@ -199,6 +199,16 @@ class TestGDPRTelemetryDelete:
         assert any("telemetry_events" in t for t in tables_hit)
         assert any("trace_archive_index" in t for t in tables_hit)
         assert any("telemetry_stream_chunks" in t for t in tables_hit)
+        # Schema uses tenant_id on telemetry event / stream tables.
+        assert any(
+            "telemetry_events" in t and "tenant_id" in t for t in tables_hit
+        )
+        assert any(
+            "telemetry_stream_chunks" in t and "tenant_id" in t for t in tables_hit
+        )
+        assert any(
+            "trace_archive_index" in t and "org_id" in t for t in tables_hit
+        )
 
     @pytest.mark.asyncio
     async def test_clickhouse_purge_includes_telemetry_events_ch(self) -> None:

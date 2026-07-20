@@ -9,6 +9,7 @@ import pytest
 from eden.providers.factory import (
     get_pr_provider_for_org,
     get_repo_provider_for_org,
+    resolve_active_repo_id,
 )
 from eden.providers.pr import GitHubPRProvider, LocalPRProvider
 from eden.providers.repo import GitHubRepoProvider, LocalRepoProvider
@@ -96,3 +97,42 @@ async def test_pr_provider_falls_back_without_connection() -> None:
     ):
         provider = await get_pr_provider_for_org("org_orphan")
     assert isinstance(provider, LocalPRProvider)
+
+
+@pytest.mark.asyncio
+async def test_resolve_active_repo_id_prefers_connection_id() -> None:
+    conn = {
+        "id": "repo-conn-9",
+        "repo_full_name": "acme/widgets",
+        "installation_id": "1",
+        "provider": "github",
+    }
+    with patch(
+        "eden.providers.factory.active_repo_connection",
+        AsyncMock(return_value=conn),
+    ):
+        assert await resolve_active_repo_id("org_a") == "repo-conn-9"
+
+
+@pytest.mark.asyncio
+async def test_resolve_active_repo_id_falls_back_to_full_name() -> None:
+    conn = {
+        "id": "",
+        "repo_full_name": "acme/widgets",
+        "installation_id": "1",
+        "provider": "github",
+    }
+    with patch(
+        "eden.providers.factory.active_repo_connection",
+        AsyncMock(return_value=conn),
+    ):
+        assert await resolve_active_repo_id("org_a") == "acme/widgets"
+
+
+@pytest.mark.asyncio
+async def test_resolve_active_repo_id_none_without_connection() -> None:
+    with patch(
+        "eden.providers.factory.active_repo_connection",
+        AsyncMock(return_value=None),
+    ):
+        assert await resolve_active_repo_id("org_a") is None

@@ -35,7 +35,7 @@ export const PRODUCT_TOUR_STEPS: TourStep[] = [
     kind: "welcome",
     href: "/dashboard",
     title: "Welcome to Eden",
-    body: "Capture LLM calls, analyse failures, and ship reviewable fixes. This walkthrough is optional — Skip anytime and resume from the banner.",
+    body: "Capture LLM calls, analyse failures, and ship reviewable fixes. This walkthrough is optional — Skip anytime and resume from the banner. It does not create a workspace; create or join an organization under Settings → Organization first if you need one.",
   },
   {
     id: "api-keys",
@@ -52,7 +52,7 @@ export const PRODUCT_TOUR_STEPS: TourStep[] = [
     kind: "nav",
     href: "/dashboard",
     title: "Install the SDK",
-    body: "Use the docs quickstart: gateway one-liner or eden-sdk / @eden-ai/sdk, then run eden-doctor (or python -m eden_sdk.doctor) to verify. Fill-in works when you are signed in.",
+    body: "Use the docs quickstart: gateway (base_url + X-Org-Id / X-Org-Api-Key) or eden-sdk / @eden-ai/sdk, then run eden-doctor (or python -m eden_sdk.doctor) to verify. Fill-in works when you are signed in.",
     ctaLabel: "Open docs quickstart",
     ctaHref: DOCS_QUICKSTART_URL,
     ctaExternal: true,
@@ -70,7 +70,7 @@ export const PRODUCT_TOUR_STEPS: TourStep[] = [
     kind: "nav",
     targetId: "dashboard",
     href: "/dashboard",
-    title: "Dashboard",
+    title: "Home",
     body: "Health, recent traces, cost, and alerts fill in after ingestion starts. Start here when you open Eden day to day.",
   },
   {

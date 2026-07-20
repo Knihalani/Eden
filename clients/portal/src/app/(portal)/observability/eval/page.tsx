@@ -1,353 +1,481 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState } from "react";
 import { useOrg } from "@/hooks/use-org";
-import { evalApi } from "@/lib/api";
-import { cn } from "@/lib/utils";
+import { useOrgQuery } from "@/hooks/use-api-query";
+import { evalApi, type EvalFailureCluster, type EvalVersion } from "@/lib/api";
+import { queryKeys } from "@/lib/query-keys";
 import { EmptyState } from "@/components/ui/empty-state";
+import { ErrorState } from "@/components/ui/error-state";
 import { NoOrgState } from "@/components/ui/no-org-state";
+import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import { PageHeader } from "@/components/layout/page-header";
 import { PageContent } from "@/components/layout/page-content";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
-import { motion, AnimatePresence } from "framer-motion";
 import { DataTable } from "@/components/ui/data-table";
-import { BarChart3, Gauge, Loader2, Plus, AlertTriangle, Tag, Layers, Sparkles, UserCheck, Users, Shield, CheckCircle2, Eye, Send, Pencil } from "lucide-react";
+import { BarChart3, Gauge, Loader2, Plus, Tag, Layers, Shield, CheckCircle2 } from "lucide-react";
 import { Card } from "@/components/ui/card";
-type Tab = "versions" | "clusters" | "clhf" | "hil" | "pairwise";
-interface Version {
-  version_id: string;
-  judge_name: string;
-  version: string;
-  tagged_at: string;
-  notes: string | null;
-}
-interface Cluster {
-  cluster_id: string;
-  size: number;
-  example_trace_ids: string[];
-  representative_failure: string;
-}
-interface CLHFSample {
-  prompt: string;
-  chosen: string;
-  rejected: string;
-}
-interface HILTask {
-  task_id: string;
-  trace_id: string;
-  question: string;
-}
-interface Pair {
-  a: string;
-  b: string;
-  trace_id: string;
-}
+import {
+  featureGatedErrorCopy,
+  featureGatedMessage,
+} from "@/lib/feature-flag-error";
+
+type Tab = "versions" | "clusters";
+
 export default function EvalPage() {
-  const {
-    currentOrg
-  } = useOrg();
+  const { currentOrg } = useOrg();
   const [activeTab, setActiveTab] = useState<Tab>("versions");
   const [error, setError] = useState("");
-  return <PageContent size="wide">
-      <PageHeader title="Evaluation" subtitle="Judge scores, comparison, and quality signals" icon={BarChart3} eyebrow="Observe" />
 
-      {error && <div className="bg-[var(--error-bg)] text-[var(--error)] text-sm px-4 py-3 rounded-xl flex items-center gap-2.5 border border-[var(--error)]/20">
-          <AlertTriangle className="w-4 h-4 flex-shrink-0" />
-          {error}
-        </div>}
+  return (
+    <PageContent size="wide">
+      <PageHeader title="Evaluation" subtitle="Judge versions and failure clusters" icon={BarChart3} eyebrow="Observe" />
 
-      {!currentOrg ? <NoOrgState icon={Gauge} feature="Evaluation Quality" description="Choose an organization to manage judge versions, failure clusters, and human-in-the-loop data." /> : <>
-          <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as Tab)}>
-            <TabsList aria-label="Evaluation sections" className="bg-[var(--bg-tertiary)] rounded-xl h-auto flex-wrap w-fit">
-              {([
+      {error ? (
+        <ErrorState
+          title="Evaluation request failed"
+          message={error}
+          action={
+            <Button size="sm" variant="outline" onClick={() => setError("")}>
+              Dismiss
+            </Button>
+          }
+        />
+      ) : null}
+
+      {!currentOrg ? (
+        <NoOrgState
+          icon={Gauge}
+          feature="Evaluation Quality"
+          description="Choose an organization to manage judge versions and failure clusters."
+        />
+      ) : (
+        <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as Tab)}>
+          <TabsList aria-label="Evaluation sections" className="bg-[var(--bg-tertiary)] rounded-xl h-auto flex-wrap w-fit">
+            {(
+              [
                 { key: "versions" as Tab, label: "Versions", icon: Tag },
                 { key: "clusters" as Tab, label: "Failure clusters", icon: Layers },
-                { key: "clhf" as Tab, label: "CLHF", icon: Sparkles },
-                { key: "hil" as Tab, label: "HIL queue", icon: UserCheck },
-                { key: "pairwise" as Tab, label: "Pairwise", icon: Users },
-              ] as const).map(({ key, label, icon: Icon }) => (
-                <TabsTrigger key={key} value={key} className="flex items-center gap-2 data-[state=active]:text-[var(--text-primary)]">
-                  <Icon className="w-4 h-4" aria-hidden />
-                  {label}
-                </TabsTrigger>
-              ))}
-            </TabsList>
+              ] as const
+            ).map(({ key, label, icon: Icon }) => (
+              <TabsTrigger
+                key={key}
+                value={key}
+                className="flex items-center gap-2 data-[state=active]:text-[var(--text-primary)]"
+              >
+                <Icon className="w-4 h-4" aria-hidden />
+                {label}
+              </TabsTrigger>
+            ))}
+          </TabsList>
 
-          <AnimatePresence mode="wait">
-            <motion.div key={activeTab} initial={{
-          opacity: 0,
-          y: 8
-        }} animate={{
-          opacity: 1,
-          y: 0
-        }} exit={{
-          opacity: 0,
-          y: -6
-        }} transition={{
-          duration: 0.2
-        }}>
-              {activeTab === "versions" && <VersionsTab orgId={currentOrg.id} onError={setError} />}
-              {activeTab === "clusters" && <FailureClustersTab orgId={currentOrg.id} onError={setError} />}
-              {activeTab === "clhf" && <CLHFTab orgId={currentOrg.id} onError={setError} />}
-              {activeTab === "hil" && <HILTab orgId={currentOrg.id} onError={setError} />}
-              {activeTab === "pairwise" && <PairwiseTab orgId={currentOrg.id} onError={setError} />}
-            </motion.div>
-          </AnimatePresence>
-          </Tabs>
-        </>}
-    </PageContent>;
+          {activeTab === "versions" && <VersionsTab orgId={currentOrg.id} onError={setError} />}
+          {activeTab === "clusters" && <FailureClustersTab orgId={currentOrg.id} onError={setError} />}
+        </Tabs>
+      )}
+    </PageContent>
+  );
 }
 
-// ──────────────────────────────────────────────────────────────────────────
-// Versions Tab
-// ──────────────────────────────────────────────────────────────────────────
-
-function VersionsTab({
-  orgId,
-  onError
-}: {
-  orgId: string;
-  onError: (s: string) => void;
-}) {
-  const [versions, setVersions] = useState<Version[]>([]);
-  const [loading, setLoading] = useState(true);
+function VersionsTab({ orgId, onError }: { orgId: string; onError: (s: string) => void }) {
   const [tagOpen, setTagOpen] = useState(false);
   const [form, setForm] = useState({
-    judge_name: "",
-    version: "",
-    notes: ""
+    deployment_sha: "",
+    prompt_version: "",
+    judge_set: "",
   });
   const [submitting, setSubmitting] = useState(false);
-  const load = useCallback(async () => {
-    setLoading(true);
-    onError("");
-    try {
-      const data = await evalApi.listVersions(orgId);
-      setVersions(data.versions);
-    } catch (err) {
-      onError(err instanceof Error ? err.message : "Failed to load versions");
-    } finally {
-      setLoading(false);
-    }
-  }, [orgId, onError]);
+  const versionsQuery = useOrgQuery(queryKeys.eval.versions(orgId), orgId, async () => {
+    const data = await evalApi.listVersions(orgId);
+    return data.versions ?? [];
+  });
+  const versions: EvalVersion[] = versionsQuery.data ?? [];
+  const loading = versionsQuery.isLoading;
+
   useEffect(() => {
-    load();
-  }, [load]);
+    if (versionsQuery.error) {
+      onError(featureGatedMessage(versionsQuery.error, "Failed to load versions"));
+    }
+  }, [versionsQuery.error, onError]);
+
   async function handleTag() {
     onError("");
-    if (!form.judge_name.trim() || !form.version.trim()) {
-      onError("Judge name and version are required.");
+    const judges = form.judge_set
+      .split(/[,\n]/)
+      .map((s) => s.trim())
+      .filter(Boolean);
+    if (!form.deployment_sha.trim() || !form.prompt_version.trim() || judges.length === 0) {
+      onError("Deployment SHA, prompt version, and at least one judge are required.");
       return;
     }
     setSubmitting(true);
     try {
       await evalApi.tagVersion(orgId, {
-        judge_name: form.judge_name.trim(),
-        version: form.version.trim(),
-        notes: form.notes.trim() || undefined
+        deployment_sha: form.deployment_sha.trim(),
+        prompt_version: form.prompt_version.trim(),
+        judge_set: judges,
       });
       setTagOpen(false);
-      setForm({
-        judge_name: "",
-        version: "",
-        notes: ""
-      });
-      await load();
+      setForm({ deployment_sha: "", prompt_version: "", judge_set: "" });
+      await versionsQuery.refetch();
     } catch (err) {
-      onError(err instanceof Error ? err.message : "Tag failed");
+      onError(featureGatedMessage(err, "Tag failed"));
     } finally {
       setSubmitting(false);
     }
   }
-  return <div className="space-y-4">
+
+  if (versionsQuery.error && !loading) {
+    const copy = featureGatedErrorCopy(
+      versionsQuery.error,
+      "Could not load eval versions",
+    );
+    return (
+      <ErrorState
+        title={copy.title}
+        message={copy.message}
+        action={
+          <button
+            onClick={() => void versionsQuery.refetch()}
+            className="inline-flex items-center gap-2 px-3 py-1.5 rounded-md bg-[var(--accent)] text-[var(--bg-base)] text-xs font-medium hover:bg-[var(--accent-hover)] transition-colors"
+          >
+            Try again
+          </button>
+        }
+      />
+    );
+  }
+
+  return (
+    <div className="space-y-4">
       <div className="flex justify-end">
-        <button onClick={() => setTagOpen(true)} className="inline-flex items-center gap-2 px-4 py-2 bg-[var(--accent)] text-[var(--bg-base)] rounded-lg text-sm font-medium hover:bg-[var(--accent-hover)] transition-colors">
+        <button
+          onClick={() => setTagOpen(true)}
+          className="inline-flex items-center gap-2 px-4 py-2 bg-[var(--accent)] text-[var(--bg-base)] rounded-lg text-sm font-medium hover:bg-[var(--accent-hover)] transition-colors"
+        >
           <Plus className="w-4 h-4" />
           Tag new version
         </button>
       </div>
 
-      {loading ? <div className="flex items-center justify-center py-20">
-          <Loader2 className="w-8 h-8 animate-spin text-[var(--accent)]" />
-        </div> : versions.length === 0 ? <EmptyState icon={Tag} title="No versions tagged" description="Tag a judge version to start tracking which judge produced each score." size="lg" /> : <Card padding="lg" className="overflow-hidden">
-          <DataTable columns={[{
-        key: "judge_name",
-        header: "Judge",
-        sortable: true,
-        cell: v => <span className="font-medium text-[var(--text-primary)]">{v.judge_name}</span>
-      }, {
-        key: "version",
-        header: "Version",
-        sortable: true,
-        cell: v => <span className="font-mono text-xs text-[var(--text-secondary)]">{v.version}</span>
-      }, {
-        key: "tagged_at",
-        header: "Tagged at",
-        sortable: true,
-        cell: v => <span className="text-[var(--text-muted)] text-xs">{v.tagged_at ? new Date(v.tagged_at).toLocaleString() : "—"}</span>
-      }, {
-        key: "notes",
-        header: "Notes",
-        cell: v => <span className="text-[var(--text-secondary)] text-xs max-w-md truncate inline-block">{v.notes || "—"}</span>
-      }]} rows={versions} rowKey={v => v.version_id} defaultSort={{
-        key: "tagged_at",
-        direction: "desc"
-      }} pageSize={25} />
-        </Card>}
+      {loading ? (
+        <div className="space-y-3 py-6" aria-busy="true" aria-live="polite">
+          <Skeleton className="h-10 w-full rounded-lg" />
+          <Skeleton className="h-10 w-full rounded-lg" />
+          <Skeleton className="h-10 w-full rounded-lg" />
+        </div>
+      ) : versions.length === 0 ? (
+        <EmptyState
+          icon={Tag}
+          title="No versions tagged"
+          description="Tag a deployment SHA with its prompt version and judge set to start tracking eval lineage."
+          size="lg"
+        />
+      ) : (
+        <Card padding="lg" className="overflow-hidden">
+          <DataTable
+            columns={[
+              {
+                key: "deployment_sha",
+                header: "Deployment SHA",
+                sortable: true,
+                cell: (v) => (
+                  <span className="font-mono text-xs text-[var(--text-primary)]">{v.deployment_sha || "—"}</span>
+                ),
+              },
+              {
+                key: "prompt_version",
+                header: "Prompt version",
+                sortable: true,
+                cell: (v) => (
+                  <span className="font-mono text-xs text-[var(--text-secondary)]">{v.prompt_version || "—"}</span>
+                ),
+              },
+              {
+                key: "judge_set",
+                header: "Judges",
+                cell: (v) => (
+                  <span className="text-[var(--text-secondary)] text-xs max-w-md truncate inline-block">
+                    {(v.judge_set ?? []).join(", ") || "—"}
+                  </span>
+                ),
+              },
+              {
+                key: "status",
+                header: "Status",
+                cell: (v) => <span className="text-xs text-[var(--text-muted)]">{v.status || "—"}</span>,
+              },
+              {
+                key: "created_at",
+                header: "Created",
+                sortable: true,
+                cell: (v) => (
+                  <span className="text-[var(--text-muted)] text-xs">
+                    {v.created_at ? new Date(v.created_at).toLocaleString() : "—"}
+                  </span>
+                ),
+              },
+            ]}
+            rows={versions}
+            rowKey={(v) => v.id ?? `${v.deployment_sha ?? "sha"}-${v.created_at ?? "t"}`}
+            defaultSort={{ key: "created_at", direction: "desc" }}
+            pageSize={25}
+          />
+        </Card>
+      )}
 
-      <Dialog open={tagOpen} onOpenChange={o => !o && setTagOpen(false)}>
+      <Dialog open={tagOpen} onOpenChange={(o) => !o && setTagOpen(false)}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Tag className="w-4 h-4 text-[var(--accent)]" />
-              Tag a new judge version
+              Tag a new eval version
             </DialogTitle>
             <DialogDescription>
-              Record which judge version produced a set of scores.
+              Record deployment SHA, prompt version, and the judge set for this release.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
             <div>
-              <label className="text-xs font-medium text-[var(--text-muted)] mb-1.5 block">Judge name</label>
-              <input type="text" value={form.judge_name} onChange={e => setForm({
-              ...form,
-              judge_name: e.target.value
-            })} placeholder="e.g. helpfulness-judge" className="w-full px-3 py-2 bg-[var(--bg-secondary)] border border-[var(--border-default)] rounded-lg text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)]" />
+              <label className="text-xs font-medium text-[var(--text-muted)] mb-1.5 block">Deployment SHA</label>
+              <input
+                type="text"
+                value={form.deployment_sha}
+                onChange={(e) => setForm({ ...form, deployment_sha: e.target.value })}
+                placeholder="e.g. abcdef1 (7–64 chars)"
+                className="w-full px-3 py-2 bg-[var(--bg-secondary)] border border-[var(--border-default)] rounded-lg text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] font-mono"
+              />
             </div>
             <div>
-              <label className="text-xs font-medium text-[var(--text-muted)] mb-1.5 block">Version</label>
-              <input type="text" value={form.version} onChange={e => setForm({
-              ...form,
-              version: e.target.value
-            })} placeholder="e.g. 1.4.0" className="w-full px-3 py-2 bg-[var(--bg-secondary)] border border-[var(--border-default)] rounded-lg text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)]" />
+              <label className="text-xs font-medium text-[var(--text-muted)] mb-1.5 block">Prompt version</label>
+              <input
+                type="text"
+                value={form.prompt_version}
+                onChange={(e) => setForm({ ...form, prompt_version: e.target.value })}
+                placeholder="e.g. prompts@1.4.0"
+                className="w-full px-3 py-2 bg-[var(--bg-secondary)] border border-[var(--border-default)] rounded-lg text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)]"
+              />
             </div>
             <div>
-              <label className="text-xs font-medium text-[var(--text-muted)] mb-1.5 block">Notes (optional)</label>
-              <textarea value={form.notes} onChange={e => setForm({
-              ...form,
-              notes: e.target.value
-            })} rows={3} placeholder="What changed in this version?" className="w-full px-3 py-2 bg-[var(--bg-secondary)] border border-[var(--border-default)] rounded-lg text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)]" />
+              <label className="text-xs font-medium text-[var(--text-muted)] mb-1.5 block">Judge set (comma-separated)</label>
+              <textarea
+                value={form.judge_set}
+                onChange={(e) => setForm({ ...form, judge_set: e.target.value })}
+                rows={3}
+                placeholder="helpfulness-judge, safety-judge"
+                className="w-full px-3 py-2 bg-[var(--bg-secondary)] border border-[var(--border-default)] rounded-lg text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)]"
+              />
             </div>
           </div>
           <DialogFooter>
-            <button onClick={() => setTagOpen(false)} className="px-3 py-1.5 bg-[var(--bg-tertiary)] text-[var(--text-primary)] rounded-lg text-xs font-medium hover:bg-[var(--border-default)] transition-colors">
+            <button
+              onClick={() => setTagOpen(false)}
+              className="px-3 py-1.5 bg-[var(--bg-tertiary)] text-[var(--text-primary)] rounded-lg text-xs font-medium hover:bg-[var(--border-default)] transition-colors"
+            >
               Cancel
             </button>
-            <button onClick={handleTag} disabled={submitting} className="inline-flex items-center gap-1.5 px-4 py-1.5 bg-[var(--accent)] text-[var(--bg-base)] rounded-lg text-xs font-medium hover:bg-[var(--accent-hover)] disabled:opacity-50 transition-colors">
+            <button
+              onClick={handleTag}
+              disabled={submitting}
+              className="inline-flex items-center gap-1.5 px-4 py-1.5 bg-[var(--accent)] text-[var(--bg-base)] rounded-lg text-xs font-medium hover:bg-[var(--accent-hover)] disabled:opacity-50 transition-colors"
+            >
               {submitting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Tag className="w-3.5 h-3.5" />}
               Tag version
             </button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>;
+    </div>
+  );
 }
 
-// ──────────────────────────────────────────────────────────────────────────
-// Failure Clusters Tab
-// ──────────────────────────────────────────────────────────────────────────
-
-function FailureClustersTab({
-  orgId,
-  onError
-}: {
-  orgId: string;
-  onError: (s: string) => void;
-}) {
-  const [clusters, setClusters] = useState<Cluster[]>([]);
+function FailureClustersTab({ orgId, onError }: { orgId: string; onError: (s: string) => void }) {
+  const [clusters, setClusters] = useState<EvalFailureCluster[]>([]);
   const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState("");
   const [promoting, setPromoting] = useState<string | null>(null);
-  const [openCluster, setOpenCluster] = useState<Cluster | null>(null);
-  const [promoteForm, setPromoteForm] = useState({
-    judge_name: "",
-    version: "",
-    threshold: 0.5
-  });
+  const [openCluster, setOpenCluster] = useState<EvalFailureCluster | null>(null);
+  const [judgeName, setJudgeName] = useState("");
+  const [window, setWindow] = useState("24h");
+  const [emptyMessage, setEmptyMessage] = useState<string | null>(null);
   const [hasLoaded, setHasLoaded] = useState(false);
-  async function load(days = 30) {
-    setLoading(true);
+  const [promoteForm, setPromoteForm] = useState({ judge_name: "", threshold: 0.5 });
+
+  async function load() {
     onError("");
+    setLoadError("");
+    if (!judgeName.trim()) {
+      onError("Judge name is required.");
+      return;
+    }
+    setLoading(true);
     try {
       const data = await evalApi.failureClusters(orgId, {
-        days
+        judge_name: judgeName.trim(),
+        window: window.trim() || "24h",
       });
-      setClusters(data.clusters);
+      setClusters(data.clusters ?? []);
+      setEmptyMessage(data.message ?? null);
       setHasLoaded(true);
     } catch (err) {
-      onError(err instanceof Error ? err.message : "Failed to load clusters");
+      const msg = featureGatedMessage(err, "Failed to load clusters");
+      setLoadError(msg);
+      onError(msg);
     } finally {
       setLoading(false);
     }
   }
+
   async function handlePromote() {
     if (!openCluster) return;
     onError("");
-    if (!promoteForm.judge_name.trim() || !promoteForm.version.trim()) {
-      onError("Judge name and version are required.");
+    if (!promoteForm.judge_name.trim()) {
+      onError("Judge name is required.");
       return;
     }
     setPromoting(openCluster.cluster_id);
     try {
       await evalApi.promoteToGuardrail(orgId, {
         judge_name: promoteForm.judge_name.trim(),
-        version: promoteForm.version.trim(),
-        threshold: promoteForm.threshold
+        threshold: promoteForm.threshold,
       });
       setOpenCluster(null);
-      setPromoteForm({
-        judge_name: "",
-        version: "",
-        threshold: 0.5
-      });
+      setPromoteForm({ judge_name: "", threshold: 0.5 });
     } catch (err) {
-      onError(err instanceof Error ? err.message : "Promote failed");
+      onError(featureGatedMessage(err, "Promote failed"));
     } finally {
       setPromoting(null);
     }
   }
-  return <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <p className="text-xs text-[var(--text-muted)]">Last 30 days of failure modes grouped by similarity.</p>
-        <button onClick={() => load(30)} disabled={loading} className="inline-flex items-center gap-2 px-3 py-1.5 bg-[var(--bg-tertiary)] text-[var(--text-primary)] rounded-lg text-xs font-medium hover:bg-[var(--border-default)] disabled:opacity-50 transition-colors">
+
+  return (
+    <div className="space-y-4">
+      <Card padding="lg" className="space-y-3">
+        <p className="text-xs text-[var(--text-muted)]">
+          Cluster low-score traces for a judge over a time window (e.g. 24h, 7d).
+        </p>
+        <div className="grid sm:grid-cols-3 gap-3">
+          <div className="sm:col-span-2">
+            <label className="text-xs font-medium text-[var(--text-muted)] mb-1.5 block">Judge name</label>
+            <input
+              type="text"
+              value={judgeName}
+              onChange={(e) => setJudgeName(e.target.value)}
+              placeholder="e.g. helpfulness-judge"
+              className="w-full px-3 py-2 bg-[var(--bg-secondary)] border border-[var(--border-default)] rounded-lg text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)]"
+            />
+          </div>
+          <div>
+            <label className="text-xs font-medium text-[var(--text-muted)] mb-1.5 block">Window</label>
+            <input
+              type="text"
+              value={window}
+              onChange={(e) => setWindow(e.target.value)}
+              placeholder="24h"
+              className="w-full px-3 py-2 bg-[var(--bg-secondary)] border border-[var(--border-default)] rounded-lg text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)]"
+            />
+          </div>
+        </div>
+        <button
+          onClick={() => void load()}
+          disabled={loading}
+          className="inline-flex items-center gap-2 px-3 py-1.5 bg-[var(--bg-tertiary)] text-[var(--text-primary)] rounded-lg text-xs font-medium hover:bg-[var(--border-default)] disabled:opacity-50 transition-colors"
+        >
           {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Layers className="w-3.5 h-3.5" />}
           {hasLoaded ? "Refresh" : "Find clusters"}
         </button>
-      </div>
+      </Card>
 
-      {!hasLoaded && !loading ? <EmptyState icon={Layers} title="No clusters loaded" description="Click “Find clusters” to cluster recent failure modes from judge scores." size="lg" /> : loading && clusters.length === 0 ? <div className="flex items-center justify-center py-20">
-          <Loader2 className="w-8 h-8 animate-spin text-[var(--accent)]" />
-        </div> : clusters.length === 0 ? <EmptyState icon={CheckCircle2} title="No failures clustered" description="No failure modes found in the last 30 days." size="md" /> : <Card padding="lg" className="overflow-hidden">
-          <DataTable columns={[{
-        key: "cluster_id",
-        header: "Cluster",
-        sortable: true,
-        cell: c => <span className="font-mono text-xs text-[var(--text-primary)]">{c.cluster_id}</span>
-      }, {
-        key: "size",
-        header: "Size",
-        sortable: true,
-        align: "right",
-        cell: c => <span className="text-[var(--text-secondary)]">{c.size}</span>
-      }, {
-        key: "representative_failure",
-        header: "Representative failure",
-        cell: c => <span className="text-[var(--text-secondary)] max-w-xl truncate inline-block">{c.representative_failure}</span>
-      }, {
-        key: "actions",
-        header: "",
-        align: "right",
-        cell: c => <button onClick={() => setOpenCluster(c)} className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[var(--accent)] text-[var(--bg-base)] rounded-lg text-xs font-medium hover:bg-[var(--accent-hover)] transition-colors">
+      {!hasLoaded && !loading ? (
+        <EmptyState
+          icon={Layers}
+          title="No clusters loaded"
+          description="Enter a judge name and click “Find clusters”."
+          size="lg"
+        />
+      ) : loadError && clusters.length === 0 ? (
+        <ErrorState
+          title="Could not load failure clusters"
+          message={loadError}
+          action={
+            <Button size="sm" variant="outline" onClick={() => void load()}>
+              Try again
+            </Button>
+          }
+        />
+      ) : loading && clusters.length === 0 ? (
+        <div className="space-y-3 py-6" aria-busy="true" aria-live="polite">
+          <Skeleton className="h-10 w-full rounded-lg" />
+          <Skeleton className="h-10 w-full rounded-lg" />
+          <Skeleton className="h-10 w-full rounded-lg" />
+        </div>
+      ) : clusters.length === 0 ? (
+        <EmptyState
+          icon={CheckCircle2}
+          title="No failures clustered"
+          description={emptyMessage || "No failure modes found in this window."}
+          size="md"
+        />
+      ) : (
+        <Card padding="lg" className="overflow-hidden">
+          <DataTable
+            columns={[
+              {
+                key: "cluster_id",
+                header: "Cluster",
+                sortable: true,
+                cell: (c) => <span className="font-mono text-xs text-[var(--text-primary)]">{c.cluster_id}</span>,
+              },
+              {
+                key: "member_count",
+                header: "Size",
+                sortable: true,
+                align: "right",
+                cell: (c) => <span className="text-[var(--text-secondary)]">{c.member_count}</span>,
+              },
+              {
+                key: "sample_score",
+                header: "Avg score",
+                sortable: true,
+                align: "right",
+                cell: (c) => <span className="text-xs text-[var(--text-muted)]">{c.sample_score.toFixed(3)}</span>,
+              },
+              {
+                key: "signature",
+                header: "Signature",
+                cell: (c) => (
+                  <span className="text-[var(--text-secondary)] max-w-xl truncate inline-block">{c.signature}</span>
+                ),
+              },
+              {
+                key: "actions",
+                header: "",
+                align: "right",
+                cell: (c) => (
+                  <button
+                    onClick={() => {
+                      setOpenCluster(c);
+                      setPromoteForm({ judge_name: judgeName.trim(), threshold: 0.5 });
+                    }}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[var(--accent)] text-[var(--bg-base)] rounded-lg text-xs font-medium hover:bg-[var(--accent-hover)] transition-colors"
+                  >
                     <Shield className="w-3.5 h-3.5" />
                     Promote to guardrail
                   </button>
-      }]} rows={clusters} rowKey={c => c.cluster_id} defaultSort={{
-        key: "size",
-        direction: "desc"
-      }} pageSize={25} />
-        </Card>}
+                ),
+              },
+            ]}
+            rows={clusters}
+            rowKey={(c) => c.cluster_id}
+            defaultSort={{ key: "member_count", direction: "desc" }}
+            pageSize={25}
+          />
+        </Card>
+      )}
 
-      <Dialog open={!!openCluster} onOpenChange={o => !o && setOpenCluster(null)}>
+      <Dialog open={!!openCluster} onOpenChange={(o) => !o && setOpenCluster(null)}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
@@ -355,382 +483,51 @@ function FailureClustersTab({
               Promote cluster to guardrail
             </DialogTitle>
             <DialogDescription>
-              Cluster {openCluster?.cluster_id} ({openCluster?.size} failures)
+              Cluster {openCluster?.cluster_id} ({openCluster?.member_count} failures)
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
             <div>
               <label className="text-xs font-medium text-[var(--text-muted)] mb-1.5 block">Judge name</label>
-              <input type="text" value={promoteForm.judge_name} onChange={e => setPromoteForm({
-              ...promoteForm,
-              judge_name: e.target.value
-            })} placeholder="e.g. helpfulness-judge" className="w-full px-3 py-2 bg-[var(--bg-secondary)] border border-[var(--border-default)] rounded-lg text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)]" />
-            </div>
-            <div>
-              <label className="text-xs font-medium text-[var(--text-muted)] mb-1.5 block">Version</label>
-              <input type="text" value={promoteForm.version} onChange={e => setPromoteForm({
-              ...promoteForm,
-              version: e.target.value
-            })} placeholder="e.g. 1.4.0" className="w-full px-3 py-2 bg-[var(--bg-secondary)] border border-[var(--border-default)] rounded-lg text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)]" />
+              <input
+                type="text"
+                value={promoteForm.judge_name}
+                onChange={(e) => setPromoteForm({ ...promoteForm, judge_name: e.target.value })}
+                placeholder="e.g. helpfulness-judge"
+                className="w-full px-3 py-2 bg-[var(--bg-secondary)] border border-[var(--border-default)] rounded-lg text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)]"
+              />
             </div>
             <div>
               <label className="text-xs font-medium text-[var(--text-muted)] mb-1.5 block">Threshold (0-1)</label>
-              <input type="number" min={0} max={1} step={0.05} value={promoteForm.threshold} onChange={e => setPromoteForm({
-              ...promoteForm,
-              threshold: Number(e.target.value)
-            })} className="w-full px-3 py-2 bg-[var(--bg-secondary)] border border-[var(--border-default)] rounded-lg text-sm text-[var(--text-primary)]" />
+              <input
+                type="number"
+                min={0}
+                max={1}
+                step={0.05}
+                value={promoteForm.threshold}
+                onChange={(e) => setPromoteForm({ ...promoteForm, threshold: Number(e.target.value) })}
+                className="w-full px-3 py-2 bg-[var(--bg-secondary)] border border-[var(--border-default)] rounded-lg text-sm text-[var(--text-primary)]"
+              />
             </div>
           </div>
           <DialogFooter>
-            <button onClick={() => setOpenCluster(null)} className="px-3 py-1.5 bg-[var(--bg-tertiary)] text-[var(--text-primary)] rounded-lg text-xs font-medium hover:bg-[var(--border-default)] transition-colors">
+            <button
+              onClick={() => setOpenCluster(null)}
+              className="px-3 py-1.5 bg-[var(--bg-tertiary)] text-[var(--text-primary)] rounded-lg text-xs font-medium hover:bg-[var(--border-default)] transition-colors"
+            >
               Cancel
             </button>
-            <button onClick={handlePromote} disabled={!!promoting} className="inline-flex items-center gap-1.5 px-4 py-1.5 bg-[var(--accent)] text-[var(--bg-base)] rounded-lg text-xs font-medium hover:bg-[var(--accent-hover)] disabled:opacity-50 transition-colors">
+            <button
+              onClick={handlePromote}
+              disabled={!!promoting}
+              className="inline-flex items-center gap-1.5 px-4 py-1.5 bg-[var(--accent)] text-[var(--bg-base)] rounded-lg text-xs font-medium hover:bg-[var(--accent-hover)] disabled:opacity-50 transition-colors"
+            >
               {promoting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Shield className="w-3.5 h-3.5" />}
               Promote
             </button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>;
-}
-
-// ──────────────────────────────────────────────────────────────────────────
-// CLHF Tab
-// ──────────────────────────────────────────────────────────────────────────
-
-function CLHFTab({
-  orgId,
-  onError
-}: {
-  orgId: string;
-  onError: (s: string) => void;
-}) {
-  const [traceIds, setTraceIds] = useState("");
-  const [n, setN] = useState(10);
-  const [submitting, setSubmitting] = useState(false);
-  const [samples, setSamples] = useState<CLHFSample[]>([]);
-  const [generationId, setGenerationId] = useState<string | null>(null);
-  async function handleGenerate() {
-    onError("");
-    const seeds = traceIds.split("\n").map(s => s.trim()).filter(Boolean);
-    if (seeds.length === 0) {
-      onError("Provide at least one seed trace id.");
-      return;
-    }
-    setSubmitting(true);
-    try {
-      const data = await evalApi.clhfGenerate(orgId, {
-        seed_traces: seeds,
-        n
-      });
-      setSamples(data.samples);
-      setGenerationId(data.generation_id);
-    } catch (err) {
-      onError(err instanceof Error ? err.message : "Generation failed");
-    } finally {
-      setSubmitting(false);
-    }
-  }
-  return <div className="space-y-4">
-      <Card padding="lg" className="space-y-3">
-        <h3 className="text-sm font-semibold text-[var(--text-primary)] flex items-center gap-2">
-          <Sparkles className="w-4 h-4 text-[var(--accent)]" />
-          Generate CLHF data
-        </h3>
-        <p className="text-xs text-[var(--text-muted)]">Provide seed traces (one id per line) to bootstrap chosen/rejected pairs.</p>
-        <div className="grid sm:grid-cols-4 gap-3">
-          <div className="sm:col-span-3">
-            <label className="text-xs font-medium text-[var(--text-muted)] mb-1.5 block">Seed trace IDs</label>
-            <textarea value={traceIds} onChange={e => setTraceIds(e.target.value)} rows={3} placeholder={"trace_abc123\ntrace_def456"} className="w-full px-3 py-2 bg-[var(--bg-secondary)] border border-[var(--border-default)] rounded-lg text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] font-mono" />
-          </div>
-          <div>
-            <label className="text-xs font-medium text-[var(--text-muted)] mb-1.5 block">N</label>
-            <input type="number" min={1} max={50} value={n} onChange={e => setN(Number(e.target.value))} className="w-full px-3 py-2 bg-[var(--bg-secondary)] border border-[var(--border-default)] rounded-lg text-sm text-[var(--text-primary)]" />
-          </div>
-        </div>
-        <button onClick={handleGenerate} disabled={submitting} className="inline-flex items-center gap-2 px-4 py-2 bg-[var(--accent)] text-[var(--bg-base)] rounded-lg text-sm font-medium hover:bg-[var(--accent-hover)] disabled:opacity-50 transition-colors">
-          {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
-          Generate
-        </button>
-      </Card>
-
-      {generationId && <p className="text-xs text-[var(--text-muted)]">Generation id: <span className="font-mono">{generationId}</span></p>}
-
-      {samples.length > 0 && <div className="space-y-3">
-          {samples.map((s, i) => <Card padding="md" className="space-y-2" key={i}>
-              <div className="text-xs font-medium text-[var(--text-muted)]">Sample {i + 1}</div>
-              <div>
-                <div className="text-[10px] uppercase tracking-wide text-[var(--text-muted)]">Prompt</div>
-                <pre className="text-xs bg-[var(--bg-secondary)] rounded-lg p-2 mt-1 whitespace-pre-wrap">{s.prompt}</pre>
-              </div>
-              <div className="grid sm:grid-cols-2 gap-2">
-                <div>
-                  <div className="text-[10px] uppercase tracking-wide text-[var(--terminal)]">Chosen</div>
-                  <pre className="text-xs bg-[var(--bg-secondary)] rounded-lg p-2 mt-1 whitespace-pre-wrap border-l-2 border-[var(--terminal)]">{s.chosen}</pre>
-                </div>
-                <div>
-                  <div className="text-[10px] uppercase tracking-wide text-[var(--error)]">Rejected</div>
-                  <pre className="text-xs bg-[var(--bg-secondary)] rounded-lg p-2 mt-1 whitespace-pre-wrap border-l-2 border-[var(--error)]">{s.rejected}</pre>
-                </div>
-              </div>
-            </Card>)}
-        </div>}
-    </div>;
-}
-
-// ──────────────────────────────────────────────────────────────────────────
-// HIL Tab
-// ──────────────────────────────────────────────────────────────────────────
-
-function HILTab({
-  orgId,
-  onError
-}: {
-  orgId: string;
-  onError: (s: string) => void;
-}) {
-  const [traceId, setTraceId] = useState("");
-  const [question, setQuestion] = useState("");
-  const [creating, setCreating] = useState(false);
-  const [task, setTask] = useState<HILTask | null>(null);
-  const [annotateOpen, setAnnotateOpen] = useState(false);
-  const [answer, setAnswer] = useState("");
-  const [confidence, setConfidence] = useState(0.8);
-  const [submitting, setSubmitting] = useState(false);
-  async function handleCreate() {
-    onError("");
-    if (!traceId.trim() || !question.trim()) {
-      onError("Trace id and question are required.");
-      return;
-    }
-    setCreating(true);
-    try {
-      const data = await evalApi.hilTask(orgId, {
-        trace_id: traceId.trim(),
-        question: question.trim()
-      });
-      setTask(data);
-    } catch (err) {
-      onError(err instanceof Error ? err.message : "Task creation failed");
-    } finally {
-      setCreating(false);
-    }
-  }
-  async function handleAnnotate() {
-    if (!task) return;
-    onError("");
-    if (!answer.trim()) {
-      onError("Answer is required.");
-      return;
-    }
-    setSubmitting(true);
-    try {
-      await evalApi.hilAnnotation(orgId, {
-        task_id: task.task_id,
-        answer: answer.trim(),
-        confidence
-      });
-      setAnnotateOpen(false);
-      setAnswer("");
-      setTask(null);
-      setTraceId("");
-      setQuestion("");
-    } catch (err) {
-      onError(err instanceof Error ? err.message : "Annotation failed");
-    } finally {
-      setSubmitting(false);
-    }
-  }
-  return <div className="space-y-4">
-      <Card padding="lg" className="space-y-3">
-        <h3 className="text-sm font-semibold text-[var(--text-primary)] flex items-center gap-2">
-          <UserCheck className="w-4 h-4 text-[var(--accent)]" />
-          Create HIL task
-        </h3>
-        <div className="grid sm:grid-cols-2 gap-3">
-          <div>
-            <label className="text-xs font-medium text-[var(--text-muted)] mb-1.5 block">Trace ID</label>
-            <input type="text" value={traceId} onChange={e => setTraceId(e.target.value)} placeholder="trace_abc123" className="w-full px-3 py-2 bg-[var(--bg-secondary)] border border-[var(--border-default)] rounded-lg text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] font-mono" />
-          </div>
-          <div>
-            <label className="text-xs font-medium text-[var(--text-muted)] mb-1.5 block">Question</label>
-            <input type="text" value={question} onChange={e => setQuestion(e.target.value)} placeholder="What should the agent have done?" className="w-full px-3 py-2 bg-[var(--bg-secondary)] border border-[var(--border-default)] rounded-lg text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)]" />
-          </div>
-        </div>
-        <button onClick={handleCreate} disabled={creating} className="inline-flex items-center gap-2 px-4 py-2 bg-[var(--accent)] text-[var(--bg-base)] rounded-lg text-sm font-medium hover:bg-[var(--accent-hover)] disabled:opacity-50 transition-colors">
-          {creating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-          Create task
-        </button>
-      </Card>
-
-      {task && <motion.div initial={{
-      opacity: 0,
-      y: 8
-    }} animate={{
-      opacity: 1,
-      y: 0
-    }} className="bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-xl p-5 space-y-3">
-          <div className="flex items-center justify-between">
-            <h3 className="text-sm font-semibold text-[var(--text-primary)] flex items-center gap-2">
-              <Eye className="w-4 h-4 text-[var(--accent)]" />
-              Task created
-            </h3>
-            <span className="text-xs text-[var(--text-muted)] font-mono">{task.task_id}</span>
-          </div>
-          <p className="text-xs text-[var(--text-muted)]">Trace: <span className="font-mono text-[var(--text-secondary)]">{task.trace_id}</span></p>
-          <p className="text-sm text-[var(--text-primary)]">Q: {task.question}</p>
-          <div className="flex justify-end">
-            <button onClick={() => setAnnotateOpen(true)} className="inline-flex items-center gap-1.5 px-4 py-1.5 bg-[var(--accent)] text-[var(--bg-base)] rounded-lg text-xs font-medium hover:bg-[var(--accent-hover)] transition-colors">
-              <Pencil className="w-3.5 h-3.5" />
-              Annotate
-            </button>
-          </div>
-        </motion.div>}
-
-      <Dialog open={annotateOpen} onOpenChange={o => !o && setAnnotateOpen(false)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Pencil className="w-4 h-4 text-[var(--accent)]" />
-              Annotate task
-            </DialogTitle>
-            <DialogDescription>
-              Record the ground-truth answer and your confidence.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-3">
-            <div>
-              <label className="text-xs font-medium text-[var(--text-muted)] mb-1.5 block">Answer</label>
-              <textarea value={answer} onChange={e => setAnswer(e.target.value)} rows={4} placeholder="Ground truth answer..." className="w-full px-3 py-2 bg-[var(--bg-secondary)] border border-[var(--border-default)] rounded-lg text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)]" />
-            </div>
-            <div>
-              <label className="text-xs font-medium text-[var(--text-muted)] mb-1.5 block">Confidence (0-1)</label>
-              <input type="number" min={0} max={1} step={0.05} value={confidence} onChange={e => setConfidence(Number(e.target.value))} className="w-full px-3 py-2 bg-[var(--bg-secondary)] border border-[var(--border-default)] rounded-lg text-sm text-[var(--text-primary)]" />
-            </div>
-          </div>
-          <DialogFooter>
-            <button onClick={() => setAnnotateOpen(false)} className="px-3 py-1.5 bg-[var(--bg-tertiary)] text-[var(--text-primary)] rounded-lg text-xs font-medium hover:bg-[var(--border-default)] transition-colors">
-              Cancel
-            </button>
-            <button onClick={handleAnnotate} disabled={submitting} className="inline-flex items-center gap-1.5 px-4 py-1.5 bg-[var(--accent)] text-[var(--bg-base)] rounded-lg text-xs font-medium hover:bg-[var(--accent-hover)] disabled:opacity-50 transition-colors">
-              {submitting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
-              Submit
-            </button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </div>;
-}
-
-// ──────────────────────────────────────────────────────────────────────────
-// Pairwise Tab
-// ──────────────────────────────────────────────────────────────────────────
-
-function PairwiseTab({
-  orgId,
-  onError
-}: {
-  orgId: string;
-  onError: (s: string) => void;
-}) {
-  const [n, setN] = useState(10);
-  const [creating, setCreating] = useState(false);
-  const [queueId, setQueueId] = useState<string | null>(null);
-  const [pairs, setPairs] = useState<Pair[]>([]);
-  const [decisions, setDecisions] = useState<Record<number, "a" | "b">>({});
-  const [submitting, setSubmitting] = useState<number | null>(null);
-  async function handleCreate() {
-    onError("");
-    if (n < 1) {
-      onError("N must be at least 1.");
-      return;
-    }
-    setCreating(true);
-    try {
-      const data = await evalApi.pairwiseQueue(orgId, {
-        n
-      });
-      setQueueId(data.queue_id);
-      setPairs(data.pairs);
-      setDecisions({});
-    } catch (err) {
-      onError(err instanceof Error ? err.message : "Queue creation failed");
-    } finally {
-      setCreating(false);
-    }
-  }
-  async function handleDecide(pairIdx: number, preferred: "a" | "b") {
-    if (!queueId) return;
-    setSubmitting(pairIdx);
-    onError("");
-    try {
-      await evalApi.pairwisePreference(orgId, {
-        queue_id: queueId,
-        pair_id: `${queueId}_${pairIdx}`,
-        preferred
-      });
-      setDecisions(prev => ({
-        ...prev,
-        [pairIdx]: preferred
-      }));
-    } catch (err) {
-      onError(err instanceof Error ? err.message : "Preference failed");
-    } finally {
-      setSubmitting(null);
-    }
-  }
-  return <div className="space-y-4">
-      <Card padding="lg" className="space-y-3">
-        <h3 className="text-sm font-semibold text-[var(--text-primary)] flex items-center gap-2">
-          <Users className="w-4 h-4 text-[var(--accent)]" />
-          Create pairwise queue
-        </h3>
-        <div className="flex items-end gap-3">
-          <div className="w-32">
-            <label className="text-xs font-medium text-[var(--text-muted)] mb-1.5 block">N pairs</label>
-            <input type="number" min={1} max={50} value={n} onChange={e => setN(Number(e.target.value))} className="w-full px-3 py-2 bg-[var(--bg-secondary)] border border-[var(--border-default)] rounded-lg text-sm text-[var(--text-primary)]" />
-          </div>
-          <button onClick={handleCreate} disabled={creating} className="inline-flex items-center gap-2 px-4 py-2 bg-[var(--accent)] text-[var(--bg-base)] rounded-lg text-sm font-medium hover:bg-[var(--accent-hover)] disabled:opacity-50 transition-colors">
-            {creating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
-            Create queue
-          </button>
-        </div>
-      </Card>
-
-      {queueId && <p className="text-xs text-[var(--text-muted)]">Queue id: <span className="font-mono">{queueId}</span></p>}
-
-      {pairs.length > 0 && <div className="space-y-3">
-          {pairs.map((p, i) => {
-        const decision = decisions[i];
-        return <Card padding="md" className="space-y-3" key={i}>
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-[var(--text-muted)] font-mono">Pair {i + 1} · trace {p.trace_id}</span>
-                  {decision && <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-[var(--terminal-faint)] text-[var(--terminal)] inline-flex items-center gap-1">
-                      <CheckCircle2 className="w-3 h-3" />
-                      {decision.toUpperCase()} wins
-                    </span>}
-                </div>
-                <div className="grid sm:grid-cols-2 gap-3">
-                  <div className="rounded-lg border border-[var(--border-subtle)] p-3 space-y-2">
-                    <div className="text-[10px] uppercase tracking-wide text-[var(--text-muted)]">Option A</div>
-                    <pre className="text-xs whitespace-pre-wrap">{p.a}</pre>
-                    <button onClick={() => handleDecide(i, "a")} disabled={!!submitting || !!decision} className={cn("w-full inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors", decision === "a" ? "bg-[var(--terminal)] text-[var(--bg-base)]" : "bg-[var(--bg-tertiary)] text-[var(--text-primary)] hover:bg-[var(--border-default)]")}>
-                      {submitting === i ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
-                      A wins
-                    </button>
-                  </div>
-                  <div className="rounded-lg border border-[var(--border-subtle)] p-3 space-y-2">
-                    <div className="text-[10px] uppercase tracking-wide text-[var(--text-muted)]">Option B</div>
-                    <pre className="text-xs whitespace-pre-wrap">{p.b}</pre>
-                    <button onClick={() => handleDecide(i, "b")} disabled={!!submitting || !!decision} className={cn("w-full inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors", decision === "b" ? "bg-[var(--terminal)] text-[var(--bg-base)]" : "bg-[var(--bg-tertiary)] text-[var(--text-primary)] hover:bg-[var(--border-default)]")}>
-                      {submitting === i ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
-                      B wins
-                    </button>
-                  </div>
-                </div>
-              </Card>;
-      })}
-        </div>}
-    </div>;
+    </div>
+  );
 }

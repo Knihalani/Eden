@@ -13,15 +13,21 @@ The fastest path to Eden is the OpenAI-compatible gateway. Change one line in yo
 
 ```bash
 pip install openai  # you probably already have this
-export EDEN_API_KEY="..."
+export EDEN_API_KEY="sk_eden_..."
+export EDEN_ORG_ID="org_..."
 ```
 
 ```python
+import os
 from openai import OpenAI
 
 client = OpenAI(
-    base_url=os.environ["EDEN_BASE_URL"],  # <-- the only line that changes
+    base_url="https://api.edenobservability.com/gateway/v1",
     api_key=os.environ["EDEN_API_KEY"],
+    default_headers={
+        "X-Org-Id": os.environ["EDEN_ORG_ID"],
+        "X-Org-Api-Key": os.environ["EDEN_API_KEY"],
+    },
 )
 
 resp = client.chat.completions.create(
@@ -41,17 +47,32 @@ For multi-step agents, tool calls, and custom evaluations, use the Eden SDKs:
 pip install eden-sdk
 
 # TypeScript
-npm install @eden/sdk
+npm install @eden-ai/sdk
 ```
 
 ```python
 import eden
 
+eden.configure(org_id="org_...", api_key="sk_eden_...")
+
 # Wrap any LLM call to capture a span
-with eden.span("agent.reasoning") as span:
+with eden.trace("agent.reasoning") as span:
     resp = client.chat.completions.create(...)
     span.set_output(resp.choices[0].message.content)
-    span.set_eval("quality", score=0.92, evaluator="llm-judge")
+    span.set_tag("prod")
+```
+
+```ts
+import { configure, wrapOpenAI } from "@eden-ai/sdk";
+import OpenAI from "openai";
+
+configure({ orgId: "org_...", apiKey: "sk_eden_..." });
+
+const openai = wrapOpenAI(new OpenAI());
+const resp = await openai.chat.completions.create({
+  model: "gpt-4o-mini",
+  messages: [{ role: "user", content: "Hello" }],
+});
 ```
 
 ## Quickstart — Self-host / Local dev
@@ -155,7 +176,8 @@ cp .env.example .env
 ```
 
 Key settings:
-- `EDEN_API_KEY` — your Eden API key
+- `EDEN_ORG_ID` — your org id (`org_…`); required for gateway + SDK attribution
+- `EDEN_API_KEY` — your Eden API key (`sk_eden_…`)
 - `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` / `BEDROCK_*` — upstream model credentials (configure whichever upstreams you want to use through the gateway)
 - `POSTGRES_*` — PostgreSQL connection settings
 - `QDRANT_*` — Qdrant connection settings
@@ -164,17 +186,18 @@ Key settings:
 ## API
 
 ```bash
-# Direct trace query (advanced; most users start via the SDK/gateway)
-curl -X POST https://gateway.eden.example/v1/chat/completions \
-  -H "Authorization: Bearer $EDEN_API_KEY" \
+# Gateway chat completion (most users start here)
+curl -X POST https://api.edenobservability.com/gateway/v1/chat/completions \
+  -H "X-Org-Api-Key: $EDEN_API_KEY" \
+  -H "X-Org-Id: $EDEN_ORG_ID" \
   -H "Content-Type: application/json" \
   -d '{
     "model": "gpt-4o",
     "messages": [{"role": "user", "content": "Hello"}]
   }'
 
-# List recent traces
-curl "https://api.eden.example/v1/traces?project_id=..." \
+# List recent traces (portal API)
+curl "https://api.edenobservability.com/orgs/$EDEN_ORG_ID/…" \
   -H "Authorization: Bearer $EDEN_API_KEY"
 ```
 
@@ -197,3 +220,4 @@ cd clients/portal && bun install && bun run dev
 ## Documentation
 
 See [PRD.md](./PRD.md) for the full product requirements document and roadmap.
+See the published docs quickstart at [docs/docs/quickstart.mdx](./docs/docs/quickstart.mdx).

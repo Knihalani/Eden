@@ -29,6 +29,7 @@ export function useResourceUrlState() {
     traceId:
       searchParams.get("traceId") ??
       searchParams.get("trace_id") ??
+      searchParams.get("trace") ??
       undefined,
     spanId: searchParams.get("spanId") ?? searchParams.get("span_id") ?? undefined,
     sessionId: searchParams.get("sessionId") ?? undefined,

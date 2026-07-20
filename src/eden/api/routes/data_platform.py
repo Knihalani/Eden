@@ -12,12 +12,14 @@ Exposes endpoints for:
 import json
 import logging
 from datetime import datetime
-from typing import Any
+from typing import Any, NoReturn
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Body, Depends, HTTPException, Path, Query
 from pydantic import BaseModel, Field
 
-from eden.api.deps import get_current_user, require_org_admin
+from eden.api.deps import get_current_user, require_org_admin, require_path_org_access
+from eden.api.utils.redact import redact_all
+from eden.api.utils.safe_error import raise_mapped_db_error
 from eden.data_platform.lineage import get_lineage_tracker
 from eden.data_platform.quality import DataQualityValidator
 from eden.data_platform.retention import DataRetentionManager
@@ -27,7 +29,24 @@ from eden.storage.postgres import get_postgres_client
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/orgs/{org_id}/data-platform", tags=["data-platform"])
+
+async def _require_pg():
+    client = await get_postgres_client()
+    if client is None:
+        raise HTTPException(status_code=503, detail="database unavailable")
+    return client
+
+
+def _reraise_dp(exc: Exception, *, fallback: str) -> NoReturn:
+    logger.warning("data_platform failed: %s", redact_all(str(exc)))
+    raise_mapped_db_error(
+        exc,
+        fallback=fallback,
+        uuid_detail="Invalid id",
+        fk_detail="Referenced resource not found",
+    )
+
+router = APIRouter(prefix="/orgs/{org_id}/data-platform", tags=["data-platform"], dependencies=[Depends(require_path_org_access)])
 
 
 # ============================================================================
@@ -134,8 +153,8 @@ class StorageSummaryResponse(BaseModel):
 
 @router.post("/etl/run", response_model=ETLRunResponse)
 async def run_etl(
-    org_id: str,
-    request: ETLLaunchRequest,
+    org_id: str = Depends(require_path_org_access),
+    request: ETLLaunchRequest = Body(...),
     user: dict = Depends(require_org_admin),
 ):
     """Trigger a Silver ETL run for unprocessed Bronze events.
@@ -151,7 +170,10 @@ async def run_etl(
             raise HTTPException(status_code=400, detail="Invalid since datetime format") from None
 
     etl = SilverETLPipeline()
-    report = await etl.run_from_bronze(since=since_dt, limit=request.limit)
+    try:
+        report = await etl.run_from_bronze(since=since_dt, limit=request.limit)
+    except Exception as exc:
+        _reraise_dp(exc, fallback="ETL run failed")
 
     return ETLRunResponse(
         processed=report.processed,
@@ -167,21 +189,24 @@ async def run_etl(
 
 @router.get("/etl/report/latest")
 async def get_latest_etl_report(
-    org_id: str,
+    org_id: str = Depends(require_path_org_access),
     user: dict = Depends(get_current_user),
 ):
     """Get the most recent ETL processing statistics from the retention log."""
-    client = await get_postgres_client()
-    row = await client.fetchrow(
-        """
-        SELECT * FROM data_retention_log
-        WHERE org_id = $1
-          AND policy_name = 'silver_etl_batch'
-        ORDER BY completed_at DESC
-        LIMIT 1
-        """,
-        org_id,
-    )
+    client = await _require_pg()
+    try:
+        row = await client.fetchrow(
+            """
+            SELECT * FROM data_retention_log
+            WHERE org_id = $1
+              AND policy_name = 'silver_etl_batch'
+            ORDER BY completed_at DESC
+            LIMIT 1
+            """,
+            org_id,
+        )
+    except Exception as exc:
+        _reraise_dp(exc, fallback="ETL report unavailable")
     if not row:
         return {"message": "No ETL reports found"}
     return dict(row)
@@ -193,14 +218,14 @@ async def get_latest_etl_report(
 
 @router.get("/quarantine", response_model=QuarantineListResponse)
 async def list_quarantine(
-    org_id: str,
+    org_id: str = Depends(require_path_org_access),
     resolution: str | None = Query(None),
     limit: int = Query(50, ge=1, le=500),
     offset: int = Query(0, ge=0),
     user: dict = Depends(get_current_user),
 ):
     """List quarantined events for review."""
-    client = await get_postgres_client()
+    client = await _require_pg()
 
     conditions = ["org_id = $1"]
     params = [org_id]
@@ -214,18 +239,21 @@ async def list_quarantine(
     where_clause = " AND ".join(conditions)
 
     count_query = f"SELECT COUNT(*) FROM quarantine_events WHERE {where_clause}"
-    total = await client.fetchval(count_query, *params) or 0
+    try:
+        total = await client.fetchval(count_query, *params) or 0
 
-    query = f"""
-        SELECT quarantine_id, org_id, event_type, quarantine_reason,
-               raw_payload, quarantined_at, resolution
-        FROM quarantine_events
-        WHERE {where_clause}
-        ORDER BY quarantined_at DESC
-        LIMIT ${param_idx} OFFSET ${param_idx + 1}
-    """
-    params.extend([limit, offset])
-    rows = await client.fetch(query, *params)
+        query = f"""
+            SELECT quarantine_id, org_id, event_type, quarantine_reason,
+                   raw_payload, quarantined_at, resolution
+            FROM quarantine_events
+            WHERE {where_clause}
+            ORDER BY quarantined_at DESC
+            LIMIT ${param_idx} OFFSET ${param_idx + 1}
+        """
+        params.extend([limit, offset])
+        rows = await client.fetch(query, *params)
+    except Exception as exc:
+        _reraise_dp(exc, fallback="quarantine list unavailable")
 
     return QuarantineListResponse(
         events=[dict(r) for r in rows],
@@ -237,30 +265,38 @@ async def list_quarantine(
 
 @router.post("/quarantine/reprocess")
 async def reprocess_quarantine(
-    org_id: str,
-    request: QuarantineReviewRequest,
+    org_id: str = Depends(require_path_org_access),
+    request: QuarantineReviewRequest = Body(...),
     user: dict = Depends(require_org_admin),
 ):
     """Reprocess selected quarantined events.
 
     Removes successfully reprocessed events from quarantine.
     """
+    if not request.quarantine_ids:
+        raise HTTPException(status_code=400, detail="quarantine_ids must be non-empty")
     etl = SilverETLPipeline()
-    report = await etl.reprocess_quarantine(request.quarantine_ids)
+    try:
+        report = await etl.reprocess_quarantine(request.quarantine_ids)
+    except Exception as exc:
+        _reraise_dp(exc, fallback="quarantine reprocess failed")
 
     # Update resolution status for all requested IDs
-    client = await get_postgres_client()
+    client = await _require_pg()
     placeholders = ", ".join(f"${i + 2}" for i in range(len(request.quarantine_ids)))
-    await client.execute(
-        f"""
-        UPDATE quarantine_events
-        SET resolution = $1, reviewed_at = NOW(), reviewed_by = $2
-        WHERE quarantine_id IN ({placeholders})
-        """,
-        request.resolution,
-        user["user_id"],
-        *request.quarantine_ids,
-    )
+    try:
+        await client.execute(
+            f"""
+            UPDATE quarantine_events
+            SET resolution = $1, reviewed_at = NOW(), reviewed_by = $2
+            WHERE quarantine_id IN ({placeholders})
+            """,
+            request.resolution,
+            user["user_id"],
+            *request.quarantine_ids,
+        )
+    except Exception as exc:
+        _reraise_dp(exc, fallback="quarantine update failed")
 
     return {
         "reprocessed": report.silver_inserted,
@@ -275,8 +311,8 @@ async def reprocess_quarantine(
 
 @router.get("/quality/{table_name}", response_model=QualityReportResponse)
 async def get_quality_report(
-    org_id: str,
-    table_name: str,
+    org_id: str = Depends(require_path_org_access),
+    table_name: str = Path(...),
     user: dict = Depends(get_current_user),
 ):
     """Run quality validation on a table and return the report."""
@@ -293,29 +329,32 @@ async def get_quality_report(
         raise HTTPException(status_code=400, detail=f"No expectation suite for table: {table_name}")
 
     # Persist report
-    client = await get_postgres_client()
-    await client.execute(
-        """
-        INSERT INTO data_quality_reports (
-            table_name, total_rows, passed_count, error_count, warning_count,
-            quality_score, results_json, duration_ms
+    client = await _require_pg()
+    try:
+        await client.execute(
+            """
+            INSERT INTO data_quality_reports (
+                table_name, total_rows, passed_count, error_count, warning_count,
+                quality_score, results_json, duration_ms
+            )
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+            """,
+            table_name,
+            report.total_rows,
+            report.passed_count,
+            report.error_count,
+            report.warning_count,
+            report.quality_score,
+            json.dumps([{
+                "name": r.expectation.name,
+                "success": r.success,
+                "observed": r.observed_value,
+                "message": r.message,
+            } for r in report.results]),
+            report.duration_ms,
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-        """,
-        table_name,
-        report.total_rows,
-        report.passed_count,
-        report.error_count,
-        report.warning_count,
-        report.quality_score,
-        json.dumps([{
-            "name": r.expectation.name,
-            "success": r.success,
-            "observed": r.observed_value,
-            "message": r.message,
-        } for r in report.results]),
-        report.duration_ms,
-    )
+    except Exception as exc:
+        _reraise_dp(exc, fallback="quality report persist failed")
 
     return QualityReportResponse(
         table_name=report.table_name,
@@ -336,7 +375,7 @@ async def get_quality_report(
 
 @router.get("/quality/reports/history")
 async def get_quality_history(
-    org_id: str,
+    org_id: str = Depends(require_path_org_access),
     table_name: str | None = Query(None),
     limit: int = Query(50, ge=1, le=500),
     offset: int = Query(0, ge=0),
@@ -381,8 +420,8 @@ async def get_quality_history(
 
 @router.get("/lineage/dataset/{dataset_name}", response_model=LineageQueryResponse)
 async def get_dataset_lineage(
-    org_id: str,
-    dataset_name: str,
+    org_id: str = Depends(require_path_org_access),
+    dataset_name: str = Path(...),
     user: dict = Depends(get_current_user),
 ):
     """Get upstream and downstream lineage for a dataset."""
@@ -400,8 +439,8 @@ async def get_dataset_lineage(
 
 @router.get("/lineage/job/{job_id}")
 async def get_job_lineage(
-    org_id: str,
-    job_id: str,
+    org_id: str = Depends(require_path_org_access),
+    job_id: str = Path(...),
     user: dict = Depends(get_current_user),
 ):
     """Get full lineage history for a specific Eden pipeline job."""
@@ -416,7 +455,7 @@ async def get_job_lineage(
 
 @router.get("/lineage/export")
 async def export_lineage(
-    org_id: str,
+    org_id: str = Depends(require_path_org_access),
     since: str | None = Query(None),
     limit: int = Query(1000, ge=1, le=10000),
     user: dict = Depends(get_current_user),
@@ -445,8 +484,8 @@ async def export_lineage(
 
 @router.post("/retention/run", response_model=RetentionRunResponse)
 async def run_retention(
-    org_id: str,
-    request: RetentionRunRequest,
+    org_id: str = Depends(require_path_org_access),
+    request: RetentionRunRequest = Body(...),
     user: dict = Depends(require_org_admin),
 ):
     """Run data retention policies.
@@ -480,7 +519,7 @@ async def run_retention(
 
 @router.delete("/gdpr/tenant")
 async def delete_tenant_data(
-    org_id: str,
+    org_id: str = Depends(require_path_org_access),
     user: dict = Depends(require_org_admin),
 ):
     """GDPR right-to-be-forgotten: delete all data for the tenant.
@@ -501,7 +540,7 @@ async def delete_tenant_data(
 
 @router.get("/gdpr/export", response_model=GDPRExportResponse)
 async def export_tenant_data(
-    org_id: str,
+    org_id: str = Depends(require_path_org_access),
     user: dict = Depends(require_org_admin),
 ):
     """GDPR data portability: export all tenant data as JSON.
@@ -524,7 +563,7 @@ async def export_tenant_data(
 
 @router.get("/storage/summary", response_model=StorageSummaryResponse)
 async def get_storage_summary(
-    org_id: str,
+    org_id: str = Depends(require_path_org_access),
     user: dict = Depends(get_current_user),
 ):
     """Get storage usage summary across hot/warm/cold tiers."""
@@ -535,7 +574,7 @@ async def get_storage_summary(
 
 @router.post("/storage/apply-lifecycle-rules")
 async def apply_lifecycle_rules(
-    org_id: str,
+    org_id: str = Depends(require_path_org_access),
     user: dict = Depends(require_org_admin),
 ):
     """Apply S3 bucket lifecycle rules for automated tiering.
@@ -549,9 +588,9 @@ async def apply_lifecycle_rules(
 
 @router.post("/storage/transition")
 async def transition_storage(
-    org_id: str,
-    table: str = Query(..., description="Table to transition (e.g., silver_events)"),
-    before_days: int = Query(7, ge=1, description="Move rows older than N days"),
+    org_id: str = Depends(require_path_org_access),
+    table: str = Query(..., description='Table to transition (e.g., silver_events)'),
+    before_days: int = Query(7, ge=1, description='Move rows older than N days'),
     user: dict = Depends(require_org_admin),
 ):
     """Move PostgreSQL rows older than N days to S3 warm storage.

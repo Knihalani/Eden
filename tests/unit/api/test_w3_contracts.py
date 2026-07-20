@@ -9,14 +9,15 @@ import pytest
 from fastapi.routing import APIRoute
 
 ROOT = Path(__file__).resolve().parents[3]
-PORTAL_API = ROOT / "clients" / "portal" / "src" / "lib" / "api.ts"
+
+from tests._portal_api_source import portal_api_source
 
 
 def test_wave6_api_paths_subset_of_backend() -> None:
     """Every wave6Api path template must exist on wave6_online.router."""
     from eden.api.routes import wave6_online
 
-    src = PORTAL_API.read_text(encoding="utf-8")
+    src = portal_api_source()
     block = src.split("const wave6Api")[1].split("(api as unknown")[0]
     # Collect `/orgs/${orgId}/...` path literals from the client block.
     client_paths = set(
@@ -55,7 +56,7 @@ def test_wave6_api_paths_subset_of_backend() -> None:
 
 def test_ai_insights_session_shape_locked() -> None:
     """Portal ai-insights session list shape matches backend keys."""
-    src = PORTAL_API.read_text(encoding="utf-8")
+    src = portal_api_source()
     assert "listAiInsightsSessions" in src or "ai-insights/sessions" in src
     # Backend contract keys
     from eden.api.routes import ai_insights
@@ -65,7 +66,7 @@ def test_ai_insights_session_shape_locked() -> None:
     assert any("ai-insights/sessions" in p for p in paths)
     # Client expects these fields on session rows
     for key in ("session_id", "title", "created_at", "updated_at"):
-        assert key in src, f"api.ts missing ai-insights session key {key}"
+        assert key in src, f"api modules missing ai-insights session key {key}"
 
 
 def test_openapi_public_strips_internal() -> None:

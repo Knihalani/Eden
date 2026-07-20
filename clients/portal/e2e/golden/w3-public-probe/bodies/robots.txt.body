@@ -1,0 +1,24 @@
+User-Agent: *
+Allow: /
+Allow: /pricing
+Allow: /about
+Allow: /contact
+Allow: /blog
+Allow: /changelog
+Allow: /customers
+Allow: /careers
+Allow: /privacy
+Allow: /terms
+Allow: /dpa
+Allow: /security
+Allow: /subprocessors
+Disallow: /portal/
+Disallow: /api/
+Disallow: /sign-in
+Disallow: /sign-up
+Disallow: /forgot-password
+Disallow: /reset-password
+Disallow: /invite/
+Disallow: /onboarding/
+
+Sitemap: https://portal.eden.example/sitemap.xml

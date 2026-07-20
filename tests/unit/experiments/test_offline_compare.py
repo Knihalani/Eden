@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from eden.experiments.compare import aggregate_grades, grade_datapoint
 
 
@@ -20,3 +22,16 @@ def test_aggregate() -> None:
     counts = aggregate_grades(["improvement", "improvement", "regression", "tie"])
     assert counts["improvement"] == 2
     assert counts["regression"] == 1
+
+
+@pytest.mark.asyncio
+async def test_run_row_marks_heuristic_stub() -> None:
+    from eden.experiments.offline_runner import OfflineExperimentRunner
+
+    out = await OfflineExperimentRunner()._run_row(
+        {"input": "hello", "expected_output": ""},
+        {"model": "stub"},
+    )
+    assert out["synthetic"] is True
+    assert out["method"] == "heuristic_stub"
+    assert "score" in out

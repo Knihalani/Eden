@@ -1,0 +1,85 @@
+{
+  "base": "https://edenobservability.com",
+  "failed": 4,
+  "total": 7,
+  "results": [
+    {
+      "route": "/login",
+      "authed": false,
+      "status": 200,
+      "consoleErrors": [
+        "Failed to load resource: the server responded with a status of 503 ()"
+      ],
+      "pageErrors": [],
+      "failed5xx": [],
+      "badVisible": [],
+      "ok": false
+    },
+    {
+      "route": "/signup",
+      "authed": false,
+      "status": 200,
+      "consoleErrors": [
+        "Failed to load resource: the server responded with a status of 503 ()"
+      ],
+      "pageErrors": [],
+      "failed5xx": [],
+      "badVisible": [],
+      "ok": false
+    },
+    {
+      "route": "/sign-in",
+      "authed": false,
+      "status": 200,
+      "consoleErrors": [
+        "Failed to load resource: the server responded with a status of 503 ()"
+      ],
+      "pageErrors": [],
+      "failed5xx": [],
+      "badVisible": [],
+      "ok": false
+    },
+    {
+      "route": "/sign-up",
+      "authed": false,
+      "status": 200,
+      "consoleErrors": [
+        "Failed to load resource: the server responded with a status of 503 ()"
+      ],
+      "pageErrors": [],
+      "failed5xx": [],
+      "badVisible": [],
+      "ok": false
+    },
+    {
+      "route": "/privacy",
+      "authed": false,
+      "status": 200,
+      "consoleErrors": [],
+      "pageErrors": [],
+      "failed5xx": [],
+      "badVisible": [],
+      "ok": true
+    },
+    {
+      "route": "/security",
+      "authed": false,
+      "status": 200,
+      "consoleErrors": [],
+      "pageErrors": [],
+      "failed5xx": [],
+      "badVisible": [],
+      "ok": true
+    },
+    {
+      "route": "/terms",
+      "authed": false,
+      "status": 200,
+      "consoleErrors": [],
+      "pageErrors": [],
+      "failed5xx": [],
+      "badVisible": [],
+      "ok": true
+    }
+  ]
+}

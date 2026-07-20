@@ -1,13 +1,20 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Loader2, Plus, Trash2, Server, Eye, EyeOff, RefreshCw } from "lucide-react";
 import { useToast } from "@/components/ui/toast";
 import { useConfirm } from "@/hooks/use-confirm";
+import { useOrgQuery } from "@/hooks/use-api-query";
+import { usePermissions } from "@/hooks/use-permissions";
 import { api } from "@/lib/api";
+import { queryKeys } from "@/lib/query-keys";
+import { isAdminOrOwner } from "@/lib/roles";
 import { cn } from "@/lib/utils";
 import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { ErrorState } from "@/components/ui/error-state";
+import { errorFromCaught } from "@/lib/safe-error-message";
 import { IntegrationStatusBanners } from "@/components/integration-status-banners";
 interface GatewayModel {
   model_id: string;
@@ -62,8 +69,18 @@ export function GatewayTab({
     confirm,
     ConfirmDialog
   } = useConfirm();
-  const [models, setModels] = useState<GatewayModel[]>([]);
-  const [loading, setLoading] = useState(false);
+  const { role: resolvedRole } = usePermissions();
+  const orgId = org?.id ?? null;
+  const {
+    data: models = [],
+    isLoading: loading,
+    error: modelsError,
+    refetch,
+  } = useOrgQuery(
+    queryKeys.gateway.models(orgId),
+    orgId,
+    () => api.listGatewayModels(orgId!),
+  );
   const [showCreate, setShowCreate] = useState(false);
   const [editing, setEditing] = useState<GatewayModel | null>(null);
   const [form, setForm] = useState({
@@ -71,23 +88,12 @@ export function GatewayTab({
   });
   const [showKey, setShowKey] = useState(false);
   const [saving, setSaving] = useState(false);
-  const canManage = org?.role === "owner" || org?.role === "admin";
-  const loadModels = async () => {
-    if (!org) return;
-    setLoading(true);
-    try {
-      const data = await api.listGatewayModels(org.id);
-      setModels(data);
-    } catch (err) {
-      console.error("Failed to load gateway models", err);
-      toast.error("Failed to load gateway models");
-    } finally {
-      setLoading(false);
-    }
-  };
-  useEffect(() => {
-    loadModels();
-  }, [org?.id]);
+  const canManage =
+    isAdminOrOwner(resolvedRole) || isAdminOrOwner(org?.role);
+  const loadModels = () => refetch();
+  const loadError = modelsError
+    ? errorFromCaught(modelsError, "Failed to load gateway models")
+    : null;
   const startCreate = () => {
     setEditing(null);
     setForm({
@@ -353,20 +359,32 @@ export function GatewayTab({
           </div>}
       </Card>
 
-      <Card padding="lg" className="overflow-hidden">
-        <div className="px-4 py-3 flex items-center justify-between border-b border-[var(--border-default)]">
-          <h3 className="text-sm font-semibold text-[var(--text-primary)]">
-            Registered models
-          </h3>
-          <button onClick={loadModels} disabled={loading} className="p-1.5 text-[var(--text-muted)] hover:text-[var(--text-primary)] disabled:opacity-50" title="Refresh">
-            <RefreshCw className={cn("w-4 h-4", loading && "animate-spin")} />
-          </button>
-        </div>
-        <DataTable columns={columns} rows={models} rowKey={m => m.model_id} loading={loading} defaultSort={{
-        key: "name",
-        direction: "asc"
-      }} emptyTitle="No upstream models yet" emptyDescription={canManage ? "Register an upstream provider to start routing traffic." : "An owner or admin must register an upstream provider first."} emptyIcon={Server} pageSize={25} />
-      </Card>
+      {loadError ? (
+        <ErrorState
+          title="Could not load gateway models"
+          message={loadError}
+          action={
+            <Button variant="outline" size="sm" onClick={() => void loadModels()}>
+              Try again
+            </Button>
+          }
+        />
+      ) : (
+        <Card padding="lg" className="overflow-hidden">
+          <div className="px-4 py-3 flex items-center justify-between border-b border-[var(--border-default)]">
+            <h3 className="text-sm font-semibold text-[var(--text-primary)]">
+              Registered models
+            </h3>
+            <button onClick={loadModels} disabled={loading} className="p-1.5 text-[var(--text-muted)] hover:text-[var(--text-primary)] disabled:opacity-50" title="Refresh">
+              <RefreshCw className={cn("w-4 h-4", loading && "animate-spin")} />
+            </button>
+          </div>
+          <DataTable columns={columns} rows={models} rowKey={m => m.model_id} loading={loading} defaultSort={{
+          key: "name",
+          direction: "asc"
+        }} emptyTitle="No upstream models yet" emptyDescription={canManage ? "Register an upstream provider to start routing traffic." : "An owner or admin must register an upstream provider first."} emptyIcon={Server} pageSize={25} />
+        </Card>
+      )}
       {ConfirmDialog}
     </div>;
 }

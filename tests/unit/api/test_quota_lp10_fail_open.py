@@ -11,8 +11,6 @@ import time
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from starlette.requests import Request
-from starlette.responses import JSONResponse, Response
 
 
 def _quota_enabled_settings():
@@ -82,24 +80,39 @@ class TestLp10FailOpen:
             "eden.config.get_settings",
             return_value=_quota_enabled_settings(),
         ):
-            mw = QuotaEnforcementMiddleware(MagicMock())
+            inner_called = {"n": 0}
+
+            async def inner(scope, receive, send):
+                inner_called["n"] += 1
+                await send({"type": "http.response.start", "status": 200, "headers": []})
+                await send({"type": "http.response.body", "body": b"", "more_body": False})
+
+            mw = QuotaEnforcementMiddleware(inner)
             mw._resolve_org_id = AsyncMock(return_value="org-cold")  # type: ignore[method-assign]
             mw._build_quota_headers = AsyncMock(return_value={})  # type: ignore[method-assign]
             mw._check_hard_limits = AsyncMock(return_value=(False, ""))  # type: ignore[method-assign]
 
             scope = {
                 "type": "http",
+                "asgi": {"version": "3.0", "spec_version": "2.0"},
                 "method": "PUT",
                 "path": "/orgs/org-cold/sidebar-prefs",
+                "raw_path": b"/orgs/org-cold/sidebar-prefs",
                 "headers": [],
                 "query_string": b"",
             }
-            request = Request(scope)
-            call_next = AsyncMock(return_value=Response(status_code=200))
+            sent: list = []
 
-            result = await mw.dispatch(request, call_next)
-            assert not isinstance(result, JSONResponse) or result.status_code != 429
-            call_next.assert_awaited()
+            async def receive():
+                return {"type": "http.request", "body": b"", "more_body": False}
+
+            async def send(msg):
+                sent.append(msg)
+
+            await mw(scope, receive, send)
+            starts = [m for m in sent if m["type"] == "http.response.start"]
+            assert starts and starts[0]["status"] != 429
+            assert inner_called["n"] == 1
             mw._check_hard_limits.assert_awaited()
 
     @pytest.mark.asyncio

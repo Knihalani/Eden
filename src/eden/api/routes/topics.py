@@ -8,7 +8,7 @@ from typing import Any, Literal
 from fastapi import APIRouter, Body, Depends, HTTPException, Path, Query
 from pydantic import BaseModel, Field
 
-from eden.api.deps import get_current_user
+from eden.api.deps import get_current_user, require_path_org_access
 from eden.topics.service import act_on_topic, generate_topics, list_topics
 
 logger = logging.getLogger(__name__)
@@ -16,7 +16,9 @@ logger = logging.getLogger(__name__)
 router = APIRouter(
     prefix="/orgs/{org_id}/topics",
     tags=["topics"],
-    dependencies=[Depends(get_current_user)],
+    dependencies=[Depends(get_current_user),
+        Depends(require_path_org_access),
+    ],
 )
 
 
@@ -31,7 +33,7 @@ class TopicActRequest(BaseModel):
 
 @router.get("")
 async def get_topics(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     facet: Literal["task", "sentiment", "issues", "custom"] | None = Query(None),
     user: dict = Depends(get_current_user),
 ) -> dict[str, Any]:
@@ -42,7 +44,7 @@ async def get_topics(
 
 @router.post("/generate")
 async def run_topic_generation(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     body: GenerateTopicsRequest = Body(default=GenerateTopicsRequest()),
     user: dict = Depends(get_current_user),
 ) -> dict[str, Any]:
@@ -53,7 +55,7 @@ async def run_topic_generation(
 
 @router.post("/{topic_id}/act")
 async def topic_act(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     topic_id: str = Path(...),
     body: TopicActRequest = Body(...),
     user: dict = Depends(get_current_user),

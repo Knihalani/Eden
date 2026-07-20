@@ -94,6 +94,69 @@ describe("forwardToBackend circuit breaker (LP-21)", () => {
     expect(body.detail).toBe("boom");
   });
 
+  it("preserves FastAPI internal_error envelope without double-wrapping", async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          error: "internal_error",
+          detail: "An unexpected error occurred",
+          request_id: "fastapi-rid-9",
+        }),
+        {
+          status: 500,
+          headers: { "Content-Type": "application/json" },
+        },
+      ),
+    );
+    const res = await forwardToBackend("/orgs/x/signals", {
+      method: "GET",
+      requestId: "proxy-rid-should-not-overwrite",
+    });
+    expect(res.status).toBe(500);
+    const body = await res.json();
+    expect(body).toEqual({
+      error: "internal_error",
+      detail: "An unexpected error occurred",
+      request_id: "fastapi-rid-9",
+    });
+    expect(res.headers.get("X-Request-ID")).toBe("fastapi-rid-9");
+  });
+
+  it("stamps request_id on empty upstream 5xx bodies", async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response("", {
+        status: 500,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    const res = await forwardToBackend("/orgs/x/signals", {
+      method: "GET",
+      requestId: "req-empty-500",
+    });
+    expect(res.status).toBe(500);
+    const body = await res.json();
+    expect(body.error).toBe("internal_error");
+    expect(body.request_id).toBe("req-empty-500");
+    expect(res.headers.get("X-Request-ID")).toBe("req-empty-500");
+  });
+
+  it("forwards X-Request-ID on the outbound upstream fetch", async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    await forwardToBackend("/health", {
+      method: "GET",
+      requestId: "outbound-rid-1",
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const init = fetchMock.mock.calls[0][1] as RequestInit;
+    const hdrs = init.headers as Record<string, string>;
+    expect(hdrs["X-Request-ID"] || hdrs["x-request-id"]).toBe("outbound-rid-1");
+  });
+
   it("normalises plain-text 'no healthy upstream' 503 into Backend unavailable", async () => {
     fetchMock.mockResolvedValueOnce(
       new Response("no healthy upstream", {

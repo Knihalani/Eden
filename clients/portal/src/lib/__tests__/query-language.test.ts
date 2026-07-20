@@ -10,7 +10,7 @@ describe("parseQueryLanguage", () => {
   it("parses agent and status tokens", () => {
     const parsed = parseQueryLanguage("agent:support status:error");
     expect(parsed.agent_id).toBe("support");
-    expect(parsed.outcome).toBe("error");
+    expect(parsed.outcome).toBe("failure");
   });
 
   it("parses quoted text", () => {
@@ -45,7 +45,7 @@ describe("parseQueryLanguage", () => {
       parseQueryLanguage("agent:bot status:error hello world"),
     );
     expect(params.agent).toBe("bot");
-    expect(params.outcome).toBe("error");
+    expect(params.outcome).toBe("failure");
     expect(params.q).toContain("hello");
   });
 });

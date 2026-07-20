@@ -24,11 +24,16 @@ _HANDLER: EdenLoggingHandler | None = None
 class EdenLoggingHandler(logging.Handler):
     """Convert :class:`logging.LogRecord` instances into Eden log events."""
 
-    def __init__(self, level: int = logging.INFO) -> None:
+    def __init__(self, level: int = logging.WARNING) -> None:
         super().__init__(level=level)
         self._installed = False
 
     def emit(self, record: logging.LogRecord) -> None:
+        # Never forward the SDK's own loggers — ingest failures
+        # log at WARNING and would otherwise re-enter enqueue and
+        # recurse (queue-full → warning → enqueue → queue-full…).
+        if record.name.startswith("eden_sdk"):
+            return
         cfg = get_config()
         if not cfg.enabled:
             return
@@ -68,16 +73,19 @@ class EdenLoggingHandler(logging.Handler):
             },
             "tags": [f"level:{record.levelname}"],
         }
-        get_default_client().enqueue(TraceEvent(payload=payload, source_format="custom"))
+        get_default_client().enqueue(TraceEvent(payload=payload, source_format="webhook"))
 
 
-def install_logging(level: int | str = logging.INFO) -> None:
-    """Attach an Eden log handler to the root logger (idempotent)."""
+def install_logging(level: int | str = logging.WARNING) -> None:
+    """Attach an Eden log handler to the root logger (idempotent).
+
+    Default level is WARNING so INFO app logs do not flood ingest.
+    """
     global _HANDLER
     if _HANDLER is not None:
         return
     if isinstance(level, str):
-        level = getattr(logging, level.upper(), logging.INFO)
+        level = getattr(logging, level.upper(), logging.WARNING)
     _HANDLER = EdenLoggingHandler(level=level)
     logging.getLogger().addHandler(_HANDLER)
 

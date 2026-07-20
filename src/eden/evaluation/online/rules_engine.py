@@ -2,15 +2,29 @@
 
 from __future__ import annotations
 
+import hashlib
 import logging
+import re
 import uuid
 from dataclasses import dataclass
-from datetime import UTC, datetime
 from typing import Any
 
 from eden.evaluation.online.scorer_cascade import OnlineScorerCascade
 
 logger = logging.getLogger(__name__)
+
+# Documented filter tokens: agent_id / agent / trace_id / outcome
+# Forms: key:value | key=value | key="value"
+_FILTER_TOKEN = re.compile(
+    r"""(?P<key>[\w.]+)\s*(?::|=)\s*(?P<val>"[^"]*"|'[^']*'|\S+)""",
+    re.IGNORECASE,
+)
+_FILTER_KEY_ALIASES = {
+    "agent": "agent_id",
+    "agent_id": "agent_id",
+    "trace_id": "trace_id",
+    "outcome": "outcome",
+}
 
 
 @dataclass
@@ -196,20 +210,44 @@ class OnlineScoringRulesEngine:
         if not rules:
             return []
 
+        content = await self._load_span_content(
+            org_id, trace_id, span_id=span_id
+        )
+        resolved_agent = agent_id or content.get("agent_id")
+        outcome = content.get("outcome")
+
         store = SpanScoreStore(pg=self._pg)
         results: list[dict[str, Any]] = []
         for rule in rules:
             if rule.scope == "span" and not span_id:
                 continue
-            if not self._matches_filter(rule.filter_query, trace_id, agent_id):
+            if not self._matches_filter(
+                rule.filter_query,
+                trace_id,
+                resolved_agent,
+                outcome=outcome if isinstance(outcome, str) else None,
+            ):
                 continue
+            if not self._passes_sample(rule.sample_rate, trace_id, rule.id):
+                continue
+            payload: dict[str, Any] = {
+                "agent_id": resolved_agent,
+                "rule_id": rule.id,
+                "trace_id": trace_id,
+                "span_id": span_id,
+                "input": content.get("input"),
+                "output": content.get("output"),
+                "text": content.get("text") or content.get("output"),
+                "name": content.get("name"),
+                "outcome": outcome,
+            }
             scored = await self._cascade.score(
                 org_id,
                 trace_id=trace_id,
                 span_id=span_id,
                 scorer_type=rule.scorer_type,
                 scorer_ref=rule.scorer_ref,
-                payload={"agent_id": agent_id, "rule_id": rule.id},
+                payload=payload,
             )
             if scored is None:
                 continue
@@ -233,16 +271,149 @@ class OnlineScoringRulesEngine:
         return results
 
     def _matches_filter(
-        self, filter_query: str, trace_id: str, agent_id: str | None
+        self,
+        filter_query: str,
+        trace_id: str,
+        agent_id: str | None,
+        *,
+        outcome: str | None = None,
     ) -> bool:
+        """Match documented filter tokens; empty/`*`/`true` = all; else AND."""
         if not filter_query or filter_query.strip() in ("*", "true"):
             return True
-        q = filter_query.lower()
-        if agent_id and f"agent_id:{agent_id.lower()}" in q:
-            return True
-        if f"trace_id:{trace_id.lower()}" in q:
-            return True
+        ctx = {
+            "agent_id": (agent_id or "").lower(),
+            "trace_id": (trace_id or "").lower(),
+            "outcome": (outcome or "").lower(),
+        }
+        tokens = list(_FILTER_TOKEN.finditer(filter_query))
+        if not tokens:
+            return False
+        for match in tokens:
+            raw_key = match.group("key").lower()
+            key = _FILTER_KEY_ALIASES.get(raw_key)
+            if key is None:
+                return False
+            want = match.group("val").strip("\"'").lower()
+            have = ctx.get(key, "")
+            if not have or have != want:
+                return False
         return True
+
+    @staticmethod
+    def _passes_sample(sample_rate: float, trace_id: str, rule_id: str = "") -> bool:
+        """Deterministic sample gate (stable per rule+trace)."""
+        rate = float(sample_rate)
+        if rate >= 1.0:
+            return True
+        if rate <= 0.0:
+            return False
+        key = f"{rule_id}:{trace_id}" if rule_id else trace_id
+        bucket = int(hashlib.sha256(key.encode()).hexdigest()[:8], 16) % 10_000
+        return bucket < int(rate * 10_000)
+
+    async def _load_span_content(
+        self,
+        org_id: str,
+        trace_id: str,
+        *,
+        span_id: str | None = None,
+    ) -> dict[str, Any]:
+        """Load span/trace I/O from telemetry for the judge payload."""
+        out: dict[str, Any] = {}
+        client = await self._client()
+        if client is None:
+            return out
+        row = None
+        try:
+            if span_id:
+                row = await client.fetchrow(
+                    """
+                    SELECT agent_id, outcome, name, request_body, response_body,
+                           request_body_zstd, response_body_zstd
+                    FROM telemetry_events
+                    WHERE tenant_id = $1 AND trace_id = $2 AND span_id = $3
+                    ORDER BY timestamp ASC
+                    LIMIT 1
+                    """,
+                    org_id,
+                    trace_id,
+                    span_id,
+                )
+            if row is None:
+                row = await client.fetchrow(
+                    """
+                    SELECT agent_id, outcome, name, request_body, response_body,
+                           request_body_zstd, response_body_zstd
+                    FROM telemetry_events
+                    WHERE tenant_id = $1 AND trace_id = $2
+                    ORDER BY timestamp DESC
+                    LIMIT 1
+                    """,
+                    org_id,
+                    trace_id,
+                )
+        except Exception:
+            # Columns may differ pre/post zstd migration — fall back to lean select.
+            try:
+                if span_id:
+                    row = await client.fetchrow(
+                        """
+                        SELECT agent_id, outcome, name, request_body, response_body
+                        FROM telemetry_events
+                        WHERE tenant_id = $1 AND trace_id = $2 AND span_id = $3
+                        ORDER BY timestamp ASC
+                        LIMIT 1
+                        """,
+                        org_id,
+                        trace_id,
+                        span_id,
+                    )
+                if row is None:
+                    row = await client.fetchrow(
+                        """
+                        SELECT agent_id, outcome, name, request_body, response_body
+                        FROM telemetry_events
+                        WHERE tenant_id = $1 AND trace_id = $2
+                        ORDER BY timestamp DESC
+                        LIMIT 1
+                        """,
+                        org_id,
+                        trace_id,
+                    )
+            except Exception as exc:
+                logger.debug("rules_engine: span content load failed: %s", exc)
+                return out
+        if not row:
+            return out
+
+        def _decode(primary: Any, zstd_val: Any) -> Any:
+            if primary is not None and primary != "" and primary != {}:
+                return primary
+            if not zstd_val:
+                return primary
+            try:
+                from eden.storage.compression import decompress_jsonb
+
+                return decompress_jsonb(zstd_val)
+            except Exception:
+                return primary
+
+        row_d = dict(row)
+        inp = _decode(row_d.get("request_body"), row_d.get("request_body_zstd"))
+        resp = _decode(row_d.get("response_body"), row_d.get("response_body_zstd"))
+        if row_d.get("agent_id"):
+            out["agent_id"] = str(row_d["agent_id"])
+        if row_d.get("outcome"):
+            out["outcome"] = str(row_d["outcome"])
+        if row_d.get("name"):
+            out["name"] = str(row_d["name"])
+        if inp is not None:
+            out["input"] = inp
+        if resp is not None:
+            out["output"] = resp
+            out["text"] = resp if isinstance(resp, str) else str(resp)
+        return out
 
     async def rewind(self, org_id: str, rule_id: str, *, limit: int = 100) -> str | None:
         """Enqueue reprocess of recent traces for a rule (F52 rewind)."""

@@ -282,6 +282,11 @@ def test_safe_portal_href() -> None:
     assert tools._safe_portal_href("//evil") is None
     assert tools._safe_portal_href("http://x") is None
     assert tools._safe_portal_href("/unknown-root") is None
+    assert tools._safe_portal_href("/marketplace") is None
+    assert tools._safe_portal_href("/builder/run") is None
+    assert tools._safe_portal_href("/finops") is None
+    assert tools._safe_portal_href("/settings?tab=finops") == "/settings?tab=finops"
+    assert tools._safe_portal_href("/analytics") == "/analytics"
 
 
 @pytest.mark.asyncio

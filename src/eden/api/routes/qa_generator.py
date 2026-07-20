@@ -23,7 +23,12 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Path
 from pydantic import BaseModel, Field
 
-from eden.api.routes.auth import get_current_user
+from eden.api.deps import (
+    _try_resolve_token_payload,
+    get_current_user,
+    require_org_member,
+    resolve_path_org_access,
+)
 from eden.data_platform.qa_generator import (
     ALL_QA_TYPES,
     QA_TYPE_EXTRACTIVE,
@@ -34,9 +39,22 @@ from eden.data_platform.qa_generator import (
 logger = logging.getLogger(__name__)
 
 
+async def _require_path_org(
+    org_id: str = Path(..., description="Organization ID"),
+    user: dict = Depends(get_current_user),
+    payload: dict | None = Depends(_try_resolve_token_payload),
+) -> str:
+    _, eden_org = await resolve_path_org_access(org_id, user, payload)
+    return eden_org
+
+
 router = APIRouter(
     prefix="/orgs/{org_id}/synthetic",
     tags=["synthetic"],
+    dependencies=[
+        Depends(require_org_member),
+        Depends(_require_path_org),
+    ],
 )
 
 
@@ -120,7 +138,7 @@ def _qa_to_response(qa: SyntheticQA) -> QAResponse:
 )
 async def generate_qa(
     body: GenerateRequest,
-    org_id: str = Path(..., description="Organization ID"),
+    org_id: str = Depends(_require_path_org),
     user: dict = Depends(get_current_user),
 ) -> GenerateResponse:
     """Run the generator and return the batch of triples.
@@ -180,7 +198,7 @@ async def generate_qa(
     summary="List past Q/A generation runs (Phase J.5 follow-up)",
 )
 async def list_runs(
-    org_id: str = Path(...),
+    org_id: str = Depends(_require_path_org),
     user: dict = Depends(get_current_user),
 ) -> dict[str, Any]:
     return {"runs": [], "total": 0, "detail": "run history ships in Phase J.5"}
@@ -191,7 +209,7 @@ async def list_runs(
     summary="Fetch a Q/A generation run (Phase J.5 follow-up)",
 )
 async def get_run(
-    org_id: str = Path(...),
+    org_id: str = Depends(_require_path_org),
     run_id: str = Path(...),
     user: dict = Depends(get_current_user),
 ) -> dict[str, Any]:

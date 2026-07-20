@@ -14,13 +14,14 @@ from datetime import UTC, datetime
 from urllib.parse import urlparse
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Body, Depends, HTTPException, Path, status
 from pydantic import BaseModel, Field
 
-from eden.api.deps import get_current_org, get_current_user, require_org_admin
+from eden.api.deps import get_current_org, get_current_user, require_org_admin, require_path_org_access
 from eden.api.middleware.api_version import CURRENT_VERSION
 from eden.api.middleware.correlation_id import get_correlation_id
 from eden.api.schemas.envelope import APIEnvelope, PaginatedAPIEnvelope
+from eden.api.utils.redact import redact_all
 from eden.storage.postgres import get_postgres_client
 
 
@@ -70,7 +71,7 @@ def _validate_webhook_url(url: str) -> None:
         )
 
 logger = logging.getLogger(__name__)
-router = APIRouter(prefix="/orgs/{org_id}/webhooks", tags=["webhooks"])
+router = APIRouter(prefix="/orgs/{org_id}/webhooks", tags=["webhooks"], dependencies=[Depends(require_path_org_access)])
 
 # Valid webhook event types
 VALID_EVENTS = [
@@ -134,11 +135,32 @@ class WebhookTestResponse(BaseModel):
 
 async def _get_webhook(org_id: str, webhook_id: str) -> dict:
     """Fetch a webhook by ID, verifying it belongs to the org."""
+    # Reject non-UUID ids before Postgres so asyncpg DataError does not
+    # surface as an unintended 500 on client typos / smoke placeholders.
+    try:
+        import uuid as _uuid
+
+        _uuid.UUID(webhook_id)
+        _uuid.UUID(org_id)
+    except (ValueError, AttributeError, TypeError) as err:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Webhook not found",
+        ) from err
     client = await get_postgres_client()
-    row = await client.fetchrow(
-        "SELECT * FROM webhooks WHERE id = $1 AND org_id = $2",
-        webhook_id, org_id,
-    )
+    try:
+        row = await client.fetchrow(
+            "SELECT * FROM webhooks WHERE id = $1 AND org_id = $2",
+            webhook_id, org_id,
+        )
+    except Exception as exc:
+        msg = str(exc).lower()
+        if "invalid input syntax for type uuid" in msg:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Webhook not found",
+            ) from exc
+        raise
     if not row:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -153,8 +175,8 @@ async def _get_webhook(org_id: str, webhook_id: str) -> dict:
 
 @router.post("", response_model=APIEnvelope)
 async def create_webhook(
-    org_id: str,
-    request: WebhookCreateRequest,
+    org_id: str = Depends(require_path_org_access),
+    request: WebhookCreateRequest = Body(...),
     user: dict = Depends(get_current_user),
     _admin: dict = Depends(require_org_admin),
 ):
@@ -183,14 +205,32 @@ async def create_webhook(
     secret = secrets.token_hex(32)
     now = datetime.now(UTC).isoformat()
 
-    await client.execute(
-        """
-        INSERT INTO webhooks (id, org_id, url, description, events, secret, active, created_by, created_at, updated_at)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $9)
-        """,
-        webhook_id, org_id, request.url, request.description,
-        request.events, secret, request.active, user["user_id"], now,
-    )
+    try:
+        await client.execute(
+            """
+            INSERT INTO webhooks (id, org_id, url, description, events, secret, active, created_by, created_at, updated_at)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $9)
+            """,
+            webhook_id, org_id, request.url, request.description,
+            request.events, secret, request.active, user["user_id"], now,
+        )
+    except Exception as exc:
+        msg = str(exc).lower()
+        if "invalid input syntax for type uuid" in msg:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid organization id",
+            ) from exc
+        if "foreign key" in msg:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Organization not found",
+            ) from exc
+        logger.warning("create_webhook failed: %s", redact_all(str(exc)))
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Failed to create webhook",
+        ) from exc
 
     data = WebhookResponse(
         id=webhook_id,
@@ -216,7 +256,7 @@ async def create_webhook(
 
 @router.get("", response_model=PaginatedAPIEnvelope)
 async def list_webhooks(
-    org_id: str,
+    org_id: str = Depends(require_path_org_access),
     active_only: bool = False,
     limit: int = 20,
     offset: int = 0,
@@ -285,8 +325,8 @@ async def list_webhooks(
 
 @router.get("/{webhook_id}", response_model=APIEnvelope)
 async def get_webhook(
-    org_id: str,
-    webhook_id: str,
+    org_id: str = Depends(require_path_org_access),
+    webhook_id: str = Path(...),
     user: dict = Depends(get_current_user),
     _admin: dict = Depends(require_org_admin),
 ):
@@ -313,9 +353,9 @@ async def get_webhook(
 
 @router.patch("/{webhook_id}", response_model=APIEnvelope)
 async def update_webhook(
-    org_id: str,
-    webhook_id: str,
-    request: WebhookUpdateRequest,
+    org_id: str = Depends(require_path_org_access),
+    webhook_id: str = Path(...),
+    request: WebhookUpdateRequest = Body(...),
     user: dict = Depends(get_current_user),
     _admin: dict = Depends(require_org_admin),
 ):
@@ -394,8 +434,8 @@ async def update_webhook(
 
 @router.delete("/{webhook_id}", response_model=APIEnvelope)
 async def delete_webhook(
-    org_id: str,
-    webhook_id: str,
+    org_id: str = Depends(require_path_org_access),
+    webhook_id: str = Path(...),
     user: dict = Depends(get_current_user),
     _admin: dict = Depends(require_org_admin),
 ):
@@ -413,8 +453,8 @@ async def delete_webhook(
 
 @router.post("/{webhook_id}/test", response_model=APIEnvelope)
 async def test_webhook(
-    org_id: str,
-    webhook_id: str,
+    org_id: str = Depends(require_path_org_access),
+    webhook_id: str = Path(...),
     user: dict = Depends(get_current_user),
     _admin: dict = Depends(require_org_admin),
 ):
@@ -445,7 +485,7 @@ async def test_webhook(
 
 @router.get("/dlq", response_model=APIEnvelope)
 async def list_dlq(
-    org_id: str,
+    org_id: str = Depends(require_path_org_access),
     limit: int = 50,
     _user: dict = Depends(get_current_user),
 ):
@@ -464,8 +504,8 @@ async def list_dlq(
 
 @router.post("/dlq/{dlq_id}/replay", response_model=APIEnvelope)
 async def replay_dlq(
-    org_id: str,
-    dlq_id: str,
+    org_id: str = Depends(require_path_org_access),
+    dlq_id: str = Path(...),
     _user: dict = Depends(require_org_admin),
 ):
     """Re-fire a DLQ delivery (D.13)."""

@@ -16,6 +16,7 @@ import logging
 import time
 import uuid
 from collections.abc import Mapping
+from contextvars import ContextVar
 from typing import Any, Optional
 
 from eden_sdk._instrumentation_ids import _trace_id_or_random
@@ -28,11 +29,15 @@ logger = logging.getLogger("eden_sdk.instrumentation.langchain")
 
 
 _handler: Optional["EdenLangChainHandler"] = None  # type: ignore[name-defined]  # noqa: F821,UP037,UP045
+_handler_var: ContextVar[Any | None] = ContextVar(
+    "eden_langchain_handler", default=None
+)
+_configure_hook_registered = False
 
 
 def install() -> None:
     """Register the Eden callback handler globally."""
-    global _handler
+    global _handler, _configure_hook_registered
     if _handler is not None:
         return
     try:
@@ -203,18 +208,19 @@ def install() -> None:
                 else None
             )
             if buffer is not None:
-                buffer.append({
+                chunk_row = {
                     "event_id": state["stream_event_id"],
                     "trace_id": state["trace_id"],
                     "chunk_index": chunk_count - 1,
-                    "delta_text": token,
+                    "delta_text": token if bool(getattr(client.config, "capture_chunk_text", False)) else None,
                     "ttft_ms": ((t_first - state.get("t_start", now)) * 1000.0)
                     if t_first is not None
                     else None,
                     "itl_ms": ((now - prev) * 1000.0) if prev is not None else None,
                     "tpot_ms": tpot_ms,
                     "received_at_client_ms": int(time.time() * 1000),
-                })
+                }
+                buffer.append(chunk_row)
             # Persist the updated counters back into state
             # so the next token (and ``on_llm_end``) see them.
             state["t_first"] = t_first
@@ -257,6 +263,10 @@ def install() -> None:
                     )
                 if state.get("model"):
                     payload.setdefault("model", state["model"])
+                # Reuse the stream's trace_id so /ingest/chunks rows
+                # join the framework event (``WHERE trace_id = ?``).
+                if state.get("trace_id"):
+                    payload["trace_id"] = state["trace_id"]
             self._record_end(run_id, payload=payload, kind="llm.end")
 
         def on_llm_error(
@@ -273,9 +283,11 @@ def install() -> None:
             # pushed to ``client._chunk_buffer`` still ship
             # (the client thread doesn't know about the
             # error); we just stop accumulating.
-            self._stream_state.pop(str(run_id), None)
-            self._record_end(run_id, payload={"error": repr(error)},
-                             kind="llm.error")
+            state = self._stream_state.pop(str(run_id), None)
+            err_payload: dict[str, Any] = {"error": repr(error)}
+            if state and state.get("trace_id"):
+                err_payload["trace_id"] = state["trace_id"]
+            self._record_end(run_id, payload=err_payload, kind="llm.error")
 
         # ── Chain events ─────────────────────────────────────────────
 
@@ -419,10 +431,17 @@ def install() -> None:
             if meta is None or t0 is None:
                 return
             duration_ms = (time.perf_counter() - t0) * 1000.0
+            # Prefer the stream-seeded trace_id (when present) so
+            # per-chunk events and the aggregate framework event
+            # share one join key. Fall back to the active
+            # ``eden.trace()`` context / a fresh id otherwise.
+            stream_tid = (payload or {}).get("trace_id")
             event: dict[str, Any] = {
                 "event_id": f"eden_lc_{rid}",
                 "trace_id": (
-                    _trace_id_or_random()
+                    stream_tid
+                    if isinstance(stream_tid, str) and stream_tid
+                    else _trace_id_or_random()
                 ),
                 "name": meta["name"],
                 "event_type": "agent.run",
@@ -447,7 +466,8 @@ def install() -> None:
             if payload:
                 event["attributes"].update(
                     {f"langchain.payload.{k}": _short(v)
-                     for k, v in payload.items()}
+                     for k, v in payload.items()
+                     if k != "trace_id"}
                 )
                 # Hoist billing-critical fields to the top level so the
                 # server-side normalizer can roll them up into
@@ -474,11 +494,33 @@ def install() -> None:
                 )
 
     _handler = EdenLangChainHandler()
-    # Best-effort: install globally. LangChain's ``set_handler`` was the
-    # 0.0-era API; modern code uses ``CallbackManager([handler])``. We
-    # register the handler in two places for safety:
-    # 1) Set as the global default so libraries that read it pick it up.
-    # 2) Append to the default manager's handlers list.
+    registered = False
+
+    # Modern langchain-core (0.1+): ``set_handler`` / ``get_callback_manager``
+    # were removed. Global handlers attach via ``register_configure_hook`` so
+    # every ``CallbackManager.configure()`` picks them up.
+    try:
+        from langchain_core.tracers.context import register_configure_hook
+    except Exception:  # noqa: BLE001
+        register_configure_hook = None  # type: ignore[assignment]
+    if register_configure_hook is not None:
+        try:
+            _handler_var.set(_handler)
+            if not _configure_hook_registered:
+                register_configure_hook(_handler_var, inheritable=True)
+                _configure_hook_registered = True
+            registered = True
+        except Exception as exc:  # noqa: BLE001
+            _handler = None
+            try:
+                _handler_var.set(None)
+            except Exception:  # noqa: BLE001
+                pass
+            raise RuntimeError(
+                f"eden: failed to register langchain configure hook: {exc}"
+            ) from exc
+
+    # Legacy 0.0-era APIs still used by some test fakes / older installs.
     try:
         from langchain_core.callbacks import get_callback_manager, set_handler  # type: ignore
     except Exception:  # noqa: BLE001
@@ -487,15 +529,27 @@ def install() -> None:
     if set_handler is not None:
         try:
             set_handler(_handler)
-        except Exception:  # noqa: BLE001
-            pass
+            registered = True
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("eden: langchain set_handler failed: %s", exc)
     if get_callback_manager is not None:
         try:
             mgr = get_callback_manager()
             if _handler not in getattr(mgr, "handlers", []):
                 mgr.add_handler(_handler)
-        except Exception:  # noqa: BLE001
-            pass
+            registered = True
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("eden: langchain get_callback_manager failed: %s", exc)
+
+    if not registered:
+        _handler = None
+        raise RuntimeError(
+            "eden: langchain-core is importable but no global callback "
+            "registration API is available (neither "
+            "langchain_core.tracers.context.register_configure_hook nor "
+            "set_handler/get_callback_manager). Upgrade langchain-core or "
+            "pass the Eden handler via RunnableConfig(callbacks=[...])."
+        )
 
     logger.debug("eden: langchain BaseCallbackHandler registered")
 
@@ -504,6 +558,10 @@ def uninstall() -> None:
     global _handler
     if _handler is None:
         return
+    try:
+        _handler_var.set(None)
+    except Exception:  # noqa: BLE001
+        pass
     try:
         from langchain_core.callbacks import get_callback_manager  # type: ignore
         mgr = get_callback_manager()

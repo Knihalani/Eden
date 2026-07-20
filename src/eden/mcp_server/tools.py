@@ -179,12 +179,14 @@ async def preview_change_impact(
     change_id: str,
     changed_files: list[str],
     agent_id: str | None = None,
+    prompt_override: str | None = None,
 ) -> dict[str, Any]:
     return await client.preview_change_impact(
         org_id,
         change_id=change_id,
         changed_files=changed_files,
         agent_id=agent_id,
+        prompt_override=prompt_override,
     )
 
 

@@ -5,9 +5,11 @@ import { readFileSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { textToUnifiedDiff } from "@/components/improve/markdown-prose";
+import { readApiModules } from "./_read-api";
 
 const ROOT = resolve(__dirname, "../../..");
 const src = (rel: string) => readFileSync(resolve(ROOT, "src", rel), "utf8");
+const apiSrc = () => readApiModules(ROOT);
 const py = (rel: string) =>
   readFileSync(resolve(ROOT, "../../src", rel), "utf8");
 
@@ -29,7 +31,9 @@ describe("W19 Improve cockpit", () => {
     expect(impact).not.toMatch(/JSON\.stringify\(report\.regression_eval/);
     const score = src("app/(portal)/improve/scorecard/page.tsx");
     expect(score).toContain("METRIC_LABELS");
-    expect(score).toContain("All gates passed");
+    expect(score).toContain("All process gates passed");
+    expect(score).toContain("Synthetic process gate");
+    expect(score).toContain("n/a (synthetic)");
   });
 });
 
@@ -82,7 +86,7 @@ describe("W19 U17 prompt environments + F68", () => {
     expect(panel).toContain("listPromptEnvironments");
     expect(panel).toContain("deployPrompt");
     expect(src("app/(portal)/prompts/page.tsx")).toContain("PromptEnvironmentsPanel");
-    expect(src("lib/api.ts")).toContain("listPromptEnvironments");
+    expect(apiSrc()).toContain("listPromptEnvironments");
   });
 });
 
@@ -104,7 +108,7 @@ describe("W19 live improvement-loop onboarding", () => {
     const page = src("app/(portal)/onboarding/improvement-loop.tsx");
     expect(page).toContain("improvementLoopStatus");
     expect(page).not.toContain("const STEPS = [");
-    expect(src("lib/api.ts")).toContain("improvementLoopStatus");
+    expect(apiSrc()).toContain("improvementLoopStatus");
   });
 });
 
@@ -123,6 +127,6 @@ describe("W19 agents/fleet/audit + Settings FinOps", () => {
     expect(settings).toContain("finops");
     expect(settings).toContain("FinOps kills");
     expect(settings).toContain("keywords");
-    expect(src("lib/api.ts")).toContain("setFinopsKillSwitch");
+    expect(apiSrc()).toContain("setFinopsKillSwitch");
   });
 });

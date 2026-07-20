@@ -25,6 +25,7 @@ to scope per-agent views.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import uuid
 from datetime import UTC, datetime
@@ -32,13 +33,14 @@ from datetime import UTC, datetime
 from fastapi import APIRouter, Depends, HTTPException, Path, Query
 from pydantic import BaseModel, Field
 
-from eden.api.deps import get_current_user, require_org_member
+from eden.api.deps import get_current_user, require_path_org_access
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(
     prefix="/orgs/{org_id}/agents",
     tags=["agents"],
+    dependencies=[Depends(require_path_org_access)],
 )
 
 
@@ -79,8 +81,8 @@ class AgentRegisterResponse(BaseModel):
 
 # ── helpers ──────────────────────────────────────────────────────
 # Audit 2026-06-22 B1.9 — _require_org_access removed; routes now use
-# Depends(require_org_member) / Depends(require_org_admin) directly
-# because get_current_user never sets auth_kind/is_superuser/org_ids.
+# Depends(require_path_org_access) so path {org_id} is membership-gated
+# and SQL uses the resolved Eden org UUID.
 
 
 def _row_to_response(row: dict) -> AgentRegistration:
@@ -107,12 +109,11 @@ def _row_to_response(row: dict) -> AgentRegistration:
 
 @router.get("", response_model=AgentListResponse)
 async def list_agents(
-    org_id: str = Path(..., description="Organization ID"),
+    org_id: str = Depends(require_path_org_access),
     framework: str | None = Query(None, description="Filter by framework"),
     name: str | None = Query(None, description="Substring match on name"),
     limit: int = Query(50, ge=1, le=500),
     offset: int = Query(0, ge=0),
-    _org: dict = Depends(require_org_member),
     user: dict = Depends(get_current_user),
 ) -> AgentListResponse:
     """List agent registrations for the org, most-recently-active first."""
@@ -131,7 +132,7 @@ async def list_agents(
         params.append(f"%{name}%")
         where += f" AND name ILIKE ${len(params)}"
 
-    rows = await client.fetch(
+    rows_coro = client.fetch(
         f"""
         SELECT agent_id, name, framework, repo_url, last_seen_at,
                created_at, updated_at
@@ -142,9 +143,10 @@ async def list_agents(
         """,
         *params, limit, offset,
     )
-    total = await client.fetchval(
+    total_coro = client.fetchval(
         f"SELECT count(*) FROM agent_registrations WHERE {where}", *params
     )
+    rows, total = await asyncio.gather(rows_coro, total_coro)
     return AgentListResponse(
         agents=[_row_to_response(r) for r in rows],
         total=total or 0,
@@ -159,8 +161,7 @@ async def list_agents(
 @router.post("/register", response_model=AgentRegisterResponse)
 async def register_agent(
     body: AgentRegisterRequest,
-    org_id: str = Path(..., description="Organization ID"),
-    _org: dict = Depends(require_org_member),
+    org_id: str = Depends(require_path_org_access),
     user: dict = Depends(get_current_user),
 ) -> AgentRegisterResponse:
     """Register an agent. Idempotent on (org_id, agent_id)."""
@@ -185,7 +186,7 @@ async def register_agent(
     )
 
     if existing is not None:
-        await client.execute(
+        row = await client.fetchrow(
             """
             UPDATE agent_registrations
             SET name = $3,
@@ -194,38 +195,24 @@ async def register_agent(
                 register_token = COALESCE($6, register_token),
                 last_seen_at = NOW()
             WHERE org_id = $1 AND agent_id = $2
+            RETURNING agent_id, name, framework, repo_url, last_seen_at,
+                      created_at, updated_at
             """,
             org_id, agent_id, body.name, body.framework, body.repo_url,
             body.register_token,
         )
-        row = await client.fetchrow(
-            """
-            SELECT agent_id, name, framework, repo_url, last_seen_at,
-                   created_at, updated_at
-            FROM agent_registrations
-            WHERE org_id = $1 AND agent_id = $2
-            """,
-            org_id, agent_id,
-        )
         return AgentRegisterResponse(agent=_row_to_response(row), created=False)
 
-    await client.execute(
+    row = await client.fetchrow(
         """
         INSERT INTO agent_registrations
             (org_id, agent_id, name, framework, repo_url, register_token)
         VALUES ($1, $2, $3, $4, $5, $6)
+        RETURNING agent_id, name, framework, repo_url, last_seen_at,
+                  created_at, updated_at
         """,
         org_id, agent_id, body.name, body.framework, body.repo_url,
         body.register_token,
-    )
-    row = await client.fetchrow(
-        """
-        SELECT agent_id, name, framework, repo_url, last_seen_at,
-               created_at, updated_at
-        FROM agent_registrations
-        WHERE org_id = $1 AND agent_id = $2
-        """,
-        org_id, agent_id,
     )
     return AgentRegisterResponse(agent=_row_to_response(row), created=True)
 
@@ -235,9 +222,8 @@ async def register_agent(
 
 @router.get("/{agent_id}", response_model=AgentRegistration)
 async def get_agent(
-    org_id: str = Path(..., description="Organization ID"),
+    org_id: str = Depends(require_path_org_access),
     agent_id: str = Path(..., description="Agent ID"),
-    _org: dict = Depends(require_org_member),
     user: dict = Depends(get_current_user),
 ) -> AgentRegistration:
     """Fetch one agent registration by id."""

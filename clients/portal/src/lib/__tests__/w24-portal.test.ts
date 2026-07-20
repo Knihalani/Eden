@@ -4,6 +4,7 @@
 import { readFileSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
+import { readApiModules } from "./_read-api";
 
 const ROOT = resolve(__dirname, "../../..");
 const src = (rel: string) => readFileSync(resolve(ROOT, "src", rel), "utf8");
@@ -14,7 +15,7 @@ const docs = (rel: string) =>
 
 describe("W24 N22 Settings UX + API client", () => {
   it("exposes get/patch autonomy policy + audit on api", () => {
-    const api = src("lib/api.ts");
+    const api = readApiModules(ROOT);
     expect(api).toContain("getAutonomyPolicy");
     expect(api).toContain("patchAutonomyPolicy");
     expect(api).toContain("getAutonomyAudit");
@@ -33,6 +34,21 @@ describe("W24 N22 Settings UX + API client", () => {
     expect(tab).toContain("maintenance_mode");
     expect(tab).toContain("compliance_profile");
     expect(tab).toContain("auto_runtime_heal");
+  });
+
+  it("does not call retired Cat 23 intelligence/code-change routes", () => {
+    const tab = src(
+      "app/(portal)/settings/_components/autonomous-tab.tsx",
+    );
+    const api = readApiModules(ROOT);
+    expect(tab).not.toContain("codeChangePolicyApi");
+    expect(tab).not.toContain("disciplineApi");
+    expect(api).not.toContain("codeChangePolicyApi");
+    expect(api).not.toContain("disciplineApi");
+    expect(api).not.toContain("/intelligence/code-change/");
+    // Live heal / approve surfaces stay wired.
+    expect(api).toContain("/intelligence/autonomous/heal");
+    expect(tab).toContain("/heal");
   });
 });
 

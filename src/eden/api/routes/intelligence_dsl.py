@@ -35,7 +35,7 @@ from typing import Any
 from fastapi import APIRouter, Body, Depends, Path, Query
 from pydantic import BaseModel, Field
 
-from eden.api.deps import get_current_user, require_feature_flag
+from eden.api.deps import get_current_user, require_feature_flag, require_path_org_access
 
 router = APIRouter(
     prefix="/orgs/{org_id}/intelligence/dsl",
@@ -43,6 +43,7 @@ router = APIRouter(
     dependencies=[
         Depends(require_feature_flag("intelligence_gap_v0")),
         Depends(get_current_user),
+        Depends(require_path_org_access),
     ],
 )
 
@@ -104,7 +105,7 @@ class CompileAlertRequest(BaseModel):
 
 @router.post("/parse")
 async def parse(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     body: ParseRequest = Body(...),
 ) -> dict[str, Any]:
     """Parse an EQL query and return the compiled form.
@@ -126,7 +127,7 @@ async def parse(
 
 @router.post("/resolve")
 async def resolve(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     body: ResolveRequest = Body(...),
 ) -> dict[str, Any]:
     """Translate the relational-field prefixes into ClickHouse SQL.
@@ -147,7 +148,7 @@ async def resolve(
 
 @router.post("/lint")
 async def lint(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     body: LintRequest = Body(...),
 ) -> dict[str, Any]:
     """Run the 4 Braintrust-parity lint rules against the query.
@@ -170,7 +171,7 @@ async def lint(
 
 @router.post("/alerts/compile")
 async def compile_alert(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     body: CompileAlertRequest = Body(...),
 ) -> dict[str, Any]:
     """Compile an EQL alert definition and persist the rule.
@@ -194,7 +195,7 @@ async def compile_alert(
 
 @router.get("/alerts")
 async def list_alerts(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     enabled_only: bool = Query(False),
 ) -> dict[str, Any]:
     """List the org's alert rules.
@@ -212,7 +213,7 @@ async def list_alerts(
 
 @router.post("/alerts/{alert_id}/evaluate")
 async def evaluate_alert(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     alert_id: str = Path(...),
     force: bool = Query(
         True,
@@ -235,7 +236,7 @@ async def evaluate_alert(
 
 @router.post("/alerts/fire-due")
 async def fire_due_alerts(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
 ) -> dict[str, Any]:
     """Evaluate every due alert for this org (manual watchdog tick).
 

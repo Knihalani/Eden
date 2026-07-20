@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { LegalPage } from "@/components/layout/legal-page";
-import { Download, FileText, Users, Globe, ShieldCheck, Inbox, AlertTriangle, Trash2, Mail } from "lucide-react";
+import { SUPPORT_EMAIL } from "@/lib/constants";
+import { FileText, Users, Globe, ShieldCheck, Inbox, AlertTriangle, Trash2, Mail } from "lucide-react";
 
 export const metadata: Metadata = {
   title: "Data Processing Addendum · Eden",
@@ -9,16 +10,7 @@ export const metadata: Metadata = {
     "GDPR-compliant DPA. Standard Contractual Clauses (SCCs). Auto-attached to enterprise contracts.",
 };
 
-{/* TODO: legal review — every clause below needs counsel sign-off before launch. */}
-
-const SUBPROCESSORS = [
-  "Postgres hosting (AWS, region selected by Customer)",
-  "ClickHouse hosting (AWS, region selected by Customer)",
-  "Object storage for exports (AWS S3, region selected by Customer)",
-  "Email delivery (Postmark, US)",
-  "Error reporting (Sentry, US)",
-  "Status page (Statuspage, US)",
-];
+// TODO: legal review — every clause below needs counsel sign-off before launch.
 
 const SECTIONS = [
   {
@@ -39,21 +31,14 @@ const SECTIONS = [
     title: "Subprocessors",
     icon: Inbox,
     body: (
-      <>
-        <p>
-          Eden engages the following subprocessor categories. A current list with
-          regions is maintained at{" "}
-          <Link href="/security" className="text-[var(--accent)] hover:underline">
-            /security
-          </Link>
-          ; changes are notified 30 days in advance.
-        </p>
-        <ul className="list-disc list-outside pl-6 space-y-1 mt-3 text-sm text-[var(--text-secondary)]">
-          {SUBPROCESSORS.map((s) => (
-            <li key={s}>{s}</li>
-          ))}
-        </ul>
-      </>
+      <p>
+        Eden engages subprocessors to process Customer Personal Data. The
+        current Art. 28 list (names, purposes, and locations) is maintained at{" "}
+        <Link href="/subprocessors" className="text-[var(--accent)] hover:underline">
+          /subprocessors
+        </Link>
+        . Material changes are notified at least 30 days in advance.
+      </p>
     ),
   },
   {
@@ -154,16 +139,26 @@ export default function DpaPage() {
             Download the DPA
           </h2>
           <p className="text-sm text-[var(--text-muted)] mb-3">
-            Signed copy auto-attached to your order form. For pre-sales review, download
-            the unsigned template below.
+            Signed copy auto-attached to your order form. For pre-sales review,
+            request the unsigned template via contact.
           </p>
           <Link
-            href="/api/dpa/download"
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-[var(--accent)] text-[var(--accent-foreground)] hover:bg-[var(--accent-hover)] rounded-lg transition-colors"
+            href="/contact"
+            className="inline-flex items-center gap-1.5 min-h-11 px-3 py-1.5 text-xs font-medium bg-[var(--accent)] text-[var(--bg-base)] hover:bg-[var(--accent-hover)] rounded-lg transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-primary)]"
           >
-            <Download className="w-3.5 h-3.5" />
-            Download DPA template (PDF)
+            <Mail className="w-3.5 h-3.5" aria-hidden />
+            Request DPA template
           </Link>
+          <p className="mt-2 text-xs text-[var(--text-faint)]">
+            Or email{" "}
+            <a
+              href={`mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent("DPA template request")}`}
+              className="text-[var(--accent)] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] rounded"
+            >
+              {SUPPORT_EMAIL}
+            </a>
+            .
+          </p>
         </div>
       </div>
 

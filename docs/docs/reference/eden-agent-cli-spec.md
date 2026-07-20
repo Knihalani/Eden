@@ -181,7 +181,7 @@ All Aider slash commands are retained and function as-is:
    - CI/CD configuration (GitHub Actions, etc.)
 
 2. **SDK integration:**
-   - Installs `@eden/sdk` (TypeScript) or `eden-sdk` (Python) as a dependency
+   - Installs `@eden-ai/sdk` (TypeScript) or `eden-sdk` (Python) as a dependency
    - Adds auto-instrumentation decorators to agent entry points
    - Configures telemetry export to Eden's API endpoint
    - Sets up environment variables (`EDEN_API_KEY`, `EDEN_ORG_ID`, `EDEN_BASE_URL`)

@@ -409,6 +409,77 @@ class GitHubOAuthClient:
         return repos
 
 
+    async def list_pull_request_files(
+        self,
+        installation_token: InstallationToken,
+        *,
+        owner: str,
+        repo: str,
+        pr_number: int,
+    ) -> list[str]:
+        """List filenames changed in a pull request (paginated)."""
+        files: list[str] = []
+        async with _shared_httpx() as client:
+            for page in range(1, 11):
+                r = await client.get(
+                    f"{GITHUB_API_BASE}/repos/{owner}/{repo}/pulls/{pr_number}/files",
+                    headers={
+                        "Accept": "application/vnd.github+json",
+                        "Authorization": f"token {installation_token.token}",
+                        "X-GitHub-Api-Version": "2022-11-28",
+                    },
+                    params={"per_page": 100, "page": page},
+                )
+                if r.status_code != 200:
+                    raise GitHubAPIError(
+                        r.status_code, "list_pull_request_files", r.text
+                    )
+                page_files = r.json()
+                if not isinstance(page_files, list) or not page_files:
+                    break
+                for item in page_files:
+                    name = item.get("filename") if isinstance(item, dict) else None
+                    if name:
+                        files.append(str(name))
+                if len(page_files) < 100:
+                    break
+        return files
+
+    async def get_file_at_ref(
+        self,
+        installation_token: InstallationToken,
+        *,
+        owner: str,
+        repo: str,
+        path: str,
+        ref: str,
+    ) -> str | None:
+        """Fetch decoded file contents at a git ref (branch/sha)."""
+        async with _shared_httpx() as client:
+            r = await client.get(
+                f"{GITHUB_API_BASE}/repos/{owner}/{repo}/contents/{path}",
+                headers={
+                    "Accept": "application/vnd.github+json",
+                    "Authorization": f"token {installation_token.token}",
+                    "X-GitHub-Api-Version": "2022-11-28",
+                },
+                params={"ref": ref},
+            )
+            if r.status_code != 200:
+                return None
+            data = r.json()
+            if not isinstance(data, dict):
+                return None
+            encoded = data.get("content")
+            if not isinstance(encoded, str) or not encoded:
+                return None
+            try:
+                return base64.b64decode(encoded).decode(
+                    "utf-8", errors="replace"
+                )
+            except Exception:
+                return None
+
     async def create_check_run(
         self,
         installation_token: InstallationToken,
@@ -463,9 +534,9 @@ class GitHubOAuthClient:
 def verify_webhook_signature(*, body: bytes, signature_header: str, secret: str) -> bool:
     """Verify the `X-Hub-Signature-256` header on a GitHub webhook.
 
-    Constant-time compare; rejects malformed headers.
+    Constant-time compare; rejects malformed headers and empty secrets.
     """
-    if not signature_header or not signature_header.startswith("sha256="):
+    if not secret or not signature_header or not signature_header.startswith("sha256="):
         return False
     expected = "sha256=" + hmac.new(
         secret.encode("utf-8"),

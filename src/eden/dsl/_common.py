@@ -140,6 +140,21 @@ _RELATIONAL_PREFIX_RE = re.compile(
     r"\b(root|parent|any)\.([A-Za-z_][A-Za-z0-9_]*)"
 )
 
+# ``any.<col>`` plus the immediate comparison so EXISTS closes
+# before a following AND/OR (appending ``)`` at query end would
+# swallow later clauses into the subquery).
+_ANY_PRED_RE = re.compile(
+    r"\bany\.([A-Za-z_][A-Za-z0-9_]*)"
+    r"(?:"
+    r"\s+(IS\s+NOT\s+NULL|IS\s+NULL)"
+    r"|"
+    r"\s*(=|!=|<>|<=|>=|<|>)\s*(?:'[^']*'|\"[^\"]*\"|\d+(?:\.\d+)?|TRUE|FALSE)"
+    r"|"
+    r"\s+IN\s*\([^)]*\)"
+    r")?",
+    re.IGNORECASE,
+)
+
 
 # The 4 Braintrust-parity lint rules. See the appendix for the
 # full rationale; the v1.3 ship matches the appendix verbatim.
@@ -321,47 +336,39 @@ def _expand_query(
             )
         )
 
-    # 3. Walk the query and substitute each match. We do this
-    #    in a single pass with a callback so the substitution
-    #    is order-preserving.
+    # 3. Expand ``any.<col> <op> <rhs>`` first so each EXISTS
+    #    closes immediately after its predicate (AND/OR after
+    #    the predicate must stay outside the subquery).
+    def _sub_any(match: re.Match[str]) -> str:
+        full = match.group(0)
+        column = match.group(1)
+        head = re.match(
+            r"any\.([A-Za-z_][A-Za-z0-9_]*)", full, re.IGNORECASE
+        )
+        rest = full[head.end() :] if head else ""
+        return (
+            f"EXISTS (SELECT 1 FROM telemetry_events e "
+            f"WHERE e.org_id = t.org_id "
+            f"AND e.trace_id = t.trace_id "
+            f"AND e.{column}{rest})"
+        )
+
+    expanded = _ANY_PRED_RE.sub(_sub_any, query)
+
+    # 4. Expand root. / parent. (any. already rewritten above).
     def _sub(match: re.Match[str]) -> str:
         prefix = match.group(1)
         column = match.group(2)
         if prefix == "root":
-            # "root.<col>" → t.<col> with a parent_span_id IS NULL
-            # guard added by the resolver below.
             return f"t.{column}"
         if prefix == "parent":
-            # "parent.<col>" → the parent's column via a
-            # correlated subquery. We inline the parent lookup.
             return (
                 f"(SELECT p.{column} FROM telemetry_events p "
                 f"WHERE p.org_id = t.org_id AND p.span_id = t.parent_span_id)"
             )
-        if prefix == "any":
-            # "any.<col>" → an EXISTS correlated subquery on
-            # the same (org_id, trace_id) pair. The <col>
-            # comparison (e.g. = 'otel.chat') is applied in
-            # the surrounding WHERE clause; the resolver
-            # wraps this in an EXISTS so the column is
-            # matched against ANY span in the trace.
-            return (
-                f"EXISTS (SELECT 1 FROM telemetry_events e "
-                f"WHERE e.org_id = t.org_id "
-                f"AND e.trace_id = t.trace_id "
-                f"AND e.{column}"
-            )
-        return match.group(0)  # unreachable
+        return match.group(0)
 
-    expanded = _RELATIONAL_PREFIX_RE.sub(_sub, query)
-
-    # 4. Close the EXISTS subqueries. We open parens on "any"
-    #    but never close them — close them at the end of the
-    #    WHERE clause (the simplest correct heuristic).
-    if "any" in query:
-        # Count the number of "any." we expanded (already
-        # captured above) and close that many parens.
-        expanded = expanded + (")" * n_any)
+    expanded = _RELATIONAL_PREFIX_RE.sub(_sub, expanded)
 
     # 5. Auto-inject the org_id if missing.
     expanded = _inject_org_id(expanded, org_id)

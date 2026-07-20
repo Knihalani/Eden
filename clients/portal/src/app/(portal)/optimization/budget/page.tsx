@@ -14,6 +14,10 @@ import { useOrgQuery } from "@/hooks/use-api-query";
 import { queryKeys } from "@/lib/query-keys";
 import { Wallet, Loader2, AlertTriangle, CheckCircle2, History } from "lucide-react";
 import { errorFromCaught } from "@/lib/safe-error-message";
+import {
+  featureGatedErrorCopy,
+  isRetryableIntelligenceError,
+} from "@/lib/feature-flag-error";
 
 interface Budget {
   window: string;
@@ -71,10 +75,9 @@ export default function BudgetPage() {
       const res = await api.getBudget(orgId!);
       return res.data as { budget: Budget; consumption: Consumption; rollup: Rollup };
     },
-    // PQ-1 fix: replace the raw ``setInterval`` (which kept firing on
-    // background tabs and didn't back off on auth errors) with React
-    // Query's ``refetchInterval``. The 5_000 ms cadence is preserved.
-    { refetchInterval: 5_000 },
+    // PQ-1: React Query refetchInterval (pauses when tab hidden).
+    // P5: ≥30s — dual 5s polls were burning budget endpoints.
+    { refetchInterval: 30_000 },
   );
   const { data: actions, refetch: refetchActions } = useOrgQuery(
     queryKeys.budget.actions(orgId),
@@ -83,7 +86,8 @@ export default function BudgetPage() {
       const res = await api.getBudgetActions(orgId!, 20);
       return (res.data.actions ?? []) as ActionLog[];
     },
-    { refetchInterval: 5_000 },
+    // P5 consolidate: budget/detail keeps the 30s poll; action log
+    // loads once + on save refetch — avoid dual 30s on this page.
   );
   const consumption = budgetData?.consumption ?? null;
   const rollup = budgetData?.rollup ?? null;
@@ -122,19 +126,22 @@ export default function BudgetPage() {
     return <PageLoadingSkeleton variant="default" lines={4} />;
   }
   if (budgetError) {
+    const copy = featureGatedErrorCopy(budgetError, "Could not load budget");
     return (
       <PageContent>
         <PageHeader eyebrow="Optimize" icon={Wallet} title="Cost Guardrails" />
         <ErrorState
-          title="Could not load budget"
-          message={budgetError.message}
+          title={copy.title}
+          message={copy.message}
           action={
-            <button
-              onClick={() => refetchBudget()}
-              className="inline-flex items-center gap-2 px-3 py-1.5 rounded-md bg-[var(--accent)] text-[var(--bg-base)] text-xs font-medium hover:bg-[var(--accent-hover)] transition-colors"
-            >
-              Try again
-            </button>
+            isRetryableIntelligenceError(budgetError) ? (
+              <button
+                onClick={() => refetchBudget()}
+                className="inline-flex items-center gap-2 px-3 py-1.5 rounded-md bg-[var(--accent)] text-[var(--bg-base)] text-xs font-medium hover:bg-[var(--accent-hover)] transition-colors"
+              >
+                Try again
+              </button>
+            ) : undefined
           }
         />
       </PageContent>
@@ -304,7 +311,7 @@ export default function BudgetPage() {
             Recent threshold events
           </h2>
           <p className="mt-1 text-xs text-[var(--text-secondary)]">
-            Polls every 5s. Auto-refresh on this tab.
+            Polls every 30s. Auto-refresh on this tab.
           </p>
         </div>
         <div className="divide-y divide-[var(--border-default)]">

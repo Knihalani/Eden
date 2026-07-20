@@ -1,0 +1,24 @@
+route	http_code	final_url	bytes	elapsed_s	content_type	title	crash_markers	verdict	notes
+/	200	https://edenobservability.com/	145106	1.024	text/html; charset=utf-8	Eden — Observability + improvement for AI agents		PASS	i18n-false-positive-ok
+/about	200	https://edenobservability.com/about	35884	0.566	text/html; charset=utf-8	About · Eden		PASS	i18n-false-positive-ok
+/pricing	200	https://edenobservability.com/pricing	35792	0.563	text/html; charset=utf-8	Pricing · Eden		PASS	i18n-false-positive-ok
+/contact	200	https://edenobservability.com/contact	35637	0.744	text/html; charset=utf-8	Eden — Observability + improvement for AI agents		PASS	i18n-false-positive-ok
+/changelog	200	https://edenobservability.com/changelog	36812	0.622	text/html; charset=utf-8	Changelog · Eden		PASS	i18n-false-positive-ok
+/privacy	200	https://edenobservability.com/privacy	51511	0.689	text/html; charset=utf-8	Privacy · Eden		PASS	i18n-false-positive-ok
+/terms	200	https://edenobservability.com/terms	50191	0.309	text/html; charset=utf-8	Terms of Service · Eden		PASS	i18n-false-positive-ok
+/dpa	200	https://edenobservability.com/dpa	55889	0.872	text/html; charset=utf-8	Data Processing Addendum · Eden		PASS	i18n-false-positive-ok
+/security	200	https://edenobservability.com/security	46660	0.635	text/html; charset=utf-8	Security · Eden		PASS	i18n-false-positive-ok
+/subprocessors	200	https://edenobservability.com/subprocessors	40562	0.869	text/html; charset=utf-8	Eden — Observability + improvement for AI agents		PASS	i18n-false-positive-ok
+/do-not-sell	200	https://edenobservability.com/do-not-sell	32572	0.744	text/html; charset=utf-8	Eden — Observability + improvement for AI agents		PASS	i18n-false-positive-ok
+/sign-in	200	https://edenobservability.com/sign-in	53177	0.5	text/html; charset=utf-8	Eden — Observability + improvement for AI agents		PASS	i18n-false-positive-ok
+/sign-up	200	https://edenobservability.com/sign-up	53321	0.569	text/html; charset=utf-8	Eden — Observability + improvement for AI agents		PASS	i18n-false-positive-ok
+/login	200	https://edenobservability.com/sign-in	53177	2.419	text/html; charset=utf-8	Eden — Observability + improvement for AI agents		PASS	i18n-false-positive-ok
+/signup	200	https://edenobservability.com/sign-up	53321	1.166	text/html; charset=utf-8	Eden — Observability + improvement for AI agents		PASS	i18n-false-positive-ok
+/forgot-password	200	https://edenobservability.com/forgot-password	42784	0.674	text/html; charset=utf-8	Eden — Observability + improvement for AI agents		PASS	i18n-false-positive-ok
+/reset-password	200	https://edenobservability.com/reset-password	28204	0.392	text/html; charset=utf-8	Eden — Observability + improvement for AI agents		PASS	i18n-false-positive-ok
+/invite/probe-token-w2	200	https://edenobservability.com/invite/probe-token-w2	42822	0.318	text/html; charset=utf-8	Eden — Observability + improvement for AI agents		PASS	i18n-false-positive-ok
+/status	200	https://edenobservability.com/status	21570	0.438	text/html; charset=utf-8	Eden — Observability + improvement for AI agents		PASS	i18n-false-positive-ok
+/health	200	https://edenobservability.com/health	21570	0.249	text/html; charset=utf-8	Eden — Observability + improvement for AI agents		PASS	i18n-false-positive-ok
+/api/health	503	https://edenobservability.com/api/health	262	0.994	application/json	json:status=degraded		PASS	intentional soft-degraded 503 JSON; health=degraded; postgres=connected; qdrant=error: [Errno 99] Cannot assign requested address
+/robots.txt	200	https://edenobservability.com/robots.txt	433	0.28	text/plain; charset=utf-8	User-Agent: *		PASS	
+/sitemap.xml	200	https://edenobservability.com/sitemap.xml	1909	0.275	application/xml			PASS	

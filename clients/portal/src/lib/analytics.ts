@@ -63,7 +63,7 @@ export function teardownAnalytics(): void {
 
 /**
  * Apply a consent choice. Accept → init; decline → teardown.
- * Call this from the cookie banner (and privacy settings).
+ * Call this from the cookie banner (and Cookie preferences re-open).
  */
 export function applyAnalyticsConsent(value: ConsentValue): void {
   if (value === "accepted") {

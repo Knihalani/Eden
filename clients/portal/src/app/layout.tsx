@@ -1,18 +1,14 @@
 import { ClerkProvider } from "@clerk/nextjs";
 import type { Metadata } from "next";
-import { Geist, Geist_Mono, Inter } from "next/font/google";
+import { Geist, Geist_Mono } from "next/font/google";
+import { headers } from "next/headers";
 import { NextIntlClientProvider, hasLocale } from "next-intl";
 import { getLocale, getMessages } from "next-intl/server";
 import { notFound } from "next/navigation";
-import { AuthProvider } from "@/hooks/use-auth";
-import { OrgProvider } from "@/hooks/use-org";
-import { ToastProvider } from "@/components/ui/toast";
-import { NotificationsProvider } from "@/hooks/use-notifications";
-import { QueryProvider } from "@/components/providers/query-provider";
-import { MotionProvider } from "@/components/providers/motion-provider";
 import { CookieConsent } from "@/components/cookie-consent";
-import { TooltipProvider } from "@radix-ui/react-tooltip";
+import { UnregisterServiceWorkers } from "@/components/unregister-service-workers";
 import { routing } from "@/i18n/routing";
+import { isKnownPortalPath } from "@/lib/portal-routes";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -25,18 +21,9 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-// Inter Display as the heading face — free, ships well, has an
-// "ops tool" character that fits Eden's terminal aesthetic. June 2026
-// polish round: brings the heading tier into a different optical
-// weight from body so the page reads as a designed system, not a
-// single-font scaffold. --font-display is the only thing that
-// changes; everything else still uses --font-sans (Geist).
-const interDisplay = Inter({
-  variable: "--font-inter-display",
-  subsets: ["latin"],
-  weight: ["500", "600", "700", "800"],
-  display: "swap",
-});
+// Display + body share Geist (brand identity). Marketing hierarchy
+// comes from fluid scale / weight contrast via --font-display recipes
+// in globals.css — not a second Google font (K11 perf budget).
 
 export const metadata: Metadata = {
   title: "Eden — Observability + improvement for AI agents",
@@ -112,15 +99,38 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  // next-intl: read the locale + message bundle on the server so
-  // `useTranslations()` works in both server and client components.
-  // `hasLocale` guards against unknown locales slipping through if
-  // someone hand-crafts a URL we don't serve.
+  // P25: portal routes do not use next-intl (`useTranslations` lives
+  // only on marketing). ``proxy.ts`` sets ``x-eden-pathname`` and
+  // skips intl middleware for portal/API; here we skip loading the
+  // message bundle + NextIntlClientProvider on those paths so portal
+  // RSC/client trees do not pay for unused locale JSON.
+  // Null pathname (SSG / no middleware) keeps intl — safe for marketing.
+  const pathname = (await headers()).get("x-eden-pathname");
+  const skipIntlMessages =
+    pathname != null &&
+    (isKnownPortalPath(pathname) ||
+      pathname.startsWith("/api/") ||
+      pathname.startsWith("/__clerk"));
+
   const locale = await getLocale();
   if (!hasLocale(routing.locales, locale)) {
     notFound();
   }
-  const messages = await getMessages();
+  const messages = skipIntlMessages ? null : await getMessages();
+
+  // P2-phase2: portal Auth/Org/Query providers mount under
+  // (portal)/layout — marketing/auth skip that tree.
+  const tree = (
+    <>
+      {children}
+      {/* K15: drop deleted SW controllers still claiming clients. */}
+      <UnregisterServiceWorkers />
+      {/* Cookie consent — GDPR / CCPA gate for analytics +
+       * marketing tags. Only renders when the user has
+       * not yet made a choice. */}
+      <CookieConsent />
+    </>
+  );
 
   return (
     // Site-wide fix (July 2026): ``min-h-full`` (not ``h-full``) on
@@ -133,35 +143,17 @@ export default async function RootLayout({
     // user saw a frozen auth card. ``min-h-full`` lets the html grow
     // with its content while still establishing the % height context
     // ``body { min-height: 100dvh }`` needs.
-    <html lang={locale} className={`${geistSans.variable} ${geistMono.variable} ${interDisplay.variable} min-h-full antialiased`}>
-      <body className="flex min-h-full flex-col bg-[var(--bg-primary)] grain-overlay">
+    <html lang={locale} className={`${geistSans.variable} ${geistMono.variable} min-h-full antialiased`}>
+      {/* P23: grain-overlay is marketing-only (see (marketing)/layout). */}
+      <body className="flex min-h-full flex-col bg-[var(--bg-primary)]">
         <ClerkProvider allowedRedirectOrigins={ALLOWED_REDIRECT_ORIGINS}>
-          <NextIntlClientProvider locale={locale} messages={messages}>
-            <QueryProvider>
-            <AuthProvider>
-            <OrgProvider>
-            <ToastProvider>
-              <MotionProvider>
-                {/* ui-audit prompt 85: Radix TooltipProvider enables
-                 * hover/focus tooltips anywhere in the app. delayDuration
-                 * 200ms prevents accidental tooltip flash on quick mouse
-                 * passes; skipDelayDuration 300ms lets users move between
-                 * adjacent triggers without re-waiting. */}
-                <TooltipProvider delayDuration={200} skipDelayDuration={300}>
-                  <NotificationsProvider>
-                    {children}
-                    {/* Cookie consent — GDPR / CCPA gate for analytics +
-                     * marketing tags. Only renders when the user has
-                     * not yet made a choice. */}
-                    <CookieConsent />
-                  </NotificationsProvider>
-                </TooltipProvider>
-              </MotionProvider>
-            </ToastProvider>
-            </OrgProvider>
-            </AuthProvider>
-            </QueryProvider>
-          </NextIntlClientProvider>
+          {messages ? (
+            <NextIntlClientProvider locale={locale} messages={messages}>
+              {tree}
+            </NextIntlClientProvider>
+          ) : (
+            tree
+          )}
         </ClerkProvider>
       </body>
     </html>

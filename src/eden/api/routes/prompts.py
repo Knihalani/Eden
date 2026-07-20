@@ -12,7 +12,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Path
 from pydantic import BaseModel, Field
 
-from eden.api.routes.auth import get_current_user
+from eden.api.deps import get_current_user, require_path_org_access
 from eden.playground.llm_handler import make_playground_handler
 from eden.prompts.pg_store import OrgPromptStore
 from eden.prompts.registry import (
@@ -27,6 +27,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(
     prefix="/orgs/{org_id}/prompts",
     tags=["prompts"],
+    dependencies=[Depends(require_path_org_access)],
 )
 
 _STORE = OrgPromptStore()
@@ -126,7 +127,7 @@ def _playground_to_response(r: PlaygroundResult) -> PlaygroundResponse:
 )
 async def register_template(
     body: PromptTemplateRequest,
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     user: dict = Depends(get_current_user),
 ) -> PromptTemplateResponse:
     template = PromptTemplate(
@@ -152,7 +153,7 @@ async def register_template(
     summary="List template names",
 )
 async def list_templates(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     user: dict = Depends(get_current_user),
 ) -> PromptListResponse:
     names = await _STORE.list_names(org_id)
@@ -165,7 +166,7 @@ async def list_templates(
     summary="Get the latest version of a template",
 )
 async def get_template(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     name: str = Path(...),
     user: dict = Depends(get_current_user),
 ) -> PromptTemplateResponse:
@@ -182,7 +183,7 @@ async def get_template(
 )
 async def update_template(
     body: UpdateTemplateRequest,
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     name: str = Path(...),
     user: dict = Depends(get_current_user),
 ) -> PromptTemplateResponse:
@@ -237,7 +238,7 @@ async def update_template(
     summary="List all versions of a template",
 )
 async def list_versions(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     name: str = Path(...),
     user: dict = Depends(get_current_user),
 ) -> VersionListResponse:
@@ -253,7 +254,7 @@ async def list_versions(
     summary="Rollback a template to a previous version",
 )
 async def rollback_template(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     name: str = Path(...),
     version: int = Path(...),
     user: dict = Depends(get_current_user),
@@ -275,7 +276,7 @@ async def rollback_template(
 )
 async def playground(
     body: PlaygroundRequest,
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     name: str = Path(...),
     user: dict = Depends(get_current_user),
 ) -> PlaygroundResponse:
@@ -309,7 +310,7 @@ async def playground(
 )
 async def compare(
     body: CompareRequest,
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     name: str = Path(...),
     user: dict = Depends(get_current_user),
 ) -> CompareResponse:

@@ -3,12 +3,37 @@
 Handles embedding-based retrieval using Qdrant.
 """
 
+from __future__ import annotations
+
 import logging
+from typing import Any
 
 from eden.kb.retrieval_logger import get_retrieval_logger
-from eden.storage.qdrant import SearchResult, get_qdrant_client
+from eden.storage.qdrant import SearchResult, SearchResults, get_qdrant_client
 
 logger = logging.getLogger(__name__)
+
+
+def _as_result_list(raw: SearchResults | list[SearchResult] | Any) -> list[SearchResult]:
+    """Normalize Qdrant wrapper output to ``list[SearchResult]``."""
+    if isinstance(raw, SearchResults):
+        return list(raw.results or [])
+    if isinstance(raw, list):
+        return raw
+    results = getattr(raw, "results", None)
+    if isinstance(results, list):
+        return results
+    return []
+
+
+def _payload_matches(payload: dict[str, Any], filter_conditions: dict[str, Any]) -> bool:
+    """Equality match for simple ``{field: value}`` filter dicts."""
+    for key, expected in filter_conditions.items():
+        if key.startswith("$"):
+            continue
+        if payload.get(key) != expected:
+            return False
+    return True
 
 
 class SemanticVectorClient:
@@ -39,19 +64,21 @@ class SemanticVectorClient:
         """
         client = get_qdrant_client()
 
-        results = client.search(
+        # K17: prefer async wrappers so sync qdrant I/O leaves the event loop.
+        raw = await client.search_async(
             collection=collection,
             query_vector=query_vector,
             query_filter=filter_conditions,
             limit=limit,
             score_threshold=score_threshold,
         )
+        results = _as_result_list(raw)
 
         # Log retrieval for RetrievalTuner
         try:
-            logger = get_retrieval_logger()
+            retrieval_logger = get_retrieval_logger()
             retrieved = [{"id": str(r.id)} for r in results]
-            await logger.log_retrieval(
+            await retrieval_logger.log_retrieval(
                 collection=collection,
                 query_vector=query_vector,
                 retrieved_items=retrieved,
@@ -60,7 +87,7 @@ class SemanticVectorClient:
                 score_threshold=score_threshold,
             )
         except Exception as e:
-            logger.warning(f"Failed to log retrieval: {e}")
+            logger.warning("Failed to log retrieval: %s", e)
 
         return results
 
@@ -86,18 +113,37 @@ class SemanticVectorClient:
         """
         client = get_qdrant_client()
 
-        results = client.search_hybrid(
-            collection=collection,
-            query_vector=query_vector,
-            query_text=query_text,
-            limit=limit,
-        )
+        # Prefer dense search with server-side filters when filters are present;
+        # hybrid fusion in the Qdrant wrapper does not accept query_filter yet.
+        if filter_conditions:
+            raw = await client.search_async(
+                collection=collection,
+                query_vector=query_vector,
+                query_filter=filter_conditions,
+                limit=limit,
+            )
+            results = _as_result_list(raw)
+        else:
+            raw = await client.search_hybrid_async(
+                collection=collection,
+                query_vector=query_vector,
+                query_text=query_text,
+                limit=limit,
+            )
+            results = _as_result_list(raw)
+
+        if filter_conditions:
+            results = [
+                r
+                for r in results
+                if _payload_matches(getattr(r, "payload", None) or {}, filter_conditions)
+            ][:limit]
 
         # Log retrieval for RetrievalTuner
         try:
-            logger = get_retrieval_logger()
+            retrieval_logger = get_retrieval_logger()
             retrieved = [{"id": str(r.id)} for r in results]
-            await logger.log_retrieval(
+            await retrieval_logger.log_retrieval(
                 collection=collection,
                 query_vector=query_vector,
                 query_text=query_text,
@@ -106,7 +152,7 @@ class SemanticVectorClient:
                 filter_conditions=filter_conditions,
             )
         except Exception as e:
-            logger.warning(f"Failed to log retrieval: {e}")
+            logger.warning("Failed to log retrieval: %s", e)
 
         return results
 
@@ -125,7 +171,8 @@ class SemanticVectorClient:
             True if successful
         """
         client = get_qdrant_client()
-        return client.upsert(collection, points)
+        # K17: upsert_async offloads sync qdrant HTTP to a worker thread.
+        return await client.upsert_async(collection, points)
 
     async def delete(
         self,
@@ -142,7 +189,7 @@ class SemanticVectorClient:
             True if successful
         """
         client = get_qdrant_client()
-        return client.delete(collection, point_ids)
+        return await client.delete_async(collection, point_ids)
 
     async def count(
         self,
@@ -159,7 +206,7 @@ class SemanticVectorClient:
             Count of matching vectors
         """
         client = get_qdrant_client()
-        return client.count(collection, filter_conditions)
+        return await client.count_async(collection, filter_conditions)
 
 
 # Singleton

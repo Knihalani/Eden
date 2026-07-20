@@ -2,7 +2,7 @@
 
 import { useId, useRef, useState, type KeyboardEvent } from "react";
 import { ArrowRight, Check } from "lucide-react";
-import { CodeChip } from "@/components/ui";
+import { CodeChip } from "@/components/ui/code-chip";
 import { cn } from "@/lib/utils";
 import { DOCS_QUICKSTART_URL } from "@/lib/constants";
 import { INSTALL_BLOCKS } from "./marketing-data";
@@ -65,10 +65,7 @@ export function InstallSection() {
           <p className="text-[11px] font-mono uppercase tracking-[0.18em] text-[var(--text-muted)] mb-3">
             Install
           </p>
-          <h2
-            className="text-3xl md:text-4xl font-bold text-[var(--text-primary)] tracking-tight mb-4"
-            style={{ letterSpacing: "-0.03em", lineHeight: 1.08 }}
-          >
+          <h2 className="marketing-h2 mb-4">
             One line.
             <br />
             Every call captured.
@@ -87,7 +84,7 @@ export function InstallSection() {
           </p>
           <ul className="flex flex-col gap-2.5 text-sm">
             {[
-              "Gateway: change base_url — keep the OpenAI SDK you already use",
+              "Gateway: base_url + org headers — keep the OpenAI SDK you already use",
               "SDK: configure → instrument / wrap for spans and tool calls",
               "Confirm with doctor, then open Traces in the portal",
             ].map((b) => (

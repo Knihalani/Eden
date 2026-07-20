@@ -15,10 +15,14 @@ from pathlib import Path
 
 import pytest
 
+from tests._portal_api_source import portal_api_source
+
 _PORTAL_ROOT = Path(__file__).parent.parent.parent / "clients/portal"
 
 
 def _read(rel: str) -> str:
+    if rel in ("src/lib/api.ts", "src/lib/api"):
+        return portal_api_source()
     return (_PORTAL_ROOT / rel).read_text()
 
 
@@ -68,7 +72,7 @@ class TestExportOrgDataThroughFetchApi:
 
     def test_calls_fetchApi_for_export(self) -> None:
         source = _read("src/lib/api.ts")
-        assert "fetchApi<string>(`/orgs/${orgId}/export`" in source, (
+        assert "fetchApi<Blob>(`/orgs/${orgId}/export`" in source, (
             "PT-9 regression: exportOrgData must route through fetchApi"
         )
 

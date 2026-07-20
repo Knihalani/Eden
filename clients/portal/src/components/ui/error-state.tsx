@@ -2,6 +2,7 @@
 
 import { AlertTriangle } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { ERROR_STATE_ATTR } from "@/lib/overlay-defer";
 
 interface ErrorStateProps {
   title?: string;
@@ -19,6 +20,9 @@ interface ErrorStateProps {
  * inlined in analytics, llmops, incidents, and other pages.
  *
  * Phase 7 of the June 2026 UI overhaul.
+ *
+ * Marks itself with ``data-eden-error-state`` so cookie / tour
+ * overlays can defer instead of stacking on a failure surface.
  */
 export function ErrorState({
   title = "Something went wrong",
@@ -46,6 +50,7 @@ export function ErrorState({
   return (
     <div
       role="alert"
+      {...{ [ERROR_STATE_ATTR]: "" }}
       className={cn(
         "bg-[var(--bg-primary)] border border-[var(--error)]/30 rounded-xl text-center",
         sizes[size],

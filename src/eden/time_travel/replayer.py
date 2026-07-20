@@ -32,6 +32,7 @@ state-edit path (tool args, memory state, etc.).
 
 from __future__ import annotations
 
+import json
 import logging
 import time
 from typing import Any
@@ -89,12 +90,6 @@ class TraceReplayer:
                 "TraceReplayer",
                 "fork_id is required and must be non-empty",
             )
-        edits_error = _validate_edits(edits or {})
-        if edits_error is not None:
-            return _not_implemented_envelope(
-                "TraceReplayer",
-                edits_error,
-            )
 
         # 1. Look up the fork.
         fork = await _get_fork_branch(fork_id=fork_id, org_id=org_id)
@@ -104,11 +99,32 @@ class TraceReplayer:
                 f"fork {fork_id!r} not found for org {org_id!r}",
             )
 
+        # Prefer request edits; when empty, load edits_json from the fork.
+        effective_edits: dict[str, Any] = dict(edits or {})
+        if not effective_edits:
+            raw = fork.get("edits_json") or {}
+            if isinstance(raw, str):
+                try:
+                    parsed = json.loads(raw) if raw.strip() else {}
+                except (ValueError, TypeError):
+                    parsed = {}
+                if isinstance(parsed, dict):
+                    effective_edits = parsed
+            elif isinstance(raw, dict):
+                effective_edits = raw
+
+        edits_error = _validate_edits(effective_edits)
+        if edits_error is not None:
+            return _not_implemented_envelope(
+                "TraceReplayer",
+                edits_error,
+            )
+
         # 2. Walk the parent trace's agent.step events.
         parent_steps = await _get_parent_steps(
             parent_trace_id=fork["parent_trace_id"], org_id=org_id
         )
-        edits_by_step = _parse_edits(edits or {})
+        edits_by_step = _parse_edits(effective_edits)
 
         # 3. Per-step: decide cache vs live + apply edits +
         #    persist the trace_replay_steps row.

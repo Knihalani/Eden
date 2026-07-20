@@ -11,8 +11,6 @@ from eden.storage.postgres import get_postgres_client
 
 logger = logging.getLogger(__name__)
 
-settings = get_settings()
-
 # Default invitation expiry: 7 days
 DEFAULT_EXPIRY_DAYS = 7
 
@@ -58,6 +56,11 @@ async def create_invitation(
     Returns tuple of (plain_token, invitation_record).
     The plain token is only available at creation time and must be sent to the invitee.
     """
+    if role == "owner":
+        raise ValueError(
+            "Cannot invite with owner role; transfer ownership instead"
+        )
+
     client = await get_postgres_client()
 
     # Check for existing pending invitation
@@ -246,13 +249,13 @@ async def accept_invitation(invitation_id: str, user_id: str) -> dict:
     #
     # ``last_writer_source = 'local'`` tells the
     # ``organizationMembership.created`` webhook handler to skip the
-    # initial role overwrite: Clerk's role string (``org:member`` /
-    # ``org:admin``) collapses ``viewer`` to ``member`` in our mapping
-    # (``src/eden/api/utils/clerk_auth.py``), so without this guard
-    # the webhook would silently demote ``viewer`` invitees. After
-    # the webhook first lands, it flips ``last_writer_source`` to
-    # ``'clerk'`` so subsequent Clerk-side role changes (admin
-    # promotions etc.) propagate normally.
+    # role overwrite while Eden owns the row: Clerk's role string
+    # (``org:member`` / ``org:admin``) collapses ``viewer`` to
+    # ``member`` in our mapping (``src/eden/api/utils/clerk_auth.py``),
+    # so without this guard the webhook would overwrite invite roles.
+    # The webhook only hands ``last_writer_source`` to ``'clerk'`` once
+    # Clerk's mapped role agrees with the local row (or Clerk already
+    # owned it), so a weaker follow-up claim cannot demote the invitee.
     await client.execute(
         """
         INSERT INTO org_members (org_id, user_id, role, invited_by, last_writer_source)

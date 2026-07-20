@@ -10,13 +10,14 @@ import { queryKeys } from "@/lib/query-keys";
 import { cn } from "@/lib/utils";
 import { SeverityBadge } from "@/components/ui/status-badge";
 import { NoOrgState } from "@/components/ui/no-org-state";
+import { ErrorState } from "@/components/ui/error-state";
 import { PageHeader } from "@/components/layout/page-header";
 import { PageContent } from "@/components/layout/page-content";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/toast";
+import { traceHref } from "@/lib/portal-cross-links";
 import {
   AlertOctagon,
-  AlertTriangle,
   ArrowLeft,
   CheckCircle2,
   ChevronRight,
@@ -109,7 +110,7 @@ export default function IncidentDetailPage() {
       <div>
         <Link
           href="/issues?tab=incidents"
-          className="inline-flex items-center gap-1.5 text-xs text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors"
+          className="inline-flex min-h-11 items-center gap-1.5 text-sm text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors"
         >
           <ArrowLeft className="w-3.5 h-3.5" />
           Back to incidents
@@ -128,6 +129,7 @@ export default function IncidentDetailPage() {
             loading={resolveMutation.isPending}
             aria-label={isResolved ? "Incident resolved" : "Mark incident resolved"}
             className={cn(
+              "min-h-11",
               isResolved &&
                 "bg-[var(--terminal)]/10 text-[var(--terminal)] border border-[var(--terminal)]/30 hover:bg-[var(--terminal)]/10",
             )}
@@ -140,24 +142,17 @@ export default function IncidentDetailPage() {
       />
       <p className="text-xs font-mono text-[var(--text-muted)] -mt-4 mb-6 break-all">{cluster_id}</p>
 
-      {error && (
-        <div
-          role="alert"
-          className="bg-[var(--error-bg)] text-[var(--error)] text-sm px-4 py-3 rounded-xl flex items-center justify-between gap-2.5 border border-[var(--error)]/20"
-        >
-          <span className="flex items-center gap-2.5">
-            <AlertTriangle className="w-4 h-4 flex-shrink-0" />
-            {error}
-          </span>
-          <button
-            onClick={retry}
-            disabled={loading}
-            className="text-xs font-medium underline underline-offset-2 hover:opacity-80 disabled:opacity-50"
-          >
-            Retry
-          </button>
-        </div>
-      )}
+      {error ? (
+        <ErrorState
+          title="Could not load incident"
+          message={error}
+          action={
+            <Button variant="outline" size="sm" onClick={retry} disabled={loading} className="min-h-11">
+              Try again
+            </Button>
+          }
+        />
+      ) : null}
 
       {loading && !summary ? (
         <div
@@ -168,8 +163,15 @@ export default function IncidentDetailPage() {
         >
           <Loader2 className="w-8 h-8 animate-spin text-[var(--accent)]" />
         </div>
-      ) : summary ? (
+      ) : error ? null : summary ? (
         <>
+          <p className="text-sm text-[var(--text-muted)] -mt-2 mb-2">
+            Systemic RCA cluster across many traces. For a single grouped agent failure, open{" "}
+            <Link href="/issues" className="text-[var(--accent)] hover:underline">
+              Agent Issues
+            </Link>
+            .
+          </p>
           <Card padding="lg" className="space-y-3">
             <div className="flex flex-wrap items-center gap-3">
               <SeverityBadge severity={summary.severity} />
@@ -231,22 +233,27 @@ export default function IncidentDetailPage() {
             ) : (
               <ul className="divide-y divide-[var(--border-subtle)]">
                 {members.map((m) => (
-                  <li key={m.trace_id} className="flex items-center gap-3 py-2.5">
-                    <span
-                      className={cn(
-                        "w-1.5 h-1.5 rounded-full flex-shrink-0",
-                        m.outcome === "failure" || m.outcome === "error"
-                          ? "bg-[var(--error)]"
-                          : m.outcome === "partial"
-                            ? "bg-[var(--warning)]"
-                            : "bg-[var(--terminal)]",
-                      )}
-                    />
-                    <span className="font-mono text-xs text-[var(--text-primary)] flex-1 truncate">
-                      {m.trace_id}
-                    </span>
-                    <span className="text-xs text-[var(--text-muted)]">{formatTime(m.occurred_at)}</span>
-                    <ChevronRight className="w-3.5 h-3.5 text-[var(--text-muted)]" />
+                  <li key={m.trace_id}>
+                    <Link
+                      href={traceHref(m.trace_id)}
+                      className="flex min-h-11 items-center gap-3 py-2.5 hover:bg-[var(--bg-secondary)] rounded-md px-1 -mx-1 transition-colors"
+                    >
+                      <span
+                        className={cn(
+                          "w-1.5 h-1.5 rounded-full flex-shrink-0",
+                          m.outcome === "failure" || m.outcome === "error"
+                            ? "bg-[var(--error)]"
+                            : m.outcome === "partial"
+                              ? "bg-[var(--warning)]"
+                              : "bg-[var(--terminal)]",
+                        )}
+                      />
+                      <span className="font-mono text-xs text-[var(--accent)] flex-1 truncate">
+                        {m.trace_id}
+                      </span>
+                      <span className="text-xs text-[var(--text-muted)]">{formatTime(m.occurred_at)}</span>
+                      <ChevronRight className="w-3.5 h-3.5 text-[var(--text-muted)]" />
+                    </Link>
                   </li>
                 ))}
               </ul>

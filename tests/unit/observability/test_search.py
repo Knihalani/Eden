@@ -609,7 +609,7 @@ class TestTypesenseFallback:
         )
         monkeypatch.setattr(
             "eden.storage.postgres.get_postgres_client",
-            lambda: fake_pg,
+            AsyncMock(return_value=fake_pg),
         )
         # Flag on so we don't short-circuit before client check
         service = SearchService(client=None)
@@ -645,7 +645,7 @@ class TestTypesenseFallback:
         fake_pg = _FakePGClient(pg_rows)
         monkeypatch.setattr(
             "eden.storage.postgres.get_postgres_client",
-            lambda: fake_pg,
+            AsyncMock(return_value=fake_pg),
         )
         # Typesense returns a server error
         error_client = _FakeTypesenseClient(search_response=(503, None))
@@ -674,7 +674,7 @@ class TestTypesenseFallback:
         fake_pg = _FakePGClient(pg_rows)
         monkeypatch.setattr(
             "eden.storage.postgres.get_postgres_client",
-            lambda: fake_pg,
+            AsyncMock(return_value=fake_pg),
         )
         service = SearchService(client=None)
         resp = await service._pg_fallback_search(

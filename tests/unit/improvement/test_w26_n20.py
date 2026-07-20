@@ -113,6 +113,18 @@ async def test_propose_denied_by_n22() -> None:
 async def test_propose_creates_improvement_plan_no_f22() -> None:
     issue = _issue(stumble_count=6)
     plan = {"id": "plan-99", "status": "draft", "diff_unified": _SAMPLE_DIFF}
+    generate = AsyncMock(
+        return_value={
+            "data": {
+                "status": "proposed",
+                "diff": _SAMPLE_DIFF,
+                "description": "Fix checkout",
+                "explanation": "loop",
+                "cost_usd": 0.12,
+                "files": ["agent/checkout.py"],
+            }
+        }
+    )
     with (
         patch(
             "eden.improvement.issue_patch_trigger._improvement_enabled",
@@ -148,23 +160,16 @@ async def test_propose_creates_improvement_plan_no_f22() -> None:
             AsyncMock(return_value=(True, "ok")),
         ),
         patch(
+            "eden.improvement.issue_patch_trigger._resolve_repo_id",
+            AsyncMock(return_value="repo-conn-1"),
+        ),
+        patch(
             "eden.improvement.issue_patch_trigger._linked_files",
             AsyncMock(return_value=[{"path": "agent/checkout.py", "content": ""}]),
         ),
         patch(
             "eden.patches.patch_generator.PatchGenerator.generate",
-            AsyncMock(
-                return_value={
-                    "data": {
-                        "status": "proposed",
-                        "diff": _SAMPLE_DIFF,
-                        "description": "Fix checkout",
-                        "explanation": "loop",
-                        "cost_usd": 0.12,
-                        "files": ["agent/checkout.py"],
-                    }
-                }
-            ),
+            generate,
         ),
         patch(
             "eden.improvement.plans_repo.create_plan",
@@ -181,6 +186,58 @@ async def test_propose_creates_improvement_plan_no_f22() -> None:
     assert result["plan_id"] == "plan-99"
     assert "issue_fix" not in str(result).lower()
     spend.assert_awaited()
+    generate.assert_awaited_once()
+    assert generate.await_args.kwargs["repo_id"] == "repo-conn-1"
+    assert generate.await_args.kwargs["repo_id"] != "repo-a"
+
+
+@pytest.mark.asyncio
+async def test_propose_repo_not_connected_when_no_connection() -> None:
+    issue = _issue(stumble_count=6)
+    with (
+        patch(
+            "eden.improvement.issue_patch_trigger._improvement_enabled",
+            AsyncMock(return_value=True),
+        ),
+        patch(
+            "eden.improvement.issue_patch_trigger._issue_context",
+            AsyncMock(
+                return_value={
+                    "issue": issue,
+                    "agent_id": "agent-not-a-repo",
+                    "kind": issue.kind,
+                    "fingerprint": issue.fingerprint,
+                    "triage": issue.triage_result,
+                    "rca_summary": "rca",
+                }
+            ),
+        ),
+        patch(
+            "eden.improvement.issue_patch_trigger._n22_may_propose",
+            AsyncMock(return_value=(True, "ok")),
+        ),
+        patch(
+            "eden.improvement.issue_patch_trigger._budget_ok",
+            AsyncMock(return_value=(True, "ok")),
+        ),
+        patch(
+            "eden.improvement.issue_patch_trigger._find_open_plan",
+            AsyncMock(return_value=None),
+        ),
+        patch(
+            "eden.closed_loop.efficiency.AgentEfficiencyController.should_run_patch",
+            AsyncMock(return_value=(True, "ok")),
+        ),
+        patch(
+            "eden.improvement.issue_patch_trigger._resolve_repo_id",
+            AsyncMock(return_value=None),
+        ),
+    ):
+        result = await propose_plan_for_issue("org_test", "iss-1")
+
+    assert result["status"] == "error"
+    assert result["reason"] == "repo_not_connected"
+    assert "Connect GitHub" in (result.get("message") or "")
 
 
 @pytest.mark.asyncio
@@ -216,6 +273,10 @@ async def test_approve_opens_pr_with_n01_merge_advice() -> None:
         patch(
             "eden.improvement.approve._n22_blocked",
             AsyncMock(return_value=None),
+        ),
+        patch(
+            "eden.improvement.approve._resolve_repo_id",
+            AsyncMock(return_value="repo-conn-1"),
         ),
         patch(
             "eden.improvement.approve.plans_repo.mark_pr_opened",

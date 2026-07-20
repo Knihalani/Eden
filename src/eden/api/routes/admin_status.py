@@ -8,7 +8,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
-from eden.api.deps import require_org_admin
+from eden.api.deps import require_org_admin, require_path_org_access
 from eden.api.utils.redact import redact_all
 
 logger = logging.getLogger(__name__)
@@ -16,6 +16,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(
     prefix="/orgs/{org_id}/admin",
     tags=["admin-status"],
+    dependencies=[Depends(require_path_org_access)],
 )
 
 
@@ -131,7 +132,7 @@ GOLDEN_PROBES = (
 
 @router.get("/eden-status")
 async def eden_status(
-    org_id: str,
+    org_id: str = Depends(require_path_org_access),
     org: dict = Depends(require_org_admin),
 ) -> dict[str, Any]:
     """Worker health, queue depths, ingest lag — portal Settings status tab."""
@@ -188,7 +189,7 @@ async def eden_status(
 
 @router.get("/flags")
 async def admin_flags(
-    org_id: str,
+    org_id: str = Depends(require_path_org_access),
     org: dict = Depends(require_org_admin),
 ) -> dict[str, Any]:
     """Feature-flag debugger for org admins (F84)."""
@@ -202,7 +203,7 @@ async def admin_flags(
 
 @router.get("/slow-queries")
 async def slow_queries(
-    org_id: str,
+    org_id: str = Depends(require_path_org_access),
     org: dict = Depends(require_org_admin),
 ) -> dict[str, Any]:
     """Tenant-safe stub — cluster query stats are not exposed (Wave 1)."""
@@ -217,7 +218,7 @@ async def slow_queries(
 
 @router.post("/synthetics/run")
 async def run_synthetics(
-    org_id: str,
+    org_id: str = Depends(require_path_org_access),
     org: dict = Depends(require_org_admin),
 ) -> dict[str, Any]:
     """Run golden-path synthetics (deterministic; no paid LLM)."""
@@ -229,7 +230,7 @@ async def run_synthetics(
 
 @router.get("/synthetics/last")
 async def last_synthetics(
-    org_id: str,
+    org_id: str = Depends(require_path_org_access),
     org: dict = Depends(require_org_admin),
 ) -> dict[str, Any]:
     _assert_path_org(org_id, org)

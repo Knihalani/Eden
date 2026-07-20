@@ -133,6 +133,12 @@ async def test_seeded_degradation_triggers_canary(evolver, fake_pg):
     enrolled_versions = sorted(c.args[1] for c in canary_calls)
     assert enrolled_versions == [2, 3]
 
+    experiment_inserts = [
+        c for c in fake_pg.execute.await_args_list
+        if "INSERT INTO prompt_canary_experiments" in c.args[0]
+    ]
+    assert len(experiment_inserts) == 2
+
     # org_audit_log should have one INSERT per canary, with the
     # expected action and metadata.
     audit_inserts = [

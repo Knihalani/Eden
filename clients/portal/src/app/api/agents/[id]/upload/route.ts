@@ -1,7 +1,7 @@
 /** Phase 3 — Proxy POST /api/agents/[id]/upload to FastAPI. */
 
 import { NextRequest, NextResponse } from "next/server";
-import { forwardToBackend } from "@/lib/proxy";
+import { forwardToBackend, proxyError } from "@/lib/proxy";
 import { bearerHeader } from "@/lib/server/clerk-bearer";
 
 /**
@@ -20,32 +20,36 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const { id } = await params;
-  const agentId = decodeURIComponent(id);
-  const orgId = request.nextUrl.searchParams.get("org_id");
-  if (!orgId) {
-    return NextResponse.json(
-      { detail: "Missing org_id query parameter" },
-      { status: 400 }
+  try {
+    const { id } = await params;
+    const agentId = decodeURIComponent(id);
+    const orgId = request.nextUrl.searchParams.get("org_id");
+    if (!orgId) {
+      return NextResponse.json(
+        { detail: "Missing org_id query parameter" },
+        { status: 400 }
+      );
+    }
+    const form = await request.formData();
+    const file = form.get("file");
+    if (!file || typeof file === "string") {
+      return NextResponse.json(
+        { detail: "Missing 'file' part in multipart body" },
+        { status: 400 }
+      );
+    }
+    // Re-wrap the file in a fresh multipart with a known filename.
+    const fd = new FormData();
+    fd.append("file", file, (file as File).name ?? "agent.tar.gz");
+    const [extraHeaders, cookieHeader] = await Promise.all([
+      bearerHeader(),
+      Promise.resolve(request.headers.get("cookie") ?? undefined),
+    ]);
+    return await forwardToBackend(
+      `/orgs/${encodeURIComponent(orgId)}/agents/${encodeURIComponent(agentId)}/upload`,
+      { method: "POST", body: fd, extraHeaders, cookieHeader }
     );
+  } catch (err) {
+    return proxyError(err, "Failed to upload agent package");
   }
-  const form = await request.formData();
-  const file = form.get("file");
-  if (!file || typeof file === "string") {
-    return NextResponse.json(
-      { detail: "Missing 'file' part in multipart body" },
-      { status: 400 }
-    );
-  }
-  // Re-wrap the file in a fresh multipart with a known filename.
-  const fd = new FormData();
-  fd.append("file", file, (file as File).name ?? "agent.tar.gz");
-  const [extraHeaders, cookieHeader] = await Promise.all([
-    bearerHeader(),
-    Promise.resolve(request.headers.get("cookie") ?? undefined),
-  ]);
-  return forwardToBackend(
-    `/orgs/${encodeURIComponent(orgId)}/agents/${encodeURIComponent(agentId)}/upload`,
-    { method: "POST", body: fd, extraHeaders, cookieHeader }
-  );
 }

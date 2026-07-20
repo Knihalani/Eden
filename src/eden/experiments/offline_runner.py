@@ -126,7 +126,8 @@ class OfflineExperimentRunner:
     async def run(self, org_id: str, experiment_id: str) -> dict[str, Any]:
         client = await self._client()
         if client is None:
-            return {"experiment_id": experiment_id, "status": "completed", "rows": 0}
+            # Do not claim completed — callers must surface ErrorState, not false success.
+            raise RuntimeError("database unavailable")
         row = await client.fetchrow(
             "SELECT * FROM offline_experiments WHERE org_id = $1 AND id = $2::uuid",
             org_id,
@@ -134,57 +135,83 @@ class OfflineExperimentRunner:
         )
         if row is None:
             raise ValueError("experiment not found")
-        dataset_id = str(row["dataset_id"])
-        cfg = row["config"]
-        if isinstance(cfg, str):
-            cfg = json.loads(cfg)
-        items = await client.fetch(
-            "SELECT id, input, expected_output, payload FROM dataset_items WHERE dataset_id = $1::uuid",
-            dataset_id,
-        )
-        grades: list[str] = []
-        for item in items:
-            control = {"score": 0.5, "output": item.get("expected_output") or ""}
-            treatment = await self._run_row(item, cfg)
-            grade, delta = grade_datapoint(control, treatment)
-            grades.append(grade)
-            await client.execute(
-                """
-                INSERT INTO experiment_datapoints
-                    (id, experiment_id, row_id, input_data, control_output,
-                     treatment_output, grade, score_delta)
-                VALUES ($1::uuid, $2::uuid, $3::uuid, $4::jsonb, $5::jsonb, $6::jsonb, $7, $8)
-                """,
-                str(uuid.uuid4()),
-                experiment_id,
-                str(item["id"]),
-                json.dumps({"input": item.get("input")}),
-                json.dumps(control),
-                json.dumps(treatment),
-                grade,
-                delta,
-            )
         await client.execute(
             """
             UPDATE offline_experiments
-            SET status = 'completed', completed_at = NOW()
+            SET status = 'running', completed_at = NULL
             WHERE id = $1::uuid
             """,
             experiment_id,
         )
-        return {
-            "experiment_id": experiment_id,
-            "status": "completed",
-            "rows": len(items),
-            "grades": aggregate_grades(grades),
-        }
+        try:
+            dataset_id = str(row["dataset_id"])
+            cfg = row["config"]
+            if isinstance(cfg, str):
+                cfg = json.loads(cfg)
+            items = await client.fetch(
+                "SELECT id, input, expected_output, payload FROM dataset_items WHERE dataset_id = $1::uuid",
+                dataset_id,
+            )
+            grades: list[str] = []
+            for item in items:
+                control = {
+                    "score": 0.5,
+                    "output": item.get("expected_output") or "",
+                    "synthetic": True,
+                    "method": "heuristic_stub",
+                }
+                treatment = await self._run_row(item, cfg)
+                grade, delta = grade_datapoint(control, treatment)
+                grades.append(grade)
+                await client.execute(
+                    """
+                    INSERT INTO experiment_datapoints
+                        (id, experiment_id, row_id, input_data, control_output,
+                         treatment_output, grade, score_delta)
+                    VALUES ($1::uuid, $2::uuid, $3::uuid, $4::jsonb, $5::jsonb, $6::jsonb, $7, $8)
+                    """,
+                    str(uuid.uuid4()),
+                    experiment_id,
+                    str(item["id"]),
+                    json.dumps({"input": item.get("input")}),
+                    json.dumps(control),
+                    json.dumps(treatment),
+                    grade,
+                    delta,
+                )
+            await client.execute(
+                """
+                UPDATE offline_experiments
+                SET status = 'completed', completed_at = NOW()
+                WHERE id = $1::uuid
+                """,
+                experiment_id,
+            )
+            return {
+                "experiment_id": experiment_id,
+                "status": "completed",
+                "rows": len(items),
+                "grades": aggregate_grades(grades),
+                "synthetic": True,
+                "method": "heuristic_stub",
+            }
+        except Exception:
+            await client.execute(
+                """
+                UPDATE offline_experiments
+                SET status = 'failed', completed_at = NOW()
+                WHERE id = $1::uuid
+                """,
+                experiment_id,
+            )
+            raise
 
     async def compare(
         self, org_id: str, experiment_id: str, *, baseline_id: str | None = None
     ) -> dict[str, Any]:
         client = await self._client()
         if client is None:
-            return {"experiment_id": experiment_id, "datapoints": []}
+            raise RuntimeError("database unavailable")
         exp = await client.fetchrow(
             "SELECT * FROM offline_experiments WHERE org_id = $1 AND id = $2::uuid",
             org_id,
@@ -216,13 +243,15 @@ class OfflineExperimentRunner:
             "dataset_snapshot_id": str(exp["dataset_snapshot_id"])
             if exp.get("dataset_snapshot_id")
             else None,
+            "synthetic": True,
+            "method": "heuristic_stub",
         }
         return out
 
     async def list_experiments(self, org_id: str, *, limit: int = 50) -> list[dict[str, Any]]:
         client = await self._client()
         if client is None:
-            return []
+            raise RuntimeError("database unavailable")
         rows = await client.fetch(
             """
             SELECT id, name, dataset_id, status, source_issue_id, created_at, completed_at
@@ -235,7 +264,11 @@ class OfflineExperimentRunner:
         return [dict(r) for r in rows]
 
     async def _run_row(self, item: dict[str, Any], config: dict[str, Any]) -> dict[str, Any]:
-        """Deterministic offline scorer — no random data."""
+        """Deterministic heuristic stub — not a live model score.
+
+        Scores are labeled ``synthetic: true`` / ``method: heuristic_stub``
+        so API + portal never present them as real LLM evals.
+        """
         expected = str(item.get("expected_output") or "")
         payload = item.get("payload")
         if isinstance(payload, str):
@@ -250,6 +283,8 @@ class OfflineExperimentRunner:
             "output": expected or input_text[:200],
             "model": model,
             "cost_usd": float(config.get("cost_usd", 0.001) or 0.001),
+            "synthetic": True,
+            "method": "heuristic_stub",
         }
 
 

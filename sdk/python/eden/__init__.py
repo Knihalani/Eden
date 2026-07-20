@@ -24,6 +24,7 @@ from eden_sdk import (  # noqa: F401,F403
     detect_installed_frameworks,
     get_config,
     get_default_client,
+    init,
     instrument,
     install_http_capture,
     uninstall_http_capture,
@@ -76,6 +77,7 @@ __all__ = [
     # Auto-instrumentation
     "instrument",
     "uninstrument",
+    "init",
     "autoInstrument",
     "detect_installed_frameworks",
     "install_http_capture",

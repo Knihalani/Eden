@@ -135,6 +135,21 @@ class AgentSessionService:
         await self._persist(session)
         return True
 
+    async def attach_traces(
+        self, org_id: str, session_id: str, trace_ids: list[str]
+    ) -> int:
+        """Append missing trace ids in one load + one persist. Returns newly added count."""
+        session = await self.get(org_id, session_id)
+        if session is None:
+            return 0
+        added = 0
+        for tid in trace_ids:
+            if tid and tid not in session.trace_ids:
+                session.trace_ids.append(tid)
+                added += 1
+        await self._persist(session)
+        return added
+
     async def identify(
         self, org_id: str, session_id: str, user_id: str
     ) -> bool:

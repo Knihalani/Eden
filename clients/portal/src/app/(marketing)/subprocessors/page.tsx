@@ -1,35 +1,47 @@
-"use client";
-
-import * as React from "react";
+import type { Metadata } from "next";
 import { LegalPage } from "@/components/layout/legal-page";
 
 type Subprocessor = { name: string; purpose: string; location: string };
 
-export default function SubprocessorsPage() {
-  const [rows, setRows] = React.useState<Subprocessor[] | null>(null);
-  const [updated, setUpdated] = React.useState<string | null>(null);
-  const [error, setError] = React.useState<string | null>(null);
+export const metadata: Metadata = {
+  title: "Subprocessors · Eden",
+  description:
+    "Third parties Eden uses to process customer data (GDPR Art. 28). Customers are notified at least 30 days before material changes.",
+  openGraph: {
+    title: "Subprocessors · Eden",
+    description:
+      "Third parties Eden uses to process customer data (GDPR Art. 28).",
+  },
+  twitter: {
+    title: "Subprocessors · Eden",
+    description:
+      "Third parties Eden uses to process customer data (GDPR Art. 28).",
+  },
+};
 
-  React.useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const res = await fetch("/api/proxy/subprocessors");
-        if (!res.ok) throw new Error(`Failed to load (${res.status})`);
-        const body = await res.json();
-        if (cancelled) return;
-        setRows(body.subprocessors ?? []);
-        setUpdated(body.last_updated ?? null);
-      } catch (err) {
-        if (!cancelled) {
-          setError(err instanceof Error ? err.message : "Failed to load");
-        }
-      }
-    })();
-    return () => {
-      cancelled = true;
+/**
+ * P19 — server-fetched subprocessors (no client proxy hop).
+ */
+export default async function SubprocessorsPage() {
+  const base = process.env.API_INTERNAL_URL || "http://localhost:8000";
+  let rows: Subprocessor[] | null = null;
+  let updated: string | null = null;
+  let error: string | null = null;
+
+  try {
+    const res = await fetch(`${base}/subprocessors`, {
+      next: { revalidate: 3600 },
+    });
+    if (!res.ok) throw new Error(`Failed to load (${res.status})`);
+    const body = (await res.json()) as {
+      subprocessors?: Subprocessor[];
+      last_updated?: string;
     };
-  }, []);
+    rows = body.subprocessors ?? [];
+    updated = body.last_updated ?? null;
+  } catch (err) {
+    error = err instanceof Error ? err.message : "Failed to load";
+  }
 
   return (
     <LegalPage
@@ -39,9 +51,9 @@ export default function SubprocessorsPage() {
       size="medium"
       draft
     >
-      {error && <p className="text-sm text-[var(--danger)]">{error}</p>}
-      {!error && !rows && (
-        <p className="text-sm text-[var(--text-muted)]">Loading subprocessors…</p>
+      {error && <p className="text-sm text-[var(--error)]">{error}</p>}
+      {!error && rows === null && (
+        <p className="text-sm text-[var(--text-muted)]">Unable to load subprocessors.</p>
       )}
       {rows && (
         <>

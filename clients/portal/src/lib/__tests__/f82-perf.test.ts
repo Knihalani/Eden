@@ -8,9 +8,12 @@ import {
 import { markEden, readEdenMarks, clearEdenMarks } from "@/lib/perf/marks";
 
 describe("F82 Web Vitals budgets", () => {
-  it("defines LCP and INP gates for core routes", () => {
+  it("defines LCP/INP/CLS/FCP/TTFB gates for core routes", () => {
     expect(WEB_VITAL_BUDGETS.LCP.max).toBeLessThanOrEqual(3000);
     expect(WEB_VITAL_BUDGETS.INP.max).toBeLessThanOrEqual(300);
+    expect(WEB_VITAL_BUDGETS.CLS.max).toBeLessThanOrEqual(0.1);
+    expect(WEB_VITAL_BUDGETS.FCP.max).toBeLessThanOrEqual(1800);
+    expect(WEB_VITAL_BUDGETS.TTFB.max).toBeLessThanOrEqual(800);
     expect(F82_CORE_ROUTES).toContain("/dashboard");
     expect(F82_CORE_ROUTES).toContain("/traces");
   });

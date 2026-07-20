@@ -89,12 +89,8 @@ async def stream_insights_chat(
         elif chunk.type == "error" and chunk.error:
             await queue.put({"type": "error", "message": chunk.error})
         elif chunk.type == "done":
-            await queue.put({
-                "type": "done",
-                "cost_usd": chunk.cost_usd,
-                "turn_cost_usd": chunk.turn_cost_usd,
-                "conversation_id": session_id,
-            })
+            # Single terminal done is emitted from run_chat with cost/usage.
+            return
 
     async def run_chat() -> None:
         service = get_chat_service()

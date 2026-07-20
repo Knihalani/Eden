@@ -431,11 +431,10 @@ class TestFailClosed:
         assert r.status_code == 200, r.text
         assert "alice@example.com" not in seen_messages[0][0]["content"]
 
-    def test_per_request_bypass_overrides_fail_closed(
+    def test_per_request_bypass_denied_under_fail_closed(
         self, api_client: TestClient, pii_policy_auth
     ):
-        """Per-request bypass wins over fail-closed — the caller
-        knows their credential is safe to send."""
+        """Client bypass must not override tenant fail-closed."""
         from eden.data_platform.pii import PIIPolicy
 
         pii_policy_auth["set_policy"](PIIPolicy(mode="fail_closed"))
@@ -462,10 +461,45 @@ class TestFailClosed:
             },
             headers={"X-PII-Bypass": "true"},
         )
-        assert r.status_code == 200, r.text
-        # Credential reaches the upstream untouched.
-        text = seen_messages[0][0]["content"]
-        assert "eyJhbGciOiJIUzI1NiJ9" in text
+        # Fail-closed: credential aborts (422) — bypass ignored.
+        assert r.status_code == 422, r.text
+        assert r.json()["detail"]["error"] == "pii_fail_closed"
+        assert not seen_messages
+
+    def test_x_pii_mode_off_denied_under_fail_closed(
+        self, api_client: TestClient, pii_policy_auth
+    ):
+        """Client ``X-PII-Mode: off`` must not disable PII under
+        tenant fail-closed (same spirit as X-PII-Bypass deny)."""
+        from eden.data_platform.pii import PIIPolicy
+
+        pii_policy_auth["set_policy"](PIIPolicy(mode="fail_closed"))
+
+        seen_messages: list[Any] = []
+
+        async def _create(**kwargs):
+            seen_messages.append(kwargs.get("messages"))
+            return _StubChatResponse(content="ok")
+
+        from eden.api.routes import gateway as gateway_module
+        gateway_module.AsyncOpenAI.chat.completions.create = AsyncMock(
+            side_effect=_create,
+        )
+
+        r = api_client.post(
+            "/gateway/v1/chat/completions",
+            json={
+                "model": "gpt-4o-mini",
+                "messages": [{
+                    "role": "user",
+                    "content": "Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0In0.signature",
+                }],
+            },
+            headers={"X-PII-Mode": "off"},
+        )
+        assert r.status_code == 422, r.text
+        assert r.json()["detail"]["error"] == "pii_fail_closed"
+        assert not seen_messages
 
 
 # ── Per-tenant disabled categories ──────────────────────────────────

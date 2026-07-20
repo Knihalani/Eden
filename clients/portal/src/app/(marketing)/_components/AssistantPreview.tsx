@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ASSISTANT_TURNS } from "./marketing-data";
+import { SignedInGate } from "./SignedInGate";
 
 export function AssistantPreview() {
   return (
@@ -75,13 +76,26 @@ export function AssistantPreview() {
                   </div>
                 ))}
                 <div className="pl-10">
-                  <Link
-                    href="/improve"
-                    className="inline-flex items-center gap-1.5 min-h-11 text-sm text-[var(--accent)] hover:text-[var(--accent-hover)] border border-[var(--border-default)] rounded-lg px-3 py-2 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-base)]"
-                  >
-                    Open the Improve inbox
-                    <ArrowRight className="w-3.5 h-3.5" aria-hidden />
-                  </Link>
+                  <SignedInGate
+                    signedIn={
+                      <Link
+                        href="/improve"
+                        className="inline-flex items-center gap-1.5 min-h-11 text-sm text-[var(--accent)] hover:text-[var(--accent-hover)] border border-[var(--border-default)] rounded-lg px-3 py-2 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-base)]"
+                      >
+                        Open the Improve inbox
+                        <ArrowRight className="w-3.5 h-3.5" aria-hidden />
+                      </Link>
+                    }
+                    signedOut={
+                      <Link
+                        href="/sign-up"
+                        className="inline-flex items-center gap-1.5 min-h-11 text-sm text-[var(--accent)] hover:text-[var(--accent-hover)] border border-[var(--border-default)] rounded-lg px-3 py-2 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-base)]"
+                      >
+                        Start free to open Improve
+                        <ArrowRight className="w-3.5 h-3.5" aria-hidden />
+                      </Link>
+                    }
+                  />
                 </div>
               </div>
               <div className="flex items-center gap-2 px-3 py-2.5 border-t border-[var(--border-subtle)]">
@@ -96,10 +110,7 @@ export function AssistantPreview() {
           </div>
 
           <div className="lg:col-span-5 order-1 lg:order-2">
-            <h2
-              className="text-3xl md:text-4xl font-bold text-[var(--text-primary)] tracking-tight mb-4"
-              style={{ letterSpacing: "-0.03em", lineHeight: 1.08 }}
-            >
+            <h2 className="marketing-h2 mb-4">
               Ask your data.
               <br />
               <span className="text-[var(--accent)]">Cited answers.</span>

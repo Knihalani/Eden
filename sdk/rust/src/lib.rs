@@ -12,7 +12,7 @@
 //! use eden::{Client, Config, Event, IngestTarget};
 //!
 //! # async fn run() -> Result<(), eden::Error> {
-//! let cfg = Config::from_env().expect("EDEN_API_KEY / EDEN_DEFAULT_ORG");
+//! let cfg = Config::from_env().expect("EDEN_API_KEY / EDEN_DEFAULT_ORG|EDEN_ORG_ID");
 //! let client = Client::new(cfg)?;
 //!
 //! client
@@ -34,7 +34,7 @@ mod event;
 mod trace;
 
 pub use client::Client;
-pub use config::{Config, IngestTarget};
+pub use config::{resolve_ingest_path, Config, IngestTarget};
 pub use errors::{Error, Result};
 pub use event::{Event, EventBuilder, Outcome, Realm};
 pub use trace::{trace, trace_fallible, trace_fn, TracedFuture};

@@ -20,6 +20,8 @@ import { ErrorState } from "@/components/ui/error-state";
 import { NoOrgState } from "@/components/ui/no-org-state";
 import { DOCS_QUICKSTART_URL } from "@/lib/constants";
 import { useOrg } from "@/hooks/use-org";
+import { usePermissions } from "@/hooks/use-permissions";
+import { isAdminOrOwner } from "@/lib/roles";
 
 interface ApiKeysTabProps {
   org: { id: string; name: string; role: string } | null;
@@ -66,6 +68,7 @@ export function ApiKeysTab({ org }: ApiKeysTabProps) {
   const toast = useToast();
   const { confirm, ConfirmDialog } = useConfirm();
   const { refreshOrgs, orgSyncing, orgSyncTimedOut } = useOrg();
+  const { role: resolvedRole } = usePermissions();
   const orgId = org?.id ?? null;
   const keysQuery = useOrgQuery(
     queryKeys.settings.apiKeys(orgId),
@@ -81,6 +84,11 @@ export function ApiKeysTab({ org }: ApiKeysTabProps) {
   const [selectedScopes, setSelectedScopes] = useState<string[]>(SDK_DEFAULT_SCOPES);
   const [createdKey, setCreatedKey] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
+
+  // Prefer resolved role (Clerk org:admin → admin/owner fallback) over raw
+  // Eden membership role, which can lag webhook sync for the org creator.
+  const canManage =
+    isAdminOrOwner(resolvedRole) || isAdminOrOwner(org?.role);
 
   const loadKeys = () => keysQuery.refetch();
 
@@ -168,8 +176,6 @@ export function ApiKeysTab({ org }: ApiKeysTabProps) {
       />
     );
   }
-
-  const canManage = org.role === "owner" || org.role === "admin";
 
   const columns: DataTableColumn<ApiKey>[] = [
     {
@@ -277,7 +283,7 @@ export function ApiKeysTab({ org }: ApiKeysTabProps) {
             </p>
           </div>
 
-          <div className="rounded-lg border border-[var(--border-default)] bg-[var(--bg-secondary)] p-3 space-y-3">
+          <div className="rounded-lg bg-[var(--bg-secondary)] p-3 space-y-3">
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <div className="min-w-0">
                 <p className="text-[11px] font-medium uppercase tracking-wider text-[var(--text-muted)]">
@@ -395,7 +401,7 @@ export function ApiKeysTab({ org }: ApiKeysTabProps) {
                   {ALL_SCOPES.map((scope) => (
                     <label
                       key={scope.id}
-                      className="flex min-h-11 items-center gap-2 rounded-md border border-[var(--border-default)] px-3 py-2 text-sm cursor-pointer hover:bg-[var(--bg-tertiary)]"
+                      className="flex min-h-11 items-center gap-2 rounded-md bg-[var(--bg-secondary)] px-3 py-2 text-sm cursor-pointer hover:bg-[var(--bg-tertiary)]"
                     >
                       <input
                         type="checkbox"
@@ -481,7 +487,7 @@ export function ApiKeysTab({ org }: ApiKeysTabProps) {
                   {copied === "EDEN_API_KEY" ? "Copied" : "Copy key"}
                 </Button>
               </div>
-              <div className="rounded-md border border-[var(--border-default)] bg-[var(--bg-secondary)] p-3">
+              <div className="rounded-md bg-[var(--bg-secondary)] p-3">
                 <div className="mb-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                   <p className="text-[11px] font-medium uppercase tracking-wider text-[var(--text-muted)]">
                     Shell exports

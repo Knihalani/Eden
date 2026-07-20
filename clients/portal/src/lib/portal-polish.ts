@@ -17,7 +17,7 @@ export const U20_CORE_AXE_ROUTES = [
 /** Gap 4.8 empty-state voice — precise, technical, calm (no exclamation marks). */
 export const U20_EMPTY_COPY = {
   dashboardTraces:
-    "Traces appear here once the SDK or gateway sends telemetry. Create an API key, follow the docs quickstart, then run eden-doctor to verify.",
+    "Waiting for first event — create an API key, follow the docs quickstart, run doctor, then check for events.",
   issues:
     "Issues appear when Eden detects failures in finalized traces — usually within 60 seconds of a failed run. Install the SDK (docs quickstart), create an API key, then send traffic.",
   artifacts:
@@ -25,9 +25,31 @@ export const U20_EMPTY_COPY = {
   ledger:
     "Resolve an issue or promote an Artifact to seed your first Ledger draft. Ledgers compound institutional memory across agents.",
   traces:
-    "Traces appear once the gateway or SDK sends telemetry. Create an API key, follow the docs quickstart, then run eden-doctor (or python -m eden_sdk.doctor) to verify ingest.",
+    "Run doctor to verify ingest, then send traffic from the gateway or SDK. This list refreshes while empty — or check for events now.",
   playground:
     "An eval scores agent output against a rubric or expected answer — create a playground to compare prompts, then promote to an experiment (docs quickstart if you still need traces).",
+  experiments:
+    "Experiments compare control vs treatment on a dataset snapshot. Promote a playground run, or start from Evals → Datasets, then return here for grades and diffs.",
+  debugger:
+    "Paste a trace id to list time-travel checkpoints, then re-run from any step. Open Traces to pick a recent run if you do not have an id yet.",
+} as const;
+
+/**
+ * Wave-3 first-trace waiting UX — shared title/CTA/doctor commands.
+ * Used by traces empty-state + dashboard first-run (not a full wizard).
+ */
+export const FIRST_EVENT_WAIT = {
+  title: "Waiting for first event",
+  titleReceived: "First event recorded",
+  description:
+    "Run doctor to verify ingest, then send traffic from the gateway or SDK. This list refreshes while empty — or check for events now.",
+  descriptionReceived:
+    "Ingest marked a first event. Refresh if it has not appeared in the list yet.",
+  checkCta: "Check for events",
+  doctorHint: "Verify ingest",
+  doctorPython: "python -m eden_sdk.doctor",
+  doctorNpx: "npx eden-doctor",
+  pollMs: 10_000,
 } as const;
 
 /** Core mutations that must surface toast feedback (U20 WP5). */

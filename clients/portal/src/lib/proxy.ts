@@ -11,8 +11,11 @@ import { NextResponse } from "next/server";
  * we see in production are ``"Not authenticated"``, ``"Invalid or
  * expired token"``, ``"Token has expired"``, ``"Session expired"``,
  * etc. Match those (case-insensitive) so the portal's sign-in prompt
- * actually triggers when the backend rejects a session. The fallback
- * remains a 500 for genuinely unexpected errors.
+ * actually triggers when the backend rejects a session.
+ *
+ * W3-C: transient transport failures (timeout / ECONNREFUSED / circuit
+ * open) map to 502/503 with clear ``detail`` instead of opaque 500.
+ * Only genuinely unexpected errors remain 500.
  */
 /**
  * Retry-After header parser. Returns the suggested wait in
@@ -60,14 +63,155 @@ export const RATE_LIMIT_HEADERS = [
   "X-RateLimit-Reset",
 ] as const;
 
-export function proxyError(error: unknown, fallback: string) {
+/** Auth-failure detail strings FastAPI (and friends) emit as 401. */
+export const PROXY_AUTH_FAILURE_RE =
+  /not\s*authenticated|session\s*expired|invalid\s*or\s*expired\s*token|token\s*(has\s*)?expired|unauthor(ized|ised)/i;
+
+/** Network / DNS / connection failures → 502 Bad Gateway. */
+const PROXY_NETWORK_FAILURE_RE =
+  /econnrefused|enotfound|econnreset|fetch failed|network|socket hang up|unreachable|eai_again|ehostunreach/i;
+
+/** Upstream outage / circuit signals → 503 Service Unavailable. */
+const PROXY_UPSTREAM_DOWN_RE =
+  /circuit\s*open|no\s*healthy\s*upstream|backend\s*unavailable|upstream\s*(unavailable|connect\s*error)/i;
+
+/**
+ * Map a thrown proxy/stream error to a statused JSON envelope.
+ *
+ * - Auth detail strings → 401 (F35: do not collapse real auth into 500)
+ * - Timeout / abort → 502 ``Backend timed out``
+ * - Network refuse / DNS → 502 ``Backend unreachable``
+ * - Circuit / no-healthy-upstream wording → 503
+ * - Everything else → 500 with the original message
+ *
+ * Every envelope carries ``request_id`` + ``X-Request-ID`` so residual
+ * 500s are still correlatable (Wave 1 ``proxy-error-taxonomy``).
+ */
+export function proxyError(
+  error: unknown,
+  fallback: string,
+  requestOrId?: Request | string,
+) {
+  const requestId =
+    typeof requestOrId === "string"
+      ? requestOrId
+      : proxyRequestId(requestOrId);
+  const headers: Record<string, string> = { "X-Request-ID": requestId };
   const message = error instanceof Error ? error.message : fallback;
-  const isAuthFailure =
-    /not\s*authenticated|session\s*expired|invalid\s*or\s*expired\s*token|token\s*(has\s*)?expired|unauthor(ized|ised)/i.test(
-      message,
+  if (PROXY_AUTH_FAILURE_RE.test(message)) {
+    return NextResponse.json(
+      { detail: message, request_id: requestId },
+      { status: 401, headers },
     );
-  const status = isAuthFailure ? 401 : 500;
-  return NextResponse.json({ detail: message }, { status });
+  }
+
+  const isAbort =
+    error instanceof Error &&
+    (error.name === "AbortError" || /aborted|timeout|timed\s*out/i.test(message));
+  if (isAbort) {
+    return NextResponse.json(
+      { detail: "Backend timed out", cause: message, request_id: requestId },
+      { status: 502, headers },
+    );
+  }
+
+  if (PROXY_NETWORK_FAILURE_RE.test(message)) {
+    return NextResponse.json(
+      { detail: "Backend unreachable", cause: message, request_id: requestId },
+      { status: 502, headers },
+    );
+  }
+
+  if (PROXY_UPSTREAM_DOWN_RE.test(message)) {
+    return NextResponse.json(
+      { detail: message, request_id: requestId },
+      { status: 503, headers },
+    );
+  }
+
+  return NextResponse.json(
+    { detail: message, request_id: requestId },
+    { status: 500, headers },
+  );
+}
+
+/**
+ * Resolve a correlatable request id from inbound headers (or mint one).
+ * Shared by dedicated SSE stream proxies and ``forwardToBackend``.
+ */
+export function proxyRequestId(request?: Request): string {
+  const fromHeader =
+    request?.headers.get("x-request-id") ||
+    request?.headers.get("x-correlation-id");
+  if (fromHeader) return fromHeader;
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+    return crypto.randomUUID();
+  }
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+/**
+ * JSON envelope for dedicated stream-route handshake failures
+ * (observability SSE / live trace events). Network-level failures
+ * become 502 with a clear detail; known upstream status codes pass
+ * through with structured JSON instead of an opaque 500.
+ */
+export function streamHandshakeFailure(options: {
+  request?: Request;
+  error?: unknown;
+  upstreamStatus?: number;
+  upstreamDetail?: string;
+  fallbackDetail: string;
+}): NextResponse {
+  const requestId = proxyRequestId(options.request);
+  const headers: Record<string, string> = { "X-Request-ID": requestId };
+  const upstreamStatus = options.upstreamStatus;
+
+  if (typeof upstreamStatus === "number" && upstreamStatus > 0) {
+    const isTransient = upstreamStatus === 502 || upstreamStatus === 503;
+    const detail =
+      options.upstreamDetail ||
+      (isTransient ? "Backend unavailable" : options.fallbackDetail);
+    if (upstreamStatus === 503) {
+      headers["Retry-After"] = String(CIRCUIT_RETRY_AFTER_S);
+    }
+    return NextResponse.json(
+      {
+        detail,
+        upstream_status: upstreamStatus,
+        request_id: requestId,
+      },
+      { status: upstreamStatus, headers },
+    );
+  }
+
+  const cause =
+    options.error instanceof Error ? options.error.message : undefined;
+  const mapped = proxyError(
+    options.error ?? new Error(options.fallbackDetail),
+    options.fallbackDetail,
+    options.request,
+  );
+  // Stream connect failures without an upstream status are transport
+  // problems — promote opaque 500 → 502 so clients back off cleanly.
+  const status = mapped.status === 500 ? 502 : mapped.status;
+  const detail =
+    status === 502
+      ? cause && /aborted|timeout|timed\s*out/i.test(cause)
+        ? "Backend timed out"
+        : "Backend unreachable"
+      : status === 401 && cause
+        ? cause
+        : options.fallbackDetail;
+
+  return NextResponse.json(
+    {
+      detail,
+      ...(cause && status === 502 ? { cause } : {}),
+      request_id: requestId,
+    },
+    { status, headers },
+  );
 }
 
 // Server-side resolution of the FastAPI upstream. The catch-all proxy
@@ -96,6 +240,174 @@ const API_BASE =
 export const CIRCUIT_FAILURE_THRESHOLD = 5;
 export const CIRCUIT_COOLDOWN_MS = 45_000;
 export const CIRCUIT_RETRY_AFTER_S = 45;
+
+/**
+ * Handshake failure for dedicated SSE proxies and the catch-all
+ * ``Accept: text/event-stream`` branch. Preserves FastAPI
+ * ``{error, detail, request_id}`` envelopes (Wave 1.5) instead of
+ * collapsing them into ``{detail, upstream_status, request_id}``
+ * with a freshly minted portal id.
+ */
+export async function streamHandshakeFromUpstream(options: {
+  request?: Request;
+  upstream: Response;
+  fallbackDetail: string;
+}): Promise<Response> {
+  const requestId = proxyRequestId(options.request);
+  const failureHeaders: Record<string, string> = {
+    "Content-Type": "application/json",
+    "Cache-Control": "no-store",
+    "X-Request-ID": requestId,
+  };
+  const retryAfter = options.upstream.headers.get("Retry-After");
+  if (retryAfter) {
+    failureHeaders["Retry-After"] = retryAfter;
+  } else if (options.upstream.status === 503) {
+    failureHeaders["Retry-After"] = String(CIRCUIT_RETRY_AFTER_S);
+  }
+
+  let envelope: Record<string, unknown> | null = null;
+  try {
+    const text = await options.upstream.text();
+    if (text) {
+      try {
+        const parsed = JSON.parse(text) as unknown;
+        if (
+          parsed !== null &&
+          typeof parsed === "object" &&
+          !Array.isArray(parsed)
+        ) {
+          envelope = parsed as Record<string, unknown>;
+        } else {
+          envelope = { detail: text };
+        }
+      } catch {
+        envelope = { detail: text.slice(0, 200) };
+      }
+    }
+  } catch {
+    envelope = null;
+  }
+
+  if (envelope) {
+    if (envelope.request_id == null || envelope.request_id === "") {
+      envelope.request_id = requestId;
+    } else if (typeof envelope.request_id === "string") {
+      failureHeaders["X-Request-ID"] = envelope.request_id;
+    }
+    return new Response(JSON.stringify(envelope), {
+      status: options.upstream.status || 502,
+      headers: failureHeaders,
+    });
+  }
+
+  return streamHandshakeFailure({
+    request: options.request,
+    upstreamStatus: options.upstream.status || 502,
+    fallbackDetail: options.fallbackDetail,
+  });
+}
+
+/**
+ * Pipe an upstream SSE body to the browser with keep-alive comments
+ * and abort-aware cleanup. ``cancel`` / ``signal`` abort cancels the
+ * upstream reader so FastAPI sees the disconnect instead of leaking
+ * a Redis pub/sub worker until maxDuration.
+ */
+export function pipeSseUpstream(
+  upstream: Response,
+  options?: { heartbeatMs?: number; signal?: AbortSignal },
+): Response {
+  const HEARTBEAT_MS = options?.heartbeatMs ?? 15_000;
+  const HEARTBEAT_BYTES = new TextEncoder().encode(": keepalive\n\n");
+  const clientSignal = options?.signal;
+
+  let reader: ReadableStreamDefaultReader<Uint8Array> | null = null;
+  let heartbeat: ReturnType<typeof setInterval> | null = null;
+
+  const stopHeartbeat = () => {
+    if (heartbeat) {
+      clearInterval(heartbeat);
+      heartbeat = null;
+    }
+  };
+
+  const stream = new ReadableStream<Uint8Array>({
+    async start(controller) {
+      reader = upstream.body?.getReader() ?? null;
+      if (!reader) {
+        controller.close();
+        return;
+      }
+
+      const onAbort = () => {
+        stopHeartbeat();
+        void reader?.cancel().catch(() => {});
+        try {
+          controller.close();
+        } catch {
+          /* already closed */
+        }
+      };
+
+      if (clientSignal) {
+        if (clientSignal.aborted) {
+          onAbort();
+          return;
+        }
+        clientSignal.addEventListener("abort", onAbort, { once: true });
+      }
+
+      heartbeat = setInterval(() => {
+        try {
+          controller.enqueue(HEARTBEAT_BYTES);
+        } catch {
+          onAbort();
+        }
+      }, HEARTBEAT_MS);
+
+      try {
+        while (true) {
+          if (clientSignal?.aborted) {
+            onAbort();
+            return;
+          }
+          const { done, value } = await reader.read();
+          if (done) {
+            stopHeartbeat();
+            controller.close();
+            break;
+          }
+          controller.enqueue(value);
+        }
+      } catch {
+        stopHeartbeat();
+        try {
+          controller.close();
+        } catch {
+          /* already closed */
+        }
+      } finally {
+        if (clientSignal) {
+          clientSignal.removeEventListener("abort", onAbort);
+        }
+      }
+    },
+    cancel() {
+      stopHeartbeat();
+      return reader?.cancel().then(() => undefined, () => undefined);
+    },
+  });
+
+  return new Response(stream, {
+    headers: {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache, no-transform",
+      Connection: "keep-alive",
+      "X-Accel-Buffering": "no",
+    },
+  });
+}
 
 /**
  * Upstream bodies that mean "the load balancer has zero healthy
@@ -147,14 +459,39 @@ function recordFetchSuccess(): void {
   circuitOpenUntilMs = 0;
 }
 
+/**
+ * Coerce ``forwardToBackend`` body values into a fetch-compatible
+ * ``BodyInit``. Plain objects/arrays become JSON strings; strings and
+ * binary/multipart types pass through unchanged.
+ */
+function serializeForwardBody(
+  body: unknown,
+): BodyInit | null | undefined {
+  if (body == null) return body as null | undefined;
+  if (typeof body === "string") return body;
+  if (typeof body !== "object") return String(body);
+  if (
+    body instanceof FormData ||
+    body instanceof Blob ||
+    body instanceof ArrayBuffer ||
+    ArrayBuffer.isView(body) ||
+    (typeof ReadableStream !== "undefined" &&
+      body instanceof ReadableStream) ||
+    (typeof URLSearchParams !== "undefined" &&
+      body instanceof URLSearchParams)
+  ) {
+    return body as BodyInit;
+  }
+  return JSON.stringify(body);
+}
+
 interface ForwardOptions {
   method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
   /**
-   * Pre-serialized request body. The catch-all route reads the raw
-   * text from ``request.text()`` and passes a string through;
-   * leaving the type loose so FormData callers (avatar/reference/
-   * agent-upload) compile even though the runtime path doesn't
-   * serialize multipart bodies today.
+   * Request body. Strings pass through as-is (catch-all proxy uses
+   * ``request.text()``). Plain objects/arrays are JSON.stringified.
+   * FormData / Blob / ArrayBuffer / ReadableStream pass through for
+   * multipart and streaming callers.
    */
   body?: unknown;
   cookieHeader?: string;
@@ -241,7 +578,12 @@ export async function forwardToBackend(
   // still win (override semantics preserved).
   const isStream = stream === true;
   const isForm = body instanceof FormData;
-  const headers: Record<string, string> = {};
+  const headers: Record<string, string> = {
+    // Always stamp the hop so FastAPI's ``_request_id`` reuses the
+    // same id the portal surfaces — avoids body vs header mismatch
+    // when upstream mints its own UUID.
+    "X-Request-ID": requestId,
+  };
   if (!isStream && !isForm) {
     headers["Content-Type"] = "application/json";
   }
@@ -250,9 +592,29 @@ export async function forwardToBackend(
   if (extraHeaders) {
     for (const [k, v] of Object.entries(extraHeaders)) {
       // Allow caller to override Content-Type for non-JSON bodies.
+      // Do not let a blank inbound id wipe the stamped request id.
+      if (
+        (k.toLowerCase() === "x-request-id" ||
+          k.toLowerCase() === "x-correlation-id") &&
+        !v
+      ) {
+        continue;
+      }
       headers[k] = v;
     }
   }
+  if (!headers["X-Request-ID"] && !headers["x-request-id"]) {
+    headers["X-Request-ID"] = requestId;
+  }
+
+  // Serialize the body for fetch. Strings / FormData / Blob /
+  // ArrayBuffer / TypedArray / ReadableStream / URLSearchParams
+  // pass through. Plain objects and arrays (e.g. PR-suggestion
+  // routes that pass ``await request.json()``) are JSON.stringified
+  // — Node fetch rejects bare objects as BodyInit and would 5xx.
+  // Do NOT stringify strings: the catch-all proxy already reads
+  // ``request.text()`` and re-stringifying would wrap JSON in quotes.
+  const fetchBody = serializeForwardBody(body);
 
   // 25s hard timeout for non-streaming requests (PT-10). SSE streams
   // are long-lived by design — the client-side ``EventSource`` /
@@ -262,14 +624,7 @@ export async function forwardToBackend(
   const fetchInit: RequestInit = {
     method,
     headers,
-    // ``body`` arrives from the catch-all route handler as either a
-    // raw string (already JSON, from request.text()) or undefined.
-    // Stringifying again would wrap the JSON string in extra quotes
-    // ("\"{\"email\":...}\"") and FastAPI would reject it as a string
-    // where an object is expected. Pass through as-is. (Multipart
-    // bodies still don't survive the text() read upstream; that's a
-    // separate gap.)
-    body: body as BodyInit | null | undefined,
+    body: fetchBody,
   };
   if (!isStream) {
     fetchInit.signal = AbortSignal.timeout(25_000);
@@ -321,6 +676,18 @@ export async function forwardToBackend(
     }
   }
 
+  // Pass FastAPI ``{error, detail, request_id}`` envelopes through
+  // unchanged. Never re-wrap ``internal_error`` into a bare
+  // ``{detail: ...}`` that drops ``error`` / ``request_id``.
+  // Empty upstream 5xx bodies still get a correlatable envelope.
+  if (response.status >= 500 && (parsed === null || parsed === undefined)) {
+    parsed = {
+      error: "internal_error",
+      detail: "Upstream error",
+      request_id: requestId,
+    };
+  }
+
   // Normalise load-balancer "no healthy upstream" (and friends) into
   // a stable JSON envelope the client can detect without string-
   // matching every vendor's wording. July 2026 — production was
@@ -343,14 +710,22 @@ export async function forwardToBackend(
   // Echo request_id on pass-through upstream 5xx so support can
   // correlate browser errors with proxy logs (LP-21). Upstream HTTP
   // errors do NOT trip the circuit — only fetch failures do.
+  // Prefer the upstream's own request_id when present (FastAPI
+  // ``internal_error`` already stamps one).
   if (
     response.status >= 500 &&
     parsed !== null &&
     typeof parsed === "object" &&
-    !Array.isArray(parsed) &&
-    !("request_id" in (parsed as Record<string, unknown>))
+    !Array.isArray(parsed)
   ) {
-    (parsed as Record<string, unknown>).request_id = requestId;
+    const obj = parsed as Record<string, unknown>;
+    if (
+      !("request_id" in obj) ||
+      obj.request_id == null ||
+      obj.request_id === ""
+    ) {
+      obj.request_id = requestId;
+    }
   }
 
   const nextResponse = NextResponse.json(parsed ?? {}, {
@@ -368,7 +743,14 @@ export async function forwardToBackend(
   // ``Cache-Control: public, max-age=300`` would silently leak.
   nextResponse.headers.set("Vary", "Cookie, Authorization");
   nextResponse.headers.set("Cache-Control", "private, no-store");
-  nextResponse.headers.set("X-Request-ID", requestId);
+  const bodyRequestId =
+    parsed !== null &&
+    typeof parsed === "object" &&
+    !Array.isArray(parsed) &&
+    typeof (parsed as Record<string, unknown>).request_id === "string"
+      ? ((parsed as Record<string, unknown>).request_id as string)
+      : requestId;
+  nextResponse.headers.set("X-Request-ID", bodyRequestId);
 
   // When the LB reports zero healthy pods, advertise a Retry-After
   // so clients back off instead of hammering the dead upstream.

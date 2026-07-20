@@ -8,7 +8,7 @@
  * or ``POST /orgs/{org}/mcp/keys``. Streamable HTTP also at ``POST /v1/mcp``.
  */
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { Check, Copy, ExternalLink, Key, Terminal } from "lucide-react";
 import { SettingsCard } from "@/components/settings/settings-card";
@@ -17,6 +17,8 @@ import { DOCS_URL } from "@/lib/constants";
 import { api } from "@/lib/api";
 import { useToast } from "@/components/ui/toast";
 import { Button } from "@/components/ui/button";
+import { usePermissions } from "@/hooks/use-permissions";
+import { isAdminOrOwner } from "@/lib/roles";
 
 const DEFAULT_API_BASE = "https://api.edenobservability.com";
 
@@ -116,10 +118,21 @@ const EXAMPLE_PROMPTS = [
 
 export function McpTab({ org }: McpTabProps) {
   const toast = useToast();
+  const { role: resolvedRole } = usePermissions();
   const [target, setTarget] = useState<ConfigTarget>("cursor");
   const [copied, setCopied] = useState(false);
   const [creatingKey, setCreatingKey] = useState(false);
   const [rawKey, setRawKey] = useState<string | null>(null);
+
+  // Prefer resolveRole (Clerk org:admin → owner during sync lag) over
+  // raw Eden membership role so creators can mint MCP keys immediately.
+  const canManageKeys =
+    isAdminOrOwner(resolvedRole) || isAdminOrOwner(org?.role);
+
+  // Clear minted secret when switching orgs (avoid cross-tenant key bleed in UI).
+  useEffect(() => {
+    setRawKey(null);
+  }, [org?.id]);
 
   const apiBase =
     (typeof process !== "undefined" && process.env.NEXT_PUBLIC_EDEN_API_BASE) ||
@@ -148,7 +161,7 @@ export function McpTab({ org }: McpTabProps) {
   };
 
   const createMcpKey = async () => {
-    if (!org) return;
+    if (!org || !canManageKeys) return;
     setCreatingKey(true);
     try {
       const res = await api.createMcpKey(org.id, "MCP");
@@ -251,14 +264,20 @@ export function McpTab({ org }: McpTabProps) {
               scopes via POST /orgs/&#123;org&#125;/mcp/keys.
             </p>
             <div className="flex flex-wrap gap-2">
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={creatingKey}
-                onClick={() => void createMcpKey()}
-              >
-                {creatingKey ? "Creating…" : "Create MCP key"}
-              </Button>
+              {canManageKeys ? (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={creatingKey}
+                  onClick={() => void createMcpKey()}
+                >
+                  {creatingKey ? "Creating…" : "Create MCP key"}
+                </Button>
+              ) : (
+                <p className="text-sm text-[var(--text-muted)]">
+                  Only org owners and admins can create MCP keys.
+                </p>
+              )}
               <Link
                 href="/settings?tab=api-keys"
                 className="inline-flex items-center gap-1 text-sm text-[var(--accent)] hover:underline"

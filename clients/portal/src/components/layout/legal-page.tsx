@@ -1,8 +1,10 @@
 import * as React from "react";
 import Link from "next/link";
-import { ChevronLeft, FileWarning } from "lucide-react";
+import { ChevronLeft } from "lucide-react";
 import { Logo } from "@/components/brand/logo";
+import { SignedInGate } from "@/app/(marketing)/_components/SignedInGate";
 import { cn } from "@/lib/utils";
+
 
 export interface LegalPageProps {
   /** Eyebrow label above the H1 (e.g. "Legal", "Security"). */
@@ -53,11 +55,38 @@ export function LegalPage({
               Pricing
             </Link>
             <Link
-              href="/sign-up"
-              className="inline-flex items-center justify-center min-h-11 px-4 text-sm font-medium bg-[var(--accent)] text-[var(--bg-base)] rounded-lg hover:bg-[var(--accent-hover)] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-primary)]"
+              href="/contact"
+              className="hidden md:inline-flex items-center min-h-11 px-3 text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] rounded-lg"
             >
-              Start free
+              Contact
             </Link>
+            <SignedInGate
+              signedIn={
+                <Link
+                  href="/dashboard"
+                  className="inline-flex items-center justify-center min-h-11 px-4 text-sm font-medium bg-[var(--accent)] text-[var(--bg-base)] rounded-lg hover:bg-[var(--accent-hover)] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-primary)]"
+                >
+                  Open dashboard
+                </Link>
+              }
+              signedOut={
+                <>
+                  <Link
+                    href="/sign-in"
+                    className="hidden sm:inline-flex items-center justify-center min-h-11 px-3 text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] rounded-lg"
+                  >
+                    Sign in
+                  </Link>
+                  <Link
+                    href="/sign-up"
+                    className="inline-flex items-center justify-center min-h-11 px-4 text-sm font-medium bg-[var(--accent)] text-[var(--bg-base)] rounded-lg hover:bg-[var(--accent-hover)] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-primary)]"
+                  >
+                    Start free
+                  </Link>
+                </>
+              }
+            />
+
             <Link
               href="/"
               className="inline-flex items-center gap-1.5 min-h-11 px-2 text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] rounded-lg"
@@ -69,28 +98,27 @@ export function LegalPage({
         </div>
       </nav>
 
-      <main className={cn("mx-auto px-6 py-16", maxW)}>
+      <main className={cn("mx-auto px-6 py-14 md:py-20", maxW)}>
         <p className="text-[11px] font-mono font-semibold uppercase tracking-widest text-[var(--accent)] mb-3">
           {eyebrow}
         </p>
-        <h1
-          className="text-4xl md:text-5xl font-bold text-[var(--text-primary)] mb-4"
-          style={{ letterSpacing: "-0.03em", lineHeight: 1.05 }}
-        >
+        <h1 className="h1-fluid mb-4 text-[var(--text-primary)]">
           {title}
         </h1>
-        <p className="text-base text-[var(--text-secondary)] mb-12 leading-relaxed">
+        <p className="text-base text-[var(--text-secondary)] mb-10 md:mb-12 leading-relaxed max-w-2xl">
           {description}
         </p>
         {draft && (
           <div
             role="status"
-            className="mb-8 flex items-start gap-3 rounded-lg border border-[var(--warning)]/40 bg-[var(--warning)]/10 px-4 py-3 text-sm text-[var(--warning)]"
+            className="mb-8 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-primary)]/60 px-4 py-3"
           >
-            <FileWarning className="h-4 w-4 shrink-0 mt-0.5" aria-hidden />
-            <p>
-              Draft for review — clauses on this page have not received final counsel sign-off.
-              Do not rely on this text for contractual purposes until the published DPA is countersigned.
+            <p className="text-[11px] font-mono uppercase tracking-[0.18em] text-[var(--text-muted)] mb-1.5">
+              Draft
+            </p>
+            <p className="text-sm text-[var(--text-secondary)] leading-relaxed">
+              For counsel review — this page has not received final legal sign-off.
+              Do not rely on it for contractual purposes until published.
             </p>
           </div>
         )}
@@ -162,10 +190,16 @@ export function LegalPage({
             >
               Security
             </Link>
+            <Link
+              href="/subprocessors"
+              className="hover:text-[var(--text-primary)] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] rounded"
+            >
+              Subprocessors
+            </Link>
             <span className="inline-flex items-baseline gap-1.5 whitespace-nowrap">
               <Link
                 href="/do-not-sell"
-                className="text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors"
+                className="hover:text-[var(--text-primary)] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] rounded"
               >
                 Do Not Sell My Info
               </Link>

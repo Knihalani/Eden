@@ -57,9 +57,13 @@ class TestDl1PublishTraceEvent:
         )
 
         collector = TelemetryCollector()
-        # Stub Redis to return a fake xadd-able client.
+        # Stub Redis to return a fake pipelined client.
+        pipe = MagicMock()
+        pipe.xadd = MagicMock(return_value=pipe)
+        pipe.expire = MagicMock(return_value=pipe)
+        pipe.execute = AsyncMock(return_value=[b"1-0", True])
         fake_redis = MagicMock()
-        fake_redis.xadd = AsyncMock(return_value=b"1-0")
+        fake_redis.pipeline = MagicMock(return_value=pipe)
         collector._redis = fake_redis  # short-circuit _get_redis
 
         event = TelemetryEvent(
@@ -79,8 +83,9 @@ class TestDl1PublishTraceEvent:
         ) as mock_publish:
             await collector._route_redis(event)
 
-        # xadd was called.
-        fake_redis.xadd.assert_awaited_once()
+        # xadd was queued on the pipeline and executed.
+        pipe.xadd.assert_called_once()
+        pipe.execute.assert_awaited_once()
         # AND publish_trace_event fired with the event payload.
         mock_publish.assert_awaited_once()
         kwargs = mock_publish.await_args.kwargs
@@ -100,10 +105,14 @@ class TestDl1PublishTraceEvent:
         )
 
         collector = TelemetryCollector()
-        fake_redis = MagicMock()
-        fake_redis.xadd = AsyncMock(
+        pipe = MagicMock()
+        pipe.xadd = MagicMock(return_value=pipe)
+        pipe.expire = MagicMock(return_value=pipe)
+        pipe.execute = AsyncMock(
             side_effect=RuntimeError("redis down"),
         )
+        fake_redis = MagicMock()
+        fake_redis.pipeline = MagicMock(return_value=pipe)
         collector._redis = fake_redis
 
         event = TelemetryEvent(
@@ -123,7 +132,7 @@ class TestDl1PublishTraceEvent:
         ) as mock_publish:
             await collector._route_redis(event)
 
-        fake_redis.xadd.assert_awaited_once()
+        pipe.execute.assert_awaited_once()
         mock_publish.assert_not_awaited()
 
     @pytest.mark.asyncio
@@ -137,8 +146,12 @@ class TestDl1PublishTraceEvent:
         )
 
         collector = TelemetryCollector()
+        pipe = MagicMock()
+        pipe.xadd = MagicMock(return_value=pipe)
+        pipe.expire = MagicMock(return_value=pipe)
+        pipe.execute = AsyncMock(return_value=[b"1-0", True])
         fake_redis = MagicMock()
-        fake_redis.xadd = AsyncMock(return_value=b"1-0")
+        fake_redis.pipeline = MagicMock(return_value=pipe)
         collector._redis = fake_redis
 
         event = TelemetryEvent(
@@ -161,7 +174,7 @@ class TestDl1PublishTraceEvent:
             # MUST NOT raise — the publish is best-effort.
             await collector._route_redis(event)
 
-        fake_redis.xadd.assert_awaited_once()
+        pipe.execute.assert_awaited_once()
 
 
 # ─── DL-2: tenant counter resets on cap ────────────────────────────
@@ -330,7 +343,7 @@ class TestDl3PgBlipReturns503:
             return {"org_id": "org-1"}
 
         with patch(
-            "eden.api.routes.ingestion.get_ingestion_auth",
+            "eden.api.routes.ingestion.get_ingest_auth",
             _fake_auth,
         ):
             with patch(

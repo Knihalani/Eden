@@ -18,8 +18,9 @@ decoder do the final validation.
 
 from __future__ import annotations
 
-import json
 import logging
+
+from eden.observability.ingestion.json_body import loads_body
 
 logger = logging.getLogger(__name__)
 
@@ -58,7 +59,7 @@ def _looks_like_otel(body: bytes) -> bool:
     ``resourceSpans`` (camelCase) or ``resource_spans`` (snake_case)
     at the top level."""
     try:
-        parsed = json.loads(body)
+        parsed = loads_body(body)
     except (ValueError, UnicodeDecodeError):
         return False
     if not isinstance(parsed, dict):
@@ -72,7 +73,7 @@ def _looks_like_helicone(body: bytes) -> bool:
     ``response_status``. Sniff the body only when the header is present
     is more reliable; this is a backstop."""
     try:
-        parsed = json.loads(body)
+        parsed = loads_body(body)
     except (ValueError, UnicodeDecodeError):
         return False
     if not isinstance(parsed, dict):
@@ -88,7 +89,7 @@ def _looks_like_langfuse(body: bytes) -> bool:
     """Langfuse batch exports carry a list of traces with ``observations``
     and ``scores`` arrays."""
     try:
-        parsed = json.loads(body)
+        parsed = loads_body(body)
     except (ValueError, UnicodeDecodeError):
         return False
     if isinstance(parsed, list):

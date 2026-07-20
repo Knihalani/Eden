@@ -1,0 +1,156 @@
+[
+  {
+    "route": "/",
+    "status": 200,
+    "finalUrl": "https://edenobservability.com/",
+    "title": "Eden — Observability + improvement for AI agents",
+    "crashHit": false,
+    "qdrantHit": false,
+    "crashes": [],
+    "screenshot": "e2e/golden/w2-07-evidence/screenshots/pub_.png",
+    "bodySnippet": "Eden Install Pillars Improve Pricing Quickstart Sign in Start free Eden See every LLM call. Review every fix. Gateway or SDK → first traces in minutes → reviewable fixes you ship. Start free Quick"
+  },
+  {
+    "route": "/about",
+    "status": 200,
+    "finalUrl": "https://edenobservability.com/about",
+    "title": "About · Eden",
+    "crashHit": false,
+    "qdrantHit": false,
+    "crashes": [],
+    "screenshot": "e2e/golden/w2-07-evidence/screenshots/pub_about.png",
+    "bodySnippet": "Eden Pricing Start free Back to home ABOUT Observability that improves behavior Observability + improvement for AI agents and LLM apps. Eden is the observability + improvement platform for AI agen"
+  },
+  {
+    "route": "/pricing",
+    "status": 200,
+    "finalUrl": "https://edenobservability.com/pricing",
+    "title": "Pricing · Eden",
+    "crashHit": false,
+    "qdrantHit": false,
+    "crashes": [],
+    "screenshot": "e2e/golden/w2-07-evidence/screenshots/pub_pricing.png",
+    "bodySnippet": "Eden Pricing Start free Back to home PRICING Free during soft launch Free during soft launch · $1 personal / $3 org monthly spend cap · No credit card. SOFT LAUNCH · FREE $0 $1/mo LLM spend cap "
+  },
+  {
+    "route": "/contact",
+    "status": 200,
+    "finalUrl": "https://edenobservability.com/contact",
+    "title": "Eden — Observability + improvement for AI agents",
+    "crashHit": false,
+    "qdrantHit": false,
+    "crashes": [],
+    "screenshot": "e2e/golden/w2-07-evidence/screenshots/pub_contact.png",
+    "bodySnippet": "Eden Pricing Start free Back to home CONTACT Get in touch Soft launch, volume, or security questions — send a note or email hello@edenobservability.com. We reply within a few business days. Privacy"
+  },
+  {
+    "route": "/dpa",
+    "status": 200,
+    "finalUrl": "https://edenobservability.com/dpa",
+    "title": "Data Processing Addendum · Eden",
+    "crashHit": false,
+    "qdrantHit": false,
+    "crashes": [],
+    "screenshot": "e2e/golden/w2-07-evidence/screenshots/pub_dpa.png",
+    "bodySnippet": "Eden Pricing Start free Back to home LEGAL Data Processing Addendum Eden's DPA is auto-attached to every paid order form. It incorporates the EU Standard Contractual Clauses (SCCs) for internationa"
+  },
+  {
+    "route": "/subprocessors",
+    "status": 200,
+    "finalUrl": "https://edenobservability.com/subprocessors",
+    "title": "Eden — Observability + improvement for AI agents",
+    "crashHit": false,
+    "qdrantHit": false,
+    "crashes": [],
+    "screenshot": "e2e/golden/w2-07-evidence/screenshots/pub_subprocessors.png",
+    "bodySnippet": "Eden Pricing Start free Back to home LEGAL Subprocessors Third parties Eden uses to process customer data (GDPR Art. 28). Customers are notified at least 30 days before material changes. Draft for"
+  },
+  {
+    "route": "/do-not-sell",
+    "status": 200,
+    "finalUrl": "https://edenobservability.com/do-not-sell",
+    "title": "Eden — Observability + improvement for AI agents",
+    "crashHit": false,
+    "qdrantHit": false,
+    "crashes": [],
+    "screenshot": "e2e/golden/w2-07-evidence/screenshots/pub_do-not-sell.png",
+    "bodySnippet": "Eden Pricing Start free Back to home CCPA Do Not Sell My Personal Information California residents can opt out of the sale or sharing of personal information under the CCPA/CPRA. Eden does not sell"
+  },
+  {
+    "route": "/privacy",
+    "status": 200,
+    "finalUrl": "https://edenobservability.com/privacy",
+    "title": "Privacy · Eden",
+    "crashHit": false,
+    "qdrantHit": false,
+    "crashes": [],
+    "screenshot": "e2e/golden/w2-07-evidence/screenshots/pub_privacy.png",
+    "bodySnippet": "Eden Pricing Start free Back to home LEGAL Privacy Eden is built around the principle that your telemetry is yours. This page summarises what we collect, where it lives, who can see it, and how to "
+  },
+  {
+    "route": "/terms",
+    "status": 200,
+    "finalUrl": "https://edenobservability.com/terms",
+    "title": "Terms of Service · Eden",
+    "crashHit": false,
+    "qdrantHit": false,
+    "crashes": [],
+    "screenshot": "e2e/golden/w2-07-evidence/screenshots/pub_terms.png",
+    "bodySnippet": "Eden Pricing Start free Back to home LEGAL Terms of Service These terms govern your use of Eden. The free tier is offered under these terms as-is. Paid plans add the SLA + DPA in your order form. "
+  },
+  {
+    "route": "/security",
+    "status": 200,
+    "finalUrl": "https://edenobservability.com/security",
+    "title": "Security · Eden",
+    "crashHit": false,
+    "qdrantHit": false,
+    "crashes": [],
+    "screenshot": "e2e/golden/w2-07-evidence/screenshots/pub_security.png",
+    "bodySnippet": "Eden Pricing Start free Back to home TRUST CENTER Security Eden is in soft launch. Observability data is sensitive — this page states what we do today and how to reach us for security questions. We"
+  },
+  {
+    "route": "/changelog",
+    "status": 200,
+    "finalUrl": "https://edenobservability.com/changelog",
+    "title": "Changelog · Eden",
+    "crashHit": false,
+    "qdrantHit": false,
+    "crashes": [],
+    "screenshot": "e2e/golden/w2-07-evidence/screenshots/pub_changelog.png",
+    "bodySnippet": "Eden Pricing Start free Back to home CHANGELOG What shipped A calm, chronological record of product changes. Soft launch focuses on reliability and the closed-loop path. 2026-07-13 Soft-launch pu"
+  },
+  {
+    "route": "/sign-in",
+    "status": 200,
+    "finalUrl": "https://edenobservability.com/sign-in",
+    "title": "Eden — Observability + improvement for AI agents",
+    "crashHit": false,
+    "qdrantHit": false,
+    "crashes": [],
+    "screenshot": "e2e/golden/w2-07-evidence/screenshots/pub_sign-in.png",
+    "bodySnippet": "Skip to form Eden OBSERVABILITY + IMPROVEMENT FOR AI AGENTS AND LLM APPS. Capture. Analyse. Improve. Every LLM call through Eden's gateway, every trace queryable in your workspace, every regression"
+  },
+  {
+    "route": "/dashboard",
+    "status": 200,
+    "finalUrl": "https://edenobservability.com/sign-in?redirect_url=https%3A%2F%2Fedenobservability.com%2Fdashboard",
+    "title": "Eden — Observability + improvement for AI agents",
+    "crashHit": false,
+    "qdrantHit": false,
+    "crashes": [],
+    "screenshot": "e2e/golden/w2-07-evidence/screenshots/pub_dashboard.png",
+    "bodySnippet": "Skip to form Eden OBSERVABILITY + IMPROVEMENT FOR AI AGENTS AND LLM APPS. Capture. Analyse. Improve. Every LLM call through Eden's gateway, every trace queryable in your workspace, every regression"
+  },
+  {
+    "route": "/api/health",
+    "status": 503,
+    "finalUrl": "https://edenobservability.com/api/health",
+    "title": "",
+    "crashHit": false,
+    "qdrantHit": true,
+    "crashes": [],
+    "screenshot": "e2e/golden/w2-07-evidence/screenshots/pub_api_health.png",
+    "bodySnippet": "{\"status\":\"degraded\",\"version\":\"0.1.0\",\"postgres\":\"connected\",\"qdrant\":\"error: [Errno 99] Cannot assign requested address\",\"quality_worker_running\":true,\"statgate_installed\":true,\"evolution_loop_runni"
+  }
+]

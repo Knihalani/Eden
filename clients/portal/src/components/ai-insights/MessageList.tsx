@@ -1,9 +1,9 @@
 "use client";
 
 import type { RefObject } from "react";
+import dynamic from "next/dynamic";
 import Link from "next/link";
 import { Download } from "lucide-react";
-import { AiChartRenderer } from "@/components/ai/ai-chart-renderer";
 import type { AiChartSpec } from "@/lib/api";
 import { downloadCsv, downloadXlsx } from "@/lib/export";
 import { Button } from "@/components/ui/button";
@@ -11,6 +11,16 @@ import { cn } from "@/lib/utils";
 import { ToolCallCard } from "./ToolCallCard";
 import { ApprovalCard } from "./ApprovalCard";
 import { needsApproval, type Message, type ChatCitation } from "./types";
+
+// Keep recharts out of the ChatSidebar island until a message actually
+// emits charts (bundle budget: recharts alone is ~412KB).
+const AiChartRenderer = dynamic(
+  () =>
+    import("@/components/ai/ai-chart-renderer").then((m) => ({
+      default: m.AiChartRenderer,
+    })),
+  { ssr: false },
+);
 
 function CitationChip({ cite }: { cite: ChatCitation }) {
   const traceId =

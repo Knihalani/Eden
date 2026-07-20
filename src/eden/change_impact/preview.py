@@ -25,7 +25,7 @@ _AGENT_CONFIG_GLOBS = (
 )
 
 _RECOMMENDATIONS = frozenset(
-    {"safe", "review_required", "block", "auto_merge_safe"}
+    {"safe", "review_required", "block", "auto_merge_safe", "unknown"}
 )
 
 
@@ -38,8 +38,8 @@ class ImpactReport:
     traces_replayed: int = 0
     trajectory_divergence_rate: float = 0.0
     new_predicted_stumbles: int = 0
-    cost_delta_pct: float = 0.0
-    latency_delta_pct: float = 0.0
+    cost_delta_pct: float | None = None
+    latency_delta_pct: float | None = None
     regression_eval: dict[str, Any] = field(default_factory=dict)
     recommendation: str = "review_required"
     recommendation_reasons: list[str] = field(default_factory=list)
@@ -50,15 +50,13 @@ class ImpactReport:
     )
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        out: dict[str, Any] = {
             "change_id": self.change_id,
             "agent_id": self.agent_id,
             "change_summary": dict(self.change_summary),
             "traces_replayed": self.traces_replayed,
             "trajectory_divergence_rate": self.trajectory_divergence_rate,
             "new_predicted_stumbles": self.new_predicted_stumbles,
-            "cost_delta_pct": self.cost_delta_pct,
-            "latency_delta_pct": self.latency_delta_pct,
             "regression_eval": dict(self.regression_eval),
             "recommendation": self.recommendation,
             "recommendation_reasons": list(self.recommendation_reasons),
@@ -66,6 +64,12 @@ class ImpactReport:
             "policy_tier": self.policy_tier,
             "generated_at": self.generated_at,
         }
+        # Omit unset deltas — never serialize fake 0.0 as a measured value.
+        if self.cost_delta_pct is not None:
+            out["cost_delta_pct"] = self.cost_delta_pct
+        if self.latency_delta_pct is not None:
+            out["latency_delta_pct"] = self.latency_delta_pct
+        return out
 
 
 class ChangeDetector:
@@ -117,13 +121,17 @@ class ImpactPreviewOrchestrator:
         changed_files: list[str],
         agent_id: str | None = None,
         trace_ids: list[str] | None = None,
+        prompt_override: str | None = None,
     ) -> ImpactReport:
         agent = agent_id or ChangeDetector.resolve_agent_id(changed_files)
+        summary: dict[str, Any] = {"files": changed_files}
+        if prompt_override:
+            summary["prompt_override_applied"] = True
         report = ImpactReport(
             change_id=change_id,
             org_id=org_id,
             agent_id=agent,
-            change_summary={"files": changed_files},
+            change_summary=summary,
         )
 
         traces = trace_ids or await self._sample_traces(org_id, agent)
@@ -132,7 +140,9 @@ class ImpactPreviewOrchestrator:
         divergences: list[dict[str, Any]] = []
         divergence_count = 0
         for tid in traces:
-            div = await self._replay_trace(tid)
+            div = await self._replay_trace(
+                tid, prompt_override=prompt_override, org_id=org_id
+            )
             if div.get("diverged"):
                 divergence_count += 1
                 divergences.append(div)
@@ -175,6 +185,8 @@ class ImpactPreviewOrchestrator:
             payload = json.loads(payload)
         if not isinstance(payload, dict):
             return None
+        cost_raw = payload.get("cost_delta_pct")
+        latency_raw = payload.get("latency_delta_pct")
         return ImpactReport(
             change_id=change_id,
             org_id=org_id,
@@ -183,6 +195,14 @@ class ImpactPreviewOrchestrator:
             traces_replayed=int(payload.get("traces_replayed") or 0),
             trajectory_divergence_rate=float(
                 payload.get("trajectory_divergence_rate") or 0
+            ),
+            cost_delta_pct=(
+                float(cost_raw) if isinstance(cost_raw, (int, float)) else None
+            ),
+            latency_delta_pct=(
+                float(latency_raw)
+                if isinstance(latency_raw, (int, float))
+                else None
             ),
             regression_eval=payload.get("regression_eval") or {},
             recommendation=str(row.get("recommendation") or "review_required"),
@@ -229,7 +249,13 @@ class ImpactPreviewOrchestrator:
             logger.debug("trace sample failed: %s", exc)
             return []
 
-    async def _replay_trace(self, trace_id: str) -> dict[str, Any]:
+    async def _replay_trace(
+        self,
+        trace_id: str,
+        *,
+        prompt_override: str | None = None,
+        org_id: str = "default",
+    ) -> dict[str, Any]:
         try:
             from eden.debugger.checkpoints import (
                 CheckpointStore,
@@ -241,17 +267,29 @@ class ImpactPreviewOrchestrator:
                 return {"trace_id": trace_id, "diverged": False}
             store = CheckpointStore(client)
             engine = LivePrefixEngine(store)
-            result = await engine.rerun_live_prefix(trace_id, live_from_step=1)
-            diverged = bool(result.diff) or result.live_tail_steps > 0
+            result = await engine.rerun_live_prefix(
+                trace_id,
+                live_from_step=1,
+                prompt_override=prompt_override,
+                org_id=org_id,
+            )
+            # live_tail_steps alone is not divergence — only an applied
+            # prompt_override that changed prefix inputs (result.diff).
+            diverged = bool(result.diff)
             return {
                 "trace_id": trace_id,
                 "step": result.live_from_step,
                 "diverged": diverged,
+                "prompt_override_applied": bool(prompt_override),
                 "stumble_risk": "loop" if diverged else None,
                 "summary": (
-                    f"Live tail from step {result.live_from_step}"
-                    if result.live_tail_steps
-                    else "Prefix replay matched"
+                    "Prompt override changed prefix inputs"
+                    if diverged
+                    else (
+                        "Prefix replay matched"
+                        if prompt_override
+                        else "No prompt override applied"
+                    )
                 ),
             }
         except Exception as exc:
@@ -275,6 +313,12 @@ class ImpactPreviewOrchestrator:
     def _recommend(
         self, report: ImpactReport
     ) -> tuple[str, list[str]]:
+        # Soft-fail with no samples must not look "safe".
+        if report.traces_replayed <= 0:
+            return (
+                "unknown",
+                ["no traces sampled — cannot assess impact"],
+            )
         reasons: list[str] = []
         if report.regression_eval.get("failed", 0) > 0:
             reasons.append(
@@ -350,7 +394,7 @@ def check_run_payload(
     conclusion = "success"
     if report.recommendation == "block":
         conclusion = "failure"
-    elif report.recommendation == "review_required":
+    elif report.recommendation in ("review_required", "unknown"):
         conclusion = "neutral"
     return {
         "name": "Eden Change Impact",

@@ -8,10 +8,10 @@ import yaml
 from datetime import UTC, datetime
 from typing import Any
 
-from fastapi import APIRouter, Body, Depends, Path, Query
+from fastapi import APIRouter, Body, Depends, HTTPException, Path, Query
 from pydantic import BaseModel, Field
 
-from eden.api.deps import get_current_user
+from eden.api.deps import get_current_user, require_path_org_access
 from eden.api.utils.redact import redact_all
 from eden.preview.gates import (
     artifacts_enabled,
@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(
     prefix="/orgs/{org_id}",
     tags=["learn"],
-    dependencies=[Depends(get_current_user)],
+    dependencies=[Depends(get_current_user), Depends(require_path_org_access)],
 )
 
 
@@ -54,7 +54,7 @@ class NudgeCreateRequest(BaseModel):
 
 @router.get("/nudges")
 async def list_nudges(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     agent_id: str | None = Query(None),
 ) -> dict[str, Any]:
     if not await artifacts_enabled(org_id):
@@ -108,7 +108,7 @@ async def _list_org_artifacts(org_id: str):
 
 @router.post("/nudges")
 async def create_nudge(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     body: NudgeCreateRequest = Body(...),
 ) -> dict[str, Any]:
     if not await artifacts_enabled(org_id):
@@ -132,7 +132,7 @@ async def create_nudge(
 
 
 @router.post("/nudges/{nudge_id}/promote")
-async def promote_nudge(org_id: str = Path(...), nudge_id: str = Path(...)) -> dict[str, Any]:
+async def promote_nudge(org_id: str = Depends(require_path_org_access), nudge_id: str = Path(...)) -> dict[str, Any]:
     if not await artifacts_enabled(org_id):
         return preview_disabled_envelope("artifacts")
     from eden.llmops.warm_learn import warm_learn_caches
@@ -187,7 +187,7 @@ async def promote_nudge(org_id: str = Path(...), nudge_id: str = Path(...)) -> d
 
 
 @router.post("/nudges/{nudge_id}/archive")
-async def archive_nudge(org_id: str = Path(...), nudge_id: str = Path(...)) -> dict[str, Any]:
+async def archive_nudge(org_id: str = Depends(require_path_org_access), nudge_id: str = Path(...)) -> dict[str, Any]:
     from eden.nudges.engine import NudgeEngine
 
     ok = await NudgeEngine().set_mode(org_id, nudge_id, "archived")
@@ -199,7 +199,7 @@ async def archive_nudge(org_id: str = Path(...), nudge_id: str = Path(...)) -> d
 
 @router.get("/promotions")
 async def list_promotions(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     status: str | None = Query(None),
 ) -> dict[str, Any]:
     from eden.promotion.evidence_gate import EvidenceGate
@@ -209,7 +209,7 @@ async def list_promotions(
 
 
 @router.get("/promotions/{candidate_id}")
-async def get_promotion(org_id: str = Path(...), candidate_id: str = Path(...)) -> dict[str, Any]:
+async def get_promotion(org_id: str = Depends(require_path_org_access), candidate_id: str = Path(...)) -> dict[str, Any]:
     from eden.promotion.evidence_gate import EvidenceGate
 
     gate = EvidenceGate()
@@ -225,7 +225,7 @@ async def get_promotion(org_id: str = Path(...), candidate_id: str = Path(...)) 
 
 @router.post("/promotions/{candidate_id}/approve")
 async def approve_promotion(
-    org_id: str = Path(...), candidate_id: str = Path(...)
+    org_id: str = Depends(require_path_org_access), candidate_id: str = Path(...)
 ) -> dict[str, Any]:
     from eden.promotion.evidence_gate import EvidenceGate
 
@@ -235,7 +235,7 @@ async def approve_promotion(
 
 @router.post("/promotions/{candidate_id}/reject")
 async def reject_promotion(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     candidate_id: str = Path(...),
     reason: str = Query("manual_reject"),
 ) -> dict[str, Any]:
@@ -254,7 +254,7 @@ class BookConfigRequest(BaseModel):
 
 
 @router.get("/agents/{agent_id}/book")
-async def get_book(org_id: str = Path(...), agent_id: str = Path(...)) -> dict[str, Any]:
+async def get_book(org_id: str = Depends(require_path_org_access), agent_id: str = Path(...)) -> dict[str, Any]:
     if await ledger_enabled(org_id):
         from eden.kb.ledger.generator import LedgerGenerator
 
@@ -269,7 +269,7 @@ async def get_book(org_id: str = Path(...), agent_id: str = Path(...)) -> dict[s
 
 
 @router.post("/agents/{agent_id}/book/regenerate")
-async def regenerate_book(org_id: str = Path(...), agent_id: str = Path(...)) -> dict[str, Any]:
+async def regenerate_book(org_id: str = Depends(require_path_org_access), agent_id: str = Path(...)) -> dict[str, Any]:
     from eden.kb.book.generator import BookGenerator
 
     book = await BookGenerator().generate(org_id, agent_id, publish_mode="manual")
@@ -278,7 +278,7 @@ async def regenerate_book(org_id: str = Path(...), agent_id: str = Path(...)) ->
 
 @router.patch("/agents/{agent_id}/book/config")
 async def patch_book_config(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     agent_id: str = Path(...),
     body: BookConfigRequest = Body(...),
 ) -> dict[str, Any]:
@@ -294,7 +294,7 @@ async def patch_book_config(
 
 
 @router.get("/agents/{agent_id}/drift")
-async def get_drift_scores(org_id: str = Path(...), agent_id: str = Path(...)) -> dict[str, Any]:
+async def get_drift_scores(org_id: str = Depends(require_path_org_access), agent_id: str = Path(...)) -> dict[str, Any]:
     from eden.insights.drift_reports import DriftReportBuilder
 
     report = await DriftReportBuilder().get_latest(org_id, agent_id)
@@ -305,7 +305,7 @@ async def get_drift_scores(org_id: str = Path(...), agent_id: str = Path(...)) -
 
 
 @router.get("/agents/{agent_id}/drift/report/latest")
-async def get_drift_report(org_id: str = Path(...), agent_id: str = Path(...)) -> dict[str, Any]:
+async def get_drift_report(org_id: str = Depends(require_path_org_access), agent_id: str = Path(...)) -> dict[str, Any]:
     from eden.insights.drift_reports import DriftReportBuilder
 
     report = await DriftReportBuilder().get_latest(org_id, agent_id)
@@ -313,7 +313,7 @@ async def get_drift_report(org_id: str = Path(...), agent_id: str = Path(...)) -
 
 
 @router.post("/agents/{agent_id}/drift/compute")
-async def compute_drift(org_id: str = Path(...), agent_id: str = Path(...)) -> dict[str, Any]:
+async def compute_drift(org_id: str = Depends(require_path_org_access), agent_id: str = Path(...)) -> dict[str, Any]:
     from eden.insights.drift_reports import DriftReportBuilder
 
     report = await DriftReportBuilder().compute_report(org_id, agent_id)
@@ -324,7 +324,7 @@ async def compute_drift(org_id: str = Path(...), agent_id: str = Path(...)) -> d
 
 
 @router.get("/production-datasets")
-async def list_production_datasets(org_id: str = Path(...)) -> dict[str, Any]:
+async def list_production_datasets(org_id: str = Depends(require_path_org_access)) -> dict[str, Any]:
     from eden.evaluation.auto_curator import AutoCurator
 
     slices = await AutoCurator().list_slices(org_id, "default-agent")
@@ -332,7 +332,7 @@ async def list_production_datasets(org_id: str = Path(...)) -> dict[str, Any]:
 
 
 @router.get("/production-datasets/{agent_id}")
-async def get_agent_slices(org_id: str = Path(...), agent_id: str = Path(...)) -> dict[str, Any]:
+async def get_agent_slices(org_id: str = Depends(require_path_org_access), agent_id: str = Path(...)) -> dict[str, Any]:
     from eden.evaluation.auto_curator import AutoCurator
 
     slices = await AutoCurator().list_slices(org_id, agent_id)
@@ -341,7 +341,7 @@ async def get_agent_slices(org_id: str = Path(...), agent_id: str = Path(...)) -
 
 @router.post("/production-datasets/refresh")
 async def refresh_slices(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     agent_id: str | None = Query(None),
 ) -> dict[str, Any]:
     from eden.evaluation.auto_curator import AutoCurator
@@ -354,7 +354,7 @@ async def refresh_slices(
 
 
 @router.get("/kb/flywheel/status")
-async def flywheel_status(org_id: str = Path(...)) -> dict[str, Any]:
+async def flywheel_status(org_id: str = Depends(require_path_org_access)) -> dict[str, Any]:
     from eden.kb.flywheel.coordinator import get_flywheel_coordinator
 
     status = await get_flywheel_coordinator().get_status(org_id)
@@ -362,7 +362,7 @@ async def flywheel_status(org_id: str = Path(...)) -> dict[str, Any]:
 
 
 @router.get("/issues/{issue_id}/kb-suggestions")
-async def kb_suggestions(org_id: str = Path(...), issue_id: str = Path(...)) -> dict[str, Any]:
+async def kb_suggestions(org_id: str = Depends(require_path_org_access), issue_id: str = Path(...)) -> dict[str, Any]:
     from eden.issues.repo import IssuesRepo
     from eden.kb.flywheel.coordinator import get_flywheel_coordinator
 
@@ -385,7 +385,7 @@ async def kb_suggestions(org_id: str = Path(...), issue_id: str = Path(...)) -> 
 
 @router.get("/artifacts")
 async def list_artifacts(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     agent_id: str | None = Query(None),
     mode: str | None = Query(None),
 ) -> dict[str, Any]:
@@ -427,19 +427,19 @@ async def list_artifacts(
 
 @router.post("/artifacts")
 async def create_artifact(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     body: NudgeCreateRequest = Body(...),
 ) -> dict[str, Any]:
     return await create_nudge(org_id, body)
 
 
 @router.post("/artifacts/{artifact_id}/promote")
-async def promote_artifact(org_id: str = Path(...), artifact_id: str = Path(...)) -> dict[str, Any]:
+async def promote_artifact(org_id: str = Depends(require_path_org_access), artifact_id: str = Path(...)) -> dict[str, Any]:
     return await promote_nudge(org_id, artifact_id)
 
 
 @router.post("/artifacts/{artifact_id}/archive")
-async def archive_artifact(org_id: str = Path(...), artifact_id: str = Path(...)) -> dict[str, Any]:
+async def archive_artifact(org_id: str = Depends(require_path_org_access), artifact_id: str = Path(...)) -> dict[str, Any]:
     return await archive_nudge(org_id, artifact_id)
 
 
@@ -450,7 +450,7 @@ class ArtifactNLRequest(BaseModel):
 
 @router.post("/artifacts/author")
 async def author_artifact_nl(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     body: ArtifactNLRequest = Body(...),
 ) -> dict[str, Any]:
     if not await artifacts_enabled(org_id):
@@ -465,7 +465,7 @@ async def author_artifact_nl(
 
 @router.get("/artifacts/export")
 async def export_artifacts_yaml(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     agent_id: str = Query(...),
 ) -> dict[str, Any]:
     if not await artifacts_enabled(org_id):
@@ -497,7 +497,7 @@ async def export_artifacts_yaml(
 
 
 @router.get("/ledger")
-async def list_ledgers(org_id: str = Path(...)) -> dict[str, Any]:
+async def list_ledgers(org_id: str = Depends(require_path_org_access)) -> dict[str, Any]:
     if not await ledger_enabled(org_id):
         return preview_disabled_envelope("ledger")
     try:
@@ -505,7 +505,7 @@ async def list_ledgers(org_id: str = Path(...)) -> dict[str, Any]:
 
         client = await get_postgres_client()
         if client is None:
-            return _ok("ledger", {"ledgers": []})
+            raise HTTPException(status_code=503, detail="Database unavailable")
         rows = await client.fetch(
             """
             SELECT agent_id, version, inject_enabled, updated_at
@@ -517,13 +517,16 @@ async def list_ledgers(org_id: str = Path(...)) -> dict[str, Any]:
             org_id,
         )
         return _ok("ledger", {"ledgers": [dict(r) for r in rows or []]})
+    except HTTPException:
+        raise
     except Exception as exc:
-        logger.debug("list ledgers: %s", redact_all(str(exc)))
-        return _ok("ledger", {"ledgers": []})
+        # Do not return ok+[] — portal would show a false empty state.
+        logger.warning("list ledgers: %s", redact_all(str(exc)))
+        raise HTTPException(status_code=503, detail="Database unavailable") from exc
 
 
 @router.get("/agents/{agent_id}/ledger")
-async def get_ledger(org_id: str = Path(...), agent_id: str = Path(...)) -> dict[str, Any]:
+async def get_ledger(org_id: str = Depends(require_path_org_access), agent_id: str = Path(...)) -> dict[str, Any]:
     if not await ledger_enabled(org_id):
         return preview_disabled_envelope("ledger")
     from eden.kb.ledger.generator import LedgerGenerator
@@ -535,7 +538,7 @@ async def get_ledger(org_id: str = Path(...), agent_id: str = Path(...)) -> dict
 
 @router.get("/agents/{agent_id}/ledger/diff")
 async def ledger_diff(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     agent_id: str = Path(...),
     since_version: int = Query(0),
 ) -> dict[str, Any]:
@@ -553,7 +556,7 @@ class LedgerPreviewRequest(BaseModel):
 
 @router.post("/agents/{agent_id}/ledger/preview")
 async def ledger_preview(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     agent_id: str = Path(...),
     body: LedgerPreviewRequest = Body(...),
 ) -> dict[str, Any]:
@@ -566,7 +569,7 @@ async def ledger_preview(
 
 
 @router.post("/agents/{agent_id}/ledger/regenerate")
-async def regenerate_ledger(org_id: str = Path(...), agent_id: str = Path(...)) -> dict[str, Any]:
+async def regenerate_ledger(org_id: str = Depends(require_path_org_access), agent_id: str = Path(...)) -> dict[str, Any]:
     if not await ledger_enabled(org_id):
         return preview_disabled_envelope("ledger")
     from eden.kb.ledger.generator import LedgerGenerator
@@ -579,7 +582,7 @@ async def regenerate_ledger(org_id: str = Path(...), agent_id: str = Path(...)) 
 
 @router.get("/improve/scorecard")
 async def improve_scorecard(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     suite: str = Query("smoke"),
 ) -> dict[str, Any]:
     # Canonical impl ships with the API package (not bench/) so Docker
@@ -591,7 +594,7 @@ async def improve_scorecard(
 
 
 @router.get("/onboarding/improvement-loop")
-async def improvement_loop_status(org_id: str = Path(...)) -> dict[str, Any]:
+async def improvement_loop_status(org_id: str = Depends(require_path_org_access)) -> dict[str, Any]:
     """Live teachable improvement-loop checklist (not a static page)."""
     from eden.storage.postgres import get_postgres_client
 
@@ -735,7 +738,7 @@ async def improvement_loop_status(org_id: str = Path(...)) -> dict[str, Any]:
 
 @router.patch("/agents/{agent_id}/ledger/config")
 async def patch_ledger_config(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     agent_id: str = Path(...),
     body: BookConfigRequest = Body(...),
 ) -> dict[str, Any]:

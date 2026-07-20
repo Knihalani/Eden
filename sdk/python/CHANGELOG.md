@@ -4,6 +4,45 @@ All notable changes to the Eden Python SDK are documented here. The
 format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## 0.3.2 — 2026-07-18
+
+### Changed
+- **Breaking:** `redact_on_client` now defaults to ``False``. The
+  gateway remains the authoritative PII layer; client-side regex
+  redaction was double-processing every payload. Restore the old
+  behaviour with ``EdenConfig(redact_on_client=True)`` or
+  ``EDEN_REDACT_ON_CLIENT=1``.
+- Default ``batch_size`` is now ``50`` (was ``32``), matching the
+  TypeScript SDK.
+- Streaming instrumentations omit ``delta_text`` by default
+  (``capture_chunk_text=False``). Set ``EDEN_CAPTURE_CHUNK_TEXT=1``
+  to include token text on `/ingest/chunks`.
+- ``install_logging()`` defaults to ``WARNING`` (was ``INFO``).
+- Ingest POSTs use ``Content-Encoding: gzip``.
+- Multi-format batch flush runs concurrently; chunk flush retries
+  honour ``Retry-After``.
+- ``ModelAdvisor`` is lazy-imported (PEP 562).
+- OTel exporter and native ``instrument()`` are mutually exclusive
+  (XOR) unless ``allow_dual=True``.
+
+### Fixed
+- Offline queue keeps a persistent SQLite connection (WAL) instead
+  of opening + ``COUNT(*)`` on every spill.
+- ``http_capture`` skips buffering stream response bodies
+  (``stream=True`` / ``text/event-stream``).
+- ``User-Agent`` / stumbles header now report ``0.3.2`` (was stuck
+  on ``0.3.0`` in ``client.py`` / ``stumbles.py``).
+- ``flush_chunks`` / ``_enqueue_chunk`` signal ``_wake`` so chunk
+  flush does not stall behind a long ``flush_interval_ms``.
+- Permanent ingest ``4xx`` no longer spills into the offline queue
+  (avoids poison-loop on auth/validation failures).
+- ``flush_offline`` acks SQLite rows only after ``flush()`` returns.
+- OTel exporter sends ``X-Org-Id`` (required with API-key auth).
+- LangChain streaming chunks and the aggregate ``llm.end`` event
+  share the same ``trace_id``.
+- ``EdenLoggingHandler`` ignores ``eden_sdk.*`` loggers to prevent
+  enqueue ↔ WARNING recursion.
+
 ## 0.3.1 — 2026-07-17
 
 ### Fixed

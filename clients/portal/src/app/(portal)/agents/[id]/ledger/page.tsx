@@ -10,8 +10,11 @@ import { PageContent } from "@/components/layout/page-content";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
+import { ErrorState } from "@/components/ui/error-state";
 import { Input } from "@/components/ui/input";
+import { NoOrgState } from "@/components/ui/no-org-state";
 import { useOrg } from "@/hooks/use-org";
+import { usePermissions } from "@/hooks/use-permissions";
 import { useKeyboardShortcuts } from "@/hooks/use-keyboard-shortcuts";
 import { DiffViewer } from "@/components/improve/diff-viewer";
 import { MarkdownProse, textToUnifiedDiff } from "@/components/improve/markdown-prose";
@@ -63,6 +66,8 @@ export default function AgentLedgerPage() {
     [params?.id],
   );
   const { currentOrg } = useOrg();
+  const { hasPermission } = usePermissions();
+  const canMutateLedger = hasPermission("jobs:write");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [entries, setEntries] = useState<Array<Record<string, unknown>>>([]);
@@ -78,7 +83,10 @@ export default function AgentLedgerPage() {
   const [regenerating, setRegenerating] = useState(false);
 
   const load = useCallback(async () => {
-    if (!currentOrg || !agentId) return;
+    if (!currentOrg || !agentId) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     setError(null);
     try {
@@ -122,19 +130,27 @@ export default function AgentLedgerPage() {
   };
 
   const toggleInject = async (on: boolean) => {
-    if (!currentOrg || !agentId) return;
-    await learnApi.patchLedgerConfig(currentOrg.id, agentId, { enabled: on, max_tokens: maxTokens });
-    setEnabled(on);
+    if (!currentOrg || !agentId || !canMutateLedger) return;
+    try {
+      await learnApi.patchLedgerConfig(currentOrg.id, agentId, { enabled: on, max_tokens: maxTokens });
+      setEnabled(on);
+    } catch (e) {
+      setError(errorFromCaught(e, "Failed to update ledger config"));
+    }
   };
 
   const saveMaxTokens = async (value: number) => {
-    if (!currentOrg || !agentId) return;
+    if (!currentOrg || !agentId || !canMutateLedger) return;
     setMaxTokens(value);
-    await learnApi.patchLedgerConfig(currentOrg.id, agentId, { enabled, max_tokens: value });
+    try {
+      await learnApi.patchLedgerConfig(currentOrg.id, agentId, { enabled, max_tokens: value });
+    } catch (e) {
+      setError(errorFromCaught(e, "Failed to update ledger config"));
+    }
   };
 
   const regenerate = async () => {
-    if (!currentOrg || !agentId) return;
+    if (!currentOrg || !agentId || !canMutateLedger) return;
     setRegenerating(true);
     try {
       await learnApi.regenerateLedger(currentOrg.id, agentId);
@@ -149,10 +165,16 @@ export default function AgentLedgerPage() {
   useKeyboardShortcuts(
     {
       d: () => void loadDiff(),
-      r: () => void regenerate(),
+      r: () => {
+        if (canMutateLedger) void regenerate();
+      },
     },
     Boolean(agentId),
   );
+
+  if (!currentOrg) {
+    return <NoOrgState feature="Agent ledger" icon={BookOpen} />;
+  }
 
   return (
     <PageContent>
@@ -182,23 +204,31 @@ export default function AgentLedgerPage() {
         <div className="flex flex-wrap items-center gap-3">
           <BookOpen className="h-5 w-5" />
           <span className="text-sm">Gateway injection {enabled ? "on" : "off"}</span>
-          <Button variant="outline" size="sm" onClick={() => void toggleInject(!enabled)}>
-            {enabled ? "Disable" : "Enable"}
-          </Button>
+          {canMutateLedger ? (
+            <Button variant="outline" size="sm" onClick={() => void toggleInject(!enabled)}>
+              {enabled ? "Disable" : "Enable"}
+            </Button>
+          ) : (
+            <span className="text-xs text-[var(--text-muted)]">View only — ask a member to change</span>
+          )}
           <span className="text-xs text-[var(--text-muted)]">v{version}</span>
-          <label className="flex items-center gap-2 text-xs text-[var(--text-muted)]">
-            Max tokens
-            <input
-              type="range"
-              min={500}
-              max={2000}
-              step={100}
-              value={maxTokens}
-              onChange={(e) => void saveMaxTokens(Number(e.target.value))}
-              className="w-24"
-            />
-            {maxTokens}
-          </label>
+          {canMutateLedger ? (
+            <label className="flex items-center gap-2 text-xs text-[var(--text-muted)]">
+              Max tokens
+              <input
+                type="range"
+                min={500}
+                max={2000}
+                step={100}
+                value={maxTokens}
+                onChange={(e) => void saveMaxTokens(Number(e.target.value))}
+                className="w-24"
+              />
+              {maxTokens}
+            </label>
+          ) : (
+            <span className="text-xs text-[var(--text-muted)]">Max tokens {maxTokens}</span>
+          )}
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <Input
@@ -213,9 +243,11 @@ export default function AgentLedgerPage() {
           <Button variant="outline" size="sm" onClick={() => void loadDiff()}>
             Version diff
           </Button>
-          <Button variant="outline" size="sm" onClick={() => void regenerate()} disabled={regenerating}>
-            {regenerating ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-          </Button>
+          {canMutateLedger ? (
+            <Button variant="outline" size="sm" onClick={() => void regenerate()} disabled={regenerating}>
+              {regenerating ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+            </Button>
+          ) : null}
         </div>
       </Card>
       {preview ? (
@@ -257,8 +289,25 @@ export default function AgentLedgerPage() {
           />
         </Card>
       ) : null}
-      {error ? <EmptyState title="Error" description={error} /> : null}
-      {loading ? (
+      {error ? (
+        <ErrorState
+          title="Could not load ledger"
+          message={error}
+          className="mb-4"
+          action={
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => void load()}
+              disabled={loading}
+              loading={loading}
+            >
+              Try again
+            </Button>
+          }
+        />
+      ) : null}
+      {error ? null : loading ? (
         <Loader2 className="h-8 w-8 animate-spin" />
       ) : entries.length === 0 ? (
         <EmptyState

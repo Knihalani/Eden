@@ -3,13 +3,17 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { ArrowLeft, GitCompare, Loader2 } from "lucide-react";
+import { ArrowLeft, Bug, GitCompare, Loader2 } from "lucide-react";
 import { useOrg } from "@/hooks/use-org";
 import { debugSessionsApi } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { EmptyState } from "@/components/ui/empty-state";
+import { ErrorState } from "@/components/ui/error-state";
+import { NoOrgState } from "@/components/ui/no-org-state";
 import { PageContent } from "@/components/layout/page-content";
 import { useToast } from "@/components/ui/toast";
+import { traceHref } from "@/lib/portal-cross-links";
 
 type DebugRun = {
   id: string;
@@ -35,25 +39,33 @@ export default function DebuggerSessionDetailPage() {
   const toast = useToast();
   const [session, setSession] = useState<DebugSessionDetail | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [compare, setCompare] = useState<Record<string, unknown> | null>(null);
   const [selected, setSelected] = useState<string[]>([]);
 
   const load = useCallback(async () => {
     if (!currentOrg?.id || !sessionId) return;
     setLoading(true);
+    setError(null);
     try {
       const res = await debugSessionsApi.get(currentOrg.id, sessionId);
-      setSession(
-        res.session
-          ? { ...res.session, runs: (res.session.runs ?? []) as DebugRun[] }
-          : null,
-      );
+      // Backend returns 200 + { status: "not_found" } (no session key).
+      if (!res.session || (res as { status?: string }).status === "not_found") {
+        setSession(null);
+        return;
+      }
+      setSession({
+        ...res.session,
+        runs: (res.session.runs ?? []) as DebugRun[],
+      });
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Load failed");
+      const msg = err instanceof Error ? err.message : "Load failed";
+      setError(msg);
+      setSession(null);
     } finally {
       setLoading(false);
     }
-  }, [currentOrg?.id, sessionId, toast]);
+  }, [currentOrg?.id, sessionId]);
 
   useEffect(() => {
     void load();
@@ -82,7 +94,7 @@ export default function DebuggerSessionDetailPage() {
     }
   };
 
-  if (!currentOrg) return null;
+  if (!currentOrg) return <NoOrgState feature="Debug sessions" icon={Bug} />;
 
   return (
     <PageContent size="wide">
@@ -97,15 +109,40 @@ export default function DebuggerSessionDetailPage() {
         <div className="flex items-center gap-2 text-sm text-[var(--text-muted)]">
           <Loader2 className="h-4 w-4 animate-spin" /> Loading session…
         </div>
+      ) : error ? (
+        <ErrorState
+          title="Could not load session"
+          message={error}
+          action={
+            <Button variant="outline" size="sm" onClick={() => void load()}>
+              Try again
+            </Button>
+          }
+        />
       ) : !session ? (
-        <p className="text-sm text-[var(--text-muted)]">Session not found.</p>
+        <EmptyState
+          icon={Bug}
+          title="Session not found"
+          description="This debugger session may have been deleted or you may not have access."
+          action={
+            <Button size="sm" asChild variant="outline">
+              <Link href="/debugger-sessions">Back to sessions</Link>
+            </Button>
+          }
+        />
       ) : (
         <div className="space-y-4">
           <div>
             <h1 className="text-lg font-semibold">{session.title}</h1>
             {session.source_trace_id && (
               <p className="text-xs font-mono text-[var(--text-muted)] mt-1">
-                source trace: {session.source_trace_id}
+                source trace:{" "}
+                <Link
+                  href={traceHref(session.source_trace_id)}
+                  className="text-[var(--accent)] hover:underline"
+                >
+                  {session.source_trace_id}
+                </Link>
               </p>
             )}
           </div>
@@ -123,9 +160,18 @@ export default function DebuggerSessionDetailPage() {
               </Button>
             </div>
             {session.runs.length === 0 ? (
-              <p className="text-sm text-[var(--text-muted)]">
-                Rerun from the Debugger tab with a session id to record runs here.
-              </p>
+              <EmptyState
+                icon={Bug}
+                title="No runs yet"
+                description="Rerun from the Debugger with a session id to record runs here."
+                size="sm"
+                variant="plain"
+                action={
+                  <Button size="sm" asChild variant="outline">
+                    <Link href="/traces?view=debug">Open debugger</Link>
+                  </Button>
+                }
+              />
             ) : (
               <ul className="space-y-2">
                 {session.runs.map((run) => (

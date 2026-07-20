@@ -180,14 +180,43 @@ def run_doctor(*, emit_test_event: bool = True, timeout_s: float = 5.0) -> Docto
             "source_format": "eden-sdk-doctor",
         }
         client = get_default_client()
-        client.enqueue(TraceEvent(payload=payload, source_format="custom"))
+        sent0, failed0 = client.sent, client.failed
+        # Path must be allow-listed (webhook); payload keeps semantic label.
+        client.enqueue(TraceEvent(payload=payload, source_format="webhook"))
         client.flush(timeout=timeout_s)
+        if cfg.dry_run:
+            emit_ok = client.sent > sent0
+            emit_msg = (
+                f"Dry-run accepted test event {event_id}"
+                if emit_ok
+                else f"Dry-run did not accept test event {event_id}"
+            )
+        else:
+            failed_delta = client.failed - failed0
+            sent_delta = client.sent - sent0
+            emit_ok = sent_delta > 0 and failed_delta == 0
+            if emit_ok:
+                emit_msg = f"Emitted test event {event_id} (HTTP 2xx)"
+            elif failed_delta > 0:
+                emit_msg = (
+                    f"Test event {event_id} ingest failed "
+                    f"(failed+={failed_delta}; expect HTTP 2xx)"
+                )
+            else:
+                emit_msg = (
+                    f"Test event {event_id} did not confirm HTTP 2xx "
+                    f"(sent+={sent_delta}, failed+={failed_delta})"
+                )
         checks.append(
             DoctorCheck(
                 "test_event",
-                True,
-                f"Emitted test event {event_id}",
-                {"event_id": event_id},
+                emit_ok,
+                emit_msg,
+                {
+                    "event_id": event_id,
+                    "sent_delta": client.sent - sent0,
+                    "failed_delta": client.failed - failed0,
+                },
             )
         )
 

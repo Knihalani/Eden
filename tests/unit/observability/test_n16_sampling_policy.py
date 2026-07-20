@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import random
 
+import pytest
+
 from eden.observability.sampling.policy import (
     IntelligenceAwareSamplingPolicy,
     KeepSignals,
@@ -23,7 +25,8 @@ def test_profile_keep_rates() -> None:
     assert profile_keep_rate("full") == 1.0
     assert profile_keep_rate("balanced") == 0.15
     assert profile_keep_rate("aggressive") == 0.05
-    assert profile_keep_rate("unknown") == PROFILE_KEEP_RATES["balanced"]
+    # Unknown → full (soft-launch safe; never silently drop)
+    assert profile_keep_rate("unknown") == PROFILE_KEEP_RATES["full"]
 
 
 def test_loop_never_dropped_when_keep_rate_one() -> None:
@@ -132,3 +135,90 @@ def test_otel_keep_attributes() -> None:
     assert attrs["eden.keep"] == "true"
     assert attrs["eden.loop_verdict"] == "true"
     assert attrs["eden.force_trace"] == "true"
+
+
+# ── Ingest apply gate (Wave 3 / PERF+COST safe win) ─────────────────────────
+
+
+def test_keep_signals_maps_outcome_and_attrs() -> None:
+    from types import SimpleNamespace
+
+    from eden.observability.sampling.apply import keep_signals_for_event
+
+    ev = SimpleNamespace(
+        outcome="failure",
+        duration_ms=120.0,
+        attributes={"eden.loop_verdict": "true", "eden.force_trace": "1"},
+    )
+    sig = keep_signals_for_event(ev)
+    assert sig.has_error
+    assert sig.is_loop
+    assert sig.force_trace
+    assert sig.duration_ms == 120.0
+
+
+def test_decide_for_event_full_keeps() -> None:
+    from types import SimpleNamespace
+
+    from eden.observability.sampling.apply import decide_for_event
+    from eden.observability.sampling.policy import (
+        IntelligenceAwareSamplingPolicy,
+        reset_sampling_policy,
+    )
+    import eden.observability.sampling.policy as policy_mod
+
+    reset_sampling_policy()
+    policy_mod._policy = IntelligenceAwareSamplingPolicy(profile="full", rng_seed=0)
+    try:
+        d = decide_for_event(SimpleNamespace(outcome="success", attributes={}, duration_ms=1))
+        assert d.keep
+    finally:
+        reset_sampling_policy()
+
+
+@pytest.mark.asyncio
+async def test_should_route_event_drops_and_summarizes() -> None:
+    from types import SimpleNamespace
+
+    from eden.observability.sampling.apply import should_route_event
+    from eden.observability.sampling.policy import (
+        IntelligenceAwareSamplingPolicy,
+        reset_sampling_policy,
+    )
+    from eden.observability.sampling.summaries import get_sampling_summary_store
+    import eden.observability.sampling.policy as policy_mod
+
+    reset_sampling_policy()
+    store = get_sampling_summary_store()
+    store.clear()
+    # Force drop of non-signal traces.
+    policy_mod._policy = IntelligenceAwareSamplingPolicy(
+        profile="balanced", keep_rate_override=0.0, rng_seed=0,
+    )
+    try:
+        ev = SimpleNamespace(
+            tenant_id="org-1",
+            trace_id="tr-1",
+            agent_id="agent-a",
+            outcome="success",
+            duration_ms=10,
+            metrics={"cost_usd": 0.02},
+            attributes={},
+        )
+        assert await should_route_event(ev) is False
+        buffered = store.buffered()
+        assert len(buffered) == 1
+        assert buffered[0].trace_id == "tr-1"
+        assert buffered[0].cost_usd == 0.02
+    finally:
+        store.clear()
+        reset_sampling_policy()
+
+
+def test_collector_ingest_calls_should_route() -> None:
+    """Source contract: TelemetryCollector wires N16 apply before _route."""
+    from pathlib import Path
+
+    src = Path("src/eden/observability/telemetry_collector.py").read_text()
+    assert "should_route_event" in src
+    assert "sampling.apply" in src

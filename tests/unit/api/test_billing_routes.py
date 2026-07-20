@@ -84,11 +84,9 @@ def _make_stripe_mock(
 def app(monkeypatch):
     """Build a FastAPI app with billing routes + stubbed deps."""
 
-    # Mock settings to have a stripe_secret_key
-    monkeypatch.setattr(
-        billing, "settings",
-        MagicMock(stripe_secret_key="sk_test_xxx"),
-    )
+    # Mock settings to have a stripe_secret_key (lazy get_settings path).
+    fake_settings = MagicMock(stripe_secret_key="sk_test_xxx")
+    monkeypatch.setattr(billing, "get_settings", lambda: fake_settings)
 
     # Auth: stub require_org_permission to a no-op (the route's auth
     # bypasses the Depends() chain by calling require_org_permission
@@ -104,12 +102,16 @@ def app(monkeypatch):
     async def _get_user():
         return {"id": "u-test", "email": "t@test.io", "org_id": "org-test"}
 
+    async def _path_org():
+        return "org-test"
+
     app = FastAPI()
     app.include_router(billing.router)
     # Key the override on the function object the route captured
     # (i.e. billing.get_current_user, which is the same object as
     # deps.get_current_user at import time).
     app.dependency_overrides[billing.get_current_user] = _get_user
+    app.dependency_overrides[billing.require_path_org_access] = _path_org
     return app
 
 
@@ -124,8 +126,8 @@ def client(app):
 def test_payment_method_no_stripe_config(client, monkeypatch):
     """No Stripe key → returns None (not 404 or 500)."""
     monkeypatch.setattr(
-        billing, "settings",
-        MagicMock(stripe_secret_key=None),
+        billing, "get_settings",
+        lambda: MagicMock(stripe_secret_key=None),
     )
     resp = client.get("/orgs/org-test/billing/payment-method")
     assert resp.status_code == 200

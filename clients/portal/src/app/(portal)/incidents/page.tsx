@@ -7,12 +7,13 @@ import { useOrgQuery, useOrgMutation } from "@/hooks/use-api-query";
 import { queryKeys } from "@/lib/query-keys";
 import { SeverityBadge } from "@/components/ui/status-badge";
 import { NoOrgState } from "@/components/ui/no-org-state";
+import { ErrorState } from "@/components/ui/error-state";
+import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/layout/page-header";
 import { PageContent } from "@/components/layout/page-content";
 import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 import {
   AlertOctagon,
-  AlertTriangle,
   ChevronRight,
   Loader2,
   RefreshCw,
@@ -124,7 +125,7 @@ export default function IncidentsPage() {
       cell: (inc) => (
         <Link
           href={`/incidents/${inc.cluster_id}`}
-          className="inline-flex items-center gap-1 text-xs font-medium text-[var(--accent)] hover:text-[var(--accent-hover)] transition-colors"
+          className="inline-flex min-h-11 items-center gap-1 text-xs font-medium text-[var(--accent)] hover:text-[var(--accent-hover)] transition-colors"
         >
           Inspect
           <ChevronRight className="w-3.5 h-3.5" />
@@ -137,7 +138,16 @@ export default function IncidentsPage() {
     <PageContent size="wide">
       <PageHeader
         title="Incidents"
-        subtitle="Systemic RCA clusters — recurring failure patterns across many traces. For individual grouped agent failures, see Agent Issues."
+        subtitle={
+          <>
+            Systemic RCA clusters — recurring failure patterns across many traces. For individual
+            grouped agent failures, see{" "}
+            <Link href="/issues" className="text-[var(--accent)] hover:underline">
+              Agent Issues
+            </Link>
+            .
+          </>
+        }
         icon={AlertOctagon}
         actions={
           <div className="flex items-center gap-2">
@@ -145,7 +155,7 @@ export default function IncidentsPage() {
               onClick={() => incidentsQuery.refetch()}
               disabled={loading}
               aria-label="Refresh incidents"
-              className="inline-flex items-center gap-2 px-3 py-2 bg-[var(--bg-tertiary)] text-[var(--text-primary)] rounded-lg text-sm font-medium hover:bg-[var(--border-default)] disabled:opacity-50 transition-colors"
+              className="inline-flex min-h-11 items-center gap-2 px-3 py-2 bg-[var(--bg-tertiary)] text-[var(--text-primary)] rounded-lg text-sm font-medium hover:bg-[var(--border-default)] disabled:opacity-50 transition-colors"
             >
               <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
               Refresh
@@ -154,7 +164,7 @@ export default function IncidentsPage() {
               onClick={handleCluster}
               disabled={clustering}
               aria-label="Run clustering now"
-              className="inline-flex items-center gap-2 px-4 py-2 bg-[var(--accent)] text-[var(--bg-base)] rounded-lg text-sm font-medium hover:bg-[var(--accent-hover)] disabled:opacity-50 transition-colors"
+              className="inline-flex min-h-11 items-center gap-2 px-4 py-2 bg-[var(--accent)] text-[var(--bg-base)] rounded-lg text-sm font-medium hover:bg-[var(--accent-hover)] disabled:opacity-50 transition-colors"
             >
               {clustering ? <Loader2 className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />}
               Run clustering
@@ -163,26 +173,24 @@ export default function IncidentsPage() {
         }
       />
 
-      {error && (
-        <div
-          role="alert"
-          className="bg-[var(--error-bg)] text-[var(--error)] text-sm px-4 py-3 rounded-xl flex items-center justify-between gap-2.5 border border-[var(--error)]/20"
-        >
-          <span className="flex items-center gap-2.5">
-            <AlertTriangle className="w-4 h-4 flex-shrink-0" />
-            {error}
-          </span>
-          <button
-            onClick={() => incidentsQuery.refetch()}
-            disabled={loading}
-            className="text-xs font-medium underline underline-offset-2 hover:opacity-80 disabled:opacity-50"
-          >
-            Retry
-          </button>
-        </div>
-      )}
-
-      {/* Incidents table */}
+      {error ? (
+        <ErrorState
+          title="Could not load incidents"
+          message={error}
+          action={
+            <Button
+              variant="outline"
+              size="sm"
+              className="min-h-11"
+              onClick={() => void incidentsQuery.refetch()}
+              disabled={loading}
+            >
+              Try again
+            </Button>
+          }
+        />
+      ) : (
+      /* Incidents table */
       <DataTable
         columns={columns}
         rows={incidents}
@@ -190,20 +198,26 @@ export default function IncidentsPage() {
         loading={loading && incidents.length === 0}
         defaultSort={{ key: "last_seen", direction: "desc" }}
         emptyTitle="No incidents yet"
-        emptyDescription="Run clustering to detect systemic failure patterns. For individual agent failures, see Agent Issues."
+        emptyDescription="Run clustering to detect systemic failure patterns across many traces."
         emptyIcon={AlertOctagon}
         emptyAction={
-          <button
-            onClick={handleCluster}
-            disabled={clustering}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-[var(--accent)] text-[var(--bg-base)] rounded-lg text-sm font-medium hover:bg-[var(--accent-hover)] disabled:opacity-50 transition-colors"
-          >
-            {clustering ? <Loader2 className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />}
-            Run clustering
-          </button>
+          <div className="flex flex-wrap items-center justify-center gap-2">
+            <button
+              onClick={handleCluster}
+              disabled={clustering}
+              className="inline-flex min-h-11 items-center gap-2 px-4 py-2 bg-[var(--accent)] text-[var(--bg-base)] rounded-lg text-sm font-medium hover:bg-[var(--accent-hover)] disabled:opacity-50 transition-colors"
+            >
+              {clustering ? <Loader2 className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />}
+              Run clustering
+            </button>
+            <Button asChild variant="outline" className="min-h-11">
+              <Link href="/issues">View Agent Issues</Link>
+            </Button>
+          </div>
         }
         pageSize={25}
       />
+      )}
     </PageContent>
   );
 }

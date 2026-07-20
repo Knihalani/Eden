@@ -158,14 +158,16 @@ class InsightsDetectorLoop:
         try:
             tenants = await self._list_tenants_with_new_scores()
         except Exception as exc:  # noqa: BLE001
-            logger.debug(f"insights loop tenant list failed: {exc}")
+            logger.warning(
+                "insights loop tenant list failed: %s", exc, exc_info=True
+            )
             tenants = []
 
         for tenant_id in tenants:
             if self._stop.is_set():
                 break
             if (time.monotonic() - started) > self.max_runtime_seconds:
-                logger.debug(
+                logger.info(
                     "insights loop tick exceeded max_runtime_seconds; "
                     "remaining tenants deferred to next tick"
                 )
@@ -175,7 +177,10 @@ class InsightsDetectorLoop:
                 per_tenant[tenant_id] = count
             except Exception as exc:  # noqa: BLE001
                 logger.warning(
-                    f"insights loop: tenant {tenant_id} failed: {exc}"
+                    "insights loop: tenant %s failed: %s",
+                    tenant_id,
+                    exc,
+                    exc_info=True,
                 )
                 per_tenant[tenant_id] = 0
         return per_tenant
@@ -274,11 +279,19 @@ class InsightsDetectorLoop:
         # advance the watermark so a transient outage doesn't
         # permanently block processing; the per-tenant count
         # is 0 in that case so dashboards don't see ghost rows.
+        #
+        # When the service IS available but one or more persists
+        # fail, hold the watermark so the batch is retried next
+        # tick (persist is idempotent by insight_id). Advancing
+        # past a failed persist silently dropped insights.
         persisted = 0
+        persist_failures = 0
+        service_available = False
         try:
             from eden.insights.insights_service import InsightsService
 
             service = InsightsService()
+            service_available = True
             # Fan out the per-insight persists concurrently via
             # asyncio.gather — each persist is an independent write
             # (separate row + audit). With many insights per cycle
@@ -297,9 +310,11 @@ class InsightsDetectorLoop:
             )
             for insight, result in zip(insights, persist_results, strict=False):
                 if isinstance(result, Exception):
-                    logger.debug(
-                        f"insights loop: persist failed for "
-                        f"{insight.insight_id}: {result}"
+                    persist_failures += 1
+                    logger.warning(
+                        "insights loop: persist failed for %s: %s",
+                        insight.insight_id,
+                        result,
                     )
                     continue
                 if result is not None:
@@ -309,11 +324,25 @@ class InsightsDetectorLoop:
 
                         await get_flywheel_coordinator().on_insight_created(insight)
                     except Exception as fly_exc:
-                        logger.debug(
+                        logger.warning(
                             "insights loop: flywheel hook failed: %s", fly_exc
                         )
         except Exception as exc:  # noqa: BLE001
-            logger.debug(f"insights loop: InsightsService unavailable: {exc}")
+            logger.warning(
+                "insights loop: InsightsService unavailable: %s",
+                exc,
+                exc_info=True,
+            )
+
+        if service_available and persist_failures > 0:
+            logger.warning(
+                "insights loop: holding watermark for tenant %s "
+                "(%d persist failures, %d persisted); will retry",
+                tenant_id,
+                persist_failures,
+                persisted,
+            )
+            return persisted
 
         # Advance watermark to the highest judge_run_id we saw.
         top = max(str(r["judge_run_id"]) for r in new_rows)
@@ -390,12 +419,17 @@ class InsightsDetectorLoop:
                 else None,
             )
         except (ValueError, TypeError) as exc:
-            logger.debug(
-                f"insights loop: bad watermark id "
-                f"{last_processed_judge_score_id!r}: {exc}"
+            logger.warning(
+                "insights loop: bad watermark id %r: %s",
+                last_processed_judge_score_id,
+                exc,
             )
         except Exception as exc:  # noqa: BLE001
-            logger.debug(f"insights loop: watermark upsert failed: {exc}")
+            logger.warning(
+                "insights loop: watermark upsert failed: %s",
+                exc,
+                exc_info=True,
+            )
 
     # ── Postgres accessor ──────────────────────────────────────────────
 
@@ -404,7 +438,11 @@ class InsightsDetectorLoop:
         try:
             return await get_postgres_client()
         except Exception as exc:  # noqa: BLE001
-            logger.debug(f"insights loop: postgres unavailable: {exc}")
+            logger.warning(
+                "insights loop: postgres unavailable: %s",
+                exc,
+                exc_info=True,
+            )
             return None
 
 

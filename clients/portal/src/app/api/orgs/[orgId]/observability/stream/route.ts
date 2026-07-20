@@ -1,5 +1,9 @@
-import { NextResponse } from "next/server";
 import { bearerHeader } from "@/lib/server/clerk-bearer";
+import {
+  pipeSseUpstream,
+  streamHandshakeFailure,
+  streamHandshakeFromUpstream,
+} from "@/lib/proxy";
 
 /**
  * Phase 7.2 (C3) — Next.js proxy for the observability SSE stream.
@@ -15,7 +19,17 @@ import { bearerHeader } from "@/lib/server/clerk-bearer";
  * function slot gets thrashed. Without ``X-Org-Id`` the backend's
  * ``extract_org_id`` falls through to the Clerk JWT (which only
  * carries personal claims) and yields ``None`` on every request.
+ *
+ * Dedicated route (not the catch-all ``/api/proxy`` which caps at
+ * ``maxDuration = 30``). Raise fluid timeout so long-lived SSE can
+ * sit open through quiet periods + keep-alives without the platform
+ * killing the function mid-stream.
+ *
+ * Policy: keep at 300 to match backend
+ * ``observability_stream._STREAM_MAX_DURATION_S`` so FastAPI emits
+ * ``stream_duration_exceeded`` before Vercel hard-kills this proxy.
  */
+export const maxDuration = 300;
 
 interface RouteParams {
   params: Promise<{ orgId: string }>;
@@ -62,87 +76,29 @@ export async function GET(request: Request, { params }: RouteParams) {
           // every proxy route consistent on the same contract.)
           "X-Org-Id": orgId,
         },
-      }
+        // Client disconnect aborts the upstream dial / body so Redis
+        // pub/sub workers are not held until maxDuration.
+        signal: request.signal,
+      },
     );
 
     if (!response.ok) {
-      return NextResponse.json(
-        { detail: "Failed to connect to observability stream" },
-        { status: response.status }
-      );
+      return streamHandshakeFromUpstream({
+        request,
+        upstream: response,
+        fallbackDetail: "Failed to connect to observability stream",
+      });
     }
 
-    // 15s SSE heartbeat — sends an SSE comment (lines starting with
-    // ``:`` are ignored by the EventSource client) so the connection
-    // doesn't idle out behind corporate proxies / Vercel function
-    // timeouts when the upstream goes quiet. Also lets the upstream
-    // detect a dead client quickly (its read() will throw on a
-    // closed pipe) and free the backend worker. Without this the
-    // stream dies silently after ~30s of upstream silence and the
-    // portal reconnects, wasting one SSE handshake per minute of
-    // idle. June 2026 cost-pass.
-    const HEARTBEAT_MS = 15_000;
-    const HEARTBEAT_BYTES = new TextEncoder().encode(": keepalive\n\n");
-
-    const stream = new ReadableStream({
-      async start(controller) {
-        const reader = response.body?.getReader();
-        if (!reader) {
-          controller.close();
-          return;
-        }
-        let heartbeat: ReturnType<typeof setInterval> | null = null;
-        const stopHeartbeat = () => {
-          if (heartbeat) {
-            clearInterval(heartbeat);
-            heartbeat = null;
-          }
-        };
-        heartbeat = setInterval(() => {
-          try {
-            controller.enqueue(HEARTBEAT_BYTES);
-          } catch {
-            stopHeartbeat();
-          }
-        }, HEARTBEAT_MS);
-        try {
-          while (true) {
-            const { done, value } = await reader.read();
-            if (done) {
-              stopHeartbeat();
-              controller.close();
-              break;
-            }
-            controller.enqueue(value);
-          }
-        } catch {
-          stopHeartbeat();
-          controller.close();
-        }
-      },
+    return pipeSseUpstream(response, {
+      heartbeatMs: 15_000,
+      signal: request.signal,
     });
-
-    return new Response(stream, {
-      headers: {
-        "Content-Type": "text/event-stream",
-        "Cache-Control": "no-cache, no-transform",
-        "Connection": "keep-alive",
-        "X-Accel-Buffering": "no",
-      },
+  } catch (error) {
+    return streamHandshakeFailure({
+      request,
+      error,
+      fallbackDetail: "Failed to connect to observability stream",
     });
-  } catch {
-    // Echo the inbound request id (or a fresh UUID) so the user can
-    // quote it in a support ticket. Matches the catch-all proxy's
-    // 502 envelope shape (lib/proxy.ts:91-112). July 2026 site-wide fix.
-    const requestId =
-      request.headers.get("x-request-id") ||
-      request.headers.get("x-correlation-id") ||
-      (typeof crypto !== "undefined" && "randomUUID" in crypto
-        ? crypto.randomUUID()
-        : `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`);
-    return NextResponse.json(
-      { detail: "Stream connection failed", request_id: requestId },
-      { status: 500 }
-    );
   }
 }

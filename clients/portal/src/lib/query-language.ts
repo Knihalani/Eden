@@ -92,7 +92,8 @@ export function parseQueryLanguage(q: string): ParsedQueryFilters {
     if (field === "agent" || field === "agent_id") {
       out.agent_id = value;
     } else if (field === "status" || field === "outcome") {
-      out.outcome = value;
+      // Query-language docs use status:error; BE outcome enum is failure.
+      out.outcome = value === "error" || value === "failed" ? "failure" : value;
     } else if (field === "realm") {
       out.realm = value;
     } else if (field === "tag") {

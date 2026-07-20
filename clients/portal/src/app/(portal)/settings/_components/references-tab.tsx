@@ -5,7 +5,9 @@
  * Upload / list / filter / delete org-scoped code reference files.
  */
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { useOrgQuery } from "@/hooks/use-api-query";
+import { queryKeys } from "@/lib/query-keys";
 import { Code, Loader2, Plus, Trash2 } from "lucide-react";
 import { usePermissions } from "@/hooks/use-permissions";
 import { useToast } from "@/components/ui/toast";
@@ -14,6 +16,9 @@ import { api } from "@/lib/api";
 import { SettingsCard } from "@/components/settings/settings-card";
 import { FilterBar } from "@/components/ui/filter-bar";
 import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { ErrorState } from "@/components/ui/error-state";
+import { errorFromCaught } from "@/lib/safe-error-message";
 
 interface ReferencesTabProps {
   org: { id: string; name: string; role: string } | null;
@@ -32,29 +37,23 @@ export function ReferencesTab({ org }: ReferencesTabProps) {
   const { hasPermission } = usePermissions();
   const toast = useToast();
   const { confirm, ConfirmDialog } = useConfirm();
-  const [references, setReferences] = useState<Reference[]>([]);
-  const [loading, setLoading] = useState(false);
+  const orgId = org?.id ?? null;
   const [uploading, setUploading] = useState(false);
   const [filter, setFilter] = useState<{ purpose?: string; language?: string }>({});
 
+  const refsQuery = useOrgQuery(
+    queryKeys.references.list(orgId, filter),
+    orgId,
+    async () => (await api.listReferences(orgId!, filter)) as Reference[],
+  );
+  const references = refsQuery.data ?? [];
+  const loading = refsQuery.isLoading;
+  const loadError = refsQuery.error
+    ? errorFromCaught(refsQuery.error, "Failed to load references")
+    : null;
   const loadReferences = async () => {
-    if (!org) return;
-    setLoading(true);
-    try {
-      const data = await api.listReferences(org.id, filter);
-      setReferences(data as Reference[]);
-    } catch (e) {
-      console.error("Failed to load references", e);
-      toast.error(e instanceof Error ? e.message : "Failed to load references");
-    } finally {
-      setLoading(false);
-    }
+    await refsQuery.refetch();
   };
-
-  useEffect(() => {
-    loadReferences();
-     
-  }, [org?.id, filter.purpose, filter.language]);
 
   const handleUpload = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -184,47 +183,61 @@ export function ReferencesTab({ org }: ReferencesTabProps) {
       />
 
       <div className="grid gap-3">
-        {references.map((ref) => (
-          <Card
-            key={ref.id}
-            padding="md"
-            className="flex items-center justify-between"
-          >
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2">
-                <span className="font-medium text-[var(--text-primary)]">{ref.name}</span>
-                <span className="px-2 py-0.5 bg-[var(--bg-tertiary)] rounded text-xs text-[var(--text-secondary)]">
-                  {ref.language}
-                </span>
-              </div>
-              <p className="text-sm text-[var(--text-muted)] truncate">{ref.filename}</p>
-              <div className="flex items-center gap-2 mt-1">
-                <span className="text-xs px-2 py-0.5 bg-[var(--accent-faint)] text-[var(--accent)] rounded">
-                  {ref.purpose}
-                </span>
-                {ref.description && (
-                  <span className="text-xs text-[var(--text-secondary)]">{ref.description}</span>
-                )}
-              </div>
-            </div>
-            {hasPermission("references:delete") && (
-              <button
-                onClick={() => handleDelete(ref.id)}
-                className="p-2 text-[var(--error)] hover:bg-[var(--error-dim)] rounded-lg ml-4"
-                title="Delete reference"
-                aria-label={`Delete ${ref.name}`}
+        {loadError ? (
+          <ErrorState
+            title="Could not load references"
+            message={loadError}
+            action={
+              <Button variant="outline" size="sm" onClick={() => void loadReferences()}>
+                Try again
+              </Button>
+            }
+          />
+        ) : (
+          <>
+            {references.map((ref) => (
+              <Card
+                key={ref.id}
+                padding="md"
+                className="flex items-center justify-between"
               >
-                <Trash2 className="w-4 h-4" />
-              </button>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium text-[var(--text-primary)]">{ref.name}</span>
+                    <span className="px-2 py-0.5 bg-[var(--bg-tertiary)] rounded text-xs text-[var(--text-secondary)]">
+                      {ref.language}
+                    </span>
+                  </div>
+                  <p className="text-sm text-[var(--text-muted)] truncate">{ref.filename}</p>
+                  <div className="flex items-center gap-2 mt-1">
+                    <span className="text-xs px-2 py-0.5 bg-[var(--accent-faint)] text-[var(--accent)] rounded">
+                      {ref.purpose}
+                    </span>
+                    {ref.description && (
+                      <span className="text-xs text-[var(--text-secondary)]">{ref.description}</span>
+                    )}
+                  </div>
+                </div>
+                {hasPermission("references:delete") && (
+                  <button
+                    onClick={() => handleDelete(ref.id)}
+                    className="p-2 text-[var(--error)] hover:bg-[var(--error-dim)] rounded-lg ml-4"
+                    title="Delete reference"
+                    aria-label={`Delete ${ref.name}`}
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                )}
+              </Card>
+            ))}
+            {references.length === 0 && !loading && (
+              <div className="text-center py-12 text-[var(--text-secondary)]">
+                <Code className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                <p>No code references yet</p>
+                <p className="text-sm">Upload code examples to help Eden learn your patterns</p>
+              </div>
             )}
-          </Card>
-        ))}
-        {references.length === 0 && !loading && (
-          <div className="text-center py-12 text-[var(--text-secondary)]">
-            <Code className="w-12 h-12 mx-auto mb-4 opacity-50" />
-            <p>No code references yet</p>
-            <p className="text-sm">Upload code examples to help Eden learn your patterns</p>
-          </div>
+          </>
         )}
       </div>
       {ConfirmDialog}

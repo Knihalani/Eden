@@ -9,17 +9,104 @@ always normalize to the same internal ``TelemetryEvent`` shape via
 
 from __future__ import annotations
 
+import asyncio
 import contextlib
-import json
+import gzip
+import io
 import logging
 from typing import Any
 
 from eden.observability.ingestion.attribution import Attribution
 from eden.observability.ingestion.errors import SchemaInvalidError
+from eden.observability.ingestion.json_body import loads_body
 from eden.observability.ingestion.normalizer import normalize_to_telemetry_event
 from eden.observability.telemetry_collector import TelemetryEvent
 
 logger = logging.getLogger(__name__)
+
+# Bodies larger than this decompress off the event loop (sync gzip is CPU-bound).
+_GZIP_OFFLOAD_BYTES = 64 * 1024
+# Cap decompressed size (matches settings.ingestion_max_body_bytes default)
+# and expansion ratio to reject gzip bombs before full inflate.
+_MAX_GUNZIP_BYTES = 5 * 1024 * 1024
+_MAX_GUNZIP_RATIO = 100
+_GUNZIP_CHUNK = 64 * 1024
+
+
+def _gunzip_limited(body: bytes) -> bytes:
+    """Gunzip with absolute + ratio caps on decompressed size."""
+    limit = min(
+        _MAX_GUNZIP_BYTES,
+        max(len(body) * _MAX_GUNZIP_RATIO, _GUNZIP_CHUNK),
+    )
+    chunks: list[bytes] = []
+    total = 0
+    try:
+        with gzip.GzipFile(fileobj=io.BytesIO(body), mode="rb") as gz:
+            while True:
+                chunk = gz.read(_GUNZIP_CHUNK)
+                if not chunk:
+                    break
+                total += len(chunk)
+                if total > limit:
+                    raise ValueError(
+                        f"gzip decompressed size exceeds {limit} bytes"
+                    )
+                chunks.append(chunk)
+    except OSError as exc:
+        raise ValueError(f"invalid gzip body: {exc}") from exc
+    return b"".join(chunks)
+
+
+def maybe_gunzip_body(
+    body: bytes,
+    content_encoding: str | None = None,
+) -> bytes:
+    """Decode ``Content-Encoding: gzip`` request bodies for ingest.
+
+    SDKs may POST gzip-compressed JSON with ``Content-Encoding: gzip``.
+    Identity / missing encodings pass through unchanged. Invalid gzip
+    or oversize inflate raises ``ValueError`` so the route can return 400.
+    """
+    if not body:
+        return body
+    encoding = (content_encoding or "").lower().strip()
+    if not encoding or encoding == "identity":
+        # Also accept raw gzip magic when the header was stripped by a proxy.
+        if len(body) >= 2 and body[0] == 0x1F and body[1] == 0x8B:
+            try:
+                return _gunzip_limited(body)
+            except ValueError as exc:
+                # Size-cap violations always reject; corrupt gzip without an
+                # explicit Content-Encoding header passes through unchanged.
+                if "exceeds" in str(exc):
+                    raise
+                return body
+        return body
+    if "gzip" not in encoding.split(","):
+        return body
+    return _gunzip_limited(body)
+
+
+def _needs_gunzip(body: bytes, content_encoding: str | None) -> bool:
+    if not body:
+        return False
+    encoding = (content_encoding or "").lower().strip()
+    if encoding and encoding != "identity":
+        return "gzip" in encoding.split(",")
+    return len(body) >= 2 and body[0] == 0x1F and body[1] == 0x8B
+
+
+async def maybe_gunzip_body_async(
+    body: bytes,
+    content_encoding: str | None = None,
+) -> bytes:
+    """Async wrapper: offload large gzip payloads via ``asyncio.to_thread``."""
+    if not _needs_gunzip(body, content_encoding):
+        return body
+    if len(body) < _GZIP_OFFLOAD_BYTES:
+        return maybe_gunzip_body(body, content_encoding)
+    return await asyncio.to_thread(maybe_gunzip_body, body, content_encoding)
 
 
 # ── OpenAI ───────────────────────────────────────────────────────────
@@ -233,7 +320,7 @@ class OpenAIDecoder:
 
     def detect(self, body: bytes, content_type: str | None) -> bool:
         try:
-            parsed = json.loads(body)
+            parsed = loads_body(body)
         except (ValueError, UnicodeDecodeError):
             return False
         if not isinstance(parsed, dict):
@@ -249,7 +336,7 @@ class OpenAIDecoder:
         self, body: bytes, attribution: Attribution
     ) -> list[TelemetryEvent]:
         try:
-            payload = json.loads(body)
+            payload = loads_body(body)
         except (ValueError, UnicodeDecodeError) as exc:
             raise SchemaInvalidError(
                 f"OpenAI body is not valid JSON: {exc}",
@@ -485,7 +572,7 @@ class AnthropicDecoder:
 
     def detect(self, body: bytes, content_type: str | None) -> bool:
         try:
-            parsed = json.loads(body)
+            parsed = loads_body(body)
         except (ValueError, UnicodeDecodeError):
             return False
         if not isinstance(parsed, dict):
@@ -498,7 +585,7 @@ class AnthropicDecoder:
         self, body: bytes, attribution: Attribution
     ) -> list[TelemetryEvent]:
         try:
-            payload = json.loads(body)
+            payload = loads_body(body)
         except (ValueError, UnicodeDecodeError) as exc:
             raise SchemaInvalidError(
                 f"Anthropic body is not valid JSON: {exc}",
@@ -659,7 +746,7 @@ class BedrockDecoder:
 
     def detect(self, body: bytes, content_type: str | None) -> bool:
         try:
-            parsed = json.loads(body)
+            parsed = loads_body(body)
         except (ValueError, UnicodeDecodeError):
             return False
         if not isinstance(parsed, dict):
@@ -676,7 +763,7 @@ class BedrockDecoder:
         self, body: bytes, attribution: Attribution
     ) -> list[TelemetryEvent]:
         try:
-            payload = json.loads(body)
+            payload = loads_body(body)
         except (ValueError, UnicodeDecodeError) as exc:
             raise SchemaInvalidError(
                 f"Bedrock body is not valid JSON: {exc}",
@@ -911,7 +998,7 @@ class GeminiDecoder:
 
     def detect(self, body: bytes, content_type: str | None) -> bool:
         try:
-            parsed = json.loads(body)
+            parsed = loads_body(body)
         except (ValueError, UnicodeDecodeError):
             return False
         if not isinstance(parsed, dict):
@@ -927,7 +1014,7 @@ class GeminiDecoder:
         self, body: bytes, attribution: Attribution
     ) -> list[TelemetryEvent]:
         try:
-            payload = json.loads(body)
+            payload = loads_body(body)
         except (ValueError, UnicodeDecodeError) as exc:
             raise SchemaInvalidError(
                 f"Gemini body is not valid JSON: {exc}",

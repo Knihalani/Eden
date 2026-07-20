@@ -1,7 +1,9 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { api } from "@/lib/api";
+import { useOrgQuery } from "@/hooks/use-api-query";
+import { queryKeys } from "@/lib/query-keys";
 import { useToast } from "@/components/ui/toast";
 import { useConfirm } from "@/hooks/use-confirm";
 import { Download, Loader2, Plus, Trash2, Cloud, Database, Play, CheckCircle2, XCircle, Calendar, FileArchive, RefreshCw } from "lucide-react";
@@ -94,11 +96,21 @@ export function ExportsTab({
   } = useConfirm();
   type Destination = Awaited<ReturnType<typeof api.listExportDestinations>>[number];
   type Schedule = Awaited<ReturnType<typeof api.listExportSchedules>>[number];
-  const [destinations, setDestinations] = useState<Destination[]>([]);
-  const [schedules, setSchedules] = useState<Schedule[]>([]);
-  const [loadingDest, setLoadingDest] = useState(true);
-  const [loadingSched, setLoadingSched] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const destQuery = useOrgQuery(
+    queryKeys.exports.destinations(orgId),
+    orgId,
+    () => api.listExportDestinations(orgId),
+  );
+  const schedQuery = useOrgQuery(
+    queryKeys.exports.schedules(orgId),
+    orgId,
+    () => api.listExportSchedules(orgId),
+  );
+  const destinations = destQuery.data ?? [];
+  const schedules = schedQuery.data ?? [];
+  const loadingDest = destQuery.isLoading;
+  const loadingSched = schedQuery.isLoading;
+  const error = destQuery.error?.message ?? schedQuery.error?.message ?? null;
   const [running, setRunning] = useState<string | null>(null);
   const [runResult, setRunResult] = useState<{
     id: string;
@@ -109,26 +121,8 @@ export function ExportsTab({
   // Forms
   const [showDestForm, setShowDestForm] = useState(false);
   const [showSchedForm, setShowSchedForm] = useState(false);
-  useEffect(() => {
-    if (!orgId) return;
-    void loadAll();
-  }, [orgId]);
   async function loadAll() {
-    if (!orgId) return;
-    setLoadingDest(true);
-    setLoadingSched(true);
-    setError(null);
-    try {
-      const [d, s] = await Promise.all([api.listExportDestinations(orgId), api.listExportSchedules(orgId)]);
-      setDestinations(d);
-      setSchedules(s);
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : "Failed to load exports";
-      setError(message);
-    } finally {
-      setLoadingDest(false);
-      setLoadingSched(false);
-    }
+    await Promise.all([destQuery.refetch(), schedQuery.refetch()]);
   }
   async function handleRunNow(scheduleId: string) {
     if (!orgId) return;
@@ -283,13 +277,13 @@ export function ExportsTab({
         />
       )}
 
-      {runResult && <div className={cn("p-3 rounded-lg border text-sm flex items-center gap-2", runResult.status === "ok" ? "bg-[var(--success-bg)] border-[var(--success)]/30 text-[var(--success)]" : "bg-[var(--error-bg)] border-[var(--error)]/30 text-[var(--error)]")}>
+      {!error && runResult && <div className={cn("p-3 rounded-lg border text-sm flex items-center gap-2", runResult.status === "ok" ? "bg-[var(--success-bg)] border-[var(--success)]/30 text-[var(--success)]" : "bg-[var(--error-bg)] border-[var(--error)]/30 text-[var(--error)]")}>
           {runResult.status === "ok" ? <CheckCircle2 className="w-4 h-4 flex-shrink-0" /> : <XCircle className="w-4 h-4 flex-shrink-0" />}
           {runResult.message}
         </div>}
 
       {/* Destinations */}
-      <section>
+      {!error && <section>
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-sm font-semibold flex items-center gap-2">
             <Cloud className="w-4 h-4 text-[var(--text-muted)]" />
@@ -325,10 +319,10 @@ export function ExportsTab({
           direction: "asc"
         }} emptyTitle="No destinations yet" emptyDescription="Add an S3 or GCS bucket to start exporting." emptyIcon={Cloud} pageSize={25} />
           </Card>}
-      </section>
+      </section>}
 
       {/* Schedules */}
-      <section>
+      {!error && <section>
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-sm font-semibold flex items-center gap-2">
             <Calendar className="w-4 h-4 text-[var(--text-muted)]" />
@@ -364,12 +358,12 @@ export function ExportsTab({
           direction: "desc"
         }} emptyTitle="No schedules yet" emptyDescription="Recurring or one-shot, you decide." emptyIcon={Calendar} pageSize={25} />
           </Card>}
-      </section>
+      </section>}
 
       {/* Legacy GDPR fallback */}
-      <section>
+      {!error && <section>
         <LegacyExportFallback orgId={orgId} />
-      </section>
+      </section>}
       {ConfirmDialog}
     </div>;
 }
@@ -428,16 +422,52 @@ function DestinationForm({
       <h4 className="text-sm font-semibold">New destination</h4>
       {err && <div className="p-2 bg-[var(--error-bg)] rounded text-xs text-[var(--error)]">{err}</div>}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <input value={name} onChange={e => setName(e.target.value)} placeholder="Destination name (e.g. 'prod-archive')" className="px-3 py-2 rounded-lg border border-[var(--border-default)] bg-[var(--bg-secondary)] text-sm" />
-        <select value={type} onChange={e => setType(e.target.value as "s3" | "gcs")} className="px-3 py-2 rounded-lg border border-[var(--border-default)] bg-[var(--bg-secondary)] text-sm">
+        <input
+          value={name}
+          onChange={e => setName(e.target.value)}
+          placeholder="Destination name (e.g. 'prod-archive')"
+          aria-label="Destination name"
+          className="px-3 py-2 rounded-lg border border-[var(--border-default)] bg-[var(--bg-secondary)] text-sm"
+        />
+        <select
+          value={type}
+          onChange={e => setType(e.target.value as "s3" | "gcs")}
+          aria-label="Destination type"
+          className="px-3 py-2 rounded-lg border border-[var(--border-default)] bg-[var(--bg-secondary)] text-sm"
+        >
           {DESTINATION_TYPES.map(t => <option key={t.id} value={t.id}>
               {t.label}
             </option>)}
         </select>
-        <input value={bucket} onChange={e => setBucket(e.target.value)} placeholder="Bucket name" className="px-3 py-2 rounded-lg border border-[var(--border-default)] bg-[var(--bg-secondary)] text-sm font-mono" />
-        <input value={region} onChange={e => setRegion(e.target.value)} placeholder="Region (optional, e.g. us-east-1)" className="px-3 py-2 rounded-lg border border-[var(--border-default)] bg-[var(--bg-secondary)] text-sm" />
-        <input value={accessKeyId} onChange={e => setAccessKeyId(e.target.value)} placeholder={type === "s3" ? "Access key ID" : "Service account email"} className="px-3 py-2 rounded-lg border border-[var(--border-default)] bg-[var(--bg-secondary)] text-sm font-mono" />
-        <input value={secretAccessKey} onChange={e => setSecretAccessKey(e.target.value)} placeholder={type === "s3" ? "Secret access key" : "Private key (PEM)"} type="password" className="px-3 py-2 rounded-lg border border-[var(--border-default)] bg-[var(--bg-secondary)] text-sm font-mono" />
+        <input
+          value={bucket}
+          onChange={e => setBucket(e.target.value)}
+          placeholder="Bucket name"
+          aria-label="Bucket name"
+          className="px-3 py-2 rounded-lg border border-[var(--border-default)] bg-[var(--bg-secondary)] text-sm font-mono"
+        />
+        <input
+          value={region}
+          onChange={e => setRegion(e.target.value)}
+          placeholder="Region (optional, e.g. us-east-1)"
+          aria-label="Region"
+          className="px-3 py-2 rounded-lg border border-[var(--border-default)] bg-[var(--bg-secondary)] text-sm"
+        />
+        <input
+          value={accessKeyId}
+          onChange={e => setAccessKeyId(e.target.value)}
+          placeholder={type === "s3" ? "Access key ID" : "Service account email"}
+          aria-label={type === "s3" ? "Access key ID" : "Service account email"}
+          className="px-3 py-2 rounded-lg border border-[var(--border-default)] bg-[var(--bg-secondary)] text-sm font-mono"
+        />
+        <input
+          value={secretAccessKey}
+          onChange={e => setSecretAccessKey(e.target.value)}
+          placeholder={type === "s3" ? "Secret access key" : "Private key (PEM)"}
+          aria-label={type === "s3" ? "Secret access key" : "Private key"}
+          type="password"
+          className="px-3 py-2 rounded-lg border border-[var(--border-default)] bg-[var(--bg-secondary)] text-sm font-mono"
+        />
       </div>
       <div className="flex justify-end gap-2">
         <button onClick={onCancel} className="px-3 py-1.5 text-sm hover:bg-[var(--bg-tertiary)] rounded-lg">

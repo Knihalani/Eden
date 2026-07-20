@@ -127,6 +127,18 @@ def _emit_http_event(
     get_default_client().enqueue(TraceEvent(payload=payload, source_format=source_format))
 
 
+def _request_wants_stream(kwargs: dict[str, Any], req_body: dict[str, Any] | None) -> bool:
+    """True when the caller asked for an SSE / streaming response body."""
+    if req_body and req_body.get("stream") is True:
+        return True
+    headers = kwargs.get("headers") or {}
+    if isinstance(headers, dict):
+        accept = str(headers.get("Accept") or headers.get("accept") or "").lower()
+        if "text/event-stream" in accept:
+            return True
+    return False
+
+
 def _wrap_sync_request(original):  # type: ignore[no-untyped-def]
     @functools.wraps(original)
     def wrapper(self, method: str, url: str | Any, **kwargs: Any):  # type: ignore[no-untyped-def]
@@ -134,15 +146,17 @@ def _wrap_sync_request(original):  # type: ignore[no-untyped-def]
         source_format = _detect_source_format(url_str)
         if source_format is None or not get_config().enabled:
             return original(self, method, url, **kwargs)
-        req_body = _parse_json_body(kwargs.get("content") or kwargs.get("data"))
+        req_body = _parse_json_body(kwargs.get("content") or kwargs.get("data") or kwargs.get("json"))
+        streaming = _request_wants_stream(kwargs, req_body)
         t0 = time.perf_counter()
         try:
             response = original(self, method, url, **kwargs)
             resp_body = None
-            try:
-                resp_body = _parse_json_body(response.content)
-            except Exception:  # noqa: BLE001
-                pass
+            if not streaming:
+                try:
+                    resp_body = _parse_json_body(response.content)
+                except Exception:  # noqa: BLE001
+                    pass
             _emit_http_event(
                 source_format=source_format,
                 url=url_str,
@@ -177,15 +191,17 @@ def _wrap_async_request(original):  # type: ignore[no-untyped-def]
         source_format = _detect_source_format(url_str)
         if source_format is None or not get_config().enabled:
             return await original(self, method, url, **kwargs)
-        req_body = _parse_json_body(kwargs.get("content") or kwargs.get("data"))
+        req_body = _parse_json_body(kwargs.get("content") or kwargs.get("data") or kwargs.get("json"))
+        streaming = _request_wants_stream(kwargs, req_body)
         t0 = time.perf_counter()
         try:
             response = await original(self, method, url, **kwargs)
             resp_body = None
-            try:
-                resp_body = _parse_json_body(response.content)
-            except Exception:  # noqa: BLE001
-                pass
+            if not streaming:
+                try:
+                    resp_body = _parse_json_body(response.content)
+                except Exception:  # noqa: BLE001
+                    pass
             _emit_http_event(
                 source_format=source_format,
                 url=url_str,

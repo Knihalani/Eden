@@ -25,7 +25,7 @@ from typing import Any
 from fastapi import APIRouter, Body, Depends, Path, Query
 from pydantic import BaseModel, Field
 
-from eden.api.deps import get_current_user, require_org_owner
+from eden.api.deps import get_current_user, require_org_owner, require_path_org_access
 from eden.services import budget_service
 
 logger = logging.getLogger(__name__)
@@ -33,7 +33,9 @@ logger = logging.getLogger(__name__)
 router = APIRouter(
     prefix="/orgs/{org_id}/budget",
     tags=["budget"],
-    dependencies=[Depends(get_current_user)],
+    dependencies=[Depends(get_current_user),
+        Depends(require_path_org_access),
+    ],
 )
 
 
@@ -50,7 +52,7 @@ class UpsertBudgetRequest(BaseModel):
 
 
 @router.get("")
-async def get_budget(org_id: str = Path(...)) -> dict[str, Any]:
+async def get_budget(org_id: str = Depends(require_path_org_access)) -> dict[str, Any]:
     """Read the per-org budget config + current window consumption."""
     budget = await budget_service.get_budget(org_id)
     consumption = await budget_service.get_consumption(org_id, window=budget["window"])
@@ -84,7 +86,7 @@ async def get_budget(org_id: str = Path(...)) -> dict[str, Any]:
 
 @router.post("")
 async def upsert_budget(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     body: UpsertBudgetRequest = Body(...),
     _user: dict = Depends(require_org_owner),
 ) -> dict[str, Any]:
@@ -108,7 +110,7 @@ async def upsert_budget(
 
 
 @router.get("/ticker")
-async def ticker(org_id: str = Path(...)) -> dict[str, Any]:
+async def ticker(org_id: str = Depends(require_path_org_access)) -> dict[str, Any]:
     """Real-time budget ticker (consumption + recent actions).
 
     The portal polls this every 5s for the live ticker card.
@@ -130,7 +132,7 @@ async def ticker(org_id: str = Path(...)) -> dict[str, Any]:
 
 @router.get("/actions")
 async def list_actions(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     limit: int = Query(50, ge=1, le=500),
 ) -> dict[str, Any]:
     """Paginated audit log of threshold/exceeded events."""

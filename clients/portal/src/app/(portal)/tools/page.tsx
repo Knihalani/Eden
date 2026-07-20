@@ -2,427 +2,625 @@
 
 import { useState, useMemo } from "react";
 import { useOrg } from "@/hooks/use-org";
-import { api } from "@/lib/api";
+import {
+  toolsApi,
+  type ToolAttributionData,
+  type ToolCompareData,
+  type ToolRecommendData,
+  type ToolTaxonomyData,
+} from "@/lib/api";
 import { useOrgQuery } from "@/hooks/use-api-query";
 import { queryKeys } from "@/lib/query-keys";
 import { cn } from "@/lib/utils";
 import { EmptyState } from "@/components/ui/empty-state";
+import { ErrorState } from "@/components/ui/error-state";
 import { NoOrgState } from "@/components/ui/no-org-state";
 import { PageHeader } from "@/components/layout/page-header";
 import { PageContent } from "@/components/layout/page-content";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
-import { Wrench, GitCompare, Sparkles, ChevronDown, ChevronRight, Loader2, AlertTriangle, Activity, Search, X } from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
+import {
+  Wrench,
+  GitCompare,
+  Sparkles,
+  ChevronRight,
+  Loader2,
+  Activity,
+  Search,
+} from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { errorFromCaught } from "@/lib/safe-error-message";
+
 type Tab = "attribution" | "compare" | "recommender" | "taxonomy";
-interface ToolAttribution {
-  tool_name: string;
-  success_rate: number;
-  call_count: number;
-}
-interface ToolComparison {
-  tool_name: string;
-  metrics: Record<string, number>;
-}
-interface ToolRecommendation {
-  tool_name: string;
-  score: number;
-  rationale: string;
-}
-interface ToolCategory {
-  category: string;
-  tools: string[];
-}
+
 export default function ToolsPage() {
-  const {
-    currentOrg
-  } = useOrg();
+  const { currentOrg } = useOrg();
   const orgId = currentOrg?.id;
   const [activeTab, setActiveTab] = useState<Tab>("attribution");
   const [error, setError] = useState("");
 
-  // Attribution + Taxonomy — the two independent GETs the page needs
-  // on mount, so they're React Query-backed instead of two hand-rolled
-  // useEffect loaders. Compare/Recommend stay imperative (on-demand,
-  // user-triggered mutations).
-  const [attributionDays, setAttributionDays] = useState(30);
-  const attributionQuery = useOrgQuery(
-    queryKeys.tools.attribution(orgId, attributionDays),
-    orgId,
-    () => api.post<{ tools: ToolAttribution[] }>(`/orgs/${orgId}/intelligence/tools/attribution`, { days: attributionDays }),
+  const taxonomyQuery = useOrgQuery(queryKeys.tools.taxonomy(orgId), orgId, () =>
+    toolsApi.taxonomy(orgId!),
   );
-  const taxonomyQuery = useOrgQuery(
-    queryKeys.tools.taxonomy(orgId),
-    orgId,
-    () => api.get<{ categories: ToolCategory[] }>(`/orgs/${orgId}/intelligence/tools/taxonomy`),
+  const taxonomy = taxonomyQuery.data ?? null;
+  const allToolNames = useMemo(
+    () => (taxonomy?.tools ?? []).map((t) => t.tool_name).filter(Boolean),
+    [taxonomy],
   );
-  const tools = attributionQuery.data?.tools ?? [];
-  const taxonomy = taxonomyQuery.data?.categories ?? null;
-  const allToolNames = useMemo(() => (taxonomy ?? []).flatMap(c => c.tools), [taxonomy]);
 
-  // Compare
-  const [selectedTools, setSelectedTools] = useState<string[]>([]);
-  const [comparison, setComparison] = useState<ToolComparison[] | null>(null);
+  // Attribution — per-tool (BE requires tool_id)
+  const [toolId, setToolId] = useState("");
+  const [attrWindow, setAttrWindow] = useState("30d");
+  const [attribution, setAttribution] = useState<ToolAttributionData | null>(null);
+  const [attrLoading, setAttrLoading] = useState(false);
+
+  // Compare — pairwise
+  const [toolA, setToolA] = useState("");
+  const [toolB, setToolB] = useState("");
+  const [compareWindow, setCompareWindow] = useState("7d");
+  const [comparison, setComparison] = useState<ToolCompareData | null>(null);
   const [compareLoading, setCompareLoading] = useState(false);
-  const [toolDropdownOpen, setToolDropdownOpen] = useState(false);
 
   // Recommender
-  const [task, setTask] = useState("");
-  const [recommendations, setRecommendations] = useState<ToolRecommendation[] | null>(null);
+  const [taskType, setTaskType] = useState("");
+  const [recommendations, setRecommendations] = useState<ToolRecommendData | null>(null);
   const [recommendLoading, setRecommendLoading] = useState(false);
 
   const [taxonomyOpen, setTaxonomyOpen] = useState(true);
 
-  const queryErrorMessage = attributionQuery.error?.message ?? taxonomyQuery.error?.message ?? null;
-  const displayError = error || queryErrorMessage;
+  const taxonomyError = taxonomyQuery.error?.message ?? null;
+  const actionError = error || null;
+  const displayError = actionError || (activeTab === "taxonomy" ? taxonomyError : null);
+
+  function retryFailedFetch() {
+    setError("");
+    if (taxonomyError) void taxonomyQuery.refetch();
+  }
+
+  async function handleAttribution() {
+    if (!currentOrg || !toolId.trim()) return;
+    setAttrLoading(true);
+    setError("");
+    setAttribution(null);
+    try {
+      const data = await toolsApi.attribution(currentOrg.id, {
+        tool_id: toolId.trim(),
+        window: attrWindow,
+      });
+      setAttribution(data);
+    } catch (err) {
+      setError(errorFromCaught(err, "Attribution failed"));
+    } finally {
+      setAttrLoading(false);
+    }
+  }
+
   async function handleCompare() {
-    if (!currentOrg || selectedTools.length < 2) return;
+    if (!currentOrg || !toolA.trim() || !toolB.trim()) return;
     setCompareLoading(true);
     setError("");
+    setComparison(null);
     try {
-      const data = await api.post<{
-        comparison: ToolComparison[];
-      }>(`/orgs/${currentOrg.id}/intelligence/tools/compare`, {
-        tool_names: selectedTools
+      const data = await toolsApi.compare(currentOrg.id, {
+        tool_a: toolA.trim(),
+        tool_b: toolB.trim(),
+        window: compareWindow,
       });
-      setComparison(data.comparison || []);
+      setComparison(data);
     } catch (err) {
       setError(errorFromCaught(err, "Comparison failed"));
     } finally {
       setCompareLoading(false);
     }
   }
+
   async function handleRecommend() {
-    if (!currentOrg || !task.trim()) return;
+    if (!currentOrg) return;
     setRecommendLoading(true);
     setError("");
+    setRecommendations(null);
     try {
-      const data = await api.post<{
-        recommendations: ToolRecommendation[];
-      }>(`/orgs/${currentOrg.id}/intelligence/tools/recommend`, {
-        task: task.trim()
+      const data = await toolsApi.recommend(currentOrg.id, {
+        task_type: taskType.trim() || undefined,
+        k: 3,
       });
-      setRecommendations(data.recommendations || []);
+      setRecommendations(data);
     } catch (err) {
       setError(errorFromCaught(err, "Recommendation failed"));
     } finally {
       setRecommendLoading(false);
     }
   }
+
   if (!currentOrg) {
-    return <NoOrgState icon={Wrench} feature="Tool Intelligence" description="Tool attribution, comparison, and recommendations light up once your organization is processing tool calls." />;
+    return (
+      <NoOrgState
+        icon={Wrench}
+        feature="Tool Intelligence"
+        description="Tool attribution, comparison, and recommendations light up once your organization is processing tool calls."
+      />
+    );
   }
-  return <PageContent size="wide">
-      <PageHeader eyebrow="Observe" title="Tool Intelligence" subtitle="Attribution, head-to-head comparison, and task-based recommendations for every tool in the fleet" icon={Wrench} />
 
-      {displayError && <div className="bg-[var(--error-bg)] text-[var(--error)] text-sm px-4 py-3 rounded-xl flex items-center gap-2.5 border border-[var(--error)]/20">
-          <AlertTriangle className="w-4 h-4 flex-shrink-0" />
-          {displayError}
-        </div>}
+  return (
+    <PageContent size="wide">
+      <PageHeader
+        eyebrow="Observe"
+        title="Tool Intelligence"
+        subtitle="Per-tool attribution, pairwise comparison, and task-type recommendations"
+        icon={Wrench}
+      />
 
-      {/* Tabs */}
+      {displayError && (
+        <ErrorState
+          title={taxonomyError && !actionError ? "Couldn't load tool catalog" : "Request failed"}
+          message={displayError}
+          size="sm"
+          action={
+            <button
+              type="button"
+              onClick={retryFailedFetch}
+              className="text-sm font-medium text-[var(--accent)] hover:text-[var(--accent-hover)] transition-colors"
+            >
+              Try again
+            </button>
+          }
+        />
+      )}
+
       <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as Tab)}>
-        <TabsList aria-label="Tool intelligence sections" className="bg-[var(--bg-tertiary)] rounded-xl h-auto flex-wrap w-fit">
-          {([{
-          key: "attribution" as Tab,
-          label: "Attribution",
-          icon: Activity
-        }, {
-          key: "compare" as Tab,
-          label: "Compare",
-          icon: GitCompare
-        }, {
-          key: "recommender" as Tab,
-          label: "Recommender",
-          icon: Sparkles
-        }, {
-          key: "taxonomy" as Tab,
-          label: "Taxonomy",
-          icon: ChevronRight
-        }] as const).map(({ key, label, icon: Icon }) => (
-            <TabsTrigger key={key} value={key} className="flex items-center gap-2 data-[state=active]:text-[var(--text-primary)]">
+        <TabsList
+          aria-label="Tool intelligence sections"
+          className="bg-[var(--bg-tertiary)] rounded-xl h-auto flex-wrap w-fit"
+        >
+          {(
+            [
+              { key: "attribution" as Tab, label: "Attribution", icon: Activity },
+              { key: "compare" as Tab, label: "Compare", icon: GitCompare },
+              { key: "recommender" as Tab, label: "Recommender", icon: Sparkles },
+              { key: "taxonomy" as Tab, label: "Taxonomy", icon: ChevronRight },
+            ] as const
+          ).map(({ key, label, icon: Icon }) => (
+            <TabsTrigger
+              key={key}
+              value={key}
+              className="flex items-center gap-2 data-[state=active]:text-[var(--text-primary)]"
+            >
               <Icon className="w-4 h-4" aria-hidden />
               {label}
             </TabsTrigger>
           ))}
         </TabsList>
 
-      {/* Content */}
-      <AnimatePresence mode="wait">
-        <motion.div key={activeTab} initial={{
-        opacity: 0,
-        y: 8
-      }} animate={{
-        opacity: 1,
-        y: 0
-      }} exit={{
-        opacity: 0,
-        y: -6
-      }} transition={{
-        duration: 0.2
-      }}>
-          {activeTab === "attribution" && <AttributionTab tools={tools} loading={attributionQuery.isLoading} days={attributionDays} onDaysChange={setAttributionDays} onRefresh={() => attributionQuery.refetch()} />}
-          {activeTab === "compare" && <CompareTab allToolNames={allToolNames} selectedTools={selectedTools} onSelectedToolsChange={setSelectedTools} dropdownOpen={toolDropdownOpen} onDropdownOpenChange={setToolDropdownOpen} onCompare={handleCompare} comparison={comparison} loading={compareLoading} />}
-          {activeTab === "recommender" && <RecommenderTab task={task} onTaskChange={setTask} onRecommend={handleRecommend} recommendations={recommendations} loading={recommendLoading} />}
-          {activeTab === "taxonomy" && <TaxonomyTab taxonomy={taxonomy} loading={taxonomyQuery.isLoading} expanded={taxonomyOpen} onToggleExpanded={() => setTaxonomyOpen(!taxonomyOpen)} />}
-        </motion.div>
-      </AnimatePresence>
+        {activeTab === "attribution" && (
+          <AttributionTab
+            toolId={toolId}
+            onToolIdChange={setToolId}
+            window={attrWindow}
+            onWindowChange={setAttrWindow}
+            allToolNames={allToolNames}
+            onRun={handleAttribution}
+            result={attribution}
+            loading={attrLoading}
+          />
+        )}
+        {activeTab === "compare" && (
+          <CompareTab
+            toolA={toolA}
+            toolB={toolB}
+            onToolAChange={setToolA}
+            onToolBChange={setToolB}
+            window={compareWindow}
+            onWindowChange={setCompareWindow}
+            allToolNames={allToolNames}
+            onCompare={handleCompare}
+            comparison={comparison}
+            loading={compareLoading}
+          />
+        )}
+        {activeTab === "recommender" && (
+          <RecommenderTab
+            taskType={taskType}
+            onTaskTypeChange={setTaskType}
+            onRecommend={handleRecommend}
+            result={recommendations}
+            loading={recommendLoading}
+          />
+        )}
+        {activeTab === "taxonomy" && (
+          <TaxonomyTab
+            taxonomy={taxonomy}
+            loading={taxonomyQuery.isLoading}
+            loadError={taxonomyError}
+            onRetry={() => void taxonomyQuery.refetch()}
+            expanded={taxonomyOpen}
+            onToggleExpanded={() => setTaxonomyOpen(!taxonomyOpen)}
+          />
+        )}
       </Tabs>
-    </PageContent>;
+    </PageContent>
+  );
 }
-
-// ──────────────────────────────────────────────────────────────────────────
-// Attribution Tab
-// ──────────────────────────────────────────────────────────────────────────
 
 function AttributionTab({
-  tools,
+  toolId,
+  onToolIdChange,
+  window,
+  onWindowChange,
+  allToolNames,
+  onRun,
+  result,
   loading,
-  days,
-  onDaysChange,
-  onRefresh
 }: {
-  tools: ToolAttribution[];
+  toolId: string;
+  onToolIdChange: (v: string) => void;
+  window: string;
+  onWindowChange: (v: string) => void;
+  allToolNames: string[];
+  onRun: () => void;
+  result: ToolAttributionData | null;
   loading: boolean;
-  days: number;
-  onDaysChange: (d: number) => void;
-  onRefresh: () => void;
 }) {
-  const columns: DataTableColumn<ToolAttribution>[] = [{
-    key: "tool_name",
-    header: "Tool",
-    sortable: true,
-    cell: r => <span className="font-mono text-xs">{r.tool_name}</span>
-  }, {
-    key: "call_count",
-    header: "Call Count",
-    sortable: true,
-    align: "right",
-    cell: r => <span className="tabular-nums">{r.call_count.toLocaleString()}</span>
-  }, {
-    key: "success_rate",
-    header: "Success Rate",
-    sortable: true,
-    align: "right",
-    cell: r => <SuccessRateBadge rate={r.success_rate} />
-  }];
-  return <div className="space-y-4">
-      {/* Controls */}
-      <Card padding="sm" className="flex flex-wrap items-center gap-3">
-        <label className="sr-only" htmlFor="attribution-days">Time window</label>
-        <select id="attribution-days" value={days} onChange={e => onDaysChange(Number(e.target.value))} className="px-3 py-1.5 bg-[var(--bg-secondary)] border border-[var(--border-default)] rounded-lg text-sm text-[var(--text-primary)]">
-          <option value={7}>Last 7 days</option>
-          <option value={30}>Last 30 days</option>
-          <option value={90}>Last 90 days</option>
-        </select>
-        <button onClick={onRefresh} disabled={loading} aria-label="Refresh tool attribution" className="inline-flex items-center gap-2 px-3 py-1.5 bg-[var(--bg-tertiary)] text-[var(--text-primary)] rounded-lg text-xs font-medium hover:bg-[var(--border-default)] disabled:opacity-50 transition-colors ml-auto">
-          {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Activity className="w-3.5 h-3.5" />}
-          Refresh
-        </button>
+  return (
+    <div className="space-y-4 mt-4">
+      <Card padding="lg">
+        <h3 className="text-sm font-semibold text-[var(--text-primary)] mb-3 flex items-center gap-2">
+          <Activity className="w-4 h-4 text-[var(--accent)]" />
+          Per-tool attribution
+        </h3>
+        <p className="text-xs text-[var(--text-muted)] mb-3">
+          Attribution is per-tool — enter a tool ID. There is no fleet-wide aggregate endpoint.
+        </p>
+        <div className="flex flex-col sm:flex-row gap-3">
+          <input
+            type="text"
+            list="tool-id-suggestions"
+            value={toolId}
+            onChange={(e) => onToolIdChange(e.target.value)}
+            placeholder="tool_id…"
+            className="flex-1 px-3 py-2 bg-[var(--bg-secondary)] border border-[var(--border-default)] rounded-lg text-sm font-mono text-[var(--text-primary)]"
+          />
+          <datalist id="tool-id-suggestions">
+            {allToolNames.map((n) => (
+              <option key={n} value={n} />
+            ))}
+          </datalist>
+          <select
+            value={window}
+            onChange={(e) => onWindowChange(e.target.value)}
+            className="px-3 py-2 bg-[var(--bg-secondary)] border border-[var(--border-default)] rounded-lg text-sm text-[var(--text-primary)]"
+          >
+            <option value="7d">Last 7 days</option>
+            <option value="30d">Last 30 days</option>
+            <option value="90d">Last 90 days</option>
+          </select>
+          <button
+            onClick={onRun}
+            disabled={loading || !toolId.trim()}
+            className="inline-flex items-center gap-2 px-4 py-2 bg-[var(--accent)] text-[var(--bg-base)] rounded-lg text-sm font-medium hover:bg-[var(--accent-hover)] disabled:opacity-50 transition-colors"
+          >
+            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Activity className="w-4 h-4" />}
+            Attribute
+          </button>
+        </div>
       </Card>
 
-      <DataTable columns={columns} rows={tools} rowKey={r => r.tool_name} loading={loading && tools.length === 0} defaultSort={{
-      key: "call_count",
-      direction: "desc"
-    }} emptyTitle="No tool calls yet" emptyDescription="Tool attribution populates once your agents start invoking tools — check back after the first traces run." emptyIcon={Wrench} pageSize={25} />
-    </div>;
-}
-function SuccessRateBadge({
-  rate
-}: {
-  rate: number;
-}) {
-  const pct = (rate * 100).toFixed(1);
-  const classes = rate >= 0.9 ? "text-[var(--terminal)]" : rate >= 0.7 ? "text-[var(--warning)]" : "text-[var(--error)]";
-  return <span className={cn("text-sm font-semibold tabular-nums", classes)}>
-      {pct}%
-    </span>;
+      {loading && (
+        <div className="flex items-center justify-center py-12">
+          <Loader2 className="w-6 h-6 animate-spin text-[var(--accent)]" />
+        </div>
+      )}
+
+      {result && (
+        <Card padding="lg">
+          {result.message && (
+            <p className="text-xs text-[var(--text-muted)] mb-3">{result.message}</p>
+          )}
+          {result.n_calls === 0 || result.success_rate == null ? (
+            <EmptyState
+              icon={Wrench}
+              title="No tool telemetry"
+              description={`No calls found for ${result.tool_name} in window ${result.window}.`}
+              size="md"
+            />
+          ) : (
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+              <Metric label="Tool" value={result.tool_name} mono />
+              <Metric label="Calls" value={String(result.n_calls)} />
+              <Metric
+                label="Success rate"
+                value={
+                  result.success_rate != null
+                    ? `${(result.success_rate * 100).toFixed(1)}%`
+                    : "—"
+                }
+              />
+              <Metric
+                label="Contribution"
+                value={
+                  result.contribution_score != null
+                    ? result.contribution_score.toFixed(3)
+                    : "—"
+                }
+              />
+              <Metric
+                label="p50"
+                value={result.p50_ms != null ? `${result.p50_ms.toFixed(0)} ms` : "—"}
+              />
+              <Metric
+                label="p95"
+                value={result.p95_ms != null ? `${result.p95_ms.toFixed(0)} ms` : "—"}
+              />
+            </div>
+          )}
+        </Card>
+      )}
+
+      {!result && !loading && (
+        <Card padding="lg">
+          <EmptyState
+            icon={Wrench}
+            title="Enter a tool ID"
+            description="Score success rate, latency, and contribution for one tool."
+            size="md"
+          />
+        </Card>
+      )}
+    </div>
+  );
 }
 
-// ──────────────────────────────────────────────────────────────────────────
-// Compare Tab
-// ──────────────────────────────────────────────────────────────────────────
+function Metric({
+  label,
+  value,
+  mono,
+}: {
+  label: string;
+  value: string;
+  mono?: boolean;
+}) {
+  return (
+    <div>
+      <p className="text-xs text-[var(--text-muted)] mb-0.5">{label}</p>
+      <p
+        className={cn(
+          "text-sm font-semibold text-[var(--text-primary)]",
+          mono && "font-mono text-xs",
+        )}
+      >
+        {value}
+      </p>
+    </div>
+  );
+}
 
 function CompareTab({
+  toolA,
+  toolB,
+  onToolAChange,
+  onToolBChange,
+  window,
+  onWindowChange,
   allToolNames,
-  selectedTools,
-  onSelectedToolsChange,
-  dropdownOpen,
-  onDropdownOpenChange,
   onCompare,
   comparison,
-  loading
+  loading,
 }: {
+  toolA: string;
+  toolB: string;
+  onToolAChange: (v: string) => void;
+  onToolBChange: (v: string) => void;
+  window: string;
+  onWindowChange: (v: string) => void;
   allToolNames: string[];
-  selectedTools: string[];
-  onSelectedToolsChange: (tools: string[]) => void;
-  dropdownOpen: boolean;
-  onDropdownOpenChange: (open: boolean) => void;
   onCompare: () => void;
-  comparison: ToolComparison[] | null;
+  comparison: ToolCompareData | null;
   loading: boolean;
 }) {
-  function toggleTool(name: string) {
-    if (selectedTools.includes(name)) {
-      onSelectedToolsChange(selectedTools.filter(t => t !== name));
-    } else {
-      onSelectedToolsChange([...selectedTools, name]);
-    }
-  }
+  const columns: DataTableColumn<ToolCompareData["tools"][number]>[] = [
+    {
+      key: "tool_name",
+      header: "Tool",
+      cell: (r) => <span className="font-mono text-xs">{r.tool_name}</span>,
+    },
+    {
+      key: "n_calls",
+      header: "Calls",
+      align: "right",
+      cell: (r) => <span className="tabular-nums">{r.n_calls}</span>,
+    },
+    {
+      key: "success_rate",
+      header: "Success",
+      align: "right",
+      cell: (r) => (
+        <span className="tabular-nums">
+          {r.success_rate != null ? `${(r.success_rate * 100).toFixed(1)}%` : "—"}
+        </span>
+      ),
+    },
+    {
+      key: "p95_ms",
+      header: "p95",
+      align: "right",
+      cell: (r) => (
+        <span className="tabular-nums">
+          {r.p95_ms != null ? `${r.p95_ms.toFixed(0)} ms` : "—"}
+        </span>
+      ),
+    },
+    {
+      key: "cost_per_call_usd",
+      header: "Cost/call",
+      align: "right",
+      cell: (r) => (
+        <span className="tabular-nums">
+          {r.cost_per_call_usd != null ? `$${r.cost_per_call_usd.toFixed(4)}` : "—"}
+        </span>
+      ),
+    },
+  ];
 
-  // Collect all metric keys across the comparison
-  const metricKeys = comparison ? Array.from(new Set(comparison.flatMap(c => Object.keys(c.metrics)))) : [];
-  return <div className="space-y-6">
-      {/* Tool picker */}
+  return (
+    <div className="space-y-6 mt-4">
       <Card padding="lg">
         <h3 className="text-sm font-semibold text-[var(--text-primary)] mb-4 flex items-center gap-2">
           <GitCompare className="w-4 h-4 text-[var(--accent)]" />
-          Compare Tools
+          Compare two tools
         </h3>
-
-        <div className="relative">
-          <button onClick={() => onDropdownOpenChange(!dropdownOpen)} aria-haspopup="listbox" aria-expanded={dropdownOpen} className="w-full px-3 py-2 bg-[var(--bg-secondary)] border border-[var(--border-default)] rounded-lg text-sm text-left text-[var(--text-primary)] flex items-center justify-between">
-            <span>
-              {selectedTools.length === 0 ? "Select tools to compare..." : selectedTools.length === 1 ? selectedTools[0] : `${selectedTools.length} tools selected`}
-            </span>
-            <ChevronDown className={cn("w-4 h-4 transition-transform", dropdownOpen && "rotate-180")} />
-          </button>
-          <AnimatePresence>
-            {dropdownOpen && <motion.div initial={{
-            opacity: 0,
-            y: -4
-          }} animate={{
-            opacity: 1,
-            y: 0
-          }} exit={{
-            opacity: 0,
-            y: -4
-          }} className="absolute z-20 mt-1 w-full bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-lg shadow-lg max-h-64 overflow-y-auto">
-                {allToolNames.length === 0 ? <div className="p-3 text-xs text-[var(--text-muted)]">
-                    No tools found. Load the taxonomy tab first.
-                  </div> : allToolNames.map(name => <label key={name} className="flex items-center gap-2 px-3 py-2 hover:bg-[var(--bg-tertiary)] cursor-pointer text-sm">
-                      <input type="checkbox" checked={selectedTools.includes(name)} onChange={() => toggleTool(name)} className="accent-[var(--accent)]" />
-                      <span className="font-mono text-xs text-[var(--text-primary)]">{name}</span>
-                    </label>)}
-              </motion.div>}
-          </AnimatePresence>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
+          <input
+            type="text"
+            list="compare-tool-a"
+            value={toolA}
+            onChange={(e) => onToolAChange(e.target.value)}
+            placeholder="tool_a…"
+            className="px-3 py-2 bg-[var(--bg-secondary)] border border-[var(--border-default)] rounded-lg text-sm font-mono text-[var(--text-primary)]"
+          />
+          <datalist id="compare-tool-a">
+            {allToolNames.map((n) => (
+              <option key={n} value={n} />
+            ))}
+          </datalist>
+          <input
+            type="text"
+            list="compare-tool-b"
+            value={toolB}
+            onChange={(e) => onToolBChange(e.target.value)}
+            placeholder="tool_b…"
+            className="px-3 py-2 bg-[var(--bg-secondary)] border border-[var(--border-default)] rounded-lg text-sm font-mono text-[var(--text-primary)]"
+          />
+          <datalist id="compare-tool-b">
+            {allToolNames.map((n) => (
+              <option key={n} value={n} />
+            ))}
+          </datalist>
         </div>
-
-        {selectedTools.length > 0 && <div className="flex flex-wrap gap-2 mt-3">
-            {selectedTools.map(t => <span key={t} className="inline-flex items-center gap-1 px-2 py-1 bg-[var(--accent-faint)] text-[var(--accent)] rounded-md text-xs font-mono">
-                {t}
-                <button onClick={() => toggleTool(t)} aria-label={`Remove ${t}`} className="hover:text-[var(--text-primary)] transition-colors">
-                  <X className="w-3 h-3" />
-                </button>
-              </span>)}
-          </div>}
-
-        <button onClick={onCompare} disabled={loading || selectedTools.length < 2} className="mt-4 inline-flex items-center gap-2 px-4 py-2 bg-[var(--accent)] text-[var(--bg-base)] rounded-lg text-sm font-medium hover:bg-[var(--accent-hover)] disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
-          {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <GitCompare className="w-4 h-4" />}
-          Compare
-        </button>
+        <div className="flex flex-wrap gap-3">
+          <select
+            value={window}
+            onChange={(e) => onWindowChange(e.target.value)}
+            className="px-3 py-2 bg-[var(--bg-secondary)] border border-[var(--border-default)] rounded-lg text-sm text-[var(--text-primary)]"
+          >
+            <option value="7d">Last 7 days</option>
+            <option value="30d">Last 30 days</option>
+          </select>
+          <button
+            onClick={onCompare}
+            disabled={loading || !toolA.trim() || !toolB.trim()}
+            className="inline-flex items-center gap-2 px-4 py-2 bg-[var(--accent)] text-[var(--bg-base)] rounded-lg text-sm font-medium hover:bg-[var(--accent-hover)] disabled:opacity-50 transition-colors"
+          >
+            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <GitCompare className="w-4 h-4" />}
+            Compare
+          </button>
+        </div>
       </Card>
 
-      {/* Results */}
-      {comparison && comparison.length > 0 && (() => {
-      // Build a transposed row per metric key: { metric, [tool_name]: number }
-      const rows = metricKeys.map(key => {
-        const row: Record<string, string | number> = {
-          metric: key
-        };
-        for (const c of comparison) {
-          const v = c.metrics[key];
-          row[c.tool_name] = typeof v === "number" ? Number(v.toFixed(3)) : v ?? 0;
-        }
-        return row;
-      });
-      const columns: DataTableColumn<Record<string, string | number>>[] = [{
-        key: "metric",
-        header: "Metric",
-        cell: r => <span className="font-mono text-xs text-[var(--text-secondary)]">{String(r.metric)}</span>
-      }, ...comparison.map<DataTableColumn<Record<string, string | number>>>(c => ({
-        key: c.tool_name,
-        header: c.tool_name,
-        align: "right",
-        headerClassName: "font-mono text-[var(--accent)]",
-        cell: r => {
-          const v = r[c.tool_name];
-          return <span className="tabular-nums">{typeof v === "number" ? v.toFixed(3) : String(v ?? "—")}</span>;
-        }
-      }))];
-      return <motion.div initial={{
-        opacity: 0,
-        y: 8
-      }} animate={{
-        opacity: 1,
-        y: 0
-      }} className="bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-xl overflow-hidden">
-            <div className="p-4 border-b border-[var(--border-default)]">
-              <h3 className="text-sm font-semibold text-[var(--text-primary)]">Side-by-Side Metrics</h3>
+      {comparison && (
+        <div className="space-y-4">
+          {comparison.message && (
+            <p className="text-xs text-[var(--text-muted)]">{comparison.message}</p>
+          )}
+          <Card padding="md">
+            <div className="flex flex-wrap gap-4 text-sm">
+              <span>
+                Winner:{" "}
+                <strong className="font-mono text-[var(--accent)]">{comparison.winner}</strong>
+              </span>
+              <span className="text-[var(--text-muted)]">
+                Δ success:{" "}
+                {comparison.success_rate_diff != null
+                  ? comparison.success_rate_diff.toFixed(3)
+                  : "—"}
+              </span>
+              <span className="text-[var(--text-muted)]">
+                confidence: {comparison.confidence.toFixed(2)}
+              </span>
             </div>
-            <DataTable columns={columns} rows={rows} rowKey={r => String(r.metric)} pageSize={100} />
-          </motion.div>;
-    })()}
-
-      {comparison && comparison.length === 0 && <EmptyState icon={GitCompare} title="No comparison data" description="The selected tools did not return any metrics. Try different tools." size="md" />}
-    </div>;
+          </Card>
+          <DataTable
+            columns={columns}
+            rows={comparison.tools}
+            rowKey={(r) => r.tool_name}
+            pageSize={10}
+            emptyTitle="No comparison data"
+            emptyDescription="Neither tool returned telemetry for this window."
+            emptyIcon={GitCompare}
+          />
+        </div>
+      )}
+    </div>
+  );
 }
 
-// ──────────────────────────────────────────────────────────────────────────
-// Recommender Tab
-// ──────────────────────────────────────────────────────────────────────────
-
 function RecommenderTab({
-  task,
-  onTaskChange,
+  taskType,
+  onTaskTypeChange,
   onRecommend,
-  recommendations,
-  loading
+  result,
+  loading,
 }: {
-  task: string;
-  onTaskChange: (t: string) => void;
+  taskType: string;
+  onTaskTypeChange: (t: string) => void;
   onRecommend: () => void;
-  recommendations: ToolRecommendation[] | null;
+  result: ToolRecommendData | null;
   loading: boolean;
 }) {
-  return <div className="space-y-6">
-      {/* Input */}
+  const recommendations = result?.recommendations ?? null;
+  return (
+    <div className="space-y-6 mt-4">
       <Card padding="lg">
         <h3 className="text-sm font-semibold text-[var(--text-primary)] mb-4 flex items-center gap-2">
           <Sparkles className="w-4 h-4 text-[var(--accent)]" />
-          Get a Tool Recommendation
+          Tool recommendations
         </h3>
         <div className="flex flex-col sm:flex-row gap-3">
-          <input type="text" value={task} onChange={e => onTaskChange(e.target.value)} onKeyDown={e => {
-          if (e.key === "Enter") onRecommend();
-        }} placeholder="Describe the task — e.g. 'fetch recent news articles'" aria-label="Task description" className="flex-1 px-3 py-2 bg-[var(--bg-secondary)] border border-[var(--border-default)] rounded-lg text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)]" />
-          <button onClick={onRecommend} disabled={loading || !task.trim()} className="inline-flex items-center gap-2 px-4 py-2 bg-[var(--accent)] text-[var(--bg-base)] rounded-lg text-sm font-medium hover:bg-[var(--accent-hover)] disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
+          <input
+            type="text"
+            value={taskType}
+            onChange={(e) => onTaskTypeChange(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") onRecommend();
+            }}
+            placeholder="task_type (optional) — e.g. retrieval"
+            aria-label="Task type"
+            className="flex-1 px-3 py-2 bg-[var(--bg-secondary)] border border-[var(--border-default)] rounded-lg text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)]"
+          />
+          <button
+            onClick={onRecommend}
+            disabled={loading}
+            className="inline-flex items-center gap-2 px-4 py-2 bg-[var(--accent)] text-[var(--bg-base)] rounded-lg text-sm font-medium hover:bg-[var(--accent-hover)] disabled:opacity-50 transition-colors"
+          >
             {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
-            Get Recommendation
+            Recommend
           </button>
         </div>
       </Card>
 
-      {/* Results */}
-      {loading ? <div className="flex items-center justify-center py-20">
+      {loading ? (
+        <div className="flex items-center justify-center py-20">
           <Loader2 className="w-8 h-8 animate-spin text-[var(--accent)]" />
-        </div> : recommendations && recommendations.length > 0 ? <motion.div initial={{
-      opacity: 0,
-      y: 8
-    }} animate={{
-      opacity: 1,
-      y: 0
-    }} className="space-y-3">
+        </div>
+      ) : recommendations && recommendations.length > 0 ? (
+        <div className="space-y-3">
           <p className="text-xs text-[var(--text-muted)] uppercase tracking-wide">Top picks</p>
-          {recommendations.slice(0, 3).map((rec, idx) => <Card padding="md" key={rec.tool_name}>
+          {recommendations.slice(0, 3).map((rec, idx) => (
+            <Card padding="md" key={rec.tool_name}>
               <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center gap-2">
-                  <span className={cn("w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold", idx === 0 ? "bg-[var(--accent)] text-[var(--bg-base)]" : "bg-[var(--bg-tertiary)] text-[var(--text-secondary)]")}>
+                  <span
+                    className={cn(
+                      "w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold",
+                      idx === 0
+                        ? "bg-[var(--accent)] text-[var(--bg-base)]"
+                        : "bg-[var(--bg-tertiary)] text-[var(--text-secondary)]",
+                    )}
+                  >
                     {idx + 1}
                   </span>
-                  <span className="font-mono text-sm text-[var(--text-primary)]">{rec.tool_name}</span>
+                  <span className="font-mono text-sm text-[var(--text-primary)]">
+                    {rec.tool_name}
+                  </span>
                 </div>
                 <div className="text-right">
                   <p className="text-xs text-[var(--text-muted)]">Score</p>
@@ -431,70 +629,134 @@ function RecommenderTab({
                   </p>
                 </div>
               </div>
-              <p className="text-sm text-[var(--text-secondary)] leading-relaxed">{rec.rationale}</p>
-            </Card>)}
-        </motion.div> : recommendations && recommendations.length === 0 ? <EmptyState icon={Search} title="No recommendations" description="The recommender did not return any tool picks for that task. Try rephrasing it." size="md" /> : null}
-    </div>;
+              <p className="text-sm text-[var(--text-secondary)] leading-relaxed">
+                {rec.rationale}
+              </p>
+            </Card>
+          ))}
+        </div>
+      ) : recommendations && recommendations.length === 0 ? (
+        <EmptyState
+          icon={Search}
+          title="No recommendations"
+          description={result?.message ?? "No tool telemetry available to score."}
+          size="md"
+        />
+      ) : null}
+    </div>
+  );
 }
-
-// ──────────────────────────────────────────────────────────────────────────
-// Taxonomy Tab
-// ──────────────────────────────────────────────────────────────────────────
 
 function TaxonomyTab({
   taxonomy,
   loading,
+  loadError,
+  onRetry,
   expanded,
-  onToggleExpanded
+  onToggleExpanded,
 }: {
-  taxonomy: ToolCategory[] | null;
+  taxonomy: ToolTaxonomyData | null;
   loading: boolean;
+  loadError: string | null;
+  onRetry: () => void;
   expanded: boolean;
   onToggleExpanded: () => void;
 }) {
-  return <Card padding="lg">
-      <button onClick={onToggleExpanded} aria-expanded={expanded} aria-controls="taxonomy-panel" className="w-full px-5 py-4 flex items-center justify-between">
+  const tools = taxonomy?.tools ?? [];
+  const columns: DataTableColumn<(typeof tools)[number]>[] = [
+    {
+      key: "tool_name",
+      header: "Tool",
+      sortable: true,
+      cell: (r) => <span className="font-mono text-xs">{r.tool_name}</span>,
+    },
+    {
+      key: "tool_version",
+      header: "Version",
+      cell: (r) => (
+        <span className="text-xs text-[var(--text-muted)]">{r.tool_version ?? "—"}</span>
+      ),
+    },
+    {
+      key: "n_calls_30d",
+      header: "Calls (30d)",
+      sortable: true,
+      align: "right",
+      cell: (r) => <span className="tabular-nums">{r.n_calls_30d.toLocaleString()}</span>,
+    },
+    {
+      key: "success_rate",
+      header: "Success",
+      sortable: true,
+      align: "right",
+      cell: (r) => (
+        <span className="tabular-nums">
+          {r.success_rate != null ? `${(r.success_rate * 100).toFixed(1)}%` : "—"}
+        </span>
+      ),
+    },
+  ];
+
+  return (
+    <Card padding="lg" className="mt-4">
+      <button
+        onClick={onToggleExpanded}
+        aria-expanded={expanded}
+        aria-controls="taxonomy-panel"
+        className="w-full px-1 py-2 flex items-center justify-between"
+      >
         <div className="flex items-center gap-2">
-          <ChevronRight className={cn("w-4 h-4 text-[var(--text-muted)] transition-transform", expanded && "rotate-90")} />
-          <h3 className="text-sm font-semibold text-[var(--text-primary)]">Tool Taxonomy</h3>
-          {taxonomy && <span className="text-xs text-[var(--text-muted)]">
-              {taxonomy.length} categories
-            </span>}
+          <ChevronRight
+            className={cn(
+              "w-4 h-4 text-[var(--text-muted)] transition-transform",
+              expanded && "rotate-90",
+            )}
+          />
+          <h3 className="text-sm font-semibold text-[var(--text-primary)]">Tool catalog</h3>
+          {taxonomy && (
+            <span className="text-xs text-[var(--text-muted)]">{tools.length} tools</span>
+          )}
         </div>
         {loading && <Loader2 className="w-4 h-4 animate-spin text-[var(--accent)]" aria-hidden />}
       </button>
 
-      <AnimatePresence>
-        {expanded && <motion.div id="taxonomy-panel" initial={{
-        opacity: 0,
-        height: 0
-      }} animate={{
-        opacity: 1,
-        height: "auto"
-      }} exit={{
-        opacity: 0,
-        height: 0
-      }} transition={{
-        duration: 0.2
-      }} className="overflow-hidden border-t border-[var(--border-default)]">
-            <div className="p-5 space-y-3">
-              {!taxonomy && !loading ? <p className="text-sm text-[var(--text-muted)]">Taxonomy not loaded yet.</p> : taxonomy && taxonomy.length === 0 ? <p className="text-sm text-[var(--text-muted)]">No categories found.</p> : taxonomy?.map(cat => <div key={cat.category} className="rounded-lg bg-[var(--bg-secondary)] border border-[var(--border-subtle)] p-3">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-sm font-semibold text-[var(--text-primary)] capitalize">
-                        {cat.category}
-                      </span>
-                      <span className="text-xs text-[var(--text-muted)] tabular-nums">
-                        {cat.tools.length} tools
-                      </span>
-                    </div>
-                    <div className="flex flex-wrap gap-1.5">
-                      {cat.tools.map(tool => <span key={tool} className="px-2 py-0.5 bg-[var(--bg-tertiary)] text-[var(--text-secondary)] rounded text-xs font-mono">
-                          {tool}
-                        </span>)}
-                    </div>
-                  </div>)}
-            </div>
-          </motion.div>}
-      </AnimatePresence>
-    </Card>;
+      {expanded && (
+        <div id="taxonomy-panel" className="border-t border-[var(--border-default)] pt-4">
+          {loadError ? (
+            <ErrorState
+              title="Couldn't load tool catalog"
+              message={loadError}
+              size="sm"
+              action={
+                <button
+                  type="button"
+                  onClick={onRetry}
+                  className="text-sm font-medium text-[var(--accent)] hover:text-[var(--accent-hover)] transition-colors"
+                >
+                  Try again
+                </button>
+              }
+            />
+          ) : (
+            <>
+              {taxonomy?.message && (
+                <p className="text-xs text-[var(--text-muted)] mb-3">{taxonomy.message}</p>
+              )}
+              <DataTable
+                columns={columns}
+                rows={tools}
+                rowKey={(r) => r.tool_name}
+                loading={loading && tools.length === 0}
+                defaultSort={{ key: "n_calls_30d", direction: "desc" }}
+                emptyTitle="No tools yet"
+                emptyDescription="Tool taxonomy populates once agents start invoking tools."
+                emptyIcon={Wrench}
+                pageSize={25}
+              />
+            </>
+          )}
+        </div>
+      )}
+    </Card>
+  );
 }

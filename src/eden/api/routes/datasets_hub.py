@@ -8,18 +8,34 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Path
 from pydantic import BaseModel, Field
 
-from eden.api.routes.auth import get_current_user
+from eden.api.deps import (
+    _try_resolve_token_payload,
+    get_current_user,
+    resolve_path_org_access,
+)
 from eden.datasets.hub import DatasetHub
 from eden.datasets.spreadsheet import SpreadsheetService
 from eden.storage.postgres import get_postgres_client
 
 from eden.api.utils.redact import redact_all
+from eden.api.utils.safe_error import raise_mapped_db_error
 
 logger = logging.getLogger(__name__)
+
+
+async def _require_path_org(
+    org_id: str = Path(..., description="Organization ID"),
+    user: dict = Depends(get_current_user),
+    payload: dict | None = Depends(_try_resolve_token_payload),
+) -> str:
+    _, eden_org = await resolve_path_org_access(org_id, user, payload)
+    return eden_org
+
 
 router = APIRouter(
     prefix="/orgs/{org_id}/datasets",
     tags=["datasets"],
+    dependencies=[Depends(_require_path_org)],
 )
 
 
@@ -67,7 +83,7 @@ def _to_response(rec: Any) -> DatasetResponse:
 
 @router.get("", response_model=DatasetListResponse)
 async def list_datasets(
-    org_id: str = Path(...),
+    org_id: str = Depends(_require_path_org),
     user: dict = Depends(get_current_user),
 ) -> DatasetListResponse:
     hub = DatasetHub()
@@ -81,7 +97,7 @@ async def list_datasets(
 @router.post("", response_model=DatasetResponse)
 async def create_dataset(
     body: CreateDatasetRequest,
-    org_id: str = Path(...),
+    org_id: str = Depends(_require_path_org),
     user: dict = Depends(get_current_user),
 ) -> DatasetResponse:
     hub = DatasetHub()
@@ -95,29 +111,46 @@ async def create_dataset(
         )
     except Exception as exc:
         logger.warning("create_dataset failed: %s", redact_all(str(exc)))
-        raise HTTPException(status_code=400, detail="dataset create failed") from exc
+        raise_mapped_db_error(
+            exc,
+            fallback="dataset create failed",
+            unique_detail="dataset already exists",
+            uuid_detail="Invalid organization or dataset id",
+            fk_detail="Organization not found",
+        )
     return _to_response(rec)
 
 
 @router.post("/promote-from-trace")
 async def promote_from_trace(
     body: PromoteTraceRequest,
-    org_id: str = Path(...),
+    org_id: str = Depends(_require_path_org),
     user: dict = Depends(get_current_user),
 ) -> dict[str, Any]:
     hub = DatasetHub()
-    result = await hub.promote_trace(
-        org_id,
-        body.trace_id,
-        dataset_id=body.dataset_id,
-        dataset_name=body.dataset_name,
-    )
+    try:
+        result = await hub.promote_trace(
+            org_id,
+            body.trace_id,
+            dataset_id=body.dataset_id,
+            dataset_name=body.dataset_name,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.warning("promote_from_trace failed: %s", redact_all(str(exc)))
+        raise_mapped_db_error(
+            exc,
+            fallback="trace promote failed",
+            uuid_detail="Invalid dataset or organization id",
+            fk_detail="Dataset or organization not found",
+        )
     return {"status": "ok", "data": result}
 
 
 @router.get("/{dataset_id}", response_model=DatasetDetailResponse)
 async def get_dataset(
-    org_id: str = Path(...),
+    org_id: str = Depends(_require_path_org),
     dataset_id: str = Path(...),
     user: dict = Depends(get_current_user),
 ) -> DatasetDetailResponse:
@@ -144,7 +177,7 @@ async def get_dataset(
 
 @router.post("/{dataset_id}/snapshots")
 async def create_snapshot(
-    org_id: str = Path(...),
+    org_id: str = Depends(_require_path_org),
     dataset_id: str = Path(...),
     user: dict = Depends(get_current_user),
 ) -> dict[str, Any]:
@@ -153,6 +186,14 @@ async def create_snapshot(
         snap = await hub.create_snapshot(org_id, dataset_id)
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.warning("create_snapshot failed: %s", redact_all(str(exc)))
+        raise_mapped_db_error(
+            exc,
+            fallback="snapshot create failed",
+            uuid_detail="Invalid dataset id",
+            fk_detail="Dataset not found",
+        )
     return {"status": "ok", "snapshot": snap.to_dict()}
 
 
@@ -164,7 +205,7 @@ class ImportRowsRequest(BaseModel):
 @router.post("/{dataset_id}/import")
 async def import_dataset_rows(
     body: ImportRowsRequest,
-    org_id: str = Path(...),
+    org_id: str = Depends(_require_path_org),
     dataset_id: str = Path(...),
     user: dict = Depends(get_current_user),
 ) -> dict[str, Any]:

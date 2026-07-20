@@ -73,6 +73,8 @@ spec:
         - name: GITHUB_APP_WEBHOOK_SECRET
         - name: GITHUB_APP_CALLBACK_URL
         - name: REDIS_URL
+        - name: UPSTASH_REDIS_REST_URL
+        - name: UPSTASH_REDIS_REST_TOKEN
         - name: QDRANT_API_KEY
         # ── Clerk (auth + webhooks) ────────────────────────────────
         # CLERK_SECRET_KEY verifies Clerk session JWTs forwarded by
@@ -438,6 +440,9 @@ spec:
       value: INFO
     - name: LOG_JSON
       value: "true"
+    # Dedicated worker hosts background loops; API keeps this at "0".
+    - name: EDEN_RUN_BACKGROUND_WORKERS
+      value: "1"
     - name: SENTRY_ENVIRONMENT
       value: northflank-staging-worker
     - name: POSTGRES_HOST

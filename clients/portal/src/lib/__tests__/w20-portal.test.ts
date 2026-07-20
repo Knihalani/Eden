@@ -5,9 +5,11 @@
 import { readFileSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
+import { readApiModules } from "./_read-api";
 
 const ROOT = resolve(__dirname, "../../..");
 const src = (rel: string) => readFileSync(resolve(ROOT, "src", rel), "utf8");
+const apiSrc = () => readApiModules(ROOT);
 const py = (rel: string) =>
   readFileSync(resolve(ROOT, "../../src", rel), "utf8");
 
@@ -104,7 +106,7 @@ describe("W20 approvals + dual surface gone", () => {
   });
 
   it("deletes Phase-C aiApi and unmounts /ai router", () => {
-    const api = src("lib/api.ts");
+    const api = apiSrc();
     expect(api).not.toContain("export const aiApi");
     expect(api).not.toContain("/orgs/${orgId}/ai/chat");
     expect(api).toContain("export interface AiChartSpec");

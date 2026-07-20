@@ -249,7 +249,7 @@ def install_cat22_sampling_policy() -> None:
             rates["loop"] = loop_rate
             rates["error"] = error_rate
             enabled = bool(getattr(settings, "sampling_enabled", True))
-            profile = getattr(settings, "sampling_profile", "balanced") or "balanced"
+            profile = getattr(settings, "sampling_profile", "full") or "full"
             if not enabled or profile == "full":
                 rates["probabilistic"] = 1.0
             else:
@@ -270,7 +270,7 @@ def install_cat22_sampling_policy() -> None:
             "wiring: Cat 22/N16 SamplingPolicy loop=%.2f error=%.2f profile=%s",
             loop_rate,
             error_rate,
-            getattr(settings, "sampling_profile", "balanced"),
+            getattr(settings, "sampling_profile", "full"),
         )
     except Exception as exc:
         logger.debug("wiring: cat22 patch failed: %s", exc)

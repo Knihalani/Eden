@@ -351,6 +351,32 @@ def test_tenant_rate_limit_middleware_is_pure_asgi():
     assert _is_pure_asgi_mw(TenantRateLimitMiddleware)
 
 
+def test_idempotency_middleware_is_pure_asgi():
+    """Wave-1 A4 / K22 — IdempotencyMiddleware converted to pure ASGI.
+
+    Body buffering happens only when ``Idempotency-Key`` is present;
+    ``dispatch`` MUST NOT exist on the class dict.
+    """
+    from eden.api.middleware.idempotency import IdempotencyMiddleware
+    assert _is_pure_asgi_mw(IdempotencyMiddleware)
+
+
+def test_quota_enforcement_middleware_is_pure_asgi():
+    """Wave-1 A4 / B3+B32 — QuotaEnforcementMiddleware converted to pure ASGI."""
+    from eden.api.middleware.quota_enforcement import QuotaEnforcementMiddleware
+    assert _is_pure_asgi_mw(QuotaEnforcementMiddleware)
+
+
+def test_rls_org_context_middleware_is_pure_asgi():
+    """Wave-1 A4 / B3 — RLSOrgContextMiddleware converted to pure ASGI.
+
+    Still constructs ``Request(scope, receive)`` for helpers and
+    ``request.state.pg_conn`` pinning (same pattern as tenant_rate_limit).
+    """
+    from eden.api.middleware.rls_org_context import RLSOrgContextMiddleware
+    assert _is_pure_asgi_mw(RLSOrgContextMiddleware)
+
+
 def test_tenant_rate_limit_cleanup_task_is_lazy():
     """v1.9 — pre-existing bug fix.
 

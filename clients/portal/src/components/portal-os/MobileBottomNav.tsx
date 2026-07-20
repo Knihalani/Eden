@@ -48,7 +48,7 @@ export const MOBILE_MORE_LINKS: MobileNavItem[] = [
   { href: "/evals", icon: FlaskConical, label: "Evals" },
   { href: "/ledger", icon: ScrollText, label: "Ledger" },
   { href: "/promotions", icon: TrendingUp, label: "Promotions" },
-  { href: "/debugger-sessions", icon: Bug, label: "Debugger" },
+  { href: "/debugger-sessions", icon: Bug, label: "Debug sessions" },
   { href: "/settings", icon: Settings, label: "Settings" },
 ];
 
@@ -59,10 +59,14 @@ function isActivePath(pathname: string, href: string, search?: string): boolean 
   const pathMatch =
     pathname === pathOnly || pathname.startsWith(pathOnly + "/");
   if (!pathMatch) return false;
-  if (!queryPart) return true;
+  const currentTab = new URLSearchParams(search || "").get("tab");
+  if (!queryPart) {
+    // Bare path = default tab; inactive when a sibling ?tab= is set.
+    return !currentTab;
+  }
   const expectedTab = new URLSearchParams(queryPart).get("tab");
   if (!expectedTab) return true;
-  return new URLSearchParams(search || "").get("tab") === expectedTab;
+  return currentTab === expectedTab;
 }
 
 function MobileNavLink({ href, icon: Icon, label }: MobileNavItem) {

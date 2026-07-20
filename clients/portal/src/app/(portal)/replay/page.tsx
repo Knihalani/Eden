@@ -4,21 +4,17 @@ import { useState, useEffect, useCallback, useRef, useMemo , Suspense} from "rea
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useOrg } from "@/hooks/use-org";
-import { usePolling } from "@/hooks/use-polling";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { StatCard } from "@/components/ui/stat-card";
-import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorState } from "@/components/ui/error-state";
 import { PageHeader } from "@/components/layout/page-header";
 import { PageContent } from "@/components/layout/page-content";
-import { useToast } from "@/components/ui/toast";
-import { motion, AnimatePresence } from "framer-motion";
 import { ArrowLeft } from "lucide-react";
 import { NoOrgState } from "@/components/ui/no-org-state";
 import { errorFromCaught } from "@/lib/safe-error-message";
-import { History, Pause, Play, StepForward, RotateCcw, CheckCircle2, XCircle, Terminal, Info, Loader2, AlertCircle, ChevronDown, ChevronUp, Clock, Layers, Activity, Zap, Trash2, RefreshCw, Search, BarChart3, Send, GitBranch } from "lucide-react";
+import { History, Play, CheckCircle2, Loader2, ChevronDown, ChevronUp, Clock, Layers, Activity, Zap, RefreshCw, Search, BarChart3, GitBranch } from "lucide-react";
 
 interface __JobItem {
   job_id: string;
@@ -85,20 +81,10 @@ interface TraceSummary {
   types: Record<string, number>;
 }
 
-interface HILTState {
-  job_id: string;
-  state: string;
-  paused_at: string | null;
-  resumed_at: string | null;
-  waiting_for: string | null;
-  current_step: number | null;
-  total_steps: number | null;
-  pending_command_count: number;
-  history: Array<Record<string, unknown>>;
-  last_updated: string;
-}
-
-type TabKey = "timeline" | "events" | "hilt";
+// HILT Control + Delete Trace used retired `/jobs/{id}/hilt/*` and
+// `/jobs/{id}/trace` REST routes (404). Those surfaces are removed
+// from this page until real replacements exist.
+type TabKey = "timeline" | "events";
 
 const EVENT_TYPE_COLORS: Record<string, { bg: string; text: string; border: string }> = {
   agent_thought: { bg: "bg-[var(--cat-purple-dim)]", text: "text-[var(--cat-purple-fg)]", border: "border-[var(--cat-purple-fg)]/20" },
@@ -128,12 +114,10 @@ function formatTimestamp(ts: string): string {
 
 function ReplayPageInner() {
   const { currentOrg } = useOrg();
-  const toast = useToast();
   const searchParams = useSearchParams();
   // June 2026: deep-link support — ?job_id= or ?trace_id= (alias).
   // The /observability Traces tab links here with ?trace_id= so the
-  // user lands directly on the right trace + can jump into HILT
-  // control without re-selecting from the dropdown.
+  // user lands directly on the right trace without re-selecting.
   const deepLinkJobId = searchParams.get("job_id") ?? searchParams.get("trace_id") ?? "";
   const [traces, setTraces] = useState<TracePickerItem[]>([]);
   const [selectedJobId, setSelectedJobId] = useState<string>(deepLinkJobId);
@@ -146,14 +130,8 @@ function ReplayPageInner() {
   const [traceEvents, setTraceEvents] = useState<TraceEventItem[]>([]);
   const [traceSummary, setTraceSummary] = useState<TraceSummary | null>(null);
   const [loadingTrace, setLoadingTrace] = useState(false);
+  const [traceError, setTraceError] = useState<string | null>(null);
   const [expandedEvent, setExpandedEvent] = useState<string | null>(null);
-
-  // HILT state
-  const [hiltState, setHiltState] = useState<HILTState | null>(null);
-  const [loadingHilt, setLoadingHilt] = useState(false);
-  const [hiltCommandLoading, setHiltCommandLoading] = useState(false);
-  const [hiltMessage, setHiltMessage] = useState<string>("");
-  const [injectPayload, setInjectPayload] = useState("");
 
   const eventListRef = useRef<HTMLDivElement>(null);
 
@@ -165,6 +143,7 @@ function ReplayPageInner() {
       return;
     }
     setLoadingJobs(true);
+    setError(null);
     try {
       const data = await api.listObservabilityTraces(currentOrg.id, { limit: 100, days: 7 });
       const flattened: TracePickerItem[] = data.traces.map((t) => ({
@@ -185,6 +164,7 @@ function ReplayPageInner() {
         setSelectedJobId(data.traces[0].trace_id);
       }
     } catch (e) {
+      setTraces([]);
       setError(errorFromCaught(e, "Failed to load traces"));
     } finally {
       setLoadingJobs(false);
@@ -199,6 +179,7 @@ function ReplayPageInner() {
   const fetchTrace = useCallback(async () => {
     if (!selectedJobId || !currentOrg?.id) return;
     setLoadingTrace(true);
+    setTraceError(null);
     try {
       const [replayData, summaryData] = await Promise.all([
         api.getTraceReplay(currentOrg.id, selectedJobId, 0, 500),
@@ -207,76 +188,17 @@ function ReplayPageInner() {
       setTraceEvents(replayData.events);
       setTraceSummary(summaryData);
     } catch (e) {
-      const msg = e instanceof Error ? e.message : "Trace load failed";
-      toast.error(msg);
+      setTraceError(errorFromCaught(e, "Trace load failed"));
       setTraceEvents([]);
       setTraceSummary(null);
     } finally {
       setLoadingTrace(false);
     }
-  }, [currentOrg?.id, selectedJobId, toast]);
+  }, [currentOrg?.id, selectedJobId]);
 
   useEffect(() => {
     fetchTrace();
   }, [fetchTrace]);
-
-  // Fetch HILT state
-  const fetchHiltState = useCallback(async () => {
-    if (!selectedJobId) return;
-    setLoadingHilt(true);
-    try {
-      const state = await api.getHILTState(selectedJobId);
-      setHiltState(state);
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : "HILT state load failed";
-      toast.error(msg);
-      setHiltState(null);
-    } finally {
-      setLoadingHilt(false);
-    }
-  }, [selectedJobId, toast]);
-
-  useEffect(() => {
-    if (activeTab === "hilt") {
-      fetchHiltState();
-    }
-  }, [activeTab, fetchHiltState]);
-
-  // Poll HILT state when on HILT tab. Cost-safe polling via shared
-  // hook — pauses on tab-hidden, backs off on errors, bails on auth
-  // failures. June 2026 cost-pass.
-  usePolling({
-    fetch: fetchHiltState,
-    intervalMs: 3_000,
-    enabled: activeTab === "hilt" && Boolean(selectedJobId),
-    deps: [activeTab, selectedJobId, fetchHiltState] });
-
-  const sendHILTCommand = async (command: string, payload?: Record<string, unknown>) => {
-    if (!selectedJobId) return;
-    setHiltCommandLoading(true);
-    try {
-      const res = await api.sendHILTCommand(selectedJobId, command, payload);
-      toast.success(`${command} → ${res.status}`, res.message);
-      await fetchHiltState();
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Command failed");
-    } finally {
-      setHiltCommandLoading(false);
-    }
-  };
-
-  const handleDeleteTrace = async () => {
-    if (!selectedJobId) return;
-    if (!confirm("Delete trace for this job? This cannot be undone.")) return;
-    try {
-      await api.deleteTrace(selectedJobId);
-      setTraceEvents([]);
-      setTraceSummary(null);
-      toast.success("Trace deleted");
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Delete failed");
-    }
-  };
 
   const selectedJob = traces.find((j) => j.job_id === selectedJobId);
 
@@ -354,7 +276,7 @@ function ReplayPageInner() {
     <PageContent>
       <PageHeader
         title="Trace Replay"
-        subtitle="Inspect pipeline traces and control execution via HILT"
+        subtitle="Inspect pipeline traces and event timelines"
         icon={History}
       />
 
@@ -397,6 +319,8 @@ function ReplayPageInner() {
             >
               {loadingJobs ? (
                 <option>Loading traces...</option>
+              ) : error ? (
+                <option>Couldn&apos;t load traces</option>
               ) : traces.length === 0 ? (
                 <option>No traces found</option>
               ) : (
@@ -429,14 +353,15 @@ function ReplayPageInner() {
           )}
       </div>
 
-      {/* Error */}
-      {error && (
+      {/* List load failure — gate tabs so we never show false empty */}
+      {error ? (
         <ErrorState
           title="Couldn't load traces"
           message={error}
           size="sm"
           action={
             <button
+              type="button"
               onClick={fetchJobs}
               className="text-sm font-medium text-[var(--accent)] hover:text-[var(--accent-hover)] transition-colors"
             >
@@ -444,8 +369,8 @@ function ReplayPageInner() {
             </button>
           }
         />
-      )}
-
+      ) : (
+        <>
       {/* Tabs */}
       <div
         role="tablist"
@@ -453,7 +378,7 @@ function ReplayPageInner() {
         className="flex items-center gap-1 bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-lg p-1 mb-6 w-fit"
         onKeyDown={(e) => {
           if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") return;
-          const order: TabKey[] = ["timeline", "events", "hilt"];
+          const order: TabKey[] = ["timeline", "events"];
           const idx = order.indexOf(activeTab);
           const next = e.key === "ArrowRight" ? (idx + 1) % order.length : (idx - 1 + order.length) % order.length;
           setActiveTab(order[next]);
@@ -462,7 +387,6 @@ function ReplayPageInner() {
         {([
           { key: "timeline" as TabKey, label: "Timeline", icon: BarChart3 },
           { key: "events" as TabKey, label: `Events (${totalEvents})`, icon: Layers },
-          { key: "hilt" as TabKey, label: "HILT Control", icon: Terminal },
         ]).map((tab) => {
           const Icon = tab.icon;
           return (
@@ -489,16 +413,28 @@ function ReplayPageInner() {
 
       {/* Timeline Tab */}
       {activeTab === "timeline" && (
-        <motion.div
-          initial={{ opacity: 0, y: 4 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.2 }}
+        <div
         >
           {loadingTrace ? (
             <div className="flex flex-col items-center justify-center py-16 gap-3">
               <Loader2 className="w-6 h-6 text-[var(--text-muted)] animate-spin" />
               <p className="text-sm text-[var(--text-muted)]">Loading trace…</p>
             </div>
+          ) : traceError ? (
+            <ErrorState
+              title="Couldn't load trace"
+              message={traceError}
+              size="sm"
+              action={
+                <button
+                  type="button"
+                  onClick={fetchTrace}
+                  className="text-sm font-medium text-[var(--accent)] hover:text-[var(--accent-hover)] transition-colors"
+                >
+                  Try again
+                </button>
+              }
+            />
           ) : !traceSummary ? (
             <EmptyState icon={History} title="No trace data for this job" description="Traces are generated during pipeline execution. Run a job to see its decision trace here." />
           ) : (
@@ -567,26 +503,15 @@ function ReplayPageInner() {
                   <RefreshCw className="w-3.5 h-3.5" aria-hidden />
                   Refresh
                 </button>
-                <button
-                  onClick={handleDeleteTrace}
-                  aria-label="Delete trace"
-                  className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-lg border border-[var(--error)]/20 text-[var(--error)] hover:bg-[var(--error)]/10 transition-colors"
-                >
-                  <Trash2 className="w-3.5 h-3.5" aria-hidden />
-                  Delete Trace
-                </button>
               </div>
             </div>
           )}
-        </motion.div>
+        </div>
       )}
 
       {/* Events Tab */}
       {activeTab === "events" && (
-        <motion.div
-          initial={{ opacity: 0, y: 4 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.2 }}
+        <div
           ref={eventListRef}
           className="space-y-2"
         >
@@ -595,6 +520,21 @@ function ReplayPageInner() {
               <Loader2 className="w-6 h-6 text-[var(--text-muted)] animate-spin" />
               <p className="text-sm text-[var(--text-muted)]">Loading events…</p>
             </div>
+          ) : traceError ? (
+            <ErrorState
+              title="Couldn't load trace"
+              message={traceError}
+              size="sm"
+              action={
+                <button
+                  type="button"
+                  onClick={fetchTrace}
+                  className="text-sm font-medium text-[var(--accent)] hover:text-[var(--accent-hover)] transition-colors"
+                >
+                  Try again
+                </button>
+              }
+            />
           ) : traceEvents.length === 0 ? (
             <EmptyState icon={Layers} title="No events" description="Select a job with trace data to view its events." />
           ) : (
@@ -605,9 +545,8 @@ function ReplayPageInner() {
                 const colors = getEventTypeColor(event.event_type);
                 const isExpanded = expandedEvent === event.event_id;
                 return (
-                  <motion.div
+                  <div
                     key={event.event_id}
-                    layout
                     className={cn(
                       "rounded-lg border transition-all bg-[var(--bg-primary)]",
                       isExpanded ? "border-[var(--border-strong)]" : "border-[var(--border-default)] hover:border-[var(--border-strong)]"
@@ -643,13 +582,9 @@ function ReplayPageInner() {
                       </div>
                     </button>
 
-                    <AnimatePresence>
+                    <>
                       {isExpanded && (
-                        <motion.div
-                          initial={{ height: 0, opacity: 0 }}
-                          animate={{ height: "auto", opacity: 1 }}
-                          exit={{ height: 0, opacity: 0 }}
-                          transition={{ duration: 0.15 }}
+                        <div
                           className="overflow-hidden"
                         >
                           <div className="px-3 pb-3 pt-0 border-t border-[var(--border-default)]">
@@ -669,262 +604,21 @@ function ReplayPageInner() {
                               </div>
                             </div>
                           </div>
-                        </motion.div>
+                        </div>
                       )}
-                    </AnimatePresence>
-                  </motion.div>
+                    </>
+                  </div>
                 );
               })}
             </div>
           )}
-        </motion.div>
+        </div>
       )}
 
-      {/* HILT Tab */}
-      {activeTab === "hilt" && (
-        <motion.div
-          initial={{ opacity: 0, y: 4 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.2 }}
-        >
-          {loadingHilt && !hiltState ? (
-            <div className="flex flex-col items-center justify-center py-16 gap-3">
-              <Loader2 className="w-6 h-6 text-[var(--text-muted)] animate-spin" />
-              <p className="text-sm text-[var(--text-muted)]">Loading HILT state…</p>
-            </div>
-          ) : !hiltState ? (
-            <EmptyState icon={Terminal} title="No HILT state" description="Human-in-the-loop control is only active for jobs that support it. Start a job to interact with the pipeline." />
-          ) : (
-            <div className="space-y-4">
-              {/* Status Card */}
-              <div className="bg-[var(--bg-primary)] rounded-lg border border-[var(--border-default)] p-4">
-                <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-sm font-semibold text-[var(--text-primary)] flex items-center gap-2">
-                    <Terminal className="w-4 h-4 text-[var(--accent)]" />
-                    HILT Status
-                  </h3>
-                  <span className={cn(
-                    "text-[10px] px-2 py-0.5 rounded-full font-bold uppercase",
-                    hiltState.state === "paused" ? "bg-[var(--warning)]/10 text-[var(--warning)]" :
-                    hiltState.state === "running" ? "bg-[var(--terminal)]/10 text-[var(--terminal)]" :
-                    hiltState.state === "waiting" ? "bg-[var(--cat-info-dim)] text-[var(--cat-info-fg)]" :
-                    "bg-[var(--bg-tertiary)] text-[var(--text-muted)]"
-                  )}>
-                    {hiltState.state}
-                  </span>
-                </div>
-
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
-                  <MiniStat label="Step" value={`${hiltState.current_step ?? "—"} / ${hiltState.total_steps ?? "—"}`} />
-                  <MiniStat label="Pending" value={String(hiltState.pending_command_count)} />
-                  <MiniStat label="Paused" value={hiltState.paused_at ? new Date(hiltState.paused_at).toLocaleTimeString() : "—"} />
-                  <MiniStat label="Updated" value={new Date(hiltState.last_updated).toLocaleTimeString()} />
-                </div>
-
-                {hiltState.waiting_for && (
-                  <div className="flex items-center gap-2 p-2 rounded-lg bg-[var(--cat-info-dim)] border border-[var(--cat-info-fg)]/10">
-                    <Info className="w-3.5 h-3.5 text-[var(--cat-info-fg)] flex-shrink-0" />
-                    <span className="text-xs text-[var(--cat-info-fg)]">Waiting for: {hiltState.waiting_for}</span>
-                  </div>
-                )}
-              </div>
-
-              {/* Command Buttons */}
-              <div className="bg-[var(--bg-primary)] rounded-lg border border-[var(--border-default)] p-4">
-                <h3 className="text-sm font-semibold text-[var(--text-primary)] mb-3">Commands</h3>
-                <div className="flex flex-wrap gap-2">
-                  <HILTButton
-                    icon={Pause}
-                    label="Pause"
-                    onClick={() => sendHILTCommand("pause")}
-                    loading={hiltCommandLoading}
-                    variant="warning"
-                  />
-                  <HILTButton
-                    icon={Play}
-                    label="Resume"
-                    onClick={() => sendHILTCommand("resume")}
-                    loading={hiltCommandLoading}
-                    variant="success"
-                  />
-                  <HILTButton
-                    icon={StepForward}
-                    label="Step"
-                    onClick={() => sendHILTCommand("step")}
-                    loading={hiltCommandLoading}
-                    variant="default"
-                  />
-                  <HILTButton
-                    icon={RotateCcw}
-                    label="Rewind"
-                    onClick={() => sendHILTCommand("rewind")}
-                    loading={hiltCommandLoading}
-                    variant="default"
-                  />
-                  <HILTButton
-                    icon={CheckCircle2}
-                    label="Approve"
-                    onClick={() => sendHILTCommand("approve")}
-                    loading={hiltCommandLoading}
-                    variant="success"
-                  />
-                  <HILTButton
-                    icon={XCircle}
-                    label="Reject"
-                    onClick={() => sendHILTCommand("reject")}
-                    loading={hiltCommandLoading}
-                    variant="danger"
-                  />
-                  <HILTButton
-                    icon={RefreshCw}
-                    label="Cleanup"
-                    onClick={() => sendHILTCommand("cleanup")}
-                    loading={hiltCommandLoading}
-                    variant="default"
-                  />
-                </div>
-
-                {/* Inject Message */}
-                <div className="mt-4 pt-4 border-t border-[var(--border-default)]">
-                  <label className="text-xs text-[var(--text-muted)] mb-1.5 block font-medium" htmlFor="hilt-inject">
-                    Inject Message
-                  </label>
-                  <div className="flex gap-2">
-                    <input
-                      id="hilt-inject"
-                      type="text"
-                      aria-label="HILT inject JSON payload"
-                      value={injectPayload}
-                      onChange={(e) => setInjectPayload(e.target.value)}
-                      placeholder='{"message": "..."}'
-                      className="flex-1 px-3 py-2 text-sm bg-[var(--bg-tertiary)] border border-[var(--border-default)] rounded-lg text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/30 focus:border-[var(--accent)]"
-                    />
-                    <button
-                      onClick={() => {
-                        try {
-                          const payload = injectPayload ? JSON.parse(injectPayload) : {};
-                          sendHILTCommand("inject", payload);
-                        } catch {
-                          toast.error("Invalid JSON payload");
-                        }
-                      }}
-                      disabled={hiltCommandLoading || !injectPayload.trim()}
-                      className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-lg bg-[var(--accent)] text-[var(--bg-base)] hover:bg-[var(--accent-hover)] disabled:opacity-40 transition-colors"
-                    >
-                      <Send className="w-3.5 h-3.5" aria-hidden />
-                      Inject
-                    </button>
-                  </div>
-                </div>
-
-                {/* Command Result */}
-                <AnimatePresence>
-                  {hiltMessage && (
-                    <motion.div
-                      initial={{ opacity: 0, y: -4 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, y: -4 }}
-                      role="status"
-                      aria-live="polite"
-                      className={cn(
-                        "mt-3 p-2.5 rounded-lg text-xs flex items-center gap-2",
-                        hiltMessage.includes(":") && !hiltMessage.toLowerCase().includes("fail") && !hiltMessage.toLowerCase().includes("error")
-                          ? "bg-[var(--terminal)]/10 text-[var(--terminal)] border border-[var(--terminal)]/20"
-                          : "bg-[var(--error)]/10 text-[var(--error)] border border-[var(--error)]/20"
-                      )}
-                    >
-                      {hiltMessage.toLowerCase().includes("fail") || hiltMessage.toLowerCase().includes("error") ? (
-                        <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" aria-hidden />
-                      ) : (
-                        <CheckCircle2 className="w-3.5 h-3.5 flex-shrink-0" aria-hidden />
-                      )}
-                      {hiltMessage}
-                      <Button
-                        variant="link"
-                        size="sm"
-                        onClick={() => setHiltMessage("")}
-                        aria-label="Dismiss message"
-                        className="ml-auto"
-                      >
-                        Dismiss
-                      </Button>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-              </div>
-
-              {/* Command History */}
-              {hiltState.history.length > 0 && (
-                <div className="bg-[var(--bg-primary)] rounded-lg border border-[var(--border-default)] p-4">
-                  <h3 className="text-sm font-semibold text-[var(--text-primary)] mb-3 flex items-center gap-2">
-                    <History className="w-4 h-4 text-[var(--accent)]" />
-                    Command History
-                  </h3>
-                  <div className="space-y-1.5 max-h-60 overflow-y-auto">
-                    {hiltState.history.map((entry, idx) => (
-                      <div
-                        key={idx}
-                        className="flex items-center gap-2 p-2 rounded-md bg-[var(--bg-tertiary)]/50 text-xs"
-                      >
-                        <span className="text-[var(--text-muted)] font-mono w-5">{idx + 1}</span>
-                        <span className="text-[var(--text-secondary)] font-medium">
-                          {String((entry as Record<string, unknown>).command || (entry as Record<string, unknown>).type || "—")}
-                        </span>
-                        <span className="text-[var(--text-muted)] ml-auto">
-                          {entry.timestamp ? new Date(String(entry.timestamp)).toLocaleTimeString() : ""}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-        </motion.div>
+        </>
       )}
+
     </PageContent>
-  );
-}
-
-function MiniStat({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="bg-[var(--bg-tertiary)]/50 rounded-md p-2">
-      <span className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider block">{label}</span>
-      <span className="text-sm font-semibold text-[var(--text-primary)]">{value}</span>
-    </div>
-  );
-}
-
-function HILTButton({
-  icon: Icon,
-  label,
-  onClick,
-  loading,
-  variant }: {
-  icon: typeof Pause;
-  label: string;
-  onClick: () => void;
-  loading: boolean;
-  variant: "default" | "warning" | "success" | "danger";
-}) {
-  const variantClasses = {
-    default: "bg-[var(--bg-tertiary)] text-[var(--text-secondary)] hover:bg-[var(--border-default)]",
-    warning: "bg-[var(--warning)]/10 text-[var(--warning)] hover:bg-[var(--warning)]/20",
-    success: "bg-[var(--terminal)]/10 text-[var(--terminal)] hover:bg-[var(--terminal)]/20",
-    danger: "bg-[var(--error)]/10 text-[var(--error)] hover:bg-[var(--error)]/20" };
-
-  return (
-    <button
-      onClick={onClick}
-      disabled={loading}
-      className={cn(
-        "flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-lg transition-colors disabled:opacity-40",
-        variantClasses[variant]
-      )}
-    >
-      {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Icon className="w-3.5 h-3.5" />}
-      {label}
-    </button>
   );
 }
 

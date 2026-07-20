@@ -333,7 +333,10 @@ class FakePg:
                     self._items[item_id]["status"] = "in_progress"
             elif "status = 'completed'" in sql:
                 item_id = args[0]
-                if item_id in self._items:
+                org_id = args[1] if len(args) > 1 else None
+                if item_id in self._items and (
+                    org_id is None or self._items[item_id]["org_id"] == org_id
+                ):
                     self._items[item_id]["status"] = "completed"
             elif "status = 'skipped'" in sql:
                 item_id, org_id = args
@@ -341,7 +344,10 @@ class FakePg:
                     self._items[item_id]["status"] = "skipped"
             return "UPDATE 1"
         if sql.startswith("update labeling_assignments"):
-            item_id, ann_id = args
+            if len(args) >= 3:
+                _org_id, item_id, ann_id = args[0], args[1], args[2]
+            else:
+                item_id, ann_id = args
             key = (item_id, ann_id)
             if key in self._assignments:
                 self._assignments[key]["completed_at"] = "2026-06-17T12:01:00+00:00"
@@ -357,9 +363,12 @@ class FakePg:
             return None
         if "select annotations_required" in sql:
             item_id = args[0]
-            if item_id in self._items:
-                return {"annotations_required": self._items[item_id]["annotations_required"]}
-            return None
+            item = self._items.get(item_id)
+            if item is None:
+                return None
+            if len(args) > 1 and item["org_id"] != args[1]:
+                return None
+            return {"annotations_required": item["annotations_required"]}
         if "from annotations" in sql and "where item_id" in sql and "annotator_id" in sql:
             item_id, ann_id = args
             row = self._annotations.get((item_id, ann_id))
@@ -372,7 +381,15 @@ class FakePg:
         sql = " ".join(query.strip().lower().split())
         if "select count(*) from annotations" in sql and "where item_id" in sql:
             item_id = args[0]
-            return sum(1 for (iid, _aid) in self._annotations if iid == item_id)
+            org_id = args[1] if len(args) > 1 else None
+            n = 0
+            for (iid, _aid), row in self._annotations.items():
+                if iid != item_id:
+                    continue
+                if org_id is not None and row["org_id"] != org_id:
+                    continue
+                n += 1
+            return n
         if "select count(*) from annotations a" in sql:
             org_id = args[0]
             n = 0
@@ -384,7 +401,7 @@ class FakePg:
 
     async def fetch(self, query: str, *args: Any) -> list[dict[str, Any]]:
         sql = " ".join(query.strip().lower().split())
-        if "select * from labeling_items" in sql:
+        if "from labeling_items" in sql and "join" not in sql and "count(*)" not in sql:
             # Filter by org_id + status + assigned_to.
             org_id = args[0]
             rows = [r for r in self._items.values() if r["org_id"] == org_id]
@@ -531,6 +548,21 @@ class TestLabelingService:
                 org_id="o-1", item_id=item_id, annotator_id="u-1",
                 label="up", confidence=2.0,
             )
+
+    @pytest.mark.asyncio
+    async def test_annotate_rejects_cross_org_item(self) -> None:
+        pg = self._pg()
+        svc = LabelingService(pg)
+        item_id = await svc.seed(org_id="o-1", payload={"x": 1}, label_schema={})
+        with pytest.raises(ValueError, match="item not found"):
+            await svc.annotate(
+                org_id="o-other",
+                item_id=item_id,
+                annotator_id="u-1",
+                label="up",
+            )
+        assert (item_id, "u-1") not in pg._annotations
+        assert pg._items[item_id]["status"] == "pending"
 
     @pytest.mark.asyncio
     async def test_skip_marks_skipped(self) -> None:

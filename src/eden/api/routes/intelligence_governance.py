@@ -26,7 +26,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, Path, Query
 from pydantic import BaseModel, Field
 
-from eden.api.deps import get_current_user, require_feature_flag, require_org_member
+from eden.api.deps import get_current_user, require_feature_flag, require_path_org_access
 from eden.services.governance_intel import (
     ApprovalWorkflowService,
     ComplianceDashboardService,
@@ -44,7 +44,7 @@ router = APIRouter(
     dependencies=[
         Depends(require_feature_flag("intelligence_gap_v0")),
         Depends(get_current_user),
-        Depends(require_org_member),
+        Depends(require_path_org_access),
     ],
 )
 
@@ -163,7 +163,7 @@ def _actor_id(user: Any) -> str:
 @router.post("/approvals")
 async def create_approval(
     body: ApprovalCreateRequest,
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     user: Any = Depends(get_current_user),
 ) -> dict[str, Any]:
     return await _approvals.create(
@@ -180,7 +180,7 @@ async def create_approval(
 @router.post("/approvals/request")
 async def request_approval(
     body: ApprovalRequestRequest,
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     user: Any = Depends(get_current_user),
 ) -> dict[str, Any]:
     return await _approvals.request(
@@ -198,7 +198,7 @@ async def request_approval(
 @router.post("/approvals/{request_id}/resolve")
 async def resolve_approval(
     body: ApprovalResolveRequest,
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     request_id: str = Path(...),
     user: Any = Depends(get_current_user),
 ) -> dict[str, Any]:
@@ -213,7 +213,7 @@ async def resolve_approval(
 
 @router.get("/approvals")
 async def list_approvals(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     state: str | None = Query(None),
     limit: int = Query(50, ge=1, le=500),
     user: Any = Depends(get_current_user),
@@ -231,7 +231,7 @@ async def list_approvals(
 @router.post("/compliance/generate")
 async def generate_compliance(
     body: ComplianceGenerateRequest,
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     user: Any = Depends(get_current_user),
 ) -> dict[str, Any]:
     return await _evidence.generate(
@@ -245,7 +245,7 @@ async def generate_compliance(
 
 @router.get("/compliance/packs")
 async def list_compliance_packs(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     framework: str | None = Query(None),
     limit: int = Query(50, ge=1, le=200),
     user: Any = Depends(get_current_user),
@@ -257,7 +257,7 @@ async def list_compliance_packs(
 
 @router.get("/compliance/packs/{evidence_pack_id}")
 async def get_compliance_pack(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     evidence_pack_id: str = Path(...),
     user: Any = Depends(get_current_user),
 ) -> dict[str, Any]:
@@ -272,7 +272,7 @@ async def get_compliance_pack(
 @router.post("/compliance/soc2")
 async def soc2(
     body: CompliancePeriodRequest,
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     user: Any = Depends(get_current_user),
 ) -> dict[str, Any]:
     return await _evidence.generate_soc2_evidence(
@@ -286,7 +286,7 @@ async def soc2(
 @router.post("/compliance/gdpr")
 async def gdpr(
     body: CompliancePeriodRequest,
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     user: Any = Depends(get_current_user),
 ) -> dict[str, Any]:
     return await _evidence.generate_gdpr_evidence(
@@ -300,7 +300,7 @@ async def gdpr(
 @router.post("/compliance/iso27001")
 async def iso27001(
     body: CompliancePeriodRequest,
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     user: Any = Depends(get_current_user),
 ) -> dict[str, Any]:
     return await _evidence.generate_iso27001_evidence(
@@ -319,7 +319,7 @@ async def iso27001(
 @router.post("/security/scan")
 async def security_scan(
     body: SecurityScanRequest | None = None,
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     scope: str | None = Query(None),
     user: Any = Depends(get_current_user),
 ) -> dict[str, Any]:
@@ -345,7 +345,7 @@ async def security_scan(
 
 @router.get("/security/scans")
 async def list_security_scans(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     limit: int = Query(50, ge=1, le=200),
     user: Any = Depends(get_current_user),
 ) -> dict[str, Any]:
@@ -360,7 +360,7 @@ async def list_security_scans(
 @router.post("/rtbf")
 async def process_rtbf(
     body: RTBFRequest,
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     user: Any = Depends(get_current_user),
 ) -> dict[str, Any]:
     return await _rtbf.process_request(
@@ -375,7 +375,7 @@ async def process_rtbf(
 @router.post("/lineage")
 async def trace_lineage(
     body: LineageRequest,
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     user: Any = Depends(get_current_user),
 ) -> dict[str, Any]:
     return await _lineage.trace(
@@ -388,7 +388,7 @@ async def trace_lineage(
 
 @router.get("/dashboard")
 async def get_dashboard(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     user: Any = Depends(get_current_user),
 ) -> dict[str, Any]:
     return await _dashboard.aggregate(org_id)

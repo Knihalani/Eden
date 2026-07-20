@@ -13,7 +13,7 @@ import {
   PanelRightClose,
   AlertTriangle,
   ChevronDown,
-  Terminal,
+  MessageSquare,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -33,7 +33,11 @@ import { SessionList } from "./SessionList";
 import { MessageList } from "./MessageList";
 import { Composer } from "./Composer";
 
-export function ChatSidebar() {
+export function ChatSidebar({
+  suppressCoach = false,
+}: {
+  suppressCoach?: boolean;
+} = {}) {
   const chat = useChatSidebar();
 
   if (!chat.f70Enabled) return null;
@@ -41,7 +45,7 @@ export function ChatSidebar() {
   const header = (
     <div className="flex items-center justify-between border-b border-[var(--border-default)] px-3 py-2.5">
       <div className="relative flex min-w-0 flex-1 items-center gap-2">
-        <Terminal className="h-3.5 w-3.5 shrink-0 text-[var(--accent)]" aria-hidden />
+        <MessageSquare className="h-3.5 w-3.5 shrink-0 text-[var(--accent)]" aria-hidden />
         <button
           type="button"
           onClick={() => chat.setSessionMenuOpen((v) => !v)}
@@ -108,8 +112,6 @@ export function ChatSidebar() {
         onStop={chat.stopStreaming}
         streaming={chat.streaming}
         sessionCostUsd={chat.sessionCostUsd}
-        modelOption={chat.modelOption}
-        onModelOptionChange={chat.setModelOption}
         costEstimateUsd={chat.costEstimateUsd}
         lastTtftMs={chat.lastTtftMs}
         ttftBudgetMs={chat.ttftBudgetMs}
@@ -140,16 +142,16 @@ export function ChatSidebar() {
                 aria-label="Open AI assistant"
                 data-ai-coach-anchor
               >
-                <Terminal className="h-5 w-5" aria-hidden />
+                <MessageSquare className="h-5 w-5" aria-hidden />
               </button>
             </TooltipTrigger>
             <TooltipContent side="left" className="max-w-[220px] text-xs">
               Ask Eden AI about this page — filters, similar traces, navigate.
-              Shortcut ⌘J · ⌘K → Ask AI
+              Shortcut ⌘J · Search ⌘K
             </TooltipContent>
           </Tooltip>
 
-          {chat.showCoach && (
+          {chat.showCoach && !suppressCoach && (
             <div
               role="status"
               data-ai-coach-mark

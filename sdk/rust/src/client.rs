@@ -112,14 +112,14 @@ impl Client {
 
     /// Send a batch of events to a single ingest target.
     ///
-    /// The batch is POSTed as a single JSON envelope
-    /// `{"events": [...]}` to the same endpoint. Useful for replaying a
-    /// recorded trace dump.
+    /// The batch is POSTed as a raw JSON array `[...]` (matching the
+    /// Python/TS SDK wire shape). Useful for replaying a recorded
+    /// trace dump.
     pub async fn send_batch(&self, target: IngestTarget, events: &[Value]) -> Result<()> {
         if events.is_empty() {
             return Ok(());
         }
-        let body = serde_json::json!({ "events": events });
+        let body = Value::Array(events.to_vec());
         let url = self.inner.config.ingest_url(target);
         let headers = self.auth_headers(None)?;
         let resp = self

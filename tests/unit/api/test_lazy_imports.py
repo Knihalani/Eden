@@ -148,10 +148,12 @@ def test_smoke_full_app_still_works():
     """Smoke test: full app import still produces a working FastAPI app.
 
     This guards against the lazy __init__ changes accidentally
-    breaking the boot path.
+    breaking the boot path. B26 deferred intelligence routers are
+    mounted explicitly so the route floor stays meaningful.
     """
     code = (
-        "from eden.api.app import app\n"
+        "from eden.api.app import app, mount_deferred_routers\n"
+        "mount_deferred_routers(app)\n"
         "import json\n"
         "print(json.dumps({'routes': len(app.routes), 'ok': True}))"
     )

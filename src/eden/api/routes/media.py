@@ -18,14 +18,18 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Path, Response
 from fastapi.responses import Response as FastAPIResponse
 
-from eden.api.deps import get_current_user
+from eden.api.deps import get_current_user, require_path_org_access
 from eden.api.middleware.security_headers import apply_security_headers
 from eden.observability.media_store import MediaStore, get_media_store
 from eden.storage.postgres import get_postgres_client
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/orgs/{org_id}/media", tags=["media"])
+router = APIRouter(
+    prefix="/orgs/{org_id}/media",
+    tags=["media"],
+    dependencies=[Depends(require_path_org_access)],
+)
 
 
 async def _load_blob(
@@ -55,7 +59,7 @@ async def _load_blob(
 
 @router.get("/{blob_id}")
 async def get_media(
-    org_id: str,
+    org_id: str = Depends(require_path_org_access),
     blob_id: str = Path(..., description="The blob UUID"),
     user: dict = Depends(get_current_user),
     store: MediaStore = Depends(get_media_store),
@@ -100,7 +104,7 @@ async def get_media(
 
 @router.get("/{blob_id}/info")
 async def get_media_info(
-    org_id: str,
+    org_id: str = Depends(require_path_org_access),
     blob_id: str = Path(..., description="The blob UUID"),
     user: dict = Depends(get_current_user),
 ) -> dict[str, Any]:

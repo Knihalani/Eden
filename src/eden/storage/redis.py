@@ -4,11 +4,14 @@ Provides caching, session storage, and distributed rate-limiting backend.
 Uses redis-py with asyncio support.
 """
 
+import asyncio
 import contextlib
 import functools
 import hashlib
 import json
 import logging
+
+from eden.util.jsonx import dumps as _jsonx_dumps, loads as _jsonx_loads
 import pickle
 import time
 from collections import OrderedDict
@@ -38,6 +41,15 @@ T = TypeVar("T")
 # ============================================================================
 
 _redis_client: Redis | None = None
+_redis_init_lock: asyncio.Lock | None = None
+
+
+def _redis_lock() -> asyncio.Lock:
+    """Lazy Lock so importing this module never needs a running loop."""
+    global _redis_init_lock
+    if _redis_init_lock is None:
+        _redis_init_lock = asyncio.Lock()
+    return _redis_init_lock
 
 
 async def get_redis_client() -> Redis | None:
@@ -50,43 +62,73 @@ async def get_redis_client() -> Redis | None:
     if _redis_client is not None:
         return _redis_client
 
-    redis_url = _get_settings().redis_url
-    if not redis_url:
-        logger.debug("Redis not configured (REDIS_URL is empty).")
-        return None
+    async with _redis_lock():
+        # Double-check after acquiring — concurrent first callers
+        # previously each ran ``from_url`` and leaked sockets.
+        if _redis_client is not None:
+            return _redis_client
 
-    try:
-        # health_check_interval=0 disables redis-py's periodic PING.
-        # On Upstash Free (500k cmds/month) a 30s ping per connection
-        # alone burns ~86k cmds/month — and rate-limit Lua was worse.
-        health_interval = int(
-            getattr(_get_settings(), "redis_health_check_interval", 0) or 0
-        )
-        _redis_client = await redis.from_url(
-            redis_url,
-            encoding="utf-8",
-            decode_responses=True,
-            socket_connect_timeout=5,
-            socket_keepalive=True,
-            health_check_interval=health_interval,
-        )
-        logger.info(
-            "Redis client connected (health_check_interval=%ss).",
-            health_interval,
-        )
-        return _redis_client
-    except Exception as e:
-        logger.warning(f"Redis connection failed: {e}")
-        return None
+        redis_url = _get_settings().redis_url
+        if not redis_url:
+            # Allow UPSTASH_REDIS_REST_* alone: build the TLS Redis URL the
+            # redis-py client needs. Same host/token Upstash shows in the
+            # REST console.
+            import os
+
+            rest_url = (os.environ.get("UPSTASH_REDIS_REST_URL") or "").rstrip("/")
+            rest_token = os.environ.get("UPSTASH_REDIS_REST_TOKEN") or ""
+            if rest_url.startswith("https://") and rest_token:
+                host = rest_url.removeprefix("https://")
+                redis_url = f"rediss://default:{rest_token}@{host}:6379"
+            else:
+                logger.debug("Redis not configured (REDIS_URL is empty).")
+                return None
+
+        try:
+            # health_check_interval=0 disables redis-py's periodic PING.
+            # On Upstash Free (500k cmds/month) a 30s ping per connection
+            # alone burns ~86k cmds/month — and rate-limit Lua was worse.
+            settings = _get_settings()
+            health_interval = int(
+                getattr(settings, "redis_health_check_interval", 0) or 0
+            )
+            socket_timeout = float(
+                getattr(settings, "redis_socket_timeout", 2.0) or 2.0
+            )
+            max_connections = int(
+                getattr(settings, "redis_max_connections", 32) or 32
+            )
+            _redis_client = await redis.from_url(
+                redis_url,
+                encoding="utf-8",
+                decode_responses=True,
+                socket_connect_timeout=5,
+                socket_timeout=socket_timeout,
+                socket_keepalive=True,
+                health_check_interval=health_interval,
+                max_connections=max_connections,
+            )
+            logger.info(
+                "Redis client connected (health_check_interval=%ss, "
+                "socket_timeout=%ss, max_connections=%s).",
+                health_interval,
+                socket_timeout,
+                max_connections,
+            )
+            return _redis_client
+        except Exception as e:
+            logger.warning(f"Redis connection failed: {e}")
+            return None
 
 
 async def close_redis_client() -> None:
     """Close the singleton Redis client."""
     global _redis_client
-    if _redis_client is not None:
-        await _redis_client.close()
-        _redis_client = None
-        logger.info("Redis client closed.")
+    async with _redis_lock():
+        if _redis_client is not None:
+            await _redis_client.close()
+            _redis_client = None
+            logger.info("Redis client closed.")
 
 
 # ============================================================================
@@ -178,13 +220,17 @@ class Cache:
         client = await get_redis_client()
         if client is None:
             return None
-        raw = await client.get(self._key(key))
+        try:
+            raw = await client.get(self._key(key))
+        except Exception as e:
+            logger.warning("Cache get soft-failed for %s: %s", key, e)
+            return None
         if raw is None:
             self._stats["redis_misses"] += 1
             return None
         self._stats["redis_hits"] += 1
         try:
-            value = json.loads(raw)
+            value = _jsonx_loads(raw)
         except json.JSONDecodeError:
             value = raw
         # Populate L0 with the Redis TTL (fall back to default_ttl).
@@ -218,7 +264,7 @@ class Cache:
         client = await get_redis_client()
         if client is None:
             return False
-        raw = json.dumps(value) if not isinstance(value, (str, bytes)) else value
+        raw = _jsonx_dumps(value) if not isinstance(value, (str, bytes)) else value
         try:
             if nx:
                 result = await client.set(
@@ -239,8 +285,12 @@ class Cache:
         client = await get_redis_client()
         if client is None:
             return False
-        result = await client.delete(self._key(key))
-        return result > 0
+        try:
+            result = await client.delete(self._key(key))
+            return result > 0
+        except Exception as e:
+            logger.warning("Cache delete soft-failed for %s: %s", key, e)
+            return False
 
     def clear(self) -> None:
         """Clear the in-process L0 layer only (Redis untouched)."""
@@ -262,26 +312,40 @@ class Cache:
         }
 
     async def exists(self, key: str) -> bool:
-        """Check if a key exists."""
+        """Check if a key exists (L0 first, then Redis)."""
+        if self._l0_get(self._key(key)) is not None:
+            return True
         client = await get_redis_client()
         if client is None:
             return False
-        result = await client.exists(self._key(key))
-        return bool(result)
+        try:
+            result = await client.exists(self._key(key))
+            return bool(result)
+        except Exception as e:
+            logger.warning("Cache exists soft-failed for %s: %s", key, e)
+            return False
 
     async def increment(self, key: str, amount: int = 1) -> int:
-        """Atomically increment a counter."""
+        """Atomically increment a counter. Soft-fails to 0 when Redis is down."""
         client = await get_redis_client()
         if client is None:
             return 0
-        return await client.incrby(self._key(key), amount)
+        try:
+            return await client.incrby(self._key(key), amount)
+        except Exception as e:
+            logger.warning("Cache increment soft-failed for %s: %s", key, e)
+            return 0
 
     async def expire(self, key: str, ttl: int) -> bool:
         """Set TTL on an existing key."""
         client = await get_redis_client()
         if client is None:
             return False
-        return await client.expire(self._key(key), ttl)
+        try:
+            return await client.expire(self._key(key), ttl)
+        except Exception as e:
+            logger.warning("Cache expire soft-failed for %s: %s", key, e)
+            return False
 
 
 # Global cache instance
@@ -327,7 +391,7 @@ def cached(
                 try:
                     raw = await client.get(cache_key)
                     if raw is not None:
-                        return json.loads(raw)
+                        return _jsonx_loads(raw)
                 except Exception:
                     pass  # Fall through to function call
 
@@ -337,7 +401,7 @@ def cached(
                 with contextlib.suppress(Exception):
                     await client.set(
                         cache_key,
-                        json.dumps(result) if not isinstance(result, (str, bytes)) else result,
+                        _jsonx_dumps(result) if not isinstance(result, (str, bytes)) else result,
                         ex=ttl,
                     )
                     # Cache write is best-effort
@@ -368,27 +432,35 @@ class SessionStore:
         return f"{self.prefix}:{session_id}"
 
     async def create(self, session_id: str, data: dict, ttl: int | None = None) -> bool:
-        """Create a new session."""
+        """Create a new session. Soft-fails to False when Redis errors."""
         client = await get_redis_client()
         if client is None:
             return False
-        return await client.set(
-            self._key(session_id),
-            json.dumps(data),
-            ex=ttl or self.default_ttl,
-            nx=True,
-        ) is not None
+        try:
+            return await client.set(
+                self._key(session_id),
+                _jsonx_dumps(data),
+                ex=ttl or self.default_ttl,
+                nx=True,
+            ) is not None
+        except Exception as e:
+            logger.warning("Session create soft-failed for %s: %s", session_id, e)
+            return False
 
     async def get(self, session_id: str) -> dict | None:
-        """Retrieve session data."""
+        """Retrieve session data. Soft-fails to None when Redis errors."""
         client = await get_redis_client()
         if client is None:
             return None
-        raw = await client.get(self._key(session_id))
+        try:
+            raw = await client.get(self._key(session_id))
+        except Exception as e:
+            logger.warning("Session get soft-failed for %s: %s", session_id, e)
+            return None
         if raw is None:
             return None
         try:
-            return json.loads(raw)
+            return _jsonx_loads(raw)
         except json.JSONDecodeError:
             return None
 
@@ -399,50 +471,67 @@ class SessionStore:
         per session — collapses N round-trips into 1 on the
         multi-session path that the interview/builder flow uses
         when prefetching active sessions. Returns one entry per
-        input (in order); missing keys are ``None``.
+        input (in order); missing keys are ``None``. Soft-fails to
+        all-``None`` when Redis errors (callers map to 503).
         """
         if not session_ids:
             return []
         client = await get_redis_client()
         if client is None:
             return [None] * len(session_ids)
-        raws = await client.mget([self._key(s) for s in session_ids])
+        try:
+            raws = await client.mget([self._key(s) for s in session_ids])
+        except Exception as e:
+            logger.warning("Session mget soft-failed: %s", e)
+            return [None] * len(session_ids)
         out: list[dict | None] = []
         for raw in raws:
             if raw is None:
                 out.append(None)
                 continue
             try:
-                out.append(json.loads(raw))
+                out.append(_jsonx_loads(raw))
             except json.JSONDecodeError:
                 out.append(None)
         return out
 
     async def update(self, session_id: str, data: dict, ttl: int | None = None) -> bool:
-        """Overwrite session data."""
+        """Overwrite session data. Soft-fails to False when Redis errors."""
         client = await get_redis_client()
         if client is None:
             return False
-        return await client.set(
-            self._key(session_id),
-            json.dumps(data),
-            ex=ttl or self.default_ttl,
-        ) is not None
+        try:
+            return await client.set(
+                self._key(session_id),
+                _jsonx_dumps(data),
+                ex=ttl or self.default_ttl,
+            ) is not None
+        except Exception as e:
+            logger.warning("Session update soft-failed for %s: %s", session_id, e)
+            return False
 
     async def delete(self, session_id: str) -> bool:
-        """Delete a session."""
+        """Delete a session. Soft-fails to False when Redis errors."""
         client = await get_redis_client()
         if client is None:
             return False
-        result = await client.delete(self._key(session_id))
-        return result > 0
+        try:
+            result = await client.delete(self._key(session_id))
+            return result > 0
+        except Exception as e:
+            logger.warning("Session delete soft-failed for %s: %s", session_id, e)
+            return False
 
     async def extend(self, session_id: str, ttl: int) -> bool:
-        """Extend session TTL."""
+        """Extend session TTL. Soft-fails to False when Redis errors."""
         client = await get_redis_client()
         if client is None:
             return False
-        return await client.expire(self._key(session_id), ttl)
+        try:
+            return await client.expire(self._key(session_id), ttl)
+        except Exception as e:
+            logger.warning("Session extend soft-failed for %s: %s", session_id, e)
+            return False
 
 
 session_store = SessionStore(prefix="eden:session", default_ttl=3600)
@@ -491,7 +580,18 @@ class Lock:
             return False
 
         self._token = token or f"{time.time()}"
-        result = await client.set(self._key, self._token, nx=True, ex=self.ttl)
+        try:
+            result = await client.set(
+                self._key, self._token, nx=True, ex=self.ttl
+            )
+        except Exception as exc:
+            # Fail-closed on Redis blips so singleton loops stay idle
+            # instead of crashing the worker process.
+            logger.warning(
+                "leader lock acquire failed: %s (%s)", self._key, exc
+            )
+            self._token = None
+            return False
         return result is not None
 
     async def release(self) -> bool:
@@ -512,7 +612,13 @@ class Lock:
                 return 0
             end
         """
-        result = await client.eval(lua, 1, self._key, self._token)
+        try:
+            result = await client.eval(lua, 1, self._key, self._token)
+        except Exception as exc:
+            logger.warning(
+                "leader lock release failed: %s (%s)", self._key, exc
+            )
+            return False
         return bool(result)
 
     async def extend(self, additional_ttl: int) -> bool:
@@ -531,5 +637,13 @@ class Lock:
                 return 0
             end
         """
-        result = await client.eval(lua, 1, self._key, self._token, str(additional_ttl))
+        try:
+            result = await client.eval(
+                lua, 1, self._key, self._token, str(additional_ttl)
+            )
+        except Exception as exc:
+            logger.warning(
+                "leader lock extend failed: %s (%s)", self._key, exc
+            )
+            return False
         return bool(result)

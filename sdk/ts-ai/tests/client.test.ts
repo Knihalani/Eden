@@ -8,7 +8,12 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { parseFetchBody } from "./_parseBody.js";
 import { EdenSDK, getDefaultClient, resetDefaultClient, setDefaultClient } from "../src/client.js";
+import { OfflineQueue } from "../src/offline-queue.js";
 import { type TelemetryEvent } from "../src/types.js";
 import { SDK_VERSION } from "../src/version.js";
 
@@ -23,12 +28,22 @@ function makeFetchStub(capture: CapturedRequest[]): typeof fetch {
     const url = typeof input === "string" ? input : input.toString();
     const headers: Record<string, string> = {};
     if (init?.headers) {
-      const h = init.headers as Record<string, string>;
-      for (const [k, v] of Object.entries(h)) headers[k] = v;
+      // Preserve caller casing (User-Agent, X-Org-Id). Headers.forEach lowercases.
+      if (init.headers instanceof Headers) {
+        init.headers.forEach((v, k) => {
+          headers[k] = v;
+        });
+      } else if (Array.isArray(init.headers)) {
+        for (const [k, v] of init.headers) headers[k] = v;
+      } else {
+        for (const [k, v] of Object.entries(init.headers)) {
+          headers[k] = String(v);
+        }
+      }
     }
     let body: unknown = init?.body;
     try {
-      body = init?.body ? JSON.parse(init.body as string) : null;
+      body = parseFetchBody(init);
     } catch {
       // keep raw
     }
@@ -102,9 +117,9 @@ describe("EdenSDK configuration", () => {
     expect(cfg.disabled).toBe(false);
   });
 
-  it("defaults redactOnClient=true and respects an explicit false", () => {
-    expect(new EdenSDK().getConfig().redactOnClient).toBe(true);
-    expect(new EdenSDK({ redactOnClient: false }).getConfig().redactOnClient).toBe(false);
+  it("defaults redactOnClient=false and respects an explicit true", () => {
+    expect(new EdenSDK().getConfig().redactOnClient).toBe(false);
+    expect(new EdenSDK({ redactOnClient: true }).getConfig().redactOnClient).toBe(true);
   });
 
   it("configure() merges new opts over existing config", () => {
@@ -118,11 +133,11 @@ describe("EdenSDK configuration", () => {
 
   it("configure() can flip redactOnClient at runtime", () => {
     const sdk = new EdenSDK({ orgId: "o", apiKey: "k" });
-    expect(sdk.getConfig().redactOnClient).toBe(true);
-    sdk.configure({ redactOnClient: false });
     expect(sdk.getConfig().redactOnClient).toBe(false);
     sdk.configure({ redactOnClient: true });
     expect(sdk.getConfig().redactOnClient).toBe(true);
+    sdk.configure({ redactOnClient: false });
+    expect(sdk.getConfig().redactOnClient).toBe(false);
   });
 });
 
@@ -144,6 +159,14 @@ describe("EdenSDK event batching", () => {
     expect(req.headers["X-Org-Api-Key"]).toBe("key_test");
     expect(Array.isArray(req.body)).toBe(true);
     expect((req.body as unknown[]).length).toBe(5);
+    // Wire envelopes via eventToWire — snake_case top-level fields
+    // including event_type (Python TraceEvent.payload already embeds
+    // these; TS TelemetryEvent needs the converter at the boundary).
+    const first = (req.body as Record<string, unknown>[])[0];
+    expect(first.event_id).toBe("evt_0");
+    expect(first.event_type).toBe("llm_completion");
+    expect(first.source_format).toBe("openai");
+    expect(first.payload).toEqual({ i: 0, sourceFormat: "openai" });
   });
 
   it("groups events by source_format into separate POSTs", async () => {
@@ -250,7 +273,11 @@ describe("EdenSDK chunk flush", () => {
     // The streaming path must not bypass the PII safety net:
     // model-echoed PII (an email the user put in the prompt that
     // the model then repeated) would otherwise leak via /ingest/chunks.
-    const sdk = new EdenSDK({ orgId: "org_test", apiKey: "key_test" });
+    const sdk = new EdenSDK({
+      orgId: "org_test",
+      apiKey: "key_test",
+      redactOnClient: true,
+    });
     sdk.bufferChunk({
       eventId: "evt_pii",
       traceId: "trc_pii",
@@ -263,9 +290,10 @@ describe("EdenSDK chunk flush", () => {
     });
     await sdk.flushChunks();
     expect(captured.length).toBe(1);
-    const body = captured[0].body as { chunks: Array<{ deltaText: string }> };
-    expect(body.chunks[0].delta_text as unknown as { deltaText: string } & { delta_text?: string }['delta_text']).toContain("[REDACTED]");
-    expect(body.chunks[0].delta_text as unknown as { deltaText: string } & { delta_text?: string }['delta_text']).not.toContain("alice@example.com");
+    const body = captured[0].body as { chunks: Array<{ delta_text?: string; deltaText?: string }> };
+    const text = body.chunks[0].delta_text ?? body.chunks[0].deltaText ?? "";
+    expect(text).toContain("[REDACTED]");
+    expect(text).not.toContain("alice@example.com");
   });
 
   it("chunk redaction is a no-op when redactOnClient is false", async () => {
@@ -288,6 +316,87 @@ describe("EdenSDK chunk flush", () => {
     const body = captured[captured.length - 1].body as { chunks: Array<{ deltaText: string }> };
     // The email survives — the operator disabled the safety net.
     expect(body.chunks[0].delta_text as unknown as { deltaText: string } & { delta_text?: string }['delta_text']).toBe("ping alice@example.com");
+  });
+
+  it("splits chunk POSTs into ≤1000 batches (BE ingest cap)", async () => {
+    // Python ``_send_chunks`` caps each POST at
+    // ``_INGEST_CHUNKS_MAX_PER_REQUEST`` (1000). A full buffer
+    // drain (≤4096) must not ship as one request.
+    const sdk = new EdenSDK({
+      orgId: "org_test",
+      apiKey: "key_test",
+      baseUrl: "http://localhost:8000",
+      maxBatchSize: 5000,
+      maxChunkBuffer: 5000,
+      flushIntervalMs: 60_000,
+    });
+    const now = Date.now();
+    for (let i = 0; i < 1001; i++) {
+      sdk.bufferChunk({
+        eventId: "evt_split",
+        traceId: "trc_split",
+        chunkIndex: i,
+        deltaText: `c${i}`,
+        ttftMs: 1,
+        itlMs: null,
+        tpotMs: 1,
+        receivedAtClientMs: now,
+      });
+    }
+    await sdk.flushChunks();
+    expect(captured.length).toBe(2);
+    const n0 = (captured[0].body as { chunks: unknown[] }).chunks.length;
+    const n1 = (captured[1].body as { chunks: unknown[] }).chunks.length;
+    expect(n0).toBe(1000);
+    expect(n1).toBe(1);
+  });
+
+  it("bisects and retries chunk POST on 413", async () => {
+    // Mirrors Python ``_post_chunk_batch``: 413 with len>1 splits
+    // mid and retries rather than permanently dropping.
+    const bodies: number[] = [];
+    globalThis.fetch = (async (_input: RequestInfo | URL, init?: RequestInit) => {
+      let n = 0;
+      try {
+        const parsed = parseFetchBody(init) as { chunks?: unknown[] };
+        n = parsed.chunks?.length ?? 0;
+      } catch {
+        n = 0;
+      }
+      bodies.push(n);
+      if (n > 2) {
+        return new Response("payload too large", { status: 413 });
+      }
+      return new Response(JSON.stringify({ accepted: n }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    }) as unknown as typeof fetch;
+
+    const sdk = new EdenSDK({
+      orgId: "org_test",
+      apiKey: "key_test",
+      baseUrl: "http://localhost:8000",
+      maxBatchSize: 100,
+      maxChunkBuffer: 100,
+      flushIntervalMs: 60_000,
+    });
+    const now = Date.now();
+    for (let i = 0; i < 4; i++) {
+      sdk.bufferChunk({
+        eventId: "evt_413",
+        traceId: "trc_413",
+        chunkIndex: i,
+        deltaText: `c${i}`,
+        ttftMs: 1,
+        itlMs: null,
+        tpotMs: 1,
+        receivedAtClientMs: now,
+      });
+    }
+    await sdk.flushChunks();
+    // First POST of 4 → 413; then 2 + 2 succeed.
+    expect(bodies).toEqual([4, 2, 2]);
   });
 });
 
@@ -416,6 +525,84 @@ describe("EdenSDK postJson retry behaviour", () => {
   });
 });
 
+// ── Offline spill policy (Python 0.3.2 parity) ─────────────────────
+
+describe("EdenSDK offline spill policy", () => {
+  let originalFetch: typeof fetch;
+  let tmpDir: string;
+
+  beforeEach(() => {
+    originalFetch = globalThis.fetch;
+    resetDefaultClient();
+    tmpDir = mkdtempSync(join(tmpdir(), "eden-spill-"));
+  });
+
+  afterEach(async () => {
+    globalThis.fetch = originalFetch;
+    resetDefaultClient();
+  });
+
+  it("does not spill permanent 4xx into the offline queue", async () => {
+    globalThis.fetch = (async () =>
+      new Response("unauthorized", { status: 401 })) as unknown as typeof fetch;
+
+    const qpath = join(tmpDir, "offline.jsonl");
+    const sdk = new EdenSDK({
+      orgId: "o",
+      apiKey: "k_spill4xx",
+      baseUrl: "http://localhost:8000",
+      flushIntervalMs: 60_000,
+      offlineQueuePath: qpath,
+      timeoutS: 1,
+    });
+    sdk.emit({
+      eventId: "e1",
+      tenantId: "o",
+      projectId: "default",
+      traceId: "t1",
+      realm: "production",
+      eventType: "agent.run",
+      timestamp: new Date().toISOString(),
+      sourceFormat: "openai",
+      payload: { event_id: "bad" },
+    });
+    await sdk.flush();
+    const q = new OfflineQueue(qpath);
+    expect(q.size()).toBe(0);
+  });
+
+  it("spills after exhausting retryable 5xx", async () => {
+    globalThis.fetch = (async () =>
+      new Response("unavailable", { status: 503 })) as unknown as typeof fetch;
+
+    const qpath = join(tmpDir, "offline.jsonl");
+    const sdk = new EdenSDK({
+      orgId: "o",
+      apiKey: "k_spill5xx",
+      baseUrl: "http://localhost:8000",
+      flushIntervalMs: 60_000,
+      offlineQueuePath: qpath,
+      timeoutS: 1,
+    });
+    sdk.emit({
+      eventId: "e1",
+      tenantId: "o",
+      projectId: "default",
+      traceId: "t1",
+      realm: "production",
+      eventType: "agent.run",
+      timestamp: new Date().toISOString(),
+      sourceFormat: "openai",
+      payload: { event_id: "tmp" },
+    });
+    await sdk.flush();
+    const q = new OfflineQueue(qpath);
+    expect(q.size()).toBeGreaterThanOrEqual(1);
+    const drained = q.drain(10);
+    expect(drained[0]?.payload).toEqual({ event_id: "tmp" });
+  });
+});
+
 
 describe("EdenSDK chunk flush concurrency", () => {
   it("two concurrent flushChunks() calls don't double-POST the same buffer", async () => {
@@ -504,7 +691,7 @@ describe("EdenSDK flushChunks waits for in-flight POST", () => {
       await gate;
       postsResolved += 1;
       let body: unknown = undefined;
-      try { body = init?.body ? JSON.parse(init.body as string) : null; } catch {}
+      try { body = parseFetchBody(init); } catch {}
       localCaptured.push({ url: String(url), body });
       return new Response(JSON.stringify({ accepted: 1 }), { status: 200 });
     }) as unknown as typeof fetch;
@@ -597,7 +784,7 @@ describe("EdenSDK dispose() inflight race", () => {
     const originalFetch = globalThis.fetch;
     globalThis.fetch = (async (_input: RequestInfo | URL, init?: RequestInit) => {
       postCount += 1;
-      const body = init?.body ? JSON.parse(init.body as string) : null;
+      const body = parseFetchBody(init);
       lastBodyLen = Array.isArray(body) ? body.length : 0;
       await inflight;
       return new Response("{}", { status: 200 });
@@ -781,7 +968,7 @@ describe("EdenSDK dispose() chunk-path inflight race", () => {
         init?: RequestInit,
       ) => {
         postCount += 1;
-        const body = init?.body ? JSON.parse(init.body as string) : null;
+        const body = parseFetchBody(init);
         lastBodyLen = Array.isArray(body?.chunks)
           ? body.chunks.length
           : 0;

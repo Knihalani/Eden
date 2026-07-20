@@ -16,6 +16,7 @@ import pytest
 
 import eden
 from eden_sdk.client import get_default_client
+from _http_body import decode_ingest_body
 
 # ── Wire contract: framework instrumentations emit ``agent.run`` ──────
 
@@ -340,9 +341,18 @@ def fake_langchain(monkeypatch):
     events = _install_fake_langchain()
     from eden_sdk.instrumentations import langchain as lc
     lc.uninstall()
+    lc._handler = None
+    lc._configure_hook_registered = False
     yield events
     lc.uninstall()
-    for k in ("langchain_core", "langchain_core.callbacks"):
+    lc._handler = None
+    lc._configure_hook_registered = False
+    for k in (
+        "langchain_core",
+        "langchain_core.callbacks",
+        "langchain_core.tracers",
+        "langchain_core.tracers.context",
+    ):
         sys.modules.pop(k, None)
 
 
@@ -389,6 +399,77 @@ def test_langchain_handler_emits_chain_and_llm_events(fake_langchain):
     #   - on_chain_end -> 1 framework event
     # (the *_start callbacks only record meta, they don't emit yet.)
     assert client.sent >= 2
+
+
+def test_langchain_install_uses_modern_configure_hook(monkeypatch):
+    """Modern langchain-core has no set_handler — install via register_configure_hook."""
+    from contextvars import ContextVar
+
+    from eden_sdk.instrumentations import langchain as lc
+
+    lc.uninstall()
+    lc._handler = None
+    lc._configure_hook_registered = False
+
+    pkg = types.ModuleType("langchain_core")
+    callbacks = types.ModuleType("langchain_core.callbacks")
+    tracers = types.ModuleType("langchain_core.tracers")
+    context = types.ModuleType("langchain_core.tracers.context")
+    registered: list[tuple[Any, bool]] = []
+
+    class BaseCallbackHandler:
+        def __init__(self) -> None:
+            pass
+
+    def register_configure_hook(var, inheritable=False, **_kwargs):
+        registered.append((var, inheritable))
+        assert isinstance(var, ContextVar)
+
+    callbacks.BaseCallbackHandler = BaseCallbackHandler
+    context.register_configure_hook = register_configure_hook  # type: ignore[attr-defined]
+    tracers.context = context
+    pkg.callbacks = callbacks
+    pkg.tracers = tracers
+    monkeypatch.setitem(sys.modules, "langchain_core", pkg)
+    monkeypatch.setitem(sys.modules, "langchain_core.callbacks", callbacks)
+    monkeypatch.setitem(sys.modules, "langchain_core.tracers", tracers)
+    monkeypatch.setitem(sys.modules, "langchain_core.tracers.context", context)
+
+    lc.install()
+    assert lc._handler is not None
+    assert registered == [(lc._handler_var, True)]
+    assert lc._handler_var.get() is lc._handler
+    lc.uninstall()
+    lc._handler = None
+    lc._configure_hook_registered = False
+
+
+def test_langchain_install_fails_loudly_without_registration_api(monkeypatch):
+    """Importable langchain-core without a global callback API must raise."""
+    from eden_sdk.instrumentations import langchain as lc
+
+    lc.uninstall()
+    lc._handler = None
+    lc._configure_hook_registered = False
+
+    pkg = types.ModuleType("langchain_core")
+    callbacks = types.ModuleType("langchain_core.callbacks")
+
+    class BaseCallbackHandler:
+        def __init__(self) -> None:
+            pass
+
+    callbacks.BaseCallbackHandler = BaseCallbackHandler
+    pkg.callbacks = callbacks
+    monkeypatch.setitem(sys.modules, "langchain_core", pkg)
+    monkeypatch.setitem(sys.modules, "langchain_core.callbacks", callbacks)
+    # No langchain_core.tracers.context / set_handler / get_callback_manager.
+    sys.modules.pop("langchain_core.tracers", None)
+    sys.modules.pop("langchain_core.tracers.context", None)
+
+    with pytest.raises(RuntimeError, match="no global callback registration API"):
+        lc.install()
+    assert lc._handler is None
 
 
 # ── OpenAI streaming ─────────────────────────────────────────────────
@@ -502,11 +583,12 @@ def test_openai_streaming_async_emits_stream_event(fake_streaming_openai):
 def test_client_flush_chunks_is_safe_with_empty_buffer():
     """flush_chunks must be a no-op when nothing is buffered."""
     import httpx
+    from _http_body import decode_ingest_body
 
     from eden_sdk.client import EdenClient
     from eden_sdk.config import EdenConfig
 
-    c = EdenClient(EdenConfig(org_id="o", api_key="k", dry_run=False), transport=httpx.MockTransport(lambda r: httpx.Response(202)))
+    c = EdenClient(EdenConfig(org_id="o", api_key="k", dry_run=False, capture_chunk_text=True), transport=httpx.MockTransport(lambda r: httpx.Response(202)))
     c.start()
     try:
         c.flush_chunks(timeout=0.1)
@@ -634,6 +716,7 @@ def test_openai_per_chunk_tpot_itl_semantics(fake_streaming_openai):
         return _slow_iter()
     _FakeStreamingCompletions.create = _slow_create
 
+    eden.configure(org_id="o", api_key="k", capture_chunk_text=True, dry_run=False)
     eden.instrument("openai")
     client = get_default_client()
     from openai.resources.chat.completions import Completions
@@ -685,11 +768,13 @@ def test_langchain_streaming_emits_per_chunk_events(fake_langchain):
     from langchain_core.callbacks import BaseCallbackHandler
     import langchain_core.callbacks as _callbacks
 
+    eden.configure(org_id="o", api_key="k", capture_chunk_text=True, dry_run=True)
     eden.instrument("langchain")
     mgr = _callbacks.get_callback_manager()
     handler = next(h for h in mgr.handlers if isinstance(h, BaseCallbackHandler))
 
     client = get_default_client()
+    client.config.capture_chunk_text = True
     # The streaming instrumentation pushes directly to the
     # client buffer; snapshot it for assertion.
     pinned_buffer = client._chunk_buffer
@@ -736,7 +821,8 @@ def test_langchain_streaming_emits_per_chunk_events(fake_langchain):
     assert pinned_buffer[0]["itl_ms"] is None
     assert pinned_buffer[0]["tpot_ms"] is None
     # Second + third chunks have non-null ITL + TPOT.
-    for c in pinned_buffer[1:]:
+    # ``_chunk_buffer`` is a ``deque`` (no slice support).
+    for c in list(pinned_buffer)[1:]:
         assert c["itl_ms"] is not None
         assert c["itl_ms"] >= 0
         # ``tpot_ms`` is per-chunk (time for THIS chunk's
@@ -796,11 +882,10 @@ def test_langchain_streaming_aggregate_event_carries_model_and_usage(fake_langch
     captured: list[dict] = []
 
     def handler(request: httpx.Request) -> httpx.Response:
-        body = request.content.decode("utf-8")
         try:
-            captured.append(json.loads(body))
-        except Exception:
-            captured.append({"raw": body})
+            captured.append(decode_ingest_body(request.content, request.headers))
+        except Exception as exc:
+            captured.append({"raw": str(exc)})
         return httpx.Response(202, json={"ok": True}, request=request)
 
     transport = httpx.MockTransport(handler)
@@ -811,6 +896,7 @@ def test_langchain_streaming_aggregate_event_carries_model_and_usage(fake_langch
             base_url="http://test.invalid",
             dry_run=False,
             flush_interval_ms=50,
+            capture_chunk_text=True,
         ),
         transport=transport,
     )
@@ -948,11 +1034,10 @@ def test_langchain_non_streaming_extracts_usage_metadata_per_generation(fake_lan
     captured: list[dict] = []
 
     def handler(request: httpx.Request) -> httpx.Response:
-        body = request.content.decode("utf-8")
         try:
-            captured.append(json.loads(body))
-        except Exception:
-            captured.append({"raw": body})
+            captured.append(decode_ingest_body(request.content, request.headers))
+        except Exception as exc:
+            captured.append({"raw": str(exc)})
         return httpx.Response(202, json={"ok": True}, request=request)
 
     transport = httpx.MockTransport(handler)
@@ -963,6 +1048,7 @@ def test_langchain_non_streaming_extracts_usage_metadata_per_generation(fake_lan
             base_url="http://test.invalid",
             dry_run=False,
             flush_interval_ms=50,
+            capture_chunk_text=True,
         ),
         transport=transport,
     )
@@ -1045,11 +1131,10 @@ def test_langchain_non_streaming_legacy_path_still_works(fake_langchain, monkeyp
     captured: list[dict] = []
 
     def handler(request: httpx.Request) -> httpx.Response:
-        body = request.content.decode("utf-8")
         try:
-            captured.append(json.loads(body))
-        except Exception:
-            captured.append({"raw": body})
+            captured.append(decode_ingest_body(request.content, request.headers))
+        except Exception as exc:
+            captured.append({"raw": str(exc)})
         return httpx.Response(202, json={"ok": True}, request=request)
 
     transport = httpx.MockTransport(handler)
@@ -1060,6 +1145,7 @@ def test_langchain_non_streaming_legacy_path_still_works(fake_langchain, monkeyp
             base_url="http://test.invalid",
             dry_run=False,
             flush_interval_ms=50,
+            capture_chunk_text=True,
         ),
         transport=transport,
     )

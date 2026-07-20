@@ -80,9 +80,12 @@ function collectDeepLinks(output: unknown): DeepLink[] {
       obj.trace_id &&
       !obj.traces_url
     ) {
-      push(`/traces?trace_id=${encodeURIComponent(obj.trace_id)}`, "Open in Traces");
       push(
-        `/observability?trace_id=${encodeURIComponent(obj.trace_id)}`,
+        `/traces?traceId=${encodeURIComponent(obj.trace_id)}`,
+        "Open in Traces",
+      );
+      push(
+        `/traces?traceId=${encodeURIComponent(obj.trace_id)}&view=inspect`,
         "Open in Inspector",
       );
     }

@@ -2,6 +2,9 @@
  * /agents/connect — optional GitHub App install + repo link.
  *
  * Traces work via SDK/gateway without Connect. SDK install is manual.
+ * Permission denial is handled inside OnboardingConnectFlow (PanelLocked);
+ * this page only gates the orgless case so non-admins are not shown
+ * a misleading NoOrgState "create a workspace" CTA.
  */
 "use client";
 
@@ -12,19 +15,20 @@ import { OnboardingConnectFlow } from "@/components/onboarding/OnboardingConnect
 import { NoOrgState } from "@/components/ui/no-org-state";
 import { PageHeader } from "@/components/layout/page-header";
 import { PageContent } from "@/components/layout/page-content";
-import { usePermissions } from "@/hooks/use-permissions";
+import { useOrg } from "@/hooks/use-org";
 import type { GitHubRepo } from "@/lib/api";
 import { DOCS_QUICKSTART_URL } from "@/lib/constants";
 
 export default function ConnectAgentPage() {
   const [linked, setLinked] = useState<GitHubRepo | null>(null);
-  const { hasPermission } = usePermissions();
+  const { currentOrg } = useOrg();
 
-  if (!hasPermission("integrations:write")) {
+  if (!currentOrg) {
     return (
       <NoOrgState
-        feature="Admins only"
-        description="Linking a repository requires the `integrations:write` permission. Ask an org owner or admin — or install the SDK yourself; Connect is optional."
+        icon={GitBranch}
+        feature="Connect repository"
+        description="Create or select an organization before linking a GitHub repo. Connect is optional — you can still install the SDK yourself."
       />
     );
   }

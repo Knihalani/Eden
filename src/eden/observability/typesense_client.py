@@ -311,10 +311,14 @@ class TypesenseClient:
         self._timeout_s = timeout_s
         self._session: Any = None
         self._schema_ready = False
-        # Track reachability so we don't keep retrying on every
-        # span when Typesense is down at startup.
+        # Circuit breaker: open after consecutive failures, exponential
+        # backoff up to ``_max_backoff_s``, then half-open probe.
         self._last_failure: float | None = None
-        self._backoff_s = 5.0
+        self._failure_count: int = 0
+        self._open_until: float = 0.0
+        self._backoff_s: float = 5.0
+        self._max_backoff_s: float = 60.0
+        self._failure_threshold: int = 3
 
     @property
     def base_url(self) -> str:
@@ -344,10 +348,23 @@ class TypesenseClient:
         self._session = None
 
     def _is_reachable(self) -> bool:
-        if self._last_failure is None:
-            return True
-        # Circuit breaker: skip calls for ``_backoff_s`` after a failure.
-        return (time.time() - self._last_failure) > self._backoff_s
+        # Closed / half-open: allow traffic once ``_open_until`` elapses.
+        return time.time() >= self._open_until
+
+    def _record_success(self) -> None:
+        self._failure_count = 0
+        self._open_until = 0.0
+        self._last_failure = None
+
+    def _record_failure(self) -> None:
+        self._last_failure = time.time()
+        self._failure_count += 1
+        if self._failure_count < self._failure_threshold:
+            return
+        # Exponential backoff after threshold; half-open when timer elapses.
+        exp = self._failure_count - self._failure_threshold
+        delay = min(self._backoff_s * (2**exp), self._max_backoff_s)
+        self._open_until = time.time() + delay
 
     async def _request(self, method: str, path: str, *,
                        json_body: Any = None,
@@ -373,10 +390,14 @@ class TypesenseClient:
                     body: Any = json.loads(text) if text else None
                 except json.JSONDecodeError:
                     body = text
+                if resp.status >= 500:
+                    self._record_failure()
+                else:
+                    self._record_success()
                 return resp.status, body
         except Exception as exc:
             logger.debug(f"Typesense {method} {path} failed: {exc}")
-            self._last_failure = time.time()
+            self._record_failure()
             return 0, None
 
     # ── Schema ─────────────────────────────────────────────────────

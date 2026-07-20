@@ -189,7 +189,7 @@ async def test_patch_trigger_disabled_when_flag_off() -> None:
 async def test_patch_trigger_generates_when_enabled() -> None:
     from eden.improvement import issue_patch_trigger as ipt
 
-    issue = _issue(agent_id="agent-a")
+    issue = _issue(agent_id="agent-a", stumble_count=5)
     repo = MagicMock()
     repo.get_issue = AsyncMock(return_value=issue)
     repo.list_stumbles = AsyncMock(return_value=[])
@@ -213,7 +213,7 @@ async def test_patch_trigger_generates_when_enabled() -> None:
         }
     )
 
-    with patch.object(ipt, "_improvement_enabled", return_value=True), patch(
+    with patch.object(ipt, "_improvement_enabled", AsyncMock(return_value=True)), patch(
         "eden.issues.repo.IssuesRepo", return_value=repo
     ), patch(
         "eden.patches.patch_generator.PatchGenerator", return_value=gen
@@ -222,6 +222,12 @@ async def test_patch_trigger_generates_when_enabled() -> None:
     ), patch(
         "eden.closed_loop.efficiency.AgentEfficiencyController.should_run_patch",
         AsyncMock(return_value=(True, "ok")),
+    ), patch.object(
+        ipt, "_n22_may_propose", AsyncMock(return_value=(True, "ok"))
+    ), patch.object(
+        ipt, "_budget_ok", AsyncMock(return_value=(True, "ok"))
+    ), patch.object(
+        ipt, "_resolve_repo_id", AsyncMock(return_value="repo-conn-1")
     ), patch.object(
         ipt, "_find_open_plan", AsyncMock(return_value=None)
     ), patch(
@@ -233,10 +239,13 @@ async def test_patch_trigger_generates_when_enabled() -> None:
     gen.generate.assert_awaited_once()
     _args, kwargs = gen.generate.call_args
     assert kwargs["rca_id"] == "iss_iss-1"
-    assert kwargs["repo_id"] == "agent-a"
+    assert kwargs["repo_id"] == "repo-conn-1"
+    assert kwargs["repo_id"] != "agent-a"
     assert kwargs["persist"] is False
     assert kwargs["linked_files"]
     assert kwargs["linked_files"][0]["path"] == "src/foo.py"
+    linker.link.assert_awaited_once()
+    assert linker.link.await_args.kwargs["repo_id"] == "repo-conn-1"
     assert res["status"] == "proposed"
     assert res["plan_id"] == "plan-9"
     assert res["patch_id"] == "plan-9"
@@ -246,12 +255,20 @@ async def test_patch_trigger_generates_when_enabled() -> None:
 async def test_patch_trigger_suppresses_duplicate_open() -> None:
     from eden.improvement import issue_patch_trigger as ipt
 
-    issue = _issue(agent_id="agent-a")
+    issue = _issue(agent_id="agent-a", stumble_count=5)
     repo = MagicMock()
     repo.get_issue = AsyncMock(return_value=issue)
 
-    with patch.object(ipt, "_improvement_enabled", return_value=True), patch(
+    with patch.object(ipt, "_improvement_enabled", AsyncMock(return_value=True)), patch(
         "eden.issues.repo.IssuesRepo", return_value=repo
+    ), patch.object(
+        ipt,
+        "_n22_may_propose",
+        AsyncMock(return_value=(True, "ok")),
+    ), patch.object(
+        ipt,
+        "_budget_ok",
+        AsyncMock(return_value=(True, "ok")),
     ), patch.object(
         ipt,
         "_find_open_plan",

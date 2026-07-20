@@ -10,7 +10,7 @@ from typing import Any
 from fastapi import APIRouter, Body, Depends, Path, Query
 from pydantic import BaseModel, Field
 
-from eden.api.deps import get_current_user, require_feature_flag
+from eden.api.deps import get_current_user, require_feature_flag, require_path_org_access
 from eden.services.agent_sessions import AgentSessionService
 
 logger = logging.getLogger(__name__)
@@ -23,6 +23,7 @@ router = APIRouter(
     dependencies=[
         Depends(require_feature_flag(_FLAG)),
         Depends(get_current_user),
+        Depends(require_path_org_access),
     ],
 )
 
@@ -69,7 +70,7 @@ async def session_contract() -> dict[str, Any]:
 
 @router.post("/start")
 async def start_session(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     body: SessionStartRequest = Body(default=SessionStartRequest()),
 ) -> dict[str, Any]:
     session = await _svc.start(
@@ -84,7 +85,7 @@ async def start_session(
 
 @router.get("")
 async def list_sessions(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     agent_id: str | None = Query(None),
     limit: int = Query(50, ge=1, le=200),
 ) -> dict[str, Any]:
@@ -97,7 +98,7 @@ async def list_sessions(
 
 @router.get("/{session_id}")
 async def get_session(
-    org_id: str = Path(...), session_id: str = Path(...)
+    org_id: str = Depends(require_path_org_access), session_id: str = Path(...)
 ) -> dict[str, Any]:
     session = await _svc.get(org_id, session_id)
     if session is None:
@@ -112,7 +113,7 @@ async def get_session(
 
 @router.post("/{session_id}/end")
 async def end_session(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     session_id: str = Path(...),
     body: SessionEndRequest = Body(default=SessionEndRequest()),
 ) -> dict[str, Any]:
@@ -134,7 +135,7 @@ async def end_session(
 
 @router.post("/{session_id}/identify")
 async def identify_session(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     session_id: str = Path(...),
     body: SessionIdentifyRequest = Body(...),
 ) -> dict[str, Any]:
@@ -144,7 +145,7 @@ async def identify_session(
 
 @router.post("/{session_id}/traces")
 async def attach_trace(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     session_id: str = Path(...),
     body: AttachTraceRequest = Body(...),
 ) -> dict[str, Any]:

@@ -9,6 +9,8 @@ import { useOrgQuery } from "@/hooks/use-api-query";
 import { queryKeys } from "@/lib/query-keys";
 import { CheckCircle2, Circle, XCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { ErrorState } from "@/components/ui/error-state";
+import { Button } from "@/components/ui/button";
 
 export interface SessionsTabProps {
   orgId: string;
@@ -110,6 +112,9 @@ export function SessionsTab({ orgId, agentId, onSelectSession }: SessionsTabProp
     [],
   );
 
+  const listError = sessionsQuery.isError;
+  const errorMessage = sessionsQuery.error?.message ?? null;
+
   return (
     <div className="space-y-2">
       <div className="flex flex-wrap items-center gap-2 px-1 text-xs">
@@ -130,17 +135,33 @@ export function SessionsTab({ orgId, agentId, onSelectSession }: SessionsTabProp
           </button>
         ))}
       </div>
-      <InfiniteDataTable
-        columns={columns}
-        rows={sessions}
-        loading={sessionsQuery.isLoading}
-        rowKey={(s) => s.id}
-        onRowClick={(s) => onSelectSession(s.id)}
-        emptyTitle="No sessions yet"
-        emptyDescription="Use eden.session / begin() in the SDK to group multi-turn traces."
-        hasMore={(sessionsQuery.data?.length ?? 0) >= limit}
-        onLoadMore={() => setLimit((n) => n + 100)}
-      />
+      {listError ? (
+        <ErrorState
+          title="Could not load sessions"
+          message={errorMessage ?? "Unknown error"}
+          action={
+            <Button
+              variant="outline"
+              onClick={() => void sessionsQuery.refetch()}
+              loading={sessionsQuery.isFetching}
+            >
+              Try again
+            </Button>
+          }
+        />
+      ) : (
+        <InfiniteDataTable
+          columns={columns}
+          rows={sessions}
+          loading={sessionsQuery.isLoading}
+          rowKey={(s) => s.id}
+          onRowClick={(s) => onSelectSession(s.id)}
+          emptyTitle="No sessions yet"
+          emptyDescription="Use eden.session / begin() in the SDK to group multi-turn traces."
+          hasMore={(sessionsQuery.data?.length ?? 0) >= limit}
+          onLoadMore={() => setLimit((n) => n + 100)}
+        />
+      )}
     </div>
   );
 }

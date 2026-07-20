@@ -26,7 +26,7 @@ from typing import Any
 from fastapi import APIRouter, Body, Depends, Path
 from pydantic import BaseModel
 
-from eden.api.deps import get_current_user, require_feature_flag, require_org_member
+from eden.api.deps import get_current_user, require_feature_flag, require_path_org_access
 from eden.kb.episodic.memory_intel.attributor import (
     MemoryAttributor,
     MemoryImpactScorer,
@@ -42,7 +42,7 @@ router = APIRouter(
     dependencies=[
         Depends(require_feature_flag("intelligence_gap_v0")),
         Depends(get_current_user),
-        Depends(require_org_member),
+        Depends(require_path_org_access),
     ],
 )
 
@@ -62,7 +62,7 @@ class ReweaverRequest(BaseModel):
 
 @router.post("/{trace_id}/attribute")
 async def attribute(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     trace_id: str = Path(...),
 ) -> dict[str, Any]:
     return await _attributor.attribute(org_id, trace_id)
@@ -70,7 +70,7 @@ async def attribute(
 
 @router.get("/timeline/{memory_id}")
 async def timeline(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     memory_id: str = Path(...),
 ) -> dict[str, Any]:
     return await _timeline.timeline(org_id, memory_id=memory_id)
@@ -78,7 +78,7 @@ async def timeline(
 
 @router.post("/{trace_id}/impact")
 async def impact(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     trace_id: str = Path(...),
 ) -> dict[str, Any]:
     return await _impact.score(org_id, trace_id)
@@ -86,7 +86,7 @@ async def impact(
 
 @router.post("/reaver/suggest")
 async def reaver_suggest(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     body: ReweaverRequest = Body(...),
 ) -> dict[str, Any]:
     return await _reaver.suggest(

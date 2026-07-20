@@ -54,6 +54,10 @@ async def test_approve_plan_opens_pr_and_updates_status() -> None:
             AsyncMock(return_value=None),
         ),
         patch(
+            "eden.improvement.approve._resolve_repo_id",
+            AsyncMock(return_value="repo-conn-1"),
+        ),
+        patch(
             "eden.improvement.approve.plans_repo.mark_pr_opened",
             AsyncMock(return_value={**plan, "status": "pr_opened"}),
         ),
@@ -71,6 +75,40 @@ async def test_approve_plan_opens_pr_and_updates_status() -> None:
     assert result["pr_number"] == 42
     assert result["pr_url"] == "https://github.com/org/repo/pull/42"
     mock_provider.create_pr.assert_awaited_once()
+    req = mock_provider.create_pr.await_args.args[0]
+    assert req.repo_id == "repo-conn-1"
+    assert req.repo_id != plan["agent_id"]
+
+
+@pytest.mark.asyncio
+async def test_approve_plan_repo_not_connected_when_no_connection() -> None:
+    plan = {
+        "id": "plan-1",
+        "status": "draft",
+        "plan_kind": "code_patch",
+        "agent_id": "agent-not-a-repo",
+        "title": "Fix foo",
+        "diff_unified": _SAMPLE_DIFF,
+    }
+    with (
+        patch(
+            "eden.improvement.approve.plans_repo.get_plan",
+            AsyncMock(return_value=plan),
+        ),
+        patch(
+            "eden.improvement.approve._n22_blocked",
+            AsyncMock(return_value=None),
+        ),
+        patch(
+            "eden.improvement.approve._resolve_repo_id",
+            AsyncMock(return_value=None),
+        ),
+    ):
+        result = await approve_plan("org-1", "plan-1")
+
+    assert result["status"] == "error"
+    assert result["error"] == "repo_not_connected"
+    assert "Connect GitHub" in (result.get("message") or "")
 
 
 @pytest.mark.asyncio
@@ -95,3 +133,95 @@ async def test_approve_plan_n22_deny_raises() -> None:
         with pytest.raises(ApproveBlocked) as exc:
             await approve_plan("org-1", "plan-1")
     assert "budget" in exc.value.reason
+
+
+@pytest.mark.asyncio
+async def test_approve_prompt_update_fail_closed_f68() -> None:
+    plan = {
+        "id": "plan-1",
+        "status": "draft",
+        "plan_kind": "prompt_update",
+        "evidence": {"prompt_version_id": "pv-1"},
+    }
+    with (
+        patch(
+            "eden.improvement.approve.plans_repo.get_plan",
+            AsyncMock(return_value=plan),
+        ),
+        patch(
+            "eden.improvement.approve._n22_blocked",
+            AsyncMock(return_value=None),
+        ),
+        patch(
+            "eden.improvement.approve.plans_repo.mark_approved",
+            AsyncMock(),
+        ) as mark,
+    ):
+        result = await approve_plan("org-1", "plan-1", approved_by="user-1")
+
+    assert result["status"] == "not_implemented"
+    assert result["supported"] is False
+    assert result["error"] == "f68_gateway_deploy_not_implemented"
+    mark.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_approve_guardrail_tune_fail_closed_f68() -> None:
+    plan = {
+        "id": "plan-2",
+        "status": "pending_review",
+        "plan_kind": "guardrail_tune",
+        "evidence": {"guardrail_id": "g-1"},
+    }
+    with (
+        patch(
+            "eden.improvement.approve.plans_repo.get_plan",
+            AsyncMock(return_value=plan),
+        ),
+        patch(
+            "eden.improvement.approve._n22_blocked",
+            AsyncMock(return_value=None),
+        ),
+    ):
+        result = await approve_plan("org-1", "plan-2")
+
+    assert result["status"] == "not_implemented"
+    assert result.get("supported") is False
+
+
+@pytest.mark.asyncio
+async def test_approve_nudge_f41_failure_not_fake_approved() -> None:
+    plan = {
+        "id": "plan-3",
+        "status": "draft",
+        "plan_kind": "nudge_promote",
+        "evidence": {"nudge_id": "n-1"},
+    }
+
+    class _BoomGate:
+        async def enqueue(self, *a, **k):
+            raise RuntimeError("f41 down")
+
+    with (
+        patch(
+            "eden.improvement.approve.plans_repo.get_plan",
+            AsyncMock(return_value=plan),
+        ),
+        patch(
+            "eden.improvement.approve._n22_blocked",
+            AsyncMock(return_value=None),
+        ),
+        patch(
+            "eden.promotion.evidence_gate.EvidenceGate",
+            return_value=_BoomGate(),
+        ),
+        patch(
+            "eden.improvement.approve.plans_repo.mark_approved",
+            AsyncMock(),
+        ) as mark,
+    ):
+        result = await approve_plan("org-1", "plan-3")
+
+    assert result["status"] == "error"
+    assert result["error"] == "promotion_enqueue_failed"
+    mark.assert_not_awaited()

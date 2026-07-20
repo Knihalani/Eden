@@ -139,17 +139,27 @@ export async function runDoctor(opts: {
       timestamp: new Date().toISOString(),
       name: "eden.doctor",
       durationMs: 0,
-      sourceFormat: "eden-sdk-doctor",
-      payload: { doctor: true },
+      // Path remaps to webhook; keep semantic label in payload via wire.
+      sourceFormat: "webhook",
+      payload: { doctor: true, source_format: "eden-sdk-doctor" },
       attributes: { doctor: true },
       tags: ["doctor", "sdk"],
     });
-    await client.flush();
+    const flushedOk = await client.flush();
+    const status = client.lastIngestHttpStatus;
+    let failMsg = `Test event ${eventId} ingest did not confirm HTTP 2xx`;
+    if (!flushedOk && (status === 401 || status === 403)) {
+      failMsg = `Test event ${eventId} rejected (HTTP ${status}) — check API key / org`;
+    } else if (!flushedOk && status != null) {
+      failMsg = `Test event ${eventId} ingest did not confirm HTTP 2xx (HTTP ${status})`;
+    }
     checks.push({
       name: "testEvent",
-      ok: true,
-      message: `Emitted test event ${eventId}`,
-      detail: { eventId },
+      ok: flushedOk,
+      message: flushedOk
+        ? `Emitted test event ${eventId} (HTTP 2xx)`
+        : failMsg,
+      detail: { eventId, statusCode: status },
     });
   }
 

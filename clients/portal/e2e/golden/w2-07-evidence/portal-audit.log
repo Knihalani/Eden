@@ -1,0 +1,12 @@
+=== portal-audit.mjs BASE hardcode check ===
+16:const PORT = process.env.PORT || "3000";
+17:const BASE = `http://127.0.0.1:${PORT}`;
+33:const PORTAL_ROUTES = [
+139:    const resp = await page.goto(`${BASE}${route}`, { waitUntil: "domcontentloaded", timeout: 60_000 });
+203:      const me = await page.request.get(`${BASE}/api/proxy/auth/me`).catch(() => null);
+215:    await page.goto(`${BASE}/dashboard`, { waitUntil: "domcontentloaded" });
+217:    const me = await page.request.get(`${BASE}/api/proxy/auth/me`).catch(() => null);
+226:  await page.goto(`${BASE}/login`, { waitUntil: "domcontentloaded" });
+275:  for (const route of PORTAL_ROUTES) {
+NOTE: portal-audit.mjs ignores env BASE; always uses http://127.0.0.1:$PORT
+Skipping full portal-audit against prod (would hit localhost). Attempting public Playwright screenshots instead.

@@ -41,9 +41,50 @@ import contextlib
 import logging
 import signal
 import sys
-from typing import Any
+from collections.abc import Awaitable, Callable
 
 logger = logging.getLogger("eden.workers.main")
+
+# Backoff before restarting a crashed supervised loop (matches
+# the module docstring promise).
+_RESTART_BACKOFF_SECONDS = 5.0
+
+
+async def _supervise(
+    name: str,
+    factory: Callable[[asyncio.Event], Awaitable[None]],
+    stop: asyncio.Event,
+    *,
+    backoff: float = _RESTART_BACKOFF_SECONDS,
+) -> None:
+    """Run ``factory(stop)`` until stop is set; restart on crash.
+
+    Without supervision a single unhandled exception in
+    ``run_if_leader`` (or its imports) permanently kills the
+    hosted loop while the worker process stays alive — NF sees
+    a healthy container with no work happening.
+    """
+    while not stop.is_set():
+        try:
+            await factory(stop)
+            # Normal exit (stop set or factory returned) — do not restart.
+            return
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            if stop.is_set():
+                return
+            logger.error(
+                "worker: %s crashed: %s; restarting in %.0fs",
+                name,
+                exc,
+                backoff,
+                exc_info=True,
+            )
+            try:
+                await asyncio.wait_for(stop.wait(), timeout=backoff)
+            except TimeoutError:
+                continue
 
 
 async def _run_forever() -> None:
@@ -57,23 +98,23 @@ async def _run_forever() -> None:
        event.
     2. ``_webhook_drain_loop`` — runs
        :meth:`WebhookDeliveryService.process_pending_deliveries`
-       on a 30s cadence. The webhook service is stateless apart
-       from the DB outbox so a dedicated instance per worker is
-       fine — NF runs one worker container.
+       on a 30s cadence. The webhook service is a process singleton
+       so in-flight deliveries survive across ticks and can be
+       drained on SIGTERM.
     """
-    loops: list[tuple[str, Any]] = []
+    loops: list[tuple[str, asyncio.Task]] = []
     stop = asyncio.Event()
 
     # 1. Insights detector loop — leader-gated singleton.
     insights_task = asyncio.create_task(
-        _leader_insights_loop(stop),
+        _supervise("insights_loop", _leader_insights_loop, stop),
         name="insights-loop",
     )
     loops.append(("insights_loop", insights_task))
 
     # 2. Webhook delivery drain — leader-gated singleton loop.
     webhook_task = asyncio.create_task(
-        _leader_webhook_drain_loop(stop),
+        _supervise("webhook_drain", _leader_webhook_drain_loop, stop),
         name="webhook-drain",
     )
     loops.append(("webhook_drain", webhook_task))
@@ -93,17 +134,11 @@ async def _run_forever() -> None:
         await stop.wait()
     finally:
         logger.info("worker: SIGTERM received; draining %d loops", len(loops))
-        for name, task in loops:
-            if hasattr(task, "stop"):
-                try:
-                    task.stop()
-                except Exception as exc:  # pragma: no cover - defensive
-                    logger.warning("worker: %s.stop() raised: %s", name, exc)
         # Give the loops 10s to drain before forcing cancellation.
         try:
             await asyncio.wait_for(
                 asyncio.gather(
-                    *(t for _, t in loops if isinstance(t, asyncio.Task)),
+                    *(t for _, t in loops),
                     return_exceptions=True,
                 ),
                 timeout=10.0,
@@ -111,8 +146,28 @@ async def _run_forever() -> None:
         except TimeoutError:
             logger.warning("worker: drain timeout; cancelling remaining loops")
             for _, task in loops:
-                if isinstance(task, asyncio.Task) and not task.done():
+                if not task.done():
                     task.cancel()
+            with contextlib.suppress(asyncio.CancelledError, Exception):
+                await asyncio.gather(
+                    *(t for _, t in loops), return_exceptions=True
+                )
+
+        # Drain in-flight webhook deliveries + release the HTTP pool.
+        try:
+            from eden.services.webhook_delivery import (
+                get_webhook_delivery_service,
+            )
+
+            svc = get_webhook_delivery_service()
+            remaining = await svc.drain(timeout=5.0)
+            if remaining:
+                logger.warning(
+                    "worker: webhook drain left %d in-flight", remaining
+                )
+            await svc.aclose()
+        except Exception as exc:
+            logger.warning("worker: webhook shutdown failed: %s", exc)
 
 
 async def _leader_insights_loop(stop: asyncio.Event) -> None:
@@ -120,12 +175,23 @@ async def _leader_insights_loop(stop: asyncio.Event) -> None:
     from eden.workers.leader import run_if_leader
 
     async def _tick() -> None:
-        from eden.insights.detector_loop import InsightsDetectorLoop
+        try:
+            from eden.insights.detector_loop import InsightsDetectorLoop
 
-        loop = InsightsDetectorLoop()
-        result = await loop.tick_once()
-        if any(result.values()):
-            logger.info("worker: insights_loop tick result=%s", result)
+            loop = InsightsDetectorLoop()
+            result = await loop.tick_once()
+            if any(result.values()):
+                logger.info("worker: insights_loop tick result=%s", result)
+        except Exception as exc:
+            # Surface at ERROR so ops sees it; run_if_leader also
+            # catches, but this keeps the tick failure message
+            # attributed to the worker loop name.
+            logger.error(
+                "worker: insights_loop tick failed: %s",
+                exc,
+                exc_info=True,
+            )
+            raise
 
     await run_if_leader(
         "insights_loop",
@@ -141,25 +207,43 @@ async def _leader_webhook_drain_loop(stop: asyncio.Event) -> None:
 
     async def _tick() -> None:
         try:
-            from eden.services.webhook_delivery import WebhookDeliveryService
+            from eden.services.webhook_delivery import (
+                get_webhook_delivery_service,
+            )
 
-            svc = WebhookDeliveryService()
+            svc = get_webhook_delivery_service()
             n = await svc.process_pending_deliveries()
             if n:
                 logger.info("worker: webhook_drain delivered=%d", n)
-        except Exception as exc:  # pragma: no cover - defensive
-            logger.warning("worker: webhook_drain tick failed: %s", exc)
+        except Exception as exc:
+            logger.error(
+                "worker: webhook_drain tick failed: %s",
+                exc,
+                exc_info=True,
+            )
+            raise
 
     await run_if_leader("webhook_drain", _tick, interval=30.0, stop=stop)
 
 
 async def _webhook_drain_loop() -> None:
-    """30s cadence webhook delivery drain. Best-effort — never crashes."""
+    """30s cadence webhook delivery drain. Best-effort — never crashes.
+
+    Legacy non-leader path retained for tests that pin the symbol;
+    production uses :func:`_leader_webhook_drain_loop`.
+    """
     try:
-        from eden.services.webhook_delivery import WebhookDeliveryService
-        svc = WebhookDeliveryService()
+        from eden.services.webhook_delivery import (
+            get_webhook_delivery_service,
+        )
+
+        svc = get_webhook_delivery_service()
     except Exception as exc:  # pragma: no cover - import failure
-        logger.warning("worker: webhook_drain: import failed (%s); loop disabled", exc)
+        logger.error(
+            "worker: webhook_drain: import failed (%s); loop disabled",
+            exc,
+            exc_info=True,
+        )
         return
     while True:
         try:
@@ -168,8 +252,12 @@ async def _webhook_drain_loop() -> None:
                 logger.info("worker: webhook_drain delivered=%d", n)
         except asyncio.CancelledError:
             raise
-        except Exception as exc:  # pragma: no cover - defensive
-            logger.warning("worker: webhook_drain tick failed: %s", exc)
+        except Exception as exc:
+            logger.error(
+                "worker: webhook_drain tick failed: %s",
+                exc,
+                exc_info=True,
+            )
         await asyncio.sleep(30)
 
 
@@ -218,19 +306,31 @@ def main(argv: list[str] | None = None) -> int:
 async def _run_once() -> None:
     """One-tick variant: drain the DLQ + run one insights tick then exit."""
     try:
-        from eden.services.webhook_delivery import WebhookDeliveryService
-        svc = WebhookDeliveryService()
+        from eden.services.webhook_delivery import (
+            get_webhook_delivery_service,
+        )
+
+        svc = get_webhook_delivery_service()
         n = await svc.process_pending_deliveries()
         logger.info("worker --once: webhook_drain delivered=%d", n)
-    except Exception as exc:  # pragma: no cover - defensive
-        logger.warning("worker --once: webhook_drain tick failed: %s", exc)
+    except Exception as exc:
+        logger.error(
+            "worker --once: webhook_drain tick failed: %s",
+            exc,
+            exc_info=True,
+        )
     try:
         from eden.insights.detector_loop import InsightsDetectorLoop
+
         loop = InsightsDetectorLoop()
         result = await loop.tick_once()
         logger.info("worker --once: insights_loop tick result=%s", result)
-    except Exception as exc:  # pragma: no cover - defensive
-        logger.warning("worker --once: insights_loop tick failed: %s", exc)
+    except Exception as exc:
+        logger.error(
+            "worker --once: insights_loop tick failed: %s",
+            exc,
+            exc_info=True,
+        )
 
 
 if __name__ == "__main__":

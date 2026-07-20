@@ -41,7 +41,6 @@ endpoint is the one most customers hit.
 
 from __future__ import annotations
 
-import json
 import logging
 import time
 import uuid
@@ -49,6 +48,9 @@ from collections.abc import AsyncIterator, Iterable
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+from eden.util.jsonx import dumps as json_dumps
+from eden.util.jsonx import dumps_bytes as json_dumps_bytes
 
 logger = logging.getLogger(__name__)
 
@@ -229,7 +231,7 @@ def messages_to_prompt(messages: list[dict[str, Any]]) -> str:
         if content is None:
             # Assistant tool_calls-only message — render the tool call JSON
             if msg.get("tool_calls"):
-                content = "[tool_calls] " + json.dumps(msg["tool_calls"], default=str)
+                content = "[tool_calls] " + json_dumps(msg["tool_calls"])
             else:
                 content = ""
         elif isinstance(content, list):
@@ -248,7 +250,7 @@ def messages_to_prompt(messages: list[dict[str, Any]]) -> str:
                 elif ptype == "refusal":
                     rendered.append(f"[refusal: {part.get('refusal', '')}]")
                 else:
-                    rendered.append(f"[{ptype}: {json.dumps(part, default=str)[:120]}]")
+                    rendered.append(f"[{ptype}: {json_dumps(part)[:120]}]")
             content = "\n".join(rendered)
         if msg.get("name"):
             parts.append(f"{role}({msg['name']}): {content}")
@@ -701,10 +703,14 @@ def sse_format(data: dict[str, Any], *, event: str | None = None) -> bytes:
     OpenAI uses ``data: <json>\\n\\n`` and signals end-of-stream with
     ``data: [DONE]\\n\\n``. We follow that exactly so existing client
     SDKs (which parse the bytes verbatim) work without modification.
+
+    Uses compact orjson encoding (same semantics as ``json.dumps``;
+    clients parse JSON and ignore whitespace).
     """
+    payload = json_dumps_bytes(data)
     if event is not None:
-        return f"event: {event}\ndata: {json.dumps(data, default=str)}\n\n".encode()
-    return f"data: {json.dumps(data, default=str)}\n\n".encode()
+        return b"event: " + event.encode() + b"\ndata: " + payload + b"\n\n"
+    return b"data: " + payload + b"\n\n"
 
 
 def sse_done() -> bytes:

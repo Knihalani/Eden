@@ -377,8 +377,9 @@ class TestClosedLoopExecutor:
 
     async def test_apply_approved_records_unmapped_kind(self) -> None:
         # G8: apply now fetches the exact action by id and dispatches a
-        # real side effect. An action_kind with no mapped handler
-        # (block_promotion) is safely *recorded* (no destructive default).
+        # real side effect. An action_kind with no mapped handler is
+        # safely *recorded* (no destructive default) and must not claim
+        # status=applied.
         from eden.llmops.closed_loop_executor import ClosedLoopExecutor
 
         with patch(
@@ -386,7 +387,7 @@ class TestClosedLoopExecutor:
             AsyncMock(
                 return_value={
                     "id": "a1",
-                    "action_kind": "block_promotion",
+                    "action_kind": "totally_unknown",
                     "payload": {},
                     "status": "approved",
                 }
@@ -398,9 +399,9 @@ class TestClosedLoopExecutor:
             r = await ClosedLoopExecutor().apply_approved(
                 "org_t", action_id="a1", applied_by="alice"
             )
-        assert r["data"]["status"] == "applied"
+        assert r["data"]["status"] == "not_applied"
         assert r["data"]["side_effect"] == "recorded"
-        assert r["data"]["action_kind"] == "block_promotion"
+        assert r["data"]["action_kind"] == "totally_unknown"
 
     async def test_apply_approved_missing_action_not_implemented(self) -> None:
         # G8: a missing/unknown action id no longer silently flips to
@@ -461,18 +462,39 @@ def _fake_user() -> dict:
 
 @pytest.fixture(scope="module")
 def closed_loop_app() -> FastAPI:
-    from eden.api.deps import get_current_user, require_org_member
-    from eden.api.routes.intelligence_closed_loop import router
+    from eden.api.deps import get_current_user, require_org_member, require_path_org_access
+    from eden.api.routes import intelligence_closed_loop as cl_mod
     from eden.config import get_settings
 
     settings = get_settings()
     settings.intelligence_gap_v0 = True
 
+    async def _admin_ok(
+        org_id: str | None = None,
+        payload: dict | None = None,
+        **_kwargs: Any,
+    ) -> dict[str, Any]:
+        return {"org_id": "org_test", "role": "admin"}
+
+    original_admin = cl_mod.require_org_admin
+    cl_mod.require_org_admin = _admin_ok  # type: ignore[assignment]
+
     app = FastAPI(title="eden-closed-loop-test")
     app.dependency_overrides[get_current_user] = _fake_user
-    app.dependency_overrides[require_org_member] = lambda: {"sub": "test-user", "org_id": "org_test"}
-    app.include_router(router)
-    return app
+    app.dependency_overrides[require_org_member] = lambda: {
+        "sub": "test-user",
+        "org_id": "org_test",
+    }
+    app.dependency_overrides[require_path_org_access] = lambda: "org_test"
+    app.dependency_overrides[cl_mod._try_resolve_token_payload] = lambda: {
+        "sub": "test-user",
+        "org_id": "org_test",
+    }
+    app.include_router(cl_mod.router)
+    try:
+        yield app
+    finally:
+        cl_mod.require_org_admin = original_admin
 
 
 class TestClosedLoopRoutes:

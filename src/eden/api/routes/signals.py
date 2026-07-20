@@ -18,7 +18,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Path
 from pydantic import BaseModel, Field
 
-from eden.api.routes.auth import get_current_user
+from eden.api.deps import get_current_user, require_path_org_access
 from eden.api.utils.redact import redact_all
 from eden.api.utils.safe_error import safe_detail
 from eden.services.cat2_intel.signals import (
@@ -37,6 +37,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(
     prefix="/orgs/{org_id}/signals",
     tags=["signals"],
+    dependencies=[Depends(require_path_org_access)],
 )
 
 
@@ -321,7 +322,7 @@ def _row_to_signal(row: Any) -> tuple[NLSignal, int]:
 )
 async def seed_default_signals(
     body: SeedDefaultsRequest = SeedDefaultsRequest(),
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     user: dict = Depends(get_current_user),
 ) -> SeedDefaultsResponse:
     """Idempotent seed of the default NL signal library (F35)."""
@@ -359,7 +360,7 @@ async def seed_default_signals(
 )
 async def create_signal(
     body: CreateSignalRequest,
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     user: dict = Depends(get_current_user),
 ) -> SignalResponse:
     user_id = str(user.get("id") or user.get("user_id") or user.get("sub") or "")
@@ -386,6 +387,39 @@ async def create_signal(
             """,
             signal_id,
         )
+        # Dual-write into signal_definitions so the F06 investigator
+        # sees user-created NL signals (mirrors seed-defaults bridge).
+        try:
+            name = (body.description.strip()[:80] or "custom signal")
+            await pg.execute(
+                """
+                INSERT INTO signal_definitions
+                    (org_id, name, description, output_schema, enabled,
+                     template_id, investigator_prompt)
+                VALUES ($1, $2, $3, $4::jsonb, $5, $6, $7)
+                ON CONFLICT (org_id, template_id)
+                    WHERE template_id IS NOT NULL
+                DO UPDATE SET
+                    name = EXCLUDED.name,
+                    description = EXCLUDED.description,
+                    enabled = EXCLUDED.enabled,
+                    investigator_prompt = EXCLUDED.investigator_prompt,
+                    output_schema = EXCLUDED.output_schema
+                """,
+                org_id,
+                name,
+                body.description,
+                _json_dumps(rule.to_dict()),
+                body.enabled,
+                f"nl:{signal_id}",
+                body.description,
+            )
+        except Exception as bridge_exc:
+            logger.info(
+                "create_signal: signal_definitions bridge skipped org=%s: %s",
+                org_id,
+                bridge_exc,
+            )
     except HTTPException:
         raise
     except Exception as exc:
@@ -412,7 +446,7 @@ async def create_signal(
     summary="List signals for an org",
 )
 async def list_signals(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     user: dict = Depends(get_current_user),
 ) -> SignalListResponse:
     # Auth dependency still runs; unused locals keep the signature
@@ -459,7 +493,7 @@ async def list_signals(
     summary="Estimate traces a library backfill would re-investigate",
 )
 async def library_backfill_estimate(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     user: dict = Depends(get_current_user),
 ) -> BackfillEstimateResponse:
     _ = user
@@ -488,7 +522,7 @@ async def library_backfill_estimate(
 )
 async def toggle_library_signal(
     body: LibraryToggleRequest,
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     template_id: str = Path(...),
     user: dict = Depends(get_current_user),
 ) -> LibraryToggleResponse:
@@ -543,7 +577,7 @@ async def toggle_library_signal(
 )
 async def match_signal_route(
     body: MatchRequest,
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     signal_id: str = Path(...),
     user: dict = Depends(get_current_user),
 ) -> MatchResponse:
@@ -590,7 +624,7 @@ async def match_signal_route(
 )
 async def cluster_signals_route(
     body: ClusterRequest,
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     user: dict = Depends(get_current_user),
 ) -> ClusterResponse:
     _ = user

@@ -570,7 +570,7 @@ Milestones:
     - Add telemetry export configuration
     - Create `.env.example` with `EDEN_API_KEY`, `EDEN_ORG_ID`, `EDEN_BASE_URL`
   - For TypeScript agents:
-    - Add `@eden/sdk` to `package.json`
+    - Add `@eden-ai/sdk` to `package.json`
     - Similar decorator/wrapper pattern
 - [ ] File changes are presented as diffs for user review
 - **Acceptance:** SDK integration generates valid code for LangChain, CrewAI, and custom agents

@@ -61,7 +61,7 @@ async def test_list_queue_merges_sources() -> None:
             "id": "plan_1",
             "agent_id": "agent_a",
             "title": "Fix loop in handler",
-            "status": "draft",
+            "status": "pending_review",
             "plan_kind": "code_patch",
             "source_ref": "issue:i1",
         }
@@ -94,7 +94,7 @@ async def test_list_queue_merges_sources() -> None:
     assert len(queue.items) == 3
     types = {i.item_type for i in queue.items}
     assert "issue_p0" in types
-    assert "proposed_patch" in types
+    assert "improvement_plan" in types
     columns = {i.column for i in queue.items}
     assert COLUMN_URGENT in columns
     assert COLUMN_PROPOSED in columns

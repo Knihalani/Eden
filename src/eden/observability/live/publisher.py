@@ -70,16 +70,19 @@ class LiveTracePublisher:
             body = json.dumps(payload, default=str)[:16 * 1024]
 
             ch = channel_name(org_id, session_id)
-            await redis.publish(ch, body)
-
             bkey = buffer_key(org_id, session_id)
-            await redis.rpush(bkey, body)
-            await redis.ltrim(bkey, -LIVE_BUFFER_MAX, -1)
-            await redis.expire(bkey, LIVE_META_TTL_S)
-            await redis.expire(seq_key(org_id, session_id), LIVE_META_TTL_S)
-
             mkey = meta_key(org_id, session_id)
-            await redis.hset(
+            skey = seq_key(org_id, session_id)
+            okey = org_sessions_key(org_id)
+
+            # Collapse ~10 serial writes into one pipeline RTT.
+            pipe = redis.pipeline(transaction=False)
+            pipe.publish(ch, body)
+            pipe.rpush(bkey, body)
+            pipe.ltrim(bkey, -LIVE_BUFFER_MAX, -1)
+            pipe.expire(bkey, LIVE_META_TTL_S)
+            pipe.expire(skey, LIVE_META_TTL_S)
+            pipe.hset(
                 mkey,
                 mapping={
                     "org_id": org_id,
@@ -88,9 +91,10 @@ class LiveTracePublisher:
                     "updated_at": str(time.time()),
                 },
             )
-            await redis.expire(mkey, LIVE_META_TTL_S)
-            await redis.sadd(org_sessions_key(org_id), session_id)
-            await redis.expire(org_sessions_key(org_id), LIVE_META_TTL_S)
+            pipe.expire(mkey, LIVE_META_TTL_S)
+            pipe.sadd(okey, session_id)
+            pipe.expire(okey, LIVE_META_TTL_S)
+            await pipe.execute()
 
             return {
                 "status": "ok",
@@ -205,9 +209,14 @@ class LiveTracePublisher:
         self, redis: Any, org_id: str, session_id: str
     ) -> dict[str, Any] | None:
         try:
-            members = await redis.smembers(org_sessions_key(org_id))
-            active = {m.decode() if isinstance(m, bytes) else str(m) for m in (members or [])}
-            if session_id not in active and len(active) >= max_sessions_per_org():
+            # SISMEMBER + SCARD (2 cmds, 1 RTT) instead of SMEMBERS
+            # which ships every session id back on every publish.
+            okey = org_sessions_key(org_id)
+            pipe = redis.pipeline(transaction=False)
+            pipe.sismember(okey, session_id)
+            pipe.scard(okey)
+            is_member, count = await pipe.execute()
+            if not bool(is_member) and int(count or 0) >= max_sessions_per_org():
                 return {
                     "status": "error",
                     "code": "session_cap",
@@ -222,10 +231,11 @@ class LiveTracePublisher:
     ) -> dict[str, Any] | None:
         try:
             key = f"trace:live:rate:{org_id}:{session_id}"
-            n = int(await redis.incr(key))
-            if n == 1:
-                await redis.expire(key, 60)
-            if n > LIVE_RATE_LIMIT_PER_MIN:
+            pipe = redis.pipeline(transaction=False)
+            pipe.incr(key)
+            pipe.expire(key, 60)
+            n, _ = await pipe.execute()
+            if int(n) > LIVE_RATE_LIMIT_PER_MIN:
                 return {
                     "status": "error",
                     "code": "rate_limited",

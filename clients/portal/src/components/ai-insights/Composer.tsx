@@ -5,10 +5,6 @@ import { Send, Square } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import {
-  CHAT_MODEL_OPTIONS,
-  type ChatModelOptionId,
-} from "./types";
-import {
   filterMentions,
   filterSlashCommands,
   type MentionOption,
@@ -22,8 +18,6 @@ export interface ComposerProps {
   onStop: () => void;
   streaming: boolean;
   sessionCostUsd: number;
-  modelOption: ChatModelOptionId;
-  onModelOptionChange: (id: ChatModelOptionId) => void;
   costEstimateUsd?: number | null;
   lastTtftMs?: number | null;
   ttftBudgetMs?: number | null;
@@ -37,8 +31,6 @@ export function Composer({
   onStop,
   streaming,
   sessionCostUsd,
-  modelOption,
-  onModelOptionChange,
   costEstimateUsd,
   lastTtftMs,
   ttftBudgetMs,
@@ -49,10 +41,16 @@ export function Composer({
   const [slashHits, setSlashHits] = useState<SlashCommand[]>([]);
   const [mentionHits, setMentionHits] = useState<MentionOption[]>([]);
   const [activeIdx, setActiveIdx] = useState(0);
+  const [pickerDismissed, setPickerDismissed] = useState(false);
   const taRef = useRef<HTMLTextAreaElement | null>(null);
 
   useEffect(() => {
     if (streaming) {
+      setSlashOpen(false);
+      setMentionOpen(false);
+      return;
+    }
+    if (pickerDismissed) {
       setSlashOpen(false);
       setMentionOpen(false);
       return;
@@ -73,10 +71,11 @@ export function Composer({
       setSlashOpen(false);
       setMentionOpen(false);
     }
-  }, [input, streaming]);
+  }, [input, streaming, pickerDismissed]);
 
   const applySlash = (cmd: SlashCommand) => {
     onInputChange(`${cmd.cmd} `);
+    setPickerDismissed(false);
     setSlashOpen(false);
     taRef.current?.focus();
   };
@@ -85,6 +84,7 @@ export function Composer({
     const at = input.lastIndexOf("@");
     const next = at >= 0 ? `${input.slice(0, at)}${m.insert}` : `${input}${m.insert}`;
     onInputChange(next);
+    setPickerDismissed(false);
     setMentionOpen(false);
     taRef.current?.focus();
   };
@@ -104,54 +104,31 @@ export function Composer({
         onSubmit();
       }}
       className="relative border-t border-[var(--border-default)] p-3"
+      data-ai-picker-open={pickerOpen && pickerLen > 0 ? "" : undefined}
     >
-      <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2 text-[10px] tabular-nums text-[var(--text-muted)]">
-        <label className="flex items-center gap-1.5">
-          <span className="uppercase tracking-wide">Model</span>
-          <select
-            value={modelOption}
-            onChange={(e) =>
-              onModelOptionChange(e.target.value as ChatModelOptionId)
-            }
-            disabled={streaming}
-            aria-label="Chat model tier"
-            className={cn(
-              "rounded border border-[var(--border-default)] bg-[var(--bg-base)]",
-              "px-1.5 py-0.5 text-[11px] text-[var(--text-secondary)]",
-              "focus:border-[var(--accent)] focus:outline-none disabled:opacity-50",
-            )}
-          >
-            {CHAT_MODEL_OPTIONS.map((o) => (
-              <option key={o.id} value={o.id} title={o.description}>
-                {o.label}
-              </option>
-            ))}
-          </select>
-        </label>
-        <div className="flex flex-wrap items-center gap-2 text-right">
-          {typeof costEstimateUsd === "number" && costEstimateUsd > 0 && (
-            <span title="Preflight turn estimate">
-              Est ≈ ${costEstimateUsd.toFixed(4)}
-            </span>
-          )}
-          <span
-            data-session-spend
-            title="Session spend meter"
-            className="text-[var(--text-secondary)]"
-          >
-            Session ≈ ${sessionCostUsd.toFixed(4)}
+      <div className="mb-1.5 flex flex-wrap items-center justify-end gap-2 text-[10px] tabular-nums text-[var(--text-muted)]">
+        {typeof costEstimateUsd === "number" && costEstimateUsd > 0 && (
+          <span title="Preflight turn estimate">
+            Est ≈ ${costEstimateUsd.toFixed(4)}
           </span>
-          {typeof lastTtftMs === "number" && lastTtftMs > 0 && (
-            <span
-              data-ttft
-              className={ttftOver ? "text-[var(--warning)]" : undefined}
-              title={ttftWarning ?? `TTFT budget ${ttftBudgetMs ?? "—"}ms`}
-            >
-              TTFT {lastTtftMs}ms
-              {typeof ttftBudgetMs === "number" ? ` / ${ttftBudgetMs}ms` : ""}
-            </span>
-          )}
-        </div>
+        )}
+        <span
+          data-session-spend
+          title="Session spend meter"
+          className="text-[var(--text-secondary)]"
+        >
+          Session ≈ ${sessionCostUsd.toFixed(4)}
+        </span>
+        {typeof lastTtftMs === "number" && lastTtftMs > 0 && (
+          <span
+            data-ttft
+            className={ttftOver ? "text-[var(--warning)]" : undefined}
+            title={ttftWarning ?? `TTFT budget ${ttftBudgetMs ?? "—"}ms`}
+          >
+            TTFT {lastTtftMs}ms
+            {typeof ttftBudgetMs === "number" ? ` / ${ttftBudgetMs}ms` : ""}
+          </span>
+        )}
       </div>
 
       {pickerOpen && pickerLen > 0 && (
@@ -213,7 +190,10 @@ export function Composer({
         <textarea
           ref={taRef}
           value={input}
-          onChange={(e) => onInputChange(e.target.value)}
+          onChange={(e) => {
+            setPickerDismissed(false);
+            onInputChange(e.target.value);
+          }}
           onKeyDown={(e) => {
             if (pickerOpen && pickerLen > 0) {
               if (e.key === "ArrowDown") {
@@ -234,6 +214,8 @@ export function Composer({
               }
               if (e.key === "Escape") {
                 e.preventDefault();
+                e.stopPropagation();
+                setPickerDismissed(true);
                 setSlashOpen(false);
                 setMentionOpen(false);
                 return;

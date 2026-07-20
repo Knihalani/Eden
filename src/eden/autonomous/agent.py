@@ -1295,47 +1295,15 @@ class ChatService:
         preferred_model: str | None = None,
         preferred_tier: str = "auto",
     ) -> tuple[str, str]:
-        """Pick model + tier (W23: T1/SLM vs T3 + operator picker).
+        """Always T2 — ChatSidebar has no operator model picker.
 
-        Returns ``(model_id, tier_key)`` where tier_key is t1|t2|t3.
+        Returns ``(model_id, tier_key)`` where tier_key is always ``t2``.
         """
-        from eden.llmops.chat_sota import (
-            classify_chat_tier,
-            model_for_tier,
-            resolve_picker_model,
-        )
+        _ = user_message, preferred_model, preferred_tier
+        from eden.llmops.chat_sota import model_for_tier
         from eden.optimization.model_router import ModelTier
 
-        explicit, tier_key = resolve_picker_model(
-            preferred_model=preferred_model,
-            preferred_tier=preferred_tier,
-        )
-        if explicit:
-            return explicit, tier_key if tier_key != "auto" else "t3"
-
-        mt = classify_chat_tier(user_message, preferred_tier=tier_key)
-        if mt == ModelTier.T3 and self._settings.ai_agent_t3_model:
-            return self._settings.ai_agent_t3_model, "t3"
-        if mt == ModelTier.T1:
-            return model_for_tier(ModelTier.T1), "t1"
-        if mt == ModelTier.T2:
-            return model_for_tier(ModelTier.T2), "t2"
-
-        try:
-            from eden.llm.internal_router import resolve_models
-
-            _tier, models = await resolve_models(
-                "chat_service",
-                slot="reasoning",
-                description="Multi-turn observability copilot with tools",
-                output_type="json",
-                requires_novelty=True,
-            )
-            if models:
-                return models[0], "t3"
-        except Exception:
-            pass
-        return model_for_tier(ModelTier.T3), "t3"
+        return model_for_tier(ModelTier.T2), "t2"
 
     async def _call_llm(
         self,
@@ -1594,9 +1562,7 @@ class ChatService:
             if cost_usd > 0:
                 try:
                     from eden.llmops.cost_ledger import CostEvent, record_cost_event
-                    from eden.services.budget_service import record_usage
 
-                    await record_usage(tenant_id, cost_usd)
                     await record_cost_event(
                         CostEvent(
                             org_id=tenant_id,
@@ -1613,7 +1579,7 @@ class ChatService:
                     )
                 except Exception as exc:
                     logger.debug(
-                        "ChatService: record_usage failed: %s", exc,
+                        "ChatService: record_cost_event failed: %s", exc,
                     )
 
             await emit(AgentChunk(

@@ -35,7 +35,19 @@ import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+import httpx
+
 logger = logging.getLogger(__name__)
+
+_HTTPX: httpx.AsyncClient | None = None
+
+
+def _shared_httpx(timeout: float) -> httpx.AsyncClient:
+    """Process-wide httpx client — never ``async with`` this instance."""
+    global _HTTPX
+    if _HTTPX is None or _HTTPX.is_closed:
+        _HTTPX = httpx.AsyncClient(timeout=timeout)
+    return _HTTPX
 
 
 # Free-tier defaults applied when no ``budgets`` row exists
@@ -223,7 +235,7 @@ async def record_usage(
     org_id: str,
     cost_usd: float,
     *,
-    window: str = "monthly",
+    window: str | None = None,
 ) -> bool:
     """Increment the active window's cost + request counter.
 
@@ -231,6 +243,10 @@ async def record_usage(
     request. Uses a single upsert so concurrent calls don't
     race. Best-effort: any DB error returns ``False`` and
     logs — the gateway should still serve the request.
+
+    When ``window`` is omitted, uses the org budget config
+    (via :func:`get_budget`) so consumption lands in the same
+    window enforcement reads.
 
     Returns ``True`` when the row was written, ``False``
     otherwise.
@@ -240,6 +256,14 @@ async def record_usage(
     client = await _get_client()
     if client is None:
         return False
+    if window is None:
+        try:
+            budget = await get_budget(org_id)
+            window = str(budget.get("window") or "monthly")
+        except Exception:
+            window = "monthly"
+    if window not in ("daily", "weekly", "monthly"):
+        window = "monthly"
     start = _window_start(window)
     if window == "daily":
         end = start + timedelta(days=1)
@@ -479,18 +503,16 @@ async def _notify_budget_alert(
         webhook = getattr(get_settings(), "slack_webhook_url", "") or ""
         if not webhook:
             return
-        import httpx
-
-        async with httpx.AsyncClient(timeout=5.0) as http:
-            await http.post(
-                webhook,
-                json={
-                    "text": (
-                        f"[Eden] Budget alert {threshold_pct}% for org "
-                        f"{org_id}: ${used:.4f} / ${hard:.4f}"
-                    )
-                },
-            )
+        http = _shared_httpx(5.0)
+        await http.post(
+            webhook,
+            json={
+                "text": (
+                    f"[Eden] Budget alert {threshold_pct}% for org "
+                    f"{org_id}: ${used:.4f} / ${hard:.4f}"
+                )
+            },
+        )
     except Exception as exc:
         logger.debug("budget_service: slack notify skipped: %s", exc)
 

@@ -10,13 +10,17 @@ Three routes:
 
 from __future__ import annotations
 
+import ipaddress
 import logging
+import os
+import socket
 from typing import Any
+from urllib.parse import urlparse
 
-from fastapi import APIRouter, Depends, HTTPException, Path, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 
-from eden.api.routes.auth import get_current_user
+from eden.api.deps import require_org_member, require_path_org_access
 from eden.redteam.findings_store import FindingsStore
 from eden.redteam.probes import (
     PROBE_CATALOGUE,
@@ -33,6 +37,10 @@ logger = logging.getLogger(__name__)
 router = APIRouter(
     prefix="/orgs/{org_id}/redteam",
     tags=["redteam"],
+    dependencies=[
+        Depends(require_org_member),
+        Depends(require_path_org_access),
+    ],
 )
 
 
@@ -115,6 +123,85 @@ class FindingsListResponse(BaseModel):
 # ── Helpers ───────────────────────────────────────────────────────
 
 
+def _validate_target_endpoint(url: str) -> None:
+    """Reject SSRF-prone target endpoints (https-only, no private IPs).
+
+    Mirrors ``webhook_delivery._assert_public_ip`` / webhook URL
+    checks: HTTPS only, no userinfo, DNS must resolve, every
+    resolved address must be public. Ambiguous / unresolved hosts
+    fail closed. Optional ``EDEN_REDTEAM_ENDPOINT_ALLOWLIST``
+    (comma-separated hostnames) further restricts targets when set.
+    """
+    parsed = urlparse(url)
+    if parsed.scheme != "https":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="target_endpoint must use HTTPS",
+        )
+    if parsed.username is not None or parsed.password is not None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="target_endpoint must not include userinfo",
+        )
+    host = parsed.hostname
+    if not host:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="target_endpoint must include a hostname",
+        )
+    allowlist_raw = os.environ.get("EDEN_REDTEAM_ENDPOINT_ALLOWLIST", "").strip()
+    if allowlist_raw:
+        allowed = {h.strip().lower() for h in allowlist_raw.split(",") if h.strip()}
+        if host.lower() not in allowed:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="target_endpoint host is not in EDEN_REDTEAM_ENDPOINT_ALLOWLIST",
+            )
+    # Literal IP host — check directly. Hostname — resolve all A/AAAA.
+    try:
+        literal = ipaddress.ip_address(host)
+    except ValueError:
+        literal = None
+    if literal is not None:
+        ips = [literal]
+    else:
+        try:
+            infos = socket.getaddrinfo(host, None)
+        except socket.gaierror as exc:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="target_endpoint hostname could not be resolved",
+            ) from exc
+        if not infos:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="target_endpoint hostname could not be resolved",
+            )
+        ips = []
+        for info in infos:
+            ip_str = info[4][0]
+            try:
+                ips.append(ipaddress.ip_address(ip_str))
+            except ValueError as exc:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="target_endpoint hostname resolved to a non-IP address",
+                ) from exc
+    for ip in ips:
+        if (
+            ip.is_private
+            or ip.is_loopback
+            or ip.is_link_local
+            or ip.is_multicast
+            or ip.is_reserved
+            or ip.is_unspecified
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="target_endpoint must point to a public IP address",
+            )
+
+
 def _probe_to_response(p: Probe) -> ProbeResponse:
     return ProbeResponse(
         name=p.name, category=p.category, severity=p.severity,
@@ -145,6 +232,7 @@ def _resolve_invoker(req: Any) -> AgentInvoker:
          clear 400.
     """
     if req.target_endpoint:
+        _validate_target_endpoint(req.target_endpoint)
         try:
             import httpx
         except ImportError as exc:
@@ -157,7 +245,13 @@ def _resolve_invoker(req: Any) -> AgentInvoker:
             ) from exc
 
         async def _invoker(prompt: str) -> str:
-            async with httpx.AsyncClient(timeout=30) as client:
+            # Re-check at call time (DNS rebind / TOCTOU).
+            _validate_target_endpoint(req.target_endpoint)
+            async with httpx.AsyncClient(
+                timeout=30,
+                follow_redirects=False,
+                trust_env=False,
+            ) as client:
                 resp = await client.post(
                     req.target_endpoint,
                     json={"prompt": prompt},
@@ -195,8 +289,7 @@ def _resolve_invoker(req: Any) -> AgentInvoker:
     summary="List available red-team probes",
 )
 async def list_probes_route(
-    org_id: str = Path(...),
-    user: dict = Depends(get_current_user),
+    org_id: str = Depends(require_path_org_access),
 ) -> ProbeListResponse:
     """Return the catalogue of available probes with their
     category, severity, and prompt count."""
@@ -212,8 +305,7 @@ async def list_probes_route(
 )
 async def run_probe_route(
     body: RunProbeRequest,
-    org_id: str = Path(...),
-    user: dict = Depends(get_current_user),
+    org_id: str = Depends(require_path_org_access),
 ) -> ProbeRunResponse:
     if body.probe_name not in PROBE_CATALOGUE:
         raise HTTPException(
@@ -246,8 +338,7 @@ async def run_probe_route(
 )
 async def run_scan_route(
     body: ScanRequest,
-    org_id: str = Path(...),
-    user: dict = Depends(get_current_user),
+    org_id: str = Depends(require_path_org_access),
 ) -> ScanResponse:
     invoker = _resolve_invoker(body)
     from eden.storage.postgres import get_postgres_client
@@ -280,20 +371,20 @@ async def run_scan_route(
     summary="List past red-team findings",
 )
 async def list_findings_route(
-    org_id: str = Path(...),
+    org_id: str = Depends(require_path_org_access),
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
     only_failures: bool = Query(default=False),
     severity: str | None = Query(default=None, pattern="^(low|medium|high|critical)$"),
     probe_name: str | None = Query(default=None),
-    user: dict = Depends(get_current_user),
 ) -> FindingsListResponse:
     from eden.storage.postgres import get_postgres_client
 
     pg = await get_postgres_client()
     if pg is None:
-        return FindingsListResponse(
-            findings=[], total=0, limit=limit, offset=offset,
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Database unavailable",
         )
     store = FindingsStore(pg)
     rows, total = await store.list_for_org(

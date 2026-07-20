@@ -4,6 +4,7 @@
 import { readFileSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
+import { readApiModules } from "./_read-api";
 
 const ROOT = resolve(__dirname, "../../..");
 const src = (rel: string) => readFileSync(resolve(ROOT, "src", rel), "utf8");
@@ -26,7 +27,7 @@ describe("W26 F22 deleted", () => {
   });
 
   it("removes fixChat API clients", () => {
-    const api = src("lib/api.ts");
+    const api = readApiModules(ROOT);
     expect(api).not.toContain("fixChatStream");
     expect(api).not.toContain("fixSession");
     expect(api).not.toContain("/fix/chat");

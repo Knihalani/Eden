@@ -7,7 +7,6 @@
  */
 
 import { useEffect, useState } from "react";
-import { AnimatePresence, motion } from "framer-motion";
 import { Download, X } from "lucide-react";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -78,22 +77,16 @@ export function TraceExportModal({ open, onOpenChange, orgId, traceId }: TraceEx
   }
 
   return (
-    <AnimatePresence>
+    <>
       {open && (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
+        <div
           className="fixed inset-0 bg-[var(--overlay)] z-50 flex items-center justify-center p-4"
           onClick={() => onOpenChange(false)}
           role="dialog"
           aria-modal="true"
           aria-label="Export trace"
         >
-          <motion.div
-            initial={{ scale: 0.95, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            exit={{ scale: 0.95, opacity: 0 }}
+          <div
             onClick={(e) => e.stopPropagation()}
             className="bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-xl max-w-2xl w-full max-h-[80vh] overflow-hidden shadow-xl flex flex-col"
           >
@@ -146,9 +139,9 @@ export function TraceExportModal({ open, onOpenChange, orgId, traceId }: TraceEx
                 </pre>
               )}
             </div>
-          </motion.div>
-        </motion.div>
+          </div>
+        </div>
       )}
-    </AnimatePresence>
+    </>
   );
 }

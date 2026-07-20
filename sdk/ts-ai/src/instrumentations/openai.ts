@@ -24,8 +24,9 @@ import {
   type TraceOptions,
 } from "../types.js";
 
-// Track clients we've already wrapped to avoid double-wrapping.
-const _wrapped = new WeakSet<object>();
+// original → proxy (and proxy → proxy) so re-wrapping the same
+// client returns the instrumented Proxy, not the bare original.
+const _proxies = new WeakMap<object, object>();
 const WRAP_MARKER = Symbol.for("@eden-ai/sdk.wrapOpenAI");
 
 /**
@@ -43,9 +44,8 @@ export function wrapOpenAI<T extends object>(
   if (!client || (client as { chat?: unknown }).chat === undefined) {
     return client;
   }
-  if (_wrapped.has(client as object)) {
-    return client;
-  }
+  const existing = _proxies.get(client as object);
+  if (existing) return existing as T;
   // If this is a Proxy we already produced, return it as-is.
   // We tag proxies with a Symbol; if the input lacks the
   // `chat` interface (or the user passes back a proxy), we
@@ -53,7 +53,6 @@ export function wrapOpenAI<T extends object>(
   // by reading the hidden property.
   const marked = (client as unknown as { [k: symbol]: unknown })[WRAP_MARKER];
   if (marked === true) return client;
-  _wrapped.add(client as object);
 
   const proxy = new Proxy(client, {
     get(target, prop, receiver) {
@@ -125,6 +124,8 @@ export function wrapOpenAI<T extends object>(
   } catch {
     // The proxy may be frozen; ignore.
   }
+  _proxies.set(client as object, proxy);
+  _proxies.set(proxy, proxy);
   return proxy;
 }
 
@@ -271,7 +272,7 @@ async function* _wrapOpenAIStream(
         eventId,
         traceId,
         chunkIndex: chunkCount - 1,
-        deltaText: text ?? null,
+        deltaText: config.captureChunkText ? (text ?? null) : null,
         ttftMs: tFirst !== null ? tFirst - start : null,
         itlMs: prev !== null ? now - prev : null,
         // Per-chunk TPOT (time per output token) is the time spent
