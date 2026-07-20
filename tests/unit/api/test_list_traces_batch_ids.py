@@ -23,6 +23,17 @@ def test_list_traces_source_supports_trace_ids_any() -> None:
     assert "[:100]" in non_comment
 
 
+def test_list_traces_sql_matches_prod_telemetry_schema() -> None:
+    """Prod has error_type + JSONB tags + cost in metrics — not bare columns."""
+    source = textwrap.dedent(inspect.getsource(observability.list_traces))
+    assert "max(error) AS error" not in source
+    assert "sum(cost_usd)" not in source
+    assert "unnest(e2.tags)" not in source
+    assert "jsonb_array_elements_text" in source
+    assert "error_type" in source
+    assert "metrics->>'cost_usd'" in source
+
+
 @pytest.mark.asyncio
 async def test_list_traces_batch_ids_skips_days_window(
     monkeypatch: pytest.MonkeyPatch,
@@ -46,7 +57,8 @@ async def test_list_traces_batch_ids_skips_days_window(
                 "session_id": None,
                 "agent_session_id": None,
                 "outcome": "ok",
-                "error": None,
+                "error_type": None,
+                "attr_error": None,
                 "input_tokens": 1,
                 "output_tokens": 2,
                 "cost_usd": 0.01,
