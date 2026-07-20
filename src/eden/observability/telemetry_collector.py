@@ -860,10 +860,13 @@ class TelemetryCollector:
                 event.span_id,
                 event.name,
                 event.duration_ms,
-                _dump_jsonb(event.payload),
-                _dump_jsonb(event.metrics),
-                _dump_jsonb(event.attributes),
-                _dump_jsonb(event.tags),
+                # NOT NULL JSONB cols: _dump_jsonb maps {} / [] → None, but
+                # an explicit NULL bypasses the column DEFAULT and raises
+                # not-null (webhook/telemetry with empty payload/tags).
+                _dump_jsonb(event.payload) or "{}",
+                _dump_jsonb(event.metrics) or "{}",
+                _dump_jsonb(event.attributes) or "{}",
+                _dump_jsonb(event.tags) or "[]",
                 event.outcome,
                 event.source_format or "eden_native",
                 _dump_jsonb(event.request_body),
