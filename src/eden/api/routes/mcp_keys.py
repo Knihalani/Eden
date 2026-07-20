@@ -59,8 +59,11 @@ async def create_mcp_key(
         name=(body.name if body else "MCP"),
         scopes=scopes,
     )
-    return await api_keys_mod.create_api_key(
-        org_id, create_body, user=user, payload=payload
+    return await api_keys_mod.create_api_key_from_body(
+        org_id=org_id,
+        body=create_body,
+        user=user,
+        payload=payload,
     )
 
 

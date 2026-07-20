@@ -107,7 +107,7 @@ async def test_create_api_key_unique_is_409():
     ):
         body = mod.CreateApiKeyBody(name="ci-key", scopes=["ingest:write"])
         with pytest.raises(HTTPException) as ei:
-            await mod.create_api_key(
+            await mod.create_api_key_from_body(
                 org_id=ORG,
                 body=body,
                 user={"user_id": USER},
@@ -134,7 +134,7 @@ async def test_create_api_key_fk_is_404():
     ):
         body = mod.CreateApiKeyBody(name="ci-key", scopes=["ingest:write"])
         with pytest.raises(HTTPException) as ei:
-            await mod.create_api_key(
+            await mod.create_api_key_from_body(
                 org_id=ORG,
                 body=body,
                 user={"user_id": USER},

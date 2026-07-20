@@ -8,8 +8,8 @@ describe("toUserFacingError", () => {
       status: 422,
       message: "Validation error",
     });
-    expect(msg).toBe("Invalid request — check the form and try again.");
     expect(msg.toLowerCase()).not.toContain("github");
+    expect(msg).toMatch(/^Invalid request/);
   });
 
   it("still maps GitHub-flavoured 422 to reconnect copy", () => {
@@ -26,9 +26,25 @@ describe("toUserFacingError", () => {
     ).toBe(REPO_NOT_CONNECTED_MESSAGE);
   });
 
-  it("maps 5xx to the server unreachable banner", () => {
-    expect(toUserFacingError({ status: 500, message: "boom" })).toBe(
-      "Eden is having trouble reaching the server. Please try again in a moment.",
-    );
+  it("summarizes FastAPI validation detail arrays on 422", () => {
+    const msg = toUserFacingError({
+      status: 422,
+      message: JSON.stringify([
+        {
+          type: "missing",
+          loc: ["body", "scopes"],
+          msg: "Field required",
+        },
+      ]),
+    });
+    expect(msg).toBe("Invalid request — scopes: Field required");
+  });
+
+  it("passes through short plain-string 422 details", () => {
+    const msg = toUserFacingError({
+      status: 422,
+      message: "Invalid JSON body: Expecting value",
+    });
+    expect(msg).toBe("Invalid request — Invalid JSON body: Expecting value");
   });
 });

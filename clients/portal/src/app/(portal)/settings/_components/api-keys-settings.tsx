@@ -45,8 +45,15 @@ export function ApiKeysSettings({ org }: ApiKeysSettingsProps) {
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
-  const [newKeyName, setNewKeyName] = useState("");
-  const [selectedScopes, setSelectedScopes] = useState<string[]>([]);
+  const [newKeyName, setNewKeyName] = useState("SDK");
+  const [selectedScopes, setSelectedScopes] = useState<string[]>([
+    "references:read",
+    "references:write",
+    "jobs:read",
+    "jobs:write",
+    "ingest:write",
+    "gateway:write",
+  ]);
   const [creating, setCreating] = useState(false);
   const [createdKey, setCreatedKey] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
