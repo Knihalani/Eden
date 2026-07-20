@@ -160,8 +160,8 @@ export function TraceDetailPanel({
           duration_ms: Number(
             (last.attributes as { duration_ms?: number } | undefined)?.duration_ms ?? 0,
           ),
-          kind: "tool",
-          status: last.status === "error" ? "error" : "ok",
+          event_type: "tool",
+          outcome: last.status === "error" ? "error" : null,
         } as (typeof prev)[number],
       ];
     });
@@ -178,8 +178,8 @@ export function TraceDetailPanel({
         start_ms: start,
         end_ms: start + duration,
         duration_ms: duration,
-        event_type: String(r.kind ?? "span"),
-        outcome: r.status === "error" ? "failure" : null,
+        event_type: String(r.event_type ?? "span"),
+        outcome: r.outcome === "failure" || r.outcome === "error" ? "failure" : null,
       };
     });
   }, [rows]);
