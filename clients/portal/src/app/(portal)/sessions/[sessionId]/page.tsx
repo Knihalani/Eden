@@ -1,30 +1,62 @@
 "use client";
 
 import { Suspense, useEffect, useMemo, useState } from "react";
-import { useParams } from "next/navigation";
+import dynamic from "next/dynamic";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { PageHeader } from "@/components/layout/page-header";
 import { PageContent } from "@/components/layout/page-content";
-import { CrossLinkBar } from "@/components/portal-os";
+import {
+  CrossLinkBar,
+  DetailPanelShell,
+  readMasterDetailParam,
+  writeMasterDetailParam,
+} from "@/components/portal-os";
 import { NoOrgState } from "@/components/ui/no-org-state";
 import { ErrorState } from "@/components/ui/error-state";
 import { LoadingSkeleton } from "@/components/ui/skeleton";
 import { SessionHeader } from "@/components/sessions/SessionHeader";
 import { SessionTurnTimeline } from "@/components/sessions/SessionTurnTimeline";
-import { TraceDetailPanel } from "@/components/traces/TraceDetailPanel";
-import { BrowserReplayPanel } from "@/components/browser/BrowserReplayPanel";
 import { useOrg } from "@/hooks/use-org";
 import { agentSessionsApi } from "@/lib/api";
 import { fetchApi } from "@/lib/api/core";
 import { useOrgQuery } from "@/hooks/use-api-query";
 import { queryKeys } from "@/lib/query-keys";
 
+/** Trace detail + rrweb replay stay off the session shell first paint (W12). */
+const TraceDetailPanel = dynamic(
+  () =>
+    import("@/components/traces/TraceDetailPanel").then((m) => ({
+      default: m.TraceDetailPanel,
+    })),
+  { ssr: false, loading: () => <LoadingSkeleton variant="detail" lines={4} /> },
+);
+const BrowserReplayPanel = dynamic(
+  () =>
+    import("@/components/browser/BrowserReplayPanel").then((m) => ({
+      default: m.BrowserReplayPanel,
+    })),
+  { ssr: false, loading: () => <LoadingSkeleton variant="default" lines={3} /> },
+);
+
 function SessionPageInner() {
   const params = useParams();
   const sessionId = decodeURIComponent(String(params.sessionId ?? ""));
   const { currentOrg } = useOrg();
   const orgId = currentOrg?.id ?? null;
-  const [selectedTraceId, setSelectedTraceId] = useState<string | undefined>();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const selectedTraceId = readMasterDetailParam(searchParams, "traceId");
   const [activeReplayStep, setActiveReplayStep] = useState(0);
+
+  const setSelectedTraceId = (id: string | undefined) => {
+    const next = new URLSearchParams(searchParams.toString());
+    writeMasterDetailParam(next, "traceId", id);
+    const qs = next.toString();
+    router.replace(
+      `${window.location.pathname}${qs ? `?${qs}` : ""}`,
+      { scroll: false },
+    );
+  };
 
   const sessionQuery = useOrgQuery(
     queryKeys.agents.session(orgId, sessionId),
@@ -79,9 +111,11 @@ function SessionPageInner() {
 
   useEffect(() => {
     if (!selectedTraceId && turns.length > 0) {
-      setSelectedTraceId(turns[0].trace_id);
+      setSelectedTraceId(turns[0]!.trace_id);
     }
-  }, [turns, selectedTraceId]);
+    // Intentionally only when turns first arrive — avoid clobbering user clear.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- setSelectedTraceId is stable URL writer
+  }, [turns.length, selectedTraceId]);
 
   const traceSummaries = useMemo(
     () =>
@@ -141,20 +175,31 @@ function SessionPageInner() {
         }}
       />
 
-      <div className="flex flex-col lg:flex-row gap-0 min-h-[24rem] border border-[var(--border-default)] rounded-xl overflow-hidden">
-        <div className="flex-1 min-w-0 lg:border-r border-[var(--border-default)]">
-          {selectedTraceId ? (
-            <TraceDetailPanel
-              traceId={selectedTraceId}
-              onClose={() => setSelectedTraceId(undefined)}
-            />
-          ) : (
-            <p className="p-6 text-sm text-[var(--text-muted)]">
-              Select a turn to view its transcript.
-            </p>
-          )}
+      {selectedTraceId ? (
+        <DetailPanelShell
+          open
+          onClose={() => setSelectedTraceId(undefined)}
+          title={
+            <span className="font-mono text-xs truncate">
+              {selectedTraceId.slice(0, 20)}…
+            </span>
+          }
+          widthClassName="xl:w-full xl:max-w-none"
+          mobileDrawer
+        >
+          <TraceDetailPanel
+            traceId={selectedTraceId}
+            onClose={() => setSelectedTraceId(undefined)}
+            hideCloseControl
+          />
+        </DetailPanelShell>
+      ) : (
+        <div className="rounded-xl border border-[var(--border-default)] bg-[var(--bg-primary)]">
+          <p className="p-6 text-sm text-[var(--text-muted)]">
+            Select a turn to view its transcript.
+          </p>
         </div>
-      </div>
+      )}
 
       {selectedTraceId && orgId ? (
         <BrowserReplayPanel

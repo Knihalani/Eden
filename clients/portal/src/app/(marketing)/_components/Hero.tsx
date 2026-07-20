@@ -42,26 +42,26 @@ export function Hero({ signedIn }: { signedIn: boolean }) {
         />
       </div>
 
-      <div className="relative z-10 flex flex-1 flex-col justify-end px-6 pb-14 pt-10 sm:pb-16 md:justify-center md:pb-20 md:pt-12">
+      <div className="relative z-10 flex flex-1 flex-col justify-end px-space-5 pb-14 pt-space-7 sm:pb-16 md:justify-center md:pb-20 md:pt-space-8">
         <div className="mx-auto w-full max-w-7xl">
           <div
             className="max-w-xl motion-safe:animate-[fade-slide-up_420ms_var(--ease-out,cubic-bezier(0.33,1,0.68,1))_both]"
           >
-            <p className="marketing-brand mb-4 md:mb-5">{PRODUCT_NAME}</p>
+            <p className="marketing-brand mb-space-4 md:mb-space-5">{PRODUCT_NAME}</p>
 
-            <h1 id="hero-heading" className="marketing-lede mb-4 md:mb-5">
+            <h1 id="hero-heading" className="marketing-lede mb-space-4 md:mb-space-5">
               See every LLM call. Review every patch.
             </h1>
 
-            <p className="marketing-support mb-7 md:mb-8">
+            <p className="marketing-support mb-space-6">
               Gateway or SDK → first traces in minutes → human-reviewed patches
               you ship.
             </p>
 
-            <div className="flex flex-wrap items-center gap-3">
+            <div className="flex flex-wrap items-center gap-space-3">
               <Link
                 href={signedIn ? "/dashboard" : "/sign-up"}
-                className={`inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-[var(--accent)] px-5 py-2.5 text-sm font-medium text-[var(--bg-base)] transition-colors hover:bg-[var(--accent-hover)] ${focusRing}`}
+                className={`inline-flex min-h-11 items-center justify-center gap-space-2 rounded-lg bg-[var(--accent)] px-space-5 py-space-3 text-sm font-medium text-[var(--bg-base)] transition-colors hover:bg-[var(--accent-hover)] ${focusRing}`}
               >
                 {signedIn ? "Open dashboard" : "Start free"}
                 <ArrowRight className="h-4 w-4" aria-hidden />
@@ -70,13 +70,13 @@ export function Hero({ signedIn }: { signedIn: boolean }) {
                 href={DOCS_QUICKSTART_URL}
                 target="_blank"
                 rel="noopener noreferrer"
-                className={`inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-[var(--border-default)] bg-[var(--bg-primary)]/80 px-5 py-2.5 text-sm font-medium text-[var(--text-primary)] backdrop-blur-sm transition-colors hover:bg-[var(--bg-tertiary)] ${focusRing}`}
+                className={`inline-flex min-h-11 items-center justify-center gap-space-2 rounded-lg border border-[var(--border-default)] bg-[var(--bg-primary)]/80 px-space-5 py-space-3 text-sm font-medium text-[var(--text-primary)] backdrop-blur-sm transition-colors hover:bg-[var(--bg-tertiary)] ${focusRing}`}
               >
                 Quickstart
               </a>
             </div>
 
-            <p className="mt-5 text-[13px] leading-relaxed text-[var(--text-muted)]">
+            <p className="mt-space-5 text-sm leading-relaxed text-[var(--text-muted)]">
               {signedIn ? "Pick up where you left off." : FREE_TIER_TAGLINE}
             </p>
           </div>

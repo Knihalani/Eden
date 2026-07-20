@@ -94,7 +94,7 @@ export function SelectedTraceCard({ traceId }: SelectedTraceCardProps) {
     >
       <header className="flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <p className="text-[10px] uppercase tracking-wider text-[var(--text-muted)] font-medium">
+          <p className="text-2xs uppercase tracking-wider text-[var(--text-muted)] font-medium">
             Selected trace
           </p>
           <p className="text-xs font-mono text-[var(--text-primary)] truncate mt-0.5" title={traceId}>
@@ -135,7 +135,7 @@ export function SelectedTraceCard({ traceId }: SelectedTraceCardProps) {
             value={
               <span
                 className={cn(
-                  "px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase",
+                  "px-1.5 py-0.5 rounded text-2xs font-semibold uppercase",
                   trace.outcome === "success"
                     ? "bg-[var(--terminal-faint)] text-[var(--terminal)]"
                     : trace.outcome === "failure" || trace.outcome === "crash"
@@ -246,7 +246,7 @@ function TraceStumbleBadges({ traceId }: { traceId: string }) {
 
   return (
     <div className="space-y-1.5 border-t border-[var(--border-default)] pt-3">
-      <p className="text-[10px] uppercase tracking-wider text-[var(--text-muted)] font-medium">
+      <p className="text-2xs uppercase tracking-wider text-[var(--text-muted)] font-medium">
         Stumbles ({stumbles.length})
       </p>
       <div className="flex flex-wrap gap-1.5">
@@ -256,7 +256,7 @@ function TraceStumbleBadges({ traceId }: { traceId: string }) {
             <span
               key={s.id}
               className={cn(
-                "px-1.5 py-0.5 rounded text-[10px] font-semibold",
+                "px-1.5 py-0.5 rounded text-2xs font-semibold",
                 style.className,
               )}
               title={`${s.title}${s.severity ? ` · ${s.severity}` : ""}`}
@@ -285,7 +285,7 @@ function Row({
     <div className="flex items-start justify-between gap-3">
       <span className="inline-flex items-center gap-1.5 text-[var(--text-muted)] shrink-0">
         {Icon && <Icon className="w-3 h-3" />}
-        <span className="text-[10px] uppercase tracking-wider">{label}</span>
+        <span className="text-2xs uppercase tracking-wider">{label}</span>
       </span>
       <span className="text-[var(--text-primary)] font-mono text-right" title={hint}>
         {value}

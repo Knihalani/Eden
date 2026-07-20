@@ -2,15 +2,22 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
-import { CheckCircle2, Circle, Loader2, RefreshCw } from "lucide-react";
+import { CheckCircle2, ChevronDown, Circle, Loader2, RefreshCw } from "lucide-react";
 
 import { PageHeader } from "@/components/layout/page-header";
-import { CrossLinkBar, CoreResourcePage } from "@/components/portal-os";
+import { CoreResourcePage } from "@/components/portal-os";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorState } from "@/components/ui/error-state";
 import { NoOrgState } from "@/components/ui/no-org-state";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { useOrg } from "@/hooks/use-org";
 import { learnApi } from "@/lib/api";
 import { errorFromCaught } from "@/lib/safe-error-message";
@@ -69,24 +76,39 @@ export default function ImprovementLoopOnboardingPage() {
           title="Improvement loop"
           description="Live progress from your org — Autonomy stays Off or Preview only until you promote."
           actions={
-            <Button variant="outline" size="sm" onClick={() => void load()} disabled={loading}>
-              <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />
-              Refresh
-            </Button>
+            <div className="flex flex-wrap items-center gap-space-2">
+              <Button variant="outline" size="sm" onClick={() => void load()} disabled={loading}>
+                <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />
+                Refresh
+              </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="sm" className="min-h-11" aria-label="Related surfaces">
+                    More
+                    <ChevronDown className="h-4 w-4" aria-hidden />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="min-w-[12rem]">
+                  <DropdownMenuLabel>Go to</DropdownMenuLabel>
+                  <DropdownMenuItem asChild>
+                    <Link href="/improve">Improve</Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild>
+                    <Link href="/artifacts">Artifacts</Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild>
+                    <Link href="/ledger">Ledger</Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild>
+                    <Link href="/traces">Traces</Link>
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
           }
         />
       }
-      toolbar={
-        <CrossLinkBar
-          className="mb-4"
-          links={[
-            { label: "Improve", href: "/improve" },
-            { label: "Artifacts", href: "/artifacts" },
-            { label: "Ledger", href: "/ledger" },
-            { label: "Traces", href: "/traces" },
-          ]}
-        />
-      }
+      toolbar={undefined}
       table={
         <>
           {error ? (
@@ -101,7 +123,7 @@ export default function ImprovementLoopOnboardingPage() {
           ) : null}
 
           {loading && steps.length === 0 ? (
-            <div className="flex justify-center py-12">
+            <div className="flex justify-center py-space-8">
               <Loader2 className="h-8 w-8 animate-spin text-[var(--text-muted)]" />
             </div>
           ) : steps.length === 0 ? (
@@ -109,7 +131,7 @@ export default function ImprovementLoopOnboardingPage() {
               title="Loop status unavailable"
               description="Send traces via SDK or gateway first. Linking a GitHub repo is optional — Connect is not required to teach the loop."
               action={
-                <div className="flex flex-wrap items-center justify-center gap-2">
+                <div className="flex flex-wrap items-center justify-center gap-space-2">
                   <Button asChild className="min-h-11">
                     <a href={DOCS_QUICKSTART_URL} target="_blank" rel="noopener noreferrer">
                       Docs quickstart
@@ -123,7 +145,7 @@ export default function ImprovementLoopOnboardingPage() {
             />
           ) : (
             <>
-              <p className="mb-3 text-sm text-[var(--text-secondary)]">
+              <p className="mb-space-3 text-sm text-[var(--text-secondary)]">
                 {completed}/{total} complete
                 {nextStep ? (
                   <>
@@ -142,7 +164,7 @@ export default function ImprovementLoopOnboardingPage() {
                   <Link
                     key={step.id}
                     href={step.href}
-                    className="flex items-center gap-3 p-4 hover:bg-[var(--bg-subtle)]"
+                    className="flex items-center gap-space-3 p-space-4 hover:bg-[var(--bg-subtle)]"
                   >
                     {step.done ? (
                       <CheckCircle2 className="h-5 w-5 text-[var(--accent)]" aria-label="done" />
@@ -153,7 +175,7 @@ export default function ImprovementLoopOnboardingPage() {
                   </Link>
                 ))}
               </Card>
-              <p className="mt-4 text-sm text-[var(--text-secondary)]">
+              <p className="mt-space-4 text-sm text-[var(--text-secondary)]">
                 Production traces become Artifacts; proven Artifacts and resolved issues write the
                 Ledger.
               </p>

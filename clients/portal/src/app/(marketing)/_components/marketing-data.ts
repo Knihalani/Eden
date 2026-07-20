@@ -10,15 +10,15 @@ import {
   GATEWAY_URL,
 } from "@/lib/constants";
 
-/** Homepage marketing nav — trimmed to primary destinations.
- * In-page section anchors (Pillars / Improve) stay discoverable by
- * scroll; keeping them in the sticky bar crowded the row on md+. */
+/** Homepage marketing nav — primary destinations only.
+ * Docs CTA is Quickstart (same destination as docs footer/nav).
+ * In-page anchors stay out of the sticky bar to avoid CTA clutter. */
 export const NAV_LINKS = [
   { label: "Install", href: "#install" },
   { label: "Pricing", href: "/pricing" },
+  { label: "Docs", href: DOCS_QUICKSTART_URL },
   { label: "About", href: "/about" },
   { label: "Contact", href: "/contact" },
-  { label: "Quickstart", href: DOCS_QUICKSTART_URL },
 ] as const;
 
 export const PILLARS = [

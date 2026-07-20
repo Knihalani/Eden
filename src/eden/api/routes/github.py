@@ -541,19 +541,36 @@ async def github_authorize(
     install_url = client.get_install_url(state=state)
     # Persist state in the session table (light: piggyback on the
     # onboarding_state row so we don't need a new table). Keyed by
-    # org_id; overwrites prior pending state.
+    # org_id; overwrites prior pending oauth_state while preserving
+    # real completed-by user id strings (used when step=done).
     pg = await get_postgres_client()
+    existing = await pg.fetchrow(
+        "SELECT completed_by_users FROM onboarding_state WHERE org_id = $1",
+        org["org_id"],
+    )
+    completed: list[Any] = []
+    if existing:
+        raw = existing.get("completed_by_users") or []
+        if isinstance(raw, str):
+            raw = json.loads(raw)
+        completed = list(raw)
+    merged: list[Any] = [
+        entry
+        for entry in completed
+        if not (isinstance(entry, dict) and "oauth_state" in entry)
+    ]
+    merged.append({"oauth_state": state})
     await pg.execute(
         """
         INSERT INTO onboarding_state (org_id, step, completed_by_users)
         VALUES ($1, 'connect_github', $2::jsonb)
         ON CONFLICT (org_id) DO UPDATE
         SET step = 'connect_github',
-            completed_by_users = onboarding_state.completed_by_users,
+            completed_by_users = $2::jsonb,
             updated_at = NOW()
         """,
         org["org_id"],
-        json.dumps([{"oauth_state": state}]),
+        json.dumps(merged),
     )
     return AuthorizeResponse(install_url=install_url, state=state)
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef } from "react";
+import { useRef, useMemo } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { DataTable, type DataTableColumn, type DataTableBulkAction, type DataTableProps } from "@/components/ui/data-table";
 import { Button } from "@/components/ui/button";
@@ -46,22 +46,26 @@ export function InfiniteDataTable<T>({
     overscan: 8,
   });
 
+  const virtualItems = virtualized ? virtualizer.getVirtualItems() : [];
   const windowRows = virtualized
-    ? virtualizer.getVirtualItems().map((v) => rows[v.index]!).filter(Boolean)
+    ? virtualItems.map((v) => rows[v.index]!).filter(Boolean)
     : rows;
 
   const paddingTop =
-    virtualized && virtualizer.getVirtualItems().length > 0
-      ? virtualizer.getVirtualItems()[0]!.start
-      : 0;
+    virtualized && virtualItems.length > 0 ? virtualItems[0]!.start : 0;
   const paddingBottom =
-    virtualized && virtualizer.getVirtualItems().length > 0
-      ? virtualizer.getTotalSize() -
-        (virtualizer.getVirtualItems()[virtualizer.getVirtualItems().length - 1]!.end)
+    virtualized && virtualItems.length > 0
+      ? virtualizer.getTotalSize() - virtualItems[virtualItems.length - 1]!.end
       : 0;
 
+  // Column key signature for diagnostics / stable identity checks (W12).
+  const columnKeySig = useMemo(
+    () => columns.map((c) => c.key).join("\0"),
+    [columns],
+  );
+
   return (
-    <div className={cn("space-y-3", className)} data-density={density}>
+    <div className={cn("space-y-3", className)} data-density={density} data-column-sig={columnKeySig}>
       <div
         ref={parentRef}
         className={cn(
@@ -76,7 +80,9 @@ export function InfiniteDataTable<T>({
           {...props}
           columns={columns}
           rows={windowRows}
-          pageSize={windowRows.length || 50}
+          // Virtual window already clips rows — disable DataTable paging so
+          // scroll length changes do not remount selection/sort state.
+          pageSize={virtualized ? Math.max(windowRows.length, 1) : windowRows.length || 50}
         />
         {virtualized && paddingBottom > 0 ? (
           <div aria-hidden style={{ height: paddingBottom }} />

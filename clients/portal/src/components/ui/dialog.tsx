@@ -4,6 +4,7 @@ import * as React from "react";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { FOCUS_RING_CLASS } from "@/components/ui/focus-ring";
 
 const Dialog = DialogPrimitive.Root;
 const DialogTrigger = DialogPrimitive.Trigger;
@@ -50,7 +51,13 @@ const DialogContent = React.forwardRef<
       {...props}
     >
       {children}
-      <DialogPrimitive.Close className="absolute right-4 top-4 rounded-md p-1 text-[var(--text-muted)] opacity-70 transition-opacity hover:opacity-100 hover:bg-[var(--accent-bg)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]">
+      <DialogPrimitive.Close
+        className={cn(
+          "absolute right-4 top-4 inline-flex items-center justify-center rounded-md min-h-11 min-w-11 text-[var(--text-muted)] opacity-70 transition-opacity hover:opacity-100 hover:bg-[var(--accent-bg)]",
+          FOCUS_RING_CLASS,
+        )}
+        aria-label="Close dialog"
+      >
         <X className="h-4 w-4" />
         <span className="sr-only">Close</span>
       </DialogPrimitive.Close>

@@ -42,20 +42,20 @@ function LazyJson({ value, maxChars = 4_000 }: { value: unknown; maxChars?: numb
   }, [open, value, maxChars]);
 
   if (typeof value === "string" && value.length < 120) {
-    return <span className="font-mono text-[11px]">{value}</span>;
+    return <span className="font-mono text-xs">{value}</span>;
   }
 
   return (
-    <div className="space-y-1">
+    <div className="space-y-space-1">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="text-[10px] font-mono uppercase tracking-wider text-[var(--accent)] hover:underline"
+        className="text-2xs font-mono uppercase tracking-wider text-[var(--accent)] hover:underline"
       >
         {open ? "Hide JSON" : "Show JSON"}
       </button>
       {open && pretty != null && (
-        <pre className="overflow-x-auto whitespace-pre-wrap font-mono text-[11px] text-[var(--text-secondary)]">
+        <pre className="overflow-x-auto whitespace-pre-wrap font-mono text-xs text-[var(--text-secondary)]">
           {pretty}
         </pre>
       )}
@@ -164,18 +164,19 @@ export function TranscriptView({
       />
 
       {/* ── Toolbar ── */}
-      <div className="flex items-center justify-between border-b border-[var(--border-default)] bg-[var(--bg-secondary)] px-4 py-2 text-xs gap-2">
+      <div className="flex items-center justify-between border-b border-[var(--border-default)] bg-[var(--bg-secondary)] px-space-4 py-space-2 text-xs gap-space-2">
         <span className="text-[var(--text-muted)]">
           {visibleRows.length} step{visibleRows.length === 1 ? "" : "s"}
           {internalCount > 0
             ? ` · ${internalCount} internal hidden`
             : ""}
         </span>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-space-3">
           {internalCount > 0 && (
             <button
+              type="button"
               onClick={() => setShowInternal((v) => !v)}
-              className="text-[var(--accent)] hover:underline min-h-[44px] px-1"
+              className="text-[var(--accent)] hover:underline min-h-[44px] px-space-1"
             >
               {showInternal ? "Hide internal" : "Show internal"}
             </button>
@@ -183,7 +184,7 @@ export function TranscriptView({
           <button
             type="button"
             onClick={() => void copyTraceSummary()}
-            className="inline-flex items-center gap-1 text-[var(--accent)] hover:underline min-h-[44px] px-1"
+            className="inline-flex items-center gap-space-1 text-[var(--accent)] hover:underline min-h-[44px] px-space-1"
             title="Copy trace summary"
           >
             <Copy className="h-3 w-3" /> Copy summary
@@ -199,7 +200,7 @@ export function TranscriptView({
               No spans to display
             </div>
           ) : (
-            <div className="space-y-1 p-2">
+            <div className="space-y-space-1 p-space-2">
               {visibleRows.map((row) => (
                 <TranscriptRowItem
                   key={row.span_id}
@@ -245,11 +246,11 @@ function SummaryCard({
     "var(--border-default)";
   return (
     <div
-      className="border-b-2 px-4 py-3"
+      className="border-b-2 px-space-4 py-space-3"
       style={{ borderBottomColor: borderColor, background: "var(--bg-secondary)" }}
     >
       <div className="flex flex-wrap items-baseline gap-x-6 gap-y-1 text-sm">
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-space-2">
           <Clock className="h-3.5 w-3.5 text-[var(--text-muted)]" />
           <span className="font-mono tabular-nums">{formatDuration(durationMs)}</span>
         </div>
@@ -267,7 +268,7 @@ function SummaryCard({
               {totalTokens.total.toLocaleString()}
             </span>{" "}
             tokens
-            <span className="ml-1 text-[10px]">
+            <span className="ml-space-1 text-2xs">
               ({totalTokens.input.toLocaleString()} in / {totalTokens.output.toLocaleString()} out)
             </span>
           </div>
@@ -280,7 +281,7 @@ function SummaryCard({
           </div>
         )}
         {outcome && (
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-space-1">
             {outcome === "success" ? (
               <CheckCircle2 className="h-3.5 w-3.5 text-[var(--terminal)]" />
             ) : (
@@ -332,7 +333,7 @@ function TranscriptRowItem({
   return (
     <div>
       <div
-        className={`group flex items-center gap-2 rounded-md border px-3 py-2 transition-colors ${
+        className={`group flex items-center gap-space-2 rounded-md border px-space-3 py-space-2 transition-colors ${
           selected
             ? "border-[var(--accent)] bg-[var(--bg-tertiary)]"
             : "border-transparent hover:border-[var(--border-default)] hover:bg-[var(--bg-secondary)]"
@@ -348,7 +349,7 @@ function TranscriptRowItem({
           onClick={() => setExpanded((v) => !v)}
           aria-label={expanded ? "Collapse details" : "Expand details"}
           aria-expanded={expanded}
-          className="text-[var(--text-muted)] hover:text-[var(--text-primary)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] rounded p-0.5 -m-0.5"
+          className="inline-flex min-h-11 min-w-11 items-center justify-center text-[var(--text-muted)] hover:text-[var(--text-primary)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] rounded p-space-1 -m-space-1"
         >
           {expanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
         </button>
@@ -359,24 +360,24 @@ function TranscriptRowItem({
         <button
           type="button"
           onClick={() => onSelect(row.span_id)}
-          aria-expanded={expanded}
+          aria-pressed={selected}
           aria-label={`Select span ${row.name || row.event_type || row.span_id.slice(0, 12)}`}
-          className="flex flex-1 items-center gap-2 min-w-0 text-left rounded focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-base)] -my-1 -mr-1 py-1 pr-1"
+          className="flex flex-1 items-center gap-space-2 min-w-0 text-left rounded focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-base)] -my-space-1 -mr-space-1 py-space-1 pr-space-1"
         >
           <Icon className="h-3.5 w-3.5" style={{ color: iconColor }} />
           <span className="flex-1 truncate font-mono text-xs">
             {row.name || row.event_type || row.span_id.slice(0, 12)}
           </span>
-          <span className="font-mono text-[10px] text-[var(--text-muted)] tabular-nums">
+          <span className="font-mono text-2xs text-[var(--text-muted)] tabular-nums">
             {formatDuration(row.duration_ms)}
           </span>
           {isLlm && row.streaming_metrics?.ttft_ms != null && (
-            <span className="font-mono text-[10px] text-[var(--terminal)] tabular-nums">
+            <span className="font-mono text-2xs text-[var(--terminal)] tabular-nums">
               TTFT {Math.round(row.streaming_metrics.ttft_ms)}ms
             </span>
           )}
           {row.cache_hit && (
-            <span className="rounded bg-[var(--terminal)]/20 px-1 py-0.5 text-[9px] font-mono text-[var(--terminal)]">
+            <span className="rounded bg-[var(--terminal)]/20 px-space-1 py-space-1 text-3xs font-mono text-[var(--terminal)]">
               CACHED
             </span>
           )}
@@ -387,7 +388,7 @@ function TranscriptRowItem({
       </div>
 
       {expanded && (
-        <div className="ml-7 mt-1 space-y-2 px-3 pb-2">
+        <div className="ml-7 mt-space-1 space-y-space-2 px-space-3 pb-space-2">
           {/* Reasoning */}
           {row.reasoning && row.reasoning.length > 0 && (
             <ReasoningPanel blocks={row.reasoning} />
@@ -405,7 +406,7 @@ function TranscriptRowItem({
           {row.request_body?.system != null && row.request_body.system !== "" ? (
             <div>
               <SectionHeader>System</SectionHeader>
-              <div className="rounded border border-[var(--border-default)] bg-[var(--bg-primary)] px-2 py-1.5 text-xs">
+              <div className="rounded border border-[var(--border-default)] bg-[var(--bg-primary)] px-space-2 py-space-2 text-xs">
                 {typeof row.request_body.system === "string"
                   ? row.request_body.system
                   : <LazyJson value={row.request_body.system} />}
@@ -466,7 +467,7 @@ function TranscriptRowItem({
 
       {/* Children (subagent nesting) */}
       {expanded && row.children && row.children.length > 0 && (
-        <div className="mt-1 space-y-1">
+        <div className="mt-space-1 space-y-space-1">
           {row.children.map((c) => (
             <TranscriptRowItem
               key={c.span_id}
@@ -488,7 +489,7 @@ function TranscriptRowItem({
 
 function SectionHeader({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex items-center gap-1.5 text-[10px] font-mono uppercase tracking-wider text-[var(--text-muted)]">
+    <div className="flex items-center gap-space-2 text-2xs font-mono uppercase tracking-wider text-[var(--text-muted)]">
       {children}
     </div>
   );
@@ -500,22 +501,22 @@ function ReasoningPanel({ blocks }: { blocks: NonNullable<TR["reasoning"]> }) {
     <div className="rounded border border-[var(--warning)]/30 bg-[var(--warning)]/5">
       <button
         onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-center gap-1.5 px-2 py-1.5 text-left text-[var(--warning)]"
+        className="flex w-full items-center gap-space-2 px-space-2 py-space-2 text-left text-[var(--warning)]"
       >
         <Brain className="h-3 w-3" />
-        <span className="text-[10px] font-mono uppercase tracking-wider">
+        <span className="text-2xs font-mono uppercase tracking-wider">
           Reasoning ({blocks.length} block{blocks.length === 1 ? "" : "s"})
         </span>
         {open ? <ChevronDown className="h-3 w-3 ml-auto" /> : <ChevronRight className="h-3 w-3 ml-auto" />}
       </button>
       {open && (
-        <div className="border-t border-[var(--warning)]/30 p-2 space-y-2 text-xs">
+        <div className="border-t border-[var(--warning)]/30 p-space-2 space-y-space-2 text-xs">
           {blocks.map((b, i) => (
-            <div key={i} className="font-mono text-[11px] text-[var(--text-primary)] whitespace-pre-wrap">
+            <div key={i} className="font-mono text-xs text-[var(--text-primary)] whitespace-pre-wrap">
               {b.thought && <span className="text-[var(--warning)]">[thought] </span>}
               {b.text}
               {b.signature && (
-                <div className="mt-1 text-[9px] text-[var(--text-muted)]">
+                <div className="mt-space-1 font-mono text-3xs text-[var(--text-muted)]">
                   signature: {b.signature.slice(0, 20)}…
                 </div>
               )}
@@ -531,14 +532,14 @@ function MessagesPanel({ title, messages }: { title: string; messages: Transcrip
   return (
     <div>
       <SectionHeader>{title} ({messages.length})</SectionHeader>
-      <div className="space-y-1">
+      <div className="space-y-space-1">
         {messages.map((m, i) => (
           <div
             key={i}
-            className="rounded border px-2 py-1.5 text-xs"
+            className="rounded border px-space-2 py-space-2 text-xs"
             style={roleColor(m.role)}
           >
-            <div className="mb-0.5 flex items-center gap-1.5 text-[10px] font-mono uppercase tracking-wider">
+            <div className="mb-space-1 flex items-center gap-space-2 text-2xs font-mono uppercase tracking-wider">
               <span>{m.role}</span>
               {m.name && <span className="text-[var(--text-muted)]">({m.name})</span>}
             </div>
@@ -611,19 +612,20 @@ function ToolCallsList({
   return (
     <div>
       <SectionHeader>{`Tool calls (${toolCalls.length})`}</SectionHeader>
-      <div className="space-y-1">
+      <div className="space-y-space-1">
         {toolCalls.map((tc, i) => (
-          <div key={i} className="rounded border border-[var(--warning)]/30 bg-[var(--bg-secondary)] px-2 py-1.5 text-xs">
-            <div className="mb-0.5 flex items-center gap-1.5">
+          <div key={i} className="rounded border border-[var(--warning)]/30 bg-[var(--bg-secondary)] px-space-2 py-space-2 text-xs">
+            <div className="mb-space-1 flex items-center gap-space-2">
               <Wrench className="h-3 w-3 text-[var(--warning)]" />
               <span className="font-mono">{tc.name}</span>
-              {tc.id && <span className="text-[10px] text-[var(--text-muted)]">{tc.id.slice(0, 12)}…</span>}
+              {tc.id && <span className="text-2xs text-[var(--text-muted)]">{tc.id.slice(0, 12)}…</span>}
               {orgId && (
-                <span className="ml-auto flex items-center gap-1">
+                <span className="ml-auto flex items-center gap-space-1">
                   <button
                     type="button"
                     disabled={busy}
-                    className="rounded px-1.5 py-0.5 text-[10px] border border-[var(--terminal)] text-[var(--terminal)] hover:bg-[var(--terminal)]/10 disabled:opacity-50"
+                    aria-label={`Label ${tc.name} good`}
+                    className="inline-flex min-h-6 min-w-6 items-center justify-center rounded px-space-2 py-space-1 text-2xs border border-[var(--terminal)] text-[var(--terminal)] hover:bg-[var(--terminal)]/10 disabled:opacity-50"
                     onClick={() => void submitLabel(tc.name, "good", tc.arguments)}
                   >
                     ✓
@@ -631,7 +633,8 @@ function ToolCallsList({
                   <button
                     type="button"
                     disabled={busy}
-                    className="rounded px-1.5 py-0.5 text-[10px] border border-[var(--error)] text-[var(--error)] hover:bg-[var(--error)]/10 disabled:opacity-50"
+                    aria-label={`Label ${tc.name} bad`}
+                    className="inline-flex min-h-6 min-w-6 items-center justify-center rounded px-space-2 py-space-1 text-2xs border border-[var(--error)] text-[var(--error)] hover:bg-[var(--error)]/10 disabled:opacity-50"
                     onClick={() => void submitLabel(tc.name, "bad", tc.arguments)}
                   >
                     ✗
@@ -640,13 +643,13 @@ function ToolCallsList({
               )}
             </div>
             {labelState && labelState !== "error" && (
-              <p className="text-[10px] text-[var(--text-muted)]">Labeled {labelState}</p>
+              <p className="text-2xs text-[var(--text-muted)]">Labeled {labelState}</p>
             )}
             {labelState === "error" && (
-              <p className="text-[10px] text-[var(--error)]">Label failed</p>
+              <p className="text-2xs text-[var(--error)]">Label failed</p>
             )}
             {tc.arguments !== undefined && (
-              <pre className="overflow-x-auto whitespace-pre-wrap font-mono text-[10px] text-[var(--text-secondary)]">
+              <pre className="overflow-x-auto whitespace-pre-wrap font-mono text-2xs text-[var(--text-secondary)]">
                 {typeof tc.arguments === "string" ? tc.arguments : <LazyJson value={tc.arguments ?? null} />}
               </pre>
             )}
@@ -661,23 +664,23 @@ function ToolResultsPanel({ results }: { results: TranscriptToolResult[] }) {
   return (
     <div>
       <SectionHeader>Tool results ({results.length})</SectionHeader>
-      <div className="space-y-1">
+      <div className="space-y-space-1">
         {results.map((tr, i) => (
           <div
             key={i}
             className={cn(
-              "rounded border px-2 py-1.5 text-xs",
+              "rounded border px-space-2 py-space-2 text-xs",
               tr.is_error
                 ? "bg-[var(--error-dim)] border-[var(--error)]"
                 : "bg-[var(--bg-secondary)] border-[var(--border-default)]"
             )}
           >
             {tr.is_error && (
-              <div className="mb-0.5 flex items-center gap-1 text-[10px] font-mono uppercase text-[var(--error)]">
+              <div className="mb-space-1 flex items-center gap-space-1 text-2xs font-mono uppercase text-[var(--error)]">
                 <AlertCircle className="h-3 w-3" /> Error
               </div>
             )}
-            <pre className="overflow-x-auto whitespace-pre-wrap font-mono text-[10px] text-[var(--text-secondary)]">
+            <pre className="overflow-x-auto whitespace-pre-wrap font-mono text-2xs text-[var(--text-secondary)]">
               {typeof tr.content === "string" ? tr.content : <LazyJson value={tr.content ?? null} />}
             </pre>
           </div>
@@ -691,11 +694,11 @@ function ImagesPanel({ images }: { images: NonNullable<TR["images"]>; orgId?: st
   return (
     <div>
       <SectionHeader>Images ({images.length})</SectionHeader>
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-wrap gap-space-2">
         {images.map((img, i) => (
           <div
             key={i}
-            className="rounded border border-[var(--border-default)] bg-[var(--bg-secondary)] p-1"
+            className="rounded border border-[var(--border-default)] bg-[var(--bg-secondary)] p-space-1"
           >
             {img.url ? (
               <Image
@@ -707,8 +710,8 @@ function ImagesPanel({ images }: { images: NonNullable<TR["images"]>; orgId?: st
                 className="h-32 w-32 rounded object-cover"
               />
             ) : (
-              <div className="flex h-32 w-32 flex-col items-center justify-center text-[10px] text-[var(--text-muted)]">
-                <ImageIcon className="mb-1 h-5 w-5" />
+              <div className="flex h-32 w-32 flex-col items-center justify-center text-2xs text-[var(--text-muted)]">
+                <ImageIcon className="mb-space-1 h-5 w-5" />
                 <span>{img.content_type || "image"}</span>
                 {img.source && <span>{img.source}</span>}
               </div>
@@ -724,7 +727,7 @@ function ResponsePanel({ response }: { response: unknown }) {
   return (
     <div>
       <SectionHeader>Response</SectionHeader>
-      <div className="overflow-x-auto rounded border border-[var(--border-default)] bg-[var(--bg-primary)] p-2 text-[10px]">
+      <div className="overflow-x-auto rounded border border-[var(--border-default)] bg-[var(--bg-primary)] p-space-2 text-2xs">
         <LazyJson value={response} />
       </div>
     </div>
@@ -735,9 +738,9 @@ function CitationsPanel({ citations }: { citations: NonNullable<TR["citations"]>
   return (
     <div>
       <SectionHeader>Citations ({citations.length})</SectionHeader>
-      <ol className="space-y-1 text-xs">
+      <ol className="space-y-space-1 text-xs">
         {citations.map((c, i) => (
-          <li key={i} className="flex gap-2">
+          <li key={i} className="flex gap-space-2">
             <span className="text-[var(--text-muted)]">{i + 1}.</span>
             <div>
               {c.url ? (
@@ -753,7 +756,7 @@ function CitationsPanel({ citations }: { citations: NonNullable<TR["citations"]>
                 <span>{c.title || "(no url)"}</span>
               )}
               {c.cited_text && (
-                <div className="text-[10px] text-[var(--text-muted)] italic">
+                <div className="text-2xs text-[var(--text-muted)] italic">
                   &ldquo;{c.cited_text}&rdquo;
                 </div>
               )}
@@ -769,7 +772,7 @@ function LogprobsPanel({ entries }: { entries: NonNullable<NonNullable<TR["logpr
   return (
     <div>
       <SectionHeader>Top logprobs ({entries.length})</SectionHeader>
-      <table className="w-full text-[10px] font-mono">
+      <table className="w-full text-2xs font-mono">
         <thead className="text-[var(--text-muted)]">
           <tr>
             <th className="text-left">Token</th>
@@ -800,14 +803,14 @@ function SpanDetailSidebar({ row }: { row: TR; orgId?: string }) {
     <aside
       className="w-80 shrink-0 border-l border-[var(--border-default)] bg-[var(--bg-secondary)] overflow-y-auto"
     >
-      <div className="border-b border-[var(--border-default)] px-3 py-2">
-        <div className="text-[10px] font-mono uppercase tracking-wider text-[var(--text-muted)]">Span</div>
+      <div className="border-b border-[var(--border-default)] px-space-3 py-space-2">
+        <div className="text-2xs font-mono uppercase tracking-wider text-[var(--text-muted)]">Span</div>
         <div className="truncate font-mono text-sm">{row.name}</div>
-        <div className="mt-0.5 text-[10px] text-[var(--text-muted)]">
+        <div className="mt-space-1 text-2xs text-[var(--text-muted)]">
           {row.span_id} • {row.event_type}
         </div>
       </div>
-      <div className="space-y-2 p-3 text-xs">
+      <div className="space-y-space-2 p-space-3 text-xs">
         <KV k="duration" v={formatDuration(row.duration_ms)} />
         <KV k="outcome" v={row.outcome || "—"} />
         {row.finish_reason && <KV k="finish_reason" v={row.finish_reason} />}
@@ -832,7 +835,7 @@ function SpanDetailSidebar({ row }: { row: TR; orgId?: string }) {
 
 function KV({ k, v }: { k: string; v: React.ReactNode }) {
   return (
-    <div className="flex items-baseline justify-between gap-2 text-[11px]">
+    <div className="flex items-baseline justify-between gap-space-2 text-xs">
       <span className="text-[var(--text-muted)] font-mono">{k}</span>
       <span className="font-mono text-[var(--text-primary)] text-right truncate">{v}</span>
     </div>

@@ -10,29 +10,27 @@ function ImprovePillar({ pillar }: { pillar: (typeof PILLARS)[number] }) {
     { token: "05", label: "Queue for review", meta: "inbox · you open the PR" },
   ];
   return (
-    <article className="mt-5 border border-[var(--border-default)] rounded-xl overflow-hidden bg-[var(--bg-base)]">
-      <div className="grid grid-cols-1 lg:grid-cols-12">
-        <div className="lg:col-span-5 p-6 lg:p-8 border-b lg:border-b-0 lg:border-r border-[var(--border-subtle)] flex flex-col">
-          <span className="text-[11px] font-mono uppercase tracking-[0.18em] text-[var(--text-muted)] mb-5">
+    <article className="mt-space-6 border-t border-[var(--border-default)] pt-space-6">
+      <div className="grid grid-cols-1 gap-space-6 lg:grid-cols-12 lg:gap-space-8">
+        <div className="lg:col-span-5 flex flex-col">
+          <span className="text-2xs font-mono uppercase tracking-[0.18em] text-[var(--text-muted)] mb-space-4">
             {pillar.badge}
           </span>
-          <div className="w-10 h-10 rounded-lg bg-[var(--bg-tertiary)] border border-[var(--border-subtle)] flex items-center justify-center mb-5">
-            <Icon className="w-5 h-5 text-[var(--accent)]" aria-hidden />
+          <div className="mb-space-4 flex h-10 w-10 items-center justify-center rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-tertiary)]">
+            <Icon className="h-5 w-5 text-[var(--accent)]" aria-hidden />
           </div>
-          <h3 className="marketing-h3 mb-3">
-            {pillar.title}
-          </h3>
-          <p className="text-sm text-[var(--text-secondary)] leading-relaxed mb-6">
+          <h3 className="marketing-h3 mb-space-3">{pillar.title}</h3>
+          <p className="mb-space-5 text-sm leading-relaxed text-[var(--text-secondary)]">
             {pillar.description}
           </p>
-          <ul className="flex flex-col gap-2 mt-auto">
+          <ul className="mt-auto flex flex-col gap-space-2">
             {pillar.bullets.map((b) => (
               <li
                 key={b}
-                className="flex items-start gap-2 text-[13px] text-[var(--text-secondary)]"
+                className="flex items-start gap-space-2 text-[13px] text-[var(--text-secondary)]"
               >
                 <span
-                  className="w-1 h-1 rounded-full bg-[var(--accent)] mt-2 shrink-0"
+                  className="mt-2 h-1 w-1 shrink-0 rounded-full bg-[var(--accent)]"
                   aria-hidden
                 />
                 <span className="leading-snug">{b}</span>
@@ -40,11 +38,11 @@ function ImprovePillar({ pillar }: { pillar: (typeof PILLARS)[number] }) {
             ))}
           </ul>
         </div>
-        <div className="lg:col-span-7 p-6 lg:p-8 font-mono">
-          <p className="pb-4 mb-4 border-b border-[var(--border-subtle)] text-[11px] text-[var(--text-muted)] tracking-wider">
+        <div className="font-mono lg:col-span-7">
+          <p className="mb-space-4 border-b border-[var(--border-subtle)] pb-space-3 text-2xs tracking-wider text-[var(--text-muted)]">
             eden — improve inbox
           </p>
-          <ol className="relative space-y-3">
+          <ol className="relative space-y-space-3">
             {steps.map((s, i) => (
               <li key={s.token} className="relative pl-8">
                 <span
@@ -61,11 +59,11 @@ function ImprovePillar({ pillar }: { pillar: (typeof PILLARS)[number] }) {
                 />
                 <span
                   aria-hidden="true"
-                  className="absolute left-0 top-1 w-[15px] h-[15px] rounded-full border border-[var(--accent)] bg-[var(--bg-base)] flex items-center justify-center text-[8px] text-[var(--accent)] font-semibold"
+                  className="absolute left-0 top-1 flex h-[15px] w-[15px] items-center justify-center rounded-sm border border-[var(--accent)] bg-[var(--bg-primary)] text-[8px] font-semibold text-[var(--accent)]"
                 >
                   {s.token}
                 </span>
-                <div className="flex flex-wrap items-baseline gap-x-3">
+                <div className="flex flex-wrap items-baseline gap-x-space-3">
                   <span className="text-[13px] text-[var(--text-primary)]">
                     {s.label}
                   </span>
@@ -76,8 +74,8 @@ function ImprovePillar({ pillar }: { pillar: (typeof PILLARS)[number] }) {
               </li>
             ))}
           </ol>
-          <p className="mt-5 pt-4 border-t border-[var(--border-subtle)] text-[12px] text-[var(--text-muted)]">
-            <span className="text-[var(--text-primary)] font-semibold">
+          <p className="mt-space-5 border-t border-[var(--border-subtle)] pt-space-4 text-xs text-[var(--text-muted)]">
+            <span className="font-semibold text-[var(--text-primary)]">
               1 suggestion queued
             </span>
             <span aria-hidden> · </span>
@@ -93,47 +91,43 @@ export function Pillars() {
   return (
     <section
       id="pillars"
-      className="py-20 md:py-28 px-6 border-t border-[var(--border-subtle)] bg-[var(--bg-secondary)]/30"
+      className="border-t border-[var(--border-subtle)] bg-[var(--bg-secondary)]/30 px-space-5 py-20 md:py-28"
     >
-      <div className="max-w-7xl mx-auto">
-        <div className="max-w-2xl mb-14">
-          <h2 className="marketing-h2 mb-4">
-            Capture. Analyse. Improve.
-          </h2>
-          <p className="text-[var(--text-secondary)] leading-relaxed max-w-[42ch]">
+      <div className="mx-auto max-w-7xl">
+        <div className="mb-space-7 max-w-2xl">
+          <h2 className="marketing-h2 mb-space-4">Capture. Analyse. Improve.</h2>
+          <p className="max-w-[42ch] leading-relaxed text-[var(--text-secondary)]">
             Instrument once, read every call, then close the loop when evals
             regress — with a human still on the open-PR decision.
           </p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+        <div className="grid grid-cols-1 gap-space-7 md:grid-cols-2 md:gap-space-8">
           {PILLARS.slice(0, 2).map((p) => {
             const Icon = p.icon;
             return (
               <article
                 key={p.id}
-                className="border border-[var(--border-subtle)] rounded-xl p-6 hover:border-[var(--border-default)] transition-colors"
+                className="border-t border-[var(--border-subtle)] pt-space-5"
               >
-                <span className="text-[11px] font-mono uppercase tracking-[0.18em] text-[var(--text-muted)] mb-6 block">
+                <span className="mb-space-5 block text-2xs font-mono uppercase tracking-[0.18em] text-[var(--text-muted)]">
                   {p.badge}
                 </span>
-                <div className="w-10 h-10 rounded-lg bg-[var(--bg-tertiary)] border border-[var(--border-subtle)] flex items-center justify-center mb-5">
-                  <Icon className="w-5 h-5 text-[var(--accent)]" aria-hidden />
+                <div className="mb-space-4 flex h-10 w-10 items-center justify-center rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-tertiary)]">
+                  <Icon className="h-5 w-5 text-[var(--accent)]" aria-hidden />
                 </div>
-                <h3 className="marketing-h3 mb-2">
-                  {p.title}
-                </h3>
-                <p className="text-sm text-[var(--text-secondary)] leading-relaxed mb-5">
+                <h3 className="marketing-h3 mb-space-2">{p.title}</h3>
+                <p className="mb-space-5 text-sm leading-relaxed text-[var(--text-secondary)]">
                   {p.description}
                 </p>
-                <ul className="flex flex-col gap-2 pt-5 border-t border-[var(--border-subtle)]">
+                <ul className="flex flex-col gap-space-2 border-t border-[var(--border-subtle)] pt-space-5">
                   {p.bullets.map((b) => (
                     <li
                       key={b}
-                      className="flex items-start gap-2 text-[13px] text-[var(--text-secondary)]"
+                      className="flex items-start gap-space-2 text-[13px] text-[var(--text-secondary)]"
                     >
                       <span
-                        className="w-1 h-1 rounded-full bg-[var(--accent)] mt-2 shrink-0"
+                        className="mt-2 h-1 w-1 shrink-0 rounded-full bg-[var(--accent)]"
                         aria-hidden
                       />
                       <span className="leading-snug">{b}</span>

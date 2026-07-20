@@ -4003,12 +4003,41 @@ export const savedViewsApi = {
       body: JSON.stringify({
         name: input.name,
         query_type: "text",
-        query: input.state.q ?? "",
+        query: input.state.q || "(all)",
         params: {
           resource: input.resource,
           ...input.state,
         },
         is_shared: input.is_shared ?? false,
+        tags: [`resource:${input.resource}`],
+      }),
+    }),
+  update: (
+    orgId: string,
+    viewId: string,
+    input: {
+      name?: string;
+      resource: string;
+      state: {
+        q?: string;
+        filter?: Record<string, string>;
+        sort?: { key: string; direction: "asc" | "desc" };
+        columns?: string[];
+        pastHours?: string;
+      };
+      is_shared?: boolean;
+    },
+  ) =>
+    fetchApi<SavedViewRecord>(`/orgs/${orgId}/saved-searches/${viewId}`, {
+      method: "PATCH",
+      body: JSON.stringify({
+        ...(input.name != null ? { name: input.name } : {}),
+        query: input.state.q || "(all)",
+        params: {
+          resource: input.resource,
+          ...input.state,
+        },
+        ...(input.is_shared != null ? { is_shared: input.is_shared } : {}),
         tags: [`resource:${input.resource}`],
       }),
     }),

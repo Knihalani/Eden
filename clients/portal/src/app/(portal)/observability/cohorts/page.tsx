@@ -8,11 +8,12 @@ import { useToast } from "@/components/ui/toast";
 import { NoOrgState } from "@/components/ui/no-org-state";
 import { ErrorState } from "@/components/ui/error-state";
 import { Button } from "@/components/ui/button";
-import { PageHeader } from "@/components/layout/page-header";
 import { PageContent } from "@/components/layout/page-content";
-import { Database, Play, Layers, RefreshCw, Loader2, Archive, FileText } from "lucide-react";
+import { ObserveLeafHeader } from "@/app/(portal)/observability/_components/observe-leaf-shell";
+import { Database, Play, Layers, RefreshCw, Archive, FileText } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { STICKY_FIRST_TD, STICKY_FIRST_TH } from "@/components/ui/table-sticky";
 import { errorFromCaught } from "@/lib/safe-error-message";
 interface ColumnarQueryResult {
   status: string;
@@ -166,7 +167,7 @@ export default function CohortsPage() {
     return <NoOrgState icon={Database} feature="Columnar Engine" description="Run read-only SQL across ClickHouse partitions and precomputed rollups once your org is configured." />;
   }
   return <PageContent size="wide">
-      <PageHeader title="Columnar Engine" subtitle="Read-only SQL across per-org monthly partitions with hourly / daily / weekly rollups" icon={Database} eyebrow="Observe" />
+      <ObserveLeafHeader title="Columnar Engine" subtitle="Read-only SQL across per-org monthly partitions with hourly / daily / weekly rollups" icon={Database} />
 
       {/* Maintenance actions */}
       <Card padding="md">
@@ -175,18 +176,18 @@ export default function CohortsPage() {
           Maintenance
         </h3>
         <div className="flex flex-wrap gap-2">
-          <button onClick={handleEnsurePartitions} disabled={actionBusy.partitions} className="inline-flex items-center gap-2 px-3 py-2 bg-[var(--bg-tertiary)] text-[var(--text-primary)] rounded-lg text-sm font-medium hover:bg-[var(--border-default)] disabled:opacity-50 transition-colors">
-            {actionBusy.partitions ? <Loader2 className="w-4 h-4 animate-spin" /> : <Layers className="w-4 h-4" />}
+          <Button variant="secondary" size="sm" className="min-h-11" onClick={handleEnsurePartitions} loading={actionBusy.partitions}>
+            <Layers className="w-4 h-4" />
             Ensure partitions
-          </button>
-          <button onClick={handlePrecomputeRollups} disabled={actionBusy.rollups} className="inline-flex items-center gap-2 px-3 py-2 bg-[var(--bg-tertiary)] text-[var(--text-primary)] rounded-lg text-sm font-medium hover:bg-[var(--border-default)] disabled:opacity-50 transition-colors">
-            {actionBusy.rollups ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+          </Button>
+          <Button variant="secondary" size="sm" className="min-h-11" onClick={handlePrecomputeRollups} loading={actionBusy.rollups}>
+            <RefreshCw className="w-4 h-4" />
             Precompute rollups
-          </button>
-          <button onClick={handleCompact} disabled={actionBusy.compact} className="inline-flex items-center gap-2 px-3 py-2 bg-[var(--bg-tertiary)] text-[var(--text-primary)] rounded-lg text-sm font-medium hover:bg-[var(--border-default)] disabled:opacity-50 transition-colors">
-            {actionBusy.compact ? <Loader2 className="w-4 h-4 animate-spin" /> : <Archive className="w-4 h-4" />}
+          </Button>
+          <Button variant="secondary" size="sm" className="min-h-11" onClick={handleCompact} loading={actionBusy.compact}>
+            <Archive className="w-4 h-4" />
             Compact
-          </button>
+          </Button>
         </div>
       </Card>
 
@@ -210,17 +211,17 @@ export default function CohortsPage() {
             SQL Query
           </h3>
           <div className="flex items-center gap-2">
-            {dataSource && <span className={cn("text-[10px] uppercase tracking-wide px-2 py-0.5 rounded-full font-medium", dataSource === "clickhouse" ? "bg-[var(--accent-faint)] text-[var(--accent)]" : "bg-[var(--warning-bg)] text-[var(--warning)]")}>
+            {dataSource && <span className={cn("text-2xs uppercase tracking-wide px-2 py-0.5 rounded-full font-medium", dataSource === "clickhouse" ? "bg-[var(--accent-faint)] text-[var(--accent)]" : "bg-[var(--warning-bg)] text-[var(--warning)]")}>
                 {dataSource === "clickhouse" ? "clickhouse" : "postgres_fallback"}
               </span>}
-            <button onClick={runQuery} disabled={running} className="inline-flex items-center gap-2 px-4 py-2 bg-[var(--accent)] text-[var(--bg-base)] rounded-lg text-sm font-medium hover:bg-[var(--accent-hover)] disabled:opacity-50 transition-colors">
-              {running ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
-              Run
-            </button>
+            <Button variant="default" className="min-h-11" onClick={runQuery} loading={running}>
+            <Play className="w-4 h-4" />
+            Run
+          </Button>
           </div>
         </div>
         <textarea value={sql} onChange={e => setSql(e.target.value)} spellCheck={false} className="w-full min-h-[180px] px-3 py-2 bg-[var(--bg-secondary)] border border-[var(--border-default)] rounded-lg font-mono text-xs text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)]" placeholder="SELECT … FROM usage_events …" />
-        <p className="text-[11px] text-[var(--text-muted)]">
+        <p className="text-xs text-[var(--text-muted)]">
           Read-only SQL. DROP/DELETE/INSERT/UPDATE not allowed.
         </p>
       </Card>
@@ -244,20 +245,42 @@ export default function CohortsPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-[var(--border-default)] bg-[var(--bg-secondary)]">
-                  {columns.map(c => <th key={c} className="text-left px-4 py-3 text-xs font-medium text-[var(--text-muted)] uppercase tracking-wide whitespace-nowrap">
+                  {columns.map((c, colIdx) => (
+                    <th
+                      key={c}
+                      className={cn(
+                        "text-left px-4 py-3 text-xs font-medium text-[var(--text-muted)] uppercase tracking-wide whitespace-nowrap",
+                        colIdx === 0 && STICKY_FIRST_TH,
+                      )}
+                    >
                       {c}
-                    </th>)}
+                    </th>
+                  ))}
                 </tr>
               </thead>
               <tbody className="divide-y divide-[var(--border-subtle)]">
-                {rows.map((row, idx) => <tr key={idx} className="hover:bg-[var(--bg-tertiary)]/50 transition-colors">
-                    {columns.map((c) => {
+                {rows.map((row, idx) => (
+                  <tr key={idx} className="hover:bg-[var(--bg-tertiary)]/50 transition-colors">
+                    {columns.map((c, colIdx) => {
                       const cell = row[c];
-                      return <td key={c} className="px-4 py-2.5 text-[var(--text-secondary)] font-mono text-xs whitespace-nowrap">
-                        {cell === null || cell === undefined ? <span className="text-[var(--text-muted)]">null</span> : String(cell)}
-                      </td>;
+                      return (
+                        <td
+                          key={c}
+                          className={cn(
+                            "px-4 py-2.5 text-[var(--text-secondary)] font-mono text-xs whitespace-nowrap",
+                            colIdx === 0 && STICKY_FIRST_TD,
+                          )}
+                        >
+                          {cell === null || cell === undefined ? (
+                            <span className="text-[var(--text-muted)]">null</span>
+                          ) : (
+                            String(cell)
+                          )}
+                        </td>
+                      );
                     })}
-                  </tr>)}
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>

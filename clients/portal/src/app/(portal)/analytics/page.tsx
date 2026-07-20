@@ -25,6 +25,7 @@ import { ErrorState } from "@/components/ui/error-state";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useOrg } from "@/hooks/use-org";
 import { api } from "@/lib/api";
 import { useOrgQuery } from "@/hooks/use-api-query";
@@ -103,7 +104,7 @@ function Kpi({ label, value, sublabel, icon: Icon, iconColor, trend, trendDir }:
         {trend && (
           <span
             className={cn(
-              "flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[10px] font-medium",
+              "flex items-center gap-1 rounded px-1.5 py-1 text-2xs font-medium",
               trendDir === "up" && "text-[var(--terminal)] bg-[var(--terminal-faint)]",
               trendDir === "down" && "text-[var(--error)] bg-[var(--error-dim)]",
               trendDir === "neutral" && "text-[var(--text-muted)] bg-[var(--bg-tertiary)]"
@@ -120,7 +121,7 @@ function Kpi({ label, value, sublabel, icon: Icon, iconColor, trend, trendDir }:
       </div>
       <p className="text-2xl font-bold tracking-tight text-[var(--text-primary)]">{value}</p>
       <p className="text-xs font-medium text-[var(--text-secondary)]">{label}</p>
-      {sublabel && <p className="mt-0.5 text-[10px] text-[var(--text-muted)]">{sublabel}</p>}
+      {sublabel && <p className="mt-1 text-2xs text-[var(--text-muted)]">{sublabel}</p>}
     </Panel>
   );
 }
@@ -232,33 +233,29 @@ function AnalyticsPageInner() {
   return (
     <PageContent size="wide">
       <PageHeader
+        eyebrow="Analyze"
         title="Analytics"
-        subtitle="Usage, tools, users, and trend insights."
-        description="Cross-cutting analytics: usage, cost, latency, and quality over time."
+        subtitle="Usage, cost, latency, and quality over time."
         actions={
           tab === "overview" ? (
             <div className="flex flex-wrap items-center gap-2">
               <div
                 role="group"
                 aria-label="Date range"
-                className="inline-flex rounded-lg border border-[var(--border-default)] bg-[var(--bg-secondary)] p-0.5"
+                className="inline-flex rounded-lg border border-[var(--border-default)] bg-[var(--bg-secondary)] p-1"
               >
                 {DAY_OPTIONS.map((opt) => (
-                  <button
+                  <Button
                     key={opt.value}
                     type="button"
+                    variant={days === opt.value ? "default" : "ghost"}
+                    size="sm"
                     onClick={() => setDays(opt.value)}
                     aria-pressed={days === opt.value}
                     aria-label={`Last ${opt.label}`}
-                    className={cn(
-                      "rounded-md px-3 py-1.5 text-xs font-medium transition-all",
-                      days === opt.value
-                        ? "bg-[var(--accent)] text-[var(--bg-base)]"
-                        : "text-[var(--text-muted)] hover:text-[var(--text-primary)]"
-                    )}
                   >
                     {opt.label}
-                  </button>
+                  </Button>
                 ))}
               </div>
               <Button
@@ -276,47 +273,56 @@ function AnalyticsPageInner() {
         }
       />
 
-      <div role="tablist" aria-label="Analytics sections" className="flex gap-1 border-b border-[var(--border-default)]">
+      <Tabs
+        value={tab}
+        onValueChange={(v) => setTab(v as (typeof ANALYTICS_TABS)[number])}
+      >
+      <TabsList
+        variant="underline"
+        aria-label="Analytics sections"
+        className="h-auto w-full justify-start gap-1 bg-transparent"
+      >
         {ANALYTICS_TABS.map((t) => (
-          <button
+          <TabsTrigger
             key={t}
-            type="button"
-            role="tab"
-            aria-selected={tab === t}
-            onClick={() => setTab(t)}
-            className={cn(
-              "px-3 py-2 text-sm font-medium capitalize border-b-2 -mb-px",
-              tab === t
-                ? "border-[var(--accent)] text-[var(--text-primary)]"
-                : "border-transparent text-[var(--text-muted)] hover:text-[var(--text-primary)]",
-            )}
+            variant="underline"
+            value={t}
+            className="capitalize"
           >
             {t}
-          </button>
+          </TabsTrigger>
         ))}
-      </div>
+      </TabsList>
 
-      {tab === "insights" && (
-        <EmbeddedSurface>
-          <InsightsView />
-        </EmbeddedSurface>
-      )}
-      {tab === "topics" && (
-        <EmbeddedSurface>
-          <TopicsView />
-        </EmbeddedSurface>
-      )}
-      {tab === "tools" && (
-        <EmbeddedSurface>
-          <ToolsView />
-        </EmbeddedSurface>
-      )}
-      {tab === "users" && (
-        <EmbeddedSurface>
-          <UsersView />
-        </EmbeddedSurface>
-      )}
-      {tab === "overview" && (
+      <TabsContent value="insights" className="mt-2">
+        {tab === "insights" ? (
+          <EmbeddedSurface>
+            <InsightsView />
+          </EmbeddedSurface>
+        ) : null}
+      </TabsContent>
+      <TabsContent value="topics" className="mt-2">
+        {tab === "topics" ? (
+          <EmbeddedSurface>
+            <TopicsView />
+          </EmbeddedSurface>
+        ) : null}
+      </TabsContent>
+      <TabsContent value="tools" className="mt-2">
+        {tab === "tools" ? (
+          <EmbeddedSurface>
+            <ToolsView />
+          </EmbeddedSurface>
+        ) : null}
+      </TabsContent>
+      <TabsContent value="users" className="mt-2">
+        {tab === "users" ? (
+          <EmbeddedSurface>
+            <UsersView />
+          </EmbeddedSurface>
+        ) : null}
+      </TabsContent>
+      <TabsContent value="overview" className="mt-2">
       <>
 
       {errorMessage ? (
@@ -399,7 +405,8 @@ function AnalyticsPageInner() {
       </>
       )}
       </>
-      )}
+      </TabsContent>
+      </Tabs>
     </PageContent>
   );
 }
@@ -433,15 +440,13 @@ function ChartSkeleton() {
 
 function OverviewChartsSkeleton() {
   return (
-    <>
+    <div className="space-y-6" data-testid="analytics-chart-hierarchy">
+      <ChartSkeleton />
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <ChartSkeleton />
         <ChartSkeleton />
       </div>
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <ChartSkeleton />
-        <ChartSkeleton />
-      </div>
-    </>
+      <ChartSkeleton />
+    </div>
   );
 }

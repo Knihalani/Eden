@@ -4,6 +4,7 @@ import * as React from "react";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { FOCUS_RING_CLASS } from "@/components/ui/focus-ring";
 
 const Sheet = DialogPrimitive.Root;
 const SheetTrigger = DialogPrimitive.Trigger;
@@ -54,7 +55,10 @@ const SheetContent = React.forwardRef<
     >
       {children}
       <DialogPrimitive.Close
-        className="absolute right-3 top-3 rounded-lg p-2 min-h-[44px] min-w-[44px] text-[var(--text-muted)] hover:bg-[var(--bg-tertiary)] hover:text-[var(--text-primary)]"
+        className={cn(
+          "absolute right-3 top-3 inline-flex items-center justify-center rounded-lg min-h-[44px] min-w-[44px] text-[var(--text-muted)] hover:bg-[var(--bg-tertiary)] hover:text-[var(--text-primary)]",
+          FOCUS_RING_CLASS,
+        )}
         aria-label="Close"
       >
         <X className="h-4 w-4" />

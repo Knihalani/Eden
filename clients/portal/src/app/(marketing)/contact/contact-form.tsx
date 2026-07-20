@@ -8,13 +8,13 @@ import { SignedInGate } from "../_components/SignedInGate";
 import { DOCS_QUICKSTART_URL, SUPPORT_EMAIL } from "@/lib/constants";
 
 const ctaPrimary =
-  "inline-flex items-center justify-center gap-2 min-h-11 px-5 py-2.5 text-sm font-medium bg-[var(--accent)] text-[var(--bg-base)] rounded-lg hover:bg-[var(--accent-hover)] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-secondary)]";
+  "inline-flex items-center justify-center gap-space-2 min-h-11 px-space-5 py-space-3 text-sm font-medium bg-[var(--accent)] text-[var(--bg-base)] rounded-lg hover:bg-[var(--accent-hover)] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-secondary)]";
 
 const ctaSecondary =
-  "inline-flex items-center justify-center gap-2 min-h-11 px-5 py-2.5 text-sm font-medium text-[var(--text-primary)] bg-[var(--bg-primary)]/80 border border-[var(--border-default)] rounded-lg hover:bg-[var(--bg-tertiary)] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-secondary)]";
+  "inline-flex items-center justify-center gap-space-2 min-h-11 px-space-5 py-space-3 text-sm font-medium text-[var(--text-primary)] bg-[var(--bg-primary)]/80 border border-[var(--border-default)] rounded-lg hover:bg-[var(--bg-tertiary)] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-secondary)]";
 
 const fieldClass =
-  "mt-1.5 w-full min-h-11 rounded-md border border-[var(--border-subtle)] bg-[var(--bg-primary)] px-3 py-2 text-[var(--text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-secondary)]";
+  "mt-space-2 w-full min-h-11 rounded-md border border-[var(--border-subtle)] bg-[var(--bg-primary)] px-space-3 py-space-2 text-[var(--text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-secondary)]";
 
 const mailtoLinkClass =
   "text-[var(--accent)] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] rounded";
@@ -59,7 +59,7 @@ export function ContactForm() {
 
   return (
     <>
-      <form onSubmit={onSubmit} className="space-y-4 max-w-md" aria-label="Contact Eden" noValidate>
+      <form onSubmit={onSubmit} className="space-y-space-4 max-w-md" aria-label="Contact Eden" noValidate>
         <p className="text-sm text-[var(--text-muted)]">
           This opens your email client — we do not submit privacy (DSAR) requests from this form.
         </p>
@@ -100,7 +100,7 @@ export function ContactForm() {
             disabled={status === "done"}
           />
         </label>
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="flex flex-wrap items-center gap-space-3">
           <Button
             type="submit"
             disabled={status === "done"}
@@ -135,13 +135,13 @@ export function ContactForm() {
           </p>
         )}
       </form>
-      <p className="mt-6 text-sm text-[var(--text-muted)]">
+      <p className="mt-space-5 text-sm text-[var(--text-muted)]">
         Prefer a blank email?{" "}
         <a href={blankMailto} className={mailtoLinkClass}>
           {SUPPORT_EMAIL}
         </a>
       </p>
-      <div className="mt-10 flex flex-wrap items-center gap-3">
+      <div className="mt-space-7 flex flex-wrap items-center gap-space-3">
         <SignedInGate
           signedIn={
             <Link href="/dashboard" className={ctaPrimary}>

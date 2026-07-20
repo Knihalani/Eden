@@ -239,11 +239,12 @@ export function ApprovalCard({
       data-tool-call-id={id}
       data-approval-card
       className={cn(
-        "my-2 rounded-md border bg-[var(--bg-elevated)] font-mono text-xs",
-        isError ? "border-[var(--error)]/40" : "border-[var(--accent)]/30",
+        "my-space-2 rounded-md border border-[var(--border-subtle)] bg-[var(--bg-elevated)] font-mono text-xs",
+        isError && "border-[var(--error)]/40",
       )}
+      data-approval-quiet
     >
-      <div className="flex items-center gap-2 px-3 py-2 border-b border-[var(--border-subtle)]">
+      <div className="flex items-center gap-space-2 border-b border-[var(--border-subtle)] px-space-3 py-space-2">
         {isRunning ? (
           <Loader2 className="h-3.5 w-3.5 animate-spin text-[var(--accent)]" />
         ) : isError ? (
@@ -254,33 +255,33 @@ export function ApprovalCard({
           <Wrench className="h-3.5 w-3.5 text-[var(--accent)]" />
         )}
         <span className="font-medium text-[var(--text-primary)]">{name}</span>
-        <Tag className="ml-auto text-[10px]">approval</Tag>
+        <Tag className="ml-auto text-2xs text-[var(--text-muted)]">approval</Tag>
         {result && typeof result.duration_ms === "number" && (
-          <Tag className="font-mono text-[10px]">{result.duration_ms}ms</Tag>
+          <Tag className="font-mono text-2xs">{result.duration_ms}ms</Tag>
         )}
       </div>
 
       {alertPreview && !cancelled && (
-        <div className="space-y-2 px-3 py-2">
+        <div className="space-y-space-3 px-space-3 py-space-3">
           <div>
-            <div className="mb-1 text-[10px] uppercase tracking-wider text-[var(--text-muted)]">
+            <div className="mb-space-1 text-2xs uppercase tracking-wider text-[var(--text-muted)]">
               English
             </div>
-            <p className="text-[11px] text-[var(--text-secondary)]">{alertPreview.nlText}</p>
+            <p className="text-xs text-[var(--text-secondary)]">{alertPreview.nlText}</p>
           </div>
           <div>
-            <div className="mb-1 text-[10px] uppercase tracking-wider text-[var(--text-muted)]">
+            <div className="mb-space-1 text-2xs uppercase tracking-wider text-[var(--text-muted)]">
               Rule name
             </div>
             <input
               value={ruleName}
               onChange={(e) => setRuleName(e.target.value)}
               disabled={done || saving}
-              className="w-full rounded border border-[var(--border-default)] bg-[var(--bg-base)] px-2 py-1 text-[11px] text-[var(--text-primary)]"
+              className="w-full rounded border border-[var(--border-default)] bg-[var(--bg-base)] px-space-2 py-space-1 text-xs text-[var(--text-primary)]"
             />
           </div>
           <div>
-            <div className="mb-1 text-[10px] uppercase tracking-wider text-[var(--text-muted)]">
+            <div className="mb-space-1 text-2xs uppercase tracking-wider text-[var(--text-muted)]">
               EQL preview (editable)
             </div>
             <textarea
@@ -288,18 +289,18 @@ export function ApprovalCard({
               onChange={(e) => setEql(e.target.value)}
               disabled={done || saving}
               rows={4}
-              className="w-full resize-y rounded border border-[var(--border-default)] bg-[var(--bg-base)] px-2 py-1 text-[11px] leading-relaxed text-[var(--text-secondary)]"
+              className="w-full resize-y rounded border border-[var(--border-default)] bg-[var(--bg-base)] px-space-2 py-space-1 text-xs leading-relaxed text-[var(--text-secondary)]"
             />
           </div>
           {alertPreview.warnings.length > 0 && (
-            <ul className="list-disc pl-4 text-[10px] text-[var(--warning)]">
+            <ul className="list-disc pl-space-4 text-2xs text-[var(--warning)]">
               {alertPreview.warnings.map((w, i) => (
                 <li key={i}>{w}</li>
               ))}
             </ul>
           )}
           {!done && (
-            <div className="flex items-center gap-2 pt-1">
+            <div className="flex items-center gap-space-2 pt-space-1">
               <Button
                 type="button"
                 size="sm"
@@ -319,7 +320,7 @@ export function ApprovalCard({
               </Button>
               <Link
                 href="/alerts"
-                className="ml-auto inline-flex items-center gap-1 text-[10px] text-[var(--accent)] hover:underline"
+                className="ml-auto inline-flex items-center gap-space-1 text-xs text-[var(--accent)] hover:underline"
               >
                 <ExternalLink className="h-3 w-3" />
                 Alerts
@@ -327,7 +328,7 @@ export function ApprovalCard({
             </div>
           )}
           {done && (
-            <p className="text-[10px] text-[var(--success)]">
+            <p className="text-xs text-[var(--success)]">
               Rule saved — view on the Alerts Rules tab.
             </p>
           )}
@@ -335,9 +336,9 @@ export function ApprovalCard({
       )}
 
       {signalPreview && !cancelled && (
-        <div className="space-y-2 px-3 py-2">
+        <div className="space-y-space-3 px-space-3 py-space-3">
           <div>
-            <div className="mb-1 text-[10px] uppercase tracking-wider text-[var(--text-muted)]">
+            <div className="mb-space-1 text-2xs uppercase tracking-wider text-[var(--text-muted)]">
               Description (editable)
             </div>
             <textarea
@@ -345,19 +346,19 @@ export function ApprovalCard({
               onChange={(e) => setSignalDesc(e.target.value)}
               disabled={done || saving}
               rows={3}
-              className="w-full resize-y rounded border border-[var(--border-default)] bg-[var(--bg-base)] px-2 py-1 text-[11px] leading-relaxed text-[var(--text-secondary)]"
+              className="w-full resize-y rounded border border-[var(--border-default)] bg-[var(--bg-base)] px-space-2 py-space-1 text-xs leading-relaxed text-[var(--text-secondary)]"
             />
           </div>
           <div>
-            <div className="mb-1 text-[10px] uppercase tracking-wider text-[var(--text-muted)]">
+            <div className="mb-space-1 text-2xs uppercase tracking-wider text-[var(--text-muted)]">
               Compiled rule
             </div>
-            <pre className="max-h-32 overflow-auto rounded bg-[var(--bg-base)] p-2 text-[10px] text-[var(--text-muted)]">
+            <pre className="max-h-32 overflow-auto rounded bg-[var(--bg-base)] p-space-2 font-mono text-2xs text-[var(--text-muted)]">
               {JSON.stringify(signalPreview.rule, null, 2)}
             </pre>
           </div>
           {!done && (
-            <div className="flex items-center gap-2 pt-1">
+            <div className="flex items-center gap-space-2 pt-space-1">
               <Button
                 type="button"
                 size="sm"
@@ -377,7 +378,7 @@ export function ApprovalCard({
               </Button>
               <Link
                 href="/alerts?tab=signals"
-                className="ml-auto inline-flex items-center gap-1 text-[10px] text-[var(--accent)] hover:underline"
+                className="ml-auto inline-flex items-center gap-space-1 text-xs text-[var(--accent)] hover:underline"
               >
                 <ExternalLink className="h-3 w-3" />
                 Signals
@@ -385,7 +386,7 @@ export function ApprovalCard({
             </div>
           )}
           {done && (
-            <p className="text-[10px] text-[var(--success)]">
+            <p className="text-xs text-[var(--success)]">
               Signal saved — view on the Signals page.
             </p>
           )}
@@ -393,10 +394,10 @@ export function ApprovalCard({
       )}
 
       {generic && !cancelled && (
-        <div className="space-y-2 px-3 py-2">
-          <p className="text-[11px] text-[var(--text-secondary)]">{generic.message}</p>
+        <div className="space-y-space-3 px-space-3 py-space-3">
+          <p className="text-xs text-[var(--text-secondary)]">{generic.message}</p>
           {generic.spendPreview && (
-            <p className="text-[10px] text-[var(--warning)]">
+            <p className="text-2xs text-[var(--warning)]">
               Spend preview: $
               {Number(generic.spendPreview.estimated_usd ?? 0).toFixed(4)}
               {generic.spendPreview.message
@@ -404,11 +405,11 @@ export function ApprovalCard({
                 : ""}
             </p>
           )}
-          <pre className="max-h-32 overflow-auto rounded bg-[var(--bg-base)] p-2 text-[10px] text-[var(--text-muted)]">
+          <pre className="max-h-32 overflow-auto rounded bg-[var(--bg-base)] p-space-2 font-mono text-2xs text-[var(--text-muted)]">
             {JSON.stringify(generic.args, null, 2)}
           </pre>
           {!done && (
-            <div className="flex items-center gap-2 pt-1">
+            <div className="flex items-center gap-space-2 pt-space-1">
               <Button
                 type="button"
                 size="sm"
@@ -429,19 +430,19 @@ export function ApprovalCard({
             </div>
           )}
           {done && (
-            <p className="text-[10px] text-[var(--success)]">Change applied.</p>
+            <p className="text-xs text-[var(--success)]">Change applied.</p>
           )}
         </div>
       )}
 
       {cancelled && (
-        <p className="px-3 py-2 text-[10px] text-[var(--text-muted)]">
+        <p className="px-space-3 py-space-3 text-xs text-[var(--text-muted)]">
           Action cancelled.
         </p>
       )}
 
       {isError && (
-        <pre className="max-h-40 overflow-auto px-3 py-2 text-[11px] text-[var(--error)]">
+        <pre className="max-h-40 overflow-auto px-space-3 py-space-2 text-xs text-[var(--error)]">
           {String(result?.output ?? "")}
         </pre>
       )}

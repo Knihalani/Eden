@@ -1,0 +1,34 @@
+{
+  "name": "w3-live-ingest-proof-rerun",
+  "timestamp_utc": "2026-07-20T13:57:00Z",
+  "base_url": "https://api.edenobservability.com",
+  "org_id": "f4dc4575-ebd5-47a2-8541-42b9e41c1148",
+  "api_key_masked": "****909b",
+  "secrets_committed": false,
+  "supersedes": "clients/portal/e2e/golden/w3-live-ingest-proof.json",
+  "pass": true,
+  "live": {"http": 200},
+  "ready": {"http": 200, "postgres": "ok"},
+  "positive_openai": {
+    "http": 200,
+    "accepted": 1,
+    "trace_id": "2dec4c37e2cc42f8a2a8b712e148d8c3"
+  },
+  "positive_webhook": {
+    "http": 200,
+    "accepted": 1,
+    "trace_id": "66d00b80398e4639b1ee95c3a2c666c7"
+  },
+  "positive_telemetry": {"http": 200, "accepted": 1},
+  "doctor": {"ok": true, "event_id": "doctor_443e7840fe02"},
+  "auth_boundary": {
+    "traces": {"http": 401, "status": "AUTH_BOUNDARY"},
+    "api_keys": {"http": 401, "status": "AUTH_BOUNDARY"}
+  },
+  "trace_ids_used": [
+    "2dec4c37e2cc42f8a2a8b712e148d8c3",
+    "66d00b80398e4639b1ee95c3a2c666c7"
+  ],
+  "fix_sha": "1ef1bab8b87c193897cbf9549c77324e07644bfb",
+  "evidence_dir": ".omc/autopilot/evidence/20260720-live-e2e/"
+}

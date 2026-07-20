@@ -31,6 +31,7 @@ import { ErrorState } from "@/components/ui/error-state";
 import { IntegrationStatusBanners } from "@/components/integration-status-banners";
 import { NoOrgState } from "@/components/ui/no-org-state";
 import { errorFromCaught } from "@/lib/safe-error-message";
+import { DangerZone } from "@/components/settings/danger-zone";
 
 type Flags = {
   intelligence_gap_v0: boolean;
@@ -231,16 +232,16 @@ export default function AutonomousTab() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-space-6">
       <IntegrationStatusBanners integration="github" orgId={currentOrg.id} />
 
-      <div className="rounded-xl border border-[var(--border-default)] bg-[var(--bg-secondary)]/40 p-5 flex items-start gap-4">
-        <div className="rounded-lg bg-[var(--accent-faint)] p-2 shrink-0">
+      <div className="rounded-xl border border-[var(--border-default)] bg-[var(--bg-secondary)]/40 p-space-5 flex items-start gap-space-4">
+        <div className="rounded-lg bg-[var(--accent-faint)] p-space-2 shrink-0">
           <Bot className="w-5 h-5 text-[var(--accent)]" />
         </div>
         <div className="min-w-0">
-          <h2 className="text-base font-semibold">Autonomous features</h2>
-          <p className="text-sm text-[var(--text-secondary)] mt-1 leading-relaxed">
+          <h2 className="text-sm font-semibold">Autonomous features</h2>
+          <p className="text-sm text-[var(--text-secondary)] mt-space-1 leading-relaxed">
             Eden ships with two flags enabled by default. The
             <span className="text-[var(--text-primary)] font-medium">
               {" "}Inbox{" "}
@@ -256,7 +257,7 @@ export default function AutonomousTab() {
         </div>
       </div>
 
-      <div className="rounded-xl border border-[var(--border-default)] bg-[var(--bg-secondary)]/30 p-4 space-y-3">
+      <div className="rounded-xl border border-[var(--border-default)] bg-[var(--bg-secondary)]/30 p-space-4 space-y-space-3">
         <h3 className="text-sm font-semibold text-[var(--text-primary)]">Autonomy tiers (T0–T4)</h3>
         <p className="text-sm text-[var(--text-secondary)] leading-relaxed">
           Eden grades autonomous actions from observe-only to auto-merge. Your effective tier is the
@@ -453,15 +454,20 @@ export default function AutonomousTab() {
         onChange={(v) => persist({ ...flags, intelligence_gap_v0: v })}
       />
 
-      <FlagRow
-        title="Autonomous destructive actions (Cat 14)"
-        description="Required for /heal + /heal/{id}/approve + /heal/{id}/deny. Every action still waits for an admin's explicit approval before any state changes."
-        icon={flags.autonomous_actions_v0 ? ShieldCheck : ShieldOff}
-        enabled={flags.autonomous_actions_v0}
-        disabled={!isAdmin || busy || !flags.intelligence_gap_v0}
-        warn={flags.autonomous_actions_v0}
-        onChange={(v) => persist({ ...flags, autonomous_actions_v0: v })}
-      />
+      <DangerZone
+        title="Autonomous destructive actions"
+        description="Cat 14 heal approve/deny paths. Every action still waits for an admin's explicit approval before any state changes."
+      >
+        <FlagRow
+          title="Autonomous destructive actions (Cat 14)"
+          description="Required for /heal + /heal/{id}/approve + /heal/{id}/deny."
+          icon={flags.autonomous_actions_v0 ? ShieldCheck : ShieldOff}
+          enabled={flags.autonomous_actions_v0}
+          disabled={!isAdmin || busy || !flags.intelligence_gap_v0}
+          warn={flags.autonomous_actions_v0}
+          onChange={(v) => persist({ ...flags, autonomous_actions_v0: v })}
+        />
+      </DangerZone>
 
       <div className="rounded-xl border border-[var(--border-default)] bg-[var(--bg-secondary)]/30 p-4 space-y-4">
         <div className="flex items-start gap-4">
@@ -573,7 +579,7 @@ export default function AutonomousTab() {
         </div>
 
         {n23ScheduleLoaded && (
-          <div className="text-[11px] text-[var(--text-muted)] space-y-1">
+          <div className="text-xs text-[var(--text-muted)] space-y-1">
             {n23Schedule.last_run_at && (
               <p>Last sweep: {new Date(n23Schedule.last_run_at).toLocaleString()}</p>
             )}
@@ -701,7 +707,7 @@ function FlagRow({
           </label>
         </div>
         {warn && enabled && (
-          <p className="text-[11px] text-[var(--warning)]/80 mt-2">
+          <p className="text-xs text-[var(--warning)]/80 mt-2">
             Active. Every destructive action still requires an admin&apos;s
             explicit approval via the Inbox or the heal queue.
           </p>

@@ -18,7 +18,9 @@
     "analyze": "ANALYZE=true next build --webpack",
     "polish:check": "bash scripts/polish-check.sh",
     "audit:a11y": "node scripts/audit-a11y.cjs",
-    "test:golden-helpers": "node --test e2e/golden/helpers-auth-domain.test.mjs"
+    "test:golden-helpers": "node --test e2e/golden/helpers-auth-domain.test.mjs",
+    "test:visual-smoke": "node e2e/golden/w6-visual-smoke-checklist.mjs",
+    "test:visual-smoke:capture": "VISUAL_SMOKE_CAPTURE=1 node e2e/golden/w6-visual-smoke-checklist.mjs"
   },
   "dependencies": {
     "@clerk/nextjs": "^7.5.3",

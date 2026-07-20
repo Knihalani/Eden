@@ -69,6 +69,7 @@ function OptimizationPageInner() {
   return (
     <PageContent size="wide">
       <PageHeader
+        eyebrow="Optimize"
         title="Cost"
         subtitle="Spend, budgets, outcomes, forecasts, and model advice."
         description="Where your tokens go, what caching saves, and how the budget is burning."
@@ -78,7 +79,7 @@ function OptimizationPageInner() {
         value={tab}
         onValueChange={(v) => setTab(v as (typeof COST_TABS)[number])}
       >
-        <TabsList variant="underline" className="w-full justify-start">
+        <TabsList variant="underline" aria-label="Cost sections" className="h-auto w-full justify-start">
           <TabsTrigger value="cost" variant="underline">Cost</TabsTrigger>
           <TabsTrigger value="budget" variant="underline">Budget</TabsTrigger>
           <TabsTrigger value="outcomes" variant="underline">Outcomes</TabsTrigger>

@@ -32,6 +32,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
+import { STICKY_FIRST_TD, STICKY_FIRST_TH } from "@/components/ui/table-sticky";
 
 // ── Public types ──────────────────────────────────────────────────
 
@@ -152,7 +153,9 @@ export function DataTable<T>({
     [rowKey]
   );
 
-  // ── Sort
+  // Sort keys off column identity (keys), not array reference — parents often
+  // rebuild `columns` each render even when keys are unchanged (W12).
+  const columnKeySig = columns.map((c) => c.key).join("\0");
   const sorted = React.useMemo(() => {
     if (!sort) return rows;
     const col = columns.find((c) => c.key === sort.key);
@@ -164,7 +167,9 @@ export function DataTable<T>({
       return sort.direction === "asc" ? cmp : -cmp;
     });
     return out;
-  }, [rows, sort, columns]);
+    // columns consulted inside; columnKeySig gates identity churn
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- W12 column identity
+  }, [rows, sort, columnKeySig]);
 
   // ── Page
   const totalPages = Math.max(1, Math.ceil(sorted.length / pageSize));
@@ -243,17 +248,19 @@ export function DataTable<T>({
           <thead className="[&_tr]:border-b">
             <tr className="border-b border-[var(--border-default)]">
               {selectable && (
-                <th className="h-10 w-10 px-3 text-left align-middle">
-                  <input
-                    type="checkbox"
-                    aria-label="Select all on page"
-                    checked={allOnPageSelected}
-                    ref={(el) => {
-                      if (el) el.indeterminate = !allOnPageSelected && someOnPageSelected;
-                    }}
-                    onChange={toggleAll}
-                    className="h-4 w-4 cursor-pointer"
-                  />
+                <th className="h-11 w-11 p-0 text-left align-middle">
+                  <label className="flex min-h-11 min-w-11 cursor-pointer items-center justify-center">
+                    <input
+                      type="checkbox"
+                      aria-label="Select all on page"
+                      checked={allOnPageSelected}
+                      ref={(el) => {
+                        if (el) el.indeterminate = !allOnPageSelected && someOnPageSelected;
+                      }}
+                      onChange={toggleAll}
+                      className="h-4 w-4 cursor-pointer"
+                    />
+                  </label>
                 </th>
               )}
               {columns.map((col) => (
@@ -263,7 +270,7 @@ export function DataTable<T>({
                     "h-10 px-3 align-middle font-medium text-[var(--text-secondary)]",
                     alignClass(col.align),
                     col.headerClassName,
-                    col.sticky && "sticky left-0 z-10 bg-[var(--bg-secondary)]"
+                    col.sticky && STICKY_FIRST_TH
                   )}
                 >
                   {col.sortable ? (
@@ -337,19 +344,21 @@ export function DataTable<T>({
                   >
                     {selectable && (
                       <td
-                        className="px-3 py-3"
+                        className="w-11 p-0"
                         onClick={(e) => {
                           e.stopPropagation();
                           toggleRow(k);
                         }}
                       >
-                        <input
-                          type="checkbox"
-                          aria-label={`Select row ${k}`}
-                          checked={isSelected}
-                          onChange={() => toggleRow(k)}
-                          className="h-4 w-4 cursor-pointer"
-                        />
+                        <label className="flex min-h-11 min-w-11 cursor-pointer items-center justify-center">
+                          <input
+                            type="checkbox"
+                            aria-label={`Select row ${k}`}
+                            checked={isSelected}
+                            onChange={() => toggleRow(k)}
+                            className="h-4 w-4 cursor-pointer"
+                          />
+                        </label>
                       </td>
                     )}
                     {columns.map((col) => (
@@ -359,7 +368,7 @@ export function DataTable<T>({
                           "px-3 py-3 align-middle",
                           alignClass(col.align),
                           col.className,
-                          col.sticky && "sticky left-0 z-10 bg-[var(--bg-primary)]"
+                          col.sticky && STICKY_FIRST_TD
                         )}
                       >
                         {col.cell

@@ -258,7 +258,7 @@ export function MembersTab({ org }: MembersTabProps) {
   ];
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-space-4">
       {isPersonal && (
         <p className="text-sm text-[var(--text-muted)] rounded-lg border border-[var(--border-default)] bg-[var(--bg-secondary)] px-4 py-3">
           This is a personal workspace. Invites are unavailable — create a team
@@ -267,7 +267,7 @@ export function MembersTab({ org }: MembersTabProps) {
       )}
       {canInvite && (
         <SettingsCard title="Invite member">
-          <div className="space-y-2">
+          <div className="space-y-space-2">
             <div className="flex gap-3">
               <input
                 type="email"
@@ -294,14 +294,15 @@ export function MembersTab({ org }: MembersTabProps) {
                 <option value="member">Member</option>
                 <option value="admin">Admin</option>
               </select>
-              <button
+              <Button
+                variant="default"
+                className="min-h-11"
                 onClick={handleInvite}
                 disabled={!isValidEmail}
                 aria-disabled={!isValidEmail || undefined}
-                className="px-4 py-2 bg-[var(--accent)] text-[var(--accent-foreground)] rounded-lg text-sm font-medium hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Invite
-              </button>
+              </Button>
             </div>
             {inviteEmail.trim() !== "" && !isValidEmail && (
               <p
@@ -324,9 +325,10 @@ export function MembersTab({ org }: MembersTabProps) {
                     className="flex-1 px-2 py-1.5 rounded-md border border-[var(--border)] bg-[var(--bg-primary)] text-xs font-mono text-[var(--text-primary)]"
                     aria-label="Invite URL"
                   />
-                  <button
+                  <Button
                     type="button"
-                    className="px-3 py-1.5 text-xs rounded-md bg-[var(--accent)] text-[var(--accent-foreground)]"
+                    variant="default"
+                    size="sm"
                     onClick={async () => {
                       try {
                         await navigator.clipboard.writeText(lastInviteUrl);
@@ -337,7 +339,7 @@ export function MembersTab({ org }: MembersTabProps) {
                     }}
                   >
                     Copy
-                  </button>
+                  </Button>
                 </div>
               </div>
             )}

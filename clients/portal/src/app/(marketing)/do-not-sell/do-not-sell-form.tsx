@@ -56,7 +56,7 @@ export function DoNotSellForm() {
   }
 
   return (
-    <form onSubmit={onSubmit} className="space-y-4 max-w-md" aria-label="Do Not Sell opt-out">
+    <form onSubmit={onSubmit} className="space-y-space-4 max-w-md" aria-label="Do Not Sell opt-out">
       <label className="block text-sm text-[var(--text-secondary)]">
         Email address
         <input
@@ -64,12 +64,12 @@ export function DoNotSellForm() {
           required
           value={email}
           onChange={(e) => setEmail(e.target.value)}
-          className="mt-1.5 w-full min-h-11 rounded-md border border-[var(--border-subtle)] bg-[var(--bg-primary)] px-3 py-2 text-[var(--text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-secondary)]"
+          className="mt-space-2 w-full min-h-11 rounded-md border border-[var(--border-subtle)] bg-[var(--bg-primary)] px-space-3 py-space-2 text-[var(--text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-secondary)]"
           autoComplete="email"
           disabled={status === "loading" || status === "done"}
         />
       </label>
-      <Button type="submit" loading={status === "loading"} disabled={status === "done"}>
+      <Button type="submit" className="min-h-11" loading={status === "loading"} disabled={status === "done"}>
         Submit opt-out
       </Button>
       {message && (

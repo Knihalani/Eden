@@ -136,6 +136,18 @@ describe("W4.1 agents query states", () => {
     expect(src).not.toContain('hasPermission("integrations:write")');
   });
 
+  it("connect wires installation_id from callback URL into claim flow", () => {
+    const src = read("app/(portal)/agents/connect/page.tsx");
+    expect(src).toContain("useSearchParams");
+    expect(src).toContain("parseInstallationId");
+    expect(src).toContain("storeInstallationId");
+    expect(src).toContain('searchParams.get("installation_id")');
+    expect(src).toContain("preselectedInstallationId={installationId}");
+    expect(src).toContain("<Suspense fallback={<LoadingSkeleton variant=\"default\" />}>");
+    expect(src).not.toContain("<Suspense fallback={null}>");
+    expect(src).toContain('searchParams.get("error")');
+  });
+
   it("list gates Link repo behind integrations:write", () => {
     const src = read("app/(portal)/agents/page.tsx");
     expect(src).toContain("usePermissions");
@@ -155,8 +167,13 @@ describe("W4.1 agents query states", () => {
     const fleet = read("app/(portal)/fleet/page.tsx");
     const agents = read("app/(portal)/agents/page.tsx");
     expect(agents).toContain("EmbeddedSurface");
-    expect(agents).toContain('tab === "fleet"');
+    expect(agents).toContain('TabsContent value="fleet"');
+    expect(agents).toContain('from "@/components/ui/tabs"');
+    expect(agents).not.toContain("CrossLinkBar");
     expect(fleet).toContain("useEmbeddedSurface");
-    expect(fleet).toMatch(/embedded \? undefined/);
+    // Wave 7: no CrossLink toolbar band — More overflow when standalone
+    expect(fleet).not.toContain("CrossLinkBar");
+    expect(fleet).toMatch(/toolbar=\{undefined\}/);
+    expect(fleet).toContain('from "@/components/ui/tabs"');
   });
 });

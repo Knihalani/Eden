@@ -1,0 +1,23 @@
+{
+  "name": "w2-08-live-ingest-matrix-rerun",
+  "timestamp_utc": "2026-07-20T13:57:00Z",
+  "base_url": "https://api.edenobservability.com",
+  "org_id": "f4dc4575-ebd5-47a2-8541-42b9e41c1148",
+  "api_key_masked": "****909b",
+  "secrets_committed": false,
+  "supersedes": "clients/portal/e2e/golden/w2-08-live-ingest-matrix.json",
+  "pass": true,
+  "probes": [
+    {"id": "M1_live", "pass": true, "http": 200},
+    {"id": "M2_ready", "pass": true, "http": 200},
+    {"id": "M3_health", "pass": true, "http": 200},
+    {"id": "M4_neg_openai", "pass": true, "http": 401},
+    {"id": "M5_neg_telem", "pass": true, "http": 401},
+    {"id": "M6_pos_openai", "pass": true, "http": 200, "accepted": 1},
+    {"id": "M7_pos_webhook", "pass": true, "http": 200, "accepted": 1},
+    {"id": "info_nonuuid_neg", "pass": true, "http": 401, "must_pass": false}
+  ],
+  "evidence_dir": ".omc/autopilot/evidence/20260720-live-e2e/",
+  "fix_sha": "1ef1bab8b87c193897cbf9549c77324e07644bfb",
+  "unblocked": "BLOCKED_NEEDS_KEYS"
+}

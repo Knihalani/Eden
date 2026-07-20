@@ -2,6 +2,7 @@ import type { ComponentType, ReactNode } from "react";
 import Link from "next/link";
 import { Building2, Loader2, RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 
 interface NoOrgStateProps {
   feature: string;
@@ -60,12 +61,9 @@ export function NoOrgState({
 
   const createOrgPrimary =
     secondaryAction ?? (
-      <Link
-        href={CREATE_ORG_HREF}
-        className="inline-flex min-h-11 items-center gap-2 px-4 py-2 bg-[var(--accent)] text-[var(--bg-base)] rounded-lg text-sm font-medium hover:bg-[var(--accent-hover)] transition-colors"
-      >
-        Create organization
-      </Link>
+      <Button asChild variant="default" className="min-h-11">
+        <Link href={CREATE_ORG_HREF}>Create organization</Link>
+      </Button>
     );
 
   const createOrgSecondary = (
@@ -94,14 +92,15 @@ export function NoOrgState({
         {syncTimedOut ? (
           <>
             {onRetrySync ? (
-              <button
+              <Button
                 type="button"
+                variant="default"
+                className="min-h-11"
                 onClick={onRetrySync}
-                className="inline-flex min-h-11 items-center gap-2 px-4 py-2 bg-[var(--accent)] text-[var(--bg-base)] rounded-lg text-sm font-medium hover:bg-[var(--accent-hover)] transition-colors"
               >
                 <RefreshCw className="w-4 h-4" />
                 Retry sync
-              </button>
+              </Button>
             ) : null}
             {secondaryAction ?? createOrgSecondary}
           </>

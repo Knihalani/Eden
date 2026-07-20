@@ -26,20 +26,28 @@ import { useParams } from "next/navigation";
 import {
   ArrowLeft,
   Bot,
+  ChevronDown,
   Clock,
   ExternalLink,
-  Loader2,
 } from "lucide-react";
 import { useOrg } from "@/hooks/use-org";
 import { agentsApi, ApiError } from "@/lib/api";
 import { useOrgQuery } from "@/hooks/use-api-query";
 import { queryKeys } from "@/lib/query-keys";
+import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorState } from "@/components/ui/error-state";
 import { NoOrgState } from "@/components/ui/no-org-state";
 import { PageHeader } from "@/components/layout/page-header";
 import { PageContent, PageLoading } from "@/components/layout/page-content";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 function formatRelative(iso?: string | null): string {
   if (!iso) return "Never";
@@ -112,26 +120,22 @@ export default function AgentDetailPage() {
 
   if (!agentId) {
     return (
-      <PageContent size="narrow" className="space-y-4">
-        <Link
-          href="/agents"
-          className="inline-flex items-center gap-1 text-xs text-[var(--text-muted)] hover:text-[var(--accent)] transition-colors"
-        >
-          <ArrowLeft className="w-3 h-3" />
-          All agents
-        </Link>
+      <PageContent size="narrow" className="space-y-space-4">
+        <Button asChild variant="ghost" size="sm" className="min-h-11 px-0">
+          <Link href="/agents">
+            <ArrowLeft className="w-3 h-3" />
+            All agents
+          </Link>
+        </Button>
         <EmptyState
           icon={Bot}
           title="Invalid agent"
           description="This URL is missing an agent id. Pick an agent from the list."
           size="lg"
           action={
-            <Link
-              href="/agents"
-              className="inline-flex min-h-11 items-center text-sm text-[var(--accent)] hover:underline"
-            >
-              Back to agents
-            </Link>
+            <Button asChild className="min-h-11">
+              <Link href="/agents">Back to agents</Link>
+            </Button>
           }
         />
       </PageContent>
@@ -144,14 +148,13 @@ export default function AgentDetailPage() {
 
   if (isNotFound) {
     return (
-      <PageContent size="narrow" className="space-y-4">
-        <Link
-          href="/agents"
-          className="inline-flex items-center gap-1 text-xs text-[var(--text-muted)] hover:text-[var(--accent)] transition-colors"
-        >
-          <ArrowLeft className="w-3 h-3" />
-          All agents
-        </Link>
+      <PageContent size="narrow" className="space-y-space-4">
+        <Button asChild variant="ghost" size="sm" className="min-h-11 px-0">
+          <Link href="/agents">
+            <ArrowLeft className="w-3 h-3" />
+            All agents
+          </Link>
+        </Button>
         <EmptyState
           icon={Bot}
           title="Agent not found"
@@ -164,29 +167,26 @@ export default function AgentDetailPage() {
 
   if (loadError) {
     return (
-      <PageContent size="narrow" className="space-y-4">
-        <Link
-          href="/agents"
-          className="inline-flex items-center gap-1 text-xs text-[var(--text-muted)] hover:text-[var(--accent)] transition-colors"
-        >
-          <ArrowLeft className="w-3 h-3" />
-          All agents
-        </Link>
+      <PageContent size="narrow" className="space-y-space-4">
+        <Button asChild variant="ghost" size="sm" className="min-h-11 px-0">
+          <Link href="/agents">
+            <ArrowLeft className="w-3 h-3" />
+            All agents
+          </Link>
+        </Button>
         <ErrorState
           title="Could not load agent"
           message={loadError}
           action={
-            <button
+            <Button
               type="button"
               onClick={() => void agentQuery.refetch()}
               disabled={loading}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-[var(--accent)] text-[var(--bg-base)] rounded-lg text-sm font-medium hover:bg-[var(--accent-hover)] disabled:opacity-50 transition-colors"
+              loading={loading}
+              className="min-h-11"
             >
-              {loading ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : null}
               Try again
-            </button>
+            </Button>
           }
         />
       </PageContent>
@@ -197,15 +197,16 @@ export default function AgentDetailPage() {
     return <PageLoading size="wide" message="Loading agent…" />;
   }
 
+  const encodedId = encodeURIComponent(agentId);
+
   return (
-    <PageContent size="wide">
-      <Link
-        href="/agents"
-        className="inline-flex items-center gap-1 text-xs text-[var(--text-muted)] hover:text-[var(--accent)] transition-colors"
-      >
-        <ArrowLeft className="w-3 h-3" />
-        All agents
-      </Link>
+    <PageContent size="wide" className="space-y-space-4">
+      <Button asChild variant="ghost" size="sm" className="min-h-11 px-0 w-fit">
+        <Link href="/agents">
+          <ArrowLeft className="w-3 h-3" />
+          All agents
+        </Link>
+      </Button>
 
       <PageHeader
         eyebrow="Agent"
@@ -231,10 +232,10 @@ export default function AgentDetailPage() {
           </>
         }
         actions={
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             {agent.framework && (
               <span
-                className={`text-[10px] font-medium uppercase tracking-wide px-2 py-1 rounded ${
+                className={`text-xs font-medium uppercase tracking-wide px-2 py-1 rounded ${
                   FRAMEWORK_BADGE[agent.framework] ?? FRAMEWORK_BADGE.none
                 }`}
               >
@@ -242,17 +243,40 @@ export default function AgentDetailPage() {
               </span>
             )}
             {isLive && (
-              <span className="inline-flex items-center gap-1 text-[10px] font-medium uppercase tracking-wide px-2 py-1 rounded bg-[var(--terminal-faint)] text-[var(--terminal)]">
+              <span className="inline-flex items-center gap-1 text-xs font-medium uppercase tracking-wide px-2 py-1 rounded bg-[var(--terminal-faint)] text-[var(--terminal)]">
                 <span className="w-1.5 h-1.5 rounded-full bg-[var(--terminal)] animate-pulse" />
                 live
               </span>
             )}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" className="min-h-11" aria-label="Related agent surfaces">
+                  More
+                  <ChevronDown className="h-4 w-4" aria-hidden />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="min-w-[12rem]">
+                <DropdownMenuLabel>Go to</DropdownMenuLabel>
+                <DropdownMenuItem asChild>
+                  <Link href={`/agents/${encodedId}/ledger`}>Ledger</Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                  <Link href={`/agents/${encodedId}/artifacts`}>Artifacts</Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                  <Link href={`/agents/${encodedId}/book`}>Agent Book</Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                  <Link href={`/agents/${encodedId}/drift`}>Drift</Link>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         }
       />
 
       <Card className="p-6">
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-space-3">
           <Stat
             icon={Clock}
             label="Last seen"
@@ -270,33 +294,6 @@ export default function AgentDetailPage() {
           />
         </div>
       </Card>
-
-      <div className="mt-4 flex flex-wrap gap-3">
-        <Link
-          href={`/agents/${encodeURIComponent(agentId)}/ledger`}
-          className="text-sm text-[var(--accent)] hover:underline"
-        >
-          Ledger →
-        </Link>
-        <Link
-          href={`/agents/${encodeURIComponent(agentId)}/artifacts`}
-          className="text-sm text-[var(--accent)] hover:underline"
-        >
-          Artifacts →
-        </Link>
-        <Link
-          href={`/agents/${encodeURIComponent(agentId)}/book`}
-          className="text-sm text-[var(--accent)] hover:underline"
-        >
-          Agent Book →
-        </Link>
-        <Link
-          href={`/agents/${encodeURIComponent(agentId)}/drift`}
-          className="text-sm text-[var(--accent)] hover:underline"
-        >
-          Drift report →
-        </Link>
-      </div>
     </PageContent>
   );
 }
@@ -312,7 +309,7 @@ function Stat({
 }) {
   return (
     <div className="rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-secondary)]/40 p-3">
-      <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wide text-[var(--text-muted)] font-medium">
+      <div className="flex items-center gap-1.5 text-xs uppercase tracking-wide text-[var(--text-muted)] font-medium">
         <Icon className="w-3 h-3" />
         {label}
       </div>

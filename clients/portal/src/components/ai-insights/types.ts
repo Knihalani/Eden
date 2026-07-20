@@ -66,6 +66,10 @@ export type PageContextPayload = {
   session_id?: string;
   alert_id?: string;
   artifact_id?: string;
+  /** Eval object ids (E-08 / W15) — path or ?datasetId / ?playgroundId / ?experimentId. */
+  dataset_id?: string;
+  playground_id?: string;
+  experiment_id?: string;
   q?: string;
   selected_id?: string;
   filters?: Record<string, string>;
@@ -104,6 +108,9 @@ export function buildPageContext(pathname: string | null): PageContextPayload {
     path.match(/\/sessions\/([^/?#]+)/)?.[1] ??
     path.match(/\/debugger-sessions\/([^/?#]+)/)?.[1] ??
     null;
+  const datasetFromPath = path.match(/\/datasets\/([^/?#]+)/)?.[1] ?? null;
+  const playgroundFromPath = path.match(/\/playgrounds\/([^/?#]+)/)?.[1] ?? null;
+  const experimentFromPath = path.match(/\/experiments\/([^/?#]+)/)?.[1] ?? null;
 
   const issue_id =
     params?.get("issueId") || params?.get("issue_id") || issueFromPath || undefined;
@@ -115,6 +122,21 @@ export function buildPageContext(pathname: string | null): PageContextPayload {
   const alert_id = params?.get("alertId") || params?.get("alert_id") || undefined;
   const artifact_id =
     params?.get("artifactId") || params?.get("artifact_id") || undefined;
+  const dataset_id =
+    params?.get("datasetId") ||
+    params?.get("dataset_id") ||
+    datasetFromPath ||
+    undefined;
+  const playground_id =
+    params?.get("playgroundId") ||
+    params?.get("playground_id") ||
+    playgroundFromPath ||
+    undefined;
+  const experiment_id =
+    params?.get("experimentId") ||
+    params?.get("experiment_id") ||
+    experimentFromPath ||
+    undefined;
   const q = params?.get("q") || params?.get("filter") || undefined;
   const trace_id = fromQuery || fromPath || undefined;
 
@@ -123,13 +145,25 @@ export function buildPageContext(pathname: string | null): PageContextPayload {
   if (session_id) filters.session_id = session_id;
   if (alert_id) filters.alert_id = alert_id;
   if (artifact_id) filters.artifact_id = artifact_id;
+  if (dataset_id) filters.dataset_id = dataset_id;
+  if (playground_id) filters.playground_id = playground_id;
+  if (experiment_id) filters.experiment_id = experiment_id;
   if (q) filters.q = q;
   if (params?.get("agent_id")) filters.agent_id = params.get("agent_id")!;
   if (params?.get("outcome")) filters.outcome = params.get("outcome")!;
   if (params?.get("view")) filters.view = params.get("view")!;
+  if (params?.get("tab")) filters.tab = params.get("tab")!;
 
   const selected_id =
-    trace_id || issue_id || session_id || alert_id || artifact_id || undefined;
+    trace_id ||
+    issue_id ||
+    session_id ||
+    alert_id ||
+    artifact_id ||
+    dataset_id ||
+    playground_id ||
+    experiment_id ||
+    undefined;
 
   return {
     ...(path ? { pathname: path } : {}),
@@ -140,6 +174,9 @@ export function buildPageContext(pathname: string | null): PageContextPayload {
     ...(session_id ? { session_id } : {}),
     ...(alert_id ? { alert_id } : {}),
     ...(artifact_id ? { artifact_id } : {}),
+    ...(dataset_id ? { dataset_id } : {}),
+    ...(playground_id ? { playground_id } : {}),
+    ...(experiment_id ? { experiment_id } : {}),
     ...(q ? { q } : {}),
     ...(selected_id ? { selected_id } : {}),
     ...(Object.keys(filters).length ? { filters } : {}),

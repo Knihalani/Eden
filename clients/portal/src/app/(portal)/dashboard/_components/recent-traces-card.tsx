@@ -81,7 +81,7 @@ export function RecentTracesCard({
             title="Traces unavailable"
             description={
               errorMessage?.trim() ||
-              "Could not load recent traces. Retry in a moment — this is not an empty inbox."
+              "Could not load recent traces. Retry — this is not an empty inbox."
             }
             size="sm"
             variant="plain"
@@ -134,7 +134,7 @@ export function RecentTracesCard({
                     {t.span_count === 1 ? "" : "s"} · {t.realm}
                   </p>
                 </div>
-                <div className="text-right shrink-0 flex flex-col items-end gap-0.5">
+                <div className="text-right shrink-0 flex flex-col items-end gap-1">
                   {t.duration_ms != null && (
                     <span className="text-xs font-medium text-[var(--text-secondary)] inline-flex items-center gap-1">
                       <Clock className="w-3 h-3 text-[var(--text-muted)]" />

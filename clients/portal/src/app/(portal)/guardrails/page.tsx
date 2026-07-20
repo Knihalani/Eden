@@ -6,7 +6,6 @@ import { useOrg } from "@/hooks/use-org";
 import { guardrailsApi } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { EmptyState } from "@/components/ui/empty-state";
-import { StatCard } from "@/components/ui/stat-card";
 import { PageHeader } from "@/components/layout/page-header";
 import { PageContent } from "@/components/layout/page-content";
 import { EmbeddedSurface } from "@/components/layout/embedded-surface";
@@ -282,21 +281,20 @@ function GuardrailsPageInner() {
   // Stats — derived from the policies list. No fabricated eval counts.
   const enabledCount = policies.filter(p => p.enabled).length;
   const statsPending = !policiesReady || policiesLoading;
-  const evalTodayEstimate = "—";
-  const blockRate = "—";
   return <PageContent size="wide">
       <PageHeader
+        eyebrow="Safety"
         title="Guardrails"
         subtitle="Content safety, injection defense, and PII redaction."
         description="Live test bench and policy management for gateway content gates."
         actions={
           activeTab === "policies" ? (
-            <Button size="sm" onClick={() => setShowAddPolicy(true)} aria-label="Add new policy">
+            <Button className="min-h-11" onClick={() => setShowAddPolicy(true)} aria-label="Add new policy">
               <Plus className="w-4 h-4" />
               Add policy
             </Button>
           ) : activeTab !== "test" ? (
-            <Button size="sm" variant="outline" onClick={() => setActiveTab("test")} aria-label="Switch to Test tab">
+            <Button className="min-h-11" variant="outline" onClick={() => setActiveTab("test")} aria-label="Switch to Test tab">
               <TestTube2 className="w-4 h-4" />
               Test content
             </Button>
@@ -304,40 +302,39 @@ function GuardrailsPageInner() {
         }
       />
 
-      {/* Stat strip — always visible; show em-dash until policies load */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <StatCard title="Total policies" value={statsPending ? "—" : policies.length} subtitle={statsPending ? "Loading…" : `${enabledCount} enabled`} icon={Shield} accent="accent" />
-        <StatCard title="Enabled" value={statsPending ? "—" : enabledCount} subtitle={statsPending ? "Loading…" : `${policies.length - enabledCount} disabled`} icon={ShieldCheck} accent="terminal" />
-        <StatCard title="Evaluations today" value={evalTodayEstimate} subtitle="unavailable" icon={Activity} accent="info" />
-        <StatCard title="Block rate" value={blockRate} subtitle="last 24h" icon={ShieldAlert} accent="warning" />
+      {/* KPI — real counts only; drop unavailable placeholders (anti-clutter) */}
+      <div className="mb-space-4 flex flex-wrap gap-space-4 text-sm" data-testid="guardrails-kpi">
+        <div>
+          <p className="text-2xs uppercase tracking-wider text-[var(--text-muted)]">Policies</p>
+          <p className="text-lg font-semibold tabular-nums text-[var(--text-primary)]">
+            {statsPending ? "—" : policies.length}
+          </p>
+          <p className="text-xs text-[var(--text-muted)]">
+            {statsPending ? "Loading…" : `${enabledCount} enabled`}
+          </p>
+        </div>
+        <div>
+          <p className="text-2xs uppercase tracking-wider text-[var(--text-muted)]">Enabled</p>
+          <p className="text-lg font-semibold tabular-nums text-[var(--text-primary)]">
+            {statsPending ? "—" : enabledCount}
+          </p>
+          <p className="text-xs text-[var(--text-muted)]">
+            {statsPending ? "Loading…" : `${Math.max(0, policies.length - enabledCount)} disabled`}
+          </p>
+        </div>
       </div>
 
-      {/* Tabs */}
+      {/* Tabs — text only; icons lived in content */}
       <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as Tab)}>
         <TabsList variant="underline" aria-label="Guardrails sections" className="w-full justify-start h-auto flex-wrap bg-transparent">
-          {([{
-          key: "test" as Tab,
-          label: "Test",
-          icon: TestTube2
-        }, {
-          key: "policies" as Tab,
-          label: "Policies",
-          icon: ShieldCheck
-        }, {
-          key: "injections" as Tab,
-          label: "Injections",
-          icon: Bug
-        }, {
-          key: "pii" as Tab,
-          label: "PII",
-          icon: FileLock2
-        }, {
-          key: "redteam" as Tab,
-          label: "Red team",
-          icon: Swords
-        }] as const).map(({ key, label, icon: Icon }) => (
-            <TabsTrigger key={key} value={key} variant="underline" className="flex items-center gap-2">
-              <Icon className="w-4 h-4" aria-hidden />
+          {([
+            { key: "test" as Tab, label: "Test" },
+            { key: "policies" as Tab, label: "Policies" },
+            { key: "injections" as Tab, label: "Injections" },
+            { key: "pii" as Tab, label: "PII" },
+            { key: "redteam" as Tab, label: "Red team" },
+          ] as const).map(({ key, label }) => (
+            <TabsTrigger key={key} value={key} variant="underline" className="min-h-11">
               {label}
             </TabsTrigger>
           ))}
@@ -400,8 +397,8 @@ function TestTab({
 }) {
   const isBusy = evaluating || scanning || redacting;
   const canRun = testContent.trim().length > 0 && !isBusy;
-  return <div className="space-y-4">
-      <Panel tone="flat" padding="lg" className="space-y-4">
+  return <div className="space-y-space-4">
+      <Panel tone="flat" padding="lg" className="space-y-space-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <TestTube2 className="w-4 h-4 text-[var(--accent)]" />
@@ -409,7 +406,7 @@ function TestTab({
                 Live evaluation bench
               </h3>
             </div>
-            <div className="text-[10px] uppercase tracking-wider text-[var(--text-muted)] font-medium font-mono">
+            <div className="text-2xs uppercase tracking-wider text-[var(--text-muted)] font-medium font-mono">
               {testContent.length} chars
             </div>
           </div>
@@ -421,22 +418,42 @@ function TestTab({
               {error}
             </div>}
 
-          <div className="flex flex-wrap items-center gap-2">
-            <Button onClick={onEvaluate} disabled={!canRun} aria-label="Evaluate content against enabled policies">
-              {evaluating ? <Loader2 className="w-4 h-4 animate-spin" aria-hidden /> : <ShieldCheck className="w-4 h-4" aria-hidden />}
+          <div className="flex flex-wrap items-center gap-space-2">
+            <Button
+              className="min-h-11"
+              onClick={onEvaluate}
+              disabled={!canRun}
+              loading={evaluating}
+              aria-label="Evaluate content against enabled policies"
+            >
+              <ShieldCheck className="w-4 h-4" aria-hidden />
               Evaluate
             </Button>
-            <Button onClick={onScan} disabled={!canRun} variant="outline" aria-label="Scan content for prompt injection">
-              {scanning ? <Loader2 className="w-4 h-4 animate-spin" aria-hidden /> : <ScanLine className="w-4 h-4" aria-hidden />}
+            <Button
+              className="min-h-11"
+              onClick={onScan}
+              disabled={!canRun}
+              loading={scanning}
+              variant="outline"
+              aria-label="Scan content for prompt injection"
+            >
+              <ScanLine className="w-4 h-4" aria-hidden />
               Injection scan
             </Button>
-            <Button onClick={onRedact} disabled={!canRun} variant="outline" aria-label="Redact PII from content">
-              {redacting ? <Loader2 className="w-4 h-4 animate-spin" aria-hidden /> : <Eraser className="w-4 h-4" aria-hidden />}
+            <Button
+              className="min-h-11"
+              onClick={onRedact}
+              disabled={!canRun}
+              loading={redacting}
+              variant="outline"
+              aria-label="Redact PII from content"
+            >
+              <Eraser className="w-4 h-4" aria-hidden />
               PII redact
             </Button>
             {testContent && <Button onClick={() => {
           onTestContentChange("");
-        }} variant="ghost" size="sm" aria-label="Clear test content" className="ml-auto">
+        }} variant="ghost" className="ml-auto min-h-11" aria-label="Clear test content">
                 <XCircle className="w-3.5 h-3.5" aria-hidden />
                 Clear
               </Button>}
@@ -486,7 +503,7 @@ function EvaluateResultCard({
             Policy evaluation
           </h3>
         </div>
-        <span className={cn("text-[10px] uppercase tracking-wider font-bold px-2 py-0.5 rounded-full", badgeTone)}>
+        <span className={cn("text-2xs uppercase tracking-wider font-bold px-2 py-1 rounded-full", badgeTone)}>
           {badgeLabel}
         </span>
       </div>
@@ -513,7 +530,7 @@ function EvaluateResultCard({
                     <span className="text-xs font-mono text-[var(--text-muted)] truncate max-w-[140px]">
                       {v.policy_id}
                     </span>
-                    <span className={cn("text-[10px] uppercase tracking-wider font-bold px-1.5 py-0.5 rounded", sev.chip)}>
+                    <span className={cn("text-2xs uppercase tracking-wider font-bold px-1.5 py-1 rounded", sev.chip)}>
                       {v.severity}
                     </span>
                   </div>
@@ -543,7 +560,7 @@ function InjectionResultCard({
           {isHot ? <Bug className="w-4 h-4 text-[var(--error)]" /> : <ShieldCheck className="w-4 h-4 text-[var(--terminal)]" />}
           <h3 className="text-sm font-semibold text-[var(--text-primary)]">Injection scan</h3>
         </div>
-        <span className={cn("text-[10px] uppercase tracking-wider font-bold px-2 py-0.5 rounded-full", isHot ? "bg-[var(--error)]/20 text-[var(--error)]" : "bg-[var(--terminal)]/20 text-[var(--terminal)]")}>
+        <span className={cn("text-2xs uppercase tracking-wider font-bold px-2 py-1 rounded-full", isHot ? "bg-[var(--error)]/20 text-[var(--error)]" : "bg-[var(--terminal)]/20 text-[var(--terminal)]")}>
           {isHot ? "Detected" : "Clean"}
         </span>
       </div>
@@ -562,11 +579,11 @@ function InjectionResultCard({
         }} />
         </div>
         {result.matched_patterns.length > 0 ? <div>
-            <p className="text-[10px] uppercase tracking-wider text-[var(--text-muted)] font-semibold mb-1.5">
+            <p className="text-2xs uppercase tracking-wider text-[var(--text-muted)] font-semibold mb-1.5">
               Matched patterns
             </p>
             <div className="flex flex-wrap gap-1.5">
-              {result.matched_patterns.map((p, i) => <span key={i} className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-[var(--error-bg)] text-[var(--error)] border border-[var(--error)]/20">
+              {result.matched_patterns.map((p, i) => <span key={i} className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full bg-[var(--error-bg)] text-[var(--error)] border border-[var(--error)]/20">
                   <AlertOctagon className="w-3 h-3" />
                   {p}
                 </span>)}
@@ -592,13 +609,13 @@ function RedactResultCard({
           <FileLock2 className="w-4 h-4 text-[var(--warning)]" />
           <h3 className="text-sm font-semibold text-[var(--text-primary)]">PII redaction</h3>
         </div>
-        <span className="text-[10px] uppercase tracking-wider font-bold px-2 py-0.5 rounded-full bg-[var(--warning)]/20 text-[var(--warning)]">
+        <span className="text-2xs uppercase tracking-wider font-bold px-2 py-1 rounded-full bg-[var(--warning)]/20 text-[var(--warning)]">
           {totalCount} masked
         </span>
       </div>
       <div className="p-4 space-y-3">
         <div>
-          <p className="text-[10px] uppercase tracking-wider text-[var(--text-muted)] font-semibold mb-1.5">
+          <p className="text-2xs uppercase tracking-wider text-[var(--text-muted)] font-semibold mb-1.5">
             Redacted content
           </p>
           <pre className="text-xs font-mono bg-[var(--bg-secondary)] rounded-lg p-3 overflow-x-auto max-h-32 whitespace-pre-wrap break-words text-[var(--text-primary)] border border-[var(--border-subtle)]">
@@ -606,7 +623,7 @@ function RedactResultCard({
           </pre>
         </div>
         {result.redactions.length > 0 && <div>
-            <p className="text-[10px] uppercase tracking-wider text-[var(--text-muted)] font-semibold mb-1.5">
+            <p className="text-2xs uppercase tracking-wider text-[var(--text-muted)] font-semibold mb-1.5">
               By category
             </p>
             <div className="space-y-1">
@@ -654,12 +671,12 @@ function PoliciesTab({
             Rules that gate every request and response at the gateway
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <Button onClick={onRefresh} disabled={loading} variant="ghost" size="sm" aria-label="Refresh policies">
+        <div className="flex items-center gap-space-2">
+          <Button onClick={onRefresh} disabled={loading} loading={loading} variant="ghost" className="min-h-11" aria-label="Refresh policies">
             <Zap className="w-3.5 h-3.5" aria-hidden />
             Refresh
           </Button>
-          <Button onClick={onAddPolicy} size="sm" aria-label="Add new policy">
+          <Button onClick={onAddPolicy} className="min-h-11" aria-label="Add new policy">
             <Plus className="w-3.5 h-3.5" aria-hidden />
             Add policy
           </Button>
@@ -684,7 +701,7 @@ function PoliciesTab({
           }
           action={
             error === FEATURE_NOT_ENABLED_TITLE || error === NOT_IMPLEMENTED_TITLE ? undefined : (
-              <Button onClick={onRefresh} variant="outline" size="sm">
+              <Button onClick={onRefresh} variant="outline" className="min-h-11">
                 Try again
               </Button>
             )
@@ -693,7 +710,7 @@ function PoliciesTab({
       ) : loading && policies.length === 0 ? <div className="flex items-center justify-center py-20">
           <Loader2 className="w-8 h-8 animate-spin text-[var(--accent)]" />
         </div> : policies.length === 0 ? (
-          <EmptyState icon={Shield} title="No policies configured" description="Add a policy to start gating content at the gateway." size="lg" action={<Button onClick={onAddPolicy} aria-label="Add your first policy">
+          <EmptyState icon={Shield} title="No policies configured" description="Add a policy to start gating content at the gateway." size="lg" action={<Button className="min-h-11" onClick={onAddPolicy} aria-label="Add your first policy">
                 <Plus className="w-4 h-4" aria-hidden />
                 Add your first policy
               </Button>} />
@@ -722,7 +739,7 @@ function PoliciesTab({
         sortable: true,
         cell: policy => {
           const kindMeta = KIND_LABELS[policy.kind] || KIND_LABELS.content;
-          return <span className={cn("inline-flex items-center gap-1 text-[10px] uppercase tracking-wider font-semibold px-2 py-0.5 rounded-full", kindMeta.color)}>
+          return <span className={cn("inline-flex items-center gap-1 text-2xs uppercase tracking-wider font-semibold px-2 py-1 rounded-full", kindMeta.color)}>
                       {kindMeta.label}
                     </span>;
         }
@@ -731,8 +748,8 @@ function PoliciesTab({
         header: "Enabled",
         sortable: true,
         cell: policy => <div className="flex items-center gap-2">
-                    <button aria-label={policy.enabled ? "Enabled" : "Disabled"} className={cn("relative inline-flex h-5 w-9 items-center rounded-full transition-colors", policy.enabled ? "bg-[var(--terminal)]" : "bg-[var(--bg-tertiary)]")}>
-                      <span className={cn("inline-block h-3.5 w-3.5 transform rounded-full bg-[var(--bg-primary)] transition-transform", policy.enabled ? "translate-x-5" : "translate-x-1")} />
+                    <button aria-label={policy.enabled ? "Enabled" : "Disabled"} className={cn("relative inline-flex h-6 w-11 min-h-11 items-center rounded-full transition-colors", policy.enabled ? "bg-[var(--terminal)]" : "bg-[var(--bg-tertiary)]")}>
+                      <span className={cn("inline-block h-4 w-4 transform rounded-full bg-[var(--bg-primary)] transition-transform", policy.enabled ? "translate-x-6" : "translate-x-1")} />
                     </button>
                     <span className="text-xs text-[var(--text-muted)]">{policy.enabled ? "On" : "Off"}</span>
                   </div>
@@ -742,7 +759,7 @@ function PoliciesTab({
         cell: policy => {
           const configJson = JSON.stringify(policy.config, null, 2);
           const configPreview = configJson.length > 80 ? configJson.slice(0, 80) + "…" : configJson;
-          return <code className="text-[10px] font-mono text-[var(--text-muted)] bg-[var(--bg-secondary)] px-2 py-1 rounded inline-block max-w-[280px] truncate align-middle" title={configJson}>
+          return <code className="text-2xs font-mono text-[var(--text-muted)] bg-[var(--bg-secondary)] px-2 py-1 rounded inline-block max-w-[280px] truncate align-middle" title={configJson}>
                       {configPreview}
                     </code>;
         }
@@ -835,16 +852,16 @@ function AddPolicyDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4">
+        <div className="space-y-space-4">
           <div>
-            <label htmlFor="policy-name" className="text-xs font-medium text-[var(--text-muted)] mb-1.5 block">
+            <label htmlFor="policy-name" className="text-xs font-medium text-[var(--text-muted)] mb-space-1 block">
               Name
             </label>
             <Input id="policy-name" value={name} onChange={e => setName(e.target.value)} placeholder="block-internal-domains" aria-label="Policy name" />
           </div>
 
           <div>
-            <label htmlFor="policy-kind" className="text-xs font-medium text-[var(--text-muted)] mb-1.5 block">
+            <label htmlFor="policy-kind" className="text-xs font-medium text-[var(--text-muted)] mb-space-1 block">
               Kind
             </label>
             <select
@@ -866,7 +883,7 @@ function AddPolicyDialog({
           </div>
 
           <div>
-            <label htmlFor="policy-action" className="text-xs font-medium text-[var(--text-muted)] mb-1.5 block">
+            <label htmlFor="policy-action" className="text-xs font-medium text-[var(--text-muted)] mb-space-1 block">
               Action
             </label>
             <select
@@ -885,7 +902,7 @@ function AddPolicyDialog({
           </div>
 
           <div>
-            <label htmlFor="policy-spec" className="text-xs font-medium text-[var(--text-muted)] mb-1.5 block">
+            <label htmlFor="policy-spec" className="text-xs font-medium text-[var(--text-muted)] mb-space-1 block">
               Spec (JSON)
             </label>
             <Textarea id="policy-spec" value={configText} onChange={e => setConfigText(e.target.value)} placeholder='{"patterns": ["ssn", "email"]}' aria-label="Policy spec (JSON)" className="min-h-[100px] font-mono text-xs" />
@@ -898,13 +915,26 @@ function AddPolicyDialog({
         </div>
 
         <DialogFooter>
-          <button onClick={() => onOpenChange(false)} disabled={submitting} aria-label="Cancel" className="px-3 py-2 text-sm text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors disabled:opacity-50">
+          <Button
+            type="button"
+            variant="outline"
+            className="min-h-11"
+            onClick={() => onOpenChange(false)}
+            disabled={submitting}
+            aria-label="Cancel"
+          >
             Cancel
-          </button>
-          <button onClick={handleSubmit} disabled={submitting} aria-label="Create policy" className="inline-flex items-center gap-2 px-4 py-2 bg-[var(--accent)] text-[var(--bg-base)] rounded-lg text-sm font-medium hover:bg-[var(--accent-hover)] disabled:opacity-50 transition-colors">
-            {submitting ? <Loader2 className="w-4 h-4 animate-spin" aria-hidden /> : <Plus className="w-4 h-4" aria-hidden />}
+          </Button>
+          <Button
+            variant="default"
+            className="min-h-11"
+            onClick={handleSubmit}
+            loading={submitting}
+            aria-label="Create policy"
+          >
+            <Plus className="w-4 h-4" aria-hidden />
             Create policy
-          </button>
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>;
@@ -968,7 +998,7 @@ function InjectionsTab({
             onRetry &&
             error !== FEATURE_NOT_ENABLED_TITLE &&
             error !== NOT_IMPLEMENTED_TITLE ? (
-              <Button size="sm" variant="outline" onClick={onRetry}>
+              <Button className="min-h-11" variant="outline" onClick={onRetry}>
                 Try again
               </Button>
             ) : undefined
@@ -982,7 +1012,7 @@ function InjectionsTab({
         sortable: true,
         cell: inj => {
           const sev = inj.verdict === "block" ? SEVERITY_STYLES["high"] : SEVERITY_STYLES[inj.verdict] ?? SEVERITY_STYLES["low"];
-          return <span className={cn("inline-flex items-center gap-1 text-[10px] uppercase tracking-wider font-bold px-1.5 py-0.5 rounded", sev.chip)}>
+          return <span className={cn("inline-flex items-center gap-1 text-2xs uppercase tracking-wider font-bold px-1.5 py-1 rounded", sev.chip)}>
                     {sev.icon === "high" ? <AlertOctagon className="w-3 h-3" /> : <AlertTriangle className="w-3 h-3" />}
                     {inj.verdict}
                   </span>;
@@ -994,7 +1024,7 @@ function InjectionsTab({
       }, {
         key: "trace_id",
         header: "Source",
-        cell: inj => <span className="text-[10px] uppercase tracking-wider font-semibold px-2 py-0.5 rounded-full bg-[var(--bg-tertiary)] text-[var(--text-secondary)]">
+        cell: inj => <span className="text-2xs uppercase tracking-wider font-semibold px-2 py-1 rounded-full bg-[var(--bg-tertiary)] text-[var(--text-secondary)]">
                   {inj.trace_id ? inj.trace_id.slice(0, 12) : "—"}
                 </span>
       }, {
@@ -1090,7 +1120,7 @@ function PiiTab({
             onRetry &&
             error !== FEATURE_NOT_ENABLED_TITLE &&
             error !== NOT_IMPLEMENTED_TITLE ? (
-              <Button size="sm" variant="outline" onClick={onRetry}>
+              <Button className="min-h-11" variant="outline" onClick={onRetry}>
                 Try again
               </Button>
             ) : undefined
@@ -1099,14 +1129,14 @@ function PiiTab({
       ) : null}
 
       {!unavailable && <>
-      {/* Category rollup strip */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-        {Object.entries(totalCategories).map(([cat, count]) => (
+      {/* Category rollup strip — thin KPI, hard-capped */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-space-2">
+        {Object.entries(totalCategories).slice(0, 7).map(([cat, count]) => (
           <Panel key={cat} tone="flat" padding="sm">
-            <p className="text-[10px] uppercase tracking-wider text-[var(--text-muted)] font-semibold font-mono">
+            <p className="text-2xs uppercase tracking-wider text-[var(--text-muted)] font-semibold font-mono">
               {cat.replace(/_/g, " ")}
             </p>
-            <p className="text-lg font-bold text-[var(--warning)] tabular-nums mt-0.5">
+            <p className="text-lg font-bold text-[var(--warning)] tabular-nums mt-space-1">
               {count}
             </p>
           </Panel>
@@ -1129,7 +1159,7 @@ function PiiTab({
         header: "Categories",
         cell: r => {
           const cat = r.reason?.match(/^pii:\s*([\w-]+)/i)?.[1] ?? "pii";
-          return <span className="inline-flex items-center gap-1 text-[10px] uppercase tracking-wider font-semibold px-1.5 py-0.5 rounded bg-[var(--warning-bg)] text-[var(--warning)]">
+          return <span className="inline-flex items-center gap-1 text-2xs uppercase tracking-wider font-semibold px-1.5 py-1 rounded bg-[var(--warning-bg)] text-[var(--warning)]">
                     {cat.replace(/_/g, " ")}
                   </span>;
         }

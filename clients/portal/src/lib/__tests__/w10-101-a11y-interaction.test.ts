@@ -78,10 +78,15 @@ describe("W10.1 cookie banner scope (F3) + touch targets", () => {
 });
 
 describe("W10.1 high-traffic hub tabs ≥44px (min-h-11)", () => {
-  it("issues status filter + detail section tabs", () => {
+  it("issues section tabs + status filter select + detail section tabs", () => {
     const list = read("app/(portal)/issues/page.tsx");
     const detail = read("app/(portal)/issues/[id]/page.tsx");
-    expect(list).toMatch(/Issue status filter[\s\S]*?min-h-11/);
+    const filterBar = read("components/ui/filter-bar.tsx");
+    // Wave 7 moved status into ResourceOsToolbar → FilterBar selects
+    expect(list).toMatch(/Issues sections[\s\S]*?min-h-11/);
+    expect(list).toContain('key: "status"');
+    expect(filterBar).toMatch(/aria-label=\{\`\$\{s\.label\} filter\`\}/);
+    expect(filterBar).toMatch(/min-h-11[\s\S]*?s\.label|aria-label=\{\`\$\{s\.label\} filter\`\}[\s\S]*?min-h-11/);
     expect(detail).toMatch(/Issue sections[\s\S]*?min-h-11/);
   });
 

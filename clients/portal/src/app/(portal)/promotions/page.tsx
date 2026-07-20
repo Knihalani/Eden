@@ -2,11 +2,18 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useState, Suspense } from "react";
-import { Loader2 } from "lucide-react";
+import { ChevronDown, Loader2 } from "lucide-react";
 
 import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorState } from "@/components/ui/error-state";
 import { NoOrgState } from "@/components/ui/no-org-state";
@@ -18,7 +25,6 @@ import {
   DetailPanelShell,
   useResourceUrlState,
   ResourceOsToolbar,
-  CrossLinkBar,
   BulkActionBar,
 } from "@/components/portal-os";
 import { cn } from "@/lib/utils";
@@ -235,11 +241,33 @@ function PromotionsPageInner() {
         <PageHeader
           title="Promotions inbox"
           description="Evidence-gated candidates — shadow, pending review, promoted, demoted."
+          actions={
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="sm" className="min-h-11" aria-label="Promotions path links">
+                  More
+                  <ChevronDown className="h-4 w-4" aria-hidden />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="min-w-[12rem]">
+                <DropdownMenuLabel>Go to</DropdownMenuLabel>
+                <DropdownMenuItem asChild>
+                  <Link href={artifactHref()}>Artifacts</Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                  <Link href="/improve">Improve</Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                  <Link href="/issues">Issues</Link>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          }
         />
       }
       toolbar={
-        <div className="space-y-3">
-          <div className="flex flex-wrap gap-1">
+        <div className="space-y-space-3" data-testid="promotions-toolbar">
+          <div className="flex flex-wrap gap-space-1">
             {["shadow", "promoted", "demoted", "all"].map((s) => (
               <Button
                 key={s}
@@ -263,13 +291,6 @@ function PromotionsPageInner() {
               ref_id: String(p.ref_id ?? ""),
             }))}
             exportFilename="promotions.csv"
-          />
-          <CrossLinkBar
-            links={[
-              { label: "Artifacts", href: artifactHref() },
-              { label: "Improve", href: "/improve" },
-              { label: "Issues", href: "/issues" },
-            ]}
           />
         </div>
       }

@@ -65,7 +65,7 @@ export function BillingTab() {
   const costPct = costHard > 0 ? Math.min(100, (costUsed / costHard) * 100) : 0;
   const costStatus = plan?.cost_status ?? "ok";
 
-  return <div className="space-y-6">
+  return <div className="space-y-space-6">
       {/* Stripe probe: free-only 503 is treated as available so this
           banner stays hidden; true Stripe misconfig still surfaces. */}
       <IntegrationStatusBanners integration="stripe" orgId={currentOrg.id} />
@@ -161,7 +161,7 @@ export function BillingTab() {
           Where the spend came from this month — informational; your cap is on
           total USD cost.
         </p>
-        <div className="space-y-4">
+        <div className="space-y-space-4">
           <UsageMeter label="Seats" used={plan?.seats_used || 0} limit={plan?.seats_limit || 0} icon={Users} />
           <UsageMeter label="Code References" used={plan?.references_used || 0} limit={plan?.references_limit || 0} icon={Code} />
           <UsageMeter label="LLM tokens" used={plan?.tokens_used || 0} limit={0} icon={Briefcase} unit="tokens" />

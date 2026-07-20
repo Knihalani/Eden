@@ -135,11 +135,11 @@ function LinkTile({ item }: { item: QuickLinkItem }) {
 
 export function QuickLinks() {
   return (
-    <Panel tone="flat" padding="md" className="space-y-2">
-      <h3 className="text-sm font-semibold text-[var(--text-primary)] px-1">
+    <Panel tone="flat" padding="md" className="flex flex-col gap-space-2">
+      <h3 className="text-sm font-semibold text-[var(--text-primary)] px-space-1">
         Quick links
       </h3>
-      <div className="grid grid-cols-1 gap-0.5 sm:grid-cols-2 xl:grid-cols-1">
+      <div className="grid grid-cols-1 gap-space-1 sm:grid-cols-2 xl:grid-cols-1">
         {QUICK_LINKS.map((item) => (
           <LinkTile key={item.href} item={item} />
         ))}

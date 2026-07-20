@@ -66,7 +66,7 @@ export function PageContent({
 
   if (isEmbedded) {
     return (
-      <div className={cn("w-full space-y-5", className)}>
+      <div className={cn("w-full space-y-space-5", className)}>
         {children}
       </div>
     );
@@ -75,14 +75,12 @@ export function PageContent({
   return (
     <div
       className={cn(
-        // Single source of truth for padding + rhythm.
-        // Slightly more horizontal air on lg+; vertical space-y is
-        // shared with embedded mode so hubs feel even.
+        // Single source of truth for padding + rhythm (w3-spacing-tokens §5.1).
         // `page-enter` lives on (portal)/layout.tsx so it fires once
         // for the route change, not twice (parent + this wrapper).
         "w-full mx-auto",
-        "px-4 py-4 sm:px-6 sm:py-5 lg:px-10 lg:py-6",
-        "space-y-5",
+        "px-space-4 py-space-4 sm:px-space-5 sm:py-space-5 lg:px-space-7 lg:py-space-6",
+        "space-y-space-5",
         SIZE[size],
         className,
       )}

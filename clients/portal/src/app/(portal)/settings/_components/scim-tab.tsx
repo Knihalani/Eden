@@ -137,7 +137,7 @@ export function ScimTab({ org }: { org: any }) {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-space-6">
       {/* Header */}
       <div className="flex items-center gap-3">
         <div className="p-2 bg-[var(--accent-faint)] rounded-lg">

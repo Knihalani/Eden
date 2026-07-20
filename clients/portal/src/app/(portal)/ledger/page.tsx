@@ -2,11 +2,18 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
-import { BookOpen, Loader2 } from "lucide-react";
+import { BookOpen, ChevronDown, Loader2 } from "lucide-react";
 
 import { PageHeader } from "@/components/layout/page-header";
-import { CoreResourcePage, CrossLinkBar } from "@/components/portal-os";
+import { CoreResourcePage } from "@/components/portal-os";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorState } from "@/components/ui/error-state";
 import { NoOrgState } from "@/components/ui/no-org-state";
@@ -68,15 +75,28 @@ export default function LedgerPickerPage() {
         <PageHeader
           title="Ledger"
           description="Proven Artifacts and resolved issues write the Ledger — compounding memory for your agents."
-        />
-      }
-      toolbar={
-        <CrossLinkBar
-          links={[
-            { label: "Artifacts", href: artifactHref() },
-            { label: "Promotions", href: promotionsHref() },
-            { label: "Improve", href: "/improve" },
-          ]}
+          actions={
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="sm" className="min-h-11" aria-label="Ledger path links">
+                  More
+                  <ChevronDown className="h-4 w-4" aria-hidden />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="min-w-[12rem]">
+                <DropdownMenuLabel>Go to</DropdownMenuLabel>
+                <DropdownMenuItem asChild>
+                  <Link href={artifactHref()}>Artifacts</Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                  <Link href={promotionsHref()}>Promotions</Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                  <Link href="/improve">Improve</Link>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          }
         />
       }
       table={

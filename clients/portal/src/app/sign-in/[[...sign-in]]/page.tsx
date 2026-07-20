@@ -40,13 +40,13 @@ export default async function SignInPage({
 
   return (
     <AuthSplitLayout brandPanel={<AuthBrandPanel />}>
-      <div className="w-full max-w-md space-y-6">
+      <div className="w-full max-w-md space-y-space-5">
         {/* Branded eyebrow above the Clerk card so the screen reads
             as "Eden auth" rather than a generic Clerk form. The
             <SignIn /> component hides its own header via
             the appearance config in clerk-theme.ts. */}
-        <div className="text-center space-y-1.5">
-          <p className="text-[10px] font-mono font-semibold uppercase tracking-[0.18em] text-[var(--accent)]">
+        <div className="text-center space-y-space-2">
+          <p className="text-2xs font-mono font-semibold uppercase tracking-[0.18em] text-[var(--accent)]">
             Account access
           </p>
           <h1 className="text-xl font-semibold text-[var(--text-primary)] tracking-tight">

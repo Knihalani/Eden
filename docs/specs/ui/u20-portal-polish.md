@@ -9,6 +9,8 @@
 | **Dependencies** | U18, U19 |
 | **Roadmap** | **Wave 13** |
 
+> **Overhaul 2026 status (2026-07-20):** Wave 6 delivered a11y focus rings (`FOCUS_RING`), motion restraint, hub microcopy, and auth/marketing token sync. Live axe still needs a portal on `:3000` — see [`overhaul-2026/w6-a11y-evidence.md`](./overhaul-2026/w6-a11y-evidence.md). Rollup: [`overhaul-2026/README.md`](./overhaul-2026/README.md).
+
 ---
 
 ## 1. Summary

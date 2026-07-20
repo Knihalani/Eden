@@ -16,6 +16,7 @@ import { ErrorState } from "@/components/ui/error-state";
 import { errorFromCaught } from "@/lib/safe-error-message";
 import { TwoFASetupDialog } from "./2fa-setup-dialog";
 import { IntegrationStatusBanners } from "@/components/integration-status-banners";
+import { DangerZone } from "@/components/settings/danger-zone";
 
 interface Member2FAStatus {
   user_id: string;
@@ -129,14 +130,14 @@ export function SecurityTab() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-space-6">
       {currentOrg && (
         <IntegrationStatusBanners integration="security" orgId={currentOrg.id} />
       )}
 
       {/* Header */}
-      <div className="flex items-center gap-3">
-        <div className="p-2 bg-[var(--accent-faint)] rounded-lg">
+      <div className="flex items-center gap-space-3">
+        <div className="p-space-2 bg-[var(--accent-faint)] rounded-lg">
           <Shield className="w-5 h-5 text-[var(--accent)]" />
         </div>
         <div>
@@ -148,8 +149,8 @@ export function SecurityTab() {
       </div>
 
       {/* User's Own 2FA Section */}
-      <div className="p-4 bg-[var(--bg-primary)] rounded-lg border border-[var(--border-default)]">
-        <div className="flex items-center gap-3 mb-4">
+      <div className="p-space-4 bg-[var(--bg-primary)] rounded-lg border border-[var(--border-default)] space-y-space-4">
+        <div className="flex items-center gap-space-3">
           <div className="w-10 h-10 bg-[var(--accent-faint)] rounded-full flex items-center justify-center">
             <UserIcon className="w-5 h-5 text-[var(--accent)]" />
           </div>
@@ -162,34 +163,38 @@ export function SecurityTab() {
             </p>
           </div>
           {user2FAEnabled ? (
-            <span className="px-3 py-1 bg-[var(--terminal-faint)] text-[var(--terminal)] rounded-full text-sm font-medium flex items-center gap-1">
+            <span className="px-space-3 py-space-1 bg-[var(--terminal-faint)] text-[var(--terminal)] rounded-full text-sm font-medium flex items-center gap-space-1">
               <ShieldCheck className="w-4 h-4" />
               Enabled
             </span>
           ) : (
-            <span className="px-3 py-1 bg-[var(--warning-bg)] text-[var(--warning)] rounded-full text-sm font-medium flex items-center gap-1">
+            <span className="px-space-3 py-space-1 bg-[var(--warning-bg)] text-[var(--warning)] rounded-full text-sm font-medium flex items-center gap-space-1">
               <ShieldAlert className="w-4 h-4" />
               Not Enabled
             </span>
           )}
         </div>
 
-        {user2FAEnabled ? (
+        {user2FAEnabled ? null : (
+          <Button variant="default" className="min-h-11" onClick={() => setShowSetupDialog(true)}>
+            Set Up 2FA
+          </Button>
+        )}
+      </div>
+
+      {user2FAEnabled ? (
+        <DangerZone
+          title="Disable two-factor authentication"
+          description="Turning off 2FA reduces account protection. You will need a recovery code or authenticator to confirm."
+        >
           <button
             onClick={() => setShowDisableDialog(true)}
-            className="px-4 py-2 text-sm border border-[var(--error)] text-[var(--error)] rounded-lg hover:bg-[var(--error-dim)]"
+            className="px-space-4 py-space-2 text-sm border border-[var(--error)] text-[var(--error)] rounded-lg hover:bg-[var(--error-dim)]"
           >
             Disable 2FA
           </button>
-        ) : (
-          <button
-            onClick={() => setShowSetupDialog(true)}
-            className="px-4 py-2 bg-[var(--accent)] text-[var(--bg-primary)] rounded-lg text-sm font-medium hover:bg-[var(--accent-hover)]"
-          >
-            Set Up 2FA
-          </button>
-        )}
-      </div>
+        </DangerZone>
+      ) : null}
 
       {/* Org 2FA Enforcement — admin/owner only; soft-hide for personal workspaces */}
       {canManageSecurity && currentOrg && !isPersonalOrg && (
@@ -243,7 +248,7 @@ export function SecurityTab() {
               {members2FA.length === 0 ? (
                 <p className="text-sm text-[var(--text-muted)]">No members found.</p>
               ) : (
-                <div className="space-y-2">
+                <div className="space-y-space-2">
                   {members2FA.map((member) => (
                     <div
                       key={member.user_id}
@@ -358,7 +363,7 @@ function Disable2FADialog({
             Enter the 6-digit code from your authenticator app to disable 2FA.
           </DialogPrimitive.Description>
 
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSubmit} className="space-y-space-4">
             <div>
               <input
                 type="text"

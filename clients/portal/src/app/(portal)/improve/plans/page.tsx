@@ -22,7 +22,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { ImprovePlanStatusBadge } from "@/components/ui/status-badge";
-import { Skeleton } from "@/components/ui/skeleton";
+import { LoadingSkeleton } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorState } from "@/components/ui/error-state";
 import { NoOrgState } from "@/components/ui/no-org-state";
@@ -48,18 +48,6 @@ function relativeTime(iso: string): string {
   }
 }
 
-function SkeletonCard() {
-  return (
-    <Card className="border-[var(--border-default)] bg-[var(--bg-base)]">
-      <div className="p-5 space-y-3">
-        <Skeleton className="h-5 w-24" />
-        <Skeleton className="h-4 w-full" />
-        <Skeleton className="h-3 w-4/5" />
-      </div>
-    </Card>
-  );
-}
-
 function PlanCard({ plan, onClick }: { plan: ImprovementPlan; onClick: () => void }) {
   const files = plan.files_changed ?? [];
   return (
@@ -68,25 +56,23 @@ function PlanCard({ plan, onClick }: { plan: ImprovementPlan; onClick: () => voi
       className="cursor-pointer border-[var(--border-default)] bg-[var(--bg-base)] hover:border-[var(--border-default)] transition-colors"
     >
       <div className="p-5 space-y-3">
-        <div className="flex items-center justify-between gap-2">
-          <PlanKindBadge kind={plan.plan_kind} />
+        <h3 className="text-sm font-medium leading-snug text-[var(--text-primary)] line-clamp-2">
+          {plan.title || "Untitled improvement plan"}
+        </h3>
+        <div className="flex flex-wrap items-center gap-2">
           <ImprovePlanStatusBadge status={plan.status} />
+          <PlanKindBadge kind={plan.plan_kind} />
         </div>
-        <div>
-          <h3 className="text-sm font-medium text-[var(--text-primary)] line-clamp-2">
-            {plan.title || "Untitled improvement plan"}
-          </h3>
-          {plan.summary && (
-            <p className="text-xs text-[var(--text-muted)] mt-1 line-clamp-2">{plan.summary}</p>
-          )}
-        </div>
+        {plan.summary ? (
+          <p className="text-xs text-[var(--text-muted)] line-clamp-2">{plan.summary}</p>
+        ) : null}
         {files.length > 0 && (
           <div className="flex flex-wrap gap-1">
             {files.slice(0, 3).map((f) => (
               <Badge
                 key={f.path}
                 variant="outline"
-                className="text-[10px] bg-[var(--bg-base)] text-[var(--text-muted)] border-[var(--border-default)]"
+                className="text-2xs bg-[var(--bg-base)] text-[var(--text-muted)] border-[var(--border-default)]"
               >
                 <FileCode className="h-2.5 w-2.5 mr-0.5" />
                 {f.path.split("/").pop()}
@@ -95,14 +81,14 @@ function PlanCard({ plan, onClick }: { plan: ImprovementPlan; onClick: () => voi
             {files.length > 3 && (
               <Badge
                 variant="outline"
-                className="text-[10px] bg-[var(--bg-base)] text-[var(--text-muted)] border-[var(--border-default)]"
+                className="text-2xs bg-[var(--bg-base)] text-[var(--text-muted)] border-[var(--border-default)]"
               >
                 +{files.length - 3} more
               </Badge>
             )}
           </div>
         )}
-        <div className="flex items-center justify-between text-xs text-[var(--text-muted)]">
+        <div className="flex items-center justify-between text-2xs text-[var(--text-muted)]">
           <div className="flex items-center gap-3">
             {plan.estimated_blast_radius && (
               <span className="flex items-center gap-1">
@@ -193,7 +179,6 @@ export default function ImprovementPlansPage() {
           p.status === "merged" &&
           Date.now() - new Date(p.created_at).getTime() < 30 * 86400 * 1000,
       ).length,
-      codePatches: plans.filter((p) => p.plan_kind === "code_patch").length,
     }),
     [plans],
   );
@@ -220,6 +205,7 @@ export default function ImprovementPlansPage() {
             onClick={() => void loadPlans(limit)}
             disabled={loading}
             size="sm"
+            className="min-h-11"
           >
             <RefreshCw className={cn("h-4 w-4 mr-1", loading && "animate-spin")} />
             Refresh
@@ -249,35 +235,33 @@ export default function ImprovementPlansPage() {
         />
       ) : null}
 
-      {/* Gate KPI/filters behind !error so outages do not look like an empty inbox. */}
-      {!error ? (
+      {/* Gate KPI/filters behind ready data so loading does not zero-flash StatCards. */}
+      {!error && !(loading && plans.length === 0) ? (
         <>
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-space-4" data-testid="improve-plans-kpi">
         <StatCard title="Pending review" value={stats.pending} icon={Clock} />
         <StatCard title="PRs open" value={stats.prOpened} icon={GitPullRequestArrow} />
         <StatCard title="Merged (30d)" value={stats.merged} icon={History} />
-        <StatCard title="Code patches" value={stats.codePatches} icon={FileCode} />
       </div>
 
-      <Card className="border-[var(--border-default)] bg-[var(--bg-base)]">
-        <div className="p-3 flex flex-wrap items-center gap-3">
-          <div className="flex items-center gap-2 flex-1 min-w-[200px]">
-            <Search className="h-4 w-4 text-[var(--text-muted)]" />
+      <div className="flex flex-wrap items-center gap-space-3 border-b border-[var(--border-subtle)] py-space-3">
+          <div className="flex items-center gap-space-2 flex-1 min-w-[200px]">
+            <Search className="h-4 w-4 shrink-0 text-[var(--text-muted)]" />
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search by title or summary…"
               aria-label="Search improvement plans"
-              className="w-full bg-[var(--bg-base)] border border-[var(--border-default)] rounded px-3 py-1.5 text-sm text-[var(--text-primary)]"
+              className="min-h-11 w-full rounded border border-[var(--border-default)] bg-[var(--bg-base)] px-space-3 py-space-2 text-sm text-[var(--text-primary)]"
             />
           </div>
-          <div className="flex items-center gap-2">
-            <Filter className="h-4 w-4 text-[var(--text-muted)]" />
+          <div className="flex flex-wrap items-center gap-space-2">
+            <Filter className="h-4 w-4 shrink-0 text-[var(--text-muted)]" />
             <select
               value={kindFilter}
               onChange={(e) => setKindFilter(e.target.value as ImprovementPlanKind | "all")}
               aria-label="Filter by plan kind"
-              className="bg-[var(--bg-base)] border border-[var(--border-default)] rounded px-3 py-1.5 text-sm text-[var(--text-primary)]"
+              className="min-h-11 rounded border border-[var(--border-default)] bg-[var(--bg-base)] px-space-3 py-space-2 text-sm text-[var(--text-primary)]"
             >
               <option value="all">All kinds</option>
               <option value="code_patch">Code patch</option>
@@ -290,7 +274,7 @@ export default function ImprovementPlansPage() {
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value as ImprovementPlanStatus | "all")}
               aria-label="Filter by status"
-              className="bg-[var(--bg-base)] border border-[var(--border-default)] rounded px-3 py-1.5 text-sm text-[var(--text-primary)]"
+              className="min-h-11 rounded border border-[var(--border-default)] bg-[var(--bg-base)] px-space-3 py-space-2 text-sm text-[var(--text-primary)]"
             >
               <option value="all">All statuses</option>
               <option value="draft">Draft</option>
@@ -301,29 +285,19 @@ export default function ImprovementPlansPage() {
               <option value="snoozed">Snoozed</option>
             </select>
           </div>
-        </div>
-      </Card>
+      </div>
         </>
       ) : null}
 
       {loading && plans.length === 0 && !error ? (
-        <div
-          role="status"
-          aria-live="polite"
-          aria-busy="true"
-          className="grid grid-cols-1 md:grid-cols-2 gap-3"
-        >
-          {Array.from({ length: 6 }).map((_, i) => (
-            <SkeletonCard key={i} />
-          ))}
-        </div>
+        <LoadingSkeleton variant="stats" lines={6} />
       ) : !error && plans.length === 0 ? (
         <EmptyState
           title="No improvement plans yet"
           description={
             canManageKeys
-              ? "Needs production traces and Agent Issues first. Create an API key, install the SDK or gateway, then the improvement agent can land ranked plans here."
-              : "Needs production traces and Agent Issues first. Ask an admin for an API key, or open Traces once data is flowing."
+              ? "No plans yet. Needs production traces and Agent Issues first. Create an API key, install the SDK or gateway, then the improvement agent can land ranked plans here."
+              : "No plans yet. Needs production traces and Agent Issues first. Ask an admin for an API key, or open Traces once data is flowing."
           }
           icon={History}
           action={
@@ -368,6 +342,7 @@ export default function ImprovementPlansPage() {
           <Button
             variant="outline"
             size="default"
+            className="min-h-11"
             onClick={handleLoadMore}
             loading={loadingMore}
             disabled={loadingMore}

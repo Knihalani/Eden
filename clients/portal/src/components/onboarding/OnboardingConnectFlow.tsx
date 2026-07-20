@@ -37,6 +37,7 @@ import {
   RefreshCw,
 } from "lucide-react";
 import { errorFromCaught } from "@/lib/safe-error-message";
+import { Button } from "@/components/ui/button";
 
 function Github(props: React.SVGProps<SVGSVGElement>) {
   return (
@@ -250,40 +251,45 @@ export function OnboardingConnectFlow({
 
   if (configured === true && canIntegrate && installations.length === 0 && !loadingRepos && phase === "install-app") {
     return (
-      <div className="space-y-8">
+      <div className="space-y-space-8">
         {showHero ? <ConnectHero /> : null}
         {error && <ErrorBanner message={error} />}
-        <div className="rounded-xl border border-[var(--border-default)] bg-[var(--bg-secondary)] p-6">
-          <h3 className="text-base font-semibold text-[var(--text-primary)]">
+        <section className="rounded-xl border border-[var(--border-default)] bg-[var(--bg-secondary)] p-space-6">
+          <p className="text-2xs font-mono font-semibold uppercase tracking-widest text-[var(--text-muted)]">
+            Step 1
+          </p>
+          <h3 className="mt-space-2 text-base font-semibold text-[var(--text-primary)]">
             Install the Eden GitHub App
           </h3>
-          <p className="mt-2 text-sm leading-relaxed text-[var(--text-secondary)]">
+          <p className="mt-space-3 text-sm leading-relaxed text-[var(--text-secondary)]">
             Optional after first ingestion. Link a repo so Eden can list it
             for agents and operator-approved improvement plans. Install the
             SDK yourself to send traces.
           </p>
-          <div className="mt-5 flex flex-wrap items-center gap-3">
-            <button
+          <div className="mt-space-5 flex flex-wrap items-center gap-space-3">
+            <Button
               type="button"
+              variant="default"
+              className="min-h-11"
               onClick={startInstall}
-              disabled={authorizing}
-              className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-[var(--accent)] px-5 py-2.5 text-sm font-medium text-[var(--bg-primary)] hover:opacity-90 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]/40"
+              loading={authorizing}
             >
-              {authorizing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Github className="h-4 w-4" />}
+              <Github className="h-4 w-4" />
               Connect GitHub
               <ArrowRight className="h-4 w-4" />
-            </button>
+            </Button>
             {(inWizard || onSkip) && (
-              <button
+              <Button
                 type="button"
+                variant="outline"
+                className="min-h-11"
                 onClick={handleSkip}
-                className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-[var(--border-default)] bg-[var(--bg-primary)] px-4 py-2.5 text-sm font-medium text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)] hover:text-[var(--text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]/40"
               >
                 Skip / continue with SDK only
-              </button>
+              </Button>
             )}
           </div>
-        </div>
+        </section>
       </div>
     );
   }
@@ -299,147 +305,166 @@ export function OnboardingConnectFlow({
 
   if (phase === "linked" && selectedRepo) {
     return (
-      <div className="space-y-4 rounded-xl border border-[var(--accent)]/30 bg-[var(--accent)]/5 p-6">
-        <div className="flex items-center gap-2 text-[var(--accent)]">
-          <Check className="h-5 w-5" />
+      <div className="space-y-space-4 rounded-xl border border-[var(--accent)]/30 bg-[var(--accent)]/5 p-space-6">
+        <div className="flex items-center gap-space-2 text-[var(--accent)]">
+          <Check className="h-5 w-5" aria-hidden="true" />
           <h2 className="text-lg font-semibold">Repo linked</h2>
         </div>
-        <p className="text-sm text-[var(--text-secondary)]">
+        <p className="text-sm leading-relaxed text-[var(--text-secondary)]">
           <span className="font-mono text-[var(--text-primary)]">{selectedRepo.full_name}</span>
           {" "}is available in Agents. Next: install the SDK so traces start flowing.
         </p>
         {(inWizard || onSkip) && (
-          <button
-            type="button"
-            onClick={handleSkip}
-            className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-[var(--accent)] px-4 py-2 text-sm font-medium text-[var(--bg-primary)] hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]/40"
-          >
+          <Button type="button" variant="default" className="min-h-11" onClick={handleSkip}>
             Continue to SDK install
             <ArrowRight className="h-4 w-4" />
-          </button>
+          </Button>
         )}
       </div>
     );
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-space-8">
       {showHero ? <ConnectHero /> : null}
       {error && <ErrorBanner message={error} />}
 
-      <div className="flex items-center justify-between gap-2">
-        <h3 className="text-sm font-medium text-[var(--text-primary)]">
-          Select a repository
-        </h3>
-        <button
-          type="button"
-          onClick={() => void loadRepos()}
-          className="inline-flex min-h-11 items-center gap-1 px-2 text-xs text-[var(--text-muted)] hover:text-[var(--text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]/40"
-        >
-          <RefreshCw className="h-3 w-3" />
-          Refresh
-        </button>
-      </div>
-
-      <div className="max-h-64 space-y-1 overflow-y-auto rounded-lg border border-[var(--border-default)]">
-        {repos.map((repo) => (
-          <button
-            key={`${repo.installation_id}:${repo.full_name}`}
-            type="button"
-            onClick={() => setSelectedRepo(repo)}
-            className={`flex min-h-11 w-full items-center gap-3 px-3 py-2.5 text-left text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--accent)]/40 ${
-              selectedRepo?.full_name === repo.full_name
-                ? "bg-[var(--accent)]/10 text-[var(--text-primary)]"
-                : "hover:bg-[var(--bg-tertiary)] text-[var(--text-secondary)]"
-            }`}
-          >
-            <GitBranch className="h-4 w-4 shrink-0" />
-            <span className="min-w-0 truncate font-mono text-xs">{repo.full_name}</span>
-          </button>
-        ))}
-        {repos.length === 0 && (
-          <div className="px-3 py-8 text-center text-sm text-[var(--text-muted)]">
-            No repos found. Grant access on GitHub, then refresh.
+      <section className="space-y-space-4">
+        <div className="flex items-end justify-between gap-space-3">
+          <div>
+            <p className="text-2xs font-mono font-semibold uppercase tracking-widest text-[var(--text-muted)]">
+              Step 1
+            </p>
+            <h3 className="mt-space-2 text-base font-semibold text-[var(--text-primary)]">
+              Select a repository
+            </h3>
           </div>
-        )}
-      </div>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="min-h-11"
+            onClick={() => void loadRepos()}
+          >
+            <RefreshCw className="h-3.5 w-3.5" />
+            Refresh
+          </Button>
+        </div>
+
+        <div
+          role="listbox"
+          aria-label="Repositories"
+          className="max-h-72 space-y-space-1 overflow-y-auto rounded-xl border border-[var(--border-default)] bg-[var(--bg-secondary)] p-space-1"
+        >
+          {repos.map((repo) => {
+            const selected = selectedRepo?.full_name === repo.full_name;
+            return (
+              <button
+                key={`${repo.installation_id}:${repo.full_name}`}
+                type="button"
+                role="option"
+                aria-selected={selected}
+                onClick={() => setSelectedRepo(repo)}
+                className={`flex min-h-11 w-full items-center gap-space-3 rounded-lg px-space-3 py-space-3 text-left text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--accent)]/40 ${
+                  selected
+                    ? "bg-[var(--accent)]/10 text-[var(--text-primary)]"
+                    : "text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)]"
+                }`}
+              >
+                <GitBranch className="h-4 w-4 shrink-0" aria-hidden="true" />
+                <span className="min-w-0 truncate font-mono text-sm">{repo.full_name}</span>
+              </button>
+            );
+          })}
+          {repos.length === 0 && (
+            <div className="px-space-4 py-space-8 text-center text-sm text-[var(--text-muted)]">
+              No repos found. Grant access on GitHub, then refresh.
+            </div>
+          )}
+        </div>
+      </section>
 
       {selectedRepo && (
-        <div className="space-y-3">
-          <label className="block text-sm font-medium" htmlFor="connect-agent-name">
-            Agent name
-          </label>
-          <input
-            id="connect-agent-name"
-            type="text"
-            value={agentName}
-            onChange={(e) => setAgentName(e.target.value)}
-            placeholder={selectedRepo.name}
-            className="min-h-11 w-full rounded-lg border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-2 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]/40"
-          />
-          <label className="block text-sm font-medium" htmlFor="connect-agent-id">
-            Agent ID (optional)
-          </label>
-          <input
-            id="connect-agent-id"
-            type="text"
-            value={agentId}
-            onChange={(e) => setAgentId(e.target.value)}
-            placeholder="auto-generated if blank"
-            className="min-h-11 w-full rounded-lg border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-2 font-mono text-xs text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]/40"
-          />
-        </div>
+        <section className="space-y-space-4 rounded-xl border border-[var(--border-default)] bg-[var(--bg-secondary)] p-space-5">
+          <div>
+            <p className="text-2xs font-mono font-semibold uppercase tracking-widest text-[var(--text-muted)]">
+              Step 2
+            </p>
+            <h3 className="mt-space-2 text-base font-semibold text-[var(--text-primary)]">
+              Name the agent
+            </h3>
+            <p className="mt-space-2 text-sm text-[var(--text-secondary)]">
+              Defaults to the repo name. Agent ID is optional and auto-generated if blank.
+            </p>
+          </div>
+          <div className="space-y-space-4">
+            <div className="space-y-space-2">
+              <label className="block text-sm font-medium text-[var(--text-primary)]" htmlFor="connect-agent-name">
+                Agent name
+              </label>
+              <input
+                id="connect-agent-name"
+                type="text"
+                value={agentName}
+                onChange={(e) => setAgentName(e.target.value)}
+                placeholder={selectedRepo.name}
+                className="min-h-11 w-full rounded-lg border border-[var(--border-default)] bg-[var(--bg-primary)] px-space-3 py-space-2 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]/40"
+              />
+            </div>
+            <div className="space-y-space-2">
+              <label className="block text-sm font-medium text-[var(--text-primary)]" htmlFor="connect-agent-id">
+                Agent ID <span className="font-normal text-[var(--text-muted)]">(optional)</span>
+              </label>
+              <input
+                id="connect-agent-id"
+                type="text"
+                value={agentId}
+                onChange={(e) => setAgentId(e.target.value)}
+                placeholder="auto-generated if blank"
+                className="min-h-11 w-full rounded-lg border border-[var(--border-default)] bg-[var(--bg-primary)] px-space-3 py-space-2 font-mono text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]/40"
+              />
+            </div>
+          </div>
+        </section>
       )}
 
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-space-3 border-t border-[var(--border-default)] pt-space-5">
         {inWizard ? (
-          <button
-            type="button"
-            onClick={handleSkip}
-            className="min-h-11 text-sm text-[var(--text-muted)] hover:text-[var(--text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]/40"
-          >
+          <Button type="button" variant="ghost" className="min-h-11" onClick={handleSkip}>
             Skip GitHub
-          </button>
+          </Button>
         ) : (
-          <Link
-            href="/agents"
-            className="inline-flex min-h-11 items-center text-sm text-[var(--text-muted)] hover:text-[var(--text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]/40"
-          >
-            ← Back to agents
-          </Link>
+          <Button asChild variant="ghost" className="min-h-11">
+            <Link href="/agents">← Back to agents</Link>
+          </Button>
         )}
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-space-2">
           {(inWizard || onSkip) && (
-            <button
-              type="button"
-              onClick={handleSkip}
-              className="inline-flex min-h-11 items-center gap-1 rounded border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-2 text-sm text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]/40"
-            >
+            <Button type="button" variant="outline" className="min-h-11" onClick={handleSkip}>
               Skip / continue with SDK only
-            </button>
+            </Button>
           )}
-          <button
+          <Button
             type="button"
+            variant="outline"
+            className="min-h-11"
             onClick={startInstall}
             disabled={authorizing}
-            className="inline-flex min-h-11 items-center gap-1 rounded border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-2 text-sm text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)] disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]/40"
           >
             <Github className="h-3.5 w-3.5" />
             Add another GitHub install
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
+            variant="default"
+            className="min-h-11"
             onClick={() => void confirmLink()}
-            disabled={!selectedRepo || authorizing}
-            className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-[var(--accent)] px-4 py-2 text-sm font-medium text-[var(--bg-primary)] hover:opacity-90 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]/40"
+            disabled={!selectedRepo}
+            loading={authorizing}
           >
-            {authorizing ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Check className="h-4 w-4" />
-            )}
+            <Check className="h-4 w-4" />
             Link repository
-          </button>
+          </Button>
         </div>
       </div>
     </div>
@@ -448,8 +473,8 @@ export function OnboardingConnectFlow({
 
 function ConnectHero() {
   return (
-    <div className="space-y-3">
-      <p className="text-[10px] font-mono font-semibold uppercase tracking-[0.18em] text-[var(--accent)]">
+    <div className="space-y-space-3">
+      <p className="text-2xs font-mono font-semibold uppercase tracking-widest text-[var(--accent)]">
         Optional
       </p>
       <h2 className="text-2xl font-bold tracking-tight text-[var(--text-primary)]">
@@ -471,11 +496,11 @@ function ConnectStatusPanel({
   detail: string;
 }) {
   return (
-    <div className="flex flex-col items-center justify-center gap-4 py-20 text-center">
-      <Loader2 className="h-9 w-9 animate-spin text-[var(--accent)]" />
-      <div>
+    <div className="flex flex-col items-center justify-center gap-space-4 py-space-8 text-center">
+      <Loader2 className="h-9 w-9 animate-spin text-[var(--accent)]" aria-hidden="true" />
+      <div className="space-y-space-2">
         <h2 className="text-lg font-semibold text-[var(--text-primary)]">{title}</h2>
-        <p className="mx-auto mt-2 max-w-md text-sm text-[var(--text-secondary)]">{detail}</p>
+        <p className="mx-auto max-w-md text-sm leading-relaxed text-[var(--text-secondary)]">{detail}</p>
       </div>
     </div>
   );
@@ -483,8 +508,11 @@ function ConnectStatusPanel({
 
 function ErrorBanner({ message }: { message: string }) {
   return (
-    <div className="rounded-xl border border-[var(--error)]/40 bg-[var(--error)]/10 p-4 text-sm text-[var(--error)]">
-      <AlertCircle className="mr-1.5 inline h-4 w-4" />
+    <div
+      role="alert"
+      className="rounded-xl border border-[var(--error)]/40 bg-[var(--error)]/10 p-space-4 text-sm text-[var(--error)]"
+    >
+      <AlertCircle className="mr-1.5 inline h-4 w-4" aria-hidden="true" />
       {message}
     </div>
   );
@@ -502,19 +530,15 @@ function PanelWarning({
   onSkip?: () => void;
 }) {
   return (
-    <div className="space-y-4">
-      <div>
-        <h2 className="text-2xl font-bold tracking-tight">{title}</h2>
-        <p className="mt-2 text-[var(--text-secondary)]">{body}</p>
+    <div className="space-y-space-5">
+      <div className="space-y-space-3">
+        <h2 className="text-2xl font-bold tracking-tight text-[var(--text-primary)]">{title}</h2>
+        <p className="text-sm leading-relaxed text-[var(--text-secondary)]">{body}</p>
       </div>
-      <button
-        type="button"
-        onClick={onSkip}
-        className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-[var(--accent)] px-4 py-2 text-sm font-medium text-[var(--bg-primary)] hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]/40"
-      >
+      <Button type="button" variant="default" className="min-h-11" onClick={onSkip}>
         {inWizard ? "Skip / continue with SDK only" : "Skip — I'll install manually"}
         <ArrowRight className="h-4 w-4" />
-      </button>
+      </Button>
     </div>
   );
 }
@@ -529,32 +553,36 @@ function PanelLocked({
   onSkip?: () => void;
 }) {
   return (
-    <div className="space-y-6">
-      <div>
-        <h2 className="text-2xl font-bold tracking-tight">Ask an admin to connect a repo</h2>
-        <p className="mt-2 text-[var(--text-secondary)]">
+    <div className="space-y-space-6">
+      <div className="space-y-space-3">
+        <h2 className="text-2xl font-bold tracking-tight text-[var(--text-primary)]">
+          Ask an admin to connect a repo
+        </h2>
+        <p className="text-sm leading-relaxed text-[var(--text-secondary)]">
           Connecting a GitHub repo requires the
           {" "}<code className="font-mono">integrations:write</code> permission,
           which only owners and admins of this org have. Your role is
           {" "}<code className="font-mono">{role || "member"}</code>.
         </p>
       </div>
-      <div className="rounded-lg border border-[var(--border-default)] bg-[var(--bg-secondary)] p-4">
-        <Lock className="mb-2 h-5 w-5 text-[var(--text-muted)]" />
-        <div className="text-sm font-medium">What to do next</div>
-        <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-[var(--text-secondary)]">
-          <li>Ping an admin in your org — they can connect a repo from <Link href="/agents" className="text-[var(--accent)] underline">/agents</Link>.</li>
+      <div className="rounded-xl border border-[var(--border-default)] bg-[var(--bg-secondary)] p-space-5">
+        <Lock className="mb-space-3 h-5 w-5 text-[var(--text-muted)]" aria-hidden="true" />
+        <div className="text-sm font-medium text-[var(--text-primary)]">What to do next</div>
+        <ul className="mt-space-3 list-disc space-y-space-2 pl-5 text-sm leading-relaxed text-[var(--text-secondary)]">
+          <li>
+            Ping an admin in your org — they can connect a repo from{" "}
+            <Link href="/agents" className="text-[var(--accent)] underline">
+              /agents
+            </Link>
+            .
+          </li>
           <li>Install the SDK yourself — traces work without a connected repo.</li>
         </ul>
       </div>
-      <button
-        type="button"
-        onClick={onSkip}
-        className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-[var(--accent)] px-4 py-2 text-sm font-medium text-[var(--bg-primary)] hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]/40"
-      >
+      <Button type="button" variant="default" className="min-h-11" onClick={onSkip}>
         {inWizard ? "Continue to SDK install / skip GitHub" : "Continue without GitHub"}
         <ArrowRight className="h-4 w-4" />
-      </button>
+      </Button>
     </div>
   );
 }

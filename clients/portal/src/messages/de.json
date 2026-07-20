@@ -13,7 +13,21 @@
     "dpa": "Auftragsverarbeitung",
     "security": "Sicherheit",
     "subprocessors": "Unterauftragsverarbeiter",
-    "language": "Sprache"
+    "language": "Sprache",
+    "product": "Produkt",
+    "resources": "Ressourcen",
+    "legal": "Rechtliches",
+    "locale": "Sprache",
+    "documentation": "Dokumentation",
+    "quickstart": "Schnellstart",
+    "changelog": "Änderungsprotokoll",
+    "apiReference": "API-Referenz",
+    "doNotSell": "Meine Daten nicht verkaufen",
+    "pricing": "Preise",
+    "contact": "Kontakt",
+    "about": "Über uns",
+    "signup": "Registrieren",
+    "signin": "Anmelden"
   },
   "hero": {
     "title": "Eden — Observability und Verbesserung für KI-Agenten",
@@ -22,6 +36,177 @@
   },
   "common": {
     "loading": "Wird geladen…",
-    "error": "Etwas ist schiefgelaufen. Bitte versuche es erneut."
+    "error": "Etwas ist schiefgelaufen. Bitte versuche es erneut.",
+    "more": "Mehr",
+    "advanced": "Erweitert",
+    "default": "Standard",
+    "docs": "Docs",
+    "retry": "Erneut versuchen",
+    "cancel": "Abbrechen",
+    "save": "Speichern",
+    "search": "Suchen"
+  },
+  "portal": {
+    "mobileNav": {
+      "ariaLabel": "Mobile Navigation",
+      "home": "Start",
+      "traces": "Traces",
+      "issues": "Probleme",
+      "improve": "Verbessern",
+      "more": "Mehr",
+      "moreTitle": "Mehr",
+      "moreDescription": "Agenten, Artefakte, Alerts, Evals, Ledger und mehr.",
+      "agentsGroup": "Agenten",
+      "workspaceGroup": "Arbeitsbereich",
+      "accountGroup": "Konto",
+      "agents": "Agenten",
+      "artifacts": "Artefakte",
+      "alerts": "Alerts",
+      "evals": "Evals",
+      "ledger": "Ledger",
+      "promotions": "Promotions",
+      "debugSessions": "Debug-Sitzungen",
+      "settings": "Einstellungen"
+    },
+    "sidebar": {
+      "home": "Start",
+      "observe": "Beobachten",
+      "evaluate": "Evaluieren",
+      "improve": "Verbessern",
+      "workspace": "Arbeitsbereich",
+      "traces": "Traces",
+      "agentIssues": "Agent-Probleme",
+      "alerts": "Alerts",
+      "agents": "Agenten",
+      "analytics": "Analysen",
+      "signals": "Signale",
+      "debugSessions": "Debug-Sitzungen",
+      "evals": "Evals",
+      "artifacts": "Artefakte",
+      "ledger": "Ledger",
+      "promotions": "Promotions",
+      "cost": "Kosten",
+      "guardrails": "Guardrails",
+      "prompts": "Prompts",
+      "auditTrail": "Audit-Trail",
+      "settings": "Einstellungen",
+      "apiKeys": "API-Schlüssel",
+      "webhookDlq": "Webhook-DLQ",
+      "quickstart": "Schnellstart"
+    },
+    "settings": {
+      "title": "Einstellungen",
+      "subtitle": "Organisation, API-Schlüssel, Sicherheit und Compliance.",
+      "sectionsAria": "Einstellungsbereiche",
+      "noMatch": "Keine Einstellungen für „{query}“.",
+      "categories": {
+        "org": "Org",
+        "members": "Mitglieder",
+        "security": "Sicherheit",
+        "compliance": "Compliance",
+        "billing": "Abrechnung",
+        "advanced": "Erweitert"
+      },
+      "tabs": {
+        "org": "Organisation",
+        "account": "Konto",
+        "apiKeys": "API-Schlüssel",
+        "members": "Mitglieder",
+        "roles": "Benutzerdefinierte Rollen",
+        "references": "Code-Referenzen",
+        "mcp": "MCP",
+        "security": "Sicherheit",
+        "scim": "SCIM",
+        "sso": "SSO",
+        "gateway": "AI-Gateway",
+        "pii": "PII-Richtlinie",
+        "retention": "Aufbewahrung",
+        "exports": "Exporte",
+        "auditLog": "Audit-Log",
+        "status": "Plattformstatus",
+        "analytics": "Analysen",
+        "billing": "Abrechnung",
+        "finops": "FinOps-Abschaltungen",
+        "autonomous": "Autonom",
+        "sidebar": "Seitenleiste"
+      }
+    },
+    "hubs": {
+      "dashboard": {
+        "title": "Start",
+        "subtitle": "Überblick über Agenten, Traces, Kosten und Alerts."
+      },
+      "traces": {
+        "title": "Traces",
+        "subtitle": "Traces, Spans und Sessions prüfen."
+      },
+      "issues": {
+        "title": "Agent-Probleme",
+        "subtitle": "Gruppierte Agent-Fehler — primäre Triage.",
+        "tabIssues": "Agent-Probleme",
+        "tabIncidents": "Incidents",
+        "sectionsAria": "Problem-Bereiche"
+      },
+      "alerts": {
+        "title": "Alerts",
+        "subtitle": "Schwellenwert-Benachrichtigungen und Signalregeln."
+      },
+      "agents": {
+        "title": "Agenten",
+        "subtitle": "KI-Agenten und Flottengesundheit verwalten."
+      },
+      "evals": {
+        "title": "Evals",
+        "subtitle": "Datasets, Playgrounds und Offline-Experimente.",
+        "datasets": "Datasets",
+        "playground": "Playground",
+        "experiments": "Experimente",
+        "scores": "Scores",
+        "labeling": "Labeling",
+        "studio": "Studio",
+        "synthetic": "Synthetisch",
+        "advanced": "Erweitert",
+        "sectionsAria": "Evals-Hauptbereiche"
+      },
+      "improve": {
+        "title": "Verbessern",
+        "subtitle": "Aktionswarteschlange, Pläne und Sweep-Verlauf.",
+        "queue": "Warteschlange",
+        "plans": "Pläne",
+        "history": "Verlauf",
+        "sectionsAria": "Verbessern-Bereiche"
+      },
+      "artifacts": {
+        "title": "Artefakte",
+        "subtitle": "Versionierte Runtime-Fixes mit evidenzgesteuerter Promotion."
+      },
+      "ledger": {
+        "title": "Ledger",
+        "subtitle": "Institutionelles Gedächtnis für deine Agenten."
+      },
+      "settings": {
+        "title": "Einstellungen",
+        "subtitle": "Organisation, API-Schlüssel, Sicherheit und Compliance."
+      }
+    },
+    "chrome": {
+      "views": "Ansichten",
+      "defaultView": "Standard",
+      "personal": "Persönlich",
+      "shared": "Geteilt",
+      "saveAs": "Speichern als…",
+      "saveChanges": "Änderungen speichern",
+      "discard": "Verwerfen",
+      "createAlertFromFilters": "Alert aus Filtern erstellen",
+      "export": "Exportieren"
+    },
+    "empty": {
+      "noTraces": "Noch keine Traces",
+      "noIssues": "Noch keine Probleme",
+      "noMatchingIssues": "Keine passenden Probleme",
+      "noAgents": "Noch keine Agenten",
+      "noAlertRules": "Noch keine Alert-Regeln",
+      "genericRetry": "Etwas ist schiefgelaufen. Bitte versuche es erneut."
+    }
   }
 }

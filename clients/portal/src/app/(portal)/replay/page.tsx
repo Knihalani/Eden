@@ -9,10 +9,13 @@ import { cn } from "@/lib/utils";
 import { StatCard } from "@/components/ui/stat-card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorState } from "@/components/ui/error-state";
-import { PageHeader } from "@/components/layout/page-header";
+import { LoadingSkeleton } from "@/components/ui/skeleton";
 import { PageContent } from "@/components/layout/page-content";
+import { ObserveLeafHeader } from "@/app/(portal)/observability/_components/observe-leaf-shell";
 import { ArrowLeft } from "lucide-react";
 import { NoOrgState } from "@/components/ui/no-org-state";
+import { Button } from "@/components/ui/button";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { errorFromCaught } from "@/lib/safe-error-message";
 import { History, Play, CheckCircle2, Loader2, ChevronDown, ChevronUp, Clock, Layers, Activity, Zap, RefreshCw, Search, BarChart3, GitBranch } from "lucide-react";
 
@@ -274,10 +277,11 @@ function ReplayPageInner() {
 
   return (
     <PageContent>
-      <PageHeader
+      <ObserveLeafHeader
         title="Trace Replay"
         subtitle="Inspect pipeline traces and event timelines"
         icon={History}
+        description="Advanced under Traces — event timeline replay; open from Traces More when nested."
       />
 
       {/* Back link */}
@@ -372,44 +376,26 @@ function ReplayPageInner() {
       ) : (
         <>
       {/* Tabs */}
-      <div
-        role="tablist"
-        aria-label="Replay view"
-        className="flex items-center gap-1 bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-lg p-1 mb-6 w-fit"
-        onKeyDown={(e) => {
-          if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") return;
-          const order: TabKey[] = ["timeline", "events"];
-          const idx = order.indexOf(activeTab);
-          const next = e.key === "ArrowRight" ? (idx + 1) % order.length : (idx - 1 + order.length) % order.length;
-          setActiveTab(order[next]);
-        }}
+      <Tabs
+        value={activeTab}
+        onValueChange={(v) => setActiveTab(v as TabKey)}
+        className="mb-6"
       >
-        {([
-          { key: "timeline" as TabKey, label: "Timeline", icon: BarChart3 },
-          { key: "events" as TabKey, label: `Events (${totalEvents})`, icon: Layers },
-        ]).map((tab) => {
-          const Icon = tab.icon;
-          return (
-            <button
-              key={tab.key}
-              role="tab"
-              aria-selected={activeTab === tab.key}
-              aria-controls={`replay-panel-${tab.key}`}
-              id={`replay-tab-${tab.key}`}
-              onClick={() => setActiveTab(tab.key)}
-              className={cn(
-                "flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-colors",
-                activeTab === tab.key
-                  ? "bg-[var(--accent)] text-[var(--bg-base)]"
-                  : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
-              )}
-            >
-              <Icon className="w-3.5 h-3.5" />
-              {tab.label}
-            </button>
-          );
-        })}
-      </div>
+        <TabsList
+          variant="underline"
+          aria-label="Replay view"
+          className="h-auto justify-start gap-1 bg-transparent"
+        >
+          <TabsTrigger variant="underline" value="timeline" className="min-h-11 gap-1.5">
+            <BarChart3 className="w-3.5 h-3.5" />
+            Timeline
+          </TabsTrigger>
+          <TabsTrigger variant="underline" value="events" className="min-h-11 gap-1.5">
+            <Layers className="w-3.5 h-3.5" />
+            Events ({totalEvents})
+          </TabsTrigger>
+        </TabsList>
+      </Tabs>
 
       {/* Timeline Tab */}
       {activeTab === "timeline" && (
@@ -426,13 +412,9 @@ function ReplayPageInner() {
               message={traceError}
               size="sm"
               action={
-                <button
-                  type="button"
-                  onClick={fetchTrace}
-                  className="text-sm font-medium text-[var(--accent)] hover:text-[var(--accent-hover)] transition-colors"
-                >
+                <Button variant="link" size="sm" className="min-h-11 px-0" onClick={fetchTrace}>
                   Try again
-                </button>
+                </Button>
               }
             />
           ) : !traceSummary ? (
@@ -727,7 +709,7 @@ function SessionTreeView({
 // surfaces in the browser console as a 404.
 export default function ReplayPage() {
   return (
-    <Suspense fallback={null}>
+    <Suspense fallback={<LoadingSkeleton variant="default" />}>
       <ReplayPageInner />
     </Suspense>
   );

@@ -53,12 +53,19 @@ describe("W10 shell + design system", () => {
     expect(src("components/portal-os/VirtualizedList.tsx")).toContain("useDensity");
   });
 
-  it("ships mobile More sheet with Artifacts/Alerts/Evals", () => {
+  it("ships mobile More sheet with Agents first + Artifacts/Alerts/Evals", () => {
     expect(MOBILE_CORE_NAV).toHaveLength(4);
     expect(MOBILE_MORE_LINKS.map((l) => l.href)).toEqual(
-      expect.arrayContaining(["/artifacts", "/alerts", "/evals", "/settings"]),
+      expect.arrayContaining(["/agents", "/artifacts", "/alerts", "/evals", "/settings"]),
     );
-    expect(src("components/portal-os/MobileBottomNav.tsx")).toContain("SheetContent");
+    expect(MOBILE_MORE_LINKS[0]?.href).toBe("/agents");
+    expect(MOBILE_MORE_LINKS.at(-1)?.href).toBe("/settings");
+    const mobileSrc = src("components/portal-os/MobileBottomNav.tsx");
+    expect(mobileSrc).toContain("SheetContent");
+    expect(mobileSrc).toContain("text-2xs");
+    expect(mobileSrc).not.toContain("text-[10px]");
+    expect(mobileSrc).toMatch(/Agents, artifacts/i);
+    expect(mobileSrc).toContain("lg:hidden");
   });
 
   it("completes breadcrumb labels for Phase 2 hubs", () => {
@@ -150,7 +157,9 @@ describe("W11 tables / filters OS", () => {
     expect(src("app/(portal)/artifacts/page.tsx")).toContain("BulkActionBar");
   });
 
-  it("CrossLinkBar appears on ≥10 surfaces", () => {
+  it("CrossLinkBar / Go-to overflow remain on detail surfaces (W11 quieted band chrome)", () => {
+    // W11 moved several list/detail toolbars from CrossLinkBar bands → More/Go to.
+    // Still require peer navigation somewhere (bar OR overflow label).
     const files = [
       "app/(portal)/issues/page.tsx",
       "app/(portal)/alerts/page.tsx",
@@ -166,14 +175,17 @@ describe("W11 tables / filters OS", () => {
     ];
     let count = 0;
     for (const f of files) {
-      if (src(f).includes("CrossLinkBar")) count += 1;
+      const body = src(f);
+      if (body.includes("CrossLinkBar") || body.includes("DropdownMenuLabel>Go to")) {
+        count += 1;
+      }
     }
-    expect(count).toBeGreaterThanOrEqual(10);
+    expect(count).toBeGreaterThanOrEqual(8);
   });
 });
 
 describe("W12 forms / charts / a11y / mobile", () => {
-  it("expands axe routes to evals + improve + alerts", () => {
+  it("expands axe routes to evals + improve + alerts + agents + settings", () => {
     expect(U20_CORE_AXE_ROUTES).toEqual([
       "/dashboard",
       "/traces",
@@ -183,6 +195,8 @@ describe("W12 forms / charts / a11y / mobile", () => {
       "/evals",
       "/improve",
       "/alerts",
+      "/agents",
+      "/settings",
     ]);
     const script = readFileSync(resolve(ROOT, "scripts/audit-a11y.cjs"), "utf8");
     for (const route of U20_CORE_AXE_ROUTES) {
@@ -200,6 +214,14 @@ describe("W12 forms / charts / a11y / mobile", () => {
   it("DetailPanelShell uses aria-modal; BulkActionBar has safe-area", () => {
     expect(src("components/portal-os/DetailPanelShell.tsx")).toContain("aria-modal");
     expect(src("components/portal-os/BulkActionBar.tsx")).toContain("safe-area-inset-bottom");
+  });
+
+  it("DetailPanelShell mode tabs use ui/tabs (L8); ResourcePageShell uses space tokens", () => {
+    const detail = src("components/portal-os/DetailPanelShell.tsx");
+    expect(detail).toContain('@/components/ui/tabs');
+    expect(detail).not.toMatch(/role=["']tablist["']/);
+    expect(detail).not.toMatch(/role=["']tab["']/);
+    expect(src("components/portal-os/ResourcePageShell.tsx")).toContain("gap-space-4");
   });
 
   it("keeps U20 motion classes", () => {

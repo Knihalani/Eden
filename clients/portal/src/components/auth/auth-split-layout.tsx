@@ -45,7 +45,7 @@ export function AuthSplitLayout({ brandPanel, children }: AuthSplitLayoutProps) 
         * gets clipped by the brand panel. */}
       <a
         href="#auth-form"
-        className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-50 focus:rounded-md focus:border focus:border-[var(--accent)] focus:bg-[var(--bg-elevated)] focus:px-3 focus:py-2 focus:text-sm focus:font-medium focus:text-[var(--accent)] focus:shadow-lg"
+        className="sr-only focus:not-sr-only focus:fixed focus:left-space-4 focus:top-space-4 focus:z-50 focus:rounded-md focus:border focus:border-[var(--accent)] focus:bg-[var(--bg-elevated)] focus:px-space-3 focus:py-space-2 focus:text-sm focus:font-medium focus:text-[var(--accent)] focus:shadow-lg"
       >
         Skip to form
       </a>
@@ -53,11 +53,11 @@ export function AuthSplitLayout({ brandPanel, children }: AuthSplitLayoutProps) 
       <div className="relative hidden md:block md:min-h-dvh">{brandPanel}</div>
 
       {/* Mobile-only compact header with logo + tagline */}
-      <div className="flex items-center justify-between border-b border-[var(--border-subtle)] bg-[var(--bg-primary)] px-6 py-4 md:hidden">
+      <div className="flex items-center justify-between border-b border-[var(--border-subtle)] bg-[var(--bg-primary)] px-space-5 py-space-4 md:hidden">
         <Link href="/" className="flex min-h-11 items-center">
           <Logo size="sm" showWordmark priority href={null} />
         </Link>
-        <p className="font-mono text-[11px] tracking-wide text-[var(--text-muted)]" aria-label="Eden product version">
+        <p className="font-mono text-xs tracking-wide text-[var(--text-muted)]" aria-label="Eden product version">
           {PRODUCT_VERSION} · observability
         </p>
       </div>
@@ -69,7 +69,7 @@ export function AuthSplitLayout({ brandPanel, children }: AuthSplitLayoutProps) 
           the viewport. The wrapper has tabindex=-1 so the skip
           link target can be focused programmatically without
           disrupting the document's tab order. */}
-      <div className="flex items-start justify-center bg-[var(--bg-secondary)] px-6 py-10 md:items-center md:p-8 md:py-12">
+      <div className="flex items-start justify-center bg-[var(--bg-secondary)] px-space-5 py-space-7 md:items-center md:p-space-6 md:py-space-8">
         <div id="auth-form" tabIndex={-1} className="w-full">
           {children}
         </div>

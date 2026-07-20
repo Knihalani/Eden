@@ -7,15 +7,17 @@ import { useOrgQuery, useOrgMutation } from "@/hooks/use-api-query";
 import { queryKeys } from "@/lib/query-keys";
 import { SeverityBadge } from "@/components/ui/status-badge";
 import { NoOrgState } from "@/components/ui/no-org-state";
-import { ErrorState } from "@/components/ui/error-state";
 import { Button } from "@/components/ui/button";
+import { QueryState } from "@/components/ui/query-state";
+import { LoadingSkeleton } from "@/components/ui/skeleton";
+import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/layout/page-header";
 import { PageContent } from "@/components/layout/page-content";
+import { useEmbeddedSurface } from "@/components/layout/embedded-surface";
 import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 import {
   AlertOctagon,
   ChevronRight,
-  Loader2,
   RefreshCw,
   Zap,
 } from "lucide-react";
@@ -35,6 +37,7 @@ export default function IncidentsPage() {
   const { currentOrg } = useOrg();
   const orgId = currentOrg?.id;
   const toast = useToast();
+  const embedded = useEmbeddedSurface();
 
   const incidentsQuery = useOrgQuery(
     queryKeys.incidents.list(orgId),
@@ -43,7 +46,6 @@ export default function IncidentsPage() {
   );
   const incidents = (incidentsQuery.data?.incidents as unknown as Incident[]) ?? [];
   const loading = incidentsQuery.isLoading;
-  const error = incidentsQuery.error?.message ?? "";
 
   const clusterMutation = useOrgMutation(
     () => rcaApi.clusterIncidents(orgId!),
@@ -123,101 +125,141 @@ export default function IncidentsPage() {
       header: "",
       align: "right",
       cell: (inc) => (
-        <Link
-          href={`/incidents/${inc.cluster_id}`}
-          className="inline-flex min-h-11 items-center gap-1 text-xs font-medium text-[var(--accent)] hover:text-[var(--accent-hover)] transition-colors"
-        >
-          Inspect
-          <ChevronRight className="w-3.5 h-3.5" />
-        </Link>
+        <Button asChild variant="link" size="sm" className="min-h-11 px-0">
+          <Link href={`/incidents/${inc.cluster_id}`}>
+            Inspect
+            <ChevronRight className="w-3.5 h-3.5" />
+          </Link>
+        </Button>
       ),
     },
   ];
 
   return (
     <PageContent size="wide">
-      <PageHeader
-        title="Incidents"
-        subtitle={
-          <>
-            Systemic RCA clusters — recurring failure patterns across many traces. For individual
-            grouped agent failures, see{" "}
-            <Link href="/issues" className="text-[var(--accent)] hover:underline">
-              Agent Issues
-            </Link>
-            .
-          </>
-        }
-        icon={AlertOctagon}
-        actions={
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => incidentsQuery.refetch()}
-              disabled={loading}
-              aria-label="Refresh incidents"
-              className="inline-flex min-h-11 items-center gap-2 px-3 py-2 bg-[var(--bg-tertiary)] text-[var(--text-primary)] rounded-lg text-sm font-medium hover:bg-[var(--border-default)] disabled:opacity-50 transition-colors"
-            >
-              <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
-              Refresh
-            </button>
-            <button
-              onClick={handleCluster}
-              disabled={clustering}
-              aria-label="Run clustering now"
-              className="inline-flex min-h-11 items-center gap-2 px-4 py-2 bg-[var(--accent)] text-[var(--bg-base)] rounded-lg text-sm font-medium hover:bg-[var(--accent-hover)] disabled:opacity-50 transition-colors"
-            >
-              {clustering ? <Loader2 className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />}
-              Run clustering
-            </button>
-          </div>
-        }
-      />
-
-      {error ? (
-        <ErrorState
-          title="Could not load incidents"
-          message={error}
-          action={
-            <Button
-              variant="outline"
-              size="sm"
-              className="min-h-11"
-              onClick={() => void incidentsQuery.refetch()}
-              disabled={loading}
-            >
-              Try again
-            </Button>
+      {!embedded ? (
+        <PageHeader
+          title="Incidents"
+          subtitle={
+            <>
+              Systemic RCA clusters — recurring failure patterns across many traces. For individual
+              grouped agent failures, see{" "}
+              <Link href="/issues" className="text-[var(--accent)] hover:underline">
+                Agent Issues
+              </Link>
+              .
+            </>
+          }
+          icon={AlertOctagon}
+          actions={
+            <div className="flex items-center gap-space-2">
+              <Button
+                onClick={() => void incidentsQuery.refetch()}
+                disabled={loading}
+                aria-label="Refresh incidents"
+                variant="outline"
+                className="min-h-11"
+                loading={loading}
+              >
+                <RefreshCw className="w-4 h-4" />
+                Refresh
+              </Button>
+              <Button
+                onClick={() => void handleCluster()}
+                disabled={clustering}
+                aria-label="Run clustering now"
+                className="min-h-11"
+                loading={clustering}
+              >
+                <Zap className="w-4 h-4" />
+                Run clustering
+              </Button>
+            </div>
           }
         />
       ) : (
-      /* Incidents table */
-      <DataTable
-        columns={columns}
-        rows={incidents}
-        rowKey={(inc) => inc.cluster_id}
-        loading={loading && incidents.length === 0}
-        defaultSort={{ key: "last_seen", direction: "desc" }}
-        emptyTitle="No incidents yet"
-        emptyDescription="Run clustering to detect systemic failure patterns across many traces."
-        emptyIcon={AlertOctagon}
-        emptyAction={
-          <div className="flex flex-wrap items-center justify-center gap-2">
-            <button
-              onClick={handleCluster}
-              disabled={clustering}
-              className="inline-flex min-h-11 items-center gap-2 px-4 py-2 bg-[var(--accent)] text-[var(--bg-base)] rounded-lg text-sm font-medium hover:bg-[var(--accent-hover)] disabled:opacity-50 transition-colors"
-            >
-              {clustering ? <Loader2 className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />}
-              Run clustering
-            </button>
-            <Button asChild variant="outline" className="min-h-11">
-              <Link href="/issues">View Agent Issues</Link>
-            </Button>
-          </div>
-        }
-        pageSize={25}
-      />
+        <div className="mb-space-3 flex flex-wrap items-center justify-end gap-space-2">
+          <Button
+            onClick={() => void incidentsQuery.refetch()}
+            disabled={loading}
+            aria-label="Refresh incidents"
+            variant="outline"
+            className="min-h-11"
+            loading={loading}
+          >
+            <RefreshCw className="w-4 h-4" />
+            Refresh
+          </Button>
+          <Button
+            onClick={() => void handleCluster()}
+            disabled={clustering}
+            aria-label="Run clustering now"
+            className="min-h-11"
+            loading={clustering}
+          >
+            <Zap className="w-4 h-4" />
+            Run clustering
+          </Button>
+        </div>
       )}
+
+      {embedded ? null : (
+        <p className="mb-space-3 text-sm text-[var(--text-muted)]">
+          Prefer the Agent Issues hub Incidents tab — list entry redirects to{" "}
+          <Link href="/issues?tab=incidents" className="text-[var(--accent)] hover:underline">
+            /issues?tab=incidents
+          </Link>
+          .
+        </p>
+      )}
+
+      <QueryState
+        loading={loading && incidents.length === 0}
+        error={incidentsQuery.error}
+        data={incidentsQuery.data}
+        onRetry={() => void incidentsQuery.refetch()}
+        errorTitle="Could not load incidents"
+        isEmpty={(d) => ((d?.incidents as unknown as Incident[] | undefined)?.length ?? 0) === 0}
+        loadingSlot={<LoadingSkeleton variant="table" lines={5} className="p-0 max-w-none" />}
+        emptySlot={
+          <EmptyState
+            icon={AlertOctagon}
+            title="No incidents yet"
+            description="Run clustering to detect systemic failure patterns across many traces."
+            size="lg"
+            action={
+              <div className="flex flex-wrap items-center justify-center gap-space-2">
+                <Button
+                  onClick={() => void handleCluster()}
+                  disabled={clustering}
+                  loading={clustering}
+                  className="min-h-11"
+                >
+                  <Zap className="w-4 h-4" />
+                  Run clustering
+                </Button>
+                <Button asChild variant="outline" className="min-h-11">
+                  <Link href="/issues">View Agent Issues</Link>
+                </Button>
+              </div>
+            }
+          />
+        }
+      >
+        {() => (
+          <DataTable
+            columns={columns}
+            rows={incidents}
+            rowKey={(inc) => inc.cluster_id}
+            loading={false}
+            defaultSort={{ key: "last_seen", direction: "desc" }}
+            emptyTitle="No incidents yet"
+            emptyDescription="Run clustering to detect systemic failure patterns across many traces."
+            emptyIcon={AlertOctagon}
+            pageSize={25}
+          />
+        )}
+      </QueryState>
     </PageContent>
   );
 }

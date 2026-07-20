@@ -100,7 +100,7 @@ export function SSOTab({ orgId }: SSOTabProps) {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-space-6">
       {!ssoCallbackAvailable && (
         <div
           role="status"
@@ -125,12 +125,9 @@ export function SSOTab({ orgId }: SSOTabProps) {
           </p>
         </div>
         {canManage && (
-          <button
-            onClick={() => setShowForm(!showForm)}
-            className="px-4 py-2 bg-[var(--accent)] text-[var(--accent-foreground)] rounded-lg text-sm font-medium hover:opacity-90"
-          >
+          <Button variant="default" className="min-h-11" onClick={() => setShowForm(!showForm)}>
             {showForm ? "Cancel" : "Add Provider"}
-          </button>
+          </Button>
         )}
       </div>
 
@@ -159,14 +156,14 @@ export function SSOTab({ orgId }: SSOTabProps) {
               />
             </div>
           </div>
-          <button type="submit" className="px-4 py-2 bg-[var(--accent)] text-[var(--accent-foreground)] rounded-lg text-sm">
+          <Button type="submit" variant="default" className="min-h-11">
             Create Provider
-          </button>
+          </Button>
         </form>
       )}
 
       {loading ? (
-        <div className="space-y-3" aria-busy="true" aria-live="polite">
+        <div className="space-y-space-3" aria-busy="true" aria-live="polite">
           <div className="h-16 rounded-lg bg-[var(--bg-tertiary)] animate-pulse" />
           <div className="h-16 rounded-lg bg-[var(--bg-tertiary)] animate-pulse" />
         </div>
@@ -183,7 +180,7 @@ export function SSOTab({ orgId }: SSOTabProps) {
       ) : providers.length === 0 ? (
         <p className="text-sm text-[var(--text-muted)]">No SSO providers configured.</p>
       ) : (
-        <div className="space-y-3">
+        <div className="space-y-space-3">
           {providers.map((provider) => (
             <div
               key={provider.id}

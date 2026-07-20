@@ -2,9 +2,9 @@
 
 import { useState } from "react";
 import { api } from "@/lib/api";
-import { Download, Loader2, FileArchive, CheckCircle } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { Download, FileArchive, CheckCircle } from "lucide-react";
 import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 
 interface DataExportPanelProps {
   orgId: string;
@@ -61,27 +61,10 @@ export function DataExportPanel({ orgId, canExport }: DataExportPanelProps) {
         </div>
       )}
 
-      <button
-        onClick={handleExport}
-        disabled={loading}
-        className={cn(
-          "px-4 py-2 text-sm rounded-lg flex items-center gap-2 transition-colors",
-          "bg-[var(--accent)] text-[var(--bg-primary)] hover:opacity-90",
-          loading && "opacity-50 cursor-not-allowed"
-        )}
-      >
-        {loading ? (
-          <>
-            <Loader2 className="w-4 h-4 animate-spin" />
-            Preparing export...
-          </>
-        ) : (
-          <>
-            <Download className="w-4 h-4" />
-            Export All Data
-          </>
-        )}
-      </button>
+      <Button variant="default" className="min-h-11" onClick={handleExport} loading={loading}>
+        <Download className="w-4 h-4" />
+        {loading ? "Preparing export..." : "Export All Data"}
+      </Button>
 
       <p className="text-xs text-[var(--text-muted)] mt-3">
         Export includes: members.json, references.json, jobs.json, audit_log.json, settings.json

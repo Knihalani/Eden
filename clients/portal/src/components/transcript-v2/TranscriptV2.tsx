@@ -98,15 +98,15 @@ export function TranscriptV2({
   const parallelBlocks = blocks.filter((b) => b.type === "parallel_tools");
 
   return (
-    <div className="relative space-y-2" data-testid="transcript-v2">
+    <div className="relative space-y-space-2" data-testid="transcript-v2">
       {showRrwebThumb && (
-        <div className="flex items-center justify-end px-1">
+        <div className="flex items-center justify-end px-space-1">
           <RrwebThumb traceId={rest.traceId} sessionId={sessionId} />
         </div>
       )}
 
       {parallelBlocks.length > 0 && (
-        <div className="space-y-2 px-1">
+        <div className="space-y-space-2 px-space-1">
           {parallelBlocks.map((b) =>
             b.type === "parallel_tools" ? (
               <ParallelToolLane

@@ -9,7 +9,6 @@ import { PageHeader } from "@/components/layout/page-header";
 import { NoOrgState } from "@/components/ui/no-org-state";
 import { ErrorState } from "@/components/ui/error-state";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { FormField } from "@/components/ui/form-field";
 import { useOrg } from "@/hooks/use-org";
@@ -187,15 +186,26 @@ export default function LabelingQueueBoardPage() {
         icon={Columns3}
         actions={
           <>
-            <Button asChild variant="outline" size="sm">
+            <Button asChild variant="outline" className="min-h-11">
               <Link href="/evals?tab=labeling">
                 <ArrowLeft className="h-3.5 w-3.5" /> Back
               </Link>
             </Button>
-            <Button variant="outline" size="sm" onClick={() => setShowCheat((v) => !v)}>
+            <Button
+              variant="ghost"
+              className="hidden min-h-11 sm:inline-flex"
+              onClick={() => setShowCheat((v) => !v)}
+            >
               <Keyboard className="h-3.5 w-3.5" /> Shortcuts
             </Button>
-            <Button onClick={() => void load()} variant="outline" size="sm" disabled={loading} loading={loading}>
+            <Button
+              onClick={() => void load()}
+              variant="outline"
+              className="min-h-11"
+              disabled={loading}
+              loading={loading}
+              aria-label="Refresh board"
+            >
               <RefreshCw className="h-3.5 w-3.5" />
             </Button>
           </>
@@ -222,7 +232,7 @@ export default function LabelingQueueBoardPage() {
       ) : null}
 
       {showCheat && !loadError ? (
-        <Card className="mb-3 p-3 text-xs text-[var(--text-secondary)]">
+        <div className="mb-space-3 border-y border-[var(--border-subtle)] py-space-3 text-xs text-[var(--text-secondary)]">
           <p className="mb-1 font-medium">Hotkeys</p>
           <ul className="list-inside list-disc space-y-0.5">
             {labels.map((l, i) => (
@@ -237,12 +247,12 @@ export default function LabelingQueueBoardPage() {
               <kbd>S</kbd> skip · <kbd>?</kbd> toggle this sheet
             </li>
           </ul>
-        </Card>
+        </div>
       ) : null}
 
       {loadError ? null : (
         <>
-          <div className="mb-3 flex flex-wrap items-center gap-3 text-xs text-[var(--text-muted)]">
+          <div className="mb-space-3 flex flex-wrap items-center gap-3 text-xs text-[var(--text-muted)]">
             <span>
               Schema: {String(schema.type || "binary")} · labels [{labels.join(", ")}]
             </span>
@@ -256,7 +266,7 @@ export default function LabelingQueueBoardPage() {
           </div>
 
           <div className="grid gap-4 lg:grid-cols-2">
-            <Card className="min-h-[280px] p-4">
+            <div className="min-h-[280px] border border-[var(--border-subtle)] p-space-4">
               <h3 className="mb-2 text-sm font-medium">Transcript</h3>
               {loading && queue.length === 0 ? (
                 <p className="text-sm text-[var(--text-muted)]">Loading board…</p>
@@ -272,9 +282,9 @@ export default function LabelingQueueBoardPage() {
                   </Button>
                 </div>
               )}
-            </Card>
+            </div>
 
-            <Card className="space-y-3 p-4">
+            <div className="space-y-space-3 border border-[var(--border-subtle)] p-space-4">
               <h3 className="text-sm font-medium">Label</h3>
               <FormField label="Notes" htmlFor="label-notes">
                 <Input
@@ -338,7 +348,7 @@ export default function LabelingQueueBoardPage() {
                   ))}
                 </ul>
               </div>
-            </Card>
+            </div>
           </div>
         </>
       )}

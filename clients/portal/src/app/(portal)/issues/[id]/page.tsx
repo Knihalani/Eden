@@ -27,7 +27,7 @@ import {
   Copy,
 } from "lucide-react";
 import { PageContent } from "@/components/layout/page-content";
-import { cn } from "@/lib/utils";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { RegressionBadge, RepeatBadge, IssueSeverityBadge, StatusBadge } from "../_components/issue-badges";
 
 type Tab = "overview" | "triage" | "handoff" | "experiment";
@@ -219,7 +219,7 @@ export default function IssueDetailPage() {
     return <NoOrgState feature="Agent Issues" icon={ShieldAlert} description="Select an organization" />;
   }
 
-  const tabs: { id: Tab; label: string; href?: string }[] = [
+  const tabs: { id: Tab; label: string }[] = [
     { id: "overview", label: "Overview" },
     { id: "triage", label: "Triage" },
     { id: "handoff", label: "Handoff" },
@@ -261,42 +261,30 @@ export default function IssueDetailPage() {
             <h1 className="text-lg font-semibold text-[var(--text-primary)]">{issue.title}</h1>
             <p className="mt-1 text-xs text-[var(--text-muted)] font-mono break-all">fingerprint: {issue.fingerprint}</p>
 
-            <div role="tablist" aria-label="Issue sections" className="flex gap-1 mt-4 border-b border-[var(--border-default)]">
-              {tabs.map((t) =>
-                t.href ? (
-                  <Link
+            <Tabs
+              value={tab}
+              onValueChange={(v) => setTab(v as Tab)}
+              className="mt-space-4"
+            >
+              <TabsList
+                variant="underline"
+                aria-label="Issue sections"
+                className="h-auto w-full justify-start gap-space-1 bg-transparent"
+              >
+                {tabs.map((t) => (
+                  <TabsTrigger
                     key={t.id}
-                    role="tab"
-                    href={t.href}
-                    className={cn(
-                      "min-h-11 px-3 py-2 text-sm font-medium border-b-2 -mb-px",
-                      tab === t.id
-                        ? "border-[var(--accent)] text-[var(--accent)]"
-                        : "border-transparent text-[var(--text-muted)] hover:text-[var(--text-primary)]",
-                    )}
+                    variant="underline"
+                    value={t.id}
+                    className="min-h-11"
                   >
                     {t.label}
-                  </Link>
-                ) : (
-                  <button
-                    key={t.id}
-                    role="tab"
-                    aria-selected={tab === t.id}
-                    onClick={() => setTab(t.id)}
-                    className={cn(
-                      "min-h-11 px-3 py-2 text-sm font-medium border-b-2 -mb-px",
-                      tab === t.id
-                        ? "border-[var(--accent)] text-[var(--accent)]"
-                        : "border-transparent text-[var(--text-muted)] hover:text-[var(--text-primary)]",
-                    )}
-                  >
-                    {t.label}
-                  </button>
-                ),
-              )}
-            </div>
+                  </TabsTrigger>
+                ))}
+              </TabsList>
+            </Tabs>
 
-            <div className="mt-4 flex flex-wrap gap-2">
+            <div className="mt-space-4 flex flex-wrap gap-space-2">
               <Button size="sm" variant="default" className="min-h-11" disabled={busy !== null} onClick={onTriage}>
                 {busy === "triage" ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <Stethoscope className="h-3 w-3 mr-1" />}
                 Re-triage
@@ -348,7 +336,7 @@ export default function IssueDetailPage() {
               {issue.triage_result && Object.keys(issue.triage_result).length > 0 && (
                 <div className="rounded-lg border border-[var(--border-default)] bg-[var(--bg-primary)] p-4">
                   <h2 className="text-sm font-semibold mb-2">Triage result</h2>
-                  <pre className="p-2 rounded bg-[var(--bg-tertiary)] text-[11px] font-mono overflow-x-auto">
+                  <pre className="p-2 rounded bg-[var(--bg-tertiary)] text-xs font-mono overflow-x-auto">
                     {JSON.stringify(issue.triage_result, null, 2)}
                   </pre>
                 </div>
@@ -564,17 +552,17 @@ function TriagePanel({
         <div className="flex items-center gap-2 flex-wrap">
           <h2 className="text-sm font-semibold">Root cause</h2>
           {tr.source ? (
-            <span className="text-[10px] uppercase tracking-wide px-2 py-0.5 rounded bg-[var(--bg-tertiary)] text-[var(--text-muted)]">
+            <span className="text-2xs uppercase tracking-wide px-2 py-0.5 rounded bg-[var(--bg-tertiary)] text-[var(--text-muted)]">
               {String(tr.source)}
             </span>
           ) : null}
           {typeof tr.confidence === "number" ? (
-            <span className="text-[10px] text-[var(--text-muted)]">
+            <span className="text-2xs text-[var(--text-muted)]">
               confidence {(Number(tr.confidence) * 100).toFixed(0)}%
             </span>
           ) : null}
           {tr.auto_escalate ? (
-            <span className="text-[10px] uppercase px-2 py-0.5 rounded bg-[var(--error-bg)] text-[var(--error)]">
+            <span className="text-2xs uppercase px-2 py-0.5 rounded bg-[var(--error-bg)] text-[var(--error)]">
               auto-escalate
             </span>
           ) : null}
@@ -725,7 +713,7 @@ function StumblesList({
 function Stat({ label, value }: { label: string; value: string | number }) {
   return (
     <div className="rounded border border-[var(--border-subtle)] p-2">
-      <p className="text-[10px] uppercase tracking-wide text-[var(--text-muted)]">{label}</p>
+      <p className="text-2xs uppercase tracking-wide text-[var(--text-muted)]">{label}</p>
       <p className="text-sm font-semibold text-[var(--text-primary)] mt-0.5 truncate">{value}</p>
     </div>
   );
@@ -844,7 +832,7 @@ function CodingAgentHandoff({
           <Copy className="h-3 w-3 mr-1" /> Copy prompt
         </Button>
       </div>
-      <pre className="text-[11px] font-mono whitespace-pre-wrap text-[var(--text-secondary)] overflow-x-auto">
+      <pre className="text-xs font-mono whitespace-pre-wrap text-[var(--text-secondary)] overflow-x-auto">
         {prompt}
       </pre>
     </div>

@@ -352,7 +352,7 @@ export default function PromptsPage() {
                   </div>
                   <div className="flex items-center gap-3 text-xs text-[var(--text-muted)] shrink-0">
                     {p.auto_eval_on_save && (
-                      <span className="rounded bg-[var(--terminal-faint)] px-1.5 py-0.5 text-[var(--terminal)] font-mono uppercase tracking-wide text-[10px]">
+                      <span className="rounded bg-[var(--terminal-faint)] px-1.5 py-0.5 text-[var(--terminal)] font-mono uppercase tracking-wide text-[length:var(--font-size-2xs)]">
                         auto-eval
                       </span>
                     )}

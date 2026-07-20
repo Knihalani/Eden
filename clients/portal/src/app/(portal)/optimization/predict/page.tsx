@@ -3,12 +3,13 @@
 import { useState } from "react";
 import { Sparkles, Activity, TrendingUp, Wallet, Server, ShieldAlert } from "lucide-react";
 
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { DataTable } from "@/components/ui/data-table";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorState } from "@/components/ui/error-state";
 import { StatCard } from "@/components/ui/stat-card";
+import { Panel } from "@/components/ui/panel";
+import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/layout/page-header";
 import { PageContent, PageLoadingSkeleton } from "@/components/layout/page-content";
 import { useOrg } from "@/hooks/use-org";
@@ -31,12 +32,9 @@ function RetryAction({
 }) {
   if (!isRetryableIntelligenceError(error)) return null;
   return (
-    <button
-      onClick={onRetry}
-      className="inline-flex items-center gap-2 px-3 py-1.5 rounded-md bg-[var(--accent)] text-[var(--bg-base)] text-xs font-medium hover:bg-[var(--accent-hover)] transition-colors"
-    >
+    <Button variant="outline" size="sm" onClick={onRetry}>
       Try again
-    </button>
+    </Button>
   );
 }
 
@@ -187,15 +185,13 @@ function QualityTab() {
     );
   }
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Quality forecast</CardTitle>
-        <CardDescription>7-day judge score projection with 95% CI</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <ForecastLine data={data ?? []} />
-      </CardContent>
-    </Card>
+    <Panel tone="flat" padding="lg" data-testid="predict-primary-chart">
+      <div className="mb-3">
+        <h3 className="text-sm font-semibold text-[var(--text-primary)]">Quality forecast</h3>
+        <p className="text-xs text-[var(--text-muted)]">Primary · 7-day judge score with 95% CI</p>
+      </div>
+      <ForecastLine data={data ?? []} height={260} />
+    </Panel>
   );
 }
 
@@ -244,41 +240,39 @@ function DriftTab() {
         icon={Activity}
         accent={drifted ? "warning" : "accent"}
       />
-      <Card>
-        <CardHeader>
-          <CardTitle>Drift details</CardTitle>
-          <CardDescription>
+      <Panel tone="flat" padding="none">
+        <div className="px-4 pt-4 pb-2">
+          <h3 className="text-sm font-semibold text-[var(--text-primary)]">Drift details</h3>
+          <p className="text-xs text-[var(--text-muted)]">
             {details.baseline_window && details.current_window
               ? `${details.baseline_window} → ${details.current_window}`
               : "Baseline → current"}
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="px-0 pb-0">
-          <DataTable
-            columns={[
-              {
-                key: "label",
-                header: "Field",
-                cell: (s) => (
-                  <span className="font-mono text-xs text-[var(--text-secondary)]">
-                    {s.label}
-                  </span>
-                ),
-              },
-              {
-                key: "value",
-                header: "Value",
-                align: "right",
-                cell: (s) => s.value,
-              },
-            ]}
-            rows={detailRows}
-            rowKey={(r) => r.key}
-            emptyIcon={Sparkles}
-            emptyTitle="No drift details"
-          />
-        </CardContent>
-      </Card>
+          </p>
+        </div>
+        <DataTable
+          columns={[
+            {
+              key: "label",
+              header: "Field",
+              cell: (s) => (
+                <span className="font-mono text-xs text-[var(--text-secondary)]">
+                  {s.label}
+                </span>
+              ),
+            },
+            {
+              key: "value",
+              header: "Value",
+              align: "right",
+              cell: (s) => s.value,
+            },
+          ]}
+          rows={detailRows}
+          rowKey={(r) => r.key}
+          emptyIcon={Sparkles}
+          emptyTitle="No drift details"
+        />
+      </Panel>
     </div>
   );
 }
@@ -321,7 +315,7 @@ function CostTab() {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4" data-testid="predict-cost-hierarchy">
       <StatCard
         title="Predicted daily cost"
         value={data?.headline != null ? formatCurrency(data.headline) : "—"}
@@ -329,15 +323,13 @@ function CostTab() {
         icon={Wallet}
         accent="warning"
       />
-      <Card>
-        <CardHeader>
-          <CardTitle>Cost forecast</CardTitle>
-          <CardDescription>30-day cost projection with 95% CI</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <ForecastLine data={data?.points ?? []} unit="usd" color="var(--warning)" />
-        </CardContent>
-      </Card>
+      <Panel tone="flat" padding="lg">
+        <div className="mb-3">
+          <h3 className="text-sm font-semibold text-[var(--text-primary)]">Cost forecast</h3>
+          <p className="text-xs text-[var(--text-muted)]">Primary · 30-day projection with 95% CI</p>
+        </div>
+        <ForecastLine data={data?.points ?? []} unit="usd" color="var(--warning)" height={260} />
+      </Panel>
     </div>
   );
 }
@@ -418,30 +410,28 @@ function RiskTab() {
         icon={ShieldAlert}
         accent={score != null && score >= 0.5 ? "warning" : "accent"}
       />
-      <Card>
-        <CardHeader>
-          <CardTitle>Risk breakdown</CardTitle>
-          <CardDescription>Per-component scores</CardDescription>
-        </CardHeader>
-        <CardContent className="px-0 pb-0">
-          <DataTable
-            columns={[
-              {
-                key: "key",
-                header: "Component",
-                cell: (r) => (
-                  <span className="font-mono text-xs text-[var(--text-secondary)]">{r.key}</span>
-                ),
-              },
-              { key: "value", header: "Score", align: "right", cell: (r) => r.value },
-            ]}
-            rows={breakdown}
-            rowKey={(r) => r.key}
-            emptyIcon={Sparkles}
-            emptyTitle="No risk components"
-          />
-        </CardContent>
-      </Card>
+      <Panel tone="flat" padding="none">
+        <div className="px-4 pt-4 pb-2">
+          <h3 className="text-sm font-semibold text-[var(--text-primary)]">Risk breakdown</h3>
+          <p className="text-xs text-[var(--text-muted)]">Per-component scores</p>
+        </div>
+        <DataTable
+          columns={[
+            {
+              key: "key",
+              header: "Component",
+              cell: (r) => (
+                <span className="font-mono text-xs text-[var(--text-secondary)]">{r.key}</span>
+              ),
+            },
+            { key: "value", header: "Score", align: "right", cell: (r) => r.value },
+          ]}
+          rows={breakdown}
+          rowKey={(r) => r.key}
+          emptyIcon={Sparkles}
+          emptyTitle="No risk components"
+        />
+      </Panel>
     </div>
   );
 }

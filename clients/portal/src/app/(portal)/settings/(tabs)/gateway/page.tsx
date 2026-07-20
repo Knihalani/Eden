@@ -49,7 +49,18 @@ function GatewaySettingsRedirectInner() {
 // surfaces in the browser console as a 404.
 export default function GatewaySettingsRedirect() {
   return (
-    <Suspense fallback={null}>
+    <Suspense
+      fallback={
+        <div
+          className="flex items-center justify-center gap-2 p-12 text-sm text-[var(--text-muted)]"
+          role="status"
+          aria-live="polite"
+        >
+          <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+          Loading…
+        </div>
+      }
+    >
       <GatewaySettingsRedirectInner />
     </Suspense>
   );

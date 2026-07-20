@@ -10,6 +10,8 @@
 | **Dependencies** | U00, U08, U12, F58, product surfaces from Waves 4–10 |
 | **Roadmap** | [EDEN-MASTER-ROADMAP](../EDEN-MASTER-ROADMAP.md) **Wave 11** |
 
+> **Overhaul 2026 status (2026-07-20):** Structural U18 goals are largely shipped via Waves 4–6 (shell, IA freeze, ResourcePageShell, redirects, mobile More, clutter contracts). Program rollup: [`overhaul-2026/README.md`](./overhaul-2026/README.md). Residual peer gaps (ViewsMenu on Issues/Alerts, Timeline mode, live axe) tracked as maintenance — not a rewrite of this spec.
+
 ---
 
 ## 1. Summary

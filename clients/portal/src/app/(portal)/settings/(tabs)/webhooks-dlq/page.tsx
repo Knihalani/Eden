@@ -170,7 +170,7 @@ export default function WebhooksDlqPage() {
             variant="plain"
             icon={CheckCircle2}
             title="DLQ is clear"
-            description="Every webhook delivery is succeeding within the retry budget."
+            description="DLQ is empty. Every webhook delivery is succeeding within the retry budget."
           />
         }
       >

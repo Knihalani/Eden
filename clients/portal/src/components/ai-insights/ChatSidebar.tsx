@@ -43,13 +43,13 @@ export function ChatSidebar({
   if (!chat.f70Enabled) return null;
 
   const header = (
-    <div className="flex items-center justify-between border-b border-[var(--border-default)] px-3 py-2.5">
-      <div className="relative flex min-w-0 flex-1 items-center gap-2">
+    <div className="flex items-center justify-between border-b border-[var(--border-default)] px-space-3 py-space-3">
+      <div className="relative flex min-w-0 flex-1 items-center gap-space-2">
         <MessageSquare className="h-3.5 w-3.5 shrink-0 text-[var(--accent)]" aria-hidden />
         <button
           type="button"
           onClick={() => chat.setSessionMenuOpen((v) => !v)}
-          className="flex min-w-0 items-center gap-1 rounded-md px-1.5 py-1 text-left hover:bg-[var(--bg-tertiary)]"
+          className="flex min-w-0 items-center gap-space-1 rounded-md px-space-2 py-space-1 text-left hover:bg-[var(--bg-tertiary)]"
           aria-expanded={chat.sessionMenuOpen}
           aria-haspopup="listbox"
           aria-label="Chat sessions"
@@ -74,7 +74,7 @@ export function ChatSidebar({
           onClose={() => chat.setSessionMenuOpen(false)}
         />
       </div>
-      <div className="flex shrink-0 items-center gap-0.5">
+      <div className="flex shrink-0 items-center gap-space-1">
         <Button
           variant="ghost"
           size="sm"
@@ -123,7 +123,7 @@ export function ChatSidebar({
   return (
     <>
       {!chat.hideChatOnRoute && !chat.open && (
-        <div className="fixed bottom-20 right-4 z-50 lg:bottom-6 lg:right-6">
+        <div className="fixed bottom-20 right-4 z-40 lg:bottom-6 lg:right-6">
           <Tooltip>
             <TooltipTrigger asChild>
               <button
@@ -157,19 +157,19 @@ export function ChatSidebar({
               data-ai-coach-mark
               className={cn(
                 "absolute bottom-14 right-0 w-56 rounded-md border",
-                "border-[var(--accent)]/40 bg-[var(--bg-primary)] p-3 text-xs shadow-lg",
+                "border-[var(--accent)]/40 bg-[var(--bg-primary)] p-space-3 text-xs shadow-lg",
                 "text-[var(--text-secondary)]",
               )}
             >
               <p className="font-medium text-[var(--text-primary)]">Ask Eden AI</p>
-              <p className="mt-1 leading-snug">
+              <p className="mt-space-1 leading-snug">
                 Filter lists, find similar traces, and jump to issues from chat.
                 Try <span className="font-mono text-[var(--accent)]">/filter</span> or{" "}
                 <span className="font-mono text-[var(--accent)]">/go</span>.
               </p>
               <button
                 type="button"
-                className="mt-2 text-[11px] font-medium text-[var(--accent)] hover:underline"
+                className="mt-space-2 text-xs font-medium text-[var(--accent)] hover:underline"
                 onClick={chat.dismissCoach}
               >
                 Got it
@@ -200,21 +200,22 @@ export function ChatSidebar({
         <aside
           ref={chat.panelRef as React.RefObject<HTMLElement>}
           className={cn(
-            "fixed right-0 top-0 z-30 flex h-dvh flex-col",
+            "fixed right-0 top-0 z-40 flex h-dvh flex-col",
             "border-l border-[var(--border-default)] bg-[var(--bg-primary)]",
             "shadow-xl lg:shadow-none",
             "w-[min(100vw,360px)]",
           )}
           role="complementary"
           aria-label="AI Insights assistant"
+          data-ai-rail
         >
           {body}
         </aside>
       )}
 
       {!chat.hasOrg && chat.open && (
-        <div className="fixed bottom-20 right-4 z-50 max-w-xs rounded-md border border-[var(--warning)]/40 bg-[var(--bg-primary)] p-3 text-xs text-[var(--text-secondary)] shadow-lg lg:bottom-4">
-          <div className="flex items-start gap-2">
+        <div className="fixed bottom-20 right-4 z-50 max-w-xs rounded-md border border-[var(--warning)]/40 bg-[var(--bg-primary)] p-space-3 text-xs text-[var(--text-secondary)] shadow-lg lg:bottom-4">
+          <div className="flex items-start gap-space-2">
             <AlertTriangle className="h-4 w-4 text-[var(--warning)]" />
             <div>Select an organization from the sidebar to use AI Insights.</div>
             <button

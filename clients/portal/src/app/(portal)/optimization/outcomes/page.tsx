@@ -8,6 +8,8 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 import { ErrorState } from "@/components/ui/error-state";
 import { StatCard } from "@/components/ui/stat-card";
+import { Panel } from "@/components/ui/panel";
+import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/layout/page-header";
 import { PageContent } from "@/components/layout/page-content";
 import { NoOrgState } from "@/components/ui/no-org-state";
@@ -104,12 +106,9 @@ function DepartmentsTab() {
         message={copy.message}
         action={
           isRetryableIntelligenceError(error) ? (
-            <button
-              onClick={() => refetch()}
-              className="inline-flex items-center gap-2 px-3 py-1.5 rounded-md bg-[var(--accent)] text-[var(--bg-base)] text-xs font-medium hover:bg-[var(--accent-hover)] transition-colors"
-            >
+            <Button variant="outline" size="sm" onClick={() => refetch()}>
               Try again
-            </button>
+            </Button>
           ) : undefined
         }
       />
@@ -125,7 +124,7 @@ function DepartmentsTab() {
       header: "ROI",
       align: "right",
       cell: (d) => (
-        <span className={cn("inline-flex rounded-full px-2 py-0.5 text-xs font-medium", roiColor(d.roi))}>
+        <span className={cn("inline-flex rounded-full px-2 py-1 text-xs font-medium", roiColor(d.roi))}>
           {d.roi == null ? "—" : d.roi.toFixed(2)}
         </span>
       ),
@@ -137,7 +136,7 @@ function DepartmentsTab() {
       header: "Alert",
       cell: (d) =>
         d.anomaly ? (
-          <span className="inline-flex items-center gap-1 rounded-full bg-[var(--error-bg)] px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-[var(--error)]">
+          <span className="inline-flex items-center gap-1 rounded-full bg-[var(--error-bg)] px-2 py-1 text-2xs font-medium uppercase tracking-wide text-[var(--error)]">
             <AlertTriangle className="h-3 w-3" /> low ROI
           </span>
         ) : (
@@ -147,23 +146,21 @@ function DepartmentsTab() {
   ];
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Departments</CardTitle>
-        <CardDescription>Cost, outcome value, and ROI by department</CardDescription>
-      </CardHeader>
-      <CardContent className="px-0 pb-0">
-        <DataTable
-          columns={columns}
-          rows={departments}
-          rowKey={(d) => d.department}
-          defaultSort={{ key: "roi", direction: "desc" }}
-          emptyIcon={Building2}
-          emptyTitle="No department data"
-          emptyDescription="Track outcomes on traces to populate department ROI."
-        />
-      </CardContent>
-    </Card>
+    <Panel tone="flat" padding="none">
+      <div className="px-4 pt-4 pb-2">
+        <h3 className="text-sm font-semibold text-[var(--text-primary)]">Departments</h3>
+        <p className="text-xs text-[var(--text-muted)]">Cost, outcome value, and ROI by department</p>
+      </div>
+      <DataTable
+        columns={columns}
+        rows={departments}
+        rowKey={(d) => d.department}
+        defaultSort={{ key: "roi", direction: "desc" }}
+        emptyIcon={Building2}
+        emptyTitle="No department data"
+        emptyDescription="Track outcomes on traces to populate department ROI."
+      />
+    </Panel>
   );
 }
 
@@ -310,23 +307,15 @@ function TrackTab() {
             </label>
           </div>
           <div className="flex items-center justify-end">
-            <button
+            <Button
               type="submit"
               disabled={submitting || !traceId.trim()}
+              loading={submitting}
               aria-label="Track outcome"
-              className={cn(
-                "inline-flex items-center gap-2 rounded-md px-4 py-2 text-sm font-medium transition-colors",
-                "bg-[var(--accent)] text-[var(--bg-primary)] shadow-sm hover:bg-[var(--accent-hover)]",
-                "disabled:cursor-not-allowed disabled:opacity-50"
-              )}
             >
-              {submitting ? (
-                <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
-              ) : (
-                <CheckCircle2 className="h-4 w-4" aria-hidden />
-              )}
+              {!submitting && <CheckCircle2 className="h-4 w-4" aria-hidden />}
               Track outcome
-            </button>
+            </Button>
           </div>
         </form>
       </CardContent>
@@ -383,12 +372,9 @@ export default function OutcomesPage() {
           message={analyticsCopy.message}
           action={
             isRetryableIntelligenceError(analyticsError) ? (
-              <button
-                onClick={() => refetchAnalytics()}
-                className="inline-flex items-center gap-2 px-3 py-1.5 rounded-md bg-[var(--accent)] text-[var(--bg-base)] text-xs font-medium hover:bg-[var(--accent-hover)] transition-colors"
-              >
+              <Button variant="outline" size="sm" onClick={() => refetchAnalytics()}>
                 Try again
-              </button>
+              </Button>
             ) : undefined
           }
         />

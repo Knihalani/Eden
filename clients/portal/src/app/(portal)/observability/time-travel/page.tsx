@@ -13,9 +13,9 @@ import { useToast } from "@/components/ui/toast";
 import { ErrorState } from "@/components/ui/error-state";
 import { Button } from "@/components/ui/button";
 import { NoOrgState } from "@/components/ui/no-org-state";
-import { PageHeader } from "@/components/layout/page-header";
 import { PageContent } from "@/components/layout/page-content";
-import { History, Loader2, Play, GitBranch, RotateCcw, Info, Circle, CheckCircle2, Code2 } from "lucide-react";
+import { ObserveLeafHeader } from "@/app/(portal)/observability/_components/observe-leaf-shell";
+import { History, Play, GitBranch, RotateCcw, Circle, CheckCircle2, Code2 } from "lucide-react";
 import { errorFromCaught } from "@/lib/safe-error-message";
 
 /** Default empty edits — BE expects ``step_<n>.<key>`` dotted paths. */
@@ -177,30 +177,27 @@ export default function TimeTravelPage() {
   }
 
   return (
-    <PageContent>
-      <PageHeader
+    <PageContent size="wide">
+      <ObserveLeafHeader
         title="Time-Travel"
-        subtitle="Replay traces with point-in-time state restoration"
+        subtitle="Record, fork, and replay — non-destructive point-in-time debugging"
         icon={History}
-        eyebrow="Observe"
+        description="Advanced under Traces — fork at any step, edit state, replay from that point. Original trace stays unchanged."
         actions={
           snapshotId ? (
-            <button
+            <Button
+              variant="secondary"
+              size="sm"
+              className="min-h-11"
               onClick={resetAll}
               aria-label="Reset all time-travel state"
-              className="inline-flex items-center gap-2 px-3 py-2 bg-[var(--bg-tertiary)] text-[var(--text-primary)] rounded-lg text-sm font-medium hover:bg-[var(--border-default)] transition-colors"
             >
               <RotateCcw className="w-4 h-4" />
               Reset
-            </button>
+            </Button>
           ) : undefined
         }
       />
-
-      <div className="bg-[var(--accent-faint)]/50 border border-[var(--accent)]/20 rounded-xl px-4 py-2.5 flex items-center gap-2 text-xs text-[var(--text-secondary)]">
-        <Info className="w-3.5 h-3.5 text-[var(--accent)] flex-shrink-0" />
-        Fork at any step, edit state, replay from that point. Non-destructive — original trace unchanged.
-      </div>
 
       {error ? (
         <ErrorState
@@ -216,8 +213,8 @@ export default function TimeTravelPage() {
         />
       ) : null}
 
-      {/* Stepper indicator */}
-      <div className="flex items-center gap-2">
+      {/* Stepper — content chrome, not a third identity band */}
+      <div className="flex items-center gap-space-2">
         {[
           { key: "record", label: "Record" },
           { key: "fork", label: "Fork" },
@@ -254,7 +251,7 @@ export default function TimeTravelPage() {
       >
         <div className="grid sm:grid-cols-[1fr_auto] gap-3">
           <div>
-            <label className="text-[11px] font-medium text-[var(--text-muted)] mb-1 block uppercase tracking-wide">
+            <label className="text-xs font-medium text-[var(--text-muted)] mb-1 block uppercase tracking-wide">
               Trace ID
             </label>
             <input
@@ -266,18 +263,19 @@ export default function TimeTravelPage() {
               className="w-full px-3 py-2 bg-[var(--bg-secondary)] border border-[var(--border-default)] rounded-lg text-sm font-mono text-[var(--text-primary)] placeholder:text-[var(--text-muted)]"
             />
           </div>
-          <button
+          <Button
+            variant="default"
+            className="self-end min-h-11"
             onClick={handleRecord}
-            disabled={recording}
-            className="self-end inline-flex items-center gap-2 px-4 py-2 bg-[var(--accent)] text-[var(--bg-base)] rounded-lg text-sm font-medium hover:bg-[var(--accent-hover)] disabled:opacity-50 transition-colors"
+            loading={recording}
           >
-            {recording ? <Loader2 className="w-4 h-4 animate-spin" /> : <History className="w-4 h-4" />}
+            <History className="w-4 h-4" />
             Record
-          </button>
+          </Button>
         </div>
         {snapshotId && (
           <div className="mt-3 px-3 py-2 rounded-lg bg-[var(--terminal-faint)] text-xs">
-            <p className="text-[var(--text-muted)] uppercase tracking-wide text-[10px] mb-0.5">Snapshot</p>
+            <p className="text-[var(--text-muted)] uppercase tracking-wide text-2xs mb-0.5">Snapshot</p>
             <p className="font-mono text-[var(--terminal)]">{snapshotId}</p>
           </div>
         )}
@@ -294,7 +292,7 @@ export default function TimeTravelPage() {
       >
         <div className="grid sm:grid-cols-[160px_1fr] gap-3 mb-3">
           <div>
-            <label className="text-[11px] font-medium text-[var(--text-muted)] mb-1 block uppercase tracking-wide">
+            <label className="text-xs font-medium text-[var(--text-muted)] mb-1 block uppercase tracking-wide">
               Step index
             </label>
             <input
@@ -307,7 +305,7 @@ export default function TimeTravelPage() {
             />
           </div>
           <div>
-            <label className="text-[11px] font-medium text-[var(--text-muted)] mb-1 block uppercase tracking-wide">
+            <label className="text-xs font-medium text-[var(--text-muted)] mb-1 block uppercase tracking-wide">
               Edits JSON (step_N.key)
             </label>
             <textarea
@@ -320,19 +318,21 @@ export default function TimeTravelPage() {
             />
           </div>
         </div>
-        <button
+        <Button
+          variant="default"
+          className="min-h-11"
           onClick={handleFork}
-          disabled={forking || !snapshotId}
-          className="inline-flex items-center gap-2 px-4 py-2 bg-[var(--accent)] text-[var(--bg-base)] rounded-lg text-sm font-medium hover:bg-[var(--accent-hover)] disabled:opacity-50 transition-colors"
+          disabled={!snapshotId}
+          loading={forking}
         >
-          {forking ? <Loader2 className="w-4 h-4 animate-spin" /> : <GitBranch className="w-4 h-4" />}
+          <GitBranch className="w-4 h-4" />
           Fork
-        </button>
+        </Button>
 
         {forkId && (
           <div className="mt-3 space-y-2">
             <div className="px-3 py-2 rounded-lg bg-[var(--terminal-faint)] text-xs">
-              <p className="text-[var(--text-muted)] uppercase tracking-wide text-[10px] mb-0.5">Fork</p>
+              <p className="text-[var(--text-muted)] uppercase tracking-wide text-2xs mb-0.5">Fork</p>
               <p className="font-mono text-[var(--terminal)]">{forkId}</p>
               <p className="text-[var(--text-secondary)] mt-1">
                 At step {forkAtStep}
@@ -344,7 +344,7 @@ export default function TimeTravelPage() {
                 <summary className="cursor-pointer text-[var(--text-muted)] hover:text-[var(--text-primary)] flex items-center gap-1.5">
                   <Code2 className="w-3.5 h-3.5" /> Fork metadata
                 </summary>
-                <pre className="mt-2 text-[11px] font-mono text-[var(--text-secondary)] bg-[var(--bg-secondary)] rounded-lg p-3 overflow-x-auto max-h-[200px]">
+                <pre className="mt-2 text-xs font-mono text-[var(--text-secondary)] bg-[var(--bg-secondary)] rounded-lg p-3 overflow-x-auto max-h-[200px]">
                   {JSON.stringify(forkMeta, null, 2)}
                 </pre>
               </details>
@@ -362,23 +362,25 @@ export default function TimeTravelPage() {
         done={!!replayId}
         disabled={!forkId}
       >
-        <button
+        <Button
+          variant="default"
+          className="min-h-11"
           onClick={handleReplay}
-          disabled={replaying || !forkId}
-          className="inline-flex items-center gap-2 px-4 py-2 bg-[var(--accent)] text-[var(--bg-base)] rounded-lg text-sm font-medium hover:bg-[var(--accent-hover)] disabled:opacity-50 transition-colors"
+          disabled={!forkId}
+          loading={replaying}
         >
-          {replaying ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
+          <Play className="w-4 h-4" />
           Replay
-        </button>
+        </Button>
 
         {replayId && replayData && (
           <div className="mt-3 space-y-3">
             <div className="flex flex-wrap items-center gap-3 px-3 py-2 rounded-lg bg-[var(--terminal-faint)] text-xs">
-              <span className="text-[var(--text-muted)] uppercase tracking-wide text-[10px]">Replay</span>
+              <span className="text-[var(--text-muted)] uppercase tracking-wide text-2xs">Replay</span>
               <span className="font-mono text-[var(--terminal)]">{replayId}</span>
               <span
                 className={cn(
-                  "px-2 py-0.5 rounded-full font-medium uppercase tracking-wide text-[10px]",
+                  "px-2 py-0.5 rounded-full font-medium uppercase tracking-wide text-2xs",
                   replayData.new_outcome === "success"
                     ? "bg-[var(--terminal-faint)] text-[var(--terminal)]"
                     : "bg-[var(--error-bg)] text-[var(--error)]"
@@ -395,10 +397,10 @@ export default function TimeTravelPage() {
               </span>
             </div>
             <div>
-              <p className="text-[11px] font-medium text-[var(--text-muted)] mb-1.5 uppercase tracking-wide">
+              <p className="text-xs font-medium text-[var(--text-muted)] mb-1.5 uppercase tracking-wide">
                 Replay result
               </p>
-              <pre className="text-[11px] font-mono text-[var(--text-secondary)] bg-[var(--bg-secondary)] rounded-lg p-3 overflow-x-auto max-h-[280px]">
+              <pre className="text-xs font-mono text-[var(--text-secondary)] bg-[var(--bg-secondary)] rounded-lg p-3 overflow-x-auto max-h-[280px]">
                 {JSON.stringify(replayData, null, 2)}
               </pre>
             </div>
@@ -435,7 +437,7 @@ function Panel({
       <h3 className="text-sm font-semibold text-[var(--text-primary)] flex items-center gap-2">
         <span
           className={cn(
-            "w-5 h-5 rounded-full text-[10px] font-bold flex items-center justify-center flex-shrink-0",
+            "w-5 h-5 rounded-full text-2xs font-bold flex items-center justify-center flex-shrink-0",
             done
               ? "bg-[var(--terminal-faint)] text-[var(--terminal)]"
               : "bg-[var(--accent-faint)] text-[var(--accent)]"

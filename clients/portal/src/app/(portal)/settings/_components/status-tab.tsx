@@ -7,6 +7,7 @@ import { adminStatusApi } from "@/lib/api";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ErrorState } from "@/components/ui/error-state";
+import { LoadingSkeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/components/ui/toast";
 import { errorFromCaught } from "@/lib/safe-error-message";
 
@@ -70,11 +71,7 @@ export function StatusTab() {
   };
 
   if (loading && !status && !error) {
-    return (
-      <div className="flex items-center justify-center p-12 text-sm text-[var(--text-muted)]">
-        <Loader2 className="h-4 w-4 mr-2 animate-spin" /> Loading platform status…
-      </div>
-    );
+    return <LoadingSkeleton variant="stats" lines={4} />;
   }
 
   if (error && !status) {
@@ -100,7 +97,7 @@ export function StatusTab() {
   };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-space-4">
       <div className="flex items-center justify-between gap-3">
         <p className="text-sm text-[var(--text-muted)]">
           Worker health, queue depths, and ingest lag — no infra SSH required.

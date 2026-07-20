@@ -227,7 +227,7 @@ export function RetentionPolicyTab() {
   const overrideCount = Object.keys(draft).length;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-space-6">
       <div className="flex items-center gap-3">
         <div className="p-2 bg-[var(--bg-tertiary)] rounded-lg border border-[var(--border-default)]">
           <Database className="w-5 h-5 text-[var(--accent)]" />
@@ -262,7 +262,7 @@ export function RetentionPolicyTab() {
             </span>
           )}
         </div>
-        <div className="space-y-2">
+        <div className="space-y-space-2">
           {TABLES.map((table) => {
             const override = draft[table.id];
             const effective = override ?? DEFAULTS[table.id];
@@ -399,15 +399,16 @@ export function RetentionPolicyTab() {
           >
             Discard changes
           </button>
-          <button
+          <Button
             type="button"
+            variant="default"
+            className="min-h-11"
             onClick={handleSave}
-            disabled={!dirty || saving}
-            className="px-4 py-2 bg-[var(--accent)] text-[var(--bg-primary)] rounded-lg text-sm font-medium hover:opacity-90 disabled:opacity-50 flex items-center gap-2"
+            disabled={!dirty}
+            loading={saving}
           >
-            {saving && <Loader2 className="w-4 h-4 animate-spin" />}
             Save changes
-          </button>
+          </Button>
         </div>
       )}
 

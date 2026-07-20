@@ -28,11 +28,11 @@ export default async function LoginPage({
 
   return (
     <AuthSplitLayout brandPanel={<AuthBrandPanel />}>
-      <div className="w-full max-w-md space-y-6">
+      <div className="w-full max-w-md space-y-space-5">
         {/* Eyebrow above the Clerk card so users land in a
             branded context instead of Clerk's default heading. */}
-        <div className="text-center space-y-1.5">
-          <p className="text-[10px] font-mono font-semibold uppercase tracking-[0.18em] text-[var(--accent)]">
+        <div className="text-center space-y-space-2">
+          <p className="text-2xs font-mono font-semibold uppercase tracking-[0.18em] text-[var(--accent)]">
             Account access
           </p>
           <h1 className="text-xl font-semibold text-[var(--text-primary)] tracking-tight">

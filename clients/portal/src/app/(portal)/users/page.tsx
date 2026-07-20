@@ -11,6 +11,7 @@ import { ErrorState } from "@/components/ui/error-state";
 import { NoOrgState } from "@/components/ui/no-org-state";
 import { PageHeader } from "@/components/layout/page-header";
 import { PageContent } from "@/components/layout/page-content";
+import { useEmbeddedSurface } from "@/components/layout/embedded-surface";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Users, Target, Smile, Users2, Layers, Plus, Loader2, AlertTriangle, Activity, TrendingUp, Search, RefreshCw } from "lucide-react";
@@ -62,6 +63,7 @@ export default function UsersPage() {
   const {
     currentOrg
   } = useOrg();
+  const embedded = useEmbeddedSurface();
   const orgId = currentOrg?.id;
   const [activeTab, setActiveTab] = useState<Tab>("sessions");
 
@@ -191,11 +193,21 @@ export default function UsersPage() {
     return <NoOrgState icon={Users} feature="User Intelligence" description="Session aggregation, goal tracking, and behavioral cohorts light up once your organization has user activity to analyse." />;
   }
   return <PageContent size="wide">
-      <PageHeader eyebrow="Intelligence" title="User Intelligence" subtitle="The 97% problem: behaviour-driven satisfaction, behavioural cohorts, and goal tracking" icon={Users} />
+      {!embedded ? (
+        <PageHeader eyebrow="Intelligence" title="User Intelligence" subtitle="The 97% problem: behaviour-driven satisfaction, behavioural cohorts, and goal tracking" icon={Users} />
+      ) : null}
 
-      {/* Tabs */}
+      {/* Tabs — pills under Analytics embed to avoid a second chrome band (W12). */}
       <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as Tab)}>
-        <TabsList aria-label="User intelligence sections" className="bg-[var(--bg-tertiary)] rounded-xl h-auto flex-wrap w-fit">
+        <TabsList
+          variant={embedded ? "pills" : "default"}
+          aria-label="User intelligence sections"
+          className={
+            embedded
+              ? "h-auto w-full justify-start gap-1 overflow-x-auto"
+              : "bg-[var(--bg-tertiary)] rounded-xl h-auto flex-wrap w-fit"
+          }
+        >
           {([{
           key: "sessions" as Tab,
           label: "Sessions",
@@ -217,7 +229,12 @@ export default function UsersPage() {
           label: "Segments",
           icon: Layers
         }] as const).map(({ key, label, icon: Icon }) => (
-            <TabsTrigger key={key} value={key} className="flex items-center gap-2 data-[state=active]:text-[var(--text-primary)]">
+            <TabsTrigger
+              key={key}
+              value={key}
+              variant={embedded ? "pills" : "default"}
+              className="flex items-center gap-2 data-[state=active]:text-[var(--text-primary)]"
+            >
               <Icon className="w-4 h-4" aria-hidden />
               {label}
             </TabsTrigger>
@@ -336,7 +353,7 @@ function SessionsTab({
         />
       ) : loading && sessions.length === 0 ? <div className="flex items-center justify-center py-20" role="status" aria-live="polite">
           <Loader2 className="w-8 h-8 animate-spin text-[var(--accent)]" aria-hidden />
-        </div> : sessions.length === 0 ? <EmptyState icon={Activity} title="No sessions yet" description="Aggregated user sessions appear here once your agents start serving real users." size="lg" /> : <Card padding="lg" className="overflow-hidden">
+        </div> : sessions.length === 0 ? <EmptyState icon={Activity} title="No sessions yet" description="No aggregated sessions yet. They appear once agents serve traffic with user identifiers." size="lg" /> : <Card padding="lg" className="overflow-hidden">
           <DataTable columns={[{
         key: "user_id",
         header: "User",
@@ -412,10 +429,17 @@ function GoalsTab({
           <span className="flex-1">{error}</span>
         </div>}
       <div className="flex justify-end">
-        <button type="button" onClick={() => onShowAddChange(!showAdd)} aria-expanded={showAdd} aria-controls="new-goal-form" className="inline-flex items-center gap-2 px-4 py-2 bg-[var(--accent)] text-[var(--bg-base)] rounded-lg text-sm font-medium hover:bg-[var(--accent-hover)] transition-colors">
+        <Button
+          type="button"
+          variant="default"
+          className="min-h-11"
+          onClick={() => onShowAddChange(!showAdd)}
+          aria-expanded={showAdd}
+          aria-controls="new-goal-form"
+        >
           <Plus className="w-4 h-4" aria-hidden />
           {showAdd ? "Cancel" : "Add Goal"}
-        </button>
+        </Button>
       </div>
 
       <>
@@ -442,10 +466,18 @@ function GoalsTab({
                 </label>
                 <textarea id="new-goal-description" value={newDescription} onChange={e => onNewDescriptionChange(e.target.value)} rows={2} placeholder="What does success look like?" className="w-full px-3 py-2 bg-[var(--bg-secondary)] border border-[var(--border-default)] rounded-lg text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)]" />
               </div>
-              <button type="button" onClick={onCreate} disabled={creating || !newName.trim()} aria-label="Create goal" className="inline-flex items-center gap-2 px-4 py-2 bg-[var(--accent)] text-[var(--bg-base)] rounded-lg text-sm font-medium hover:bg-[var(--accent-hover)] disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
-                {creating ? <Loader2 className="w-4 h-4 animate-spin" aria-hidden /> : <Target className="w-4 h-4" aria-hidden />}
+              <Button
+                type="button"
+                variant="default"
+                className="min-h-11"
+                onClick={onCreate}
+                disabled={!newName.trim()}
+                loading={creating}
+                aria-label="Create goal"
+              >
+                <Target className="w-4 h-4" aria-hidden />
                 Create Goal
-              </button>
+              </Button>
             </div>
           </div>}
       </>
@@ -464,7 +496,7 @@ function GoalsTab({
         />
       ) : loading && goals.length === 0 ? <div className="flex items-center justify-center py-20" role="status" aria-live="polite">
           <Loader2 className="w-8 h-8 animate-spin text-[var(--accent)]" aria-hidden />
-        </div> : goals.length === 0 ? <EmptyState icon={Target} title="No goals tracked" description="Define the success metrics you want to monitor — current progress will appear here as data flows in." size="lg" /> : <div className="grid sm:grid-cols-2 gap-3">
+        </div> : goals.length === 0 ? <EmptyState icon={Target} title="No goals tracked" description="No goals defined yet. Add success metrics to monitor; progress appears as data flows in." size="lg" /> : <div className="grid sm:grid-cols-2 gap-3">
           {goals.map(goal => {
         const pct = Math.min(100, goal.current / Math.max(goal.target, 1) * 100);
         return <Card padding="md" className="space-y-3" key={goal.goal_id}>
@@ -485,7 +517,7 @@ function GoalsTab({
                 width: `${pct}%`
               }} />
                   </div>
-                  <p className="text-[10px] text-[var(--text-muted)] text-right tabular-nums">
+                  <p className="text-2xs text-[var(--text-muted)] text-right tabular-nums">
                     {pct.toFixed(0)}%
                   </p>
                 </div>
@@ -521,24 +553,32 @@ function SatisfactionTab({
     satisfaction: number;
   }>;
 }) {
-  return <div className="space-y-6">
+  return <div className="space-y-space-6">
       {/* Input */}
       <Card padding="lg">
-        <h3 className="text-sm font-semibold text-[var(--text-primary)] mb-4 flex items-center gap-2">
+        <h3 className="text-sm font-semibold text-[var(--text-primary)] mb-space-4 flex items-center gap-space-2">
           <Smile className="w-4 h-4 text-[var(--accent)]" aria-hidden />
           Analyze Trace Satisfaction
         </h3>
-        <div className="flex flex-col sm:flex-row gap-3">
+        <div className="flex flex-col sm:flex-row gap-space-3">
           <label htmlFor="satisfaction-trace-id" className="sr-only">
             Trace ID
           </label>
           <input id="satisfaction-trace-id" type="text" value={traceId} onChange={e => onTraceIdChange(e.target.value)} onKeyDown={e => {
           if (e.key === "Enter") onAnalyze();
         }} placeholder="Enter a trace_id..." className="flex-1 px-3 py-2 bg-[var(--bg-secondary)] border border-[var(--border-default)] rounded-lg text-sm text-[var(--text-primary)] font-mono placeholder:text-[var(--text-muted)]" />
-          <button type="button" onClick={onAnalyze} disabled={loading || !traceId.trim()} aria-label="Analyze satisfaction" className="inline-flex items-center gap-2 px-4 py-2 bg-[var(--accent)] text-[var(--bg-base)] rounded-lg text-sm font-medium hover:bg-[var(--accent-hover)] disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
-            {loading ? <Loader2 className="w-4 h-4 animate-spin" aria-hidden /> : <Search className="w-4 h-4" aria-hidden />}
+          <Button
+            type="button"
+            variant="default"
+            className="min-h-11"
+            onClick={onAnalyze}
+            disabled={!traceId.trim()}
+            loading={loading}
+            aria-label="Analyze satisfaction"
+          >
+            <Search className="w-4 h-4" aria-hidden />
             Analyze
-          </button>
+          </Button>
         </div>
         {error && <p role="alert" className="mt-3 text-xs text-[var(--error)] flex items-center gap-1.5">
             <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" aria-hidden />
@@ -610,7 +650,7 @@ function SatisfactionTab({
             value,
             highlight
           }) => <div key={label}>
-                    <p className="text-[10px] text-[var(--text-muted)] uppercase tracking-wide">{label}</p>
+                    <p className="text-2xs font-mono text-[var(--text-muted)] uppercase tracking-wide">{label}</p>
                     <p className={cn("text-lg font-semibold tabular-nums", highlight ? "text-[var(--accent)]" : "text-[var(--text-primary)]")}>
                       {value}
                     </p>
@@ -620,8 +660,8 @@ function SatisfactionTab({
         </div> : null}
 
       {/* Recent traces */}
-      {recent.length > 0 && <Card padding="lg" className="overflow-hidden">
-          <div className="p-4 border-b border-[var(--border-default)]">
+      {recent.length > 0 && <Card padding="none" className="overflow-hidden">
+          <div className="px-space-4 py-space-3 border-b border-[var(--border-default)]">
             <h3 className="text-sm font-semibold text-[var(--text-primary)]">Recent traces</h3>
           </div>
           <DataTable columns={[{
@@ -679,7 +719,7 @@ function CohortsTab({
         />
       ) : loading && cohorts.length === 0 ? <div className="flex items-center justify-center py-20" role="status" aria-live="polite">
           <Loader2 className="w-8 h-8 animate-spin text-[var(--accent)]" aria-hidden />
-        </div> : cohorts.length === 0 ? <EmptyState icon={Users2} title="No cohorts yet" description="Behavioural cohorts surface once the system has enough traces to group users by behaviour patterns." size="lg" /> : <Card padding="lg" className="overflow-hidden">
+        </div> : cohorts.length === 0 ? <EmptyState icon={Users2} title="No cohorts yet" description="No behavioural cohorts yet. They surface once enough traces exist to group users by behaviour." size="lg" /> : <Card padding="lg" className="overflow-hidden">
           <DataTable columns={[{
         key: "name",
         header: "Cohort",
@@ -750,7 +790,7 @@ function SegmentsTab({
         />
       ) : loading && segments.length === 0 ? <div className="flex items-center justify-center py-20" role="status" aria-live="polite">
           <Loader2 className="w-8 h-8 animate-spin text-[var(--accent)]" aria-hidden />
-        </div> : segments.length === 0 ? <EmptyState icon={Layers} title="No segments defined" description="User segments are derived from behavioural signals — they will appear here automatically as patterns emerge." size="lg" /> : <Card padding="lg" className="overflow-hidden">
+        </div> : segments.length === 0 ? <EmptyState icon={Layers} title="No segments defined" description="No segments yet. They are derived from behavioural signals as patterns emerge." size="lg" /> : <Card padding="lg" className="overflow-hidden">
           <DataTable columns={[{
         key: "name",
         header: "Segment",
@@ -765,7 +805,7 @@ function SegmentsTab({
       }, {
         key: "criteria",
         header: "Criteria",
-        cell: s => <pre className="text-[10px] bg-[var(--bg-secondary)] rounded p-2 max-w-md overflow-x-auto text-[var(--text-muted)]">
+        cell: s => <pre className="text-2xs font-mono bg-[var(--bg-secondary)] rounded p-2 max-w-md overflow-x-auto text-[var(--text-muted)]">
                     {JSON.stringify(s.criteria, null, 2)}
                   </pre>
       }]} rows={segments} rowKey={s => s.segment_id} defaultSort={{

@@ -12,11 +12,12 @@ import { ErrorState } from "@/components/ui/error-state";
 import { NoOrgState } from "@/components/ui/no-org-state";
 import { PageHeader } from "@/components/layout/page-header";
 import { PageContent } from "@/components/layout/page-content";
+import { useEmbeddedSurface } from "@/components/layout/embedded-surface";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { DataTable } from "@/components/ui/data-table";
 import { Sparkles, Loader2, Plus, FileText, Layers, ListChecks, Eye, CheckCircle2, Wand2, Save, Trash2, Clock } from "lucide-react";
-import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import {
   featureGatedErrorCopy,
   featureGatedMessage,
@@ -66,6 +67,7 @@ function isProduction(status: string | undefined): boolean {
 
 export default function StudioPage() {
   const { currentOrg } = useOrg();
+  const embedded = useEmbeddedSurface();
   const [activeTab, setActiveTab] = useState<Tab>("templates");
   const [error, setError] = useState("");
   const [examplesDirty, setExamplesDirty] = useState(false);
@@ -91,7 +93,7 @@ export default function StudioPage() {
       <PageHeader
         eyebrow="Eval"
         title="Custom-Metric Studio"
-        subtitle="Live metric studio (not a stub) — design, generate, and version rubrics from templates or examples."
+        subtitle="Design and version rubrics from templates or examples."
         icon={Sparkles}
       />
 
@@ -100,13 +102,14 @@ export default function StudioPage() {
           title="Something went wrong"
           message={error}
           action={
-            <button
+            <Button
               type="button"
+              variant="outline"
+              className="min-h-11"
               onClick={() => setError("")}
-              className="inline-flex items-center gap-2 px-3 py-1.5 rounded-md border border-[var(--border-default)] text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)] transition-colors"
             >
               Dismiss
-            </button>
+            </Button>
           }
         />
       ) : null}
@@ -123,7 +126,16 @@ export default function StudioPage() {
             value={activeTab}
             onValueChange={(v) => requestTabChange(v as Tab)}
           >
-            <TabsList aria-label="Custom-Metric Studio sections" className="bg-[var(--bg-tertiary)] rounded-xl h-auto flex-wrap w-fit">
+            {/* W11: under Evals embed, pills avoid a second underline chrome band. */}
+            <TabsList
+              variant={embedded ? "pills" : "underline"}
+              aria-label="Custom-Metric Studio sections"
+              className={
+                embedded
+                  ? "mb-space-3 h-auto w-full justify-start gap-1 overflow-x-auto"
+                  : "mb-space-4 h-auto w-full justify-start gap-1 overflow-x-auto bg-transparent"
+              }
+            >
               {(
                 [
                   { key: "templates" as Tab, label: "Templates", icon: FileText },
@@ -131,8 +143,13 @@ export default function StudioPage() {
                   { key: "metrics" as Tab, label: "My metrics", icon: Layers },
                 ] as const
               ).map(({ key, label, icon: Icon }) => (
-                <TabsTrigger key={key} value={key} className="flex items-center gap-2 data-[state=active]:text-[var(--text-primary)]">
-                  <Icon className="w-4 h-4" aria-hidden />
+                <TabsTrigger
+                  key={key}
+                  variant={embedded ? "pills" : "underline"}
+                  value={key}
+                  className="min-h-11 shrink-0"
+                >
+                  <Icon className="mr-1.5 hidden h-4 w-4 sm:inline" aria-hidden />
                   {label}
                 </TabsTrigger>
               ))}
@@ -197,12 +214,13 @@ function TemplatesTab({
         title={copy.title}
         message={copy.message}
         action={
-          <button
+          <Button
+            variant="default"
+            className="min-h-11"
             onClick={() => void templatesQuery.refetch()}
-            className="inline-flex items-center gap-2 px-3 py-1.5 rounded-md bg-[var(--accent)] text-[var(--bg-base)] text-xs font-medium hover:bg-[var(--accent-hover)] transition-colors"
           >
             Try again
-          </button>
+          </Button>
         }
       />
     );
@@ -216,7 +234,7 @@ function TemplatesTab({
       ) : templates.length === 0 ? (
         <EmptyState icon={FileText} title="No templates yet" description="Built-in rubric templates will appear here as they are added." size="lg" />
       ) : (
-        <Card padding="lg" className="overflow-hidden">
+        <div className="overflow-hidden border-y border-[var(--border-subtle)] py-space-2">
           <DataTable
             columns={[
               {
@@ -254,14 +272,16 @@ function TemplatesTab({
                 header: "Action",
                 align: "right",
                 cell: (tpl) => (
-                  <button
+                  <Button
+                    variant="default"
+                    size="sm"
+                    className="min-h-11"
                     onClick={() => setOpenTemplate(tpl)}
                     aria-label={`Use template ${tpl.name}`}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[var(--accent)] text-[var(--bg-base)] rounded-lg text-xs font-medium hover:bg-[var(--accent-hover)] transition-colors"
                   >
                     <Wand2 className="w-3.5 h-3.5" aria-hidden="true" />
                     Use template
-                  </button>
+                  </Button>
                 ),
               },
             ]}
@@ -272,7 +292,7 @@ function TemplatesTab({
             emptyDescription="Built-in rubric templates will appear here as they are added."
             pageSize={25}
           />
-        </Card>
+        </div>
       )}
 
       <Dialog open={!!openTemplate} onOpenChange={(o) => !o && setOpenTemplate(null)}>
@@ -298,14 +318,17 @@ function TemplatesTab({
             ))}
           </ol>
           <DialogFooter>
-            <button
+            <Button
+              variant="outline"
+              className="min-h-11"
               onClick={() => setOpenTemplate(null)}
               aria-label="Close template preview"
-              className="px-3 py-1.5 bg-[var(--bg-tertiary)] text-[var(--text-primary)] rounded-lg text-xs font-medium hover:bg-[var(--border-default)] transition-colors"
             >
               Close
-            </button>
-            <button
+            </Button>
+            <Button
+              variant="default"
+              className="min-h-11"
               onClick={() => {
                 if (!openTemplate) return;
                 onUseTemplate({
@@ -316,11 +339,10 @@ function TemplatesTab({
                 setOpenTemplate(null);
               }}
               aria-label={`Start from template ${openTemplate?.name}`}
-              className="inline-flex items-center gap-1.5 px-4 py-1.5 bg-[var(--accent)] text-[var(--bg-base)] rounded-lg text-xs font-medium hover:bg-[var(--accent-hover)] transition-colors"
             >
               <Wand2 className="w-3.5 h-3.5" aria-hidden="true" />
               Start from template
-            </button>
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -481,8 +503,8 @@ function FromExamplesTab({
     }
   }
   return (
-    <div className="space-y-4">
-      <Card padding="lg" className="space-y-4">
+    <div className="space-y-space-4">
+      <div className="space-y-space-4 border-y border-[var(--border-subtle)] py-space-4">
         <h3 className="text-sm font-semibold text-[var(--text-primary)] flex items-center gap-2">
           <Wand2 className="w-4 h-4 text-[var(--accent)]" />
           Generate a rubric from examples
@@ -490,9 +512,9 @@ function FromExamplesTab({
             <span className="text-xs font-normal text-[var(--warning)]">Unsaved changes</span>
           ) : null}
         </h3>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-space-3">
           <div>
-            <label htmlFor="metric-name" className="text-xs font-medium text-[var(--text-muted)] mb-1.5 block">
+            <label htmlFor="metric-name" className="text-xs font-medium text-[var(--text-muted)] mb-space-1 block">
               Metric name
             </label>
             <input
@@ -507,7 +529,7 @@ function FromExamplesTab({
             />
           </div>
           <div>
-            <label htmlFor="metric-domain" className="text-xs font-medium text-[var(--text-muted)] mb-1.5 block">
+            <label htmlFor="metric-domain" className="text-xs font-medium text-[var(--text-muted)] mb-space-1 block">
               Domain
             </label>
             <select
@@ -527,21 +549,24 @@ function FromExamplesTab({
           </div>
         </div>
 
-        <div className="space-y-3">
+        <div className="space-y-space-3">
           {examples.map((ex, i) => (
-            <div key={i} className="rounded-lg border border-[var(--border-subtle)] p-3 space-y-2">
+            <div key={i} className="rounded-lg border border-[var(--border-subtle)] p-3 space-y-space-2">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-medium text-[var(--text-muted)]">Example {i + 1}</span>
                 {examples.length > 2 && (
-                  <button
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="min-h-11 min-w-11 text-[var(--text-muted)] hover:text-[var(--error)]"
                     onClick={() => removeExample(i)}
                     aria-label={`Remove example ${i + 1}`}
                     disabled={generating || saving}
-                    className="p-1 text-[var(--text-muted)] hover:text-[var(--error)] transition-colors disabled:opacity-50"
                     title="Remove example"
                   >
                     <Trash2 className="w-3.5 h-3.5" aria-hidden="true" />
-                  </button>
+                  </Button>
                 )}
               </div>
               <input
@@ -562,9 +587,9 @@ function FromExamplesTab({
                 disabled={generating || saving}
                 className="w-full px-3 py-2 bg-[var(--bg-secondary)] border border-[var(--border-default)] rounded-lg text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] disabled:opacity-50"
               />
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-2 gap-space-3">
                 <div>
-                  <label htmlFor={`label-${i}`} className="text-[10px] font-medium text-[var(--text-muted)] mb-1 block">
+                  <label htmlFor={`label-${i}`} className="text-xs font-medium text-[var(--text-muted)] mb-space-1 block">
                     Label
                   </label>
                   <select
@@ -580,7 +605,7 @@ function FromExamplesTab({
                   </select>
                 </div>
                 <div>
-                  <label htmlFor={`rationale-${i}`} className="text-[10px] font-medium text-[var(--text-muted)] mb-1 block">
+                  <label htmlFor={`rationale-${i}`} className="text-xs font-medium text-[var(--text-muted)] mb-space-1 block">
                     Rationale
                   </label>
                   <input
@@ -599,29 +624,32 @@ function FromExamplesTab({
           ))}
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-space-2">
           {examples.length < 5 && (
-            <button
+            <Button
+              type="button"
+              variant="outline"
+              className="min-h-11"
               onClick={addExample}
               aria-label="Add another example"
               disabled={generating || saving}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[var(--bg-tertiary)] text-[var(--text-primary)] rounded-lg text-xs font-medium hover:bg-[var(--border-default)] transition-colors disabled:opacity-50"
             >
               <Plus className="w-3.5 h-3.5" aria-hidden="true" />
               Add example
-            </button>
+            </Button>
           )}
-          <button
+          <Button
+            variant="default"
+            className="ml-auto min-h-11"
             onClick={handleGenerate}
-            disabled={generating}
+            loading={generating}
             aria-label="Generate rubric from examples"
-            className="ml-auto inline-flex items-center gap-2 px-4 py-2 bg-[var(--accent)] text-[var(--bg-base)] rounded-lg text-sm font-medium hover:bg-[var(--accent-hover)] disabled:opacity-50 transition-colors"
           >
-            {generating ? <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" /> : <Wand2 className="w-4 h-4" aria-hidden="true" />}
+            <Wand2 className="w-4 h-4" aria-hidden="true" />
             Generate rubric
-          </button>
+          </Button>
         </div>
-      </Card>
+      </div>
 
       {generated && (
         <div className="bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-xl p-5 space-y-3">
@@ -637,24 +665,27 @@ function FromExamplesTab({
           <pre className="text-xs bg-[var(--bg-secondary)] rounded-lg p-3 overflow-x-auto max-h-[40vh] whitespace-pre-wrap">
             {generated.rubric_prompt}
           </pre>
-          <div className="flex justify-end gap-2">
-            <button
+          <div className="flex justify-end gap-space-2">
+            <Button
+              type="button"
+              variant="outline"
+              className="min-h-11"
               onClick={discardGenerated}
               disabled={saving}
               aria-label="Discard generated rubric"
-              className="px-3 py-1.5 bg-[var(--bg-tertiary)] text-[var(--text-primary)] rounded-lg text-xs font-medium hover:bg-[var(--border-default)] transition-colors disabled:opacity-50"
             >
               Discard
-            </button>
-            <button
+            </Button>
+            <Button
+              variant="default"
+              className="min-h-11"
               onClick={handleSave}
-              disabled={saving}
+              loading={saving}
               aria-label="Save generated rubric as a metric"
-              className="inline-flex items-center gap-1.5 px-4 py-1.5 bg-[var(--accent)] text-[var(--bg-base)] rounded-lg text-xs font-medium hover:bg-[var(--accent-hover)] disabled:opacity-50 transition-colors"
             >
-              {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden="true" /> : <Save className="w-3.5 h-3.5" aria-hidden="true" />}
+              <Save className="w-3.5 h-3.5" aria-hidden="true" />
               Save as metric
-            </button>
+            </Button>
           </div>
         </div>
       )}
@@ -741,12 +772,9 @@ function MyMetricsTab({
         title={copy.title}
         message={copy.message}
         action={
-          <button
-            onClick={() => void load()}
-            className="inline-flex items-center gap-2 px-3 py-1.5 rounded-md bg-[var(--accent)] text-[var(--bg-base)] text-xs font-medium hover:bg-[var(--accent-hover)] transition-colors"
-          >
+          <Button variant="default" className="min-h-11" onClick={() => void load()}>
             Try again
-          </button>
+          </Button>
         }
       />
     );
@@ -764,7 +792,7 @@ function MyMetricsTab({
         }) ? (
         <EmptyState icon={Layers} title="No metrics yet" description="Generate one from the “From examples” tab to see it here." size="lg" />
       ) : (
-        <Card padding="lg" className="overflow-hidden">
+        <div className="overflow-hidden border-y border-[var(--border-subtle)] py-space-2">
           <DataTable
             columns={[
               {
@@ -809,14 +837,16 @@ function MyMetricsTab({
                 header: "Action",
                 align: "right",
                 cell: (m) => (
-                  <button
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="min-h-11"
                     onClick={() => openMetric(m.metric_id)}
                     aria-label={`View metric ${m.name}`}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[var(--bg-tertiary)] text-[var(--text-primary)] rounded-lg text-xs font-medium hover:bg-[var(--border-default)] transition-colors"
                   >
                     <Eye className="w-3.5 h-3.5" aria-hidden="true" />
                     View
-                  </button>
+                  </Button>
                 ),
               },
             ]}
@@ -828,7 +858,7 @@ function MyMetricsTab({
             emptyIcon={Layers}
             pageSize={25}
           />
-        </Card>
+        </div>
       )}
 
       <Dialog open={!!openDetail} onOpenChange={(o) => !o && setOpenDetail(null)}>
@@ -847,25 +877,25 @@ function MyMetricsTab({
           <div className="space-y-3 text-xs text-[var(--text-secondary)]">
             <div className="grid grid-cols-2 gap-2">
               <div className="rounded-lg bg-[var(--bg-secondary)] px-3 py-2">
-                <div className="text-[10px] uppercase tracking-wide text-[var(--text-muted)] mb-0.5">Metric ID</div>
+                <div className="text-2xs font-mono uppercase tracking-wide text-[var(--text-muted)] mb-space-1">Metric ID</div>
                 <div className="font-mono break-all">{openDetail?.metric_id}</div>
               </div>
               <div className="rounded-lg bg-[var(--bg-secondary)] px-3 py-2">
-                <div className="text-[10px] uppercase tracking-wide text-[var(--text-muted)] mb-0.5">Rubric ID</div>
+                <div className="text-2xs font-mono uppercase tracking-wide text-[var(--text-muted)] mb-space-1">Rubric ID</div>
                 <div className="font-mono break-all">{openDetail?.rubric_id}</div>
               </div>
               <div className="rounded-lg bg-[var(--bg-secondary)] px-3 py-2">
-                <div className="text-[10px] uppercase tracking-wide text-[var(--text-muted)] mb-0.5">Judge ID</div>
+                <div className="text-2xs font-mono uppercase tracking-wide text-[var(--text-muted)] mb-space-1">Judge ID</div>
                 <div className="font-mono break-all">{openDetail?.judge_id || "—"}</div>
               </div>
               <div className="rounded-lg bg-[var(--bg-secondary)] px-3 py-2">
-                <div className="text-[10px] uppercase tracking-wide text-[var(--text-muted)] mb-0.5">Created</div>
+                <div className="text-2xs font-mono uppercase tracking-wide text-[var(--text-muted)] mb-space-1">Created</div>
                 <div>{openDetail?.created_at ? new Date(openDetail.created_at).toLocaleString() : "—"}</div>
               </div>
             </div>
             {(openDetail?.n_scores_30d != null || openDetail?.median_score != null) && (
               <div className="rounded-lg bg-[var(--bg-secondary)] px-3 py-2">
-                <div className="text-[10px] uppercase tracking-wide text-[var(--text-muted)] mb-0.5">30-day scores</div>
+                <div className="text-2xs font-mono uppercase tracking-wide text-[var(--text-muted)] mb-space-1">30-day scores</div>
                 <div>
                   n={openDetail?.n_scores_30d ?? 0}
                   {openDetail?.median_score != null ? ` · median ${openDetail.median_score}` : ""}
@@ -875,27 +905,27 @@ function MyMetricsTab({
           </div>
 
           <DialogFooter>
-            <button
+            <Button
+              type="button"
+              variant="outline"
+              className="min-h-11"
               onClick={() => setOpenDetail(null)}
               disabled={approving}
               aria-label="Close metric detail"
-              className="px-3 py-1.5 bg-[var(--bg-tertiary)] text-[var(--text-primary)] rounded-lg text-xs font-medium hover:bg-[var(--border-default)] transition-colors disabled:opacity-50"
             >
               Close
-            </button>
-            <button
+            </Button>
+            <Button
+              variant="default"
+              className="min-h-11"
               onClick={handleApprove}
-              disabled={approving || isProduction(openDetail?.status)}
+              disabled={isProduction(openDetail?.status)}
+              loading={approving}
               aria-label={`Approve metric ${openDetail?.name}`}
-              className="inline-flex items-center gap-1.5 px-4 py-1.5 bg-[var(--accent)] text-[var(--bg-base)] rounded-lg text-xs font-medium hover:bg-[var(--accent-hover)] disabled:opacity-50 transition-colors"
             >
-              {approving ? (
-                <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden="true" />
-              ) : (
-                <CheckCircle2 className="w-3.5 h-3.5" aria-hidden="true" />
-              )}
+              <CheckCircle2 className="w-3.5 h-3.5" aria-hidden="true" />
               {isProduction(openDetail?.status) ? "Approved" : "Approve"}
-            </button>
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

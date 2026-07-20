@@ -70,7 +70,7 @@ describe("W4-5 improve queue approve + href honesty", () => {
     expect(src).toContain("isLegacyProposedPatch");
     expect(src).toContain("Legacy Cat 23 patches are read-only");
     expect(src).toContain("Approve disabled:");
-    expect(src).toContain('from "@/components/ui/error-state"');
+    expect(src).toContain("QueryState");
     expect(src).toContain("Docs quickstart");
     expect(src).toContain("/settings?tab=api-keys");
     // Must not map patch_id → /improve/plans/{id}
@@ -78,6 +78,15 @@ describe("W4-5 improve queue approve + href honesty", () => {
     expect(src).not.toMatch(
       /item\.ref\.startsWith\("proposed_patch:"\)[\s\S]{0,120}\/improve\/plans\/\$\{/,
     );
+  });
+
+  it("UX-P1-01 mobile list/stack below lg with touch targets", () => {
+    const src = read("app/(portal)/improve/page.tsx");
+    expect(src).toContain("lg:hidden");
+    expect(src).toMatch(/hidden[\s\S]{0,40}lg:grid/);
+    expect(src).toContain("min-h-11");
+    expect(src).not.toMatch(/text-\[(?:9|10)px\]/);
+    expect(src).not.toContain("h-7 px-2");
   });
 
   it("N23 refs deep-link; legacy proposed_patch goes to inbox only", () => {

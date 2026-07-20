@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import dynamic from "next/dynamic";
 import Link from "next/link";
 import { Loader2, ExternalLink, Radio } from "lucide-react";
 import { api } from "@/lib/api";
@@ -9,27 +10,57 @@ import { useLiveTraceStream } from "@/hooks/use-live-trace-stream";
 import { buildTranscriptRows } from "@/lib/observability/build-transcript-rows";
 import { VirtualizedTranscript } from "@/components/transcript-v2/VirtualizedTranscript";
 import { CrossLinkBar } from "@/components/portal-os/CrossLinkBar";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ErrorState } from "@/components/ui/error-state";
 import { TraceOutcomeBadge } from "@/components/ui/status-badge";
 import { markEden } from "@/lib/perf";
-import { cn } from "@/lib/utils";
 import {
   artifactHref,
   labelingQueueHref,
   playgroundHref,
 } from "@/lib/portal-cross-links";
-import { ScoresTab } from "@/app/(portal)/observability/ScoresTab";
-import { LatencyHistogram } from "@/components/observability/LatencyHistogram";
+import { useTraceTimeline } from "@/app/(portal)/observability/_lib/use-observability-data";
+
+const ScoresTab = dynamic(
+  () =>
+    import("@/app/(portal)/observability/ScoresTab").then((m) => ({
+      default: m.ScoresTab,
+    })),
+  { ssr: false },
+);
+const LatencyHistogram = dynamic(
+  () =>
+    import("@/components/observability/LatencyHistogram").then((m) => ({
+      default: m.LatencyHistogram,
+    })),
+  { ssr: false },
+);
+
+/** Laminar P0-4: Transcript · Tree · Timeline · Metadata (+ Scores moat). */
+export const TRACE_DETAIL_MODE_TABS = [
+  { id: "transcript", label: "Transcript" },
+  { id: "tree", label: "Tree" },
+  { id: "timeline", label: "Timeline" },
+  { id: "meta", label: "Metadata" },
+  { id: "scores", label: "Scores" },
+] as const;
 
 export interface TraceDetailPanelProps {
   traceId: string;
   onClose?: () => void;
   highlightSpanId?: string | null;
+  /** When true, hide Esc close (parent DetailPanelShell owns close). */
+  hideCloseControl?: boolean;
 }
 
-type DetailMode = "transcript" | "tree" | "meta" | "scores";
+type DetailMode = (typeof TRACE_DETAIL_MODE_TABS)[number]["id"];
 
-export function TraceDetailPanel({ traceId, onClose, highlightSpanId }: TraceDetailPanelProps) {
+export function TraceDetailPanel({
+  traceId,
+  onClose,
+  highlightSpanId,
+  hideCloseControl = false,
+}: TraceDetailPanelProps) {
   const { currentOrg } = useOrg();
   const [phase, setPhase] = useState<"meta" | "ready" | "error">("meta");
   const [mode, setMode] = useState<DetailMode>("transcript");
@@ -50,6 +81,11 @@ export function TraceDetailPanel({ traceId, onClose, highlightSpanId }: TraceDet
     sessionId: sessionId ?? traceId,
     enabled: Boolean(currentOrg?.id && (sessionId || phase === "ready")),
   });
+
+  const timelineQuery = useTraceTimeline(
+    mode === "timeline" ? currentOrg?.id : undefined,
+    mode === "timeline" ? traceId : null,
+  );
 
   useEffect(() => {
     if (!currentOrg || !traceId) return;
@@ -131,6 +167,30 @@ export function TraceDetailPanel({ traceId, onClose, highlightSpanId }: TraceDet
     });
   }, [liveStream.events, liveStream.live]);
 
+  const fallbackTimelineSteps = useMemo(() => {
+    if (rows.length === 0) return [];
+    const t0 = Math.min(...rows.map((r) => new Date(r.timestamp).getTime()));
+    return rows.map((r) => {
+      const start = Math.max(0, new Date(r.timestamp).getTime() - t0);
+      const duration = Math.max(0, r.duration_ms);
+      return {
+        name: r.name,
+        start_ms: start,
+        end_ms: start + duration,
+        duration_ms: duration,
+        event_type: String(r.kind ?? "span"),
+        outcome: r.status === "error" ? "failure" : null,
+      };
+    });
+  }, [rows]);
+
+  const timelineSteps =
+    timelineQuery.data?.steps?.length ? timelineQuery.data.steps : fallbackTimelineSteps;
+  const timelineTotalMs =
+    timelineQuery.data?.total_duration_ms ??
+    meta?.duration_ms ??
+    Math.max(1, ...timelineSteps.map((s) => s.end_ms), 1);
+
   if (phase === "meta") {
     return (
       <div className="flex h-48 flex-col items-center justify-center gap-2">
@@ -166,7 +226,7 @@ export function TraceDetailPanel({ traceId, onClose, highlightSpanId }: TraceDet
         {showLiveBadge && (
           <span
             data-testid="live-trace-badge"
-            className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-[var(--terminal)] border border-[var(--terminal)]/40 bg-[var(--terminal)]/10"
+            className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-2xs font-medium uppercase tracking-wide text-[var(--terminal)] border border-[var(--terminal)]/40 bg-[var(--terminal)]/10"
             aria-live="polite"
           >
             <Radio className="h-3 w-3 animate-pulse" aria-hidden />
@@ -178,13 +238,13 @@ export function TraceDetailPanel({ traceId, onClose, highlightSpanId }: TraceDet
             type="button"
             data-testid="live-trace-retry"
             onClick={() => liveStream.retry()}
-            className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium text-[var(--error)] border border-[var(--error)]/40 hover:bg-[var(--error)]/10"
+            className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-2xs font-medium text-[var(--error)] border border-[var(--error)]/40 hover:bg-[var(--error)]/10"
           >
             Live reconnect failed — Retry
           </button>
         )}
         {liveStream.finalized && (
-          <span className="text-[10px] text-[var(--text-muted)]">Live → persisted</span>
+          <span className="text-2xs text-[var(--text-muted)]">Live → persisted</span>
         )}
         <span className="text-[var(--text-muted)]">
           {meta?.span_count ?? 0} spans · {(meta?.duration_ms ?? 0).toFixed(0)}ms
@@ -201,24 +261,29 @@ export function TraceDetailPanel({ traceId, onClose, highlightSpanId }: TraceDet
             View session <ExternalLink className="w-3 h-3" />
           </Link>
         )}
-        <div className="inline-flex rounded-md border border-[var(--border-default)] p-0.5 ml-2">
-          {(["transcript", "tree", "meta", "scores"] as const).map((m) => (
-            <button
-              key={m}
-              type="button"
-              onClick={() => setMode(m)}
-              className={cn(
-                "px-2 py-0.5 text-[10px] capitalize rounded",
-                mode === m
-                  ? "bg-[var(--accent)] text-[var(--bg-primary)]"
-                  : "text-[var(--text-muted)]",
-              )}
-            >
-              {m}
-            </button>
-          ))}
-        </div>
-        {onClose && (
+        <Tabs
+          value={mode}
+          onValueChange={(id) => setMode(id as DetailMode)}
+          className="ml-2"
+        >
+          <TabsList
+            variant="underline"
+            aria-label="Trace detail modes"
+            className="h-auto gap-1 rounded-none bg-transparent p-0"
+          >
+            {TRACE_DETAIL_MODE_TABS.map((t) => (
+              <TabsTrigger
+                key={t.id}
+                value={t.id}
+                variant="underline"
+                className="min-h-8 px-2 text-2xs"
+              >
+                {t.label}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+        </Tabs>
+        {onClose && !hideCloseControl ? (
           <button
             type="button"
             onClick={onClose}
@@ -226,11 +291,19 @@ export function TraceDetailPanel({ traceId, onClose, highlightSpanId }: TraceDet
           >
             Esc
           </button>
-        )}
+        ) : null}
       </div>
       <div className="flex-1 overflow-y-auto p-2">
         {mode === "scores" && currentOrg ? (
           <ScoresTab orgId={currentOrg.id} traceId={traceId} />
+        ) : mode === "timeline" ? (
+          <TraceTimelineView
+            loading={timelineQuery.isLoading && timelineSteps.length === 0}
+            error={timelineQuery.error?.message ?? null}
+            steps={timelineSteps}
+            totalMs={timelineTotalMs}
+            markers={timelineQuery.data?.markers ?? []}
+          />
         ) : mode === "meta" ? (
           <div className="space-y-4 p-3">
             <dl className="space-y-2 text-xs">
@@ -260,7 +333,7 @@ export function TraceDetailPanel({ traceId, onClose, highlightSpanId }: TraceDet
             />
           </div>
         ) : mode === "tree" ? (
-          <ul className="space-y-1 p-2 font-mono text-[11px] text-[var(--text-secondary)]">
+          <ul className="space-y-1 p-2 font-mono text-2xs text-[var(--text-secondary)]">
             {rows.map((r) => (
               <li key={r.span_id} className="truncate">
                 {r.name} · {r.duration_ms.toFixed(0)}ms · {r.span_id.slice(0, 8)}
@@ -293,6 +366,97 @@ export function TraceDetailPanel({ traceId, onClose, highlightSpanId }: TraceDet
             highlightSpanId={highlightSpanId}
           />
         )}
+      </div>
+    </div>
+  );
+}
+
+function TraceTimelineView({
+  loading,
+  error,
+  steps,
+  totalMs,
+  markers,
+}: {
+  loading: boolean;
+  error: string | null;
+  steps: Array<{
+    name: string;
+    start_ms: number;
+    end_ms: number;
+    duration_ms: number;
+    event_type: string;
+    outcome: string | null;
+  }>;
+  totalMs: number;
+  markers: Array<{ at_ms: number; label: string; severity: string }>;
+}) {
+  if (loading) {
+    return (
+      <div className="flex h-40 flex-col items-center justify-center gap-2">
+        <Loader2 className="h-5 w-5 animate-spin text-[var(--text-muted)]" />
+        <p className="text-xs text-[var(--text-muted)]">Loading timeline…</p>
+      </div>
+    );
+  }
+
+  if (error && steps.length === 0) {
+    return <ErrorState title="Could not load timeline" message={error} />;
+  }
+
+  if (steps.length === 0) {
+    return (
+      <p className="p-4 text-sm text-[var(--text-muted)]">No timeline steps for this trace.</p>
+    );
+  }
+
+  const span = Math.max(totalMs, 1);
+
+  return (
+    <div className="space-y-3 p-3" data-testid="trace-timeline">
+      <div className="flex items-baseline justify-between gap-2">
+        <p className="text-xs text-[var(--text-muted)]">
+          Condensed Gantt · {steps.length} steps · {span.toFixed(0)}ms
+        </p>
+        {error ? (
+          <p className="text-2xs text-[var(--warning)]">API timeline unavailable — using span tree</p>
+        ) : null}
+      </div>
+      <div className="relative space-y-1.5">
+        {markers.map((m) => (
+          <div
+            key={`${m.at_ms}-${m.label}`}
+            className="pointer-events-none absolute top-0 bottom-0 w-px bg-[var(--warning)]/60"
+            style={{ left: `${Math.min(100, (m.at_ms / span) * 100)}%` }}
+            title={m.label}
+          />
+        ))}
+        {steps.map((s, i) => {
+          const left = Math.min(100, (s.start_ms / span) * 100);
+          const width = Math.max(0.5, Math.min(100 - left, (s.duration_ms / span) * 100));
+          const failed = s.outcome === "failure" || s.outcome === "error";
+          return (
+            <div key={`${s.name}-${i}`} className="grid grid-cols-[minmax(0,7rem)_1fr_auto] items-center gap-2">
+              <span className="truncate font-mono text-2xs text-[var(--text-secondary)]" title={s.name}>
+                {s.name}
+              </span>
+              <div className="relative h-5 rounded bg-[var(--bg-secondary)]">
+                <div
+                  className={
+                    failed
+                      ? "absolute top-0.5 bottom-0.5 rounded bg-[var(--error)]/80"
+                      : "absolute top-0.5 bottom-0.5 rounded bg-[var(--terminal)]/70"
+                  }
+                  style={{ left: `${left}%`, width: `${width}%` }}
+                  title={`${s.name}: ${s.duration_ms.toFixed(0)}ms`}
+                />
+              </div>
+              <span className="w-12 text-right font-mono text-2xs text-[var(--text-muted)]">
+                {s.duration_ms.toFixed(0)}ms
+              </span>
+            </div>
+          );
+        })}
       </div>
     </div>
   );

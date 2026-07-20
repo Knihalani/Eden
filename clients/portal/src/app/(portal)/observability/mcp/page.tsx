@@ -2,11 +2,11 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { AlertTriangle, ChevronRight, RefreshCw, Server } from "lucide-react";
-import { PageHeader } from "@/components/layout/page-header";
 import { PageContent } from "@/components/layout/page-content";
+import { ObserveLeafHeader } from "@/app/(portal)/observability/_components/observe-leaf-shell";
 import { Button } from "@/components/ui/button";
-import { ErrorState } from "@/components/ui/error-state";
 import { NoOrgState } from "@/components/ui/no-org-state";
+import { QueryState } from "@/components/ui/query-state";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useOrg } from "@/hooks/use-org";
 import {
@@ -97,7 +97,7 @@ export default function McpObservabilityPage() {
 
   return (
     <PageContent size="wide">
-      <PageHeader
+      <ObserveLeafHeader
         icon={Server}
         title="MCP Observability"
         subtitle="Fleet health, auth failures, trends, and agent → server drill-down (N02)"
@@ -141,62 +141,51 @@ export default function McpObservabilityPage() {
         }
       />
 
-      {loading && (
-        <div className="space-y-6" aria-busy="true" aria-live="polite">
-          <div className="grid gap-4 md:grid-cols-3">
-            {Array.from({ length: 3 }).map((_, i) => (
-              <Skeleton key={i} className="h-24 w-full rounded-lg" />
-            ))}
-          </div>
-          <Skeleton className="h-28 w-full rounded-lg" />
-          <Skeleton className="h-64 w-full rounded-lg" />
-        </div>
-      )}
-
-      {!loading && error && (
-        <ErrorState
-          title="Could not load MCP dashboard"
-          message={error}
-          action={
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => void load()}
-              className="min-h-[44px]"
-            >
-              Try again
-            </Button>
-          }
-        />
-      )}
-
-      {!loading && !error && (
-        <>
-          <div className="grid gap-4 md:grid-cols-3">
-            <div className="rounded-lg border border-[var(--border-default)] bg-[var(--bg-primary)] p-4">
-              <p className="text-xs text-[var(--text-muted)]">Servers ({days}d)</p>
-              <p className="mt-1 text-2xl font-mono tabular-nums">{servers.length}</p>
+      <QueryState
+        loading={loading}
+        error={error ? new Error(error) : null}
+        data={loading || error ? undefined : { servers, failures, edges, trends }}
+        onRetry={() => void load()}
+        errorTitle="Could not load MCP dashboard"
+        loadingSlot={
+          <div className="space-y-space-5" aria-busy="true" aria-live="polite">
+            <div className="grid gap-space-4 md:grid-cols-3">
+              {Array.from({ length: 3 }).map((_, i) => (
+                <Skeleton key={i} className="h-24 w-full rounded-lg" />
+              ))}
             </div>
-            <div className="rounded-lg border border-[var(--border-default)] bg-[var(--bg-primary)] p-4">
+            <Skeleton className="h-28 w-full rounded-lg" />
+            <Skeleton className="h-64 w-full rounded-lg" />
+          </div>
+        }
+      >
+        {() => (
+        <>
+          <div className="grid gap-space-4 md:grid-cols-3">
+            <div className="rounded-lg border border-[var(--border-default)] bg-[var(--bg-primary)] p-space-4">
+              <p className="text-xs text-[var(--text-muted)]">Servers ({days}d)</p>
+              <p className="mt-space-1 text-2xl font-mono tabular-nums">{servers.length}</p>
+            </div>
+            <div className="rounded-lg border border-[var(--border-default)] bg-[var(--bg-primary)] p-space-4">
               <p className="text-xs text-[var(--text-muted)]">Auth failures (open)</p>
-              <p className="mt-1 text-2xl font-mono tabular-nums text-[var(--error)]">
+              <p className="mt-space-1 text-2xl font-mono tabular-nums text-[var(--error)]">
                 {failures.length}
               </p>
             </div>
-            <div className="rounded-lg border border-[var(--border-default)] bg-[var(--bg-primary)] p-4">
+            <div className="rounded-lg border border-[var(--border-default)] bg-[var(--bg-primary)] p-space-4">
               <p className="text-xs text-[var(--text-muted)]">Agent → server edges</p>
-              <p className="mt-1 text-2xl font-mono tabular-nums">{edges.length}</p>
+              <p className="mt-space-1 text-2xl font-mono tabular-nums">{edges.length}</p>
             </div>
           </div>
 
-          <section className="rounded-lg border border-[var(--border-default)] bg-[var(--bg-primary)] p-4">
-            <h2 className="text-sm font-semibold mb-3">Call volume trend</h2>
+          <section className="rounded-lg border border-[var(--border-default)] bg-[var(--bg-primary)] p-space-4">
+            <h2 className="text-sm font-semibold mb-space-3">Call volume trend</h2>
             {trends.length === 0 ? (
               <p className="text-sm text-[var(--text-muted)]">No MCP telemetry in this range.</p>
             ) : (
-              <div className="flex items-end gap-2 h-28">
+              <div className="flex items-end gap-space-2 h-28">
                 {trends.map((row) => (
-                  <div key={row.day} className="flex-1 min-w-0 flex flex-col items-center gap-1">
+                  <div key={row.day} className="flex-1 min-w-0 flex flex-col items-center gap-space-1">
                     <div
                       className="w-full rounded-t bg-[var(--accent)]/70"
                       style={{
@@ -205,7 +194,7 @@ export default function McpObservabilityPage() {
                       }}
                       title={`${row.call_count} calls`}
                     />
-                    <span className="text-[10px] text-[var(--text-muted)] truncate w-full text-center">
+                    <span className="text-2xs text-[var(--text-muted)] truncate w-full text-center font-mono">
                       {row.day.slice(5)}
                     </span>
                   </div>
@@ -214,14 +203,14 @@ export default function McpObservabilityPage() {
             )}
           </section>
 
-          <div className="grid gap-4 lg:grid-cols-2">
+          <div className="grid gap-space-4 lg:grid-cols-2">
             <section className="rounded-lg border border-[var(--border-default)] bg-[var(--bg-primary)]">
-              <div className="border-b border-[var(--border-default)] px-4 py-3">
+              <div className="border-b border-[var(--border-default)] px-space-4 py-space-3">
                 <h2 className="text-sm font-semibold">MCP servers</h2>
               </div>
               <div className="divide-y divide-[var(--border-subtle)]">
                 {servers.length === 0 ? (
-                  <p className="px-4 py-6 text-sm text-[var(--text-muted)]">
+                  <p className="px-space-4 py-space-6 text-sm text-[var(--text-muted)]">
                     No MCP server activity in this range.
                   </p>
                 ) : (
@@ -231,17 +220,17 @@ export default function McpObservabilityPage() {
                       type="button"
                       onClick={() => setSelectedServer(s.server_name)}
                       className={cn(
-                        "flex w-full items-center justify-between px-4 py-3 text-sm text-left min-h-[44px] hover:bg-[var(--bg-elev-2)] transition-colors",
+                        "flex w-full items-center justify-between px-space-4 py-space-3 text-sm text-left min-h-11 hover:bg-[var(--bg-elev-2)] transition-colors",
                         selectedServer === s.server_name && "bg-[var(--bg-elev-2)]",
                       )}
                     >
                       <div className="min-w-0">
                         <p className="font-mono truncate">{s.server_name}</p>
-                        <p className="text-[11px] text-[var(--text-muted)] truncate">
+                        <p className="text-xs text-[var(--text-muted)] truncate">
                           {(s.tool_names ?? []).slice(0, 4).join(", ") || "—"}
                         </p>
                       </div>
-                      <div className="flex items-center gap-2 text-right font-mono text-xs tabular-nums shrink-0">
+                      <div className="flex items-center gap-space-2 text-right font-mono text-xs tabular-nums shrink-0">
                         <div>
                           <p>{s.call_count_7d ?? 0} calls</p>
                           {s.transport && (
@@ -257,25 +246,25 @@ export default function McpObservabilityPage() {
             </section>
 
             <section className="rounded-lg border border-[var(--border-default)] bg-[var(--bg-primary)]">
-              <div className="border-b border-[var(--border-default)] px-4 py-3">
+              <div className="border-b border-[var(--border-default)] px-space-4 py-space-3">
                 <h2 className="text-sm font-semibold">
                   {selectedServer ? `Tools · ${selectedServer}` : "Select a server"}
                 </h2>
               </div>
               <div className="divide-y divide-[var(--border-subtle)] max-h-80 overflow-y-auto">
                 {!selectedServer ? (
-                  <p className="px-4 py-6 text-sm text-[var(--text-muted)]">
+                  <p className="px-space-4 py-space-6 text-sm text-[var(--text-muted)]">
                     Tap a server to drill into tool call stats.
                   </p>
                 ) : tools.length === 0 ? (
-                  <p className="px-4 py-6 text-sm text-[var(--text-muted)]">
+                  <p className="px-space-4 py-space-6 text-sm text-[var(--text-muted)]">
                     No tool stats for this server.
                   </p>
                 ) : (
                   tools.map((tool) => (
                     <div
                       key={tool.tool_name}
-                      className="flex items-center justify-between px-4 py-3 text-xs min-h-[44px]"
+                      className="flex items-center justify-between px-space-4 py-space-3 text-xs min-h-11"
                     >
                       <span className="font-mono">{tool.tool_name}</span>
                       <span className="font-mono tabular-nums">{tool.call_count_7d ?? 0} calls</span>
@@ -287,16 +276,16 @@ export default function McpObservabilityPage() {
           </div>
 
           <section className="rounded-lg border border-[var(--border-default)] bg-[var(--bg-primary)]">
-            <div className="border-b border-[var(--border-default)] px-4 py-3 flex items-center gap-2">
+            <div className="border-b border-[var(--border-default)] px-space-4 py-space-3 flex items-center gap-space-2">
               <AlertTriangle className="h-4 w-4 text-[var(--error)]" />
               <h2 className="text-sm font-semibold">Recent auth failures</h2>
             </div>
             <div className="divide-y divide-[var(--border-subtle)] max-h-64 overflow-y-auto">
               {failures.length === 0 ? (
-                <p className="px-4 py-6 text-sm text-[var(--text-muted)]">No open auth failures.</p>
+                <p className="px-space-4 py-space-6 text-sm text-[var(--text-muted)]">No open auth failures.</p>
               ) : (
                 failures.map((f) => (
-                  <div key={f.id} className="px-4 py-3 text-xs min-h-[44px]">
+                  <div key={f.id} className="px-space-4 py-space-3 text-xs min-h-11">
                     <p className="font-mono">
                       {f.server_name} · {f.failure_kind}
                     </p>
@@ -307,7 +296,8 @@ export default function McpObservabilityPage() {
             </div>
           </section>
         </>
-      )}
+        )}
+      </QueryState>
     </PageContent>
   );
 }

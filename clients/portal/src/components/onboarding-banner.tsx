@@ -9,29 +9,21 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
 import { ChevronRight, ExternalLink, X } from "lucide-react";
 import { useTourProgress } from "@/hooks/use-tour-progress";
-import {
-  formatOnboardingProgress,
-  isOnboardingWizardPath,
-} from "@/lib/onboarding-progress";
+import { formatOnboardingProgress } from "@/lib/onboarding-progress";
 import { DOCS_QUICKSTART_URL } from "@/lib/constants";
 import { shouldShowTourBanner } from "@/lib/tour-progress";
 import { PRODUCT_TOUR_STEPS } from "@/lib/product-tour";
-import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 
 const SESSION_KEY = "eden:onboarding:banner-dismissed";
-
-const chipBase =
-  "inline-flex min-h-11 items-center gap-1 rounded-lg px-3 text-xs font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-primary)]";
 
 export function OnboardingBanner({
   collapsed = false,
 }: {
   collapsed?: boolean;
 }) {
-  const pathname = usePathname();
   const { isLoaded, progress } = useTourProgress();
   const [dismissed, setDismissed] = useState(() => {
     if (typeof window === "undefined") return false;
@@ -39,7 +31,6 @@ export function OnboardingBanner({
   });
 
   if (!isLoaded) return null;
-  if (isOnboardingWizardPath(pathname)) return null;
   if (!shouldShowTourBanner(progress)) return null;
   if (dismissed) return null;
 
@@ -72,21 +63,17 @@ export function OnboardingBanner({
         aria-label="Onboarding progress"
         className="sticky top-14 z-20 border-b border-[var(--accent)]/25 bg-[var(--accent)]/5"
       >
-        <div className="mx-auto flex max-w-7xl items-center gap-2 px-4 py-1.5 text-xs">
+        <div className="mx-auto flex max-w-7xl items-center gap-space-2 px-space-4 py-space-2 text-xs">
           <span className="min-w-0 truncate text-[var(--text-secondary)]">
             {progress?.status === "skipped" ? "Tour paused" : "Setup"} ·{" "}
             {progressView.label}
           </span>
-          <Link
-            href="/dashboard?onboarding=1"
-            className={cn(
-              chipBase,
-              "ml-auto shrink-0 bg-[var(--accent)] text-[var(--accent-foreground)] hover:opacity-90",
-            )}
-          >
-            Resume tour
-            <ChevronRight className="h-3.5 w-3.5" aria-hidden />
-          </Link>
+          <Button asChild size="sm" className="ml-auto min-h-11 shrink-0">
+            <Link href="/dashboard?onboarding=1">
+              Resume tour
+              <ChevronRight className="h-3.5 w-3.5" aria-hidden />
+            </Link>
+          </Button>
         </div>
       </div>
     );
@@ -98,7 +85,7 @@ export function OnboardingBanner({
       aria-label="Onboarding progress"
       className="sticky top-14 z-20 border-b border-[var(--accent)]/25 bg-[var(--accent)]/5"
     >
-      <div className="mx-auto flex max-w-7xl items-center gap-2 px-4 py-2 text-xs sm:text-sm">
+      <div className="mx-auto flex max-w-7xl items-center gap-space-2 px-space-4 py-space-2 text-xs sm:text-sm">
         <span className="font-medium text-[var(--text-primary)] whitespace-nowrap">
           {progress?.status === "skipped" ? "Tour paused" : "Setup"}{" "}
           {progressView.current}/{progressView.total}
@@ -116,57 +103,48 @@ export function OnboardingBanner({
               : progressView.blurb}
           </span>
         </span>
-        <div className="ml-auto flex shrink-0 items-center gap-1.5">
+        <div className="ml-auto flex shrink-0 items-center gap-space-2">
           {emphasizeApiKey && (
-            <Link
-              href="/settings?tab=api-keys"
-              className={cn(
-                chipBase,
-                "bg-[var(--accent)] text-[var(--accent-foreground)] hover:opacity-90",
-              )}
-            >
-              Create API key
-              <ChevronRight className="h-3.5 w-3.5" aria-hidden />
-            </Link>
+            <Button asChild size="sm" className="min-h-11">
+              <Link href="/settings?tab=api-keys">
+                Create API key
+                <ChevronRight className="h-3.5 w-3.5" aria-hidden />
+              </Link>
+            </Button>
           )}
           {emphasizeInstall && (
-            <a
-              href={DOCS_QUICKSTART_URL}
-              target="_blank"
-              rel="noopener noreferrer"
-              className={cn(
-                chipBase,
-                "bg-[var(--accent)] text-[var(--accent-foreground)] hover:opacity-90",
-              )}
-            >
-              Docs quickstart
-              <ExternalLink className="h-3.5 w-3.5" aria-hidden />
-            </a>
+            <Button asChild size="sm" className="min-h-11">
+              <a
+                href={DOCS_QUICKSTART_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Docs quickstart
+                <ExternalLink className="h-3.5 w-3.5" aria-hidden />
+              </a>
+            </Button>
           )}
-          <Link
-            href="/dashboard?onboarding=1"
-            className={cn(
-              chipBase,
-              earlySetup
-                ? "border border-[var(--accent)]/40 bg-transparent font-medium text-[var(--accent)] hover:bg-[var(--accent)]/10"
-                : "bg-[var(--accent)]/10 font-medium text-[var(--accent)] hover:bg-[var(--accent)]/20",
-            )}
+          <Button
+            asChild
+            size="sm"
+            variant={earlySetup ? "outline" : "ghost"}
+            className="min-h-11"
           >
-            {progress?.status === "skipped" ? "Resume tour" : "Continue tour"}
-            <ChevronRight className="h-3.5 w-3.5" aria-hidden />
-          </Link>
-          <button
+            <Link href="/dashboard?onboarding=1">
+              {progress?.status === "skipped" ? "Resume tour" : "Continue tour"}
+              <ChevronRight className="h-3.5 w-3.5" aria-hidden />
+            </Link>
+          </Button>
+          <Button
             type="button"
+            variant="ghost"
+            size="icon"
             onClick={dismiss}
             aria-label="Dismiss onboarding banner"
-            className={cn(
-              "inline-flex h-11 w-11 items-center justify-center rounded-lg text-[var(--text-muted)]",
-              "hover:bg-[var(--bg-elev-2)] hover:text-[var(--text-primary)]",
-              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-primary)]",
-            )}
+            className="min-h-11 min-w-11"
           >
             <X className="h-4 w-4" />
-          </button>
+          </Button>
         </div>
       </div>
     </div>

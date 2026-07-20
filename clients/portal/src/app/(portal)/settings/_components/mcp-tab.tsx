@@ -183,10 +183,10 @@ export function McpTab({ org }: McpTabProps) {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-space-4">
       <IntegrationStatusBanner orgId={org.id} watch={["github_action"]} />
       <SettingsCard>
-        <div className="space-y-4">
+        <div className="space-y-space-4">
           <div className="flex items-start gap-3">
             <Terminal className="w-5 h-5 text-[var(--accent)] mt-0.5 flex-shrink-0" />
             <div>
@@ -235,18 +235,14 @@ export function McpTab({ org }: McpTabProps) {
             <pre className="text-xs font-mono text-[var(--text-primary)] overflow-x-auto whitespace-pre-wrap break-all">
               {configText}
             </pre>
-            <button
-              type="button"
-              onClick={copyConfig}
-              className="mt-3 inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium bg-[var(--accent)] text-[var(--accent-foreground)] hover:opacity-90"
-            >
+            <Button type="button" variant="default" className="min-h-11" onClick={copyConfig}>
               {copied ? (
                 <Check className="w-4 h-4" />
               ) : (
                 <Copy className="w-4 h-4" />
               )}
               {copied ? "Copied" : "Copy config"}
-            </button>
+            </Button>
           </div>
         </div>
       </SettingsCard>

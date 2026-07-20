@@ -10,9 +10,12 @@ import { Input } from "@/components/ui/input";
 import { Panel } from "@/components/ui/panel";
 import { DataTable, DataTableSearch } from "@/components/ui/data-table";
 import { NoOrgState } from "@/components/ui/no-org-state";
-import { ErrorState } from "@/components/ui/error-state";
+import { QueryState } from "@/components/ui/query-state";
+import { LoadingSkeleton } from "@/components/ui/skeleton";
+import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/layout/page-header";
 import { PageContent } from "@/components/layout/page-content";
+import { useEmbeddedSurface } from "@/components/layout/embedded-surface";
 import { useToast } from "@/components/ui/toast";
 import { Textarea } from "@/components/ui/textarea";
 import { Activity, RefreshCw, Play } from "lucide-react";
@@ -30,6 +33,7 @@ export default function SignalsPage() {
   const { currentOrg } = useOrg();
   const orgId = currentOrg?.id ?? null;
   const toast = useToast();
+  const embedded = useEmbeddedSurface();
   // useToast() returns a fresh object each render — keep a stable ref so
   // mutation handlers don't re-create closures that churn RQ deps.
   const toastRef = useRef(toast);
@@ -54,7 +58,6 @@ export default function SignalsPage() {
   const signals = signalsQuery.data ?? [];
   const loading = signalsQuery.isLoading;
   const refreshing = signalsQuery.isFetching && !loading;
-  const error = signalsQuery.error?.message ?? null;
   const load = () => void signalsQuery.refetch();
   const busy = creating || seeding;
 
@@ -70,6 +73,7 @@ export default function SignalsPage() {
       keywords.some((k) => k.toLowerCase().includes(q))
     );
   });
+  const filterActive = Boolean(filter.trim());
 
   const createSignal = async () => {
     if (!orgId) return;
@@ -147,28 +151,54 @@ export default function SignalsPage() {
 
   return (
     <PageContent size="wide">
-      <PageHeader
-        title="Signals"
-        subtitle="Plain-English metric rules. Describe a threshold; Eden compiles it immediately."
-        description="Create a signal, or save a span search as a signal from Traces. Then wire an alert rule."
-        actions={
-          <>
-            <DataTableSearch value={filter} onChange={setFilter} placeholder="Filter signals" />
-            <Button
-              onClick={load}
-              variant="ghost"
-              size="sm"
-              disabled={loading || refreshing}
-              loading={loading || refreshing}
-              aria-label="Refresh signals"
-            >
-              <RefreshCw className="h-3.5 w-3.5" /> Refresh
-            </Button>
-          </>
-        }
-      />
+      {!embedded ? (
+        <PageHeader
+          title="Signals"
+          subtitle="Plain-English metric rules. Describe a threshold; Eden compiles it immediately."
+          description="Nested under Alerts — create a signal, or save a span search from Traces, then wire an alert rule."
+          actions={
+            <>
+              <DataTableSearch value={filter} onChange={setFilter} placeholder="Filter signals" />
+              <Button
+                onClick={load}
+                variant="ghost"
+                size="sm"
+                disabled={loading || refreshing}
+                loading={loading || refreshing}
+                aria-label="Refresh signals"
+              >
+                <RefreshCw className="h-3.5 w-3.5" /> Refresh
+              </Button>
+            </>
+          }
+        />
+      ) : (
+        <div className="mb-space-3 flex flex-wrap items-center justify-end gap-space-2">
+          <DataTableSearch value={filter} onChange={setFilter} placeholder="Filter signals" />
+          <Button
+            onClick={load}
+            variant="ghost"
+            size="sm"
+            disabled={loading || refreshing}
+            loading={loading || refreshing}
+            aria-label="Refresh signals"
+          >
+            <RefreshCw className="h-3.5 w-3.5" /> Refresh
+          </Button>
+        </div>
+      )}
 
-      <Panel tone="flat" padding="md" className="space-y-3">
+      {embedded ? null : (
+        <p className="mb-space-3 text-sm text-[var(--text-muted)]">
+          Prefer the Alerts hub Signals tab — list entry redirects to{" "}
+          <Link href="/alerts?tab=signals" className="text-[var(--accent)] hover:underline">
+            /alerts?tab=signals
+          </Link>
+          .
+        </p>
+      )}
+
+      <Panel tone="flat" padding="md" className="mb-space-4 space-y-space-3">
         <label className="block text-xs font-medium text-[var(--text-muted)]" htmlFor="signal-desc">
           New signal description
         </label>
@@ -180,9 +210,9 @@ export default function SignalsPage() {
           placeholder='e.g. "error rate above 5%"'
           className="border-[var(--border-subtle)] bg-[var(--bg-inset)]"
         />
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-space-2">
           <Button
-            onClick={createSignal}
+            onClick={() => void createSignal()}
             size="sm"
             disabled={busy || description.trim().length < 3}
             loading={creating}
@@ -190,7 +220,7 @@ export default function SignalsPage() {
             Create signal
           </Button>
           <Button
-            onClick={seedDefaults}
+            onClick={() => void seedDefaults()}
             size="sm"
             variant="outline"
             disabled={busy}
@@ -201,7 +231,7 @@ export default function SignalsPage() {
           <Input
             value={matchValue}
             onChange={(e) => setMatchValue(e.target.value)}
-            className="h-8 w-24 border-[var(--border-subtle)] bg-[var(--bg-inset)] px-2 text-xs font-mono"
+            className="h-8 w-24 border-[var(--border-subtle)] bg-[var(--bg-inset)] px-space-2 text-xs font-mono"
             aria-label="Test match value"
             title="Value used by Test match"
             inputMode="decimal"
@@ -209,16 +239,16 @@ export default function SignalsPage() {
           <span className="text-xs text-[var(--text-muted)]">Test-match value</span>
         </div>
         {lastCreated?.rule && (
-          <div className="space-y-1" data-testid="signals-last-created">
+          <div className="space-y-space-1" data-testid="signals-last-created">
             <p className="text-xs font-medium text-[var(--text-muted)]">Compiled rule</p>
-            <pre className="rounded-md bg-[var(--bg-inset)] ring-1 ring-inset ring-[var(--border-subtle)] p-3 text-xs font-mono overflow-auto text-[var(--text-secondary)]">
+            <pre className="rounded-md bg-[var(--bg-inset)] ring-1 ring-inset ring-[var(--border-subtle)] p-space-3 text-xs font-mono overflow-auto text-[var(--text-secondary)]">
               {JSON.stringify(lastCreated.rule, null, 2)}
             </pre>
           </div>
         )}
         {lastMatch && (
           <div
-            className="rounded-md bg-[var(--bg-inset)] ring-1 ring-inset ring-[var(--border-subtle)] p-3 space-y-1"
+            className="rounded-md bg-[var(--bg-inset)] ring-1 ring-inset ring-[var(--border-subtle)] p-space-3 space-y-space-1"
             data-testid="signals-last-match"
             role="status"
           >
@@ -234,82 +264,97 @@ export default function SignalsPage() {
         )}
       </Panel>
 
-      {error ? (
-        <ErrorState
-          title="Could not load signals"
-          message={error}
-          action={
-            <Button onClick={load} variant="outline" size="sm" disabled={loading || refreshing}>
-              <RefreshCw className="h-3.5 w-3.5" /> Try again
-            </Button>
-          }
-        />
-      ) : (
-        <DataTable
-          loading={loading}
-          rows={filtered}
-          rowKey={(r) => r.id}
-          emptyTitle="No signals yet"
-          emptyDescription="Create a signal above — or save a span search as a signal from Traces. Then wire an alert rule."
-          emptyIcon={Activity}
-          emptyAction={
-            <Link
-              href="/alerts?tab=rules"
-              className="text-xs text-[var(--accent)] hover:underline"
-            >
-              Create alert rule
-            </Link>
-          }
-          columns={[
-            {
-              key: "description",
-              header: "Description",
-              sortable: true,
-            },
-            {
-              key: "rule",
-              header: "Rule",
-              cell: (r) => (
-                <span className="font-mono text-xs text-[var(--text-muted)]">
-                  {r.rule?.metric ?? "—"} {r.rule?.op ?? ""} {r.rule?.threshold ?? ""}
-                </span>
-              ),
-            },
-            {
-              key: "enabled",
-              header: "Enabled",
-              cell: (r) => (r.enabled ? "yes" : "no"),
-            },
-            {
-              key: "match_count",
-              header: "Matches",
-              align: "right",
-              cell: (r) => r.match_count ?? 0,
-            },
-            {
-              key: "actions",
-              header: "",
-              align: "right",
-              cell: (r) => {
-                const isMatching = matchingId === r.id;
-                return (
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    disabled={isMatching || busy}
-                    loading={isMatching}
-                    onClick={() => testMatch(r)}
-                    aria-label={`Test match for ${r.description}`}
-                  >
-                    <Play className="h-3 w-3" />
-                    Test match
-                  </Button>
-                );
+      <QueryState
+        loading={loading}
+        error={signalsQuery.error}
+        data={signalsQuery.data}
+        onRetry={load}
+        errorTitle="Could not load signals"
+        isEmpty={() => filtered.length === 0}
+        loadingSlot={<LoadingSkeleton variant="table" lines={5} className="p-0 max-w-none" />}
+        emptySlot={
+          <EmptyState
+            icon={Activity}
+            title={filterActive ? "No matching signals" : "No signals yet"}
+            description={
+              filterActive
+                ? "No signals match your filter. Clear the search to see the full library."
+                : "Create a signal above — or save a span search as a signal from Traces. Then wire an alert rule."
+            }
+            size="lg"
+            action={
+              filterActive ? (
+                <Button variant="link" className="min-h-11 px-0" onClick={() => setFilter("")}>
+                  Clear filter
+                </Button>
+              ) : (
+                <Button asChild variant="outline" className="min-h-11">
+                  <Link href="/alerts?tab=rules">Create alert rule</Link>
+                </Button>
+              )
+            }
+          />
+        }
+      >
+        {() => (
+          <DataTable
+            loading={false}
+            rows={filtered}
+            rowKey={(r) => r.id}
+            emptyTitle="No signals yet"
+            emptyDescription="Create a signal above — or save a span search as a signal from Traces. Then wire an alert rule."
+            emptyIcon={Activity}
+            columns={[
+              {
+                key: "description",
+                header: "Description",
+                sortable: true,
               },
-            },
-          ]}
-        />
-      )}
+              {
+                key: "rule",
+                header: "Rule",
+                cell: (r) => (
+                  <span className="font-mono text-xs text-[var(--text-muted)]">
+                    {r.rule?.metric ?? "—"} {r.rule?.op ?? ""} {r.rule?.threshold ?? ""}
+                  </span>
+                ),
+              },
+              {
+                key: "enabled",
+                header: "Enabled",
+                cell: (r) => (r.enabled ? "yes" : "no"),
+              },
+              {
+                key: "match_count",
+                header: "Matches",
+                align: "right",
+                cell: (r) => r.match_count ?? 0,
+              },
+              {
+                key: "actions",
+                header: "",
+                align: "right",
+                cell: (r) => {
+                  const isMatching = matchingId === r.id;
+                  return (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      disabled={isMatching || busy}
+                      loading={isMatching}
+                      onClick={() => void testMatch(r)}
+                      aria-label={`Test match for ${r.description}`}
+                    >
+                      <Play className="h-3 w-3" />
+                      Test match
+                    </Button>
+                  );
+                },
+              },
+            ]}
+          />
+        )}
+      </QueryState>
     </PageContent>
   );
 }

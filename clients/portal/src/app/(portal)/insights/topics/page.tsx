@@ -13,6 +13,11 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorState } from "@/components/ui/error-state";
 import { NoOrgState } from "@/components/ui/no-org-state";
 import { useToast } from "@/components/ui/toast";
+import { PageHeader } from "@/components/layout/page-header";
+import { PageContent } from "@/components/layout/page-content";
+import { useEmbeddedSurface } from "@/components/layout/embedded-surface";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { LoadingSkeleton } from "@/components/ui/skeleton";
 
 type Facet = "task" | "sentiment" | "issues";
 type ViewMode = "list" | "scatter";
@@ -33,6 +38,7 @@ type Topic = {
 
 export default function TopicsPage() {
   const { currentOrg } = useOrg();
+  const embedded = useEmbeddedSurface();
   const orgId = currentOrg?.id;
   const toast = useToast();
   const [facet, setFacet] = useState<Facet>("task");
@@ -74,7 +80,7 @@ export default function TopicsPage() {
         setActingId(null);
       }
     },
-    [orgId, refetch],
+    [orgId, refetch, toast],
   );
 
   const topics: Topic[] = data?.topics ?? [];
@@ -96,37 +102,68 @@ export default function TopicsPage() {
   }
 
   return (
-    <div className="space-y-6 p-6 max-w-5xl">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="text-xl font-semibold text-[var(--text-primary)]">
-            Topics
-          </h1>
-          <p className="text-sm text-[var(--text-muted)] mt-1">
-            Intent and issue clusters from production traffic. Drill into traces
-            or act on a cluster.
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
+    <PageContent>
+      {!embedded ? (
+        <PageHeader
+          eyebrow="Analyze"
+          title="Topics"
+          subtitle="Intent and issue clusters from production traffic."
+          actions={
+            <div className="flex flex-wrap items-center gap-2">
+              <div
+                role="group"
+                aria-label="View mode"
+                className="inline-flex rounded-lg border border-[var(--border-default)] p-1"
+              >
+                {(["list", "scatter"] as const).map((mode) => (
+                  <Button
+                    key={mode}
+                    type="button"
+                    size="sm"
+                    variant={view === mode ? "default" : "ghost"}
+                    aria-pressed={view === mode}
+                    className="capitalize"
+                    onClick={() => setView(mode)}
+                  >
+                    {mode}
+                  </Button>
+                ))}
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={generate.isPending || isFetching}
+                onClick={() => generate.mutate()}
+              >
+                {generate.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Sparkles className="h-4 w-4" />
+                )}
+                Generate
+              </Button>
+            </div>
+          }
+        />
+      ) : (
+        <div className="mb-space-3 flex flex-wrap items-center gap-2">
           <div
             role="group"
             aria-label="View mode"
-            className="inline-flex rounded-lg border border-[var(--border-default)] p-0.5"
+            className="inline-flex rounded-lg border border-[var(--border-default)] p-1"
           >
             {(["list", "scatter"] as const).map((mode) => (
-              <button
+              <Button
                 key={mode}
                 type="button"
+                size="sm"
+                variant={view === mode ? "default" : "ghost"}
                 aria-pressed={view === mode}
-                className={`px-3 py-1.5 rounded-md text-sm capitalize ${
-                  view === mode
-                    ? "bg-[var(--bg-tertiary)] text-[var(--text-primary)]"
-                    : "text-[var(--text-muted)]"
-                }`}
+                className="capitalize"
                 onClick={() => setView(mode)}
               >
                 {mode}
-              </button>
+              </Button>
             ))}
           </div>
           <Button
@@ -140,35 +177,31 @@ export default function TopicsPage() {
             ) : (
               <Sparkles className="h-4 w-4" />
             )}
-            <span className="ml-2">Generate</span>
+            Generate
           </Button>
         </div>
-      </div>
+      )}
 
-      <div className="flex gap-2" role="tablist" aria-label="Topic facets">
-        {FACETS.map((f) => (
-          <button
-            key={f.id}
-            type="button"
-            role="tab"
-            aria-selected={facet === f.id}
-            className={`px-3 py-1.5 rounded-md text-sm border transition-colors ${
-              facet === f.id
-                ? "bg-[var(--bg-tertiary)] border-[var(--border-default)] text-[var(--text-primary)]"
-                : "border-transparent text-[var(--text-muted)] hover:text-[var(--text-primary)]"
-            }`}
-            onClick={() => setFacet(f.id)}
-          >
-            {f.label}
-          </button>
-        ))}
-      </div>
+      <Tabs value={facet} onValueChange={(v) => setFacet(v as Facet)}>
+        <TabsList
+          variant={embedded ? "pills" : "underline"}
+          aria-label="Topic facets"
+          className={
+            embedded
+              ? "h-auto w-full justify-start gap-1 overflow-x-auto"
+              : "h-auto w-full justify-start"
+          }
+        >
+          {FACETS.map((f) => (
+            <TabsTrigger key={f.id} value={f.id} variant={embedded ? "pills" : "underline"}>
+              {f.label}
+            </TabsTrigger>
+          ))}
+        </TabsList>
+      </Tabs>
 
       {isLoading ? (
-        <div className="flex items-center gap-2 text-sm text-[var(--text-muted)]">
-          <Loader2 className="h-4 w-4 animate-spin" />
-          Loading topics…
-        </div>
+        <LoadingSkeleton variant="table" lines={5} />
       ) : isError ? (
         <ErrorState
           title="Could not load topics"
@@ -188,24 +221,21 @@ export default function TopicsPage() {
         />
       ) : view === "scatter" ? (
         <div
-          className="relative h-72 rounded-lg border border-[var(--border-default)] bg-[var(--bg-secondary)]"
+          className="relative h-72 rounded-xl bg-[var(--bg-secondary)]"
           data-testid="u11-topics-scatter"
           role="img"
           aria-label="Topics scatter: share % vs sample count"
         >
-          <span className="absolute left-2 bottom-2 text-[10px] text-[var(--text-muted)]">
+          <span className="absolute bottom-2 left-2 text-2xs text-[var(--text-muted)]">
             Share % →
           </span>
-          <span className="absolute left-2 top-2 text-[10px] text-[var(--text-muted)] rotate-0">
+          <span className="absolute left-2 top-2 text-2xs text-[var(--text-muted)]">
             Samples ↑
           </span>
           {topics.map((t) => {
-            const x =
-              ((t.share_pct ?? 0) / scatterBounds.maxShare) * 88 + 6;
+            const x = ((t.share_pct ?? 0) / scatterBounds.maxShare) * 88 + 6;
             const y =
-              100 -
-              ((t.sample_count ?? 0) / scatterBounds.maxSamples) * 80 -
-              8;
+              100 - ((t.sample_count ?? 0) / scatterBounds.maxSamples) * 80 - 8;
             return (
               <button
                 key={t.id}
@@ -228,14 +258,14 @@ export default function TopicsPage() {
           ) : null}
         </div>
       ) : (
-        <ul className="divide-y divide-[var(--border-subtle)] rounded-lg border border-[var(--border-default)]">
+        <ul className="divide-y divide-[var(--border-subtle)] rounded-xl border border-[var(--border-default)]">
           {topics.map((t) => (
             <li
               key={t.id}
               className="flex flex-wrap items-center justify-between gap-3 px-4 py-3"
             >
               <div className="min-w-0 flex-1">
-                <p className="font-medium text-[var(--text-primary)] truncate">
+                <p className="truncate font-medium text-[var(--text-primary)]">
                   {t.name}
                 </p>
                 <p className="text-xs text-[var(--text-muted)]">
@@ -245,7 +275,7 @@ export default function TopicsPage() {
                 {t.representative_trace_ids?.[0] && (
                   <Link
                     href={`/traces/${t.representative_trace_ids[0]}?org=${orgId}`}
-                    className="text-xs text-[var(--accent)] hover:underline mt-1 inline-block"
+                    className="mt-1 inline-block text-xs text-[var(--accent)] hover:underline"
                   >
                     Open sample trace
                   </Link>
@@ -267,7 +297,7 @@ export default function TopicsPage() {
                   ) : (
                     <ChevronDown className="h-3.5 w-3.5" />
                   )}
-                  <span className="ml-1.5">Act</span>
+                  Act
                 </Button>
                 {actOpenId === t.id ? (
                   <ActMenu
@@ -283,7 +313,7 @@ export default function TopicsPage() {
           ))}
         </ul>
       )}
-    </div>
+    </PageContent>
   );
 }
 

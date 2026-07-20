@@ -419,9 +419,17 @@ function ArtifactsPageInner() {
           title="Artifacts"
           description="Production traces become Artifacts — versioned, evidence-gated runtime fixes."
           actions={
-            <Button variant="ghost" size="sm" asChild>
-              <Link href="/promotions">Promotions inbox</Link>
-            </Button>
+            <div className="flex flex-wrap items-center gap-space-2">
+              <Button variant="ghost" size="sm" className="min-h-11" asChild>
+                <Link href="/promotions">Promotions</Link>
+              </Button>
+              <Button variant="ghost" size="sm" className="min-h-11" asChild>
+                <Link href="/ledger">Ledger</Link>
+              </Button>
+              <Button variant="ghost" size="sm" className="min-h-11" asChild>
+                <Link href="/improve">Improve</Link>
+              </Button>
+            </div>
           }
         />
       }

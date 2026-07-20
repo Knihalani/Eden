@@ -1,10 +1,27 @@
 "use client";
 
-import { RefreshCw } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import type { ReactNode } from "react";
 import { ErrorState } from "@/components/ui/error-state";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
+
+/** Empty taxonomy from w3-component-contract §5. */
+export type QueryEmptyKind = "zero-data" | "filter-empty" | "period-empty";
+
+export function resolveEmptySlot({
+  filtersActive,
+  emptySlot,
+  filterEmptySlot,
+}: {
+  filtersActive?: boolean;
+  emptySlot?: ReactNode;
+  filterEmptySlot?: ReactNode;
+}): ReactNode {
+  if (filtersActive && filterEmptySlot != null) {
+    return filterEmptySlot;
+  }
+  return emptySlot;
+}
 
 interface QueryStateProps<T> {
   /** ``isLoading`` from ``useApiQuery``/``useOrgQuery`` — true only
@@ -22,13 +39,26 @@ interface QueryStateProps<T> {
   isEmpty?: (data: T) => boolean;
   /** Rendered while ``loading`` is true. Defaults to a generic
    *  3-line skeleton card. */
-  loadingSlot?: React.ReactNode;
-  /** Rendered when ``isEmpty`` returns true. */
-  emptySlot?: React.ReactNode;
+  loadingSlot?: ReactNode;
+  /** Rendered when ``isEmpty`` returns true (and filter-empty does
+   *  not take precedence). */
+  emptySlot?: ReactNode;
+  /**
+   * Prefer this over ``emptySlot`` when ``filtersActive`` is true and
+   * the result set is empty (filter-empty taxonomy).
+   */
+  filterEmptySlot?: ReactNode;
+  /** True when the user has active filters that could empty the set. */
+  filtersActive?: boolean;
+  /**
+   * Documents which empty taxonomy is shown. Emitted as
+   * ``data-empty-kind`` on the empty wrapper when the empty path renders.
+   */
+  emptyKind?: QueryEmptyKind;
   /** Error copy passed through to ``ErrorState``. */
   errorTitle?: string;
   className?: string;
-  children: (data: T) => React.ReactNode;
+  children: (data: T) => ReactNode;
 }
 
 /**
@@ -55,13 +85,21 @@ export function QueryState<T>({
   isEmpty,
   loadingSlot,
   emptySlot,
+  filterEmptySlot,
+  filtersActive,
+  emptyKind,
   errorTitle = "Could not load this data",
   className,
   children,
 }: QueryStateProps<T>) {
   if (loading) {
     return (
-      <div className={cn(className)} aria-busy="true" aria-live="polite">
+      <div
+        className={cn(className)}
+        data-query-state="loading"
+        aria-busy="true"
+        aria-live="polite"
+      >
         {loadingSlot ?? (
           <div className="space-y-2 p-1">
             <Skeleton className="h-4 w-1/3" />
@@ -75,27 +113,42 @@ export function QueryState<T>({
 
   if (error) {
     return (
-      <ErrorState
-        title={errorTitle}
-        message={error.message}
-        className={className}
-        action={
-          onRetry && (
-            <Button onClick={onRetry} variant="outline" size="default">
-              <RefreshCw className="h-4 w-4" />
-              Try again
-            </Button>
-          )
-        }
-      />
+      <div className="contents" data-query-state="error">
+        <ErrorState
+          title={errorTitle}
+          message={error.message}
+          className={className}
+          onRetry={onRetry}
+        />
+      </div>
     );
   }
 
   if (data == null) return null;
 
   if (isEmpty?.(data)) {
-    return <div className={cn(className)}>{emptySlot}</div>;
+    const resolved = resolveEmptySlot({
+      filtersActive,
+      emptySlot,
+      filterEmptySlot,
+    });
+    const kind =
+      emptyKind ??
+      (filtersActive && filterEmptySlot != null ? "filter-empty" : undefined);
+    return (
+      <div
+        className={cn(className)}
+        data-query-state="empty"
+        data-empty-kind={kind}
+      >
+        {resolved}
+      </div>
+    );
   }
 
-  return <>{children(data)}</>;
+  return (
+    <div className="contents" data-query-state="ready">
+      {children(data)}
+    </div>
+  );
 }

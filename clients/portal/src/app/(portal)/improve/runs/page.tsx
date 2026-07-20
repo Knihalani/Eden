@@ -19,6 +19,7 @@ import { PageHeader } from "@/components/layout/page-header";
 import { PageContent } from "@/components/layout/page-content";
 import { useToast } from "@/components/ui/toast";
 import { ImproveFeatureDisabledState } from "@/components/improve/feature-disabled-state";
+import { STICKY_FIRST_TD, STICKY_FIRST_TH } from "@/components/ui/table-sticky";
 import { errorFromCaught } from "@/lib/safe-error-message";
 import { isImprovementAgentDisabled } from "@/lib/improve-feature";
 
@@ -103,12 +104,23 @@ export default function ImprovementRunsPage() {
         subtitle="Improvement agent runs, watermarks, and plan counts per sweep"
         icon={CalendarClock}
         actions={
-          <div className="flex gap-2">
-            <Button variant="outline" size="sm" onClick={() => void load()} disabled={loading || featureDisabled}>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              className="min-h-11"
+              onClick={() => void load()}
+              disabled={loading || featureDisabled}
+            >
               <RefreshCw className={cn("h-4 w-4 mr-1", loading && "animate-spin")} />
               Refresh
             </Button>
-            <Button size="sm" onClick={() => void handleTrigger()} disabled={triggerBusy || featureDisabled}>
+            <Button
+              size="sm"
+              className="min-h-11"
+              onClick={() => void handleTrigger()}
+              disabled={triggerBusy || featureDisabled}
+            >
               <Play className={cn("h-4 w-4 mr-1", triggerBusy && "animate-pulse")} />
               Run sweep now
             </Button>
@@ -156,7 +168,7 @@ export default function ImprovementRunsPage() {
       ) : !error && runs.length === 0 ? (
         <EmptyState
           title="No sweeps yet"
-          description="Manual or scheduled improvement sweeps appear here with plan counts and LLM cost. Configure cadence in Settings, or trigger a sweep now once you have traces and issues."
+          description="No sweeps recorded yet. Manual or scheduled improvement sweeps appear here with plan counts and LLM cost. Configure cadence in Settings, or trigger a sweep once you have traces and issues."
           icon={CalendarClock}
           size="lg"
           action={
@@ -180,45 +192,75 @@ export default function ImprovementRunsPage() {
           }
         />
       ) : runs.length === 0 ? null : (
-        <div className="overflow-x-auto rounded-lg border border-[var(--border-default)]">
-          <table className="w-full text-sm">
-            <thead className="bg-[var(--bg-secondary)] text-left text-xs text-[var(--text-muted)]">
-              <tr>
-                <th className="px-3 py-2 font-medium">Started</th>
-                <th className="px-3 py-2 font-medium">Status</th>
-                <th className="px-3 py-2 font-medium">Watermark</th>
-                <th className="px-3 py-2 font-medium">Plans</th>
-                <th className="px-3 py-2 font-medium">Skipped</th>
-                <th className="px-3 py-2 font-medium">LLM cost</th>
-                <th className="px-3 py-2 font-medium">Finished</th>
-              </tr>
-            </thead>
-            <tbody>
-              {runs.map((run) => (
-                <tr
-                  key={run.id}
-                  className="border-t border-[var(--border-default)] hover:bg-[var(--bg-secondary)]/40"
-                >
-                  <td className="px-3 py-2 whitespace-nowrap">{formatTs(run.started_at)}</td>
-                  <td className={cn("px-3 py-2 capitalize font-medium", statusClass(run.status))}>
-                    {run.status}
-                  </td>
-                  <td className="px-3 py-2 whitespace-nowrap text-xs text-[var(--text-muted)]">
-                    {formatTs(run.last_run_at)}
-                  </td>
-                  <td className="px-3 py-2">{run.plans_created}</td>
-                  <td className="px-3 py-2">{run.plans_skipped_dedup ?? 0}</td>
-                  <td className="px-3 py-2">
-                    {run.llm_cost_usd != null ? `$${run.llm_cost_usd.toFixed(4)}` : "—"}
-                  </td>
-                  <td className="px-3 py-2 whitespace-nowrap text-xs text-[var(--text-muted)]">
-                    {formatTs(run.finished_at)}
-                  </td>
+        <>
+          <ul className="flex flex-col gap-space-3 lg:hidden" data-testid="improve-runs-mobile-cards">
+            {runs.map((run) => (
+              <li
+                key={run.id}
+                className="rounded-lg border border-[var(--border-default)] bg-[var(--bg-primary)] p-space-4 space-y-space-2"
+              >
+                <p className="text-sm font-medium text-[var(--text-primary)]">
+                  {formatTs(run.started_at)}
+                </p>
+                <p className={cn("text-xs font-medium capitalize", statusClass(run.status))}>
+                  {run.status}
+                </p>
+                <p className="text-2xs text-[var(--text-muted)]">
+                  Plans {run.plans_created}
+                  {" · "}
+                  Skipped {run.plans_skipped_dedup ?? 0}
+                  {" · "}
+                  {run.llm_cost_usd != null ? `$${run.llm_cost_usd.toFixed(4)}` : "No LLM cost"}
+                  {" · "}
+                  Finished {formatTs(run.finished_at)}
+                </p>
+              </li>
+            ))}
+          </ul>
+          <div className="hidden overflow-x-auto rounded-lg border border-[var(--border-default)] lg:block">
+            <table className="w-full text-sm">
+              <thead className="bg-[var(--bg-secondary)] text-left text-xs text-[var(--text-muted)]">
+                <tr>
+                  <th className={cn(STICKY_FIRST_TH, "px-3 py-2 font-medium")}>
+                    Started
+                  </th>
+                  <th className="px-3 py-2 font-medium">Status</th>
+                  <th className="px-3 py-2 font-medium">Watermark</th>
+                  <th className="px-3 py-2 font-medium">Plans</th>
+                  <th className="px-3 py-2 font-medium">Skipped</th>
+                  <th className="px-3 py-2 font-medium">LLM cost</th>
+                  <th className="px-3 py-2 font-medium">Finished</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {runs.map((run) => (
+                  <tr
+                    key={run.id}
+                    className="border-t border-[var(--border-default)] hover:bg-[var(--bg-secondary)]/40"
+                  >
+                    <td className={cn(STICKY_FIRST_TD, "px-3 py-2 whitespace-nowrap")}>
+                      {formatTs(run.started_at)}
+                    </td>
+                    <td className={cn("px-3 py-2 capitalize font-medium", statusClass(run.status))}>
+                      {run.status}
+                    </td>
+                    <td className="px-3 py-2 whitespace-nowrap text-xs text-[var(--text-muted)]">
+                      {formatTs(run.last_run_at)}
+                    </td>
+                    <td className="px-3 py-2">{run.plans_created}</td>
+                    <td className="px-3 py-2">{run.plans_skipped_dedup ?? 0}</td>
+                    <td className="px-3 py-2">
+                      {run.llm_cost_usd != null ? `$${run.llm_cost_usd.toFixed(4)}` : "—"}
+                    </td>
+                    <td className="px-3 py-2 whitespace-nowrap text-xs text-[var(--text-muted)]">
+                      {formatTs(run.finished_at)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
       )}
     </PageContent>
   );

@@ -30,6 +30,7 @@ import { SettingsCard } from "@/components/settings/settings-card";
 import { DangerZone } from "@/components/settings/danger-zone";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorState } from "@/components/ui/error-state";
+import { FormField } from "@/components/ui/form-field";
 import { Button } from "@/components/ui/button";
 import { DeleteOrgDialog } from "./delete-org-dialog";
 import { TransferOwnershipDialog } from "./transfer-ownership-dialog";
@@ -129,7 +130,7 @@ export function OrgTab({
       <EmptyState
         icon={Building2}
         title="No organization yet"
-        description="Create an organization here to manage members, API keys, and settings. The product tour does not create or sync your workspace."
+        description="No organization yet. Create one to manage members, API keys, and settings. The product tour does not create or sync a workspace."
         action={
           <Button className="min-h-11" onClick={() => setShowCreate(true)}>
             <Plus className="w-4 h-4" />
@@ -149,9 +150,9 @@ export function OrgTab({
           <button type="button" onClick={() => setShowCreate(false)} className="min-h-11 px-4 py-2 text-sm text-[var(--text-muted)]">
             Cancel
           </button>
-          <button type="button" onClick={handleCreateOrg} disabled={loading} className="min-h-11 px-4 py-2 bg-[var(--accent)] text-[var(--accent-foreground)] rounded-lg text-sm font-medium disabled:opacity-50">
-            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Create Organization"}
-          </button>
+          <Button type="button" variant="default" className="min-h-11" onClick={handleCreateOrg} loading={loading}>
+            Create Organization
+          </Button>
         </div>
       </SettingsCard>;
   }
@@ -163,39 +164,45 @@ export function OrgTab({
     isOwnerRole(resolvedRole) ||
     isOwnerRole(org.role) ||
     Boolean(org.is_owner);
-  return <div className="space-y-4">
+  return <div className="space-y-space-4">
       <SettingsCard title="Organization details">
-        <div className="space-y-4">
-          <div>
-            <label htmlFor="org-name" className="block text-sm font-medium text-[var(--text-secondary)] mb-1">
-              Name
-            </label>
+        <div className="space-y-space-4">
+          <FormField
+            label="Name"
+            htmlFor="org-name"
+            description="Rename not available in portal yet"
+          >
             <input
-              id="org-name"
               type="text"
               value={org.name}
               readOnly
               aria-readonly="true"
-              className="w-full px-3 py-2 rounded-lg border border-[var(--border-default)] bg-[var(--bg-tertiary)] text-[var(--text-secondary)] cursor-default"
+              className="w-full px-space-3 py-space-2 rounded-lg border border-[var(--border-default)] bg-[var(--bg-tertiary)] text-[var(--text-secondary)] cursor-default"
             />
-            <p className="mt-1 text-xs text-[var(--text-muted)]">
-              Rename not available in portal yet
-            </p>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1">
-              Slug
-            </label>
-            <div className="flex items-center gap-2">
-              <input type="text" value={org.slug} disabled className="flex-1 px-3 py-2 rounded-lg border border-[var(--border-default)] bg-[var(--bg-tertiary)] text-[var(--text-primary)]" />
-              <button onClick={() => navigator.clipboard.writeText(org.slug)} className="p-2 hover:bg-[var(--bg-tertiary)] rounded-lg text-[var(--text-muted)]" title="Copy slug" aria-label="Copy slug">
+          </FormField>
+          <FormField label="Slug" htmlFor="org-slug">
+            <div className="flex items-center gap-space-2">
+              <input
+                id="org-slug"
+                type="text"
+                value={org.slug}
+                disabled
+                className="flex-1 px-space-3 py-space-2 rounded-lg border border-[var(--border-default)] bg-[var(--bg-tertiary)] text-[var(--text-primary)]"
+              />
+              <button
+                type="button"
+                onClick={() => navigator.clipboard.writeText(org.slug)}
+                className="p-space-2 hover:bg-[var(--bg-tertiary)] rounded-lg text-[var(--text-muted)]"
+                title="Copy slug"
+                aria-label="Copy slug"
+              >
                 <Copy className="w-4 h-4" />
               </button>
             </div>
-          </div>
-          <div className="pt-2">
+          </FormField>
+          <div className="pt-space-2">
             <span className="text-sm font-medium text-[var(--text-secondary)]">Role: </span>
-            <span className={cn("px-2 py-1 rounded-md text-sm font-medium", isOwner ? "bg-[var(--warning-bg)] text-[var(--warning)]" : org.role === "admin" ? "bg-[var(--accent-faint)] text-[var(--accent)]" : "bg-[var(--bg-tertiary)] text-[var(--text-secondary)]")}>
+            <span className={cn("px-space-2 py-space-1 rounded-md text-sm font-medium", isOwner ? "bg-[var(--warning-bg)] text-[var(--warning)]" : org.role === "admin" ? "bg-[var(--accent-faint)] text-[var(--accent)]" : "bg-[var(--bg-tertiary)] text-[var(--text-secondary)]")}>
               {org.role}
             </span>
           </div>
@@ -203,7 +210,13 @@ export function OrgTab({
       </SettingsCard>
 
       {isAdmin && <SettingsCard title="Manage organization">
-          <div className="flex flex-wrap items-center gap-3">
+          <div className="flex flex-wrap items-center gap-space-3">
+            <DataExportPanel orgId={org.id} canExport={true} />
+          </div>
+        </SettingsCard>}
+
+      {isAdmin && <DangerZone title="Permanent actions" description={isPersonal ? "Archiving or deleting a personal workspace is irreversible." : "Archiving, deleting, or transferring an organization is irreversible. Make sure all admins have a backup plan."}>
+          <div className="space-y-space-3">
             <button onClick={async () => {
           if (!(await confirm({
             title: "Archive organization",
@@ -218,23 +231,17 @@ export function OrgTab({
           } catch (err: unknown) {
             toast.error(err instanceof Error ? err.message : "Failed to archive organization");
           }
-        }} className="px-3 py-1.5 text-sm border border-[var(--border-default)] rounded-lg hover:bg-[var(--bg-tertiary)] flex items-center gap-1.5 text-[var(--text-primary)]">
+        }} className="px-space-3 py-space-2 text-sm border border-[var(--error)]/40 rounded-lg hover:bg-[var(--error-dim)] flex items-center gap-space-2 text-[var(--error)]">
               <Archive className="w-4 h-4" />
               Archive
             </button>
-            <DataExportPanel orgId={org.id} canExport={true} />
-          </div>
-        </SettingsCard>}
-
-      {isOwner && <DangerZone title="Permanent actions" description={isPersonal ? "Deleting a personal workspace is irreversible." : "Deleting or transferring an organization is irreversible. Make sure all admins have a backup plan."}>
-          <div className="space-y-3">
-            {!isPersonal && <>
-            <button onClick={toggleTransfer} className="px-3 py-1.5 text-sm border border-[var(--error)]/40 rounded-lg hover:bg-[var(--error-dim)] flex items-center gap-1.5 text-[var(--error)]">
+            {isOwner && !isPersonal && <>
+            <button onClick={toggleTransfer} className="px-space-3 py-space-2 text-sm border border-[var(--error)]/40 rounded-lg hover:bg-[var(--error-dim)] flex items-center gap-space-2 text-[var(--error)]">
               <RefreshCw className={cn("w-4 h-4", isTransferExpanded && "animate-spin")} />
               Transfer Ownership
             </button>
             {isTransferExpanded && <Card padding="md">
-                {loadingMembers ? <div className="flex items-center justify-center py-8">
+                {loadingMembers ? <div className="flex items-center justify-center py-space-8">
                     <Loader2 className="w-6 h-6 animate-spin text-[var(--text-muted)]" />
                   </div> : membersError ? (
                   <ErrorState
@@ -254,12 +261,12 @@ export function OrgTab({
                     }
                   />
                 ) : members.length > 0 ? <>
-                    <p className="text-sm text-[var(--text-secondary)] mb-3">
+                    <p className="text-sm text-[var(--text-secondary)] mb-space-3">
                       Select a member to transfer ownership to. You will become an admin after the transfer.
                     </p>
-                    <div className="space-y-2">
-                      {members.map(m => <div key={m.user_id} className="flex items-center justify-between p-3 bg-[var(--bg-tertiary)] rounded-lg">
-                          <div className="flex items-center gap-3">
+                    <div className="space-y-space-2">
+                      {members.map(m => <div key={m.user_id} className="flex items-center justify-between p-space-3 bg-[var(--bg-tertiary)] rounded-lg">
+                          <div className="flex items-center gap-space-3">
                             <div className="w-8 h-8 bg-[var(--accent-faint)] rounded-full flex items-center justify-center">
                               <span className="text-[var(--accent)] font-medium text-sm">
                                 {m.name.charAt(0).toUpperCase()}
@@ -272,7 +279,7 @@ export function OrgTab({
                               <p className="text-xs text-[var(--text-secondary)]">{m.email}</p>
                             </div>
                           </div>
-                          <button onClick={() => setSelectedMember(m)} className="px-3 py-1.5 text-sm bg-[var(--warning-bg)] text-[var(--warning)] rounded-lg hover:opacity-90">
+                          <button onClick={() => setSelectedMember(m)} className="px-space-3 py-space-2 text-sm bg-[var(--warning-bg)] text-[var(--warning)] rounded-lg hover:opacity-90">
                             Transfer
                           </button>
                         </div>)}
@@ -283,11 +290,13 @@ export function OrgTab({
               </Card>}
             </>}
 
-            <div className={cn(!isPersonal && "pt-3 border-t border-[var(--error)]/20")}>
+            {isOwner && (
+            <div className="pt-space-3 border-t border-[var(--error)]/20">
               <DeleteOrgDialog orgId={org.id} orgName={org.name} onDeleted={async () => {
             await refreshOrgs();
           }} />
             </div>
+            )}
           </div>
         </DangerZone>}
 

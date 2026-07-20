@@ -16,6 +16,7 @@ import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 // list endpoint is offline; the server still validates on write.
 // ────────────────────────────────────────────────────────────────────
 import { Card } from "@/components/ui/card";
+import { Panel } from "@/components/ui/panel";
 import { IntegrationStatusBanners } from "@/components/integration-status-banners";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorState } from "@/components/ui/error-state";
@@ -247,19 +248,19 @@ export function ExportsTab({
           </button>
         </div>
   }];
-  return <div className="space-y-6">
+  return <div className="space-y-space-6">
       <IntegrationStatusBanners integration="exports" orgId={orgId} />
 
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-lg font-semibold flex items-center gap-2">
-            <FileArchive className="w-5 h-5 text-[var(--text-muted)]" />
-            Exports
+          <h2 className="text-sm font-semibold flex items-center gap-space-2 text-[var(--text-primary)]">
+            <FileArchive className="w-4 h-4 text-[var(--text-muted)]" />
+            Destinations & jobs
           </h2>
-          <p className="text-sm text-[var(--text-secondary)] mt-1">
-            Stream your observability data into S3 or GCS for long-term analysis. One-shot
-            or recurring schedules, three formats (CSV, Parquet, JSONL).
+          <p className="text-sm text-[var(--text-secondary)] mt-space-1">
+            Stream observability data into S3 or GCS. One-shot or recurring schedules;
+            CSV, Parquet, or JSONL.
           </p>
         </div>
       </div>
@@ -289,10 +290,10 @@ export function ExportsTab({
             <Cloud className="w-4 h-4 text-[var(--text-muted)]" />
             Destinations
           </h3>
-          <button onClick={() => setShowDestForm(v => !v)} className="px-3 py-1.5 bg-[var(--accent)] text-[var(--bg-base)] rounded-lg text-sm font-medium hover:opacity-90 flex items-center gap-1.5">
+          <Button variant="default" className="min-h-11" onClick={() => setShowDestForm(v => !v)}>
             <Plus className="w-4 h-4" />
             {showDestForm ? "Cancel" : "Add destination"}
-          </button>
+          </Button>
         </div>
 
         {showDestForm && <DestinationForm orgId={orgId} onSaved={async () => {
@@ -310,14 +311,14 @@ export function ExportsTab({
           <EmptyState
             icon={Cloud}
             title="No destinations yet"
-            description="Add an S3 or GCS bucket to start exporting."
+            description="Add an S3 or GCS bucket as an export destination."
             size="sm"
           />
         ) : <Card padding="lg" className="overflow-hidden">
             <DataTable columns={destColumns} rows={destinations} rowKey={d => d.destination_id} defaultSort={{
           key: "name",
           direction: "asc"
-        }} emptyTitle="No destinations yet" emptyDescription="Add an S3 or GCS bucket to start exporting." emptyIcon={Cloud} pageSize={25} />
+        }} emptyTitle="No destinations yet" emptyDescription="Add an S3 or GCS bucket as an export destination." emptyIcon={Cloud} pageSize={25} />
           </Card>}
       </section>}
 
@@ -328,10 +329,16 @@ export function ExportsTab({
             <Calendar className="w-4 h-4 text-[var(--text-muted)]" />
             Schedules
           </h3>
-          <button onClick={() => setShowSchedForm(v => !v)} className="px-3 py-1.5 bg-[var(--accent)] text-[var(--bg-base)] rounded-lg text-sm font-medium hover:opacity-90 flex items-center gap-1.5" disabled={destinations.length === 0} title={destinations.length === 0 ? "Add a destination first" : ""}>
+          <Button
+            variant="default"
+            className="min-h-11"
+            onClick={() => setShowSchedForm(v => !v)}
+            disabled={destinations.length === 0}
+            title={destinations.length === 0 ? "Add a destination first" : ""}
+          >
             <Plus className="w-4 h-4" />
             {showSchedForm ? "Cancel" : "New schedule"}
-          </button>
+          </Button>
         </div>
 
         {showSchedForm && <ScheduleForm orgId={orgId} destinations={destinations} onSaved={async () => {
@@ -349,14 +356,14 @@ export function ExportsTab({
           <EmptyState
             icon={Calendar}
             title="No schedules yet"
-            description="Recurring or one-shot, you decide."
+            description="No schedules yet. Add a recurring or one-shot export after a destination exists."
             size="sm"
           />
         ) : <Card padding="lg" className="overflow-hidden">
             <DataTable columns={schedColumns} rows={schedules} rowKey={s => s.schedule_id} defaultSort={{
           key: "last_run_at",
           direction: "desc"
-        }} emptyTitle="No schedules yet" emptyDescription="Recurring or one-shot, you decide." emptyIcon={Calendar} pageSize={25} />
+        }} emptyTitle="No schedules yet" emptyDescription="No schedules yet. Add a recurring or one-shot export after a destination exists." emptyIcon={Calendar} pageSize={25} />
           </Card>}
       </section>}
 
@@ -418,7 +425,7 @@ function DestinationForm({
       setSaving(false);
     }
   }
-  return <Card padding="md" className="mb-4 space-y-3">
+  return <Panel tone="inset" padding="md" className="mb-space-4 space-y-space-3">
       <h4 className="text-sm font-semibold">New destination</h4>
       {err && <div className="p-2 bg-[var(--error-bg)] rounded text-xs text-[var(--error)]">{err}</div>}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -473,12 +480,18 @@ function DestinationForm({
         <button onClick={onCancel} className="px-3 py-1.5 text-sm hover:bg-[var(--bg-tertiary)] rounded-lg">
           Cancel
         </button>
-        <button onClick={handleSave} disabled={saving || !name.trim() || !bucket.trim()} className="px-3 py-1.5 bg-[var(--accent)] text-[var(--bg-base)] rounded-lg text-sm font-medium hover:opacity-90 disabled:opacity-50 flex items-center gap-1.5">
-          {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Database className="w-3.5 h-3.5" />}
+        <Button
+          variant="default"
+          className="min-h-11"
+          onClick={handleSave}
+          disabled={!name.trim() || !bucket.trim()}
+          loading={saving}
+        >
+          <Database className="w-3.5 h-3.5" />
           Save destination
-        </button>
+        </Button>
       </div>
-    </Card>;
+    </Panel>;
 }
 
 // ────────────────────────────────────────────────────────────────────
@@ -520,7 +533,7 @@ function ScheduleForm({
       setSaving(false);
     }
   }
-  return <Card padding="md" className="mb-4 space-y-3">
+  return <Panel tone="inset" padding="md" className="mb-space-4 space-y-space-3">
       <h4 className="text-sm font-semibold">New schedule</h4>
       {err && <div className="p-2 bg-[var(--error-bg)] rounded text-xs text-[var(--error)]">{err}</div>}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -561,12 +574,12 @@ function ScheduleForm({
         <button onClick={onCancel} className="px-3 py-1.5 text-sm hover:bg-[var(--bg-tertiary)] rounded-lg">
           Cancel
         </button>
-        <button onClick={handleSave} disabled={saving} className="px-3 py-1.5 bg-[var(--accent)] text-[var(--bg-base)] rounded-lg text-sm font-medium hover:opacity-90 disabled:opacity-50 flex items-center gap-1.5">
-          {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Calendar className="w-3.5 h-3.5" />}
+        <Button variant="default" className="min-h-11" onClick={handleSave} loading={saving}>
+          <Calendar className="w-3.5 h-3.5" />
           Create schedule
-        </button>
+        </Button>
       </div>
-    </Card>;
+    </Panel>;
 }
 
 // ────────────────────────────────────────────────────────────────────
@@ -595,12 +608,12 @@ function LegacyExportFallback({
       setLoading(false);
     }
   }
-  return <Card padding="md">
-      <div className="flex items-center gap-2 mb-2">
+  return <Panel tone="inset" padding="md">
+      <div className="flex items-center gap-space-2 mb-space-2">
         <FileArchive className="w-4 h-4 text-[var(--text-muted)]" />
         <h3 className="text-sm font-semibold">Legacy GDPR ZIP</h3>
       </div>
-      <p className="text-xs text-[var(--text-secondary)] mb-3">
+      <p className="text-xs text-[var(--text-secondary)] mb-space-3">
         One-shot ZIP of all org data (members, references, jobs, audit log, settings).
         Use the destinations above for incremental exports.
       </p>
@@ -613,5 +626,5 @@ function LegacyExportFallback({
         {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
         Download ZIP
       </button>
-    </Card>;
+    </Panel>;
 }

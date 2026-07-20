@@ -11,6 +11,7 @@ import { PageHeader } from "@/components/layout/page-header";
 import { PageContent } from "@/components/layout/page-content";
 import { useToast } from "@/components/ui/toast";
 import { ErrorState } from "@/components/ui/error-state";
+import { FormField } from "@/components/ui/form-field";
 import { LoadingSkeleton } from "@/components/ui/skeleton";
 import { useConfirm } from "@/hooks/use-confirm";
 import { TwoFASetupDialog } from "../settings/_components/2fa-setup-dialog";
@@ -194,14 +195,14 @@ export default function ProfilePage() {
   return <PageContent size="narrow">
       <PageHeader eyebrow="Account" title="Profile" subtitle="Manage your account settings, security, and authentication." icon={User} />
 
-      <IntegrationStatusBanners integration="storage" className="mb-6" />
+      <IntegrationStatusBanners integration="storage" className="mb-space-6" />
 
-      {/* User Info Section */}
-      <div className="bg-[var(--bg-primary)] rounded-lg border border-[var(--border)] p-6 mb-6">
-        <h2 className="text-lg font-semibold text-[var(--text-primary)] mb-4">User Information</h2>
+      {/* User Info Section — hairline panel, not nested Card chrome */}
+      <section className="mb-space-6 space-y-space-6 border-b border-[var(--border-subtle)] pb-space-6" data-testid="profile-user-section">
+        <h2 className="text-sm font-semibold text-[var(--text-primary)]">User information</h2>
 
         {/* Avatar Upload */}
-        <div className="flex items-center gap-4 mb-6">
+        <div className="flex items-center gap-space-4">
           <div className="relative">
             <div className="user-avatar w-20 h-20 rounded-full flex items-center justify-center text-2xl overflow-hidden bg-[var(--bg-tertiary)]">
               {avatarUrl ? (
@@ -228,23 +229,19 @@ export default function ProfilePage() {
           </div>
         </div>
 
-        {/* Name Input */}
-        <div className="space-y-4">
-          <div>
-            <label htmlFor="profile-name" className="block text-sm font-medium text-[var(--text-secondary)] mb-1">
-              Name
-            </label>
+        <div className="space-y-space-4">
+          <FormField label="Name" htmlFor="profile-name">
             <div className="relative">
               <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-muted)]" aria-hidden />
               <input id="profile-name" type="text" value={name} onChange={e => setName(e.target.value)} className="w-full pl-10 pr-3 py-2 rounded-lg border border-[var(--border)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/40" />
             </div>
-          </div>
+          </FormField>
 
-          {/* Email — read-only; updateProfile only accepts name/avatar_url */}
-          <div>
-            <label htmlFor="profile-email" className="block text-sm font-medium text-[var(--text-secondary)] mb-1">
-              Email
-            </label>
+          <FormField
+            label="Email"
+            htmlFor="profile-email"
+            description="Email cannot be changed from this page."
+          >
             <div className="relative">
               <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-muted)]" aria-hidden />
               <input
@@ -256,21 +253,16 @@ export default function ProfilePage() {
                 className="w-full pl-10 pr-3 py-2 rounded-lg border border-[var(--border)] bg-[var(--bg-muted)] text-[var(--text-secondary)] cursor-default"
               />
             </div>
-            <p className="mt-1 text-xs text-[var(--text-muted)]">
-              Email cannot be changed from this page.
-            </p>
-          </div>
+          </FormField>
 
-          {/* User ID (read-only) */}
           <div>
-            <p className="block text-sm font-medium text-[var(--text-secondary)] mb-1">User ID</p>
-            <p aria-label={`User ID ${user.user_id}`} className="text-sm text-[var(--text-primary)] font-mono bg-[var(--bg-muted)] px-3 py-2 rounded-lg inline-block">
+            <p className="block text-sm font-medium text-[var(--text-secondary)] mb-space-1">User ID</p>
+            <p aria-label={`User ID ${user.user_id}`} className="text-sm text-[var(--text-primary)] font-mono bg-[var(--bg-muted)] px-space-3 py-space-2 rounded-lg inline-block">
               {user.user_id}
             </p>
           </div>
 
-          {/* Save Button */}
-          <div className="pt-2">
+          <div className="pt-space-2">
             <Button onClick={handleSaveProfile} disabled={saving || !name.trim()} loading={saving}>
               {saveSuccess ? <>
                   <Check className="w-4 h-4" aria-hidden />
@@ -279,7 +271,7 @@ export default function ProfilePage() {
             </Button>
           </div>
         </div>
-      </div>
+      </section>
 
       {/* Password Change Section */}
       <div className="bg-[var(--bg-primary)] rounded-lg border border-[var(--border)] p-6 mb-6">

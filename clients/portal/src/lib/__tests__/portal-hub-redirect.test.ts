@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import { buildHubRedirectUrl } from "@/lib/portal-hub-redirect";
-import { isOnboardingWizardPath } from "@/lib/onboarding-progress";
 import { datasetHref } from "@/lib/portal-cross-links";
 
 describe("portal hub redirect merge", () => {
@@ -25,12 +24,38 @@ describe("portal hub redirect merge", () => {
       "/evals?tab=playgrounds",
     );
   });
-});
 
-describe("onboarding wizard path", () => {
-  it("returns false for improvement-loop (keeps chrome)", () => {
-    expect(isOnboardingWizardPath("/onboarding/improvement-loop")).toBe(false);
-    expect(isOnboardingWizardPath("/onboarding")).toBe(false);
+  it("soft-nests observability facets under traces with query merge", () => {
+    expect(buildHubRedirectUrl("/observability/mcp", "?filter=auth")).toBe(
+      "/traces?filter=auth&facet=mcp",
+    );
+    expect(
+      buildHubRedirectUrl("/observability/decisions", "?pastHours=24"),
+    ).toBe("/traces?pastHours=24&facet=decisions");
+    expect(buildHubRedirectUrl("/observability/memory", "")).toBe(
+      "/traces?facet=memory",
+    );
+    expect(buildHubRedirectUrl("/observability/retrieval", "")).toBe(
+      "/traces?facet=retrieval",
+    );
+  });
+
+  it("soft-nests time-travel and cohorts under traces views", () => {
+    expect(
+      buildHubRedirectUrl("/observability/time-travel", "?filter=x"),
+    ).toBe("/traces?filter=x&view=time-travel");
+    expect(buildHubRedirectUrl("/observability/cohorts", "")).toBe(
+      "/traces?view=cohorts",
+    );
+  });
+
+  it("does not overwrite an explicit facet or view on observability nests", () => {
+    expect(
+      buildHubRedirectUrl("/observability/mcp", "?facet=decisions"),
+    ).toBe("/traces?facet=decisions");
+    expect(
+      buildHubRedirectUrl("/observability/cohorts", "?view=query"),
+    ).toBe("/traces?view=query");
   });
 });
 

@@ -50,7 +50,7 @@ export function PageHeader({
   if (hideChrome) {
     if (!actions) return null;
     return (
-      <div className={cn("mb-3 flex flex-wrap items-center justify-end gap-2", className)}>
+      <div className={cn("mb-space-3 flex flex-wrap items-center justify-end gap-space-2", className)}>
         {actions}
       </div>
     );
@@ -60,27 +60,27 @@ export function PageHeader({
     // Compact title row — location lives in AppShell breadcrumbs;
     // this is page identity + actions only. Actions wrap below on
     // narrow viewports instead of overflowing horizontally.
-    <div className={cn("flex flex-col sm:flex-row sm:items-start justify-between gap-3 mb-4", className)}>
-      <div className="min-w-0 flex items-start gap-2.5">
+    <div className={cn("flex flex-col sm:flex-row sm:items-start justify-between gap-space-3 mb-space-4", className)}>
+      <div className="min-w-0 flex items-start gap-space-3">
         {Icon && (
           <Icon
-            className="mt-0.5 w-4 h-4 shrink-0 text-[var(--text-muted)]"
+            className="mt-space-1 w-4 h-4 shrink-0 text-[var(--text-muted)]"
             aria-hidden
           />
         )}
         <div className="min-w-0">
           {greeting && (
-            <p className="text-xs text-[var(--text-secondary)] mb-1 leading-relaxed">
+            <p className="text-xs text-[var(--text-secondary)] mb-space-1 leading-relaxed">
               {greeting}
             </p>
           )}
           {eyebrow && (
-            <p className="text-[10px] font-mono font-semibold uppercase tracking-widest text-[var(--text-muted)] mb-1">
+            <p className="text-2xs font-mono font-semibold uppercase tracking-widest text-[var(--text-muted)] mb-space-1">
               {eyebrow}
             </p>
           )}
-          <div className="flex items-center gap-1.5">
-            <h1 className="text-xl lg:text-2xl font-semibold text-[var(--text-primary)] tracking-tight">
+          <div className="flex items-center gap-space-2">
+            <h1 className="text-xl lg:text-2xl font-semibold text-[var(--text-primary)] tracking-tight leading-tight">
               {title}
             </h1>
             {description && (
@@ -96,7 +96,7 @@ export function PageHeader({
                 </TooltipTrigger>
                 <TooltipContent side="right" sideOffset={6} className="max-w-[280px]">
                   <div className="font-medium text-[var(--text-primary)]">About this page</div>
-                  <div className="mt-0.5 text-xs text-[var(--text-secondary)] leading-snug">
+                  <div className="mt-space-1 text-xs text-[var(--text-secondary)] leading-snug">
                     {description}
                   </div>
                 </TooltipContent>
@@ -104,11 +104,11 @@ export function PageHeader({
             )}
           </div>
           {subtitle && (
-            <p className="text-sm text-[var(--text-muted)] mt-0.5">{subtitle}</p>
+            <p className="text-sm text-[var(--text-muted)] mt-space-1">{subtitle}</p>
           )}
         </div>
       </div>
-      {actions && <div className="flex flex-wrap items-center gap-2 shrink-0">{actions}</div>}
+      {actions && <div className="flex flex-wrap items-center gap-space-2 shrink-0">{actions}</div>}
     </div>
   );
 }

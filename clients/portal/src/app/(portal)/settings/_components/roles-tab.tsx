@@ -37,6 +37,7 @@ import { PermissionGate } from "@/components/settings/permission-gate";
 import { NoOrgState } from "@/components/ui/no-org-state";
 import { Button } from "@/components/ui/button";
 import { ErrorState } from "@/components/ui/error-state";
+import { LoadingSkeleton } from "@/components/ui/skeleton";
 import { errorFromCaught } from "@/lib/safe-error-message";
 
 // Built-in permission keys. The full set lives in
@@ -197,15 +198,11 @@ export default function RolesTab() {
   }
 
   if (loading && !roles) {
-    return (
-      <div className="flex items-center justify-center py-20">
-        <Loader2 className="w-6 h-6 animate-spin text-[var(--accent)]" />
-      </div>
-    );
+    return <LoadingSkeleton variant="table" lines={4} />;
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-space-6">
       <div className="flex items-start justify-between">
         <div>
           <h3 className="text-lg font-semibold text-[var(--text-primary)] flex items-center gap-2">
@@ -219,13 +216,10 @@ export default function RolesTab() {
             can be org-wide or scoped to a single resource.
           </p>
         </div>
-        <button
-          onClick={() => setShowCreate(true)}
-          className="inline-flex items-center gap-2 px-4 py-2 bg-[var(--accent)] text-[var(--bg-base)] rounded-lg text-sm font-medium hover:bg-[var(--accent-hover)]"
-        >
+        <Button variant="default" className="min-h-11" onClick={() => setShowCreate(true)}>
           <Plus className="w-4 h-4" />
           New role
-        </button>
+        </Button>
       </div>
 
       {displayError && (
@@ -261,7 +255,7 @@ export default function RolesTab() {
       )}
 
       {!displayError && roles && roles.length > 0 && (
-        <div className="space-y-2">
+        <div className="space-y-space-2">
           {roles.map((role) => (
             <RoleRow
               key={role.id}
@@ -462,7 +456,7 @@ function CreateRoleForm({
         </button>
       </div>
 
-      <div className="space-y-3">
+      <div className="space-y-space-3">
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className="block text-xs font-medium text-[var(--text-muted)] mb-1">
@@ -511,7 +505,7 @@ function CreateRoleForm({
           <label className="block text-xs font-medium text-[var(--text-muted)] mb-2">
             Additional permissions (on top of the base role)
           </label>
-          <div className="space-y-2">
+          <div className="space-y-space-2">
             {PERMISSION_PRESETS.map((preset) => (
               <div key={preset.category}>
                 <div className="text-xs font-medium text-[var(--text-secondary)] mb-1">
@@ -547,7 +541,9 @@ function CreateRoleForm({
         >
           Cancel
         </button>
-        <button
+        <Button
+          variant="default"
+          className="min-h-11"
           onClick={() =>
             onSubmit({
               name: name.trim(),
@@ -556,10 +552,9 @@ function CreateRoleForm({
               permissions: Array.from(selected) })
           }
           disabled={!name.trim()}
-          className="px-4 py-2 bg-[var(--accent)] text-[var(--bg-base)] rounded-lg text-sm font-medium hover:bg-[var(--accent-hover)] disabled:opacity-50"
         >
           Create role
-        </button>
+        </Button>
       </div>
     </div>
   );

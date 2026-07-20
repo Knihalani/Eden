@@ -32,14 +32,17 @@ import {
 
 export function TokenUsageChart({
   data,
+  height = 340,
 }: {
   data: Array<{ date: string; input_tokens: number; output_tokens: number }>;
+  /** Primary overview chart is taller than secondary panels. */
+  height?: number;
 }) {
   return (
     <ChartCard
       title="Token usage trends"
-      description="Input vs output tokens by day, last 30 days"
-      height={300}
+      description="Primary · input vs output tokens by day"
+      height={height}
       isEmpty={data.length === 0}
     >
       <MultiLineChart
@@ -134,14 +137,16 @@ export function MultiLineChart({
 
 export function LatencyChart({
   data,
+  height = 240,
 }: {
   data: Array<{ date: string; p50_ms: number; p95_ms: number; p99_ms: number }>;
+  height?: number;
 }) {
   return (
     <ChartCard
       title="Latency percentiles"
-      description="p50, p95, p99 over time"
-      height={300}
+      description="Secondary · p50, p95, p99 over time"
+      height={height}
       isEmpty={data.length === 0}
     >
       <ResponsiveContainer width="100%" height="100%">
@@ -235,8 +240,8 @@ export function ThroughputHeatmap({
   return (
     <ChartCard
       title="Throughput by hour of day"
-      description="Request volume · darker accent = more traffic"
-      height={300}
+      description="Secondary · request volume · darker accent = more traffic"
+      height={240}
       isEmpty={data.length === 0}
     >
       <div className="flex h-full flex-col">
@@ -275,7 +280,7 @@ export function ThroughputHeatmap({
             pageSize={10}
           />
         </div>
-        <div className="mt-2 flex items-center justify-end gap-1 text-[10px] text-[var(--text-muted)]">
+        <div className="mt-2 flex items-center justify-end gap-1 text-2xs text-[var(--text-muted)]">
           <span>Low</span>
           <div className="flex h-2 w-32 overflow-hidden rounded">
             {Array.from({ length: 16 }).map((_, i) => (
@@ -297,6 +302,7 @@ export function ThroughputHeatmap({
 
 export function TopAgentsChart({
   data,
+  height = 240,
 }: {
   data: Array<{
     agent: string;
@@ -304,12 +310,13 @@ export function TopAgentsChart({
     requests: number;
     avg_latency_ms: number;
   }>;
+  height?: number;
 }) {
   return (
     <ChartCard
       title="Top agents by cost"
-      description="All-time cumulative across tracked agents"
-      height={300}
+      description="Secondary · spend by agent"
+      height={height}
       isEmpty={data.length === 0}
     >
       <ResponsiveContainer width="100%" height="100%">
@@ -378,16 +385,16 @@ export default function OverviewCharts({
   topAgents,
 }: OverviewChartsProps) {
   return (
-    <>
+    <div className="space-y-6" data-testid="analytics-chart-hierarchy">
+      {/* Primary analysis chart — full width, taller */}
+      <TokenUsageChart data={tokenByDay} height={340} />
+      {/* Secondary metrics — equal weight, denser */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <TokenUsageChart data={tokenByDay} />
-        <LatencyChart data={latencyByDay} />
+        <LatencyChart data={latencyByDay} height={240} />
+        <TopAgentsChart data={topAgents} height={240} />
       </div>
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <ThroughputHeatmap data={throughput} />
-        <TopAgentsChart data={topAgents} />
-      </div>
-    </>
+      <ThroughputHeatmap data={throughput} />
+    </div>
   );
 }
 

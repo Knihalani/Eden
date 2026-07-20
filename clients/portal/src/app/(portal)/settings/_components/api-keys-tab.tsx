@@ -258,9 +258,9 @@ export function ApiKeysTab({ org }: ApiKeysTabProps) {
   ];
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-space-4">
       <SettingsCard>
-        <div className="space-y-3">
+        <div className="space-y-space-3">
           <div>
             <h3 className="text-sm font-semibold text-[var(--text-primary)]">
               SDK credentials
@@ -358,7 +358,7 @@ export function ApiKeysTab({ org }: ApiKeysTabProps) {
           )}
 
           {showCreate && (
-            <div className="space-y-4">
+            <div className="space-y-space-4">
               <h3 className="text-sm font-semibold text-[var(--text-primary)]">
                 Create new API key
               </h3>

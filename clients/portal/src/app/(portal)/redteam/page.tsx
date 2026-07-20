@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import { useOrg } from "@/hooks/use-org";
-import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { DataTable } from "@/components/ui/data-table";
@@ -15,8 +14,10 @@ import { useToast } from "@/components/ui/toast";
 import { useOrgQuery } from "@/hooks/use-api-query";
 import { queryKeys } from "@/lib/query-keys";
 import { interpretRedteamScan } from "@/lib/eval-run-outcome";
-import { Loader2, RefreshCw, ShieldAlert } from "lucide-react";
+import { RefreshCw, ShieldAlert } from "lucide-react";
 import { redteamApi } from "@/lib/api";
+import { QueryState } from "@/components/ui/query-state";
+import { EmptyState } from "@/components/ui/empty-state";
 
 export default function RedteamPage() {
   const { currentOrg } = useOrg();
@@ -81,44 +82,51 @@ export default function RedteamPage() {
       <PageHeader
         eyebrow="Safety"
         title="Red team"
-        subtitle="Adversarial probes run against your agent endpoint. Findings appear here with severity and category."
+        subtitle="Adversarial probes against your agent endpoint."
         icon={ShieldAlert}
         actions={
           <Button
             onClick={() => refetch()}
             variant="outline"
-            size="sm"
+            className="min-h-11"
             disabled={loading}
             loading={loading}
             aria-label="Refresh findings"
           >
-            <RefreshCw className="h-3.5 w-3.5" /> Refresh
+            <RefreshCw className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">Refresh</span>
           </Button>
         }
       />
 
-      <Card className="p-4">
-        <div className="flex flex-col sm:flex-row gap-2">
-          <Input
-            placeholder="Target endpoint URL (POST JSON { prompt })"
-            value={targetEndpoint}
-            onChange={(e) => setTargetEndpoint(e.target.value)}
-            className="flex-1 min-h-[44px]"
-            aria-label="Target endpoint URL"
-            disabled={submitting}
-          />
+      <div className="mb-space-4 border-y border-[var(--border-subtle)] py-space-4">
+        <div className="flex flex-col gap-space-3 sm:flex-row sm:items-end">
+          <div className="w-full flex-1 space-y-space-1">
+            <label htmlFor="redteam-endpoint" className="block text-xs font-medium text-[var(--text-muted)]">
+              Target endpoint
+            </label>
+            <Input
+              id="redteam-endpoint"
+              placeholder="Target endpoint URL (POST JSON { prompt })"
+              value={targetEndpoint}
+              onChange={(e) => setTargetEndpoint(e.target.value)}
+              className="min-h-11 flex-1"
+              aria-label="Target endpoint URL"
+              disabled={submitting}
+            />
+          </div>
           <Button
             onClick={submit}
-            disabled={!targetEndpoint.trim() || submitting}
+            disabled={!targetEndpoint.trim()}
             loading={submitting}
-            className="min-h-[44px]"
+            className="min-h-11"
             aria-label="Run red team scan"
           >
-            {submitting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ShieldAlert className="h-3.5 w-3.5" />}
-            {submitting ? "Running…" : "Run scan"}
+            <ShieldAlert className="h-3.5 w-3.5" />
+            Run scan
           </Button>
         </div>
-      </Card>
+      </div>
 
       {scanError ? (
         <ErrorState
@@ -128,7 +136,7 @@ export default function RedteamPage() {
             <Button
               onClick={() => setScanError(null)}
               variant="outline"
-              size="sm"
+              className="min-h-11"
             >
               Dismiss
             </Button>
@@ -136,45 +144,61 @@ export default function RedteamPage() {
         />
       ) : null}
 
-      {error ? (
-        <ErrorState
-          title="Could not load findings"
-          message={error.message}
-          action={
-            <Button onClick={() => refetch()} variant="outline" size="sm" disabled={loading}>
-              <RefreshCw className="h-3.5 w-3.5" /> Try again
-            </Button>
-          }
-        />
-      ) : (
-        <Card className="p-2">
-          <DataTable
-            loading={loading}
-            rows={findings ?? []}
-            rowKey={(r) => r.id}
-            emptyTitle="No findings"
-            emptyDescription="Run a scan against a target endpoint to surface adversarial findings."
-            emptyIcon={ShieldAlert}
-            columns={[
-              { key: "probe_name", header: "Probe", sortable: true },
-              { key: "category", header: "Category", sortable: true },
-              { key: "severity", header: "Severity", sortable: true, cell: (r) => <SeverityBadge severity={r.severity} /> },
-              {
-                key: "attack_prompt",
-                header: "Probe prompt",
-                cell: (r) => (
-                  <span className="font-mono text-xs">
-                    {r.attack_prompt.slice(0, 80)}
-                    {r.attack_prompt.length > 80 ? "…" : ""}
-                  </span>
-                ),
-              },
-              { key: "created_at", header: "Found", sortable: true, cell: (r) => new Date(r.created_at).toLocaleString() },
-            ]}
+      <QueryState
+        loading={loading && !findings}
+        error={error}
+        data={findings ?? []}
+        onRetry={() => void refetch()}
+        errorTitle="Could not load findings"
+        isEmpty={(rows) => rows.length === 0}
+        emptySlot={
+          <EmptyState
+            icon={ShieldAlert}
+            title="No findings"
+            description="Run a scan against a target endpoint to surface adversarial findings."
+            variant="plain"
           />
-        </Card>
-      )}
-    
+        }
+      >
+        {(rows) => (
+          <div className="border-y border-[var(--border-subtle)] py-space-2">
+            <DataTable
+              loading={loading}
+              rows={rows}
+              rowKey={(r) => r.id}
+              emptyTitle="No findings"
+              emptyDescription="Run a scan against a target endpoint to surface adversarial findings."
+              emptyIcon={ShieldAlert}
+              columns={[
+                { key: "probe_name", header: "Probe", sortable: true },
+                { key: "category", header: "Category", sortable: true },
+                {
+                  key: "severity",
+                  header: "Severity",
+                  sortable: true,
+                  cell: (r) => <SeverityBadge severity={r.severity} />,
+                },
+                {
+                  key: "attack_prompt",
+                  header: "Probe prompt",
+                  cell: (r) => (
+                    <span className="font-mono text-xs">
+                      {r.attack_prompt.slice(0, 80)}
+                      {r.attack_prompt.length > 80 ? "…" : ""}
+                    </span>
+                  ),
+                },
+                {
+                  key: "created_at",
+                  header: "Found",
+                  sortable: true,
+                  cell: (r) => new Date(r.created_at).toLocaleString(),
+                },
+              ]}
+            />
+          </div>
+        )}
+      </QueryState>
     </PageContent>
   );
 }

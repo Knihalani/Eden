@@ -135,26 +135,26 @@ export function AuthBrandPanel() {
       <div className="auth-grid-overlay" aria-hidden="true" />
 
       {/* Content */}
-      <div className="relative z-10 flex flex-col justify-between min-h-screen px-10 lg:px-14 py-10">
+      <div className="relative z-10 flex flex-col justify-between min-h-screen px-space-7 lg:px-14 py-space-7">
         {/* Top: logo */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-space-3">
           <Logo size="lg" showWordmark priority href={null} />
         </div>
 
         {/* Middle: hero + pipeline + features */}
-        <div className="flex flex-col gap-10 max-w-lg">
+        <div className="flex flex-col gap-space-7 max-w-lg">
           {/* Hero */}
           <div>
-            <p className="mb-5 font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--accent)]">
+            <p className="mb-space-5 font-mono text-2xs font-semibold uppercase tracking-[0.18em] text-[var(--accent)]">
               {PRODUCT_TAGLINE}
             </p>
 
-            <p className="auth-hero-line mb-4">
+            <p className="auth-hero-line mb-space-4">
               Capture. Analyse.{" "}
               <span className="text-[var(--accent)]">Improve.</span>
             </p>
 
-            <p className="text-[15px] text-[var(--text-secondary)] leading-relaxed max-w-md">
+            <p className="text-base text-[var(--text-secondary)] leading-relaxed max-w-md">
               Every LLM call through Eden&apos;s gateway, every trace queryable in your
               workspace, every regression turned into a reviewable patch via{" "}
               <CodeChip size="md">trace_8a3f</CodeChip>
@@ -163,19 +163,19 @@ export function AuthBrandPanel() {
           </div>
 
           {/* Closed-loop pipeline visualizer */}
-          <div className="flex flex-col gap-3">
-            <p className="text-[10px] font-mono tracking-[0.18em] uppercase text-[var(--text-muted)]">
+          <div className="flex flex-col gap-space-3">
+            <p className="text-2xs font-mono tracking-[0.18em] uppercase text-[var(--text-muted)]">
               The closed loop
             </p>
-            <div className="flex items-center gap-2 flex-wrap">
+            <div className="flex items-center gap-space-2 flex-wrap">
               {PIPELINE.map((node, i) => (
-                <div key={node.id} className="flex items-center gap-2">
-                  <div className="flex items-center gap-2">
+                <div key={node.id} className="flex items-center gap-space-2">
+                  <div className="flex items-center gap-space-2">
                     <span
                       className="auth-pipeline-dot"
                       style={{ background: node.color }}
                     />
-                    <span className="text-[12px] font-mono text-[var(--text-primary)]">
+                    <span className="text-xs font-mono text-[var(--text-primary)]">
                       {node.label}
                     </span>
                   </div>
@@ -191,11 +191,11 @@ export function AuthBrandPanel() {
           </div>
 
           {/* Feature list */}
-          <ul className="flex flex-col gap-2.5">
+          <ul className="flex flex-col gap-space-3">
             {FEATURES.map(({ icon: Icon, text }) => (
               <li
                 key={text}
-                className="flex items-center gap-3 text-[13.5px] text-[var(--text-secondary)]"
+                className="flex items-center gap-space-3 text-sm text-[var(--text-secondary)]"
               >
                 <span className="auth-feature-icon shrink-0">
                   <Icon className="w-3.5 h-3.5" strokeWidth={2.25} />
@@ -207,11 +207,11 @@ export function AuthBrandPanel() {
         </div>
 
         {/* Bottom: status badge + footer */}
-        <div className="flex flex-col gap-5">
+        <div className="flex flex-col gap-space-5">
           <div
             role="status"
             aria-live="polite"
-            className="inline-flex items-center gap-2 self-start px-2.5 py-1 rounded-full border text-[11px] font-mono"
+            className="inline-flex items-center gap-space-2 self-start px-space-3 py-space-1 rounded-full border text-xs font-mono"
             style={{
               background: `color-mix(in srgb, ${statusColor} 10%, transparent)`,
               borderColor: `color-mix(in srgb, ${statusColor} 25%, transparent)`,
@@ -233,11 +233,11 @@ export function AuthBrandPanel() {
             {STATUS_LABEL[health]}
           </div>
 
-          <div className="flex items-center justify-between gap-4 flex-wrap">
-            <p className="text-[11px] text-[var(--text-muted)] font-mono">
+          <div className="flex items-center justify-between gap-space-4 flex-wrap">
+            <p className="text-xs text-[var(--text-muted)] font-mono">
               © {new Date().getFullYear()} Eden · {PRODUCT_VERSION}
             </p>
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-space-4">
               {FOOTER_LINKS.map((link) =>
                 link.external ? (
                   <a
@@ -245,7 +245,7 @@ export function AuthBrandPanel() {
                     href={link.href}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-[11px] text-[var(--text-muted)] hover:text-[var(--text-secondary)] transition-colors"
+                    className="text-xs text-[var(--text-muted)] hover:text-[var(--text-secondary)] transition-colors"
                   >
                     {link.label}
                   </a>
@@ -253,7 +253,7 @@ export function AuthBrandPanel() {
                   <Link
                     key={link.href}
                     href={link.href}
-                    className="text-[11px] text-[var(--text-muted)] hover:text-[var(--text-secondary)] transition-colors"
+                    className="text-xs text-[var(--text-muted)] hover:text-[var(--text-secondary)] transition-colors"
                   >
                     {link.label}
                   </Link>

@@ -5,32 +5,37 @@ import { Slot } from "@radix-ui/react-slot";
 import { cva, type VariantProps } from "class-variance-authority";
 import { Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { FOCUS_RING_CLASS } from "./focus-ring";
 
 const buttonVariants = cva(
-  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-lg text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0",
+  cn(
+    "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-lg text-sm font-medium transition-colors disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0",
+    FOCUS_RING_CLASS,
+  ),
   {
     variants: {
       variant: {
         default:
-          "bg-[var(--accent)] text-[var(--bg-primary)] hover:bg-[var(--accent-hover)] focus:ring-[var(--accent)]",
+          "bg-[var(--accent)] text-[var(--bg-primary)] hover:bg-[var(--accent-hover)]",
         destructive:
-          "bg-[var(--error)] text-[var(--bg-primary)] hover:bg-[var(--error)]/90 focus:ring-[var(--error)]",
+          "bg-[var(--error)] text-[var(--bg-primary)] hover:bg-[var(--error)]/90",
         outline:
           "border border-[var(--border)] bg-transparent hover:bg-[var(--accent-bg)] hover:text-[var(--accent)]",
         ghost: "hover:bg-[var(--accent-bg)] hover:text-[var(--accent)]",
         secondary:
-          "bg-[var(--primary)] text-[var(--bg-primary)] hover:bg-[var(--primary-hover)] focus:ring-[var(--primary)]",
+          "bg-[var(--primary)] text-[var(--bg-primary)] hover:bg-[var(--primary-hover)]",
         emerald:
-          "bg-[var(--accent-2)] text-[var(--bg-base)] hover:bg-[var(--accent-2)]/90 focus:ring-[var(--accent-2)]",
+          "bg-[var(--accent-2)] text-[var(--bg-base)] hover:bg-[var(--accent-2)]/90",
         danger:
-          "bg-[var(--error-dim)] text-[var(--error)] border border-[var(--error)]/30 hover:bg-[var(--error)]/20 focus:ring-[var(--error)]",
-        link: "text-[var(--accent)] underline-offset-4 hover:underline focus:ring-[var(--accent)]",
+          "bg-[var(--error-dim)] text-[var(--error)] border border-[var(--error)]/30 hover:bg-[var(--error)]/20",
+        link: "text-[var(--accent)] underline-offset-4 hover:underline",
       },
       size: {
-        default: "h-10 px-4 py-2",
-        sm: "h-8 px-3 text-xs",
+        default: "min-h-11 h-11 px-4 py-2",
+        // Dense secondary: compact type/padding, still ≥44px touch (W15).
+        sm: "min-h-11 h-11 px-3 text-xs",
         lg: "h-12 px-6 text-base",
-        icon: "h-10 w-10",
+        icon: "min-h-11 min-w-11 h-11 w-11",
       },
     },
     defaultVariants: {

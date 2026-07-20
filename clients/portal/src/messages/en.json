@@ -13,7 +13,21 @@
     "dpa": "DPA",
     "security": "Security",
     "subprocessors": "Subprocessors",
-    "language": "Language"
+    "language": "Language",
+    "product": "Product",
+    "resources": "Resources",
+    "legal": "Legal",
+    "locale": "Locale",
+    "documentation": "Documentation",
+    "quickstart": "Quickstart",
+    "changelog": "Changelog",
+    "apiReference": "API reference",
+    "doNotSell": "Do Not Sell My Info",
+    "pricing": "Pricing",
+    "contact": "Contact",
+    "about": "About",
+    "signup": "Sign up",
+    "signin": "Sign in"
   },
   "hero": {
     "title": "Eden — Observability + improvement for AI agents and LLM apps.",
@@ -22,6 +36,177 @@
   },
   "common": {
     "loading": "Loading…",
-    "error": "Something went wrong. Please try again."
+    "error": "Something went wrong. Please try again.",
+    "more": "More",
+    "advanced": "Advanced",
+    "default": "Default",
+    "docs": "Docs",
+    "retry": "Retry",
+    "cancel": "Cancel",
+    "save": "Save",
+    "search": "Search"
+  },
+  "portal": {
+    "mobileNav": {
+      "ariaLabel": "Mobile navigation",
+      "home": "Home",
+      "traces": "Traces",
+      "issues": "Issues",
+      "improve": "Improve",
+      "more": "More",
+      "moreTitle": "More",
+      "moreDescription": "Agents, artifacts, alerts, evals, ledger, and more.",
+      "agentsGroup": "Agents",
+      "workspaceGroup": "Workspace",
+      "accountGroup": "Account",
+      "agents": "Agents",
+      "artifacts": "Artifacts",
+      "alerts": "Alerts",
+      "evals": "Evals",
+      "ledger": "Ledger",
+      "promotions": "Promotions",
+      "debugSessions": "Debug sessions",
+      "settings": "Settings"
+    },
+    "sidebar": {
+      "home": "Home",
+      "observe": "Observe",
+      "evaluate": "Evaluate",
+      "improve": "Improve",
+      "workspace": "Workspace",
+      "traces": "Traces",
+      "agentIssues": "Agent Issues",
+      "alerts": "Alerts",
+      "agents": "Agents",
+      "analytics": "Analytics",
+      "signals": "Signals",
+      "debugSessions": "Debug sessions",
+      "evals": "Evals",
+      "artifacts": "Artifacts",
+      "ledger": "Ledger",
+      "promotions": "Promotions",
+      "cost": "Cost",
+      "guardrails": "Guardrails",
+      "prompts": "Prompts",
+      "auditTrail": "Audit trail",
+      "settings": "Settings",
+      "apiKeys": "API keys",
+      "webhookDlq": "Webhook DLQ",
+      "quickstart": "Quickstart"
+    },
+    "settings": {
+      "title": "Settings",
+      "subtitle": "Organization, API keys, security, and compliance.",
+      "sectionsAria": "Settings sections",
+      "noMatch": "No settings match “{query}”.",
+      "categories": {
+        "org": "Org",
+        "members": "Members",
+        "security": "Security",
+        "compliance": "Compliance",
+        "billing": "Billing",
+        "advanced": "Advanced"
+      },
+      "tabs": {
+        "org": "Organization",
+        "account": "Account",
+        "apiKeys": "API Keys",
+        "members": "Members",
+        "roles": "Custom Roles",
+        "references": "Code References",
+        "mcp": "MCP",
+        "security": "Security",
+        "scim": "SCIM",
+        "sso": "SSO",
+        "gateway": "AI Gateway",
+        "pii": "PII Policy",
+        "retention": "Retention",
+        "exports": "Exports",
+        "auditLog": "Audit Log",
+        "status": "Platform status",
+        "analytics": "Analytics",
+        "billing": "Billing",
+        "finops": "FinOps kills",
+        "autonomous": "Autonomous",
+        "sidebar": "Sidebar"
+      }
+    },
+    "hubs": {
+      "dashboard": {
+        "title": "Home",
+        "subtitle": "One-glance view of agents, traces, costs, and alerts."
+      },
+      "traces": {
+        "title": "Traces",
+        "subtitle": "Inspect traces, spans, and sessions."
+      },
+      "issues": {
+        "title": "Agent Issues",
+        "subtitle": "Grouped agent failures — the primary triage loop.",
+        "tabIssues": "Agent Issues",
+        "tabIncidents": "Incidents",
+        "sectionsAria": "Issues sections"
+      },
+      "alerts": {
+        "title": "Alerts",
+        "subtitle": "Threshold notifications and custom signal rules."
+      },
+      "agents": {
+        "title": "Agents",
+        "subtitle": "Manage AI agents and fleet health."
+      },
+      "evals": {
+        "title": "Evals",
+        "subtitle": "Datasets, playgrounds, and offline experiments.",
+        "datasets": "Datasets",
+        "playground": "Playground",
+        "experiments": "Experiments",
+        "scores": "Scores",
+        "labeling": "Labeling",
+        "studio": "Studio",
+        "synthetic": "Synthetic",
+        "advanced": "Advanced",
+        "sectionsAria": "Evals primary sections"
+      },
+      "improve": {
+        "title": "Improve",
+        "subtitle": "Action queue, improvement plans, and sweep history.",
+        "queue": "Queue",
+        "plans": "Plans",
+        "history": "History",
+        "sectionsAria": "Improve sections"
+      },
+      "artifacts": {
+        "title": "Artifacts",
+        "subtitle": "Versioned runtime fixes with evidence-gated promotion."
+      },
+      "ledger": {
+        "title": "Ledger",
+        "subtitle": "Compounding institutional memory for your agents."
+      },
+      "settings": {
+        "title": "Settings",
+        "subtitle": "Organization, API keys, security, and compliance."
+      }
+    },
+    "chrome": {
+      "views": "Views",
+      "defaultView": "Default",
+      "personal": "Personal",
+      "shared": "Shared",
+      "saveAs": "Save as…",
+      "saveChanges": "Save changes",
+      "discard": "Discard",
+      "createAlertFromFilters": "Create alert from filters",
+      "export": "Export"
+    },
+    "empty": {
+      "noTraces": "No traces yet",
+      "noIssues": "No issues yet",
+      "noMatchingIssues": "No matching issues",
+      "noAgents": "No agents yet",
+      "noAlertRules": "No alert rules yet",
+      "genericRetry": "Something went wrong. Please try again."
+    }
   }
 }

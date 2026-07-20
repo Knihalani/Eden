@@ -101,7 +101,7 @@ export function TransferOwnershipSection({
                 Select a member to transfer ownership to. You will become an admin after the
                 transfer.
               </p>
-              <div className="space-y-2">
+              <div className="space-y-space-2">
                 {members.map((member) => (
                   <div
                     key={member.user_id}

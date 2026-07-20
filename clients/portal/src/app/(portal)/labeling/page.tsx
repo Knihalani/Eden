@@ -4,11 +4,9 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useOrg } from "@/hooks/use-org";
-import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { DataTable, DataTableSearch } from "@/components/ui/data-table";
 import { NoOrgState } from "@/components/ui/no-org-state";
-import { ErrorState } from "@/components/ui/error-state";
 import { PageHeader } from "@/components/layout/page-header";
 import { PageContent } from "@/components/layout/page-content";
 import { useToast } from "@/components/ui/toast";
@@ -22,9 +20,11 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Tag as TagIcon, RefreshCw, Plus, CheckCircle2, SkipForward, Columns3 } from "lucide-react";
+import { Tag as TagIcon, RefreshCw, Plus, CheckCircle2, SkipForward, Columns3, ChevronDown } from "lucide-react";
 import { Tag } from "@/components/ui/tag";
 import { labelingApi, labelingQueuesApi, type LabelingItem } from "@/lib/api";
+import { QueryState } from "@/components/ui/query-state";
+import { EmptyState } from "@/components/ui/empty-state";
 import {
   Select,
   SelectContent,
@@ -33,6 +33,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 type QueueRow = {
   id: string;
@@ -179,38 +185,64 @@ export default function LabelingPage() {
       <PageHeader
         eyebrow="Eval"
         title="Labeling queue"
-        subtitle="Items waiting for human labels. Approve or skip — annotations feed the eval pipeline."
+        subtitle="Approve or skip items — annotations feed datasets."
         icon={TagIcon}
         actions={
           <>
-            <DataTableSearch value={filter} onChange={setFilter} placeholder="Filter by prompt or tag" />
+            <div className="hidden min-w-[12rem] sm:block">
+              <DataTableSearch
+                value={filter}
+                onChange={setFilter}
+                placeholder="Filter by prompt or tag"
+              />
+            </div>
             <Button
               onClick={load}
               variant="outline"
-              size="sm"
+              className="min-h-11"
               disabled={loading}
               loading={loading}
               aria-label="Refresh labeling queue"
             >
-              <RefreshCw className="h-3.5 w-3.5" /> Refresh
+              <RefreshCw className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">Refresh</span>
             </Button>
-            <Button size="sm" onClick={() => void seedItem()} aria-label="Seed labeling item">
-              <Plus className="h-3.5 w-3.5" /> Seed item
-            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" className="min-h-11" aria-label="More labeling actions">
+                  More
+                  <ChevronDown className="h-4 w-4" aria-hidden />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onSelect={() => void seedItem()}>
+                  <Plus className="h-3.5 w-3.5" /> Seed item
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                  <Link href="/evals?tab=datasets">Open datasets</Link>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </>
         }
       />
 
-      <Card className="mb-4 space-y-3 p-4">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div>
-            <h2 className="text-sm font-medium text-[var(--text-primary)]">Annotation queues</h2>
-            <p className="text-xs text-[var(--text-muted)]">
-              Kanban workstations with hotkeys — export done items to a dataset.
-            </p>
-          </div>
+      <details className="mb-space-4 group border-b border-[var(--border-subtle)] pb-space-3">
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-2 py-space-2 text-sm font-medium text-[var(--text-primary)] [&::-webkit-details-marker]:hidden">
+          <span>
+            Annotation queues
+            {queues.length > 0 ? (
+              <span className="ml-2 font-normal text-[var(--text-muted)]">({queues.length})</span>
+            ) : null}
+          </span>
+          <ChevronDown className="h-4 w-4 text-[var(--text-muted)] transition-transform group-open:rotate-180" aria-hidden />
+        </summary>
+        <div className="space-y-space-3 pt-space-2">
+          <p className="text-xs text-[var(--text-muted)]">
+            Kanban workstations with hotkeys — export done items to a dataset.
+          </p>
           <Button
-            size="sm"
+            className="min-h-11"
             variant="outline"
             onClick={() => void createQueue()}
             disabled={creatingQueue}
@@ -219,167 +251,174 @@ export default function LabelingPage() {
           >
             <Columns3 className="h-3.5 w-3.5" /> New queue
           </Button>
+          <QueryState
+            loading={queuesLoading && queues.length === 0}
+            error={queuesError ? new Error(queuesError) : null}
+            data={queues}
+            onRetry={() => void queuesQuery.refetch()}
+            errorTitle="Could not load labeling queues"
+            isEmpty={(q) => q.length === 0}
+            emptySlot={
+              <div className="flex flex-wrap items-center gap-2 text-sm text-[var(--text-muted)]">
+                <span>No queues yet.</span>
+                <Button className="min-h-11" onClick={() => void createQueue()} disabled={creatingQueue}>
+                  <Plus className="h-3.5 w-3.5" /> Create queue
+                </Button>
+              </div>
+            }
+          >
+            {(qRows) => (
+              <ul className="divide-y divide-[var(--border-subtle)]">
+                {qRows.map((q) => (
+                  <li key={q.id} className="flex items-center justify-between gap-2 py-2 text-sm">
+                    <div className="min-w-0">
+                      <Link
+                        href={`/labeling/queues/${q.id}`}
+                        className="font-medium text-[var(--accent)] hover:underline"
+                      >
+                        {q.name || q.id}
+                      </Link>
+                      {q.description ? (
+                        <p className="truncate text-xs text-[var(--text-muted)]">{q.description}</p>
+                      ) : null}
+                    </div>
+                    <Button asChild className="min-h-11" variant="ghost">
+                      <Link href={`/labeling/queues/${q.id}`}>Open board</Link>
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </QueryState>
         </div>
-        {queuesError ? (
-          <ErrorState
-            title="Could not load labeling queues"
-            message={queuesError}
-            size="sm"
+      </details>
+
+      <div className="mb-space-3 sm:hidden">
+        <DataTableSearch
+          value={filter}
+          onChange={setFilter}
+          placeholder="Filter by prompt or tag"
+        />
+      </div>
+
+      <QueryState
+        loading={loading && items.length === 0}
+        error={error ? new Error(error) : null}
+        data={items}
+        onRetry={load}
+        errorTitle="Could not load labeling queue"
+        isEmpty={() => filtered.length === 0}
+        filtersActive={filterActive}
+        emptyKind={filterMiss ? "filter-empty" : "zero-data"}
+        filterEmptySlot={
+          <EmptyState
+            icon={TagIcon}
+            title="No matching items"
+            description={`Nothing matches “${filter.trim()}”. Clear the filter or seed a new item.`}
+            variant="plain"
             action={
               <Button
-                onClick={() => void queuesQuery.refetch()}
+                className="min-h-11"
                 variant="outline"
-                size="sm"
-                disabled={queuesLoading}
+                data-testid="labeling-clear-filter"
+                onClick={() => setFilter("")}
               >
-                <RefreshCw className="h-3.5 w-3.5" /> Try again
+                Clear filter
               </Button>
             }
           />
-        ) : queuesLoading && queues.length === 0 ? (
-          <p className="text-sm text-[var(--text-muted)]">Loading queues…</p>
-        ) : queues.length === 0 ? (
-          <div className="flex flex-wrap items-center gap-2 text-sm text-[var(--text-muted)]">
-            <span>No queues yet.</span>
-            <Button size="sm" onClick={() => void createQueue()} disabled={creatingQueue}>
-              <Plus className="h-3.5 w-3.5" /> Create queue
-            </Button>
-          </div>
-        ) : (
-          <ul className="divide-y divide-[var(--border-subtle)]">
-            {queues.map((q) => (
-              <li key={q.id} className="flex items-center justify-between gap-2 py-2 text-sm">
-                <div className="min-w-0">
-                  <Link
-                    href={`/labeling/queues/${q.id}`}
-                    className="font-medium text-[var(--accent)] hover:underline"
-                  >
-                    {q.name || q.id}
-                  </Link>
-                  {q.description ? (
-                    <p className="truncate text-xs text-[var(--text-muted)]">{q.description}</p>
-                  ) : null}
-                </div>
-                <Button asChild size="sm" variant="ghost">
-                  <Link href={`/labeling/queues/${q.id}`}>Open board</Link>
-                </Button>
-              </li>
-            ))}
-          </ul>
-        )}
-      </Card>
-
-      {error ? (
-        <ErrorState
-          title="Could not load labeling queue"
-          message={error}
-          action={
-            <Button onClick={load} variant="outline" size="sm" disabled={loading}>
-              <RefreshCw className="h-3.5 w-3.5" /> Try again
-            </Button>
-          }
-        />
-      ) : (
-        <Card className="p-2">
-          <DataTable
-            loading={loading}
-            rows={filtered}
-            rowKey={(r) => r.id}
-            emptyTitle={filterMiss ? "No matching items" : "No items in queue"}
-            emptyDescription={
-              filterMiss
-                ? `Nothing matches “${filter.trim()}”. Clear the filter or seed a new item.`
-                : "When the eval pipeline flags low-confidence items, they appear here for human review — or seed one now."
+        }
+        emptySlot={
+          <EmptyState
+            icon={TagIcon}
+            title="No items in queue"
+            description="When the eval pipeline flags low-confidence items, they appear here — or seed one now."
+            variant="plain"
+            action={
+              <Button className="min-h-11" data-testid="labeling-empty-seed" onClick={() => void seedItem()}>
+                <Plus className="h-3.5 w-3.5" /> Seed item
+              </Button>
             }
-            emptyIcon={TagIcon}
-            emptyAction={
-              filterMiss ? (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  data-testid="labeling-clear-filter"
-                  onClick={() => setFilter("")}
-                >
-                  Clear filter
-                </Button>
-              ) : (
-                <div className="flex flex-wrap justify-center gap-2">
-                  <Button size="sm" data-testid="labeling-empty-seed" onClick={() => void seedItem()}>
-                    <Plus className="h-3.5 w-3.5" /> Seed item
-                  </Button>
-                  <Button asChild size="sm" variant="outline">
-                    <Link href="/evals?tab=datasets">Open datasets</Link>
-                  </Button>
-                </div>
-              )
-            }
-            columns={[
-              {
-                key: "prompt",
-                header: "Prompt",
-                sortable: true,
-                cell: (r) => (
-                  <button
-                    type="button"
-                    onClick={() => openReview(r)}
-                    className="text-left font-mono text-xs hover:text-[var(--accent)] transition-colors"
-                  >
-                    {(r.prompt ?? "").slice(0, 120)}
-                    {(r.prompt ?? "").length > 120 ? "…" : ""}
-                  </button>
-                ),
-              },
-              {
-                key: "tags",
-                header: "Tags",
-                cell: (r) => (
-                  <span className="flex flex-wrap gap-1">
-                    {(r.tags ?? []).map((t) => (
-                      <Tag key={t} className="text-[10px]">
-                        {t}
-                      </Tag>
-                    ))}
-                  </span>
-                ),
-              },
-              { key: "source", header: "Source", sortable: true },
-              { key: "annotations_count", header: "Annotations", sortable: true, align: "right" },
-              {
-                key: "created_at",
-                header: "Created",
-                sortable: true,
-                cell: (r) => new Date(r.created_at).toLocaleString(),
-              },
-              {
-                key: "actions",
-                header: "",
-                align: "right",
-                cell: (r) => (
-                  <div className="flex items-center justify-end gap-1">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => openReview(r)}
-                      aria-label={`Review ${r.id}`}
-                    >
-                      Review
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => void handleSkip(r)}
-                      disabled={submitting}
-                      aria-label={`Skip ${r.id}`}
-                    >
-                      <SkipForward className="h-3.5 w-3.5" />
-                    </Button>
-                  </div>
-                ),
-              },
-            ]}
           />
-        </Card>
-      )}
+        }
+      >
+        {() => (
+          <div className="border-y border-[var(--border-subtle)] py-space-2">
+            <DataTable
+              loading={loading}
+              rows={filtered}
+              rowKey={(r) => r.id}
+              emptyTitle="No items in queue"
+              emptyDescription="Queue is empty."
+              emptyIcon={TagIcon}
+              columns={[
+                {
+                  key: "prompt",
+                  header: "Prompt",
+                  sortable: true,
+                  cell: (r) => (
+                    <button
+                      type="button"
+                      onClick={() => openReview(r)}
+                      className="text-left font-mono text-xs hover:text-[var(--accent)] transition-colors"
+                    >
+                      {(r.prompt ?? "").slice(0, 120)}
+                      {(r.prompt ?? "").length > 120 ? "…" : ""}
+                    </button>
+                  ),
+                },
+                {
+                  key: "tags",
+                  header: "Tags",
+                  cell: (r) => (
+                    <span className="flex flex-wrap gap-1">
+                      {(r.tags ?? []).map((t) => (
+                        <Tag key={t} className="text-[length:var(--font-size-2xs)]">
+                          {t}
+                        </Tag>
+                      ))}
+                    </span>
+                  ),
+                },
+                { key: "source", header: "Source", sortable: true },
+                { key: "annotations_count", header: "Annotations", sortable: true, align: "right" },
+                {
+                  key: "created_at",
+                  header: "Created",
+                  sortable: true,
+                  cell: (r) => new Date(r.created_at).toLocaleString(),
+                },
+                {
+                  key: "actions",
+                  header: "",
+                  align: "right",
+                  cell: (r) => (
+                    <div className="flex items-center justify-end gap-1">
+                      <Button
+                        className="min-h-11"
+                        variant="outline"
+                        onClick={() => openReview(r)}
+                        aria-label={`Review ${r.id}`}
+                      >
+                        Review
+                      </Button>
+                      <Button
+                        className="min-h-11"
+                        variant="ghost"
+                        onClick={() => void handleSkip(r)}
+                        disabled={submitting}
+                        aria-label={`Skip ${r.id}`}
+                      >
+                        <SkipForward className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                  ),
+                },
+              ]}
+            />
+          </div>
+        )}
+      </QueryState>
 
       <Dialog open={Boolean(reviewItem)} onOpenChange={(open) => !open && closeReview()}>
         <DialogContent className="max-w-lg">
@@ -431,6 +470,7 @@ export default function LabelingPage() {
           <DialogFooter className="gap-2 sm:gap-0">
             <Button
               variant="outline"
+              className="min-h-11"
               onClick={() => reviewItem && void handleSkip(reviewItem)}
               disabled={submitting || !reviewItem}
             >
@@ -438,6 +478,7 @@ export default function LabelingPage() {
               Skip
             </Button>
             <Button
+              className="min-h-11"
               onClick={() => void handleAnnotate(label)}
               disabled={submitting || !reviewItem}
               loading={submitting}

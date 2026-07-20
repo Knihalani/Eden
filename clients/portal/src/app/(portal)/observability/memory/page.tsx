@@ -6,16 +6,17 @@ import { queryKeys } from "@/lib/query-keys";
 import { useOrg } from "@/hooks/use-org";
 import { memoryApi, type MemoryAttributionData, type MemoryImpactData, type MemoryReaverData } from "@/lib/api";
 import { cn } from "@/lib/utils";
-import { Alert } from "@/components/ui/alert";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorState } from "@/components/ui/error-state";
 import { NoOrgState } from "@/components/ui/no-org-state";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { PageHeader } from "@/components/layout/page-header";
+import { QueryState } from "@/components/ui/query-state";
 import { PageContent } from "@/components/layout/page-content";
+import { useEmbeddedSurface } from "@/components/layout/embedded-surface";
+import { ObserveLeafHeader } from "@/app/(portal)/observability/_components/observe-leaf-shell";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Archive, Brain, Combine, Loader2, Search, TrendingDown, Zap } from "lucide-react";
+import { Archive, Brain, Combine, Search, TrendingDown, Zap } from "lucide-react";
 import { DataTable } from "@/components/ui/data-table";
 import { Card } from "@/components/ui/card";
 import { errorFromCaught } from "@/lib/safe-error-message";
@@ -25,6 +26,7 @@ type ReaverSuggestion = MemoryReaverData["suggestions"][number];
 
 export default function MemoryIntelligencePage() {
   const { currentOrg } = useOrg();
+  const embedded = useEmbeddedSurface();
   const [activeTab, setActiveTab] = useState<SubTab>("attribution");
   const [error, setError] = useState("");
   if (!currentOrg) {
@@ -38,18 +40,11 @@ export default function MemoryIntelligencePage() {
   }
   return (
     <PageContent size="wide">
-      <PageHeader
+      <ObserveLeafHeader
         title="Memory"
         subtitle="Episodic + semantic memory attribution and reweaving"
         icon={Brain}
-        eyebrow="Observe"
-      />
-
-      <Alert
-        variant="info"
-        title="Cat 5 memory intelligence"
-        description="This page attributes and scores memories that influenced a trace — it is not a full knowledge-base browser."
-        className="mb-4"
+        description="Advanced under Traces — attributes memories that influenced a trace; not a knowledge-base browser."
       />
 
       {error ? (
@@ -71,16 +66,35 @@ export default function MemoryIntelligencePage() {
           setError("");
         }}
       >
-        <TabsList variant="underline" className="border-b border-[var(--border-default)] w-full justify-start">
-          <TabsTrigger value="attribution" variant="underline" className="flex items-center gap-2">
+        <TabsList
+          variant={embedded ? "pills" : "underline"}
+          className={
+            embedded
+              ? "w-full justify-start"
+              : "border-b border-[var(--border-default)] w-full justify-start"
+          }
+        >
+          <TabsTrigger
+            value="attribution"
+            variant={embedded ? "pills" : "underline"}
+            className="flex items-center gap-2 min-h-11"
+          >
             <Search className="w-4 h-4" />
             Attribution
           </TabsTrigger>
-          <TabsTrigger value="impact" variant="underline" className="flex items-center gap-2">
+          <TabsTrigger
+            value="impact"
+            variant={embedded ? "pills" : "underline"}
+            className="flex items-center gap-2 min-h-11"
+          >
             <Zap className="w-4 h-4" />
             Impact
           </TabsTrigger>
-          <TabsTrigger value="reaver" variant="underline" className="flex items-center gap-2">
+          <TabsTrigger
+            value="reaver"
+            variant={embedded ? "pills" : "underline"}
+            className="flex items-center gap-2 min-h-11"
+          >
             <Combine className="w-4 h-4" />
             Reweaver
           </TabsTrigger>
@@ -140,14 +154,10 @@ function AttributionTab({
             placeholder="Enter trace ID..."
             className="flex-1 px-3 py-2 bg-[var(--bg-secondary)] border border-[var(--border-default)] rounded-lg text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)]"
           />
-          <button
-            onClick={handleRun}
-            disabled={loading || !traceId.trim()}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-[var(--accent)] text-[var(--bg-base)] rounded-lg text-sm font-medium hover:bg-[var(--accent-hover)] disabled:opacity-50 transition-colors"
-          >
-            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Brain className="w-4 h-4" />}
+          <Button variant="default" className="min-h-11" onClick={handleRun} disabled={loading || !traceId.trim()} loading={loading}>
+            <Brain className="w-4 h-4" />
             Attribute
-          </button>
+          </Button>
         </div>
       </Card>
 
@@ -181,7 +191,7 @@ function AttributionTab({
                       {m.memory_id}
                     </span>
                     {m.role && (
-                      <span className="text-[10px] uppercase tracking-wide text-[var(--text-muted)]">
+                      <span className="text-2xs uppercase tracking-wide text-[var(--text-muted)]">
                         {m.role}
                       </span>
                     )}
@@ -261,14 +271,10 @@ function ImpactTab({
             placeholder="Enter trace ID..."
             className="flex-1 px-3 py-2 bg-[var(--bg-secondary)] border border-[var(--border-default)] rounded-lg text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)]"
           />
-          <button
-            onClick={handleRun}
-            disabled={loading || !traceId.trim()}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-[var(--accent)] text-[var(--bg-base)] rounded-lg text-sm font-medium hover:bg-[var(--accent-hover)] disabled:opacity-50 transition-colors"
-          >
-            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />}
+          <Button variant="default" className="min-h-11" onClick={handleRun} disabled={loading || !traceId.trim()} loading={loading}>
+            <Zap className="w-4 h-4" />
             Score
-          </button>
+          </Button>
         </div>
       </Card>
 
@@ -382,74 +388,80 @@ function ReaverTab({
     if (res.error) setError(errorFromCaught(res.error, "Failed to load suggestions"));
   };
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
+    <div className="space-y-space-4">
+      <div className="flex items-center justify-between gap-space-3">
         <p className="text-xs text-[var(--text-muted)]">
           Reweaver suggestions — merge duplicates, archive dead memories, demote low-influence ones
         </p>
-        <button
-          onClick={load}
-          disabled={loading}
-          className="inline-flex items-center gap-2 px-3 py-1.5 bg-[var(--bg-tertiary)] text-[var(--text-primary)] rounded-lg text-xs font-medium hover:bg-[var(--border-default)] disabled:opacity-50 transition-colors"
-        >
-          {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Combine className="w-3.5 h-3.5" />}
+        <Button variant="secondary" size="sm" className="min-h-11" onClick={() => void load()} loading={loading}>
+          <Combine className="w-3.5 h-3.5" />
           Refresh
-        </button>
+        </Button>
       </div>
 
-      {reaverQuery.isError && suggestions.length === 0 ? (
-        <ErrorState
-          title="Could not load reweaver suggestions"
-          message={errorFromCaught(reaverQuery.error, "Failed to load suggestions")}
-          action={
-            <Button size="sm" variant="outline" onClick={() => void load()}>
-              Try again
-            </Button>
-          }
-        />
-      ) : loading && suggestions.length === 0 ? (
-        <div className="space-y-3 py-6" aria-busy="true" aria-live="polite">
-          <Skeleton className="h-10 w-full rounded-lg" />
-          <Skeleton className="h-10 w-full rounded-lg" />
-          <Skeleton className="h-10 w-full rounded-lg" />
-        </div>
-      ) : (
-        <Card padding="lg" className="overflow-hidden">
-          <DataTable
-            columns={[
-              {
-                key: "memory_id",
-                header: "Memory ID",
-                sortable: true,
-                cell: (s) => (
-                  <span className="font-mono text-xs text-[var(--text-primary)]">{s.memory_id}</span>
-                ),
-              },
-              {
-                key: "action",
-                header: "Action",
-                sortable: true,
-                cell: (s) => <ActionBadge action={s.action} />,
-              },
-              {
-                key: "rationale",
-                header: "Rationale",
-                cell: (s) => (
-                  <span className="text-[var(--text-secondary)] text-xs">{s.rationale}</span>
-                ),
-              },
-            ]}
-            rows={suggestions}
-            rowKey={(s) => `${s.memory_id}:${s.action}:${s.with_memory_id ?? ""}`}
-            loading={loading}
-            defaultSort={{ key: "action", direction: "asc" }}
-            emptyTitle="No reweaver suggestions"
-            emptyDescription="Your memory store is already clean — nothing to merge, archive, or demote"
-            emptyIcon={Combine}
-            pageSize={25}
-          />
-        </Card>
-      )}
+      <QueryState
+        loading={loading && suggestions.length === 0}
+        error={reaverQuery.isError && suggestions.length === 0 ? reaverQuery.error : null}
+        data={reaverQuery.data ?? []}
+        onRetry={() => void load()}
+        errorTitle="Could not load reweaver suggestions"
+        loadingSlot={
+          <div className="space-y-space-3 py-space-6" aria-busy="true" aria-live="polite">
+            <Skeleton className="h-10 w-full rounded-lg" />
+            <Skeleton className="h-10 w-full rounded-lg" />
+            <Skeleton className="h-10 w-full rounded-lg" />
+          </div>
+        }
+        isEmpty={(d) => d.length === 0}
+        emptySlot={
+          <Card padding="lg">
+            <EmptyState
+              icon={Combine}
+              title="No reweaver suggestions"
+              description="Your memory store is already clean — nothing to merge, archive, or demote"
+              size="md"
+            />
+          </Card>
+        }
+      >
+        {(rows) => (
+          <Card padding="lg" className="overflow-hidden">
+            <DataTable
+              columns={[
+                {
+                  key: "memory_id",
+                  header: "Memory ID",
+                  sortable: true,
+                  cell: (s) => (
+                    <span className="font-mono text-xs text-[var(--text-primary)]">{s.memory_id}</span>
+                  ),
+                },
+                {
+                  key: "action",
+                  header: "Action",
+                  sortable: true,
+                  cell: (s) => <ActionBadge action={s.action} />,
+                },
+                {
+                  key: "rationale",
+                  header: "Rationale",
+                  cell: (s) => (
+                    <span className="text-[var(--text-secondary)] text-xs">{s.rationale}</span>
+                  ),
+                },
+              ]}
+              rows={rows}
+              rowKey={(s) => `${s.memory_id}:${s.action}:${s.with_memory_id ?? ""}`}
+              loading={loading}
+              defaultSort={{ key: "action", direction: "asc" }}
+              emptyTitle="No reweaver suggestions"
+              emptyDescription="Your memory store is already clean — nothing to merge, archive, or demote"
+              emptyIcon={Combine}
+              pageSize={25}
+            />
+          </Card>
+        )}
+      </QueryState>
     </div>
   );
 }

@@ -8,10 +8,10 @@ import { ErrorState } from "@/components/ui/error-state";
 import { NoOrgState } from "@/components/ui/no-org-state";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { PageHeader } from "@/components/layout/page-header";
-import { Compass, Loader2, GitBranch, Lightbulb, Info, Sparkles, Play, ArrowRight } from "lucide-react";
+import { Compass, GitBranch, Lightbulb, Info, Sparkles, Play, ArrowRight } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { PageContent } from "@/components/layout/page-content";
+import { ObserveLeafHeader } from "@/app/(portal)/observability/_components/observe-leaf-shell";
 import { errorFromCaught } from "@/lib/safe-error-message";
 
 interface DecisionPath {
@@ -110,7 +110,7 @@ export default function DecisionsPage() {
 
   return (
     <PageContent size="wide">
-      <PageHeader title="Decisions" subtitle="Trace the choice points in your agent's reasoning" icon={Compass} eyebrow="Observe" />
+      <ObserveLeafHeader title="Decisions" subtitle="Trace the choice points in your agent's reasoning" icon={Compass} />
 
       {error ? (
         <ErrorState
@@ -143,14 +143,10 @@ export default function DecisionsPage() {
               placeholder="trace_abc123"
               className="flex-1 px-3 py-2 bg-[var(--bg-secondary)] border border-[var(--border-default)] rounded-lg text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] font-mono"
             />
-            <button
-              onClick={handlePath}
-              disabled={pathLoading}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-[var(--accent)] text-[var(--bg-base)] rounded-lg text-sm font-medium hover:bg-[var(--accent-hover)] disabled:opacity-50 transition-colors"
-            >
-              {pathLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
-              Show path
-            </button>
+            <Button variant="default" className="min-h-11" onClick={handlePath} loading={pathLoading}>
+            <Play className="w-4 h-4" />
+            Show path
+          </Button>
           </div>
         </Card>
 
@@ -213,14 +209,10 @@ export default function DecisionsPage() {
               />
             </div>
           </div>
-          <button
-            onClick={handleExplain}
-            disabled={explLoading}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-[var(--accent)] text-[var(--bg-base)] rounded-lg text-sm font-medium hover:bg-[var(--accent-hover)] disabled:opacity-50 transition-colors"
-          >
-            {explLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+          <Button variant="default" className="min-h-11" onClick={handleExplain} loading={explLoading}>
+            <Sparkles className="w-4 h-4" />
             Explain
-          </button>
+          </Button>
         </Card>
 
         {explLoading ? (
@@ -274,7 +266,7 @@ export default function DecisionsPage() {
 const DecisionStep = memo(function DecisionStep({ step }: { step: DecisionPathStep }) {
   return (
     <li className="relative pl-8">
-      <div className="absolute left-0 top-0 w-5 h-5 rounded-full bg-[var(--accent)] text-[var(--bg-base)] flex items-center justify-center text-[10px] font-bold">
+      <div className="absolute left-0 top-0 w-5 h-5 rounded-full bg-[var(--accent)] text-[var(--bg-base)] flex items-center justify-center text-2xs font-bold">
         {step.step_index + 1}
       </div>
       <div className="rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-secondary)] p-3 space-y-2">
@@ -282,7 +274,7 @@ const DecisionStep = memo(function DecisionStep({ step }: { step: DecisionPathSt
           {step.chosen_action || "(no action)"}
         </p>
         {step.event_type && (
-          <span className="text-[10px] uppercase tracking-wide text-[var(--text-muted)]">{step.event_type}</span>
+          <span className="text-2xs uppercase tracking-wide text-[var(--text-muted)]">{step.event_type}</span>
         )}
         {step.reasoning && (
           <p className="text-xs text-[var(--text-muted)] italic">Reasoning: {step.reasoning}</p>

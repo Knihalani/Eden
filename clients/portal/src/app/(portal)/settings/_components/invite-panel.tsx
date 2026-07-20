@@ -75,7 +75,7 @@ export function InvitePanel({
           No pending invitations
         </p>}
 
-      {!loading && invitations.length > 0 && <div className="space-y-3">
+      {!loading && invitations.length > 0 && <div className="space-y-space-3">
           {invitations.map(invite => <div key={invite.id} className="flex items-center justify-between p-3 bg-[var(--bg-muted)] rounded-lg">
               <div className="flex flex-col gap-1">
                 <span className="text-sm font-medium">{invite.email}</span>

@@ -138,7 +138,7 @@ export function AuditLogTab({
           </code>;
     }
   }];
-  return <div className="space-y-4">
+  return <div className="space-y-space-4">
       {/* Filters */}
       <Card padding="md">
         <div className="flex items-center justify-between mb-3">

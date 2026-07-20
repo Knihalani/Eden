@@ -70,7 +70,7 @@ export function MessageCards({
     );
   }
   return (
-    <div className={cn("flex flex-col gap-2", className)} data-testid="message-cards">
+    <div className={cn("flex flex-col gap-space-2", className)} data-testid="message-cards">
       {messages.map((m) => (
         <MessageCard
           key={m.id}
@@ -95,12 +95,15 @@ const MessageCard = memo(function MessageCard({
   orgId,
   traceId,
   agentId,
+  nested = false,
 }: {
   message: TranscriptMessage;
   collapseAtChars: number;
   orgId?: string;
   traceId?: string;
   agentId?: string;
+  /** Nested children use hairline separators — no card-in-card. */
+  nested?: boolean;
 }) {
   const [expanded, setExpanded] = useState(false);
   const meta = ROLE_META[message.role];
@@ -109,8 +112,14 @@ const MessageCard = memo(function MessageCard({
     tooLong && !expanded ? message.content.slice(0, collapseAtChars) + "…" : message.content;
 
   return (
-    <div className="rounded-lg border border-[var(--border-default)] bg-[var(--bg-primary)] p-3">
-      <div className="mb-1 flex items-center gap-2 text-xs font-medium" style={{ color: meta.color }}>
+    <div
+      className={
+        nested
+          ? "space-y-space-1 py-space-2"
+          : "rounded-lg border border-[var(--border-default)] bg-[var(--bg-primary)] p-space-3"
+      }
+    >
+      <div className="mb-space-1 flex items-center gap-space-2 text-xs font-medium" style={{ color: meta.color }}>
         <span aria-hidden>{meta.icon}</span>
         {meta.label}
       </div>
@@ -120,7 +129,7 @@ const MessageCard = memo(function MessageCard({
       {tooLong && (
         <button
           type="button"
-          className="mt-1 text-[11px] text-[var(--accent)] hover:underline"
+          className="mt-space-1 text-xs text-[var(--accent)] hover:underline"
           onClick={() => setExpanded((e) => !e)}
         >
           {expanded ? "Collapse" : "Expand"}
@@ -153,14 +162,18 @@ const MessageCard = memo(function MessageCard({
         />
       )}
       {message.children && message.children.length > 0 && (
-        <div className="mt-2 ml-3 border-l border-[var(--border-subtle)] pl-3">
-          <MessageCards
-            messages={message.children}
-            collapseAtChars={collapseAtChars}
-            orgId={orgId}
-            traceId={traceId}
-            agentId={agentId}
-          />
+        <div className="mt-space-2 ml-space-3 space-y-space-2 border-l border-[var(--border-subtle)] pl-space-3">
+          {message.children.map((child) => (
+            <MessageCard
+              key={child.id}
+              message={child}
+              collapseAtChars={collapseAtChars}
+              orgId={orgId}
+              traceId={traceId}
+              agentId={agentId}
+              nested
+            />
+          ))}
         </div>
       )}
     </div>
@@ -210,17 +223,17 @@ function ToolLabelRow({
   if (!orgId || !traceId) return null;
 
   return (
-    <ul className="mt-2 space-y-1" data-testid="f21-tool-labels">
+    <ul className="mt-space-2 space-y-space-1" data-testid="f21-tool-labels">
       {toolCalls.map((tc) => {
         const spanId = tc.span_id || tc.id || fallbackSpanId;
         const state = labelState[spanId];
         return (
           <li
             key={spanId}
-            className="flex items-center gap-2 rounded border border-[var(--border-subtle)] px-2 py-1 text-[11px]"
+            className="flex items-center gap-space-2 rounded border border-[var(--border-subtle)] px-space-2 py-space-1 text-xs"
           >
             <span className="font-mono truncate">{tc.name}</span>
-            <span className="ml-auto flex items-center gap-1">
+            <span className="ml-auto flex items-center gap-space-1">
               {state === "good" || state === "bad" ? (
                 <span className="text-[var(--text-muted)]">labeled {state}</span>
               ) : (
@@ -229,7 +242,7 @@ function ToolLabelRow({
                     type="button"
                     disabled={busy}
                     aria-label={`Label ${tc.name} good`}
-                    className="rounded px-1.5 py-0.5 border border-[var(--terminal)] text-[var(--terminal)] disabled:opacity-50"
+                    className="inline-flex min-h-6 min-w-6 items-center justify-center rounded px-space-2 py-space-1 border border-[var(--terminal)] text-[var(--terminal)] disabled:opacity-50"
                     onClick={() => void submit(tc, "good")}
                   >
                     ✓
@@ -238,7 +251,7 @@ function ToolLabelRow({
                     type="button"
                     disabled={busy}
                     aria-label={`Label ${tc.name} bad`}
-                    className="rounded px-1.5 py-0.5 border border-[var(--error)] text-[var(--error)] disabled:opacity-50"
+                    className="inline-flex min-h-6 min-w-6 items-center justify-center rounded px-space-2 py-space-1 border border-[var(--error)] text-[var(--error)] disabled:opacity-50"
                     onClick={() => void submit(tc, "bad")}
                   >
                     ✗

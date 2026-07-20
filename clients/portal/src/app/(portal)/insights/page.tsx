@@ -4,24 +4,26 @@ import Link from "next/link";
 import { useState } from "react";
 import { useOrg } from "@/hooks/use-org";
 import { useToast } from "@/components/ui/toast";
-import { api, datasetsApi, type InsightsOverviewResponse } from "@/lib/api";
+import { api, type InsightsOverviewResponse } from "@/lib/api";
 import { useOrgQuery } from "@/hooks/use-api-query";
 import { queryKeys } from "@/lib/query-keys";
 import { cn } from "@/lib/utils";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorState } from "@/components/ui/error-state";
 import { StatCard } from "@/components/ui/stat-card";
-import { SeverityBadge, SeverityIcon } from "@/components/ui/status-badge";
+import { SeverityIcon } from "@/components/ui/status-badge";
 import { PageHeader } from "@/components/layout/page-header";
 import { PageContent } from "@/components/layout/page-content";
+import { useEmbeddedSurface } from "@/components/layout/embedded-surface";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
-import { Lightbulb, Activity, BarChart3, Database, Layers, ChevronRight, Loader2, Zap, TrendingUp, Sparkles, FileJson, Download, Play, CheckCircle2 } from "lucide-react";
+import { Lightbulb, Activity, BarChart3, Database, Layers, ChevronRight, Loader2, Sparkles, Play } from "lucide-react";
 import { DataTable } from "@/components/ui/data-table";
 import { NoOrgState } from "@/components/ui/no-org-state";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Card } from "@/components/ui/card";
+import { Panel } from "@/components/ui/panel";
 import { Alert } from "@/components/ui/alert";
+import { LoadingSkeleton } from "@/components/ui/skeleton";
 
 type OverviewData = InsightsOverviewResponse;
 type Tab = "overview" | "insights" | "closed-loop";
@@ -55,6 +57,7 @@ export default function InsightsPage() {
   const {
     currentOrg
   } = useOrg();
+  const embedded = useEmbeddedSurface();
   const toast = useToast();
   const orgId = currentOrg?.id ?? null;
   const [activeTab, setActiveTab] = useState<Tab>("overview");
@@ -101,22 +104,43 @@ export default function InsightsPage() {
     }
   }
   if (!currentOrg) {
-    return <NoOrgState icon={Lightbulb} feature="Insights" description="Pattern detection and closed-loop insights light up once your organization has traces to inspect." />;
+    return <NoOrgState icon={Lightbulb} feature="Insights" description="Insights are org-scoped. Select or create an organization with traces to inspect." />;
   }
   return <PageContent size="wide">
-      <PageHeader title="Insights" subtitle="Automatic pattern detection and closed-loop improvement signals" icon={Lightbulb} actions={<div className="flex items-center gap-2">
-            <Button asChild variant="outline">
-              <Link href="/analytics?tab=topics">Topic clusters</Link>
-            </Button>
-            <Button variant="default" onClick={handleRunDetectors} loading={runningDetectors} aria-label="Run insight detectors now">
-              <Play className="w-4 h-4" />
-              Run Detectors
-            </Button>
-            <Button variant="outline" onClick={loadOverview} aria-label="Refresh insights overview">
-              <Activity className="w-4 h-4" />
-              Refresh
-            </Button>
-          </div>} />
+      {!embedded ? (
+        <PageHeader
+          eyebrow="Analyze"
+          title="Insights"
+          subtitle="Pattern detection and closed-loop improvement signals"
+          icon={Lightbulb}
+          actions={
+            <div className="flex items-center gap-2">
+              <Button asChild variant="outline" size="sm">
+                <Link href="/analytics?tab=topics">Topic clusters</Link>
+              </Button>
+              <Button variant="default" size="sm" onClick={handleRunDetectors} loading={runningDetectors} aria-label="Run insight detectors now">
+                <Play className="w-4 h-4" />
+                Run Detectors
+              </Button>
+              <Button variant="ghost" size="sm" onClick={loadOverview} aria-label="Refresh insights overview">
+                <Activity className="w-4 h-4" />
+                Refresh
+              </Button>
+            </div>
+          }
+        />
+      ) : (
+        <div className="mb-space-3 flex flex-wrap items-center gap-2">
+          <Button variant="default" size="sm" onClick={handleRunDetectors} loading={runningDetectors} aria-label="Run insight detectors now">
+            <Play className="w-4 h-4" />
+            Run Detectors
+          </Button>
+          <Button variant="ghost" size="sm" onClick={loadOverview} aria-label="Refresh insights overview">
+            <Activity className="w-4 h-4" />
+            Refresh
+          </Button>
+        </div>
+      )}
 
       {overview?.summary?.source === "in_memory" && (
         <Alert
@@ -129,15 +153,18 @@ export default function InsightsPage() {
         />
       )}
 
-      {/* Tabs */}
       <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as Tab)}>
-        <TabsList className="bg-[var(--bg-tertiary)] rounded-xl w-fit">
+        <TabsList
+          variant={embedded ? "pills" : "underline"}
+          aria-label="Insights sections"
+          className={
+            embedded
+              ? "h-auto w-full justify-start gap-1 overflow-x-auto"
+              : "h-auto w-full justify-start"
+          }
+        >
           {(["overview", "insights", "closed-loop"] as Tab[]).map((tab) => (
-            <TabsTrigger
-              key={tab}
-              value={tab}
-              className="px-4 py-2 rounded-lg data-[state=active]:bg-[var(--bg-primary)] data-[state=active]:text-[var(--text-primary)] text-[var(--text-muted)] hover:text-[var(--text-secondary)]"
-            >
+            <TabsTrigger key={tab} value={tab} variant={embedded ? "pills" : "underline"}>
               {tab === "closed-loop" ? "Closed-loop" : tab.charAt(0).toUpperCase() + tab.slice(1)}
             </TabsTrigger>
           ))}
@@ -145,9 +172,9 @@ export default function InsightsPage() {
       </Tabs>
 
       {/* Content — prefer ErrorState over false empty on load failure */}
-      {loading && !overview ? <div className="flex items-center justify-center py-20">
-          <Loader2 className="w-8 h-8 animate-spin text-[var(--accent)]" />
-        </div> : isError && !overview ? (
+      {loading && !overview ? (
+        <LoadingSkeleton variant="stats" lines={4} />
+      ) : isError && !overview ? (
           <ErrorState
             size="lg"
             title="Could not load insights"
@@ -207,26 +234,26 @@ function InsightsEmptyOnboarding({
   return (
     <EmptyState
       title="No insights yet"
-      description="Insights appear after detectors run over your traces. Hit Run Detectors to scan now — this takes about a minute on a fresh dataset."
+      description="No insights yet. They appear after detectors run over your traces. Run Detectors to scan now — about a minute on a fresh dataset."
       size="lg"
       variant="terminal"
       terminal={
-        <div className="rounded-lg overflow-hidden border border-[var(--border-default)] bg-[var(--bg-base)] text-left shadow-[0_24px_60px_-24px_rgba(0,0,0,0.6)]">
+        <div className="rounded-lg overflow-hidden border border-[var(--border-default)] bg-[var(--bg-base)] text-left">
           <div className="flex items-center gap-1.5 px-3 py-1.5 bg-[var(--bg-secondary)] border-b border-[var(--border-subtle)]">
             <span className="w-2 h-2 rounded-full bg-[var(--traffic-close)]" />
             <span className="w-2 h-2 rounded-full bg-[var(--traffic-minimize)]" />
             <span className="w-2 h-2 rounded-full bg-[var(--traffic-zoom)]" />
-            <span className="ml-2 text-[10px] font-mono text-[var(--text-muted)] tracking-wider">
+            <span className="ml-2 text-2xs font-mono text-[var(--text-muted)] tracking-wider">
               insight.preview
             </span>
-            <span className="ml-auto inline-flex items-center gap-1 text-[10px] font-mono uppercase tracking-[0.18em] text-[var(--terminal)]">
+            <span className="ml-auto inline-flex items-center gap-1 text-2xs font-mono uppercase tracking-[0.18em] text-[var(--terminal)]">
               <span className="w-1 h-1 rounded-full bg-[var(--terminal)]" />
               preview
             </span>
           </div>
           <div className="p-4 space-y-3">
             <div className="flex items-center gap-2">
-              <span className="text-xs font-mono font-bold px-2 py-0.5 rounded-full bg-[var(--error-bg)] text-[var(--error)]">CRITICAL</span>
+              <span className="text-xs font-mono font-bold px-2 py-1 rounded-full bg-[var(--error-bg)] text-[var(--error)]">CRITICAL</span>
               <span className="text-xs font-mono text-[var(--text-muted)]">latency_regression · conf 0.91</span>
             </div>
             <p className="text-sm text-[var(--text-primary)]">
@@ -273,96 +300,139 @@ function OverviewTab({
     value: summary.total_insights,
     icon: Sparkles
   }];
-  return <div className="space-y-6">
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        {cards.map(card => <StatCard key={card.label} title={card.label} value={card.value} icon={card.icon} accent={card.label === "Total Traces" ? "accent" : "warning"} />)}
+  return <div className="space-y-space-6" data-testid="insights-chart-hierarchy">
+      {/* Thin KPI strip — overview density (≤2 primary glance metrics) */}
+      <div className="grid grid-cols-2 gap-space-3 max-w-xl">
+        {cards.map(card => (
+          <StatCard
+            key={card.label}
+            title={card.label}
+            value={card.value}
+            icon={card.icon}
+            accent={card.label === "Total Traces" ? "accent" : "warning"}
+          />
+        ))}
       </div>
 
-      <div className="grid lg:grid-cols-2 gap-6">
-        <Card padding="lg">
-          <h3 className="text-sm font-semibold text-[var(--text-primary)] mb-4 flex items-center gap-2">
-            <BarChart3 className="w-4 h-4 text-[var(--accent)]" />
-            Insights by Severity
-          </h3>
-          <div className="space-y-3">
-            {["critical", "high", "medium", "low", "info"].map(severity => {
+      {/* Primary chart — severity distribution full width */}
+      <Panel tone="flat" padding="lg" aria-label="Insights by severity">
+        <h3 className="mb-space-4 flex items-center gap-space-2 text-sm font-semibold text-[var(--text-primary)]">
+          <BarChart3 className="h-4 w-4 text-[var(--accent)]" />
+          Insights by severity
+          <span className="ml-auto text-2xs font-normal uppercase tracking-wide text-[var(--text-muted)]">Primary</span>
+        </h3>
+        <div className="space-y-space-3">
+          {["critical", "high", "medium", "low", "info"].map((severity) => {
             const count = insights.by_severity[severity] || 0;
             const total = summary.total_insights || 1;
-            const pct = count / total * 100;
-            const color = severity === "critical" ? "bg-[var(--error)]" : severity === "high" ? "bg-[var(--warning)]" : severity === "medium" ? "bg-[var(--warning)]" : severity === "low" ? "bg-[var(--accent-faint)]" : "bg-[var(--text-muted)]";
-            return <div key={severity}>
-                  <div className="flex items-center justify-between text-sm mb-1">
-                    <span className="capitalize text-[var(--text-secondary)]">{severity}</span>
-                    <span className="font-medium text-[var(--text-primary)]">{count}</span>
-                  </div>
-                  <div className="h-2 bg-[var(--bg-tertiary)] rounded-full overflow-hidden">
-                    <div className={cn("h-full rounded-full transition-all duration-500", color)} style={{
-                  width: `${pct}%`
-                }} />
-                  </div>
-                </div>;
+            const pct = (count / total) * 100;
+            const color =
+              severity === "critical"
+                ? "bg-[var(--error)]"
+                : severity === "high"
+                  ? "bg-[var(--warning)]"
+                  : severity === "medium"
+                    ? "bg-[var(--warning)]"
+                    : severity === "low"
+                      ? "bg-[var(--accent-faint)]"
+                      : "bg-[var(--text-muted)]";
+            return (
+              <div key={severity}>
+                <div className="mb-1 flex items-center justify-between text-sm">
+                  <span className="capitalize text-[var(--text-secondary)]">{severity}</span>
+                  <span className="font-medium text-[var(--text-primary)]">{count}</span>
+                </div>
+                <div className="h-2 overflow-hidden rounded-full bg-[var(--bg-tertiary)]">
+                  <div
+                    className={cn("h-full rounded-full transition-all duration-500", color)}
+                    style={{ width: `${pct}%` }}
+                  />
+                </div>
+              </div>
+            );
           })}
-          </div>
-        </Card>
+        </div>
+      </Panel>
 
-        <Card padding="lg">
-          <h3 className="text-sm font-semibold text-[var(--text-primary)] mb-4 flex items-center gap-2">
-            <Layers className="w-4 h-4 text-[var(--accent)]" />
-            Traces by Realm
+      {/* Secondary metrics */}
+      <div className="grid gap-4 lg:grid-cols-2">
+        <Panel tone="flat" padding="md" aria-label="Traces by realm">
+          <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-[var(--text-primary)]">
+            <Layers className="h-4 w-4 text-[var(--accent)]" />
+            Traces by realm
           </h3>
-          <div className="space-y-3">
+          <div className="space-y-2">
             {Object.entries(traces.by_realm).map(([realm, count]) => {
-            const total = summary.total_traces || 1;
-            const pct = count / total * 100;
-            return <div key={realm}>
-                  <div className="flex items-center justify-between text-sm mb-1">
+              const total = summary.total_traces || 1;
+              const pct = (count / total) * 100;
+              return (
+                <div key={realm}>
+                  <div className="mb-1 flex items-center justify-between text-xs">
                     <span className="capitalize text-[var(--text-secondary)]">{realm}</span>
                     <span className="font-medium text-[var(--text-primary)]">{count}</span>
                   </div>
-                  <div className="h-2 bg-[var(--bg-tertiary)] rounded-full overflow-hidden">
-                    <div className="h-full bg-[var(--accent)] rounded-full transition-all duration-500" style={{
-                  width: `${pct}%`
-                }} />
-                  </div>
-                </div>;
-          })}
-            {Object.keys(traces.by_realm).length === 0 && <EmptyState icon={Activity} title="No traces ingested yet" description="Trace ingestion happens automatically as your agents run." size="sm" />}
-          </div>
-        </Card>
-      </div>
-
-      <Card padding="lg">
-        <h3 className="text-sm font-semibold text-[var(--text-primary)] mb-4 flex items-center gap-2">
-          <Sparkles className="w-4 h-4 text-[var(--accent)]" />
-          Recent Insights
-        </h3>
-        {insights.recent.length > 0 ? <div className="space-y-3">
-            {insights.recent.slice(0, 5).map(insight => (
-              <button
-                key={insight.insight_id}
-                type="button"
-                onClick={() => onOpenInsight(insight)}
-                className="w-full text-left flex items-start gap-3 p-3 rounded-lg bg-[var(--bg-secondary)] hover:bg-[var(--bg-tertiary)] transition-colors"
-              >
-                <SeverityIcon severity={insight.severity} />
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-[var(--text-primary)] truncate">
-                    {insight.summary}
-                  </p>
-                  <div className="flex items-center gap-2 mt-1">
-                    <span className="text-xs px-2 py-0.5 rounded-full bg-[var(--bg-tertiary)] text-[var(--text-muted)]">
-                      {insight.detector}
-                    </span>
-                    <span className="text-xs text-[var(--text-muted)]">
-                      confidence: {(insight.confidence * 100).toFixed(0)}%
-                    </span>
+                  <div className="h-1.5 overflow-hidden rounded-full bg-[var(--bg-tertiary)]">
+                    <div
+                      className="h-full rounded-full bg-[var(--accent)] transition-all duration-500"
+                      style={{ width: `${pct}%` }}
+                    />
                   </div>
                 </div>
-                <ChevronRight className="w-4 h-4 text-[var(--text-muted)] flex-shrink-0 mt-1" />
-              </button>
-            ))}
-          </div> : <EmptyState icon={Sparkles} title="No insights yet" description="Run detectors to discover patterns and quality trends in your outputs." size="md" />}
-      </Card>
+              );
+            })}
+            {Object.keys(traces.by_realm).length === 0 && (
+              <EmptyState
+                icon={Activity}
+                title="No traces ingested yet"
+                description="No traces in this window. Send traffic via the SDK or gateway, then refresh."
+                size="sm"
+              />
+            )}
+          </div>
+        </Panel>
+
+        <div className="space-y-2" aria-label="Recent insights">
+          <h3 className="flex items-center gap-2 text-sm font-semibold text-[var(--text-primary)]">
+            <Sparkles className="h-4 w-4 text-[var(--accent)]" />
+            Recent insights
+          </h3>
+          {insights.recent.length > 0 ? (
+            <div className="divide-y divide-[var(--border-subtle)] rounded-xl border border-[var(--border-default)]">
+              {insights.recent.slice(0, 5).map((insight) => (
+                <button
+                  key={insight.insight_id}
+                  type="button"
+                  onClick={() => onOpenInsight(insight)}
+                  className="flex w-full items-start gap-3 p-3 text-left transition-colors hover:bg-[var(--bg-secondary)]"
+                >
+                  <SeverityIcon severity={insight.severity} />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium text-[var(--text-primary)]">
+                      {insight.summary}
+                    </p>
+                    <div className="mt-1 flex items-center gap-2">
+                      <span className="rounded-full bg-[var(--bg-tertiary)] px-2 py-1 text-2xs text-[var(--text-muted)]">
+                        {insight.detector}
+                      </span>
+                      <span className="text-2xs text-[var(--text-muted)]">
+                        {(insight.confidence * 100).toFixed(0)}% conf
+                      </span>
+                    </div>
+                  </div>
+                  <ChevronRight className="mt-1 h-4 w-4 shrink-0 text-[var(--text-muted)]" />
+                </button>
+              ))}
+            </div>
+          ) : (
+            <EmptyState
+              icon={Sparkles}
+              title="No insights yet"
+              description="No insights yet. Run detectors to scan patterns and quality trends in your outputs."
+              size="md"
+            />
+          )}
+        </div>
+      </div>
     </div>;
 }
 
@@ -410,7 +480,7 @@ function InsightsTab({
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-[var(--text-primary)]">{insight.summary}</p>
                   <div className="flex flex-wrap items-center gap-2 mt-2">
-                    <span className="text-xs px-2 py-0.5 rounded-full bg-[var(--accent-faint)] text-[var(--accent)]">
+                    <span className="text-xs px-2 py-1 rounded-full bg-[var(--accent-faint)] text-[var(--accent)]">
                       {insight.detector}
                     </span>
                     <span className="text-xs text-[var(--text-muted)]">
@@ -419,7 +489,7 @@ function InsightsTab({
                     <span className="text-xs text-[var(--text-muted)]">
                       {insight.affected_trace_ids.length} affected
                     </span>
-                    {insight.auto_created_dataset && <span className="text-xs px-2 py-0.5 rounded-full bg-[var(--terminal-faint)] text-[var(--terminal)]">
+                    {insight.auto_created_dataset && <span className="text-xs px-2 py-1 rounded-full bg-[var(--terminal-faint)] text-[var(--terminal)]">
                         Dataset: {insight.auto_created_dataset}
                       </span>}
                   </div>
@@ -427,7 +497,7 @@ function InsightsTab({
                 <ChevronRight className="w-4 h-4 text-[var(--text-muted)] flex-shrink-0 mt-1" />
               </div>
             </button>)}
-        {data.recent.length === 0 && <EmptyState icon={Sparkles} title="No insights detected yet" description="Run detectors to discover quality patterns and improvement opportunities in your outputs." size="lg" />}
+        {data.recent.length === 0 && <EmptyState icon={Sparkles} title="No insights detected yet" description="No detector results yet. Run detectors to scan quality patterns in your outputs." size="lg" />}
       </div>
     </div>;
 }
@@ -458,13 +528,13 @@ function InsightDetailModal({
       <div className="space-y-4">
         <p className="text-sm text-[var(--text-primary)]">{insight.summary}</p>
         <div className="flex flex-wrap gap-2">
-          <span className="text-xs px-2 py-0.5 rounded-full bg-[var(--accent-faint)] text-[var(--accent)]">
+          <span className="text-xs px-2 py-1 rounded-full bg-[var(--accent-faint)] text-[var(--accent)]">
             {insight.detector}
           </span>
-          <span className="text-xs px-2 py-0.5 rounded-full bg-[var(--bg-tertiary)] text-[var(--text-muted)]">
+          <span className="text-xs px-2 py-1 rounded-full bg-[var(--bg-tertiary)] text-[var(--text-muted)]">
             {(insight.confidence * 100).toFixed(0)}% confidence
           </span>
-          <span className="text-xs px-2 py-0.5 rounded-full bg-[var(--bg-tertiary)] text-[var(--text-muted)]">
+          <span className="text-xs px-2 py-1 rounded-full bg-[var(--bg-tertiary)] text-[var(--text-muted)]">
             {insight.affected_trace_ids.length} traces
           </span>
         </div>
@@ -485,9 +555,9 @@ function InsightDetailModal({
         {/* Radix DialogContent renders its own close button via
             DialogPrimitive.Close (top-right). Keeping onClose wired
             here so callers can use it for explicit dismissal. */}
-        <button type="button" onClick={onClose} aria-label="Close insight detail" className="text-xs text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors">
+        <Button type="button" variant="ghost" size="sm" onClick={onClose} aria-label="Close insight detail">
           Close
-        </button>
+        </Button>
       </div>
     </DialogContent>;
 }
@@ -534,78 +604,87 @@ function ClosedLoopTab() {
       <EmptyState
         size="lg"
         title="No correlation data yet"
-        description="Once the closed-loop is established, this view shows whether insight-driven KB entries correlate with downstream gold-tier jobs."
+        description="No correlation report yet. After insights drive KB entries, this view shows post-rate vs gold-tier job outcomes."
       />
     );
   }
   const ratePct = report.aggregate_post_rate ? (report.aggregate_post_rate * 100).toFixed(1) : "—";
   const targetPct = (report.target_slo * 100).toFixed(0);
-  return <div className="space-y-6">
-      {/* Headline card */}
-      <div className="bg-[var(--bg-secondary)] border border-[var(--border-default)] rounded-xl p-6">
-        <div className="flex items-start justify-between mb-4">
+  return <div className="space-y-space-6">
+      {/* Primary closed-loop KPI band */}
+      <Panel tone="flat" padding="lg">
+        <div className="mb-space-4 flex items-start justify-between gap-space-3">
           <div>
-            <h3 className="text-lg font-semibold text-[var(--text-primary)]">
-              Closed-loop measurement (§3.2)
+            <h3 className="text-sm font-semibold text-[var(--text-primary)]">
+              Closed-loop measurement
             </h3>
-            <p className="text-sm text-[var(--text-muted)] mt-1">
+            <p className="mt-space-1 text-xs text-[var(--text-muted)]">
               Did insight-driven KB entries correlate with gold-tier jobs in the post-write window?
             </p>
           </div>
-          <select value={days} onChange={e => setDays(Number(e.target.value))} className="text-sm border border-[var(--border-default)] rounded-lg px-3 py-1.5 bg-[var(--bg-primary)] text-[var(--text-primary)]">
+          <select
+            value={days}
+            onChange={(e) => setDays(Number(e.target.value))}
+            aria-label="Lookback window"
+            className="rounded-lg border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-1.5 text-sm text-[var(--text-primary)]"
+          >
             <option value={7}>Last 7 days</option>
             <option value={30}>Last 30 days</option>
             <option value={90}>Last 90 days</option>
             <option value={180}>Last 180 days</option>
           </select>
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 gap-space-4 sm:grid-cols-3">
           <div>
-            <div className="text-xs text-[var(--text-muted)] uppercase tracking-wide mb-1">
+            <div className="mb-1 text-2xs uppercase tracking-wide text-[var(--text-muted)]">
               Aggregate gold rate
             </div>
-            <div className="text-3xl font-bold text-[var(--text-primary)]">
-              {ratePct}%
-            </div>
-            <div className="text-xs text-[var(--text-muted)] mt-1">
-              target ≥ {targetPct}%
-            </div>
+            <div className="text-3xl font-bold text-[var(--text-primary)]">{ratePct}%</div>
+            <div className="mt-1 text-xs text-[var(--text-muted)]">target ≥ {targetPct}%</div>
           </div>
           <div>
-            <div className="text-xs text-[var(--text-muted)] uppercase tracking-wide mb-1">
+            <div className="mb-1 text-2xs uppercase tracking-wide text-[var(--text-muted)]">
               SLO target met
             </div>
-            <div className={cn("text-3xl font-bold", report.target_slo_met ? "text-[var(--terminal)]" : "text-[var(--warning)]")}>
+            <div
+              className={cn(
+                "text-3xl font-bold",
+                report.target_slo_met ? "text-[var(--terminal)]" : "text-[var(--warning)]",
+              )}
+            >
               {report.target_slo_met ? "✓ YES" : "✗ NO"}
             </div>
           </div>
           <div>
-            <div className="text-xs text-[var(--text-muted)] uppercase tracking-wide mb-1">
+            <div className="mb-1 text-2xs uppercase tracking-wide text-[var(--text-muted)]">
               Jobs in window
             </div>
             <div className="text-3xl font-bold text-[var(--text-primary)]">
               {report.aggregate_post_jobs}
             </div>
-            <div className="text-xs text-[var(--text-muted)] mt-1">
+            <div className="mt-1 text-xs text-[var(--text-muted)]">
               {report.aggregate_post_gold} gold
             </div>
           </div>
         </div>
-      </div>
+      </Panel>
 
-      {/* Per-week table */}
-      <div className="bg-[var(--bg-secondary)] border border-[var(--border-default)] rounded-xl overflow-hidden">
-        <div className="px-6 py-4 border-b border-[var(--border-default)] flex items-center justify-between">
-          <h3 className="text-sm font-semibold text-[var(--text-primary)]">
-            Per-week breakdown
-          </h3>
-          <span className="text-xs text-[var(--text-muted)]">
+      {/* Secondary table — analysis density */}
+      <div className="overflow-hidden rounded-xl border border-[var(--border-default)]">
+        <div className="flex items-center justify-between border-b border-[var(--border-default)] px-4 py-3">
+          <h3 className="text-sm font-semibold text-[var(--text-primary)]">Per-week breakdown</h3>
+          <span className="text-2xs text-[var(--text-muted)]">
             generated {new Date(report.generated_at).toLocaleString()}
           </span>
         </div>
-        {report.weeks.length === 0 ? <div className="px-6 py-8 text-center text-sm text-[var(--text-muted)]">
-            No insights written in the {days}-day window.
-          </div> : <DataTable columns={[{
+        {report.weeks.length === 0 ? (
+          <EmptyState
+            size="sm"
+            title="No insights written in this window"
+            description={`No insights written in the ${days}-day window.`}
+            className="px-space-6"
+          />
+        ) : <DataTable columns={[{
         key: "week_start",
         header: "Week",
         sortable: true,

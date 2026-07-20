@@ -13,6 +13,10 @@
  *
  * Screenshots → e2e/golden/screenshots/
  *
+ * W6 chrome + hub visual map (agents / improve / settings gaps, re-baseline):
+ *   docs/specs/ui/overhaul-2026/w6-visual-regression.md
+ *   node e2e/golden/w6-visual-smoke-checklist.mjs
+ *
  * Required env vars (for seed-auth, sourced before this script):
  *   CLERK_SECRET_KEY, NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY
  */

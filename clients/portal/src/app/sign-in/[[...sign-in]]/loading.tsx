@@ -11,7 +11,7 @@ export default function Loading() {
   return (
     <AuthSplitLayout brandPanel={<AuthBrandPanel />}>
       <div
-        className="flex items-center justify-center py-12"
+        className="flex items-center justify-center py-space-8"
         aria-busy="true"
         aria-live="polite"
       >

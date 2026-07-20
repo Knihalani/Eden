@@ -96,9 +96,10 @@ describe("W5-2 redteam page wiring", () => {
     expect(src).not.toContain("Scan completed with failures");
   });
 
-  it("gates findings empty behind !error", () => {
+  it("gates findings empty behind QueryState", () => {
     const src = read("app/(portal)/redteam/page.tsx");
-    expect(src).toMatch(/error \? \([\s\S]*ErrorState[\s\S]*\) : \(/);
+    expect(src).toContain('from "@/components/ui/query-state"');
+    expect(src).toContain("<QueryState");
     expect(src).toContain("Could not load findings");
   });
 });

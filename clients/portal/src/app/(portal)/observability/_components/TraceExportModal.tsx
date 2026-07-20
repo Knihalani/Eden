@@ -11,6 +11,7 @@ import { Download, X } from "lucide-react";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { errorFromCaught } from "@/lib/safe-error-message";
+import { Button } from "@/components/ui/button";
 
 type ExportFormat = "json" | "jsonl" | "csv";
 
@@ -119,14 +120,16 @@ export function TraceExportModal({ open, onOpenChange, orgId, traceId }: TraceEx
                     {fmt.toUpperCase()}
                   </button>
                 ))}
-                <button
+                <Button
+                  variant="default"
+                  className="min-h-11 ml-auto"
                   onClick={handleDownload}
-                  disabled={loading || !!error || !data}
-                  className="ml-auto inline-flex items-center gap-2 px-3 py-1.5 bg-[var(--accent)] text-[var(--accent-foreground)] rounded-lg text-xs font-medium hover:bg-[var(--accent-hover)] disabled:opacity-50 transition-colors"
+                  disabled={!!error || !data}
+                  loading={loading}
                 >
                   <Download className="w-3.5 h-3.5" />
                   Download
-                </button>
+                </Button>
               </div>
               {error ? (
                 <div className="text-sm text-[var(--error)] bg-[var(--error-bg)] p-3 rounded-lg">
