@@ -3,13 +3,16 @@
 import { useEffect, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
-import { Loader2, ExternalLink, Radio } from "lucide-react";
+import { ChevronRight, Loader2, ExternalLink, Radio } from "lucide-react";
 import { api } from "@/lib/api";
 import { useOrg } from "@/hooks/use-org";
 import { useLiveTraceStream } from "@/hooks/use-live-trace-stream";
-import { buildTranscriptRows } from "@/lib/observability/build-transcript-rows";
+import {
+  buildSpanTree,
+  buildTranscriptRows,
+} from "@/lib/observability/build-transcript-rows";
+import type { TranscriptRow } from "@/lib/observability/types";
 import { VirtualizedTranscript } from "@/components/transcript-v2/VirtualizedTranscript";
-import { CrossLinkBar } from "@/components/portal-os/CrossLinkBar";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ErrorState } from "@/components/ui/error-state";
 import { TraceOutcomeBadge } from "@/components/ui/status-badge";
@@ -20,6 +23,7 @@ import {
   playgroundHref,
 } from "@/lib/portal-cross-links";
 import { useTraceTimeline } from "@/app/(portal)/observability/_lib/use-observability-data";
+import { cn } from "@/lib/utils";
 
 const ScoresTab = dynamic(
   () =>
@@ -45,25 +49,31 @@ export const TRACE_DETAIL_MODE_TABS = [
   { id: "scores", label: "Scores" },
 ] as const;
 
+export type DetailMode = (typeof TRACE_DETAIL_MODE_TABS)[number]["id"];
+
 export interface TraceDetailPanelProps {
   traceId: string;
   onClose?: () => void;
   highlightSpanId?: string | null;
   /** When true, hide Esc close (parent DetailPanelShell owns close). */
   hideCloseControl?: boolean;
+  /** URL / parent-driven mode; defaults to transcript. */
+  initialMode?: DetailMode;
+  /** Notify parent when local mode tabs change (e.g. sync `?mode=`). */
+  onModeChange?: (mode: DetailMode) => void;
 }
-
-type DetailMode = (typeof TRACE_DETAIL_MODE_TABS)[number]["id"];
 
 export function TraceDetailPanel({
   traceId,
   onClose,
   highlightSpanId,
   hideCloseControl = false,
+  initialMode = "transcript",
+  onModeChange,
 }: TraceDetailPanelProps) {
   const { currentOrg } = useOrg();
   const [phase, setPhase] = useState<"meta" | "ready" | "error">("meta");
-  const [mode, setMode] = useState<DetailMode>("transcript");
+  const [mode, setMode] = useState<DetailMode>(initialMode);
   const [error, setError] = useState<string | null>(null);
   const [meta, setMeta] = useState<{
     duration_ms: number;
@@ -72,8 +82,12 @@ export function TraceDetailPanel({
     model?: string;
     cost_cents?: number | null;
     session_id?: string | null;
+    agent_id?: string | null;
+    input_tokens?: number | null;
+    output_tokens?: number | null;
   } | null>(null);
   const [rows, setRows] = useState<ReturnType<typeof buildTranscriptRows>>([]);
+  const [treeRows, setTreeRows] = useState<ReturnType<typeof buildSpanTree>>([]);
 
   const sessionId = meta?.session_id ?? null;
   const liveStream = useLiveTraceStream({
@@ -88,11 +102,16 @@ export function TraceDetailPanel({
   );
 
   useEffect(() => {
+    setMode(initialMode);
+  }, [initialMode, traceId]);
+
+  useEffect(() => {
     if (!currentOrg || !traceId) return;
     let cancelled = false;
     setPhase("meta");
     setError(null);
     setRows([]);
+    setTreeRows([]);
     markEden("eden:panel_open", "trace");
 
     // K4: fetch meta + tree in parallel (was sequential meta→tree).
@@ -110,11 +129,13 @@ export function TraceDetailPanel({
           setPhase("error");
           return;
         }
+        const rootRecords = roots as Array<Record<string, unknown>>;
         setRows(
-          buildTranscriptRows(roots as Array<Record<string, unknown>>, {
+          buildTranscriptRows(rootRecords, {
             lazyToolPayloads: true,
           }),
         );
+        setTreeRows(buildSpanTree(rootRecords));
         setMeta({
           duration_ms: tree?.total_duration_ms ?? trace?.duration_ms ?? 0,
           span_count: tree?.span_count ?? trace?.span_count ?? 0,
@@ -126,6 +147,11 @@ export function TraceDetailPanel({
               ?.agent_session_id ??
             (trace as { session_id?: string } | undefined)?.session_id ??
             null,
+          agent_id: (trace as { agent_id?: string | null } | undefined)?.agent_id ?? null,
+          input_tokens:
+            (trace as { input_tokens?: number | null } | undefined)?.input_tokens ?? null,
+          output_tokens:
+            (trace as { output_tokens?: number | null } | undefined)?.output_tokens ?? null,
         });
         setPhase("ready");
       })
@@ -191,6 +217,20 @@ export function TraceDetailPanel({
     meta?.duration_ms ??
     Math.max(1, ...timelineSteps.map((s) => s.end_ms), 1);
 
+  const totalTokens =
+    meta?.input_tokens != null && meta?.output_tokens != null
+      ? {
+          input: meta.input_tokens,
+          output: meta.output_tokens,
+          total: meta.input_tokens + meta.output_tokens,
+        }
+      : undefined;
+
+  const setModeAndNotify = (next: DetailMode) => {
+    setMode(next);
+    onModeChange?.(next);
+  };
+
   if (phase === "meta") {
     return (
       <div className="flex h-48 flex-col items-center justify-center gap-2">
@@ -204,23 +244,22 @@ export function TraceDetailPanel({
     return <ErrorState title="Could not load trace" message={error ?? "Unknown error"} />;
   }
 
-  const crossLinks = [
+  const openInLinks = [
     { label: "Create artifact", href: artifactHref() },
     { label: "Open playground", href: playgroundHref(traceId) },
-    { label: "Add to dataset", href: `/evals?tab=datasets&promote_trace=${encodeURIComponent(traceId)}` },
+    {
+      label: "Add to dataset",
+      href: `/evals?tab=datasets&promote_trace=${encodeURIComponent(traceId)}`,
+    },
     { label: "Seed labeling", href: labelingQueueHref() },
     { label: "Related issues", href: `/issues?q=${encodeURIComponent(traceId)}` },
     { label: "Alerts", href: "/alerts" },
-    ...(sessionId
-      ? [{ label: "Session", href: `/sessions/${encodeURIComponent(sessionId)}` }]
-      : []),
   ];
 
   const showLiveBadge = liveStream.live && !liveStream.finalized;
 
   return (
     <div className="flex flex-col h-full">
-      <CrossLinkBar links={crossLinks} />
       <div className="px-4 py-2 border-b border-[var(--border-default)] flex flex-wrap items-center gap-2 text-xs">
         <TraceOutcomeBadge outcome={meta?.outcome ?? null} />
         {showLiveBadge && (
@@ -258,12 +297,29 @@ export function TraceDetailPanel({
             href={`/sessions/${encodeURIComponent(sessionId)}`}
             className="text-[var(--accent)] hover:underline inline-flex items-center gap-1"
           >
-            View session <ExternalLink className="w-3 h-3" />
+            Session <ExternalLink className="w-3 h-3" />
           </Link>
         )}
+        <details className="group relative">
+          <summary className="cursor-pointer list-none text-[var(--text-muted)] hover:text-[var(--text-primary)] inline-flex items-center gap-0.5 [&::-webkit-details-marker]:hidden">
+            Open in…
+            <ChevronRight className="h-3 w-3 opacity-60 transition-transform group-open:rotate-90" />
+          </summary>
+          <div className="absolute left-0 top-full z-20 mt-1 min-w-[11rem] rounded border border-[var(--border-default)] bg-[var(--bg-primary)] py-1 shadow-md">
+            {openInLinks.map((link) => (
+              <Link
+                key={link.href}
+                href={link.href}
+                className="block px-3 py-1.5 text-2xs text-[var(--text-secondary)] hover:bg-[var(--bg-secondary)] hover:text-[var(--text-primary)]"
+              >
+                {link.label}
+              </Link>
+            ))}
+          </div>
+        </details>
         <Tabs
           value={mode}
-          onValueChange={(id) => setMode(id as DetailMode)}
+          onValueChange={(id) => setModeAndNotify(id as DetailMode)}
           className="ml-2"
         >
           <TabsList
@@ -312,8 +368,20 @@ export function TraceDetailPanel({
                 <dd className="font-mono break-all">{traceId}</dd>
               </div>
               <div className="flex justify-between gap-4">
+                <dt className="text-[var(--text-muted)]">Agent</dt>
+                <dd>{meta?.agent_id ?? "—"}</dd>
+              </div>
+              <div className="flex justify-between gap-4">
                 <dt className="text-[var(--text-muted)]">Model</dt>
                 <dd>{meta?.model ?? "—"}</dd>
+              </div>
+              <div className="flex justify-between gap-4">
+                <dt className="text-[var(--text-muted)]">Tokens</dt>
+                <dd className="font-mono">
+                  {totalTokens
+                    ? `${totalTokens.total.toLocaleString()} (${totalTokens.input.toLocaleString()} in / ${totalTokens.output.toLocaleString()} out)`
+                    : "—"}
+                </dd>
               </div>
               <div className="flex justify-between gap-4">
                 <dt className="text-[var(--text-muted)]">Cost</dt>
@@ -333,13 +401,15 @@ export function TraceDetailPanel({
             />
           </div>
         ) : mode === "tree" ? (
-          <ul className="space-y-1 p-2 font-mono text-2xs text-[var(--text-secondary)]">
-            {rows.map((r) => (
-              <li key={r.span_id} className="truncate">
-                {r.name} · {r.duration_ms.toFixed(0)}ms · {r.span_id.slice(0, 8)}
-              </li>
-            ))}
-          </ul>
+          treeRows.length === 0 ? (
+            <p className="p-4 text-sm text-[var(--text-muted)]">No spans in tree.</p>
+          ) : (
+            <ul className="space-y-0.5 p-2 font-mono text-2xs" data-testid="trace-span-tree">
+              {treeRows.map((node) => (
+                <SpanTreeNode key={node.span_id} node={node} depth={0} />
+              ))}
+            </ul>
+          )
         ) : rows.length === 0 ? (
           <p className="text-sm text-[var(--text-muted)] p-4">
             {liveStream.live ? "Waiting for live steps…" : "No transcript steps found."}
@@ -350,6 +420,7 @@ export function TraceDetailPanel({
             rows={rows}
             totalDurationMs={meta?.duration_ms ?? 0}
             totalCost={meta?.cost_cents != null ? meta.cost_cents / 100 : undefined}
+            totalTokens={totalTokens}
             model={meta?.model}
             outcome={
               (meta?.outcome as
@@ -368,6 +439,60 @@ export function TraceDetailPanel({
         )}
       </div>
     </div>
+  );
+}
+
+function SpanTreeNode({ node, depth }: { node: TranscriptRow; depth: number }) {
+  const kids = node.children ?? [];
+  const [open, setOpen] = useState(depth < 2);
+  const failed = node.outcome === "failure" || node.outcome === "error";
+
+  return (
+    <li>
+      <div
+        className="flex items-center gap-1.5 rounded px-1 py-0.5 hover:bg-[var(--bg-secondary)]"
+        style={{ paddingLeft: `${depth * 0.75 + 0.25}rem` }}
+      >
+        {kids.length > 0 ? (
+          <button
+            type="button"
+            aria-expanded={open}
+            aria-label={open ? "Collapse" : "Expand"}
+            onClick={() => setOpen((v) => !v)}
+            className="shrink-0 text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+          >
+            <ChevronRight
+              className={cn("h-3 w-3 transition-transform", open && "rotate-90")}
+            />
+          </button>
+        ) : (
+          <span className="inline-block w-3 shrink-0" aria-hidden />
+        )}
+        <span
+          className={cn(
+            "h-1.5 w-1.5 shrink-0 rounded-full",
+            failed ? "bg-[var(--error)]" : "bg-[var(--terminal)]/70",
+          )}
+          title={node.outcome ?? "ok"}
+        />
+        <span className="min-w-0 truncate text-[var(--text-secondary)]" title={node.name}>
+          {node.name}
+        </span>
+        <span className="shrink-0 text-[var(--text-muted)]">
+          {node.duration_ms.toFixed(0)}ms
+        </span>
+        <span className="shrink-0 text-[var(--text-muted)]/70">
+          {node.span_id.slice(0, 8)}
+        </span>
+      </div>
+      {open && kids.length > 0 ? (
+        <ul>
+          {kids.map((child) => (
+            <SpanTreeNode key={child.span_id} node={child} depth={depth + 1} />
+          ))}
+        </ul>
+      ) : null}
+    </li>
   );
 }
 

@@ -43,6 +43,8 @@ interface TracesTabProps {
   onFilterChange?: (f: TraceFilter) => void;
   onSelectTrace: (id: string) => void;
   onViewTimeline: (id: string) => void;
+  /** Open detail panel on the Tree tab. */
+  onViewTree?: (id: string) => void;
   onExport: (id: string) => void;
   /** Pre-select this trace on first mount (for `?traceId=` deep links). */
   initialTraceId?: string;
@@ -80,11 +82,39 @@ function formatDurationMs(ms: number | null | undefined): string {
   return `${ms.toFixed(0)}ms`;
 }
 
+function formatRelativeTime(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  const t = new Date(iso).getTime();
+  if (Number.isNaN(t)) return "—";
+  const delta = Date.now() - t;
+  const sec = Math.round(delta / 1000);
+  if (sec < 60) return `${Math.max(0, sec)}s ago`;
+  const min = Math.round(sec / 60);
+  if (min < 60) return `${min}m ago`;
+  const hr = Math.round(min / 60);
+  if (hr < 48) return `${hr}h ago`;
+  return new Date(iso).toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function identityLabel(t: TraceItem): string {
+  const agent = t.agent_id?.trim();
+  if (agent) return agent;
+  const model = t.model?.trim();
+  if (model) return model;
+  return t.trace_id.slice(0, 12);
+}
+
 export function TracesTab({
   traces,
   loading,
   onSelectTrace,
   onViewTimeline,
+  onViewTree,
   onExport,
   initialTraceId,
   showReplayLink = true,
@@ -94,7 +124,7 @@ export function TracesTab({
   loadingMore,
   visibleColumns = TRACES_DEFAULT_VISIBLE_OPTIONAL,
   onSortChange,
-  defaultSort = { key: "duration_ms", direction: "desc" },
+  defaultSort = { key: "started_at", direction: "desc" },
   selectable = true,
   bulkActions,
 }: TracesTabProps) {
@@ -110,23 +140,41 @@ export function TracesTab({
     const visible = new Set(visibleColumns);
     return [
     {
-      key: "trace_id",
-      header: "Trace ID",
+      key: "agent_id",
+      header: "Agent",
       sortable: true,
       sticky: true,
       cell: (t) => (
-        <span className="font-mono text-xs text-[var(--text-primary)]">
-          {t.trace_id.slice(0, 16)}…
+        <div className="min-w-0 max-w-[220px]">
+          <div className="truncate text-sm font-medium text-[var(--text-primary)]">
+            {identityLabel(t)}
+          </div>
+          <div className="truncate font-mono text-2xs text-[var(--text-muted)]">
+            {t.trace_id.slice(0, 16)}…
+          </div>
+        </div>
+      ),
+    },
+    {
+      key: "started_at",
+      header: "When",
+      sortable: true,
+      cell: (t) => (
+        <span
+          className="text-xs text-[var(--text-secondary)] tabular-nums"
+          title={t.started_at ?? undefined}
+        >
+          {formatRelativeTime(t.started_at)}
         </span>
       ),
     },
     {
-      key: "realm",
-      header: "Realm",
+      key: "model",
+      header: "Model",
       sortable: true,
       cell: (t) => (
-        <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-[var(--accent-faint)] text-[var(--accent)]">
-          {t.realm}
+        <span className="block max-w-[140px] truncate text-xs text-[var(--text-secondary)]">
+          {t.model?.trim() || "—"}
         </span>
       ),
     },
@@ -137,23 +185,23 @@ export function TracesTab({
       cell: (t) => <TraceOutcomeBadge outcome={t.outcome} />,
     },
     {
-      key: "span_count",
-      header: "Spans",
-      sortable: true,
-      align: "right",
-      cell: (t) => (
-        <span className="text-[var(--text-secondary)]">{t.span_count}</span>
-      ),
-    },
-    {
       key: "duration_ms",
       header: "Duration",
       sortable: true,
       align: "right",
       cell: (t) => (
-        <span className="text-[var(--text-secondary)]">
+        <span className="tabular-nums text-[var(--text-secondary)]">
           {formatDurationMs(t.duration_ms)}
         </span>
+      ),
+    },
+    {
+      key: "span_count",
+      header: "Spans",
+      sortable: true,
+      align: "right",
+      cell: (t) => (
+        <span className="tabular-nums text-[var(--text-secondary)]">{t.span_count}</span>
       ),
     },
     ...(showTokenCostCols && visible.has("input_tokens")
@@ -228,7 +276,7 @@ export function TracesTab({
           <button
             onClick={(e) => {
               e.stopPropagation();
-              onSelectTrace(t.trace_id);
+              (onViewTree ?? onSelectTrace)(t.trace_id);
             }}
             className="p-1.5 text-[var(--text-muted)] hover:text-[var(--accent)] hover:bg-[var(--accent-faint)] rounded-lg transition-colors"
             title="View Trace Tree"
@@ -293,6 +341,7 @@ export function TracesTab({
     showReplayLink,
     onSelectTrace,
     onViewTimeline,
+    onViewTree,
     onAnnotate,
     onExport,
   ]);

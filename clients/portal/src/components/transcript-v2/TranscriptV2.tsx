@@ -78,6 +78,17 @@ export function TranscriptV2({
   }, [virtualize, visibleCount, rows.length]);
 
   const slice = rows.slice(0, visibleCount);
+
+  React.useEffect(() => {
+    if (!highlightSpanId) return;
+    const el = document.querySelector(
+      `[data-span-id="${CSS.escape(highlightSpanId)}"]`,
+    );
+    if (el instanceof HTMLElement) {
+      el.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    }
+  }, [highlightSpanId, slice.length]);
+
   const blocks = useParallelGroups(slice);
   const flatIds = React.useMemo(() => flattenSpanIds(slice), [slice]);
 
