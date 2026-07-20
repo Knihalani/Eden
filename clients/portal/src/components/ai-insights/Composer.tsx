@@ -103,10 +103,10 @@ export function Composer({
         e.preventDefault();
         onSubmit();
       }}
-      className="relative border-t border-[var(--border-default)] p-3"
+      className="relative border-t border-[var(--border-default)] p-space-3"
       data-ai-picker-open={pickerOpen && pickerLen > 0 ? "" : undefined}
     >
-      <div className="mb-1.5 flex flex-wrap items-center justify-end gap-2 text-[10px] tabular-nums text-[var(--text-muted)]">
+      <div className="mb-space-2 flex flex-wrap items-center justify-end gap-space-2 text-2xs tabular-nums text-[var(--text-muted)]">
         {typeof costEstimateUsd === "number" && costEstimateUsd > 0 && (
           <span title="Preflight turn estimate">
             Est ≈ ${costEstimateUsd.toFixed(4)}
@@ -135,7 +135,7 @@ export function Composer({
         <ul
           role="listbox"
           aria-label={slashOpen ? "Slash commands" : "Mentions"}
-          className="absolute bottom-full left-3 right-3 z-20 mb-1 max-h-48 overflow-auto rounded-md border border-[var(--border-default)] bg-[var(--bg-primary)] py-1 shadow-lg"
+          className="absolute bottom-full left-3 right-3 z-20 mb-space-1 max-h-48 overflow-auto rounded-md border border-[var(--border-default)] bg-[var(--bg-primary)] py-space-1 shadow-lg"
         >
           {slashOpen &&
             slashHits.map((c, i) => (
@@ -143,7 +143,7 @@ export function Composer({
                 <button
                   type="button"
                   className={cn(
-                    "flex w-full flex-col items-start gap-0.5 px-3 py-1.5 text-left text-sm",
+                    "flex w-full flex-col items-start gap-space-1 px-space-3 py-space-2 text-left text-sm",
                     i === activeIdx
                       ? "bg-[var(--bg-tertiary)] text-[var(--text-primary)]"
                       : "text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)]",
@@ -154,7 +154,7 @@ export function Composer({
                   }}
                 >
                   <span className="font-medium text-[var(--accent)]">{c.cmd}</span>
-                  <span className="text-[11px] text-[var(--text-muted)]">
+                  <span className="text-xs text-[var(--text-muted)]">
                     {c.description}
                   </span>
                 </button>
@@ -166,7 +166,7 @@ export function Composer({
                 <button
                   type="button"
                   className={cn(
-                    "flex w-full flex-col items-start gap-0.5 px-3 py-1.5 text-left text-sm",
+                    "flex w-full flex-col items-start gap-space-1 px-space-3 py-space-2 text-left text-sm",
                     i === activeIdx
                       ? "bg-[var(--bg-tertiary)] text-[var(--text-primary)]"
                       : "text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)]",
@@ -177,7 +177,7 @@ export function Composer({
                   }}
                 >
                   <span className="font-medium text-[var(--accent)]">{m.label}</span>
-                  <span className="text-[11px] text-[var(--text-muted)]">
+                  <span className="text-xs text-[var(--text-muted)]">
                     {m.description}
                   </span>
                 </button>
@@ -186,7 +186,7 @@ export function Composer({
         </ul>
       )}
 
-      <div className="flex items-end gap-2">
+      <div className="flex items-end gap-space-2">
         <textarea
           ref={taRef}
           value={input}
@@ -244,7 +244,7 @@ export function Composer({
           aria-autocomplete="list"
           className={cn(
             "flex-1 resize-none rounded-md border border-[var(--border-default)]",
-            "bg-[var(--bg-base)] px-3 py-2 text-sm text-[var(--text-primary)]",
+            "bg-[var(--bg-base)] px-space-3 py-space-2 text-sm text-[var(--text-primary)]",
             "placeholder:text-[var(--text-muted)] focus:border-[var(--accent)]",
             "focus:outline-none disabled:opacity-50",
           )}

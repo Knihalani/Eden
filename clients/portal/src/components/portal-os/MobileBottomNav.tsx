@@ -16,9 +16,11 @@ import {
   ScrollText,
   TrendingUp,
   Bug,
+  Bot,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { FOCUS_RING_CLASS } from "@/components/ui/focus-ring";
 import {
   Sheet,
   SheetContent,
@@ -33,6 +35,12 @@ export interface MobileNavItem {
   label: string;
 }
 
+export interface MobileMoreGroup {
+  id: string;
+  label: string;
+  links: MobileNavItem[];
+}
+
 /** U18 locked mobile IA — 4 core + More sheet. */
 export const MOBILE_CORE_NAV: MobileNavItem[] = [
   { href: "/dashboard", icon: Home, label: "Home" },
@@ -41,16 +49,39 @@ export const MOBILE_CORE_NAV: MobileNavItem[] = [
   { href: "/improve", icon: Sparkles, label: "Improve" },
 ];
 
-/** Overflow destinations opened from the More sheet. */
-export const MOBILE_MORE_LINKS: MobileNavItem[] = [
-  { href: "/artifacts", icon: Package, label: "Artifacts" },
-  { href: "/alerts", icon: Bell, label: "Alerts" },
-  { href: "/evals", icon: FlaskConical, label: "Evals" },
-  { href: "/ledger", icon: ScrollText, label: "Ledger" },
-  { href: "/promotions", icon: TrendingUp, label: "Promotions" },
-  { href: "/debugger-sessions", icon: Bug, label: "Debug sessions" },
-  { href: "/settings", icon: Settings, label: "Settings" },
+/**
+ * More sheet groups — Agents first (UX-P0-14); Settings last.
+ * Flat `MOBILE_MORE_LINKS` is derived for consumers / tests.
+ */
+export const MOBILE_MORE_GROUPS: MobileMoreGroup[] = [
+  {
+    id: "agents",
+    label: "Agents",
+    links: [{ href: "/agents", icon: Bot, label: "Agents" }],
+  },
+  {
+    id: "workspace",
+    label: "Workspace",
+    links: [
+      { href: "/artifacts", icon: Package, label: "Artifacts" },
+      { href: "/alerts", icon: Bell, label: "Alerts" },
+      { href: "/evals", icon: FlaskConical, label: "Evals" },
+      { href: "/ledger", icon: ScrollText, label: "Ledger" },
+      { href: "/promotions", icon: TrendingUp, label: "Promotions" },
+      { href: "/debugger-sessions", icon: Bug, label: "Debug sessions" },
+    ],
+  },
+  {
+    id: "account",
+    label: "Account",
+    links: [{ href: "/settings", icon: Settings, label: "Settings" }],
+  },
 ];
+
+/** Overflow destinations opened from the More sheet (flat, Agents first). */
+export const MOBILE_MORE_LINKS: MobileNavItem[] = MOBILE_MORE_GROUPS.flatMap(
+  (g) => g.links,
+);
 
 function isActivePath(pathname: string, href: string, search?: string): boolean {
   if (!pathname || !href) return false;
@@ -78,9 +109,11 @@ function MobileNavLink({ href, icon: Icon, label }: MobileNavItem) {
     <Link
       href={href}
       aria-label={label}
+      title={label}
       aria-current={active ? "page" : undefined}
       className={cn(
-        "flex flex-col items-center justify-center min-w-[44px] min-h-[44px] gap-1 transition-colors relative",
+        "flex flex-col items-center justify-center min-w-[44px] min-h-[44px] max-w-[4.75rem] gap-1 transition-colors relative rounded-md px-0.5",
+        FOCUS_RING_CLASS,
         active ? "text-[var(--accent)]" : "text-[var(--text-muted)] hover:text-[var(--text-secondary)]",
       )}
     >
@@ -90,8 +123,10 @@ function MobileNavLink({ href, icon: Icon, label }: MobileNavItem) {
           className="absolute top-0 left-1/2 -translate-x-1/2 w-8 h-0.5 rounded-full bg-[var(--accent)]"
         />
       )}
-      <Icon className="w-5 h-5" />
-      <span className="text-[10px] font-medium">{label}</span>
+      <Icon className="w-5 h-5 shrink-0" />
+      <span className="text-2xs font-medium max-w-full truncate text-center leading-tight">
+        {label}
+      </span>
     </Link>
   );
 }
@@ -116,17 +151,21 @@ export function MobileBottomNav({ items = MOBILE_CORE_NAV }: { items?: MobileNav
           <button
             type="button"
             aria-label="More"
+            title="More"
             aria-expanded={moreOpen}
             onClick={() => setMoreOpen(true)}
             className={cn(
-              "flex flex-col items-center justify-center min-w-[44px] min-h-[44px] gap-1 transition-colors relative",
+              "flex flex-col items-center justify-center min-w-[44px] min-h-[44px] max-w-[4.75rem] gap-1 transition-colors relative rounded-md px-0.5",
+              FOCUS_RING_CLASS,
               moreActive || moreOpen
                 ? "text-[var(--accent)]"
                 : "text-[var(--text-muted)] hover:text-[var(--text-secondary)]",
             )}
           >
-            <MoreHorizontal className="w-5 h-5" />
-            <span className="text-[10px] font-medium">More</span>
+            <MoreHorizontal className="w-5 h-5 shrink-0" />
+            <span className="text-2xs font-medium max-w-full truncate text-center leading-tight">
+              More
+            </span>
           </button>
         </div>
       </nav>
@@ -135,27 +174,39 @@ export function MobileBottomNav({ items = MOBILE_CORE_NAV }: { items?: MobileNav
         <SheetContent side="bottom" className="lg:hidden">
           <SheetHeader>
             <SheetTitle>More</SheetTitle>
-            <SheetDescription>Artifacts, alerts, evals, ledger, and more.</SheetDescription>
+            <SheetDescription>
+              Agents, artifacts, alerts, evals, ledger, and more.
+            </SheetDescription>
           </SheetHeader>
-          <ul className="p-2 space-y-1">
-            {MOBILE_MORE_LINKS.map(({ href, icon: Icon, label }) => (
-              <li key={href}>
-                <Link
-                  href={href}
-                  onClick={() => setMoreOpen(false)}
-                  className={cn(
-                    "flex items-center gap-3 min-h-[44px] px-3 py-2 rounded-lg text-sm",
-                    isActivePath(pathname, href)
-                      ? "bg-[var(--accent-faint)] text-[var(--accent)]"
-                      : "text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)]",
-                  )}
-                >
-                  <Icon className="w-5 h-5 shrink-0" />
-                  {label}
-                </Link>
-              </li>
+          <div className="p-2 space-y-3">
+            {MOBILE_MORE_GROUPS.map((group) => (
+              <div key={group.id}>
+                <p className="px-3 pt-1 pb-1 text-2xs uppercase tracking-wide text-[var(--text-muted)]">
+                  {group.label}
+                </p>
+                <ul className="space-y-1">
+                  {group.links.map(({ href, icon: Icon, label }) => (
+                    <li key={href}>
+                      <Link
+                        href={href}
+                        onClick={() => setMoreOpen(false)}
+                        className={cn(
+                          "flex items-center gap-3 min-h-[44px] px-3 py-2 rounded-lg text-sm",
+                          FOCUS_RING_CLASS,
+                          isActivePath(pathname, href)
+                            ? "bg-[var(--accent-faint)] text-[var(--accent)]"
+                            : "text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)]",
+                        )}
+                      >
+                        <Icon className="w-5 h-5 shrink-0" />
+                        {label}
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              </div>
             ))}
-          </ul>
+          </div>
         </SheetContent>
       </Sheet>
     </>

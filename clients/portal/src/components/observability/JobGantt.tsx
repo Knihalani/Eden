@@ -17,7 +17,6 @@
  */
 
 import * as React from "react";
-import { motion } from "framer-motion";
 import { Calendar } from "lucide-react";
 
 export interface GanttJob {
@@ -178,16 +177,16 @@ function GanttRow({
           className="relative h-full"
           style={{ marginLeft: 0 }}
         >
-          <motion.div
-            initial={{ scaleX: 0, opacity: 0 }}
-            animate={{ scaleX: 1, opacity: 1 }}
-            transition={{ duration: 0.3 }}
+          {/* Static bar — no framer-motion per row (w6-perf-check).
+              AnimatePresence/motion on list/gantt rows causes layout
+              thrash when N jobs remount; CSS enter can be added later
+              on the container only if needed. */}
+          <div
             className="absolute top-1/2 h-3 -translate-y-1/2 rounded-sm"
             style={{
               left: `${leftPct}%`,
               width: `${widthPct}%`,
               background: STATUS_COLORS[job.status],
-              transformOrigin: "left center",
               opacity: 0.85 }}
             title={`${job.name}\n${new Date(job.started_at).toISOString()}\nDuration: ${(job.duration_ms / 1000).toFixed(1)}s\nStatus: ${job.status}`}
           >
@@ -210,7 +209,7 @@ function GanttRow({
                 })}
               </div>
             )}
-          </motion.div>
+          </div>
         </div>
       </div>
     </div>

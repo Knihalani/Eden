@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import dynamic from "next/dynamic";
 import { useOrg } from "@/hooks/use-org";
+import { useQueryTab } from "@/hooks/use-query-tab";
 import { useToast } from "@/components/ui/toast";
 import { api, nlAlertsApi, integrationsApi } from "@/lib/api";
 import { useOrgQuery, useOrgMutation } from "@/hooks/use-api-query";
@@ -15,9 +16,18 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorState } from "@/components/ui/error-state";
 import { Button } from "@/components/ui/button";
 import { NoOrgState } from "@/components/ui/no-org-state";
+import { QueryState } from "@/components/ui/query-state";
+import { LoadingSkeleton } from "@/components/ui/skeleton";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { PageHeader } from "@/components/layout/page-header";
 import { CoreResourcePage, DetailPanelShell, useResourceUrlState, ResourceOsToolbar, BulkActionBar, VirtualizedList } from "@/components/portal-os";
-import { CrossLinkBar } from "@/components/portal-os/CrossLinkBar";
 import { incidentHref, traceHref } from "@/lib/portal-cross-links";
 import { EmbeddedSurface } from "@/components/layout/embedded-surface";
 import {
@@ -35,6 +45,8 @@ import {
   ChevronUp,
   Clock,
   RefreshCw } from "lucide-react";
+
+const ALERT_TABS = ["feed", "signals"] as const;
 
 const SignalsView = dynamic(() => import("@/app/(portal)/signals/page"), {
   ssr: false,
@@ -118,6 +130,7 @@ function AlertsPageInner() {
   const { currentOrg, orgSyncing } = useOrg();
   const orgId = currentOrg?.id ?? null;
   const toast = useToast();
+  const [tab, setTab] = useQueryTab("tab", ALERT_TABS, "feed");
   const [severityFilter, setSeverityFilter] = useState<SeverityFilter>("all");
   const [verdictFilter, setVerdictFilter] = useState<VerdictFilter>("all");
   const [acknowledgedFilter, setAcknowledgedFilter] = useState<boolean | null>(null);
@@ -125,10 +138,12 @@ function AlertsPageInner() {
   const { state: urlState, setState: setUrlState } = useResourceUrlState();
   const alertId = urlState.alertId;
   const [offset, setOffset] = useState(0);
+  // Rules is a feed-panel toggle (?tab=rules), not a hub peer of Feed/Signals.
+  // useQueryTab ignores unknown values and falls back to "feed".
   const [rulesOpen, setRulesOpen] = useState(
     searchParams.get("tab") === "rules",
   );
-  const showSignals = searchParams.get("tab") === "signals";
+  const showSignals = tab === "signals";
   const [channelConfigured, setChannelConfigured] = useState(BASE_CHANNEL_CONFIGURED);
   const limit = 50;
 
@@ -184,7 +199,6 @@ function AlertsPageInner() {
   const rulesError = rulesQuery.error?.message ?? null;
   const loading = alertsQuery.isLoading;
   const refreshing = alertsQuery.isFetching && !loading;
-  const error = alertsQuery.error?.message ?? null;
   const total = alertsQuery.data?.total ?? 0;
   const unreadCount = alertsQuery.data?.unread_count ?? 0;
   // Map listAlerts envelope → page AlertItem shape (message ← description).
@@ -288,64 +302,50 @@ function AlertsPageInner() {
       <NoOrgState
         icon={Bell}
         feature="Alerts"
-        description="Alert rules and the live feed belong to an organization, so create one to start getting notified."
-      />
-    );
-  }
-
-  if (showSignals) {
-    return (
-      <CoreResourcePage
-        header={
-          <PageHeader
-            title="Alerts"
-            subtitle="Threshold notifications and custom signal rules."
-          />
-        }
-        toolbar={
-          <div className="flex gap-2 text-sm">
-            <Link href="/alerts" className="text-[var(--accent)] hover:underline">Feed</Link>
-            <span className="text-[var(--text-muted)]">·</span>
-            <span className="font-medium text-[var(--text-primary)]">Signals</span>
-          </div>
-        }
-        table={
-          <EmbeddedSurface>
-            <SignalsView />
-          </EmbeddedSurface>
-        }
+        description="Alert rules and the live feed are org-scoped. Create or select an organization."
       />
     );
   }
 
   return (
+    <Tabs
+      value={tab}
+      onValueChange={(v) => {
+        const next = v as (typeof ALERT_TABS)[number];
+        if (next === "signals") setRulesOpen(false);
+        setTab(next);
+      }}
+    >
     <CoreResourcePage
       header={
         <PageHeader
           title="Alerts"
-          subtitle={loading ? "..." : `${total} alerts · ${unreadCount} unread`}
-          description="Configure notifications when traces, costs, or quality cross a threshold."
+          subtitle={
+            tab === "signals"
+              ? "Signals nest here — plain-English metric thresholds that feed notification rules."
+              : loading
+                ? "..."
+                : `${total} alerts · ${unreadCount} unread`
+          }
+          description="Watch thresholds on traces, costs, and quality. Delivery channels live in Settings; Signals nest as a hub tab."
           actions={
-          <div className="flex items-center gap-2">
-            <Link
-              href="/alerts?tab=signals"
-              className="text-xs text-[var(--text-muted)] hover:text-[var(--accent)] px-2"
-            >
-              Signals
-            </Link>
-            <button
+          tab === "feed" ? (
+          <div className="flex items-center gap-space-2">
+            <Button
+              variant="ghost"
+              size="default"
               onClick={fetchAlerts}
               disabled={loading || refreshing}
+              loading={refreshing}
               aria-label="Refresh alerts"
-              className="inline-flex min-h-11 min-w-11 items-center justify-center p-2 text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)] rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               title="Refresh"
             >
-              <RefreshCw className={cn("w-4 h-4", (loading || refreshing) && "animate-spin")} />
-            </button>
+              <RefreshCw className="h-4 w-4" />
+            </Button>
           {hasSelection && (
             <Button
               size="sm"
-              onClick={handleBatchAcknowledge}
+              onClick={() => void handleBatchAcknowledge()}
               disabled={ackLoading}
               aria-label={`Acknowledge ${selectedAlerts.size} selected alerts`}
               className="min-h-11"
@@ -359,27 +359,199 @@ function AlertsPageInner() {
             </Button>
           )}
           </div>
+          ) : null
         }
         />
       }
+      toolbar={
+        <div
+          className="flex flex-col gap-space-3"
+          data-testid="alerts-toolbar"
+        >
+          <div className="flex flex-wrap items-end gap-space-2">
+            <TabsList
+              variant="underline"
+              aria-label="Alerts sections"
+              className="h-auto flex-1 justify-start gap-space-1 bg-transparent"
+            >
+              <TabsTrigger variant="underline" value="feed" title="Feed" className="min-h-11">
+                Feed
+              </TabsTrigger>
+              <TabsTrigger variant="underline" value="signals" title="Signals" className="min-h-11">
+                Signals
+              </TabsTrigger>
+            </TabsList>
+            {tab === "feed" ? (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="default"
+                    className="min-h-11"
+                    aria-label="More links"
+                  >
+                    More
+                    <ChevronDown className="h-4 w-4" aria-hidden />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="min-w-[12rem]">
+                  <DropdownMenuLabel>Related</DropdownMenuLabel>
+                  <DropdownMenuItem asChild>
+                    <Link href="/settings">Settings</Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild>
+                    <Link href="/issues?tab=incidents">Incidents</Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild>
+                    <Link href="/traces">Traces</Link>
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            ) : null}
+          </div>
+          {tab === "feed" ? (
+            <ResourceOsToolbar
+              resourceKey="alerts"
+              sticky
+              onCreateAlert={() => {
+                setRulesOpen(true);
+                router.replace("/alerts?tab=rules");
+              }}
+              exportRows={alerts.map((a) => ({
+                id: a.alert_id,
+                title: a.title,
+                severity: a.severity,
+                acknowledged: a.acknowledged,
+                created_at: a.created_at,
+              }))}
+              exportFilename="alerts.csv"
+              selects={[
+                {
+                  key: "severity",
+                  label: "Severity",
+                  value: severityFilter === "all" ? "" : severityFilter,
+                  options: (["critical", "high", "warning", "info", "debug"] as const).map(
+                    (sev) => ({
+                      value: sev,
+                      label: `${getSeverityConfig(sev).label}${
+                        severityCounts[sev] ? ` (${severityCounts[sev]})` : ""
+                      }`,
+                    }),
+                  ),
+                },
+                {
+                  key: "ack",
+                  label: "Ack state",
+                  value:
+                    acknowledgedFilter === null
+                      ? ""
+                      : acknowledgedFilter
+                        ? "acknowledged"
+                        : "unread",
+                  options: [
+                    { value: "unread", label: "Unread" },
+                    { value: "acknowledged", label: "Acknowledged" },
+                  ],
+                },
+                {
+                  key: "verdict",
+                  label: "Verdict",
+                  value: verdictFilter === "all" ? "" : verdictFilter,
+                  options: (["real_incident", "benign", "duplicate", "pending"] as const).map(
+                    (v) => ({
+                      value: v,
+                      label: VERDICT_CONFIG[v]?.label ?? v,
+                    }),
+                  ),
+                },
+              ]}
+              onFiltersChange={(next) => {
+                const sev = next.severity?.trim();
+                setSeverityFilter(
+                  sev && sev !== "all" ? (sev as SeverityFilter) : "all",
+                );
+                const ack = next.ack?.trim();
+                setAcknowledgedFilter(
+                  ack === "acknowledged" ? true : ack === "unread" ? false : null,
+                );
+                const verdict = next.verdict?.trim();
+                setVerdictFilter(
+                  verdict && verdict !== "all" ? (verdict as VerdictFilter) : "all",
+                );
+                setOffset(0);
+              }}
+            >
+              <Button
+                type="button"
+                size="sm"
+                variant={rulesOpen ? "secondary" : "outline"}
+                className="min-h-11"
+                onClick={() => {
+                  const next = !rulesOpen;
+                  setRulesOpen(next);
+                  const params = new URLSearchParams(searchParams.toString());
+                  if (next) {
+                    params.set("tab", "rules");
+                  } else {
+                    params.delete("tab");
+                  }
+                  const qs = params.toString();
+                  router.replace(qs ? `/alerts?${qs}` : "/alerts");
+                }}
+              >
+                <Megaphone className="w-3.5 h-3.5" />
+                Rules
+                {rulesOpen ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+              </Button>
+            </ResourceOsToolbar>
+          ) : null}
+        </div>
+      }
+      kpiStrip={
+        tab === "feed" && !loading ? (
+          <div
+            className="flex flex-wrap items-center gap-space-2"
+            data-testid="alerts-severity-strip"
+            aria-label="Severity counts"
+          >
+            {(["critical", "high", "warning", "info"] as const).map((sev) => {
+              const cfg = getSeverityConfig(sev);
+              const count = severityCounts[sev] ?? 0;
+              const active = severityFilter === sev;
+              return (
+                <button
+                  key={sev}
+                  type="button"
+                  onClick={() => {
+                    setSeverityFilter(active ? "all" : sev);
+                    setOffset(0);
+                  }}
+                  className={cn(
+                    "inline-flex min-h-9 items-center gap-space-1.5 rounded-md px-space-2.5 text-xs font-medium transition-colors",
+                    active
+                      ? cn(cfg.bg, cfg.color, "ring-1 ring-current/30")
+                      : "bg-[var(--bg-secondary)] text-[var(--text-muted)] hover:text-[var(--text-primary)]",
+                  )}
+                  aria-pressed={active}
+                >
+                  <span className={cn("font-semibold tabular-nums", active ? undefined : cfg.color)}>
+                    {count}
+                  </span>
+                  {cfg.label}
+                </button>
+              );
+            })}
+          </div>
+        ) : undefined
+      }
       table={
         <>
-      <ResourceOsToolbar
-        resourceKey="alerts"
-        onCreateAlert={() => {
-          setRulesOpen(true);
-          router.replace("/alerts?tab=rules");
-        }}
-        exportRows={alerts.map((a) => ({
-          id: a.alert_id,
-          title: a.title,
-          severity: a.severity,
-          acknowledged: a.acknowledged,
-          created_at: a.created_at,
-        }))}
-        exportFilename="alerts.csv"
-        className="mb-4"
-      />
+      <TabsContent value="signals" className="mt-0">
+        <EmbeddedSurface>
+          <SignalsView />
+        </EmbeddedSurface>
+      </TabsContent>
+      <TabsContent value="feed" className="mt-0 space-y-space-4">
       <BulkActionBar
         count={selectedAlerts.size}
         onClear={() => setSelectedAlerts(new Set())}
@@ -390,145 +562,23 @@ function AlertsPageInner() {
           },
         ]}
       />
-      {/* Stats — only when there is feed data or an active severity filter */}
-      {(alerts.length > 0 || severityFilter !== "all") && (
-      <div className="mb-6 space-y-2">
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-        {(["critical", "high", "warning", "info", "debug"] as const).map((sev) => {
-          const config = getSeverityConfig(sev);
-          const count = severityCounts[sev] || 0;
-          const Icon = config.icon;
-          return (
-            <button
-              key={sev}
-              onClick={() => {
-                setSeverityFilter(severityFilter === sev ? "all" : sev);
-                setOffset(0);
-              }}
-              className={cn(
-                "flex items-center gap-3 p-3 min-h-11 rounded-lg transition-all text-left",
-                severityFilter === sev
-                  ? cn(config.bg, "ring-1 ring-[var(--border-strong)]")
-                  : "bg-[var(--bg-secondary)] hover:bg-[var(--bg-tertiary)]"
-              )}
-            >
-              <div className={cn("p-1.5 rounded-md", config.bg)}>
-                <Icon className={cn("w-4 h-4", config.color)} />
-              </div>
-              <div>
-                <p className={cn("text-lg font-bold", severityFilter === sev ? config.color : "text-[var(--text-primary)]")}>
-                  {count}
-                </p>
-                <p className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider">{config.label}</p>
-              </div>
-            </button>
-          );
-        })}
-      </div>
-      <p className="text-[10px] text-[var(--text-muted)]">
-        Counts reflect this page ({offset + 1}–{Math.min(offset + alerts.length, total || offset + alerts.length)}
-        {total > 0 ? ` of ${total}` : ""}), not the full org feed.
-      </p>
-      </div>
+
+      {rulesOpen && (
+        <div className="overflow-hidden">
+          <AlertRulesPanel
+            orgId={currentOrg?.id}
+            prefillFilters={{
+              realm: searchParams.get("realm") || "",
+              outcome: searchParams.get("outcome") || "",
+              agent_id: searchParams.get("agent_id") || "",
+            }}
+          />
+        </div>
       )}
-
-      {/* Filters */}
-      <div className="flex flex-wrap items-center gap-2 mb-4">
-        <div className="flex items-center gap-1 rounded-lg bg-[var(--bg-secondary)] p-1">
-          {(["all", "unread", "acknowledged"] as const).map((filter) => (
-            <button
-              key={filter}
-              onClick={() => {
-                setAcknowledgedFilter(
-                  filter === "all" ? null : filter === "acknowledged" ? true : false
-                );
-                setOffset(0);
-              }}
-              className={cn(
-                "px-3 py-1.5 text-xs font-medium rounded-md transition-colors",
-                (filter === "all" && acknowledgedFilter === null) ||
-                (filter === "unread" && acknowledgedFilter === false) ||
-                (filter === "acknowledged" && acknowledgedFilter === true)
-                  ? "bg-[var(--accent)] text-[var(--bg-base)]"
-                  : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
-              )}
-            >
-              {filter.charAt(0).toUpperCase() + filter.slice(1)}
-            </button>
-          ))}
-        </div>
-
-        <div className="h-4 w-px bg-[var(--border-subtle)]" />
-
-        <button
-          onClick={() => {
-            const next = !rulesOpen;
-            setRulesOpen(next);
-            const params = new URLSearchParams(searchParams.toString());
-            if (next) {
-              params.set("tab", "rules");
-            } else {
-              params.delete("tab");
-            }
-            const qs = params.toString();
-            router.replace(qs ? `/alerts?${qs}` : "/alerts");
-          }}
-          className={cn(
-            "flex items-center gap-1.5 min-h-11 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors",
-            rulesOpen
-              ? "bg-[var(--accent-faint)] text-[var(--accent)]"
-              : "text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)]"
-          )}
-        >
-          <Megaphone className="w-3.5 h-3.5" />
-          Rules
-          {rulesOpen ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-        </button>
-
-        <div className="h-4 w-px bg-[var(--border-subtle)]" />
-
-        <div className="flex items-center gap-1 rounded-lg bg-[var(--bg-secondary)] p-1">
-          {(["all", "real_incident", "benign", "duplicate", "pending"] as const).map((v) => (
-            <button
-              key={v}
-              onClick={() => {
-                setVerdictFilter(v);
-                setOffset(0);
-              }}
-              className={cn(
-                "px-3 py-1.5 text-xs font-medium rounded-md transition-colors",
-                verdictFilter === v
-                  ? "bg-[var(--accent)] text-[var(--bg-base)]"
-                  : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
-              )}
-            >
-              {v === "all" ? "All verdicts" : VERDICT_CONFIG[v]?.label ?? v}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Alert Rules Panel */}
-      <>
-        {rulesOpen && (
-          <div
-            className="overflow-hidden mb-4"
-          >
-            <AlertRulesPanel
-              orgId={currentOrg?.id}
-              prefillFilters={{
-                realm: searchParams.get("realm") || "",
-                outcome: searchParams.get("outcome") || "",
-                agent_id: searchParams.get("agent_id") || "",
-              }}
-            />
-          </div>
-        )}
-      </>
 
       {/* Triage events (F81) */}
       {triageEvents.length > 0 && (
-        <div className="mb-4 space-y-2">
+        <div className="space-y-space-2">
           <h3 className="text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">
             Triage feed
           </h3>
@@ -537,22 +587,24 @@ function AlertsPageInner() {
             return (
               <div
                 key={ev.id}
-                className="rounded-lg bg-[var(--bg-secondary)] p-4"
+                className="rounded-lg bg-[var(--bg-secondary)] p-space-4"
               >
-                <div className="flex items-center gap-2 mb-1">
+                <div className="mb-space-1 flex items-center gap-space-2">
                   <span className="text-sm font-semibold text-[var(--text-primary)]">{ev.title}</span>
-                  <span className={cn("px-1.5 py-0.5 text-[10px] font-bold uppercase rounded", verdictCfg.bg, verdictCfg.color)}>
+                  <span className={cn("rounded px-space-2 py-space-1 text-xs font-bold uppercase", verdictCfg.bg, verdictCfg.color)}>
                     {verdictCfg.label}
                   </span>
                 </div>
                 {ev.triage_reason && (
                   <p className="text-xs text-[var(--text-muted)]">{ev.triage_reason}</p>
                 )}
-                <div className="flex items-center gap-2 mt-2">
+                <div className="mt-space-2 flex items-center gap-space-2">
                   {ev.triage_verdict !== "real_incident" && (
-                    <button
+                    <Button
                       type="button"
-                      className="text-[10px] text-[var(--accent)] hover:underline"
+                      variant="link"
+                      size="sm"
+                      className="min-h-11 px-0"
                       onClick={async () => {
                         if (!orgId) return;
                         try {
@@ -565,12 +617,14 @@ function AlertsPageInner() {
                       }}
                     >
                       Override → Real
-                    </button>
+                    </Button>
                   )}
                   {ev.triage_verdict !== "benign" && (
-                    <button
+                    <Button
                       type="button"
-                      className="text-[10px] text-[var(--text-muted)] hover:underline"
+                      variant="link"
+                      size="sm"
+                      className="min-h-11 px-0 text-[var(--text-muted)]"
                       onClick={async () => {
                         if (!orgId) return;
                         try {
@@ -583,7 +637,7 @@ function AlertsPageInner() {
                       }}
                     >
                       Mark benign
-                    </button>
+                    </Button>
                   )}
                 </div>
               </div>
@@ -593,97 +647,94 @@ function AlertsPageInner() {
       )}
 
       {/* Alert List */}
-      <div className="space-y-2">
-        {loading && alerts.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-16 gap-3">
-            <Loader2 className="w-6 h-6 text-[var(--text-muted)] animate-spin" />
-            <p className="text-sm text-[var(--text-muted)]">Loading alerts...</p>
-          </div>
-        ) : error ? (
-          <ErrorState
-            title="Could not load alerts"
-            message={error}
-            action={
-              <Button onClick={fetchAlerts} variant="outline" size="sm">
-                Try again
-              </Button>
-            }
-          />
-        ) : alerts.length === 0 &&
-          rulesError &&
-          severityFilter === "all" &&
-          acknowledgedFilter === null ? (
-          <ErrorState
-            title="Could not verify alert rules"
-            message={rulesError}
-            action={
-              <Button
-                onClick={() => void rulesQuery.refetch()}
-                variant="outline"
-                size="sm"
-                loading={rulesQuery.isFetching}
-                data-testid="alerts-rules-retry"
-              >
-                Try again
-              </Button>
-            }
-          />
-        ) : alerts.length === 0 ? (
-          <EmptyState
-            variant="plain"
-            icon={Bell}
-            title={
-              severityFilter !== "all" || acknowledgedFilter !== null
-                ? "No matching alerts"
-                : !rulesReady
-                  ? "Checking alert rules…"
-                  : hasAlertRules
-                    ? "All clear"
-                    : "No alert rules yet"
-            }
-            description={
-              severityFilter !== "all" || acknowledgedFilter !== null
-                ? "No alerts match your current filters. Try clearing the filters to see all alerts."
-                : !rulesReady
-                  ? "Confirming whether notification rules are configured before calling the feed healthy."
-                  : hasAlertRules
-                    ? "No active alerts for your rules. New notifications appear here when thresholds fire."
-                    : "Alerts fire from rules you define. Create a rule to catch cost spikes, quality drops, and pipeline failures — empty does not mean healthy until rules exist."
-            }
-            size="lg"
-            action={
-              severityFilter !== "all" || acknowledgedFilter !== null ? (
-                <button
-                  onClick={() => {
-                    setSeverityFilter("all");
-                    setAcknowledgedFilter(null);
-                    setVerdictFilter("all");
-                    setOffset(0);
-                  }}
-                  className="inline-flex min-h-11 items-center text-sm text-[var(--accent)] hover:underline"
-                  data-testid="alerts-clear-filters"
-                >
-                  Clear filters
-                </button>
-              ) : !rulesReady ? null : (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setRulesOpen(true);
-                    const params = new URLSearchParams(searchParams.toString());
-                    params.set("tab", "rules");
-                    router.replace(`/alerts?${params.toString()}`);
-                  }}
-                  className="inline-flex min-h-11 items-center gap-1.5 rounded-lg bg-[var(--accent)] px-4 py-2.5 text-sm font-medium text-[var(--bg-base)] hover:bg-[var(--accent-hover)]"
-                  data-testid="alerts-create-rule-cta"
-                >
-                  Create rule
-                </button>
-              )
-            }
-          />
-        ) : (
-          <>
+      <div className="space-y-space-2">
+        <QueryState
+          loading={loading && alerts.length === 0}
+          error={alertsQuery.error}
+          data={alerts}
+          onRetry={fetchAlerts}
+          errorTitle="Could not load alerts"
+          isEmpty={(d) => d.length === 0}
+          loadingSlot={<LoadingSkeleton variant="table" lines={5} className="p-0 max-w-none" />}
+          emptySlot={
+            rulesError &&
+            severityFilter === "all" &&
+            acknowledgedFilter === null ? (
+              <ErrorState
+                title="Could not verify alert rules"
+                message={rulesError}
+                action={
+                  <Button
+                    onClick={() => void rulesQuery.refetch()}
+                    variant="outline"
+                    size="sm"
+                    loading={rulesQuery.isFetching}
+                    data-testid="alerts-rules-retry"
+                  >
+                    Try again
+                  </Button>
+                }
+              />
+            ) : (
+              <EmptyState
+                variant="plain"
+                icon={Bell}
+                title={
+                  severityFilter !== "all" || acknowledgedFilter !== null
+                    ? "No matching alerts"
+                    : !rulesReady
+                      ? "Checking alert rules…"
+                      : hasAlertRules
+                        ? "All clear"
+                        : "No alert rules yet"
+                }
+                description={
+                  severityFilter !== "all" || acknowledgedFilter !== null
+                    ? "No alerts match the current filters. Clear filters to see the full feed."
+                    : !rulesReady
+                      ? "Confirming whether notification rules exist before treating an empty feed as healthy."
+                      : hasAlertRules
+                        ? "No active alerts for your rules. New rows appear here when thresholds fire."
+                        : "No notification rules configured. Empty does not mean healthy — create a rule to watch cost, quality, or pipeline thresholds."
+                }
+                size="lg"
+                action={
+                  severityFilter !== "all" || acknowledgedFilter !== null ? (
+                    <Button
+                      variant="link"
+                      onClick={() => {
+                        setSeverityFilter("all");
+                        setAcknowledgedFilter(null);
+                        setVerdictFilter("all");
+                        setOffset(0);
+                      }}
+                      className="min-h-11 px-0"
+                      data-testid="alerts-clear-filters"
+                    >
+                      Clear filters
+                    </Button>
+                  ) : !rulesReady ? null : (
+                    <Button
+                      type="button"
+                      onClick={() => {
+                        setRulesOpen(true);
+                        const params = new URLSearchParams(searchParams.toString());
+                        params.set("tab", "rules");
+                        router.replace(`/alerts?${params.toString()}`);
+                      }}
+                      className="min-h-11"
+                      data-testid="alerts-create-rule-cta"
+                    >
+                      Create rule
+                    </Button>
+                  )
+                }
+              />
+            )
+          }
+        >
+          {() => (
+            <>
             <VirtualizedList
               items={alerts}
               rowKey={(alert) => alert.alert_id}
@@ -706,7 +757,7 @@ function AlertsPageInner() {
                   )}
                 >
                   <div
-                    className="flex items-start gap-3 p-4 cursor-pointer"
+                    className="flex cursor-pointer items-start gap-space-3 p-space-4"
                     onClick={() =>
                       setUrlState({ alertId: isActive ? undefined : alert.alert_id })
                     }
@@ -731,17 +782,17 @@ function AlertsPageInner() {
                     </button>
 
                     {/* Severity Icon */}
-                    <div className={cn("p-2 rounded-lg flex-shrink-0", config.bg)}>
+                    <div className={cn("p-space-2 rounded-lg flex-shrink-0", config.bg)}>
                       <Icon className={cn("w-4 h-4", config.color)} />
                     </div>
 
                     {/* Content */}
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-1">
+                      <div className="mb-space-1 flex items-center gap-space-2">
                         <span className={cn("text-sm font-semibold", alert.acknowledged ? "text-[var(--text-secondary)]" : "text-[var(--text-primary)]")}>
                           {alert.title}
                         </span>
-                        <span className={cn("px-1.5 py-0.5 text-[10px] font-bold uppercase rounded", config.bg, config.color)}>
+                        <span className={cn("rounded px-space-2 py-space-1 text-xs font-bold uppercase", config.bg, config.color)}>
                           {config.label}
                         </span>
                         {!alert.acknowledged && (
@@ -749,23 +800,23 @@ function AlertsPageInner() {
                         )}
                       </div>
                       <p className="text-xs text-[var(--text-muted)] line-clamp-2">{alert.message}</p>
-                      <div className="flex items-center gap-3 mt-2">
-                        <span className="text-[10px] text-[var(--text-muted)] flex items-center gap-1">
+                      <div className="mt-space-2 flex items-center gap-space-3">
+                        <span className="flex items-center gap-space-1 text-xs text-[var(--text-muted)]">
                           <Clock className="w-3 h-3" />
                           {formatRelativeTime(alert.created_at)}
                         </span>
                         {alert.entity_id && (
-                          <span className="text-[10px] text-[var(--text-muted)] font-mono">
+                          <span className="text-xs text-[var(--text-muted)] font-mono">
                             {alert.entity_id.slice(0, 12)}
                           </span>
                         )}
                         {alert.channels.length > 0 && (
-                          <span className="text-[10px] flex flex-wrap gap-1">
+                          <span className="flex flex-wrap gap-space-1 text-xs">
                             {alert.channels.map((ch) => (
                               <span
                                 key={ch}
                                 className={cn(
-                                  "px-1.5 py-0.5 rounded",
+                                  "rounded px-space-2 py-space-1",
                                   channelConfigured[ch]
                                     ? "text-[var(--text-muted)]"
                                     : "text-[var(--text-muted)]/50 line-through bg-[var(--bg-muted)]",
@@ -785,19 +836,21 @@ function AlertsPageInner() {
                     </div>
 
                     {/* Actions */}
-                    <div className="flex items-center gap-1 flex-shrink-0">
+                    <div className="flex shrink-0 items-center gap-space-1">
                       {!alert.acknowledged && (
-                        <button
+                        <Button
+                          variant="ghost"
+                          size="icon"
                           onClick={(e) => {
                             e.stopPropagation();
-                            handleAcknowledge(alert.alert_id);
+                            void handleAcknowledge(alert.alert_id);
                           }}
                           aria-label={`Acknowledge alert: ${alert.title}`}
-                          className="inline-flex min-h-11 min-w-11 items-center justify-center p-1.5 text-[var(--text-muted)] hover:text-[var(--accent)] hover:bg-[var(--accent-faint)] rounded-lg transition-colors"
                           title="Acknowledge"
+                          className="min-h-11 min-w-11"
                         >
                           <CheckCircle2 className="w-4 h-4" />
-                        </button>
+                        </Button>
                       )}
                     </div>
                   </div>
@@ -809,32 +862,36 @@ function AlertsPageInner() {
             {/* Pagination */}
             {total > limit && (
               <div className="flex items-center justify-center gap-2 pt-4">
-                <button
+                <Button
+                  variant="outline"
+                  size="sm"
                   onClick={() => setOffset(Math.max(0, offset - limit))}
                   disabled={offset === 0}
-                  className="px-3 py-1.5 text-xs font-medium rounded-lg border border-[var(--border-default)] text-[var(--text-secondary)] disabled:opacity-30 hover:bg-[var(--bg-tertiary)] transition-colors"
                 >
                   Previous
-                </button>
+                </Button>
                 <span className="text-xs text-[var(--text-muted)]">
                   {offset + 1}–{Math.min(offset + limit, total)} of {total}
                 </span>
-                <button
+                <Button
+                  variant="outline"
+                  size="sm"
                   onClick={() => setOffset(offset + limit)}
                   disabled={offset + limit >= total}
-                  className="px-3 py-1.5 text-xs font-medium rounded-lg border border-[var(--border-default)] text-[var(--text-secondary)] disabled:opacity-30 hover:bg-[var(--bg-tertiary)] transition-colors"
                 >
                   Next
-                </button>
+                </Button>
               </div>
             )}
           </>
-        )}
+          )}
+        </QueryState>
       </div>
+      </TabsContent>
         </>
       }
       detail={
-        alertId && selectedAlert ? (
+        tab === "feed" && alertId && selectedAlert ? (
           <DetailPanelShell
             open
             onClose={() => setUrlState({ alertId: undefined })}
@@ -850,32 +907,50 @@ function AlertsPageInner() {
                 : undefined
             }
             headerActions={
-              !selectedAlert.acknowledged ? (
-                <button
-                  type="button"
-                  onClick={() => void handleAcknowledge(selectedAlert.alert_id)}
-                  className="text-xs px-2 py-1 rounded bg-[var(--accent)] text-[var(--bg-base)]"
-                >
-                  Acknowledge
-                </button>
-              ) : null
+              <div className="flex flex-wrap items-center gap-space-2">
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" size="sm" className="min-h-11" aria-label="Related surfaces">
+                      Go to
+                      <ChevronDown className="h-4 w-4" aria-hidden />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="min-w-[12rem]">
+                    <DropdownMenuLabel>Go to</DropdownMenuLabel>
+                    <DropdownMenuItem asChild>
+                      <Link href={incidentHref()}>View incidents</Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem asChild>
+                      <Link
+                        href={
+                          selectedAlert.entity_id?.startsWith("trace")
+                          || (selectedAlert.metadata?.trace_id as string | undefined)
+                            ? traceHref(
+                                (selectedAlert.metadata?.trace_id as string) ?? selectedAlert.entity_id,
+                              )
+                            : "/traces"
+                        }
+                      >
+                        {selectedAlert.entity_id?.startsWith("trace")
+                        || (selectedAlert.metadata?.trace_id as string | undefined)
+                          ? "Example traces"
+                          : "Traces hub"}
+                      </Link>
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+                {!selectedAlert.acknowledged ? (
+                  <Button
+                    size="sm"
+                    onClick={() => void handleAcknowledge(selectedAlert.alert_id)}
+                  >
+                    Acknowledge
+                  </Button>
+                ) : null}
+              </div>
             }
           >
-            <CrossLinkBar
-              links={[
-                { label: "View incidents", href: incidentHref() },
-                ...(selectedAlert.entity_id?.startsWith("trace")
-                  || (selectedAlert.metadata?.trace_id as string | undefined)
-                  ? [{
-                      label: "Example traces",
-                      href: traceHref(
-                        (selectedAlert.metadata?.trace_id as string) ?? selectedAlert.entity_id,
-                      ),
-                    }]
-                  : [{ label: "Traces hub", href: "/traces" }]),
-              ]}
-            />
-            <div className="p-4 space-y-2">
+            <div className="flex flex-col gap-space-2 p-space-4">
               <p className="text-sm text-[var(--text-secondary)]">{selectedAlert.message}</p>
               <DetailRow label="Alert ID" value={selectedAlert.alert_id} />
               <DetailRow label="Entity" value={selectedAlert.entity_id || "—"} />
@@ -888,14 +963,15 @@ function AlertsPageInner() {
         ) : null
       }
     />
+    </Tabs>
   );
 }
 
 function DetailRow({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex items-baseline justify-between gap-4">
-      <span className="text-[11px] text-[var(--text-muted)] uppercase tracking-wider flex-shrink-0">{label}</span>
-      <span className="text-xs text-[var(--text-secondary)] font-mono truncate">{value}</span>
+    <div className="flex items-baseline justify-between gap-space-4">
+      <span className="shrink-0 text-xs uppercase tracking-wider text-[var(--text-muted)]">{label}</span>
+      <span className="truncate font-mono text-xs text-[var(--text-secondary)]">{value}</span>
     </div>
   );
 }
@@ -983,14 +1059,14 @@ function AlertRulesPanel({
   };
 
   return (
-    <div className="bg-[var(--bg-primary)] rounded-lg border border-[var(--border-default)] p-4 space-y-4">
-      <h3 className="text-sm font-semibold text-[var(--text-primary)] flex items-center gap-2">
+    <div className="bg-[var(--bg-primary)] rounded-lg border border-[var(--border-default)] p-space-4 space-y-space-4">
+      <h3 className="text-sm font-semibold text-[var(--text-primary)] flex items-center gap-space-2">
         <Megaphone className="w-4 h-4 text-[var(--accent)]" />
         NL Alert Rules
       </h3>
 
-      <div className="space-y-2">
-        <label className="text-[10px] uppercase tracking-wider text-[var(--text-muted)]">
+      <div className="space-y-space-2">
+        <label className="text-xs uppercase tracking-wider text-[var(--text-muted)]">
           English
         </label>
         <textarea
@@ -998,41 +1074,41 @@ function AlertRulesPanel({
           onChange={(e) => setNlText(e.target.value)}
           rows={3}
           placeholder="Wake me if support agent cost per run exceeds $0.30 for 15 minutes"
-          className="w-full rounded-lg border border-[var(--border-default)] bg-[var(--bg-secondary)] px-3 py-2 text-sm text-[var(--text-primary)]"
+          className="w-full rounded-lg border border-[var(--border-default)] bg-[var(--bg-secondary)] px-space-3 py-space-2 text-sm text-[var(--text-primary)]"
         />
-        <div className="flex gap-2">
-          <Button size="sm" onClick={() => void handleCompile()} disabled={compiling || !nlText.trim()}>
-            {compiling ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "Compile"}
+        <div className="flex gap-space-2">
+          <Button size="sm" onClick={() => void handleCompile()} disabled={compiling || !nlText.trim()} loading={compiling}>
+            Compile
           </Button>
         </div>
       </div>
 
       {compiledEql && (
-        <div className="space-y-2">
-          <label className="text-[10px] uppercase tracking-wider text-[var(--text-muted)]">
+        <div className="space-y-space-2">
+          <label className="text-xs uppercase tracking-wider text-[var(--text-muted)]">
             EQL preview (editable)
           </label>
           <input
             value={ruleName}
             onChange={(e) => setRuleName(e.target.value)}
             placeholder="Rule name"
-            className="w-full rounded-lg border border-[var(--border-default)] bg-[var(--bg-secondary)] px-3 py-1.5 text-sm"
+            className="w-full rounded-lg border border-[var(--border-default)] bg-[var(--bg-secondary)] px-space-3 py-space-2 text-sm"
           />
           <textarea
             value={compiledEql}
             onChange={(e) => setCompiledEql(e.target.value)}
             rows={4}
-            className="w-full font-mono text-xs rounded-lg border border-[var(--border-default)] bg-[var(--bg-secondary)] px-3 py-2"
+            className="w-full font-mono text-xs rounded-lg border border-[var(--border-default)] bg-[var(--bg-secondary)] px-space-3 py-space-2"
           />
           {warnings.length > 0 && (
-            <ul className="text-[10px] text-[var(--warning)] list-disc pl-4">
+            <ul className="text-xs text-[var(--warning)] list-disc pl-space-4">
               {warnings.map((w, i) => (
                 <li key={i}>{w}</li>
               ))}
             </ul>
           )}
-          <Button size="sm" onClick={() => void handleSave()} disabled={saving}>
-            {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "Save rule"}
+          <Button size="sm" onClick={() => void handleSave()} disabled={saving} loading={saving}>
+            Save rule
           </Button>
         </div>
       )}
@@ -1053,20 +1129,20 @@ function AlertRulesPanel({
       ) : nlRules.length === 0 ? (
         <p className="text-xs text-[var(--text-muted)]">No NL rules yet. Compile and save above.</p>
       ) : (
-        <div className="space-y-2 border-t border-[var(--border-default)] pt-3">
-          <p className="text-[10px] uppercase tracking-wider text-[var(--text-muted)]">Saved rules</p>
+        <div className="space-y-space-2 border-t border-[var(--border-default)] pt-space-3">
+          <p className="text-xs uppercase tracking-wider text-[var(--text-muted)]">Saved rules</p>
           {nlRules.map((rule) => (
-            <div key={rule.id} className="p-3 rounded-lg bg-[var(--bg-tertiary)]/50">
-              <div className="flex items-center gap-2">
+            <div key={rule.id} className="p-space-3 rounded-lg bg-[var(--bg-tertiary)]/50">
+              <div className="flex items-center gap-space-2">
                 <span className="text-sm font-medium text-[var(--text-primary)]">{rule.name}</span>
                 {!rule.enabled && (
-                  <span className="px-1.5 py-0.5 text-[10px] bg-[var(--bg-muted)] text-[var(--text-muted)] rounded">
+                  <span className="px-space-2 py-space-1 text-xs bg-[var(--bg-muted)] text-[var(--text-muted)] rounded">
                     Disabled
                   </span>
                 )}
               </div>
-              <p className="text-xs text-[var(--text-muted)] mt-0.5">{rule.nl_text}</p>
-              <pre className="mt-1 text-[10px] font-mono text-[var(--text-secondary)] line-clamp-2">
+              <p className="text-xs text-[var(--text-muted)] mt-space-1">{rule.nl_text}</p>
+              <pre className="mt-space-1 text-xs font-mono text-[var(--text-secondary)] line-clamp-2">
                 {rule.compiled_eql}
               </pre>
             </div>

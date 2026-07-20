@@ -190,7 +190,9 @@ describe("W17 alerts + signals", () => {
 
   it("signals library remains reachable from alerts tab", () => {
     const alerts = src("app/(portal)/alerts/page.tsx");
-    expect(alerts).toContain("tab=signals");
+    expect(alerts).toContain('useQueryTab("tab", ALERT_TABS, "feed")');
+    expect(alerts).toContain('value="signals"');
+    expect(alerts).toContain("@/components/ui/tabs");
     expect(existsSync(resolve(ROOT, "src/app/(portal)/signals/page.tsx"))).toBe(true);
   });
 });

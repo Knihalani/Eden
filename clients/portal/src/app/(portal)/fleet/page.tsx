@@ -2,7 +2,7 @@
 
 import { PageHeader } from "@/components/layout/page-header";
 import { useEmbeddedSurface } from "@/components/layout/embedded-surface";
-import { CoreResourcePage, CrossLinkBar } from "@/components/portal-os";
+import { CoreResourcePage } from "@/components/portal-os";
 import {
   Loader2,
   Network,
@@ -11,6 +11,7 @@ import {
   GitBranch,
   BookOpen,
   Key,
+  ChevronDown,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useState } from "react";
@@ -23,8 +24,17 @@ import { queryKeys } from "@/lib/query-keys";
 import { Card } from "@/components/ui/card";
 import { NoOrgState } from "@/components/ui/no-org-state";
 import { EmptyState } from "@/components/ui/empty-state";
-import { ErrorState } from "@/components/ui/error-state";
+import { QueryState } from "@/components/ui/query-state";
 import { Button } from "@/components/ui/button";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { STICKY_FIRST_TD } from "@/components/ui/table-sticky";
 import { DOCS_QUICKSTART_URL } from "@/lib/constants";
 
 type FleetTab = "agents" | "heatmap" | "delegation";
@@ -144,61 +154,79 @@ export default function FleetPage() {
     <CoreResourcePage
       size="default"
       header={
-        <PageHeader
-          title="Fleet Health"
-          subtitle="Agent health rollup from traces and issues — not a full fleet SRE product yet. Use Issues and the SDK while agents populate."
-          icon={Network}
-          actions={
-            <Link
-              href="/issues"
-              className="text-sm text-[var(--accent)] hover:underline min-h-[44px] inline-flex items-center"
-            >
-              Open issues →
-            </Link>
-          }
-        />
-      }
-      toolbar={
-        embedded ? undefined : (
-          <CrossLinkBar
-            className="mb-4"
-            links={[
-              { label: "Issues", href: "/issues" },
-              { label: "Agents", href: "/agents" },
-              { label: "Improve", href: "/improve" },
-              { label: "Audit trail", href: "/audit-trail" },
-            ]}
+        embedded ? null : (
+          <PageHeader
+            title="Fleet Health"
+            subtitle="Agent health rollup from traces and issues — not a full fleet SRE product yet. Use Issues and the SDK while agents populate."
+            icon={Network}
+            actions={
+              <div className="flex flex-wrap items-center gap-space-2">
+                <Button asChild variant="outline" className="min-h-11">
+                  <Link href="/issues">Open issues</Link>
+                </Button>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="outline"
+                      size="default"
+                      className="min-h-11"
+                      aria-label="Related surfaces"
+                    >
+                      More
+                      <ChevronDown className="h-4 w-4" aria-hidden />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="min-w-[12rem]">
+                    <DropdownMenuLabel>Related</DropdownMenuLabel>
+                    <DropdownMenuItem asChild>
+                      <Link href="/agents">Agents</Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem asChild>
+                      <Link href="/improve">Improve</Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem asChild>
+                      <Link href="/audit-trail">Audit trail</Link>
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+            }
           />
         )
       }
+      toolbar={undefined}
       kpiStrip={
-        showKpis ? (
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-6" data-testid="fleet-kpi-strip">
+        // W11: when nested under Agents, skip Card KPI strip (embed chrome leak).
+        // Standalone keeps thin status chips; Cards only on the full leaf.
+        showKpis && !embedded ? (
+          <div
+            className="grid grid-cols-2 md:grid-cols-5 gap-space-3"
+            data-testid="fleet-kpi-strip"
+          >
             <Card padding="sm" className="text-center">
               <div className="text-2xl font-semibold tabular-nums">{agents.length}</div>
-              <div className="text-[10px] uppercase tracking-wide text-[var(--text-muted)]">Agents</div>
+              <div className="text-xs uppercase tracking-wide text-[var(--text-muted)]">Agents</div>
             </Card>
             <Card padding="sm" className="text-center">
               <div className={cn("text-2xl font-semibold tabular-nums", slaCount > 0 && "text-[var(--error)]")}>
                 {slaCount}
               </div>
-              <div className="text-[10px] uppercase tracking-wide text-[var(--text-muted)]">SLO breaches</div>
+              <div className="text-xs uppercase tracking-wide text-[var(--text-muted)]">SLO breaches</div>
             </Card>
             <Card padding="sm" className="text-center">
               <div className="text-2xl font-semibold tabular-nums">{criticalCount}</div>
-              <div className="text-[10px] uppercase tracking-wide text-[var(--text-muted)]">Critical tier</div>
+              <div className="text-xs uppercase tracking-wide text-[var(--text-muted)]">Critical tier</div>
             </Card>
             <Card padding="sm" className="text-center">
-              <div className="text-2xl font-semibold tabular-nums">
-                {delegationQuery.isSuccess ? edges.length : "—"}
+              <div className="text-2xl font-semibold tabular-nums">                {delegationQuery.isSuccess ? edges.length : "—"}
               </div>
-              <div className="text-[10px] uppercase tracking-wide text-[var(--text-muted)]">Delegation edges</div>
+              <div className="text-xs uppercase tracking-wide text-[var(--text-muted)]">Delegation edges</div>
             </Card>
             <Card padding="sm" className="text-center" data-testid="f64-agentic-fleet">
               <div className="text-2xl font-semibold tabular-nums">
                 {agenticScore == null ? "—" : `${Math.round(agenticScore * 100)}%`}
               </div>
-              <div className="text-[10px] uppercase tracking-wide text-[var(--text-muted)]">
+              <div className="text-xs uppercase tracking-wide text-[var(--text-muted)]">
                 Agentic quality
               </div>
             </Card>
@@ -215,77 +243,57 @@ export default function FleetPage() {
               size="lg"
               action={<FleetOnboardingActions />}
             />
-          ) : errorMessage ? (
-            <ErrorState
-              className="mb-4"
-              title="Could not load fleet"
-              message={errorMessage}
-              action={
-                <div className="flex flex-wrap items-center gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
-                      void summaryQuery.refetch();
-                      if (tab === "heatmap") void heatmapQuery.refetch();
-                      if (tab === "delegation") void delegationQuery.refetch();
-                    }}
-                  >
-                    Try again
-                  </Button>
-                  <Button asChild variant="ghost" size="sm">
-                    <Link href="/issues">View issues</Link>
-                  </Button>
+          ) : (
+            <QueryState
+              loading={loading && agents.length === 0}
+              error={errorMessage ? new Error(errorMessage) : null}
+              data={summaryQuery.data ?? (errorMessage ? undefined : { data: { agents: [] } })}
+              onRetry={() => {
+                void summaryQuery.refetch();
+                if (tab === "heatmap") void heatmapQuery.refetch();
+                if (tab === "delegation") void delegationQuery.refetch();
+              }}
+              errorTitle="Could not load fleet"
+              isEmpty={() => false}
+              loadingSlot={
+                <div className="flex items-center justify-center p-12 text-sm text-[var(--text-muted)]">
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" /> Loading fleet…
                 </div>
               }
-            />
-          ) : loading && agents.length === 0 ? (
-            <div className="flex items-center justify-center p-12 text-sm text-[var(--text-muted)]">
-              <Loader2 className="h-4 w-4 mr-2 animate-spin" /> Loading fleet…
-            </div>
-          ) : (
-            <>
-              <div
-                role="tablist"
+            >
+              {() => (
+            <Tabs
+              value={tab}
+              onValueChange={(v) => setTab(v as FleetTab)}
+              className="space-y-space-4"
+            >
+              <TabsList
+                variant="underline"
                 aria-label="Fleet views"
-                className="inline-flex rounded-lg border border-[var(--border-default)] p-1 mb-6"
+                className="h-auto w-full justify-start gap-1 bg-transparent"
               >
-                {(
-                  [
-                    ["agents", "Agents"],
-                    ["heatmap", "Heatmap"],
-                    ["delegation", "Delegation"],
-                  ] as const
-                ).map(([id, label]) => (
-                  <button
-                    key={id}
-                    type="button"
-                    role="tab"
-                    aria-selected={tab === id}
-                    onClick={() => setTab(id)}
-                    className={cn(
-                      "min-h-[44px] rounded-md px-4 text-sm font-medium transition-colors",
-                      tab === id
-                        ? "bg-[var(--bg-primary)] text-[var(--text-primary)]"
-                        : "text-[var(--text-muted)] hover:text-[var(--text-primary)]",
-                    )}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
+                <TabsTrigger variant="underline" value="agents" className="min-h-11">
+                  Agents
+                </TabsTrigger>
+                <TabsTrigger variant="underline" value="heatmap" className="min-h-11">
+                  Heatmap
+                </TabsTrigger>
+                <TabsTrigger variant="underline" value="delegation" className="min-h-11">
+                  Delegation
+                </TabsTrigger>
+              </TabsList>
 
-              {tab === "agents" ? (
-                agents.length === 0 ? (
+              <TabsContent value="agents" className="mt-0">
+                {agents.length === 0 ? (
                   <EmptyState
                     icon={Network}
                     title="No agents in the fleet yet"
-                    description="Fleet cards appear after agents send traces or stumbles. Until then, triage failures in Issues or install the SDK to start ingest."
+                    description="No fleet agents yet. Cards appear after agents send traces or stumbles. Triage failures in Issues, or install the SDK to begin ingest."
                     size="lg"
                     action={<FleetOnboardingActions />}
                   />
                 ) : (
-                  <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                  <div className="grid gap-space-3 md:grid-cols-2 xl:grid-cols-3">
                     {agents.map((a) => (
                       <div
                         key={a.agent_id}
@@ -295,24 +303,24 @@ export default function FleetPage() {
                           <h2 className="text-sm font-semibold text-[var(--text-primary)] truncate">
                             {a.display_name || a.agent_id}
                           </h2>
-                          <span className="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded border border-[var(--border-subtle)] text-[var(--text-muted)]">
+                          <span className="text-xs uppercase tracking-wide px-1.5 py-1 rounded border border-[var(--border-subtle)] text-[var(--text-muted)]">
                             {a.tier}
                           </span>
                         </div>
                         <p className="text-xs font-mono text-[var(--text-muted)] truncate mb-2">{a.agent_id}</p>
                         <div className="flex flex-wrap gap-1 mb-3">
                           {a.autonomy_mode && (
-                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--accent-faint)] text-[var(--accent)]">
+                            <span className="text-xs px-1.5 py-1 rounded bg-[var(--accent-faint)] text-[var(--accent)]">
                               {AUTONOMY_LABEL[a.autonomy_mode] ?? a.autonomy_mode}
                             </span>
                           )}
                           {a.compliance_profile && a.compliance_profile !== "standard" && (
-                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--warning-bg)] text-[var(--warning)]">
+                            <span className="text-xs px-1.5 py-1 rounded bg-[var(--warning-bg)] text-[var(--warning)]">
                               {a.compliance_profile}
                             </span>
                           )}
                           {a.drift_flagged && (
-                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--error-dim)] text-[var(--error)] flex items-center gap-0.5">
+                            <span className="text-xs px-1.5 py-1 rounded bg-[var(--error-dim)] text-[var(--error)] flex items-center gap-0.5">
                               <Activity className="h-3 w-3" /> Drift
                             </span>
                           )}
@@ -343,36 +351,37 @@ export default function FleetPage() {
                           </div>
                         </dl>
                         {a.slo_breach && (
-                          <p className="mt-2 text-[10px] text-[var(--error)] flex items-center gap-1">
+                          <p className="mt-2 text-xs text-[var(--error)] flex items-center gap-1">
                             <ShieldAlert className="h-3 w-3" /> SLO breach
                           </p>
                         )}
                         <div className="mt-3 flex flex-wrap gap-3">
-                          <Link
-                            href={`/issues?agent=${encodeURIComponent(a.agent_id)}`}
-                            className="text-xs text-[var(--accent)] hover:underline min-h-[44px] leading-[44px]"
-                          >
-                            Issues →
-                          </Link>
-                          <Link
-                            href={`/improve?agent=${encodeURIComponent(a.agent_id)}`}
-                            className="text-xs text-[var(--accent)] hover:underline min-h-[44px] leading-[44px]"
-                          >
-                            Improve →
-                          </Link>
-                          <Link
-                            href={`/audit-trail?agent=${encodeURIComponent(a.agent_id)}`}
-                            className="text-xs text-[var(--accent)] hover:underline min-h-[44px] leading-[44px]"
-                          >
-                            Audit trail →
-                          </Link>
+                          <Button asChild variant="link" size="sm" className="min-h-11 px-0">
+                            <Link href={`/issues?agent=${encodeURIComponent(a.agent_id)}`}>
+                              Issues →
+                            </Link>
+                          </Button>
+                          <Button asChild variant="link" size="sm" className="min-h-11 px-0">
+                            <Link href={`/improve?agent=${encodeURIComponent(a.agent_id)}`}>
+                              Improve →
+                            </Link>
+                          </Button>
+                          <Button asChild variant="link" size="sm" className="min-h-11 px-0">
+                            <Link
+                              href={`/audit-trail?agent=${encodeURIComponent(a.agent_id)}`}
+                            >
+                              Audit trail →
+                            </Link>
+                          </Button>
                         </div>
                       </div>
                     ))}
                   </div>
-                )
-              ) : tab === "heatmap" ? (
-                heatmap.length === 0 ? (
+                )}
+              </TabsContent>
+
+              <TabsContent value="heatmap" className="mt-0">
+                {heatmap.length === 0 ? (
                   <EmptyState
                     icon={Activity}
                     title="No stumble heatmap yet"
@@ -385,7 +394,14 @@ export default function FleetPage() {
                     <table className="w-full text-xs">
                       <thead>
                         <tr>
-                          <th className="text-left p-2 text-[var(--text-muted)]">Agent</th>
+                          <th
+                            className={cn(
+                              STICKY_FIRST_TD,
+                              "text-left p-2 text-[var(--text-muted)]",
+                            )}
+                          >
+                            Agent
+                          </th>
                           {heatmapKinds.map((kind) => (
                             <th key={kind} className="p-2 text-[var(--text-muted)] font-mono">{kind}</th>
                           ))}
@@ -394,7 +410,9 @@ export default function FleetPage() {
                       <tbody>
                         {heatmapAgents.map((agentId) => (
                           <tr key={agentId} className="border-t border-[var(--border-subtle)]">
-                            <td className="p-2 font-mono">{agentId}</td>
+                            <td className={cn(STICKY_FIRST_TD, "p-2 font-mono")}>
+                              {agentId}
+                            </td>
                             {heatmapKinds.map((kind) => {
                               const count = heatmapLookup.get(`${agentId}:${kind}`) ?? 0;
                               const intensity = count / heatmapMax;
@@ -418,40 +436,46 @@ export default function FleetPage() {
                       </tbody>
                     </table>
                   </div>
-                )
-              ) : edges.length === 0 ? (
-                <EmptyState
-                  icon={GitBranch}
-                  title="No delegation edges yet"
-                  description="Delegation links appear when parent agents call child agents. Until then, use Issues for failures or the SDK to instrument multi-agent flows."
-                  size="lg"
-                  action={<FleetOnboardingActions />}
-                />
-              ) : (
-                <div className="rounded-lg border border-[var(--border-default)] bg-[var(--bg-primary)] p-4">
-                  <h2 className="text-sm font-semibold text-[var(--text-primary)] mb-3 flex items-center gap-2">
-                    <GitBranch className="h-4 w-4" /> Delegation graph (7d)
-                  </h2>
-                  <ul className="space-y-2 text-xs font-mono text-[var(--text-secondary)]">
-                    {edges.slice(0, 30).map((e) => (
-                      <li
-                        key={`${e.source}-${e.target}`}
-                        className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--border-subtle)] pb-1"
-                      >
-                        <span>
-                          {e.source} → {e.target}
-                        </span>
-                        <span className="text-[var(--text-muted)] tabular-nums">
-                          {e.call_count_7d} calls
-                          {e.error_rate_7d != null && ` · ${Math.round(e.error_rate_7d * 100)}% err`}
-                          {e.delegation_trust != null && ` · trust ${e.delegation_trust}`}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
+                )}
+              </TabsContent>
+
+              <TabsContent value="delegation" className="mt-0">
+                {edges.length === 0 ? (
+                  <EmptyState
+                    icon={GitBranch}
+                    title="No delegation edges yet"
+                    description="Delegation links appear when parent agents call child agents. Until then, use Issues for failures or the SDK to instrument multi-agent flows."
+                    size="lg"
+                    action={<FleetOnboardingActions />}
+                  />
+                ) : (
+                  <div className="rounded-lg border border-[var(--border-default)] bg-[var(--bg-primary)] p-4">
+                    <h2 className="text-sm font-semibold text-[var(--text-primary)] mb-3 flex items-center gap-2">
+                      <GitBranch className="h-4 w-4" /> Delegation graph (7d)
+                    </h2>
+                    <ul className="space-y-2 text-xs font-mono text-[var(--text-secondary)]">
+                      {edges.slice(0, 30).map((e) => (
+                        <li
+                          key={`${e.source}-${e.target}`}
+                          className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--border-subtle)] pb-1"
+                        >
+                          <span>
+                            {e.source} → {e.target}
+                          </span>
+                          <span className="text-[var(--text-muted)] tabular-nums">
+                            {e.call_count_7d} calls
+                            {e.error_rate_7d != null && ` · ${Math.round(e.error_rate_7d * 100)}% err`}
+                            {e.delegation_trust != null && ` · trust ${e.delegation_trust}`}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </TabsContent>
+            </Tabs>
               )}
-            </>
+            </QueryState>
           )}
         </>
       }

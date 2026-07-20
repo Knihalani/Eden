@@ -2,10 +2,16 @@ export { AppShell } from "./AppShell";
 export type { AppShellProps } from "./AppShell";
 export { ResourcePageShell } from "./ResourcePageShell";
 export type { ResourcePageShellProps } from "./ResourcePageShell";
-export { CoreResourcePage } from "./CoreResourcePage";
-export type { CoreResourcePageProps } from "./CoreResourcePage";
+export {
+  CoreResourcePage,
+  MASTER_DETAIL_QUERY_KEYS,
+  readMasterDetailParam,
+  writeMasterDetailParam,
+  clearTraceDetailParams,
+} from "./CoreResourcePage";
+export type { CoreResourcePageProps, MasterDetailKind } from "./CoreResourcePage";
 export { useResourceUrlState } from "./useResourceUrlState";
-export { useSavedViews } from "./useSavedViews";
+export { useSavedViews, isViewDirty, viewStatesEqual, normalizeViewState } from "./useSavedViews";
 export type { ViewState } from "./useSavedViews";
 export { QueryFilterBar, ViewsMenuTrigger } from "./QueryFilterBar";
 export type { FilterMode, QueryFilterBarProps } from "./QueryFilterBar";
@@ -28,6 +34,11 @@ export {
 export { InfiniteDataTable } from "./InfiniteDataTable";
 export { VirtualizedList } from "./VirtualizedList";
 export { CommandPalette } from "./CommandPalette";
-export { MobileBottomNav, MOBILE_CORE_NAV, MOBILE_MORE_LINKS } from "./MobileBottomNav";
-export type { MobileNavItem } from "./MobileBottomNav";
+export {
+  MobileBottomNav,
+  MOBILE_CORE_NAV,
+  MOBILE_MORE_LINKS,
+  MOBILE_MORE_GROUPS,
+} from "./MobileBottomNav";
+export type { MobileNavItem, MobileMoreGroup } from "./MobileBottomNav";
 export { DensityProvider, useDensity } from "./DensityProvider";

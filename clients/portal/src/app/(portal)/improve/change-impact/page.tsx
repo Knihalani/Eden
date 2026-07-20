@@ -2,9 +2,9 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { GitCompareArrows, Play, AlertTriangle, CheckCircle2, Ban } from "lucide-react";
+import { ChevronDown, GitCompareArrows, Play, AlertTriangle, CheckCircle2, Ban } from "lucide-react";
 import { PageHeader } from "@/components/layout/page-header";
-import { CrossLinkBar, CoreResourcePage } from "@/components/portal-os";
+import { CoreResourcePage } from "@/components/portal-os";
 import { NoOrgState } from "@/components/ui/no-org-state";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorState } from "@/components/ui/error-state";
@@ -12,6 +12,13 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { FormField } from "@/components/ui/form-field";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { useOrg } from "@/hooks/use-org";
 import { useToast } from "@/components/ui/toast";
 import { changeImpactApi } from "@/lib/api";
@@ -126,19 +133,34 @@ export default function ChangeImpactPage() {
           title="Change impact preview"
           subtitle="Replay stratified production traffic before prompt or model changes land."
           icon={GitCompareArrows}
+          actions={
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" className="min-h-11" aria-label="Related surfaces">
+                  More
+                  <ChevronDown className="h-4 w-4" aria-hidden />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="min-w-[12rem]">
+                <DropdownMenuLabel>Go to</DropdownMenuLabel>
+                <DropdownMenuItem asChild>
+                  <Link href="/improve">Improve queue</Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                  <Link href="/improve/scorecard">Scorecard</Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                  <Link href="/promotions">Promotions</Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                  <Link href="/traces">Traces</Link>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          }
         />
       }
-      toolbar={
-        <CrossLinkBar
-          className="mb-4"
-          links={[
-            { label: "Improve queue", href: "/improve" },
-            { label: "Scorecard", href: "/improve/scorecard" },
-            { label: "Promotions", href: "/promotions" },
-            { label: "Traces", href: "/traces" },
-          ]}
-        />
-      }
+      toolbar={undefined}
       table={
         <>
           <Card className="mb-4 space-y-3 p-4">
@@ -164,7 +186,7 @@ export default function ChangeImpactPage() {
                 onChange={(e) => setFiles(e.target.value)}
               />
             </FormField>
-            <Button onClick={() => void run()} disabled={busy} loading={busy}>
+            <Button onClick={() => void run()} disabled={busy} loading={busy} className="min-h-11">
               <Play className="h-3.5 w-3.5" /> Generate preview
             </Button>
           </Card>
@@ -195,7 +217,7 @@ export default function ChangeImpactPage() {
           {!report && !error && !busy ? (
             <EmptyState
               title="No preview yet"
-              description="Generate a preview to see divergence, cost Δ, and a ship/block recommendation. Needs production traces for meaningful replay."
+              description="No preview generated yet. Run a preview to see divergence, cost Δ, and a ship/block recommendation. Needs production traces for meaningful replay."
               action={
                 <div className="flex flex-wrap items-center justify-center gap-2">
                   <Button

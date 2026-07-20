@@ -33,19 +33,19 @@ export function SettingsCard({
       )}
     >
       {(title || description || actions) && (
-        <header className="flex items-start justify-between gap-3 p-5 border-b border-[var(--border-default)]">
-          <div>
+        <header className="flex items-start justify-between gap-space-3 p-space-5 border-b border-[var(--border-default)]">
+          <div className="min-w-0 space-y-space-1">
             {title && (
               <h2 className="text-sm font-semibold text-[var(--text-primary)]">{title}</h2>
             )}
             {description && (
-              <p className="mt-1 text-xs text-[var(--text-muted)]">{description}</p>
+              <p className="text-xs text-[var(--text-muted)]">{description}</p>
             )}
           </div>
           {actions && <div className="shrink-0">{actions}</div>}
         </header>
       )}
-      <div className={cn("p-5", contentClassName)}>{children}</div>
+      <div className={cn("p-space-5", contentClassName)}>{children}</div>
     </section>
   );
 }

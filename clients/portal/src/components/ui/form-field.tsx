@@ -30,7 +30,7 @@ export function FormField({
   const errId = htmlFor ? `${htmlFor}-err` : undefined;
 
   return (
-    <div className={cn("space-y-1.5", className)}>
+    <div className={cn("space-y-space-2", className)}>
       <label
         htmlFor={htmlFor}
         className="block text-sm font-medium text-[var(--text-primary)]"

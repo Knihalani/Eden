@@ -94,7 +94,7 @@ export function LiveTailPanel({
             </p>
             <p
               className={cn(
-                "text-[10px] truncate",
+                "text-2xs truncate",
                 failed ? "text-[var(--error)]" : "text-[var(--text-muted)]",
               )}
             >
@@ -173,10 +173,10 @@ export function LiveTailPanel({
                 className="w-full flex items-center justify-between gap-2 py-1.5 text-left hover:bg-[var(--bg-tertiary)] rounded px-1"
                 onClick={() => onSelectTrace?.(ev.trace_id)}
               >
-                <span className="font-mono text-[11px] text-[var(--text-primary)] truncate">
+                <span className="font-mono text-2xs text-[var(--text-primary)] truncate">
                   {ev.trace_id.slice(0, 18)}…
                 </span>
-                <span className="text-[10px] text-[var(--text-muted)] shrink-0">
+                <span className="text-2xs text-[var(--text-muted)] shrink-0">
                   {ev.outcome ?? "—"} · {ev.span_count} spans
                 </span>
               </button>

@@ -10,6 +10,7 @@ import {
   QUERY_LANGUAGE_FIELDS,
 } from "@/lib/query-language";
 import { useDensity } from "./DensityProvider";
+import { Button } from "@/components/ui/button";
 
 export type FilterMode = "basic" | "query";
 
@@ -27,6 +28,8 @@ export interface QueryFilterBarProps {
     value: string;
   }>;
   onCreateAlert?: () => void;
+  /** Stick under shell header (`h-11`); uses `py-space-2` min padding on the bar. */
+  sticky?: boolean;
   className?: string;
 }
 
@@ -39,6 +42,7 @@ export function QueryFilterBar({
   onQueryChange,
   selects = [],
   onCreateAlert,
+  sticky = false,
   className,
 }: QueryFilterBarProps) {
   const density = useDensity();
@@ -73,6 +77,24 @@ export function QueryFilterBar({
     return null;
   }, [queryDraft]);
 
+  const appliedChips = useMemo(() => {
+    const chips: Array<{ key: string; label: string }> = [];
+    if (mode === "query" && query) {
+      chips.push({ key: "q", label: query });
+    }
+    for (const s of selects) {
+      if (!s.value) continue;
+      const opt = s.options.find((o) => o.value === s.value);
+      chips.push({ key: s.key, label: `${s.label}: ${opt?.label ?? s.value}` });
+    }
+    for (const [key, value] of Object.entries(filters)) {
+      if (!value) continue;
+      if (selects.some((s) => s.key === key)) continue;
+      chips.push({ key, label: `${key}: ${value}` });
+    }
+    return chips;
+  }, [mode, query, filters, selects]);
+
   const applyQuery = () => {
     onQueryChange(queryDraft.trim());
     const parsed = parseQueryLanguage(queryDraft);
@@ -84,31 +106,40 @@ export function QueryFilterBar({
     setShowSuggest(false);
   };
 
+  const clearAll = () => {
+    setQueryDraft("");
+    onQueryChange("");
+    onFiltersChange(
+      clearedFilters(
+        filters,
+        selects.map((s) => s.key),
+      ),
+    );
+  };
+
   return (
     <div
       className={cn(
-        "space-y-2",
-        density === "compact" && "[&_input]:py-1 [&_button]:py-0.5 text-sm",
+        "space-y-space-2",
+        sticky && "sticky top-11 z-10",
+        density === "compact" && "[&_input]:py-space-1 [&_button]:py-space-1 text-sm",
         className,
       )}
       data-density={density}
     >
-      <div className="flex flex-wrap items-center gap-2">
-        <div className="inline-flex rounded-lg border border-[var(--border-default)] p-0.5 text-xs">
+      <div className="flex flex-wrap items-center gap-space-3">
+        <div className="inline-flex rounded-lg border border-[var(--border-default)] p-space-1 text-xs">
           {(["basic", "query"] as const).map((m) => (
-            <button
+            <Button
               key={m}
               type="button"
+              variant={mode === m ? "default" : "ghost"}
+              size="sm"
               onClick={() => onModeChange(m)}
-              className={cn(
-                "px-2.5 py-1 rounded-md capitalize min-h-[44px] sm:min-h-0",
-                mode === m
-                  ? "bg-[var(--accent)] text-[var(--bg-primary)]"
-                  : "text-[var(--text-muted)] hover:text-[var(--text-primary)]",
-              )}
+              className="capitalize min-h-[44px] sm:min-h-0"
             >
               {m}
-            </button>
+            </Button>
           ))}
         </div>
         {onCreateAlert && (
@@ -127,12 +158,14 @@ export function QueryFilterBar({
           filters={filters}
           onChange={onFiltersChange}
           selects={selects}
+          sticky={false}
         />
       ) : (
-        <div className="relative space-y-1">
+        <div className="relative space-y-space-1">
           <div
             className={cn(
-              "flex flex-wrap items-center gap-2 bg-[var(--bg-primary)] border rounded-xl p-3",
+              "flex flex-wrap items-center gap-space-3 bg-[var(--bg-primary)] border rounded-xl px-space-3",
+              sticky ? "py-space-2" : "py-space-3",
               parseError ? "border-[var(--error)]" : "border-[var(--border-default)]",
             )}
           >
@@ -153,29 +186,16 @@ export function QueryFilterBar({
               aria-label="Query language filter"
               aria-invalid={Boolean(parseError)}
               aria-describedby={parseError ? "query-lang-error" : "query-lang-docs"}
-              className="flex-1 min-w-[12rem] px-3 py-1.5 bg-[var(--bg-secondary)] border border-[var(--border-default)] rounded-lg text-sm font-mono text-[var(--text-primary)] placeholder:text-[var(--text-muted)]"
+              className="flex-1 min-w-[12rem] px-space-3 py-1.5 bg-[var(--bg-secondary)] border border-[var(--border-default)] rounded-lg text-sm font-mono text-[var(--text-primary)] placeholder:text-[var(--text-muted)]"
             />
-            <button
-              type="button"
-              onClick={applyQuery}
-              className="px-3 py-1.5 text-xs rounded-lg bg-[var(--accent)] text-[var(--bg-primary)]"
-            >
+            <Button type="button" variant="default" size="sm" className="min-h-11" onClick={applyQuery}>
               Apply
-            </button>
+            </Button>
             {(query || queryDraft || Object.values(filters).some(Boolean)) && (
               <button
                 type="button"
-                onClick={() => {
-                  setQueryDraft("");
-                  onQueryChange("");
-                  onFiltersChange(
-                    clearedFilters(
-                      filters,
-                      selects.map((s) => s.key),
-                    ),
-                  );
-                }}
-                className="inline-flex items-center gap-1 px-2 py-1 text-xs text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+                onClick={clearAll}
+                className="inline-flex items-center justify-center gap-space-1 px-space-2 min-h-11 min-w-11 sm:min-h-6 sm:min-w-6 text-xs text-[var(--text-muted)] hover:text-[var(--text-primary)]"
               >
                 <X className="w-3.5 h-3.5" />
                 Clear
@@ -185,17 +205,17 @@ export function QueryFilterBar({
           {parseError && (
             <p
               id="query-lang-error"
-              className="text-[10px] text-[var(--error)] underline decoration-wavy"
+              className="text-xs text-[var(--error)] underline decoration-wavy"
             >
               {parseError}
             </p>
           )}
-          <p id="query-lang-docs" className="text-[10px] text-[var(--text-muted)]">
+          <p id="query-lang-docs" className="text-xs text-[var(--text-muted)]">
             Fields: {QUERY_LANGUAGE_FIELDS.map((f) => f.field).join(", ")}
           </p>
           {showSuggest && suggestions.length > 0 && (
             <ul
-              className="absolute z-20 mt-1 max-h-40 w-full overflow-auto rounded-lg border border-[var(--border-default)] bg-[var(--bg-primary)] shadow-lg"
+              className="absolute z-20 mt-space-1 max-h-40 w-full overflow-auto rounded-lg border border-[var(--border-default)] bg-[var(--bg-primary)] shadow-lg"
               role="listbox"
               aria-label="Query field suggestions"
             >
@@ -205,7 +225,7 @@ export function QueryFilterBar({
                     type="button"
                     role="option"
                     aria-selected={false}
-                    className="w-full px-3 py-1.5 text-left text-xs hover:bg-[var(--bg-tertiary)]"
+                    className="w-full px-space-3 py-1.5 text-left text-xs hover:bg-[var(--bg-tertiary)]"
                     onMouseDown={(e) => {
                       e.preventDefault();
                       setQueryDraft(s.insert);
@@ -213,7 +233,7 @@ export function QueryFilterBar({
                     }}
                   >
                     <span className="font-mono text-[var(--accent)]">{s.label}</span>
-                    <span className="ml-2 text-[var(--text-muted)]">{s.docs}</span>
+                    <span className="ml-space-2 text-[var(--text-muted)]">{s.docs}</span>
                   </button>
                 </li>
               ))}
@@ -222,10 +242,18 @@ export function QueryFilterBar({
         </div>
       )}
 
-      {mode === "query" && query && (
-        <p className="text-[10px] text-[var(--text-muted)] font-mono truncate">
-          Active: {query}
-        </p>
+      {mode === "query" && appliedChips.length > 0 && (
+        <div className="flex flex-wrap items-center gap-space-2" aria-label="Applied filters">
+          {appliedChips.map((chip) => (
+            <span
+              key={chip.key}
+              className="inline-flex max-w-full items-center truncate rounded-md border border-[var(--border-default)] bg-[var(--bg-secondary)] px-space-2 py-space-1 text-xs font-mono text-[var(--text-secondary)]"
+              title={chip.label}
+            >
+              {chip.label}
+            </span>
+          ))}
+        </div>
       )}
     </div>
   );
@@ -241,7 +269,7 @@ export function ViewsMenuTrigger({
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1 px-2.5 py-1.5 text-xs rounded-lg border",
+        "inline-flex items-center gap-space-1 min-h-11 px-2.5 py-1.5 text-xs rounded-lg border",
         dirty
           ? "border-[var(--warning)] text-[var(--warning)] bg-[var(--warning-bg)]"
           : "border-[var(--border-default)] text-[var(--text-secondary)]",

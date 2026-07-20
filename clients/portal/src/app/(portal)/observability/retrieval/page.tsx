@@ -8,10 +8,11 @@ import { Alert } from "@/components/ui/alert";
 import { ErrorState } from "@/components/ui/error-state";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { PageHeader } from "@/components/layout/page-header";
 import { PageContent } from "@/components/layout/page-content";
+import { useEmbeddedSurface } from "@/components/layout/embedded-surface";
+import { ObserveLeafHeader } from "@/app/(portal)/observability/_components/observe-leaf-shell";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { CheckCircle2, Database, Lightbulb, Loader2, Network, Search, Shuffle, Sparkles, XCircle, Zap } from "lucide-react";
+import { CheckCircle2, Database, Lightbulb, Network, Search, Shuffle, Sparkles, XCircle, Zap } from "lucide-react";
 import { DataTable } from "@/components/ui/data-table";
 import { EmptyState } from "@/components/ui/empty-state";
 import { NoOrgState } from "@/components/ui/no-org-state";
@@ -27,6 +28,7 @@ type SubTab = "gaps" | "utilization" | "reorder";
 
 export default function RetrievalIntelligencePage() {
   const { currentOrg } = useOrg();
+  const embedded = useEmbeddedSurface();
   const [activeTab, setActiveTab] = useState<SubTab>("gaps");
   const [error, setError] = useState("");
 
@@ -42,7 +44,7 @@ export default function RetrievalIntelligencePage() {
 
   return (
     <PageContent size="wide">
-      <PageHeader title="Retrieval" subtitle="Chunk attribution, gap detection, and reorder signals" icon={Network} eyebrow="Observe" />
+      <ObserveLeafHeader title="Retrieval" subtitle="Chunk attribution, gap detection, and reorder signals" icon={Network} />
 
       {error ? (
         <ErrorState
@@ -63,16 +65,35 @@ export default function RetrievalIntelligencePage() {
           setError("");
         }}
       >
-        <TabsList variant="underline" className="border-b border-[var(--border-default)] w-full justify-start">
-          <TabsTrigger value="gaps" variant="underline" className="flex items-center gap-2">
+        <TabsList
+          variant={embedded ? "pills" : "underline"}
+          className={
+            embedded
+              ? "w-full justify-start"
+              : "border-b border-[var(--border-default)] w-full justify-start"
+          }
+        >
+          <TabsTrigger
+            value="gaps"
+            variant={embedded ? "pills" : "underline"}
+            className="flex items-center gap-2 min-h-11"
+          >
             <Lightbulb className="w-4 h-4" />
             Knowledge Gaps
           </TabsTrigger>
-          <TabsTrigger value="utilization" variant="underline" className="flex items-center gap-2">
+          <TabsTrigger
+            value="utilization"
+            variant={embedded ? "pills" : "underline"}
+            className="flex items-center gap-2 min-h-11"
+          >
             <Sparkles className="w-4 h-4" />
             Utilization
           </TabsTrigger>
-          <TabsTrigger value="reorder" variant="underline" className="flex items-center gap-2">
+          <TabsTrigger
+            value="reorder"
+            variant={embedded ? "pills" : "underline"}
+            className="flex items-center gap-2 min-h-11"
+          >
             <Shuffle className="w-4 h-4" />
             Reorder
           </TabsTrigger>
@@ -124,14 +145,16 @@ function GapsTab({ orgId }: { orgId: string }) {
             placeholder="7d"
             className="w-24 px-2 py-1.5 bg-[var(--bg-secondary)] border border-[var(--border-default)] rounded-lg text-xs text-[var(--text-primary)] font-mono"
           />
-          <button
+          <Button
+            variant="secondary"
+            size="sm"
+            className="min-h-11"
             onClick={() => void gapsQuery.refetch()}
-            disabled={loading}
-            className="inline-flex items-center gap-2 px-3 py-1.5 bg-[var(--bg-tertiary)] text-[var(--text-primary)] rounded-lg text-xs font-medium hover:bg-[var(--border-default)] disabled:opacity-50 transition-colors"
+            loading={loading}
           >
-            {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Zap className="w-3.5 h-3.5" />}
+            <Zap className="w-3.5 h-3.5" />
             Refresh
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -266,14 +289,10 @@ function UtilizationTab({ orgId, setError }: { orgId: string; setError: (e: stri
             placeholder="Enter trace ID..."
             className="flex-1 px-3 py-2 bg-[var(--bg-secondary)] border border-[var(--border-default)] rounded-lg text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)]"
           />
-          <button
-            onClick={handleRun}
-            disabled={loading || !traceId.trim()}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-[var(--accent)] text-[var(--bg-base)] rounded-lg text-sm font-medium hover:bg-[var(--accent-hover)] disabled:opacity-50 transition-colors"
-          >
-            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+          <Button variant="default" className="min-h-11" onClick={handleRun} disabled={loading || !traceId.trim()} loading={loading}>
+            <Sparkles className="w-4 h-4" />
             Analyze
-          </button>
+          </Button>
         </div>
       </Card>
 
@@ -423,14 +442,17 @@ function ReorderTab({ orgId, setError }: { orgId: string; setError: (e: string) 
             placeholder="collection name"
             className="flex-1 px-3 py-2 bg-[var(--bg-secondary)] border border-[var(--border-default)] rounded-lg text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] font-mono"
           />
-          <button
+          <Button
+            variant="secondary"
+            size="sm"
+            className="min-h-11"
             onClick={() => void load()}
-            disabled={loading || !collection.trim()}
-            className="inline-flex items-center gap-2 px-3 py-1.5 bg-[var(--bg-tertiary)] text-[var(--text-primary)] rounded-lg text-xs font-medium hover:bg-[var(--border-default)] disabled:opacity-50 transition-colors"
+            disabled={!collection.trim()}
+            loading={loading}
           >
-            {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Zap className="w-3.5 h-3.5" />}
+            <Zap className="w-3.5 h-3.5" />
             {hasLoaded ? "Refresh" : "Suggest order"}
-          </button>
+          </Button>
         </div>
       </Card>
 

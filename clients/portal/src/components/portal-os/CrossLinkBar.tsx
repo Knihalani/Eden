@@ -27,7 +27,7 @@ export function CrossLinkBar({ links, className }: CrossLinkBarProps) {
       role="navigation"
       aria-label="Related resources"
     >
-      <span className="text-[10px] font-medium uppercase tracking-wide text-[var(--text-muted)]">
+      <span className="text-[length:var(--font-size-2xs)] font-medium uppercase tracking-wide text-[var(--text-muted)]">
         Go to
       </span>
       {links.map((link) => (

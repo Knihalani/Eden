@@ -2,7 +2,7 @@
 /**
  * U20 axe gate — run @axe-core/cli (unauthenticated) OR Playwright + axe-core
  * (authenticated, when e2e/.auth-state.json is present) against the running
- * portal server. Audits 5 core routes (WCAG 2.2 AA).
+ * portal server. Audits core routes (WCAG 2.2 AA).
  *
  * Authenticated mode (default when storageState exists):
  *   Uses Playwright with the saved Clerk storageState so pages render the real
@@ -16,7 +16,8 @@
  *   PORT=3000 bun run audit:a11y
  *
  * CI: run seed-auth.mjs first (saves storageState), start production server,
- * then run this script. Fails on any critical violation.
+ * then run this script. Fails on any critical violation. Also fails on
+ * serious violations for /traces and /improve (W6 UX-P0-15).
  */
 const { execSync, execFileSync } = require("node:child_process");
 const http = require("node:http");
@@ -34,7 +35,11 @@ const ROUTES = [
   "/evals",
   "/improve",
   "/alerts",
+  "/agents",
+  "/settings",
 ];
+/** Keep in sync with U20_SERIOUS_AXE_ROUTES — fail gate on serious here. */
+const SERIOUS_GATE_ROUTES = new Set(["/traces", "/improve"]);
 const BLOCKING_IMPACTS = new Set(["critical"]);
 const STATE_PATH = path.join(__dirname, "../e2e/.auth-state.json");
 
@@ -123,6 +128,7 @@ async function runAxeWithAuth(routes, storageState) {
       const violations = axeResults.violations || [];
       const critical = violations.filter((v) => v.impact === "critical").length;
       const serious = violations.filter((v) => v.impact === "serious").length;
+      const seriousGate = SERIOUS_GATE_ROUTES.has(route);
 
       // Log any critical violations with details for debugging
       if (critical > 0) {
@@ -135,14 +141,19 @@ async function runAxeWithAuth(routes, storageState) {
       }
       if (serious > 0) {
         for (const v of violations.filter((v) => v.impact === "serious")) {
+          const tag = seriousGate ? "SERIOUS(gate)" : "serious";
           console.warn(
-            `[audit:a11y]   serious: ${v.id} — ${v.description}`,
+            `[audit:a11y]   ${tag}: ${v.id} — ${v.description}`,
           );
         }
       }
 
-      console.log(`[audit:a11y] ${route}: ${critical} critical, ${serious} serious`);
-      results.push({ route, ok: critical === 0, critical, serious, violations: violations.length });
+      const ok = critical === 0 && (!seriousGate || serious === 0);
+      console.log(
+        `[audit:a11y] ${route}: ${critical} critical, ${serious} serious` +
+          (seriousGate ? " (serious gated)" : ""),
+      );
+      results.push({ route, ok, critical, serious, seriousGate, violations: violations.length });
 
       // Save JSON report for CI artifact
       const reportPath = path.join(process.cwd(), `report-a11y-auth-${encodeURIComponent(route)}.json`);
@@ -185,6 +196,7 @@ async function main() {
 
   let totalCritical = 0;
   let totalSerious = 0;
+  let totalSeriousGateFails = 0;
   let results;
 
   if (storageState) {
@@ -192,6 +204,7 @@ async function main() {
     for (const r of results) {
       totalCritical += r.critical || 0;
       totalSerious += r.serious || 0;
+      if (r.seriousGate && (r.serious || 0) > 0) totalSeriousGateFails += r.serious;
     }
   } else {
     // Unauthenticated fallback via @axe-core/cli
@@ -202,6 +215,7 @@ async function main() {
       const reportPath = path.join(process.cwd(), r.reportFile);
       let critical = 0;
       let serious = 0;
+      const seriousGate = SERIOUS_GATE_ROUTES.has(route);
 
       try {
         const report = JSON.parse(fs.readFileSync(reportPath, "utf8"));
@@ -210,12 +224,22 @@ async function main() {
         serious = violations.filter((v) => v.impact === "serious").length;
         totalCritical += critical;
         totalSerious += serious;
-        console.log(`[audit:a11y] ${route}: ${critical} critical, ${serious} serious`);
+        if (seriousGate && serious > 0) totalSeriousGateFails += serious;
+        console.log(
+          `[audit:a11y] ${route}: ${critical} critical, ${serious} serious` +
+            (seriousGate ? " (serious gated)" : ""),
+        );
       } catch (e) {
         console.error(`[audit:a11y] ${route}: failed to read report`, e.message);
       }
 
-      results.push({ route, ok: r.ok && critical === 0, critical, serious });
+      results.push({
+        route,
+        ok: r.ok && critical === 0 && (!seriousGate || serious === 0),
+        critical,
+        serious,
+        seriousGate,
+      });
     }
   }
 
@@ -226,6 +250,8 @@ async function main() {
         mode: storageState ? "authenticated" : "unauthenticated",
         totalCritical,
         totalSerious,
+        totalSeriousGateFails,
+        seriousGateRoutes: [...SERIOUS_GATE_ROUTES],
         routes: results,
       },
       null,
@@ -237,7 +263,13 @@ async function main() {
     console.error(`[audit:a11y] FAIL: ${totalCritical} critical violations`);
     process.exit(1);
   }
-  console.log("[audit:a11y] PASS (no critical)");
+  if (totalSeriousGateFails > 0) {
+    console.error(
+      `[audit:a11y] FAIL: ${totalSeriousGateFails} serious violations on gated routes (${[...SERIOUS_GATE_ROUTES].join(", ")})`,
+    );
+    process.exit(1);
+  }
+  console.log("[audit:a11y] PASS (no critical; serious clear on gated routes)");
 }
 
 main().catch((e) => {

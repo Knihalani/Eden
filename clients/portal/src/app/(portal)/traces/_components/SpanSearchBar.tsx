@@ -147,7 +147,7 @@ export function SpanSearchBar({ orgId, onSelectTrace }: SpanSearchBarProps) {
         )}
       </div>
       {suggestions.length > 0 && hits.length === 0 && (
-        <ul className="rounded border border-[var(--border-subtle)] divide-y divide-[var(--border-subtle)] text-[11px]">
+        <ul className="rounded border border-[var(--border-subtle)] divide-y divide-[var(--border-subtle)] text-2xs">
           {suggestions.slice(0, 5).map((s) => (
             <li key={s.label}>
               <button
@@ -162,15 +162,15 @@ export function SpanSearchBar({ orgId, onSelectTrace }: SpanSearchBarProps) {
           ))}
         </ul>
       )}
-      {error && <p className="text-[11px] text-[var(--error)]">{error}</p>}
+      {error && <p className="text-2xs text-[var(--error)]">{error}</p>}
       {isFallback && !error && (
-        <p className="text-[11px] text-[var(--text-muted)] italic">
+        <p className="text-2xs text-[var(--text-muted)] italic">
           Search index offline — results may be incomplete
         </p>
       )}
       {hits.length > 0 && q.trim().length >= 2 && (
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <p className="text-[10px] text-[var(--text-muted)]">
+          <p className="text-2xs text-[var(--text-muted)]">
             {traceIds.length} trace{traceIds.length === 1 ? "" : "s"} · j/k to navigate
             {costEstimate != null && (
               <span className="ml-2 font-mono">~${costEstimate.toFixed(4)} backfill</span>
@@ -181,7 +181,7 @@ export function SpanSearchBar({ orgId, onSelectTrace }: SpanSearchBarProps) {
               type="button"
               size="sm"
               variant="ghost"
-              className="h-7 text-[11px]"
+              className="h-7 text-2xs"
               disabled={previewing}
               onClick={() => void previewCost()}
             >
@@ -191,7 +191,7 @@ export function SpanSearchBar({ orgId, onSelectTrace }: SpanSearchBarProps) {
               type="button"
               size="sm"
               variant="outline"
-              className="h-7 text-[11px]"
+              className="h-7 text-2xs"
               disabled={saving}
               onClick={() => void saveAsSignal()}
             >
@@ -202,7 +202,7 @@ export function SpanSearchBar({ orgId, onSelectTrace }: SpanSearchBarProps) {
               )}
               <span className="ml-1">Save as signal</span>
             </Button>
-            <Button type="button" size="sm" variant="ghost" className="h-7 text-[11px]" asChild>
+            <Button type="button" size="sm" variant="ghost" className="h-7 text-2xs" asChild>
               <Link href={`/alerts?tab=rules&q=${encodeURIComponent(q)}`}>
                 <Bell className="h-3 w-3 mr-1" />
                 Alert
@@ -212,7 +212,7 @@ export function SpanSearchBar({ orgId, onSelectTrace }: SpanSearchBarProps) {
         </div>
       )}
       {saveMsg && (
-        <p className="text-[11px] text-[var(--text-muted)]">
+        <p className="text-2xs text-[var(--text-muted)]">
           {saveMsg}{" "}
           <Link href="/alerts?tab=signals" className="text-[var(--accent)] hover:underline">
             Open signals
@@ -240,11 +240,11 @@ export function SpanSearchBar({ orgId, onSelectTrace }: SpanSearchBarProps) {
                   setHits([]);
                 }}
               >
-                <p className="font-mono text-[11px] text-[var(--text-primary)]">
+                <p className="font-mono text-2xs text-[var(--text-primary)]">
                   {h.trace_id.slice(0, 20)}…
                 </p>
                 {h.snippet && (
-                  <p className="text-[10px] text-[var(--text-muted)] truncate">{h.snippet}</p>
+                  <p className="text-2xs text-[var(--text-muted)] truncate">{h.snippet}</p>
                 )}
               </button>
             </li>

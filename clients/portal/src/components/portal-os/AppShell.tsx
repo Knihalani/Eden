@@ -24,6 +24,9 @@ export interface AppShellProps {
  *
  * Content column uses `--bg-primary` so page body reads as a clear
  * work surface against the secondary shell / sidebar rail.
+ *
+ * Anti-clutter: fewer simultaneous sticky layers — sticky header lives in
+ * portal-chrome; AppShell does not add a second sticky header.
  */
 export function AppShell({
   density = "comfortable",
@@ -45,6 +48,7 @@ export function AppShell({
         )}
         data-density={density}
         data-shell={hideChrome ? "minimal" : "full"}
+        data-shell-sticky-layers="1"
       >
         <a href="#main-content" className="skip-to-content">
           Skip to main content
@@ -53,13 +57,27 @@ export function AppShell({
         <main
           id="main-content"
           className={cn(
-            "flex-1 min-w-0 flex flex-col bg-[var(--bg-primary)]",
-            hideChrome ? "pb-0" : "pb-20 lg:pb-0",
+            // Work surface: min-w-0 + fill viewport so secondary shell frames sidebar only.
+            "flex-1 min-w-0 flex flex-col bg-[var(--bg-primary)] lg:min-h-dvh",
+            hideChrome
+              ? "pb-0"
+              : density === "comfortable"
+                ? "pb-24 lg:pb-0"
+                : "pb-20 lg:pb-0",
           )}
+          data-shell-surface="work"
           tabIndex={-1}
         >
           {!hideChrome && header}
-          {children}
+          {/* Subtle breathing so page body is not flush against the sticky header. */}
+          <div
+            className={cn(
+              "flex-1 min-w-0 flex flex-col",
+              !hideChrome && "pt-space-2",
+            )}
+          >
+            {children}
+          </div>
           {!hideChrome && mobileNav}
           {commandPalette}
         </main>

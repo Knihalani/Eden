@@ -177,22 +177,19 @@ export default function AgentLedgerPage() {
   }
 
   return (
-    <PageContent>
+    <PageContent className="space-y-space-4">
       <PageHeader
+        eyebrow="Agent"
         title="The Book"
         description="Living memory — failures, fixes, and gotchas as markdown with citation chips."
       />
-      <div className="mb-4 flex flex-wrap items-center gap-2 text-sm">
-        <Link
-          href={`/agents/${encodeURIComponent(agentId)}`}
-          className="inline-flex items-center gap-1 text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
-        >
+      <Button asChild variant="ghost" size="sm" className="min-h-11 px-0 w-fit">
+        <Link href={`/agents/${encodeURIComponent(agentId)}`}>
           <ArrowLeft className="h-4 w-4" />
           Back to agent
         </Link>
-      </div>
+      </Button>
       <CrossLinkBar
-        className="mb-4"
         links={[
           { label: "Drift", href: driftHref(agentId) },
           { label: "Traces", href: tracesFilteredHref({ agent_id: agentId }) },
@@ -200,7 +197,7 @@ export default function AgentLedgerPage() {
           { label: "Improve", href: "/improve" },
         ]}
       />
-      <Card className="mb-4 flex flex-wrap items-center justify-between gap-4 p-4">
+      <Card className="flex flex-wrap items-center justify-between gap-4 p-4">
         <div className="flex flex-wrap items-center gap-3">
           <BookOpen className="h-5 w-5" />
           <span className="text-sm">Gateway injection {enabled ? "on" : "off"}</span>
@@ -312,7 +309,7 @@ export default function AgentLedgerPage() {
       ) : entries.length === 0 ? (
         <EmptyState
           title="Ledger draft empty"
-          description="The Book is living memory for this agent — failures, fixes, and gotchas in plain language."
+          description="Draft is empty. Resolve an issue or promote an Artifact to seed living memory for this agent."
           action={
             <div className="flex flex-wrap justify-center gap-2">
               <Button size="sm" variant="outline" asChild>

@@ -1,6 +1,7 @@
 /**
- * Wave 5.4 — Observability hub children: ErrorState + refresh, skeletons,
- * no dead 501-only hub links (APM redirects to traces; cohorts listed).
+ * Wave 5.4 / w5-observe-leaves — Observability Advanced leaves:
+ * ErrorState or QueryState async shell, ObserveLeafHeader template,
+ * skeletons, no dead 501-only hub links.
  */
 import { readFileSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
@@ -24,14 +25,17 @@ const CHILD_PAGES = [
 ] as const;
 
 describe("W5-4 observability hub children ErrorState", () => {
-  it.each(CHILD_PAGES)("%s uses ErrorState (not Alert-only / ad-hoc banner)", (child) => {
+  it.each(CHILD_PAGES)("%s uses ErrorState or QueryState with retry", (child) => {
     const src = read(`app/(portal)/observability/${child}/page.tsx`);
-    expect(src).toContain('from "@/components/ui/error-state"');
-    expect(src).toContain("ErrorState");
-    expect(src).toContain("Try again");
-    expect(src).not.toMatch(
-      /\{error && \(\s*<div className="bg-\[var\(--error-bg\)\]/,
-    );
+    const hasErrorState =
+      src.includes('from "@/components/ui/error-state"') && src.includes("ErrorState");
+    const hasQueryState =
+      src.includes('from "@/components/ui/query-state"') && src.includes("QueryState");
+    expect(hasErrorState || hasQueryState).toBe(true);
+    // Retry copy lives on the page or inside QueryState's errorTitle path
+    expect(
+      src.includes("Try again") || hasQueryState,
+    ).toBe(true);
   });
 
   it("hub SUBPAGES includes cohorts and omits apm", () => {
@@ -50,6 +54,30 @@ describe("W5-4 observability hub children ErrorState", () => {
   });
 });
 
+describe("W5 observe-leaves shared template", () => {
+  it("ObserveLeafHeader defaults eyebrow Observe + Advanced framing", () => {
+    const shell = read(
+      "app/(portal)/observability/_components/observe-leaf-shell.tsx",
+    );
+    expect(shell).toContain("ObserveLeafHeader");
+    expect(shell).toContain('eyebrow = "Observe"');
+    expect(shell).toContain("Advanced under Traces");
+  });
+
+  it.each(CHILD_PAGES)("%s uses ObserveLeafHeader", (child) => {
+    const src = read(`app/(portal)/observability/${child}/page.tsx`);
+    expect(src).toContain("ObserveLeafHeader");
+    expect(src).toContain("PageContent");
+  });
+
+  it("landing uses ObserveLeafHeader and points operators to Traces", () => {
+    const src = read("app/(portal)/observability/page.tsx");
+    expect(src).toContain("ObserveLeafHeader");
+    expect(src).toContain("Open Traces");
+    expect(src).toContain("Advanced tools");
+  });
+});
+
 describe("W5-4 observability loading skeletons", () => {
   it.each(CHILD_PAGES)("%s has route loading.tsx skeleton", (child) => {
     const loadingPath = resolve(
@@ -64,7 +92,7 @@ describe("W5-4 observability loading skeletons", () => {
   it("auto-load surfaces use Skeleton for initial empty load (not spinner-only)", () => {
     const mcp = read("app/(portal)/observability/mcp/page.tsx");
     expect(mcp).toContain("Skeleton");
-    expect(mcp).toMatch(/loading &&[\s\S]*Skeleton/);
+    expect(mcp).toMatch(/loading &&[\s\S]*Skeleton|loadingSlot[\s\S]*Skeleton/);
 
     const memory = read("app/(portal)/observability/memory/page.tsx");
     expect(memory).toContain("Skeleton");

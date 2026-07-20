@@ -17,7 +17,9 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorState } from "@/components/ui/error-state";
 import { NoOrgState } from "@/components/ui/no-org-state";
 import { useToast } from "@/components/ui/toast";
-import { Loader2, Sparkles, Plus, RotateCcw, FlaskConical } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { U20_EMPTY_COPY } from "@/lib/portal-polish";
+import { Loader2, Sparkles, Plus, RotateCcw, FlaskConical, ArrowLeft } from "lucide-react";
 
 type ScoringRule = {
   id: string;
@@ -33,7 +35,7 @@ type ScoringRule = {
 function SlmBadge({ type }: { type?: string }) {
   if ((type || "").toLowerCase() !== "slm") return null;
   return (
-    <span className="rounded bg-[var(--warning-bg)] px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--warning)]">
+    <span className="rounded bg-[var(--warning-bg)] px-1.5 py-0.5 text-2xs font-semibold uppercase tracking-wide text-[var(--warning)]">
       SLM
     </span>
   );
@@ -163,11 +165,19 @@ export default function OnlineScoringPage() {
     <>
       <PageHeader
         title="Online scoring rules"
-        description="Create, enable, test, and rewind production scorers (code → SLM → LLM)."
+        description="Sampled production scorers (code → SLM → LLM). Reachable from Improve → Go to."
         actions={
-          <Button size="sm" onClick={() => { resetForm(); setShowForm(true); }}>
-            <Plus className="h-3.5 w-3.5" /> New rule
-          </Button>
+          <div className="flex flex-wrap items-center gap-space-2">
+            <Button asChild variant="ghost" className="min-h-11">
+              <Link href="/improve">
+                <ArrowLeft className="h-3.5 w-3.5" />
+                Improve
+              </Link>
+            </Button>
+            <Button className="min-h-11" onClick={() => { resetForm(); setShowForm(true); }}>
+              <Plus className="h-3.5 w-3.5" /> New rule
+            </Button>
+          </div>
         }
       />
       <PageContent>
@@ -217,10 +227,10 @@ export default function OnlineScoringPage() {
               </FormField>
             </div>
             <div className="flex gap-2">
-              <Button onClick={save} disabled={busy || !name.trim()} loading={busy}>
+              <Button className="min-h-11" onClick={save} disabled={busy || !name.trim()} loading={busy}>
                 Save
               </Button>
-              <Button variant="ghost" onClick={resetForm}>
+              <Button variant="ghost" className="min-h-11" onClick={resetForm}>
                 Cancel
               </Button>
             </div>
@@ -236,7 +246,7 @@ export default function OnlineScoringPage() {
               onChange={(e) => setTestTraceId(e.target.value)}
               className="max-w-md"
             />
-            <Button variant="outline" size="sm" onClick={testApply} disabled={busy}>
+            <Button variant="outline" size="sm" className="min-h-11" onClick={testApply} disabled={busy}>
               <FlaskConical className="h-3.5 w-3.5" /> Apply rules
             </Button>
           </div>
@@ -255,19 +265,15 @@ export default function OnlineScoringPage() {
                 ? rulesQuery.error.message
                 : "Online scoring rules could not be loaded."
             }
-            action={
-              <Button variant="outline" size="sm" onClick={() => void refresh()}>
-                Try again
-              </Button>
-            }
+            onRetry={() => void refresh()}
           />
         ) : rules.length === 0 ? (
           <EmptyState
             icon={Sparkles}
             title="No online scoring rules yet"
-            description="Create a rule to score production traces on a sample. Code evaluators and SLM judges run first; full LLM only on low confidence."
+            description={U20_EMPTY_COPY.onlineScoring}
             action={
-              <Button size="sm" onClick={() => setShowForm(true)}>
+              <Button className="min-h-11" onClick={() => setShowForm(true)}>
                 Create rule
               </Button>
             }
@@ -277,17 +283,25 @@ export default function OnlineScoringPage() {
             {rules.map((rule) => (
               <Card key={String(rule.id)} className="p-4">
                 <div className="flex flex-wrap items-center justify-between gap-4">
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <p className="font-medium">{String(rule.name)}</p>
+                  <div className="min-w-0 space-y-1">
+                    <p className="font-medium text-[var(--text-primary)]">{String(rule.name)}</p>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span
+                        className={cn(
+                          "text-xs font-medium",
+                          rule.enabled ? "text-[var(--terminal)]" : "text-[var(--text-muted)]",
+                        )}
+                      >
+                        {rule.enabled ? "Enabled" : "Disabled"}
+                      </span>
                       <SlmBadge type={rule.scorer_type} />
                     </div>
-                    <p className="text-sm text-muted-foreground">
+                    <p className="text-2xs text-[var(--text-muted)]">
                       {String(rule.scope || "trace")} · {String(rule.scorer_type)} · sample{" "}
                       {Math.round(Number(rule.sample_rate ?? 1) * 100)}%
                     </p>
                     {rule.filter_query ? (
-                      <p className="mt-1 font-mono text-xs text-[var(--text-muted)]">
+                      <p className="font-mono text-2xs text-[var(--text-muted)]">
                         {rule.filter_query}
                       </p>
                     ) : null}
@@ -298,12 +312,13 @@ export default function OnlineScoringPage() {
                       onCheckedChange={() => void toggleEnabled(rule)}
                       label={rule.enabled ? "Enabled" : "Disabled"}
                     />
-                    <Button size="sm" variant="outline" onClick={() => startEdit(rule)}>
+                    <Button size="sm" variant="outline" className="min-h-11" onClick={() => startEdit(rule)}>
                       Edit
                     </Button>
                     <Button
                       size="sm"
                       variant="ghost"
+                      className="min-h-11"
                       onClick={() => void rewind(rule.id)}
                       disabled={busy}
                     >

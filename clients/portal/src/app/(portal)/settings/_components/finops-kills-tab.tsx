@@ -14,6 +14,7 @@ import { useOrg } from "@/hooks/use-org";
 import { useToast } from "@/components/ui/toast";
 import { api } from "@/lib/api";
 import { errorFromCaught } from "@/lib/safe-error-message";
+import { DangerZone } from "@/components/settings/danger-zone";
 
 type KillRow = { feature_key: string; enabled: boolean; source?: string };
 
@@ -86,13 +87,13 @@ export function FinOpsKillsTab() {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-space-4">
       <div>
-        <h3 className="text-sm font-semibold text-[var(--text-primary)] flex items-center gap-2">
+        <h3 className="text-sm font-semibold text-[var(--text-primary)] flex items-center gap-space-2">
           <Wallet className="h-4 w-4" />
           FinOps kill switches
         </h3>
-        <p className="mt-1 text-xs text-[var(--text-muted)]">
+        <p className="mt-space-1 text-xs text-[var(--text-muted)]">
           Customer feature kills (fail-closed). Searchable as FinOps / kill switches — not Eden COGS.
         </p>
       </div>
@@ -103,7 +104,7 @@ export function FinOpsKillsTab() {
         onChange={(e) => setFilter(e.target.value)}
         placeholder="Filter feature keys…"
         aria-label="Filter FinOps kill switches"
-        className="w-full max-w-md rounded-lg border border-[var(--border-default)] bg-[var(--bg-secondary)] px-3 py-2 text-sm"
+        className="w-full max-w-md rounded-lg border border-[var(--border-default)] bg-[var(--bg-secondary)] px-space-3 py-space-2 text-sm"
       />
 
       {error ? (
@@ -122,24 +123,29 @@ export function FinOpsKillsTab() {
       ) : rows.length === 0 ? (
         <EmptyState title="No kill switches" description="No customer feature keys configured." />
       ) : (
-        <div className="space-y-2">
-          {rows.map((row) => (
-            <Card key={row.feature_key} className="flex items-center justify-between p-3">
-              <div>
-                <p className="text-sm font-medium font-mono">{row.feature_key}</p>
-                <p className="text-[11px] text-[var(--text-muted)]">
-                  source: {row.source ?? "—"}
-                </p>
-              </div>
-              <Switch
-                checked={row.enabled}
-                disabled={busyKey === row.feature_key}
-                onCheckedChange={(v) => void toggle(row.feature_key, v)}
-                aria-label={`Toggle ${row.feature_key}`}
-              />
-            </Card>
-          ))}
-        </div>
+        <DangerZone
+          title="Feature kill switches"
+          description="Disabling a feature fails closed for the organization. Re-enable only after validating impact."
+        >
+          <div className="space-y-space-2">
+            {rows.map((row) => (
+              <Card key={row.feature_key} className="flex items-center justify-between p-space-3">
+                <div>
+                  <p className="text-sm font-medium font-mono">{row.feature_key}</p>
+                  <p className="text-xs text-[var(--text-muted)]">
+                    source: {row.source ?? "—"}
+                  </p>
+                </div>
+                <Switch
+                  checked={row.enabled}
+                  disabled={busyKey === row.feature_key}
+                  onCheckedChange={(v) => void toggle(row.feature_key, v)}
+                  aria-label={`Toggle ${row.feature_key}`}
+                />
+              </Card>
+            ))}
+          </div>
+        </DangerZone>
       )}
     </div>
   );

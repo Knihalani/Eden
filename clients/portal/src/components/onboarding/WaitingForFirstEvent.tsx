@@ -28,8 +28,8 @@ export function DoctorCommandChip({ command }: { command: string }) {
       }}
       aria-label={`Copy ${command}`}
       className={cn(
-        "group inline-flex max-w-full items-center gap-2 rounded-lg border border-[var(--border-default)]",
-        "bg-[var(--bg-tertiary)] px-3 py-2 text-left font-mono text-xs text-[var(--text-secondary)]",
+        "group inline-flex max-w-full items-center gap-space-2 rounded-lg border border-[var(--border-default)]",
+        "bg-[var(--bg-tertiary)] px-space-3 py-space-2 text-left font-mono text-xs text-[var(--text-secondary)]",
         "hover:border-[var(--accent)]/40 hover:text-[var(--text-primary)]",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]",
         "focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-primary)]",
@@ -80,13 +80,13 @@ export function WaitingForFirstEvent({
         size="lg"
         className={cn(!received && "live-append-pulse")}
         action={
-          <div className="flex flex-col items-center gap-3">
+          <div className="flex flex-col items-center gap-space-3">
             {!received ? (
-              <div className="flex flex-col items-center gap-2 w-full">
-                <p className="text-[11px] uppercase tracking-wide text-[var(--text-faint)] m-0">
+              <div className="flex w-full flex-col items-center gap-space-2">
+                <p className="m-0 text-2xs uppercase tracking-wide text-[var(--text-faint)]">
                   {FIRST_EVENT_WAIT.doctorHint}
                 </p>
-                <div className="flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center justify-center gap-2 w-full max-w-md">
+                <div className="flex w-full max-w-md flex-col flex-wrap items-stretch justify-center gap-space-2 sm:flex-row sm:items-center">
                   <DoctorCommandChip command={FIRST_EVENT_WAIT.doctorNpx} />
                   <DoctorCommandChip command={FIRST_EVENT_WAIT.doctorPython} />
                 </div>
@@ -102,7 +102,7 @@ export function WaitingForFirstEvent({
               {FIRST_EVENT_WAIT.checkCta}
             </Button>
             {secondaryActions ? (
-              <div className="flex flex-wrap items-center justify-center gap-2">
+              <div className="flex flex-wrap items-center justify-center gap-space-2">
                 {secondaryActions}
               </div>
             ) : null}

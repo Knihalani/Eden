@@ -2,12 +2,18 @@
 
 import { useCallback, useEffect, useState, Suspense } from "react";
 import Link from "next/link";
-import { BarChart3, FlaskConical, Play, RefreshCw, Loader2 } from "lucide-react";
+import { BarChart3, ChevronDown, FlaskConical, Play, RefreshCw, Loader2 } from "lucide-react";
 import { PageHeader } from "@/components/layout/page-header";
 import { NoOrgState } from "@/components/ui/no-org-state";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { useOrg } from "@/hooks/use-org";
 import { useToast } from "@/components/ui/toast";
 import { offlineExperimentsApi } from "@/lib/api";
@@ -20,7 +26,6 @@ import {
   ResourceOsToolbar,
 } from "@/components/portal-os";
 import { usePagePerf } from "@/lib/perf";
-import { CrossLinkBar } from "@/components/portal-os/CrossLinkBar";
 import { datasetHref, issueHref, playgroundHref } from "@/lib/portal-cross-links";
 import { charDiff } from "@/lib/char-diff";
 import { ErrorState } from "@/components/ui/error-state";
@@ -252,16 +257,19 @@ function ExperimentsPageInner() {
             <>
               <Button
                 variant="outline"
-                size="sm"
+                className="min-h-11"
                 disabled={selected.size !== 2}
                 onClick={compareSelected}
               >
-                Compare selected ({selected.size}/2)
+                Compare ({selected.size}/2)
               </Button>
-              <Button asChild variant="outline" size="sm">
-                <Link href="/evals?tab=playgrounds">Open playground</Link>
-              </Button>
-              <Button onClick={load} variant="outline" size="sm" disabled={loading} loading={loading}>
+              <Button
+                onClick={load}
+                variant="ghost"
+                className="hidden min-h-11 sm:inline-flex"
+                disabled={loading}
+                loading={loading}
+              >
                 <RefreshCw className="h-3.5 w-3.5" /> Refresh
               </Button>
             </>
@@ -281,14 +289,14 @@ function ExperimentsPageInner() {
         />
       }
       table={
-        <Card className="p-2">
+        <div className="min-w-0 border-y border-[var(--border-subtle)] py-space-2">
           {runError && !loading ? (
             <ErrorState
               title="Could not start run"
               message={runError}
               className="mb-2"
               action={
-                <Button onClick={() => setRunError(null)} variant="outline" size="sm">
+                <Button onClick={() => setRunError(null)} variant="outline" className="min-h-11">
                   Dismiss
                 </Button>
               }
@@ -299,7 +307,7 @@ function ExperimentsPageInner() {
               title="Could not load experiments"
               message={loadError}
               action={
-                <Button onClick={load} variant="outline" size="sm">
+                <Button onClick={load} variant="outline" className="min-h-11">
                   Try again
                 </Button>
               }
@@ -314,10 +322,10 @@ function ExperimentsPageInner() {
               emptyIcon={FlaskConical}
               emptyAction={
                 <div className="flex flex-wrap items-center justify-center gap-2">
-                  <Button asChild size="sm">
+                  <Button asChild className="min-h-11">
                     <Link href="/evals?tab=datasets">Open datasets</Link>
                   </Button>
-                  <Button asChild size="sm" variant="outline">
+                  <Button asChild className="min-h-11" variant="outline">
                     <Link href="/evals?tab=playgrounds">Open playground</Link>
                   </Button>
                 </div>
@@ -352,7 +360,7 @@ function ExperimentsPageInner() {
                   cell: (r) => (
                     <div className="flex justify-end gap-1">
                       <Button
-                        size="sm"
+                        className="min-h-11"
                         variant="outline"
                         disabled={Boolean(runningId)}
                         loading={runningId === r.id}
@@ -360,7 +368,11 @@ function ExperimentsPageInner() {
                       >
                         <Play className="h-3 w-3" /> {runningId === r.id ? "Running…" : "Run"}
                       </Button>
-                      <Button size="sm" variant="ghost" onClick={() => setUrlState({ experimentId: r.id })}>
+                      <Button
+                        className="min-h-11"
+                        variant="ghost"
+                        onClick={() => setUrlState({ experimentId: r.id })}
+                      >
                         Compare
                       </Button>
                     </div>
@@ -369,7 +381,7 @@ function ExperimentsPageInner() {
               ]}
             />
           )}
-        </Card>
+        </div>
       }
       detail={
         experimentId ? (
@@ -392,6 +404,32 @@ function ExperimentsPageInner() {
               selectedIndex >= 0 && selectedIndex < rows.length - 1
                 ? () => setUrlState({ experimentId: rows[selectedIndex + 1]!.id })
                 : undefined
+            }
+            headerActions={
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="sm" className="min-h-11" aria-label="Related surfaces">
+                    Go to
+                    <ChevronDown className="h-4 w-4" aria-hidden />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="min-w-[12rem]">
+                  <DropdownMenuLabel>Go to</DropdownMenuLabel>
+                  {selectedRow?.dataset_id ? (
+                    <DropdownMenuItem asChild>
+                      <Link href={datasetHref(selectedRow.dataset_id)}>Dataset</Link>
+                    </DropdownMenuItem>
+                  ) : null}
+                  <DropdownMenuItem asChild>
+                    <Link href={playgroundHref()}>Playground</Link>
+                  </DropdownMenuItem>
+                  {selectedRow?.source_issue_id ? (
+                    <DropdownMenuItem asChild>
+                      <Link href={issueHref(selectedRow.source_issue_id)}>Source issue</Link>
+                    </DropdownMenuItem>
+                  ) : null}
+                </DropdownMenuContent>
+              </DropdownMenu>
             }
           >
             {summaryLoading ? (
@@ -422,18 +460,32 @@ function ExperimentsPageInner() {
               />
             ) : summary ? (
               <div className="flex h-full flex-col">
-                <CrossLinkBar
-                  links={[
-                    ...(selectedRow?.dataset_id
-                      ? [{ label: "Dataset", href: datasetHref(selectedRow.dataset_id) }]
-                      : []),
-                    { label: "Playground", href: playgroundHref() },
-                    ...(selectedRow?.source_issue_id
-                      ? [{ label: "Source issue", href: issueHref(selectedRow.source_issue_id) }]
-                      : []),
-                  ]}
-                />
-                <div className="p-4">
+                <div className="p-space-4">
+                  {(() => {
+                    const baselineId =
+                      selected.size === 2
+                        ? [...selected].find((id) => id !== experimentId)
+                        : undefined;
+                    const baselineName = baselineId
+                      ? rows.find((r) => r.id === baselineId)?.name
+                      : undefined;
+                    return baselineName ? (
+                      <p
+                        className="mb-space-3 text-xs text-[var(--text-muted)]"
+                        data-testid="compare-baseline"
+                      >
+                        Baseline: <span className="font-medium text-[var(--text-secondary)]">{baselineName}</span>
+                        {" · "}treatment:{" "}
+                        <span className="font-medium text-[var(--text-secondary)]">
+                          {selectedRow?.name ?? "—"}
+                        </span>
+                      </p>
+                    ) : (
+                      <p className="mb-space-3 text-xs text-[var(--text-muted)]">
+                        Select a second experiment to set a baseline for score deltas.
+                      </p>
+                    );
+                  })()}
                   {compareMeta?.synthetic ? (
                     <div
                       className="mb-3 rounded border border-[var(--warning)]/40 bg-[var(--warning-bg)] px-3 py-2 text-xs text-[var(--warning)]"
@@ -454,7 +506,12 @@ function ExperimentsPageInner() {
                   </div>
                   <h3 className="mb-2 text-sm font-medium">Datapoints</h3>
                   <ul className="max-h-[50vh] space-y-2 overflow-auto">
-                    {datapoints.map((dp, idx) => {
+                    {[...datapoints]
+                      .sort(
+                        (a, b) =>
+                          Number(a.score_delta ?? 0) - Number(b.score_delta ?? 0),
+                      )
+                      .map((dp, idx) => {
                       const control = outputText(dp.control_output);
                       const treatment = outputText(dp.treatment_output);
                       const diff = charDiff(control, treatment);

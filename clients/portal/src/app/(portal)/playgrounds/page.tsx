@@ -9,7 +9,6 @@ import { FlaskConical, Play, Loader2, ArrowUpRight, ExternalLink } from "lucide-
 import { PageHeader } from "@/components/layout/page-header";
 import { NoOrgState } from "@/components/ui/no-org-state";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { FormField } from "@/components/ui/form-field";
 import { useOrg } from "@/hooks/use-org";
 import { useToast } from "@/components/ui/toast";
@@ -24,7 +23,7 @@ import { U20_EMPTY_COPY } from "@/lib/portal-polish";
 import { useEmbeddedSurface } from "@/components/layout/embedded-surface";
 import { CoreResourcePage } from "@/components/portal-os";
 import { EmptyState } from "@/components/ui/empty-state";
-import { ErrorState } from "@/components/ui/error-state";
+import { QueryState } from "@/components/ui/query-state";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
@@ -155,6 +154,27 @@ function PlaygroundsInner() {
     toast.success(datasetId ? "Dataset bound" : "Dataset unbound");
   };
 
+  /** E-04: create + bind without leaving Playground tab (upload stays on Datasets). */
+  const createAndBindDataset = async () => {
+    if (!currentOrg?.id || !active) return;
+    setBusy(true);
+    try {
+      const created = await datasetsApi.create(currentOrg.id, {
+        name: `Dataset ${new Date().toLocaleString()}`,
+        description: "Created from Playground",
+      });
+      const cfg = { ...(active.config || {}), dataset_id: created.id };
+      const res = await playgroundApi.patch(currentOrg.id, active.id, { config: cfg });
+      setActive(res.playground);
+      await load();
+      toast.success("Dataset created and bound");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Create dataset failed");
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const runMatrix = async () => {
     if (!currentOrg?.id || !active) return;
     setBusy(true);
@@ -222,7 +242,7 @@ function PlaygroundsInner() {
           New playground
         </Button>
         {!embedded ? (
-          <Button asChild variant="outline" className="min-h-11">
+          <Button asChild variant="outline" className="hidden min-h-11 sm:inline-flex">
             <a href={DOCS_QUICKSTART_URL} target="_blank" rel="noopener noreferrer">
               Docs quickstart
               <ExternalLink className="h-3.5 w-3.5" aria-hidden />
@@ -247,7 +267,7 @@ function PlaygroundsInner() {
       table={
         <>
           {!embedded ? (
-            <p className="mb-4 text-sm text-[var(--text-muted)]">
+            <p className="mb-space-4 text-sm text-[var(--text-muted)]">
               Offline Evaluate only.{" "}
               <Link
                 href="/evals?tab=datasets"
@@ -266,181 +286,170 @@ function PlaygroundsInner() {
             </p>
           ) : null}
 
-          {loading ? (
-            <div className="mb-4 flex flex-col items-center justify-center gap-3 py-16">
-              <Loader2 className="h-6 w-6 animate-spin text-[var(--text-muted)]" />
-              <p className="text-sm text-[var(--text-muted)]">Loading playgrounds…</p>
-            </div>
-          ) : null}
-
-          {listError && !loading ? (
-            <ErrorState
-              title="Could not load playgrounds"
-              message={listError}
-              className="mb-4"
-              action={
-                <Button
-                  onClick={() => void load()}
-                  variant="outline"
-                  size="sm"
-                  loading={listQuery.isFetching}
-                >
-                  Try again
-                </Button>
-              }
-            />
-          ) : null}
-
-          {!loading && !listError && playgrounds.length === 0 ? (
-            <EmptyState
-              icon={FlaskConical}
-              title="No playgrounds yet"
-              description={U20_EMPTY_COPY.playground}
-              variant="plain"
-              className="mb-4"
-              action={
-                <div className="flex flex-wrap items-center justify-center gap-2">
+          <QueryState
+            loading={loading}
+            error={listError ? new Error(listError) : null}
+            data={playgrounds}
+            onRetry={() => void load()}
+            errorTitle="Could not load playgrounds"
+            isEmpty={(rows) => rows.length === 0}
+            emptySlot={
+              <EmptyState
+                icon={FlaskConical}
+                title="No playgrounds yet"
+                description={U20_EMPTY_COPY.playground}
+                variant="plain"
+                className="mb-space-4"
+                action={
                   <Button className="min-h-11" onClick={createNew} disabled={busy}>
                     Create playground
                   </Button>
-                  <Button asChild variant="outline" className="min-h-11">
-                    <a href={DOCS_QUICKSTART_URL} target="_blank" rel="noopener noreferrer">
-                      Docs quickstart
-                      <ExternalLink className="h-3.5 w-3.5" aria-hidden />
-                    </a>
-                  </Button>
-                </div>
-              }
-            />
-          ) : null}
-
-          {playgrounds.length > 0 ? (
-            <div className="mb-3 flex flex-wrap gap-2" role="group" aria-label="Saved playgrounds">
-              {playgrounds.map((p) => (
-                <button
-                  key={p.id}
-                  type="button"
-                  onClick={() => setActive(p)}
-                  aria-pressed={active?.id === p.id}
-                  className={`min-h-11 rounded border px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] ${
-                    active?.id === p.id
-                      ? "border-[var(--accent)] text-[var(--accent)]"
-                      : "border-[var(--border-default)] text-[var(--text-muted)]"
-                  }`}
+                }
+              />
+            }
+          >
+            {(rows) => (
+              <>
+                <div
+                  className="mb-space-3 flex flex-wrap gap-2"
+                  role="group"
+                  aria-label="Saved playgrounds"
                 >
-                  {p.name}
-                </button>
-              ))}
-            </div>
-          ) : null}
-
-          {active ? (
-            <Card className="mb-4 space-y-3 p-4">
-              <FormField label="User message" htmlFor="pg-user">
-                <Textarea
-                  id="pg-user"
-                  className="mt-1 min-h-[100px]"
-                  value={userPrompt}
-                  onChange={(e) => setUserPrompt(e.target.value)}
-                  placeholder="Paste span input or draft prompt…"
-                />
-              </FormField>
-              <FormField label="Bind dataset" htmlFor="pg-ds">
-                <Select
-                  value={boundDatasetId || "none"}
-                  onValueChange={(v) => void bindDataset(v === "none" ? "" : v)}
-                >
-                  <SelectTrigger id="pg-ds" className="mt-1 min-h-11">
-                    <SelectValue placeholder="None (adhoc run)" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">None (adhoc run)</SelectItem>
-                    {datasets.map((d) => (
-                      <SelectItem key={d.id} value={d.id}>
-                        {d.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {datasets.length === 0 ? (
-                  <p className="mt-1.5 text-xs text-[var(--text-muted)]">
-                    <Link
-                      href="/evals?tab=datasets"
-                      className="text-[var(--accent)] underline-offset-2 hover:underline"
+                  {rows.map((p) => (
+                    <button
+                      key={p.id}
+                      type="button"
+                      onClick={() => setActive(p)}
+                      aria-pressed={active?.id === p.id}
+                      className={`min-h-11 rounded border px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] ${
+                        active?.id === p.id
+                          ? "border-[var(--accent)] text-[var(--accent)]"
+                          : "border-[var(--border-default)] text-[var(--text-muted)]"
+                      }`}
                     >
-                      Create a dataset
-                    </Link>{" "}
-                    to enable promote → experiment.
-                  </p>
-                ) : null}
-              </FormField>
-              <div className="flex flex-wrap items-center gap-2">
-                <span title={runDisabledReason} className="inline-flex">
-                  <Button
-                    className="min-h-11"
-                    onClick={runMatrix}
-                    disabled={busy || !canRun}
-                    loading={busy}
-                    aria-disabled={busy || !canRun}
-                    aria-describedby={!canRun ? "pg-run-reason" : undefined}
-                  >
-                    <Play className="h-3.5 w-3.5" /> Run matrix
-                  </Button>
-                </span>
-                <span title={promoteDisabledReason} className="inline-flex">
-                  <Button
-                    className="min-h-11"
-                    variant="outline"
-                    onClick={promote}
-                    disabled={busy || !canPromote}
-                    aria-disabled={busy || !canPromote}
-                    aria-describedby={!canPromote ? "pg-promote-reason" : undefined}
-                  >
-                    <ArrowUpRight className="h-3.5 w-3.5" /> Promote → experiment
-                  </Button>
-                </span>
-              </div>
-              {!canRun ? (
-                <p id="pg-run-reason" className="text-xs text-[var(--text-muted)]">
-                  {runDisabledReason}
-                </p>
-              ) : null}
-              {!canPromote ? (
-                <p id="pg-promote-reason" className="text-xs text-[var(--text-muted)]">
-                  {promoteDisabledReason}
-                </p>
-              ) : null}
-            </Card>
-          ) : null}
+                      {p.name}
+                    </button>
+                  ))}
+                </div>
 
-          {run ? (
-            <Card className="space-y-3 p-4">
-              <div className="flex items-center justify-between text-sm">
-                <span className="font-medium">Matrix results</span>
-                <span className="text-[var(--text-muted)]">
-                  cost_usd ${Number(run.cost_usd ?? 0).toFixed(4)}
-                </span>
-              </div>
-              {(run.matrix || []).map((row) => (
-                <div key={row.row_id} className="rounded border border-[var(--border-default)] p-3">
-                  <div className="mb-2 flex gap-3 text-xs text-[var(--text-muted)]">
-                    <span>grade: {row.grade}</span>
-                    <span>Δ {Number(row.score_delta ?? 0).toFixed(3)}</span>
+                {active ? (
+                  <div className="mb-space-4 space-y-space-3 border-y border-[var(--border-subtle)] py-space-4">
+                    <FormField label="User message" htmlFor="pg-user">
+                      <Textarea
+                        id="pg-user"
+                        className="mt-1 min-h-[100px]"
+                        value={userPrompt}
+                        onChange={(e) => setUserPrompt(e.target.value)}
+                        placeholder="Paste span input or draft prompt…"
+                      />
+                    </FormField>
+                    <FormField label="Bind dataset" htmlFor="pg-ds">
+                      <Select
+                        value={boundDatasetId || "none"}
+                        onValueChange={(v) => void bindDataset(v === "none" ? "" : v)}
+                      >
+                        <SelectTrigger id="pg-ds" className="mt-1 min-h-11">
+                          <SelectValue placeholder="None (adhoc run)" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">None (adhoc run)</SelectItem>
+                          {datasets.map((d) => (
+                            <SelectItem key={d.id} value={d.id}>
+                              {d.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[var(--text-muted)]">
+                        <button
+                          type="button"
+                          className="min-h-11 text-[var(--accent)] underline-offset-2 hover:underline disabled:opacity-50"
+                          disabled={busy || !active}
+                          onClick={() => void createAndBindDataset()}
+                        >
+                          Create dataset
+                        </button>
+                        <Link
+                          href="/evals?tab=datasets"
+                          className="min-h-11 inline-flex items-center text-[var(--accent)] underline-offset-2 hover:underline"
+                        >
+                          Upload / manage
+                        </Link>
+                      </div>
+                    </FormField>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span title={runDisabledReason} className="inline-flex">
+                        <Button
+                          className="min-h-11"
+                          onClick={runMatrix}
+                          disabled={busy || !canRun}
+                          loading={busy}
+                          aria-disabled={busy || !canRun}
+                          aria-describedby={!canRun ? "pg-run-reason" : undefined}
+                        >
+                          <Play className="h-3.5 w-3.5" /> Run matrix
+                        </Button>
+                      </span>
+                      <span title={promoteDisabledReason} className="inline-flex">
+                        <Button
+                          className="min-h-11"
+                          variant="outline"
+                          onClick={promote}
+                          disabled={busy || !canPromote}
+                          aria-disabled={busy || !canPromote}
+                          aria-describedby={!canPromote ? "pg-promote-reason" : undefined}
+                        >
+                          <ArrowUpRight className="h-3.5 w-3.5" /> Promote → experiment
+                        </Button>
+                      </span>
+                    </div>
+                    {!canRun ? (
+                      <p id="pg-run-reason" className="text-xs text-[var(--text-muted)]">
+                        {runDisabledReason}
+                      </p>
+                    ) : null}
+                    {!canPromote ? (
+                      <p id="pg-promote-reason" className="text-xs text-[var(--text-muted)]">
+                        {promoteDisabledReason}
+                      </p>
+                    ) : null}
                   </div>
-                  <div className="grid gap-2 md:grid-cols-2">
-                    {(row.tasks || []).map((t, i) => (
-                      <div key={i} className="rounded bg-[var(--surface-raised)] p-2">
-                        <div className="mb-1 text-xs font-medium">
-                          {t.label || t.model} · ${Number(t.cost_usd ?? 0).toFixed(4)}
+                ) : null}
+
+                {run ? (
+                  <div className="space-y-space-3 border-t border-[var(--border-subtle)] pt-space-4">
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="font-medium">Matrix results</span>
+                      <span className="text-[var(--text-muted)]">
+                        cost_usd ${Number(run.cost_usd ?? 0).toFixed(4)}
+                      </span>
+                    </div>
+                    {(run.matrix || []).map((row) => (
+                      <div
+                        key={row.row_id}
+                        className="rounded border border-[var(--border-default)] p-space-3"
+                      >
+                        <div className="mb-2 flex gap-3 text-xs text-[var(--text-muted)]">
+                          <span>grade: {row.grade}</span>
+                          <span>Δ {Number(row.score_delta ?? 0).toFixed(3)}</span>
                         </div>
-                        <pre className="whitespace-pre-wrap text-xs">{t.response}</pre>
+                        <div className="grid gap-2 md:grid-cols-2">
+                          {(row.tasks || []).map((t, i) => (
+                            <div key={i} className="rounded bg-[var(--surface-raised)] p-2">
+                              <div className="mb-1 text-xs font-medium">
+                                {t.label || t.model} · ${Number(t.cost_usd ?? 0).toFixed(4)}
+                              </div>
+                              <pre className="whitespace-pre-wrap text-xs">{t.response}</pre>
+                            </div>
+                          ))}
+                        </div>
                       </div>
                     ))}
                   </div>
-                </div>
-              ))}
-            </Card>
-          ) : null}
+                ) : null}
+              </>
+            )}
+          </QueryState>
         </>
       }
     />

@@ -4,14 +4,16 @@ import * as React from "react";
 import * as TabsPrimitive from "@radix-ui/react-tabs";
 import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/utils";
+import { FOCUS_RING_CLASS } from "./focus-ring";
 
 const Tabs = TabsPrimitive.Root;
 
-const tabsListVariants = cva("inline-flex items-center justify-center", {
+/** Hub default grammar: `variant="underline"` (w3-component-contract R3). */
+const tabsListVariants = cva("inline-flex max-w-full items-center justify-center", {
   variants: {
     variant: {
       default: "gap-2 p-1 bg-[var(--accent-bg)] rounded-lg",
-      underline: "gap-8 border-b border-[var(--border)]",
+      underline: "gap-8 border-b border-[var(--border)] overflow-x-auto",
       pills: "gap-1 p-1",
     },
   },
@@ -21,12 +23,16 @@ const tabsListVariants = cva("inline-flex items-center justify-center", {
 });
 
 const tabsTriggerVariants = cva(
-  "inline-flex items-center justify-center whitespace-nowrap text-sm font-medium transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50",
+  cn(
+    "inline-flex max-w-[12rem] shrink-0 items-center justify-center truncate whitespace-nowrap text-sm font-medium transition-all disabled:pointer-events-none disabled:opacity-50",
+    FOCUS_RING_CLASS,
+  ),
   {
     variants: {
       variant: {
         default: "rounded-md px-3 py-1.5 data-[state=active]:bg-[var(--bg-primary)] data-[state=active]:text-[var(--accent)] text-[var(--text-secondary)]",
-        underline: "border-b-2 border-transparent -mb-px pb-3 data-[state=active]:border-[var(--accent)] data-[state=active]:text-[var(--accent)] text-[var(--text-muted)]",
+        underline:
+          "min-h-11 border-b-2 border-transparent -mb-px pb-3 data-[state=active]:border-[var(--accent)] data-[state=active]:text-[var(--accent)] text-[var(--text-muted)]",
         pills: "rounded-full px-3 py-1.5 data-[state=active]:bg-[var(--accent)] data-[state=active]:text-[var(--bg-base)] text-[var(--text-secondary)]",
       },
     },
@@ -65,10 +71,7 @@ const TabsContent = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <TabsPrimitive.Content
     ref={ref}
-    className={cn(
-      "mt-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2",
-      className
-    )}
+    className={cn("mt-2", FOCUS_RING_CLASS, className)}
     {...props}
   />
 ));

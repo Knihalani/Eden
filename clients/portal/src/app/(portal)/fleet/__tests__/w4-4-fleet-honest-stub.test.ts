@@ -65,11 +65,11 @@ describe("W4-4 fleet honest stub", () => {
     expect(src).toContain("Fleet Health is not available yet");
   });
 
-  it("load failures use ErrorState with retry, not empty zeros", () => {
+  it("load failures use QueryState with retry, not empty zeros", () => {
     const src = read("app/(portal)/fleet/page.tsx");
     expect(src).toContain("Could not load fleet");
-    expect(src).toContain("Try again");
-    expect(src).toContain('from "@/components/ui/error-state"');
+    expect(src).toContain('from "@/components/ui/query-state"');
+    expect(src).toContain("QueryState");
     expect(src).toContain("summaryQuery.refetch()");
   });
 

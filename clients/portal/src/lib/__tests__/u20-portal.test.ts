@@ -21,6 +21,8 @@ describe("U20 core axe routes", () => {
       "/evals",
       "/improve",
       "/alerts",
+      "/agents",
+      "/settings",
     ]);
   });
 

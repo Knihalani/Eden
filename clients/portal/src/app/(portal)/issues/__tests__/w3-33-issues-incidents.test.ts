@@ -56,9 +56,12 @@ describe("W3-3.3 ErrorState consistency", () => {
     expect(src).toMatch(/issueDetailError \?[\s\S]*ErrorState/);
   });
 
-  it("gates incidents empty behind error", () => {
+  it("gates incidents empty behind QueryState error path", () => {
     const src = read("app/(portal)/incidents/page.tsx");
-    expect(src).toMatch(/error \?[\s\S]*ErrorState[\s\S]*:[\s\S]*DataTable/);
+    expect(src).toContain('from "@/components/ui/query-state"');
+    expect(src).toContain('errorTitle="Could not load incidents"');
+    expect(src).toContain("DataTable");
+    expect(src).not.toMatch(/bg-\[var\(--accent\)\] text-\[var\(--bg-base\)\]/);
   });
 });
 

@@ -83,7 +83,7 @@ export function AnalyticsTab() {
       <EmptyState
         icon={BarChart2}
         title="No analytics data yet"
-        description="Usage charts appear once the workspace has members, references, or storage activity."
+        description="No usage charts yet. They appear once the workspace has members, references, or storage activity."
       />
     );
   }
@@ -102,7 +102,7 @@ export function AnalyticsTab() {
   ];
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-space-6">
       {/* Summary Stats */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div className="bg-[var(--bg-primary)] p-4 rounded-lg border border-[var(--border-default)]">
@@ -237,7 +237,7 @@ export function AnalyticsTab() {
           <Users className="w-5 h-5" />
           Member Activity
         </h3>
-        <div className="space-y-3">
+        <div className="space-y-space-3">
           {analytics.member_activity.map((member) => (
             <div
               key={member.user_id}

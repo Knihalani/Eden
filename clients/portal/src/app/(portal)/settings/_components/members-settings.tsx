@@ -97,7 +97,7 @@ export function MembersSettings({ org }: MembersSettingsProps) {
     return (
       <SettingsCard title="Members">
         <div className="text-center py-8 text-[var(--text-secondary)] text-sm">
-          Select an organization above to manage its members.
+          Select an organization in the sidebar to manage its members.
         </div>
       </SettingsCard>
     );
@@ -159,7 +159,7 @@ export function MembersSettings({ org }: MembersSettingsProps) {
   ];
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-space-4">
       {isPersonal && (
         <p className="text-sm text-[var(--text-muted)] rounded-lg border border-[var(--border-default)] bg-[var(--bg-secondary)] px-4 py-3">
           This is a personal workspace. Invites are unavailable — create a team
@@ -169,7 +169,7 @@ export function MembersSettings({ org }: MembersSettingsProps) {
       {canInvite && (
         <SettingsCard
           title="Invite a member"
-          description="Add teammates by email. They'll get a link to join."
+          description="Add teammates by email. They receive a link to join."
         >
           <div className="flex flex-col sm:flex-row gap-3">
             <input
@@ -188,12 +188,9 @@ export function MembersSettings({ org }: MembersSettingsProps) {
               <option value="member">Member</option>
               <option value="admin">Admin</option>
             </select>
-            <button
-              onClick={handleInvite}
-              className="px-4 py-2 bg-[var(--accent)] text-[var(--bg-base)] rounded-lg text-sm font-medium hover:opacity-90"
-            >
+            <Button variant="default" className="min-h-11" onClick={handleInvite}>
               Invite
-            </button>
+            </Button>
           </div>
         </SettingsCard>
       )}

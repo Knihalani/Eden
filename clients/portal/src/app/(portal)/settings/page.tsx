@@ -2,120 +2,144 @@
 
 import { useState, useEffect, useRef, Suspense } from "react";
 import dynamic from "next/dynamic";
-import { useOrganizationList } from "@clerk/nextjs";
 import { useOrg } from "@/hooks/use-org";
 import { useAuth } from "@/hooks/use-auth";
 import { usePermissions } from "@/hooks/use-permissions";
 import { useToast } from "@/components/ui/toast";
 import { Building2, Users, User, Code, Key, FileText, Shield, ShieldCheck, CreditCard, KeyRound, Lock, BarChart2, Server, EyeOff, Database, FileArchive, Settings2, Bot, Terminal, Activity, Wallet } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Skeleton } from "@/components/ui/skeleton";
 
 // Heavy tabs — code-split via next/dynamic so the initial settings bundle
 // doesn't ship recharts / @xyflow / 2FA crypto / SCIM flows. Each lazy
 // import keeps a LoadingSkeleton fallback so the tab-rail layout
 // doesn't jump when the user clicks the tab. (June 2026 perf pass.)
+const tabLoading = () => <Skeleton className="h-64 w-full" />;
 const AnalyticsTab = dynamic(() => import("./_components/analytics-tab").then(m => ({
   default: m.AnalyticsTab
 })), {
   ssr: false,
-  loading: () => <Skeleton className="h-64 w-full" />
+  loading: tabLoading
 });
 const AutonomousTab = dynamic(() => import("./_components/autonomous-tab").then(m => ({
   default: m.default
 })), {
   ssr: false,
-  loading: () => <Skeleton className="h-64 w-full" />
+  loading: tabLoading
 });
 const AuditLogTab = dynamic(() => import("./_components/audit-log-tab").then(m => ({
   default: m.AuditLogTab
 })), {
   ssr: false,
-  loading: () => <Skeleton className="h-64 w-full" />
+  loading: tabLoading
 });
 const BillingTab = dynamic(() => import("./_components/billing-tab").then(m => ({
   default: m.BillingTab
 })), {
   ssr: false,
-  loading: () => <Skeleton className="h-64 w-full" />
+  loading: tabLoading
 });
 const ExportsTab = dynamic(() => import("./_components/exports-tab").then(m => ({
   default: m.ExportsTab
 })), {
   ssr: false,
-  loading: () => <Skeleton className="h-64 w-full" />
+  loading: tabLoading
 });
 const GatewayTab = dynamic(() => import("./_components/gateway-tab").then(m => ({
   default: m.GatewayTab
 })), {
   ssr: false,
-  loading: () => <Skeleton className="h-64 w-full" />
+  loading: tabLoading
 });
 const PiiPolicyTab = dynamic(() => import("./_components/pii-policy-tab").then(m => ({
   default: m.PiiPolicyTab
 })), {
   ssr: false,
-  loading: () => <Skeleton className="h-64 w-full" />
+  loading: tabLoading
 });
 const RetentionPolicyTab = dynamic(() => import("./_components/retention-policy-tab").then(m => ({
   default: m.RetentionPolicyTab
 })), {
   ssr: false,
-  loading: () => <Skeleton className="h-64 w-full" />
+  loading: tabLoading
 });
 const ScimTab = dynamic(() => import("./_components/scim-tab").then(m => ({
   default: m.ScimTab
 })), {
   ssr: false,
-  loading: () => <Skeleton className="h-64 w-full" />
+  loading: tabLoading
 });
 const SecurityTab = dynamic(() => import("./_components/security-tab").then(m => ({
   default: m.SecurityTab
 })), {
   ssr: false,
-  loading: () => <Skeleton className="h-64 w-full" />
+  loading: tabLoading
 });
 const SidebarSettingsTab = dynamic(() => import("./_components/sidebar-settings-tab").then(m => ({
   default: m.SidebarSettingsTab
 })), {
   ssr: false,
-  loading: () => <Skeleton className="h-64 w-full" />
+  loading: tabLoading
 });
 const McpTab = dynamic(() => import("./_components/mcp-tab").then(m => ({
   default: m.McpTab
 })), {
   ssr: false,
-  loading: () => <Skeleton className="h-64 w-full" />
+  loading: tabLoading
 });
 const StatusTab = dynamic(() => import("./_components/status-tab").then(m => ({
   default: m.StatusTab
 })), {
   ssr: false,
-  loading: () => <Skeleton className="h-64 w-full" />
+  loading: tabLoading
 });
 const FinOpsKillsTab = dynamic(() => import("./_components/finops-kills-tab").then(m => ({
   default: m.FinOpsKillsTab
 })), {
   ssr: false,
-  loading: () => <Skeleton className="h-64 w-full" />
+  loading: tabLoading
 });
 const AccountTab = dynamic(() => import("@/app/(portal)/profile/page"), {
   ssr: false,
-  loading: () => <Skeleton className="h-64 w-full" />
+  loading: tabLoading
 });
-import { OrgTab } from "./_components/org-tab";
-import { MembersTab } from "./_components/members-tab";
-import { ReferencesTab } from "./_components/references-tab";
-import { ApiKeysTab } from "./_components/api-keys-tab";
-import RolesTab from "./_components/roles-tab";
-import { Skeleton } from "@/components/ui/skeleton";
+// W17 load pass — also split formerly-eager tabs so Settings shell
+// doesn't pull members/API-keys/roles into the first paint graph.
+const OrgTab = dynamic(() => import("./_components/org-tab").then(m => ({
+  default: m.OrgTab
+})), {
+  ssr: false,
+  loading: tabLoading
+});
+const MembersTab = dynamic(() => import("./_components/members-tab").then(m => ({
+  default: m.MembersTab
+})), {
+  ssr: false,
+  loading: tabLoading
+});
+const ReferencesTab = dynamic(() => import("./_components/references-tab").then(m => ({
+  default: m.ReferencesTab
+})), {
+  ssr: false,
+  loading: tabLoading
+});
+const ApiKeysTab = dynamic(() => import("./_components/api-keys-tab").then(m => ({
+  default: m.ApiKeysTab
+})), {
+  ssr: false,
+  loading: tabLoading
+});
+const RolesTab = dynamic(() => import("./_components/roles-tab"), {
+  ssr: false,
+  loading: tabLoading
+});
+import SettingsLoading from "./loading";
 import { useSearchParams, useRouter } from "next/navigation";
 import { SettingsSearch } from "@/components/settings/settings-search";
 import { SettingsCategoryGroup } from "@/components/settings/settings-category-group";
-import { Panel } from "@/components/ui/panel";
 import { PageHeader } from "@/components/layout/page-header";
 import { PageContent } from "@/components/layout/page-content";
 import { EmbeddedSurface } from "@/components/layout/embedded-surface";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 type Tab = "org" | "members" | "references" | "api-keys" | "mcp" | "security" | "scim" | "sso" | "audit-log" | "analytics" | "billing" | "gateway" | "pii" | "retention" | "exports" | "sidebar" | "autonomous" | "roles" | "account" | "status" | "finops";
 type SettingsCategory = "Org" | "Members" | "Security" | "Compliance" | "Billing" | "Advanced";
 const TABS: ReadonlyArray<{
@@ -129,22 +153,26 @@ const TABS: ReadonlyArray<{
   id: "org",
   label: "Organization",
   icon: Building2,
-  category: "Org"
+  category: "Org",
+  keywords: ["workspace", "team", "slug", "archive", "delete", "transfer"],
 }, {
   id: "account",
   label: "Account",
   icon: User,
-  category: "Org"
+  category: "Org",
+  keywords: ["profile", "user", "me"],
 }, {
   id: "api-keys",
   label: "API Keys",
   icon: Key,
-  category: "Org"
+  category: "Org",
+  keywords: ["token", "credentials", "sdk", "secret", "revoke"],
 }, {
   id: "members",
   label: "Members",
   icon: Users,
-  category: "Members"
+  category: "Members",
+  keywords: ["invite", "people", "team", "remove"],
 }, {
   id: "roles",
   label: "Custom Roles",
@@ -152,26 +180,31 @@ const TABS: ReadonlyArray<{
   category: "Members",
   // Soft-launch: custom roles CRUD exists but is not enforced on routes.
   hidden: true,
+  keywords: ["permissions", "rbac"],
 }, {
   id: "references",
   label: "Code References",
   icon: Code,
-  category: "Members"
+  category: "Members",
+  keywords: ["github", "repo", "source"],
 }, {
   id: "mcp",
   label: "MCP",
   icon: Terminal,
-  category: "Security"
+  category: "Security",
+  keywords: ["model context", "tools", "server"],
 }, {
   id: "security",
   label: "Security",
   icon: Shield,
-  category: "Security"
+  category: "Security",
+  keywords: ["2fa", "mfa", "totp", "password", "enforcement"],
 }, {
   id: "scim",
   label: "SCIM",
   icon: KeyRound,
-  category: "Security"
+  category: "Security",
+  keywords: ["provisioning", "directory", "okta", "entra", "users"],
 }, {
   // Soft-launch: SSO deferred (requires Clerk Enterprise or Eden-native
   // SAML SP). Tab kept out of the rail; deep-link ?tab=sso shows a notice.
@@ -180,62 +213,73 @@ const TABS: ReadonlyArray<{
   icon: Lock,
   category: "Security",
   hidden: true,
+  keywords: ["saml", "oidc", "login", "identity"],
 }, {
   id: "gateway",
   label: "AI Gateway",
   icon: Server,
-  category: "Compliance"
+  category: "Compliance",
+  keywords: ["models", "llm", "proxy", "routing"],
 }, {
   id: "pii",
   label: "PII Policy",
   icon: EyeOff,
-  category: "Compliance"
+  category: "Compliance",
+  keywords: ["privacy", "redact", "scrub", "gdpr", "phi"],
 }, {
   id: "retention",
   label: "Retention",
   icon: Database,
-  category: "Compliance"
+  category: "Compliance",
+  keywords: ["delete", "lifecycle", "storage", "ttl"],
 }, {
   id: "exports",
   label: "Exports",
   icon: FileArchive,
-  category: "Compliance"
+  category: "Compliance",
+  keywords: ["download", "gdpr", "data", "zip"],
 }, {
   id: "audit-log",
   label: "Audit Log",
   icon: FileText,
-  category: "Compliance"
+  category: "Compliance",
+  keywords: ["audit", "trail", "compliance", "events"],
 }, {
   id: "status",
   label: "Platform status",
   icon: Activity,
-  category: "Advanced"
+  category: "Advanced",
+  keywords: ["health", "uptime", "incidents"],
 }, {
   id: "analytics",
   label: "Analytics",
   icon: BarChart2,
-  category: "Advanced"
+  category: "Advanced",
+  keywords: ["metrics", "usage", "charts"],
 }, {
   id: "billing",
   label: "Billing",
   icon: CreditCard,
-  category: "Billing"
+  category: "Billing",
+  keywords: ["plan", "stripe", "invoice", "subscription", "payment"],
 }, {
   id: "finops",
   label: "FinOps kills",
   icon: Wallet,
   category: "Billing",
-  keywords: ["finops", "kill", "kills", "cost", "feature kill"],
+  keywords: ["finops", "kill", "kills", "cost", "feature kill", "switch"],
 }, {
   id: "autonomous",
   label: "Autonomous",
   icon: Bot,
-  category: "Advanced"
+  category: "Advanced",
+  keywords: ["heal", "intelligence", "agent", "cron", "destructive"],
 }, {
   id: "sidebar",
   label: "Sidebar",
   icon: Settings2,
-  category: "Advanced"
+  category: "Advanced",
+  keywords: ["navigation", "nav", "pin", "layout"],
 }];
 
 // Order categories for the rail. The order is fixed — Org first
@@ -247,14 +291,9 @@ function SettingsPageInner() {
   } = useAuth();
   const {
     currentOrg,
-    organizations,
-    setCurrentOrg
   } = useOrg();
   const { hasPermission, role } = usePermissions();
   const toast = useToast();
-  const {
-    setActive: setActiveOrg
-  } = useOrganizationList();
   const router = useRouter();
   const searchParams = useSearchParams();
   // Billing / FinOps / MCP: admin+ (settings:edit or billing:view).
@@ -399,19 +438,63 @@ function SettingsPageInner() {
   // grow with content instead of clipping. The dvh unit + iOS
   // safe-area inset keep mobile (375x667) looking right without
   // the "double scroll" the previous h-[calc(100vh-4rem)] caused.
+  const searchableTabCount = TABS.filter((t) => !t.hidden && canAccessTab(t.id)).length;
+  const isSearching = Boolean(normalisedQuery);
+
   return <div className="flex flex-col lg:flex-row min-h-[calc(100dvh-4rem)] pb-[env(safe-area-inset-bottom)]">
-      {/* Tab rail: horizontal scroll on mobile, vertical on lg */}
+      {/* Tab rail: search-first (Stripe/Linear), horizontal on mobile */}
       <div className="w-full lg:w-[240px] flex-shrink-0 bg-[var(--bg-primary)] border-b lg:border-b-0 lg:border-r border-[var(--border-default)]">
-        <div className="p-3 lg:p-4 space-y-3">
-          <h2 className="text-sm font-semibold text-[var(--text-primary)] px-2">Settings</h2>
-          <SettingsSearch value={searchQuery} onChange={setSearchQuery} totalLabel={normalisedQuery ? `Showing ${visibleTabs.length} of ${TABS.length} settings` : undefined} />
-          <nav className="flex flex-row lg:flex-col gap-3 overflow-x-auto lg:overflow-visible pb-1 lg:pb-0 -mx-1 px-1 lg:mx-0 lg:px-0" role="tablist" aria-label="Settings sections">
-            {visibleCategories.map(category => <SettingsCategoryGroup key={category} category={category} count={tabsByCategory[category].length}>
-                {tabsByCategory[category].map(tab => <button key={tab.id} type="button" role="tab" data-tab-id={tab.id} data-tour-id={tab.id} aria-selected={activeTab === tab.id} id={`settings-tab-${tab.id}`} onClick={() => handleTabChange(tab.id)} className={cn("flex-shrink-0 lg:w-full min-h-11 px-3 py-2 rounded-lg text-sm font-medium flex items-center gap-2 lg:gap-3 transition-colors whitespace-nowrap", activeTab === tab.id ? "bg-[var(--accent-faint)] text-[var(--accent)] lg:border-l-2 lg:border-[var(--accent)]" : "text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)]")}>
+        <div className="p-space-3 lg:p-space-4 space-y-space-3">
+          <SettingsSearch
+            value={searchQuery}
+            onChange={setSearchQuery}
+            totalLabel={
+              isSearching
+                ? `Showing ${visibleTabs.length} of ${searchableTabCount} settings`
+                : undefined
+            }
+          />
+          <nav
+            className="flex flex-row lg:flex-col gap-space-3 overflow-x-auto lg:overflow-visible pb-space-1 lg:pb-0 -mx-space-1 px-space-1 lg:mx-0 lg:px-0"
+            role="tablist"
+            aria-label="Settings sections"
+          >
+            {isSearching && visibleTabs.length === 0 ? (
+              <p className="px-space-2 py-space-3 text-sm text-[var(--text-muted)]" role="status">
+                No settings match “{searchQuery.trim()}”.
+              </p>
+            ) : null}
+            {visibleCategories.map((category) => (
+              <SettingsCategoryGroup
+                key={category}
+                category={category}
+                count={tabsByCategory[category].length}
+                forceExpanded={isSearching}
+              >
+                {tabsByCategory[category].map((tab) => (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    role="tab"
+                    data-tab-id={tab.id}
+                    data-tour-id={tab.id}
+                    aria-selected={activeTab === tab.id}
+                    id={`settings-tab-${tab.id}`}
+                    onClick={() => handleTabChange(tab.id)}
+                    className={cn(
+                      "flex-shrink-0 lg:w-full min-h-11 min-w-0 max-w-[12rem] lg:max-w-none px-space-3 py-space-2 rounded-lg text-sm font-medium flex items-center gap-space-2 lg:gap-space-3 transition-colors",
+                      activeTab === tab.id
+                        ? "bg-[var(--accent-faint)] text-[var(--accent)] lg:border-l-2 lg:border-[var(--accent)]"
+                        : "text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)]",
+                    )}
+                    title={tab.label}
+                  >
                     <tab.icon className="w-4 h-4 flex-shrink-0" aria-hidden />
-                    <span>{tab.label}</span>
-                  </button>)}
-              </SettingsCategoryGroup>)}
+                    <span className="truncate">{tab.label}</span>
+                  </button>
+                ))}
+              </SettingsCategoryGroup>
+            ))}
           </nav>
         </div>
       </div>
@@ -423,43 +506,6 @@ function SettingsPageInner() {
             title="Settings"
             subtitle="Organization, API keys, security, and compliance."
           />
-
-          {/* Org Switcher */}
-          {organizations.length > 0 && <Panel tone="flat" padding="md" className="mb-6">
-              <div className="flex items-center gap-3 mb-3">
-                <Building2 className="w-4 h-4 text-[var(--text-muted)]" />
-                <span className="text-sm font-medium text-[var(--text-primary)]">Current Organization</span>
-              </div>
-              <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-                <label htmlFor="settings-org-select" className="sr-only">
-                  Current organization
-                </label>
-                <Select
-                  value={currentOrg?.id || ""}
-                  onValueChange={(value) => {
-                    const org = organizations.find((o) => o.id === value);
-                    if (org) {
-                      setCurrentOrg(org);
-                      const clerkOrgId = (org as { clerk_org_id?: string }).clerk_org_id;
-                      if (clerkOrgId && setActiveOrg) {
-                        void setActiveOrg({ organization: clerkOrgId });
-                      }
-                    }
-                  }}
-                >
-                  <SelectTrigger id="settings-org-select" className="flex-1 min-w-0">
-                    <SelectValue placeholder="Select organization" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {organizations.map((org) => (
-                      <SelectItem key={org.id} value={org.id}>
-                        {org.name} ({org.role})
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </Panel>}
 
           {/* Tab Content */}
           <div role="tabpanel" aria-labelledby={`settings-tab-${activeTab}`}>
@@ -516,7 +562,7 @@ function SettingsPageInner() {
 // surfaces in the browser console as a 404.
 export default function SettingsPage() {
   return (
-    <Suspense fallback={null}>
+    <Suspense fallback={<SettingsLoading />}>
       <SettingsPageInner />
     </Suspense>
   );

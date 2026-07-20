@@ -4,7 +4,6 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { useOrg } from "@/hooks/use-org";
-import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { NoOrgState } from "@/components/ui/no-org-state";
@@ -20,9 +19,17 @@ import {
   Camera,
   Upload,
   FlaskConical,
+  PanelRightOpen,
+  ChevronDown,
 } from "lucide-react";
 import { datasetsApi, offlineExperimentsApi, type DatasetRow, type DatasetColumn } from "@/lib/api";
-import { VirtualizedList } from "@/components/portal-os/VirtualizedList";
+import { DetailPanelShell, VirtualizedList } from "@/components/portal-os";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 interface DatasetDetail {
   id: string;
@@ -87,6 +94,7 @@ export default function DatasetDetailPage() {
   const { id } = useParams<{ id: string }>();
   const { currentOrg } = useOrg();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const toast = useToast();
   const fileRef = useRef<HTMLInputElement>(null);
   const [data, setData] = useState<DatasetDetail | null>(null);
@@ -97,6 +105,7 @@ export default function DatasetDetailPage() {
   const [importProgress, setImportProgress] = useState<string | null>(null);
   const [editing, setEditing] = useState<{ rowId: string; key: string } | null>(null);
   const [editValue, setEditValue] = useState("");
+  const [selectedRowId, setSelectedRowId] = useState<string | undefined>();
 
   const load = useCallback(async () => {
     if (!currentOrg?.id || !id) return;
@@ -245,6 +254,7 @@ export default function DatasetDetailPage() {
 
   const columns = resolveColumns(data);
   const canMutate = !error && !loading && Boolean(data);
+  const selectedRow = data?.rows.find((r) => r.id === selectedRowId) ?? null;
 
   return (
     <PageContent size="wide">
@@ -262,21 +272,41 @@ export default function DatasetDetailPage() {
             <Link
               href="/evals?tab=datasets"
               aria-label="Back to datasets list"
-              className="inline-flex items-center gap-1 text-sm text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+              className="inline-flex min-h-11 items-center gap-1 text-sm text-[var(--text-muted)] hover:text-[var(--text-primary)]"
             >
               <ArrowLeft className="h-3.5 w-3.5" /> Back
             </Link>
-            <Button onClick={snapshot} variant="outline" size="sm" disabled={!canMutate}>
-              <Camera className="h-3.5 w-3.5" /> Snapshot
-            </Button>
             <Button
+              onClick={runExperiment}
               variant="outline"
-              size="sm"
+              className="min-h-11"
               disabled={!canMutate}
-              onClick={() => fileRef.current?.click()}
             >
-              <Upload className="h-3.5 w-3.5" /> Import
+              <FlaskConical className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">New experiment</span>
             </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" className="min-h-11" aria-label="More dataset actions">
+                  More
+                  <ChevronDown className="h-4 w-4" aria-hidden />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem disabled={!canMutate} onSelect={() => void snapshot()}>
+                  <Camera className="h-3.5 w-3.5" /> Snapshot
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  disabled={!canMutate}
+                  onSelect={() => fileRef.current?.click()}
+                >
+                  <Upload className="h-3.5 w-3.5" /> Import
+                </DropdownMenuItem>
+                <DropdownMenuItem disabled={loading} onSelect={() => void load()}>
+                  <RefreshCw className="h-3.5 w-3.5" /> Refresh
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
             <input
               ref={fileRef}
               type="file"
@@ -288,12 +318,6 @@ export default function DatasetDetailPage() {
                 e.target.value = "";
               }}
             />
-            <Button onClick={runExperiment} variant="outline" size="sm" disabled={!canMutate}>
-              <FlaskConical className="h-3.5 w-3.5" /> New experiment
-            </Button>
-            <Button onClick={load} variant="outline" size="sm" disabled={loading} loading={loading}>
-              <RefreshCw className="h-3.5 w-3.5" /> Refresh
-            </Button>
           </>
         }
       />
@@ -317,7 +341,7 @@ export default function DatasetDetailPage() {
       {!error ? (
         <>
           {(data?.snapshots?.length ?? 0) > 0 ? (
-            <Card className="mb-3 p-3">
+            <div className="mb-space-3 border-y border-[var(--border-subtle)] py-space-3">
               <div className="mb-2 text-xs font-medium uppercase tracking-wide text-[var(--text-muted)]">
                 Snapshots
               </div>
@@ -332,10 +356,10 @@ export default function DatasetDetailPage() {
                   </li>
                 ))}
               </ul>
-            </Card>
+            </div>
           ) : null}
 
-          <Card className="mb-3 space-y-3 p-4">
+          <div className="mb-space-3 space-y-space-3 border-y border-[var(--border-subtle)] py-space-4">
             <div className="text-xs font-medium uppercase tracking-wide text-[var(--text-muted)]">
               Add row
             </div>
@@ -359,9 +383,10 @@ export default function DatasetDetailPage() {
               Click any cell to edit inline. Promote traces from the traces hub with{" "}
               <code className="text-[var(--accent)]">?promote_trace=</code>.
             </p>
-          </Card>
+          </div>
 
-          <Card className="overflow-x-auto p-2">
+          <div className="flex flex-col xl:flex-row xl:items-start gap-space-4">
+          <div className="min-w-0 flex-1 overflow-x-auto border-y border-[var(--border-subtle)] py-space-2">
             <div className="mb-2 flex items-center justify-between gap-2 px-2 text-xs text-[var(--text-muted)]">
               <span>
                 {(data?.rows?.length ?? 0).toLocaleString()} rows
@@ -383,7 +408,21 @@ export default function DatasetDetailPage() {
                 className="min-w-[480px]"
               >
                 {(r) => (
-                  <div className="flex items-stretch gap-1 border-b border-[var(--border-subtle)] px-1 py-0.5 text-sm">
+                  <div
+                    className={`flex items-stretch gap-1 border-b border-[var(--border-subtle)] px-1 py-0.5 text-sm ${
+                      selectedRowId === r.id ? "bg-[var(--bg-tertiary)]" : ""
+                    }`}
+                  >
+                    <button
+                      type="button"
+                      className="w-8 shrink-0 inline-flex items-center justify-center text-[var(--text-muted)] hover:text-[var(--accent)]"
+                      aria-label={`Peek row ${r.id}`}
+                      onClick={() =>
+                        setSelectedRowId(selectedRowId === r.id ? undefined : r.id)
+                      }
+                    >
+                      <PanelRightOpen className="h-3.5 w-3.5" aria-hidden />
+                    </button>
                     {columns.map((c) => {
                       const isEdit = editing?.rowId === r.id && editing.key === c.key;
                       const val = cellValue(r, c.key);
@@ -441,7 +480,27 @@ export default function DatasetDetailPage() {
                 </div>
               </div>
             ) : null}
-          </Card>
+          </div>
+          {selectedRow ? (
+            <DetailPanelShell
+              open
+              onClose={() => setSelectedRowId(undefined)}
+              title={<span className="font-mono text-xs">Row {selectedRow.id.slice(0, 8)}…</span>}
+              widthClassName="xl:w-[min(420px,40vw)]"
+            >
+              <dl className="space-y-3 p-4 text-xs">
+                {columns.map((c) => (
+                  <div key={c.key} className="space-y-1">
+                    <dt className="text-[var(--text-muted)] font-medium">{c.label}</dt>
+                    <dd className="font-mono break-all text-[var(--text-primary)] whitespace-pre-wrap">
+                      {cellValue(selectedRow, c.key) || "—"}
+                    </dd>
+                  </div>
+                ))}
+              </dl>
+            </DetailPanelShell>
+          ) : null}
+          </div>
         </>
       ) : null}
     </PageContent>

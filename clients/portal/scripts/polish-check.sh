@@ -10,10 +10,13 @@ cd "$ROOT"
 
 echo "→ checking for hardcoded hex outside globals.css / clerk-theme.ts…"
 # The analytics-tab holds a known SSR fallback const (CHART_COLORS_FALLBACK)
-# for when window is undefined. Every other hex should be a design token.
+# for when window is undefined. BrowserReplayPanel embeds a sandboxed HTML
+# shell for the replay iframe (not product chrome). Every other hex should
+# be a design token.
 if grep -rE '#[0-9a-fA-F]{6}' src/app src/components 2>/dev/null \
   | grep -v 'globals.css' | grep -v 'clerk-theme.ts' \
-  | grep -v 'analytics-tab.tsx'; then
+  | grep -v 'analytics-tab.tsx' \
+  | grep -v 'BrowserReplayPanel.tsx'; then
   echo "✗ hardcoded hex found (see above)"
   exit 1
 fi
@@ -109,10 +112,27 @@ font_aliases = {"font-sans", "font-mono", "font-display"}
 # shadcn snippets (see the docblock at the top of globals.css).
 compat_aliases = {"background", "foreground", "surface", "surface-elevated"}
 
+# Reserved design-system tokens (declared for clerk-theme / type scale /
+# semantic pairs). Not yet referenced via var(--*) in product TSX; keep
+# them so Wave 4+ migrations can adopt without re-adding CSS. Do not
+# expand this set casually — prefer wiring a real var(--*) consumer.
+reserved_tokens = {
+    "cat-danger-dim",
+    "cat-danger-fg",
+    "cat-success-fg",
+    "cat-warning-dim",
+    "cat-warning-fg",
+    "info-bg",
+    "letter-spacing-tight",
+    "letter-spacing-wide",
+}
+
 dead = []
 for t in sorted(root_tokens):
     name = t[2:]
     if name in compat_aliases:
+        continue
+    if name in reserved_tokens:
         continue
     if t in live_in_globals:
         continue
@@ -149,5 +169,14 @@ if ! grep -qE "overflow-y:[[:space:]]*auto" src/app/globals.css; then
   echo "✗ html overflow-y: auto not declared in globals.css"
   exit 1
 fi
+
+echo "→ lint:portal-layout (viewport height ban)…"
+node scripts/lint-portal-layout.cjs
+
+echo "→ lint:portal-classes (colors + Wave 4/5 spacing/type ratchets)…"
+node scripts/lint-portal-classes.cjs
+
+echo "→ lint:portal-clutter (Wave 5 anti-clutter gates)…"
+node scripts/lint-portal-clutter.cjs
 
 echo "✓ all polish invariants pass"

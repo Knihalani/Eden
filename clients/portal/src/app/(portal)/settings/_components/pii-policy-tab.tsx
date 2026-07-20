@@ -201,7 +201,7 @@ export function PiiPolicyTab() {
   }
   const enabledCount = CATEGORIES.filter((c) => isCategoryEnabled(draft, c.id)).length;
   return (
-    <div className="space-y-6">
+    <div className="space-y-space-6">
       <div className="flex items-center gap-3">
         <div className="p-2 bg-[var(--bg-tertiary)] rounded-lg border border-[var(--border-default)]">
           <ShieldCheck className="w-5 h-5 text-[var(--accent)]" />
@@ -362,15 +362,16 @@ export function PiiPolicyTab() {
               placeholder="e.g. session_token"
               className="flex-1 px-3 py-2 rounded-lg border border-[var(--border-default)] bg-[var(--bg-secondary)] text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)] text-sm font-mono"
             />
-            <button
+            <Button
               type="button"
+              variant="default"
+              className="min-h-11"
               onClick={addExtraKey}
               disabled={!newKey.trim()}
-              className="px-3 py-2 bg-[var(--accent)] text-[var(--bg-primary)] rounded-lg text-sm font-medium hover:opacity-90 disabled:opacity-50 flex items-center gap-1"
             >
               <Plus className="w-4 h-4" />
               Add
-            </button>
+            </Button>
           </div>
         )}
       </Card>
@@ -385,15 +386,16 @@ export function PiiPolicyTab() {
           >
             Discard changes
           </button>
-          <button
+          <Button
             type="button"
+            variant="default"
+            className="min-h-11"
             onClick={handleSave}
-            disabled={!dirty || saving}
-            className="px-4 py-2 bg-[var(--accent)] text-[var(--bg-primary)] rounded-lg text-sm font-medium hover:opacity-90 disabled:opacity-50 flex items-center gap-2"
+            disabled={!dirty}
+            loading={saving}
           >
-            {saving && <Loader2 className="w-4 h-4 animate-spin" />}
             Save changes
-          </button>
+          </Button>
         </div>
       )}
 

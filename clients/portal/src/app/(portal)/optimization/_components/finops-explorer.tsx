@@ -4,15 +4,17 @@
  * F60 FinOps explorer — model / agent / session / feature / day breakdown,
  * compare_previous, cache savings, CSV export. Customer-facing only
  * (no Eden COGS cockpit).
+ *
+ * Helicone-style cost grouping: dimension drill + table is the primary
+ * interaction; KPIs are a calm secondary strip (not a card wall).
  */
 
 import { useMemo, useState } from "react";
-import { Download, Loader2, Wallet, Calendar, PiggyBank, AlertTriangle } from "lucide-react";
+import { Download, Loader2, Wallet } from "lucide-react";
 
 import { DataTable } from "@/components/ui/data-table";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorState } from "@/components/ui/error-state";
-import { StatCard } from "@/components/ui/stat-card";
 import { Panel } from "@/components/ui/panel";
 import { Button } from "@/components/ui/button";
 import { NoOrgState } from "@/components/ui/no-org-state";
@@ -55,33 +57,30 @@ function formatUsd(n: number): string {
   return `$${n.toFixed(4)}`;
 }
 
-function MetricTile({
-  title,
-  description,
+function KpiCell({
+  label,
   value,
   meta,
   emphasize,
 }: {
-  title: string;
-  description: string;
+  label: string;
   value: string;
   meta: string;
   emphasize?: boolean;
 }) {
   return (
-    <Panel tone="flat" padding="md">
-      <p className="text-sm font-medium text-[var(--text-primary)]">{title}</p>
-      <p className="mt-0.5 text-xs text-[var(--text-muted)]">{description}</p>
+    <div className="min-w-0">
+      <p className="text-2xs uppercase tracking-wide text-[var(--text-muted)]">{label}</p>
       <p
         className={cn(
-          "mt-2 text-lg font-semibold tabular-nums",
+          "mt-1 text-xl font-semibold tabular-nums tracking-tight",
           emphasize ? "text-[var(--terminal)]" : "text-[var(--text-primary)]",
         )}
       >
         {value}
       </p>
-      <p className="text-xs text-[var(--text-muted)]">{meta}</p>
-    </Panel>
+      <p className="mt-0.5 text-xs text-[var(--text-muted)]">{meta}</p>
+    </div>
   );
 }
 
@@ -164,139 +163,133 @@ export default function FinOpsExplorer() {
   }
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-6" data-testid="finops-cost-hierarchy">
+      {/* Toolbar: window + export — Helicone-style dimension controls live with the table */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div
           role="group"
           aria-label="Window"
-          className="inline-flex rounded-lg border border-[var(--border-default)] bg-[var(--bg-secondary)] p-0.5"
+          className="inline-flex rounded-lg border border-[var(--border-default)] bg-[var(--bg-secondary)] p-1"
         >
           {[24, 168, 720].map((h) => (
-            <button
+            <Button
               key={h}
               type="button"
+              size="sm"
+              variant={hours === h ? "default" : "ghost"}
               onClick={() => setHours(h)}
               aria-pressed={hours === h}
-              className={cn(
-                "rounded-md px-3 py-1.5 text-xs font-medium",
-                hours === h
-                  ? "bg-[var(--accent)] text-[var(--bg-primary)]"
-                  : "text-[var(--text-muted)] hover:text-[var(--text-primary)]",
-              )}
             >
               {h === 24 ? "24h" : h === 168 ? "7d" : "30d"}
-            </button>
+            </Button>
           ))}
         </div>
-        <a
-          href={`/api/proxy/orgs/${orgId}/finops/export?window_hours=${hours}&fmt=csv`}
-          className="inline-flex items-center gap-1.5 rounded-md border border-[var(--border-default)] px-3 py-1.5 text-xs font-medium text-[var(--text-secondary)] hover:bg-[var(--bg-secondary)] hover:text-[var(--text-primary)]"
-        >
-          <Download className="h-3.5 w-3.5" />
-          Export CSV
-        </a>
+        <Button asChild variant="outline" size="sm">
+          <a href={`/api/proxy/orgs/${orgId}/finops/export?window_hours=${hours}&fmt=csv`}>
+            <Download className="h-3.5 w-3.5" />
+            Export CSV
+          </a>
+        </Button>
       </div>
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard
-          title="Spend"
-          value={formatUsd(data?.total_cost_usd ?? 0)}
-          subtitle={
-            data?.delta_pct != null
-              ? `${data.delta_pct >= 0 ? "+" : ""}${data.delta_pct}% vs prior`
-              : "vs prior window"
-          }
-          icon={Wallet}
-          accent="warning"
-        />
-        <StatCard
-          title="Prior window"
-          value={formatUsd(data?.previous_cost_usd ?? 0)}
-          subtitle="compare_previous"
-          icon={Calendar}
-          accent="accent"
-        />
-        <StatCard
-          title="Cache savings"
-          value={formatUsd(data?.cache_savings_usd ?? 0)}
-          subtitle="Gateway prompt-cache"
-          icon={PiggyBank}
-          accent="terminal"
-        />
-        <StatCard
-          title="Untagged LLM exits"
-          value={String(data?.untagged_events ?? 0)}
-          subtitle="feature=unknown"
-          icon={AlertTriangle}
-          accent={(data?.untagged_events ?? 0) > 0 ? "warning" : "accent"}
-        />
-      </div>
+      {/* Secondary KPI strip — flat, not a 4-card wall */}
+      <Panel tone="flat" padding="md" aria-label="Spend summary">
+        <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+          <KpiCell
+            label="Spend"
+            value={formatUsd(data?.total_cost_usd ?? 0)}
+            meta={
+              data?.delta_pct != null
+                ? `${data.delta_pct >= 0 ? "+" : ""}${data.delta_pct}% vs prior`
+                : "vs prior window"
+            }
+            emphasize
+          />
+          <KpiCell
+            label="Prior window"
+            value={formatUsd(data?.previous_cost_usd ?? 0)}
+            meta="compare_previous"
+          />
+          <KpiCell
+            label="Cache savings"
+            value={formatUsd(data?.cache_savings_usd ?? 0)}
+            meta="Gateway prompt-cache"
+          />
+          <KpiCell
+            label="Untagged exits"
+            value={String(data?.untagged_events ?? 0)}
+            meta="feature=unknown"
+          />
+        </div>
+      </Panel>
 
+      {/* Secondary loop spend — compact, not competing cards */}
       <div
-        className="grid grid-cols-1 gap-3 sm:grid-cols-2"
+        className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4"
         data-testid="evolve-promote-spend"
       >
-        <MetricTile
-          title="Evolution spend"
-          description="feature=evolution (N18 loop)"
-          value={formatUsd(evolvePromoteSpend.evolution_usd)}
-          meta={`${evolvePromoteSpend.evolution_events} events`}
-        />
-        <MetricTile
-          title="Promote spend"
-          description="feature=promote (EvidenceGate)"
-          value={formatUsd(evolvePromoteSpend.promote_usd)}
-          meta={`${evolvePromoteSpend.promote_events} events`}
-        />
+        <Panel tone="subtle" padding="sm">
+          <p className="text-xs text-[var(--text-muted)]">Evolution</p>
+          <p className="mt-1 text-sm font-semibold tabular-nums text-[var(--text-primary)]">
+            {formatUsd(evolvePromoteSpend.evolution_usd)}
+          </p>
+          <p className="text-2xs text-[var(--text-muted)]">
+            {evolvePromoteSpend.evolution_events} events
+          </p>
+        </Panel>
+        <Panel tone="subtle" padding="sm">
+          <p className="text-xs text-[var(--text-muted)]">Promote</p>
+          <p className="mt-1 text-sm font-semibold tabular-nums text-[var(--text-primary)]">
+            {formatUsd(evolvePromoteSpend.promote_usd)}
+          </p>
+          <p className="text-2xs text-[var(--text-muted)]">
+            {evolvePromoteSpend.promote_events} events
+          </p>
+        </Panel>
+        <Panel tone="subtle" padding="sm" data-testid="f34-classifier-savings">
+          <p className="text-xs text-[var(--text-muted)]">Classifier savings</p>
+          <p className="mt-1 text-sm font-semibold tabular-nums text-[var(--terminal)]">
+            {formatUsd(data?.classifier_savings_usd ?? 0)}
+          </p>
+          <p className="text-2xs text-[var(--text-muted)]">
+            {evolvePromoteSpend.classifier_events} classifier events
+          </p>
+        </Panel>
+        <Panel tone="subtle" padding="sm">
+          <p className="text-xs text-[var(--text-muted)]">Investigator</p>
+          <p className="mt-1 text-sm font-semibold tabular-nums text-[var(--text-primary)]">
+            {formatUsd(evolvePromoteSpend.investigator_usd)}
+          </p>
+          <p className="text-2xs text-[var(--text-muted)]">when classifiers miss</p>
+        </Panel>
       </div>
 
-      <div
-        className="grid grid-cols-1 gap-3 sm:grid-cols-2"
-        data-testid="f34-classifier-savings"
-      >
-        <MetricTile
-          title="Classifier savings"
-          description="F34 estimated $ avoided vs F06 investigator"
-          value={formatUsd(data?.classifier_savings_usd ?? 0)}
-          meta={`${evolvePromoteSpend.classifier_events} classifier events`}
-          emphasize
-        />
-        <MetricTile
-          title="Investigator spend"
-          description="feature=signal_investigator"
-          value={formatUsd(evolvePromoteSpend.investigator_usd)}
-          meta="Metered when classifiers do not skip F06"
-        />
-      </div>
-
+      {/* Primary interaction — dimension group + breakdown table */}
       <div className="space-y-3">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
             <h3 className="text-sm font-semibold text-[var(--text-primary)]">Cost breakdown</h3>
             <p className="text-xs text-[var(--text-muted)]">
-              Drill by feature, model, agent, session, or day
+              Group spend by feature, model, agent, session, or day
             </p>
           </div>
           <div
             role="group"
             aria-label="Dimension"
-            className="inline-flex rounded-lg border border-[var(--border-default)] bg-[var(--bg-secondary)] p-0.5"
+            className="inline-flex rounded-lg border border-[var(--border-default)] bg-[var(--bg-secondary)] p-1"
           >
             {(["feature", "model", "agent", "session", "day"] as const).map((d) => (
-              <button
+              <Button
                 key={d}
                 type="button"
+                size="sm"
+                variant={dim === d ? "default" : "ghost"}
                 onClick={() => setDim(d)}
                 aria-pressed={dim === d}
-                className={cn(
-                  "rounded-md px-2.5 py-1 text-xs font-medium capitalize",
-                  dim === d
-                    ? "bg-[var(--accent)] text-[var(--bg-primary)]"
-                    : "text-[var(--text-muted)] hover:text-[var(--text-primary)]",
-                )}
+                className="capitalize"
               >
                 {d}
-              </button>
+              </Button>
             ))}
           </div>
         </div>

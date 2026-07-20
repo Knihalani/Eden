@@ -120,7 +120,7 @@ function Sparkline({ series }: { series: number[] }) {
       width={w}
       height={h}
       viewBox={`0 0 ${w} ${h}`}
-      className="mt-2 block text-[var(--accent)]"
+      className="mt-space-2 block text-[var(--accent)]"
       aria-hidden
     >
       <polyline
@@ -167,7 +167,7 @@ export function ToolCallCard({ id, name, input, result }: ToolCallCardProps) {
     <div
       data-tool-call-id={id}
       className={cn(
-        "my-2 rounded-md border bg-[var(--bg-elevated)] font-mono text-xs",
+        "my-space-2 rounded-md border bg-[var(--bg-elevated)] font-mono text-xs",
         isError
           ? "border-[var(--error)]/40"
           : "border-[var(--border-subtle)]"
@@ -176,7 +176,7 @@ export function ToolCallCard({ id, name, input, result }: ToolCallCardProps) {
       <button
         type="button"
         onClick={() => setExpanded((v) => !v)}
-        className="flex w-full items-center gap-2 px-3 py-2 text-left"
+        className="flex w-full items-center gap-space-2 px-space-3 py-space-2 text-left"
         aria-expanded={expanded}
       >
         {expanded ? (
@@ -194,19 +194,19 @@ export function ToolCallCard({ id, name, input, result }: ToolCallCardProps) {
         <Wrench className="h-3.5 w-3.5 text-[var(--text-muted)]" />
         <span className="font-medium text-[var(--text-primary)]">{name}</span>
         {result && typeof result.duration_ms === "number" && (
-          <Tag className="ml-auto font-mono text-[10px]">
+          <Tag className="ml-auto font-mono text-2xs">
             {result.duration_ms}ms
           </Tag>
         )}
       </button>
 
       {deepLinks.length > 0 && (
-        <div className="flex flex-wrap gap-2 border-t border-[var(--border-subtle)] px-3 py-2">
+        <div className="flex flex-wrap gap-space-2 border-t border-[var(--border-subtle)] px-space-3 py-space-2">
           {deepLinks.map((link) => (
             <Link
               key={link.href}
               href={link.href}
-              className="inline-flex items-center gap-1 text-[10px] text-[var(--accent)] hover:underline"
+              className="inline-flex items-center gap-space-1 text-xs text-[var(--accent)] hover:underline"
             >
               <ExternalLink className="h-3 w-3" />
               {link.label}
@@ -216,31 +216,31 @@ export function ToolCallCard({ id, name, input, result }: ToolCallCardProps) {
       )}
 
       {spark && (
-        <div className="border-t border-[var(--border-subtle)] px-3 py-1">
+        <div className="border-t border-[var(--border-subtle)] px-space-3 py-space-1">
           <Sparkline series={spark} />
         </div>
       )}
 
       {expanded && (
-        <div className="border-t border-[var(--border-subtle)] px-3 py-2">
+        <div className="border-t border-[var(--border-subtle)] px-space-3 py-space-2">
           {input !== undefined && (
-            <div className="mb-2">
-              <div className="mb-1 text-[10px] uppercase tracking-wider text-[var(--text-muted)]">
+            <div className="mb-space-2">
+              <div className="mb-space-1 text-2xs uppercase tracking-wider text-[var(--text-muted)]">
                 input
               </div>
-              <pre className="max-h-40 overflow-auto rounded bg-[var(--bg-base)] p-2 text-[11px] leading-relaxed text-[var(--text-secondary)]">
+              <pre className="max-h-40 overflow-auto rounded bg-[var(--bg-base)] p-space-2 text-xs leading-relaxed text-[var(--text-secondary)]">
                 {safeStringify(input)}
               </pre>
             </div>
           )}
           {result && (
             <div>
-              <div className="mb-1 text-[10px] uppercase tracking-wider text-[var(--text-muted)]">
+              <div className="mb-space-1 text-2xs uppercase tracking-wider text-[var(--text-muted)]">
                 {isError ? "error" : "output"}
               </div>
               <pre
                 className={cn(
-                  "max-h-60 overflow-auto rounded p-2 text-[11px] leading-relaxed",
+                  "max-h-60 overflow-auto rounded p-space-2 text-xs leading-relaxed",
                   isError
                     ? "bg-[var(--error)]/10 text-[var(--error)]"
                     : "bg-[var(--bg-base)] text-[var(--text-secondary)]"

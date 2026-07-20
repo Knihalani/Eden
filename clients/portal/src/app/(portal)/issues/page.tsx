@@ -12,17 +12,26 @@ import { queryKeys } from "@/lib/query-keys";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorState } from "@/components/ui/error-state";
 import { NoOrgState } from "@/components/ui/no-org-state";
+import { QueryState } from "@/components/ui/query-state";
+import { LoadingSkeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
-import { BookOpen, Key, Loader2, ShieldAlert } from "lucide-react";
+import { BookOpen, ChevronDown, Key, Loader2, ShieldAlert } from "lucide-react";
 import { PageHeader } from "@/components/layout/page-header";
 import { CoreResourcePage, DetailPanelShell, useResourceUrlState, VirtualizedList, ResourceOsToolbar, BulkActionBar } from "@/components/portal-os";
-import { CrossLinkBar } from "@/components/portal-os/CrossLinkBar";
 import { EmbeddedSurface } from "@/components/layout/embedded-surface";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { useQueryTab } from "@/hooks/use-query-tab";
 import { usePagePerf, useTableQueryPerf } from "@/lib/perf";
 import { artifactHref, experimentHref } from "@/lib/portal-cross-links";
-import { U20_EMPTY_COPY } from "@/lib/portal-polish";
+import { U20_EMPTY_COPY, U20_FILTER_EMPTY_COPY } from "@/lib/portal-polish";
 import { DOCS_QUICKSTART_URL } from "@/lib/constants";
 import { useToast } from "@/components/ui/toast";
 import { RepeatBadge, RegressionBadge, IssueSeverityBadge, StatusBadge } from "./_components/issue-badges";
@@ -61,12 +70,20 @@ function IssuesList({
   onIssuesChange,
   selectedIds,
   onSelectedIdsChange,
+  statusFilter,
+  onStatusFilterChange,
+  limit,
+  onLimitChange,
 }: {
   selectedId?: string;
   onSelect: (id: string) => void;
   onIssuesChange?: (issues: AgentIssue[]) => void;
   selectedIds: string[];
   onSelectedIdsChange: (ids: string[]) => void;
+  statusFilter: string;
+  onStatusFilterChange: (status: string) => void;
+  limit: number;
+  onLimitChange: (limit: number) => void;
 }) {
   const { currentOrg } = useOrg();
   const { hasPermission } = usePermissions();
@@ -74,9 +91,6 @@ function IssuesList({
   // and viewers must not get a primary "API keys" first-run CTA.
   const canManageKeys = hasPermission("settings:edit");
   const orgId = currentOrg?.id ?? null;
-  const router = useRouter();
-  const [statusFilter, setStatusFilter] = useState<string>("all");
-  const [limit, setLimit] = useState(PAGE_SIZE);
 
   const issuesFilter = { status: statusFilter === "all" ? undefined : statusFilter, limit };
   const issuesQuery = useOrgQuery(
@@ -90,7 +104,7 @@ function IssuesList({
   const error = issuesQuery.error?.message ?? null;
   const load = () => void issuesQuery.refetch();
   const canLoadMore = !loading && !error && limit < MAX_LIMIT && issues.length === limit;
-  const loadMore = () => setLimit((l) => Math.min(l + PAGE_SIZE, MAX_LIMIT));
+  const loadMore = () => onLimitChange(Math.min(limit + PAGE_SIZE, MAX_LIMIT));
 
   useEffect(() => {
     onIssuesChange?.(issues);
@@ -98,166 +112,139 @@ function IssuesList({
 
   useTableQueryPerf("/issues", refreshing, loading);
 
-  const exportRows = issues.map((i) => ({
-    id: i.id,
-    title: i.title,
-    status: i.status,
-    severity: i.severity,
-    stumbles: i.stumble_count,
-  }));
+  const statusFiltered = statusFilter !== "all";
 
   return (
-    <>
-      <ResourceOsToolbar
-        resourceKey="issues"
-        onCreateAlert={() => {
-          router.push("/alerts?tab=rules");
-        }}
-        exportRows={exportRows}
-        exportFilename="issues.csv"
-        className="mb-4"
-      />
-      <div role="tablist" aria-label="Issue status filter" className="flex items-center gap-1 mb-4 border-b border-[var(--border-subtle)] overflow-x-auto">
-        {STATUS_FILTERS.map((s) => (
-          <button
-            key={s}
-            role="tab"
-            aria-selected={statusFilter === s}
-            onClick={() => {
-              setStatusFilter(s);
-              setLimit(PAGE_SIZE);
-            }}
-            className={cn(
-              "min-h-11 px-3 py-2 text-sm font-medium border-b-2 -mb-px transition-colors whitespace-nowrap capitalize",
-              statusFilter === s
-                ? "border-[var(--accent)] text-[var(--text-primary)]"
-                : "border-transparent text-[var(--text-muted)] hover:text-[var(--text-primary)]",
-            )}
-          >
-            {s.replace("_", " ")}
-          </button>
-        ))}
-      </div>
-
-      {loading ? (
-        <div role="status" aria-busy="true" className="flex items-center justify-center p-12 text-sm text-[var(--text-muted)]">
-          <Loader2 className="h-4 w-4 mr-2 animate-spin" /> Loading…
-        </div>
-      ) : error ? (
-        <ErrorState
-          title="Failed to load issues"
-          message={error}
-          className="mb-4"
-          action={
-            <Button
-              onClick={load}
-              variant="outline"
-              size="sm"
-              loading={refreshing}
-              disabled={loading}
-            >
-              Retry
-            </Button>
-          }
-        />
-      ) : issues.length === 0 ? (
-        <EmptyState
-          icon={ShieldAlert}
-          title="No issues yet"
-          description={U20_EMPTY_COPY.issues}
-          size="lg"
-          action={
-            <div className="flex flex-wrap items-center justify-center gap-2">
-              <Button asChild className="min-h-11">
-                <a href={DOCS_QUICKSTART_URL} target="_blank" rel="noopener noreferrer">
-                  <BookOpen className="h-4 w-4" />
-                  Install SDK
-                </a>
-              </Button>
-              {canManageKeys ? (
-                <Button asChild variant="outline" className="min-h-11">
-                  <Link href="/settings?tab=api-keys">
-                    <Key className="h-4 w-4" />
-                    API keys
-                  </Link>
+    <div className="flex flex-col gap-space-4">
+      <QueryState
+        loading={loading}
+        error={issuesQuery.error}
+        data={issuesQuery.data}
+        onRetry={load}
+        errorTitle="Could not load issues"
+        isEmpty={(d) => (d?.data?.issues.length ?? 0) === 0}
+        loadingSlot={<LoadingSkeleton variant="table" lines={5} className="p-0 max-w-none" />}
+        emptySlot={
+          <EmptyState
+            icon={ShieldAlert}
+            title={statusFiltered ? "No matching issues" : "No issues yet"}
+            description={
+              statusFiltered
+                ? U20_FILTER_EMPTY_COPY.issues
+                : U20_EMPTY_COPY.issues
+            }
+            size="lg"
+            action={
+              statusFiltered ? (
+                <Button
+                  variant="link"
+                  className="min-h-11 px-0"
+                  onClick={() => {
+                    onStatusFilterChange("all");
+                    onLimitChange(PAGE_SIZE);
+                  }}
+                >
+                  Clear status filter
                 </Button>
               ) : (
-                <span className="text-xs text-[var(--text-muted)] px-3 py-2">
-                  Ask an admin for an API key
-                </span>
-              )}
-            </div>
-          }
-        />
-      ) : (
-        <VirtualizedList
-          items={issues}
-          rowKey={(i) => i.id}
-          className="divide-y divide-[var(--border-subtle)]"
-        >
-          {(i) => {
-            const checked = selectedIds.includes(i.id);
-            return (
-              <div
-                key={i.id}
-                className={cn(
-                  "row-select-highlight flex w-full items-start gap-3 rounded-lg px-3 py-3.5 transition-colors hover:bg-[var(--bg-secondary)]",
-                  selectedId === i.id
-                    ? "bg-[var(--accent-faint)]/40 ring-1 ring-[var(--accent)]/30 is-selected"
-                    : "",
-                )}
-              >
-                <input
-                  type="checkbox"
-                  className="mt-1 h-4 w-4 shrink-0"
-                  checked={checked}
-                  aria-label={`Select ${i.title}`}
-                  onChange={(e) => {
-                    if (e.target.checked) onSelectedIdsChange([...selectedIds, i.id]);
-                    else onSelectedIdsChange(selectedIds.filter((id) => id !== i.id));
-                  }}
-                />
-                <button
-                  type="button"
-                  onClick={() => onSelect(i.id)}
-                  className="min-w-0 flex-1 text-left"
-                >
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <IssueSeverityBadge severity={i.severity} />
-                    <StatusBadge status={i.status} />
-                    <span className="text-xs font-mono px-2 py-0.5 rounded bg-[var(--bg-tertiary)] text-[var(--text-muted)]">
-                      {i.kind}
+                <div className="flex flex-wrap items-center justify-center gap-space-2">
+                  <Button asChild className="min-h-11">
+                    <a href={DOCS_QUICKSTART_URL} target="_blank" rel="noopener noreferrer">
+                      <BookOpen className="h-4 w-4" />
+                      Install SDK
+                    </a>
+                  </Button>
+                  {canManageKeys ? (
+                    <Button asChild variant="outline" className="min-h-11">
+                      <Link href="/settings?tab=api-keys">
+                        <Key className="h-4 w-4" />
+                        API keys
+                      </Link>
+                    </Button>
+                  ) : (
+                    <span className="text-xs text-[var(--text-muted)] px-space-3 py-space-2">
+                      Ask an admin for an API key
                     </span>
-                    {i.repetition_count > 1 && <RepeatBadge count={i.repetition_count} />}
-                    <RegressionBadge regressionCaseId={i.regression_case_id} status={i.status} />
+                  )}
+                </div>
+              )
+            }
+          />
+        }
+      >
+        {() => (
+          <>
+            <VirtualizedList
+              items={issues}
+              rowKey={(i) => i.id}
+              className="divide-y divide-[var(--border-subtle)]"
+            >
+              {(i) => {
+                const checked = selectedIds.includes(i.id);
+                return (
+                  <div
+                    key={i.id}
+                    className={cn(
+                      "row-select-highlight flex w-full items-start gap-space-3 rounded-lg px-space-3 py-space-3 transition-colors hover:bg-[var(--bg-secondary)]",
+                      selectedId === i.id
+                        ? "bg-[var(--accent-faint)]/40 ring-1 ring-[var(--accent)]/30 is-selected"
+                        : "",
+                    )}
+                  >
+                    <input
+                      type="checkbox"
+                      className="mt-1 h-4 w-4 shrink-0"
+                      checked={checked}
+                      aria-label={`Select ${i.title}`}
+                      onChange={(e) => {
+                        if (e.target.checked) onSelectedIdsChange([...selectedIds, i.id]);
+                        else onSelectedIdsChange(selectedIds.filter((id) => id !== i.id));
+                      }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => onSelect(i.id)}
+                      className="min-w-0 flex-1 text-left"
+                    >
+                      <div className="flex items-center gap-space-2 flex-wrap">
+                        <IssueSeverityBadge severity={i.severity} />
+                        <StatusBadge status={i.status} />
+                        <span className="text-xs font-mono px-space-2 py-space-1 rounded bg-[var(--bg-tertiary)] text-[var(--text-muted)]">
+                          {i.kind}
+                        </span>
+                        {i.repetition_count > 1 && <RepeatBadge count={i.repetition_count} />}
+                        <RegressionBadge regressionCaseId={i.regression_case_id} status={i.status} />
+                      </div>
+                      <p className="mt-space-2 text-sm font-medium text-[var(--text-primary)] truncate">{i.title}</p>
+                      <p className="mt-space-1 text-xs text-[var(--text-muted)]">
+                        {i.stumble_count} stumble{i.stumble_count === 1 ? "" : "s"} · {i.user_count} user{i.user_count === 1 ? "" : "s"}
+                        {i.agent_id ? ` · ${i.agent_id}` : ""}
+                        {i.last_seen ? ` · last seen ${new Date(i.last_seen).toLocaleString()}` : ""}
+                      </p>
+                    </button>
                   </div>
-                  <p className="mt-2 text-sm font-medium text-[var(--text-primary)] truncate">{i.title}</p>
-                  <p className="mt-1 text-xs text-[var(--text-muted)]">
-                    {i.stumble_count} stumble{i.stumble_count === 1 ? "" : "s"} · {i.user_count} user{i.user_count === 1 ? "" : "s"}
-                    {i.agent_id ? ` · ${i.agent_id}` : ""}
-                    {i.last_seen ? ` · last seen ${new Date(i.last_seen).toLocaleString()}` : ""}
-                  </p>
-                </button>
-              </div>
-            );
-          }}
-        </VirtualizedList>
-      )}
+                );
+              }}
+            </VirtualizedList>
 
-      {canLoadMore && (
-        <div className="flex justify-center pt-4">
-          <Button variant="outline" size="default" onClick={loadMore} loading={refreshing} disabled={refreshing}>
-            Load more issues
-          </Button>
-        </div>
-      )}
-    </>
+            {canLoadMore && (
+              <div className="flex justify-center pt-space-4">
+                <Button variant="outline" size="default" onClick={loadMore} loading={refreshing} disabled={refreshing}>
+                  Load more issues
+                </Button>
+              </div>
+            )}
+          </>
+        )}
+      </QueryState>
+    </div>
   );
 }
 
 function IssuesPageInner() {
   const { currentOrg } = useOrg();
   const orgId = currentOrg?.id ?? null;
+  const router = useRouter();
   usePagePerf("/issues");
   const [tab, setTab] = useQueryTab("tab", TOP_TABS, "issues");
   const { state: urlState, setState: setUrlState } = useResourceUrlState();
@@ -265,6 +252,8 @@ function IssuesPageInner() {
   const [listIssues, setListIssues] = useState<AgentIssue[]>([]);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [bulkBusy, setBulkBusy] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [limit, setLimit] = useState(PAGE_SIZE);
   const toast = useToast();
   const queryClient = useQueryClient();
 
@@ -280,6 +269,14 @@ function IssuesPageInner() {
   const issueDetailError = issueDetailQuery.error?.message ?? null;
   const issueIndex = issueId ? listIssues.findIndex((i) => i.id === issueId) : -1;
 
+  const exportRows = listIssues.map((i) => ({
+    id: i.id,
+    title: i.title,
+    status: i.status,
+    severity: i.severity,
+    stumbles: i.stumble_count,
+  }));
+
   if (!currentOrg) {
     return (
       <NoOrgState
@@ -291,49 +288,94 @@ function IssuesPageInner() {
   }
 
   return (
+    <Tabs
+      value={tab}
+      onValueChange={(v) => setTab(v as (typeof TOP_TABS)[number])}
+    >
     <CoreResourcePage
       header={
         <PageHeader
           title="Agent Issues"
-          subtitle="Grouped agent failures — the primary triage loop. Switch to Incidents for systemic RCA clusters."
-          description="Triage stumbles here; Incidents cluster many failures into one RCA summary."
+          subtitle={
+            tab === "incidents"
+              ? "Incidents nest here — systemic RCA clusters across many traces (not a separate sidebar leaf)."
+              : "Grouped agent failures — the primary triage loop. Switch to Incidents for systemic RCA clusters."
+          }
+          description="Triage stumbles here; Incidents cluster many failures into one RCA summary. /incidents redirects into this hub."
         />
       }
       toolbar={
-        <div role="tablist" aria-label="Issues sections" className="flex gap-1 border-b border-[var(--border-subtle)]">
-          {TOP_TABS.map((t) => (
-            <button
-              key={t}
-              type="button"
-              role="tab"
-              aria-selected={tab === t}
-              onClick={() => setTab(t)}
-              className={cn(
-                "min-h-11 px-3 py-2 text-sm font-medium border-b-2 -mb-px",
-                tab === t
-                  ? "border-[var(--accent)] text-[var(--text-primary)]"
-                  : "border-transparent text-[var(--text-muted)] hover:text-[var(--text-primary)]",
-              )}
-            >
-              {TOP_TAB_LABELS[t]}
-            </button>
-          ))}
+        <div
+          className="flex flex-col gap-space-3"
+          data-testid="issues-toolbar"
+        >
+          <TabsList
+            variant="underline"
+            aria-label="Issues sections"
+            className="h-auto w-full justify-start gap-space-1 bg-transparent"
+          >
+            {TOP_TABS.map((t) => (
+              <TabsTrigger
+                key={t}
+                variant="underline"
+                value={t}
+                title={TOP_TAB_LABELS[t]}
+                className="min-h-11"
+              >
+                {TOP_TAB_LABELS[t]}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+          {tab === "issues" ? (
+            <ResourceOsToolbar
+              resourceKey="issues"
+              sticky
+              onCreateAlert={() => {
+                router.push("/alerts?tab=rules");
+              }}
+              exportRows={exportRows}
+              exportFilename="issues.csv"
+              selects={[
+                {
+                  key: "status",
+                  label: "Status",
+                  value: statusFilter === "all" ? "" : statusFilter,
+                  options: STATUS_FILTERS.filter((s) => s !== "all").map((s) => ({
+                    value: s,
+                    label: s.replace("_", " "),
+                  })),
+                },
+              ]}
+              onFiltersChange={(next) => {
+                const status = next.status?.trim();
+                setStatusFilter(status ? status : "all");
+                setLimit(PAGE_SIZE);
+              }}
+            />
+          ) : null}
         </div>
       }
       table={
-        tab === "issues" ? (
+        <>
+        <TabsContent value="issues" className="mt-0">
           <IssuesList
             selectedId={issueId}
             onSelect={(id) => setUrlState({ issueId: id })}
             onIssuesChange={setListIssues}
             selectedIds={selectedIds}
             onSelectedIdsChange={setSelectedIds}
+            statusFilter={statusFilter}
+            onStatusFilterChange={setStatusFilter}
+            limit={limit}
+            onLimitChange={setLimit}
           />
-        ) : (
+        </TabsContent>
+        <TabsContent value="incidents" className="mt-0">
           <EmbeddedSurface>
             <IncidentsView />
           </EmbeddedSurface>
-        )
+        </TabsContent>
+        </>
       }
       bulkBar={
         <BulkActionBar
@@ -397,9 +439,43 @@ function IssuesPageInner() {
                 : undefined
             }
             headerActions={
-              <Button variant="outline" size="sm" asChild>
-                <Link href={`/issues/${issueId}`}>Open full page</Link>
-              </Button>
+              <div className="flex flex-wrap items-center gap-space-2">
+                {selectedIssue ? (
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="outline" size="sm" className="min-h-11" aria-label="Related surfaces">
+                        Go to
+                        <ChevronDown className="h-4 w-4" aria-hidden />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="min-w-[12rem]">
+                      <DropdownMenuLabel>Go to</DropdownMenuLabel>
+                      <DropdownMenuItem asChild>
+                        <Link href={`/improve?issue=${selectedIssue.id}`}>Improve plan</Link>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem asChild>
+                        <Link href={experimentHref(undefined, selectedIssue.id)}>Run experiment</Link>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem asChild>
+                        <Link href={artifactHref()}>Create artifact</Link>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem asChild>
+                        <Link href={`/issues/${selectedIssue.id}`}>Export fixture</Link>
+                      </DropdownMenuItem>
+                      {selectedIssue.experiment_id ? (
+                        <DropdownMenuItem asChild>
+                          <Link href={experimentHref(selectedIssue.experiment_id)}>
+                            Linked experiment
+                          </Link>
+                        </DropdownMenuItem>
+                      ) : null}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                ) : null}
+                <Button variant="outline" size="sm" asChild className="min-h-11">
+                  <Link href={`/issues/${issueId}`}>Open full page</Link>
+                </Button>
+              </div>
             }
           >
             {issueDetailQuery.isLoading ? (
@@ -427,19 +503,8 @@ function IssuesPageInner() {
               />
             ) : selectedIssue ? (
               <div className="flex h-full flex-col">
-                <CrossLinkBar
-                  links={[
-                    { label: "Improve plan", href: `/improve?issue=${selectedIssue.id}` },
-                    { label: "Run experiment", href: experimentHref(undefined, selectedIssue.id) },
-                    { label: "Create artifact", href: artifactHref() },
-                    { label: "Export fixture", href: `/issues/${selectedIssue.id}` },
-                    ...(selectedIssue.experiment_id
-                      ? [{ label: "Linked experiment", href: experimentHref(selectedIssue.experiment_id) }]
-                      : []),
-                  ]}
-                />
-                <div className="space-y-4 p-4 text-sm">
-                <div className="flex flex-wrap gap-2">
+                <div className="space-y-space-4 p-space-4 text-sm">
+                <div className="flex flex-wrap gap-space-2">
                   <IssueSeverityBadge severity={selectedIssue.severity} />
                   <StatusBadge status={selectedIssue.status} />
                 </div>
@@ -448,23 +513,23 @@ function IssuesPageInner() {
                     ? selectedIssue.triage_result.summary
                     : `${selectedIssue.kind} · ${selectedIssue.status}`}
                 </p>
-                <dl className="grid gap-2 text-xs">
-                  <div className="flex justify-between gap-4">
+                <dl className="grid gap-space-2 text-xs">
+                  <div className="flex justify-between gap-space-4">
                     <dt className="text-[var(--text-muted)]">Stumbles</dt>
                     <dd>{selectedIssue.stumble_count}</dd>
                   </div>
-                  <div className="flex justify-between gap-4">
+                  <div className="flex justify-between gap-space-4">
                     <dt className="text-[var(--text-muted)]">Users</dt>
                     <dd>{selectedIssue.user_count}</dd>
                   </div>
                   {selectedIssue.agent_id ? (
-                    <div className="flex justify-between gap-4">
+                    <div className="flex justify-between gap-space-4">
                       <dt className="text-[var(--text-muted)]">Agent</dt>
                       <dd className="font-mono truncate">{selectedIssue.agent_id}</dd>
                     </div>
                   ) : null}
                 </dl>
-                <div className="flex flex-wrap gap-2 pt-2">
+                <div className="flex flex-wrap gap-space-2 pt-space-2">
                   <Button
                     size="sm"
                     variant="default"
@@ -502,6 +567,7 @@ function IssuesPageInner() {
         ) : null
       }
     />
+    </Tabs>
   );
 }
 

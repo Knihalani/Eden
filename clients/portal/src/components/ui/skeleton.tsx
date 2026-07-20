@@ -53,7 +53,7 @@ export function LoadingSkeleton({
   return (
     <div
       className={cn(
-        "w-full mx-auto p-4 sm:p-6 lg:p-8 space-y-6 page-enter",
+        "w-full mx-auto px-space-4 py-space-4 sm:px-space-5 sm:py-space-5 lg:px-space-7 lg:py-space-6 space-y-space-5 page-enter",
         maxWidth,
         className,
       )}

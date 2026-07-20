@@ -62,7 +62,7 @@ export function ThroughputCard({
           {trend && trendValue && !empty && !unavailable && !loading && (
             <div
               className={cn(
-                "flex items-center gap-0.5 text-xs font-medium px-1.5 py-0.5 rounded",
+                "flex items-center gap-1 text-xs font-medium px-1.5 py-1 rounded",
                 trend === "up"
                   ? "text-[var(--success)] bg-[var(--success-bg)]"
                   : "text-[var(--error)] bg-[var(--error-bg)]",

@@ -28,11 +28,11 @@ export default function ResetPasswordPage() {
         title="Use Clerk to reset your password"
         subtitle="Native reset links are retired. Sign in with Clerk and use Forgot password? instead."
       >
-        <div className="space-y-5">
+        <div className="space-y-space-5">
           <div
             role="status"
             aria-live="polite"
-            className="bg-[var(--accent-faint)] text-[var(--text-secondary)] text-sm px-4 py-3 rounded-xl flex items-start gap-2.5 border border-[var(--accent)]/20"
+            className="bg-[var(--accent-faint)] text-[var(--text-secondary)] text-sm px-space-4 py-space-3 rounded-xl flex items-start gap-space-3 border border-[var(--accent)]/20"
           >
             <KeyRound className="w-4 h-4 flex-shrink-0 mt-0.5 text-[var(--accent)]" aria-hidden="true" />
             <span>
@@ -42,7 +42,7 @@ export default function ResetPasswordPage() {
           </div>
           <Link
             href="/sign-in"
-            className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-[var(--accent)] px-4 py-2.5 text-sm font-medium text-[var(--bg-primary)] hover:opacity-90"
+            className="inline-flex min-h-11 items-center gap-space-2 rounded-lg bg-[var(--accent)] px-space-4 py-space-3 text-sm font-medium text-[var(--bg-primary)] hover:opacity-90"
           >
             Continue to sign in
             <ArrowRight className="w-4 h-4" aria-hidden="true" />

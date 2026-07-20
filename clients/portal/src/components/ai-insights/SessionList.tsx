@@ -34,15 +34,15 @@ export function SessionList({
   return (
     <div
       role="listbox"
-      className="absolute left-0 top-full z-20 mt-1 max-h-56 w-64 overflow-y-auto rounded-md border border-[var(--border-default)] bg-[var(--bg-primary)] py-1 shadow-lg"
+      className="absolute left-0 top-full z-20 mt-space-1 max-h-56 w-64 overflow-y-auto rounded-md border border-[var(--border-default)] bg-[var(--bg-primary)] py-space-1 shadow-lg"
     >
       {loading ? (
-        <div className="flex items-center gap-1 px-3 py-2 text-xs text-[var(--text-muted)]">
+        <div className="flex items-center gap-space-1 px-space-3 py-space-2 text-xs text-[var(--text-muted)]">
           <Loader2 className="h-3 w-3 animate-spin" />
           Loading…
         </div>
       ) : error ? (
-        <div className="px-2 py-2">
+        <div className="px-space-2 py-space-2">
           <ErrorState
             title="Could not load sessions"
             message={error}
@@ -54,7 +54,7 @@ export function SessionList({
           />
         </div>
       ) : sessions.length === 0 ? (
-        <div className="px-3 py-2 text-xs text-[var(--text-muted)]">
+        <div className="px-space-3 py-space-2 text-xs text-[var(--text-muted)]">
           No conversations yet
         </div>
       ) : (
@@ -64,7 +64,7 @@ export function SessionList({
             role="option"
             aria-selected={s.session_id === activeSessionId}
             className={cn(
-              "flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs",
+              "flex w-full items-center gap-space-2 px-space-3 py-space-2 text-left text-xs",
               s.session_id === activeSessionId
                 ? "bg-[var(--accent-faint)] text-[var(--accent)]"
                 : "text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)]",

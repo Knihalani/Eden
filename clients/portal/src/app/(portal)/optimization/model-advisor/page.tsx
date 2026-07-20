@@ -35,8 +35,10 @@ import {
   Zap,
 } from "lucide-react";
 
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
+import { Panel } from "@/components/ui/panel";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { StatCard } from "@/components/ui/stat-card";
@@ -196,14 +198,14 @@ function SpecCard({ spec, role, highlight }: {
 }) {
   const opt = findOpt(spec.provider, spec.model_id);
   const tierBadge = (
-    <Badge variant="outline" className={cn("border text-[10px] uppercase tracking-wide", opt?.color)}>
+    <Badge variant="outline" className={cn("border text-2xs uppercase tracking-wide", opt?.color)}>
       {opt?.tier ?? spec.source}
     </Badge>
   );
   return (
     <div className={cn(
       "rounded-lg border bg-[var(--bg-secondary)] p-4",
-      highlight ? "border-[var(--accent)] shadow-[var(--shadow-glow)]" : "border-[var(--border-default)]",
+      highlight ? "border-[var(--accent)]" : "border-[var(--border-default)]",
     )}>
       <div className="mb-3 flex items-start justify-between gap-2">
         <div className="min-w-0">
@@ -256,11 +258,9 @@ function RecommendationCard({ rec, loading, error }: {
 }) {
   if (loading) {
     return (
-      <Card>
-        <CardContent className="flex h-40 items-center justify-center">
-          <Loader2 className="h-5 w-5 animate-spin text-[var(--text-muted)]" />
-        </CardContent>
-      </Card>
+      <Panel tone="flat" padding="lg" className="flex h-40 items-center justify-center">
+        <Loader2 className="h-5 w-5 animate-spin text-[var(--text-muted)]" />
+      </Panel>
     );
   }
   if (error) {
@@ -373,7 +373,7 @@ function RunnerUpRow({ runner }: { runner: RunnerUpDto }) {
           <div className="truncate text-xs text-[var(--text-muted)]">{runner.rationale}</div>
         </div>
       </div>
-      <Badge variant="outline" className={cn("shrink-0 border text-[10px]", opt?.color)}>
+      <Badge variant="outline" className={cn("shrink-0 border text-2xs", opt?.color)}>
         {opt?.tier ?? runner.provider}
       </Badge>
     </li>
@@ -391,11 +391,9 @@ function CompareView({ comparison, loading, error }: {
 }) {
   if (loading) {
     return (
-      <Card>
-        <CardContent className="flex h-40 items-center justify-center">
-          <Loader2 className="h-5 w-5 animate-spin text-[var(--text-muted)]" />
-        </CardContent>
-      </Card>
+      <Panel tone="flat" padding="lg" className="flex h-40 items-center justify-center">
+        <Loader2 className="h-5 w-5 animate-spin text-[var(--text-muted)]" />
+      </Panel>
     );
   }
   if (error) {
@@ -406,18 +404,18 @@ function CompareView({ comparison, loading, error }: {
   const ratioIsFree = comparison.cost_ratio >= 1e8;
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
+    <Panel tone="flat" padding="lg" className="space-y-space-4">
+      <div>
+        <h3 className="flex items-center gap-space-2 text-sm font-semibold text-[var(--text-primary)]">
           <Scale className="h-4 w-4 text-[var(--accent)]" />
           Side-by-side comparison
-        </CardTitle>
-        <CardDescription>
+        </h3>
+        <p className="mt-space-1 text-sm text-[var(--text-muted)]">
           {comparison.current.model_id} → {comparison.candidate.model_id}
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="grid grid-cols-2 gap-3">
+        </p>
+      </div>
+      <div className="space-y-space-4">
+        <div className="grid grid-cols-2 gap-space-3">
           <SpecCard spec={comparison.current} role="current" />
           <SpecCard spec={comparison.candidate} role="candidate" highlight />
         </div>
@@ -477,8 +475,8 @@ function CompareView({ comparison, loading, error }: {
             {ratioIsFree ? "free" : `${comparison.cost_ratio.toFixed(2)}×`}
           </span>
         </div>
-      </CardContent>
-    </Card>
+      </div>
+    </Panel>
   );
 }
 
@@ -495,11 +493,9 @@ function ProjectView({ projection, loading, error, scaleFactor, onScale }: {
 }) {
   if (loading) {
     return (
-      <Card>
-        <CardContent className="flex h-40 items-center justify-center">
-          <Loader2 className="h-5 w-5 animate-spin text-[var(--text-muted)]" />
-        </CardContent>
-      </Card>
+      <Panel tone="flat" padding="lg" className="flex h-40 items-center justify-center">
+        <Loader2 className="h-5 w-5 animate-spin text-[var(--text-muted)]" />
+      </Panel>
     );
   }
   if (error) {
@@ -511,19 +507,19 @@ function ProjectView({ projection, loading, error, scaleFactor, onScale }: {
   const hasTraffic = projection.requests_in_window > 0;
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
+    <Panel tone="flat" padding="lg" className="space-y-space-4">
+      <div>
+        <h3 className="flex items-center gap-space-2 text-sm font-semibold text-[var(--text-primary)]">
           <Wallet className="h-4 w-4 text-[var(--accent)]" />
           Cost projection
-        </CardTitle>
-        <CardDescription>
+        </h3>
+        <p className="mt-space-1 text-sm text-[var(--text-muted)]">
           {projection.current_model_id} → {projection.candidate_model_id}
           {" "}over the last {projection.window_days} days
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        </p>
+      </div>
+        {/* Thin KPI strip — ≤4 primary glance metrics */}
+        <div className="grid grid-cols-2 gap-space-3 sm:grid-cols-4">
           <StatCard
             title="Current bill"
             value={fmtUsd(projection.current_total_usd, { compact: true })}
@@ -554,8 +550,8 @@ function ProjectView({ projection, loading, error, scaleFactor, onScale }: {
           />
         </div>
 
-        <div className="rounded-md border border-[var(--border-default)] bg-[var(--bg-tertiary)] p-4">
-          <div className="mb-3 flex items-center justify-between">
+        <div className="rounded-md border border-[var(--border-default)] bg-[var(--bg-tertiary)] p-space-4">
+          <div className="mb-space-3 flex items-center justify-between">
             <div>
               <div className="text-sm font-medium text-[var(--text-primary)]">
                 Scale: {scaleFactor.toFixed(1)}× current traffic
@@ -582,7 +578,7 @@ function ProjectView({ projection, loading, error, scaleFactor, onScale }: {
             onChange={(e) => onScale(parseFloat(e.target.value))}
             className="w-full accent-[var(--accent)]"
           />
-          <div className="mt-1 flex justify-between text-[10px] text-[var(--text-muted)] tabular-nums">
+          <div className="mt-1 flex justify-between text-2xs text-[var(--text-muted)] tabular-nums">
             <span>0.1×</span>
             <span>1×</span>
             <span>2×</span>
@@ -597,8 +593,7 @@ function ProjectView({ projection, loading, error, scaleFactor, onScale }: {
             The projection uses a default 1K input / 500 output workload per request.
           </div>
         )}
-      </CardContent>
-    </Card>
+    </Panel>
   );
 }
 
@@ -651,7 +646,7 @@ function CandidatePicker({ selected, onChange }: {
             <Badge
               key={optKey(o)}
               variant="outline"
-              className={cn("border text-[10px]", o.color)}
+              className={cn("border text-2xs", o.color)}
             >
               {o.label}
             </Badge>
@@ -667,7 +662,7 @@ function CandidatePicker({ selected, onChange }: {
       <>
         {open && (
           <div
-            className="absolute z-20 mt-1 w-full overflow-hidden rounded-md border border-[var(--border-default)] bg-[var(--bg-primary)] shadow-lg"
+            className="absolute z-20 mt-1 w-full overflow-hidden rounded-md border border-[var(--border-default)] bg-[var(--bg-primary)] shadow-sm"
           >
             <div className="border-b border-[var(--border-default)] p-2">
               <Input
@@ -702,11 +697,11 @@ function CandidatePicker({ selected, onChange }: {
                             ? "border-[var(--accent)] bg-[var(--accent)] text-[var(--bg-primary)]"
                             : "border-[var(--border-strong)]",
                         )}>
-                          {isSelected && <span className="text-[10px]">✓</span>}
+                          {isSelected && <span className="text-2xs">✓</span>}
                         </span>
                         <span className="truncate text-[var(--text-primary)]">{o.label}</span>
                       </div>
-                      <Badge variant="outline" className={cn("shrink-0 border text-[10px]", o.color)}>
+                      <Badge variant="outline" className={cn("shrink-0 border text-2xs", o.color)}>
                         {o.tier}
                       </Badge>
                     </button>
@@ -897,31 +892,29 @@ export default function ModelAdvisorPage() {
           <div className="flex flex-wrap items-center gap-3">
             <div className="flex items-center gap-2">
               <span className="text-sm font-medium text-[var(--text-secondary)]">Mode</span>
-              <div className="inline-flex rounded-md border border-[var(--border-default)] bg-[var(--bg-secondary)] p-0.5">
-                <button
+              <div
+                role="group"
+                aria-label="Advisor mode"
+                className="inline-flex rounded-md border border-[var(--border-default)] bg-[var(--bg-secondary)] p-1"
+              >
+                <Button
                   type="button"
+                  size="sm"
+                  variant={mode === "switch" ? "default" : "ghost"}
                   onClick={() => setMode("switch")}
-                  className={cn(
-                    "rounded px-3 py-1 text-sm transition-colors",
-                    mode === "switch"
-                      ? "bg-[var(--accent)] text-[var(--bg-primary)]"
-                      : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]",
-                  )}
+                  aria-pressed={mode === "switch"}
                 >
                   Switch from current
-                </button>
-                <button
+                </Button>
+                <Button
                   type="button"
+                  size="sm"
+                  variant={mode === "pick" ? "default" : "ghost"}
                   onClick={() => setMode("pick")}
-                  className={cn(
-                    "rounded px-3 py-1 text-sm transition-colors",
-                    mode === "pick"
-                      ? "bg-[var(--accent)] text-[var(--bg-primary)]"
-                      : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]",
-                  )}
+                  aria-pressed={mode === "pick"}
                 >
                   Fresh pick
-                </button>
+                </Button>
               </div>
             </div>
             <div className="flex items-center gap-2">

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useOrganizationList } from "@clerk/nextjs";
-import { Building2, Plus, Copy, Archive, Loader2 } from "lucide-react";
+import { Building2, Plus, Copy, Archive } from "lucide-react";
 import { useOrg } from "@/hooks/use-org";
 import { usePermissions } from "@/hooks/use-permissions";
 import { useToast } from "@/components/ui/toast";
@@ -18,7 +18,9 @@ import {
 import { isAdminOrOwner, isOwnerRole } from "@/lib/roles";
 import { cn } from "@/lib/utils";
 import { SettingsCard } from "@/components/settings/settings-card";
+import { DangerZone } from "@/components/settings/danger-zone";
 import { EmptyState } from "@/components/ui/empty-state";
+import { Button } from "@/components/ui/button";
 import type { Organization } from "@/lib/types";
 import { DeleteOrgDialog } from "./delete-org-dialog";
 import { TransferOwnershipSection } from "./transfer-ownership-section";
@@ -77,16 +79,13 @@ export function OrgSettings({ org }: OrgSettingsProps) {
         <EmptyState
           icon={Building2}
           title="No organization yet"
-          description="Create an organization to start observing agents and inviting your team."
+          description="Create an organization to manage members, API keys, and settings."
           size="md"
           action={
-            <button
-              onClick={() => setShowCreate(true)}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-[var(--accent)] text-[var(--bg-base)] rounded-lg text-sm font-medium hover:opacity-90 transition-opacity"
-            >
+            <Button variant="default" className="min-h-11" onClick={() => setShowCreate(true)}>
               <Plus className="w-4 h-4" />
               Create Organization
-            </button>
+            </Button>
           }
         />
       </SettingsCard>
@@ -110,57 +109,53 @@ export function OrgSettings({ org }: OrgSettingsProps) {
           >
             Cancel
           </button>
-          <button
-            onClick={handleCreateOrg}
-            disabled={loading}
-            className="px-4 py-2 bg-[var(--accent)] text-[var(--bg-base)] rounded-lg text-sm font-medium disabled:opacity-50 inline-flex items-center gap-2"
-          >
-            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Create Organization"}
-          </button>
+          <Button variant="default" className="min-h-11" onClick={handleCreateOrg} loading={loading}>
+            Create Organization
+          </Button>
         </div>
       </SettingsCard>
     );
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-space-4">
       <SettingsCard
         title="Organization Details"
         description="Your team's name, slug, and role. Slug is used in API URLs and can't be changed."
       >
-        <div className="space-y-4">
+        <div className="space-y-space-4">
           <div>
-            <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1">Name</label>
+            <label className="block text-sm font-medium text-[var(--text-secondary)] mb-space-1">Name</label>
             <input
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              className="w-full px-3 py-2 rounded-lg border border-[var(--border-default)] bg-[var(--bg-secondary)] text-[var(--text-primary)]"
+              className="w-full px-space-3 py-space-2 rounded-lg border border-[var(--border-default)] bg-[var(--bg-secondary)] text-[var(--text-primary)]"
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1">Slug</label>
-            <div className="flex items-center gap-2">
+            <label className="block text-sm font-medium text-[var(--text-secondary)] mb-space-1">Slug</label>
+            <div className="flex items-center gap-space-2">
               <input
                 type="text"
                 value={org?.slug || ""}
                 disabled
-                className="flex-1 px-3 py-2 rounded-lg border border-[var(--border-default)] bg-[var(--bg-tertiary)] text-[var(--text-secondary)]"
+                className="flex-1 px-space-3 py-space-2 rounded-lg border border-[var(--border-default)] bg-[var(--bg-tertiary)] text-[var(--text-secondary)]"
               />
               <button
                 onClick={() => navigator.clipboard.writeText(org?.slug || "")}
-                className="p-2 hover:bg-[var(--bg-tertiary)] rounded-lg text-[var(--text-secondary)]"
+                className="p-space-2 hover:bg-[var(--bg-tertiary)] rounded-lg text-[var(--text-secondary)]"
                 title="Copy slug"
               >
                 <Copy className="w-4 h-4" />
               </button>
             </div>
           </div>
-          <div className="pt-2">
+          <div className="pt-space-2">
             <span className="text-sm font-medium text-[var(--text-secondary)]">Role: </span>
             <span
               className={cn(
-                "px-2 py-1 rounded-md text-sm font-medium",
+                "px-space-2 py-space-1 rounded-md text-sm font-medium",
                 isOwner
                   ? "bg-[var(--warning-bg)] text-[var(--warning)]"
                   : org?.role === "admin"
@@ -173,50 +168,64 @@ export function OrgSettings({ org }: OrgSettingsProps) {
           </div>
 
           {isAdmin && (
-            <div className="pt-4 border-t border-[var(--border-default)] flex flex-wrap items-center gap-3">
-              <button
-                onClick={async () => {
-                  if (!org) return;
-                  if (
-                    !(await confirm({
-                      title: "Archive organization",
-                      description: `Archive ${org.name}? It will be hidden from the org switcher.`,
-                      confirmLabel: "Archive",
-                      variant: "destructive",
-                    }))
-                  )
-                    return;
-                  try {
-                    await api.archiveOrg(org.id);
-                    await refreshOrgs();
-                    toast.success("Organization archived");
-                  } catch (err: unknown) {
-                    const message = err instanceof Error ? err.message : "Failed to archive organization";
-                    toast.error(message);
-                  }
-                }}
-                className="px-3 py-1.5 text-sm border border-[var(--border-default)] rounded-lg hover:bg-[var(--bg-tertiary)] inline-flex items-center gap-1.5 text-[var(--text-primary)]"
-              >
-                <Archive className="w-4 h-4" />
-                Archive
-              </button>
-              {isOwner && (
-                <>
-                  <DeleteOrgDialog
-                    orgId={org!.id}
-                    orgName={org!.name}
-                    onDeleted={async () => {
-                      await refreshOrgs();
-                    }}
-                  />
-                  {!isPersonal && <TransferOwnershipSection org={org!} />}
-                </>
-              )}
+            <div className="pt-space-4 border-t border-[var(--border-default)]">
               <DataExportPanel orgId={org!.id} canExport={true} />
             </div>
           )}
         </div>
       </SettingsCard>
+
+      {isAdmin && (
+        <DangerZone
+          title="Permanent actions"
+          description={
+            isPersonal
+              ? "Archiving or deleting a personal workspace is irreversible."
+              : "Archiving, deleting, or transferring an organization is irreversible."
+          }
+        >
+          <div className="flex flex-wrap items-center gap-space-3">
+            <button
+              onClick={async () => {
+                if (!org) return;
+                if (
+                  !(await confirm({
+                    title: "Archive organization",
+                    description: `Archive ${org.name}? It will be hidden from the org switcher.`,
+                    confirmLabel: "Archive",
+                    variant: "destructive",
+                  }))
+                )
+                  return;
+                try {
+                  await api.archiveOrg(org.id);
+                  await refreshOrgs();
+                  toast.success("Organization archived");
+                } catch (err: unknown) {
+                  const message = err instanceof Error ? err.message : "Failed to archive organization";
+                  toast.error(message);
+                }
+              }}
+              className="px-space-3 py-space-2 text-sm border border-[var(--error)]/40 rounded-lg hover:bg-[var(--error-dim)] inline-flex items-center gap-space-2 text-[var(--error)]"
+            >
+              <Archive className="w-4 h-4" />
+              Archive
+            </button>
+            {isOwner && (
+              <>
+                <DeleteOrgDialog
+                  orgId={org!.id}
+                  orgName={org!.name}
+                  onDeleted={async () => {
+                    await refreshOrgs();
+                  }}
+                />
+                {!isPersonal && <TransferOwnershipSection org={org!} />}
+              </>
+            )}
+          </div>
+        </DangerZone>
+      )}
       {ConfirmDialog}
     </div>
   );

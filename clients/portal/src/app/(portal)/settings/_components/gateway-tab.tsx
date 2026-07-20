@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Loader2, Plus, Trash2, Server, Eye, EyeOff, RefreshCw } from "lucide-react";
+import { Plus, Trash2, Server, Eye, EyeOff, RefreshCw } from "lucide-react";
 import { useToast } from "@/components/ui/toast";
 import { useConfirm } from "@/hooks/use-confirm";
 import { useOrgQuery } from "@/hooks/use-api-query";
@@ -14,6 +14,7 @@ import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ErrorState } from "@/components/ui/error-state";
+import { FormField } from "@/components/ui/form-field";
 import { errorFromCaught } from "@/lib/safe-error-message";
 import { IntegrationStatusBanners } from "@/components/integration-status-banners";
 interface GatewayModel {
@@ -250,7 +251,7 @@ export function GatewayTab({
             </button>
           </div> : null
   }];
-  return <div className="space-y-4">
+  return <div className="space-y-space-4">
       <IntegrationStatusBanners integration="gateway" orgId={org.id} />
 
       <Card padding="md">
@@ -266,10 +267,12 @@ export function GatewayTab({
               back to the portal.
             </p>
           </div>
-          {canManage && !showCreate && <button onClick={startCreate} className="flex items-center gap-2 px-4 py-2 bg-[var(--accent)] text-[var(--bg-primary)] rounded-lg text-sm font-medium hover:opacity-90 flex-shrink-0">
+          {canManage && !showCreate && (
+            <Button variant="default" className="min-h-11 flex-shrink-0" onClick={startCreate}>
               <Plus className="w-4 h-4" />
               Add model
-            </button>}
+            </Button>
+          )}
         </div>
 
         {showCreate && <div className="mt-4 space-y-4 border-t border-[var(--border-default)] pt-4">
@@ -277,84 +280,139 @@ export function GatewayTab({
               {editing ? `Edit ${editing.name}` : "Register a new upstream model"}
             </h4>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <label htmlFor="gw-name" className="block text-xs font-medium text-[var(--text-secondary)] mb-1">
-                  Logical name
-                </label>
-                <input id="gw-name" type="text" value={form.name} disabled={!!editing} onChange={e => setForm({
-              ...form,
-              name: e.target.value
-            })} placeholder="gpt-4o-mini" className="w-full px-3 py-2 rounded-lg border border-[var(--border-default)] bg-[var(--bg-secondary)] text-[var(--text-primary)] disabled:opacity-50" />
-                <p className="text-xs text-[var(--text-muted)] mt-1">
-                  The name callers use in API requests. Unique per org.
-                </p>
-              </div>
-              <div>
-                <label htmlFor="gw-provider" className="block text-xs font-medium text-[var(--text-secondary)] mb-1">
-                  Provider
-                </label>
-                <select id="gw-provider" value={form.provider} disabled={!!editing} onChange={e => setForm({
-              ...form,
-              provider: e.target.value
-            })} className="w-full px-3 py-2 rounded-lg border border-[var(--border-default)] bg-[var(--bg-secondary)] text-[var(--text-primary)] disabled:opacity-50">
-                  {PROVIDER_OPTIONS.map(p => <option key={p.id} value={p.id}>
+              <FormField
+                label="Logical name"
+                htmlFor="gw-name"
+                description="The name callers use in API requests. Unique per org."
+              >
+                <input
+                  id="gw-name"
+                  type="text"
+                  value={form.name}
+                  disabled={!!editing}
+                  onChange={(e) =>
+                    setForm({
+                      ...form,
+                      name: e.target.value,
+                    })
+                  }
+                  placeholder="gpt-4o-mini"
+                  className="w-full px-3 py-2 rounded-lg border border-[var(--border-default)] bg-[var(--bg-secondary)] text-[var(--text-primary)] disabled:opacity-50"
+                />
+              </FormField>
+              <FormField label="Provider" htmlFor="gw-provider">
+                <select
+                  id="gw-provider"
+                  value={form.provider}
+                  disabled={!!editing}
+                  onChange={(e) =>
+                    setForm({
+                      ...form,
+                      provider: e.target.value,
+                    })
+                  }
+                  className="w-full px-3 py-2 rounded-lg border border-[var(--border-default)] bg-[var(--bg-secondary)] text-[var(--text-primary)] disabled:opacity-50"
+                >
+                  {PROVIDER_OPTIONS.map((p) => (
+                    <option key={p.id} value={p.id}>
                       {p.label}
-                    </option>)}
+                    </option>
+                  ))}
                 </select>
+              </FormField>
+              <FormField label="Upstream model id" htmlFor="gw-upstream-model">
+                <input
+                  id="gw-upstream-model"
+                  type="text"
+                  value={form.upstream_model}
+                  onChange={(e) =>
+                    setForm({
+                      ...form,
+                      upstream_model: e.target.value,
+                    })
+                  }
+                  placeholder="gpt-4o-mini-2024-07-18"
+                  className="w-full px-3 py-2 rounded-lg border border-[var(--border-default)] bg-[var(--bg-secondary)] text-[var(--text-primary)]"
+                />
+              </FormField>
+              <FormField label="Endpoint (optional)" htmlFor="gw-endpoint">
+                <input
+                  id="gw-endpoint"
+                  type="text"
+                  value={form.endpoint}
+                  onChange={(e) =>
+                    setForm({
+                      ...form,
+                      endpoint: e.target.value,
+                    })
+                  }
+                  placeholder={
+                    form.provider === "openai" ? "https://api.openai.com/v1" : "https://..."
+                  }
+                  className="w-full px-3 py-2 rounded-lg border border-[var(--border-default)] bg-[var(--bg-secondary)] text-[var(--text-primary)]"
+                />
+              </FormField>
+              <div className="sm:col-span-2 flex items-end gap-2">
+                <FormField label="Upstream API key" htmlFor="gw-key" className="flex-1">
+                  <input
+                    id="gw-key"
+                    type={showKey ? "text" : "password"}
+                    value={form.upstream_api_key}
+                    onChange={(e) =>
+                      setForm({
+                        ...form,
+                        upstream_api_key: e.target.value,
+                      })
+                    }
+                    placeholder={editing ? "Leave blank to keep current key" : "sk-..."}
+                    autoComplete="off"
+                    className="w-full px-3 py-2 rounded-lg border border-[var(--border-default)] bg-[var(--bg-secondary)] text-[var(--text-primary)] font-mono"
+                  />
+                </FormField>
+                <button
+                  type="button"
+                  onClick={() => setShowKey((s) => !s)}
+                  className="min-h-11 min-w-11 p-2 hover:bg-[var(--bg-tertiary)] rounded-lg mb-0.5"
+                  title={showKey ? "Hide key" : "Show key"}
+                  aria-label={showKey ? "Hide API key" : "Show API key"}
+                >
+                  {showKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
               </div>
-              <div>
-                <label htmlFor="gw-upstream-model" className="block text-xs font-medium text-[var(--text-secondary)] mb-1">
-                  Upstream model id
-                </label>
-                <input id="gw-upstream-model" type="text" value={form.upstream_model} onChange={e => setForm({
-              ...form,
-              upstream_model: e.target.value
-            })} placeholder="gpt-4o-mini-2024-07-18" className="w-full px-3 py-2 rounded-lg border border-[var(--border-default)] bg-[var(--bg-secondary)] text-[var(--text-primary)]" />
-              </div>
-              <div>
-                <label htmlFor="gw-endpoint" className="block text-xs font-medium text-[var(--text-secondary)] mb-1">
-                  Endpoint (optional)
-                </label>
-                <input id="gw-endpoint" type="text" value={form.endpoint} onChange={e => setForm({
-              ...form,
-              endpoint: e.target.value
-            })} placeholder={form.provider === "openai" ? "https://api.openai.com/v1" : "https://..."} className="w-full px-3 py-2 rounded-lg border border-[var(--border-default)] bg-[var(--bg-secondary)] text-[var(--text-primary)]" />
-              </div>
-              <div className="sm:col-span-2">
-                <label htmlFor="gw-key" className="block text-xs font-medium text-[var(--text-secondary)] mb-1">
-                  Upstream API key
-                </label>
-                <div className="flex items-center gap-2">
-                  <input id="gw-key" type={showKey ? "text" : "password"} value={form.upstream_api_key} onChange={e => setForm({
-                ...form,
-                upstream_api_key: e.target.value
-              })} placeholder={editing ? "Leave blank to keep current key" : "sk-..."} autoComplete="off" className="flex-1 px-3 py-2 rounded-lg border border-[var(--border-default)] bg-[var(--bg-secondary)] text-[var(--text-primary)] font-mono" />
-                  <button type="button" onClick={() => setShowKey(s => !s)} className="p-2 hover:bg-[var(--bg-tertiary)] rounded-lg" title={showKey ? "Hide key" : "Show key"}>
-                    {showKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  </button>
-                </div>
-              </div>
-              <div>
-                <label htmlFor="gw-priority" className="block text-xs font-medium text-[var(--text-secondary)] mb-1">
-                  Routing priority
-                </label>
-                <input id="gw-priority" type="number" min={0} max={100000} value={form.routing_priority} onChange={e => setForm({
-              ...form,
-              routing_priority: Number(e.target.value) || 0
-            })} className="w-full px-3 py-2 rounded-lg border border-[var(--border-default)] bg-[var(--bg-secondary)] text-[var(--text-primary)]" />
-                <p className="text-xs text-[var(--text-muted)] mt-1">
-                  Lower numbers win when multiple rows share a name.
-                </p>
-              </div>
+              <FormField
+                label="Routing priority"
+                htmlFor="gw-priority"
+                description="Lower numbers win when multiple rows share a name."
+              >
+                <input
+                  id="gw-priority"
+                  type="number"
+                  min={0}
+                  max={100000}
+                  value={form.routing_priority}
+                  onChange={(e) =>
+                    setForm({
+                      ...form,
+                      routing_priority: Number(e.target.value) || 0,
+                    })
+                  }
+                  className="w-full px-3 py-2 rounded-lg border border-[var(--border-default)] bg-[var(--bg-secondary)] text-[var(--text-primary)]"
+                />
+              </FormField>
             </div>
             <div className="flex gap-2 justify-end pt-2">
               <button onClick={cancelForm} className="px-4 py-2 text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)]">
                 Cancel
               </button>
-              <button onClick={handleSubmit} disabled={saving || !form.name.trim() || !form.upstream_model.trim() || !editing && !form.upstream_api_key} className="px-4 py-2 bg-[var(--accent)] text-[var(--bg-primary)] rounded-lg text-sm font-medium disabled:opacity-50 inline-flex items-center gap-2">
-                {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+              <Button
+                variant="default"
+                className="min-h-11"
+                onClick={handleSubmit}
+                disabled={!form.name.trim() || !form.upstream_model.trim() || (!editing && !form.upstream_api_key)}
+                loading={saving}
+              >
                 {editing ? "Save changes" : "Register model"}
-              </button>
+              </Button>
             </div>
           </div>}
       </Card>

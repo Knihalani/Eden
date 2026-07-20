@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import Link from "next/link";
 import { InfiniteDataTable } from "@/components/portal-os";
 import type { DataTableColumn } from "@/components/ui/data-table";
 import { api } from "@/lib/api";
@@ -33,6 +32,10 @@ function hitKey(h: SpanHit): string {
   return `${h.trace_id}-${h.span_id ?? h.name ?? ""}`;
 }
 
+/**
+ * Spans lens — shares hub toolbar grammar (QueryFilterBar / Views).
+ * No sibling chrome band; table OS only.
+ */
 export function SpansTab({ orgId, query, onSelectTrace }: SpansTabProps) {
   const [page, setPage] = useState(1);
   const [hits, setHits] = useState<SpanHit[]>([]);
@@ -84,6 +87,7 @@ export function SpansTab({ orgId, query, onSelectTrace }: SpansTabProps) {
       {
         key: "name",
         header: "Span",
+        sortable: true,
         cell: (r) => (
           <span className="text-xs font-medium text-[var(--text-primary)]">
             {r.name ?? "—"}
@@ -93,6 +97,7 @@ export function SpansTab({ orgId, query, onSelectTrace }: SpansTabProps) {
       {
         key: "trace_id",
         header: "Trace",
+        sortable: true,
         cell: (r) => (
           <span className="font-mono text-xs text-[var(--text-muted)]">
             {r.trace_id.slice(0, 12)}…
@@ -102,7 +107,19 @@ export function SpansTab({ orgId, query, onSelectTrace }: SpansTabProps) {
       {
         key: "outcome",
         header: "Status",
+        sortable: true,
         cell: (r) => <TraceOutcomeBadge outcome={r.outcome ?? null} />,
+      },
+      {
+        key: "duration_ms",
+        header: "Duration",
+        sortable: true,
+        align: "right",
+        cell: (r) => (
+          <span className="text-xs tabular-nums text-[var(--text-secondary)]">
+            {r.duration_ms != null ? `${r.duration_ms.toFixed(0)}ms` : "—"}
+          </span>
+        ),
       },
       {
         key: "snippet",
@@ -119,26 +136,16 @@ export function SpansTab({ orgId, query, onSelectTrace }: SpansTabProps) {
 
   const total = spansQuery.data?.total ?? 0;
   const isFallback = spansQuery.data?.fallback === true;
-  const alertHref = `/alerts?tab=rules&q=${encodeURIComponent(query ?? "")}`;
   const listError = spansQuery.isError;
   const errorMessage = spansQuery.error?.message ?? null;
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-space-2" data-testid="spans-table">
       {isFallback && !listError && (
-        <p className="text-[11px] text-[var(--warning)] px-1">
+        <p className="text-xs text-[var(--warning)] px-1">
           Search index offline (PG fallback) — results may lag Typesense.
         </p>
       )}
-      <div className="flex flex-wrap items-center gap-2 px-1 text-[11px]">
-        <Link href={alertHref} className="text-[var(--accent)] hover:underline">
-          Create alert from filters
-        </Link>
-        <span className="text-[var(--text-muted)]">·</span>
-        <span className="text-[var(--text-muted)] font-mono truncate max-w-md">
-          {searchParams.q}
-        </span>
-      </div>
       {listError ? (
         <ErrorState
           title="Could not load spans"
@@ -160,10 +167,13 @@ export function SpansTab({ orgId, query, onSelectTrace }: SpansTabProps) {
           loading={spansQuery.isLoading && page === 1}
           rowKey={(r) => hitKey(r)}
           onRowClick={(r) => onSelectTrace(r.trace_id, r.span_id)}
+          selectable
+          defaultSort={{ key: "duration_ms", direction: "desc" }}
           emptyTitle="No spans match"
           emptyDescription="Try widening your query or time range. Use agent: / status: / text: tokens."
           hasMore={total > hits.length}
           onLoadMore={loadMore}
+          loadingMore={spansQuery.isFetching && page > 1}
         />
       )}
     </div>

@@ -46,14 +46,20 @@ const nextConfig: NextConfig = {
       "cmdk",
       "@clerk/nextjs",
       "@radix-ui/react-avatar",
+      "@radix-ui/react-checkbox",
       "@radix-ui/react-dialog",
       "@radix-ui/react-dropdown-menu",
       "@radix-ui/react-label",
+      "@radix-ui/react-popover",
+      "@radix-ui/react-scroll-area",
       "@radix-ui/react-select",
       "@radix-ui/react-separator",
       "@radix-ui/react-slot",
+      "@radix-ui/react-switch",
       "@radix-ui/react-tabs",
       "@radix-ui/react-tooltip",
+      "@tanstack/react-query",
+      "@tanstack/react-virtual",
     ],
   },
   images: {
@@ -145,17 +151,31 @@ const nextConfig: NextConfig = {
       { source: "/inspector", destination: "/traces?view=inspect", permanent: true },
       { source: "/replay", destination: "/traces?view=replay", permanent: true },
       { source: "/debugger", destination: "/traces?view=debug", permanent: true },
-      // Time-travel + columnar pages are live — do not soft-land them on
-      // debugger/query (that orphaned the real UIs and looped Cohorts→Query).
       { source: "/observability/query", destination: "/traces?view=query", permanent: true },
-      // Facet soft-landings removed: dedicated /observability/{mcp,decisions,
-      // memory,retrieval} pages exist. Old /traces?facet=* bookmarks still
-      // embed those pages via the traces hub (see traces/page.tsx).
+      // W3 UX-P0-13 GAP: soft-nest facet/view orphans under Traces (embed via hub).
+      // time-travel/cohorts land on their own views — not debugger/query.
+      { source: "/observability/mcp", destination: "/traces?facet=mcp", permanent: true },
+      { source: "/observability/decisions", destination: "/traces?facet=decisions", permanent: true },
+      { source: "/observability/memory", destination: "/traces?facet=memory", permanent: true },
+      { source: "/observability/retrieval", destination: "/traces?facet=retrieval", permanent: true },
+      { source: "/observability/time-travel", destination: "/traces?view=time-travel", permanent: true },
+      { source: "/observability/cohorts", destination: "/traces?view=cohorts", permanent: true },
       { source: "/observability/eval", destination: "/evals?tab=eval", permanent: true },
 
       { source: "/fleet", destination: "/agents?tab=fleet", permanent: true },
       { source: "/llmops", destination: "/optimization", permanent: true },
       { source: "/llmops/:path*", destination: "/optimization", permanent: true },
+      // W11: Model Advisor deep-link → Cost hub tab (no dual standalone chrome).
+      {
+        source: "/optimization/model-advisor",
+        destination: "/optimization?tab=advisor",
+        permanent: true,
+      },
+      {
+        source: "/optimization/model-advisor/:path*",
+        destination: "/optimization?tab=advisor",
+        permanent: true,
+      },
       { source: "/profile", destination: "/settings?tab=account", permanent: true },
       { source: "/billing", destination: "/settings?tab=billing", permanent: true },
       { source: "/users", destination: "/analytics?tab=users", permanent: true },

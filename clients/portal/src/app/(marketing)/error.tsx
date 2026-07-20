@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import Link from "next/link";
 import { AlertTriangle, RefreshCw, Home } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { SUPPORT_EMAIL } from "@/lib/constants";
 
 /** Marketing 500 — landing page error. Kept minimal so it doesn't
@@ -20,12 +21,12 @@ export default function MarketingError({
   }, [error]);
 
   return (
-    <div className="flex items-center justify-center min-h-screen px-4 bg-[var(--bg-base)]">
-      <div className="max-w-md w-full text-center space-y-6">
+    <div className="flex items-center justify-center min-h-screen px-space-4 bg-[var(--bg-base)]">
+      <div className="max-w-md w-full text-center space-y-space-5">
         <div className="w-16 h-16 bg-[var(--error-dim)] border border-[var(--error)]/20 rounded-2xl flex items-center justify-center mx-auto">
           <AlertTriangle className="w-8 h-8 text-[var(--error)]" />
         </div>
-        <div className="space-y-2">
+        <div className="space-y-space-2">
           <h1 className="text-xl font-semibold text-[var(--text-primary)]">
             The page failed to load
           </h1>
@@ -34,21 +35,17 @@ export default function MarketingError({
             line at <a href={`mailto:${SUPPORT_EMAIL}`} className="text-[var(--accent)] hover:underline">{SUPPORT_EMAIL}</a>.
           </p>
         </div>
-        <div className="flex items-center justify-center gap-3">
-          <button
-            onClick={reset}
-            className="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-[var(--bg-primary)] bg-[var(--accent)] hover:bg-[var(--accent-hover)] rounded-xl transition-colors"
-          >
+        <div className="flex items-center justify-center gap-space-3">
+          <Button type="button" onClick={reset} className="min-h-11">
             <RefreshCw className="w-4 h-4" />
             Retry
-          </button>
-          <Link
-            href="/"
-            className="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-[var(--text-primary)] bg-[var(--bg-primary)] hover:bg-[var(--bg-tertiary)] border border-[var(--border-default)] rounded-xl transition-colors"
-          >
-            <Home className="w-4 h-4" />
-            Home
-          </Link>
+          </Button>
+          <Button asChild variant="outline" className="min-h-11">
+            <Link href="/">
+              <Home className="w-4 h-4" />
+              Home
+            </Link>
+          </Button>
         </div>
       </div>
     </div>

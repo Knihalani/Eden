@@ -34,7 +34,8 @@ export { FOCUS_RING_CLASS, FOCUS_RING_VARS } from "./focus-ring";
 
 export { EmptyState } from "./empty-state";
 export { ErrorState } from "./error-state";
-export { QueryState } from "./query-state";
+export { QueryState, resolveEmptySlot } from "./query-state";
+export type { QueryEmptyKind } from "./query-state";
 export { NoOrgState } from "./no-org-state";
 export { Breadcrumb } from "./breadcrumb";
 export type { BreadcrumbProps, BreadcrumbItem } from "./breadcrumb";

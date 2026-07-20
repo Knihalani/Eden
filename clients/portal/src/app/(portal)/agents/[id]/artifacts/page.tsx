@@ -54,15 +54,18 @@ export default function AgentArtifactsPage() {
   }
 
   return (
-    <PageContent>
-      <PageHeader title="Agent Artifacts" description={`Runtime fixes for ${agentId}`} />
-      <Link
-        href={`/agents/${encodeURIComponent(agentId)}`}
-        className="mb-4 inline-flex items-center gap-1 text-sm text-[var(--text-secondary)]"
-      >
-        <ArrowLeft className="h-4 w-4" />
-        Back to agent
-      </Link>
+    <PageContent className="space-y-space-4">
+      <PageHeader
+        eyebrow="Agent"
+        title="Agent Artifacts"
+        description={`Runtime fixes for ${agentId}`}
+      />
+      <Button asChild variant="ghost" size="sm" className="min-h-11 px-0 w-fit">
+        <Link href={`/agents/${encodeURIComponent(agentId)}`}>
+          <ArrowLeft className="h-4 w-4" />
+          Back to agent
+        </Link>
+      </Button>
       {error ? (
         <ErrorState
           title="Could not load artifacts"
@@ -80,14 +83,16 @@ export default function AgentArtifactsPage() {
           }
         />
       ) : loading ? (
-        <Loader2 className="h-8 w-8 animate-spin" />
+        <div className="flex justify-center py-12">
+          <Loader2 className="h-8 w-8 animate-spin text-[var(--text-muted)]" />
+        </div>
       ) : artifacts.length === 0 ? (
         <EmptyState
           title="No artifacts for this agent"
-          description="Shadow candidates appear after issues resolve or loop detectors fire."
+          description="No artifacts yet. Shadow candidates appear after issues resolve or loop detectors fire."
         />
       ) : (
-        <div className="space-y-2">
+        <div className="space-y-space-3">
           {artifacts.map((a) => (
             <Card key={String(a.id)} className="p-4">
               <div className="font-medium">{String(a.name)}</div>

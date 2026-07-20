@@ -12,7 +12,9 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { useToast } from "@/components/ui/toast";
 import { useOrgQuery } from "@/hooks/use-api-query";
 import { queryKeys } from "@/lib/query-keys";
-import { Wallet, Loader2, AlertTriangle, CheckCircle2, History } from "lucide-react";
+import { Wallet, AlertTriangle, CheckCircle2, History } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Panel } from "@/components/ui/panel";
 import { errorFromCaught } from "@/lib/safe-error-message";
 import {
   featureGatedErrorCopy,
@@ -135,12 +137,9 @@ export default function BudgetPage() {
           message={copy.message}
           action={
             isRetryableIntelligenceError(budgetError) ? (
-              <button
-                onClick={() => refetchBudget()}
-                className="inline-flex items-center gap-2 px-3 py-1.5 rounded-md bg-[var(--accent)] text-[var(--bg-base)] text-xs font-medium hover:bg-[var(--accent-hover)] transition-colors"
-              >
+              <Button variant="outline" size="sm" onClick={() => refetchBudget()}>
                 Try again
-              </button>
+              </Button>
             ) : undefined
           }
         />
@@ -222,8 +221,8 @@ export default function BudgetPage() {
       )}
 
       {budget && (
-        <div className="rounded-lg border border-[var(--border-default)] bg-[var(--bg-primary)] p-6">
-          <h2 className="mb-4 text-lg font-semibold text-[var(--text-primary)]">
+        <Panel tone="flat" padding="lg">
+          <h2 className="mb-4 text-sm font-semibold text-[var(--text-primary)]">
             Budget config
           </h2>
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -289,28 +288,25 @@ export default function BudgetPage() {
             />
           </div>
           <div className="mt-6 flex items-center justify-end gap-3">
-            <button
+            <Button
               type="button"
               onClick={handleSave}
               disabled={saving}
+              loading={saving}
               aria-label="Save budget configuration"
-              className="inline-flex items-center gap-2 rounded-md bg-[var(--accent)] px-4 py-2 text-sm font-medium text-[var(--accent-foreground)] hover:bg-[var(--accent-hover)] transition-colors disabled:opacity-50"
             >
-              {saving ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : null}
               Save (org owner only)
-            </button>
+            </Button>
           </div>
-        </div>
+        </Panel>
       )}
 
-      <div className="rounded-lg border border-[var(--border-default)] bg-[var(--bg-primary)]">
-        <div className="border-b border-[var(--border-default)] p-4">
-          <h2 className="text-lg font-semibold text-[var(--text-primary)]">
+      <div className="rounded-xl border border-[var(--border-default)]">
+        <div className="border-b border-[var(--border-default)] px-4 py-3">
+          <h2 className="text-sm font-semibold text-[var(--text-primary)]">
             Recent threshold events
           </h2>
-          <p className="mt-1 text-xs text-[var(--text-secondary)]">
+          <p className="mt-1 text-2xs text-[var(--text-secondary)]">
             Polls every 30s. Auto-refresh on this tab.
           </p>
         </div>

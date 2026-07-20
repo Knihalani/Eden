@@ -12,6 +12,8 @@ interface LatencyCardProps {
   unavailable?: boolean;
   p95Ms: number | null;
   p50Ms?: number | null;
+  /** Shared Home time window (matches PageHeader range). */
+  windowHours?: number;
   trend?: "up" | "down" | null;
   trendValue?: string;
   href?: string;
@@ -22,6 +24,7 @@ export function LatencyCard({
   unavailable = false,
   p95Ms,
   p50Ms = null,
+  windowHours = 24,
   trend,
   trendValue,
   href = "/traces",
@@ -46,13 +49,15 @@ export function LatencyCard({
               <p className="text-sm font-medium text-[var(--text-secondary)]">
                 p95 Latency
               </p>
-              <p className="text-xs text-[var(--text-muted)]">last 24h</p>
+              <p className="text-xs text-[var(--text-muted)]">
+                last {windowHours >= 168 ? "7d" : `${windowHours}h`}
+              </p>
             </div>
           </div>
           {trend && trendValue && !empty && !unavailable && !loading && (
             <div
               className={cn(
-                "flex items-center gap-0.5 text-xs font-medium px-1.5 py-0.5 rounded",
+                "flex items-center gap-1 text-xs font-medium px-1.5 py-1 rounded",
                 trend === trendIsGood
                   ? "text-[var(--success)] bg-[var(--success-bg)]"
                   : "text-[var(--error)] bg-[var(--error-bg)]",

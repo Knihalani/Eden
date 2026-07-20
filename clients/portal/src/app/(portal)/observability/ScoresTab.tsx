@@ -263,7 +263,7 @@ export function ScoresTab({ orgId, traceId }: ScoresTabProps) {
                       {s.judge_name}
                     </span>
                     {s.span_id && (
-                      <div className="text-[10px] text-[var(--text-muted)]">
+                      <div className="text-2xs text-[var(--text-muted)]">
                         span: {s.span_id.slice(0, 12)}…
                       </div>
                     )}
@@ -274,7 +274,7 @@ export function ScoresTab({ orgId, traceId }: ScoresTabProps) {
             {
               key: "judge_version",
               header: "Version",
-              cell: (s) => <span className="font-mono text-[10px] text-[var(--text-muted)]">{s.judge_version}</span>,
+              cell: (s) => <span className="font-mono text-2xs text-[var(--text-muted)]">{s.judge_version}</span>,
             },
             {
               key: "score",
@@ -293,13 +293,13 @@ export function ScoresTab({ orgId, traceId }: ScoresTabProps) {
             {
               key: "model",
               header: "Model",
-              cell: (s) => <span className="font-mono text-[10px] text-[var(--text-muted)]">{s.model}</span>,
+              cell: (s) => <span className="font-mono text-2xs text-[var(--text-muted)]">{s.model}</span>,
             },
             {
               key: "scored_at",
               header: "Scored at",
               sortable: true,
-              cell: (s) => <span className="font-mono text-[10px] text-[var(--text-muted)]">{s.scored_at}</span>,
+              cell: (s) => <span className="font-mono text-2xs text-[var(--text-muted)]">{s.scored_at}</span>,
             },
             {
               key: "rationale",

@@ -1,11 +1,15 @@
 "use client";
 
 /**
- * U12 IA freeze — ≤12 core nav items (July 2026 Wave 3).
+ * U12 IA freeze — ≤12 core nav items (July 2026 Wave 3 / Wave 4 foundation).
  *
  * Product path order: Home → Observe → Evaluate → Improve → Workspace.
  * Advanced surfaces (agents, prompts, analytics, guardrails, cost) stay
  * behind the Advanced toggle until expanded.
+ *
+ * Group `id` values are stable keys (legacy); display labels live on
+ * `label` and in `GROUP_LABEL` (nav-commands). Do not rename ids without
+ * migrating breadcrumb category maps.
  */
 
 import type { ComponentType } from "react";
@@ -16,6 +20,13 @@ import {
   ShieldAlert,
   ShieldCheck,
   KeyRound,
+  Package,
+  TrendingUp,
+  BookOpen,
+  Radio,
+  Bug,
+  Inbox,
+  FileCode,
   type LucideIcon,
 } from "lucide-react";
 import {
@@ -44,6 +55,7 @@ export interface SidebarItem {
 }
 
 export interface SidebarGroup {
+  /** Stable key — display via `label` / GROUP_LABEL, not this id. */
   id: "build" | "observe" | "optimize" | "automate" | "workspace";
   label: string;
   items: SidebarItem[];
@@ -109,7 +121,7 @@ export const DEFAULT_SIDEBAR: SidebarGroup[] = [
         id: "signals",
         href: "/alerts?tab=signals",
         label: "Signals",
-        icon: AlertNavIcon,
+        icon: Radio,
         category: "advanced",
         description: "Deep search signals and classifier rules.",
       },
@@ -117,7 +129,7 @@ export const DEFAULT_SIDEBAR: SidebarGroup[] = [
         id: "debugger-sessions",
         href: "/debugger-sessions",
         label: "Debug sessions",
-        icon: TraceIcon,
+        icon: Bug,
         category: "advanced",
         description: "Multi-run debugger timeline and compare (F74).",
       },
@@ -151,21 +163,21 @@ export const DEFAULT_SIDEBAR: SidebarGroup[] = [
         id: "artifacts",
         href: "/artifacts",
         label: "Artifacts",
-        icon: PatchIcon,
+        icon: Package,
         description: "Versioned runtime fixes with evidence-gated promotion.",
       },
       {
         id: "ledger",
         href: "/ledger",
         label: "Ledger",
-        icon: FileText,
+        icon: BookOpen,
         description: "Compounding institutional memory for your agents.",
       },
       {
         id: "promotions",
         href: "/promotions",
         label: "Promotions",
-        icon: PatchIcon,
+        icon: TrendingUp,
         description: "EvidenceGate inbox — approve or reject shadow candidates.",
       },
       {
@@ -188,7 +200,7 @@ export const DEFAULT_SIDEBAR: SidebarGroup[] = [
         id: "prompts",
         href: "/prompts",
         label: "Prompts",
-        icon: FileText,
+        icon: FileCode,
         category: "advanced",
         description: "Version and manage prompt templates.",
       },
@@ -223,7 +235,7 @@ export const DEFAULT_SIDEBAR: SidebarGroup[] = [
             id: "settings-webhooks-dlq",
             href: "/settings/webhooks-dlq",
             label: "Webhook DLQ",
-            icon: Settings,
+            icon: Inbox,
             category: "advanced",
             description: "Replay terminal-state webhook deliveries.",
           },

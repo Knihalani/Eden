@@ -56,13 +56,13 @@ export function MarketingNav({ signedIn }: { signedIn: boolean }) {
   }, [mobileMenuOpen]);
 
   const linkClass =
-    "px-3 py-2 min-h-11 inline-flex items-center text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)] rounded-lg transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-primary)]";
+    "px-space-3 py-space-2 min-h-11 inline-flex items-center text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)] rounded-lg transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-primary)]";
 
   const primaryCtaClass =
-    "inline-flex items-center justify-center gap-2 min-h-11 px-4 py-2 text-sm font-medium bg-[var(--accent)] text-[var(--bg-base)] rounded-lg hover:bg-[var(--accent-hover)] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-primary)]";
+    "inline-flex items-center justify-center gap-space-2 min-h-11 px-space-4 py-space-2 text-sm font-medium bg-[var(--accent)] text-[var(--bg-base)] rounded-lg hover:bg-[var(--accent-hover)] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-primary)]";
 
   const secondaryCtaClass =
-    "inline-flex items-center justify-center min-h-11 px-4 py-2 text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-primary)]";
+    "inline-flex items-center justify-center min-h-11 px-space-4 py-space-2 text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-primary)]";
 
   return (
     <nav
@@ -70,10 +70,10 @@ export function MarketingNav({ signedIn }: { signedIn: boolean }) {
       style={{ backdropFilter: "blur(16px)" }}
       aria-label="Marketing"
     >
-      <div className="max-w-7xl mx-auto px-6 h-full flex items-center justify-between gap-4">
+      <div className="max-w-7xl mx-auto px-space-5 h-full flex items-center justify-between gap-space-4">
         <Logo size="md" showWordmark priority href="/" />
 
-        <div className="hidden md:flex items-center gap-0.5">
+        <div className="hidden md:flex items-center gap-space-1">
           {NAV_LINKS.map((link) =>
             isExternalHref(link.href) ? (
               <a
@@ -93,7 +93,7 @@ export function MarketingNav({ signedIn }: { signedIn: boolean }) {
           )}
         </div>
 
-        <div className="hidden md:flex items-center gap-2 shrink-0">
+        <div className="hidden md:flex items-center gap-space-2 shrink-0">
           {signedIn ? (
             <Link href="/dashboard" className={primaryCtaClass}>
               Open dashboard
@@ -115,7 +115,7 @@ export function MarketingNav({ signedIn }: { signedIn: boolean }) {
         <button
           ref={menuButtonRef}
           type="button"
-          className="md:hidden p-2 min-h-11 min-w-11 inline-flex items-center justify-center text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)] rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
+          className="md:hidden p-space-2 min-h-11 min-w-11 inline-flex items-center justify-center text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)] rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
           onClick={() => setMobileMenuOpen((open) => !open)}
           aria-label={mobileMenuOpen ? "Close menu" : "Open menu"}
           aria-expanded={mobileMenuOpen}
@@ -133,12 +133,12 @@ export function MarketingNav({ signedIn }: { signedIn: boolean }) {
         <div
           id={menuId}
           ref={menuPanelRef}
-          className="md:hidden absolute top-16 left-0 right-0 bg-[var(--bg-primary)] border-b border-[var(--border-subtle)] px-6 py-4 flex flex-col gap-1 max-h-[calc(100dvh-4rem)] overflow-y-auto"
+          className="md:hidden absolute top-16 left-0 right-0 bg-[var(--bg-primary)] border-b border-[var(--border-subtle)] px-space-5 py-space-4 flex flex-col gap-space-1 max-h-[calc(100dvh-4rem)] overflow-y-auto"
           role="dialog"
           aria-modal="true"
           aria-label="Navigation menu"
         >
-          <div className="mb-1 flex items-center justify-end">
+          <div className="mb-space-1 flex items-center justify-end">
             <button
               type="button"
               className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
@@ -174,7 +174,7 @@ export function MarketingNav({ signedIn }: { signedIn: boolean }) {
               </Link>
             ),
           )}
-          <div className="flex flex-col gap-2 mt-2 pt-3 border-t border-[var(--border-subtle)]">
+          <div className="flex flex-col gap-space-2 mt-space-2 pt-space-3 border-t border-[var(--border-subtle)]">
             {signedIn ? (
               <Link
                 href="/dashboard"
@@ -187,7 +187,7 @@ export function MarketingNav({ signedIn }: { signedIn: boolean }) {
               <>
                 <Link
                   href="/sign-in"
-                  className="inline-flex items-center justify-center min-h-11 px-4 py-2.5 text-sm text-center text-[var(--text-secondary)] border border-[var(--border-default)] rounded-lg hover:bg-[var(--bg-tertiary)] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
+                  className="inline-flex items-center justify-center min-h-11 px-space-4 py-space-3 text-sm text-center text-[var(--text-secondary)] border border-[var(--border-default)] rounded-lg hover:bg-[var(--bg-tertiary)] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
                   onClick={() => setMobileMenuOpen(false)}
                 >
                   Sign in

@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import { AlertTriangle, RefreshCw, Home } from "lucide-react";
 import Link from "next/link";
+import { Button } from "@/components/ui/button";
 
 export default function AuthError({
   error,
@@ -16,13 +17,13 @@ export default function AuthError({
   }, [error]);
 
   return (
-    <div className="flex items-center justify-center min-h-screen px-4 bg-[var(--bg-base)]">
-      <div className="max-w-md w-full text-center space-y-6 page-enter">
+    <div className="flex items-center justify-center min-h-screen px-space-4 bg-[var(--bg-base)]">
+      <div className="max-w-md w-full text-center space-y-space-5 page-enter">
         <div className="w-16 h-16 bg-[var(--error-dim)] border border-[var(--error)]/20 rounded-2xl flex items-center justify-center mx-auto">
           <AlertTriangle className="w-8 h-8 text-[var(--error)]" />
         </div>
 
-        <div className="space-y-2">
+        <div className="space-y-space-2">
           <h1 className="text-xl font-semibold text-[var(--text-primary)]">
             Authentication error
           </h1>
@@ -31,21 +32,17 @@ export default function AuthError({
           </p>
         </div>
 
-        <div className="flex items-center justify-center gap-3">
-          <button
-            onClick={reset}
-            className="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-[var(--bg-primary)] bg-[var(--accent)] hover:bg-[var(--accent-hover)] rounded-xl transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--border-glow)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-base)]"
-          >
+        <div className="flex items-center justify-center gap-space-3">
+          <Button type="button" onClick={reset} className="min-h-11">
             <RefreshCw className="w-4 h-4" />
             Try again
-          </button>
-          <Link
-            href="/"
-            className="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-[var(--text-primary)] bg-[var(--bg-primary)] hover:bg-[var(--bg-tertiary)] border border-[var(--border-default)] rounded-xl transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--border-glow)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-base)]"
-          >
-            <Home className="w-4 h-4" />
-            Home
-          </Link>
+          </Button>
+          <Button asChild variant="outline" className="min-h-11">
+            <Link href="/">
+              <Home className="w-4 h-4" />
+              Home
+            </Link>
+          </Button>
         </div>
       </div>
     </div>

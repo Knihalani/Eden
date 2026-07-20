@@ -15,11 +15,21 @@ import { Button } from "@/components/ui/button";
 export interface SessionsTabProps {
   orgId: string;
   agentId?: string;
+  /** Hub QueryFilterBar outcome — no sibling filter band on this lens. */
+  outcome?: string;
   onSelectSession: (sessionId: string) => void;
 }
 
-export function SessionsTab({ orgId, agentId, onSelectSession }: SessionsTabProps) {
-  const [outcomeFilter, setOutcomeFilter] = useState<"all" | "success" | "failure" | "open">("all");
+/**
+ * Sessions lens — shares hub toolbar grammar.
+ * Outcome comes from hub filters (`?outcome=`), not a local chrome row.
+ */
+export function SessionsTab({
+  orgId,
+  agentId,
+  outcome,
+  onSelectSession,
+}: SessionsTabProps) {
   const [limit, setLimit] = useState(100);
 
   const sessionsQuery = useOrgQuery(
@@ -36,13 +46,16 @@ export function SessionsTab({ orgId, agentId, onSelectSession }: SessionsTabProp
 
   const sessions = useMemo(() => {
     const all = sessionsQuery.data ?? [];
-    if (outcomeFilter === "all") return all;
+    if (!outcome) return all;
     return all.filter((s) => {
-      if (outcomeFilter === "success") return s.success === true;
-      if (outcomeFilter === "failure") return s.success === false;
-      return s.success == null;
+      if (outcome === "success") return s.success === true;
+      if (outcome === "failure") return s.success === false;
+      if (outcome === "open" || outcome === "partial" || outcome === "timeout") {
+        return s.success == null;
+      }
+      return true;
     });
-  }, [sessionsQuery.data, outcomeFilter]);
+  }, [sessionsQuery.data, outcome]);
 
   const columns: DataTableColumn<AgentSessionRecord>[] = useMemo(
     () => [
@@ -50,6 +63,7 @@ export function SessionsTab({ orgId, agentId, onSelectSession }: SessionsTabProp
         key: "id",
         header: "Session",
         sticky: true,
+        sortable: true,
         cell: (s) => (
           <Link
             href={`/sessions/${encodeURIComponent(s.id)}`}
@@ -64,6 +78,7 @@ export function SessionsTab({ orgId, agentId, onSelectSession }: SessionsTabProp
         key: "turns",
         header: "Turns",
         align: "right",
+        sortable: true,
         cell: (s) => (
           <span className="text-xs tabular-nums">{s.trace_ids?.length ?? 0}</span>
         ),
@@ -71,6 +86,7 @@ export function SessionsTab({ orgId, agentId, onSelectSession }: SessionsTabProp
       {
         key: "agent_id",
         header: "Agent",
+        sortable: true,
         cell: (s) => (
           <span className="text-xs text-[var(--text-secondary)]">{s.agent_id ?? "—"}</span>
         ),
@@ -85,23 +101,29 @@ export function SessionsTab({ orgId, agentId, onSelectSession }: SessionsTabProp
       {
         key: "success",
         header: "Outcome",
+        sortable: true,
         cell: (s) => {
-          const outcome =
+          const sessionOutcome =
             s.success === true ? "success" : s.success === false ? "failure" : "open";
           const Icon =
-            outcome === "success" ? CheckCircle2 : outcome === "failure" ? XCircle : Circle;
+            sessionOutcome === "success"
+              ? CheckCircle2
+              : sessionOutcome === "failure"
+                ? XCircle
+                : Circle;
           const iconClass =
-            outcome === "success"
+            sessionOutcome === "success"
               ? "text-[var(--success)]"
-              : outcome === "failure"
+              : sessionOutcome === "failure"
                 ? "text-[var(--error)]"
                 : "text-[var(--text-muted)]";
-          return <Icon className={cn("h-4 w-4", iconClass)} aria-label={outcome} />;
+          return <Icon className={cn("h-4 w-4", iconClass)} aria-label={sessionOutcome} />;
         },
       },
       {
         key: "started_at",
         header: "Last activity",
+        sortable: true,
         cell: (s) => (
           <time className="text-xs text-[var(--text-muted)]" dateTime={s.started_at}>
             {s.started_at ? new Date(s.started_at).toLocaleString() : "—"}
@@ -116,25 +138,7 @@ export function SessionsTab({ orgId, agentId, onSelectSession }: SessionsTabProp
   const errorMessage = sessionsQuery.error?.message ?? null;
 
   return (
-    <div className="space-y-2">
-      <div className="flex flex-wrap items-center gap-2 px-1 text-xs">
-        <span className="text-[var(--text-muted)]">Outcome</span>
-        {(["all", "success", "failure", "open"] as const).map((o) => (
-          <button
-            key={o}
-            type="button"
-            onClick={() => setOutcomeFilter(o)}
-            className={cn(
-              "px-2 py-0.5 rounded border capitalize",
-              outcomeFilter === o
-                ? "border-[var(--accent)] text-[var(--accent)]"
-                : "border-[var(--border-subtle)] text-[var(--text-muted)]",
-            )}
-          >
-            {o}
-          </button>
-        ))}
-      </div>
+    <div className="space-y-space-2" data-testid="sessions-table">
       {listError ? (
         <ErrorState
           title="Could not load sessions"
@@ -156,6 +160,8 @@ export function SessionsTab({ orgId, agentId, onSelectSession }: SessionsTabProp
           loading={sessionsQuery.isLoading}
           rowKey={(s) => s.id}
           onRowClick={(s) => onSelectSession(s.id)}
+          selectable
+          defaultSort={{ key: "started_at", direction: "desc" }}
           emptyTitle="No sessions yet"
           emptyDescription="Use eden.session / begin() in the SDK to group multi-turn traces."
           hasMore={(sessionsQuery.data?.length ?? 0) >= limit}

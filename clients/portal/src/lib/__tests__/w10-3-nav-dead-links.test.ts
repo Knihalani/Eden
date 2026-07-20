@@ -72,6 +72,9 @@ describe("W10.3 nav-dead-links", () => {
       MOBILE_MORE_LINKS.map((l) => l.href),
       "mobile-more",
     );
+    // UX-P0-14: Agents stays in More (not core); Settings last OK.
+    expect(MOBILE_MORE_LINKS.some((l) => l.href === "/agents")).toBe(true);
+    expect(MOBILE_CORE_NAV.every((l) => l.href !== "/agents")).toBe(true);
   });
 
   it("next.config soft-lands every removed route (+ finops)", () => {

@@ -2,15 +2,22 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { RefreshCw, Trophy, XCircle, CheckCircle2 } from "lucide-react";
+import { CheckCircle2, ChevronDown, RefreshCw, Trophy, XCircle } from "lucide-react";
 
 import { PageHeader } from "@/components/layout/page-header";
-import { CrossLinkBar, CoreResourcePage } from "@/components/portal-os";
-import { Card } from "@/components/ui/card";
+import { CoreResourcePage } from "@/components/portal-os";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorState } from "@/components/ui/error-state";
 import { NoOrgState } from "@/components/ui/no-org-state";
+import { Panel } from "@/components/ui/panel";
 import { LoadingSkeleton } from "@/components/ui/skeleton";
 import { useOrg } from "@/hooks/use-org";
 import { learnApi } from "@/lib/api";
@@ -89,21 +96,33 @@ export default function ImproveScorecardPage() {
           description="Synthetic engineering gates only (inject budget, hot-path p95). Not organization production KPIs, quality lift, or cost."
           icon={Trophy}
           actions={
-            <Button variant="outline" size="sm" onClick={() => void load()} disabled={loading}>
-              <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />
-              Refresh
-            </Button>
+            <div className="flex flex-wrap items-center gap-space-2">
+              <Button variant="outline" size="sm" className="min-h-11" onClick={() => void load()} disabled={loading}>
+                <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />
+                Refresh
+              </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="sm" className="min-h-11" aria-label="Scorecard path links">
+                    More
+                    <ChevronDown className="h-4 w-4" aria-hidden />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="min-w-[12rem]">
+                  <DropdownMenuLabel>Go to</DropdownMenuLabel>
+                  <DropdownMenuItem asChild>
+                    <Link href="/improve">Improve</Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild>
+                    <Link href="/improve/change-impact">Change impact</Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild>
+                    <Link href="/onboarding/improvement-loop">Onboarding loop</Link>
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
           }
-        />
-      }
-      toolbar={
-        <CrossLinkBar
-          className="mb-4"
-          links={[
-            { label: "Improve", href: "/improve" },
-            { label: "Change impact", href: "/improve/change-impact" },
-            { label: "Onboarding loop", href: "/onboarding/improvement-loop" },
-          ]}
         />
       }
       table={
@@ -141,42 +160,38 @@ export default function ImproveScorecardPage() {
               }
             />
           ) : (
-            <div className="space-y-4">
-              <Card className="border-[var(--warning)]/50 bg-[var(--warning)]/10 p-4">
+            <div className="space-y-space-4">
+              <Panel tone="flat" padding="md" className="border-l-2 border-l-[var(--warning)]">
                 <p className="text-sm font-semibold text-[var(--warning)]">
                   Synthetic process gate — not org KPIs
                 </p>
-                <p className="mt-1 text-xs text-[var(--text-muted)]">
-                  This scorecard is a local microbench used as an engineering process gate
-                  (inject budget, hot-path latency). It does not reflect your organization&apos;s
-                  production quality, lift, cost, or customer outcomes.
+                <p className="mt-space-1 text-xs text-[var(--text-muted)]">
+                  Local microbench for inject budget and hot-path latency — not org production quality, lift, or cost.
                 </p>
-              </Card>
+              </Panel>
 
-              <Card
+              <div
                 className={cn(
-                  "flex items-center gap-3 p-4",
-                  failed
-                    ? "border-[var(--error)]/40 bg-[var(--error)]/5"
-                    : "border-[var(--terminal)]/40 bg-[var(--terminal)]/5",
+                  "flex items-center gap-space-3 border-b border-[var(--border-subtle)] py-space-3",
+                  failed ? "text-[var(--error)]" : "text-[var(--terminal)]",
                 )}
               >
                 {failed ? (
-                  <XCircle className="h-6 w-6 text-[var(--error)]" />
+                  <XCircle className="h-5 w-5 shrink-0" />
                 ) : (
-                  <CheckCircle2 className="h-6 w-6 text-[var(--terminal)]" />
+                  <CheckCircle2 className="h-5 w-5 shrink-0" />
                 )}
                 <div>
-                  <p className="text-sm font-semibold">
+                  <p className="text-sm font-semibold text-[var(--text-primary)]">
                     {failed ? "Process gates failed" : "All process gates passed"}
                   </p>
                   <p className="text-xs text-[var(--text-muted)]">
-                    Suite: {String(metrics.suite ?? "smoke")} · synthetic microbench (not org KPIs)
+                    Suite: {String(metrics.suite ?? "smoke")} · synthetic microbench
                   </p>
                 </div>
-              </Card>
+              </div>
 
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              <div className="grid gap-space-3 sm:grid-cols-2 lg:grid-cols-3">
                 {Object.entries(metrics)
                   .filter(([k]) => k !== "suite" && k !== "full_suite")
                   .map(([k, v]) => {
@@ -186,26 +201,29 @@ export default function ImproveScorecardPage() {
                     };
                     const synthetic = SYNTHETIC_KEYS.has(k);
                     return (
-                      <Card key={k} className="p-4">
-                        <div className="flex items-start justify-between gap-2">
+                      <div
+                        key={k}
+                        className="border-b border-[var(--border-subtle)] py-space-3 last:border-0 sm:border sm:border-[var(--border-subtle)] sm:rounded-md sm:px-space-3 sm:last:border"
+                      >
+                        <div className="flex items-start justify-between gap-space-2">
                           <p className="text-xs text-[var(--text-muted)]">{meta.label}</p>
                           {synthetic ? (
-                            <span className="shrink-0 text-[10px] uppercase tracking-wide text-[var(--warning)]">
+                            <span className="shrink-0 text-2xs uppercase tracking-wide text-[var(--warning)]">
                               synthetic
                             </span>
                           ) : (
-                            <span className="shrink-0 text-[10px] uppercase tracking-wide text-[var(--text-muted)]">
+                            <span className="shrink-0 text-2xs uppercase tracking-wide text-[var(--text-muted)]">
                               process gate
                             </span>
                           )}
                         </div>
-                        <p className="mt-1 text-lg font-semibold tabular-nums">
+                        <p className="mt-space-1 text-lg font-semibold tabular-nums">
                           {formatMetric(k, v)}
                         </p>
                         {meta.hint ? (
-                          <p className="mt-1 text-[11px] text-[var(--text-muted)]">{meta.hint}</p>
+                          <p className="mt-space-1 text-2xs text-[var(--text-muted)]">{meta.hint}</p>
                         ) : null}
-                      </Card>
+                      </div>
                     );
                   })}
               </div>

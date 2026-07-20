@@ -17,10 +17,10 @@ export interface EmptyStateProps {
   terminal?: React.ReactNode;
   size?: "sm" | "md" | "lg";
   /**
-   * `panel` — wrap the empty state in a bordered Card surface (default).
-   * `plain` — flat, no surface, just centred content. Use when the
-   * parent already provides the surface and the empty state shouldn't
-   * double-frame it.
+   * `plain` — flat, no surface, just centred content (default). Quieter
+   * chrome; use when the parent already provides the surface.
+   * `panel` — wrap in a bordered Card surface when a standalone frame
+   * is needed.
    * `terminal` — replace the icon with the `terminal` slot. Use for
    * data-product empty states where a "this is what you'd see" preview
    * sells the value better than an icon.
@@ -39,22 +39,22 @@ const SIZE_STYLES: Record<NonNullable<EmptyStateProps["size"]>, {
   description: string;
 }> = {
   sm: {
-    wrap: "py-4",
-    iconWrap: "w-8 h-8 mb-2",
+    wrap: "py-space-4",
+    iconWrap: "w-8 h-8 mb-space-2",
     icon: "w-4 h-4",
     title: "text-xs",
     description: "text-xs",
   },
   md: {
-    wrap: "py-8",
-    iconWrap: "w-10 h-10 mb-3",
+    wrap: "py-space-6",
+    iconWrap: "w-10 h-10 mb-space-3",
     icon: "w-5 h-5",
     title: "text-sm",
     description: "text-sm",
   },
   lg: {
-    wrap: "py-12",
-    iconWrap: "w-12 h-12 mb-4",
+    wrap: "py-space-8",
+    iconWrap: "w-12 h-12 mb-space-4",
     icon: "w-6 h-6",
     title: "text-base",
     description: "text-sm",
@@ -68,7 +68,7 @@ export function EmptyState({
   action,
   terminal,
   size = "md",
-  variant = "panel",
+  variant = "plain",
   className,
   titleId,
 }: EmptyStateProps) {
@@ -78,7 +78,7 @@ export function EmptyState({
   const inner = (
     <>
       {variant === "terminal" && terminal ? (
-        <div className="mb-5 mx-auto max-w-md" aria-hidden={true}>
+        <div className="mb-space-5 mx-auto max-w-md" aria-hidden={true}>
           {terminal}
         </div>
       ) : (
@@ -103,14 +103,14 @@ export function EmptyState({
       {description && (
         <p
           className={cn(
-            "text-[var(--text-muted)] mt-1 max-w-md mx-auto leading-relaxed",
+            "text-[var(--text-muted)] mt-space-1 max-w-md mx-auto leading-relaxed",
             s.description,
           )}
         >
           {description}
         </p>
       )}
-      {action && <div className="mt-4">{action}</div>}
+      {action && <div className="mt-space-4">{action}</div>}
     </>
   );
 
@@ -122,7 +122,7 @@ export function EmptyState({
         aria-atomic="true"
         aria-labelledby={headingId}
         className={cn(
-          "rounded-xl border border-[var(--border-default)] bg-[var(--bg-primary)] text-center p-6",
+          "rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-primary)] text-center p-space-5",
           s.wrap,
           className,
         )}

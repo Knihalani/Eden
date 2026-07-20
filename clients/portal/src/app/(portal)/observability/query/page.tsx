@@ -18,20 +18,11 @@ import { ErrorState } from "@/components/ui/error-state";
 import { NoOrgState } from "@/components/ui/no-org-state";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { PageHeader } from "@/components/layout/page-header";
 import { PageContent } from "@/components/layout/page-content";
-import {
-  Search,
-  Loader2,
-  Code2,
-  AlertTriangle,
-  CheckCircle2,
-  Sparkles,
-  ListChecks,
-  Bell,
-  Play,
-} from "lucide-react";
+import { ObserveLeafHeader } from "@/app/(portal)/observability/_components/observe-leaf-shell";
+import { Search, Code2, AlertTriangle, CheckCircle2, Sparkles, ListChecks, Bell, Play } from "lucide-react";
 import { Card } from "@/components/ui/card";
+import { STICKY_FIRST_TD, STICKY_FIRST_TH } from "@/components/ui/table-sticky";
 import { errorFromCaught } from "@/lib/safe-error-message";
 
 // Valid leading SELECT example from docs/docs/observability/19-trace-query-dsl.md
@@ -287,11 +278,10 @@ export default function QueryDslPage() {
 
   return (
     <PageContent size="wide">
-      <PageHeader
+      <ObserveLeafHeader
         title="Query"
         subtitle="Trace Query DSL with EQL syntax over the columnar engine"
         icon={Sparkles}
-        eyebrow="Observe"
       />
 
       {error ? (
@@ -308,8 +298,8 @@ export default function QueryDslPage() {
         />
       ) : null}
 
-      <div className="grid lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 space-y-4">
+      <div className="grid lg:grid-cols-3 gap-space-5">
+        <div className="lg:col-span-2 space-y-space-4">
           <Card padding="md" className="space-y-3">
             <h3 className="text-sm font-semibold text-[var(--text-primary)] flex items-center gap-2">
               <Code2 className="w-4 h-4 text-[var(--accent)]" />
@@ -326,41 +316,25 @@ export default function QueryDslPage() {
               placeholder="SELECT trace_id FROM telemetry_events WHERE root.event_type = 'agent.run'"
             />
             <div className="flex flex-wrap gap-2 items-center">
-              <button
-                onClick={runParse}
-                disabled={activeOp !== null}
-                className="inline-flex items-center gap-2 px-3 py-1.5 bg-[var(--bg-tertiary)] text-[var(--text-primary)] rounded-lg text-xs font-medium hover:bg-[var(--border-default)] disabled:opacity-50 transition-colors"
-              >
-                {activeOp === "parse" ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Code2 className="w-3.5 h-3.5" />}
-                Parse
-              </button>
-              <button
-                onClick={runLint}
-                disabled={activeOp !== null}
-                className="inline-flex items-center gap-2 px-3 py-1.5 bg-[var(--bg-tertiary)] text-[var(--text-primary)] rounded-lg text-xs font-medium hover:bg-[var(--border-default)] disabled:opacity-50 transition-colors"
-              >
-                {activeOp === "lint" ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ListChecks className="w-3.5 h-3.5" />}
-                Lint
-              </button>
-              <button
-                onClick={runResolve}
-                disabled={activeOp !== null}
-                className="inline-flex items-center gap-2 px-3 py-1.5 bg-[var(--bg-tertiary)] text-[var(--text-primary)] rounded-lg text-xs font-medium hover:bg-[var(--border-default)] disabled:opacity-50 transition-colors"
-              >
-                {activeOp === "resolve" ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
-                Resolve
-              </button>
-              <button
-                onClick={runExecute}
-                disabled={activeOp !== null}
-                className="inline-flex items-center gap-2 px-3 py-1.5 bg-[var(--accent)] text-[var(--bg-base)] rounded-lg text-xs font-medium hover:bg-[var(--accent-hover)] disabled:opacity-50 transition-colors"
-              >
-                {activeOp === "run" ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Play className="w-3.5 h-3.5" />}
+              <Button variant="secondary" size="sm" className="min-h-11" onClick={runParse} disabled={activeOp !== null} loading={activeOp === "parse"}>
+            <Code2 className="w-3.5 h-3.5" />
+            Parse
+          </Button>
+              <Button variant="secondary" size="sm" className="min-h-11" onClick={runLint} disabled={activeOp !== null} loading={activeOp === "lint"}>
+            <ListChecks className="w-3.5 h-3.5" />
+            Lint
+          </Button>
+              <Button variant="secondary" size="sm" className="min-h-11" onClick={runResolve} disabled={activeOp !== null} loading={activeOp === "resolve"}>
+            <Sparkles className="w-3.5 h-3.5" />
+            Resolve
+          </Button>
+              <Button variant="default" className="min-h-11" onClick={runExecute} disabled={activeOp !== null} loading={activeOp === "run"}>
+                <Play className="w-3.5 h-3.5" />
                 Run
-              </button>
+              </Button>
               <Link
                 href="/observability/cohorts"
-                className="text-[11px] text-[var(--text-muted)] hover:text-[var(--text-primary)] underline-offset-2 hover:underline ml-1"
+                className="text-xs text-[var(--text-muted)] hover:text-[var(--text-primary)] underline-offset-2 hover:underline ml-1"
               >
                 Or run SQL in Columnar Engine →
               </Link>
@@ -379,11 +353,11 @@ export default function QueryDslPage() {
                   {parseResult.warnings.length === 1 ? "" : "s"}
                 </p>
               )}
-              <pre className="text-[11px] font-mono text-[var(--text-secondary)] bg-[var(--bg-secondary)] rounded-lg p-3 overflow-x-auto max-h-[300px]">
+              <pre className="text-xs font-mono text-[var(--text-secondary)] bg-[var(--bg-secondary)] rounded-lg p-3 overflow-x-auto max-h-[300px]">
                 {parseResult.clickhouse_sql}
               </pre>
               {parseResult.relational_fields_used.length > 0 && (
-                <p className="text-[11px] text-[var(--text-muted)] mt-2">
+                <p className="text-xs text-[var(--text-muted)] mt-2">
                   Relational fields: {parseResult.relational_fields_used.join(", ")}
                 </p>
               )}
@@ -417,7 +391,7 @@ export default function QueryDslPage() {
 
           {resolveResult && (
             <ResultCard title="Resolved SQL" icon={Sparkles}>
-              <pre className="text-[11px] font-mono text-[var(--text-secondary)] bg-[var(--bg-secondary)] rounded-lg p-3 overflow-x-auto">
+              <pre className="text-xs font-mono text-[var(--text-secondary)] bg-[var(--bg-secondary)] rounded-lg p-3 overflow-x-auto">
                 {resolveResult.expanded_query}
               </pre>
               {(resolveResult.warnings?.length ?? 0) > 0 && (
@@ -432,16 +406,22 @@ export default function QueryDslPage() {
 
           {runResult && (
             <ResultCard title="Run results" icon={Play}>
-              <p className="text-[11px] text-[var(--text-muted)] mb-2">
+              <p className="text-xs text-[var(--text-muted)] mb-2">
                 {runResult.row_count} row{runResult.row_count === 1 ? "" : "s"}
                 {runResult.data_source ? ` · ${runResult.data_source}` : ""}
               </p>
               <div className="overflow-x-auto max-h-[320px]">
-                <table className="w-full text-[11px] font-mono">
+                <table className="w-full text-xs font-mono">
                   <thead>
                     <tr className="text-left text-[var(--text-muted)]">
-                      {runResult.columns.map((c) => (
-                        <th key={c} className="px-2 py-1 border-b border-[var(--border-default)] font-medium">
+                      {runResult.columns.map((c, colIdx) => (
+                        <th
+                          key={c}
+                          className={cn(
+                            "px-2 py-1 border-b border-[var(--border-default)] font-medium",
+                            colIdx === 0 && STICKY_FIRST_TH,
+                          )}
+                        >
                           {c}
                         </th>
                       ))}
@@ -450,10 +430,16 @@ export default function QueryDslPage() {
                   <tbody>
                     {runResult.rows.slice(0, 50).map((row, i) => (
                       <tr key={i} className="text-[var(--text-secondary)]">
-                        {runResult.columns.map((c) => {
+                        {runResult.columns.map((c, colIdx) => {
                           const cell = row[c];
                           return (
-                            <td key={c} className="px-2 py-1 border-b border-[var(--border-subtle)] truncate max-w-[220px]">
+                            <td
+                              key={c}
+                              className={cn(
+                                "px-2 py-1 border-b border-[var(--border-subtle)] truncate max-w-[220px]",
+                                colIdx === 0 && STICKY_FIRST_TD,
+                              )}
+                            >
                               {cell === null || cell === undefined ? "null" : String(cell)}
                             </td>
                           );
@@ -473,7 +459,7 @@ export default function QueryDslPage() {
             </h3>
             <div className="grid sm:grid-cols-2 gap-3">
               <div>
-                <label className="text-[11px] font-medium text-[var(--text-muted)] mb-1 block uppercase tracking-wide">
+                <label className="text-xs font-medium text-[var(--text-muted)] mb-1 block uppercase tracking-wide">
                   Name
                 </label>
                 <input
@@ -484,7 +470,7 @@ export default function QueryDslPage() {
                 />
               </div>
               <div>
-                <label className="text-[11px] font-medium text-[var(--text-muted)] mb-1 block uppercase tracking-wide">
+                <label className="text-xs font-medium text-[var(--text-muted)] mb-1 block uppercase tracking-wide">
                   Severity
                 </label>
                 <select
@@ -499,14 +485,10 @@ export default function QueryDslPage() {
                 </select>
               </div>
             </div>
-            <button
-              onClick={handleCompileAlert}
-              disabled={compiling}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-[var(--accent)] text-[var(--bg-base)] rounded-lg text-sm font-medium hover:bg-[var(--accent-hover)] disabled:opacity-50 transition-colors"
-            >
-              {compiling ? <Loader2 className="w-4 h-4 animate-spin" /> : <Bell className="w-4 h-4" />}
-              Compile alert
-            </button>
+            <Button variant="default" className="min-h-11" onClick={handleCompileAlert} loading={compiling}>
+            <Bell className="w-4 h-4" />
+            Compile alert
+          </Button>
 
             {compileResult && (
               <div className="mt-2 px-3 py-2 rounded-lg bg-[var(--terminal-faint)] text-xs text-[var(--terminal)] flex items-center gap-2">
@@ -524,13 +506,15 @@ export default function QueryDslPage() {
                 <Bell className="w-4 h-4 text-[var(--accent)]" />
                 Compiled Alerts
               </h3>
-              <button
+              <Button
+                variant="ghost"
+                size="sm"
                 onClick={loadAlerts}
-                disabled={alertsLoading}
-                className="text-xs text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors"
+                loading={alertsLoading}
+                aria-label="Refresh compiled alerts"
               >
-                {alertsLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "Refresh"}
-              </button>
+                Refresh
+              </Button>
             </div>
             {alertsQuery.isError ? (
               <ErrorState
@@ -565,7 +549,7 @@ export default function QueryDslPage() {
                       <span className="text-sm font-medium text-[var(--text-primary)] truncate">{a.name}</span>
                       <span
                         className={cn(
-                          "text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded-full font-medium flex-shrink-0",
+                          "text-2xs uppercase tracking-wide px-1.5 py-0.5 rounded-full font-medium flex-shrink-0",
                           a.severity === "critical"
                             ? "bg-[var(--error-bg)] text-[var(--error)]"
                             : a.severity === "high"
@@ -578,8 +562,8 @@ export default function QueryDslPage() {
                         {a.severity}
                       </span>
                     </div>
-                    <p className="text-[10px] text-[var(--text-muted)] font-mono mt-0.5 truncate">{a.alert_id}</p>
-                    <p className="text-[10px] text-[var(--text-muted)] mt-0.5">
+                    <p className="text-2xs text-[var(--text-muted)] font-mono mt-0.5 truncate">{a.alert_id}</p>
+                    <p className="text-2xs text-[var(--text-muted)] mt-0.5">
                       {a.last_fired_at
                         ? `Last fired ${new Date(a.last_fired_at).toLocaleString()}`
                         : "Never fired"}
@@ -607,8 +591,8 @@ function LintRow({ warning: w }: { warning: DslLintWarning }) {
             : "bg-[var(--bg-tertiary)] text-[var(--text-secondary)]",
       )}
     >
-      <span className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-[var(--bg-base)]/40">{w.code}</span>
-      <span className="font-medium uppercase text-[10px] tracking-wide opacity-80">{w.severity}</span>
+      <span className="font-mono text-2xs px-1.5 py-0.5 rounded bg-[var(--bg-base)]/40">{w.code}</span>
+      <span className="font-medium uppercase text-2xs tracking-wide opacity-80">{w.severity}</span>
       <span className="flex-1">{w.message}</span>
     </li>
   );

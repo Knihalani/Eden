@@ -17,7 +17,6 @@ import Link from "next/link";
 import { useEffect, useMemo, useRef } from "react";
 import { Activity, BarChart3, Brain, Compass, History, Network, Sparkles, ArrowRight, TrendingUp, Zap, DollarSign, AlertOctagon, Bot, LineChart, RefreshCw, Radio } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
-import { PageHeader } from "@/components/layout/page-header";
 import { PageContent } from "@/components/layout/page-content";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -29,6 +28,7 @@ import { queryKeys } from "@/lib/query-keys";
 import { api, agentsApi } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { SelectedTraceRail } from "./_components/SelectedTraceCard";
+import { ObserveLeafHeader } from "./_components/observe-leaf-shell";
 interface SubPage {
   href: string;
   title: string;
@@ -266,20 +266,21 @@ export default function ObservabilityLanding() {
 
   // Real (non-404) summary failure with no cached data to fall back
   // on — show a retry rather than a hub full of misleading zeros.
+  // Real (non-404) summary failure with no cached data to fall back
+  // on — show a retry rather than a hub full of misleading zeros.
   if (summaryQuery.isError && !summaryQuery.data) {
     return (
       <PageContent size="wide">
-        <PageHeader
-          eyebrow="Observe"
+        <ObserveLeafHeader
           title="Observability"
-          subtitle="Inspect, evaluate, and replay every interaction in your agent stack"
+          subtitle="Advanced Observe tools — primary work lives on Traces"
           icon={Activity}
         />
         <ErrorState
           title="Could not load observability data"
           message={summaryQuery.error?.message}
           action={
-            <Button onClick={() => void summaryQuery.refetch()} variant="outline" size="default">
+            <Button onClick={() => void summaryQuery.refetch()} variant="outline" size="default" className="min-h-11">
               <RefreshCw className="h-4 w-4" />
               Try again
             </Button>
@@ -291,50 +292,48 @@ export default function ObservabilityLanding() {
 
   return (
     <PageContent size="wide">
-      <PageHeader
-        eyebrow="Observe"
+      <ObserveLeafHeader
         title="Observability"
-        subtitle="Inspect, evaluate, and replay every interaction in your agent stack"
+        subtitle="Advanced Observe tools — primary work lives on Traces"
         icon={Activity}
+        actions={
+          <Button asChild variant="outline" className="min-h-11">
+            <Link href="/traces">Open Traces</Link>
+          </Button>
+        }
       />
 
-      <div className="space-y-6">
-        {/* Pattern 4.4 (Honeycomb) — When the URL carries ?trace_id=…,
-            the SelectedTraceRail renders as a sticky sidebar on lg+
-            viewports. On mobile it stacks above the KPI tiles. */}
-        <div className="flex flex-col lg:flex-row gap-6">
-          <div className="flex-1 min-w-0 space-y-6">
+      <div className="space-y-space-5">
+        <div className="flex flex-col lg:flex-row gap-space-5">
+          <div className="flex-1 min-w-0 space-y-space-5">
             <section>
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-space-3">
                 {deltaTiles.map(tile => <KpiTile key={tile.key} icon={tile.icon} label={tile.label} value={tile.value} delta={tile.delta} good={tile.good} format={tile.format} href={tile.href} tone={tile.tone} loading={loading} />)}
               </div>
             </section>
 
-            {/* Pattern 3.5 (Datadog) — Watchdog Insights carousel.
-                Hides entirely when there are no insights (cold start). */}
             {insights.length > 0 && <InsightsCarousel insights={insights} />}
 
-            {/* Sub-page cards */}
             <section>
-              <header className="flex items-center justify-between mb-3">
+              <header className="flex items-center justify-between mb-space-3">
                 <h2 className="text-base font-semibold text-[var(--text-primary)]">
-                  Drill into
+                  Advanced tools
                 </h2>
                 <span className="text-xs text-[var(--text-muted)]">
-                  {SUBPAGES.length} surfaces
+                  {SUBPAGES.length} under Traces
                 </span>
               </header>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-space-4">
                 {SUBPAGES.map(s => <Link key={s.href} href={s.href} className="group">
-                    <Card variant="interactive" className={cn("h-full p-5 transition-all duration-150", "hover:border-[var(--accent)]/50")}>
-                      <div className="flex items-start justify-between mb-3">
-                        <s.icon className="h-6 w-6 text-[var(--accent)]" />
+                    <Card variant="interactive" className={cn("h-full p-space-4 transition-all duration-150", "hover:border-[var(--accent)]/50")}>
+                      <div className="flex items-start justify-between mb-space-3">
+                        <s.icon className="h-5 w-5 text-[var(--accent)]" />
                         <ArrowRight className="h-4 w-4 text-[var(--text-muted)] opacity-0 group-hover:opacity-100 group-hover:translate-x-0.5 transition-all" />
                       </div>
-                      <h3 className="text-base font-semibold text-[var(--text-primary)] group-hover:text-[var(--accent)] transition-colors">
+                      <h3 className="text-sm font-semibold text-[var(--text-primary)] group-hover:text-[var(--accent)] transition-colors">
                         {s.title}
                       </h3>
-                      <p className="mt-1 text-sm text-[var(--text-secondary)] line-clamp-2">
+                      <p className="mt-space-1 text-xs text-[var(--text-secondary)] line-clamp-2">
                         {s.description}
                       </p>
                     </Card>
@@ -342,8 +341,8 @@ export default function ObservabilityLanding() {
               </div>
             </section>
 
-            <p className="pt-2 text-center text-xs text-[var(--text-muted)]">
-              Looking for the trace list? It moved to{" "}
+            <p className="pt-space-2 text-center text-xs text-[var(--text-muted)]">
+              Trace list and primary Observe chrome live on{" "}
               <Link href="/traces" className="text-[var(--accent)] hover:underline">
                 /traces
               </Link>
@@ -351,9 +350,6 @@ export default function ObservabilityLanding() {
             </p>
           </div>
 
-          {/* Pattern 4.4 — sticky right rail. SelectedTraceRail returns
-              null when no ?trace_id is present, so the layout collapses
-              to a single column cleanly. */}
           <SelectedTraceRail />
         </div>
       </div>
@@ -409,17 +405,17 @@ function KpiTile({
   // "good" direction decides which colour the delta badge uses —
   // lower error rate is good, so a -12% delta gets a green badge.
   const deltaIsGood = delta != null && deltaIsPositive === (good === "up");
-  return <Link href={href} className={cn("block bg-[var(--bg-primary)] rounded-xl p-4 border border-[var(--border-default)] h-full", "hover:border-[var(--accent)]/40 transition-colors")}>
-      <div className="flex items-center justify-between mb-2">
-        <div className="flex items-center gap-2 min-w-0">
-          <div className={cn("p-1.5 rounded-md shrink-0", toneClass)}>
+  return <Link href={href} className={cn("block bg-[var(--bg-primary)] rounded-xl p-space-4 border border-[var(--border-default)] h-full", "hover:border-[var(--accent)]/40 transition-colors")}>
+      <div className="flex items-center justify-between mb-space-2">
+        <div className="flex items-center gap-space-2 min-w-0">
+          <div className={cn("p-space-1 rounded-md shrink-0", toneClass)}>
             <Icon className="h-3.5 w-3.5" />
           </div>
-          <span className="text-[10px] uppercase tracking-wider text-[var(--text-muted)] font-medium truncate">
+          <span className="text-2xs uppercase tracking-wider text-[var(--text-muted)] font-medium truncate">
             {label}
           </span>
         </div>
-        {deltaText && <span className={cn("text-[10px] font-mono font-medium px-1.5 py-0.5 rounded shrink-0", deltaIsGood ? "text-[var(--terminal)] bg-[var(--terminal-faint)]" : "text-[var(--error)] bg-[var(--error-dim)]")} title={`${deltaText} vs previous period`}>
+        {deltaText && <span className={cn("text-2xs font-mono font-medium px-space-1 py-space-1 rounded shrink-0", deltaIsGood ? "text-[var(--terminal)] bg-[var(--terminal-faint)]" : "text-[var(--error)] bg-[var(--error-dim)]")} title={`${deltaText} vs previous period`}>
             {deltaText}
           </span>}
       </div>
@@ -482,10 +478,10 @@ function InsightCard({
   const sevColor = insight.severity === "high" ? "text-[var(--error)]" : insight.severity === "medium" ? "text-[var(--warning)]" : "text-[var(--text-muted)]";
   return <div className={cn("snap-start shrink-0 w-72 rounded-xl border p-4 flex flex-col gap-2", sevTone)}>
       <div className="flex items-center justify-between">
-        <span className={cn("text-[10px] font-bold uppercase tracking-wider", sevColor)}>
+        <span className={cn("text-2xs font-bold uppercase tracking-wider", sevColor)}>
           {sevLabel}
         </span>
-        <Link href={insight.href} className="text-[11px] text-[var(--accent)] hover:underline inline-flex items-center gap-1">
+        <Link href={insight.href} className="text-xs text-[var(--accent)] hover:underline inline-flex items-center gap-1">
           Open <ArrowRight className="w-3 h-3" />
         </Link>
       </div>

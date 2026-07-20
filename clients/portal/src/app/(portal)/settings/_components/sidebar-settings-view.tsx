@@ -102,7 +102,7 @@ export function SidebarSettingsView({ embedded = false }: SidebarSettingsPagePro
 
   const body = <div className="space-y-8">
         {/* Density */}
-        <Card padding="lg" as="section" className="space-y-3">
+        <Card padding="lg" as="section" className="space-y-space-3">
           <h2 className="text-sm font-semibold text-[var(--text-primary)]">Density</h2>
           <p className="text-xs text-[var(--text-muted)]">
             Make the sidebar more compact by reducing the item height and gap.
@@ -115,7 +115,7 @@ export function SidebarSettingsView({ embedded = false }: SidebarSettingsPagePro
         </Card>
 
         {/* Pinned items */}
-        <Card padding="lg" as="section" className="space-y-3">
+        <Card padding="lg" as="section" className="space-y-space-3">
           <h2 className="text-sm font-semibold text-[var(--text-primary)]">
             Pinned items <span className="text-[var(--text-muted)] font-normal">({pinnedItems.length})</span>
           </h2>
@@ -139,12 +139,14 @@ export function SidebarSettingsView({ embedded = false }: SidebarSettingsPagePro
         </Card>
 
         {/* Group order */}
-        <Card padding="lg" as="section" className="space-y-3">
+        <Card padding="lg" as="section" className="space-y-space-3">
           <div className="flex items-center justify-between">
             <h2 className="text-sm font-semibold text-[var(--text-primary)]">Group order</h2>
-            {reordering && <button onClick={commitReorder} className="px-3 py-1 text-xs font-medium bg-[var(--accent)] text-[var(--accent-foreground)] rounded-md hover:bg-[var(--accent-hover)]">
+            {reordering && (
+              <Button variant="default" size="sm" onClick={commitReorder}>
                 Save order
-              </button>}
+              </Button>
+            )}
           </div>
           <ol className="space-y-1">
             {draftOrder.map((groupId, idx) => {
@@ -169,7 +171,7 @@ export function SidebarSettingsView({ embedded = false }: SidebarSettingsPagePro
         </Card>
 
         {/* All items — pin / hide toggles */}
-        <Card padding="lg" as="section" className="space-y-3">
+        <Card padding="lg" as="section" className="space-y-space-3">
           <h2 className="text-sm font-semibold text-[var(--text-primary)]">All items</h2>
           <p className="text-xs text-[var(--text-muted)]">
             Pin items to surface them at the top of the sidebar, or hide them entirely.
@@ -204,7 +206,7 @@ export function SidebarSettingsView({ embedded = false }: SidebarSettingsPagePro
         </Card>
 
         {/* Live preview */}
-        <Card padding="lg" as="section" className="space-y-3">
+        <Card padding="lg" as="section" className="space-y-space-3">
           <h2 className="text-sm font-semibold text-[var(--text-primary)]">Live preview</h2>
           <p className="text-xs text-[var(--text-muted)]">
             This is what your sidebar will look like.
@@ -240,7 +242,7 @@ export function SidebarSettingsView({ embedded = false }: SidebarSettingsPagePro
       </div>;
 
   if (embedded) {
-    return <div className="space-y-6">
+    return <div className="space-y-space-6">
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <Settings2 className="w-4 h-4 text-[var(--text-muted)]" />

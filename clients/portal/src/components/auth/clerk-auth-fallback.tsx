@@ -92,12 +92,12 @@ export function ClerkAuthFallback({ children, formLabel }: ClerkAuthFallbackProp
 
   if (mountState === "failed" || !clerk) {
     return (
-      <div className="w-full max-w-md space-y-4">
+      <div className="w-full max-w-md space-y-space-4">
         <div
           role="alert"
-          className="rounded-xl border border-[var(--border-default)] bg-[var(--bg-primary)] p-6"
+          className="rounded-xl border border-[var(--border-default)] bg-[var(--bg-primary)] p-space-5"
         >
-          <div className="flex items-start gap-3">
+          <div className="flex items-start gap-space-3">
             <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-[var(--warning)]/30 bg-[var(--warning)]/10">
               <AlertTriangle className="h-4 w-4 text-[var(--warning)]" />
             </div>
@@ -105,22 +105,22 @@ export function ClerkAuthFallback({ children, formLabel }: ClerkAuthFallbackProp
               <p className="text-sm font-semibold text-[var(--text-primary)]">
                 Auth provider unavailable
               </p>
-              <p className="mt-1 text-[13px] leading-relaxed text-[var(--text-muted)]">
+              <p className="mt-space-1 text-sm leading-relaxed text-[var(--text-muted)]">
                 We can&rsquo;t load the {formLabel === "sign-in" ? "sign-in" : "sign-up"} form
                 right now. The auth service may be temporarily unreachable, or
                 the deployment is missing a configuration value.
               </p>
-              <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:items-center">
+              <div className="mt-space-4 flex flex-col gap-space-2 sm:flex-row sm:items-center">
                 <button
                   type="button"
                   onClick={() => window.location.reload()}
-                  className="inline-flex min-h-11 items-center justify-center rounded-lg border border-[var(--border-default)] bg-[var(--bg-secondary)] px-4 text-sm font-medium text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)]"
+                  className="inline-flex min-h-11 items-center justify-center rounded-lg border border-[var(--border-default)] bg-[var(--bg-secondary)] px-space-4 text-sm font-medium text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)]"
                 >
                   Try again
                 </button>
                 <a
                   href="mailto:security@eden.dev?subject=Auth%20provider%20unavailable"
-                  className="inline-flex items-center gap-1.5 text-sm font-medium text-[var(--accent)] hover:text-[var(--accent-hover)]"
+                  className="inline-flex min-h-11 items-center gap-space-2 text-sm font-medium text-[var(--accent)] hover:text-[var(--accent-hover)]"
                 >
                   <Mail className="h-3.5 w-3.5" />
                   Email security@eden.dev
@@ -130,34 +130,34 @@ export function ClerkAuthFallback({ children, formLabel }: ClerkAuthFallbackProp
           </div>
         </div>
         <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-base)] overflow-hidden">
-          <div className="flex items-center gap-2 px-4 py-2.5 border-b border-[var(--border-subtle)] bg-[var(--bg-secondary)]/50">
-            <span aria-hidden className="flex gap-1.5">
+          <div className="flex items-center gap-space-2 px-space-4 py-space-3 border-b border-[var(--border-subtle)] bg-[var(--bg-secondary)]/50">
+            <span aria-hidden className="flex gap-space-2">
               <span className="w-2 h-2 rounded-full bg-[var(--text-faint)]" />
               <span className="w-2 h-2 rounded-full bg-[var(--text-faint)]" />
               <span className="w-2 h-2 rounded-full bg-[var(--text-faint)]" />
             </span>
-            <span className="ml-1 text-[10px] font-mono uppercase tracking-[0.18em] text-[var(--text-muted)]">
+            <span className="ml-space-1 text-2xs font-mono uppercase tracking-[0.18em] text-[var(--text-muted)]">
               Meanwhile, try the SDK
             </span>
           </div>
-          <div className="p-4 font-mono text-[13px] leading-relaxed text-[var(--text-secondary)]">
+          <div className="p-space-4 font-mono text-sm leading-relaxed text-[var(--text-secondary)]">
             <div className="text-[var(--text-faint)]"># install the SDK</div>
-            <div className="mt-1.5">
+            <div className="mt-space-2">
               <span className="text-[var(--accent)]">$</span>{" "}
               <span className="text-[var(--text-primary)]">pip install eden-sdk</span>
             </div>
             <div className="text-[var(--text-faint)]"># create or join an org, then get an API key</div>
-            <div className="mt-1.5 break-all">
+            <div className="mt-space-2 break-all">
               <span className="text-[var(--accent)]">$</span>{" "}
               <span className="text-[var(--text-primary)]">export EDEN_API_KEY=…</span>
             </div>
-            <div className="mt-3 text-[var(--text-faint)]"># send your first trace</div>
-            <div className="mt-1.5">
+            <div className="mt-space-3 text-[var(--text-faint)]"># send your first trace</div>
+            <div className="mt-space-2">
               <a
                 href={DOCS_QUICKSTART_URL}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center gap-1.5 text-[var(--accent)] hover:text-[var(--accent-hover)]"
+                className="inline-flex items-center gap-space-2 text-[var(--accent)] hover:text-[var(--accent-hover)]"
               >
                 Docs quickstart
                 <ExternalLink className="h-3 w-3" aria-hidden />
@@ -194,19 +194,19 @@ function ClerkFormSkeleton({
   return (
     <div
       aria-hidden="true"
-      className="pointer-events-none absolute inset-0 flex flex-col gap-3 bg-[var(--bg-secondary)]"
+      className="pointer-events-none absolute inset-0 flex flex-col gap-space-3 bg-[var(--bg-secondary)]"
     >
       <div className="h-10 w-full rounded-md border border-[var(--border-default)] bg-[var(--bg-primary)]/80" />
       <div className="h-10 w-full rounded-md border border-[var(--border-default)] bg-[var(--bg-primary)]/80" />
-      <div className="mt-1 h-10 w-full rounded-md border border-[var(--accent)]/25 bg-[var(--accent)]/5" />
-      <div className="mt-3 flex items-center gap-3 text-[10px] font-mono uppercase tracking-[0.18em] text-[var(--text-muted)]">
+      <div className="mt-space-1 h-10 w-full rounded-md border border-[var(--accent)]/25 bg-[var(--accent)]/5" />
+      <div className="mt-space-3 flex items-center gap-space-3 text-2xs font-mono uppercase tracking-[0.18em] text-[var(--text-muted)]">
         <span className="h-px flex-1 bg-[var(--border-subtle)]" />
         or
         <span className="h-px flex-1 bg-[var(--border-subtle)]" />
       </div>
       <div className="h-10 w-full rounded-md border border-[var(--border-default)] bg-[var(--bg-primary)]/60" />
       <div className="h-10 w-full rounded-md border border-[var(--border-default)] bg-[var(--bg-primary)]/60" />
-      <p className="mt-2 text-center text-[10px] font-mono uppercase tracking-[0.2em] text-[var(--text-muted)]">
+      <p className="mt-space-2 text-center text-2xs font-mono uppercase tracking-[0.2em] text-[var(--text-muted)]">
         {formLabel === "sign-in" ? "loading sign-in" : "loading sign-up"}
       </p>
     </div>

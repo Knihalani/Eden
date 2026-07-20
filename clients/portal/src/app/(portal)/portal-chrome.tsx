@@ -43,13 +43,10 @@ import { buildBreadcrumbs } from "@/lib/breadcrumbs";
 import { GROUP_LABEL } from "@/lib/nav-commands";
 import { PageHelpHint } from "@/components/layout/page-help-hint";
 import { ErrorBoundary } from "@/components/ui/error-boundary";
-import { OnboardingBanner } from "@/components/onboarding-banner";
-import { BudgetTicker } from "@/components/budget-ticker";
 import { CHROME_BANNER_ATTR } from "@/lib/overlay-defer";
 
-// P2-phase1 lazy islands — keep ChatSidebar / CommandPalette / ProductTour
-// (via OnboardingOverlay) out of the initial dashboard module graph.
-// A3 owns (portal)/providers.tsx; until it lands, providers stay in root layout.
+// Lazy islands — keep ChatSidebar / CommandPalette / ProductTour /
+// budget polling / onboarding banner out of the initial module graph.
 const CommandPalette = dynamic(
   () =>
     import("@/components/portal-os/CommandPalette").then((m) => ({
@@ -71,9 +68,22 @@ const OnboardingOverlay = dynamic(
     })),
   { ssr: false },
 );
+const OnboardingBanner = dynamic(
+  () =>
+    import("@/components/onboarding-banner").then((m) => ({
+      default: m.OnboardingBanner,
+    })),
+  { ssr: false },
+);
+const BudgetTicker = dynamic(
+  () =>
+    import("@/components/budget-ticker").then((m) => ({
+      default: m.BudgetTicker,
+    })),
+  { ssr: false },
+);
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { isKnownPortalPath } from "@/lib/portal-routes";
-import { isOnboardingWizardPath } from "@/lib/onboarding-progress";
 
 const SIDEBAR_EXPANDED_WIDTH = 240;
 const SIDEBAR_COLLAPSED_WIDTH = 64;
@@ -148,7 +158,7 @@ export function PortalChrome({ children }: { children: React.ReactNode }) {
           aria-label="Loading portal"
         >
           <div className="h-px w-16 bg-[var(--border-default)]" />
-          <p className="text-[10px] font-mono uppercase tracking-[0.2em] text-[var(--text-muted)]">
+          <p className="text-2xs font-mono uppercase tracking-[0.2em] text-[var(--text-muted)]">
             Loading
           </p>
         </div>
@@ -470,14 +480,11 @@ function PortalLayoutContent({ children }: { children: React.ReactNode }) {
   // session and known org — Retry only, no forced re-auth.
   const showAuthBanner = !!(!loading && user && authError);
   const isSessionAuthError = authErrorKind === "session";
-  // Don't stack the sync banner on top of the wizard — welcome already
-  // shows a sync status card, and dual sticky chrome blocks the CTA.
   const showOrgSyncingBanner = !!(
     !loading &&
     user &&
     orgSyncing &&
-    authErrorKind !== "session" &&
-    !isOnboardingWizardPath(pathname)
+    authErrorKind !== "session"
   );
   // Signal cookie / tour overlays to defer while chrome banners own attention.
   const blockingChromeBanner = !!(showAuthBanner || showOrgSyncingBanner || !online);
@@ -570,15 +577,10 @@ function PortalLayoutContent({ children }: { children: React.ReactNode }) {
 
   const breadcrumbs = buildBreadcrumbs(pathname);
   const { pinnedItems, groups } = applySidebarPrefs(prefs, advancedCollapsed);
-  // Wizard routes ship their own top bar + progress — hide the portal
-  // sidebar/header/mobile nav so setup isn't competing with 75 routes.
-  const inOnboardingWizard = isOnboardingWizardPath(pathname);
-  const hidePortalChrome = inOnboardingWizard;
 
   return (
     <AppShell
       density={densityCompact ? "compact" : "comfortable"}
-      hideChrome={hidePortalChrome}
       sidebar={
         <>
       {mobileDrawerOpen && (
@@ -649,7 +651,7 @@ function PortalLayoutContent({ children }: { children: React.ReactNode }) {
               <PanelLeftClose className="w-3.5 h-3.5" />
             )}
             {!collapsed && <span>Collapse</span>}
-            <kbd className="ml-1 px-1 py-0.5 bg-[var(--bg-base)] border border-[var(--border-default)] rounded text-[10px] font-mono text-[var(--text-muted)]">
+            <kbd className="ml-1 px-1 py-1 bg-[var(--bg-base)] border border-[var(--border-default)] rounded text-2xs font-mono text-[var(--text-muted)]">
               ⌘B
             </kbd>
           </button>
@@ -665,24 +667,29 @@ function PortalLayoutContent({ children }: { children: React.ReactNode }) {
           </button>
         </div>
 
-        {/* Organization switcher — Clerk-native multi-org control.
-            Soft-launch: restore discoverable switching without a
-            second brand avatar; appearance keeps it compact. */}
-        {!collapsed && (
-          <div className="px-3 pb-2">
-            <OrganizationSwitcher
-              hidePersonal
-              afterSelectOrganizationUrl="/dashboard"
-              appearance={{
-                elements: {
-                  rootBox: "w-full",
-                  organizationSwitcherTrigger:
-                    "w-full justify-between rounded-lg border border-[var(--border-default)] bg-[var(--bg-secondary)] px-2 py-1.5 text-sm text-[var(--text-primary)]",
-                },
-              }}
-            />
-          </div>
-        )}
+        {/* Organization switcher — chrome-only org context (UX-P0-02/03).
+            Always mounted so collapsed 64px rail still opens org picker. */}
+        <div
+          className={cn(
+            "pb-2",
+            collapsed ? "px-1.5 flex justify-center" : "px-3",
+          )}
+        >
+          <OrganizationSwitcher
+            hidePersonal
+            afterSelectOrganizationUrl="/dashboard"
+            appearance={{
+              elements: {
+                rootBox: collapsed ? "w-10" : "w-full",
+                organizationSwitcherTrigger: collapsed
+                  ? "w-10 h-10 min-h-11 justify-center rounded-lg border border-[var(--border-default)] bg-[var(--bg-secondary)] p-0 text-[var(--text-primary)]"
+                  : "w-full justify-between rounded-lg border border-[var(--border-default)] bg-[var(--bg-secondary)] px-2 py-1.5 text-sm text-[var(--text-primary)]",
+                organizationPreviewTextContainer: collapsed ? "hidden" : undefined,
+                organizationSwitcherTriggerIcon: collapsed ? "hidden" : undefined,
+              },
+            }}
+          />
+        </div>
 
         {/* Navigation — data-driven from DEFAULT_SIDEBAR + user prefs
             (pinned / hidden / reordered). FIX-I: bounded max-height
@@ -769,12 +776,13 @@ function PortalLayoutContent({ children }: { children: React.ReactNode }) {
                 Customize sidebar
               </Link>
               <button
+                type="button"
                 onClick={toggleAdvanced}
                 aria-pressed={!advancedCollapsed}
-                className="flex items-center justify-between gap-2 px-3 py-1.5 mt-1 text-[11px] text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)] rounded-lg transition-colors"
-                title={advancedCollapsed ? "Show advanced surfaces" : "Hide advanced surfaces"}
+                className="flex items-center justify-between gap-2 px-3 py-2 mt-1 min-h-11 text-xs text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)] rounded-lg transition-colors"
+                title={advancedCollapsed ? "Show Advanced (Agents, Analytics, Cost…)" : "Hide Advanced surfaces"}
               >
-                <span>{advancedCollapsed ? "Show advanced" : "Hide advanced"}</span>
+                <span>{advancedCollapsed ? "Show Advanced" : "Hide Advanced"}</span>
                 <span
                   className={cn(
                     "w-7 h-3.5 rounded-full p-0.5 transition-colors motion-reduce:transition-none",
@@ -887,7 +895,8 @@ function PortalLayoutContent({ children }: { children: React.ReactNode }) {
       }
       header={
         <header className="sticky top-0 z-30 bg-[var(--bg-primary)]/95 backdrop-blur-sm border-b border-[var(--border-subtle)]">
-          <div className="flex items-center justify-between h-11 px-4 lg:px-10">
+          {/* Shell location band — keep h-11 touch floor; breathe via horizontal pad */}
+          <div className="flex items-center justify-between h-11 px-space-4 sm:px-space-5 lg:px-space-7 gap-space-3">
             {/* Left: Mobile logo + hamburger */}
             <div className="flex items-center gap-3 lg:hidden">
               <button
@@ -994,7 +1003,7 @@ function PortalLayoutContent({ children }: { children: React.ReactNode }) {
               >
                 <Search className="w-3.5 h-3.5" />
                 <span>Search</span>
-                <kbd className="ml-1 px-1 py-0.5 border border-[var(--border-subtle)] rounded text-[var(--text-muted)] font-mono text-[10px]">⌘K</kbd>
+                <kbd className="ml-1 px-1 py-1 border border-[var(--border-subtle)] rounded text-[var(--text-muted)] font-mono text-2xs">⌘K</kbd>
               </button>
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -1256,7 +1265,7 @@ function NotificationsDropdown() {
       >
         <Bell className="w-5 h-5" />
         {unreadCount > 0 && (
-          <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] flex items-center justify-center bg-[var(--error)] text-[var(--bg-primary)] text-[10px] font-bold rounded-full px-1">
+          <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] flex items-center justify-center bg-[var(--error)] text-[var(--bg-primary)] text-2xs font-bold rounded-full px-1">
             {unreadCount > 99 ? "99+" : unreadCount}
           </span>
         )}
@@ -1518,7 +1527,7 @@ function NavItem({
               <>
                 <span className="truncate flex-1">{label}</span>
                 {badge && (
-                  <span className="px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider rounded bg-[var(--accent-faint)] text-[var(--accent)]">
+                  <span className="px-1.5 py-1 text-3xs font-semibold uppercase tracking-wider rounded bg-[var(--accent-faint)] text-[var(--accent)]">
                     {badge}
                   </span>
                 )}
@@ -1598,7 +1607,7 @@ function NavGroup({
   }
   return (
     <div className="space-y-1">
-      <div className="px-3 pt-1 pb-0.5 text-[10px] font-mono font-semibold uppercase tracking-[0.14em] text-[var(--text-muted)]/80">
+      <div className="px-3 pt-1 pb-0.5 text-2xs font-mono font-semibold uppercase tracking-[0.14em] text-[var(--text-muted)]/80">
         {label}
       </div>
       {children}

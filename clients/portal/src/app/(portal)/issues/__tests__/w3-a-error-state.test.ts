@@ -1,5 +1,5 @@
 /**
- * W3-A — Issues list uses shared ErrorState with Retry (not ad-hoc banner).
+ * W3-A — Issues list uses shared ErrorState / QueryState with Retry (not ad-hoc banner).
  */
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -12,18 +12,18 @@ function read(rel: string): string {
 }
 
 describe("W3-A issues ErrorState", () => {
-  it("uses shared ErrorState with Retry for list failures", () => {
+  it("uses QueryState with retry for list failures", () => {
     const src = read("app/(portal)/issues/page.tsx");
+    expect(src).toContain('from "@/components/ui/query-state"');
     expect(src).toContain('from "@/components/ui/error-state"');
-    expect(src).toContain('title="Failed to load issues"');
-    expect(src).toContain("Retry");
-    expect(src).toContain("onClick={load}");
-    expect(src).not.toMatch(/Failed to load issues[\s\S]*AlertCircle/);
+    expect(src).toContain('errorTitle="Could not load issues"');
+    expect(src).toContain("onRetry={load}");
   });
 
-  it("gates empty state behind error (no false empty on outage)", () => {
+  it("gates empty state via QueryState isEmpty (no false empty on outage)", () => {
     const src = read("app/(portal)/issues/page.tsx");
-    expect(src).toMatch(/loading \?[\s\S]*: error \?[\s\S]*: issues\.length === 0 \?/);
+    expect(src).toContain("isEmpty={(d) => (d?.data?.issues.length ?? 0) === 0}");
+    expect(src).toContain("<QueryState");
   });
 
   it("issue detail fails closed on stumbles/experiments/regression (no catch→[])", () => {

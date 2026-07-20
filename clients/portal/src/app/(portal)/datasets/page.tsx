@@ -4,22 +4,28 @@ import { useState, useEffect, useCallback, useRef, Suspense } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useOrg } from "@/hooks/use-org";
-import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { DataTableSearch } from "@/components/ui/data-table";
 import { NoOrgState } from "@/components/ui/no-org-state";
-import { ErrorState } from "@/components/ui/error-state";
 import { PageHeader } from "@/components/layout/page-header";
 import { useToast } from "@/components/ui/toast";
-import { Database, ExternalLink, RefreshCw, Loader2, Plus } from "lucide-react";
+import { Database, ExternalLink, RefreshCw, Loader2, Plus, ChevronDown } from "lucide-react";
 import { datasetsApi, type Dataset } from "@/lib/api";
 import {
   CoreResourcePage,
   InfiniteDataTable,
   ResourceOsToolbar,
-  CrossLinkBar,
 } from "@/components/portal-os";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { QueryState } from "@/components/ui/query-state";
+import { EmptyState } from "@/components/ui/empty-state";
 import { usePagePerf } from "@/lib/perf";
 
 function DatasetsPageInner() {
@@ -129,20 +135,20 @@ function DatasetsPageInner() {
         />
       }
       toolbar={
-        <div className="mb-2 space-y-3">
-          <div className="flex flex-wrap gap-2">
+        <div className="flex flex-col gap-space-3 sm:flex-row sm:flex-wrap sm:items-center">
+          <div className="flex min-w-0 flex-1 flex-wrap gap-2">
             <Input
               ref={nameInputRef}
               placeholder="New dataset name"
               value={newName}
               onChange={(e) => setNewName(e.target.value)}
-              className="max-w-xs"
+              className="max-w-xs min-h-11"
               onKeyDown={(e) => {
                 if (e.key === "Enter") void createDataset();
               }}
             />
             <Button
-              size="sm"
+              className="min-h-11"
               onClick={createDataset}
               disabled={!newName.trim() || creating}
               loading={creating}
@@ -150,131 +156,141 @@ function DatasetsPageInner() {
               <Plus className="h-3.5 w-3.5" /> Create
             </Button>
           </div>
-          <ResourceOsToolbar
-            resourceKey="datasets"
-            exportRows={filtered.map((d) => ({
-              id: d.id,
-              name: d.name,
-              row_count: (d as { row_count?: number }).row_count ?? 0,
-            }))}
-            exportFilename="datasets.csv"
-          />
-          <CrossLinkBar
-            links={[
-              { label: "Playgrounds", href: "/evals?tab=playgrounds" },
-              { label: "Experiments", href: "/evals?tab=experiments" },
-              { label: "Labeling", href: "/evals?tab=labeling" },
-              { label: "Issues", href: "/issues" },
-            ]}
-          />
+          <div className="hidden items-center gap-2 sm:flex">
+            <ResourceOsToolbar
+              resourceKey="datasets"
+              exportRows={filtered.map((d) => ({
+                id: d.id,
+                name: d.name,
+                row_count: (d as { row_count?: number }).row_count ?? 0,
+              }))}
+              exportFilename="datasets.csv"
+            />
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" className="min-h-11" aria-label="Related eval surfaces">
+                  Go to
+                  <ChevronDown className="h-4 w-4" aria-hidden />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuLabel>Evaluate path</DropdownMenuLabel>
+                <DropdownMenuItem asChild>
+                  <Link href="/evals?tab=playgrounds">Playgrounds</Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                  <Link href="/evals?tab=experiments">Experiments</Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                  <Link href="/evals?tab=labeling">Labeling</Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                  <Link href="/issues">Issues</Link>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
         </div>
       }
       table={
-        error ? (
-          <ErrorState
-            title="Could not load datasets"
-            message={error}
-            action={
-              <Button onClick={load} variant="outline" size="sm" disabled={loading}>
-                <RefreshCw className="h-3.5 w-3.5" /> Try again
-              </Button>
-            }
-          />
-        ) : (
-          <Card className="p-2">
-            <InfiniteDataTable
-              loading={loading}
-              rows={filtered}
-              rowKey={(r) => r.id}
-              emptyTitle={filterMiss ? "No matching datasets" : "No datasets"}
-              emptyDescription={
-                filterMiss
-                  ? `Nothing matches “${filter.trim()}”. Clear the filter or create a new dataset.`
-                  : "Start the eval loop: resolve an issue → promote traces here → playground → experiment → regression gate."
+        <QueryState
+          loading={loading && datasets.length === 0}
+          error={error ? new Error(error) : null}
+          data={datasets}
+          onRetry={load}
+          errorTitle="Could not load datasets"
+          isEmpty={() => filtered.length === 0}
+          filtersActive={filterActive}
+          emptyKind={filterMiss ? "filter-empty" : "zero-data"}
+          filterEmptySlot={
+            <EmptyState
+              icon={Database}
+              title="No matching datasets"
+              description={`Nothing matches “${filter.trim()}”. Clear the filter or create a new dataset.`}
+              variant="plain"
+              action={
+                <Button
+                  className="min-h-11"
+                  variant="outline"
+                  data-testid="datasets-clear-filter"
+                  onClick={() => setFilter("")}
+                >
+                  Clear filter
+                </Button>
               }
-              emptyIcon={Database}
-              emptyAction={
-                filterMiss ? (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    data-testid="datasets-clear-filter"
-                    onClick={() => setFilter("")}
-                  >
-                    Clear filter
-                  </Button>
-                ) : (
-                  <div className="flex flex-wrap items-center justify-center gap-3 text-sm">
-                    <Button
-                      size="sm"
-                      data-testid="datasets-empty-create"
-                      onClick={() => nameInputRef.current?.focus()}
-                    >
-                      <Plus className="h-3.5 w-3.5" /> Create dataset
-                    </Button>
-                    <div className="flex flex-wrap justify-center gap-2">
-                      <Link href="/issues" className="text-[var(--accent)] hover:underline">
-                        Issues
-                      </Link>
-                      <span className="text-[var(--text-muted)]">→</span>
-                      <Link
-                        href="/evals?tab=playgrounds"
-                        className="text-[var(--accent)] hover:underline"
-                      >
-                        Playground
-                      </Link>
-                      <span className="text-[var(--text-muted)]">→</span>
-                      <Link
-                        href="/evals?tab=experiments"
-                        className="text-[var(--accent)] hover:underline"
-                      >
-                        Experiments
-                      </Link>
-                    </div>
-                  </div>
-                )
-              }
-              columns={[
-                {
-                  key: "name",
-                  header: "Name",
-                  sortable: true,
-                  cell: (r) => (
-                    <Link
-                      href={`/datasets/${r.id}`}
-                      className="font-medium text-[var(--accent)] hover:underline"
-                    >
-                      {r.name}
-                    </Link>
-                  ),
-                },
-                { key: "description", header: "Description" },
-                { key: "row_count", header: "Rows", align: "right", sortable: true },
-                { key: "column_count", header: "Columns", align: "right", sortable: true },
-                {
-                  key: "created_at",
-                  header: "Created",
-                  sortable: true,
-                  cell: (r) => new Date(r.created_at).toLocaleString(),
-                },
-                {
-                  key: "actions",
-                  header: "",
-                  align: "right",
-                  cell: (r) => (
-                    <Link
-                      href={`/datasets/${r.id}`}
-                      aria-label={`Open dataset ${r.name}`}
-                      className="inline-flex items-center gap-1 text-xs text-[var(--text-muted)] hover:text-[var(--text-primary)]"
-                    >
-                      Open <ExternalLink className="h-3 w-3" />
-                    </Link>
-                  ),
-                },
-              ]}
             />
-          </Card>
-        )
+          }
+          emptySlot={
+            <EmptyState
+              icon={Database}
+              title="No datasets"
+              description="No datasets yet. Create one to score agent output, then open Playground."
+              variant="plain"
+              action={
+                <div className="flex flex-wrap items-center justify-center gap-3 text-sm">
+                  <Button
+                    className="min-h-11"
+                    data-testid="datasets-empty-create"
+                    onClick={() => nameInputRef.current?.focus()}
+                  >
+                    <Plus className="h-3.5 w-3.5" /> Create dataset
+                  </Button>
+                </div>
+              }
+            />
+          }
+        >
+          {() => (
+            <div className="min-w-0 border-y border-[var(--border-subtle)] py-space-2">
+              <InfiniteDataTable
+                loading={loading}
+                rows={filtered}
+                rowKey={(r) => r.id}
+                emptyTitle="No datasets"
+                emptyDescription="No datasets yet."
+                emptyIcon={Database}
+                columns={[
+                  {
+                    key: "name",
+                    header: "Name",
+                    sortable: true,
+                    cell: (r) => (
+                      <Link
+                        href={`/datasets/${r.id}`}
+                        className="font-medium text-[var(--accent)] hover:underline"
+                      >
+                        {r.name}
+                      </Link>
+                    ),
+                  },
+                  { key: "description", header: "Description" },
+                  { key: "row_count", header: "Rows", align: "right", sortable: true },
+                  { key: "column_count", header: "Columns", align: "right", sortable: true },
+                  {
+                    key: "created_at",
+                    header: "Created",
+                    sortable: true,
+                    cell: (r) => new Date(r.created_at).toLocaleString(),
+                  },
+                  {
+                    key: "actions",
+                    header: "",
+                    align: "right",
+                    cell: (r) => (
+                      <Link
+                        href={`/datasets/${r.id}`}
+                        aria-label={`Open dataset ${r.name}`}
+                        className="inline-flex items-center gap-1 text-xs text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+                      >
+                        Open <ExternalLink className="h-3 w-3" />
+                      </Link>
+                    ),
+                  },
+                ]}
+              />
+            </div>
+          )}
+        </QueryState>
       }
     />
   );

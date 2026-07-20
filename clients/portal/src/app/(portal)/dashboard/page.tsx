@@ -12,6 +12,8 @@ import {
   Key,
   LayoutGrid,
   Radio,
+  CheckCircle2,
+  ChevronDown,
 } from "lucide-react";
 import { api, ApiError, wave6Api, onboardingV2Api } from "@/lib/api";
 import { useOrg } from "@/hooks/use-org";
@@ -22,6 +24,13 @@ import { PageHeader } from "@/components/layout/page-header";
 import { CoreResourcePage } from "@/components/portal-os";
 import { StatCard } from "@/components/ui/stat-card";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { DoctorCommandChip } from "@/components/onboarding/WaitingForFirstEvent";
 import { ThroughputCard } from "./_components/throughput-card";
 import { LatencyCard } from "./_components/latency-card";
@@ -38,19 +47,48 @@ import { FIRST_EVENT_WAIT } from "@/lib/portal-polish";
 import { usePagePerf } from "@/lib/perf";
 import { cn } from "@/lib/utils";
 
-const DAY_MS = 24 * 60 * 60 * 1000;
+const HOUR_MS = 60 * 60 * 1000;
 
-const DEFAULT_WIDGETS = [
+/** Full catalog — Edit layout can toggle any of these. */
+const ALL_WIDGETS = [
   "throughput",
   "latency",
   "cost",
   "anomalies",
   "failures",
-  "agentic",
   "traces",
+  "agentic",
   "links",
 ] as const;
-type WidgetId = (typeof DEFAULT_WIDGETS)[number];
+type WidgetId = (typeof ALL_WIDGETS)[number];
+
+/**
+ * Default Home layout — Status→Diagnosis→Action scan (D-01/D-02).
+ * 6 widgets: 4 KPI tiles + diagnosis strip + traces list.
+ * Agentic + quick links stay in Edit layout (progressive disclosure).
+ * Cap: anti-clutter AC-04 — desktop 5–7 / mobile 3–4 above the fold.
+ */
+const HOME_KPI_CAP_DESKTOP = 7;
+const DEFAULT_WIDGETS: WidgetId[] = [
+  "throughput",
+  "latency",
+  "cost",
+  "anomalies",
+  "failures",
+  "traces",
+];
+// Compile-time guard — default layout must stay within AC-04 desktop cap.
+void (DEFAULT_WIDGETS.length <= HOME_KPI_CAP_DESKTOP ||
+  (() => {
+    throw new Error("DEFAULT_WIDGETS exceeds HOME_KPI_CAP_DESKTOP (AC-04)");
+  })());
+
+const TIME_RANGES = [
+  { hours: 1, label: "Last 1h" },
+  { hours: 6, label: "Last 6h" },
+  { hours: 24, label: "Last 24h" },
+  { hours: 168, label: "Last 7d" },
+] as const;
 
 function layoutStorageKey(orgId: string) {
   return `eden.home.layout.${orgId}`;
@@ -62,7 +100,7 @@ function loadLayout(orgId: string): WidgetId[] {
     if (!raw) return [...DEFAULT_WIDGETS];
     const parsed = JSON.parse(raw) as string[];
     const valid = parsed.filter((id): id is WidgetId =>
-      (DEFAULT_WIDGETS as readonly string[]).includes(id),
+      (ALL_WIDGETS as readonly string[]).includes(id),
     );
     return valid.length > 0 ? valid : [...DEFAULT_WIDGETS];
   } catch {
@@ -109,6 +147,7 @@ export default function DashboardPage() {
 
   const orgId = currentOrg?.id ?? null;
   const [editing, setEditing] = useState(false);
+  const [windowHours, setWindowHours] = useState(24);
   // null until localStorage layout loads — avoids firing every shard
   // on the first paint when the user hid widgets in a prior session.
   const [visibleWidgets, setVisibleWidgets] = useState<WidgetId[] | null>(null);
@@ -123,6 +162,7 @@ export default function DashboardPage() {
 
   const widgets = visibleWidgets ?? [...DEFAULT_WIDGETS];
   const layoutReady = visibleWidgets !== null;
+  const traceDays = Math.max(1, Math.ceil(windowHours / 24));
 
   const saveLayout = (next: WidgetId[]) => {
     setVisibleWidgets(next);
@@ -150,9 +190,12 @@ export default function DashboardPage() {
   // (drives first-run detection). Layout must be ready so a customized
   // home does not pay for hidden cost/alerts/agentic on every visit.
   const tracesQuery = useOrgQuery(
-    queryKeys.observability.traces(orgId, { limit: 50, days: 7 }),
+    queryKeys.observability.traces(orgId, { limit: 50, days: traceDays }),
     orgId,
-    () => shardOr404Null(api.listObservabilityTraces(orgId!, { limit: 50, days: 7 })),
+    () =>
+      shardOr404Null(
+        api.listObservabilityTraces(orgId!, { limit: 50, days: traceDays }),
+      ),
     {
       enabled: layoutReady,
       refetchInterval: (q) => {
@@ -167,14 +210,23 @@ export default function DashboardPage() {
   // Same filter shape the observability hub uses for its summary
   // call (window_hours + compare_previous) so both pages hit the
   // identical React Query key and share one cache entry / one
-  // in-flight request instead of double-fetching the same 24h
+  // in-flight request instead of double-fetching the same window
   // summary shard whenever a user has both tabs open. `compare_previous`
   // only adds a `previous` field to the response — free to request
   // even though the dashboard doesn't render deltas today.
   const summaryQuery = useOrgQuery(
-    queryKeys.observability.summary(orgId, { window_hours: 24, compare_previous: true }),
+    queryKeys.observability.summary(orgId, {
+      window_hours: windowHours,
+      compare_previous: true,
+    }),
     orgId,
-    () => shardOr404Null(api.getObservabilitySummary(orgId!, { window_hours: 24, compare_previous: true })),
+    () =>
+      shardOr404Null(
+        api.getObservabilitySummary(orgId!, {
+          window_hours: windowHours,
+          compare_previous: true,
+        }),
+      ),
     {
       enabled:
         layoutReady &&
@@ -198,15 +250,19 @@ export default function DashboardPage() {
     { enabled: layoutReady && show("cost") },
   );
   const costKpiQuery = useOrgQuery(
-    queryKeys.cost.kpi(orgId, 24),
+    queryKeys.cost.kpi(orgId, windowHours),
     orgId,
-    () => shardOr404Null(wave6Api.costKpi(orgId!, { window_hours: 24 })),
+    () =>
+      shardOr404Null(
+        wave6Api.costKpi(orgId!, { window_hours: windowHours }),
+      ),
     { enabled: layoutReady && show("cost") },
   );
   const agenticQuery = useOrgQuery(
-    queryKeys.dashboard.agentic(orgId),
+    [...queryKeys.dashboard.agentic(orgId), windowHours] as const,
     orgId,
-    () => shardOr404Null(api.agenticMetricsSummary(orgId!, 24)),
+    () =>
+      shardOr404Null(api.agenticMetricsSummary(orgId!, windowHours)),
     { enabled: layoutReady && show("agentic") },
   );
 
@@ -253,9 +309,9 @@ export default function DashboardPage() {
     agentic?.metrics?.action_completion?.score ?? null;
 
   // ── Derived metrics ─────────────────────────────────────────────
-  // Throughput from the 24h summary shard — never the 50-trace sample
+  // Throughput from the summary shard — never the 50-trace sample
   // bucketing that used to invent a "Live" 5-minute eps series.
-  const summaryWindowHours = summary?.window_hours ?? 24;
+  const summaryWindowHours = summary?.window_hours ?? windowHours;
   const throughputTotal = summary?.total_traces ?? null;
   const avgEps =
     summary != null && summaryWindowHours > 0
@@ -282,8 +338,8 @@ export default function DashboardPage() {
     };
   }, [summary, throughputTotal]);
 
-  // Summary shard is window_hours: 24 — fallback trace percentiles
-  // use the same 24h window so the latency card label stays honest.
+  // Fallback trace percentiles use the same window as the summary
+  // so the latency card label stays honest.
   const { p95, p50 } = useMemo(() => {
     if (summary) {
       return {
@@ -291,12 +347,12 @@ export default function DashboardPage() {
         p50: summary.p50_ms,
       };
     }
-    const cutoff = Date.now() - DAY_MS;
+    const cutoff = Date.now() - windowHours * HOUR_MS;
     const recent = traces.filter(
       (t) => new Date(t.started_at).getTime() >= cutoff
     );
     return { p95: computeP95(recent), p50: computeP50(recent) };
-  }, [summary, traces]);
+  }, [summary, traces, windowHours]);
 
   const latencyTrend = useMemo((): {
     trend: "up" | "down" | null;
@@ -356,22 +412,18 @@ export default function DashboardPage() {
             ? "up"
             : "down";
 
-  // Alerts "24h" card — the feed itself has no time-window filter,
-  // so the card used to label an unbounded fetch as "24h". Filter
-  // client-side to the same last-24h window the traces card uses so
-  // the label is honest. (June 2026 data-trust fix.)
-  const lastDayAlerts = useMemo(() => {
-    const cutoff = Date.now() - DAY_MS;
+  // Alerts card — filter client-side to the shared time window so the
+  // label matches the header range (feed itself has no window filter).
+  const windowAlerts = useMemo(() => {
+    const cutoff = Date.now() - windowHours * HOUR_MS;
     return alerts.filter((a) => new Date(a.triggered_at).getTime() >= cutoff);
-  }, [alerts]);
-  const anomalyCount = lastDayAlerts.length;
+  }, [alerts, windowHours]);
+  const anomalyCount = windowAlerts.length;
 
-  // Last 24h traces — see comment above on the eslint-disable for
-  // the same purity rule (filter cutoff, not control flow).
-  const lastDayTraces = useMemo(() => {
-    const cutoff = Date.now() - DAY_MS;
+  const windowTraces = useMemo(() => {
+    const cutoff = Date.now() - windowHours * HOUR_MS;
     return traces.filter((t) => new Date(t.started_at).getTime() >= cutoff);
-  }, [traces]);
+  }, [traces, windowHours]);
 
   // Wait until the query has settled before calling anything "empty".
   // Soft-null (404/422 undeployed) stays on the install path — do NOT
@@ -431,6 +483,11 @@ export default function DashboardPage() {
   );
   const firstTraceAt = firstTraceSignal.data ?? null;
 
+  const severityCounts = countBySeverity(windowAlerts);
+  const rangeLabel =
+    TIME_RANGES.find((r) => r.hours === windowHours)?.label ??
+    `Last ${windowHours}h`;
+
   // Wait for org context before claiming empty product or NoOrgState —
   // otherwise first paint looks like a dead dashboard with no traces.
   if (orgLoading && !currentOrg && !authError) {
@@ -467,7 +524,7 @@ export default function DashboardPage() {
   return (
     <CoreResourcePage
       size="wide"
-      className="space-y-4 sm:space-y-5"
+      className="flex flex-col gap-space-4 sm:gap-space-5"
       header={
         <PageHeader
           title="Home"
@@ -475,12 +532,33 @@ export default function DashboardPage() {
             isFirstRun
               ? firstTraceAt
                 ? FIRST_EVENT_WAIT.descriptionReceived
-                : "Waiting for first event — install the SDK or gateway, run doctor, then check for events."
-              : "Editable first screen — volume, cost Δ, anomalies, and quick links."
+                : "No events ingested yet. Install the SDK or gateway, run doctor, then check for events."
+              : `Status → diagnosis → next action · ${rangeLabel.toLowerCase()}.`
           }
           greeting={currentOrg ? `Welcome back to ${currentOrg.name}.` : undefined}
           actions={
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="flex flex-wrap items-center gap-space-2">
+              {!isFirstRun ? (
+                <label className="inline-flex items-center gap-space-2">
+                  <span className="sr-only">Time range</span>
+                  <select
+                    value={windowHours}
+                    onChange={(e) => setWindowHours(Number(e.target.value))}
+                    aria-label="Time range"
+                    className={cn(
+                      "min-h-11 rounded-lg border border-[var(--border-default)]",
+                      "bg-[var(--bg-secondary)] px-space-3 text-xs text-[var(--text-primary)]",
+                      "focus:outline-none focus:ring-2 focus:ring-[var(--accent)]",
+                    )}
+                  >
+                    {TIME_RANGES.map((r) => (
+                      <option key={r.hours} value={r.hours}>
+                        {r.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              ) : null}
               {isFirstRun ? (
                 <>
                   {canManageKeys ? (
@@ -506,21 +584,15 @@ export default function DashboardPage() {
                       </a>
                     </Button>
                   ) : (
-                    <span className="text-xs text-[var(--text-muted)] px-3 py-2">
+                    <span className="text-xs text-[var(--text-muted)] px-space-3 py-space-2">
                       Ask an admin for an API key
                     </span>
                   )}
-                  <Button asChild variant="ghost" className="min-h-11">
-                    <Link href="/dashboard?onboarding=1">
-                      <Sparkles className="w-3.5 h-3.5" />
-                      Tour
-                    </Link>
-                  </Button>
                   {canConnect ? (
                     <Button asChild variant="ghost" className="min-h-11">
                       <Link href="/agents/connect">
                         <GitBranch className="w-3.5 h-3.5" />
-                        Connect repo
+                        Connect
                       </Link>
                     </Button>
                   ) : null}
@@ -539,24 +611,36 @@ export default function DashboardPage() {
                       Issues
                     </Link>
                   </Button>
-                  {canConnect ? (
-                    <Button asChild variant="ghost" className="min-h-11">
-                      <Link href="/agents/connect">
-                        <GitBranch className="w-3.5 h-3.5" />
-                        Connect repo
-                      </Link>
-                    </Button>
-                  ) : null}
-                  <Button
-                    variant={editing ? "default" : "ghost"}
-                    size="sm"
-                    className="min-h-11"
-                    onClick={() => setEditing((e) => !e)}
-                    aria-pressed={editing}
-                  >
-                    <LayoutGrid className="h-3.5 w-3.5" />
-                    {editing ? "Done" : "Edit layout"}
-                  </Button>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="min-h-11"
+                        aria-label="More home actions"
+                      >
+                        More
+                        <ChevronDown className="h-3.5 w-3.5" aria-hidden />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="min-w-[12rem]">
+                      <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                      {canConnect ? (
+                        <DropdownMenuItem asChild>
+                          <Link href="/agents/connect">
+                            <GitBranch className="h-3.5 w-3.5" />
+                            Connect
+                          </Link>
+                        </DropdownMenuItem>
+                      ) : null}
+                      <DropdownMenuItem
+                        onSelect={() => setEditing((e) => !e)}
+                      >
+                        <LayoutGrid className="h-3.5 w-3.5" />
+                        {editing ? "Done editing" : "Edit layout"}
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 </>
               )}
             </div>
@@ -566,20 +650,23 @@ export default function DashboardPage() {
       table={
         <>
       {editing ? (
-        <Panel tone="subtle" padding="sm" className="mb-4 flex flex-wrap gap-2">
-          {DEFAULT_WIDGETS.map((id) => (
+        <Panel tone="subtle" padding="sm" className="flex flex-wrap gap-space-2">
+          {ALL_WIDGETS.map((id) => (
             <button
               key={id}
               type="button"
               onClick={() => toggleWidget(id)}
               className={cn(
-                "rounded-md px-2.5 py-1 text-xs capitalize",
+                "rounded-md px-space-3 py-space-1 text-xs capitalize",
                 show(id)
                   ? "bg-[var(--accent-faint)] text-[var(--accent)]"
                   : "bg-[var(--bg-tertiary)] text-[var(--text-muted)]",
               )}
             >
               {id}
+              {!DEFAULT_WIDGETS.includes(id) ? (
+                <span className="ml-1 text-2xs opacity-70">extra</span>
+              ) : null}
             </button>
           ))}
           <Button
@@ -596,7 +683,6 @@ export default function DashboardPage() {
         <ErrorState
           title="Could not load some telemetry."
           message={error}
-          className="mb-4"
           size="sm"
           action={
             <Button
@@ -614,17 +700,17 @@ export default function DashboardPage() {
         />
       ) : null}
 
-      {/* Row 1: metrics or first-run checklist (install path; no CTA theatre) */}
+      {/* ── Status → Diagnosis → Action (operational Home) ── */}
       {isFirstRun ? (
         <Panel
           data-testid="dashboard-first-run"
           tone="flat"
           padding="lg"
-          className="sm:p-8"
+          className="sm:p-space-8"
         >
-          <div className="max-w-xl space-y-4">
-            <div className="space-y-2">
-              <div className="flex flex-wrap items-center gap-2">
+          <div className="max-w-xl flex flex-col gap-space-4">
+            <div className="flex flex-col gap-space-2">
+              <div className="flex flex-wrap items-center gap-space-2">
                 <h2 className="text-lg font-semibold text-[var(--text-primary)]">
                   {firstTraceAt
                     ? FIRST_EVENT_WAIT.titleReceived
@@ -647,18 +733,18 @@ export default function DashboardPage() {
             </div>
 
             {!firstTraceAt ? (
-              <div className="space-y-2" data-testid="dashboard-doctor-commands">
-                <p className="text-[11px] uppercase tracking-wide text-[var(--text-faint)] m-0">
+              <div className="flex flex-col gap-space-2" data-testid="dashboard-doctor-commands">
+                <p className="text-2xs font-mono uppercase tracking-widest text-[var(--text-faint)] m-0">
                   {FIRST_EVENT_WAIT.doctorHint}
                 </p>
-                <div className="flex flex-col sm:flex-row flex-wrap gap-2">
+                <div className="flex flex-col sm:flex-row flex-wrap gap-space-2">
                   <DoctorCommandChip command={FIRST_EVENT_WAIT.doctorNpx} />
                   <DoctorCommandChip command={FIRST_EVENT_WAIT.doctorPython} />
                 </div>
               </div>
             ) : null}
 
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="flex flex-wrap items-center gap-space-2">
               <Button
                 className="min-h-11"
                 loading={tracesQuery.isFetching}
@@ -676,12 +762,12 @@ export default function DashboardPage() {
               </Button>
             </div>
 
-            <ol className="space-y-1 text-sm list-none">
+            <ol className="flex flex-col gap-space-1 text-sm list-none m-0 p-0">
               <li>
                 {canManageKeys ? (
                   <Link
                     href="/settings?tab=api-keys"
-                    className="inline-flex items-center gap-2 min-h-[44px] text-[var(--text-primary)] hover:text-[var(--accent)] transition-colors"
+                    className="inline-flex items-center gap-space-2 min-h-11 text-[var(--text-primary)] hover:text-[var(--accent)] transition-colors"
                   >
                     <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-[var(--accent-faint)] text-xs font-semibold text-[var(--accent)]">
                       1
@@ -692,7 +778,7 @@ export default function DashboardPage() {
                     </span>
                   </Link>
                 ) : (
-                  <span className="inline-flex items-center gap-2 min-h-[44px] text-[var(--text-primary)]">
+                  <span className="inline-flex items-center gap-space-2 min-h-11 text-[var(--text-primary)]">
                     <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-[var(--accent-faint)] text-xs font-semibold text-[var(--accent)]">
                       1
                     </span>
@@ -708,7 +794,7 @@ export default function DashboardPage() {
                   href={DOCS_QUICKSTART_URL}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex items-center gap-2 min-h-[44px] text-[var(--text-primary)] hover:text-[var(--accent)] transition-colors"
+                  className="inline-flex items-center gap-space-2 min-h-11 text-[var(--text-primary)] hover:text-[var(--accent)] transition-colors"
                 >
                   <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-[var(--accent-faint)] text-xs font-semibold text-[var(--accent)]">
                     2
@@ -724,7 +810,7 @@ export default function DashboardPage() {
                   href={DOCS_QUICKSTART_URL}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex items-center gap-2 min-h-[44px] text-[var(--text-primary)] hover:text-[var(--accent)] transition-colors"
+                  className="inline-flex items-center gap-space-2 min-h-11 text-[var(--text-primary)] hover:text-[var(--accent)] transition-colors"
                 >
                   <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-[var(--accent-faint)] text-xs font-semibold text-[var(--accent)]">
                     3
@@ -741,7 +827,7 @@ export default function DashboardPage() {
               <li>
                 <Link
                   href="/traces"
-                  className="inline-flex items-center gap-2 min-h-[44px] text-[var(--text-primary)] hover:text-[var(--accent)] transition-colors"
+                  className="inline-flex items-center gap-space-2 min-h-11 text-[var(--text-primary)] hover:text-[var(--accent)] transition-colors"
                 >
                   <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-[var(--accent-faint)] text-xs font-semibold text-[var(--accent)]">
                     4
@@ -756,7 +842,12 @@ export default function DashboardPage() {
           </div>
         </Panel>
       ) : (
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3 sm:gap-4 mb-4">
+      <>
+      {/* STATUS — KPI tiles (≤5–7 with diagnosis + traces) */}
+      <div
+        className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-space-3 sm:gap-space-4"
+        data-testid="dashboard-status-kpis"
+      >
         {show("throughput") ? (
           <ThroughputCard
             loading={summaryLoading}
@@ -775,6 +866,7 @@ export default function DashboardPage() {
             unavailable={summaryQuery.isError && p95 == null}
             p95Ms={p95}
             p50Ms={p50}
+            windowHours={summaryWindowHours}
             trend={latencyTrend.trend}
             trendValue={latencyTrend.trendValue}
           />
@@ -834,7 +926,6 @@ export default function DashboardPage() {
           ? (() => {
           const alertsLoadedOk =
             alertsQuery.isSuccess && alertsQuery.data != null;
-          const severityCounts = countBySeverity(lastDayAlerts);
           const severityClass = alertsUnavailable
             ? "bg-[var(--warning-bg)] text-[var(--warning-strong)]"
             : anomalyCount === 0
@@ -846,7 +937,7 @@ export default function DashboardPage() {
                   : "bg-[var(--accent-faint)] text-[var(--accent)]";
           return (
             <StatCard
-              title="Anomalies (24h)"
+              title={`Anomalies (${formatWindowShort(windowHours)})`}
               value={alertsUnavailable ? "—" : anomalyCount}
               subtitle={
                 alertsUnavailable
@@ -875,7 +966,7 @@ export default function DashboardPage() {
                 ? "—"
                 : `${Math.round(actionCompletion * 100)}%`
             }
-            subtitle="F64 action completion · 24h"
+            subtitle={`F64 action completion · ${formatWindowShort(windowHours)}`}
             icon={Sparkles}
             accent="accent"
             loading={agenticQuery.isLoading}
@@ -889,61 +980,183 @@ export default function DashboardPage() {
           />
         ) : null}
       </div>
-      )}
 
-      {!isFirstRun && show("failures") && topFailureModes.length > 0 && (
-        <Panel tone="flat" padding="md" className="mb-4 sm:p-5">
-          <h2 className="text-sm font-medium text-[var(--text-primary)] mb-3">
-            Top failure modes (24h)
-          </h2>
-          <ul className="space-y-2">
-            {topFailureModes.map((mode) => (
-              <li
-                key={mode.name}
-                className="flex items-center justify-between text-sm gap-4"
-              >
-                <span className="text-[var(--text-primary)] truncate">{mode.name}</span>
-                <span className="text-[var(--text-muted)] shrink-0">
-                  {mode.count} events
-                </span>
-              </li>
-            ))}
-          </ul>
-        </Panel>
-      )}
-
-      {/* Row 2: recent traces + quick links — only after traffic exists.
-          On the install path the checklist already covers API keys /
-          docs / Open Traces; repeating empty Recent Traces + Quick
-          links duplicated those CTAs. */}
-      {!isFirstRun ? (
-        <div className="grid grid-cols-1 xl:grid-cols-3 gap-4 sm:gap-6">
-          {show("traces") ? (
-            <div className="xl:col-span-2">
-              <RecentTracesCard
-                loading={!tracesSettled || tracesQuery.isLoading}
-                traces={lastDayTraces.slice(0, 10)}
-                unavailable={tracesUnavailable}
-                errorMessage={tracesErrorMessage}
-              />
-            </div>
-          ) : null}
-          {show("links") ? (
-            <div className={cn(show("traces") ? "xl:col-span-1" : "xl:col-span-3")}>
-              <QuickLinks />
-            </div>
-          ) : null}
-        </div>
+      {/* DIAGNOSIS — one strip: anomaly / failure / clear */}
+      {show("failures") ? (
+        <DiagnosisStrip
+          windowHours={windowHours}
+          anomalyCount={anomalyCount}
+          severityCounts={severityCounts}
+          alertsUnavailable={alertsUnavailable}
+          topFailureModes={topFailureModes}
+          summaryUnavailable={summaryQuery.isError}
+          summaryLoading={summaryLoading}
+        />
       ) : null}
+
+      {/* DETAIL — recent traces + optional quick links */}
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-space-4 sm:gap-space-6">
+        {show("traces") ? (
+          <div className="xl:col-span-2">
+            <RecentTracesCard
+              loading={!tracesSettled || tracesQuery.isLoading}
+              traces={windowTraces.slice(0, 10)}
+              unavailable={tracesUnavailable}
+              errorMessage={tracesErrorMessage}
+            />
+          </div>
+        ) : null}
+        {show("links") ? (
+          <div className={cn(show("traces") ? "xl:col-span-1" : "xl:col-span-3")}>
+            <QuickLinks />
+          </div>
+        ) : null}
+      </div>
+      </>
+      )}
         </>
       }
     />
   );
 }
 
-// ─── subviews ──────────────────────────────────────────────────────
+// ─── diagnosis strip ───────────────────────────────────────────────
+
+function DiagnosisStrip({
+  windowHours,
+  anomalyCount,
+  severityCounts,
+  alertsUnavailable,
+  topFailureModes,
+  summaryUnavailable,
+  summaryLoading,
+}: {
+  windowHours: number;
+  anomalyCount: number;
+  severityCounts: Record<string, number>;
+  alertsUnavailable: boolean;
+  topFailureModes: Array<{ name: string; count: number }>;
+  summaryUnavailable: boolean;
+  summaryLoading: boolean;
+}) {
+  const hasCritical = (severityCounts.critical ?? 0) > 0;
+  const hasWarning = (severityCounts.warning ?? 0) > 0;
+  const hasFailures = topFailureModes.length > 0;
+  const tone =
+    alertsUnavailable || summaryUnavailable
+      ? "warning"
+      : hasCritical
+        ? "error"
+        : hasWarning || hasFailures
+          ? "warning"
+          : "ok";
+
+  const title =
+    alertsUnavailable || summaryUnavailable
+      ? "Diagnosis incomplete"
+      : hasCritical
+        ? "Critical anomalies need attention"
+        : hasFailures
+          ? "Failure modes detected"
+          : hasWarning
+            ? "Warnings in the window"
+            : "All systems normal";
+
+  const detail =
+    alertsUnavailable || summaryUnavailable
+      ? "Some telemetry shards failed — retry from the banner above, or open Traces."
+      : hasCritical || hasWarning
+        ? `${severityCount} anomal${anomalyCount === 1 ? "y" : "ies"} in ${formatWindowShort(windowHours)}${
+            hasFailures
+              ? ` · top: ${topFailureModes[0]?.name ?? "—"}`
+              : ""
+          }`
+        : hasFailures
+          ? `${topFailureModes.length} failure mode${topFailureModes.length === 1 ? "" : "s"} in ${formatWindowShort(windowHours)}`
+          : `No anomalies or failure modes in ${formatWindowShort(windowHours)}.`;
+
+  return (
+    <Panel
+      tone="flat"
+      padding="md"
+      data-testid="dashboard-diagnosis"
+      className={cn(
+        "flex flex-col gap-space-3 sm:flex-row sm:items-start sm:justify-between",
+        tone === "error" && "border-[var(--error)]/30",
+        tone === "warning" && "border-[var(--warning)]/30",
+      )}
+    >
+      <div className="flex items-start gap-space-3 min-w-0">
+        {tone === "ok" ? (
+          <CheckCircle2
+            className="h-5 w-5 shrink-0 text-[var(--success)] mt-0.5"
+            aria-hidden
+          />
+        ) : (
+          <AlertTriangle
+            className={cn(
+              "h-5 w-5 shrink-0 mt-0.5",
+              tone === "error"
+                ? "text-[var(--error)]"
+                : "text-[var(--warning-strong)]",
+            )}
+            aria-hidden
+          />
+        )}
+        <div className="min-w-0 flex flex-col gap-space-1">
+          <p className="text-2xs font-mono uppercase tracking-widest text-[var(--text-muted)] m-0">
+            Diagnosis
+          </p>
+          <h2 className="text-sm font-medium text-[var(--text-primary)] m-0">
+            {summaryLoading ? "Checking status…" : title}
+          </h2>
+          <p className="text-xs text-[var(--text-muted)] m-0">{detail}</p>
+          {!summaryLoading && hasFailures ? (
+            <ul className="mt-space-2 flex flex-col gap-space-1 m-0 p-0 list-none">
+              {topFailureModes.slice(0, 3).map((mode) => (
+                <li
+                  key={mode.name}
+                  className="flex items-center justify-between text-xs gap-space-4"
+                >
+                  <span className="text-[var(--text-primary)] truncate">
+                    {mode.name}
+                  </span>
+                  <span className="text-[var(--text-muted)] shrink-0">
+                    {mode.count} events
+                  </span>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+        </div>
+      </div>
+      <div className="flex flex-wrap items-center gap-space-2 shrink-0">
+        {hasCritical || hasWarning || anomalyCount > 0 ? (
+          <Button asChild size="sm" variant="outline" className="min-h-11">
+            <Link href="/alerts">Open Alerts</Link>
+          </Button>
+        ) : null}
+        {hasFailures ? (
+          <Button asChild size="sm" variant="outline" className="min-h-11">
+            <Link href="/issues">Open Issues</Link>
+          </Button>
+        ) : (
+          <Button asChild size="sm" variant="ghost" className="min-h-11">
+            <Link href="/traces">Open Traces</Link>
+          </Button>
+        )}
+      </div>
+    </Panel>
+  );
+}
 
 // ─── helpers ───────────────────────────────────────────────────────
+
+function formatWindowShort(hours: number): string {
+  if (hours >= 168) return "7d";
+  if (hours === 24) return "24h";
+  return `${hours}h`;
+}
 
 function computeP95(traces: TraceRow[]): number | null {
   const durations = traces

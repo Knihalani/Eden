@@ -4,6 +4,10 @@
 // already constrains the row to h-screen + overflow-clip; a child page
 // using min-h-screen pushes the row past the viewport and produces the
 // "blank space below" bug. Use min-h-full or remove the class instead.
+//
+// Wave 4 note: hand-rolled page padding (vs PageContent) is intentionally
+// NOT gated here — too many existing product pages; migrate via PageContent
+// first, then add a ratchet if useful.
 
 const { execSync } = require("node:child_process");
 const PATTERN = "min-h-screen|h-screen|min-h-\\[100vh\\]";

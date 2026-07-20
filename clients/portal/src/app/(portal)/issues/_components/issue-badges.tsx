@@ -12,7 +12,7 @@ export function RepeatBadge({ count }: { count: number }) {
   return (
     <span
       title={`Regressed / re-occurred ${count} times`}
-      className="inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded border bg-[var(--error)]/10 text-[var(--error)] border-[var(--error)]/30"
+      className="inline-flex items-center gap-1 text-2xs font-semibold px-space-2 py-space-1 rounded border bg-[var(--error)]/10 text-[var(--error)] border-[var(--error)]/30"
       role="status"
       aria-label={`Repeated ${count} times`}
     >
@@ -32,7 +32,7 @@ export function RegressionBadge({
   return (
     <span
       title={regressionCaseId ? `Regression case ${regressionCaseId}` : "Issue regressed after fix"}
-      className="inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded border bg-[var(--warning)]/15 text-[var(--warning)] border-[var(--warning)]/30"
+      className="inline-flex items-center gap-1 text-2xs font-semibold px-space-2 py-space-1 rounded border bg-[var(--warning)]/15 text-[var(--warning)] border-[var(--warning)]/30"
       role="status"
       aria-label="Regression"
     >

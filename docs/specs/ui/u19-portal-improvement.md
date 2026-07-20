@@ -10,6 +10,8 @@
 | **Dependencies** | U18 complete; U01–U17 at least v0 |
 | **Roadmap** | **Wave 12** |
 
+> **Overhaul 2026 status (2026-07-20):** Density / empty / cross-link work advanced in Waves 5–6 (hub QueryState, empty/error voice, Traces ViewsMenu + master–detail). Residual gaps deferred: Issues/Alerts `ViewsMenu` dirty-views OS; Trace detail Timeline mode. See [`overhaul-2026/w6-qa-matrix.md`](./overhaul-2026/w6-qa-matrix.md) and [`overhaul-2026/README.md`](./overhaul-2026/README.md).
+
 ---
 
 ## 1. Summary

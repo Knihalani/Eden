@@ -4,20 +4,20 @@ import { DOCS_QUICKSTART_URL } from "@/lib/constants";
 
 export function ImproveSpotlight() {
   return (
-    <section id="improve" className="py-20 md:py-28 px-6">
-      <div className="max-w-7xl mx-auto">
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
+    <section id="improve" className="px-space-5 py-20 md:py-28">
+      <div className="mx-auto max-w-7xl">
+        <div className="grid grid-cols-1 items-center gap-space-7 lg:grid-cols-12 lg:gap-space-8">
           <div className="lg:col-span-5">
-            <h2 className="marketing-h2 mb-4">
+            <h2 className="marketing-h2 mb-space-4">
               From regression detected to{" "}
               <span className="text-[var(--accent)]">patch ready for review</span>
             </h2>
-            <p className="text-[var(--text-secondary)] mb-5 leading-relaxed">
+            <p className="mb-space-5 leading-relaxed text-[var(--text-secondary)]">
               Traces alone are not a fix. When a judge score drifts, Eden queues
               a draft with failing traces, root cause, and eval results. You
               decide whether to open the PR — Eden never opens one on its own.
             </p>
-            <ul className="flex flex-col gap-3 mb-7">
+            <ul className="mb-space-6 flex flex-col gap-space-3">
               {[
                 "Root-cause hypotheses cited to trace IDs and eval records",
                 "Prompt or code patch, then local evals against your suite",
@@ -26,10 +26,10 @@ export function ImproveSpotlight() {
               ].map((b) => (
                 <li
                   key={b}
-                  className="flex items-start gap-3 text-sm text-[var(--text-secondary)]"
+                  className="flex items-start gap-space-3 text-sm text-[var(--text-secondary)]"
                 >
                   <Check
-                    className="w-4 h-4 mt-0.5 text-[var(--accent)] shrink-0"
+                    className="mt-0.5 h-4 w-4 shrink-0 text-[var(--accent)]"
                     aria-hidden
                   />
                   <span className="leading-relaxed">{b}</span>
@@ -40,26 +40,26 @@ export function ImproveSpotlight() {
               href={DOCS_QUICKSTART_URL}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-2 min-h-11 text-sm font-medium text-[var(--accent)] hover:text-[var(--accent-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-primary)] rounded-md"
+              className="inline-flex min-h-11 items-center gap-space-2 rounded-md text-sm font-medium text-[var(--accent)] hover:text-[var(--accent-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-primary)]"
             >
-              Quickstart
-              <ArrowRight className="w-4 h-4" aria-hidden />
+              Docs quickstart
+              <ArrowRight className="h-4 w-4" aria-hidden />
             </a>
           </div>
 
           <div className="lg:col-span-7">
-            <div className="border border-[var(--border-default)] rounded-xl overflow-hidden bg-[var(--bg-base)]">
-              <div className="px-4 py-2.5 border-b border-[var(--border-subtle)]">
-                <span className="text-[11px] font-mono text-[var(--text-muted)]">
+            <div className="overflow-hidden rounded-lg border border-[var(--border-default)] bg-[var(--bg-base)]">
+              <div className="border-b border-[var(--border-subtle)] px-space-4 py-space-3">
+                <span className="font-mono text-2xs text-[var(--text-muted)]">
                   eden — improve · ready for review
                 </span>
               </div>
-              <div className="p-5 md:p-6 font-mono text-[13px]">
-                <div className="flex flex-wrap items-center gap-3 pb-4 border-b border-[var(--border-subtle)]">
-                  <span className="text-[var(--text-primary)] font-semibold">
+              <div className="p-space-5 font-mono text-[13px] md:p-space-6">
+                <div className="flex flex-wrap items-center gap-space-3 border-b border-[var(--border-subtle)] pb-space-4">
+                  <span className="font-semibold text-[var(--text-primary)]">
                     judge.score drift · plan: tool_call.2
                   </span>
-                  <span className="ml-auto text-[10px] font-mono uppercase tracking-wider text-[var(--text-muted)] border border-[var(--border-subtle)] px-2 py-0.5 rounded">
+                  <span className="ml-auto rounded border border-[var(--border-subtle)] px-space-2 py-0.5 font-mono text-2xs uppercase tracking-wider text-[var(--text-muted)]">
                     awaiting review
                   </span>
                 </div>

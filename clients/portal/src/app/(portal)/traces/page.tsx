@@ -8,7 +8,7 @@ import { useCallback, useMemo, useState, Suspense, useEffect } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import dynamic from "next/dynamic";
-import { BookOpen, Key, Layers, RefreshCw, Loader2 } from "lucide-react";
+import { BookOpen, ChevronDown, Key, Layers, Radio, RefreshCw, Loader2 } from "lucide-react";
 import { PageHeader } from "@/components/layout/page-header";
 import { PageContent } from "@/components/layout/page-content";
 import { NoOrgState } from "@/components/ui/no-org-state";
@@ -16,17 +16,27 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorState } from "@/components/ui/error-state";
 import { LoadingSkeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { WaitingForFirstEvent } from "@/components/onboarding/WaitingForFirstEvent";
-import { TracesTab } from "../observability/_components/TracesTab";
-import { AnnotateTraceDialog } from "../observability/_components/AnnotateTraceDialog";
+import {
+  TracesTab,
+  TRACES_OPTIONAL_COLUMNS,
+  TRACES_DEFAULT_VISIBLE_OPTIONAL,
+} from "../observability/_components/TracesTab";
 import type { TraceFilter, TraceItem } from "../observability/_lib/types";
 import { useOrg } from "@/hooks/use-org";
 import { usePermissions } from "@/hooks/use-permissions";
 import { api, onboardingV2Api } from "@/lib/api";
 import { useOrgQuery } from "@/hooks/use-api-query";
 import { queryKeys } from "@/lib/query-keys";
-import { TraceExportModal } from "../observability/_components/TraceExportModal";
-import { LiveTailPanel } from "./_components/LiveTailPanel";
 import { SpanSearchBar } from "./_components/SpanSearchBar";
 import {
   ResourcePageShell,
@@ -35,24 +45,32 @@ import {
   DetailPanelShell,
   useResourceUrlState,
   useSavedViews,
+  isViewDirty,
   type FilterMode,
 } from "@/components/portal-os";
 import { useQueryTab } from "@/hooks/use-query-tab";
 import { parseQueryLanguage } from "@/lib/query-language";
 import { usePagePerf, useTableQueryPerf, markEden } from "@/lib/perf";
-import { cn } from "@/lib/utils";
 import { EmbeddedSurface } from "@/components/layout/embedded-surface";
 import { DOCS_QUICKSTART_URL } from "@/lib/constants";
-import { FIRST_EVENT_WAIT } from "@/lib/portal-polish";
+import { FIRST_EVENT_WAIT, U20_FILTER_EMPTY_COPY } from "@/lib/portal-polish";
 import {
   deriveTracesListUi,
   filtersFromSearchParams,
 } from "./traces-list-ui";
 
 const HUB_VIEWS = ["traces", "spans", "sessions"] as const;
-const LEGACY_VIEWS = ["inspect", "replay", "debug", "query"] as const;
+const LEGACY_VIEWS = ["inspect", "replay", "debug", "query", "time-travel"] as const;
 const FACET_VIEWS = ["mcp", "decisions", "memory", "retrieval"] as const;
 const ALL_VIEWS = [...HUB_VIEWS, ...LEGACY_VIEWS] as const;
+
+const LEGACY_TOOL_LINKS = [
+  { href: "/traces?view=inspect", label: "Inspector" },
+  { href: "/traces?view=replay", label: "Replay" },
+  { href: "/traces?view=debug", label: "Debugger" },
+  { href: "/traces?view=time-travel", label: "Time-Travel" },
+  { href: "/traces?view=query", label: "Query" },
+] as const;
 
 function ViewLoading() {
   return (
@@ -99,6 +117,10 @@ const QueryView = dynamic(() => import("@/app/(portal)/observability/query/page"
   ssr: false,
   loading: () => <ViewLoading />,
 });
+const TimeTravelView = dynamic(
+  () => import("@/app/(portal)/observability/time-travel/page"),
+  { ssr: false, loading: () => <ViewLoading /> },
+);
 const McpFacetView = dynamic(() => import("@/app/(portal)/observability/mcp/page"), {
   ssr: false,
   loading: () => <ViewLoading />,
@@ -114,6 +136,28 @@ const MemoryFacetView = dynamic(
 const RetrievalFacetView = dynamic(
   () => import("@/app/(portal)/observability/retrieval/page"),
   { ssr: false, loading: () => <ViewLoading /> },
+);
+/** LiveTail / export / annotate stay out of the traces hub first paint. */
+const LiveTailPanel = dynamic(
+  () =>
+    import("./_components/LiveTailPanel").then((m) => ({
+      default: m.LiveTailPanel,
+    })),
+  { ssr: false },
+);
+const TraceExportModal = dynamic(
+  () =>
+    import("../observability/_components/TraceExportModal").then((m) => ({
+      default: m.TraceExportModal,
+    })),
+  { ssr: false },
+);
+const AnnotateTraceDialog = dynamic(
+  () =>
+    import("../observability/_components/AnnotateTraceDialog").then((m) => ({
+      default: m.AnnotateTraceDialog,
+    })),
+  { ssr: false },
 );
 const PAGE_SIZE = 50;
 
@@ -134,7 +178,7 @@ function TracesPageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { state: urlState, setState: setUrlState } = useResourceUrlState();
-  const [hubView, setHubView] = useQueryTab("view", ALL_VIEWS, "traces");
+  const [hubView] = useQueryTab("view", ALL_VIEWS, "traces");
   const isLegacyView = (LEGACY_VIEWS as readonly string[]).includes(hubView);
   const facetParam = searchParams.get("facet");
   const activeFacet =
@@ -142,12 +186,46 @@ function TracesPageInner() {
       ? (facetParam as (typeof FACET_VIEWS)[number])
       : null;
   const isFacetView = activeFacet != null;
+  const liveOn = searchParams.get("live") === "1";
 
-  const traceId =
-    urlState.traceId ?? searchParams.get("trace_id") ?? searchParams.get("trace") ?? "";
-  const spanId = urlState.spanId ?? searchParams.get("span_id") ?? undefined;
-  // Hub tabs use `view=`; saved views use `savedView=` (avoids UUID clash).
-  const savedViewId = searchParams.get("savedView") ?? undefined;
+  // Master–detail: canonical `?traceId=` (aliases read via useResourceUrlState).
+  const traceId = urlState.traceId ?? "";
+  const spanId = urlState.spanId;
+  // Hub tabs use `view=`; saved views use canonical `viewId` (alias `savedView`).
+  const savedViewId = urlState.viewId;
+
+  const replaceSearchParams = useCallback(
+    (mutate: (params: URLSearchParams) => void) => {
+      const params = new URLSearchParams(searchParams.toString());
+      mutate(params);
+      const qs = params.toString();
+      router.replace(`${window.location.pathname}${qs ? `?${qs}` : ""}`, {
+        scroll: false,
+      });
+    },
+    [router, searchParams],
+  );
+
+  const setLiveOn = useCallback(
+    (on: boolean) => {
+      replaceSearchParams((params) => {
+        if (on) params.set("live", "1");
+        else params.delete("live");
+      });
+    },
+    [replaceSearchParams],
+  );
+
+  const selectHubView = useCallback(
+    (next: (typeof HUB_VIEWS)[number]) => {
+      replaceSearchParams((params) => {
+        if (next === "traces") params.delete("view");
+        else params.set("view", next);
+        params.delete("facet");
+      });
+    },
+    [replaceSearchParams],
+  );
 
   const filterUrlKey = [
     searchParams.get("realm") ?? "",
@@ -160,6 +238,15 @@ function TracesPageInner() {
     filtersFromSearchParams(searchParams),
   );
   const [query, setQuery] = useState(urlState.q ?? searchParams.get("q") ?? "");
+  const [tableSort, setTableSort] = useState<{
+    key: string;
+    direction: "asc" | "desc";
+  } | null>({ key: "duration_ms", direction: "desc" });
+  const [visibleColumns, setVisibleColumns] = useState<string[]>(() => {
+    const raw = searchParams.get("cols");
+    if (raw == null || raw === "") return [...TRACES_DEFAULT_VISIBLE_OPTIONAL];
+    return raw.split(",").map((s) => s.trim()).filter(Boolean);
+  });
   const [offset, setOffset] = useState(0);
   const [accumulated, setAccumulated] = useState<TraceItem[]>([]);
   const [exportOpen, setExportOpen] = useState(false);
@@ -167,12 +254,51 @@ function TracesPageInner() {
   const [annotateOpen, setAnnotateOpen] = useState(false);
   const [annotateTraceId, setAnnotateTraceId] = useState("");
 
+  const setFacet = useCallback(
+    (facet: string) => {
+      replaceSearchParams((params) => {
+        if (!facet) params.delete("facet");
+        else params.set("facet", facet);
+      });
+    },
+    [replaceSearchParams],
+  );
+
+  const writeVisibleColumns = useCallback(
+    (next: string[]) => {
+      setVisibleColumns(next);
+      replaceSearchParams((params) => {
+        const sameDefault =
+          next.length === TRACES_DEFAULT_VISIBLE_OPTIONAL.length &&
+          TRACES_DEFAULT_VISIBLE_OPTIONAL.every((id) => next.includes(id));
+        if (sameDefault) params.delete("cols");
+        else if (next.length === 0) params.set("cols", "");
+        else params.set("cols", next.join(","));
+      });
+    },
+    [replaceSearchParams],
+  );
+
   // Re-hydrate when shareable filter params change (deep link / back nav).
   useEffect(() => {
     setFilter(filtersFromSearchParams(searchParams));
   }, [filterUrlKey, searchParams]);
 
-  const { views, save, remove, resolveView } = useSavedViews("traces");
+  // Re-hydrate Display columns from `?cols=` on back/forward.
+  const colsParam = searchParams.get("cols");
+  useEffect(() => {
+    if (colsParam == null) {
+      setVisibleColumns([...TRACES_DEFAULT_VISIBLE_OPTIONAL]);
+      return;
+    }
+    setVisibleColumns(
+      colsParam === ""
+        ? []
+        : colsParam.split(",").map((s) => s.trim()).filter(Boolean),
+    );
+  }, [colsParam]);
+
+  const { views, save, update, remove, resolveView } = useSavedViews("traces");
   const savedState = resolveView(savedViewId);
 
   const writeFilterParams = useCallback(
@@ -202,15 +328,16 @@ function TracesPageInner() {
     [writeFilterParams],
   );
 
+  // applyView hydrates filter/q into local state — do not re-merge savedState
+  // here or dirty edits would be overwritten while the amber trigger stays on.
   const effectiveFilter = useMemo(() => {
     const base = { ...filter };
     const qParsed = parseQueryLanguage(query);
     if (qParsed.agent_id) base.agent_id = qParsed.agent_id;
     if (qParsed.outcome) base.outcome = qParsed.outcome;
     if (qParsed.realm) base.realm = qParsed.realm;
-    if (savedState?.filter) Object.assign(base, savedState.filter);
     return base;
-  }, [filter, query, savedState]);
+  }, [filter, query]);
 
   const filterKey = useMemo(
     () =>
@@ -254,7 +381,29 @@ function TracesPageInner() {
     [effectiveFilter, pageOffset],
   );
 
-  const filterDirty =
+  // UX-P0-10: dirty when filters|sort|columns diverge from active saved view / Default
+  const currentViewState = useMemo(
+    () => ({
+      q: query || undefined,
+      filter: {
+        realm: filter.realm ?? "",
+        outcome: filter.outcome ?? "",
+        agent_id: filter.agent_id ?? "",
+      },
+      sort: tableSort ?? undefined,
+      columns: visibleColumns,
+    }),
+    [
+      query,
+      filter.realm,
+      filter.outcome,
+      filter.agent_id,
+      tableSort,
+      visibleColumns,
+    ],
+  );
+  const filterDirty = isViewDirty(currentViewState, savedState);
+  const hasListConstraints =
     Boolean(query) ||
     Boolean(filter.realm || filter.outcome || filter.agent_id) ||
     Boolean(savedViewId);
@@ -267,7 +416,7 @@ function TracesPageInner() {
       // Soft poll while first-run empty so doctor / SDK traffic appears
       // without a hard refresh. Stops once rows exist or filters are on.
       refetchInterval: (q) => {
-        if (filterDirty || q.state.error) return false;
+        if (hasListConstraints || q.state.error) return false;
         const data = q.state.data;
         if (!data) return false;
         const total = data.total ?? data.traces?.length ?? 0;
@@ -351,9 +500,9 @@ function TracesPageInner() {
   const handleViewTimeline = useCallback(
     (id: string) => {
       setUrlState({ traceId: id, spanId: undefined });
-      setHubView("traces");
+      selectHubView("traces");
     },
-    [setUrlState, setHubView],
+    [setUrlState, selectHubView],
   );
 
   const handleExport = useCallback((id: string) => {
@@ -379,36 +528,43 @@ function TracesPageInner() {
 
   const applyView = useCallback(
     (viewId: string) => {
-      const params = new URLSearchParams(searchParams.toString());
-      if (!viewId) params.delete("savedView");
-      else params.set("savedView", viewId);
-      const vs = resolveView(viewId);
-      if (vs?.q) {
-        setQuery(vs.q);
-        params.set("q", vs.q);
-      }
-      if (vs?.filter) {
-        const next = {
-          realm: "",
-          outcome: "",
-          agent_id: "",
-          ...vs.filter,
-        };
-        setFilter(next);
-        if (next.realm) params.set("realm", next.realm);
+      const vs = viewId ? resolveView(viewId) : null;
+      const nextFilter = {
+        realm: "",
+        outcome: "",
+        agent_id: "",
+        ...(vs?.filter ?? {}),
+      };
+      const nextQ = vs?.q ?? "";
+      const nextCols = vs?.columns?.length
+        ? vs.columns
+        : [...TRACES_DEFAULT_VISIBLE_OPTIONAL];
+      const nextSort = vs?.sort ?? { key: "duration_ms", direction: "desc" as const };
+      setQuery(nextQ);
+      setFilter(nextFilter);
+      setVisibleColumns(nextCols);
+      setTableSort(nextSort);
+      replaceSearchParams((params) => {
+        // Canonical viewId; strip legacy savedView alias.
+        params.delete("savedView");
+        if (!viewId) params.delete("viewId");
+        else params.set("viewId", viewId);
+        if (nextQ) params.set("q", nextQ);
+        else params.delete("q");
+        if (nextFilter.realm) params.set("realm", nextFilter.realm);
         else params.delete("realm");
-        if (next.outcome) params.set("outcome", next.outcome);
+        if (nextFilter.outcome) params.set("outcome", nextFilter.outcome);
         else params.delete("outcome");
-        if (next.agent_id) params.set("agent_id", next.agent_id);
+        if (nextFilter.agent_id) params.set("agent_id", nextFilter.agent_id);
         else params.delete("agent_id");
-      }
-      window.history.replaceState(
-        null,
-        "",
-        `${window.location.pathname}?${params.toString()}`,
-      );
+        const sameDefault =
+          nextCols.length === TRACES_DEFAULT_VISIBLE_OPTIONAL.length &&
+          TRACES_DEFAULT_VISIBLE_OPTIONAL.every((id) => nextCols.includes(id));
+        if (!viewId || sameDefault) params.delete("cols");
+        else params.set("cols", nextCols.join(","));
+      });
     },
-    [resolveView, searchParams],
+    [resolveView, replaceSearchParams],
   );
 
   // Avoid false "No traces yet" / empty hub while org context is still
@@ -441,164 +597,204 @@ function TracesPageInner() {
   if (!currentOrg) return null;
 
   const toolbar = (
-    <div className="space-y-3">
-      <div
-        role="tablist"
-        aria-label="Observe hub"
-        className="flex flex-wrap gap-1 border-b border-[var(--border-default)]"
+    <div
+      className="flex flex-wrap items-end gap-2"
+      data-testid="traces-toolbar"
+      data-chrome-band="toolbar"
+    >
+      <Tabs
+        value={
+          (HUB_VIEWS as readonly string[]).includes(hubView) ? hubView : "traces"
+        }
+        onValueChange={(v) => selectHubView(v as (typeof HUB_VIEWS)[number])}
+        className="min-w-0"
       >
-        {HUB_VIEWS.map((v) => (
-          <button
-            key={v}
-            type="button"
-            role="tab"
-            aria-selected={hubView === v}
-            onClick={() => setHubView(v)}
-            className={cn(
-              "min-h-11 px-3 py-2 text-sm font-medium capitalize border-b-2 -mb-px",
-              hubView === v
-                ? "border-[var(--accent)] text-[var(--text-primary)]"
-                : "border-transparent text-[var(--text-muted)] hover:text-[var(--text-primary)]",
-            )}
-          >
-            {v}
-          </button>
-        ))}
-        <div className="ml-auto flex flex-wrap items-center gap-2 text-xs text-[var(--text-muted)] pb-1">
-          <Link href="/traces?view=inspect" className="hover:text-[var(--accent)]">
-            Inspector
-          </Link>
-          <Link href="/traces?view=replay" className="hover:text-[var(--accent)]">
-            Replay
-          </Link>
-          <Link href="/traces?view=debug" className="hover:text-[var(--accent)]">
-            Debugger
-          </Link>
-          <Link href="/observability/time-travel" className="hover:text-[var(--accent)]">
-            Time-Travel
-          </Link>
-          <Link href="/traces?view=query" className="hover:text-[var(--accent)]">
-            Query
-          </Link>
-        </div>
-      </div>
-
-      <div
-        role="group"
-        aria-label="Observability facets"
-        className="flex flex-wrap gap-1.5"
-      >
-        {FACET_VIEWS.map((facet) => (
-          <Link
-            key={facet}
-            href={`/traces?facet=${facet}`}
-            className={cn(
-              "inline-flex items-center rounded-md border px-2.5 py-1 text-xs font-medium capitalize transition-colors",
-              activeFacet === facet
-                ? "border-[var(--accent)] bg-[var(--accent-faint)] text-[var(--accent)]"
-                : "border-[var(--border-default)] text-[var(--text-secondary)] hover:border-[var(--accent)]/50 hover:text-[var(--text-primary)]",
-            )}
-          >
-            {facet}
-          </Link>
-        ))}
-      </div>
-
-      <div className="flex flex-wrap items-start gap-3">
-        <QueryFilterBar
-          mode={filterMode}
-          onModeChange={setFilterMode}
-          filters={{
-            realm: filter.realm ?? "",
-            outcome: filter.outcome ?? "",
-            agent_id: filter.agent_id ?? "",
-          }}
-          onFiltersChange={(next) =>
-            applyListFilters({
-              realm: next.realm ?? "",
-              outcome: next.outcome ?? "",
-              agent_id: next.agent_id ?? "",
-            })
-          }
-          query={query}
-          onQueryChange={(q) => {
-            setQuery(q);
-            setUrlState({ q });
-            writeFilterParams(filter, q);
-          }}
-          selects={[
-            {
-              key: "realm",
-              label: "All realms",
-              value: filter.realm ?? "",
-              options: [
-                { value: "environment", label: "Environment" },
-                { value: "production", label: "Production" },
-              ],
-            },
-            {
-              key: "outcome",
-              label: "All outcomes",
-              value: filter.outcome ?? "",
-              options: [
-                { value: "success", label: "success" },
-                { value: "failure", label: "failure" },
-                { value: "partial", label: "partial" },
-                { value: "timeout", label: "timeout" },
-              ],
-            },
-          ]}
-          onCreateAlert={() => handleCreateAlertFromFilters(filter)}
-          className="flex-1 min-w-[20rem]"
-        />
-        {filter.agent_id ? (
-          <span
-            className="inline-flex items-center gap-1 rounded-md border border-[var(--border-default)] px-2 py-1 text-xs text-[var(--text-secondary)]"
-            data-testid="traces-agent-filter-chip"
-          >
-            agent:{filter.agent_id}
-            <button
-              type="button"
-              className="text-[var(--text-muted)] hover:text-[var(--text-primary)]"
-              aria-label="Clear agent filter"
-              onClick={() =>
-                applyListFilters({ ...filter, agent_id: "" })
-              }
+        <TabsList
+          variant="underline"
+          aria-label="Observe hub"
+          className="h-auto flex-wrap justify-start gap-1 bg-transparent"
+        >
+          {HUB_VIEWS.map((v) => (
+            <TabsTrigger
+              key={v}
+              variant="underline"
+              value={v}
+              title={v}
+              className="min-h-11 capitalize"
             >
-              ×
-            </button>
-          </span>
-        ) : null}
-        <ViewsMenu
-          views={views}
-          activeViewId={savedViewId}
-          dirty={filterDirty}
-          onSelect={applyView}
-          onSave={async (name) => {
-            await save({
-              name,
-              state: { q: query, filter: { ...filter } },
-            });
-          }}
-          onDiscard={() => {
-            setQuery("");
-            applyListFilters({ realm: "", outcome: "", agent_id: "" });
-            applyView("");
-          }}
-          onDelete={async (id) => remove(id)}
-        />
-        <Button variant="outline" size="default" onClick={refresh} loading={refreshing} aria-label="Refresh traces">
-          <RefreshCw className="w-4 h-4" aria-hidden />
-          Refresh
-        </Button>
-      </div>
+              {v}
+            </TabsTrigger>
+          ))}
+        </TabsList>
+      </Tabs>
+      <QueryFilterBar
+        mode={filterMode}
+        onModeChange={setFilterMode}
+        filters={{
+          realm: filter.realm ?? "",
+          outcome: filter.outcome ?? "",
+          agent_id: filter.agent_id ?? "",
+          facet: activeFacet ?? "",
+        }}
+        onFiltersChange={(next) => {
+          const nextFacet = next.facet ?? "";
+          if (nextFacet !== (activeFacet ?? "")) {
+            setFacet(nextFacet);
+          }
+          applyListFilters({
+            realm: next.realm ?? "",
+            outcome: next.outcome ?? "",
+            agent_id: next.agent_id ?? "",
+          });
+        }}
+        query={query}
+        onQueryChange={(q) => {
+          setQuery(q);
+          setUrlState({ q });
+          writeFilterParams(filter, q);
+        }}
+        selects={[
+          {
+            key: "realm",
+            label: "All realms",
+            value: filter.realm ?? "",
+            options: [
+              { value: "environment", label: "Environment" },
+              { value: "production", label: "Production" },
+            ],
+          },
+          {
+            key: "outcome",
+            label: "All outcomes",
+            value: filter.outcome ?? "",
+            options: [
+              { value: "success", label: "success" },
+              { value: "failure", label: "failure" },
+              { value: "partial", label: "partial" },
+              { value: "timeout", label: "timeout" },
+            ],
+          },
+          {
+            key: "facet",
+            label: "Facets",
+            value: activeFacet ?? "",
+            options: FACET_VIEWS.map((facet) => ({
+              value: facet,
+              label: facet.charAt(0).toUpperCase() + facet.slice(1),
+            })),
+          },
+        ]}
+        onCreateAlert={() => handleCreateAlertFromFilters(filter)}
+        className="flex-1 min-w-[20rem]"
+      />
+      <ViewsMenu
+        views={views}
+        activeViewId={savedViewId}
+        dirty={filterDirty}
+        onSelect={applyView}
+        onSave={async (name) => {
+          await save({
+            name,
+            state: currentViewState,
+          });
+        }}
+        onSaveChanges={
+          savedViewId
+            ? async () => {
+                await update({
+                  viewId: savedViewId,
+                  state: currentViewState,
+                });
+              }
+            : undefined
+        }
+        onDiscard={() => {
+          if (savedViewId) {
+            applyView(savedViewId);
+            return;
+          }
+          applyView("");
+        }}
+        onDelete={async (id) => remove(id)}
+      />
+      <Button
+        type="button"
+        variant={liveOn ? "default" : "outline"}
+        size="default"
+        className="min-h-11"
+        aria-pressed={liveOn}
+        aria-label={liveOn ? "Turn off live tail" : "Turn on live tail"}
+        onClick={() => setLiveOn(!liveOn)}
+      >
+        <Radio className="h-4 w-4" aria-hidden />
+        Live
+      </Button>
+      <Button
+        variant="outline"
+        size="default"
+        onClick={refresh}
+        loading={refreshing}
+        aria-label="Refresh traces"
+      >
+        <RefreshCw className="w-4 h-4" aria-hidden />
+        Refresh
+      </Button>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            variant="outline"
+            size="default"
+            className="min-h-11"
+            aria-label="More tools and display"
+          >
+            More
+            <ChevronDown className="h-4 w-4" aria-hidden />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="min-w-[12rem]">
+          <DropdownMenuLabel>Tools</DropdownMenuLabel>
+          {LEGACY_TOOL_LINKS.map((item) => (
+            <DropdownMenuItem key={item.href} asChild>
+              <Link href={item.href}>{item.label}</Link>
+            </DropdownMenuItem>
+          ))}
+          <DropdownMenuSeparator />
+          <DropdownMenuLabel>Display</DropdownMenuLabel>
+          {TRACES_OPTIONAL_COLUMNS.map((col) => {
+            const checked = visibleColumns.includes(col.id);
+            return (
+              <DropdownMenuItem
+                key={col.id}
+                onSelect={(e) => {
+                  e.preventDefault();
+                  const next = checked
+                    ? visibleColumns.filter((id) => id !== col.id)
+                    : [...visibleColumns, col.id];
+                  writeVisibleColumns(next);
+                }}
+                aria-checked={checked}
+                data-testid={`display-col-${col.id}`}
+              >
+                {checked ? "✓ " : ""}
+                {col.label}
+              </DropdownMenuItem>
+            );
+          })}
+        </DropdownMenuContent>
+      </DropdownMenu>
     </div>
   );
 
   const tableContent = (
     <>
       {hubView === "traces" && (
-        <div className="grid gap-4 lg:grid-cols-[1fr_18rem]">
+        <div
+          className={
+            liveOn
+              ? "grid gap-4 lg:grid-cols-[1fr_18rem]"
+              : "space-y-4"
+          }
+        >
           <div className="space-y-4 min-w-0">
             {showError ? (
               <ErrorState
@@ -654,7 +850,7 @@ function TracesPageInner() {
                 <EmptyState
                   icon={Layers}
                   title="No traces match"
-                  description="The list returned successfully with no rows for the current filters. Clear filters or widen the query."
+                  description={U20_FILTER_EMPTY_COPY.traces}
                   size="lg"
                   action={
                     <Button
@@ -678,21 +874,28 @@ function TracesPageInner() {
                   traces={traces}
                   loading={loading}
                   filter={effectiveFilter}
-                  onFilterChange={applyListFilters}
                   onSelectTrace={handleSelectTrace}
                   onViewTimeline={handleViewTimeline}
                   onExport={handleExport}
                   onAnnotate={handleAnnotate}
-                  onCreateAlertFromFilters={handleCreateAlertFromFilters}
                   initialTraceId={traceId || undefined}
                   hasMore={!loading && !showError && tracesTotal > traces.length}
                   onLoadMore={() => setOffset((o) => o + PAGE_SIZE)}
                   loadingMore={loadingMore}
+                  visibleColumns={visibleColumns}
+                  defaultSort={tableSort ?? undefined}
+                  onSortChange={setTableSort}
                 />
               </>
             )}
           </div>
-          <LiveTailPanel orgId={currentOrg.id} onSelectTrace={handleSelectTrace} />
+          {liveOn ? (
+            <LiveTailPanel
+              orgId={currentOrg.id}
+              enabled
+              onSelectTrace={handleSelectTrace}
+            />
+          ) : null}
         </div>
       )}
       {hubView === "spans" && orgId && (
@@ -702,6 +905,7 @@ function TracesPageInner() {
         <SessionsTab
           orgId={orgId}
           agentId={effectiveFilter.agent_id || undefined}
+          outcome={effectiveFilter.outcome || undefined}
           onSelectSession={(sid) => {
             router.push(`/sessions/${encodeURIComponent(sid)}`);
           }}
@@ -720,41 +924,7 @@ function TracesPageInner() {
             subtitle="Traces, spans, and sessions — shareable filters and inline transcript detail."
           />
         }
-        toolbar={
-          isLegacyView ? undefined : isFacetView ? (
-            <div className="space-y-2">
-              <div className="flex flex-wrap items-center gap-2 text-xs">
-                <Link href="/traces" className="text-[var(--accent)] hover:underline">
-                  ← Traces
-                </Link>
-                <span className="text-[var(--text-muted)]">·</span>
-                <span className="text-[var(--text-muted)]">Facets</span>
-              </div>
-              <div
-                role="group"
-                aria-label="Observability facets"
-                className="flex flex-wrap gap-1.5"
-              >
-                {FACET_VIEWS.map((facet) => (
-                  <Link
-                    key={facet}
-                    href={`/traces?facet=${facet}`}
-                    className={cn(
-                      "inline-flex items-center rounded-md border px-2.5 py-1 text-xs font-medium capitalize transition-colors",
-                      activeFacet === facet
-                        ? "border-[var(--accent)] bg-[var(--accent-faint)] text-[var(--accent)]"
-                        : "border-[var(--border-default)] text-[var(--text-secondary)] hover:border-[var(--accent)]/50 hover:text-[var(--text-primary)]",
-                    )}
-                  >
-                    {facet}
-                  </Link>
-                ))}
-              </div>
-            </div>
-          ) : (
-            toolbar
-          )
-        }
+        toolbar={isLegacyView ? undefined : toolbar}
         table={
           isLegacyView || isFacetView ? (
             <EmbeddedSurface>
@@ -762,6 +932,7 @@ function TracesPageInner() {
               {hubView === "replay" && <ReplayView />}
               {hubView === "debug" && <DebugView />}
               {hubView === "query" && <QueryView />}
+              {hubView === "time-travel" && <TimeTravelView />}
               {activeFacet === "mcp" && <McpFacetView />}
               {activeFacet === "decisions" && <DecisionsFacetView />}
               {activeFacet === "memory" && <MemoryFacetView />}
@@ -784,6 +955,7 @@ function TracesPageInner() {
                 traceId={traceId}
                 highlightSpanId={spanId}
                 onClose={handleCloseDetail}
+                hideCloseControl
               />
             </DetailPanelShell>
           ) : null

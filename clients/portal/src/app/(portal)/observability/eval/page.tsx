@@ -10,12 +10,12 @@ import { ErrorState } from "@/components/ui/error-state";
 import { NoOrgState } from "@/components/ui/no-org-state";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { PageHeader } from "@/components/layout/page-header";
 import { PageContent } from "@/components/layout/page-content";
+import { ObserveLeafHeader } from "@/app/(portal)/observability/_components/observe-leaf-shell";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { DataTable } from "@/components/ui/data-table";
-import { BarChart3, Gauge, Loader2, Plus, Tag, Layers, Shield, CheckCircle2 } from "lucide-react";
+import { BarChart3, Gauge, Plus, Tag, Layers, Shield, CheckCircle2 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import {
   featureGatedErrorCopy,
@@ -31,7 +31,7 @@ export default function EvalPage() {
 
   return (
     <PageContent size="wide">
-      <PageHeader title="Evaluation" subtitle="Judge versions and failure clusters" icon={BarChart3} eyebrow="Observe" />
+      <ObserveLeafHeader title="Evaluation" subtitle="Judge versions and failure clusters" icon={BarChart3} />
 
       {error ? (
         <ErrorState
@@ -53,7 +53,11 @@ export default function EvalPage() {
         />
       ) : (
         <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as Tab)}>
-          <TabsList aria-label="Evaluation sections" className="bg-[var(--bg-tertiary)] rounded-xl h-auto flex-wrap w-fit">
+          <TabsList
+            variant="underline"
+            aria-label="Evaluation sections"
+            className="h-auto w-full justify-start gap-1 bg-transparent border-b border-[var(--border-default)]"
+          >
             {(
               [
                 { key: "versions" as Tab, label: "Versions", icon: Tag },
@@ -63,7 +67,8 @@ export default function EvalPage() {
               <TabsTrigger
                 key={key}
                 value={key}
-                className="flex items-center gap-2 data-[state=active]:text-[var(--text-primary)]"
+                variant="underline"
+                className="flex items-center gap-2"
               >
                 <Icon className="w-4 h-4" aria-hidden />
                 {label}
@@ -137,12 +142,13 @@ function VersionsTab({ orgId, onError }: { orgId: string; onError: (s: string) =
         title={copy.title}
         message={copy.message}
         action={
-          <button
+          <Button
+            variant="default"
+            className="min-h-11"
             onClick={() => void versionsQuery.refetch()}
-            className="inline-flex items-center gap-2 px-3 py-1.5 rounded-md bg-[var(--accent)] text-[var(--bg-base)] text-xs font-medium hover:bg-[var(--accent-hover)] transition-colors"
           >
             Try again
-          </button>
+          </Button>
         }
       />
     );
@@ -151,13 +157,10 @@ function VersionsTab({ orgId, onError }: { orgId: string; onError: (s: string) =
   return (
     <div className="space-y-4">
       <div className="flex justify-end">
-        <button
-          onClick={() => setTagOpen(true)}
-          className="inline-flex items-center gap-2 px-4 py-2 bg-[var(--accent)] text-[var(--bg-base)] rounded-lg text-sm font-medium hover:bg-[var(--accent-hover)] transition-colors"
-        >
+        <Button variant="default" className="min-h-11" onClick={() => setTagOpen(true)}>
           <Plus className="w-4 h-4" />
           Tag new version
-        </button>
+        </Button>
       </div>
 
       {loading ? (
@@ -270,20 +273,13 @@ function VersionsTab({ orgId, onError }: { orgId: string; onError: (s: string) =
             </div>
           </div>
           <DialogFooter>
-            <button
-              onClick={() => setTagOpen(false)}
-              className="px-3 py-1.5 bg-[var(--bg-tertiary)] text-[var(--text-primary)] rounded-lg text-xs font-medium hover:bg-[var(--border-default)] transition-colors"
-            >
+            <Button variant="outline" size="sm" onClick={() => setTagOpen(false)}>
               Cancel
-            </button>
-            <button
-              onClick={handleTag}
-              disabled={submitting}
-              className="inline-flex items-center gap-1.5 px-4 py-1.5 bg-[var(--accent)] text-[var(--bg-base)] rounded-lg text-xs font-medium hover:bg-[var(--accent-hover)] disabled:opacity-50 transition-colors"
-            >
-              {submitting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Tag className="w-3.5 h-3.5" />}
+            </Button>
+            <Button variant="default" className="min-h-11" onClick={handleTag} loading={submitting}>
+              <Tag className="w-3.5 h-3.5" />
               Tag version
-            </button>
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -378,14 +374,16 @@ function FailureClustersTab({ orgId, onError }: { orgId: string; onError: (s: st
             />
           </div>
         </div>
-        <button
+        <Button
+          variant="secondary"
+          size="sm"
+          className="min-h-11"
           onClick={() => void load()}
-          disabled={loading}
-          className="inline-flex items-center gap-2 px-3 py-1.5 bg-[var(--bg-tertiary)] text-[var(--text-primary)] rounded-lg text-xs font-medium hover:bg-[var(--border-default)] disabled:opacity-50 transition-colors"
+          loading={loading}
         >
-          {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Layers className="w-3.5 h-3.5" />}
+          <Layers className="w-3.5 h-3.5" />
           {hasLoaded ? "Refresh" : "Find clusters"}
-        </button>
+        </Button>
       </Card>
 
       {!hasLoaded && !loading ? (
@@ -454,16 +452,18 @@ function FailureClustersTab({ orgId, onError }: { orgId: string; onError: (s: st
                 header: "",
                 align: "right",
                 cell: (c) => (
-                  <button
+                  <Button
+                    variant="default"
+                    size="sm"
+                    className="min-h-11"
                     onClick={() => {
                       setOpenCluster(c);
                       setPromoteForm({ judge_name: judgeName.trim(), threshold: 0.5 });
                     }}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[var(--accent)] text-[var(--bg-base)] rounded-lg text-xs font-medium hover:bg-[var(--accent-hover)] transition-colors"
                   >
                     <Shield className="w-3.5 h-3.5" />
                     Promote to guardrail
-                  </button>
+                  </Button>
                 ),
               },
             ]}
@@ -511,20 +511,13 @@ function FailureClustersTab({ orgId, onError }: { orgId: string; onError: (s: st
             </div>
           </div>
           <DialogFooter>
-            <button
-              onClick={() => setOpenCluster(null)}
-              className="px-3 py-1.5 bg-[var(--bg-tertiary)] text-[var(--text-primary)] rounded-lg text-xs font-medium hover:bg-[var(--border-default)] transition-colors"
-            >
+            <Button variant="outline" size="sm" onClick={() => setOpenCluster(null)}>
               Cancel
-            </button>
-            <button
-              onClick={handlePromote}
-              disabled={!!promoting}
-              className="inline-flex items-center gap-1.5 px-4 py-1.5 bg-[var(--accent)] text-[var(--bg-base)] rounded-lg text-xs font-medium hover:bg-[var(--accent-hover)] disabled:opacity-50 transition-colors"
-            >
-              {promoting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Shield className="w-3.5 h-3.5" />}
+            </Button>
+            <Button variant="default" className="min-h-11" onClick={handlePromote} loading={!!promoting}>
+              <Shield className="w-3.5 h-3.5" />
               Promote
-            </button>
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

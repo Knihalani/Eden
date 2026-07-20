@@ -173,6 +173,7 @@
   --overlay: rgba(0, 0, 0, 0.72);
 
   /* Typography Scale */
+  --font-size-xs: 0.75rem; /* 12 — smallest readable UI chrome */
   --font-size-sm: 0.875rem;
   --font-size-base: 1rem;
   --font-size-lg: 1.125rem;
@@ -210,11 +211,17 @@
 
   --letter-spacing-tight: -0.025em;
   --letter-spacing-normal: 0;
+  --letter-spacing-wide: 0.05em; /* uppercase 2xs meta labels */
 
-  /* Spacing System (base 4px) */
-  --space-2: 0.5rem;
-  --space-3: 0.75rem;
-  --space-4: 1rem;
+  /* Spacing System — 4px base, 8px primary (complete ladder) */
+  --space-1: 0.25rem; /* 4 */
+  --space-2: 0.5rem;  /* 8 */
+  --space-3: 0.75rem; /* 12 */
+  --space-4: 1rem;    /* 16 */
+  --space-5: 1.5rem;  /* 24 */
+  --space-6: 2rem;    /* 32 */
+  --space-7: 2.5rem;  /* 40 */
+  --space-8: 3rem;    /* 48 */
 
   /* Border Radius */
   --radius-sm: 6px;
@@ -346,8 +353,27 @@
   --radius-md: var(--radius-md);
   --radius-lg: var(--radius-lg);
   --radius-xl: var(--radius-xl);
-  --font-size-2xs: var(--font-size-2xs);
+  /* Spacing → p-space-*, m-space-*, gap-space-*, etc. */
+  --spacing-space-1: var(--space-1);
+  --spacing-space-2: var(--space-2);
+  --spacing-space-3: var(--space-3);
+  --spacing-space-4: var(--space-4);
+  --spacing-space-5: var(--space-5);
+  --spacing-space-6: var(--space-6);
+  --spacing-space-7: var(--space-7);
+  --spacing-space-8: var(--space-8);
+
+  /* Type — full ladder (2xs/3xs restricted to meta/mono) */
   --font-size-3xs: var(--font-size-3xs);
+  --font-size-2xs: var(--font-size-2xs);
+  --font-size-xs: var(--font-size-xs);
+  --font-size-sm: var(--font-size-sm);
+  --font-size-base: var(--font-size-base);
+  --font-size-lg: var(--font-size-lg);
+  --font-size-xl: var(--font-size-xl);
+  --font-size-2xl: var(--font-size-2xl);
+  --font-size-3xl: var(--font-size-3xl);
+  --font-size-4xl: var(--font-size-4xl);
   --shadow-xs: var(--shadow-xs);
   --shadow-sm: var(--shadow-sm);
   --shadow-md: var(--shadow-md);
@@ -379,8 +405,8 @@ body {
   background: var(--bg-base);
   color: var(--text-primary);
   font-family: var(--font-sans);
-  /* Dark UI: light type reads thinner — slightly looser leading. */
-  line-height: 1.55;
+  /* Align body leading to token ladder (was 1.55). */
+  line-height: var(--line-height-normal);
   letter-spacing: var(--letter-spacing-normal);
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
@@ -426,9 +452,35 @@ select:focus-visible,
   box-shadow: 0 0 0 2px var(--focus-ring-offset), 0 0 0 4px var(--focus-ring);
 }
 
-/* Smooth Scrolling */
+/* Smooth Scrolling + WCAG 2.4.11 focus-not-obscured clearance.
+ * Sticky shell header is h-11 (2.75rem); mobile bottom nav is h-16 +
+ * safe-area. scroll-padding on html + scroll-margin on focused
+ * controls keep keyboard focus from sitting fully under chrome. */
 html {
   scroll-behavior: smooth;
+  scroll-padding-top: 3.5rem;
+  scroll-padding-bottom: 5.5rem;
+}
+
+@media (min-width: 1024px) {
+  html {
+    scroll-padding-bottom: 0.75rem;
+  }
+}
+
+#main-content {
+  scroll-margin-top: 3.5rem;
+}
+
+#main-content :focus-visible {
+  scroll-margin-top: 3.5rem;
+  scroll-margin-bottom: 5.5rem;
+}
+
+@media (min-width: 1024px) {
+  #main-content :focus-visible {
+    scroll-margin-bottom: 0.75rem;
+  }
 }
 
 /* FIX-A + FIX-B: explicit body / html scroll contract.

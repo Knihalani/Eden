@@ -8,7 +8,7 @@
 import { useState } from "react";
 import { useOrgQuery } from "@/hooks/use-api-query";
 import { queryKeys } from "@/lib/query-keys";
-import { Code, Loader2, Plus, Trash2 } from "lucide-react";
+import { Code, Plus, Trash2 } from "lucide-react";
 import { usePermissions } from "@/hooks/use-permissions";
 import { useToast } from "@/components/ui/toast";
 import { useConfirm } from "@/hooks/use-confirm";
@@ -100,10 +100,10 @@ export function ReferencesTab({ org }: ReferencesTabProps) {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-space-4">
       {hasPermission("references:upload") && (
         <SettingsCard title="Upload code reference">
-          <form onSubmit={handleUpload} className="space-y-3">
+          <form onSubmit={handleUpload} className="space-y-space-3">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <input
                 name="name"
@@ -136,14 +136,10 @@ export function ReferencesTab({ org }: ReferencesTabProps) {
                 aria-label="Code file"
                 className="flex-1 text-sm"
               />
-              <button
-                type="submit"
-                disabled={uploading}
-                className="px-4 py-2 bg-[var(--accent)] text-[var(--accent-foreground)] rounded-lg text-sm font-medium hover:opacity-90 disabled:opacity-50 flex items-center gap-2"
-              >
-                {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+              <Button type="submit" variant="default" className="min-h-11" loading={uploading}>
+                <Plus className="w-4 h-4" />
                 Upload
-              </button>
+              </Button>
             </div>
           </form>
         </SettingsCard>

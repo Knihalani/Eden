@@ -328,7 +328,7 @@ export default function ImprovementPlanDetailPage({
 
   return (
     <PageContent size="wide">
-      <Button variant="ghost" onClick={() => router.push("/improve/plans")} size="sm">
+      <Button variant="ghost" onClick={() => router.push("/improve/plans")} size="sm" className="min-h-11">
         <ArrowLeft className="h-4 w-4 mr-1" />
         Back to inbox
       </Button>
@@ -345,6 +345,7 @@ export default function ImprovementPlanDetailPage({
                 <Button
                   variant="outline"
                   size="sm"
+                  className="min-h-11"
                   onClick={() => void handleSaveDraft()}
                   disabled={!dirty || busyAction === "save"}
                 >
@@ -357,6 +358,7 @@ export default function ImprovementPlanDetailPage({
                 </Button>
                 <Button
                   size="sm"
+                  className="min-h-11"
                   onClick={() => setConfirmAction("approve")}
                   disabled={busyAction === "approve"}
                 >
@@ -366,6 +368,7 @@ export default function ImprovementPlanDetailPage({
                 <Button
                   variant="outline"
                   size="sm"
+                  className="min-h-11"
                   onClick={() => setConfirmAction("reject")}
                   disabled={busyAction === "reject"}
                 >
@@ -375,6 +378,7 @@ export default function ImprovementPlanDetailPage({
                 <Button
                   variant="ghost"
                   size="sm"
+                  className="min-h-11"
                   onClick={() => void handleSnooze()}
                   disabled={busyAction === "snooze"}
                 >
@@ -384,7 +388,7 @@ export default function ImprovementPlanDetailPage({
               </>
             )}
             {plan.pr_url && (
-              <Button asChild variant="outline" size="sm">
+              <Button asChild variant="outline" size="sm" className="min-h-11">
                 <a href={plan.pr_url} target="_blank" rel="noreferrer">
                   <ExternalLink className="h-4 w-4 mr-1" />
                   View PR #{plan.pr_number ?? ""}

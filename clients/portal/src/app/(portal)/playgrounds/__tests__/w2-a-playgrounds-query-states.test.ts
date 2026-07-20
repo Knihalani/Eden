@@ -28,21 +28,22 @@ function showPlaygroundsEmpty(opts: {
 }
 
 describe("W2-A playgrounds query states", () => {
-  it("gates empty on isLoading / isPending / isError, not busy alone", () => {
+  it("gates empty on isLoading / isPending / isError via QueryState", () => {
     const src = read("app/(portal)/playgrounds/page.tsx");
     expect(src).not.toMatch(/!playgrounds\.length && !busy/);
     expect(src).toMatch(/listQuery\.isLoading/);
     expect(src).toMatch(/listQuery\.isPending/);
     expect(src).toMatch(/listQuery\.isError/);
-    expect(src).toMatch(/!loading && !listError && playgrounds\.length === 0/);
+    expect(src).toContain("<QueryState");
+    expect(src).toContain("isEmpty={(rows) => rows.length === 0}");
   });
 
-  it("renders in-page ErrorState with retry", () => {
+  it("renders in-page QueryState with retry", () => {
     const src = read("app/(portal)/playgrounds/page.tsx");
-    expect(src).toContain('from "@/components/ui/error-state"');
+    expect(src).toContain('from "@/components/ui/query-state"');
     expect(src).toContain("Could not load playgrounds");
-    expect(src).toContain("Try again");
-    expect(src).toContain("onClick={() => void load()}");
+    expect(src).toContain("<QueryState");
+    expect(src).toContain("onRetry={() => void load()}");
   });
 
   it("does not show empty while loading or on error", () => {

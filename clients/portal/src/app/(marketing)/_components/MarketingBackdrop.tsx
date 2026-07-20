@@ -1,7 +1,7 @@
 /**
- * Ambient atmosphere for marketing — soft radial + fine grid.
+ * Ambient atmosphere for marketing — soft accent radial + fine grid.
  * Pointer-events none; quieter under prefers-reduced-motion.
- * Kept restrained: no purple mesh, no decorative glow blobs.
+ * No purple mesh, no phosphor-green decoration (green = active only).
  */
 export function MarketingBackdrop() {
   return (
@@ -10,21 +10,21 @@ export function MarketingBackdrop() {
       className="pointer-events-none absolute inset-0 -z-10 overflow-hidden"
     >
       <div
-        className="absolute -top-32 left-[-10%] h-[70vh] w-[70vw] opacity-[0.22] motion-reduce:opacity-[0.1]"
+        className="absolute -top-32 left-[-10%] h-[70vh] w-[70vw] opacity-[0.2] motion-reduce:opacity-[0.08]"
         style={{
           background:
             "radial-gradient(ellipse at 30% 20%, var(--accent-dim) 0%, transparent 62%)",
         }}
       />
       <div
-        className="absolute bottom-[-20%] right-[-8%] h-[55vh] w-[50vw] opacity-[0.14] motion-reduce:opacity-[0.06]"
+        className="absolute bottom-[-18%] right-[-10%] h-[50vh] w-[48vw] opacity-[0.1] motion-reduce:opacity-[0.04]"
         style={{
           background:
-            "radial-gradient(ellipse at center, color-mix(in srgb, var(--terminal) 18%, transparent) 0%, transparent 70%)",
+            "radial-gradient(ellipse at center, color-mix(in srgb, var(--accent) 14%, transparent) 0%, transparent 70%)",
         }}
       />
       <svg
-        className="absolute inset-0 h-full w-full opacity-[0.35] motion-reduce:opacity-[0.15]"
+        className="absolute inset-0 h-full w-full opacity-[0.32] motion-reduce:opacity-[0.12]"
         xmlns="http://www.w3.org/2000/svg"
         aria-hidden
       >

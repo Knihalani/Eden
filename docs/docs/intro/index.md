@@ -1,7 +1,7 @@
 ---
 slug: /
 id: index
-title: Eden — observability, evaluation, governance for AI agents
+title: Eden — observability + improvement for AI agents
 description: Drop-in observability and evals for LLM applications and AI agents. OpenTelemetry-native, auto-instrumentation, deterministic judge scores, cost intelligence.
 keywords: [eden, llm, observability, ai agents, evaluation, tracing, opentelemetry]
 sidebar_label: Home
@@ -11,18 +11,18 @@ hide_table_of_contents: true
 ---
 
 <div class="eden-hero">
-  <div class="eden-hero__badge">EDEN · v1.7</div>
+  <p class="eden-hero__brand">Eden</p>
   <h1 class="eden-hero__title">
-    Observability, evaluation,<br/>
-    <span class="eden-hero__title--accent">governance for AI agents.</span>
+    Observability and improvement for AI agents.
   </h1>
   <p class="eden-hero__subtitle">
     Drop-in tracing, auto-instrumentation, deterministic judges, cost
-    intelligence, and a portal that turns trace data into action.
+    intelligence — and a portal that turns traces into reviewable patches.
   </p>
   <div class="eden-hero__cta">
-    <a class="eden-btn eden-btn--primary" href="/quickstart">Get started →</a>
+    <a class="eden-btn eden-btn--primary" href="/quickstart">Quickstart</a>
     <a class="eden-btn eden-btn--ghost" href="/reference/sdk-python">Browse SDKs</a>
+    <a class="eden-btn eden-btn--ghost" href="https://edenobservability.com/sign-up">Start free</a>
   </div>
   <div class="eden-hero__install" role="group" aria-label="Install command">
     <span class="eden-hero__install-prompt" aria-hidden="true">$</span>
@@ -35,59 +35,46 @@ hide_table_of_contents: true
 
 ## What is Eden?
 
-Eden is the data plane for production AI agents. You point the SDK at
-your code, Eden captures every LLM call (tokens, cost, latency, model,
-prompt, response), and the portal turns the firehose into traces,
-judge scores, cost breakdowns, regression alerts, and audit-ready
-governance evidence.
+Eden is the data plane for production AI agents. Point an SDK or gateway
+at your traffic, Eden captures every LLM call (tokens, cost, latency,
+model, prompt, response), and the portal turns the firehose into traces,
+judge scores, cost breakdowns, regression alerts, and human-reviewed
+patch suggestions.
 
 The platform ships:
 
 - **Two production SDKs** — Python (`eden-sdk`) and TypeScript
-  (`@eden-ai/sdk`). Each one is fire-and-forget; producer p99
-  overhead is budgeted at ≤ 5 ms.
-- **Open ingestion** — the API accepts OpenAI, Anthropic, LangChain,
-  Vercel AI, and raw `custom` events. Wire it from your own code
-  even if you don't use an SDK.
-- **22 intelligence surfaces** — trace replay, RCA, evaluation,
-  retrieval, memory, agents, cost, user, governance, outcome,
-  experimentation, prediction, autonomy, APM depth, and more.
-- **One portal** — Next.js dashboard at `edenobservability.com`.
-  Observability, evaluators, cost intelligence, judges, incidents, and
-  improvement controls.
+  (`@eden-ai/sdk`). Fire-and-forget; producer p99 overhead budgeted ≤ 5 ms.
+- **Open ingestion** — OpenAI, Anthropic, LangChain, Vercel AI, and raw
+  `custom` events. Wire it from your own code even without an SDK.
+- **One portal** — Next.js workspace at `edenobservability.com`.
+  Traces, evaluators, cost intelligence, incidents, and Improve.
 
 ---
 
-## The four pillars
+## Capture. Analyse. Improve.
 
 <div class="eden-grid">
 
   <div class="eden-card">
-    <div class="eden-card__icon">🔭</div>
-    <h3>Observe</h3>
-    <p>OTel-compatible ingestion, full trace timelines, agent-graph view, and 22 specialised intelligence surfaces.</p>
+    <p class="eden-card__eyebrow">Observe</p>
+    <h3>Capture every call</h3>
+    <p>OTel-compatible ingestion, full trace timelines, and specialised intelligence surfaces.</p>
     <a href="/reference/api-ingestion">Ingestion reference →</a>
   </div>
 
   <div class="eden-card">
-    <div class="eden-card__icon">🧠</div>
-    <h3>Evaluate</h3>
-    <p>Deterministic + LLM judges, regression alerts, golden datasets, batch replay, and closed-loop prompt evolution.</p>
+    <p class="eden-card__eyebrow">Evaluate</p>
+    <h3>Score what shipped</h3>
+    <p>Deterministic + LLM judges, regression alerts, golden datasets, and batch replay.</p>
     <a href="/tutorials/judge-model-output">Judge tutorial →</a>
   </div>
 
   <div class="eden-card">
-    <div class="eden-card__icon">💸</div>
-    <h3>Control cost</h3>
-    <p>Per-org token budgets, soft/hard limits, cost forecasting, anomaly detection, and ROI by department.</p>
+    <p class="eden-card__eyebrow">Control</p>
+    <h3>Budget and govern</h3>
+    <p>Per-org token budgets, PII redaction, audit log, RBAC, and compliance evidence.</p>
     <a href="/how-to/cost-budgets">Set a budget →</a>
-  </div>
-
-  <div class="eden-card">
-    <div class="eden-card__icon">🛡️</div>
-    <h3>Govern</h3>
-    <p>PII scanner with in-place redaction, RTBF anonymisation, SOC 2 / HIPAA / GDPR evidence packs, audit log, RBAC.</p>
-    <a href="/explanation/security-model">Security model →</a>
   </div>
 
 </div>
@@ -99,7 +86,7 @@ The platform ships:
 <div class="eden-grid eden-grid--compact">
 
   <div class="eden-card eden-card--small">
-    <h4>📘 I'm new here</h4>
+    <p class="eden-card__eyebrow">New here</p>
     <ul>
       <li><a href="/quickstart">5-minute quickstart</a></li>
       <li><a href="/tutorials/auto-instrument-openai">Auto-instrument OpenAI</a></li>
@@ -108,30 +95,22 @@ The platform ships:
   </div>
 
   <div class="eden-card eden-card--small">
-    <h4>🛠️ I need to integrate</h4>
+    <p class="eden-card__eyebrow">Integrate</p>
     <ul>
       <li><a href="/reference/sdk-python">Python SDK</a></li>
       <li><a href="/reference/sdk-typescript">TypeScript SDK</a></li>
       <li><a href="/reference/api">REST API</a></li>
+      <li><a href="/how-to/api-keys">API keys</a></li>
     </ul>
   </div>
 
   <div class="eden-card eden-card--small">
-    <h4>🔒 I'm a security / compliance person</h4>
+    <p class="eden-card__eyebrow">Security</p>
     <ul>
       <li><a href="/how-to/auth">Auth model</a></li>
       <li><a href="/how-to/pii">Set a PII policy</a></li>
       <li><a href="/explanation/security-model">Security model</a></li>
-      <li><a href="/explanation/multi-tenancy">Multi-tenancy</a></li>
-    </ul>
-  </div>
-
-  <div class="eden-card eden-card--small">
-    <h4>🔌 Integrate</h4>
-    <ul>
-      <li><a href="/how-to/api-keys">API keys</a></li>
-      <li><a href="/how-to/connect-any-agent">Connect any agent</a></li>
-      <li><a href="/how-to/deploy">API endpoint</a></li>
+      <li><a href="https://edenobservability.com/security">Portal security</a></li>
     </ul>
   </div>
 

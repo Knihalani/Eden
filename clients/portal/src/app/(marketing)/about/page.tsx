@@ -19,10 +19,10 @@ export const metadata: Metadata = {
 };
 
 const ctaPrimary =
-  "inline-flex items-center justify-center gap-2 min-h-11 px-5 py-2.5 text-sm font-medium bg-[var(--accent)] text-[var(--bg-base)] rounded-lg hover:bg-[var(--accent-hover)] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-secondary)]";
+  "inline-flex items-center justify-center gap-space-2 min-h-11 px-space-5 py-space-3 text-sm font-medium bg-[var(--accent)] text-[var(--bg-base)] rounded-lg hover:bg-[var(--accent-hover)] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-secondary)]";
 
 const ctaSecondary =
-  "inline-flex items-center justify-center gap-2 min-h-11 px-5 py-2.5 text-sm font-medium text-[var(--text-primary)] bg-[var(--bg-primary)]/80 border border-[var(--border-default)] rounded-lg hover:bg-[var(--bg-tertiary)] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-secondary)]";
+  "inline-flex items-center justify-center gap-space-2 min-h-11 px-space-5 py-space-3 text-sm font-medium text-[var(--text-primary)] bg-[var(--bg-primary)]/80 border border-[var(--border-default)] rounded-lg hover:bg-[var(--bg-tertiary)] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-secondary)]";
 
 export default function AboutPage() {
   return (
@@ -32,13 +32,13 @@ export default function AboutPage() {
       description={PRODUCT_TAGLINE}
       size="medium"
     >
-      <div className="space-y-6 text-[var(--text-secondary)] leading-relaxed max-w-2xl">
+      <div className="space-y-space-5 text-[var(--text-secondary)] leading-relaxed max-w-2xl">
         <p>
           Eden is the observability + improvement platform for AI agents and LLM apps: drop-in
           SDKs (
-          <code className="font-mono text-[13px] text-[var(--text-primary)]">eden-sdk</code>
+          <code className="font-mono text-sm text-[var(--text-primary)]">eden-sdk</code>
           {" / "}
-          <code className="font-mono text-[13px] text-[var(--text-primary)]">@eden-ai/sdk</code>
+          <code className="font-mono text-sm text-[var(--text-primary)]">@eden-ai/sdk</code>
           ) and an OpenAI-compatible gateway for capture, plus a multi-tenant workspace for
           traces, evals, export, and a cited AI assistant.
         </p>
@@ -51,7 +51,7 @@ export default function AboutPage() {
           Voice is precise, technical, and calm — closer to an instrument panel than a marketing
           deck. Soft launch is free while we harden the closed-loop path for production teams.
         </p>
-        <div className="flex flex-wrap items-center gap-3 pt-4">
+        <div className="flex flex-wrap items-center gap-space-3 pt-space-4">
           <SignedInGate
             signedIn={
               <Link href="/dashboard" className={ctaPrimary}>

@@ -2,12 +2,9 @@
 
 /**
  * SettingsCategoryGroup — collapsible group header for the
- * Settings tab rail.
- *
- * State is persisted to localStorage so the user's collapse
- * preference survives reloads. The 6 categories ("Org",
- * "Members", "Security", "Compliance", "Billing", "Advanced")
- * match the taxonomy declared in settings/page.tsx.
+ * Settings tab rail (Org · Members · Security · Compliance ·
+ * Billing · Advanced). Collapse state persists in localStorage.
+ * Advanced defaults collapsed; search forces groups open.
  */
 
 import { ChevronDown } from "lucide-react";
@@ -16,15 +13,21 @@ import { cn } from "@/lib/utils";
 
 const STORAGE_KEY = "eden:settings:cat-collapsed";
 
+/** First-visit defaults — Advanced starts collapsed to shorten the rail. */
+const DEFAULT_COLLAPSED: Record<string, boolean> = {
+  Advanced: true,
+};
+
 function readCollapsed(): Record<string, boolean> {
-  if (typeof window === "undefined") return {};
+  if (typeof window === "undefined") return { ...DEFAULT_COLLAPSED };
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY);
-    if (!raw) return {};
+    if (!raw) return { ...DEFAULT_COLLAPSED };
     const parsed = JSON.parse(raw);
-    return typeof parsed === "object" && parsed !== null ? (parsed as Record<string, boolean>) : {};
+    if (typeof parsed !== "object" || parsed === null) return { ...DEFAULT_COLLAPSED };
+    return { ...DEFAULT_COLLAPSED, ...(parsed as Record<string, boolean>) };
   } catch {
-    return {};
+    return { ...DEFAULT_COLLAPSED };
   }
 }
 
@@ -39,58 +42,69 @@ function writeCollapsed(next: Record<string, boolean>) {
 
 interface SettingsCategoryGroupProps {
   category: string;
-  /** Visible tab count within this group (so the header can show
-   *  "(3)" if the user wants). Optional. */
+  /** Visible tab count within this group. */
   count?: number;
+  /** When searching, force the group open so matches stay visible. */
+  forceExpanded?: boolean;
   children: React.ReactNode;
 }
 
-export function SettingsCategoryGroup({ category, count, children }: SettingsCategoryGroupProps) {
-  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+export function SettingsCategoryGroup({
+  category,
+  count,
+  forceExpanded = false,
+  children,
+}: SettingsCategoryGroupProps) {
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>(DEFAULT_COLLAPSED);
 
-  // ponytail: hydrate after mount so the first client paint
-  // matches SSR. Without the gate the group would jump from
-  // expanded → collapsed on reload.
+  // Hydrate after mount so SSR matches the first client paint defaults.
   useEffect(() => {
     setCollapsed(readCollapsed());
   }, []);
 
-  const isCollapsed = collapsed[category] === true;
+  const isCollapsed = !forceExpanded && collapsed[category] === true;
 
   const toggle = () => {
+    if (forceExpanded) return;
     const next = { ...collapsed, [category]: !isCollapsed };
     setCollapsed(next);
     writeCollapsed(next);
   };
 
   return (
-    <div className="space-y-1">
+    <div className="space-y-space-1">
       <button
         type="button"
         onClick={toggle}
         aria-expanded={!isCollapsed}
         aria-controls={`settings-cat-${category}`}
-        className="w-full flex items-center justify-between gap-2 px-2 py-1 text-[10px] font-mono font-semibold uppercase tracking-[0.14em] text-[var(--text-muted)] hover:text-[var(--text-secondary)] rounded transition-colors"
+        disabled={forceExpanded}
+        className={cn(
+          "w-full flex items-center justify-between gap-space-2 px-space-2 py-space-1 text-2xs font-mono font-semibold uppercase tracking-[0.14em] text-[var(--text-muted)] rounded transition-colors",
+          forceExpanded
+            ? "cursor-default opacity-90"
+            : "hover:text-[var(--text-secondary)]",
+        )}
       >
-        <span className="flex items-center gap-2 min-w-0">
+        <span className="flex items-center gap-space-2 min-w-0">
           <ChevronDown
             className={cn(
               "w-3 h-3 transition-transform shrink-0",
-              isCollapsed && "-rotate-90"
+              isCollapsed && "-rotate-90",
             )}
             aria-hidden
           />
           <span className="truncate">{category}</span>
-          {typeof count === "number" && (
+          {typeof count === "number" ? (
             <span className="text-[var(--text-faint)]">({count})</span>
-          )}
+          ) : null}
         </span>
       </button>
-      {!isCollapsed && (
-        <div id={`settings-cat-${category}`} className="space-y-1">
+      {!isCollapsed ? (
+        <div id={`settings-cat-${category}`} className="space-y-space-1">
           {children}
         </div>
-      )}
+      ) : null}
     </div>
   );
 }

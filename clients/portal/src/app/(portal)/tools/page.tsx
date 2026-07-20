@@ -17,6 +17,7 @@ import { ErrorState } from "@/components/ui/error-state";
 import { NoOrgState } from "@/components/ui/no-org-state";
 import { PageHeader } from "@/components/layout/page-header";
 import { PageContent } from "@/components/layout/page-content";
+import { useEmbeddedSurface } from "@/components/layout/embedded-surface";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 import {
@@ -29,12 +30,15 @@ import {
   Search,
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
+import { Panel } from "@/components/ui/panel";
+import { Button } from "@/components/ui/button";
 import { errorFromCaught } from "@/lib/safe-error-message";
 
 type Tab = "attribution" | "compare" | "recommender" | "taxonomy";
 
 export default function ToolsPage() {
   const { currentOrg } = useOrg();
+  const embedded = useEmbeddedSurface();
   const orgId = currentOrg?.id;
   const [activeTab, setActiveTab] = useState<Tab>("attribution");
   const [error, setError] = useState("");
@@ -144,12 +148,14 @@ export default function ToolsPage() {
 
   return (
     <PageContent size="wide">
-      <PageHeader
-        eyebrow="Observe"
-        title="Tool Intelligence"
-        subtitle="Per-tool attribution, pairwise comparison, and task-type recommendations"
-        icon={Wrench}
-      />
+      {!embedded ? (
+        <PageHeader
+          eyebrow="Observe"
+          title="Tool Intelligence"
+          subtitle="Per-tool attribution, pairwise comparison, and task-type recommendations"
+          icon={Wrench}
+        />
+      ) : null}
 
       {displayError && (
         <ErrorState
@@ -157,21 +163,27 @@ export default function ToolsPage() {
           message={displayError}
           size="sm"
           action={
-            <button
+            <Button
               type="button"
+              variant="outline"
+              className="min-h-11"
               onClick={retryFailedFetch}
-              className="text-sm font-medium text-[var(--accent)] hover:text-[var(--accent-hover)] transition-colors"
             >
               Try again
-            </button>
+            </Button>
           }
         />
       )}
 
       <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as Tab)}>
         <TabsList
+          variant={embedded ? "pills" : "default"}
           aria-label="Tool intelligence sections"
-          className="bg-[var(--bg-tertiary)] rounded-xl h-auto flex-wrap w-fit"
+          className={
+            embedded
+              ? "h-auto w-full justify-start gap-1 overflow-x-auto"
+              : "bg-[var(--bg-tertiary)] rounded-xl h-auto flex-wrap w-fit"
+          }
         >
           {(
             [
@@ -184,6 +196,7 @@ export default function ToolsPage() {
             <TabsTrigger
               key={key}
               value={key}
+              variant={embedded ? "pills" : "default"}
               className="flex items-center gap-2 data-[state=active]:text-[var(--text-primary)]"
             >
               <Icon className="w-4 h-4" aria-hidden />
@@ -262,46 +275,62 @@ function AttributionTab({
   loading: boolean;
 }) {
   return (
-    <div className="space-y-4 mt-4">
+    <div className="space-y-space-4 mt-space-4">
       <Card padding="lg">
-        <h3 className="text-sm font-semibold text-[var(--text-primary)] mb-3 flex items-center gap-2">
+        <h3 className="text-sm font-semibold text-[var(--text-primary)] mb-space-3 flex items-center gap-2">
           <Activity className="w-4 h-4 text-[var(--accent)]" />
           Per-tool attribution
         </h3>
-        <p className="text-xs text-[var(--text-muted)] mb-3">
+        <p className="text-xs text-[var(--text-muted)] mb-space-3">
           Attribution is per-tool — enter a tool ID. There is no fleet-wide aggregate endpoint.
         </p>
-        <div className="flex flex-col sm:flex-row gap-3">
-          <input
-            type="text"
-            list="tool-id-suggestions"
-            value={toolId}
-            onChange={(e) => onToolIdChange(e.target.value)}
-            placeholder="tool_id…"
-            className="flex-1 px-3 py-2 bg-[var(--bg-secondary)] border border-[var(--border-default)] rounded-lg text-sm font-mono text-[var(--text-primary)]"
-          />
+        <div className="flex flex-col sm:flex-row gap-space-3">
+          <div className="flex-1 space-y-space-1">
+            <label htmlFor="attr-tool-id" className="text-xs font-medium text-[var(--text-muted)] block">
+              Tool ID
+            </label>
+            <input
+              id="attr-tool-id"
+              type="text"
+              list="tool-id-suggestions"
+              value={toolId}
+              onChange={(e) => onToolIdChange(e.target.value)}
+              placeholder="tool_id…"
+              aria-label="Tool ID"
+              className="w-full px-3 py-2 min-h-11 bg-[var(--bg-secondary)] border border-[var(--border-default)] rounded-lg text-sm font-mono text-[var(--text-primary)]"
+            />
+          </div>
           <datalist id="tool-id-suggestions">
             {allToolNames.map((n) => (
               <option key={n} value={n} />
             ))}
           </datalist>
-          <select
-            value={window}
-            onChange={(e) => onWindowChange(e.target.value)}
-            className="px-3 py-2 bg-[var(--bg-secondary)] border border-[var(--border-default)] rounded-lg text-sm text-[var(--text-primary)]"
-          >
-            <option value="7d">Last 7 days</option>
-            <option value="30d">Last 30 days</option>
-            <option value="90d">Last 90 days</option>
-          </select>
-          <button
+          <div className="space-y-space-1">
+            <label htmlFor="attr-window" className="text-xs font-medium text-[var(--text-muted)] block">
+              Window
+            </label>
+            <select
+              id="attr-window"
+              value={window}
+              onChange={(e) => onWindowChange(e.target.value)}
+              aria-label="Attribution window"
+              className="px-3 py-2 min-h-11 bg-[var(--bg-secondary)] border border-[var(--border-default)] rounded-lg text-sm text-[var(--text-primary)]"
+            >
+              <option value="7d">Last 7 days</option>
+              <option value="30d">Last 30 days</option>
+              <option value="90d">Last 90 days</option>
+            </select>
+          </div>
+          <Button
+            variant="default"
+            className="min-h-11 self-end"
             onClick={onRun}
-            disabled={loading || !toolId.trim()}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-[var(--accent)] text-[var(--bg-base)] rounded-lg text-sm font-medium hover:bg-[var(--accent-hover)] disabled:opacity-50 transition-colors"
+            disabled={!toolId.trim()}
+            loading={loading}
           >
-            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Activity className="w-4 h-4" />}
+            <Activity className="w-4 h-4" />
             Attribute
-          </button>
+          </Button>
         </div>
       </Card>
 
@@ -312,19 +341,19 @@ function AttributionTab({
       )}
 
       {result && (
+        result.n_calls === 0 || result.success_rate == null ? (
+          <EmptyState
+            icon={Wrench}
+            title="No tool telemetry"
+            description={`No calls found for ${result.tool_name} in window ${result.window}.`}
+            size="md"
+          />
+        ) : (
         <Card padding="lg">
           {result.message && (
-            <p className="text-xs text-[var(--text-muted)] mb-3">{result.message}</p>
+            <p className="text-xs text-[var(--text-muted)] mb-space-3">{result.message}</p>
           )}
-          {result.n_calls === 0 || result.success_rate == null ? (
-            <EmptyState
-              icon={Wrench}
-              title="No tool telemetry"
-              description={`No calls found for ${result.tool_name} in window ${result.window}.`}
-              size="md"
-            />
-          ) : (
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-space-4">
               <Metric label="Tool" value={result.tool_name} mono />
               <Metric label="Calls" value={String(result.n_calls)} />
               <Metric
@@ -352,19 +381,17 @@ function AttributionTab({
                 value={result.p95_ms != null ? `${result.p95_ms.toFixed(0)} ms` : "—"}
               />
             </div>
-          )}
         </Card>
+        )
       )}
 
       {!result && !loading && (
-        <Card padding="lg">
-          <EmptyState
-            icon={Wrench}
-            title="Enter a tool ID"
-            description="Score success rate, latency, and contribution for one tool."
-            size="md"
-          />
-        </Card>
+        <EmptyState
+          icon={Wrench}
+          title="Enter a tool ID"
+          description="Score success rate, latency, and contribution for one tool."
+          size="md"
+        />
       )}
     </div>
   );
@@ -462,57 +489,80 @@ function CompareTab({
   ];
 
   return (
-    <div className="space-y-6 mt-4">
+    <div className="space-y-space-6 mt-space-4">
       <Card padding="lg">
-        <h3 className="text-sm font-semibold text-[var(--text-primary)] mb-4 flex items-center gap-2">
+        <h3 className="text-sm font-semibold text-[var(--text-primary)] mb-space-4 flex items-center gap-2">
           <GitCompare className="w-4 h-4 text-[var(--accent)]" />
           Compare two tools
         </h3>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
-          <input
-            type="text"
-            list="compare-tool-a"
-            value={toolA}
-            onChange={(e) => onToolAChange(e.target.value)}
-            placeholder="tool_a…"
-            className="px-3 py-2 bg-[var(--bg-secondary)] border border-[var(--border-default)] rounded-lg text-sm font-mono text-[var(--text-primary)]"
-          />
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-space-3 mb-space-3">
+          <div className="space-y-space-1">
+            <label htmlFor="compare-tool-a-input" className="text-xs font-medium text-[var(--text-muted)] block">
+              Tool A
+            </label>
+            <input
+              id="compare-tool-a-input"
+              type="text"
+              list="compare-tool-a"
+              value={toolA}
+              onChange={(e) => onToolAChange(e.target.value)}
+              placeholder="tool_a…"
+              aria-label="Tool A"
+              className="w-full px-3 py-2 min-h-11 bg-[var(--bg-secondary)] border border-[var(--border-default)] rounded-lg text-sm font-mono text-[var(--text-primary)]"
+            />
+          </div>
           <datalist id="compare-tool-a">
             {allToolNames.map((n) => (
               <option key={n} value={n} />
             ))}
           </datalist>
-          <input
-            type="text"
-            list="compare-tool-b"
-            value={toolB}
-            onChange={(e) => onToolBChange(e.target.value)}
-            placeholder="tool_b…"
-            className="px-3 py-2 bg-[var(--bg-secondary)] border border-[var(--border-default)] rounded-lg text-sm font-mono text-[var(--text-primary)]"
-          />
+          <div className="space-y-space-1">
+            <label htmlFor="compare-tool-b-input" className="text-xs font-medium text-[var(--text-muted)] block">
+              Tool B
+            </label>
+            <input
+              id="compare-tool-b-input"
+              type="text"
+              list="compare-tool-b"
+              value={toolB}
+              onChange={(e) => onToolBChange(e.target.value)}
+              placeholder="tool_b…"
+              aria-label="Tool B"
+              className="w-full px-3 py-2 min-h-11 bg-[var(--bg-secondary)] border border-[var(--border-default)] rounded-lg text-sm font-mono text-[var(--text-primary)]"
+            />
+          </div>
           <datalist id="compare-tool-b">
             {allToolNames.map((n) => (
               <option key={n} value={n} />
             ))}
           </datalist>
         </div>
-        <div className="flex flex-wrap gap-3">
-          <select
-            value={window}
-            onChange={(e) => onWindowChange(e.target.value)}
-            className="px-3 py-2 bg-[var(--bg-secondary)] border border-[var(--border-default)] rounded-lg text-sm text-[var(--text-primary)]"
-          >
-            <option value="7d">Last 7 days</option>
-            <option value="30d">Last 30 days</option>
-          </select>
-          <button
+        <div className="flex flex-wrap gap-space-3 items-end">
+          <div className="space-y-space-1">
+            <label htmlFor="compare-window" className="text-xs font-medium text-[var(--text-muted)] block">
+              Window
+            </label>
+            <select
+              id="compare-window"
+              value={window}
+              onChange={(e) => onWindowChange(e.target.value)}
+              aria-label="Compare window"
+              className="px-3 py-2 min-h-11 bg-[var(--bg-secondary)] border border-[var(--border-default)] rounded-lg text-sm text-[var(--text-primary)]"
+            >
+              <option value="7d">Last 7 days</option>
+              <option value="30d">Last 30 days</option>
+            </select>
+          </div>
+          <Button
+            variant="default"
+            className="min-h-11"
             onClick={onCompare}
-            disabled={loading || !toolA.trim() || !toolB.trim()}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-[var(--accent)] text-[var(--bg-base)] rounded-lg text-sm font-medium hover:bg-[var(--accent-hover)] disabled:opacity-50 transition-colors"
+            disabled={!toolA.trim() || !toolB.trim()}
+            loading={loading}
           >
-            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <GitCompare className="w-4 h-4" />}
+            <GitCompare className="w-4 h-4" />
             Compare
-          </button>
+          </Button>
         </div>
       </Card>
 
@@ -568,32 +618,39 @@ function RecommenderTab({
 }) {
   const recommendations = result?.recommendations ?? null;
   return (
-    <div className="space-y-6 mt-4">
+    <div className="space-y-space-6 mt-space-4">
       <Card padding="lg">
-        <h3 className="text-sm font-semibold text-[var(--text-primary)] mb-4 flex items-center gap-2">
+        <h3 className="text-sm font-semibold text-[var(--text-primary)] mb-space-4 flex items-center gap-2">
           <Sparkles className="w-4 h-4 text-[var(--accent)]" />
           Tool recommendations
         </h3>
-        <div className="flex flex-col sm:flex-row gap-3">
-          <input
-            type="text"
-            value={taskType}
-            onChange={(e) => onTaskTypeChange(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") onRecommend();
-            }}
-            placeholder="task_type (optional) — e.g. retrieval"
-            aria-label="Task type"
-            className="flex-1 px-3 py-2 bg-[var(--bg-secondary)] border border-[var(--border-default)] rounded-lg text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)]"
-          />
-          <button
+        <div className="flex flex-col sm:flex-row gap-space-3 items-end">
+          <div className="flex-1 space-y-space-1">
+            <label htmlFor="recommend-task-type" className="text-xs font-medium text-[var(--text-muted)] block">
+              Task type
+            </label>
+            <input
+              id="recommend-task-type"
+              type="text"
+              value={taskType}
+              onChange={(e) => onTaskTypeChange(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") onRecommend();
+              }}
+              placeholder="task_type (optional) — e.g. retrieval"
+              aria-label="Task type"
+              className="w-full px-3 py-2 min-h-11 bg-[var(--bg-secondary)] border border-[var(--border-default)] rounded-lg text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)]"
+            />
+          </div>
+          <Button
+            variant="default"
+            className="min-h-11"
             onClick={onRecommend}
-            disabled={loading}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-[var(--accent)] text-[var(--bg-base)] rounded-lg text-sm font-medium hover:bg-[var(--accent-hover)] disabled:opacity-50 transition-colors"
+            loading={loading}
           >
-            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+            <Sparkles className="w-4 h-4" />
             Recommend
-          </button>
+          </Button>
         </div>
       </Card>
 
@@ -605,9 +662,9 @@ function RecommenderTab({
         <div className="space-y-3">
           <p className="text-xs text-[var(--text-muted)] uppercase tracking-wide">Top picks</p>
           {recommendations.slice(0, 3).map((rec, idx) => (
-            <Card padding="md" key={rec.tool_name}>
-              <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center gap-2">
+            <Panel tone="flat" padding="md" key={rec.tool_name}>
+              <div className="flex items-center justify-between mb-space-2">
+                <div className="flex items-center gap-space-2">
                   <span
                     className={cn(
                       "w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold",
@@ -632,7 +689,7 @@ function RecommenderTab({
               <p className="text-sm text-[var(--text-secondary)] leading-relaxed">
                 {rec.rationale}
               </p>
-            </Card>
+            </Panel>
           ))}
         </div>
       ) : recommendations && recommendations.length === 0 ? (
@@ -728,13 +785,14 @@ function TaxonomyTab({
               message={loadError}
               size="sm"
               action={
-                <button
+                <Button
                   type="button"
+                  variant="outline"
+                  className="min-h-11"
                   onClick={onRetry}
-                  className="text-sm font-medium text-[var(--accent)] hover:text-[var(--accent-hover)] transition-colors"
                 >
                   Try again
-                </button>
+                </Button>
               }
             />
           ) : (

@@ -4,9 +4,10 @@
 
 import { PageHeader } from "@/components/layout/page-header";
 import { EmbeddedSurface } from "@/components/layout/embedded-surface";
-import { CoreResourcePage, CrossLinkBar } from "@/components/portal-os";
+import { CoreResourcePage } from "@/components/portal-os";
 import {
   Bot,
+  ChevronDown,
   ExternalLink,
   Loader2,
   Plus,
@@ -27,6 +28,14 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Card } from "@/components/ui/card";
 import { Panel } from "@/components/ui/panel";
 import { Button } from "@/components/ui/button";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { agentsApi, type AgentSummary } from "@/lib/api";
 import { useOrg } from "@/hooks/use-org";
 import { usePermissions } from "@/hooks/use-permissions";
@@ -34,6 +43,7 @@ import { useState, useMemo, Suspense } from "react";
 import Link from "next/link";
 import dynamic from "next/dynamic";
 import { DOCS_QUICKSTART_URL } from "@/lib/constants";
+import { U20_EMPTY_COPY, U20_FILTER_EMPTY_COPY } from "@/lib/portal-polish";
 
 const AGENT_TABS = ["agents", "fleet"] as const;
 const FleetView = dynamic(() => import("@/app/(portal)/fleet/page"), {
@@ -129,23 +139,27 @@ function AgentsPageInner() {
       <NoOrgState
         icon={Bot}
         feature="Agents"
-        description="Agents you register via the SDK or CLI appear here. Once your org is set up you can upload code, run sims, and inspect test results for each one."
+        description="Registered agents appear here after the SDK or CLI reports them. Select or create an organization."
       />
     );
   }
 
   return (
+    <Tabs
+      value={tab}
+      onValueChange={(v) => setTab(v as (typeof AGENT_TABS)[number])}
+    >
     <CoreResourcePage
       size="wide"
       header={
         <PageHeader
+          eyebrow="Build"
           title="Agents"
           subtitle={
             loading
               ? "Loading…"
               : `${total} registered · SDK first; link a repo only when you need GitHub listing.`
           }
-          description="Agents appear after SDK/CLI registration. Linking a GitHub repo is optional."
           actions={
             <div className="flex flex-wrap items-center gap-2">
               <Button asChild className="min-h-11">
@@ -166,59 +180,127 @@ function AgentsPageInner() {
                   </Link>
                 </Button>
               ) : null}
-              {tab === "agents" && (
-                <Button
-                  onClick={() => void agentsQuery.refetch()}
-                  variant="ghost"
-                  size="default"
-                  disabled={refreshing}
-                  loading={refreshing}
-                  aria-label="Refresh agents"
-                >
-                  <RefreshCw className="h-4 w-4" /> Refresh
-                </Button>
-              )}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="default"
+                    className="min-h-11"
+                    aria-label="Related surfaces"
+                  >
+                    More
+                    <ChevronDown className="h-4 w-4" aria-hidden />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="min-w-[12rem]">
+                  <DropdownMenuLabel>Related</DropdownMenuLabel>
+                  <DropdownMenuItem asChild>
+                    <Link href="/improve">Improve</Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild>
+                    <Link href="/ledger">Ledger</Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild>
+                    <Link href="/audit-trail">Audit trail</Link>
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
           }
         />
       }
       toolbar={
-        <div className="mb-4 space-y-3">
-          <CrossLinkBar
-            links={[
-              { label: "Fleet", href: "/agents?tab=fleet" },
-              { label: "Improve", href: "/improve" },
-              { label: "Ledger", href: "/ledger" },
-              { label: "Audit trail", href: "/audit-trail" },
-            ]}
-          />
-          <div role="tablist" aria-label="Agents sections" className="flex gap-1 border-b border-[var(--border-default)]">
-            {AGENT_TABS.map((t) => (
-              <button
-                key={t}
-                type="button"
-                role="tab"
-                aria-selected={tab === t}
-                onClick={() => setTab(t)}
-                className={cn(
-                  "px-3 py-2 text-sm font-medium capitalize border-b-2 -mb-px",
-                  tab === t
-                    ? "border-[var(--accent)] text-[var(--text-primary)]"
-                    : "border-transparent text-[var(--text-muted)] hover:text-[var(--text-primary)]",
-                )}
+        <div
+          className="flex flex-col gap-space-3"
+          data-testid="agents-toolbar"
+        >
+          <div className="flex flex-wrap items-end gap-space-2">
+            <TabsList
+              variant="underline"
+              aria-label="Agents sections"
+              className="h-auto flex-1 justify-start gap-1 bg-transparent"
+            >
+              <TabsTrigger variant="underline" value="agents" title="Agents" className="min-h-11 capitalize">
+                Agents
+              </TabsTrigger>
+              <TabsTrigger variant="underline" value="fleet" title="Fleet" className="min-h-11 capitalize">
+                Fleet
+              </TabsTrigger>
+            </TabsList>
+            {tab === "agents" ? (
+              <Button
+                onClick={() => void agentsQuery.refetch()}
+                variant="ghost"
+                size="default"
+                disabled={refreshing}
+                loading={refreshing}
+                aria-label="Refresh agents"
+                className="min-h-11"
               >
-                {t}
-              </button>
-            ))}
+                <RefreshCw className="h-4 w-4" /> Refresh
+              </Button>
+            ) : null}
           </div>
+          {tab === "agents" ? (
+            <div className="flex flex-col sm:flex-row gap-space-3 items-stretch sm:items-center">
+              <div className="relative flex-1 min-w-0">
+                <Search
+                  aria-hidden="true"
+                  className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-muted)] pointer-events-none"
+                />
+                <input
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Search by name, framework, or repo…"
+                  aria-label="Search agents by name, framework, or repo"
+                  className="w-full pl-9 pr-9 py-2 bg-[var(--bg-secondary)] border border-[var(--border-default)] rounded-lg text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/40 min-h-11"
+                />
+                {search && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => setSearch("")}
+                    aria-label="Clear search"
+                    className="absolute right-1 top-1/2 -translate-y-1/2 h-8 w-8 text-[var(--text-muted)]"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </Button>
+                )}
+              </div>
+              {frameworks.length > 1 && (
+                <div className="relative">
+                  <Filter
+                    aria-hidden="true"
+                    className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[var(--text-muted)] pointer-events-none"
+                  />
+                  <select
+                    value={frameworkFilter}
+                    onChange={(e) => setFrameworkFilter(e.target.value)}
+                    aria-label="Filter agents by framework"
+                    className="pl-8 pr-8 py-2 min-h-11 bg-[var(--bg-secondary)] border border-[var(--border-default)] rounded-lg text-sm text-[var(--text-primary)] appearance-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/40"
+                  >
+                    <option value="">All frameworks</option>
+                    {frameworks.map((f) => (
+                      <option key={f} value={f}>
+                        {f}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+            </div>
+          ) : null}
         </div>
       }
       table={
-        tab === "fleet" ? (
+        <>
+        <TabsContent value="fleet" className="mt-0">
           <EmbeddedSurface>
             <FleetView />
           </EmbeddedSurface>
-        ) : (
+        </TabsContent>
+        <TabsContent value="agents" className="mt-0 space-y-space-4">
       <QueryState
         loading={loading && agents.length === 0}
         error={agentsQuery.error}
@@ -227,7 +309,7 @@ function AgentsPageInner() {
         errorTitle="Could not load agents"
         isEmpty={(d) => (d?.agents.length ?? 0) === 0}
         loadingSlot={
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-space-3">
             {Array.from({ length: 6 }).map((_, i) => (
               <Panel key={i} tone="flat" padding="md" className="space-y-3">
                 <Skeleton className="h-5 w-32" />
@@ -241,11 +323,7 @@ function AgentsPageInner() {
           <EmptyState
             icon={Bot}
             title="No agents yet"
-            description={
-              canManageKeys
-                ? "Register via the SDK or CLI after you create an API key. Linking a GitHub repo is optional and does not install the SDK."
-                : "Register via the SDK or CLI after an admin shares an API key. Linking a GitHub repo is optional and requires an admin."
-            }
+            description={U20_EMPTY_COPY.agents}
             size="lg"
             action={
               <div className="flex flex-col items-center gap-3 text-sm">
@@ -283,76 +361,30 @@ function AgentsPageInner() {
       >
         {() => (
           <>
-            <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center">
-              <div className="relative flex-1 min-w-0">
-                <Search
-                  aria-hidden="true"
-                  className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-muted)] pointer-events-none"
-                />
-                <input
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Search by name, framework, or repo…"
-                  aria-label="Search agents by name, framework, or repo"
-                  className="w-full pl-9 pr-9 py-2 bg-[var(--bg-secondary)] border border-[var(--border-default)] rounded-lg text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/40"
-                />
-                {search && (
-                  <button
-                    type="button"
-                    onClick={() => setSearch("")}
-                    aria-label="Clear search"
-                    className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/40"
-                  >
-                    <X className="w-3.5 h-3.5" />
-                  </button>
-                )}
-              </div>
-              {frameworks.length > 1 && (
-                <div className="relative">
-                  <Filter
-                    aria-hidden="true"
-                    className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[var(--text-muted)] pointer-events-none"
-                  />
-                  <select
-                    value={frameworkFilter}
-                    onChange={(e) => setFrameworkFilter(e.target.value)}
-                    aria-label="Filter agents by framework"
-                    className="pl-8 pr-8 py-2 bg-[var(--bg-secondary)] border border-[var(--border-default)] rounded-lg text-sm text-[var(--text-primary)] appearance-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/40"
-                  >
-                    <option value="">All frameworks</option>
-                    {frameworks.map((f) => (
-                      <option key={f} value={f}>
-                        {f}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
-            </div>
-
             {filtered.length === 0 ? (
-              <div className="mt-3">
+              <div className="mt-space-3">
                 <EmptyState
                   icon={Search}
                   title="No matches"
-                  description="No agents match the current filters."
+                  description={U20_FILTER_EMPTY_COPY.agents}
                   size="sm"
                   action={
-                    <button
+                    <Button
                       type="button"
+                      variant="ghost"
+                      size="sm"
                       onClick={() => {
                         setSearch("");
                         setFrameworkFilter("");
                       }}
-                      className="text-xs text-[var(--accent)] hover:underline"
                     >
                       Clear filters
-                    </button>
+                    </Button>
                   }
                 />
               </div>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3 mt-3">
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-space-3">
                 {filtered.map((a) => (
                   <AgentCard key={a.agent_id} agent={a} />
                 ))}
@@ -360,7 +392,7 @@ function AgentsPageInner() {
             )}
 
             {!search && !frameworkFilter && agents.length < total && (
-              <div className="flex justify-center pt-2">
+              <div className="flex justify-center pt-space-2">
                 <Button
                   variant="outline"
                   size="default"
@@ -375,9 +407,11 @@ function AgentsPageInner() {
           </>
         )}
       </QueryState>
-        )
+        </TabsContent>
+        </>
       }
     />
+    </Tabs>
   );
 }
 
@@ -428,7 +462,7 @@ function AgentCard({ agent }: { agent: AgentSummary }) {
                 />
               )}
             </div>
-            <p className="text-[11px] font-mono text-[var(--text-muted)] truncate mt-0.5">
+            <p className="text-xs font-mono text-[var(--text-muted)] truncate mt-0.5">
               {agent.agent_id}
             </p>
           </div>
@@ -438,7 +472,7 @@ function AgentCard({ agent }: { agent: AgentSummary }) {
           {agent.framework && (
             <span
               className={cn(
-                "text-[10px] font-medium uppercase tracking-wide px-1.5 py-0.5 rounded",
+                "text-xs font-medium uppercase tracking-wide px-1.5 py-1 rounded",
                 FRAMEWORK_BADGE[agent.framework] ?? FRAMEWORK_BADGE.none,
               )}
             >
@@ -447,7 +481,7 @@ function AgentCard({ agent }: { agent: AgentSummary }) {
           )}
         </div>
 
-        <div className="mt-4 pt-3 border-t border-[var(--border-subtle)] flex items-center justify-between text-[11px] text-[var(--text-muted)]">
+        <div className="mt-4 pt-3 border-t border-[var(--border-subtle)] flex items-center justify-between text-xs text-[var(--text-muted)]">
           <span className="flex items-center gap-1">
             <Clock className="w-3 h-3" aria-hidden="true" />
             {formatRelative(agent.last_seen_at)}

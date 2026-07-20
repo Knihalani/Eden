@@ -70,13 +70,32 @@ describe("W3-A dashboard ErrorState", () => {
     expect(throughput).toContain("no events yet");
   });
 
-  it("dashboard loading skeleton mirrors KPI + traces + links layout", () => {
+  it("dashboard loading skeleton mirrors KPI + diagnosis + traces layout", () => {
     const loading = read("app/(portal)/dashboard/loading.tsx");
     expect(loading).toContain('aria-label="Loading dashboard"');
     expect(loading).toMatch(/xl:grid-cols-4/);
     expect(loading).toMatch(/xl:grid-cols-3/);
     expect(loading).toMatch(/xl:col-span-2/);
     expect(loading).toContain("Skeleton");
+    expect(loading).toMatch(/Status→Diagnosis→Action|diagnosis/i);
+  });
+
+  it("default Home layout is 5–7 widgets with Status→Diagnosis→Action", () => {
+    const src = read("app/(portal)/dashboard/page.tsx");
+    expect(src).toMatch(/const DEFAULT_WIDGETS/);
+    expect(src).toContain('data-testid="dashboard-status-kpis"');
+    expect(src).toContain('data-testid="dashboard-diagnosis"');
+    expect(src).toContain("Open Traces");
+    expect(src).toContain('aria-label="Time range"');
+    expect(src).not.toMatch(/text-\[9px\]|text-\[10px\]|text-\[11px\]/);
+    // Default visible set ≤7 (agentic + links are progressive extras).
+    const defaultMatch = src.match(
+      /const DEFAULT_WIDGETS:\s*WidgetId\[\]\s*=\s*\[([\s\S]*?)\];/,
+    );
+    expect(defaultMatch).toBeTruthy();
+    const ids = (defaultMatch![1].match(/"[a-z]+"/g) ?? []).length;
+    expect(ids).toBeGreaterThanOrEqual(5);
+    expect(ids).toBeLessThanOrEqual(7);
   });
 
   it("latency/throughput cards use Skeleton while loading (not spinner-only)", () => {

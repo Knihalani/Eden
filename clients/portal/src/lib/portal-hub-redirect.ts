@@ -30,9 +30,36 @@ export const HUB_REDIRECT_RULES: Record<string, HubRedirectRule> = {
   "/replay": { destination: "/traces", defaultParams: { view: "replay" } },
   "/debugger": { destination: "/traces", defaultParams: { view: "debug" } },
   "/observability": { destination: "/traces" },
+  // W3 UX-P0-13 GAP: query-preserving soft nests (next.config drops source query).
+  "/observability/mcp": { destination: "/traces", defaultParams: { facet: "mcp" } },
+  "/observability/decisions": {
+    destination: "/traces",
+    defaultParams: { facet: "decisions" },
+  },
+  "/observability/memory": {
+    destination: "/traces",
+    defaultParams: { facet: "memory" },
+  },
+  "/observability/retrieval": {
+    destination: "/traces",
+    defaultParams: { facet: "retrieval" },
+  },
+  "/observability/time-travel": {
+    destination: "/traces",
+    defaultParams: { view: "time-travel" },
+  },
+  "/observability/cohorts": {
+    destination: "/traces",
+    defaultParams: { view: "cohorts" },
+  },
   "/redteam": { destination: "/guardrails", tab: "redteam" },
   "/profile": { destination: "/settings", tab: "account" },
   "/billing": { destination: "/settings", tab: "billing" },
+  // W11: Model Advisor filesystem deep-link → Cost hub advisor tab.
+  "/optimization/model-advisor": {
+    destination: "/optimization",
+    tab: "advisor",
+  },
 };
 
 export function buildHubRedirectUrl(pathname: string, search: string): string | null {

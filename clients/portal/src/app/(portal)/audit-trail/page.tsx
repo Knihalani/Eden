@@ -1,8 +1,15 @@
 "use client";
 
 import { PageHeader } from "@/components/layout/page-header";
-import { CoreResourcePage, CrossLinkBar } from "@/components/portal-os";
+import { CoreResourcePage } from "@/components/portal-os";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Panel } from "@/components/ui/panel";
 import { QueryState } from "@/components/ui/query-state";
@@ -14,8 +21,9 @@ import { queryKeys } from "@/lib/query-keys";
 import { complianceApi, fleetApi } from "@/lib/api";
 import { useToast } from "@/components/ui/toast";
 import { Suspense, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { Loader2, ShieldCheck, Download, Link2 } from "lucide-react";
+import { ChevronDown, Loader2, ShieldCheck, Download, Link2 } from "lucide-react";
 
 const PAGE_SIZE = 50;
 const MAX_LIMIT = 500;
@@ -179,27 +187,78 @@ function AuditTrailPageInner() {
           subtitle="Append-only agent events with hash-chain attestation for regulated deployments."
           description="Export SOC2/HIPAA compliance packs. This is separate from The Book (Ledger) memory product."
           actions={
-            <Button size="sm" onClick={() => void runVerify()} disabled={verifying}>
-              {verifying ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Link2 className="h-4 w-4 mr-2" />}
-              Verify chain
-            </Button>
+            <div className="flex flex-wrap items-center gap-space-2">
+              <Button size="sm" className="min-h-11" onClick={() => void runVerify()} disabled={verifying}>
+                {verifying ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Link2 className="h-4 w-4 mr-2" />}
+                Verify chain
+              </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="sm" className="min-h-11" aria-label="Audit trail path links">
+                    More
+                    <ChevronDown className="h-4 w-4" aria-hidden />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="min-w-[12rem]">
+                  <DropdownMenuLabel>Go to</DropdownMenuLabel>
+                  <DropdownMenuItem asChild>
+                    <Link href="/agents">Agents</Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild>
+                    <Link href="/agents?tab=fleet">Fleet</Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild>
+                    <Link href="/ledger">Ledger</Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild>
+                    <Link href="/settings?tab=audit-log">Settings audit</Link>
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
           }
         />
       }
       toolbar={
-        <CrossLinkBar
-          links={[
-            { label: "Agents", href: "/agents" },
-            { label: "Fleet", href: "/agents?tab=fleet" },
-            { label: "Ledger", href: "/ledger" },
-            { label: "Settings audit", href: "/settings?tab=audit-log" },
-          ]}
-        />
+        <div
+          data-testid="audit-trail-toolbar"
+          className="flex flex-wrap items-center gap-space-2"
+        >
+          <label className="text-xs text-[var(--text-muted)]">Filter agent</label>
+          <select
+            value={agentFilter}
+            onChange={(e) => {
+              setAgentFilter(e.target.value);
+              setLimit(PAGE_SIZE);
+            }}
+            className="min-h-11 rounded-md border border-[var(--border-default)] bg-[var(--bg-primary)] px-space-2 py-space-1.5 text-xs"
+          >
+            <option value="">All agents</option>
+            {agentFilter && !agents.includes(agentFilter) ? (
+              <option value={agentFilter}>{agentFilter}</option>
+            ) : null}
+            {agents.map((id) => (
+              <option key={id} value={id}>{id}</option>
+            ))}
+          </select>
+          {eventTypes.length > 0 && (
+            <span className="text-xs text-[var(--text-muted)]">
+              Showing {events.length} events
+            </span>
+          )}
+        </div>
       }
       table={
         <>
-      <div className="grid gap-4 md:grid-cols-2 mb-6">
-        <Panel tone="flat" padding="md" className="space-y-3">
+      <details className="mb-space-6 group">
+        <summary className="cursor-pointer list-none text-sm font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)]">
+          Compliance tools
+          <span className="ml-space-2 text-xs font-normal text-[var(--text-muted)] group-open:hidden">
+            Verify · export pack
+          </span>
+        </summary>
+        <div className="mt-space-3 grid gap-space-4 md:grid-cols-2">
+        <Panel tone="flat" padding="md" className="space-y-space-3">
           <h2 className="text-sm font-semibold text-[var(--text-primary)]">Chain verification</h2>
           <p className="text-xs text-[var(--text-muted)]">
             Recompute SHA-256 hashes across the agent audit ledger to detect tampering.
@@ -211,13 +270,13 @@ function AuditTrailPageInner() {
           )}
         </Panel>
 
-        <Panel tone="flat" padding="md" className="space-y-3">
+        <Panel tone="flat" padding="md" className="space-y-space-3">
           <h2 className="text-sm font-semibold text-[var(--text-primary)]">Compliance pack export</h2>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-space-2">
             <select
               value={exportAgent}
               onChange={(e) => setExportAgent(e.target.value)}
-              className="rounded-md border border-[var(--border-default)] bg-[var(--bg-primary)] px-2 py-1.5 text-xs"
+              className="rounded-md border border-[var(--border-default)] bg-[var(--bg-primary)] px-space-2 py-space-1.5 text-xs"
             >
               {agents.length === 0 ? <option value="">No agents</option> : null}
               {agents.map((id) => (
@@ -228,13 +287,13 @@ function AuditTrailPageInner() {
               type="date"
               value={period.period_start}
               onChange={(e) => setPeriod((p) => ({ ...p, period_start: e.target.value }))}
-              className="rounded-md border border-[var(--border-default)] px-2 py-1.5 text-xs"
+              className="rounded-md border border-[var(--border-default)] px-space-2 py-space-1.5 text-xs"
             />
             <input
               type="date"
               value={period.period_end}
               onChange={(e) => setPeriod((p) => ({ ...p, period_end: e.target.value }))}
-              className="rounded-md border border-[var(--border-default)] px-2 py-1.5 text-xs"
+              className="rounded-md border border-[var(--border-default)] px-space-2 py-space-1.5 text-xs"
             />
           </div>
           <Button size="sm" variant="outline" onClick={() => void runExport()} disabled={exporting || !exportAgent}>
@@ -242,32 +301,8 @@ function AuditTrailPageInner() {
             Download JSON pack
           </Button>
         </Panel>
-      </div>
-
-      <div className="mb-4 flex flex-wrap items-center gap-2">
-        <label className="text-xs text-[var(--text-muted)]">Filter agent</label>
-        <select
-          value={agentFilter}
-          onChange={(e) => {
-            setAgentFilter(e.target.value);
-            setLimit(PAGE_SIZE);
-          }}
-          className="rounded-md border border-[var(--border-default)] bg-[var(--bg-primary)] px-2 py-1.5 text-xs"
-        >
-          <option value="">All agents</option>
-          {agentFilter && !agents.includes(agentFilter) ? (
-            <option value={agentFilter}>{agentFilter}</option>
-          ) : null}
-          {agents.map((id) => (
-            <option key={id} value={id}>{id}</option>
-          ))}
-        </select>
-        {eventTypes.length > 0 && (
-          <span className="text-xs text-[var(--text-muted)]">
-            Showing {events.length} events · types: {eventTypes.join(", ")}
-          </span>
-        )}
-      </div>
+        </div>
+      </details>
 
       <QueryState
         loading={loading}

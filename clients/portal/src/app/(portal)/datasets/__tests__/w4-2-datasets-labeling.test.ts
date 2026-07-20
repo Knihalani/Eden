@@ -55,12 +55,12 @@ function cellValue(
 }
 
 describe("W4-2 datasets query states", () => {
-  it("gates list behind ErrorState with retry (not false empty on 5xx)", () => {
+  it("gates list behind QueryState with retry (not false empty on 5xx)", () => {
     const src = read("app/(portal)/datasets/page.tsx");
-    expect(src).toContain('from "@/components/ui/error-state"');
+    expect(src).toContain('from "@/components/ui/query-state"');
     expect(src).toContain("Could not load datasets");
-    expect(src).toContain("Try again");
-    expect(src).toMatch(/error \? \([\s\S]*ErrorState[\s\S]*\) : \(/);
+    expect(src).toContain("<QueryState");
+    expect(src).toContain("onRetry={load}");
   });
 
   it("does not show empty while loading or on error", () => {
@@ -146,13 +146,14 @@ describe("W4-2 labeling CRUD + empty CTAs", () => {
     expect(src).not.toMatch(/import \{\s*Tag\s*,/);
   });
 
-  it("gates items list behind ErrorState; empty has seed CTA", () => {
+  it("gates items list behind QueryState; empty has seed CTA", () => {
     const src = read("app/(portal)/labeling/page.tsx");
     expect(src).toContain("Could not load labeling queue");
     expect(src).toContain('data-testid="labeling-empty-seed"');
     expect(src).toContain("No matching items");
     expect(src).toContain('data-testid="labeling-clear-filter"');
-    expect(src).toMatch(/error \? \([\s\S]*ErrorState[\s\S]*\) : \(/);
+    expect(src).toContain('from "@/components/ui/query-state"');
+    expect(src).toContain("<QueryState");
   });
 
   it("surfaces queue list + create with ErrorState on queues 5xx", () => {

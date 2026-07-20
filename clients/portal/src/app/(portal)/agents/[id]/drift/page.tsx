@@ -126,31 +126,45 @@ function AgentDriftPageInner() {
   }
 
   return (
-    <PageContent>
+    <PageContent className="space-y-space-4">
       <PageHeader
+        eyebrow="Agent"
         title="Behavioral drift"
         description={`24h vs 7d baseline · ${agentId}`}
         actions={
-          <div className="flex gap-2">
-            <Button variant="outline" size="sm" asChild>
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" size="sm" asChild className="min-h-11">
               <Link href={ledgerHref(agentId)}>Ledger</Link>
             </Button>
-            <Button variant="outline" size="sm" onClick={() => void load()} disabled={loading}>
+            <Button
+              variant="outline"
+              size="sm"
+              className="min-h-11"
+              onClick={() => void load()}
+              disabled={loading}
+              loading={loading}
+              aria-label="Refresh drift report"
+            >
               <RefreshCw className="h-4 w-4" />
             </Button>
-            <Button size="sm" onClick={() => void recompute()} disabled={busy}>
-              {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : "Compute now"}
+            <Button
+              size="sm"
+              className="min-h-11"
+              onClick={() => void recompute()}
+              disabled={busy}
+              loading={busy}
+            >
+              Compute now
             </Button>
           </div>
         }
       />
-      <Link
-        href={`/agents/${encodeURIComponent(agentId)}`}
-        className="mb-4 inline-flex items-center gap-1 text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
-      >
-        <ArrowLeft className="h-4 w-4" />
-        Back to agent
-      </Link>
+      <Button asChild variant="ghost" size="sm" className="min-h-11 px-0 w-fit">
+        <Link href={`/agents/${encodeURIComponent(agentId)}`}>
+          <ArrowLeft className="h-4 w-4" />
+          Back to agent
+        </Link>
+      </Button>
 
       {error ? (
         <ErrorState
@@ -180,7 +194,7 @@ function AgentDriftPageInner() {
       ) : dimensions.length === 0 ? (
         <EmptyState
           title="No baseline yet"
-          description="Eden needs enough production traces to learn normal behavior."
+          description="No baseline yet. Enough production traces are required before Eden can learn normal behavior."
           action={
             <div className="flex flex-wrap justify-center gap-2">
               <Button size="sm" onClick={() => void recompute()} disabled={busy}>

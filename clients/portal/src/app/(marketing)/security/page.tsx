@@ -116,22 +116,22 @@ export default function SecurityPage() {
         </div>
       </section>
 
-      <div className="flex flex-wrap gap-3 mt-8">
+      <div className="flex flex-wrap gap-space-3 mt-space-6">
         <Link
           href="/privacy"
-          className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-[var(--text-primary)] bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-lg hover:bg-[var(--bg-tertiary)] transition-colors"
+          className="inline-flex items-center gap-space-2 min-h-11 px-space-4 py-space-2 text-sm font-medium text-[var(--text-primary)] bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-lg hover:bg-[var(--bg-tertiary)] transition-colors"
         >
           Privacy policy
         </Link>
         <Link
           href="/dpa"
-          className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-[var(--text-primary)] bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-lg hover:bg-[var(--bg-tertiary)] transition-colors"
+          className="inline-flex items-center gap-space-2 min-h-11 px-space-4 py-space-2 text-sm font-medium text-[var(--text-primary)] bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-lg hover:bg-[var(--bg-tertiary)] transition-colors"
         >
           DPA
         </Link>
         <a
           href={DOCS_URL}
-          className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-[var(--accent)] bg-[var(--accent)] hover:bg-[var(--accent-hover)] rounded-lg transition-colors"
+          className="inline-flex items-center gap-space-2 min-h-11 px-space-4 py-space-2 text-sm font-medium text-[var(--accent)] bg-[var(--accent)] hover:bg-[var(--accent-hover)] rounded-lg transition-colors"
           style={{ color: "var(--accent-foreground)" }}
         >
           Read the docs

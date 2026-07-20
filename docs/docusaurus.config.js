@@ -49,6 +49,14 @@ const config = {
   // and again on any SPA route change (Docusaurus does soft navigations).
   headTags: [
     {
+      tagName: 'link',
+      attributes: {
+        rel: 'preconnect',
+        href: 'https://cdn.jsdelivr.net',
+        crossorigin: 'anonymous',
+      },
+    },
+    {
       tagName: 'script',
       attributes: { type: 'text/javascript' },
       innerHTML: `
@@ -177,26 +185,42 @@ const config = {
         disableSwitch: true,
         respectPrefersColorScheme: false,
       },
+      // No Algolia keys in-repo — local search plugin not wired.
+      // Navbar shows a Find: ⌘/Ctrl+F affordance (see custom.css).
+      docs: {
+        sidebar: {
+          hideable: true,
+          autoCollapseCategories: true,
+        },
+      },
       navbar: {
-        // Logo + brand text, linking back to the main Eden site.
-        // The docs are a sub-product — the logo is the escape hatch
-        // back to edenobservability.com (portal, pricing, marketing).
+        // Logo escapes to marketing/portal; title stays on docs home.
         logo: {
-          alt: 'Eden — back to edenobservability.com',
+          alt: 'Eden',
           src: 'img/logo.webp',
           srcDark: 'img/logo.webp',
           href: 'https://edenobservability.com',
           target: '_self',
           height: 28,
         },
-        title: 'Eden Docs',
+        title: 'Docs',
         items: [
-          { type: 'doc', docId: 'intro/index', position: 'left', label: 'Home' },
           { type: 'doc', docId: 'quickstart', position: 'left', label: 'Quickstart' },
           { type: 'docSidebar', sidebarId: 'tutorials', position: 'left', label: 'Tutorials' },
           { type: 'docSidebar', sidebarId: 'howto', position: 'left', label: 'How-to' },
           { type: 'docSidebar', sidebarId: 'reference', position: 'left', label: 'Reference' },
-          { href: 'https://edenobservability.com', label: '← edenobservability.com', position: 'right', className: 'navbar-back-link' },
+          {
+            href: 'https://edenobservability.com/sign-up',
+            label: 'Start free',
+            position: 'right',
+            className: 'navbar-cta',
+          },
+          {
+            href: 'https://edenobservability.com',
+            label: 'Portal',
+            position: 'right',
+            className: 'navbar-portal',
+          },
           { href: 'https://github.com/eden/eden', label: 'GitHub', position: 'right' },
         ],
       },
@@ -206,25 +230,27 @@ const config = {
           {
             title: 'Get started',
             items: [
-              { label: 'Home', to: '/' },
+              { label: 'Docs home', to: '/' },
               { label: 'Quickstart', to: '/quickstart' },
+              { label: 'Start free', href: 'https://edenobservability.com/sign-up' },
             ],
           },
           {
-            title: 'Tutorials',
+            title: 'Product',
+            items: [
+              { label: 'Portal', href: 'https://edenobservability.com' },
+              { label: 'Pricing', href: 'https://edenobservability.com/pricing' },
+              { label: 'Security', href: 'https://edenobservability.com/security' },
+              { label: 'Contact', href: 'https://edenobservability.com/contact' },
+            ],
+          },
+          {
+            title: 'Guides',
             items: [
               { label: 'Auto-instrument OpenAI', to: '/tutorials/auto-instrument-openai' },
-              { label: 'Trace a multi-agent run', to: '/tutorials/trace-multi-agent' },
-              { label: 'Judge a model output', to: '/tutorials/judge-model-output' },
-            ],
-          },
-          {
-            title: 'How-to',
-            items: [
               { label: 'Set up auth', to: '/how-to/auth' },
               { label: 'API endpoint', to: '/how-to/deploy' },
-              { label: 'Connect GitHub', to: '/how-to/github' },
-              { label: 'Set PII policy', to: '/how-to/pii' },
+              { label: 'PII policy', to: '/how-to/pii' },
             ],
           },
           {
@@ -234,13 +260,14 @@ const config = {
               { label: 'TypeScript SDK', to: '/reference/sdk-typescript' },
               { label: 'REST API', to: '/reference/api' },
               { label: 'CLI', to: '/reference/cli' },
-              { label: 'Configuration', to: '/reference/configuration' },
             ],
           },
         ],
-        copyright: `Copyright © ${new Date().getFullYear()} Eden contributors. Built with Docusaurus.`,
+        copyright: `Copyright © ${new Date().getFullYear()} Eden. Observability + improvement for AI agents.`,
       },
       prism: {
+        theme: require('prism-react-renderer').themes.vsDark,
+        darkTheme: require('prism-react-renderer').themes.vsDark,
         additionalLanguages: ['python', 'typescript', 'bash', 'sql', 'yaml', 'json'],
       },
     }),

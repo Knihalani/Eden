@@ -12,6 +12,7 @@ import { Command as Cmnd } from "cmdk";
 import { useRouter, usePathname } from "next/navigation";
 import { Search, X, ChevronRight } from "lucide-react";
 import { cn, isExternalHref } from "@/lib/utils";
+import { FOCUS_RING_CLASS } from "@/components/ui/focus-ring";
 import {
   COMMAND_PALETTE_RECENT_KEY,
   COMMAND_PALETTE_RECENT_LIMIT,
@@ -249,7 +250,10 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
             type="button"
             onClick={() => onOpenChange(false)}
             aria-label="Close command palette"
-            className="inline-flex items-center justify-center min-h-[44px] min-w-[44px] p-1 hover:bg-[var(--bg-tertiary)] rounded transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--accent)]"
+            className={cn(
+              "inline-flex items-center justify-center min-h-[44px] min-w-[44px] p-1 hover:bg-[var(--bg-tertiary)] rounded transition-colors",
+              FOCUS_RING_CLASS,
+            )}
           >
             <X className="w-4 h-4 text-[var(--text-muted)]" />
           </button>

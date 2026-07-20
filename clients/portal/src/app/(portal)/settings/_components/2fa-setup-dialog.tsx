@@ -155,7 +155,7 @@ export function TwoFASetupDialog({ onClose, onSuccess }: TwoFASetupDialogProps) 
             <Button onClick={loadQrCode} variant="outline">Try again</Button>
           </div>
         ) : step === "qr" && qrData ? (
-          <div className="space-y-4">
+          <div className="space-y-space-4">
             <div className="flex flex-col items-center space-y-3">
               <div className="p-3 bg-[var(--bg-base)] border border-[var(--border-default)] rounded-xl">
                 {/* next/image doesn't support data: URLs — use plain <img> for the inline QR */}
@@ -203,7 +203,7 @@ export function TwoFASetupDialog({ onClose, onSuccess }: TwoFASetupDialogProps) 
             </DialogFooter>
           </div>
         ) : step === "verify" ? (
-          <form onSubmit={handleVerify} className="space-y-4">
+          <form onSubmit={handleVerify} className="space-y-space-4">
             <p className="text-sm text-[var(--text-secondary)]">
               Enter the 6-digit code from your authenticator app.
             </p>

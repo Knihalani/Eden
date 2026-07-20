@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Plus, Key, Loader2, Trash2, Copy, Check } from "lucide-react";
+import { Plus, Key, Trash2, Copy, Check } from "lucide-react";
 import { useToast } from "@/components/ui/toast";
 import { useConfirm } from "@/hooks/use-confirm";
 import { api } from "@/lib/api";
@@ -130,7 +130,7 @@ export function ApiKeysSettings({ org }: ApiKeysSettingsProps) {
         <EmptyState
           icon={Key}
           title="No organization selected"
-          description="Select an organization above to manage its API keys."
+          description="No organization selected. Select one in the sidebar to manage its API keys."
           size="md"
         />
       </SettingsCard>
@@ -191,24 +191,21 @@ export function ApiKeysSettings({ org }: ApiKeysSettingsProps) {
   ];
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-space-4">
       {canManage && (
         <SettingsCard
           title="API keys"
           description="Create a key to call the Eden API from CI or your own scripts."
         >
           {!showCreate && !createdKey && (
-            <button
-              onClick={() => setShowCreate(true)}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-[var(--accent)] text-[var(--bg-base)] rounded-lg text-sm font-medium hover:opacity-90"
-            >
+            <Button variant="default" className="min-h-11" onClick={() => setShowCreate(true)}>
               <Plus className="w-4 h-4" />
               Create API Key
-            </button>
+            </Button>
           )}
 
           {showCreate && (
-            <div className="space-y-4">
+            <div className="space-y-space-4">
               <h3 className="text-sm font-semibold text-[var(--text-primary)]">Create new key</h3>
               <input
                 type="text"
@@ -253,20 +250,21 @@ export function ApiKeysSettings({ org }: ApiKeysSettingsProps) {
                 >
                   Cancel
                 </button>
-                <button
+                <Button
+                  variant="default"
+                  className="min-h-11"
                   onClick={handleCreate}
-                  disabled={creating || !newKeyName.trim() || selectedScopes.length === 0}
-                  className="px-4 py-2 bg-[var(--accent)] text-[var(--bg-base)] rounded-lg text-sm font-medium disabled:opacity-50 inline-flex items-center gap-2"
+                  disabled={!newKeyName.trim() || selectedScopes.length === 0}
+                  loading={creating}
                 >
-                  {creating ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
                   Create Key
-                </button>
+                </Button>
               </div>
             </div>
           )}
 
           {createdKey && (
-            <div className="space-y-4">
+            <div className="space-y-space-4">
               <div className="p-4 bg-[var(--success-bg)] border border-[var(--success)]/30 rounded-lg">
                 <p className="text-sm font-medium text-[var(--success)] mb-2">API key created</p>
                 <p className="text-xs text-[var(--success)]/80 mb-3">

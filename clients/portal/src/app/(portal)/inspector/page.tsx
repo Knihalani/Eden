@@ -11,8 +11,8 @@ import { Input } from "@/components/ui/input";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorState } from "@/components/ui/error-state";
 import { NoOrgState } from "@/components/ui/no-org-state";
-import { PageHeader } from "@/components/layout/page-header";
 import { PageContent } from "@/components/layout/page-content";
+import { ObserveLeafHeader } from "@/app/(portal)/observability/_components/observe-leaf-shell";
 import {
   Search,
   ChevronRight,
@@ -273,11 +273,11 @@ export default function TraceInspectorPage() {
     // that was retired in June 2026; with the new flex layout it
     // collapsed the page. June 2026 layout-pass fix.
     <PageContent className="bg-[var(--bg-base)]">
-      <PageHeader
-        eyebrow="Observe"
+      <ObserveLeafHeader
         title="Trace Inspector"
         subtitle="Drill into one trace: span tree, tool calls, model thoughts, env steps."
         icon={Compass}
+        description="Advanced under Traces — searchable span tree for one trace; open from Traces More when nested."
       />
 
         {/* Toolbar */}

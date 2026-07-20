@@ -15,18 +15,18 @@ export default function NotFound() {
             <span className="eden-404__prompt">$</span> page not found
           </h1>
           <p className="eden-404__subtitle">
-            The page you're looking for doesn't exist — or it has been
+            The page you&apos;re looking for doesn&apos;t exist — or it was
             renamed, moved, or never shipped.
           </p>
           <div className="eden-404__cta">
             <Link className="eden-btn eden-btn--primary" to="/">
-              ← Back to docs home
+              Docs home
             </Link>
             <Link className="eden-btn eden-btn--ghost" to="/quickstart">
-              Get started
+              Quickstart
             </Link>
             <a className="eden-btn eden-btn--ghost" href="https://edenobservability.com">
-              edenobservability.com ↗
+              Portal
             </a>
           </div>
           <div className="eden-404__hints">
@@ -37,6 +37,7 @@ export default function NotFound() {
               <li><Link to="/reference/api">REST API reference</Link></li>
               <li><Link to="/reference/sdk-python">Python SDK</Link></li>
               <li><Link to="/how-to/deploy">API endpoint</Link></li>
+              <li><a href="https://edenobservability.com/pricing">Pricing</a></li>
             </ul>
           </div>
         </div>

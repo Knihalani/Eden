@@ -25,6 +25,7 @@ import {
   PRODUCT_TOUR_TOTAL,
   type TourStep,
 } from "@/lib/product-tour";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 const PAD = 10;
@@ -33,17 +34,6 @@ const CARD_H = 280;
 
 const FOCUSABLE =
   'button:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])';
-
-const btnBase =
-  "inline-flex min-h-11 items-center justify-center gap-1.5 rounded-xl px-3.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-primary)]";
-const btnGhost = cn(
-  btnBase,
-  "border border-[var(--border-default)] text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)] disabled:opacity-40",
-);
-const btnPrimary = cn(
-  btnBase,
-  "bg-[var(--accent)] px-4 font-semibold text-[var(--accent-foreground)] hover:opacity-90",
-);
 
 interface Rect {
   top: number;
@@ -462,130 +452,132 @@ export function ProductTour({
                 />
               </div>
 
-              <div className="flex items-start justify-between gap-4 px-5 pt-5 pb-1 sm:px-6 sm:pt-6">
+              <div className="flex items-start justify-between gap-space-4 px-space-5 pt-space-5 pb-space-1 sm:px-space-6 sm:pt-space-6">
                 <div className="min-w-0">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--accent)]">
+                  <p className="text-2xs font-semibold uppercase tracking-[0.14em] text-[var(--accent)]">
                     Product tour · {stepIndex + 1} / {PRODUCT_TOUR_TOTAL}
                   </p>
                   <h2
                     id="eden-tour-title"
-                    className="mt-1.5 font-[family-name:var(--font-display)] text-xl font-semibold tracking-tight text-[var(--text-primary)] sm:text-2xl"
+                    className="mt-space-2 font-[family-name:var(--font-display)] text-xl font-semibold tracking-tight text-[var(--text-primary)] sm:text-2xl"
                   >
                     {step.title}
                   </h2>
                 </div>
-                <button
+                <Button
                   type="button"
+                  variant="ghost"
+                  size="icon"
                   onClick={() => skipRef.current()}
                   aria-label="Close tour"
-                  className={cn(
-                    "inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-[var(--text-muted)]",
-                    "transition-colors hover:bg-[var(--bg-tertiary)] hover:text-[var(--text-primary)]",
-                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-primary)]",
-                  )}
+                  className="min-h-11 min-w-11 shrink-0"
                 >
                   <X className="h-5 w-5" />
-                </button>
+                </Button>
               </div>
 
-              <div className="px-5 py-4 sm:px-6">
+              <div className="px-space-5 py-space-4 sm:px-space-6">
                 <p
                   id="eden-tour-body"
-                  className="text-[15px] leading-relaxed text-[var(--text-secondary)] sm:text-base"
+                  className="text-sm leading-relaxed text-[var(--text-secondary)] sm:text-base"
                 >
                   {step.body}
                 </p>
               </div>
 
-              <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[var(--border-default)] px-5 py-4 sm:px-6">
-                <button
+              <div className="flex flex-wrap items-center justify-between gap-space-3 border-t border-[var(--border-default)] px-space-5 py-space-4 sm:px-space-6">
+                <Button
                   type="button"
+                  variant="ghost"
                   onClick={() => skipRef.current()}
-                  className={cn(
-                    "min-h-11 px-2 text-sm text-[var(--text-muted)] transition-colors hover:text-[var(--text-primary)]",
-                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-primary)] rounded-lg",
-                  )}
+                  className="min-h-11"
                 >
                   Skip tour
-                </button>
-                <div className="flex flex-wrap items-center justify-end gap-2">
+                </Button>
+                <div className="flex flex-wrap items-center justify-end gap-space-2">
                   {!isWelcome && (
-                    <button
+                    <Button
                       type="button"
+                      variant="outline"
                       disabled={stepIndex === 0}
                       onClick={goBack}
-                      className={btnGhost}
+                      className="min-h-11"
                     >
                       <ArrowLeft className="h-4 w-4" />
                       Back
-                    </button>
+                    </Button>
                   )}
                   {isFinish && step.ctaHref ? (
                     <>
-                      <Link
-                        href="/settings?tab=api-keys"
-                        className={btnGhost}
-                        onClick={() => onFinish()}
-                      >
-                        API keys
-                      </Link>
-                      <a
-                        href={step.ctaHref}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        data-tour-primary
-                        data-tour-cta
-                        className={btnPrimary}
-                        onClick={() => onFinish()}
-                      >
-                        {step.ctaLabel ?? "Open docs"}
-                        <ExternalLink className="h-4 w-4" />
-                      </a>
-                    </>
-                  ) : step.ctaHref ? (
-                    <>
-                      <button
-                        type="button"
-                        onClick={goNext}
-                        className={btnGhost}
-                      >
-                        {isWelcome ? "Start tour" : "Next"}
-                        <ArrowRight className="h-4 w-4" />
-                      </button>
-                      {step.ctaExternal ? (
+                      <Button asChild variant="outline" className="min-h-11">
+                        <Link
+                          href="/settings?tab=api-keys"
+                          onClick={() => onFinish()}
+                        >
+                          API keys
+                        </Link>
+                      </Button>
+                      <Button asChild className="min-h-11">
                         <a
                           href={step.ctaHref}
                           target="_blank"
                           rel="noopener noreferrer"
                           data-tour-primary
                           data-tour-cta
-                          className={btnPrimary}
+                          onClick={() => onFinish()}
                         >
-                          {step.ctaLabel ?? "Open"}
+                          {step.ctaLabel ?? "Open docs"}
                           <ExternalLink className="h-4 w-4" />
                         </a>
+                      </Button>
+                    </>
+                  ) : step.ctaHref ? (
+                    <>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={goNext}
+                        className="min-h-11"
+                      >
+                        {isWelcome ? "Start tour" : "Next"}
+                        <ArrowRight className="h-4 w-4" />
+                      </Button>
+                      {step.ctaExternal ? (
+                        <Button asChild className="min-h-11">
+                          <a
+                            href={step.ctaHref}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            data-tour-primary
+                            data-tour-cta
+                          >
+                            {step.ctaLabel ?? "Open"}
+                            <ExternalLink className="h-4 w-4" />
+                          </a>
+                        </Button>
                       ) : (
-                        <Link
-                          href={step.ctaHref}
-                          data-tour-primary
-                          data-tour-cta
-                          className={btnPrimary}
-                        >
-                          {step.ctaLabel ?? "Open"}
-                          <ArrowRight className="h-4 w-4" />
-                        </Link>
+                        <Button asChild className="min-h-11">
+                          <Link
+                            href={step.ctaHref}
+                            data-tour-primary
+                            data-tour-cta
+                          >
+                            {step.ctaLabel ?? "Open"}
+                            <ArrowRight className="h-4 w-4" />
+                          </Link>
+                        </Button>
                       )}
                     </>
                   ) : (
-                    <button
+                    <Button
                       type="button"
                       onClick={goNext}
                       data-tour-primary
-                      className={btnPrimary}
+                      className="min-h-11"
                     >
                       {isWelcome ? "Start tour" : "Next"}
                       <ArrowRight className="h-4 w-4" />
-                    </button>
+                    </Button>
                   )}
                 </div>
               </div>

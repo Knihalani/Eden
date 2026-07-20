@@ -17,7 +17,7 @@ export function RrwebThumb({ traceId, sessionId, hasReplay = true }: RrwebThumbP
 
   if (!hasReplay) {
     return (
-      <div className="inline-flex items-center gap-1.5 rounded border border-dashed border-[var(--border-default)] px-2 py-1 text-[10px] text-[var(--text-muted)]">
+      <div className="inline-flex items-center gap-space-2 rounded border border-dashed border-[var(--border-default)] px-space-2 py-space-1 font-mono text-2xs text-[var(--text-muted)]">
         <MonitorPlay className="h-3 w-3" />
         No browser recording
       </div>
@@ -27,7 +27,7 @@ export function RrwebThumb({ traceId, sessionId, hasReplay = true }: RrwebThumbP
   return (
     <Link
       href={href}
-      className="inline-flex items-center gap-1.5 rounded border border-[var(--border-default)] bg-[var(--bg-tertiary)] px-2 py-1 text-[10px] text-[var(--accent)] hover:underline"
+      className="inline-flex items-center gap-space-2 rounded border border-[var(--border-default)] bg-[var(--bg-tertiary)] px-space-2 py-space-1 font-mono text-2xs text-[var(--accent)] hover:underline"
       data-testid="rrweb-thumb"
     >
       <MonitorPlay className="h-3 w-3" />

@@ -28,11 +28,10 @@ describe("W6-B guardrails stats ready", () => {
 });
 
 describe("W6-B ErrorState sweep", () => {
-  it("incidents uses ErrorState with retry (not ad-hoc banner)", () => {
+  it("incidents uses QueryState error path (not ad-hoc banner)", () => {
     const src = read("app/(portal)/incidents/page.tsx");
-    expect(src).toContain('from "@/components/ui/error-state"');
-    expect(src).toContain('title="Could not load incidents"');
-    expect(src).toContain("Try again");
+    expect(src).toContain('from "@/components/ui/query-state"');
+    expect(src).toContain('errorTitle="Could not load incidents"');
     expect(src).not.toMatch(/role="alert"[\s\S]{0,120}AlertTriangle/);
   });
 

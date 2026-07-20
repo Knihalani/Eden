@@ -3,8 +3,8 @@
 /**
  * OnboardingChecklist — optional progress list for non-wizard surfaces.
  *
- * Uses the same ``lib/onboarding-progress`` SoT as the banner + wizard.
- * Not rendered inside the wizard welcome step (avoids dual counters).
+ * Uses the same ``lib/onboarding-progress`` SoT as the banner + tour.
+ * Not rendered inside the tour welcome step (avoids dual counters).
  */
 
 import { useEffect, useState } from "react";
@@ -16,6 +16,7 @@ import {
   formatOnboardingProgress,
   ONBOARDING_PROGRESS_STEPS,
 } from "@/lib/onboarding-progress";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 export function OnboardingChecklist() {
@@ -39,7 +40,7 @@ export function OnboardingChecklist() {
 
   if (loading) {
     return (
-      <div className="flex items-center gap-2 p-6 text-sm text-[var(--text-muted)]">
+      <div className="flex items-center gap-space-2 p-space-6 text-sm text-[var(--text-muted)]">
         <Loader2 className="h-4 w-4 animate-spin" />
         Loading onboarding state…
       </div>
@@ -47,7 +48,7 @@ export function OnboardingChecklist() {
   }
   if (!state) {
     return (
-      <div className="rounded-lg border border-[var(--border-default)] bg-[var(--bg-elev-1)] p-4 text-sm text-[var(--text-muted)]">
+      <div className="rounded-lg border border-[var(--border-default)] bg-[var(--bg-elev-1)] p-space-4 text-sm text-[var(--text-muted)]">
         Onboarding checklist is unavailable right now.
       </div>
     );
@@ -57,7 +58,7 @@ export function OnboardingChecklist() {
   const currentIdx = progress.index;
 
   return (
-    <ol className="space-y-2">
+    <ol className="space-y-space-2">
       {ONBOARDING_PROGRESS_STEPS.map((step, i) => {
         const done = i < currentIdx || state.step === "done";
         const active = i === currentIdx && state.step !== "done";
@@ -66,7 +67,7 @@ export function OnboardingChecklist() {
           <li
             key={step.id}
             className={cn(
-              "flex items-start gap-3 rounded-lg border p-3 transition-colors",
+              "flex items-start gap-space-3 rounded-lg border p-space-3 transition-colors",
               done
                 ? "border-[var(--accent)]/40 bg-[var(--accent)]/5"
                 : active
@@ -76,7 +77,7 @@ export function OnboardingChecklist() {
           >
             <div
               className={cn(
-                "mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full",
+                "mt-space-1 flex h-6 w-6 shrink-0 items-center justify-center rounded-full",
                 done
                   ? "bg-[var(--accent)] text-[var(--bg-primary)]"
                   : active
@@ -103,20 +104,17 @@ export function OnboardingChecklist() {
               >
                 {i + 1}. {step.label}
               </div>
-              <div className="mt-0.5 text-xs text-[var(--text-muted)]">
+              <div className="mt-space-1 text-xs text-[var(--text-muted)]">
                 {step.blurb}
               </div>
             </div>
             {active && (
-              <Link
-                href={step.href}
-                className="rounded-md border border-[var(--accent)]/40 bg-[var(--accent)]/10 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-[var(--accent)] hover:bg-[var(--accent)]/20"
-              >
-                Resume
-              </Link>
+              <Button asChild size="sm" variant="outline" className="min-h-11 shrink-0">
+                <Link href={step.href}>Resume</Link>
+              </Button>
             )}
             {done && (
-              <span className="rounded-md bg-[var(--accent)]/10 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-[var(--accent)]">
+              <span className="rounded-md bg-[var(--accent)]/10 px-space-2 py-space-1 text-2xs font-medium uppercase tracking-wide text-[var(--accent)]">
                 Done
               </span>
             )}

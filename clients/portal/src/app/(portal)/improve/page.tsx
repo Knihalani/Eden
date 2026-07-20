@@ -3,16 +3,25 @@
 import { Suspense, useMemo, useState } from "react";
 import Link from "next/link";
 import dynamic from "next/dynamic";
-import { Check, Clock, Loader2, RefreshCw } from "lucide-react";
+import { Check, ChevronDown, Clock, Loader2, RefreshCw } from "lucide-react";
 
 import { PageHeader } from "@/components/layout/page-header";
-import { CoreResourcePage, CrossLinkBar, VirtualizedList } from "@/components/portal-os";
+import { CoreResourcePage, VirtualizedList } from "@/components/portal-os";
 import { EmbeddedSurface } from "@/components/layout/embedded-surface";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { EmptyState } from "@/components/ui/empty-state";
-import { ErrorState } from "@/components/ui/error-state";
 import { NoOrgState } from "@/components/ui/no-org-state";
 import { Panel } from "@/components/ui/panel";
+import { QueryState } from "@/components/ui/query-state";
+import { LoadingSkeleton } from "@/components/ui/skeleton";
 import { useOrg } from "@/hooks/use-org";
 import { usePermissions } from "@/hooks/use-permissions";
 import { useToast } from "@/components/ui/toast";
@@ -35,6 +44,17 @@ import { ImproveFeatureDisabledState } from "@/components/improve/feature-disabl
 import type { ImprovementPlanKind } from "@/lib/api";
 import { useQueryTab } from "@/hooks/use-query-tab";
 import { DOCS_QUICKSTART_URL } from "@/lib/constants";
+import { U20_EMPTY_COPY } from "@/lib/portal-polish";
+
+/** Moat / loop links — overflow only (no peer CrossLink band). */
+const PATH_LINKS = [
+  { label: "Issues", href: "/issues" },
+  { label: "Artifacts", href: "/artifacts" },
+  { label: "Promotions", href: "/promotions" },
+  { label: "Ledger", href: "/ledger" },
+  { label: "Scorecard", href: "/improve/scorecard" },
+  { label: "Online scoring", href: "/improve/online-scoring" },
+] as const;
 
 const IMPROVE_TABS = ["queue", "plans", "history"] as const;
 
@@ -73,6 +93,9 @@ const SEVERITY_RANK: Record<string, number> = {
   low: 3,
   p3: 3,
 };
+
+/** Desktop kanban row estimate — title + status + meta + min-h-11 actions. */
+const QUEUE_CARD_ROW_HEIGHT = 152;
 
 function severityRank(sev: string): number {
   return SEVERITY_RANK[sev.toLowerCase()] ?? 4;
@@ -135,6 +158,127 @@ function canApproveQueueItem(item: ImproveQueueItem): boolean {
   );
 }
 
+function QueueItemCard({
+  item,
+  busy,
+  onApprove,
+  onSnooze,
+}: {
+  item: ImproveQueueItem;
+  busy: boolean;
+  onApprove: (item: ImproveQueueItem) => void;
+  onSnooze: (item: ImproveQueueItem) => void;
+}) {
+  const href = planHref(item);
+  const kind = planKindFromItem(item);
+  const showDisabledApprove =
+    (item.column === "proposed" || item.column === "needs_you") &&
+    !canApproveQueueItem(item) &&
+    Boolean(
+      item.blocked_reason ||
+        isLegacyProposedPatch(item) ||
+        item.ref.startsWith("promotion:") ||
+        item.item_type === "nudge_shadow",
+    );
+
+  return (
+    <article className="rounded-md bg-[var(--bg-primary)]/60 p-space-3 flex flex-col gap-space-2">
+      {href ? (
+        <Link
+          href={href}
+          className="block text-sm font-medium leading-snug text-[var(--text-primary)] hover:underline line-clamp-2"
+        >
+          {item.title}
+        </Link>
+      ) : (
+        <p className="text-sm font-medium leading-snug text-[var(--text-primary)] line-clamp-2">
+          {item.title}
+        </p>
+      )}
+
+      <p className={cn("text-xs font-medium capitalize", severityClass(item.severity))}>
+        {item.severity}
+      </p>
+
+      {item.item_type === "auto_heal" ? (
+        <p className="text-2xs text-[var(--accent)]">Auto-heal event</p>
+      ) : null}
+      {item.item_type === "policy_denial" ? (
+        <p className="text-2xs text-[var(--error)]">Policy denial</p>
+      ) : null}
+
+      <p className="text-2xs text-[var(--text-muted)]">
+        {item.item_type}
+        {item.source ? ` · ${item.source}` : ""}
+        {item.autonomy_tier_required ? ` · Tier ${item.autonomy_tier_required}` : ""}
+      </p>
+
+      {kind ? (
+        <div>
+          <PlanKindBadge kind={kind} />
+        </div>
+      ) : null}
+
+      {item.blocked_reason ? (
+        <p
+          className={cn(
+            "text-2xs",
+            item.item_type === "policy_denial"
+              ? "text-[var(--error)]"
+              : "text-[var(--warning)]",
+          )}
+        >
+          {item.item_type === "policy_denial" ? "Denied: " : "Blocked: "}
+          {item.blocked_reason}
+        </p>
+      ) : null}
+
+      <div className="flex flex-wrap gap-space-2 pt-space-1">
+        {canApproveQueueItem(item) ? (
+          <Button
+            size="sm"
+            variant="ghost"
+            className="min-h-11 px-space-3 text-xs"
+            disabled={busy}
+            onClick={() => void onApprove(item)}
+          >
+            <Check className="mr-1 h-3.5 w-3.5" />
+            Approve
+          </Button>
+        ) : null}
+        {showDisabledApprove ? (
+          <Button
+            size="sm"
+            variant="ghost"
+            className="min-h-11 px-space-3 text-xs"
+            disabled
+            title={
+              item.blocked_reason
+                ? `Approve disabled: ${item.blocked_reason}`
+                : isLegacyProposedPatch(item)
+                  ? "Legacy Cat 23 patches are read-only — open Improvement plans"
+                  : "Approve not supported for this item type"
+            }
+          >
+            <Check className="mr-1 h-3.5 w-3.5" />
+            Approve
+          </Button>
+        ) : null}
+        <Button
+          size="sm"
+          variant="ghost"
+          className="min-h-11 px-space-3 text-xs"
+          disabled={busy}
+          onClick={() => void onSnooze(item)}
+        >
+          <Clock className="mr-1 h-3.5 w-3.5" />
+          Snooze
+        </Button>
+      </div>
+    </article>
+  );
+}
+
 export default function ImprovePage() {
   return (
     <Suspense fallback={<TabLoading />}>
@@ -182,7 +326,6 @@ function ImprovePageInner() {
   const items = queueQuery.data?.items ?? [];
   const refreshedAt = queueQuery.data?.refreshed_at ?? null;
   const loading = queueQuery.isLoading || featureGateQuery.isLoading;
-  const error = queueQuery.error?.message ?? null;
   const featureDisabled = featureGateQuery.data?.enabled === false;
 
   const load = () => queueQuery.refetch();
@@ -282,6 +425,10 @@ function ImprovePageInner() {
   if (!currentOrg) return null;
 
   return (
+    <Tabs
+      value={tab}
+      onValueChange={(v) => setTab(v as (typeof IMPROVE_TABS)[number])}
+    >
     <CoreResourcePage
       size="wide"
       header={
@@ -294,6 +441,7 @@ function ImprovePageInner() {
               <Button
                 variant="outline"
                 size="sm"
+                className="min-h-11"
                 onClick={() => void load()}
                 disabled={loading}
                 aria-label="Refresh improvement queue"
@@ -306,110 +454,150 @@ function ImprovePageInner() {
         />
       }
       toolbar={
-        <div className="space-y-3">
-          <CrossLinkBar
-            links={[
-              { label: "Issues", href: "/issues" },
-              { label: "Artifacts", href: "/artifacts" },
-              { label: "Promotions", href: "/promotions" },
-              { label: "Scorecard", href: "/improve/scorecard" },
-            ]}
-          />
-          <div role="tablist" aria-label="Improve sections" className="flex gap-1 border-b border-[var(--border-subtle)]">
-          {IMPROVE_TABS.map((t) => (
-            <button
-              key={t}
-              type="button"
-              role="tab"
-              aria-selected={tab === t}
-              onClick={() => setTab(t)}
-              className={cn(
-                "px-3 py-2 text-sm font-medium capitalize border-b-2 -mb-px",
-                tab === t
-                  ? "border-[var(--accent)] text-[var(--text-primary)]"
-                  : "border-transparent text-[var(--text-muted)] hover:text-[var(--text-primary)]",
-              )}
-            >
-              {t === "queue" ? "Queue" : t === "plans" ? "Plans" : "History"}
-            </button>
-          ))}
-          </div>
+        <div
+          data-testid="improve-toolbar"
+          className="flex flex-wrap items-center gap-space-2 border-b border-[var(--border-subtle)] pb-space-1"
+        >
+          <TabsList
+            variant="underline"
+            aria-label="Improve sections"
+            className="h-auto min-w-0 flex-1 justify-start gap-space-1 overflow-x-auto bg-transparent"
+          >
+            {IMPROVE_TABS.map((t) => {
+              const label =
+                t === "queue" ? "Queue" : t === "plans" ? "Plans" : "History";
+              return (
+                <TabsTrigger
+                  key={t}
+                  variant="underline"
+                  value={t}
+                  title={label}
+                  className="min-h-11 shrink-0 capitalize"
+                >
+                  {label}
+                </TabsTrigger>
+              );
+            })}
+          </TabsList>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="ghost"
+                className="min-h-11 shrink-0"
+                aria-label="Improve path links"
+              >
+                <span className="hidden sm:inline">More</span>
+                <span className="sm:hidden">More</span>
+                <ChevronDown className="h-4 w-4" aria-hidden />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="min-w-[12rem]">
+              <DropdownMenuLabel>Go to</DropdownMenuLabel>
+              {PATH_LINKS.map((l) => (
+                <DropdownMenuItem key={l.href} asChild>
+                  <Link href={l.href}>{l.label}</Link>
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       }
       table={
         <>
-        {tab === "plans" && (
+        <TabsContent value="plans" className="mt-0">
           <EmbeddedSurface>
             <PlansView />
           </EmbeddedSurface>
-        )}
-        {tab === "history" && (
+        </TabsContent>
+        <TabsContent value="history" className="mt-0">
           <EmbeddedSurface>
             <HistoryView />
           </EmbeddedSurface>
-        )}
-        {tab === "queue" && (
+        </TabsContent>
+        <TabsContent value="queue" className="mt-0">
           <>
         {featureDisabled ? (
           <ImproveFeatureDisabledState />
         ) : (
           <>
-        {error && (
-          <ErrorState
-            className="mb-4"
-            title="Could not load the improvement queue"
-            message={error}
-            action={
-              <Button onClick={() => void load()} variant="outline" size="default">
-                <RefreshCw className="h-4 w-4" />
-                Try again
-              </Button>
-            }
-          />
-        )}
         {refreshedAt && (
-          <p className="mb-4 text-xs text-[var(--text-muted)]">
+          <p className="mb-space-4 text-xs text-[var(--text-muted)]">
             Updated {new Date(refreshedAt).toLocaleString()}
           </p>
         )}
-        {loading && items.length === 0 ? (
-          <div className="flex items-center gap-2 text-sm text-[var(--text-muted)]">
-            <Loader2 className="h-4 w-4 animate-spin" />
-            Loading queue…
+        <QueryState
+          loading={loading && items.length === 0}
+          error={queueQuery.error}
+          data={queueQuery.data}
+          onRetry={() => void load()}
+          errorTitle="Could not load the improvement queue"
+          isEmpty={(d) => (d?.items.length ?? 0) === 0}
+          loadingSlot={<LoadingSkeleton variant="table" lines={5} className="p-0 max-w-none" />}
+          emptySlot={
+            <EmptyState
+              variant="plain"
+              title="Nothing in the queue"
+              description={U20_EMPTY_COPY.improveQueue}
+              action={
+                <div className="flex flex-wrap items-center justify-center gap-space-2">
+                  <Button asChild className="min-h-11">
+                    <a href={DOCS_QUICKSTART_URL} target="_blank" rel="noopener noreferrer">
+                      Docs quickstart
+                    </a>
+                  </Button>
+                  {canManageKeys ? (
+                    <Button asChild variant="outline" className="min-h-11">
+                      <Link href="/settings?tab=api-keys">Create API key</Link>
+                    </Button>
+                  ) : (
+                    <Button asChild variant="outline" className="min-h-11">
+                      <Link href="/traces">Open Traces</Link>
+                    </Button>
+                  )}
+                  <Button asChild variant="ghost" className="min-h-11">
+                    <Link href="/issues">View Issues</Link>
+                  </Button>
+                </div>
+              }
+            />
+          }
+        >
+          {() => (
+          <>
+          {/* UX-P1-01: &lt;lg = list/stack (populated columns only); lg+ = kanban grid */}
+          <div className="flex flex-col gap-space-4 lg:hidden">
+            {COLUMNS.map((col) => {
+              const colItems = byColumn[col.id] ?? [];
+              if (colItems.length === 0) return null;
+              return (
+                <section key={col.id} aria-label={col.label} className="flex flex-col gap-space-2">
+                  <header className="px-space-1">
+                    <h2 className="text-sm font-semibold text-[var(--text-primary)]">
+                      {col.label}
+                      <span className="ml-space-2 text-xs font-normal text-[var(--text-muted)]">
+                        {colItems.length}
+                      </span>
+                    </h2>
+                    <p className="text-xs text-[var(--text-muted)]">{col.hint}</p>
+                  </header>
+                  <ul className="flex flex-col gap-space-2 m-0 p-0 list-none">
+                    {colItems.map((item) => (
+                      <li key={item.ref}>
+                        <QueueItemCard
+                          item={item}
+                          busy={busyRef === item.ref}
+                          onApprove={onApprove}
+                          onSnooze={onSnooze}
+                        />
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+              );
+            })}
           </div>
-        ) : !error && items.length === 0 ? (
-          <EmptyState
-            variant="plain"
-            title="Nothing in the queue"
-            description={
-              canManageKeys
-                ? "Needs production traces and Agent Issues first. Create an API key, install the SDK or gateway from the docs, then return when Eden has signals to triage."
-                : "Needs production traces and Agent Issues first. Ask an admin for an API key, or open Traces once data is flowing."
-            }
-            action={
-              <div className="flex flex-wrap items-center justify-center gap-2">
-                <Button asChild className="min-h-11">
-                  <a href={DOCS_QUICKSTART_URL} target="_blank" rel="noopener noreferrer">
-                    Docs quickstart
-                  </a>
-                </Button>
-                {canManageKeys ? (
-                  <Button asChild variant="outline" className="min-h-11">
-                    <Link href="/settings?tab=api-keys">Create API key</Link>
-                  </Button>
-                ) : (
-                  <Button asChild variant="outline" className="min-h-11">
-                    <Link href="/traces">Open Traces</Link>
-                  </Button>
-                )}
-                <Button asChild variant="ghost" className="min-h-11">
-                  <Link href="/issues">View Issues</Link>
-                </Button>
-              </div>
-            }
-          />
-        ) : items.length === 0 ? null : (
-          <div className="grid gap-3 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5">
+
+          <div className="hidden gap-space-3 lg:grid lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5">
             {COLUMNS.map((col) => (
               <Panel
                 key={col.id}
@@ -418,10 +606,10 @@ function ImprovePageInner() {
                 aria-label={col.label}
                 className="min-h-[12rem]"
               >
-                <header className="mb-3 px-1">
+                <header className="mb-space-3 px-space-1">
                   <h2 className="text-sm font-semibold text-[var(--text-primary)]">
                     {col.label}
-                    <span className="ml-2 text-xs font-normal text-[var(--text-muted)]">
+                    <span className="ml-space-2 text-xs font-normal text-[var(--text-muted)]">
                       {byColumn[col.id]?.length ?? 0}
                     </span>
                   </h2>
@@ -430,138 +618,31 @@ function ImprovePageInner() {
                 <VirtualizedList
                   items={byColumn[col.id] ?? []}
                   rowKey={(item) => item.ref}
-                  rowHeight={120}
-                  className="max-h-[28rem] space-y-1.5"
+                  rowHeight={QUEUE_CARD_ROW_HEIGHT}
+                  className="max-h-[28rem] flex flex-col gap-space-2"
                 >
-                  {(item) => {
-                    const href = planHref(item);
-                    const kind = planKindFromItem(item);
-                    return (
-                    <div
-                      key={item.ref}
-                      className="rounded-md bg-[var(--bg-primary)]/60 p-2.5"
-                    >
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="min-w-0">
-                          {href ? (
-                            <Link
-                              href={href}
-                              className="block truncate text-sm font-medium text-[var(--text-primary)] hover:underline"
-                            >
-                              {item.title}
-                            </Link>
-                          ) : (
-                            <p className="truncate text-sm font-medium text-[var(--text-primary)]">
-                              {item.title}
-                            </p>
-                          )}
-                          <p className="mt-0.5 text-[11px] text-[var(--text-muted)]">
-                            <span className={severityClass(item.severity)}>
-                              {item.severity}
-                            </span>
-                            {" · "}
-                            {item.item_type}
-                            {item.source ? ` · ${item.source}` : ""}
-                          </p>
-                          {kind && (
-                            <div className="mt-1">
-                              <PlanKindBadge kind={kind} />
-                            </div>
-                          )}
-                          {item.item_type === "auto_heal" && (
-                            <p className="mt-1 text-[11px] text-[var(--accent)]">
-                              Auto-heal event
-                            </p>
-                          )}
-                          {item.item_type === "policy_denial" && (
-                            <p className="mt-1 text-[11px] text-[var(--error)]">
-                              Policy denial
-                            </p>
-                          )}
-                          {item.blocked_reason && (
-                            <p
-                              className={cn(
-                                "mt-1 text-[11px]",
-                                item.item_type === "policy_denial"
-                                  ? "text-[var(--error)]"
-                                  : "text-[var(--warning)]",
-                              )}
-                            >
-                              {item.item_type === "policy_denial"
-                                ? "Denied: "
-                                : "Blocked: "}
-                              {item.blocked_reason}
-                            </p>
-                          )}
-                          {item.autonomy_tier_required && (
-                            <p className="mt-0.5 text-[10px] text-[var(--text-muted)]">
-                              Tier {item.autonomy_tier_required} required
-                            </p>
-                          )}
-                        </div>
-                      </div>
-                      <div className="mt-2 flex gap-1">
-                        {canApproveQueueItem(item) ? (
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            className="h-7 px-2 text-xs"
-                            disabled={busyRef === item.ref}
-                            onClick={() => void onApprove(item)}
-                          >
-                            <Check className="mr-1 h-3 w-3" />
-                            Approve
-                          </Button>
-                        ) : null}
-                        {(item.column === "proposed" ||
-                          item.column === "needs_you") &&
-                          !canApproveQueueItem(item) &&
-                          (item.blocked_reason ||
-                            isLegacyProposedPatch(item) ||
-                            item.ref.startsWith("promotion:") ||
-                            item.item_type === "nudge_shadow") && (
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              className="h-7 px-2 text-xs"
-                              disabled
-                              title={
-                                item.blocked_reason
-                                  ? `Approve disabled: ${item.blocked_reason}`
-                                  : isLegacyProposedPatch(item)
-                                    ? "Legacy Cat 23 patches are read-only — open Improvement plans"
-                                    : "Approve not supported for this item type"
-                              }
-                            >
-                              <Check className="mr-1 h-3 w-3" />
-                              Approve
-                            </Button>
-                          )}
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="h-7 px-2 text-xs"
-                          disabled={busyRef === item.ref}
-                          onClick={() => void onSnooze(item)}
-                        >
-                          <Clock className="mr-1 h-3 w-3" />
-                          Snooze
-                        </Button>
-                      </div>
-                    </div>
-                    );
-                  }}
+                  {(item) => (
+                    <QueueItemCard
+                      item={item}
+                      busy={busyRef === item.ref}
+                      onApprove={onApprove}
+                      onSnooze={onSnooze}
+                    />
+                  )}
                 </VirtualizedList>
               </Panel>
             ))}
           </div>
-        )}
+          </>
+          )}
+        </QueryState>
           </>
         )}
           </>
-        )}
+        </TabsContent>
         </>
       }
     />
+    </Tabs>
   );
 }

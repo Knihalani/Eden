@@ -46,15 +46,6 @@ export function onboardingProgressIndexFromPath(pathname: string): number {
   return 0;
 }
 
-export function isWaitPath(_pathname: string): boolean {
-  return false;
-}
-
-export function isOnboardingWizardPath(_pathname: string | null | undefined): boolean {
-  // Legacy wizard routes redirect; improvement-loop keeps full chrome.
-  return false;
-}
-
 export interface OnboardingProgressView {
   index: number;
   current: number;
