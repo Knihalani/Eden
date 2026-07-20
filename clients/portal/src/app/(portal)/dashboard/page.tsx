@@ -1066,7 +1066,7 @@ function DiagnosisStrip({
     alertsUnavailable || summaryUnavailable
       ? "Some telemetry shards failed — retry from the banner above, or open Traces."
       : hasCritical || hasWarning
-        ? `${severityCount} anomal${anomalyCount === 1 ? "y" : "ies"} in ${formatWindowShort(windowHours)}${
+        ? `${anomalyCount} anomal${anomalyCount === 1 ? "y" : "ies"} in ${formatWindowShort(windowHours)}${
             hasFailures
               ? ` · top: ${topFailureModes[0]?.name ?? "—"}`
               : ""
