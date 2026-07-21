@@ -466,7 +466,7 @@ def _fake_user() -> dict:
 @pytest.fixture(scope="module")
 def apm_depth_app() -> FastAPI:
     from eden.api.deps import get_current_user, require_org_member
-    from eden.api.routes.intelligence_apm_depth import router
+    from eden.api.routes import intelligence_apm_depth as mod
     from eden.config import get_settings
 
     settings = get_settings()
@@ -475,7 +475,17 @@ def apm_depth_app() -> FastAPI:
     app = FastAPI(title="eden-apm-depth-test")
     app.dependency_overrides[get_current_user] = _fake_user
     app.dependency_overrides[require_org_member] = lambda: {"sub": "test-user", "org_id": "org_test"}
-    app.include_router(router)
+    # Router uses module-local ``_require_path_org`` (not require_path_org_access).
+    app.dependency_overrides[mod._require_path_org] = lambda: "org_test"
+    async def _flag_on() -> None:
+        return None
+    for r in mod.router.routes:
+        if not hasattr(r, "dependant"):
+            continue
+        for d in r.dependant.dependencies:
+            if getattr(d.call, "__name__", "") == "_dependency":
+                app.dependency_overrides[d.call] = _flag_on
+    app.include_router(mod.router)
     return app
 
 

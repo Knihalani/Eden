@@ -259,7 +259,10 @@ class TestInvestigationAgentReport:
         pg = _pg_with_signals(
             judge_trends=judge_trends, incidents=incidents
         )
-        with patch("eden.llm.client.get_llm_client", return_value=_make_llm_client(content='{"summary": "scores stable."}')):
+        with patch(
+            "eden.autonomous.investigation._call_llm",
+            AsyncMock(return_value='{"summary": "scores stable."}'),
+        ):
             with patch("eden.storage.postgres.get_postgres_client", return_value=pg):
                 result = await InvestigationAgent().report(
                     "org_test", period="weekly"
@@ -280,7 +283,10 @@ class TestInvestigationAgentReport:
         from eden.autonomous import InvestigationAgent
 
         pg = _pg_with_signals()
-        with patch("eden.llm.client.get_llm_client", return_value=_make_llm_client(content="not json")):
+        with patch(
+            "eden.autonomous.investigation._call_llm",
+            AsyncMock(return_value="not json"),
+        ):
             with patch("eden.storage.postgres.get_postgres_client", return_value=pg):
                 result = await InvestigationAgent().report(
                     "org_test", period="monthly"
@@ -433,20 +439,22 @@ class TestNLReportGenerator:
             '"title": "Monthly exec report"}'
         )
         report_summary_json = '{"summary": "monthly stable"}'
-        llm_responses = [
-            MagicMock(content=parse_json),
-            MagicMock(content=report_summary_json),
-        ]
-        llm = MagicMock()
-        llm.acall = AsyncMock(side_effect=llm_responses)
+        llm_responses = [parse_json, report_summary_json]
 
         pg = _pg_with_signals()
-        with patch("eden.llm.client.get_llm_client", return_value=llm):
-            with patch("eden.storage.postgres.get_postgres_client", return_value=pg):
-                result = await NLReportGenerator().generate(
-                    "org_test",
-                    request="Monthly exec report on judge quality and incidents",
-                )
+        with patch(
+            "eden.autonomous.nl_interface.query._call_llm",
+            AsyncMock(side_effect=llm_responses),
+        ), patch(
+            "eden.autonomous.investigation._call_llm",
+            AsyncMock(return_value=report_summary_json),
+        ), patch(
+            "eden.storage.postgres.get_postgres_client", return_value=pg
+        ):
+            result = await NLReportGenerator().generate(
+                "org_test",
+                request="Monthly exec report on judge quality and incidents",
+            )
         assert result["status"] == "ok"
         assert result["data"]["period"] == "monthly"
         assert "judge_quality" in result["data"]["focus"]
@@ -511,7 +519,7 @@ class TestRoutes:
 
     @pytest.fixture
     def client(self) -> TestClient:
-        from eden.api.deps import get_current_user, require_org_member
+        from eden.api.deps import get_current_user, require_org_member, require_path_org_access
 
         def _fake_user() -> dict[str, Any]:
             return {"sub": "u1", "org_id": "org_test"}
@@ -522,6 +530,7 @@ class TestRoutes:
         app = FastAPI()
         app.dependency_overrides[get_current_user] = _fake_user
         app.dependency_overrides[require_org_member] = lambda: {"sub": "test-user", "org_id": "org_test"}
+        app.dependency_overrides[require_path_org_access] = lambda: "org_test"
         # The router uses ``Depends(require_feature_flag(...))``
         # which returns a new inner function each call. The
         # inner function is *bound* at the moment the route
@@ -579,7 +588,7 @@ class TestRoutes:
         # the intelligence_gap_v0 flag. We override the flag
         # dep by identity (the inner ``_dependency``
         # function is the dep's identity key in FastAPI).
-        from eden.api.deps import get_current_user, require_org_member
+        from eden.api.deps import get_current_user, require_org_member, require_path_org_access
 
         def _fake_user() -> dict[str, Any]:
             return {"sub": "u1", "org_id": "org_test"}
@@ -590,6 +599,7 @@ class TestRoutes:
         app = FastAPI()
         app.dependency_overrides[get_current_user] = _fake_user
         app.dependency_overrides[require_org_member] = lambda: {"sub": "test-user", "org_id": "org_test"}
+        app.dependency_overrides[require_path_org_access] = lambda: "org_test"
         import eden.api.routes.intelligence_autonomous as mod
         for r in mod.router.routes:
             if not hasattr(r, "dependant"):
@@ -612,6 +622,7 @@ class TestRoutes:
         # 200 OR 403.
         assert r.status_code in (200, 403)
 
+    @pytest.mark.skip(reason="nl/query and nl/dashboard routes removed from autonomous router")
     def test_nl_query_route(self, client: TestClient) -> None:
         pg = _pg_with_signals(
             judge_trends=[
@@ -634,6 +645,7 @@ class TestRoutes:
         assert "assumptions" in body["data"]
         assert body["data"]["data_source"] == "postgres"
 
+    @pytest.mark.skip(reason="nl/query and nl/dashboard routes removed from autonomous router")
     def test_nl_dashboard_route(self, client: TestClient) -> None:
         pg = _pg_with_signals()
         with patch("eden.storage.postgres.get_postgres_client", return_value=pg):

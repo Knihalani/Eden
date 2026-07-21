@@ -101,9 +101,11 @@ def fine_tune_client(mock_postgres_client: MagicMock) -> TestClient:
         get_current_user,
         require_org_admin,
         require_org_member,
+        require_path_org_access,
     )
     app.dependency_overrides[get_current_user] = _fake_user
     app.dependency_overrides[require_org_member] = _fake_member
+    app.dependency_overrides[require_path_org_access] = lambda: "org_test"
     app.dependency_overrides[require_org_admin] = _fake_admin
     try:
         client = TestClient(app)

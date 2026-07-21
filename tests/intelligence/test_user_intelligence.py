@@ -1124,7 +1124,7 @@ class TestHelpers:
 
 @pytest.fixture(scope="module")
 def user_test_app() -> FastAPI:
-    from eden.api.deps import get_current_user, require_org_member
+    from eden.api.deps import get_current_user, require_org_member, require_path_org_access
     from eden.config import get_settings
 
     settings = get_settings()
@@ -1141,6 +1141,7 @@ def user_test_app() -> FastAPI:
     }
     app.dependency_overrides[get_current_user] = lambda: user_payload
     app.dependency_overrides[require_org_member] = lambda: user_payload
+    app.dependency_overrides[require_path_org_access] = lambda: "org_test"
     mod = importlib.import_module("eden.api.routes.intelligence_user")
     app.include_router(mod.router)
     return app

@@ -328,7 +328,7 @@ def app():
     test_app.include_router(agents.router)
     test_app.include_router(observability.router)
 
-    from eden.api.deps import get_current_user, require_org_member
+    from eden.api.deps import get_current_user, require_org_member, require_path_org_access
 
     def _override_user():
         return {
@@ -353,6 +353,7 @@ def app():
 
     test_app.dependency_overrides[get_current_user] = _override_user
     test_app.dependency_overrides[require_org_member] = _override_org_member
+    test_app.dependency_overrides[require_path_org_access] = lambda: "org_test"
 
     stub = _StubPostgresClient()
     # Seed events so /summary has something to aggregate

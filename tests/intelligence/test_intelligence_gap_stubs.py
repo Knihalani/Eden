@@ -59,7 +59,7 @@ def test_app() -> FastAPI:
     auth cookie, and turns on the ``intelligence_gap_v0``
     feature flag via a settings monkeypatch.
     """
-    from eden.api.deps import get_current_user, require_org_member
+    from eden.api.deps import get_current_user, require_org_member, require_path_org_access
     from eden.config import get_settings
 
     # Make sure the feature flag is on for the duration of the
@@ -72,6 +72,7 @@ def test_app() -> FastAPI:
     app = FastAPI(title="eden-intelligence-stub-test")
     app.dependency_overrides[get_current_user] = _fake_user
     app.dependency_overrides[require_org_member] = lambda: {"sub": "test-user", "org_id": "org_test"}
+    app.dependency_overrides[require_path_org_access] = lambda: "org_x"
     for mod_name in ROUTER_MODULES:
         mod = importlib.import_module(mod_name)
         app.include_router(mod.router)
