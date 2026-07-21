@@ -21,8 +21,13 @@ const ctaSecondary =
 
 const ENTRIES = [
   {
+    date: "2026-07-21",
+    title: "Public beta",
+    body: "Free public beta of Observe → Eval → Improve. Paid Team / Pro plans and enterprise SSO remain unavailable; the free tier has no SLA.",
+  },
+  {
     date: "2026-07-13",
-    title: "Soft-launch public surface",
+    title: "Public surface",
     body: "Public pricing, about, contact, subprocessors, and CCPA Do Not Sell pages. GDPR export and DSAR job pipelines. Portal unit tests in CI.",
   },
   {
@@ -42,7 +47,7 @@ export default function ChangelogPage() {
     <LegalPage
       eyebrow="Changelog"
       title="What shipped"
-      description="A calm, chronological record of product changes. Soft launch focuses on reliability and human-reviewed Improve."
+      description="A calm, chronological record of product changes. Public beta focuses on reliability and human-reviewed Improve."
       size="medium"
     >
       <ol className="space-y-10">

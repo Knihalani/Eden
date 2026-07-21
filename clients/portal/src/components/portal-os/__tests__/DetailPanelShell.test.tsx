@@ -67,10 +67,14 @@ describe("master–detail URL helpers", () => {
   it("documents canonical keys and reads aliases", () => {
     expect(MASTER_DETAIL_QUERY_KEYS.traceId[0]).toBe("traceId");
     expect(MASTER_DETAIL_QUERY_KEYS.viewId).toContain("savedView");
+    expect(MASTER_DETAIL_QUERY_KEYS.spanId).toContain("span");
 
     const params = new URLSearchParams("trace_id=abc&savedView=v1");
     expect(readMasterDetailParam(params, "traceId")).toBe("abc");
     expect(readMasterDetailParam(params, "viewId")).toBe("v1");
+
+    const legacySpan = new URLSearchParams("span=s9");
+    expect(readMasterDetailParam(legacySpan, "spanId")).toBe("s9");
   });
 
   it("writes canonical and strips aliases", () => {

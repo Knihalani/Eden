@@ -1,5 +1,25 @@
-import { StatusTab } from "../../_components/status-tab";
+"use client";
 
-export default function SettingsStatusPage() {
-  return <StatusTab />;
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { Loader2 } from "lucide-react";
+
+export default function StatusSettingsRedirect() {
+  const router = useRouter();
+
+  useEffect(() => {
+    router.replace("/settings?tab=status");
+  }, [router]);
+
+  return (
+    <div
+      className="flex h-48 items-center justify-center gap-2 text-sm text-[var(--text-muted)]"
+      role="status"
+      aria-live="polite"
+      aria-busy="true"
+    >
+      <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+      Redirecting…
+    </div>
+  );
 }

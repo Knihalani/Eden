@@ -43,7 +43,17 @@ export { Banner } from "./banner";
 export { Alert } from "./alert";
 export { StatCard } from "./stat-card";
 export type { StatCardProps } from "./stat-card";
-export { StatusBadge, IssuePriorityBadge, IssueWorkflowBadge } from "./status-badge";
+export {
+  StatusBadge,
+  OutcomeBadge,
+  TraceOutcomeBadge,
+  SeverityBadge,
+  SeverityIcon,
+  PRStatusBadge,
+  ImprovePlanStatusBadge,
+  IssuePriorityBadge,
+  IssueWorkflowBadge,
+} from "./status-badge";
 
 export {
   Select,
@@ -136,7 +146,10 @@ export { CodeBlock } from "./code-block";
 export { Panel, panelVariants } from "./panel";
 export type { PanelProps } from "./panel";
 
-export { DataList, DataRow, DataLabel, DataValue } from "./data-list";
-
 export { CodeChip } from "./code-chip";
 export type { CodeChipProps } from "./code-chip";
+
+export { FilterBar, clearedFilters } from "./filter-bar";
+export { Wizard } from "./wizard";
+export type { WizardContext, WizardStep, WizardProps } from "./wizard";
+export { ErrorBoundary } from "./error-boundary";

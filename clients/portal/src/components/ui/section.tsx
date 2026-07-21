@@ -27,27 +27,29 @@ export function Section({
   return (
     <section
       className={cn(
-        "rounded-xl bg-[var(--bg-secondary)] overflow-hidden",
+        // Quiet chart host — tonal lift only, no border stack (Wave 6.8).
+        "overflow-hidden rounded-xl bg-[var(--bg-secondary)]",
         className
       )}
+      data-chart-quiet="true"
       {...props}
     >
       {hasHeader && (
-        <header className="flex items-start justify-between gap-3 px-4 pt-4 pb-2">
+        <header className="flex items-start justify-between gap-3 px-3 pb-1.5 pt-3">
           <div className="min-w-0">
             {title && (
-              <h3 className="text-sm font-semibold text-[var(--text-primary)] tracking-tight">
+              <h3 className="text-sm font-medium tracking-tight text-[var(--text-primary)]">
                 {title}
               </h3>
             )}
             {description && (
-              <p className="text-xs text-[var(--text-muted)] mt-0.5">{description}</p>
+              <p className="mt-0.5 text-xs text-[var(--text-muted)]">{description}</p>
             )}
           </div>
-          {actions && <div className="flex items-center gap-2 shrink-0">{actions}</div>}
+          {actions && <div className="flex shrink-0 items-center gap-1">{actions}</div>}
         </header>
       )}
-      <div className={cn(hasHeader ? "px-4 pb-4" : "", contentClassName)}>{children}</div>
+      <div className={cn(hasHeader ? "px-3 pb-3" : "", contentClassName)}>{children}</div>
     </section>
   );
 }

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { LegalPage } from "@/components/layout/legal-page";
+import { SALES_EMAIL } from "@/lib/constants";
 import { Shield, Lock, Eye, Database } from "lucide-react";
 
 export const metadata: Metadata = {
@@ -57,7 +58,7 @@ const SECTIONS = [
         <p>
           PII redaction is irreversible — the original payload is dropped at the gateway
           edge and never reaches our storage tier. For compliance-sensitive workloads,
-          contact us about dedicated tenancy (enterprise).
+          contact us about dedicated tenancy options when available.
         </p>
       </>
     ),
@@ -74,10 +75,10 @@ const SECTIONS = [
           do not cross-replicate telemetry data between regions.
         </p>
         <p>
-          For compliance-sensitive workloads, Eden offers dedicated cloud tenancy under
-          enterprise contracts — contact{" "}
-          <a href="mailto:sales@eden.dev" className="text-[var(--accent)] hover:underline">
-            sales@eden.dev
+          For compliance-sensitive workloads, dedicated cloud tenancy may be
+          discussed under a separate agreement — contact{" "}
+          <a href={`mailto:${SALES_EMAIL}`} className="text-[var(--accent)] hover:underline">
+            {SALES_EMAIL}
           </a>
           . Eden is not distributed as a self-hosted control plane.
         </p>
@@ -104,7 +105,7 @@ const SECTIONS = [
         </p>
         <p>
           Account deletion cascades: removing your user record deletes all sessions,
-          personal tokens, and SSO bindings; the org&apos;s data is preserved unless the org
+          personal tokens, and identity bindings; the org&apos;s data is preserved unless the org
           owner separately requests deletion.
         </p>
       </>
@@ -119,8 +120,8 @@ const SECTIONS = [
         <p>
           We do not sell, rent, or share customer telemetry with third parties — including
           for training. Subprocessors (Postgres hosting, ClickHouse hosting, error
-          reporting, email delivery) are listed in our DPA, which is auto-attached to
-          enterprise contracts.
+          reporting, email delivery) are listed in our DPA draft. A signed DPA is
+          available on request during public beta; it is not auto-attached to free accounts.
         </p>
         <p>
           We may disclose data when required by law (subpoena, court order). In the 24

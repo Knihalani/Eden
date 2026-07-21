@@ -11,6 +11,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowRight, KeyRound } from "lucide-react";
 import { AuthSplitLayout, AuthBrandPanel, AuthFormCard } from "@/components/auth";
+import { Button } from "@/components/ui/button";
 
 export default function ForgotPasswordPage() {
   const router = useRouter();
@@ -24,6 +25,7 @@ export default function ForgotPasswordPage() {
 
   return (
     <AuthSplitLayout brandPanel={<AuthBrandPanel />}>
+      <div data-wave11-auth="forgot-password">
       <AuthFormCard
         title="Password reset moved"
         subtitle="Eden uses Clerk for account access. Reset your password from the sign-in screen."
@@ -40,15 +42,15 @@ export default function ForgotPasswordPage() {
               the Clerk sign-in form to receive a reset link. Redirecting you there…
             </span>
           </div>
-          <Link
-            href="/sign-in"
-            className="inline-flex min-h-11 items-center gap-space-2 rounded-lg bg-[var(--accent)] px-space-4 py-space-3 text-sm font-medium text-[var(--bg-primary)] hover:opacity-90"
-          >
-            Continue to sign in
-            <ArrowRight className="w-4 h-4" aria-hidden="true" />
-          </Link>
+          <Button asChild className="min-h-11">
+            <Link href="/sign-in">
+              Continue to sign in
+              <ArrowRight className="w-4 h-4" aria-hidden="true" />
+            </Link>
+          </Button>
         </div>
       </AuthFormCard>
+      </div>
     </AuthSplitLayout>
   );
 }

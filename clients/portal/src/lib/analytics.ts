@@ -15,6 +15,15 @@ export type ConsentValue = "accepted" | "declined";
 
 export const COOKIE_CONSENT_KEY = "eden_cookie_consent";
 
+/** Dispatched by Settings / footer to re-open the consent dialog (2A). */
+export const OPEN_COOKIE_PREFERENCES_EVENT = "eden:open-cookie-preferences";
+
+/** Re-open cookie consent from Settings Privacy or marketing footer. */
+export function openCookiePreferences(): void {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new CustomEvent(OPEN_COOKIE_PREFERENCES_EVENT));
+}
+
 const PLAUSIBLE_SCRIPT_ID = "eden-plausible-script";
 
 function readConsent(): ConsentValue | null {

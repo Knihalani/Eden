@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useCallback } from "react";
-import Link from "next/link";
 import { useOrg } from "@/hooks/use-org";
 import { usePolling } from "@/hooks/use-polling";
 import { api } from "@/lib/api";
@@ -12,171 +11,37 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorState } from "@/components/ui/error-state";
 import { NoOrgState } from "@/components/ui/no-org-state";
 import { PageContent } from "@/components/layout/page-content";
-import { ObserveLeafHeader } from "@/app/(portal)/observability/_components/observe-leaf-shell";
+import {
+  ObserveBackToTraces,
+  ObserveLeafHeader,
+  WAVE10_POWER_ATTR,
+  WAVE_V3_8_POWER_ATTR,
+} from "@/app/(portal)/observability/_components/observe-leaf-shell";
 import {
   Search,
-  ChevronRight,
-  ChevronDown,
-  Wrench,
-  Brain,
-  Box,
   Eye,
   EyeOff,
   Clock,
   Compass,
-  ArrowLeft } from "lucide-react";
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import { errorFromCaught } from "@/lib/safe-error-message";
 import {
   TranscriptView as MessageTranscript,
-  type TranscriptMessage,
 } from "@/components/observability/transcript-view";
-
-/**
- * Trace Inspector — Phase 5.4.3
- *
- * A focused, single-trace view that complements the replay page. Whereas
- * replay shows timeline + HILT controls, the inspector is a searchable,
- * tree-structured view of one trace with:
- *   - Full event log (chronological)
- *   - Span tree (parent/child)
- *   - Tool calls, model thoughts, env steps — all expandable
- *   - Filter by type
- *   - Jump to timestamp
- *   - N13 transcript view of LLM message cards
- *
- * Reads from the observability API: getTraceTree, getTimeline.
- */
-
-type Span = {
-  span_id: string;
-  parent_span_id?: string | null;
-  name: string;
-  span_type: "llm_completion" | "tool_invocation" | "env_step" | "reasoning" | "user_interaction" | "system";
-  duration_ms: number;
-  start_offset_ms: number;
-  payload: Record<string, unknown>;
-};
-
-type Filter = "all" | "llm" | "tool" | "env" | "reasoning";
-type ViewMode = "tree" | "transcript";
-
-const FILTER_LABELS: Record<Filter, string> = {
-  all: "All",
-  llm: "Model",
-  tool: "Tools",
-  env: "Env",
-  reasoning: "Reasoning" };
-
-function spansToTranscriptMessages(spans: Span[]): TranscriptMessage[] {
-  const out: TranscriptMessage[] = [];
-  for (const span of spans) {
-    const payload = span.payload ?? {};
-    const messages = (payload.messages ?? payload.input_messages) as
-      | Array<Record<string, unknown>>
-      | undefined;
-    if (Array.isArray(messages)) {
-      for (const m of messages) {
-        const roleRaw = String(m.role ?? "assistant");
-        const role = (
-          roleRaw === "system" || roleRaw === "user" || roleRaw === "assistant" || roleRaw === "tool"
-            ? roleRaw
-            : "assistant"
-        ) as TranscriptMessage["role"];
-        out.push({
-          id: `${span.span_id}-${out.length}`,
-          role,
-          content: String(m.content ?? ""),
-        });
-      }
-    } else if (span.span_type === "llm_completion" || span.span_type === "reasoning") {
-      const content =
-        (typeof payload.response === "string" && payload.response) ||
-        (typeof payload.content === "string" && payload.content) ||
-        (typeof payload.output === "string" && payload.output) ||
-        JSON.stringify(payload).slice(0, 500);
-      out.push({
-        id: span.span_id,
-        role: "assistant",
-        content: content || span.name,
-      });
-    } else if (span.span_type === "tool_invocation") {
-      out.push({
-        id: span.span_id,
-        role: "tool",
-        content: JSON.stringify(payload, null, 2).slice(0, 2000),
-      });
-    } else if (span.span_type === "user_interaction") {
-      out.push({
-        id: span.span_id,
-        role: "user",
-        content: String(payload.content ?? payload.message ?? span.name),
-      });
-    }
-  }
-  return out;
-}
-
-const SPAN_ICONS: Record<Span["span_type"], typeof Brain> = {
-  llm_completion: Brain,
-  tool_invocation: Wrench,
-  env_step: Box,
-  reasoning: Brain,
-  user_interaction: Brain,
-  system: Box };
-
-function formatDuration(ms: number): string {
-  if (ms < 1000) return `${ms}ms`;
-  if (ms < 60_000) return `${(ms / 1000).toFixed(1)}s`;
-  return `${(ms / 60_000).toFixed(1)}m`;
-}
-
-interface SpanNodeProps {
-  span: Span;
-  depth: number;
-  query: string;
-}
-
-function SpanNode({ span, depth, query }: SpanNodeProps) {
-  const [open, setOpen] = useState(depth < 2);
-  const matchesQuery =
-    !query ||
-    span.name.toLowerCase().includes(query.toLowerCase()) ||
-    JSON.stringify(span.payload).toLowerCase().includes(query.toLowerCase());
-  if (!matchesQuery && depth > 0) return null;
-
-  const Icon = SPAN_ICONS[span.span_type] ?? Box;
-
-  return (
-    <div className="font-mono text-xs">
-      <button
-        onClick={() => setOpen((v) => !v)}
-        className={cn(
-          "flex w-full items-center gap-2 rounded px-2 py-1.5 text-left",
-          "hover:bg-[var(--bg-tertiary)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)]",
-          depth === 0 && "bg-[var(--bg-tertiary)]"
-        )}
-        style={{ paddingLeft: `${depth * 16 + 8}px` }}
-      >
-        {open ? (
-          <ChevronDown className="h-3 w-3 shrink-0 text-[var(--text-muted)]" />
-        ) : (
-          <ChevronRight className="h-3 w-3 shrink-0 text-[var(--text-muted)]" />
-        )}
-        <Icon className="h-3 w-3 shrink-0 text-[var(--accent)]" />
-        <span className="flex-1 truncate text-[var(--text-primary)]">{span.name}</span>
-        <span className="shrink-0 text-[var(--text-muted)]">
-          {formatDuration(span.duration_ms)}
-        </span>
-      </button>
-      {open && (
-        <pre className="ml-8 mr-2 mb-2 overflow-x-auto rounded border border-[var(--border-subtle)] bg-[var(--bg-base)] p-2 text-[11px] leading-relaxed text-[var(--text-secondary)]">
-          {JSON.stringify(span.payload, null, 2)}
-        </pre>
-      )}
-    </div>
-  );
-}
+import {
+  FILTER_LABELS,
+  depthOf,
+  filterSpans,
+  flattenTraceTree,
+  formatDuration,
+  orderSpansByParent,
+  spansToTranscriptMessages,
+  type Filter,
+  type Span,
+  type ViewMode,
+} from "./_components/inspector-helpers";
+import { SpanNode } from "./_components/span-node";
 
 export default function TraceInspectorPage() {
   const { currentOrg } = useOrg();
@@ -196,26 +61,7 @@ export default function TraceInspectorPage() {
       setError(null);
       try {
         const tree = await api.getTraceTree(currentOrg.id, id);
-        // The API returns a tree of root_spans; flatten recursively for the
-        // tree view. Unknown fields fall back to best-effort shape.
-        const flat: Span[] = [];
-        const visit = (node: Record<string, unknown>) => {
-          const children = (node.children as Array<Record<string, unknown>>) ?? [];
-          for (const child of children) {
-            flat.push({
-              span_id: String(child.span_id ?? ""),
-              parent_span_id: (child.parent_span_id as string | null | undefined) ?? null,
-              name: String(child.name ?? "unnamed"),
-              span_type: (child.span_type as Span["span_type"]) ?? "system",
-              duration_ms: Number(child.duration_ms ?? 0),
-              start_offset_ms: Number(child.start_offset_ms ?? 0),
-              payload: (child.payload as Record<string, unknown>) ?? {} });
-            visit(child);
-          }
-        };
-        const roots = Array.isArray(tree?.root_spans) ? tree.root_spans : [];
-        for (const root of roots) visit(root);
-        setSpans(flat);
+        setSpans(flattenTraceTree(tree));
       } catch (err) {
         setSpans([]);
         setError(errorFromCaught(err, "Failed to load trace"));
@@ -223,232 +69,193 @@ export default function TraceInspectorPage() {
         setLoading(false);
       }
     },
-    [currentOrg]
+    [currentOrg],
   );
 
-  // Auto-refresh — default off; when on, 15s (was 3s) via shared
-  // hook (pauses on tab-hidden, backs off on errors, bails on auth).
   usePolling({
     fetch: () => loadTrace(traceId),
     intervalMs: 15_000,
     enabled: Boolean(autoRefresh && traceId),
-    deps: [autoRefresh, traceId, loadTrace] });
-
-  // Filter spans
-  const filteredSpans = spans.filter((s) => {
-    if (filter === "all") return true;
-    if (filter === "llm") return s.span_type === "llm_completion";
-    if (filter === "tool") return s.span_type === "tool_invocation";
-    if (filter === "env") return s.span_type === "env_step";
-    if (filter === "reasoning") return s.span_type === "reasoning";
-    return true;
+    deps: [autoRefresh, traceId, loadTrace],
   });
 
-  // Build a flat-ordered tree using parent_span_id
-  const orderedSpans: Span[] = [];
-  const byParent = new Map<string | null, Span[]>();
-  for (const s of filteredSpans) {
-    const key = s.parent_span_id ?? null;
-    if (!byParent.has(key)) byParent.set(key, []);
-    byParent.get(key)!.push(s);
-  }
-  const walk = (parent: string | null) => {
-    const children = byParent.get(parent) ?? [];
-    for (const c of children) {
-      orderedSpans.push(c);
-      walk(c.span_id);
-    }
-  };
-  walk(null);
+  const orderedSpans = orderSpansByParent(filterSpans(spans, filter));
 
   if (!currentOrg) {
     return <NoOrgState feature="Trace Inspector" />;
   }
 
   return (
-    // Matches the canonical page wrapper used by every other portal
-    // page (``p-4 sm:p-6 lg:p-8 max-w-6xl mx-auto space-y-6
-    //``). The previous ``min-h-full`` here was a leftover
-    // from the old ``h-screen + overflow-clip`` (portal) contract
-    // that was retired in June 2026; with the new flex layout it
-    // collapsed the page. June 2026 layout-pass fix.
     <PageContent className="bg-[var(--bg-base)]">
-      <ObserveLeafHeader
-        title="Trace Inspector"
-        subtitle="Drill into one trace: span tree, tool calls, model thoughts, env steps."
-        icon={Compass}
-        description="Advanced under Traces — searchable span tree for one trace; open from Traces More when nested."
-      />
+      <div
+        {...WAVE10_POWER_ATTR}
+        {...WAVE_V3_8_POWER_ATTR}
+        className="contents"
+      >
+        <ObserveBackToTraces />
+        <ObserveLeafHeader
+          title="Inspector"
+          subtitle="Span tree for one trace — open from Traces More"
+          icon={Compass}
+        />
+      </div>
 
-        {/* Toolbar */}
-        <div className="mb-4 flex flex-wrap items-center gap-2">
-          <Input
-            placeholder="Trace or job ID…"
-            aria-label="Trace or job ID"
-            value={traceId}
-            onChange={(e) => setTraceId(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && loadTrace(traceId)}
-            className="max-w-xs"
-          />
-          <Button
-            onClick={() => loadTrace(traceId)}
-            disabled={!traceId || loading}
-          >
-            Load
-          </Button>
-          <div className="mx-3 h-5 w-px bg-[var(--border-subtle)]" aria-hidden />
-          <div role="group" aria-label="Filter spans by type" className="flex items-center gap-1">
-            {(["all", "llm", "tool", "env", "reasoning"] as Filter[]).map((f) => (
-              <button
-                key={f}
-                onClick={() => setFilter(f)}
-                aria-pressed={filter === f}
-                className={cn(
-                  "rounded px-2 py-1 text-xs font-medium transition-colors",
-                  filter === f
-                    ? "bg-[var(--accent)] text-[var(--accent-foreground)]"
-                    : "text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)]"
-                )}
-              >
-                {FILTER_LABELS[f]}
-              </button>
-            ))}
-          </div>
-          <div className="mx-3 h-5 w-px bg-[var(--border-subtle)]" aria-hidden />
-          <div role="group" aria-label="View mode" className="flex items-center gap-1">
-            {([
+      <div
+        className="mb-4 flex flex-wrap items-center gap-2"
+        data-testid="inspector-slim-toolbar"
+      >
+        <Input
+          placeholder="Trace or job ID…"
+          aria-label="Trace or job ID"
+          value={traceId}
+          onChange={(e) => setTraceId(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && loadTrace(traceId)}
+          className="max-w-xs"
+        />
+        <Button onClick={() => loadTrace(traceId)} disabled={!traceId || loading}>
+          Load
+        </Button>
+        <div className="mx-3 h-5 w-px bg-[var(--border-subtle)]" aria-hidden />
+        <div
+          role="group"
+          aria-label="Filter spans by type"
+          className="flex items-center gap-1"
+        >
+          {(["all", "llm", "tool", "env", "reasoning"] as Filter[]).map((f) => (
+            <button
+              key={f}
+              onClick={() => setFilter(f)}
+              aria-pressed={filter === f}
+              className={cn(
+                "rounded px-2 py-1 text-xs font-medium transition-colors",
+                filter === f
+                  ? "bg-[var(--accent)] text-[var(--accent-foreground)]"
+                  : "text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)]",
+              )}
+            >
+              {FILTER_LABELS[f]}
+            </button>
+          ))}
+        </div>
+        <div className="mx-3 h-5 w-px bg-[var(--border-subtle)]" aria-hidden />
+        <div role="group" aria-label="View mode" className="flex items-center gap-1">
+          {(
+            [
               ["tree", "Tree"],
               ["transcript", "Transcript"],
-            ] as const).map(([mode, label]) => (
-              <button
-                key={mode}
-                type="button"
-                onClick={() => setViewMode(mode)}
-                aria-pressed={viewMode === mode}
-                className={cn(
-                  "rounded px-2 py-1 text-xs font-medium transition-colors",
-                  viewMode === mode
-                    ? "bg-[var(--accent)] text-[var(--accent-foreground)]"
-                    : "text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)]"
-                )}
-              >
-                {label}
-              </button>
+            ] as const
+          ).map(([mode, label]) => (
+            <button
+              key={mode}
+              type="button"
+              onClick={() => setViewMode(mode)}
+              aria-pressed={viewMode === mode}
+              className={cn(
+                "rounded px-2 py-1 text-xs font-medium transition-colors",
+                viewMode === mode
+                  ? "bg-[var(--accent)] text-[var(--accent-foreground)]"
+                  : "text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)]",
+              )}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        <div className="mx-3 h-5 w-px bg-[var(--border-subtle)]" aria-hidden />
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => setAutoRefresh((v) => !v)}
+          aria-pressed={autoRefresh}
+          className="gap-1"
+        >
+          {autoRefresh ? (
+            <Eye className="h-3 w-3" />
+          ) : (
+            <EyeOff className="h-3 w-3" />
+          )}
+          {autoRefresh ? "Auto-refresh on" : "Auto-refresh off"}
+        </Button>
+      </div>
+
+      <div className="relative mb-4">
+        <Search
+          className="absolute left-3 top-1/2 h-3 w-3 -translate-y-1/2 text-[var(--text-muted)]"
+          aria-hidden
+        />
+        <Input
+          placeholder="Search spans by name or content…"
+          aria-label="Search spans"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          className="pl-8"
+        />
+      </div>
+
+      <div className="rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-tertiary)] p-4">
+        {!traceId ? (
+          <EmptyState
+            icon={Search}
+            title="Enter a trace ID"
+            description="Trace IDs are visible in the replay page URL or via the observability dashboard."
+            size="sm"
+          />
+        ) : loading ? (
+          <div className="space-y-2">
+            <Skeleton className="h-8 w-full" />
+            <Skeleton className="h-8 w-5/6" />
+            <Skeleton className="h-8 w-4/6" />
+          </div>
+        ) : error ? (
+          <ErrorState
+            title="Couldn't load trace"
+            message={error}
+            size="sm"
+            action={
+              <Button size="sm" variant="outline" onClick={() => loadTrace(traceId)}>
+                Try again
+              </Button>
+            }
+          />
+        ) : orderedSpans.length === 0 ? (
+          <EmptyState
+            icon={Search}
+            title="No matching spans"
+            description="No spans match the current filter. Try widening the filter or clearing the search."
+            size="sm"
+          />
+        ) : viewMode === "transcript" ? (
+          <MessageTranscript
+            messages={spansToTranscriptMessages(orderedSpans)}
+          />
+        ) : (
+          <div className="space-y-0.5">
+            {orderedSpans.map((span) => (
+              <SpanNode
+                key={span.span_id}
+                span={span}
+                depth={depthOf(span, spans)}
+                query={query}
+              />
             ))}
           </div>
-          <div className="mx-3 h-5 w-px bg-[var(--border-subtle)]" aria-hidden />
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setAutoRefresh((v) => !v)}
-            aria-pressed={autoRefresh}
-            className="gap-1"
-          >
-            {autoRefresh ? (
-              <Eye className="h-3 w-3" />
-            ) : (
-              <EyeOff className="h-3 w-3" />
-            )}
-            {autoRefresh ? "Auto-refresh on" : "Auto-refresh off"}
-          </Button>
-        </div>
-
-        {/* Search */}
-        <div className="relative mb-4">
-          <Search className="absolute left-3 top-1/2 h-3 w-3 -translate-y-1/2 text-[var(--text-muted)]" aria-hidden />
-          <Input
-            placeholder="Search spans by name or content…"
-            aria-label="Search spans"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            className="pl-8"
-          />
-        </div>
-
-        {/* Body */}
-        <div className="rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-tertiary)] p-4">
-          {!traceId ? (
-            <EmptyState
-              icon={Search}
-              title="Enter a trace ID"
-              description="Trace IDs are visible in the replay page URL or via the observability dashboard."
-              size="sm"
-            />
-          ) : loading ? (
-            <div className="space-y-2">
-              <Skeleton className="h-8 w-full" />
-              <Skeleton className="h-8 w-5/6" />
-              <Skeleton className="h-8 w-4/6" />
-            </div>
-          ) : error ? (
-            <ErrorState
-              title="Couldn't load trace"
-              message={error}
-              size="sm"
-              action={
-                <Button size="sm" variant="outline" onClick={() => loadTrace(traceId)}>
-                  Try again
-                </Button>
-              }
-            />
-          ) : orderedSpans.length === 0 ? (
-            <EmptyState
-              icon={Search}
-              title="No matching spans"
-              description="No spans match the current filter. Try widening the filter or clearing the search."
-              size="sm"
-            />
-          ) : viewMode === "transcript" ? (
-            <MessageTranscript messages={spansToTranscriptMessages(orderedSpans)} />
-          ) : (
-            <div className="space-y-0.5">
-              {orderedSpans.map((span) => (
-                <SpanNode
-                  key={span.span_id}
-                  span={span}
-                  depth={depthOf(span, spans)}
-                  query={query}
-                />
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Back link */}
-        <div className="mt-6 flex items-center gap-2 text-xs text-[var(--text-muted)]">
-          <Link
-            href="/traces"
-            className="inline-flex items-center gap-1 hover:text-[var(--text-secondary)] transition-colors"
-          >
-            <ArrowLeft className="h-3 w-3" />
-            Back to Trace Explorer
-          </Link>
-        </div>
-
-        {/* Footer summary */}
-        {orderedSpans.length > 0 && (
-          <footer className="mt-4 flex items-center gap-4 text-xs text-[var(--text-muted)]">
-            <span>{orderedSpans.length} spans</span>
-            <span>
-              Total: {formatDuration(
-                Math.max(...orderedSpans.map((s) => s.start_offset_ms + s.duration_ms))
-              )}
-            </span>
-            <Clock className="ml-auto h-3 w-3" />
-          </footer>
         )}
+      </div>
+
+      {orderedSpans.length > 0 && (
+        <footer className="mt-4 flex items-center gap-4 text-xs text-[var(--text-muted)]">
+          <span>{orderedSpans.length} spans</span>
+          <span>
+            Total:{" "}
+            {formatDuration(
+              Math.max(
+                ...orderedSpans.map((s) => s.start_offset_ms + s.duration_ms),
+              ),
+            )}
+          </span>
+          <Clock className="ml-auto h-3 w-3" />
+        </footer>
+      )}
     </PageContent>
   );
-}
-
-function depthOf(span: Span, all: Span[]): number {
-  let d = 0;
-  let parent = span.parent_span_id;
-  while (parent) {
-    d += 1;
-    const p = all.find((s) => s.span_id === parent);
-    if (!p) break;
-    parent = p.parent_span_id;
-  }
-  return d;
 }

@@ -20,14 +20,13 @@
  * skeleton while the agent comes back.
  */
 
+import type { ReactNode } from "react";
 import Link from "next/link";
 import { useMemo } from "react";
 import { useParams } from "next/navigation";
 import {
-  ArrowLeft,
   Bot,
   ChevronDown,
-  Clock,
   ExternalLink,
 } from "lucide-react";
 import { useOrg } from "@/hooks/use-org";
@@ -35,7 +34,6 @@ import { agentsApi, ApiError } from "@/lib/api";
 import { useOrgQuery } from "@/hooks/use-api-query";
 import { queryKeys } from "@/lib/query-keys";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorState } from "@/components/ui/error-state";
 import { NoOrgState } from "@/components/ui/no-org-state";
@@ -48,6 +46,7 @@ import {
   DropdownMenuLabel,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { tracesFilteredHref } from "@/lib/portal-cross-links";
 
 function formatRelative(iso?: string | null): string {
   if (!iso) return "Never";
@@ -69,6 +68,19 @@ const FRAMEWORK_BADGE: Record<string, string> = {
   raw: "bg-[var(--bg-tertiary)] text-[var(--text-secondary)]",
   none: "bg-[var(--bg-tertiary)] text-[var(--text-secondary)]",
 };
+
+function DetailRow({ label, value }: { label: string; value: ReactNode }) {
+  return (
+    <div className="flex items-baseline justify-between gap-space-4">
+      <span className="shrink-0 text-xs uppercase tracking-wider text-[var(--text-muted)]">
+        {label}
+      </span>
+      <span className="min-w-0 truncate text-right text-sm text-[var(--text-secondary)]">
+        {value}
+      </span>
+    </div>
+  );
+}
 
 export default function AgentDetailPage() {
   const params = useParams<{ id: string }>();
@@ -121,12 +133,6 @@ export default function AgentDetailPage() {
   if (!agentId) {
     return (
       <PageContent size="narrow" className="space-y-space-4">
-        <Button asChild variant="ghost" size="sm" className="min-h-11 px-0">
-          <Link href="/agents">
-            <ArrowLeft className="w-3 h-3" />
-            All agents
-          </Link>
-        </Button>
         <EmptyState
           icon={Bot}
           title="Invalid agent"
@@ -149,17 +155,16 @@ export default function AgentDetailPage() {
   if (isNotFound) {
     return (
       <PageContent size="narrow" className="space-y-space-4">
-        <Button asChild variant="ghost" size="sm" className="min-h-11 px-0">
-          <Link href="/agents">
-            <ArrowLeft className="w-3 h-3" />
-            All agents
-          </Link>
-        </Button>
         <EmptyState
           icon={Bot}
           title="Agent not found"
           description={`No agent with id ${agentId} exists in this organisation yet. It will appear once the agent first reports telemetry.`}
           size="lg"
+          action={
+            <Button asChild variant="outline" className="min-h-11">
+              <Link href="/agents">Back to agents</Link>
+            </Button>
+          }
         />
       </PageContent>
     );
@@ -168,12 +173,6 @@ export default function AgentDetailPage() {
   if (loadError) {
     return (
       <PageContent size="narrow" className="space-y-space-4">
-        <Button asChild variant="ghost" size="sm" className="min-h-11 px-0">
-          <Link href="/agents">
-            <ArrowLeft className="w-3 h-3" />
-            All agents
-          </Link>
-        </Button>
         <ErrorState
           title="Could not load agent"
           message={loadError}
@@ -200,20 +199,18 @@ export default function AgentDetailPage() {
   const encodedId = encodeURIComponent(agentId);
 
   return (
-    <PageContent size="wide" className="space-y-space-4">
-      <Button asChild variant="ghost" size="sm" className="min-h-11 px-0 w-fit">
-        <Link href="/agents">
-          <ArrowLeft className="w-3 h-3" />
-          All agents
-        </Link>
-      </Button>
-
+    <PageContent size="wide" className="space-y-space-4" data-wave7-agents="detail-flat">
       <PageHeader
-        eyebrow="Agent"
         title={agent.name ?? agentId}
-        icon={Bot}
         subtitle={
           <>
+            <Link
+              href="/agents"
+              className="text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+            >
+              Agents
+            </Link>
+            {" · "}
             <span className="font-mono">{agentId}</span>
             {agent.repo_url && repoHost ? (
               <>
@@ -233,21 +230,21 @@ export default function AgentDetailPage() {
         }
         actions={
           <div className="flex flex-wrap items-center gap-2">
-            {agent.framework && (
+            {agent.framework ? (
               <span
-                className={`text-xs font-medium uppercase tracking-wide px-2 py-1 rounded ${
+                className={`rounded px-2 py-1 text-xs font-medium uppercase tracking-wide ${
                   FRAMEWORK_BADGE[agent.framework] ?? FRAMEWORK_BADGE.none
                 }`}
               >
                 {agent.framework}
               </span>
-            )}
-            {isLive && (
-              <span className="inline-flex items-center gap-1 text-xs font-medium uppercase tracking-wide px-2 py-1 rounded bg-[var(--terminal-faint)] text-[var(--terminal)]">
-                <span className="w-1.5 h-1.5 rounded-full bg-[var(--terminal)] animate-pulse" />
+            ) : null}
+            {isLive ? (
+              <span className="inline-flex items-center gap-1 rounded bg-[var(--terminal-faint)] px-2 py-1 text-xs font-medium uppercase tracking-wide text-[var(--terminal)]">
+                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[var(--terminal)]" />
                 live
               </span>
-            )}
+            ) : null}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="outline" className="min-h-11" aria-label="Related agent surfaces">
@@ -269,53 +266,25 @@ export default function AgentDetailPage() {
                 <DropdownMenuItem asChild>
                   <Link href={`/agents/${encodedId}/drift`}>Drift</Link>
                 </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                  <Link href={tracesFilteredHref({ agent_id: agentId })}>Traces</Link>
+                </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
         }
       />
 
-      <Card className="p-6">
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-space-3">
-          <Stat
-            icon={Clock}
-            label="Last seen"
-            value={formatRelative(agent.last_seen_at)}
-          />
-          <Stat
-            icon={Bot}
-            label="Framework"
-            value={agent.framework ?? "—"}
-          />
-          <Stat
-            icon={ExternalLink}
-            label="Repo"
-            value={repoHost ?? "Not linked"}
-          />
-        </div>
-      </Card>
-    </PageContent>
-  );
-}
-
-function Stat({
-  icon: Icon,
-  label,
-  value,
-}: {
-  icon: typeof Bot;
-  label: string;
-  value: string;
-}) {
-  return (
-    <div className="rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-secondary)]/40 p-3">
-      <div className="flex items-center gap-1.5 text-xs uppercase tracking-wide text-[var(--text-muted)] font-medium">
-        <Icon className="w-3 h-3" />
-        {label}
+      <div
+        className="flex max-w-lg flex-col gap-space-3"
+        data-testid="agent-detail-stats"
+        data-wave10-agent-detail="completed"
+        data-wave7-agents="flat-meta"
+      >
+        <DetailRow label="Last seen" value={formatRelative(agent.last_seen_at)} />
+        <DetailRow label="Framework" value={agent.framework ?? "—"} />
+        <DetailRow label="Repo" value={repoHost ?? "Not linked"} />
       </div>
-      <p className="text-base font-semibold text-[var(--text-primary)] mt-1 tabular-nums">
-        {value}
-      </p>
-    </div>
+    </PageContent>
   );
 }

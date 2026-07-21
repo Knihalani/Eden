@@ -203,6 +203,8 @@
    * Rule: mono is for *identity-shaped* and *data* text. Reserve
    * it. Don't apply mono to prose. */
   --font-size-2xs: 0.625rem;
+  /* DEPRECATED for chrome/UI chrome — use ≥ 2xs/xs (10–12px). Kept for
+   * rare code/gutter call sites until Wave 2 removal. */
   --font-size-3xs: 0.5625rem;
 
   --line-height-tight: 1.25;
@@ -257,6 +259,35 @@
   --z-cookie: 40;
   --z-toast: 60;
   --z-grain: 9999;
+
+  /* ==================== Chrome bottom stack (Wave 1 / 1.6 / Home Shell W9) ===
+   * Thumb-zone layers on mobile. Never put content chrome above dialogs.
+   * Mutual exclusion (visibility), not z-wars — see DESIGN.md §13.
+   *
+   *   Layer              Token            z     Bottom clearance
+   *   ------------------ ---------------- ----- --------------------------------
+   *   BulkActionBar      --z-bulk-bar     20    above mobile nav (calc); hideOnMobile
+   *   MobileBottomNav    --z-mobile-nav   30    fixed bottom-0 + safe-area
+   *   AI FAB / coach     --z-ai-fab       35    --ai-fab-bottom clears nav + home indicator
+   *   AI rail (desktop)  --z-ai-rail      40    full-height aside
+   *   Dialogs / palette  (Tailwind z-50)  50    always wins over chrome
+   *   Cookie             --z-cookie       40    banner only while awaiting (2A: null after)
+   *   Toast              --z-toast        60    above dialogs
+   *
+   * --mobile-nav-height matches MobileBottomNav inner row (h-16 = 4rem).
+   * Bulk bar: bottom = nav height + safe-area + 1rem gap on <lg.
+   * AI open → hide mobile nav + cookie + FAB (data-ai-rail-open / eden:ai-rail-open).
+   * Cookie awaiting → hide FAB (data-cookie-awaiting).
+   * ========================================================================== */
+  --z-bulk-bar: 20;
+  --z-mobile-nav: 30;
+  --z-ai-fab: 35;
+  --z-ai-rail: 40;
+  --mobile-nav-height: 4rem;
+  /* FAB sits above MobileBottomNav row + iOS home indicator + 0.75rem gap. */
+  --ai-fab-bottom: calc(
+    var(--mobile-nav-height) + env(safe-area-inset-bottom, 0px) + 0.75rem
+  );
 
   /* shadcn / legacy compatibility aliases (map to canonical tokens) */
   --surface: var(--bg-primary);
@@ -363,7 +394,8 @@
   --spacing-space-7: var(--space-7);
   --spacing-space-8: var(--space-8);
 
-  /* Type — full ladder (2xs/3xs restricted to meta/mono) */
+  /* Type — full ladder. text-3xs mapping kept for legacy
+   * code/gutter call sites; DEPRECATED for chrome (use ≥ 2xs/xs). */
   --font-size-3xs: var(--font-size-3xs);
   --font-size-2xs: var(--font-size-2xs);
   --font-size-xs: var(--font-size-xs);
@@ -968,13 +1000,12 @@ button:active, [role="button"]:active {
   gap: 0.5rem;
 }
 
+/* Tonal rail wash — near-invisible; hierarchy stays from --bg-secondary. */
 .sidebar-gradient {
   background: linear-gradient(
     to bottom,
-    rgba(91, 158, 255, 0.015) 0%,
-    transparent 20%,
-    transparent 80%,
-    rgba(95, 229, 168, 0.008) 100%
+    transparent 0%,
+    transparent 100%
   );
 }
 
@@ -983,60 +1014,20 @@ button:active, [role="button"]:active {
   overflow: hidden;
 }
 
-.nav-item::before {
-  content: "";
-  position: absolute;
-  left: 0;
-  top: 50%;
-  transform: translateY(-50%) scaleY(0);
-  width: 2px;
-  height: 60%;
-  background: var(--accent);
-  border-radius: 0 2px 2px 0;
-  transition: transform var(--duration-normal) var(--ease-out);
-}
-
-.nav-item.active::before {
-  transform: translateY(-50%) scaleY(1);
-}
-
-.nav-item:hover:not(.active) {
-  background: var(--accent-faint);
-  opacity: 0.85;
-}
-
-.nav-item.active {
-  background: var(--accent-faint);
-  color: var(--accent);
-  box-shadow: inset 2px 0 0 var(--accent);
-}
-
-.nav-item.active .nav-icon {
-  color: var(--accent);
-  filter: drop-shadow(0 0 4px var(--terminal-glow));
-}
-
-/* Keyboard-focused nav items get a visible left accent so the
-   active/hover state isn't only discoverable with a mouse. */
+/* Active tick is rendered in JSX (one --accent). CSS only handles focus. */
 .nav-item:focus-visible {
   outline: none;
   box-shadow: inset 2px 0 0 var(--accent);
 }
 
 .pin-button {
-  opacity: 0;
   transition: opacity var(--duration-fast) ease;
-}
-
-.nav-item:hover .pin-button,
-.nav-item:focus-within .pin-button {
-  opacity: 1;
 }
 
 .pin-button:focus-visible {
   opacity: 1;
   outline: none;
-  box-shadow: 0 0 0 2px var(--bg-primary), 0 0 0 4px var(--accent);
+  box-shadow: 0 0 0 2px var(--bg-secondary), 0 0 0 4px var(--terminal);
   border-radius: var(--radius-sm);
 }
 
@@ -1120,7 +1111,7 @@ button:active, [role="button"]:active {
 }
 
 .user-dropdown-item:hover {
-  background: var(--accent-faint);
+  background: var(--bg-tertiary);
 }
 
 .user-dropdown-item.danger {
@@ -1562,13 +1553,13 @@ input::placeholder, textarea::placeholder {
 }
 
 .panel-enter {
-  animation: panel-enter-keyframes 180ms ease-out;
+  animation: panel-enter-keyframes var(--duration-normal) var(--ease-out);
 }
 
 .row-select-highlight {
   transition:
-    border-color 120ms ease,
-    box-shadow 120ms ease;
+    border-color var(--duration-fast) var(--ease-out),
+    box-shadow var(--duration-fast) var(--ease-out);
 }
 
 @keyframes live-append-pulse-keyframes {
@@ -1581,8 +1572,9 @@ input::placeholder, textarea::placeholder {
   }
 }
 
+/* Wave 11 — live-append confirms append only; hard-capped ≤ --duration-normal */
 .live-append-pulse {
-  animation: live-append-pulse-keyframes 600ms ease-out 1;
+  animation: live-append-pulse-keyframes var(--duration-normal) var(--ease-out) 1;
 }
 
 /* Respect reduced motion preferences */

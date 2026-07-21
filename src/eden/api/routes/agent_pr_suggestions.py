@@ -41,6 +41,10 @@ from pydantic import BaseModel, Field
 from eden.agent import PRSuggester
 from eden.api.deps import get_current_user, require_feature_flag, require_path_org_access
 from eden.api.utils.redact import redact_all
+from eden.patches.diff_materializer import (
+    DiffMaterializeError,
+    materialize_unified_diff,
+)
 from eden.providers import (
     PRCreateRequest,
     PRProvider,
@@ -223,9 +227,10 @@ async def open_pr(
 ) -> dict[str, Any]:
     """Materialise the suggestion as a real PR.
 
-    Reads the suggestion, calls ``PRProvider.create_pr``,
-    marks the suggestion as ``"opened"``, and returns
-    the new :class:`PullRequestInfo`.
+    Applies ``patch_diff`` via the diff materializer (using
+    suggestion originals when present, else the org repo),
+    then calls the org-scoped ``PRProvider.create_pr``.
+    Fail-closed on empty/bad diffs and silent create failures.
     """
     suggester = await _get_suggester(org_id)
     suggestion = await suggester.get_suggestion(org_id, suggestion_id)
@@ -239,6 +244,31 @@ async def open_pr(
                 "message": "Suggestion not found.",
             },
         }
+
+    repo_provider = await _get_repo_provider(org_id)
+    try:
+        files = await _materialize_suggestion_files(suggestion, repo_provider)
+    except DiffMaterializeError as exc:
+        return {
+            "status": "error",
+            "feature": "pr_suggester",
+            "live": True,
+            "data": {
+                "suggestion_id": suggestion_id,
+                "message": f"diff_materialize_failed: {exc}",
+            },
+        }
+    if not files:
+        return {
+            "status": "error",
+            "feature": "pr_suggester",
+            "live": True,
+            "data": {
+                "suggestion_id": suggestion_id,
+                "message": "empty_or_unparseable_diff",
+            },
+        }
+
     pr_provider = await _get_pr_provider(org_id)
     pr_req = PRCreateRequest(
         title=body.pr_title or suggestion.pr_title,
@@ -248,12 +278,7 @@ async def open_pr(
         labels=body.labels,
         reviewers=body.reviewers,
         draft=body.draft,
-        files=[
-            FileEntry(
-                path=f.path, size=f.size, content=f.content,
-            )
-            for f in suggestion.files
-        ],
+        files=files,
         commit_message=(
             f"[Eden Agent] {suggestion.pr_title}\n\n"
             f"Trigger: {suggestion.trigger} {suggestion.trigger_id}\n"
@@ -287,6 +312,23 @@ async def open_pr(
                 "message": f"PR creation failed: {exc}",
             },
         }
+    if _pr_create_failed(pr_info):
+        logger.warning(
+            "open_pr: create_pr returned failure envelope "
+            "(state=%s number=%s url=%r)",
+            getattr(pr_info, "state", None),
+            getattr(pr_info, "number", None),
+            getattr(pr_info, "url", None),
+        )
+        return {
+            "status": "error",
+            "feature": "pr_suggester",
+            "live": True,
+            "data": {
+                "suggestion_id": suggestion_id,
+                "message": "PR provider returned a failed create_pr result",
+            },
+        }
     await suggester.mark_opened(org_id, suggestion_id, pr_info.number)
     return {
         "status": "ok",
@@ -308,6 +350,42 @@ async def open_pr(
 
 
 # ── Helpers ────────────────────────────────────────────────────
+
+
+def _pr_create_failed(info: Any) -> bool:
+    """True when create_pr returned a silent failure envelope."""
+    state = (getattr(info, "state", None) or "").lower()
+    number = int(getattr(info, "number", 0) or 0)
+    url = (getattr(info, "url", None) or "").strip()
+    return state == "failed" or number == 0 or not url
+
+
+async def _materialize_suggestion_files(
+    suggestion: Any,
+    repo_provider: RepoProvider,
+) -> list[FileEntry]:
+    """Apply ``patch_diff`` onto originals (or live repo) → FileEntrys.
+
+    Prefer suggestion-captured originals as the base so open-pr
+    stays stable even if the live tree moved; fall back to the
+    org-scoped repo reader for paths not in the snapshot.
+    """
+    diff = (getattr(suggestion, "patch_diff", None) or "").strip()
+    if not diff:
+        return []
+
+    originals: dict[str, str] = {
+        f.path: f.content
+        for f in (getattr(suggestion, "files", None) or [])
+        if getattr(f, "path", None)
+    }
+
+    async def read_file(path: str) -> str:
+        if path in originals:
+            return originals[path]
+        return await repo_provider.read_file(path)
+
+    return await materialize_unified_diff(diff, read_file=read_file)
 
 
 def _suggestion_to_dict(s: Any) -> dict[str, Any]:

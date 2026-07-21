@@ -8,6 +8,7 @@ import {
   type QueryFilterBarProps,
 } from "./QueryFilterBar";
 import { ViewsMenu } from "./ViewsMenu";
+import type { ViewPreset } from "./ViewsMenu";
 import { isViewDirty, useSavedViews, type ViewState } from "./useSavedViews";
 import { useResourceUrlState } from "./useResourceUrlState";
 import { readMasterDetailParam, writeMasterDetailParam } from "./CoreResourcePage";
@@ -32,6 +33,8 @@ export interface ResourceOsToolbarProps {
    * (chip edits, saved-view apply, discard). Keys match `selects[].key`.
    */
   onFiltersChange?: (filters: Record<string, string>) => void;
+  /** Built-in status/filter presets (Issues Wave 5 — status as saved views). */
+  viewPresets?: ViewPreset[];
   /** Stick filter toolbar under shell header (`h-11`). */
   sticky?: boolean;
   className?: string;
@@ -55,6 +58,7 @@ export function ResourceOsToolbar({
   sort,
   columns,
   onFiltersChange,
+  viewPresets = [],
   sticky = false,
   className,
   children,
@@ -72,19 +76,26 @@ export function ResourceOsToolbar({
   const onFiltersChangeRef = useRef(onFiltersChange);
   onFiltersChangeRef.current = onFiltersChange;
 
+  const resolveAnyView = (viewId: string | undefined): ViewState | null => {
+    if (!viewId) return null;
+    const preset = viewPresets.find((p) => p.id === viewId);
+    if (preset) return preset.state;
+    return resolveView(viewId);
+  };
+
   const pushFilters = (next: Record<string, string>) => {
     setFilters(next);
     onFiltersChangeRef.current?.(next);
   };
 
-  // Hydrate once per viewId from URL / saved view (share round-trip).
+  // Hydrate once per viewId from URL / saved view / status preset (share round-trip).
   useEffect(() => {
     if (!savedViewId) {
       hydratedViewRef.current = null;
       return;
     }
     if (hydratedViewRef.current === savedViewId) return;
-    const vs = resolveView(savedViewId);
+    const vs = resolveAnyView(savedViewId);
     if (!vs) return;
     hydratedViewRef.current = savedViewId;
     setQuery(vs.q ?? "");
@@ -92,7 +103,9 @@ export function ResourceOsToolbar({
     setFilters(nextFilter);
     onFiltersChangeRef.current?.(nextFilter);
     if (vs.q) setState({ q: vs.q });
-  }, [savedViewId, resolveView, setState]);
+    // resolveAnyView is stable via viewPresets + resolveView
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional hydrate-once
+  }, [savedViewId, resolveView, setState, viewPresets]);
 
   // Hub EmptyState / KPI clears update parent state — mirror select values back in.
   const selectValueKey = selects.map((s) => `${s.key}:${s.value ?? ""}`).join("|");
@@ -124,7 +137,7 @@ export function ResourceOsToolbar({
     [query, filters, sort, columns],
   );
 
-  const baseline = resolveView(savedViewId);
+  const baseline = resolveAnyView(savedViewId);
   const viewsDirty = isViewDirty(currentViewState, baseline);
 
   // Select values always mirror filter state so dirty + chips stay honest.
@@ -140,7 +153,7 @@ export function ResourceOsToolbar({
   const applyView = (viewId: string) => {
     const params = new URLSearchParams(searchParams.toString());
     writeMasterDetailParam(params, "viewId", viewId || undefined);
-    const vs = resolveView(viewId);
+    const vs = resolveAnyView(viewId);
     hydratedViewRef.current = viewId || null;
     if (vs?.q) {
       setQuery(vs.q);
@@ -202,6 +215,7 @@ export function ResourceOsToolbar({
       />
       <ViewsMenu
         views={views}
+        presets={viewPresets}
         activeViewId={savedViewId}
         dirty={viewsDirty}
         onSelect={applyView}
@@ -209,7 +223,7 @@ export function ResourceOsToolbar({
           await save({ name, state: currentViewState });
         }}
         onSaveChanges={
-          savedViewId
+          savedViewId && !viewPresets.some((p) => p.id === savedViewId)
             ? async () => {
                 await update({ viewId: savedViewId, state: currentViewState });
               }

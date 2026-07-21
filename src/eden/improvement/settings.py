@@ -12,11 +12,22 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_SCHEDULE_CRON = "0 3 * * 0"
 DEFAULT_MAX_PLANS_PER_SWEEP = 10
+DEFAULT_MAX_CODE_PATCH_PER_SWEEP = 3
+DEFAULT_MAX_ADVISORY_PER_SWEEP = 5
+DEFAULT_MAX_GENERATES_PER_SWEEP = 3
 
 
 async def get_settings(org_id: str) -> dict[str, Any]:
     """Read improvement settings from organizations.features."""
     stored = await _read_features(org_id)
+    try:
+        from eden.config import get_settings as get_global
+
+        generates = int(
+            getattr(get_global(), "patch_max_generates_per_sweep", 3) or 3
+        )
+    except Exception:
+        generates = DEFAULT_MAX_GENERATES_PER_SWEEP
     return {
         "improvement_schedule_cron": stored.get(
             "improvement_schedule_cron", DEFAULT_SCHEDULE_CRON
@@ -25,6 +36,21 @@ async def get_settings(org_id: str) -> dict[str, Any]:
             stored.get(
                 "improvement_max_plans_per_sweep", DEFAULT_MAX_PLANS_PER_SWEEP
             )
+        ),
+        "improvement_max_code_patch_per_sweep": int(
+            stored.get(
+                "improvement_max_code_patch_per_sweep",
+                DEFAULT_MAX_CODE_PATCH_PER_SWEEP,
+            )
+        ),
+        "improvement_max_advisory_per_sweep": int(
+            stored.get(
+                "improvement_max_advisory_per_sweep",
+                DEFAULT_MAX_ADVISORY_PER_SWEEP,
+            )
+        ),
+        "improvement_max_generates_per_sweep": int(
+            stored.get("improvement_max_generates_per_sweep", generates)
         ),
     }
 

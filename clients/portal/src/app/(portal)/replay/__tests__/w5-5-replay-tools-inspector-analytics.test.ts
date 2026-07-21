@@ -69,22 +69,28 @@ function showSyntheticRunsEmpty(opts: {
 
 describe("W5-5 replay query states", () => {
   it("list + detail failures use ErrorState with Try again (not toast)", () => {
-    const src = read("app/(portal)/replay/page.tsx");
+    const page = read("app/(portal)/replay/page.tsx");
+    const timeline = read("app/(portal)/replay/_components/replay-timeline.tsx");
+    const events = read("app/(portal)/replay/_components/replay-events.tsx");
+    const src = `${page}\n${timeline}\n${events}`;
     expect(src).toContain('from "@/components/ui/error-state"');
     expect(src).toContain("Couldn't load traces");
     expect(src).toContain("Couldn't load trace");
     expect(src).toContain("traceError");
-    expect(src).toContain("onClick={fetchJobs}");
-    expect(src).toContain("onClick={fetchTrace}");
+    expect(page).toContain("onClick={fetchJobs}");
+    expect(page).toContain("onRetry={fetchTrace}");
     expect(src).toContain("Try again");
     expect(src).not.toContain("useToast");
     expect(src).not.toMatch(/toast\.error/);
   });
 
   it("gates timeline/events empty behind list + detail errors", () => {
-    const src = read("app/(portal)/replay/page.tsx");
-    expect(src).toMatch(/error \? \([\s\S]*ErrorState[\s\S]*Couldn't load traces/);
-    expect(src).toMatch(/traceError \? \([\s\S]*ErrorState[\s\S]*Couldn't load trace/);
+    const page = read("app/(portal)/replay/page.tsx");
+    const timeline = read("app/(portal)/replay/_components/replay-timeline.tsx");
+    const events = read("app/(portal)/replay/_components/replay-events.tsx");
+    expect(page).toMatch(/error \? \([\s\S]*ErrorState[\s\S]*Couldn't load traces/);
+    expect(timeline).toMatch(/traceError[\s\S]*ErrorState[\s\S]*Couldn't load trace/);
+    expect(events).toMatch(/traceError[\s\S]*ErrorState[\s\S]*Couldn't load trace/);
     expect(
       showReplayEmpty({
         loading: false,
@@ -113,12 +119,10 @@ describe("W5-5 replay query states", () => {
 });
 
 describe("W5-5 tools query states", () => {
-  it("uses ErrorState for taxonomy/action failures (not AlertTriangle banner)", () => {
-    const src = read("app/(portal)/tools/page.tsx");
-    expect(src).toContain('from "@/components/ui/error-state"');
+  it("uses QueryState for taxonomy failures on Analytics tools panel", () => {
+    const src = read("app/(portal)/analytics/_components/tools-panel.tsx");
+    expect(src).toContain("QueryState");
     expect(src).toContain("Couldn't load tool catalog");
-    expect(src).toContain("Try again");
-    expect(src).toContain("loadError");
     expect(src).toContain("taxonomyQuery.refetch");
     expect(src).not.toContain("AlertTriangle");
   });
@@ -207,13 +211,12 @@ describe("W5-5 analytics query states", () => {
 });
 
 describe("W5-5 synthetic query states", () => {
-  it("run history failure uses ErrorState and gates empty table", () => {
+  it("run history deferred uses EmptyState (not false ErrorState table)", () => {
     const src = read("app/(portal)/synthetic/page.tsx");
-    expect(src).toContain('from "@/components/ui/error-state"');
-    expect(src).toContain("Could not load run history");
-    expect(src).toContain("Try again");
-    expect(src).toContain('data-testid="synthetic-runs-table"');
-    expect(src).toMatch(/error \? \([\s\S]*ErrorState[\s\S]*\) : \(/);
+    expect(src).toContain('from "@/components/ui/empty-state"');
+    expect(src).toContain("Persisted run history is deferred");
+    expect(src).toContain('data-wave-e5-synthetic="history-deferred"');
+    expect(src).not.toContain('from "@/components/ui/error-state"');
     expect(
       showSyntheticRunsEmpty({ loading: false, error: "boom", runCount: 0 }),
     ).toBe(false);

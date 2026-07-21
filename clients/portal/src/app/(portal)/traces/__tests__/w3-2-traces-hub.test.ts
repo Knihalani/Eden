@@ -9,6 +9,11 @@ import {
   deriveTracesListUi,
   filtersFromSearchParams,
 } from "../traces-list-ui";
+import {
+  TRACES_BUILTIN_VIEW_PRESETS,
+  resolveTracesBuiltinView,
+  isTracesUnreviewedSoftView,
+} from "../_components/trace-builtin-views";
 
 const portalSrc = resolve(__dirname, "../../../../");
 
@@ -63,8 +68,9 @@ describe("W3-2 traces hub list UI gate", () => {
     expect(qBar).toContain("clearedFilters");
 
     const page = read("app/(portal)/traces/page.tsx");
-    expect(page).toContain("agent_id: next.agent_id ?? \"\"");
-    expect(page).toContain('applyListFilters({ realm: "", outcome: "", agent_id: "" })');
+    const list = read("app/(portal)/traces/_components/traces-hub-list.tsx");
+    expect(page).toContain("agent_id: next.agent_id");
+    expect(list).toContain('applyListFilters({ realm: "", outcome: "", agent_id: "" })');
   });
 
   it("does not show empty while loading or on error", () => {
@@ -126,38 +132,41 @@ describe("W3-2 traces hub list UI gate", () => {
 
   it("page wires ErrorState, filtered empty, and URL filter sync", () => {
     const src = read("app/(portal)/traces/page.tsx");
-    expect(src).toContain('from "@/components/ui/error-state"');
-    expect(src).toContain("Could not load traces");
-    expect(src).toContain("Try again");
-    expect(src).toContain("showFirstRunEmpty");
-    expect(src).toContain("showFilteredEmpty");
-    expect(src).toContain('title="No traces match"');
-    expect(src).toContain("filtersFromSearchParams");
-    expect(src).toContain("writeFilterParams");
-    expect(src).toContain('params.set("agent_id"');
-    expect(src).toContain('from "./traces-list-ui"');
+    const hook = read("app/(portal)/traces/_components/use-traces-hub.ts");
+    const list = read("app/(portal)/traces/_components/traces-hub-list.tsx");
+    const dynamics = read("app/(portal)/traces/_components/traces-hub-dynamics.tsx");
+    expect(list).toContain('from "@/components/ui/error-state"');
+    expect(list).toContain("Could not load traces");
+    expect(list).toContain("Try again");
+    expect(list).toContain("showFirstRunEmpty");
+    expect(list).toContain("showFilteredEmpty");
+    expect(list).toContain('title="No traces match"');
+    expect(hook).toContain("filtersFromSearchParams");
+    expect(hook).toContain("writeFilterParams");
+    expect(hook).toContain('params.set("agent_id"');
+    expect(hook).toContain('from "../traces-list-ui"');
     // Wave-2 hydration: hub tabs / detail are dynamic() like legacy views.
-    expect(src).toMatch(/dynamic\(\s*\(\)\s*=>\s*import\(["']@\/components\/traces\/SpansTab["']/);
-    expect(src).toMatch(/dynamic\(\s*\(\)\s*=>\s*import\(["']@\/components\/traces\/SessionsTab["']/);
-    expect(src).toMatch(/dynamic\(\s*\(\)\s*=>\s*import\(["']@\/components\/traces\/TraceDetailPanel["']/);
+    expect(dynamics).toMatch(/import\(["']@\/components\/traces\/SpansTab["']/);
+    expect(dynamics).toMatch(/import\(["']@\/components\/traces\/SessionsTab["']/);
+    expect(dynamics).toMatch(/import\(["']@\/components\/traces\/TraceDetailPanel["']/);
     // Orgless gate from Wave 2 must remain ahead of first-run empty.
-    const noOrgIdx = src.indexOf("if (!currentOrg && !authError)");
-    const emptyIdx = src.indexOf("<WaitingForFirstEvent");
-    // WaitingForFirstEvent owns the empty title ("Waiting for first event").
-    expect(src).toContain("WaitingForFirstEvent");
-    expect(src).toContain("FIRST_EVENT_WAIT");
-    expect(src).toContain("first_trace_at");
+    const noOrgIdx = src.indexOf("if (!hub.currentOrg && !hub.authError)");
+    const emptyIdx = list.indexOf("<WaitingForFirstEvent");
+    expect(list).toContain("WaitingForFirstEvent");
+    expect(hook).toContain("FIRST_EVENT_WAIT");
+    expect(hook).toContain("first_trace_at");
     expect(noOrgIdx).toBeGreaterThan(-1);
-    expect(emptyIdx).toBeGreaterThan(noOrgIdx);
-    expect(src).toMatch(/orgLoading\s*&&\s*!currentOrg/);
+    expect(emptyIdx).toBeGreaterThan(-1);
+    expect(src).toMatch(/hub\.orgLoading\s*&&\s*!hub\.currentOrg/);
   });
 
   it("first-run empty polls and offers doctor + check CTA", () => {
-    const src = read("app/(portal)/traces/page.tsx");
-    expect(src).toContain("refetchInterval");
-    expect(src).toContain("FIRST_EVENT_WAIT.pollMs");
-    expect(src).toContain("onboardingV2Api.getState");
-    expect(src).toContain('data-testid="traces-first-run-hint"');
+    const hook = read("app/(portal)/traces/_components/use-traces-hub.ts");
+    const list = read("app/(portal)/traces/_components/traces-hub-list.tsx");
+    expect(hook).toContain("refetchInterval");
+    expect(hook).toContain("FIRST_EVENT_WAIT.pollMs");
+    expect(hook).toContain("onboardingV2Api.getState");
+    expect(list).toContain('data-testid="traces-first-run-hint"');
 
     const wait = read("components/onboarding/WaitingForFirstEvent.tsx");
     expect(wait).toContain("FIRST_EVENT_WAIT.title");
@@ -181,6 +190,7 @@ describe("W3-2 traces hub list UI gate", () => {
     const core = read("components/portal-os/CoreResourcePage.tsx");
     expect(core).toContain("MASTER_DETAIL_QUERY_KEYS");
     expect(core).toMatch(/traceId:[\s\S]*"traceId"[\s\S]*"trace_id"[\s\S]*"trace"/);
+    expect(core).toMatch(/spanId:[\s\S]*"spanId"[\s\S]*"span_id"[\s\S]*"span"/);
 
     const detail = read("components/traces/TraceDetailPanel.tsx");
     expect(detail).toContain("Trace not found");
@@ -188,6 +198,11 @@ describe("W3-2 traces hub list UI gate", () => {
 
     const cross = read("lib/portal-cross-links.ts");
     expect(cross).toMatch(/tracesFilteredHref[\s\S]*agent_id/);
+    expect(cross).toContain("opts?: { spanId?: string }");
+
+    const triage = read("app/(portal)/issues/_components/issue-triage-panel.tsx");
+    expect(triage).toContain("traceHref(tid, preserve, { spanId: span })");
+    expect(triage).not.toMatch(/\/traces\/\$\{tid\}\?span=/);
   });
 
   it("spans and sessions tabs gate empty behind ErrorState", () => {
@@ -204,49 +219,56 @@ describe("W3-2 traces hub list UI gate", () => {
 
   it("UX-P0-01 chrome is Identity + one toolbar band (no facet strip)", () => {
     const src = read("app/(portal)/traces/page.tsx");
+    const toolbar = read("app/(portal)/traces/_components/TracesToolbar.tsx");
+    const hook = read("app/(portal)/traces/_components/use-traces-hub.ts");
+    const list = read("app/(portal)/traces/_components/traces-hub-list.tsx");
     // Identity
     expect(src).toContain('eyebrow="Observe"');
     expect(src).toContain('title="Traces"');
-    expect(src).toContain('data-chrome-band="toolbar"');
-    expect(src).toContain('data-testid="traces-toolbar"');
+    expect(toolbar).toContain('data-chrome-band="toolbar"');
+    expect(toolbar).toContain('data-testid="traces-toolbar"');
     expect(src).toContain("ResourcePageShell");
     // Hub tabs only — legacy tools not tab siblings
-    expect(src).toContain('const HUB_VIEWS = ["traces", "spans", "sessions"]');
-    expect(src).toContain("LEGACY_TOOL_LINKS");
-    expect(src).toContain("More");
+    expect(toolbar).toContain('export const HUB_VIEWS = ["traces", "spans", "sessions"]');
+    expect(toolbar).toContain("LEGACY_TOOL_LINKS");
+    expect(toolbar).toContain("More");
     expect(src).not.toMatch(/<TabsTrigger[^>]*value="inspect"/);
-    // Facets are a QueryFilterBar select (`?facet=`) — never a third band
+    // Facets are Overflow / deep-link only (`?facet=`) — never a third band
     expect(src).not.toContain('aria-label="Observability facets"');
-    expect(src).toContain('key: "facet"');
-    expect(src).toContain('params.set("facet"');
-    expect(src).toContain('searchParams.get("facet")');
-    expect(src).toContain("setFacet");
-    // Live + Refresh live in the single toolbar band (not a third chrome row)
-    expect(src).toMatch(/aria-label=\{liveOn \? "Turn off live tail"/);
-    expect(src).toContain('searchParams.get("live") === "1"');
-    expect(src).toContain("LiveTailPanel");
-    expect(src).toMatch(/liveOn \?[\s\S]*LiveTailPanel/);
-    expect(src).toContain('aria-label="Refresh traces"');
-    expect(src).toContain('data-testid="traces-toolbar"');
+    expect(hook).toContain('searchParams.get("facet")');
+    expect(toolbar).toContain("FACET_LINKS");
+    expect(toolbar).toContain("DropdownMenuLabel>Facets");
+    expect(toolbar).not.toContain("advancedSelects");
+    // Live + Refresh: Live under Display; Refresh stays in More
+    expect(hook).toContain('searchParams.get("live") === "1"');
+    expect(list).toContain("LiveTailPanel");
+    expect(list).toMatch(/liveOn && currentOrg/);
+    expect(src).toContain("TracesToolbar");
+    expect(toolbar).toContain('data-testid="traces-live-toggle"');
+    expect(toolbar).toContain('data-testid="traces-refresh"');
+    expect(toolbar).toContain('data-primary-control="display"');
     // Master–detail stays on hub
     expect(src).toContain("DetailPanelShell");
     expect(src).toContain("traceId");
-    // Display hides optional cols inside More — not a new band
-    expect(src).toContain("TRACES_OPTIONAL_COLUMNS");
+    // Display is first-class (columns / density / LIVE / range) — not buried only in More
+    expect(toolbar).toContain("TRACES_OPTIONAL_COLUMNS");
     expect(src).toContain("writeVisibleColumns");
-    expect(src).toContain('DropdownMenuLabel>Display');
+    expect(toolbar).toContain('data-testid="traces-display"');
+    expect(toolbar).toContain("DropdownMenuLabel>Columns");
   });
 
   it("UX-P0-10 wires ViewsMenu dirty + Save changes + Discard", () => {
     const src = read("app/(portal)/traces/page.tsx");
-    expect(src).toContain("isViewDirty");
-    expect(src).toContain("dirty={filterDirty}");
+    const hook = read("app/(portal)/traces/_components/use-traces-hub.ts");
+    expect(hook).toContain("isViewDirty");
+    expect(src).toContain("filterDirty={hub.filterDirty}");
     expect(src).toContain("onSaveChanges");
     expect(src).toContain("currentViewState");
     expect(src).toContain("visibleColumns");
-    expect(src).toContain("tableSort");
-    expect(src).toMatch(/await update\(\{[\s\S]*viewId: savedViewId/);
-    expect(src).toMatch(/onDiscard=\{\(\)\s*=>\s*\{[\s\S]*applyView\(savedViewId\)/);
+    expect(hook).toContain("tableSort");
+    expect(src).toMatch(/await hub\.update\(\{[\s\S]*viewId: hub\.savedViewId/);
+    expect(src).toContain("onDiscardView");
+    expect(src).toMatch(/hub\.applyView\(hub\.savedViewId\)/);
   });
 
   it("Wave 6: TracesTab has no sibling filter Card (hub owns filters)", () => {
@@ -294,11 +316,53 @@ describe("W3-2 traces hub list UI gate", () => {
     expect(detail).toContain('{ id: "tree", label: "Tree" }');
     expect(detail).toContain('{ id: "timeline", label: "Timeline" }');
     expect(detail).toContain('{ id: "meta", label: "Metadata" }');
-    expect(detail).toContain('useState<DetailMode>("transcript")');
+    expect(detail).toContain('initialMode = "transcript"');
     expect(detail).toContain('aria-label="Trace detail modes"');
     expect(detail).toContain("VirtualizedTranscript");
-    expect(detail).toContain("CrossLinkBar");
-    expect(detail).toContain('data-testid="trace-timeline"');
+    expect(detail).toContain('data-testid="trace-actions-overflow"');
     expect(detail).toContain("useTraceTimeline");
+    const views = read("components/traces/trace-detail-views.tsx");
+    expect(views).toContain('data-testid="trace-timeline"');
+  });
+
+  it("Wave 2: built-in views + I/O cols + empty≠filtered + Spans use hub search", () => {
+    expect(TRACES_BUILTIN_VIEW_PRESETS.map((p) => p.id)).toEqual([
+      "builtin:errors",
+      "builtin:high-latency",
+      "builtin:unreviewed",
+    ]);
+    expect(resolveTracesBuiltinView("builtin:errors")?.filter?.outcome).toBe(
+      "failure",
+    );
+    expect(resolveTracesBuiltinView("builtin:high-latency")?.sort).toEqual({
+      key: "duration_ms",
+      direction: "desc",
+    });
+    expect(isTracesUnreviewedSoftView("builtin:unreviewed")).toBe(true);
+
+    const hook = read("app/(portal)/traces/_components/use-traces-hub.ts");
+    expect(hook).toContain("TRACES_BUILTIN_VIEW_PRESETS");
+    expect(hook).toContain("resolveTracesBuiltinView");
+    expect(hook).toContain("filterDirty: hasListConstraints");
+
+    const toolbar = read("app/(portal)/traces/_components/TracesToolbar.tsx");
+    expect(toolbar).toContain("presets={viewPresets}");
+
+    const tab = read("app/(portal)/observability/_components/TracesTab.tsx");
+    expect(tab).toContain('id: "input"');
+    expect(tab).toContain('id: "output"');
+    expect(tab).toContain('data-testid="trace-input-preview"');
+
+    const list = read("app/(portal)/traces/_components/traces-hub-list.tsx");
+    expect(list).toContain("traces-unreviewed-soft-note");
+    expect(list).toContain("showFirstRunEmpty");
+    expect(list).toContain("showFilteredEmpty");
+    expect(list).toContain("loading");
+
+    const page = read("app/(portal)/traces/page.tsx");
+    const spans = read("components/traces/SpansTab.tsx");
+    expect(page).not.toContain("SpanSearchBar");
+    expect(spans).not.toContain("SpanSearchBar");
+    expect(list).toContain("query={query}");
   });
 });

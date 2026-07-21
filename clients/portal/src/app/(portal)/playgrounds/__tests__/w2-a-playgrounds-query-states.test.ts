@@ -29,13 +29,14 @@ function showPlaygroundsEmpty(opts: {
 
 describe("W2-A playgrounds query states", () => {
   it("gates empty on isLoading / isPending / isError via QueryState", () => {
-    const src = read("app/(portal)/playgrounds/page.tsx");
-    expect(src).not.toMatch(/!playgrounds\.length && !busy/);
-    expect(src).toMatch(/listQuery\.isLoading/);
-    expect(src).toMatch(/listQuery\.isPending/);
-    expect(src).toMatch(/listQuery\.isError/);
-    expect(src).toContain("<QueryState");
-    expect(src).toContain("isEmpty={(rows) => rows.length === 0}");
+    const page = read("app/(portal)/playgrounds/page.tsx");
+    const hook = read("app/(portal)/playgrounds/_components/use-playgrounds-page.ts");
+    expect(page).not.toMatch(/!playgrounds\.length && !busy/);
+    expect(hook).toMatch(/listQuery\.isLoading/);
+    expect(hook).toMatch(/listQuery\.isPending/);
+    expect(hook).toMatch(/listQuery\.isError/);
+    expect(page).toContain("<QueryState");
+    expect(page).toContain("isEmpty={(rows) => rows.length === 0}");
   });
 
   it("renders in-page QueryState with retry", () => {
@@ -82,9 +83,9 @@ describe("W2-A playgrounds query states", () => {
   });
 
   it("soft-fails datasets so playgrounds list stays authoritative", () => {
-    const src = read("app/(portal)/playgrounds/page.tsx");
+    const src = read("app/(portal)/playgrounds/_components/use-playgrounds-page.ts");
     expect(src).toMatch(/datasets are soft-fail|soft-fail/);
-    expect(src).toMatch(/try \{\s*const ds = await datasetsApi\.list/s);
-    expect(src).not.toMatch(/Promise\.all\(\[\s*fetchApi[\s\S]*datasetsApi\.list/s);
+    expect(src).toMatch(/try \{\s*const ds = await datasetsApi\.list/);
+    expect(src).not.toMatch(/Promise\.all\(\[\s*fetchApi[\s\S]*datasetsApi\.list/);
   });
 });

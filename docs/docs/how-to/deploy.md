@@ -41,6 +41,6 @@ The portal talks to the API through its same-origin proxy
 
 ## Status & support
 
-- Support: support@eden.dev
+- Support: hello@edenobservability.com
 
-Enterprise dedicated tenancy — contact sales@eden.dev.
+Dedicated tenancy inquiries — contact sales@edenobservability.com.

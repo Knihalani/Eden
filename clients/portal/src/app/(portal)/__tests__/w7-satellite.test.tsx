@@ -33,12 +33,17 @@ describe("W7 satellite — ResourcePageShell band budget", () => {
 describe("W7 satellite — Issues hub", () => {
   it("composes ≤2 bands: tabs + ResourceOsToolbar in one toolbar slot", () => {
     const src = read("app/(portal)/issues/page.tsx");
+    const listSrc = read("app/(portal)/issues/_components/issues-list.tsx");
+    const detailSrc = read(
+      "app/(portal)/issues/_components/issues-detail-panel.tsx",
+    );
     expect(src).toContain("CoreResourcePage");
     expect(src).toContain('data-testid="issues-toolbar"');
     expect(src).toContain("ResourceOsToolbar");
     expect(src).toMatch(/key:\s*"status"/);
-    expect(src).toContain("QueryState");
-    expect(src).toContain("DetailPanelShell");
+    // QueryState / DetailPanelShell live in list + peek (peeled from page)
+    expect(listSrc).toContain("QueryState");
+    expect(detailSrc).toContain("DetailPanelShell");
     expect(src).toContain("BulkActionBar");
     // Status filter lives in hub toolbar — not a third content band
     expect(src).toMatch(/toolbar=\{[\s\S]*ResourceOsToolbar[\s\S]*key:\s*"status"/);
@@ -48,15 +53,18 @@ describe("W7 satellite — Issues hub", () => {
 describe("W7 satellite — Alerts hub", () => {
   it("keeps severity as thin KPI strip; related/Go-to in overflow (no CrossLinkBar band)", () => {
     const src = read("app/(portal)/alerts/page.tsx");
+    const strip = read("app/(portal)/alerts/_components/alerts-severity-strip.tsx");
+    const detail = read("app/(portal)/alerts/_components/alerts-detail-panel.tsx");
     expect(src).toContain("CoreResourcePage");
     expect(src).toContain('data-testid="alerts-toolbar"');
-    expect(src).toContain('data-testid="alerts-severity-strip"');
+    expect(strip).toContain('data-testid="alerts-severity-strip"');
     expect(src).toContain("kpiStrip");
     expect(src).toContain("ResourceOsToolbar");
     expect(src).toContain("DropdownMenu");
     expect(src).toMatch(/More[\s\S]*Incidents|Incidents[\s\S]*More/);
-    expect(src).toContain("DropdownMenuLabel>Go to");
+    expect(detail).toContain("DropdownMenuLabel>Go to");
     expect(src).not.toContain("CrossLinkBar");
+    expect(detail).not.toContain("CrossLinkBar");
     // No peer CrossLinkBar chrome band in toolbar
     const toolbarStart = src.indexOf('data-testid="alerts-toolbar"');
     const kpiStart = src.indexOf("kpiStrip=");
@@ -82,11 +90,19 @@ describe("W7 satellite — Agents hub", () => {
 describe("W7 satellite — Dashboard Home", () => {
   it("caps default KPI widgets at 5–7; Status→Action CTAs ≤3 primary", () => {
     const src = read("app/(portal)/dashboard/page.tsx");
-    expect(src).toContain("DEFAULT_WIDGETS");
-    expect(src).toContain('data-testid="dashboard-status-kpis"');
-    expect(src).toContain('data-testid="dashboard-diagnosis"');
-    // Default layout length — 6 widgets (4 KPI + diagnosis + traces)
-    const match = src.match(
+    const widgets = read(
+      "app/(portal)/dashboard/_components/home-widgets.ts",
+    );
+    const kpi = read(
+      "app/(portal)/dashboard/_components/home-kpi-strip.tsx",
+    );
+    const diagnosis = read(
+      "app/(portal)/dashboard/_components/diagnosis-strip.tsx",
+    );
+    expect(widgets).toContain("DEFAULT_WIDGETS");
+    expect(kpi).toContain('data-testid="dashboard-status-kpis"');
+    expect(diagnosis).toContain('data-testid="dashboard-diagnosis"');
+    const match = widgets.match(
       /const DEFAULT_WIDGETS: WidgetId\[\] = \[([\s\S]*?)\];/,
     );
     expect(match).toBeTruthy();
@@ -96,10 +112,14 @@ describe("W7 satellite — Dashboard Home", () => {
       .filter(Boolean);
     expect(ids.length).toBeGreaterThanOrEqual(5);
     expect(ids.length).toBeLessThanOrEqual(7);
-    // Connect / Edit layout progressive disclosure
-    expect(src).toContain("Edit layout");
-    expect(src).toContain("DropdownMenu");
-    expect(src).toContain("More home actions");
+    expect(src).toContain("HomeHeaderActions");
+    const header = read(
+      "app/(portal)/dashboard/_components/home-header-actions.tsx",
+    );
+    expect(header).not.toContain("Edit layout");
+    expect(header).toContain("DropdownMenu");
+    expect(header).toContain("More home actions");
+    expect(src).toContain("WAVE11_HOME_PROTECTED");
   });
 });
 

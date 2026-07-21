@@ -192,10 +192,14 @@ export default async function StatusPage() {
     <LegalPage
       eyebrow="Trust Center"
       title="System status"
-      description="Live probe of Eden’s public API health. This page never sits behind portal chrome — what you see here is what uptime monitors should parse from /api/health."
+      description="Live probe of Eden’s public API health during public beta. Best-effort only — no uptime SLA. This page never sits behind portal chrome — what you see here is what uptime monitors should parse from /api/health."
       size="narrow"
     >
       <div className="space-y-10">
+        <p className="text-sm text-[var(--text-muted)] leading-relaxed rounded-xl border border-[var(--border-default)] bg-[var(--bg-primary)] px-4 py-3">
+          Public beta · free tier · no SLA. Status here is informational; do not treat green
+          as a contractual uptime guarantee.
+        </p>
         {/* Primary status banner — tinted by state, never green when degraded */}
         <div
           className="rounded-xl border p-5 sm:p-6"

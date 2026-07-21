@@ -8,13 +8,17 @@ import { Button } from "@/components/ui/button";
 import { DataTable, DataTableSearch } from "@/components/ui/data-table";
 import { ErrorState } from "@/components/ui/error-state";
 import { NoOrgState } from "@/components/ui/no-org-state";
-import { PageHeader } from "@/components/layout/page-header";
 import { CoreResourcePage } from "@/components/portal-os";
 import { LoadingSkeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/components/ui/toast";
 import { RefreshCw, Rewind } from "lucide-react";
 import { debuggerApi, type Checkpoint, type RerunResult } from "@/lib/api";
 import { U20_EMPTY_COPY } from "@/lib/portal-polish";
+import {
+  ObserveBackToTraces,
+  ObserveLeafHeader,
+  WAVE10_POWER_ATTR,
+} from "@/app/(portal)/observability/_components/observe-leaf-shell";
 
 function DebuggerInner() {
   const { currentOrg } = useOrg();
@@ -78,18 +82,22 @@ function DebuggerInner() {
   });
 
   return (
+    <div {...WAVE10_POWER_ATTR}>
     <CoreResourcePage
       size="wide"
       header={
-        <PageHeader
-          title="Debugger"
-          subtitle="Time-travel checkpoints. Enter a trace id to list saved steps, then re-run from a step."
-          actions={
-            <Button asChild variant="outline" size="sm" className="min-h-11">
-              <Link href="/debugger-sessions">Debug sessions</Link>
-            </Button>
-          }
-        />
+        <>
+          <ObserveBackToTraces />
+          <ObserveLeafHeader
+            title="Debugger"
+            subtitle="Checkpoints + prefix rerun — open from Traces More"
+            actions={
+              <Button asChild variant="outline" size="sm" className="min-h-11">
+                <Link href="/debugger-sessions">Debug sessions</Link>
+              </Button>
+            }
+          />
+        </>
       }
       toolbar={
         <div
@@ -278,6 +286,7 @@ function DebuggerInner() {
         </>
       }
     />
+    </div>
   );
 }
 

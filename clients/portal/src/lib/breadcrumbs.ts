@@ -6,10 +6,10 @@
 // re-implementing the sidebar-group lookup in two places.
 
 export type SidebarGroupId =
-  | "build"
+  | "home"
   | "observe"
-  | "optimize"
-  | "automate"
+  | "improve"
+  | "evaluate"
   | "workspace";
 
 export interface BreadcrumbLabel {
@@ -24,13 +24,14 @@ export const BREADCRUMB_LABELS: Record<string, BreadcrumbLabel> = {
   // is "Home" not redundant "Home · Home".
   dashboard: { label: "Home" },
   analytics: { label: "Analytics", category: "observe" },
-  optimization: { label: "Cost", category: "optimize" },
-  budget: { label: "Budget", category: "optimize" },
+  optimization: { label: "Cost", category: "improve" },
+  budget: { label: "Budget", category: "improve" },
   settings: { label: "Settings", category: "workspace" },
+  overview: { label: "Overview", category: "workspace" },
   billing: { label: "Billing", category: "workspace" },
-  docs: { label: "Documentation", category: "workspace" },
+  docs: { label: "Quickstart", category: "workspace" },
   profile: { label: "Profile", category: "workspace" },
-  new: { label: "New", category: "build" },
+  new: { label: "New", category: "home" },
   observability: { label: "Observability", category: "observe" },
   incidents: { label: "Incidents", category: "observe" },
   insights: { label: "Insights", category: "observe" },
@@ -40,27 +41,29 @@ export const BREADCRUMB_LABELS: Record<string, BreadcrumbLabel> = {
   agents: { label: "Agents", category: "observe" },
   // sandbox / builder / marketplace / multi-agent removed — env-gen strip
   users: { label: "User Intelligence", category: "observe" },
-  prompts: { label: "Prompts", category: "optimize" },
+  prompts: { label: "Prompts", category: "improve" },
   debugger: { label: "Debugger", category: "observe" },
   synthetic: { label: "Synthetic Q/A", category: "observe" },
   signals: { label: "Signals", category: "observe" },
-  redteam: { label: "Red team", category: "optimize" },
+  redteam: { label: "Red team", category: "improve" },
   members: { label: "Members", category: "workspace" },
-  guardrails: { label: "Guardrails", category: "optimize" },
-  autonomous: { label: "Autonomous", category: "automate" },
-  improve: { label: "Improve", category: "optimize" },
-  issues: { label: "Agent Issues", category: "observe" },
-  studio: { label: "Custom Metrics", category: "optimize" },
-  "pr-suggestions": { label: "PR Suggestions", category: "automate" },
-  eden: { label: "Eden", category: "automate" },
-  inbox: { label: "PR Inbox", category: "automate" },
+  guardrails: { label: "Guardrails", category: "improve" },
+  autonomous: { label: "Autonomous", category: "evaluate" },
+  improve: { label: "Improve", category: "improve" },
+  // Align with sidebar IA ("Issues", not "Agent Issues").
+  issues: { label: "Issues", category: "observe" },
+  studio: { label: "Custom Metrics", category: "improve" },
+  "pr-suggestions": { label: "PR Suggestions", category: "evaluate" },
+  eden: { label: "Eden", category: "evaluate" },
+  inbox: { label: "PR Inbox", category: "evaluate" },
   retrieval: { label: "Retrieval", category: "observe" },
   memory: { label: "Memory", category: "observe" },
   "time-travel": { label: "Time-Travel", category: "observe" },
   apm: { label: "Traces", category: "observe" },
   decisions: { label: "Decisions", category: "observe" },
-  outcomes: { label: "Outcomes", category: "optimize" },
-  predict: { label: "Predictive", category: "optimize" },
+  outcomes: { label: "Outcomes", category: "improve" },
+  predict: { label: "Predictive", category: "improve" },
+  forecast: { label: "Forecast", category: "improve" },
   tools: { label: "Tools", category: "observe" },
   query: { label: "Query", category: "observe" },
   cohorts: { label: "Columnar Engine", category: "observe" },
@@ -68,24 +71,27 @@ export const BREADCRUMB_LABELS: Record<string, BreadcrumbLabel> = {
   eval: { label: "Eval", category: "observe" },
   traces: { label: "Traces", category: "observe" },
   onboarding: { label: "Onboarding", category: "workspace" },
-  connect: { label: "Connect Agent", category: "build" },
+  connect: { label: "Connect Agent", category: "home" },
   fleet: { label: "Fleet", category: "observe" },
   replay: { label: "Replay", category: "observe" },
-  datasets: { label: "Datasets", category: "build" },
-  labeling: { label: "Labeling", category: "build" },
+  datasets: { label: "Datasets", category: "home" },
+  labeling: { label: "Labeling", category: "home" },
   mcp: { label: "MCP SRE", category: "observe" },
-  "model-advisor": { label: "Model Advisor", category: "optimize" },
-  "closed-loop": { label: "Closed-Loop", category: "automate" },
-  artifacts: { label: "Artifacts", category: "optimize" },
-  experiments: { label: "Experiments", category: "automate" },
-  playgrounds: { label: "Playgrounds", category: "automate" },
-  promotions: { label: "Promotions", category: "optimize" },
-  evals: { label: "Evals", category: "automate" },
+  "model-advisor": { label: "Model Advisor", category: "improve" },
+  "closed-loop": { label: "Closed-Loop", category: "evaluate" },
+  artifacts: { label: "Artifacts", category: "improve" },
+  experiments: { label: "Experiments", category: "evaluate" },
+  playgrounds: { label: "Playgrounds", category: "evaluate" },
+  promotions: { label: "Promotions", category: "improve" },
+  evals: { label: "Evals", category: "evaluate" },
   sessions: { label: "Sessions", category: "observe" },
-  ledger: { label: "Ledger", category: "optimize" },
-  book: { label: "Agent Book", category: "automate" },
-  drift: { label: "Drift", category: "automate" },
+  ledger: { label: "Ledger", category: "improve" },
+  book: { label: "Agent Book", category: "evaluate" },
+  drift: { label: "Drift", category: "evaluate" },
   "debugger-sessions": { label: "Debug sessions", category: "observe" },
+  scorecard: { label: "Scorecard", category: "improve" },
+  "online-scoring": { label: "Online scoring", category: "improve" },
+  "change-impact": { label: "Change impact", category: "improve" },
   audit: { label: "Audit trail", category: "workspace" },
   "audit-trail": { label: "Audit trail", category: "workspace" },
 };
@@ -99,12 +105,15 @@ export interface Breadcrumb {
 export function buildBreadcrumbs(pathname: string): Breadcrumb[] {
   const segments = pathname.split("/").filter(Boolean);
   const crumbs: Breadcrumb[] = [];
-  let path = "";
+  let href = "";
   for (const segment of segments) {
-    path += `/${segment}`;
-    const entry = BREADCRUMB_LABELS[segment];
-    const label = entry?.label ?? segment.charAt(0).toUpperCase() + segment.slice(1);
-    crumbs.push({ label, href: path, category: entry?.category });
+    href += `/${segment}`;
+    const meta = BREADCRUMB_LABELS[segment];
+    crumbs.push({
+      label: meta?.label ?? segment,
+      href,
+      category: meta?.category,
+    });
   }
   return crumbs;
 }

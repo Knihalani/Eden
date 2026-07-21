@@ -1,6 +1,13 @@
 "use client";
 
-import { useState, useEffect, useRef, type ChangeEvent, type KeyboardEvent, type ClipboardEvent } from "react";
+import {
+  useState,
+  useEffect,
+  useRef,
+  type ChangeEvent,
+  type KeyboardEvent,
+  type ClipboardEvent,
+} from "react";
 import { api } from "@/lib/api";
 import {
   Dialog,
@@ -8,8 +15,10 @@ import {
   DialogHeader,
   DialogTitle,
   DialogDescription,
-  DialogFooter } from "@/components/ui/dialog";
+  DialogFooter,
+} from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { Loader2, Copy, Check, ShieldCheck, AlertTriangle, KeyRound } from "lucide-react";
 
 interface TwoFASetupDialogProps {
@@ -33,7 +42,7 @@ export function TwoFASetupDialog({ onClose, onSuccess }: TwoFASetupDialogProps) 
   const inputRefs = useRef<Array<HTMLInputElement | null>>([]);
 
   useEffect(() => {
-    loadQrCode();
+    void loadQrCode();
   }, []);
 
   const loadQrCode = async () => {
@@ -60,12 +69,10 @@ export function TwoFASetupDialog({ onClose, onSuccess }: TwoFASetupDialogProps) 
     try {
       await api.verify2FA(code);
       setStep("success");
-      // Close after a brief delay so the user sees the success state
       setTimeout(() => onSuccess(), 1200);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (e: any) {
       setError(e.message || "Invalid code. Please try again.");
-      // Clear digits so the user can re-enter
       setDigits(Array(CODE_LENGTH).fill(""));
       inputRefs.current[0]?.focus();
     } finally {
@@ -75,7 +82,7 @@ export function TwoFASetupDialog({ onClose, onSuccess }: TwoFASetupDialogProps) 
 
   const handleCopySecret = () => {
     if (qrData?.secret) {
-      navigator.clipboard.writeText(qrData.secret);
+      void navigator.clipboard.writeText(qrData.secret);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     }
@@ -84,7 +91,6 @@ export function TwoFASetupDialog({ onClose, onSuccess }: TwoFASetupDialogProps) 
   const handleDigitChange = (index: number, e: ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value.replace(/\D/g, "");
     if (val.length > 1) {
-      // Handle paste of multiple digits
       const chars = val.slice(0, CODE_LENGTH - index).split("");
       const newDigits = [...digits];
       chars.forEach((c, i) => {
@@ -111,7 +117,7 @@ export function TwoFASetupDialog({ onClose, onSuccess }: TwoFASetupDialogProps) 
     } else if (e.key === "ArrowRight" && index < CODE_LENGTH - 1) {
       inputRefs.current[index + 1]?.focus();
     } else if (e.key === "Enter") {
-      handleVerify();
+      void handleVerify();
     }
   };
 
@@ -130,7 +136,7 @@ export function TwoFASetupDialog({ onClose, onSuccess }: TwoFASetupDialogProps) 
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="max-w-md" data-ws4-security-setup>
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <ShieldCheck className="w-5 h-5 text-[var(--accent)]" aria-hidden />
@@ -152,7 +158,9 @@ export function TwoFASetupDialog({ onClose, onSuccess }: TwoFASetupDialogProps) 
               <AlertTriangle className="w-6 h-6 text-[var(--error)]" aria-hidden />
             </div>
             <p className="text-sm text-[var(--error)] text-center max-w-xs">{error}</p>
-            <Button onClick={loadQrCode} variant="outline">Try again</Button>
+            <Button onClick={() => void loadQrCode()} variant="outline">
+              Try again
+            </Button>
           </div>
         ) : step === "qr" && qrData ? (
           <div className="space-y-space-4">
@@ -176,14 +184,19 @@ export function TwoFASetupDialog({ onClose, onSuccess }: TwoFASetupDialogProps) 
             <div className="p-3 bg-[var(--bg-base)] border border-[var(--border-default)] rounded-lg">
               <div className="flex items-center gap-2 mb-1.5">
                 <KeyRound className="w-3.5 h-3.5 text-[var(--text-muted)]" aria-hidden />
-                <p className="text-xs text-[var(--text-muted)] font-medium">Can&apos;t scan? Enter manually:</p>
+                <p className="text-xs text-[var(--text-muted)] font-medium">
+                  Can&apos;t scan? Enter manually:
+                </p>
               </div>
               <div className="flex items-center gap-2">
-                <code className="flex-1 text-sm font-mono break-all text-[var(--terminal)]">{qrData.secret}</code>
-                <button
+                <code className="flex-1 text-sm font-mono break-all text-[var(--terminal)]">
+                  {qrData.secret}
+                </code>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
                   onClick={handleCopySecret}
-                  className="p-1.5 hover:bg-[var(--bg-tertiary)] rounded transition-colors flex-shrink-0"
-                  title="Copy to clipboard"
                   aria-label={copied ? "Secret copied" : "Copy secret to clipboard"}
                 >
                   {copied ? (
@@ -191,19 +204,26 @@ export function TwoFASetupDialog({ onClose, onSuccess }: TwoFASetupDialogProps) 
                   ) : (
                     <Copy className="w-4 h-4 text-[var(--text-muted)]" aria-hidden />
                   )}
-                </button>
+                </Button>
               </div>
             </div>
 
             <DialogFooter className="gap-2">
-              <Button variant="outline" onClick={onClose}>Cancel</Button>
-              <Button onClick={() => { setStep("verify"); setTimeout(() => inputRefs.current[0]?.focus(), 100); }}>
+              <Button variant="outline" onClick={onClose}>
+                Cancel
+              </Button>
+              <Button
+                onClick={() => {
+                  setStep("verify");
+                  setTimeout(() => inputRefs.current[0]?.focus(), 100);
+                }}
+              >
                 I&apos;ve scanned it
               </Button>
             </DialogFooter>
           </div>
         ) : step === "verify" ? (
-          <form onSubmit={handleVerify} className="space-y-space-4">
+          <form onSubmit={(e) => void handleVerify(e)} className="space-y-space-4">
             <p className="text-sm text-[var(--text-secondary)]">
               Enter the 6-digit code from your authenticator app.
             </p>
@@ -212,7 +232,9 @@ export function TwoFASetupDialog({ onClose, onSuccess }: TwoFASetupDialogProps) 
               {digits.map((d, i) => (
                 <input
                   key={i}
-                  ref={(el) => { inputRefs.current[i] = el; }}
+                  ref={(el) => {
+                    inputRefs.current[i] = el;
+                  }}
                   type="text"
                   inputMode="numeric"
                   autoComplete="one-time-code"
@@ -227,14 +249,18 @@ export function TwoFASetupDialog({ onClose, onSuccess }: TwoFASetupDialogProps) 
                     "bg-[var(--bg-base)] border border-[var(--border-default)] rounded-lg",
                     "focus:outline-none focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent-faint)]",
                     "transition-colors",
-                    error && "border-[var(--error)] focus:border-[var(--error)] focus:ring-[var(--error-dim)]",
+                    error &&
+                      "border-[var(--error)] focus:border-[var(--error)] focus:ring-[var(--error-dim)]",
                   )}
                 />
               ))}
             </div>
 
             {error && (
-              <p role="alert" className="text-sm text-[var(--error)] text-center flex items-center justify-center gap-1.5">
+              <p
+                role="alert"
+                className="text-sm text-[var(--error)] text-center flex items-center justify-center gap-1.5"
+              >
                 <AlertTriangle className="w-3.5 h-3.5" aria-hidden />
                 {error}
               </p>
@@ -244,15 +270,12 @@ export function TwoFASetupDialog({ onClose, onSuccess }: TwoFASetupDialogProps) 
               <Button type="button" variant="outline" onClick={() => setStep("qr")}>
                 Back
               </Button>
-              <Button type="submit" disabled={loading || digits.join("").length !== CODE_LENGTH}>
-                {loading ? (
-                  <>
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    Verifying…
-                  </>
-                ) : (
-                  "Verify & Enable"
-                )}
+              <Button
+                type="submit"
+                disabled={loading || digits.join("").length !== CODE_LENGTH}
+                loading={loading}
+              >
+                Verify & Enable
               </Button>
             </DialogFooter>
           </form>
@@ -270,9 +293,4 @@ export function TwoFASetupDialog({ onClose, onSuccess }: TwoFASetupDialogProps) 
       </DialogContent>
     </Dialog>
   );
-}
-
-// cn import helper (local, since we only use it once in this file)
-function cn(...classes: Array<string | false | undefined | null>) {
-  return classes.filter(Boolean).join(" ");
 }

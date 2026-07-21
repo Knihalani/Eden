@@ -83,11 +83,16 @@ export function FinOpsKillsTab() {
   };
 
   if (!currentOrg) {
-    return <EmptyState title="Select an organization" description="FinOps kills are org-scoped." />;
+    return (
+      <EmptyState
+        title="Select a workspace"
+        description="FinOps kills are workspace-scoped."
+      />
+    );
   }
 
   return (
-    <div className="space-y-space-4">
+    <div className="space-y-space-4" data-ws8-finops>
       <div>
         <h3 className="text-sm font-semibold text-[var(--text-primary)] flex items-center gap-space-2">
           <Wallet className="h-4 w-4" />

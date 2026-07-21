@@ -38,7 +38,7 @@ export function SessionHeader({ session, traceSummaries = [] }: SessionHeaderPro
           aria-hidden
         />
         <div className="min-w-0 flex-1">
-          <p className="text-[10px] uppercase tracking-wide text-[var(--text-muted)]">
+          <p className="text-2xs uppercase tracking-wide text-[var(--text-muted)]">
             Session · D12 eden-agent-session-v1
           </p>
           <p className="font-mono text-sm text-[var(--text-primary)] break-all">{session.id}</p>

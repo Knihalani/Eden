@@ -3,6 +3,12 @@
 import * as React from "react";
 import { cn } from "@/lib/utils";
 
+/**
+ * EmptyState — presentational empty UI (icon/title/description/action).
+ * List hubs must not use this as the sole shell: wrap list queries in
+ * QueryState and pass EmptyState as emptySlot / filterEmptySlot so
+ * loading and error paths stay consistent. See query-state.tsx adoption.
+ */
 export interface EmptyStateProps {
   icon?: React.ComponentType<{ className?: string }>;
   title: string;

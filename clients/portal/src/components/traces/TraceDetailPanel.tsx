@@ -3,7 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
-import { ChevronRight, Loader2, ExternalLink, Radio } from "lucide-react";
+import { useSearchParams } from "next/navigation";
+import { ChevronRight, Loader2, Radio } from "lucide-react";
 import { api } from "@/lib/api";
 import { useOrg } from "@/hooks/use-org";
 import { useLiveTraceStream } from "@/hooks/use-live-trace-stream";
@@ -11,19 +12,26 @@ import {
   buildSpanTree,
   buildTranscriptRows,
 } from "@/lib/observability/build-transcript-rows";
-import type { TranscriptRow } from "@/lib/observability/types";
 import { VirtualizedTranscript } from "@/components/transcript-v2/VirtualizedTranscript";
+import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ErrorState } from "@/components/ui/error-state";
 import { TraceOutcomeBadge } from "@/components/ui/status-badge";
 import { markEden } from "@/lib/perf";
+import { cn } from "@/lib/utils";
 import {
   artifactHref,
+  improveHref,
   labelingQueueHref,
   playgroundHref,
+  preserveFromSearchParams,
+  promoteTraceToDatasetHref,
+  sessionHref,
 } from "@/lib/portal-cross-links";
 import { useTraceTimeline } from "@/app/(portal)/observability/_lib/use-observability-data";
-import { cn } from "@/lib/utils";
+import { resolveTimelineSteps } from "@/lib/observability/timeline-sync";
+import { TraceTimelineView, TraceTreeView } from "./trace-detail-views";
+import { TraceHeader } from "./TraceHeader";
 
 const ScoresTab = dynamic(
   () =>
@@ -61,6 +69,8 @@ export interface TraceDetailPanelProps {
   initialMode?: DetailMode;
   /** Notify parent when local mode tabs change (e.g. sync `?mode=`). */
   onModeChange?: (mode: DetailMode) => void;
+  /** Write-back selected span id to hub URL (`?spanId=`). */
+  onSpanSelect?: (spanId: string | null) => void;
 }
 
 export function TraceDetailPanel({
@@ -70,10 +80,18 @@ export function TraceDetailPanel({
   hideCloseControl = false,
   initialMode = "transcript",
   onModeChange,
+  onSpanSelect,
 }: TraceDetailPanelProps) {
   const { currentOrg } = useOrg();
+  const searchParams = useSearchParams();
+  const linkPreserve = useMemo(
+    () => preserveFromSearchParams(searchParams),
+    [searchParams],
+  );
   const [phase, setPhase] = useState<"meta" | "ready" | "error">("meta");
   const [mode, setMode] = useState<DetailMode>(initialMode);
+  /** Laminar-style Gantt strip above transcript — collapsed by default. */
+  const [ganttStripOpen, setGanttStripOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [meta, setMeta] = useState<{
     duration_ms: number;
@@ -97,8 +115,12 @@ export function TraceDetailPanel({
   });
 
   const timelineQuery = useTraceTimeline(
-    mode === "timeline" ? currentOrg?.id : undefined,
-    mode === "timeline" ? traceId : null,
+    mode === "timeline" || (mode === "transcript" && ganttStripOpen)
+      ? currentOrg?.id
+      : undefined,
+    mode === "timeline" || (mode === "transcript" && ganttStripOpen)
+      ? traceId
+      : null,
   );
 
   useEffect(() => {
@@ -193,25 +215,10 @@ export function TraceDetailPanel({
     });
   }, [liveStream.events, liveStream.live]);
 
-  const fallbackTimelineSteps = useMemo(() => {
-    if (rows.length === 0) return [];
-    const t0 = Math.min(...rows.map((r) => new Date(r.timestamp).getTime()));
-    return rows.map((r) => {
-      const start = Math.max(0, new Date(r.timestamp).getTime() - t0);
-      const duration = Math.max(0, r.duration_ms);
-      return {
-        name: r.name,
-        start_ms: start,
-        end_ms: start + duration,
-        duration_ms: duration,
-        event_type: String(r.event_type ?? "span"),
-        outcome: r.outcome === "failure" || r.outcome === "error" ? "failure" : null,
-      };
-    });
-  }, [rows]);
-
-  const timelineSteps =
-    timelineQuery.data?.steps?.length ? timelineQuery.data.steps : fallbackTimelineSteps;
+  const timelineSteps = useMemo(
+    () => resolveTimelineSteps(timelineQuery.data?.steps, rows),
+    [timelineQuery.data?.steps, rows],
+  );
   const timelineTotalMs =
     timelineQuery.data?.total_duration_ms ??
     meta?.duration_ms ??
@@ -244,112 +251,240 @@ export function TraceDetailPanel({
     return <ErrorState title="Could not load trace" message={error ?? "Unknown error"} />;
   }
 
+  const spanForPlayground = highlightSpanId ?? undefined;
+  const addToDatasetHref = promoteTraceToDatasetHref(traceId, linkPreserve);
+  const openPlaygroundHref = playgroundHref(traceId, spanForPlayground, linkPreserve);
+
+  /** Wave 6 + Wave 9: secondary closed-loop actions (ghost; one solid CTA max elsewhere). */
   const openInLinks = [
+    { label: "Open Improve", href: improveHref() },
     { label: "Create artifact", href: artifactHref() },
-    { label: "Open playground", href: playgroundHref(traceId) },
-    {
-      label: "Add to dataset",
-      href: `/evals?tab=datasets&promote_trace=${encodeURIComponent(traceId)}`,
-    },
     { label: "Seed labeling", href: labelingQueueHref() },
     { label: "Related issues", href: `/issues?q=${encodeURIComponent(traceId)}` },
     { label: "Alerts", href: "/alerts" },
   ];
+  if (sessionId) {
+    openInLinks.unshift({
+      label: "Open session",
+      href: sessionHref(sessionId, linkPreserve),
+    });
+  }
 
   const showLiveBadge = liveStream.live && !liveStream.finalized;
 
-  return (
-    <div className="flex flex-col h-full">
-      <div className="px-4 py-2 border-b border-[var(--border-default)] flex flex-wrap items-center gap-2 text-xs">
-        <TraceOutcomeBadge outcome={meta?.outcome ?? null} />
-        {showLiveBadge && (
-          <span
-            data-testid="live-trace-badge"
-            className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-2xs font-medium uppercase tracking-wide text-[var(--terminal)] border border-[var(--terminal)]/40 bg-[var(--terminal)]/10"
-            aria-live="polite"
-          >
-            <Radio className="h-3 w-3 animate-pulse" aria-hidden />
-            Live
-          </span>
-        )}
-        {liveStream.failed && !liveStream.finalized && (
-          <button
-            type="button"
-            data-testid="live-trace-retry"
-            onClick={() => liveStream.retry()}
-            className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-2xs font-medium text-[var(--error)] border border-[var(--error)]/40 hover:bg-[var(--error)]/10"
-          >
-            Live reconnect failed — Retry
-          </button>
-        )}
-        {liveStream.finalized && (
-          <span className="text-2xs text-[var(--text-muted)]">Live → persisted</span>
-        )}
-        <span className="text-[var(--text-muted)]">
-          {meta?.span_count ?? 0} spans · {(meta?.duration_ms ?? 0).toFixed(0)}ms
-          {liveStream.events.length > 0 ? ` · +${liveStream.events.length} live` : ""}
+  /** Wave 4: ≤4 header metrics — outcome · spans · duration · cost. */
+  const headerMetrics = [
+    { key: "outcome", node: <TraceOutcomeBadge outcome={meta?.outcome ?? null} /> },
+    {
+      key: "spans",
+      node: (
+        <span className="tabular-nums text-[var(--text-muted)]">
+          {meta?.span_count ?? 0} spans
         </span>
-        {meta?.cost_cents != null && (
-          <span className="font-mono">${(meta.cost_cents / 100).toFixed(2)}</span>
-        )}
-        {sessionId && (
-          <Link
-            href={`/sessions/${encodeURIComponent(sessionId)}`}
-            className="text-[var(--accent)] hover:underline inline-flex items-center gap-1"
-          >
-            Session <ExternalLink className="w-3 h-3" />
-          </Link>
-        )}
-        <details className="group relative">
-          <summary className="cursor-pointer list-none text-[var(--text-muted)] hover:text-[var(--text-primary)] inline-flex items-center gap-0.5 [&::-webkit-details-marker]:hidden">
-            Open in…
-            <ChevronRight className="h-3 w-3 opacity-60 transition-transform group-open:rotate-90" />
-          </summary>
-          <div className="absolute left-0 top-full z-20 mt-1 min-w-[11rem] rounded border border-[var(--border-default)] bg-[var(--bg-primary)] py-1 shadow-md">
-            {openInLinks.map((link) => (
-              <Link
-                key={link.href}
-                href={link.href}
-                className="block px-3 py-1.5 text-2xs text-[var(--text-secondary)] hover:bg-[var(--bg-secondary)] hover:text-[var(--text-primary)]"
-              >
-                {link.label}
-              </Link>
-            ))}
-          </div>
-        </details>
-        <Tabs
-          value={mode}
-          onValueChange={(id) => setModeAndNotify(id as DetailMode)}
-          className="ml-2"
+      ),
+    },
+    {
+      key: "duration",
+      node: (
+        <span className="tabular-nums text-[var(--text-muted)]">
+          {(meta?.duration_ms ?? 0).toFixed(0)}ms
+        </span>
+      ),
+    },
+    {
+      key: "cost",
+      node:
+        meta?.cost_cents != null ? (
+          <span className="font-mono tabular-nums">${(meta.cost_cents / 100).toFixed(2)}</span>
+        ) : (
+          <span className="text-[var(--text-faint)]">—</span>
+        ),
+    },
+  ] as const;
+
+  const liveSlot = (
+    <>
+      {showLiveBadge && (
+        <span
+          data-testid="live-trace-badge"
+          className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs font-medium uppercase tracking-wide text-[var(--terminal)] border border-[var(--terminal)]/40 bg-[var(--terminal)]/10"
+          aria-live="polite"
         >
-          <TabsList
+          <Radio className="h-3 w-3 animate-pulse" aria-hidden />
+          Live
+        </span>
+      )}
+      {liveStream.failed && !liveStream.finalized && (
+        <button
+          type="button"
+          data-testid="live-trace-retry"
+          onClick={() => liveStream.retry()}
+          className="inline-flex items-center gap-1 rounded border border-[var(--error)]/40 px-1.5 py-0.5 text-xs font-medium text-[var(--error)] hover:bg-[var(--error)]/10"
+        >
+          Live reconnect failed — Retry
+        </button>
+      )}
+      {liveStream.finalized && (
+        <span className="text-xs text-[var(--text-muted)]">Live → persisted</span>
+      )}
+      {liveStream.events.length > 0 ? (
+        <span className="text-xs text-[var(--text-muted)]">+{liveStream.events.length} live</span>
+      ) : null}
+    </>
+  );
+
+  const overflowActions = (
+    <div
+      className="ml-auto flex flex-wrap items-center gap-1.5"
+      data-wave-e1-trace-loop="primary"
+      data-wave-v3-6-loop="secondary"
+    >
+      <Button
+        asChild
+        variant="ghost"
+        size="sm"
+        className="h-8 px-2 text-xs font-medium text-[var(--text-secondary)]"
+      >
+        <Link
+          href={addToDatasetHref}
+          data-testid="trace-add-to-dataset"
+          data-wave-e1-trace-cta="add-to-dataset"
+          data-wave-v3-6-cta="add-to-dataset"
+        >
+          Add to dataset
+        </Link>
+      </Button>
+      <Button
+        asChild
+        variant="ghost"
+        size="sm"
+        className="h-8 px-2 text-xs font-medium text-[var(--text-secondary)]"
+      >
+        <Link
+          href={openPlaygroundHref}
+          data-testid="trace-open-playground"
+          data-wave-e1-trace-cta="open-playground"
+          data-wave-v3-6-cta="open-playground"
+        >
+          Iterate in playground
+        </Link>
+      </Button>
+      <details className="group relative">
+        <summary
+          className="inline-flex cursor-pointer list-none items-center gap-1 text-[var(--text-muted)] hover:text-[var(--text-primary)] [&::-webkit-details-marker]:hidden"
+          data-testid="trace-actions-overflow"
+        >
+          More
+          <ChevronRight className="h-3 w-3 opacity-60 transition-transform group-open:rotate-90" />
+        </summary>
+        <div className="absolute right-0 top-full z-20 mt-1 min-w-[11rem] rounded border border-[var(--border-default)] bg-[var(--bg-primary)] py-1 shadow-md">
+            {openInLinks.map((link) => (
+            <Link
+              key={link.href}
+              href={link.href}
+              data-wave9-improve-crossloop={
+                link.label === "Open Improve" ? "trace-improve" : undefined
+              }
+              className="block px-3 py-1.5 text-xs text-[var(--text-secondary)] hover:bg-[var(--bg-secondary)] hover:text-[var(--text-primary)]"
+            >
+              {link.label}
+            </Link>
+          ))}
+        </div>
+      </details>
+    </div>
+  );
+
+  const modeTabs = (
+    <Tabs
+      value={mode}
+      onValueChange={(id) => setModeAndNotify(id as DetailMode)}
+      className="w-full sm:w-auto"
+    >
+      <TabsList
+        variant="underline"
+        aria-label="Trace detail modes"
+        className="h-auto gap-1 rounded-none bg-transparent p-0"
+      >
+        {TRACE_DETAIL_MODE_TABS.map((t) => (
+          <TabsTrigger
+            key={t.id}
+            value={t.id}
             variant="underline"
-            aria-label="Trace detail modes"
-            className="h-auto gap-1 rounded-none bg-transparent p-0"
+            className="min-h-8 px-2 text-xs"
           >
-            {TRACE_DETAIL_MODE_TABS.map((t) => (
-              <TabsTrigger
-                key={t.id}
-                value={t.id}
-                variant="underline"
-                className="min-h-8 px-2 text-2xs"
-              >
-                {t.label}
-              </TabsTrigger>
-            ))}
-          </TabsList>
-        </Tabs>
-        {onClose && !hideCloseControl ? (
-          <button
-            type="button"
-            onClick={onClose}
-            className="ml-auto text-[var(--text-muted)] hover:text-[var(--text-primary)]"
-          >
-            Esc
-          </button>
-        ) : null}
-      </div>
-      <div className="flex-1 overflow-y-auto p-2">
+            {t.label}
+          </TabsTrigger>
+        ))}
+      </TabsList>
+    </Tabs>
+  );
+
+  const pillClass =
+    "rounded border border-[var(--border-subtle)] px-space-1 py-space-1 font-mono text-[var(--text-muted)] tabular-nums";
+  const contextPills = (
+    <div className="flex flex-wrap items-center gap-space-1" data-testid="trace-context-pills">
+      {meta?.model ? <span className={pillClass}>{meta.model}</span> : null}
+      {meta?.duration_ms != null ? (
+        <span className={pillClass} data-pill="latency">
+          {(meta.duration_ms).toFixed(0)}ms
+        </span>
+      ) : null}
+      {totalTokens ? (
+        <span className={pillClass} data-pill="tokens">
+          {totalTokens.total.toLocaleString()} tok
+        </span>
+      ) : null}
+      {meta?.cost_cents != null ? (
+        <span className={pillClass} data-pill="cost">
+          ${(meta.cost_cents / 100).toFixed(4)}
+        </span>
+      ) : null}
+      {sessionId ? (
+        <span className={pillClass} data-pill="session">
+          session {sessionId.slice(0, 10)}…
+        </span>
+      ) : null}
+    </div>
+  );
+
+  const failureOutcome =
+    meta?.outcome === "failure" ||
+    meta?.outcome === "error" ||
+    meta?.outcome === "crash" ||
+    meta?.outcome === "timeout";
+
+  const issuesHref = (() => {
+    const q = new URLSearchParams();
+    q.set("q", traceId);
+    if (linkPreserve?.pastHours) q.set("pastHours", linkPreserve.pastHours);
+    if (linkPreserve?.realm) q.set("realm", linkPreserve.realm);
+    if (linkPreserve?.outcome) q.set("outcome", linkPreserve.outcome);
+    if (linkPreserve?.agent_id) q.set("agent_id", linkPreserve.agent_id);
+    return `/issues?${q.toString()}`;
+  })();
+
+  return (
+    <div className="flex h-full min-h-0 flex-col">
+      <TraceHeader
+        metrics={[...headerMetrics]}
+        liveSlot={liveSlot}
+        overflowActions={overflowActions}
+        modeTabs={modeTabs}
+        contextPills={contextPills}
+        closeControl={
+          onClose && !hideCloseControl ? (
+            <button
+              type="button"
+              onClick={onClose}
+              className="ml-auto text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+            >
+              Esc
+            </button>
+          ) : null
+        }
+      />
+      <div className="min-h-0 flex-1 overflow-y-auto p-2">
         {mode === "scores" && currentOrg ? (
           <ScoresTab orgId={currentOrg.id} traceId={traceId} />
         ) : mode === "timeline" ? (
@@ -359,6 +494,8 @@ export function TraceDetailPanel({
             steps={timelineSteps}
             totalMs={timelineTotalMs}
             markers={timelineQuery.data?.markers ?? []}
+            selectedSpanId={highlightSpanId}
+            onSpanSelect={(spanId) => onSpanSelect?.(spanId)}
           />
         ) : mode === "meta" ? (
           <div className="space-y-4 p-3">
@@ -401,188 +538,98 @@ export function TraceDetailPanel({
             />
           </div>
         ) : mode === "tree" ? (
-          treeRows.length === 0 ? (
-            <p className="p-4 text-sm text-[var(--text-muted)]">No spans in tree.</p>
-          ) : (
-            <ul className="space-y-0.5 p-2 font-mono text-2xs" data-testid="trace-span-tree">
-              {treeRows.map((node) => (
-                <SpanTreeNode key={node.span_id} node={node} depth={0} />
-              ))}
-            </ul>
-          )
+          <TraceTreeView
+            roots={treeRows}
+            selectedSpanId={highlightSpanId}
+            onSpanSelect={(spanId) => onSpanSelect?.(spanId)}
+          />
         ) : rows.length === 0 ? (
           <p className="text-sm text-[var(--text-muted)] p-4">
             {liveStream.live ? "Waiting for live steps…" : "No transcript steps found."}
           </p>
         ) : (
-          <VirtualizedTranscript
-            traceId={traceId}
-            rows={rows}
-            totalDurationMs={meta?.duration_ms ?? 0}
-            totalCost={meta?.cost_cents != null ? meta.cost_cents / 100 : undefined}
-            totalTokens={totalTokens}
-            model={meta?.model}
-            outcome={
-              (meta?.outcome as
-                | "success"
-                | "failure"
-                | "partial"
-                | "timeout"
-                | "crash"
-                | null) ?? null
-            }
-            spanCount={meta?.span_count ?? rows.length}
-            orgId={currentOrg?.id}
-            sessionId={sessionId}
-            highlightSpanId={highlightSpanId}
-          />
-        )}
-      </div>
-    </div>
-  );
-}
-
-function SpanTreeNode({ node, depth }: { node: TranscriptRow; depth: number }) {
-  const kids = node.children ?? [];
-  const [open, setOpen] = useState(depth < 2);
-  const failed = node.outcome === "failure" || node.outcome === "error";
-
-  return (
-    <li>
-      <div
-        className="flex items-center gap-1.5 rounded px-1 py-0.5 hover:bg-[var(--bg-secondary)]"
-        style={{ paddingLeft: `${depth * 0.75 + 0.25}rem` }}
-      >
-        {kids.length > 0 ? (
-          <button
-            type="button"
-            aria-expanded={open}
-            aria-label={open ? "Collapse" : "Expand"}
-            onClick={() => setOpen((v) => !v)}
-            className="shrink-0 text-[var(--text-muted)] hover:text-[var(--text-primary)]"
-          >
-            <ChevronRight
-              className={cn("h-3 w-3 transition-transform", open && "rotate-90")}
-            />
-          </button>
-        ) : (
-          <span className="inline-block w-3 shrink-0" aria-hidden />
-        )}
-        <span
-          className={cn(
-            "h-1.5 w-1.5 shrink-0 rounded-full",
-            failed ? "bg-[var(--error)]" : "bg-[var(--terminal)]/70",
-          )}
-          title={node.outcome ?? "ok"}
-        />
-        <span className="min-w-0 truncate text-[var(--text-secondary)]" title={node.name}>
-          {node.name}
-        </span>
-        <span className="shrink-0 text-[var(--text-muted)]">
-          {node.duration_ms.toFixed(0)}ms
-        </span>
-        <span className="shrink-0 text-[var(--text-muted)]/70">
-          {node.span_id.slice(0, 8)}
-        </span>
-      </div>
-      {open && kids.length > 0 ? (
-        <ul>
-          {kids.map((child) => (
-            <SpanTreeNode key={child.span_id} node={child} depth={depth + 1} />
-          ))}
-        </ul>
-      ) : null}
-    </li>
-  );
-}
-
-function TraceTimelineView({
-  loading,
-  error,
-  steps,
-  totalMs,
-  markers,
-}: {
-  loading: boolean;
-  error: string | null;
-  steps: Array<{
-    name: string;
-    start_ms: number;
-    end_ms: number;
-    duration_ms: number;
-    event_type: string;
-    outcome: string | null;
-  }>;
-  totalMs: number;
-  markers: Array<{ at_ms: number; label: string; severity: string }>;
-}) {
-  if (loading) {
-    return (
-      <div className="flex h-40 flex-col items-center justify-center gap-2">
-        <Loader2 className="h-5 w-5 animate-spin text-[var(--text-muted)]" />
-        <p className="text-xs text-[var(--text-muted)]">Loading timeline…</p>
-      </div>
-    );
-  }
-
-  if (error && steps.length === 0) {
-    return <ErrorState title="Could not load timeline" message={error} />;
-  }
-
-  if (steps.length === 0) {
-    return (
-      <p className="p-4 text-sm text-[var(--text-muted)]">No timeline steps for this trace.</p>
-    );
-  }
-
-  const span = Math.max(totalMs, 1);
-
-  return (
-    <div className="space-y-3 p-3" data-testid="trace-timeline">
-      <div className="flex items-baseline justify-between gap-2">
-        <p className="text-xs text-[var(--text-muted)]">
-          Condensed Gantt · {steps.length} steps · {span.toFixed(0)}ms
-        </p>
-        {error ? (
-          <p className="text-2xs text-[var(--warning)]">API timeline unavailable — using span tree</p>
-        ) : null}
-      </div>
-      <div className="relative space-y-1.5">
-        {markers.map((m) => (
-          <div
-            key={`${m.at_ms}-${m.label}`}
-            className="pointer-events-none absolute top-0 bottom-0 w-px bg-[var(--warning)]/60"
-            style={{ left: `${Math.min(100, (m.at_ms / span) * 100)}%` }}
-            title={m.label}
-          />
-        ))}
-        {steps.map((s, i) => {
-          const left = Math.min(100, (s.start_ms / span) * 100);
-          const width = Math.max(0.5, Math.min(100 - left, (s.duration_ms / span) * 100));
-          const failed = s.outcome === "failure" || s.outcome === "error";
-          return (
-            <div key={`${s.name}-${i}`} className="grid grid-cols-[minmax(0,7rem)_1fr_auto] items-center gap-2">
-              <span className="truncate font-mono text-2xs text-[var(--text-secondary)]" title={s.name}>
-                {s.name}
-              </span>
-              <div className="relative h-5 rounded bg-[var(--bg-secondary)]">
-                <div
-                  className={
-                    failed
-                      ? "absolute top-0.5 bottom-0.5 rounded bg-[var(--error)]/80"
-                      : "absolute top-0.5 bottom-0.5 rounded bg-[var(--terminal)]/70"
-                  }
-                  style={{ left: `${left}%`, width: `${width}%` }}
-                  title={`${s.name}: ${s.duration_ms.toFixed(0)}ms`}
-                />
+          <>
+            {failureOutcome ? (
+              <div
+                data-testid="trace-failure-callout"
+                className="mb-2 flex flex-wrap items-center gap-x-2 gap-y-1 rounded border border-[var(--error)]/25 bg-[var(--error)]/5 px-2.5 py-1.5 text-xs text-[var(--text-secondary)]"
+              >
+                <span>
+                  Trace outcome{" "}
+                  <span className="font-mono uppercase text-[var(--error)]">
+                    {meta?.outcome}
+                  </span>
+                  .
+                </span>
+                <Link
+                  href={issuesHref}
+                  className="font-medium text-[var(--accent)] hover:underline"
+                >
+                  View related issues
+                </Link>
               </div>
-              <span className="w-12 text-right font-mono text-2xs text-[var(--text-muted)]">
-                {s.duration_ms.toFixed(0)}ms
-              </span>
+            ) : null}
+            <div
+              className="mb-2 rounded border border-[var(--border-subtle)]"
+              data-testid="transcript-gantt-strip"
+            >
+              <button
+                type="button"
+                data-testid="transcript-gantt-toggle"
+                aria-expanded={ganttStripOpen}
+                onClick={() => setGanttStripOpen((v) => !v)}
+                className="flex w-full items-center gap-1.5 px-2 py-1 text-left text-2xs text-[var(--text-muted)] hover:text-[var(--text-secondary)]"
+              >
+                <ChevronRight
+                  className={cn(
+                    "h-3 w-3 shrink-0 transition-transform",
+                    ganttStripOpen && "rotate-90",
+                  )}
+                />
+                Timeline overview
+                <span className="ml-auto tabular-nums">
+                  {timelineSteps.length} spans
+                </span>
+              </button>
+              {ganttStripOpen ? (
+                <TraceTimelineView
+                  loading={timelineQuery.isLoading && timelineSteps.length === 0}
+                  error={timelineQuery.error?.message ?? null}
+                  steps={timelineSteps}
+                  totalMs={timelineTotalMs}
+                  markers={timelineQuery.data?.markers ?? []}
+                  selectedSpanId={highlightSpanId}
+                  onSpanSelect={(spanId) => onSpanSelect?.(spanId)}
+                  variant="strip"
+                />
+              ) : null}
             </div>
-          );
-        })}
+            <VirtualizedTranscript
+              traceId={traceId}
+              rows={rows}
+              totalDurationMs={meta?.duration_ms ?? 0}
+              totalCost={meta?.cost_cents != null ? meta.cost_cents / 100 : undefined}
+              totalTokens={totalTokens}
+              model={meta?.model}
+              outcome={
+                (meta?.outcome as
+                  | "success"
+                  | "failure"
+                  | "partial"
+                  | "timeout"
+                  | "crash"
+                  | null) ?? null
+              }
+              spanCount={meta?.span_count ?? rows.length}
+              orgId={currentOrg?.id}
+              sessionId={sessionId}
+              highlightSpanId={highlightSpanId}
+              onSpanSelect={onSpanSelect}
+            />
+          </>
+        )}
       </div>
     </div>
   );
 }
+

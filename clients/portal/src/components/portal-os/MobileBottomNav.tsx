@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import {
@@ -17,6 +17,9 @@ import {
   TrendingUp,
   Bug,
   Bot,
+  ShieldCheck,
+  KeyRound,
+  FileCode,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -41,17 +44,22 @@ export interface MobileMoreGroup {
   links: MobileNavItem[];
 }
 
-/** U18 locked mobile IA — 4 core + More sheet. */
+/** Wave 1.3 — mobile More Workspace matches desktop Workspace membership. */
+export const WS1_MOBILE_WORKSPACE_COMPLETED = true;
+
+/** Wave 3 — same core five as desktop Target IA primary path. */
 export const MOBILE_CORE_NAV: MobileNavItem[] = [
   { href: "/dashboard", icon: Home, label: "Home" },
   { href: "/traces", icon: Layers, label: "Traces" },
   { href: "/issues", icon: ShieldAlert, label: "Issues" },
+  { href: "/evals", icon: FlaskConical, label: "Evals" },
   { href: "/improve", icon: Sparkles, label: "Improve" },
 ];
 
 /**
- * More sheet groups — Agents first (UX-P0-14); Settings last.
+ * More sheet groups — Agents first (UX-P0-14); Workspace last (matches desktop).
  * Flat `MOBILE_MORE_LINKS` is derived for consumers / tests.
+ * Promotions nest under Ledger (Wave 3) — no dual mobile entry.
  */
 export const MOBILE_MORE_GROUPS: MobileMoreGroup[] = [
   {
@@ -60,21 +68,25 @@ export const MOBILE_MORE_GROUPS: MobileMoreGroup[] = [
     links: [{ href: "/agents", icon: Bot, label: "Agents" }],
   },
   {
-    id: "workspace",
-    label: "Workspace",
+    id: "ops",
+    label: "Ops",
     links: [
       { href: "/artifacts", icon: Package, label: "Artifacts" },
+      { href: "/prompts", icon: FileCode, label: "Prompts" },
       { href: "/alerts", icon: Bell, label: "Alerts" },
-      { href: "/evals", icon: FlaskConical, label: "Evals" },
       { href: "/ledger", icon: ScrollText, label: "Ledger" },
-      { href: "/promotions", icon: TrendingUp, label: "Promotions" },
+      { href: "/ledger?tab=promotions", icon: TrendingUp, label: "Promotions" },
       { href: "/debugger-sessions", icon: Bug, label: "Debug sessions" },
     ],
   },
   {
-    id: "account",
-    label: "Account",
-    links: [{ href: "/settings", icon: Settings, label: "Settings" }],
+    id: "workspace",
+    label: "Workspace",
+    links: [
+      { href: "/audit-trail", icon: ShieldCheck, label: "Audit trail" },
+      { href: "/settings", icon: Settings, label: "Settings" },
+      { href: "/settings?tab=api-keys", icon: KeyRound, label: "API keys" },
+    ],
   },
 ];
 
@@ -133,16 +145,42 @@ function MobileNavLink({ href, icon: Icon, label }: MobileNavItem) {
 
 export function MobileBottomNav({ items = MOBILE_CORE_NAV }: { items?: MobileNavItem[] }) {
   const [moreOpen, setMoreOpen] = useState(false);
+  const [aiRailOpen, setAiRailOpen] = useState(false);
   const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const search = searchParams.toString();
   const moreActive = MOBILE_MORE_LINKS.some((l) =>
-    isActivePath(pathname, l.href),
+    isActivePath(pathname, l.href, search),
   );
+
+  // Wave 9 — bottom-layer exclusivity: hide nav while AI rail/sheet claims thumb zone.
+  useEffect(() => {
+    const sync = () => {
+      setAiRailOpen(
+        typeof document !== "undefined" &&
+          document.documentElement.getAttribute("data-ai-rail-open") === "1",
+      );
+    };
+    sync();
+    const onRail = (e: Event) => {
+      const open = !!(e as CustomEvent<{ open?: boolean }>).detail?.open;
+      setAiRailOpen(open);
+    };
+    window.addEventListener("eden:ai-rail-open", onRail as EventListener);
+    return () =>
+      window.removeEventListener("eden:ai-rail-open", onRail as EventListener);
+  }, []);
+
+  if (aiRailOpen) return null;
 
   return (
     <>
       <nav
-        className="lg:hidden fixed bottom-0 left-0 right-0 bg-[var(--bg-primary)] border-t border-[var(--border-default)] z-40 pb-[env(safe-area-inset-bottom)]"
+        className="lg:hidden fixed bottom-0 left-0 right-0 bg-[var(--bg-primary)] border-t border-[var(--border-default)] z-[var(--z-mobile-nav)] pb-[env(safe-area-inset-bottom,0px)]"
         aria-label="Mobile navigation"
+        data-bottom-layer="mobile-nav"
+        data-wave11-bottom="exclusive"
+        data-wave9-mobile-nav="safe-area"
       >
         <div className="flex items-center justify-around h-16 px-1">
           {items.map((item) => (
@@ -175,12 +213,17 @@ export function MobileBottomNav({ items = MOBILE_CORE_NAV }: { items?: MobileNav
           <SheetHeader>
             <SheetTitle>More</SheetTitle>
             <SheetDescription>
-              Agents, artifacts, alerts, evals, ledger, and more.
+              Agents, ops tools, and workspace settings.
             </SheetDescription>
           </SheetHeader>
           <div className="p-2 space-y-3">
             {MOBILE_MORE_GROUPS.map((group) => (
-              <div key={group.id}>
+              <div
+                key={group.id}
+                {...(group.id === "workspace"
+                  ? { "data-ws1-mobile-workspace": true }
+                  : {})}
+              >
                 <p className="px-3 pt-1 pb-1 text-2xs uppercase tracking-wide text-[var(--text-muted)]">
                   {group.label}
                 </p>
@@ -193,7 +236,7 @@ export function MobileBottomNav({ items = MOBILE_CORE_NAV }: { items?: MobileNav
                         className={cn(
                           "flex items-center gap-3 min-h-[44px] px-3 py-2 rounded-lg text-sm",
                           FOCUS_RING_CLASS,
-                          isActivePath(pathname, href)
+                          isActivePath(pathname, href, search)
                             ? "bg-[var(--accent-faint)] text-[var(--accent)]"
                             : "text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)]",
                         )}

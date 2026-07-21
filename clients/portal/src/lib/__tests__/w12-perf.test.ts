@@ -14,11 +14,14 @@ function read(rel: string): string {
 describe("W12 chrome lazy islands", () => {
   it("portal-chrome keeps CommandPalette / ChatSidebar / OnboardingOverlay dynamic", () => {
     const src = read("app/(portal)/portal-chrome.tsx");
+    const aiRail = read("components/portal-chrome/AiRailHost.tsx");
+    const sidebar = read("components/portal-chrome/SidebarNav.tsx");
     expect(src).toMatch(/const CommandPalette = dynamic\(/);
-    expect(src).toMatch(/const ChatSidebar = dynamic\(/);
+    expect(aiRail).toMatch(/dynamic\(/);
+    expect(aiRail).toMatch(/ChatSidebar/);
     expect(src).toMatch(/const OnboardingOverlay = dynamic\(/);
     expect(src).toMatch(/const OnboardingBanner = dynamic\(/);
-    expect(src).toMatch(/const BudgetTicker = dynamic\(/);
+    expect(sidebar).toMatch(/const BudgetTicker = dynamic\(/);
     expect(src).not.toMatch(
       /import\s+\{\s*ChatSidebar\s*\}\s+from\s+["']@\/components\/ai-insights\/ChatSidebar["']/,
     );
@@ -39,11 +42,15 @@ describe("W12 chrome lazy islands", () => {
 
 describe("W12 bundle hotspots", () => {
   it("traces hub dynamic-imports LiveTail / export / annotate", () => {
-    const src = read("app/(portal)/traces/page.tsx");
-    expect(src).toMatch(/const LiveTailPanel = dynamic\(/);
-    expect(src).toMatch(/const TraceExportModal = dynamic\(/);
-    expect(src).toMatch(/const AnnotateTraceDialog = dynamic\(/);
-    expect(src).not.toMatch(
+    // Wave 3 shell: dynamics live in traces-hub-dynamics, re-exported into page
+    const dynamics = read("app/(portal)/traces/_components/traces-hub-dynamics.tsx");
+    const page = read("app/(portal)/traces/page.tsx");
+    expect(dynamics).toMatch(/export const LiveTailPanel = dynamic\(/);
+    expect(dynamics).toMatch(/export const TraceExportModal = dynamic\(/);
+    expect(dynamics).toMatch(/export const AnnotateTraceDialog = dynamic\(/);
+    expect(page).toContain("TraceExportModal");
+    expect(page).toContain("AnnotateTraceDialog");
+    expect(page).not.toMatch(
       /import\s+\{\s*LiveTailPanel\s*\}\s+from\s+["']\.\/_components\/LiveTailPanel["']/,
     );
   });
@@ -115,26 +122,27 @@ describe("W12 loading waterfall leftovers", () => {
 });
 
 describe("W12 analytics embed quiet + lazy", () => {
-  it("Users/Tools/Insights/Topics suppress PageHeader + use pills when embedded", () => {
-    for (const rel of [
-      "app/(portal)/users/page.tsx",
-      "app/(portal)/tools/page.tsx",
-      "app/(portal)/insights/page.tsx",
-      "app/(portal)/insights/topics/page.tsx",
-    ]) {
+  it("Users/Tools/Insights/Topics soft-redirect into Analytics modes", () => {
+    for (const [rel, tab] of [
+      ["app/(portal)/users/page.tsx", "users"],
+      ["app/(portal)/tools/page.tsx", "tools"],
+      ["app/(portal)/insights/page.tsx", "insights"],
+      ["app/(portal)/insights/topics/page.tsx", "topics"],
+    ] as const) {
       const src = read(rel);
-      expect(src).toContain("useEmbeddedSurface");
-      expect(src).toContain("!embedded");
-      expect(src).toMatch(/variant=\{embedded \? "pills"/);
+      expect(src).toContain(`router.replace("/analytics?tab=${tab}")`);
+      expect(src).not.toContain("useEmbeddedSurface");
+      expect(src).not.toContain("PageHeader");
     }
   });
 
-  it("analytics only mounts active embed children", () => {
+  it("analytics mounts thin panels for active tabs only (no EmbeddedSurface)", () => {
     const src = read("app/(portal)/analytics/page.tsx");
-    expect(src).toContain('{tab === "insights" ? (');
-    expect(src).toContain('{tab === "topics" ? (');
-    expect(src).toContain('{tab === "tools" ? (');
-    expect(src).toContain('{tab === "users" ? (');
+    expect(src).toContain('{tab === "insights" ? <InsightsPanel />');
+    expect(src).toContain('{tab === "topics" ? <TopicsPanel />');
+    expect(src).toContain('{tab === "tools" ? <ToolsPanel />');
+    expect(src).toContain('{tab === "users" ? <UsersPanel />');
+    expect(src).not.toContain("EmbeddedSurface");
     expect(src).toMatch(/const OverviewCharts = dynamic\(/);
   });
 });

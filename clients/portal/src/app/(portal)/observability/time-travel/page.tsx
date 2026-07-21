@@ -14,7 +14,11 @@ import { ErrorState } from "@/components/ui/error-state";
 import { Button } from "@/components/ui/button";
 import { NoOrgState } from "@/components/ui/no-org-state";
 import { PageContent } from "@/components/layout/page-content";
-import { ObserveLeafHeader } from "@/app/(portal)/observability/_components/observe-leaf-shell";
+import {
+  ObserveBackToTraces,
+  ObserveLeafHeader,
+  WAVE10_SHELL_ATTR,
+} from "@/app/(portal)/observability/_components/observe-leaf-shell";
 import { History, Play, GitBranch, RotateCcw, Circle, CheckCircle2, Code2 } from "lucide-react";
 import { errorFromCaught } from "@/lib/safe-error-message";
 
@@ -178,26 +182,28 @@ export default function TimeTravelPage() {
 
   return (
     <PageContent size="wide">
-      <ObserveLeafHeader
-        title="Time-Travel"
-        subtitle="Record, fork, and replay — non-destructive point-in-time debugging"
-        icon={History}
-        description="Advanced under Traces — fork at any step, edit state, replay from that point. Original trace stays unchanged."
-        actions={
-          snapshotId ? (
-            <Button
-              variant="secondary"
-              size="sm"
-              className="min-h-11"
-              onClick={resetAll}
-              aria-label="Reset all time-travel state"
-            >
-              <RotateCcw className="w-4 h-4" />
-              Reset
-            </Button>
-          ) : undefined
-        }
-      />
+      <div {...WAVE10_SHELL_ATTR} className="contents">
+        <ObserveBackToTraces />
+        <ObserveLeafHeader
+          title="Time-Travel"
+          subtitle="Fork, edit state, replay — original trace stays unchanged"
+          icon={History}
+          actions={
+            snapshotId ? (
+              <Button
+                variant="secondary"
+                size="sm"
+                className="min-h-11"
+                onClick={resetAll}
+                aria-label="Reset all time-travel state"
+              >
+                <RotateCcw className="w-4 h-4" />
+                Reset
+              </Button>
+            ) : undefined
+          }
+        />
+      </div>
 
       {error ? (
         <ErrorState

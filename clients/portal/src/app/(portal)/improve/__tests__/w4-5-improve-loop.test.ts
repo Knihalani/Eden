@@ -64,29 +64,28 @@ function canActOnPlan(status: string): boolean {
 }
 
 describe("W4-5 improve queue approve + href honesty", () => {
-  it("page wires canApproveQueueItem, legacy read-only approve, and N23 planHref", () => {
-    const src = read("app/(portal)/improve/page.tsx");
-    expect(src).toContain("canApproveQueueItem");
-    expect(src).toContain("isLegacyProposedPatch");
-    expect(src).toContain("Legacy Cat 23 patches are read-only");
-    expect(src).toContain("Approve disabled:");
-    expect(src).toContain("QueryState");
-    expect(src).toContain("Docs quickstart");
-    expect(src).toContain("/settings?tab=api-keys");
+  it("queue wires canApproveQueueItem, legacy read-only approve, and N23 planHref", () => {
+    const board = read("app/(portal)/improve/_components/queue-board.tsx");
+    const card = read("app/(portal)/improve/_components/queue-item-card.tsx");
+    const helpers = read("app/(portal)/improve/_components/queue-helpers.ts");
+    expect(helpers).toContain("canApproveQueueItem");
+    expect(helpers).toContain("isLegacyProposedPatch");
+    expect(card).toContain("Legacy patch · read-only");
+    expect(board).toContain("QueryState");
+    expect(board).toContain("View Issues");
     // Must not map patch_id → /improve/plans/{id}
-    expect(src).not.toMatch(/payload\?\.plan_id \?\? item\.payload\?\.patch_id/);
-    expect(src).not.toMatch(
+    expect(helpers).not.toMatch(/payload\?\.plan_id \?\? item\.payload\?\.patch_id/);
+    expect(helpers).not.toMatch(
       /item\.ref\.startsWith\("proposed_patch:"\)[\s\S]{0,120}\/improve\/plans\/\$\{/,
     );
   });
 
   it("UX-P1-01 mobile list/stack below lg with touch targets", () => {
-    const src = read("app/(portal)/improve/page.tsx");
-    expect(src).toContain("lg:hidden");
-    expect(src).toMatch(/hidden[\s\S]{0,40}lg:grid/);
-    expect(src).toContain("min-h-11");
-    expect(src).not.toMatch(/text-\[(?:9|10)px\]/);
-    expect(src).not.toContain("h-7 px-2");
+    const board = read("app/(portal)/improve/_components/queue-board.tsx");
+    expect(board).toContain("data-wave11-mobile");
+    expect(board).toContain("min-h-11");
+    expect(board).not.toMatch(/text-\[(?:9|10)px\]/);
+    expect(board).not.toContain("h-7 px-2");
   });
 
   it("N23 refs deep-link; legacy proposed_patch goes to inbox only", () => {
@@ -156,14 +155,17 @@ describe("W4-5 improve queue approve + href honesty", () => {
 
 describe("W4-5 plan detail canAct + ErrorState", () => {
   it("limits canAct to draft|pending_review|approved", () => {
-    const src = read("app/(portal)/improve/plans/[id]/page.tsx");
-    expect(src).toMatch(
+    const page = read("app/(portal)/improve/plans/[id]/page.tsx");
+    const hook = read(
+      "app/(portal)/improve/plans/[id]/_components/use-plan-detail.ts",
+    );
+    expect(hook).toMatch(
       /\["draft", "pending_review", "approved"\]\.includes\(plan\.status\)/,
     );
-    expect(src).toContain("ErrorState");
-    expect(src).toContain("Approve & open PR");
-    expect(src).toContain("approvePlan");
-    expect(src).toContain("rejectPlan");
+    expect(page).toContain("ErrorState");
+    expect(page).toContain("Approve & open PR");
+    expect(hook).toContain("approvePlan");
+    expect(hook).toContain("rejectPlan");
     expect(canActOnPlan("draft")).toBe(true);
     expect(canActOnPlan("snoozed")).toBe(false);
     expect(canActOnPlan("pr_opened")).toBe(false);
@@ -172,42 +174,37 @@ describe("W4-5 plan detail canAct + ErrorState", () => {
 });
 
 describe("W4-5 ErrorState + empty onboarding CTAs", () => {
-  it("plans gates KPI/filters behind !error and keeps empty CTAs", () => {
+  it("plans gates KPI/filters behind !error and keeps one empty CTA", () => {
     const src = read("app/(portal)/improve/plans/page.tsx");
     expect(src).toContain("Could not load plans");
     expect(src).toContain("Try again");
-    expect(src).toMatch(/\{\/\* Gate KPI\/filters behind !error/);
-    expect(src).toMatch(/!error \? \(\s*<>/);
+    expect(src).toContain("!error && !(plansQuery.isLoading && plans.length === 0)");
     expect(src).toContain("No improvement plans yet");
-    expect(src).toContain("/settings?tab=api-keys");
-    expect(src).toContain("/settings?tab=autonomous");
-    expect(src).toContain("Docs quickstart");
+    expect(src).toContain('href="/issues"');
+    expect(src).toContain("View Issues");
   });
 
-  it("runs empty offers Run sweep + schedule + plans CTAs", () => {
+  it("runs empty offers one Run sweep CTA (schedule in prose)", () => {
     const src = read("app/(portal)/improve/runs/page.tsx");
     expect(src).toContain("Could not load sweep history");
     expect(src).toContain("No sweeps yet");
     expect(src).toContain("Run sweep now");
     expect(src).toContain("/settings?tab=autonomous");
-    expect(src).toContain("/improve/plans");
+    expect(src).toContain('data-testid="improve-runs-empty-trigger"');
     expect(src).toMatch(/EmptyState[\s\S]*action=\{/);
   });
 
-  it("scorecard empty offers retry + improve links", () => {
+  it("scorecard empty offers one retry CTA", () => {
     const src = read("app/(portal)/improve/scorecard/page.tsx");
     expect(src).toContain("ErrorState");
     expect(src).toContain("No scorecard metrics");
     expect(src).toContain("Retry scorecard");
-    expect(src).toContain('href="/improve"');
-    expect(src).toContain('href="/improve/change-impact"');
   });
 
-  it("change-impact empty offers Generate preview + traces CTA", () => {
+  it("change-impact empty offers traces CTA (Run lives on form)", () => {
     const src = read("app/(portal)/improve/change-impact/page.tsx");
     expect(src).toContain("ErrorState");
-    expect(src).toContain("No preview yet");
-    expect(src).toContain("Generate preview");
+    expect(src).toContain("No result yet");
     expect(src).toContain('href="/traces"');
     expect(src).toMatch(/!report && !error && !busy/);
   });

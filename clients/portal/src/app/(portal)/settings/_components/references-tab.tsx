@@ -94,13 +94,13 @@ export function ReferencesTab({ org }: ReferencesTabProps) {
   if (!org) {
     return (
       <div className="text-center py-12 text-[var(--text-secondary)]">
-        Select an organization to manage code references
+        Select a workspace to manage code references
       </div>
     );
   }
 
   return (
-    <div className="space-y-space-4">
+    <div className="space-y-space-4" data-ws8-references>
       {hasPermission("references:upload") && (
         <SettingsCard title="Upload code reference">
           <form onSubmit={handleUpload} className="space-y-space-3">
@@ -215,14 +215,17 @@ export function ReferencesTab({ org }: ReferencesTabProps) {
                   </div>
                 </div>
                 {hasPermission("references:delete") && (
-                  <button
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
                     onClick={() => handleDelete(ref.id)}
-                    className="p-2 text-[var(--error)] hover:bg-[var(--error-dim)] rounded-lg ml-4"
+                    className="text-[var(--error)] hover:bg-[var(--error-dim)] ml-4"
                     title="Delete reference"
                     aria-label={`Delete ${ref.name}`}
                   >
                     <Trash2 className="w-4 h-4" />
-                  </button>
+                  </Button>
                 )}
               </Card>
             ))}

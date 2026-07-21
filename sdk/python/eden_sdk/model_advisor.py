@@ -293,7 +293,7 @@ class ModelAdvisor:
         self.base_url = (
             base_url
             or getattr(cfg, "base_url", None)
-            or "https://api.eden.ai"
+            or "https://api.edenobservability.com"
         ).rstrip("/")
         self.api_key = getattr(cfg, "api_key", "") or ""
         self.org_id = getattr(cfg, "org_id", "") or ""

@@ -1,18 +1,19 @@
 "use client";
 
 import { useState, useCallback, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { useOrg } from "@/hooks/use-org";
 import { cn } from "@/lib/utils";
 import { api, ApiError } from "@/lib/api";
-import { PageHeader } from "@/components/layout/page-header";
 import { PageContent, PageLoadingSkeleton } from "@/components/layout/page-content";
+import { useEmbeddedSurface } from "@/components/layout/embedded-surface";
 import { NoOrgState } from "@/components/ui/no-org-state";
 import { ErrorState } from "@/components/ui/error-state";
 import { EmptyState } from "@/components/ui/empty-state";
 import { useToast } from "@/components/ui/toast";
 import { useOrgQuery } from "@/hooks/use-api-query";
 import { queryKeys } from "@/lib/query-keys";
-import { Wallet, AlertTriangle, CheckCircle2, History } from "lucide-react";
+import { AlertTriangle, CheckCircle2, History, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Panel } from "@/components/ui/panel";
 import { errorFromCaught } from "@/lib/safe-error-message";
@@ -20,6 +21,7 @@ import {
   featureGatedErrorCopy,
   isRetryableIntelligenceError,
 } from "@/lib/feature-flag-error";
+import { CostImproveCrossLink } from "../_components/cost-improve-cross-link";
 
 interface Budget {
   window: string;
@@ -62,8 +64,17 @@ export default function BudgetPage() {
   const { currentOrg } = useOrg();
   const orgId = currentOrg?.id;
   const toast = useToast();
+  const router = useRouter();
+  const embedded = useEmbeddedSurface();
   const [budget, setBudget] = useState<Budget | null>(null);
   const [saving, setSaving] = useState(false);
+
+  // Soft-redirect orphan leaf → Cost hub tab (keep content when embedded).
+  useEffect(() => {
+    if (!embedded) {
+      router.replace("/optimization?tab=budget");
+    }
+  }, [embedded, router]);
 
   const {
     data: budgetData,
@@ -123,6 +134,13 @@ export default function BudgetPage() {
     }
   }, [orgId, budget, toast, refetchBudget, refetchActions]);
 
+  if (!embedded) {
+    return (
+      <div className="flex h-48 items-center justify-center" aria-busy="true">
+        <Loader2 className="h-4 w-4 animate-spin text-[var(--text-muted)]" />
+      </div>
+    );
+  }
   if (!currentOrg) return <NoOrgState feature="Budgets" />;
   if (isLoading) {
     return <PageLoadingSkeleton variant="default" lines={4} />;
@@ -131,7 +149,6 @@ export default function BudgetPage() {
     const copy = featureGatedErrorCopy(budgetError, "Could not load budget");
     return (
       <PageContent>
-        <PageHeader eyebrow="Optimize" icon={Wallet} title="Cost Guardrails" />
         <ErrorState
           title={copy.title}
           message={copy.message}
@@ -155,12 +172,17 @@ export default function BudgetPage() {
 
   return (
     <PageContent>
-      <PageHeader
-        eyebrow="Optimize"
-        icon={Wallet}
-        title="Cost Guardrails"
-        subtitle="Per-org budget caps with closed-loop enforcement (D.10)"
-      />
+      {status !== "ok" ? (
+        <div className="mb-space-4">
+          <CostImproveCrossLink
+            reason={
+              status === "exceeded"
+                ? "Hard budget cap exceeded — open Improve to act on cost plans."
+                : "Budget alert threshold breached — open Improve to act on cost plans."
+            }
+          />
+        </div>
+      ) : null}
 
       {rollup && (
         <div

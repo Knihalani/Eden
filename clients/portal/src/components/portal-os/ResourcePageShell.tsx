@@ -47,6 +47,7 @@ export function ResourcePageShell({
       className={cn("flex flex-col gap-space-4", className)}
       data-has-kpi={hasKpi ? "" : undefined}
       data-page-bands={pageBands}
+      data-wave11-shell="resource"
     >
       {header && (
         <div className="min-w-0 [&_.mb-4]:mb-0 [&_.mb-space-4]:mb-0" data-chrome-band="identity">

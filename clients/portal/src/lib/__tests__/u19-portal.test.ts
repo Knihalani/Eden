@@ -5,11 +5,15 @@ import {
   datasetHref,
   driftHref,
   experimentHref,
+  improveHref,
   incidentHref,
   issueHref,
   labelingQueueHref,
   ledgerHref,
+  mergeTracePreserve,
   playgroundHref,
+  preserveFromRecord,
+  preserveFromSearchParams,
   promotionsHref,
   traceHref,
   tracesFilteredHref,
@@ -25,6 +29,8 @@ describe("U19 cross-link matrix", () => {
     expect(pairs).toContain("trace->labeling");
     expect(pairs).toContain("issue->experiment");
     expect(pairs).toContain("issue->artifact");
+    expect(pairs).toContain("issue->trace");
+    expect(pairs).toContain("issue->improve");
     expect(pairs).toContain("alert->incident");
     expect(pairs).toContain("alert->trace");
     expect(pairs).toContain("artifact->trace");
@@ -37,10 +43,15 @@ describe("U19 cross-link matrix", () => {
 
   it("builds shareable trace deep links", () => {
     expect(traceHref("abc-123")).toBe("/traces?traceId=abc-123");
+    expect(traceHref("abc-123", { pastHours: "24" })).toContain("pastHours=24");
+    expect(traceHref("abc-123", undefined, { spanId: "s1" })).toBe(
+      "/traces?traceId=abc-123&spanId=s1",
+    );
   });
 
   it("builds issue panel deep links", () => {
     expect(issueHref("iss-1")).toBe("/issues?issueId=iss-1");
+    expect(improveHref("iss-1")).toBe("/improve?issue=iss-1");
   });
 
   it("builds artifact deep links with optional selection", () => {
@@ -53,6 +64,7 @@ describe("U19 cross-link matrix", () => {
     expect(playgroundHref("t1", "s1")).toContain("span_id=s1");
     expect(playgroundHref("t1", "s1")).toContain("tab=playgrounds");
     expect(playgroundHref()).toBe("/evals?tab=playgrounds");
+    expect(playgroundHref("t1", undefined, { pastHours: "6" })).toContain("pastHours=6");
   });
 
   it("builds dataset and experiment links", () => {
@@ -76,11 +88,35 @@ describe("U19 cross-link matrix", () => {
     expect(href).toContain("agent_id=a1");
   });
 
+  it("preserveFromSearchParams and mergeTracePreserve carry Observe keys", () => {
+    const fromUrl = preserveFromSearchParams(
+      new URLSearchParams("pastHours=24&realm=prod&q=err"),
+    );
+    expect(fromUrl).toEqual({ pastHours: "24", realm: "prod", q: "err" });
+    const merged = mergeTracePreserve(fromUrl, preserveFromRecord({ outcome: "error" }));
+    expect(merged?.pastHours).toBe("24");
+    expect(merged?.outcome).toBe("error");
+  });
+
+  it("alert → trace matrix preserves filters when provided", () => {
+    const entry = CROSS_LINK_MATRIX.find((e) => e.from === "alert" && e.to === "trace");
+    expect(entry).toBeTruthy();
+    const href = entry!.href({
+      pastHours: "48",
+      realm: "prod",
+      outcome: "error",
+    });
+    expect(href).toContain("/traces");
+    expect(href).toContain("pastHours=48");
+    expect(href).toContain("realm=prod");
+    expect(href).not.toBe("/traces");
+  });
+
   it("builds labeling and incident routes", () => {
     expect(labelingQueueHref("q1")).toBe("/labeling/queues/q1");
     expect(labelingQueueHref()).toBe("/evals?tab=labeling");
     expect(incidentHref()).toBe("/issues?tab=incidents");
-    expect(promotionsHref()).toBe("/promotions");
+    expect(promotionsHref()).toBe("/ledger?tab=promotions");
   });
 });
 

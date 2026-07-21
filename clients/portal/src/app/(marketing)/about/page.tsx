@@ -49,7 +49,7 @@ export default function AboutPage() {
         </p>
         <p>
           Voice is precise, technical, and calm — closer to an instrument panel than a marketing
-          deck. Soft launch is free while we harden the closed-loop path for production teams.
+          deck. Public beta is free while we harden the closed-loop path for production teams.
         </p>
         <div className="flex flex-wrap items-center gap-space-3 pt-space-4">
           <SignedInGate

@@ -9,6 +9,7 @@
   },
   "footer": {
     "privacy": "Privacy",
+    "cookiePreferences": "Cookie preferences",
     "terms": "Terms",
     "dpa": "DPA",
     "security": "Security",
@@ -26,6 +27,7 @@
     "pricing": "Pricing",
     "contact": "Contact",
     "about": "About",
+    "status": "Status",
     "signup": "Sign up",
     "signin": "Sign in"
   },

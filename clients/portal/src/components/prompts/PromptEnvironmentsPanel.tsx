@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Layers, Loader2, Rocket } from "lucide-react";
+import { Layers, Loader2, Rocket, RotateCcw } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -32,10 +32,13 @@ export function PromptEnvironmentsPanel({
   orgId,
   promptName,
   latestVersion,
+  onPinsChange,
 }: {
   orgId: string;
   promptName: string;
   latestVersion?: number;
+  /** Notify parent when pin count changes (lifecycle badge). */
+  onPinsChange?: (count: number) => void;
 }) {
   const toast = useToast();
   const [loading, setLoading] = useState(true);
@@ -54,14 +57,17 @@ export function PromptEnvironmentsPanel({
         (res as { data?: { environments?: EnvRow[] } }).data?.environments ??
         (res as { environments?: EnvRow[] }).environments ??
         [];
-      setEnvs(Array.isArray(rows) ? rows : []);
+      const list = Array.isArray(rows) ? rows : [];
+      setEnvs(list);
+      onPinsChange?.(list.length);
     } catch (e) {
       setError(errorFromCaught(e, "Failed to load environments"));
       setEnvs([]);
+      onPinsChange?.(0);
     } finally {
       setLoading(false);
     }
-  }, [orgId, promptName]);
+  }, [orgId, promptName, onPinsChange]);
 
   useEffect(() => {
     void load();
@@ -71,17 +77,20 @@ export function PromptEnvironmentsPanel({
     if (latestVersion) setDeployVersion(latestVersion);
   }, [latestVersion]);
 
-  const deploy = async () => {
+  const deploy = async (opts?: { env?: string; version?: number; rollback?: boolean }) => {
+    const env = opts?.env ?? deployEnv;
+    const version = opts?.version ?? deployVersion;
     setBusy(true);
     try {
-      await wave6Api.deployPrompt(orgId, promptName, {
-        env: deployEnv,
-        version: deployVersion,
-      });
-      toast.success(`Pinned v${deployVersion} → ${deployEnv}`);
+      await wave6Api.deployPrompt(orgId, promptName, { env, version });
+      toast.success(
+        opts?.rollback
+          ? `Rolled back → ${env} @ v${version}`
+          : `Pinned v${version} → ${env}`,
+      );
       await load();
     } catch (e) {
-      toast.error(errorFromCaught(e, "Deploy failed"));
+      toast.error(errorFromCaught(e, opts?.rollback ? "Rollback failed" : "Deploy failed"));
     } finally {
       setBusy(false);
     }
@@ -93,12 +102,23 @@ export function PromptEnvironmentsPanel({
     envCount: envs.length,
   });
 
+  const productionPin = envs.find((e) => e.env === "production");
+  const rollbackTarget =
+    productionPin?.version != null && productionPin.version > 1
+      ? productionPin.version - 1
+      : latestVersion != null && latestVersion > 1
+        ? latestVersion - 1
+        : null;
+
   return (
     <div className="mt-4 rounded-md border border-[var(--border-default)] bg-[var(--bg-elev-1)] p-3">
       <div className="mb-2 flex items-center gap-2 text-xs font-medium text-[var(--text-secondary)]">
         <Layers className="h-3 w-3" />
         Environments (F68 gateway pin)
       </div>
+      <p className="mb-2 text-xs text-[var(--text-muted)]" data-testid="prompts-env-honesty">
+        Pin deploys a version per env. Rollback re-pins an earlier version — no separate rollback API.
+      </p>
       {loading ? (
         <Loader2 className="h-4 w-4 animate-spin text-[var(--text-muted)]" />
       ) : error ? (
@@ -161,6 +181,26 @@ export function PromptEnvironmentsPanel({
             <Rocket className="h-3.5 w-3.5" />
             Deploy pin
           </Button>
+          {rollbackTarget != null ? (
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={busy}
+              loading={busy}
+              data-testid="prompts-env-rollback"
+              title="Re-pins the prior version via deploy — no dedicated rollback API"
+              onClick={() =>
+                void deploy({
+                  env: productionPin?.env ?? "production",
+                  version: rollbackTarget,
+                  rollback: true,
+                })
+              }
+            >
+              <RotateCcw className="h-3.5 w-3.5" />
+              Rollback to v{rollbackTarget}
+            </Button>
+          ) : null}
         </div>
       ) : null}
     </div>

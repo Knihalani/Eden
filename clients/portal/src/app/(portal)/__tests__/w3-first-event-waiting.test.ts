@@ -24,21 +24,29 @@ describe("W3 first-trace waiting UX", () => {
   });
 
   it("traces empty uses WaitingForFirstEvent + first_trace_at signal", () => {
-    const src = read("app/(portal)/traces/page.tsx");
-    expect(src).toContain("WaitingForFirstEvent");
-    expect(src).toContain("onboardingV2Api");
-    expect(src).toContain("first_trace_at");
-    expect(src).toContain("refetchInterval");
-    expect(src).not.toContain('title="No traces yet"');
+    const list = read("app/(portal)/traces/_components/traces-hub-list.tsx");
+    const hook = read("app/(portal)/traces/_components/use-traces-hub.ts");
+    expect(list).toContain("WaitingForFirstEvent");
+    expect(hook).toContain("onboardingV2Api");
+    expect(hook).toContain("first_trace_at");
+    expect(hook).toContain("refetchInterval");
+    expect(list).not.toContain('title="No traces yet"');
   });
 
   it("dashboard first-run shows waiting title, doctor chips, and check CTA", () => {
-    const src = read("app/(portal)/dashboard/page.tsx");
-    expect(src).toContain("FIRST_EVENT_WAIT.title");
-    expect(src).toContain("dashboard-doctor-commands");
-    expect(src).toContain("DoctorCommandChip");
-    expect(src).toContain("FIRST_EVENT_WAIT.checkCta");
-    expect(src).toContain("first_trace_at");
-    expect(src).toContain("refetchInterval");
+    const page = read("app/(portal)/dashboard/page.tsx");
+    const firstRun = read(
+      "app/(portal)/dashboard/_components/home-first-run.tsx",
+    );
+    const hook = read(
+      "app/(portal)/dashboard/_components/use-home-dashboard.ts",
+    );
+    expect(page).toContain("HomeFirstRun");
+    expect(firstRun).toContain("FIRST_EVENT_WAIT.title");
+    expect(firstRun).toContain("dashboard-doctor-commands");
+    expect(firstRun).toContain("DoctorCommandChip");
+    expect(firstRun).toContain("FIRST_EVENT_WAIT.checkCta");
+    expect(hook).toContain("first_trace_at");
+    expect(hook).toContain("refetchInterval");
   });
 });

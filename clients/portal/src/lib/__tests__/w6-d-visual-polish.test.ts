@@ -13,7 +13,21 @@ function read(rel: string): string {
 
 describe("W6-D semantic colors tokenized", () => {
   it("model-advisor uses success/error/warning tokens (no emerald/rose/orange Tailwind)", () => {
-    const src = read("app/(portal)/optimization/model-advisor/page.tsx");
+    const src = [
+      read("app/(portal)/optimization/model-advisor/page.tsx"),
+      read(
+        "app/(portal)/optimization/model-advisor/_components/recommendation-card.tsx",
+      ),
+      read(
+        "app/(portal)/optimization/model-advisor/_components/compare-view.tsx",
+      ),
+      read(
+        "app/(portal)/optimization/model-advisor/_components/project-view.tsx",
+      ),
+      read(
+        "app/(portal)/optimization/model-advisor/_components/advisor-candidates.ts",
+      ),
+    ].join("\n");
     expect(src).toContain("var(--success)");
     expect(src).toContain("var(--error)");
     expect(src).toContain("var(--warning)");
@@ -21,7 +35,7 @@ describe("W6-D semantic colors tokenized", () => {
   });
 
   it("experiments char-diff uses error/success tokens", () => {
-    const src = read("app/(portal)/experiments/page.tsx");
+    const src = read("app/(portal)/experiments/_components/compare-panel.tsx");
     expect(src).toContain("var(--error-bg)");
     expect(src).toContain("var(--success-bg)");
     expect(src).not.toMatch(/bg-red-|bg-emerald-/);
@@ -36,7 +50,7 @@ describe("W6-D semantic colors tokenized", () => {
 
 describe("W6-D shared Input/Select/Textarea", () => {
   it("prompts new-entry form uses Input and Textarea", () => {
-    const src = read("app/(portal)/prompts/page.tsx");
+    const src = read("app/(portal)/prompts/_components/prompts-create-form.tsx");
     expect(src).toContain('from "@/components/ui/input"');
     expect(src).toContain('from "@/components/ui/textarea"');
     expect(src).toContain("<Input");
@@ -45,7 +59,9 @@ describe("W6-D shared Input/Select/Textarea", () => {
   });
 
   it("labeling review dialog uses Select and Textarea", () => {
-    const src = read("app/(portal)/labeling/page.tsx");
+    const src = read(
+      "app/(portal)/labeling/_components/labeling-review-dialog.tsx",
+    );
     expect(src).toContain('from "@/components/ui/select"');
     expect(src).toContain('from "@/components/ui/textarea"');
     expect(src).toContain("<Select");

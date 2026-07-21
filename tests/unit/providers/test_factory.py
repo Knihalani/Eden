@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from eden.providers.factory import (
+    RepoConnectionError,
     get_pr_provider_for_org,
     get_repo_provider_for_org,
     resolve_active_repo_id,
@@ -97,6 +98,99 @@ async def test_pr_provider_falls_back_without_connection() -> None:
     ):
         provider = await get_pr_provider_for_org("org_orphan")
     assert isinstance(provider, LocalPRProvider)
+
+
+@pytest.mark.asyncio
+async def test_pr_provider_fail_closed_when_mint_fails() -> None:
+    """Active connection + mint failure must not use EDEN_GITHUB_TOKEN."""
+    conn = {
+        "installation_id": "12345",
+        "repo_full_name": "acme/agent-runner",
+        "default_branch": "develop",
+        "provider": "github",
+        "id": "repo_1",
+    }
+    env = {
+        **{
+            k: v
+            for k, v in __import__("os").environ.items()
+            if k not in ("EDEN_PR_PROVIDER",)
+        },
+        "EDEN_PR_PROVIDER": "",
+        "EDEN_GITHUB_TOKEN": "ghs_should_not_use",
+        "EDEN_GITHUB_REPO": "wrong/repo",
+    }
+    with (
+        patch.dict("os.environ", env, clear=True),
+        patch(
+            "eden.providers.factory.active_repo_connection",
+            AsyncMock(return_value=conn),
+        ),
+        patch(
+            "eden.providers.factory._mint_installation_token",
+            AsyncMock(return_value=None),
+        ),
+    ):
+        with pytest.raises(RepoConnectionError) as exc_info:
+            await get_pr_provider_for_org("org_a")
+    assert exc_info.value.org_id == "org_a"
+
+
+@pytest.mark.asyncio
+async def test_repo_provider_fail_closed_when_mint_fails() -> None:
+    conn = {
+        "installation_id": "99",
+        "repo_full_name": "acme/widgets",
+        "default_branch": "main",
+        "provider": "github",
+        "id": "repo_2",
+    }
+    with (
+        patch.dict(
+            "os.environ",
+            {
+                "EDEN_PR_PROVIDER": "",
+                "EDEN_GITHUB_TOKEN": "ghs_should_not_use",
+                "EDEN_GITHUB_REPO": "wrong/repo",
+            },
+            clear=False,
+        ),
+        patch(
+            "eden.providers.factory.active_repo_connection",
+            AsyncMock(return_value=conn),
+        ),
+        patch(
+            "eden.providers.factory._mint_installation_token",
+            AsyncMock(return_value=None),
+        ),
+    ):
+        with pytest.raises(RepoConnectionError):
+            await get_repo_provider_for_org("org_b")
+
+
+@pytest.mark.asyncio
+async def test_pr_provider_force_local_overrides_active_connection() -> None:
+    conn = {
+        "installation_id": "12345",
+        "repo_full_name": "acme/agent-runner",
+        "default_branch": "main",
+        "provider": "github",
+        "id": "repo_1",
+    }
+    with (
+        patch.dict("os.environ", {"EDEN_PR_PROVIDER": "local"}, clear=False),
+        patch(
+            "eden.providers.factory.active_repo_connection",
+            AsyncMock(return_value=conn),
+        ),
+        patch(
+            "eden.providers.factory._mint_installation_token",
+            AsyncMock(return_value=None),
+        ) as mint,
+    ):
+        provider = await get_pr_provider_for_org("org_a")
+    assert isinstance(provider, LocalPRProvider)
+    mint.assert_not_called()
 
 
 @pytest.mark.asyncio

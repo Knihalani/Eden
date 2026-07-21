@@ -2,13 +2,18 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import re
-from datetime import UTC, datetime, timedelta
+from datetime import datetime
 from typing import Any
 
 from eden.improvement import plans_repo, runs_repo, settings as imp_settings
-from eden.improvement.planner import PlanCandidate, persist_candidates
+from eden.improvement.planner import PlanCandidate, persist_candidates, rank_candidates
+from eden.improvement.sweep_budget import (
+    begin_sweep_llm_budget,
+    clear_sweep_llm_budget,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -130,6 +135,37 @@ class ImprovementAgent:
         if not await _agent_enabled_for_org(org_id):
             return {"status": "disabled", "reason": "improvement_agent_v1=false"}
 
+        try:
+            return await asyncio.wait_for(
+                self._sweep_body(
+                    org_id,
+                    since=since,
+                    agent_id=agent_id,
+                    issue_id=issue_id,
+                    trigger=trigger,
+                ),
+                timeout=_SWEEP_TIMEOUT_S,
+            )
+        except TimeoutError:
+            logger.warning(
+                "improvement.sweep timed out org=%s after %ss",
+                org_id,
+                _SWEEP_TIMEOUT_S,
+            )
+            return {
+                "status": "failed",
+                "error": f"sweep_timeout:{_SWEEP_TIMEOUT_S}s",
+            }
+
+    async def _sweep_body(
+        self,
+        org_id: str,
+        *,
+        since: datetime | None = None,
+        agent_id: str | None = None,
+        issue_id: str | None = None,
+        trigger: str = "manual",
+    ) -> dict[str, Any]:
         watermark = since or await runs_repo.get_watermark(org_id)
         run = await runs_repo.create_run(
             org_id,
@@ -140,9 +176,24 @@ class ImprovementAgent:
         run_id = str(run.get("id") or "")
         cfg = await imp_settings.get_settings(org_id)
         max_plans = int(cfg.get("improvement_max_plans_per_sweep", 10))
+        max_code = int(cfg.get("improvement_max_code_patch_per_sweep", 3))
+        max_advisory = int(cfg.get("improvement_max_advisory_per_sweep", 5))
+        max_generates = int(cfg.get("improvement_max_generates_per_sweep", 3))
+        try:
+            from eden.config import get_settings as get_global
 
+            max_llm = int(
+                getattr(get_global(), "patch_max_llm_calls_per_sweep", 8) or 8
+            )
+        except Exception:
+            max_llm = 8
+
+        begin_sweep_llm_budget(max_llm)
         candidates: list[PlanCandidate] = []
         llm_cost = 0.0
+        issue_plan_ids: list[str] = []
+        issue_created_n = 0
+        issue_skipped_n = 0
         try:
             if issue_id:
                 from eden.improvement.issue_patch_trigger import propose_plan_for_issue
@@ -171,39 +222,67 @@ class ImprovementAgent:
                     "plan_ids": [result["plan_id"]] if result.get("plan_id") else [],
                     "scoped_issue_id": issue_id,
                 }
-            else:
-                candidates.extend(await self._from_issues(org_id, watermark, agent_id))
-                candidates.extend(await self._from_traces(org_id, watermark, agent_id))
-                candidates.extend(await self._from_metrics(org_id, agent_id))
-                candidates.extend(await self._from_repo_health(org_id, agent_id))
-                candidates.extend(await self._from_cost_anomalies(org_id, agent_id))
-                candidates.extend(
-                    await self._from_prompt_nudge_candidates(org_id, agent_id)
-                )
 
-            llm_cost = sum(c.llm_cost_usd for c in candidates)
+            gen = await self._rank_and_generate_issue_patches(
+                org_id,
+                watermark,
+                agent_id,
+                run_id=run_id,
+                max_generates=min(max_generates, max_code),
+            )
+            issue_created_n = int(gen.get("created") or 0)
+            issue_skipped_n = int(gen.get("skipped") or 0)
+            llm_cost += float(gen.get("cost_usd") or 0)
+            issue_plan_ids = list(gen.get("plan_ids") or [])
+
+            candidates.extend(await self._from_traces(org_id, watermark, agent_id))
+            candidates.extend(await self._from_metrics(org_id, agent_id))
+            candidates.extend(await self._from_repo_health(org_id, agent_id))
+            candidates.extend(await self._from_cost_anomalies(org_id, agent_id))
+            candidates.extend(
+                await self._from_prompt_nudge_candidates(org_id, agent_id)
+            )
+            # Advisory lane only — never fake empty code_patch.
+            candidates = [
+                c
+                for c in candidates
+                if c.plan_kind != "code_patch"
+                or (c.diff_unified and str(c.diff_unified).strip())
+            ]
+
+            llm_cost += sum(c.llm_cost_usd for c in candidates)
+            advisory_budget = min(
+                max_advisory, max(0, max_plans - issue_created_n)
+            )
             created, skipped = await persist_candidates(
                 org_id,
                 candidates,
                 run_id=run_id,
-                max_plans=max_plans,
+                max_plans=advisory_budget,
+                max_code_patch=0,
+                max_advisory=advisory_budget,
             )
+            all_ids = issue_plan_ids + [p["id"] for p in created]
+            total_created = issue_created_n + len(created)
+            total_skipped = issue_skipped_n + skipped
             await runs_repo.finish_run(
                 org_id,
                 run_id,
                 status="completed",
-                plans_created=len(created),
-                plans_skipped_dedup=skipped,
+                plans_created=total_created,
+                plans_skipped_dedup=total_skipped,
                 llm_cost_usd=llm_cost,
             )
-            await _emit_sweep_completed(org_id, run_id, len(created))
+            await _emit_sweep_completed(org_id, run_id, total_created)
             return {
                 "status": "completed",
                 "run_id": run_id,
-                "plans_created": len(created),
-                "plans_skipped_dedup": skipped,
+                "plans_created": total_created,
+                "plans_skipped_dedup": total_skipped,
                 "llm_cost_usd": llm_cost,
-                "plan_ids": [p["id"] for p in created],
+                "plan_ids": all_ids,
+                "code_patch_created": issue_created_n,
+                "advisory_created": len(created),
             }
         except Exception as exc:
             logger.warning("improvement.sweep failed org=%s: %s", org_id, exc)
@@ -215,6 +294,8 @@ class ImprovementAgent:
                 error=str(exc),
             )
             return {"status": "failed", "run_id": run_id, "error": str(exc)}
+        finally:
+            clear_sweep_llm_budget()
 
     async def _from_issue(
         self, org_id: str, issue_id: str, *, run_id: str
@@ -243,49 +324,98 @@ class ImprovementAgent:
             )
         ]
 
-    async def _from_issues(
-        self, org_id: str, since: datetime, agent_id: str | None
-    ) -> list[PlanCandidate]:
-        out: list[PlanCandidate] = []
+    async def _rank_and_generate_issue_patches(
+        self,
+        org_id: str,
+        since: datetime,
+        agent_id: str | None,
+        *,
+        run_id: str,
+        max_generates: int = 3,
+    ) -> dict[str, Any]:
+        """Cheap collect → filter → rank → top-K PatchGenerator invokes."""
+        from eden.improvement.issue_patch_trigger import (
+            build_candidate_from_issue,
+            issue_passes_cheap_gates,
+            propose_plan_for_issue,
+        )
+
+        pending: list[Any] = []
         try:
             from eden.issues.repo import IssuesRepo
 
-            pending: list[tuple[Any, str]] = []
             for status in ("open", "regressed"):
                 rows = await IssuesRepo().list_issues(org_id, status=status, limit=50)
                 for issue in rows:
                     if agent_id and issue.agent_id and issue.agent_id != agent_id:
                         continue
-                    triage = issue.triage_result or {}
-                    action = triage.get("recommended_action") or triage.get(
-                        "recommended"
-                    )
-                    if action not in (
-                        "code_change",
-                        "prompt_update",
-                        "investigate",
-                        None,
-                    ):
+                    ok, _reason = issue_passes_cheap_gates(issue)
+                    if not ok:
                         continue
-                    fp = f"issue:{issue.id}"
-                    pending.append((issue, fp))
-
-            existing = await plans_repo.find_open_fingerprints(
-                org_id, [fp for _, fp in pending]
-            )
-            from eden.improvement.issue_patch_trigger import (
-                build_candidate_from_issue,
-            )
-
-            for issue, fp in pending:
-                if fp in existing:
-                    continue
-                cand = await build_candidate_from_issue(org_id, issue)
-                if cand:
-                    out.append(cand)
+                    pending.append(issue)
         except Exception as exc:
-            logger.debug("sweep issues: %s", exc)
-        return out
+            logger.debug("sweep issues collect: %s", exc)
+            return {"created": 0, "skipped": 0, "cost_usd": 0.0, "plan_ids": []}
+
+        fps = [f"issue:{issue.id}" for issue in pending]
+        existing = await plans_repo.find_open_fingerprints(org_id, fps)
+        rejected_skip = 0
+        candidates: list[PlanCandidate] = []
+        for issue in pending:
+            fp = f"issue:{issue.id}"
+            if fp in existing:
+                continue
+            if await plans_repo.is_rejection_active(
+                org_id,
+                title=issue.title or issue.fingerprint,
+                fingerprint=fp,
+            ):
+                rejected_skip += 1
+                continue
+            if await plans_repo.find_blocking_by_fingerprint(org_id, fp):
+                continue
+            cand = await build_candidate_from_issue(org_id, issue)
+            if cand:
+                candidates.append(cand)
+
+        ranked = rank_candidates(candidates)
+        top = ranked[: max(0, int(max_generates))]
+        created = 0
+        skipped = rejected_skip + max(0, len(ranked) - len(top))
+        cost = 0.0
+        plan_ids: list[str] = []
+        for cand in top:
+            issue_id = str((cand.evidence or {}).get("issue_id") or "")
+            if not issue_id and cand.source_fingerprint.startswith("issue:"):
+                issue_id = cand.source_fingerprint.split(":", 1)[1]
+            if not issue_id:
+                skipped += 1
+                continue
+            result = await propose_plan_for_issue(org_id, issue_id, run_id=run_id)
+            if result.get("status") == "proposed" and result.get("plan_id"):
+                created += 1
+                plan_ids.append(str(result["plan_id"]))
+                cost += float(
+                    (result.get("plan") or {}).get("llm_cost_usd")
+                    or result.get("cost_usd")
+                    or 0
+                )
+            else:
+                skipped += 1
+        return {
+            "created": created,
+            "skipped": skipped,
+            "cost_usd": cost,
+            "plan_ids": plan_ids,
+            "ranked": len(ranked),
+            "generated": len(top),
+        }
+
+    async def _from_issues(
+        self, org_id: str, since: datetime, agent_id: str | None
+    ) -> list[PlanCandidate]:
+        """Deprecated empty-card path — kept for tests; returns []."""
+        return []
 
     async def _from_traces(
         self, org_id: str, since: datetime, agent_id: str | None
@@ -640,7 +770,8 @@ class ImprovementAgent:
                     continue
 
                 has_cve = any(f.get("kind") == "cve_advisory" for f in findings)
-                plan_kind = "code_patch" if has_cve else "config_change"
+                # Advisory only — never invent empty code_patch cards.
+                plan_kind = "config_change"
                 sev = "high" if has_cve else "medium"
                 out.append(
                     PlanCandidate(

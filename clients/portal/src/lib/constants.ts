@@ -26,10 +26,10 @@ export const FREE_TIER_ORG_CAP_USD = 3;
 export const FREE_TIER_CAP_SHORT = `$${FREE_TIER_PERSONAL_CAP_USD} personal / $${FREE_TIER_ORG_CAP_USD} org`;
 
 /** Full free-tier marketing sentence — landing, pricing, CTA. */
-export const FREE_TIER_TAGLINE = `Free during soft launch · ${FREE_TIER_CAP_SHORT} monthly spend cap · No credit card.`;
+export const FREE_TIER_TAGLINE = `Free during public beta · ${FREE_TIER_CAP_SHORT} monthly spend cap · No credit card.`;
 
 /** Sales contact — used by billing plan cards. */
-export const SALES_EMAIL = "sales@eden.dev";
+export const SALES_EMAIL = "sales@edenobservability.com";
 
 /** Public Docusaurus docs site (hosted separately from the portal). */
 export const DOCS_URL = "https://docs.edenobservability.com";

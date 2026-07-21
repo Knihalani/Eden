@@ -1,5 +1,10 @@
 import { SignIn } from "@clerk/nextjs";
-import { AuthSplitLayout, AuthBrandPanel, ClerkAuthFallback } from "@/components/auth";
+import {
+  AuthSplitLayout,
+  AuthBrandPanel,
+  AuthPageIntro,
+  ClerkAuthFallback,
+} from "@/components/auth";
 import { clerkAppearance } from "@/components/auth/clerk-theme";
 import { buildAuthClerkRedirectProps } from "@/lib/auth-redirect";
 
@@ -28,21 +33,12 @@ export default async function LoginPage({
 
   return (
     <AuthSplitLayout brandPanel={<AuthBrandPanel />}>
-      <div className="w-full max-w-md space-y-space-5">
-        {/* Eyebrow above the Clerk card so users land in a
-            branded context instead of Clerk's default heading. */}
-        <div className="text-center space-y-space-2">
-          <p className="text-2xs font-mono font-semibold uppercase tracking-[0.18em] text-[var(--accent)]">
-            Account access
-          </p>
-          <h1 className="text-xl font-semibold text-[var(--text-primary)] tracking-tight">
-            Welcome back
-          </h1>
-          <p className="text-sm text-[var(--text-muted)]">
-            Sign in to create or join an org, then get an API key and send your
-            first trace.
-          </p>
-        </div>
+      <div className="w-full max-w-md space-y-space-5" data-wave11-auth="sign-in">
+        <AuthPageIntro
+          eyebrow="Account access"
+          title="Welcome back"
+          description="Sign in to create or join an org, then get an API key and send your first trace."
+        />
         <ClerkAuthFallback formLabel="sign-in">
           <SignIn
             path="/login"

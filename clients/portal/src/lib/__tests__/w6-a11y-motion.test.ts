@@ -36,7 +36,7 @@ describe("W6 MobileBottomNav a11y", () => {
     expect(mobile).toContain("FOCUS_RING_CLASS");
     expect(mobile).toContain("text-2xs");
     expect(mobile).not.toContain("text-[10px]");
-    expect(mobile).toMatch(/Agents, artifacts/i);
+    expect(mobile).toMatch(/Agents, ops tools/i);
   });
 });
 
@@ -73,7 +73,7 @@ describe("W6 axe route expansion", () => {
     expect(U20_CORE_AXE_ROUTES).toEqual(
       expect.arrayContaining(["/agents", "/settings", "/evals", "/alerts"]),
     );
-    expect([...U20_SERIOUS_AXE_ROUTES]).toEqual(["/traces", "/improve"]);
+    expect([...U20_SERIOUS_AXE_ROUTES]).toEqual(["/traces", "/improve", "/evals", "/issues"]);
     const script = readFileSync(resolve(ROOT, "scripts/audit-a11y.cjs"), "utf8");
     expect(script).toContain('"/agents"');
     expect(script).toContain('"/settings"');

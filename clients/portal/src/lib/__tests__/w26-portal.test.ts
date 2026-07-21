@@ -44,18 +44,23 @@ describe("W26 F22 deleted", () => {
 describe("W26 N20 + handoff CTAs", () => {
   it("issue detail exposes handoff CTAs", () => {
     const detail = src("app/(portal)/issues/[id]/page.tsx");
-    expect(detail).toContain("View improvement plan");
-    expect(detail).toContain("Open in coding agent");
-    expect(detail).toContain("Export fixture");
-    expect(detail).toContain("coding-agent-handoff");
-    expect(detail).not.toContain("fixChatStream");
+    const handoff = src("app/(portal)/issues/_components/issue-handoff.tsx");
+    expect(detail).toContain("IssueHandoffPanel");
+    expect(handoff).toContain("View improvement plan");
+    expect(handoff).toContain("Open in coding agent");
+    expect(handoff).toContain("Export fixture");
+    expect(handoff).toContain("coding-agent-handoff");
+    expect(handoff).not.toContain("fixChatStream");
   });
 
   it("improve plan page has approve/reject/diff", () => {
     const page = src("app/(portal)/improve/plans/[id]/page.tsx");
+    const hook = src(
+      "app/(portal)/improve/plans/[id]/_components/use-plan-detail.ts",
+    );
     expect(page).toContain("approve");
     expect(page).toContain("reject");
-    expect(page).toContain("diff_unified");
+    expect(hook).toContain("diff_unified");
   });
 
   it("backend N20 gates fingerprint and N22", () => {

@@ -54,11 +54,14 @@ describe("W5-1 assertOkEnvelope + 501 honesty", () => {
 describe("W5-1 outcomes ErrorState vs false-zero KPIs", () => {
   it("analytics query uses assertOkEnvelope and ErrorState", () => {
     const src = read("app/(portal)/optimization/outcomes/page.tsx");
+    const strip = read("app/(portal)/optimization/_components/outcomes-kpi-strip.tsx");
     expect(src).toContain("assertOkEnvelope");
     expect(src).toContain("analyticsUnavailable");
     expect(src).toContain("Could not load outcomes analytics");
-    expect(src).toMatch(/analyticsLoading \|\| analyticsUnavailable/);
-    expect(src).toContain('analyticsUnavailable ? "unavailable"');
+    expect(src).toContain("OutcomesKpiStrip");
+    expect(strip).toMatch(/loading \|\| unavailable/);
+    expect(strip).toContain('unavailable ? "unavailable"');
+    expect(strip).not.toMatch(/from "@\/components\/ui\/stat-card"/);
   });
 
   it("departments load failure uses ErrorState with gated retry", () => {
@@ -68,18 +71,18 @@ describe("W5-1 outcomes ErrorState vs false-zero KPIs", () => {
   });
 });
 
-describe("W5-1 predict tabs + envelope honesty", () => {
-  it("keeps quality/drift/cost/capacity/risk tabs (live Cat 13)", () => {
-    const src = read("app/(portal)/optimization/predict/page.tsx");
-    expect(src).toContain('value="quality"');
-    expect(src).toContain('value="drift"');
-    expect(src).toContain('value="cost"');
-    expect(src).toContain('value="capacity"');
-    expect(src).toContain('value="risk"');
+describe("W5-1 predict panels + envelope honesty", () => {
+  it("exports forecast/drift/spend/capacity/risk panels (live Cat 13)", () => {
+    const src = read("app/(portal)/optimization/_components/predict-panels.tsx");
+    expect(src).toContain("PredictForecastPanel");
+    expect(src).toContain("PredictDriftPanel");
+    expect(src).toContain("PredictSpendPanel");
+    expect(src).toContain("PredictCapacityPanel");
+    expect(src).toContain("PredictRiskPanel");
   });
 
   it("all predict fetches assertOkEnvelope before rendering charts", () => {
-    const src = read("app/(portal)/optimization/predict/page.tsx");
+    const src = read("app/(portal)/optimization/_components/predict-panels.tsx");
     expect(src.match(/assertOkEnvelope/g)?.length ?? 0).toBeGreaterThanOrEqual(5);
     expect(src).toContain("isRetryableIntelligenceError");
   });
@@ -103,18 +106,32 @@ describe("W5-1 finops + budget honesty", () => {
 });
 
 describe("W5-1 optimization hub tabs are wired", () => {
-  it("Cost hub exposes cost/budget/outcomes/predict/advisor without dead stubs", () => {
+  it("Cost hub exposes flattened cost modes without nested Predict shell", () => {
     const src = read("app/(portal)/optimization/page.tsx");
-    for (const tab of ["cost", "budget", "outcomes", "predict", "advisor"]) {
+    for (const tab of [
+      "cost",
+      "budget",
+      "outcomes",
+      "forecast",
+      "drift",
+      "spend",
+      "capacity",
+      "risk",
+      "advisor",
+    ]) {
       expect(src).toContain(`value="${tab}"`);
       expect(src).toContain(`tab === "${tab}"`);
     }
+    expect(src).not.toContain('value="predict"');
   });
 });
 
 describe("W5-1 guardrails ErrorState (W5-A/W6-B)", () => {
   it("policies and scan history use ErrorState with gated retry", () => {
-    const src = read("app/(portal)/guardrails/page.tsx");
+    const policies = read("app/(portal)/guardrails/_components/policies-tab.tsx");
+    const inj = read("app/(portal)/guardrails/_components/injections-tab.tsx");
+    const pii = read("app/(portal)/guardrails/_components/pii-tab.tsx");
+    const src = [policies, inj, pii].join("\n");
     expect(src).toContain("Could not load policies");
     expect(src).toContain("Could not load injection history");
     expect(src).toContain("Could not load PII history");

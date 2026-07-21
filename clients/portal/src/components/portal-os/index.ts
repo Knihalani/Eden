@@ -16,6 +16,7 @@ export type { ViewState } from "./useSavedViews";
 export { QueryFilterBar, ViewsMenuTrigger } from "./QueryFilterBar";
 export type { FilterMode, QueryFilterBarProps } from "./QueryFilterBar";
 export { ViewsMenu } from "./ViewsMenu";
+export type { ViewPreset } from "./ViewsMenu";
 export { ResourceOsToolbar } from "./ResourceOsToolbar";
 export type { ResourceOsToolbarProps } from "./ResourceOsToolbar";
 export { TableExportToolbar } from "./TableExportToolbar";
@@ -33,6 +34,7 @@ export {
 } from "./DetailPanelShell";
 export { InfiniteDataTable } from "./InfiniteDataTable";
 export { VirtualizedList } from "./VirtualizedList";
+/** CommandPalette: re-export only — canonical impl is `@/components/ui/command-palette` (portal-chrome may dynamic-import this path). */
 export { CommandPalette } from "./CommandPalette";
 export {
   MobileBottomNav,

@@ -33,12 +33,12 @@ import {
 } from "lucide-react";
 import { DEFAULT_SIDEBAR, type SidebarGroup, type SidebarIcon, type SidebarItem } from "@/lib/sidebar-config";
 
-/** Maps sidebar group IDs → product IA labels (Home/Observe/Evaluate/Improve/Workspace). */
+/** Maps sidebar group IDs → product IA labels (ids match labels after Wave 3). */
 export const GROUP_LABEL: Record<SidebarGroup["id"], string> = {
-  build: "Home",
+  home: "Home",
   observe: "Observe",
-  optimize: "Improve",
-  automate: "Evaluate",
+  evaluate: "Evaluate",
+  improve: "Improve",
   workspace: "Workspace",
 };
 
@@ -76,7 +76,8 @@ export const PALETTE_ACTIONS: NavCommand[] = [
   {
     href: OPEN_AI_CHAT_HREF,
     label: "Ask AI",
-    description: "Open the ChatSidebar assistant (⌘J). Ask about traces, filters, cost.",
+    description:
+      "Open assistant — header · FAB · ⌘K/⌘J. Ask about traces, filters, cost.",
     group: "Actions",
     icon: MessageSquare,
     kind: "action",
@@ -87,6 +88,14 @@ export const PALETTE_ACTIONS: NavCommand[] = [
     description: "Open alert rules to define a new threshold or signal rule.",
     group: "Actions",
     icon: Plus,
+    kind: "action",
+  },
+  {
+    href: "/evals",
+    label: "Open Evals",
+    description: "Datasets, playground, and offline experiments — Observe → Evaluate loop.",
+    group: "Actions",
+    icon: FlaskConical,
     kind: "action",
   },
   {
@@ -130,6 +139,14 @@ export const PALETTE_ACTIONS: NavCommand[] = [
     kind: "action",
   },
   {
+    href: "/prompts",
+    label: "Open prompts",
+    description: "Version and manage prompt templates — core Improve destination.",
+    group: "Actions",
+    icon: Code,
+    kind: "action",
+  },
+  {
     href: "/alerts",
     label: "View alerts",
     description: "Acknowledge threshold notifications and on-call pages.",
@@ -140,7 +157,23 @@ export const PALETTE_ACTIONS: NavCommand[] = [
   {
     href: "/improve/online-scoring",
     label: "Online scoring",
-    description: "Production scorers (code → SLM → LLM) on sampled traces.",
+    description: "Production scorers (code → SLM → LLM) — Advanced Improve.",
+    group: "Actions",
+    icon: Sparkles,
+    kind: "action",
+  },
+  {
+    href: "/improve/scorecard",
+    label: "Process scorecard",
+    description: "Synthetic engineering gates — Advanced Improve only.",
+    group: "Actions",
+    icon: Sparkles,
+    kind: "action",
+  },
+  {
+    href: "/improve/change-impact",
+    label: "Change impact preview",
+    description: "Replay stratified traffic before shipping changes — Advanced Improve.",
     group: "Actions",
     icon: Sparkles,
     kind: "action",
@@ -148,13 +181,30 @@ export const PALETTE_ACTIONS: NavCommand[] = [
 ];
 
 /**
+ * Wave 1.7 — ⌘K audit entry targets canonical `/audit-trail` (M3/M9).
+ * Settings `?tab=audit-log` bookmarks redirect separately; nav no longer deep-links that tab.
+ */
+export const WS1_NAV_AUDIT_REDIRECT_COMPLETED = true as const;
+
+/** Wave E1 — Evaluate dual-entry hygiene: sidebar + ⌘K advertise `/evals` only. */
+export const WAVE_E1_NAV_HYGIENE_COMPLETED = true as const;
+
+/**
  * Settings tab deep-links for ⌘K (peer S-06). Labels match the settings rail.
  * Hidden soft-launch tabs (roles, sso) omitted from the palette.
+ * Audit trail aliases to `/audit-trail` (unified compliance), not `?tab=audit-log`.
  */
 export const SETTINGS_TAB_COMMANDS: NavCommand[] = [
   {
+    href: "/settings",
+    label: "Settings · Overview",
+    description: "Workspace settings overview — members, billing, security, and more.",
+    group: "Settings",
+    icon: Settings2,
+  },
+  {
     href: "/settings?tab=org",
-    label: "Settings · Organization",
+    label: "Settings · Workspace",
     description: "Workspace name, slug, archive, and ownership transfer.",
     group: "Settings",
     icon: Building2,
@@ -237,9 +287,9 @@ export const SETTINGS_TAB_COMMANDS: NavCommand[] = [
     icon: FileArchive,
   },
   {
-    href: "/settings?tab=audit-log",
-    label: "Settings · Audit Log",
-    description: "Org audit trail of privileged actions.",
+    href: "/audit-trail",
+    label: "Audit trail",
+    description: "Unified compliance — privileged events and chain-verified packs.",
     group: "Settings",
     icon: FileText,
   },

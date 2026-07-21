@@ -41,7 +41,7 @@ describe("W6-2 settings integrations tabs", () => {
     expect(src).toContain("Could not verify");
     // Must not fall through to available on unexpected throws.
     expect(src).not.toMatch(
-      /catch\s*\{[^}]*setStatus\("available"\)/s,
+      /catch\s*\{[\s\S]*?setStatus\("available"\)/,
     );
   });
 
@@ -71,7 +71,7 @@ describe("W6-2 settings integrations tabs", () => {
 
   it("exports gates empty tables behind !error", () => {
     const src = read("app/(portal)/settings/_components/exports-tab.tsx");
-    expect(src).toContain("{!error && <section>");
+    expect(src).toMatch(/\{!error &&\s*\(?\s*<section>/);
     expect(src).toContain('title="Could not load exports"');
     expect(src).toContain("Try again");
   });
@@ -103,11 +103,17 @@ describe("W6-2 settings integrations tabs", () => {
   });
 
   it("webhooks DLQ keeps QueryState error + empty honesty", () => {
-    const src = read("app/(portal)/settings/(tabs)/webhooks-dlq/page.tsx");
+    const src = read("app/(portal)/settings/_components/webhooks-dlq-tab.tsx");
     expect(src).toContain('errorTitle="Could not load DLQ entries"');
     expect(src).toContain("DLQ is clear");
     expect(src).toContain("toast.error");
     expect(src).toContain("Replay failed");
+  });
+
+  it("webhooks DLQ FS route is redirect-only", () => {
+    const page = read("app/(portal)/settings/(tabs)/webhooks-dlq/page.tsx");
+    expect(page).toContain('params.set("tab", "webhooks-dlq")');
+    expect(page).not.toContain("listWebhookDlq");
   });
 
   it("gateway tab keeps IntegrationStatusBanners + ErrorState", () => {

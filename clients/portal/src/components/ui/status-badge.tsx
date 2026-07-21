@@ -4,6 +4,7 @@ import * as _React from "react";
 import { cn } from "@/lib/utils";
 import { AlertCircle, AlertTriangle, CheckCircle2, Circle, Clock, Info, LucideIcon, XCircle } from "lucide-react";
 import { STATUS, OUTCOMES, PR_STATUSES, IMPROVEMENT_PLAN_STATUSES, type StatusDescriptor, type OutcomeDescriptor } from "@/lib/types";
+import { Badge } from "./badge";
 
 interface StatusBadgeProps {
   status: string;
@@ -73,7 +74,7 @@ function resolveStatus(
 
 /**
  * Generic icon + text badge for any status key in `STATUS` (or a custom descriptor map).
- * Color is one of three signals — icon and label are the primary signals.
+ * Wraps kit `Badge` so status chips share one pill grammar.
  */
 export function StatusBadge({ status, animated = false, className, iconOnly = false, descriptors }: StatusBadgeProps) {
   const desc = resolveStatus(status, descriptors);
@@ -81,9 +82,10 @@ export function StatusBadge({ status, animated = false, className, iconOnly = fa
   const isAnimated = animated && status === "running";
 
   return (
-    <span
+    <Badge
+      variant="outline"
       className={cn(
-        "inline-flex items-center gap-1.5 rounded-md px-2 py-0.5 text-xs font-medium border border-current/10",
+        "gap-1.5 rounded-md border-current/10 px-2 py-0.5 font-medium",
         desc.className,
         className,
       )}
@@ -95,7 +97,7 @@ export function StatusBadge({ status, animated = false, className, iconOnly = fa
         aria-hidden
       />
       {!iconOnly && <span>{desc.label}</span>}
-    </span>
+    </Badge>
   );
 }
 
@@ -120,9 +122,10 @@ export function OutcomeBadge({ outcome, className, iconOnly = false }: OutcomeBa
   const Icon = desc.icon;
 
   return (
-    <span
+    <Badge
+      variant="outline"
       className={cn(
-        "inline-flex items-center gap-1.5 rounded-md px-2 py-0.5 text-xs font-medium border",
+        "gap-1.5 rounded-md px-2 py-0.5 font-medium",
         desc.className,
         className,
       )}
@@ -131,7 +134,7 @@ export function OutcomeBadge({ outcome, className, iconOnly = false }: OutcomeBa
     >
       <Icon className="w-3 h-3 flex-shrink-0" aria-hidden />
       {!iconOnly && <span>{desc.label}</span>}
-    </span>
+    </Badge>
   );
 }
 
@@ -142,9 +145,10 @@ export function OutcomeBadge({ outcome, className, iconOnly = false }: OutcomeBa
 export function TraceOutcomeBadge({ outcome, className }: TraceOutcomeBadgeProps) {
   if (outcome == null || outcome === "") {
     return (
-      <span
+      <Badge
+        variant="outline"
         className={cn(
-          "inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-medium",
+          "gap-1.5 rounded-md px-2 py-0.5 font-medium",
           "bg-[var(--bg-tertiary)] text-[var(--text-muted)]",
           className,
         )}
@@ -152,15 +156,16 @@ export function TraceOutcomeBadge({ outcome, className }: TraceOutcomeBadgeProps
         aria-label="Trace outcome: none"
       >
         —
-      </span>
+      </Badge>
     );
   }
   const key = outcome;
   const Icon = TRACE_OUTCOME_ICONS[key] || TRACE_OUTCOME_ICONS.unknown;
   return (
-    <span
+    <Badge
+      variant="outline"
       className={cn(
-        "inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-medium",
+        "gap-1.5 rounded-md px-2 py-0.5 font-medium",
         TRACE_OUTCOME_CLASSES[key] || TRACE_OUTCOME_CLASSES.unknown,
         className,
       )}
@@ -169,7 +174,7 @@ export function TraceOutcomeBadge({ outcome, className }: TraceOutcomeBadgeProps
     >
       <Icon className="h-3 w-3 flex-shrink-0" aria-hidden />
       {key}
-    </span>
+    </Badge>
   );
 }
 
@@ -235,9 +240,10 @@ export function IssuePriorityBadge({ severity, className }: { severity: string; 
   const key = severity || "p3";
   const Icon = ISSUE_PRIORITY_ICONS[key] || Circle;
   return (
-    <span
+    <Badge
+      variant="outline"
       className={cn(
-        "inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded border",
+        "gap-1.5 rounded-md px-2 py-0.5 font-semibold uppercase tracking-wide",
         ISSUE_PRIORITY_CLASSES[key] ?? ISSUE_PRIORITY_CLASSES.p3,
         className,
       )}
@@ -246,7 +252,7 @@ export function IssuePriorityBadge({ severity, className }: { severity: string; 
     >
       <Icon className="h-3 w-3 flex-shrink-0" aria-hidden />
       {key}
-    </span>
+    </Badge>
   );
 }
 
@@ -259,9 +265,10 @@ export function SeverityBadge({ severity, className }: { severity: string; class
   const key = severity || "info";
   const Icon = SEVERITY_ICON_FOR_BADGE[key] || Info;
   return (
-    <span
+    <Badge
+      variant="outline"
       className={cn(
-        "inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-medium capitalize",
+        "gap-1.5 rounded-md px-2 py-0.5 font-medium capitalize",
         SEVERITY_CLASSES[key] || SEVERITY_CLASSES.info,
         className,
       )}
@@ -270,7 +277,7 @@ export function SeverityBadge({ severity, className }: { severity: string; class
     >
       <Icon className="h-3 w-3 flex-shrink-0" aria-hidden />
       {key}
-    </span>
+    </Badge>
   );
 }
 

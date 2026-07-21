@@ -85,7 +85,7 @@ describe("U18 route agreement", () => {
   });
 
   it("sidebar and ⌘K never href GAP observability from-paths", () => {
-    const fromPaths = new Set(
+    const fromPaths = new Set<string>(
       OBSERVABILITY_GAP_REDIRECTS.map(([source]) => source),
     );
     const hrefs = [
@@ -116,12 +116,13 @@ describe("U18 command palette", () => {
 });
 
 describe("U18 mobile shell", () => {
-  it("locks bottom nav to four core items plus More sheet", () => {
-    expect(MOBILE_CORE_NAV).toHaveLength(4);
+  it("locks bottom nav to five core items plus More sheet", () => {
+    expect(MOBILE_CORE_NAV).toHaveLength(5);
     expect(MOBILE_CORE_NAV.map((i) => i.href)).toEqual([
       "/dashboard",
       "/traces",
       "/issues",
+      "/evals",
       "/improve",
     ]);
   });
@@ -129,14 +130,14 @@ describe("U18 mobile shell", () => {
   it("keeps Agents discoverable first in More (UX-P0-14) and uses text-2xs", () => {
     expect(MOBILE_MORE_LINKS[0]?.href).toBe("/agents");
     expect(MOBILE_MORE_LINKS[0]?.label).toBe("Agents");
-    expect(MOBILE_MORE_LINKS.at(-1)?.href).toBe("/settings");
+    expect(MOBILE_MORE_LINKS.at(-1)?.href).toBe("/settings?tab=api-keys");
     const mobileSrc = readFileSync(
       resolve(ROOT, "src/components/portal-os/MobileBottomNav.tsx"),
       "utf8",
     );
     expect(mobileSrc).toContain("text-2xs");
     expect(mobileSrc).not.toContain("text-[10px]");
-    expect(mobileSrc).toMatch(/Agents, artifacts/i);
+    expect(mobileSrc).toMatch(/Agents, ops tools/i);
     expect(mobileSrc).toContain("lg:hidden");
     expect(mobileSrc).not.toContain("md:hidden");
   });

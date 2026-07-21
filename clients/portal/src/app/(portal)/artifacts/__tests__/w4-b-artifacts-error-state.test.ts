@@ -36,7 +36,7 @@ function artifactsEmptyCopy(opts: {
 
 describe("W4-B artifacts query states", () => {
   it("gates list UI behind !error and uses ErrorState with retry", () => {
-    const src = read("app/(portal)/artifacts/page.tsx");
+    const src = read("app/(portal)/artifacts/_components/artifacts-list.tsx");
     expect(src).toContain('from "@/components/ui/error-state"');
     expect(src).toContain("Could not load artifacts");
     expect(src).toContain("Try again");
@@ -60,7 +60,7 @@ describe("W4-B artifacts query states", () => {
   });
 
   it("mode filter empty does not claim first-run empty when artifacts exist", () => {
-    const src = read("app/(portal)/artifacts/page.tsx");
+    const src = read("app/(portal)/artifacts/_components/artifacts-list.tsx");
     expect(src).toContain("No ${tab} artifacts");
     expect(src).toContain('data-testid="artifacts-clear-mode-filter"');
     expect(src).toContain('onClick={() => setTab("all")}');
@@ -74,12 +74,12 @@ describe("W4-B artifacts query states", () => {
   });
 
   it("hides KPI / author chrome while load failed", () => {
-    const src = read("app/(portal)/artifacts/page.tsx");
-    // ErrorState precedes the success-only fragment that owns KPI + tabs.
+    const src = read("app/(portal)/artifacts/_components/artifacts-list.tsx");
+    // ErrorState precedes the success-only fragment that owns mode tabs + author.
     const errIdx = src.indexOf("Could not load artifacts");
-    const kpiIdx = src.indexOf('{ label: "Shadow"');
+    const modesIdx = src.indexOf('data-testid="artifacts-mode-tabs"');
     expect(errIdx).toBeGreaterThan(-1);
-    expect(kpiIdx).toBeGreaterThan(errIdx);
+    expect(modesIdx).toBeGreaterThan(errIdx);
     expect(src).toMatch(/error \? null : \(\s*<>/);
   });
 });

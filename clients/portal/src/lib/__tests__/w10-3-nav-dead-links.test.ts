@@ -5,7 +5,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import { QUICK_LINKS } from "@/app/(portal)/dashboard/_components/quick-links";
+import { HOME_QUIET_LINKS } from "@/app/(portal)/dashboard/_components/home-widgets";
 import { MOBILE_CORE_NAV, MOBILE_MORE_LINKS } from "@/components/portal-os/MobileBottomNav";
 import { isSafePortalHref } from "@/components/ai-insights/clientToolExecutors";
 import {
@@ -59,10 +59,10 @@ describe("W10.3 nav-dead-links", () => {
     );
   });
 
-  it("quick links + mobile nav have zero removed hrefs", () => {
+  it("quiet home links + mobile nav have zero removed hrefs", () => {
     assertNoRemoved(
-      QUICK_LINKS.map((l) => l.href),
-      "quick-links",
+      HOME_QUIET_LINKS.map((l) => l.href),
+      "home-quiet-links",
     );
     assertNoRemoved(
       MOBILE_CORE_NAV.map((l) => l.href),

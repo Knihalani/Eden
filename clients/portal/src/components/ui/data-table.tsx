@@ -33,6 +33,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
 import { STICKY_FIRST_TD, STICKY_FIRST_TH } from "@/components/ui/table-sticky";
+import { useDensity } from "@/components/portal-os/DensityProvider";
 
 // ── Public types ──────────────────────────────────────────────────
 
@@ -137,6 +138,7 @@ export function DataTable<T>({
   highlightRowId,
   className,
 }: DataTableProps<T>) {
+  const density = useDensity();
   const [sort, setSort] = React.useState<{ key: string; direction: "asc" | "desc" } | null>(
     defaultSort ?? null
   );
@@ -217,7 +219,11 @@ export function DataTable<T>({
 
   // ── Render
   return (
-    <div className={cn("space-y-3", className)}>
+    <div
+      className={cn("space-y-3", className)}
+      data-density={density}
+      data-wave11-density={density}
+    >
       {selectable && selected.size > 0 && (
         <div className="flex flex-wrap items-center gap-2 rounded-md border border-[var(--border-default)] bg-[var(--accent-faint)] px-3 py-2 text-sm">
           <span className="font-medium text-[var(--text-primary)]">
@@ -244,7 +250,13 @@ export function DataTable<T>({
       )}
 
       <div className="relative w-full overflow-auto rounded-md border border-[var(--border-default)]">
-        <table className="w-full caption-bottom text-sm">
+        <table
+          className={cn(
+            "w-full caption-bottom text-sm",
+            density === "compact" && "[&_td]:py-1.5 [&_th]:py-1.5 text-sm",
+            density === "comfortable" && "[&_td]:py-2.5 [&_th]:py-2.5",
+          )}
+        >
           <thead className="[&_tr]:border-b">
             <tr className="border-b border-[var(--border-default)]">
               {selectable && (

@@ -5,7 +5,7 @@ import { SUPPORT_EMAIL } from "@/lib/constants";
 import { ContactForm } from "./contact-form";
 
 const DESCRIPTION =
-  "Reach Eden about soft launch, volume, or security questions. Privacy rights requests go through the Privacy page.";
+  "Reach Eden about public beta, volume, or security questions. Privacy rights requests go through the Privacy page.";
 
 export const metadata: Metadata = {
   title: "Contact · Eden",
@@ -28,7 +28,7 @@ export default function ContactPage() {
       title="Get in touch"
       description={
         <>
-          Soft launch, volume, or security questions — open your email client or write{" "}
+          Public beta, volume, or security questions — open your email client or write{" "}
           <a
             href={`mailto:${SUPPORT_EMAIL}`}
             className="text-[var(--accent)] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] rounded"

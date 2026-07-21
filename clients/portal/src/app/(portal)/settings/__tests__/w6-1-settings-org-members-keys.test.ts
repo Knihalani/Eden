@@ -62,10 +62,13 @@ describe("W6-1 admin gates use resolveRole", () => {
 });
 
 describe("W6-1 personal-org soft-hide SCIM/SSO/transfer", () => {
-  it("settings page soft-hides SCIM and SSO for personal orgs", () => {
+  it("settings page soft-hides SCIM for personal orgs; SSO is a ghost tab", () => {
     const src = read("app/(portal)/settings/page.tsx");
-    expect(src).toMatch(/isPersonalOrg && \(id === "scim" \|\| id === "sso"\)/);
-    expect(src).toContain("Team organizations only");
+    expect(src).toContain("isTeamOnlyTab");
+    expect(src).toMatch(/isTeamOnlyTab\(id\)\s*&&\s*isPersonalOrg/);
+    expect(src).toContain("Team workspaces only");
+    expect(src).toContain("GHOST_TABS");
+    expect(src).toContain('"sso"');
   });
 
   it("org-tab and transfer section soft-hide transfer for personal orgs", () => {
@@ -75,13 +78,17 @@ describe("W6-1 personal-org soft-hide SCIM/SSO/transfer", () => {
     const transfer = read(
       "app/(portal)/settings/_components/transfer-ownership-section.tsx",
     );
-    expect(transfer).toMatch(/if\s*\(\s*org\.is_personal\s*\)\s*return\s*null/);
+    expect(transfer).toContain("canTransferOwnership");
+    expect(transfer).toMatch(
+      /if\s*\(\s*!canTransferOwnership\(\s*org\s*\)\s*\)\s*return\s*null/,
+    );
   });
 
   it("members tab blocks invites on personal orgs", () => {
     const src = read("app/(portal)/settings/_components/members-tab.tsx");
+    expect(src).toContain("canInviteMembers");
     expect(src).toMatch(
-      /canInvite\s*=\s*hasPermission\("members:invite"\)\s*&&\s*!isPersonal/,
+      /canInvite\s*=\s*[\s\S]*?hasPermission\("members:invite"\)\s*&&\s*canInviteMembers\(\s*org\s*\)/,
     );
   });
 });
@@ -93,10 +100,10 @@ describe("W6-1 members remove permission gate", () => {
     expect(src).toMatch(/canRemove\s*&&\s*m\.role\s*!==\s*"owner"/);
   });
 
-  it("members-settings requires members:remove for trash control", () => {
+  it("members-settings re-exports members-tab (Wave 8 S15)", () => {
     const src = read("app/(portal)/settings/_components/members-settings.tsx");
-    expect(src).toContain('hasPermission("members:remove")');
-    expect(src).toMatch(/canRemove\s*&&\s*m\.role\s*!==\s*"owner"/);
+    expect(src).toContain('from "./members-tab"');
+    expect(src).toContain("MembersTab as MembersSettings");
   });
 });
 

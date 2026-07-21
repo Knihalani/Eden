@@ -39,9 +39,9 @@ describe("W13 traces hub / TranscriptV2", () => {
     expect(twin).not.toMatch(/ROLE_META/);
   });
 
-  it("TraceDetailPanel uses CrossLinkBar + progressive modes + VirtualizedTranscript", () => {
+  it("TraceDetailPanel uses overflow actions + progressive modes + VirtualizedTranscript", () => {
     const panel = src("components/traces/TraceDetailPanel.tsx");
-    expect(panel).toContain("CrossLinkBar");
+    expect(panel).toContain('data-testid="trace-actions-overflow"');
     expect(panel).toContain("VirtualizedTranscript");
     expect(panel).toContain('"transcript"');
     expect(panel).toContain("Related issues");
@@ -103,20 +103,23 @@ describe("W14 spans / query language", () => {
     expect(params.q).toContain("timeout");
   });
 
-  it("SpansTab paginates and wires query language + create-alert", () => {
+  it("SpansTab paginates and wires query language + hideable columns", () => {
     const tab = src("components/traces/SpansTab.tsx");
     expect(tab).toContain("parsedToSpanSearchParams");
     expect(tab).toContain("onLoadMore");
-    expect(tab).toContain("Create alert from filters");
+    expect(tab).toContain("SPANS_OPTIONAL_COLUMNS");
+    expect(tab).toContain('data-testid="spans-columns-menu"');
     expect(tab).toContain("setPage");
   });
 
-  it("QueryFilterBar exposes autocomplete + error underline + query draft sync", () => {
+  it("QueryFilterBar exposes autocomplete + Advanced drawer + create-alert", () => {
     const bar = src("components/portal-os/QueryFilterBar.tsx");
     expect(bar).toContain("suggestQueryCompletions");
     expect(bar).toContain("Unknown field");
     expect(bar).toContain("setQueryDraft(query)");
     expect(bar).toContain("clearedFilters");
+    expect(bar).toContain("Create alert from filters");
+    expect(bar).toContain('data-testid="query-filter-advanced-panel"');
     // Save-as-signal lives on SpanSearchBar, not a dead QueryFilterBar affordance.
     expect(bar).not.toContain("onSaveAsSignal");
     expect(bar).not.toContain("Save as signal");
@@ -165,15 +168,16 @@ describe("W16 issues triage (no F22 investment)", () => {
     const page = src("app/(portal)/issues/page.tsx");
     expect(page).toContain("agentIssuesApi.triage");
     expect(page).toContain("agentIssuesApi.resolve");
-    expect(page).toContain("View improvement plan");
   });
 
   it("issue detail uses handoff CTAs instead of Fix tab investment", () => {
     const detail = src("app/(portal)/issues/[id]/page.tsx");
-    expect(detail).toContain("handoff");
-    expect(detail).toContain("View improvement plan");
-    expect(detail).toContain("Open in coding agent");
-    expect(detail).toContain("Export fixture");
+    const handoff = src("app/(portal)/issues/_components/issue-handoff.tsx");
+    expect(detail).toContain("IssueHandoffPanel");
+    expect(handoff).toContain("handoff");
+    expect(handoff).toContain("View improvement plan");
+    expect(handoff).toContain("Open in coding agent");
+    expect(handoff).toContain("Export fixture");
     expect(detail).not.toMatch(/id: "fix"/);
   });
 });
@@ -181,17 +185,21 @@ describe("W16 issues triage (no F22 investment)", () => {
 describe("W17 alerts + signals", () => {
   it("alerts empty state offers Create-rule CTA", () => {
     const page = src("app/(portal)/alerts/page.tsx");
-    expect(page).toContain("alerts-create-rule-cta");
-    expect(page).toContain("Create rule");
+    const feed = src("app/(portal)/alerts/_components/alerts-feed.tsx");
+    const sheet = src("app/(portal)/alerts/_components/alert-rules-sheet.tsx");
+    expect(feed).toContain("alerts-create-rule-cta");
+    expect(feed).toContain("Create rule");
     expect(page).toContain("real_incident");
-    expect(page).toContain("benign");
-    expect(page).toContain("compileNlAlert");
+    expect(feed).toContain("benign");
+    expect(sheet).toContain("compileNlAlert");
   });
 
   it("signals library remains reachable from alerts tab", () => {
     const alerts = src("app/(portal)/alerts/page.tsx");
-    expect(alerts).toContain('useQueryTab("tab", ALERT_TABS, "feed")');
-    expect(alerts).toContain('value="signals"');
+    const hook = src("app/(portal)/alerts/_components/use-alerts-page.ts");
+    const feed = src("app/(portal)/alerts/_components/alerts-feed.tsx");
+    expect(hook).toContain('useQueryTab("tab", ALERT_TABS, "feed")');
+    expect(feed).toContain('value="signals"');
     expect(alerts).toContain("@/components/ui/tabs");
     expect(existsSync(resolve(ROOT, "src/app/(portal)/signals/page.tsx"))).toBe(true);
   });

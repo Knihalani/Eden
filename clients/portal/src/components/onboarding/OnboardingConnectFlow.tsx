@@ -189,6 +189,11 @@ export function OnboardingConnectFlow({
     setError(null);
     try {
       const name = agentName.trim() || selectedRepo.name;
+      await githubApi.connectRepo(currentOrg.id, {
+        installation_id: selectedRepo.installation_id,
+        repo_full_name: selectedRepo.full_name,
+        default_branch: selectedRepo.default_branch || "main",
+      });
       await agentsApi.register(currentOrg.id, {
         name,
         agent_id: agentId.trim() || undefined,

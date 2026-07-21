@@ -11,6 +11,7 @@ import {
   DOCS_URL,
   DOCS_QUICKSTART_URL,
 } from "@/lib/constants";
+import { openCookiePreferences } from "@/lib/analytics";
 
 const linkClass =
   "inline-flex items-center min-h-11 text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-primary)] rounded-md";
@@ -41,6 +42,9 @@ export function MarketingFooter() {
             </Link>
             <Link href="/security" className={linkClass}>
               {t("footer.security")}
+            </Link>
+            <Link href="/status" className={linkClass}>
+              {t("footer.status")}
             </Link>
             <Link href="/contact" className={linkClass}>
               {t("footer.contact")}
@@ -94,6 +98,13 @@ export function MarketingFooter() {
             <Link href="/privacy" className={linkClass}>
               {t("footer.privacy")}
             </Link>
+            <button
+              type="button"
+              onClick={() => openCookiePreferences()}
+              className={linkClass}
+            >
+              {t("footer.cookiePreferences")}
+            </button>
             <Link href="/terms" className={linkClass}>
               {t("footer.terms")}
             </Link>

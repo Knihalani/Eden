@@ -1,7 +1,7 @@
 /**
  * W3-A — Dashboard telemetry outage uses shared ErrorState + Retry;
  * W1-C first-run derivation must still hold (no installPath loop).
- * Wave 3.1: cost/agentic/latency must not false-empty on hard API failure.
+ * Wave 7: restraint KPI strip (no agentic/latency edit-only cards).
  */
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -26,88 +26,91 @@ describe("W3-A dashboard ErrorState", () => {
   });
 
   it("keeps W1-C isFirstRun derivation (no installPath setState loop)", () => {
-    const src = read("app/(portal)/dashboard/page.tsx");
+    const src = read(
+      "app/(portal)/dashboard/_components/use-home-dashboard.ts",
+    );
     expect(src).not.toMatch(/setInstallPath/);
-    expect(src).not.toMatch(/useState\(true\);\s*\n\s*useEffect\(\(\) => \{[^}]*setInstallPath/s);
+    expect(src).not.toMatch(
+      /useState\(true\);\s*\n\s*useEffect\(\(\) => \{[\s\S]*?setInstallPath/,
+    );
     expect(src).toMatch(/const isFirstRun =/);
     expect(src).toMatch(/!tracesQuery\.isError/);
   });
 
-  it("cost card distinguishes unavailable vs empty on shard failure", () => {
-    const src = read("app/(portal)/dashboard/page.tsx");
-    expect(src).toMatch(/const costUnavailable/);
-    expect(src).toMatch(/costComparisonQuery\.isError/);
-    expect(src).toMatch(/costKpiQuery\.isError/);
-    expect(src).toContain("Cost unavailable — could not load spend.");
-    expect(src).toContain("No cost data — start routing calls to populate.");
+  it("cost cell distinguishes unavailable vs empty on shard failure", () => {
+    const hook = read(
+      "app/(portal)/dashboard/_components/use-home-dashboard.ts",
+    );
+    const kpi = read(
+      "app/(portal)/dashboard/_components/home-kpi-strip.tsx",
+    );
+    expect(hook).toMatch(/const costUnavailable/);
+    expect(hook).toMatch(/costComparisonQuery\.isError/);
+    expect(hook).toMatch(/costKpiQuery\.isError/);
+    expect(hook).toContain("cost unavailable");
+    expect(hook).toContain("no cost data yet");
+    expect(kpi).toContain("costUnavailable");
+    expect(kpi).toContain("costEmpty");
   });
 
-  it("agentic card uses unavailable copy on isError (not Layer A empty)", () => {
-    const src = read("app/(portal)/dashboard/page.tsx");
-    expect(src).toContain(
-      "Agentic scores unavailable — could not load metrics.",
+  it("throughput/errors cells surface summaryError as unavailable", () => {
+    const kpi = read(
+      "app/(portal)/dashboard/_components/home-kpi-strip.tsx",
     );
-    expect(src).toMatch(/agenticQuery\.isError/);
-    expect(src).toContain(
-      "Scores appear after Layer A runs on finalized traces.",
-    );
+    expect(kpi).toContain("summaryError");
+    expect(kpi).toContain("unavailable");
+    expect(kpi).toContain("no events yet");
   });
 
-  it("latency unavailable when summary errors and no fallback p95", () => {
-    const src = read("app/(portal)/dashboard/page.tsx");
-    expect(src).toMatch(
-      /unavailable=\{summaryQuery\.isError && p95 == null\}/,
-    );
-  });
-
-  it("throughput card surfaces unavailable prop from summary isError", () => {
-    const src = read("app/(portal)/dashboard/page.tsx");
-    expect(src).toMatch(/unavailable=\{summaryQuery\.isError\}/);
-    const throughput = read(
-      "app/(portal)/dashboard/_components/throughput-card.tsx",
-    );
-    expect(throughput).toContain("throughput unavailable");
-    expect(throughput).toContain("no events yet");
-  });
-
-  it("dashboard loading skeleton mirrors KPI + diagnosis + traces layout", () => {
+  it("dashboard loading skeleton mirrors restraint KPI + diagnosis + failures", () => {
     const loading = read("app/(portal)/dashboard/loading.tsx");
-    expect(loading).toContain('aria-label="Loading dashboard"');
-    expect(loading).toMatch(/xl:grid-cols-4/);
-    expect(loading).toMatch(/xl:grid-cols-3/);
-    expect(loading).toMatch(/xl:col-span-2/);
-    expect(loading).toContain("Skeleton");
-    expect(loading).toMatch(/Status→Diagnosis→Action|diagnosis/i);
+    const skeleton = read(
+      "app/(portal)/dashboard/_components/home-dashboard-skeleton.tsx",
+    );
+    expect(loading).toContain("HomeDashboardSkeleton");
+    expect(skeleton).toContain('label = "Loading dashboard"');
+    expect(skeleton).toContain("aria-label={label}");
+    expect(skeleton).toMatch(/xl:grid-cols-4/);
+    expect(skeleton).toContain('data-home-shell-kpi="restraint"');
+    expect(skeleton).toContain("Skeleton");
+    expect(skeleton).toMatch(/Status → Diagnosis → Action|diagnosis/i);
   });
 
   it("default Home layout is 5–7 widgets with Status→Diagnosis→Action", () => {
-    const src = read("app/(portal)/dashboard/page.tsx");
-    expect(src).toMatch(/const DEFAULT_WIDGETS/);
-    expect(src).toContain('data-testid="dashboard-status-kpis"');
-    expect(src).toContain('data-testid="dashboard-diagnosis"');
-    expect(src).toContain("Open Traces");
-    expect(src).toContain('aria-label="Time range"');
-    expect(src).not.toMatch(/text-\[9px\]|text-\[10px\]|text-\[11px\]/);
-    // Default visible set ≤7 (agentic + links are progressive extras).
-    const defaultMatch = src.match(
+    const page = read("app/(portal)/dashboard/page.tsx");
+    const widgets = read(
+      "app/(portal)/dashboard/_components/home-widgets.ts",
+    );
+    const kpi = read(
+      "app/(portal)/dashboard/_components/home-kpi-strip.tsx",
+    );
+    const diagnosis = read(
+      "app/(portal)/dashboard/_components/diagnosis-strip.tsx",
+    );
+    expect(widgets).toMatch(/const DEFAULT_WIDGETS/);
+    expect(kpi).toContain('data-testid="dashboard-status-kpis"');
+    expect(diagnosis).toContain('data-testid="dashboard-diagnosis"');
+    expect(page).toContain("HomeHeaderActions");
+    const header = read(
+      "app/(portal)/dashboard/_components/home-header-actions.tsx",
+    );
+    expect(header).toContain("Open Traces");
+    expect(page).not.toMatch(/text-\[9px\]|text-\[10px\]|text-\[11px\]/);
+    const defaultMatch = widgets.match(
       /const DEFAULT_WIDGETS:\s*WidgetId\[\]\s*=\s*\[([\s\S]*?)\];/,
     );
     expect(defaultMatch).toBeTruthy();
-    const ids = (defaultMatch![1].match(/"[a-z]+"/g) ?? []).length;
+    const ids = (defaultMatch![1].match(/"[a-z-]+"/g) ?? []).length;
     expect(ids).toBeGreaterThanOrEqual(5);
     expect(ids).toBeLessThanOrEqual(7);
   });
 
-  it("latency/throughput cards use Skeleton while loading (not spinner-only)", () => {
-    const latency = read(
-      "app/(portal)/dashboard/_components/latency-card.tsx",
+  it("KPI strip uses Skeleton while loading (not spinner-only)", () => {
+    const kpi = read(
+      "app/(portal)/dashboard/_components/home-kpi-strip.tsx",
     );
-    const throughput = read(
-      "app/(portal)/dashboard/_components/throughput-card.tsx",
-    );
-    expect(latency).toContain('from "@/components/ui/skeleton"');
-    expect(throughput).toContain('from "@/components/ui/skeleton"');
-    expect(latency).not.toMatch(/Loader2/);
-    expect(throughput).not.toMatch(/Loader2/);
+    expect(kpi).toContain('from "@/components/ui/skeleton"');
+    expect(kpi).toContain("Skeleton");
+    expect(kpi).not.toMatch(/Loader2/);
   });
 });

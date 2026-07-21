@@ -27,6 +27,7 @@ import {
   isRetryableIntelligenceError,
 } from "@/lib/feature-flag-error";
 import { cn } from "@/lib/utils";
+import { CostImproveCrossLink } from "./cost-improve-cross-link";
 
 type DimRow = {
   key?: string;
@@ -222,6 +223,10 @@ export default function FinOpsExplorer() {
           />
         </div>
       </Panel>
+
+      {data?.delta_pct != null && data.delta_pct >= 25 ? (
+        <CostImproveCrossLink reason="Spend up sharply vs prior window — open Improve to act on cost plans." />
+      ) : null}
 
       {/* Secondary loop spend — compact, not competing cards */}
       <div

@@ -29,10 +29,11 @@ describe("W25 FinOps evolution/promote spend", () => {
       "app/(portal)/optimization/_components/finops-explorer.tsx",
     );
     expect(explorer).toContain("evolve-promote-spend");
-    expect(explorer).toContain("feature=evolution");
-    expect(explorer).toContain("feature=promote");
-    expect(explorer).toContain("Evolution spend");
-    expect(explorer).toContain("Promote spend");
+    // Labels use plain "Evolution" / "Promote" text (not query-string anchors)
+    expect(explorer).toContain(">Evolution<");
+    expect(explorer).toContain(">Promote<");
+    expect(explorer).toContain("evolution_usd");
+    expect(explorer).toContain("promote_usd");
   });
 });
 

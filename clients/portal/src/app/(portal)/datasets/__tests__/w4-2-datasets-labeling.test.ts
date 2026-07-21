@@ -99,14 +99,19 @@ describe("W4-2 datasets query states", () => {
 
 describe("W4-2 dataset detail spreadsheet cells", () => {
   it("reads top-level input/expected_output (not values-only)", () => {
-    const src = read("app/(portal)/datasets/[id]/page.tsx");
-    expect(src).toContain("function cellValue");
-    expect(src).toContain("row.input");
-    expect(src).toContain("row.expected_output");
-    expect(src).toContain('key === "input"');
-    expect(src).toContain("expected_output: value");
+    const cells = read(
+      "app/(portal)/datasets/[id]/_components/dataset-cells.ts",
+    );
+    expect(cells).toContain("function cellValue");
+    expect(cells).toContain("row.input");
+    expect(cells).toContain("row.expected_output");
+    expect(cells).toContain('key === "input"');
+    const hook = read(
+      "app/(portal)/datasets/[id]/_components/use-dataset-detail.ts",
+    );
+    expect(hook).toContain("expected_output: value");
     // Load failure is ErrorState-only (no toast on load catch).
-    expect(src).not.toMatch(/catch \(e\) \{\s*const msg[\s\S]*toast\.error\(msg\)/);
+    expect(hook).not.toMatch(/catch \(e\) \{\s*const msg[\s\S]*toast\.error\(msg\)/);
   });
 
   it("cellValue prefers top-level spreadsheet fields", () => {
@@ -129,40 +134,52 @@ describe("W4-2 dataset detail spreadsheet cells", () => {
 
   it("gates mutation chrome and empty CTAs behind successful load", () => {
     const src = read("app/(portal)/datasets/[id]/page.tsx");
+    const sheet = read(
+      "app/(portal)/datasets/[id]/_components/dataset-spreadsheet.tsx",
+    );
     expect(src).toContain("Could not load dataset");
-    expect(src).toContain("Import file");
-    expect(src).toMatch(/disabled=\{!canMutate\}/);
-    expect(src).toMatch(/\{error && !loading \?[\s\S]*ErrorState/);
-    expect(src).toMatch(/\{!error \? \(/);
+    expect(sheet).toContain("Import file");
+    expect(src).toMatch(/disabled=\{!d\.canMutate\}/);
+    expect(src).toMatch(/\{d\.error && !d\.loading \?[\s\S]*ErrorState/);
+    expect(src).toMatch(/\{!d\.error \? \(/);
   });
 });
 
 describe("W4-2 labeling CRUD + empty CTAs", () => {
   it("uses UI Tag chips (not lucide Tag as chip wrapper)", () => {
-    const src = read("app/(portal)/labeling/page.tsx");
-    expect(src).toContain('from "@/components/ui/tag"');
-    expect(src).toContain("Tag as TagIcon");
-    expect(src).toMatch(/<(Tag)\s+key=\{t\}/);
-    expect(src).not.toMatch(/import \{\s*Tag\s*,/);
+    // E5 peel: Tag chips live in review dialog / items table, not thin page shell.
+    const page = read("app/(portal)/labeling/page.tsx");
+    const dialog = read("app/(portal)/labeling/_components/labeling-review-dialog.tsx");
+    const items = read("app/(portal)/labeling/_components/labeling-items-table.tsx");
+    const joined = `${page}\n${dialog}\n${items}`;
+    expect(page).toContain("Tag as TagIcon");
+    expect(joined).toContain('from "@/components/ui/tag"');
+    expect(joined).toMatch(/<(Tag)\s+key=\{t\}/);
+    expect(joined).not.toMatch(/import \{\s*Tag\s*,/);
   });
 
   it("gates items list behind QueryState; empty has seed CTA", () => {
-    const src = read("app/(portal)/labeling/page.tsx");
-    expect(src).toContain("Could not load labeling queue");
-    expect(src).toContain('data-testid="labeling-empty-seed"');
-    expect(src).toContain("No matching items");
-    expect(src).toContain('data-testid="labeling-clear-filter"');
-    expect(src).toContain('from "@/components/ui/query-state"');
-    expect(src).toContain("<QueryState");
+    const page = read("app/(portal)/labeling/page.tsx");
+    const items = read("app/(portal)/labeling/_components/labeling-items-table.tsx");
+    const joined = `${page}\n${items}`;
+    expect(joined).toContain("Could not load labeling queue");
+    expect(joined).toContain('data-testid="labeling-empty-seed"');
+    expect(joined).toContain("No matching items");
+    expect(joined).toContain('data-testid="labeling-clear-filter"');
+    expect(joined).toContain('from "@/components/ui/query-state"');
+    expect(joined).toContain("<QueryState");
   });
 
   it("surfaces queue list + create with ErrorState on queues 5xx", () => {
-    const src = read("app/(portal)/labeling/page.tsx");
-    expect(src).toContain("labelingQueuesApi");
-    expect(src).toContain("Could not load labeling queues");
-    expect(src).toContain('data-testid="labeling-create-queue"');
-    expect(src).toContain("/labeling/queues/");
-    expect(src).toContain("router.push");
+    const page = read("app/(portal)/labeling/page.tsx");
+    const queues = read("app/(portal)/labeling/_components/labeling-queues-section.tsx");
+    const hook = read("app/(portal)/labeling/_components/use-labeling-page.ts");
+    const joined = `${page}\n${queues}\n${hook}`;
+    expect(joined).toContain("labelingQueuesApi");
+    expect(joined).toContain("Could not load labeling queues");
+    expect(joined).toContain('data-testid="labeling-create-queue"');
+    expect(joined).toContain("/labeling/queues/");
+    expect(joined).toContain("router.push");
   });
 
   it("ships route error.tsx under labeling/", () => {
@@ -173,9 +190,13 @@ describe("W4-2 labeling CRUD + empty CTAs", () => {
   });
 
   it("queue board empty has CTA back to labeling", () => {
-    const src = read("app/(portal)/labeling/queues/[id]/page.tsx");
-    expect(src).toContain("Could not load labeling board");
-    expect(src).toContain("Back to labeling · seed item");
-    expect(src).toMatch(/loadError \?[\s\S]*ErrorState/);
+    const page = read("app/(portal)/labeling/queues/[id]/page.tsx");
+    const transcript = read(
+      "app/(portal)/labeling/queues/[id]/_components/queue-transcript.tsx",
+    );
+    const joined = `${page}\n${transcript}`;
+    expect(joined).toContain("Could not load labeling board");
+    expect(joined).toContain("Back to labeling · seed item");
+    expect(page).toMatch(/loadError \?[\s\S]*ErrorState/);
   });
 });

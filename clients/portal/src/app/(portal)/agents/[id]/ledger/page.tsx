@@ -8,11 +8,11 @@ import { ArrowLeft, BookOpen, Loader2, RefreshCw } from "lucide-react";
 import { PageHeader } from "@/components/layout/page-header";
 import { PageContent } from "@/components/layout/page-content";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorState } from "@/components/ui/error-state";
 import { Input } from "@/components/ui/input";
 import { NoOrgState } from "@/components/ui/no-org-state";
+import { Panel } from "@/components/ui/panel";
 import { useOrg } from "@/hooks/use-org";
 import { usePermissions } from "@/hooks/use-permissions";
 import { useKeyboardShortcuts } from "@/hooks/use-keyboard-shortcuts";
@@ -27,13 +27,12 @@ import {
   tracesFilteredHref,
 } from "@/lib/portal-cross-links";
 import { errorFromCaught } from "@/lib/safe-error-message";
-import { CrossLinkBar } from "@/components/portal-os";
 
 function CitationChip({ cite }: { cite: string }) {
   if (cite.startsWith("artifact:")) {
     const id = cite.replace("artifact:", "");
     return (
-      <Link href={artifactHref(id)} className="rounded bg-[var(--accent-faint)] px-2 py-0.5 text-xs hover:underline">
+      <Link href={artifactHref(id)} className="rounded bg-[var(--accent-faint)] px-2 py-1 text-xs hover:underline">
         artifact:{id.slice(0, 8)}
       </Link>
     );
@@ -41,7 +40,7 @@ function CitationChip({ cite }: { cite: string }) {
   if (cite.startsWith("trace:")) {
     const id = cite.replace("trace:", "");
     return (
-      <Link href={traceHref(id)} className="rounded bg-[var(--accent-faint)] px-2 py-0.5 text-xs hover:underline">
+      <Link href={traceHref(id)} className="rounded bg-[var(--accent-faint)] px-2 py-1 text-xs hover:underline">
         trace:{id.slice(0, 8)}
       </Link>
     );
@@ -50,13 +49,13 @@ function CitationChip({ cite }: { cite: string }) {
     return (
       <Link
         href={issueFullHref(cite)}
-        className="rounded bg-[var(--accent-faint)] px-2 py-0.5 text-xs hover:underline"
+        className="rounded bg-[var(--accent-faint)] px-2 py-1 text-xs hover:underline"
       >
         issue:{cite.slice(0, 8)}
       </Link>
     );
   }
-  return <span className="rounded bg-[var(--bg-secondary)] px-2 py-0.5 text-xs">{cite}</span>;
+  return <span className="rounded bg-[var(--bg-secondary)] px-2 py-1 text-xs">{cite}</span>;
 }
 
 export default function AgentLedgerPage() {
@@ -189,15 +188,31 @@ export default function AgentLedgerPage() {
           Back to agent
         </Link>
       </Button>
-      <CrossLinkBar
-        links={[
-          { label: "Drift", href: driftHref(agentId) },
-          { label: "Traces", href: tracesFilteredHref({ agent_id: agentId }) },
-          { label: "Artifacts", href: artifactHref() },
-          { label: "Improve", href: "/improve" },
-        ]}
-      />
-      <Card className="flex flex-wrap items-center justify-between gap-4 p-4">
+      <nav
+        aria-label="Related"
+        data-testid="agent-ledger-related-strip"
+        className="flex flex-wrap items-center gap-x-space-3 gap-y-1 text-xs text-[var(--text-muted)]"
+      >
+        <Link href="/improve" className="text-[var(--accent)] hover:underline">
+          Queue
+        </Link>
+        <Link href={artifactHref()} className="text-[var(--accent)] hover:underline">
+          Artifacts
+        </Link>
+        <Link href="/ledger" className="text-[var(--accent)] hover:underline">
+          Ledger
+        </Link>
+        <Link href={driftHref(agentId)} className="text-[var(--accent)] hover:underline">
+          Drift
+        </Link>
+        <Link
+          href={tracesFilteredHref({ agent_id: agentId })}
+          className="text-[var(--accent)] hover:underline"
+        >
+          Traces
+        </Link>
+      </nav>
+      <Panel tone="flat" padding="md" className="flex flex-wrap items-center justify-between gap-4">
         <div className="flex flex-wrap items-center gap-3">
           <BookOpen className="h-5 w-5" />
           <span className="text-sm">Gateway injection {enabled ? "on" : "off"}</span>
@@ -246,19 +261,19 @@ export default function AgentLedgerPage() {
             </Button>
           ) : null}
         </div>
-      </Card>
+      </Panel>
       {preview ? (
-        <Card className="mb-4 space-y-2 p-4 text-sm">
+        <Panel tone="inset" padding="md" className="mb-4 space-y-2 text-sm">
           <div className="font-medium">Inject preview</div>
           <div className="flex flex-wrap gap-4 text-xs text-[var(--text-muted)]">
             <span>Tokens: {String(preview.tokens ?? "—")}</span>
             <span>Est. $/match: {String(preview.est_usd_per_match ?? "—")}</span>
           </div>
           <MarkdownProse content={String(preview.injected_block ?? "")} />
-        </Card>
+        </Panel>
       ) : null}
       {diffText || diff.length > 0 ? (
-        <Card className="mb-4 space-y-3 p-4 text-sm">
+        <Panel tone="inset" padding="md" className="mb-4 space-y-3 text-sm">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="font-medium">Version diff since v{sinceVersion}</div>
             <Input
@@ -284,7 +299,7 @@ export default function AgentLedgerPage() {
             onModeChange={setDiffMode}
             emptyMessage="No chapter text changes in this range."
           />
-        </Card>
+        </Panel>
       ) : null}
       {error ? (
         <ErrorState
@@ -322,16 +337,19 @@ export default function AgentLedgerPage() {
           }
         />
       ) : (
-        <div className="space-y-2">
+        <div className="space-y-3" data-testid="ledger-markdown-entries">
           {entries.map((e) => {
             const cites = (e.citations as string[] | undefined) ?? [];
             return (
-              <Card key={String(e.id)} className="p-4">
+              <article
+                key={String(e.id)}
+                className="border-b border-[var(--border-subtle)] pb-space-4 last:border-b-0"
+              >
                 <div className="text-xs text-[var(--text-muted)]">
                   {String(e.chapter)} · v{String(e.version)}
                 </div>
                 <MarkdownProse
-                  className="mt-1"
+                  className="mt-1 prose-calm"
                   content={String(e.content_md ?? e.text ?? "")}
                 />
                 {cites.length > 0 ? (
@@ -341,7 +359,7 @@ export default function AgentLedgerPage() {
                     ))}
                   </div>
                 ) : null}
-              </Card>
+              </article>
             );
           })}
         </div>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { Check, Columns2, Copy, Rows3 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -261,6 +261,8 @@ export function DiffViewer({
 }) {
   const hunks = useMemo(() => parseDiff(diff), [diff]);
   const [copied, setCopied] = useState(false);
+  const unifiedRef = useRef<HTMLButtonElement>(null);
+  const splitRef = useRef<HTMLButtonElement>(null);
 
   async function handleCopy() {
     try {
@@ -269,6 +271,27 @@ export function DiffViewer({
       setTimeout(() => setCopied(false), 2000);
     } catch {
       // ignore
+    }
+  }
+
+  function onLayoutKeyDown(e: KeyboardEvent<HTMLDivElement>) {
+    if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
+      e.preventDefault();
+      const next = diffMode === "unified" ? "split" : "unified";
+      onModeChange(next);
+      queueMicrotask(() => {
+        (next === "unified" ? unifiedRef : splitRef).current?.focus();
+      });
+      return;
+    }
+    if (e.key === "u" || e.key === "U") {
+      e.preventDefault();
+      onModeChange("unified");
+      return;
+    }
+    if (e.key === "s" || e.key === "S") {
+      e.preventDefault();
+      onModeChange("split");
     }
   }
 
@@ -281,41 +304,44 @@ export function DiffViewer({
   }
 
   return (
-    <div>
-      <div className="flex items-center justify-between mb-2">
-        <div className="inline-flex bg-[var(--bg-base)] border border-[var(--border-default)] rounded-md p-0.5">
-          <button
+    <div data-testid="diff-viewer">
+      <div className="mb-space-2 flex items-center justify-between gap-space-2">
+        <div
+          role="group"
+          aria-label="Diff layout"
+          tabIndex={0}
+          className="inline-flex h-8 items-center gap-0.5 rounded-md border border-[var(--border-default)] bg-[var(--bg-secondary)] p-0.5 outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
+          onKeyDown={onLayoutKeyDown}
+        >
+          <Button
+            ref={unifiedRef}
             type="button"
-            onClick={() => onModeChange("unified")}
+            size="sm"
+            variant={diffMode === "unified" ? "secondary" : "ghost"}
+            className="h-7 gap-1.5 px-2.5 text-xs"
             aria-pressed={diffMode === "unified"}
-            className={cn(
-              "px-2.5 py-1 text-xs rounded flex items-center gap-1.5",
-              diffMode === "unified"
-                ? "bg-[var(--bg-tertiary)] text-[var(--text-primary)]"
-                : "text-[var(--text-muted)] hover:text-[var(--text-muted)]",
-            )}
+            onClick={() => onModeChange("unified")}
           >
-            <Rows3 className="h-3 w-3" />
+            <Rows3 className="h-3.5 w-3.5" />
             Unified
-          </button>
-          <button
+          </Button>
+          <Button
+            ref={splitRef}
             type="button"
-            onClick={() => onModeChange("split")}
+            size="sm"
+            variant={diffMode === "split" ? "secondary" : "ghost"}
+            className="h-7 gap-1.5 px-2.5 text-xs"
             aria-pressed={diffMode === "split"}
-            className={cn(
-              "px-2.5 py-1 text-xs rounded flex items-center gap-1.5",
-              diffMode === "split"
-                ? "bg-[var(--bg-tertiary)] text-[var(--text-primary)]"
-                : "text-[var(--text-muted)] hover:text-[var(--text-muted)]",
-            )}
+            onClick={() => onModeChange("split")}
           >
-            <Columns2 className="h-3 w-3" />
+            <Columns2 className="h-3.5 w-3.5" />
             Split
-          </button>
+          </Button>
         </div>
         <Button
           variant="ghost"
           size="sm"
+          className="h-8"
           onClick={handleCopy}
           aria-label={copied ? "Copied diff to clipboard" : "Copy diff to clipboard"}
         >
@@ -326,10 +352,14 @@ export function DiffViewer({
           )}
         </Button>
       </div>
-      <div className="text-xs font-mono leading-relaxed bg-[var(--bg-base)] border border-[var(--border-default)] rounded-lg overflow-hidden">
+      <div
+        className="overflow-hidden rounded-md border border-[var(--border-subtle)] bg-[var(--bg-base)] font-mono text-xs leading-relaxed"
+        tabIndex={0}
+        aria-label={diffMode === "unified" ? "Unified diff" : "Split diff"}
+      >
         {hunks.map((h, hi) => (
-          <div key={hi} className="border-b border-[var(--border-default)]/50 last:border-0">
-            <div className="px-3 py-1 bg-[var(--accent)]/5 text-[var(--accent)] text-[10px]">
+          <div key={hi} className="border-b border-[var(--border-subtle)] last:border-0">
+            <div className="bg-[var(--bg-tertiary)] px-space-3 py-1 text-xs text-[var(--text-muted)]">
               {h.header}
             </div>
             {diffMode === "unified" ? <UnifiedHunk hunk={h} /> : <SplitHunk hunk={h} />}

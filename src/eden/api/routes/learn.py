@@ -619,9 +619,21 @@ async def improvement_loop_status(org_id: str = Depends(require_path_org_access)
             "done": False,
         },
         {
+            "id": "queue",
+            "label": "Open Improve queue",
+            "href": "/improve",
+            "done": False,
+        },
+        {
             "id": "artifact",
             "label": "First Artifact candidate",
             "href": "/artifacts",
+            "done": False,
+        },
+        {
+            "id": "prompts",
+            "label": "Prompts registry",
+            "href": "/prompts",
             "done": False,
         },
         {
@@ -636,6 +648,7 @@ async def improvement_loop_status(org_id: str = Depends(require_path_org_access)
         "traces": 0,
         "issues": 0,
         "artifacts": 0,
+        "prompts": 0,
         "ledgers": 0,
     }
     if client is not None:
@@ -692,6 +705,25 @@ async def improvement_loop_status(org_id: str = Depends(require_path_org_access)
         except Exception:
             counts["artifacts"] = 0
         try:
+            counts["prompts"] = int(
+                await client.fetchval(
+                    "SELECT COUNT(*) FROM prompts WHERE org_id = $1",
+                    org_id,
+                )
+                or 0
+            )
+        except Exception:
+            try:
+                counts["prompts"] = int(
+                    await client.fetchval(
+                        "SELECT COUNT(*) FROM prompt_registry WHERE org_id = $1",
+                        org_id,
+                    )
+                    or 0
+                )
+            except Exception:
+                counts["prompts"] = 0
+        try:
             counts["ledgers"] = int(
                 await client.fetchval(
                     """
@@ -718,7 +750,10 @@ async def improvement_loop_status(org_id: str = Depends(require_path_org_access)
         "sdk": counts["api_keys"] > 0 or counts["traces"] > 0,
         "trace": counts["traces"] > 0,
         "issue": counts["issues"] > 0,
+        # Queue is teachable once issues exist (master–detail act path is ready).
+        "queue": counts["issues"] > 0,
         "artifact": counts["artifacts"] > 0,
+        "prompts": counts["prompts"] > 0,
         "ledger": counts["ledgers"] > 0,
     }
     for step in steps:

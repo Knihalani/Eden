@@ -1895,6 +1895,7 @@ export const api = {
       duration_ms: number;
       event_type: string;
       outcome: string | null;
+      span_id?: string;
     }>;
     total_duration_ms: number;
     markers: Array<{ at_ms: number; label: string; severity: string }>;
@@ -5266,6 +5267,27 @@ export const githubApi = {
       `/orgs/${orgId}/github/repos`,
       { headers: { "X-Org-Id": orgId } },
     ),
+  connectRepo: (
+    orgId: string,
+    body: {
+      installation_id: number;
+      repo_full_name: string;
+      default_branch?: string;
+    },
+  ) =>
+    fetchApi<{
+      id: string;
+      org_id: string;
+      provider: string;
+      installation_id: string;
+      repo_full_name: string;
+      default_branch: string;
+      status: string;
+    }>(`/orgs/${orgId}/github/repos/connect`, {
+      method: "POST",
+      headers: { "X-Org-Id": orgId },
+      body: JSON.stringify(body),
+    }),
 };
 
 export const onboardingApi = {

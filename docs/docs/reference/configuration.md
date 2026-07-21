@@ -38,7 +38,7 @@ npx @eden-ai/sdk doctor
 
 The hosted API, portal, and workers are configured by Eden. Customers
 do not deploy Postgres, Redis, ClickHouse, or Clerk. Dedicated
-tenancy is available for enterprise — contact sales@eden.dev.
+tenancy may be discussed under a separate agreement — contact sales@edenobservability.com.
 
 If you are an Eden operator, the full platform variable list lives in
 [Environment variables](/reference/environment-variables).

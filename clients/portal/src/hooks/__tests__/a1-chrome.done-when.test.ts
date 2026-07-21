@@ -15,18 +15,21 @@ function read(rel: string): string {
 
 describe("A1 portal chrome Done-when", () => {
   it("P2-phase1: chrome uses dynamic() for ChatSidebar, CommandPalette, OnboardingOverlay", () => {
-    const src = read("app/(portal)/portal-chrome.tsx");
-    expect(src).toMatch(/dynamic\(/);
-    expect(src).toMatch(/ChatSidebar/);
-    expect(src).toMatch(/CommandPalette/);
-    expect(src).toMatch(/OnboardingOverlay/);
-    expect(src).not.toMatch(
+    // ChatSidebar peeled into AiRailHost; palette/overlay stay on orchestrator.
+    const chrome = read("app/(portal)/portal-chrome.tsx");
+    const aiRail = read("components/portal-chrome/AiRailHost.tsx");
+    const peeled = `${chrome}\n${aiRail}`;
+    expect(peeled).toMatch(/dynamic\(/);
+    expect(aiRail).toMatch(/ChatSidebar/);
+    expect(chrome).toMatch(/CommandPalette/);
+    expect(chrome).toMatch(/OnboardingOverlay/);
+    expect(peeled).not.toMatch(
       /import\s+\{\s*ChatSidebar\s*\}\s+from\s+["']@\/components\/ai-insights\/ChatSidebar["']/,
     );
-    expect(src).not.toMatch(
+    expect(peeled).not.toMatch(
       /import\s+\{\s*CommandPalette\s*\}\s+from\s+["']@\/components\/portal-os\/CommandPalette["']/,
     );
-    expect(src).not.toMatch(
+    expect(peeled).not.toMatch(
       /import\s+\{\s*OnboardingOverlay\s*\}\s+from\s+["']@\/components\/onboarding\/OnboardingOverlay["']/,
     );
   });
@@ -83,20 +86,35 @@ describe("A1 portal chrome Done-when", () => {
   });
 
   it("React #310: chrome banner useEffect is above loading early returns", () => {
+    // Banner attr effect peeled into usePortalChromeBannerAttr; call must
+    // stay above loading early returns in the orchestrator.
+    const effects = read("hooks/use-portal-chrome-effects.ts");
+    expect(effects).toMatch(/export function usePortalChromeBannerAttr/);
+    expect(effects).toMatch(/CHROME_BANNER_ATTR/);
+
     const chrome = read("app/(portal)/portal-chrome.tsx");
     const start = chrome.indexOf("function PortalLayoutContent");
     expect(start).toBeGreaterThanOrEqual(0);
     const body = chrome.slice(start);
-    const effectIdx = body.indexOf("CHROME_BANNER_ATTR");
+    const callIdx = body.indexOf("usePortalChromeBannerAttr");
     const earlyIdx = body.indexOf("if (loading && !isKnownPortalPath");
-    expect(effectIdx).toBeGreaterThanOrEqual(0);
+    expect(callIdx).toBeGreaterThanOrEqual(0);
     expect(earlyIdx).toBeGreaterThanOrEqual(0);
-    expect(effectIdx).toBeLessThan(earlyIdx);
+    expect(callIdx).toBeLessThan(earlyIdx);
   });
 
   it("P35: PerformanceObservers gated to development", () => {
-    const src = read("app/(portal)/portal-chrome.tsx");
-    expect(src).toMatch(/NODE_ENV\s*!==\s*["']development["']/);
+    // Runtime chrome no longer ships web-vitals observers (load bloat cut).
+    // CI measure script retains PerformanceObservers for budgets.
+    const chrome = read("app/(portal)/portal-chrome.tsx");
+    const effects = read("hooks/use-portal-chrome-effects.ts");
+    expect(chrome).not.toMatch(/PerformanceObserver/);
+    expect(effects).not.toMatch(/PerformanceObserver/);
+    const measure = readFileSync(
+      join(root, "../scripts/measure-web-vitals.mjs"),
+      "utf8",
+    );
+    expect(measure).toMatch(/PerformanceObserver/);
   });
 
   it("K1: shared ME_QUERY_KEY exists", () => {

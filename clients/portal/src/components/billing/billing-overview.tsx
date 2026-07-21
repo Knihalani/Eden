@@ -54,7 +54,7 @@ export function BillingOverview({ variant = "page" }: BillingOverviewProps) {
   if (!currentOrg) {
     return (
       <div className="text-center py-12 text-[var(--text-secondary)]">
-        Select an organization to manage billing
+        Select a workspace to manage billing
       </div>
     );
   }

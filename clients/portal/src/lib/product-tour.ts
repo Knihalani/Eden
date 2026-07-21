@@ -1,11 +1,18 @@
 /**
  * Product tour — walks the core portal surfaces, then points at the
  * public docs quickstart.
+ *
+ * Wave 11: slimmed to 5 steps (welcome → key → install → traces → finish).
+ * Home / Issues / Improve are mentioned on finish — not separate spotlight stops.
+ * No overlapping chrome — OnboardingOverlay defers behind banners / ErrorState.
  */
 
 import { DOCS_QUICKSTART_URL } from "@/lib/constants";
 
 export { DOCS_QUICKSTART_URL };
+
+/** Wave 11.5 — tour stays ≤5 steps; overlay defers behind chrome banners. */
+export const WAVE11_TOUR_SLIM = true as const;
 
 export type TourStepKind = "welcome" | "nav" | "finish";
 
@@ -26,7 +33,7 @@ export interface TourStep {
 }
 
 /**
- * Ordered tour: welcome → API keys → install → core surfaces → finish.
+ * Ordered tour: welcome → API keys → install → traces → finish.
  * Agents / repo connect is demoted to a soft mention on finish.
  */
 export const PRODUCT_TOUR_STEPS: TourStep[] = [
@@ -35,7 +42,7 @@ export const PRODUCT_TOUR_STEPS: TourStep[] = [
     kind: "welcome",
     href: "/dashboard",
     title: "Welcome to Eden",
-    body: "Capture LLM calls, analyse failures, and ship reviewable fixes. This walkthrough is optional — Skip anytime and resume from the banner. It does not create a workspace; create or join an organization under Settings → Organization first if you need one.",
+    body: "Capture LLM calls, analyse failures, and ship reviewable fixes. This walkthrough is optional — Skip anytime and resume from the banner. It does not create a workspace; create or join a workspace under Settings → Workspace first if you need one.",
   },
   {
     id: "api-keys",
@@ -66,35 +73,11 @@ export const PRODUCT_TOUR_STEPS: TourStep[] = [
     body: "Your first events land here. Open a row to inspect spans, replay sessions, and dig into failures.",
   },
   {
-    id: "dashboard",
-    kind: "nav",
-    targetId: "dashboard",
-    href: "/dashboard",
-    title: "Home",
-    body: "Health, recent traces, cost, and alerts fill in after ingestion starts. Start here when you open Eden day to day.",
-  },
-  {
-    id: "issues",
-    kind: "nav",
-    targetId: "issues",
-    href: "/issues",
-    title: "Issues",
-    body: "Failures cluster here automatically — triage and heal instead of chasing one-off errors.",
-  },
-  {
-    id: "improve",
-    kind: "nav",
-    targetId: "improve",
-    href: "/improve",
-    title: "Improve",
-    body: "Once you have signal, reviewable patches and plans show up here. Approve changes that close the loop.",
-  },
-  {
     id: "finish",
     kind: "finish",
     href: "/dashboard",
     title: "You're ready",
-    body: "Next: docs quickstart → send a test trace → open Traces. Connecting a repo under Agents is optional when you want Eden to see your code.",
+    body: "Next: docs quickstart → send a test trace → open Traces. Day to day: Home for health, Issues for clustered failures, Improve for reviewable patches. Connecting a repo under Agents is optional when you want Eden to see your code.",
     ctaLabel: "Open docs quickstart",
     ctaHref: DOCS_QUICKSTART_URL,
     ctaExternal: true,
@@ -125,9 +108,9 @@ export function tourIndexFromOnboardingStep(
   }
   if (s === "install" || s === "install_sdk") return stepIndexById("install");
   if (s === "traces") return stepIndexById("traces");
-  if (s === "dashboard") return stepIndexById("dashboard");
-  if (s === "issues") return stepIndexById("issues");
-  if (s === "improve") return stepIndexById("improve");
+  // Removed Wave 10 steps map to finish (or traces for dashboard).
+  if (s === "dashboard") return PRODUCT_TOUR_TOTAL - 1;
+  if (s === "issues" || s === "improve") return PRODUCT_TOUR_TOTAL - 1;
   if (s === "wait" || s === "wait_for_pr") return PRODUCT_TOUR_TOTAL - 1;
   // Agents / connect demoted — never resume mid-tour on Agents.
   if (s === "connect" || s === "connect_github" || s === "agents") {
@@ -139,6 +122,9 @@ export function tourIndexFromOnboardingStep(
       return id === "settings"
         ? stepIndexById("api-keys")
         : PRODUCT_TOUR_TOTAL - 1;
+    }
+    if (id === "dashboard" || id === "issues" || id === "improve") {
+      return PRODUCT_TOUR_TOTAL - 1;
     }
     const idx = PRODUCT_TOUR_STEPS.findIndex((t) => t.id === id);
     return idx >= 0 ? idx : 0;

@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import { AlertTriangle, RefreshCw, Home, Bug } from "lucide-react";
 import Link from "next/link";
+import { Button } from "@/components/ui/button";
 
 export default function PortalError({
   error,
@@ -52,20 +53,16 @@ export default function PortalError({
         )}
 
         <div className="flex items-center justify-center gap-3">
-          <button
-            onClick={reset}
-            className="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-[var(--bg-primary)] bg-[var(--accent)] hover:bg-[var(--accent-hover)] rounded-xl transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--border-glow)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-base)]"
-          >
+          <Button type="button" onClick={reset}>
             <RefreshCw className="w-4 h-4" />
             Try again
-          </button>
-          <Link
-            href="/dashboard"
-            className="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-[var(--text-primary)] bg-[var(--bg-primary)] hover:bg-[var(--bg-tertiary)] border border-[var(--border-default)] rounded-xl transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--border-glow)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-base)]"
-          >
-            <Home className="w-4 h-4" />
-            Dashboard
-          </Link>
+          </Button>
+          <Button asChild variant="outline">
+            <Link href="/dashboard">
+              <Home className="w-4 h-4" />
+              Dashboard
+            </Link>
+          </Button>
         </div>
       </div>
     </div>

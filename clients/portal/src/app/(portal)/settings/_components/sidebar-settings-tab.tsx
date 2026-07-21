@@ -8,5 +8,9 @@
 import { SidebarSettingsView } from "./sidebar-settings-view";
 
 export function SidebarSettingsTab() {
-  return <SidebarSettingsView embedded />;
+  return (
+    <div data-ws8-sidebar>
+      <SidebarSettingsView embedded />
+    </div>
+  );
 }

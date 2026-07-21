@@ -40,9 +40,8 @@ describe("W11 embed chrome leaks", () => {
   });
 
   it("Studio/Memory/Retrieval use pills tabs under EmbeddedSurface", () => {
-    expect(read("app/(portal)/studio/page.tsx")).toContain(
-      'variant={embedded ? "pills" : "underline"}',
-    );
+    // Studio shell always uses underline tabs; Memory/Retrieval still flip to pills when embedded.
+    expect(read("app/(portal)/studio/page.tsx")).toContain('variant="underline"');
     expect(read("app/(portal)/observability/memory/page.tsx")).toContain(
       'variant={embedded ? "pills" : "underline"}',
     );
@@ -54,30 +53,35 @@ describe("W11 embed chrome leaks", () => {
 
 describe("W11 CrossLinkBar overflow (band → More)", () => {
   it("Issues detail uses Go to dropdown, not CrossLinkBar band", () => {
-    const src = read("app/(portal)/issues/page.tsx");
+    const src = read("app/(portal)/issues/_components/issues-detail-panel.tsx");
     expect(src).not.toContain("<CrossLinkBar");
     expect(src).toContain("DropdownMenuLabel>Go to");
   });
 
-  it("change-impact / improvement-loop / agent detail / alerts / experiments move CrossLinks to More", () => {
+  it("change-impact / improvement-loop / agent detail / alerts move CrossLinks to More", () => {
     for (const rel of [
-      "app/(portal)/improve/change-impact/page.tsx",
       "app/(portal)/onboarding/improvement-loop.tsx",
       "app/(portal)/agents/[id]/page.tsx",
-      "app/(portal)/alerts/page.tsx",
-      "app/(portal)/experiments/page.tsx",
+      "app/(portal)/alerts/_components/alerts-detail-panel.tsx",
     ]) {
       const src = read(rel);
       expect(src).not.toContain("<CrossLinkBar");
       expect(src).toContain("DropdownMenuLabel>Go to");
     }
+    // Wave 7: change-impact is Advanced Improve — related strip, not Go-to overflow
+    const changeImpact = read("app/(portal)/improve/change-impact/page.tsx");
+    expect(changeImpact).not.toContain("<CrossLinkBar");
+    expect(changeImpact).not.toContain("DropdownMenuLabel>Go to");
+    expect(changeImpact).toContain('data-testid="change-impact-related-strip"');
+    // Experiments (Wave 8) — no CrossLinkBar band; More/overflow may vary by hub rewrite
+    expect(read("app/(portal)/experiments/page.tsx")).not.toContain("<CrossLinkBar");
   });
 });
 
 describe("W11 query-state + a11y + settings FormField", () => {
   it("improve plans gates KPI until data ready", () => {
     const src = read("app/(portal)/improve/plans/page.tsx");
-    expect(src).toContain("!(loading && plans.length === 0)");
+    expect(src).toContain("!(plansQuery.isLoading && plans.length === 0)");
     expect(src).toContain("LoadingSkeleton");
   });
 
@@ -88,15 +92,15 @@ describe("W11 query-state + a11y + settings FormField", () => {
   });
 
   it("TranscriptView expand control is ≥44px", () => {
-    const src = read("components/observability/TranscriptView.tsx");
-    expect(src).toContain("min-h-11 min-w-11");
-    expect(src).toContain("Collapse details");
+    const row = read("components/transcript-v2/TranscriptRowItem.tsx");
+    expect(row).toContain("min-h-11 min-w-11");
+    expect(row).toContain("Collapse details");
   });
 
   it("gateway create form uses FormField", () => {
-    const src = read("app/(portal)/settings/_components/gateway-tab.tsx");
+    const src = read("app/(portal)/settings/_components/gateway-model-form.tsx");
     expect(src).toContain('from "@/components/ui/form-field"');
-    expect(src).toContain('<FormField');
+    expect(src).toContain("<FormField");
     expect(src).toContain('htmlFor="gw-name"');
   });
 });

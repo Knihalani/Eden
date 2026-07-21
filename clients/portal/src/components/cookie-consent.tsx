@@ -9,46 +9,23 @@
  *
  * Non-essential cookies (analytics, marketing) are NOT set until the
  * user accepts. The default state is "declined" — accepting
- * explicitly opts the user in. After a choice, a compact
- * "Cookie preferences" control re-opens the banner so the user can
- * accept, decline, or withdraw consent without leaving the page.
+ * explicitly opts the user in.
  *
- * Layout / reading flow:
+ * Home Shell 2A: after Accept/Decline render **null** — no fixed
+ * "Cookie preferences" pill. Re-open only from Settings Privacy or
+ * the marketing footer via ``openCookiePreferences()``.
  *
- * The banner is ``position: fixed`` at the viewport bottom. The
- * previous implementation reserved 128px of body padding-bottom
- * via ``--cookie-banner-offset`` so the very end of the document
- * wouldn't be hidden, but mid-page reading was still broken — the
- * fixed banner always sat over the bottom 128px of the viewport,
- * blocking whatever the user was trying to read (privacy section 3,
- * docs endpoint cards, marketing FAQ answers, etc.). The pointer-
- * events-none wrapper meant the user couldn't even scroll past the
- * hidden content.
+ * Layout / reading flow (while awaiting a first choice):
  *
- * The fix is three-fold:
- *
- * 1. The banner auto-collapses to a small floating pill after the
- *    user scrolls past ~30% of the document. Reading flow is no
- *    longer blocked because the pill is ~36px tall instead of ~96px.
- *    The pill keeps the choice reachable inline; an explicit chevron
- *    expands it back to the full banner for users who want the
- *    longer copy.
- *
- * 2. On short pages (little or no scroll room), the banner starts
- *    collapsed as a pill immediately — the full banner would
- *    otherwise sit on top of primary CTAs (Start free, Open email,
- *    BottomCta) with nowhere to scroll them clear.
- *
- * 3. ``--cookie-banner-offset`` tracks the *visible* chrome: full
- *    banner height while expanded, pill height while collapsed, so
- *    the document end (and short-page CTAs) stay above the overlay.
+ * The banner is ``position: fixed`` at the viewport bottom. It
+ * auto-collapses to a compact choice pill after ~30% scroll (or
+ * immediately on short pages) so primary CTAs stay clickable.
+ * ``--cookie-banner-offset`` tracks visible chrome and clears to
+ * ``0px`` when the banner is hidden.
  *
  * Accessibility: the banner is a ``role="dialog"`` with
  * ``aria-live="polite"`` and an "Accept" button as the primary
  * focusable element on mount.
- *
- * Ponytail: useState + useEffect + localStorage + a rAF-throttled
- * scroll/resize listener for the auto-collapse. No external consent library.
  */
 
 import { useEffect, useState } from "react";
@@ -57,9 +34,11 @@ import {
   applyAnalyticsConsent,
   bootAnalyticsFromStoredConsent,
   COOKIE_CONSENT_KEY,
+  OPEN_COOKIE_PREFERENCES_EVENT,
   type ConsentValue,
 } from "@/lib/analytics";
 import { isAuthPath } from "@/lib/auth-redirect";
+import { Button } from "@/components/ui/button";
 import {
   CHROME_BANNER_ATTR,
   ERROR_STATE_ATTR,
@@ -67,8 +46,8 @@ import {
 } from "@/lib/overlay-defer";
 
 const STORAGE_KEY = COOKIE_CONSENT_KEY;
-/** Pill (collapsed) reserves a slim strip so the bottom edge of the
- * document isn't flush against the pill. */
+/** Collapsed first-choice pill reserves a slim strip so the bottom
+ * edge of the document isn't flush against the pill. */
 const PILL_OFFSET_PX = 56;
 /**
  * Full banner + safe breathing room (stacked copy + actions on
@@ -105,36 +84,59 @@ export function CookieConsent() {
   const [hasChoice, setHasChoice] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
   const [expanded, setExpanded] = useState(false);
+  /** Home Shell W9 — yield thumb zone while Ask AI sheet/rail is open. */
+  const [aiRailOpen, setAiRailOpen] = useState(false);
 
   const showFull = !collapsed || expanded;
+  const showBanner = visible && !aiRailOpen;
 
   // Reserve body padding for whichever chrome is actually showing.
   useEffect(() => {
     if (typeof document === "undefined") return;
-    if (visible) {
+    if (showBanner) {
       document.documentElement.style.setProperty(
         "--cookie-banner-offset",
         `${showFull ? FULL_BANNER_OFFSET_PX : PILL_OFFSET_PX}px`,
       );
+      document.documentElement.setAttribute("data-cookie-awaiting", "1");
     } else {
       document.documentElement.style.setProperty(
         "--cookie-banner-offset",
         "0px",
       );
+      document.documentElement.removeAttribute("data-cookie-awaiting");
     }
     return () => {
       document.documentElement.style.setProperty(
         "--cookie-banner-offset",
         "0px",
       );
+      document.documentElement.removeAttribute("data-cookie-awaiting");
     };
-  }, [visible, showFull]);
+  }, [showBanner, showFull]);
+
+  // Wave 9 — hide cookie while AI claims the thumb zone; restore when closed.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const sync = () => {
+      setAiRailOpen(
+        document.documentElement.getAttribute("data-ai-rail-open") === "1",
+      );
+    };
+    sync();
+    const onRail = (e: Event) => {
+      setAiRailOpen(!!(e as CustomEvent<{ open?: boolean }>).detail?.open);
+    };
+    window.addEventListener("eden:ai-rail-open", onRail as EventListener);
+    return () =>
+      window.removeEventListener("eden:ai-rail-open", onRail as EventListener);
+  }, []);
 
   // Scroll/resize-driven collapse: long pages collapse after the
   // user scrolls; short pages collapse immediately so CTAs aren't
   // occluded. Expanded state always wins for showFull via OR.
   useEffect(() => {
-    if (!visible) return;
+    if (!visible || aiRailOpen) return;
     let frame = 0;
     const update = () => {
       frame = 0;
@@ -165,7 +167,7 @@ export function CookieConsent() {
       window.removeEventListener("resize", onScrollOrResize);
       if (frame) window.cancelAnimationFrame(frame);
     };
-  }, [visible]);
+  }, [visible, aiRailOpen]);
 
   useEffect(() => {
     // F3: don't show the banner on auth routes — the cookie choice
@@ -240,6 +242,21 @@ export function CookieConsent() {
     }
   }, [onAuthRoute]);
 
+  // Settings Privacy / footer reopen (2A) — no fixed post-choice pill.
+  useEffect(() => {
+    if (onAuthRoute) return;
+    const onOpen = () => {
+      setCollapsed(false);
+      setExpanded(true);
+      setVisible(true);
+      setReady(true);
+    };
+    window.addEventListener(OPEN_COOKIE_PREFERENCES_EVENT, onOpen);
+    return () => {
+      window.removeEventListener(OPEN_COOKIE_PREFERENCES_EVENT, onOpen);
+    };
+  }, [onAuthRoute]);
+
   const set = (value: ConsentValue) => {
     try {
       window.localStorage.setItem(STORAGE_KEY, value);
@@ -252,35 +269,14 @@ export function CookieConsent() {
     setExpanded(false);
   };
 
-  const openPreferences = () => {
-    setCollapsed(false);
-    setExpanded(true);
-    setVisible(true);
-  };
-
   // Auth routes: nothing to render (choice deferred to portal).
   if (onAuthRoute) return null;
 
-  // Compact re-open control after a choice — honest withdraw path.
-  if (ready && hasChoice && !visible) {
-    return (
-      <div
-        className="pointer-events-none fixed inset-x-0 bottom-[calc(4rem+env(safe-area-inset-bottom)+0.75rem)] lg:bottom-4 flex justify-end px-4"
-        style={{ zIndex: "var(--z-cookie)" }}
-      >
-        <button
-          type="button"
-          onClick={openPreferences}
-          className="pointer-events-auto inline-flex items-center gap-2 rounded-full border border-[var(--border-default)] bg-[var(--bg-elevated)]/95 px-3 min-h-[44px] text-[11px] font-medium text-[var(--text-secondary)] shadow-lg backdrop-blur transition-colors hover:text-[var(--text-primary)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
-        >
-          <span className="inline-flex h-1.5 w-1.5 rounded-full bg-[var(--text-muted)]" />
-          Cookie preferences
-        </button>
-      </div>
-    );
-  }
+  // 2A: after a choice, render nothing fixed until Settings/footer reopen.
+  if (ready && hasChoice && !visible) return null;
 
-  if (!visible) return null;
+  // W9: AI open owns thumb zone — no cookie chrome stacked under sheet.
+  if (!showBanner) return null;
 
   // Pointer-events-none on the wrapper preserves page scroll;
   // the inner card opts back in so the buttons + link remain
@@ -292,12 +288,15 @@ export function CookieConsent() {
       role="dialog"
       aria-live="polite"
       aria-label="Cookie consent"
-      className="pointer-events-none fixed inset-x-0 bottom-[calc(4rem+env(safe-area-inset-bottom)+0.75rem)] lg:bottom-4 flex justify-center px-4"
+      data-cookie-consent="banner"
+      data-bottom-layer="cookie"
+      data-wave9-cookie="awaiting"
+      className="pointer-events-none fixed inset-x-0 bottom-[calc(var(--mobile-nav-height)+env(safe-area-inset-bottom,0px)+0.75rem)] lg:bottom-4 flex justify-center px-4"
       style={{ zIndex: "var(--z-cookie)" }}
     >
       <div
         className={
-          // Pill: collapsed, compact, single line.
+          // Pill: collapsed, compact, single line (first-choice only).
           !showFull
             ? "pointer-events-auto inline-flex items-center gap-2 rounded-full border border-[var(--border-default)] bg-[var(--bg-elevated)]/95 px-3 py-1.5 shadow-lg backdrop-blur"
             : // Full banner: expanded, multi-line, max-w-2xl.
@@ -312,25 +311,31 @@ export function CookieConsent() {
             <span className="text-[11px] font-mono uppercase tracking-[0.18em] text-[var(--text-secondary)]">
               Cookies
             </span>
-            <button
+            <Button
               type="button"
+              variant="ghost"
+              size="sm"
               onClick={() => set("declined")}
-              className="rounded-full px-3 min-h-[44px] text-[11px] font-medium text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
+              className="rounded-full px-3 min-h-[44px] text-[11px] font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
             >
               Decline
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
+              variant="default"
+              size="sm"
               onClick={() => set("accepted")}
-              className="rounded-full border border-[var(--accent)] bg-[var(--accent)] px-3 min-h-[44px] text-[11px] font-medium text-[var(--bg-base)] transition-colors hover:bg-[var(--accent-hover)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
+              className="rounded-full px-3 min-h-[44px] text-[11px] font-medium"
             >
               Accept
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
+              variant="ghost"
+              size="icon"
               onClick={() => setExpanded(true)}
               aria-label="Show cookie details"
-              className="ml-1 inline-flex items-center justify-center rounded-full min-h-[44px] min-w-[44px] p-1 text-[var(--text-muted)] transition-colors hover:text-[var(--text-primary)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
+              className="ml-1 rounded-full min-h-[44px] min-w-[44px] text-[var(--text-muted)] hover:text-[var(--text-primary)]"
             >
               <svg
                 width="12"
@@ -345,11 +350,10 @@ export function CookieConsent() {
               >
                 <polyline points="6 9 12 15 18 9" />
               </svg>
-            </button>
+            </Button>
           </>
         ) : (
-          // Full banner — same content as before. The button group
-          // stays at md+ and stacks on mobile.
+          // Full banner — Accept / Decline; reopen from Settings or footer.
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:gap-4">
             <div className="flex-1 min-w-0 text-sm text-[var(--text-secondary)]">
               <p className="font-medium text-[var(--text-primary)]">
@@ -359,16 +363,19 @@ export function CookieConsent() {
                 Eden uses essential cookies to keep you signed in. With
                 your consent we also use analytics cookies to understand
                 how the portal is used. You can change or withdraw this
-                any time via Cookie preferences.
+                any time in Settings or via Cookie preferences in the
+                footer.
               </p>
             </div>
             <div className="flex items-center gap-2 md:flex-shrink-0">
               {collapsed && (
-                <button
+                <Button
                   type="button"
+                  variant="ghost"
+                  size="icon"
                   onClick={() => setExpanded(false)}
                   aria-label="Collapse cookie details"
-                  className="inline-flex items-center justify-center rounded-md min-h-[44px] min-w-[44px] p-1 text-[var(--text-muted)] transition-colors hover:text-[var(--text-primary)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
+                  className="min-h-[44px] min-w-[44px] text-[var(--text-muted)] hover:text-[var(--text-primary)]"
                 >
                   <svg
                     width="14"
@@ -383,22 +390,26 @@ export function CookieConsent() {
                   >
                     <polyline points="18 15 12 9 6 15" />
                   </svg>
-                </button>
+                </Button>
               )}
-              <button
+              <Button
                 type="button"
+                variant="outline"
+                size="sm"
                 onClick={() => set("declined")}
-                className="rounded-md border border-[var(--border-subtle)] px-3 min-h-[44px] text-xs font-medium text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-secondary)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-base)]"
+                className="min-h-[44px] text-xs font-medium text-[var(--text-secondary)]"
               >
                 Decline
-              </button>
-              <button
+              </Button>
+              <Button
                 type="button"
+                variant="default"
+                size="sm"
                 onClick={() => set("accepted")}
-                className="rounded-md border border-[var(--accent)] bg-[var(--accent)] px-3 min-h-[44px] text-xs font-medium text-[var(--bg-base)] transition-colors hover:bg-[var(--accent-hover)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-base)]"
+                className="min-h-[44px] text-xs font-medium"
               >
                 Accept
-              </button>
+              </Button>
             </div>
           </div>
         )}

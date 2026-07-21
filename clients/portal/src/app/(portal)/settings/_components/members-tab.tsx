@@ -1,8 +1,8 @@
 "use client";
 
 /**
- * MembersTab — extracted from settings/page.tsx (June 2026 Phase 5).
- * List org members + invite form + pending invitations.
+ * MembersTab — list workspace members + invite form + pending invitations.
+ * Personal workspaces teach upgrade via canInviteMembers; no invite chrome.
  */
 
 import { useState } from "react";
@@ -18,12 +18,19 @@ import { cn } from "@/lib/utils";
 import { SettingsCard } from "@/components/settings/settings-card";
 import { Button } from "@/components/ui/button";
 import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
+import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorState } from "@/components/ui/error-state";
 import { NoOrgState } from "@/components/ui/no-org-state";
 import { useOrg } from "@/hooks/use-org";
 import { errorFromCaught } from "@/lib/safe-error-message";
+import {
+  canInviteMembers,
+  isPersonalWorkspace,
+} from "@/lib/workspace-mode";
 import { InvitePanel } from "./invite-panel";
 import type { Organization } from "@/lib/types";
+
+export const WS4_MEMBERS_COMPLETED = true as const;
 
 interface MembersTabProps {
   org: Organization | null;
@@ -35,8 +42,9 @@ export function MembersTab({ org }: MembersTabProps) {
   const { confirm, ConfirmDialog } = useConfirm();
   const { refreshOrgs, orgSyncing, orgSyncTimedOut } = useOrg();
   const orgId = org?.id ?? null;
-  const isPersonal = Boolean(org?.is_personal);
-  const canInvite = hasPermission("members:invite") && !isPersonal;
+  const isPersonal = isPersonalWorkspace(org);
+  const canInvite =
+    hasPermission("members:invite") && canInviteMembers(org);
   // Remove is a separate permission from invite — viewers/members must
   // not see the trash control (backend 403s, but the UI must not tease).
   const canRemove = hasPermission("members:remove");
@@ -65,6 +73,7 @@ export function MembersTab({ org }: MembersTabProps) {
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState("member");
   const [lastInviteUrl, setLastInviteUrl] = useState<string | null>(null);
+  const [inviteRefreshKey, setInviteRefreshKey] = useState(0);
 
   // P9: client-side email validation. The backend rejects bad
   // addresses with a 422, but the user wouldn't see the error
@@ -74,27 +83,13 @@ export function MembersTab({ org }: MembersTabProps) {
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   const isValidEmail = emailRegex.test(inviteEmail.trim());
 
-  const formatRelativeTime = (dateStr: string | null) => {
-    if (!dateStr) return "Never";
-    const date = new Date(dateStr);
-    const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
-    const diffMins = Math.floor(diffMs / 60000);
-    const diffHours = Math.floor(diffMins / 60);
-    const diffDays = Math.floor(diffHours / 24);
-    if (diffMins < 1) return "Just now";
-    if (diffMins < 60) return `${diffMins}m ago`;
-    if (diffHours < 24) return `${diffHours}h ago`;
-    if (diffDays < 7) return `${diffDays}d ago`;
-    return date.toLocaleDateString();
-  };
-
   const handleInvite = async () => {
-    if (!org || !inviteEmail.trim()) return;
+    if (!org || !inviteEmail.trim() || !canInvite) return;
     try {
       const res = await api.inviteOrgMember(org.id, inviteEmail, inviteRole);
       setInviteEmail("");
       setLastInviteUrl(res.invite_url ?? null);
+      setInviteRefreshKey((k) => k + 1);
       await membersQuery.refetch();
       if (res.invite_url) {
         toast.success("Invitation created", "Copy the invite link below to share.");
@@ -107,7 +102,7 @@ export function MembersTab({ org }: MembersTabProps) {
   };
 
   const handleRoleChange = async (userId: string, role: string) => {
-    if (!org) return;
+    if (!org || !canInvite) return;
     try {
       await api.updateOrgMemberRole(org.id, userId, role);
       await membersQuery.refetch();
@@ -122,7 +117,7 @@ export function MembersTab({ org }: MembersTabProps) {
     if (
       !(await confirm({
         title: "Remove member",
-        description: "Are you sure you want to remove this member from the organization?",
+        description: "Are you sure you want to remove this member from the workspace?",
         confirmLabel: "Remove",
         variant: "destructive",
       }))
@@ -139,26 +134,45 @@ export function MembersTab({ org }: MembersTabProps) {
 
   if (!org) {
     return (
-      <NoOrgState
-        feature="Members"
-        icon={Users}
-        syncing={orgSyncing && !orgSyncTimedOut}
-        syncTimedOut={orgSyncTimedOut}
-        onRetrySync={() => void refreshOrgs()}
-        description={
-          orgSyncTimedOut
-            ? undefined
-            : "Select or create an organization to manage members. The product tour does not sync your workspace."
-        }
-        secondaryAction={
-          <Link
-            href="/settings?tab=org"
-            className="inline-flex min-h-11 items-center text-sm text-[var(--accent)] hover:underline"
-          >
-            Open Organization settings
-          </Link>
-        }
-      />
+      <div data-ws4-members>
+        <NoOrgState
+          feature="Members"
+          icon={Users}
+          syncing={orgSyncing && !orgSyncTimedOut}
+          syncTimedOut={orgSyncTimedOut}
+          onRetrySync={() => void refreshOrgs()}
+          description={
+            orgSyncTimedOut
+              ? undefined
+              : "Select or create a workspace to manage members. The product tour does not sync your workspace."
+          }
+          secondaryAction={
+            <Button asChild variant="secondary" className="min-h-11">
+              <Link href="/settings?tab=org">Open Workspace settings</Link>
+            </Button>
+          }
+        />
+      </div>
+    );
+  }
+
+  // Personal: upgrade teaching only — no invite form / pending panel.
+  if (isPersonal) {
+    return (
+      <div data-ws4-members data-ws2-personal-members className="space-y-space-4">
+        <EmptyState
+          icon={Users}
+          title="Team members need a team workspace"
+          description="Personal workspaces are solo — invites are unavailable. Create a team workspace to add members."
+          action={
+            <Button asChild variant="default" className="min-h-11">
+              <Link href="/settings?tab=org&create=1">Create a team workspace</Link>
+            </Button>
+          }
+          size="md"
+          variant="panel"
+        />
+      </div>
     );
   }
 
@@ -207,8 +221,6 @@ export function MembersTab({ org }: MembersTabProps) {
       sortable: true,
       cell: (m) => (
         <span
-          // The label is hidden visually but available to AT — the
-          // shield icon is the primary indicator.
           aria-label={m.two_factor_enabled ? "Two-factor enabled" : "Two-factor disabled"}
           title={m.two_factor_enabled ? "Two-factor enabled" : "Two-factor disabled"}
           className={cn(
@@ -227,48 +239,34 @@ export function MembersTab({ org }: MembersTabProps) {
       ),
     },
     {
-      key: "joined_at",
-      header: "Joined",
-      sortable: true,
-      cell: (m) => new Date(m.joined_at).toLocaleDateString(),
-      className: "text-[var(--text-muted)] text-sm",
-    },
-    {
-      key: "last_active_at",
-      header: "Last Active",
-      sortable: true,
-      cell: (m) => formatRelativeTime(m.last_active_at),
-      className: "text-[var(--text-muted)] text-sm",
-    },
-    {
       key: "user_id",
       header: "",
       align: "right",
       cell: (m) =>
         canRemove && m.role !== "owner" ? (
-          <button
-            onClick={() => handleRemove(m.user_id)}
-            className="p-2 text-[var(--error)] hover:bg-[var(--error-dim)] rounded-lg"
-            aria-label={`Remove ${m.name} from organization`}
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            onClick={() => void handleRemove(m.user_id)}
+            className="text-[var(--error)] hover:bg-[var(--error-dim)]"
+            aria-label={`Remove ${m.name} from workspace`}
           >
             <Trash2 className="w-4 h-4" />
-          </button>
+          </Button>
         ) : null,
     },
   ];
 
   return (
-    <div className="space-y-space-4">
-      {isPersonal && (
-        <p className="text-sm text-[var(--text-muted)] rounded-lg border border-[var(--border-default)] bg-[var(--bg-secondary)] px-4 py-3">
-          This is a personal workspace. Invites are unavailable — create a team
-          organization under Organization settings to add members.
-        </p>
-      )}
+    <div data-ws4-members className="space-y-space-4">
       {canInvite && (
-        <SettingsCard title="Invite member">
+        <SettingsCard
+          title="Invite member"
+          description="Add teammates by email. They receive a link to join this workspace."
+        >
           <div className="space-y-space-2">
-            <div className="flex gap-3">
+            <div className="flex flex-col sm:flex-row gap-3">
               <input
                 type="email"
                 value={inviteEmail}
@@ -278,7 +276,7 @@ export function MembersTab({ org }: MembersTabProps) {
                 aria-invalid={inviteEmail.trim() !== "" && !isValidEmail ? "true" : undefined}
                 aria-describedby="invite-email-error"
                 className={cn(
-                  "flex-1 px-3 py-2 rounded-lg border bg-[var(--bg-secondary)] text-[var(--text-primary)]",
+                  "flex-1 min-h-11 px-3 py-2 rounded-lg border bg-[var(--bg-secondary)] text-[var(--text-primary)]",
                   inviteEmail.trim() !== "" && !isValidEmail
                     ? "border-[var(--error)]"
                     : "border-[var(--border-default)]",
@@ -288,16 +286,17 @@ export function MembersTab({ org }: MembersTabProps) {
                 value={inviteRole}
                 onChange={(e) => setInviteRole(e.target.value)}
                 aria-label="Role"
-                className="px-3 py-2 rounded-lg border border-[var(--border-default)] bg-[var(--bg-secondary)] text-[var(--text-primary)]"
+                className="min-h-11 px-3 py-2 rounded-lg border border-[var(--border-default)] bg-[var(--bg-secondary)] text-[var(--text-primary)]"
               >
-                <option value="viewer">Viewer</option>
                 <option value="member">Member</option>
                 <option value="admin">Admin</option>
+                <option value="viewer">Viewer</option>
               </select>
               <Button
+                type="button"
                 variant="default"
                 className="min-h-11"
-                onClick={handleInvite}
+                onClick={() => void handleInvite()}
                 disabled={!isValidEmail}
                 aria-disabled={!isValidEmail || undefined}
               >
@@ -327,7 +326,7 @@ export function MembersTab({ org }: MembersTabProps) {
                   />
                   <Button
                     type="button"
-                    variant="default"
+                    variant="secondary"
                     size="sm"
                     onClick={async () => {
                       try {
@@ -347,7 +346,9 @@ export function MembersTab({ org }: MembersTabProps) {
         </SettingsCard>
       )}
 
-      <SettingsCard contentClassName="p-0">
+      {canInvite && <InvitePanel orgId={org.id} canManage refreshKey={inviteRefreshKey} />}
+
+      <SettingsCard contentClassName="p-0" title="Members">
         {loadError ? (
           <div className="p-4">
             <ErrorState
@@ -355,6 +356,7 @@ export function MembersTab({ org }: MembersTabProps) {
               message={loadError}
               action={
                 <Button
+                  type="button"
                   variant="outline"
                   className="min-h-11"
                   onClick={() => void membersQuery.refetch()}
@@ -375,7 +377,7 @@ export function MembersTab({ org }: MembersTabProps) {
             emptyDescription={
               canInvite
                 ? "Use the invite form above to add your team."
-                : undefined
+                : "You need members:invite permission to invite teammates."
             }
             emptyIcon={Users}
             pageSize={25}
@@ -383,7 +385,6 @@ export function MembersTab({ org }: MembersTabProps) {
         )}
       </SettingsCard>
 
-      {canInvite && <InvitePanel orgId={org.id} canManage />}
       {ConfirmDialog}
     </div>
   );

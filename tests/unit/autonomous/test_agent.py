@@ -74,17 +74,18 @@ class TestToolRegistry:
         assert len(_TOOL_REGISTRY) >= 14
 
     def test_write_tools_require_role(self):
+        from eden.autonomous.agent import _WRITE_INSIGHTS_TOOLS
+
         assert _TOOL_REGISTRY["mark_incident_resolved"]["requires_role"] == "admin"
         assert _TOOL_REGISTRY["open_pr_suggestion"]["requires_role"] == "admin"
         if "create_alert_rule" in _TOOL_REGISTRY:
             assert _TOOL_REGISTRY["create_alert_rule"]["requires_role"] == "admin"
         # Write tools must keep their admin gate; read tools stay open.
+        # Insights mutations inherit admin via `_WRITE_INSIGHTS_TOOLS`.
         admin_gated = {
             "mark_incident_resolved",
             "open_pr_suggestion",
-            "create_alert_rule",
-            "create_signal",
-            "promote_artifact",
+            *_WRITE_INSIGHTS_TOOLS,
         }
         for name, spec in _TOOL_REGISTRY.items():
             if name in admin_gated:
@@ -649,15 +650,19 @@ class TestSSEFormat:
 
 class TestResolveUserRole:
     @pytest.mark.asyncio
-    async def test_default_to_member_when_no_org_member_row(self):
-        # Stub PG to return no row.
+    async def test_rejects_when_no_org_member_row(self):
+        # Never default non-members to "member" — that leaked write tools.
+        from fastapi import HTTPException
+
         fake_pg = MagicMock()
         fake_pg.fetchrow = AsyncMock(return_value=None)
 
         with patch("eden.storage.postgres.get_postgres_client",
                    new=AsyncMock(return_value=fake_pg)):
-            role = await _resolve_user_role("t-1", "u-1")
-        assert role == "member"
+            with pytest.raises(HTTPException) as exc_info:
+                await _resolve_user_role("t-1", "u-1")
+        assert exc_info.value.status_code == 403
+        assert "Not a member" in str(exc_info.value.detail)
 
     @pytest.mark.asyncio
     async def test_returns_role_from_org_member_row(self):
@@ -677,3 +682,199 @@ def test_get_chat_service_singleton():
     s1 = get_chat_service()
     s2 = get_chat_service()
     assert s1 is s2
+
+
+# ── open_pr_suggestion (legacy open-pr materialize) ───────────────
+
+
+_FOO_PATCH = (
+    "--- a/foo.py\n"
+    "+++ b/foo.py\n"
+    "@@ -1 +1 @@\n"
+    "-x = 1\n"
+    "+x = 2\n"
+)
+
+
+class TestOpenPrSuggestionTool:
+    @pytest.mark.asyncio
+    async def test_materializes_patch_and_uses_org_provider(self):
+        from datetime import UTC, datetime
+
+        from eden.agent.pr_suggester import PRSuggestion
+        from eden.autonomous.agent import _tool_open_pr_suggestion
+        from eden.providers.repo import FileEntry, PullRequestInfo
+
+        suggestion = PRSuggestion(
+            id="prsug_abc",
+            org_id="org-1",
+            trigger="rca_cluster",
+            trigger_id="clu_1",
+            trigger_summary="x should be 2",
+            files=[FileEntry(path="foo.py", size=6, content="x = 1\n")],
+            patch_diff=_FOO_PATCH,
+            pr_title="Fix foo",
+            pr_body="body",
+            blast_radius=0.1,
+            confidence=0.8,
+            status="pending",
+        )
+        mock_suggester = MagicMock()
+        mock_suggester.get_suggestion = AsyncMock(return_value=suggestion)
+        mock_suggester.mark_opened = AsyncMock()
+
+        captured: dict[str, Any] = {}
+
+        async def _create_pr(req: Any) -> PullRequestInfo:
+            captured["req"] = req
+            return PullRequestInfo(
+                number=7,
+                title=req.title,
+                body=req.body,
+                branch=req.branch,
+                base=req.base,
+                url="https://example.com/pr/7",
+                state="open",
+                created_at=datetime.now(UTC),
+            )
+
+        mock_pr = MagicMock()
+        mock_pr.create_pr = AsyncMock(side_effect=_create_pr)
+        mock_repo = MagicMock()
+        mock_repo.read_file = AsyncMock(return_value="x = 1\n")
+
+        with (
+            patch(
+                "eden.providers.factory.get_repo_provider_for_org",
+                AsyncMock(return_value=mock_repo),
+            ),
+            patch(
+                "eden.providers.factory.get_pr_provider_for_org",
+                AsyncMock(return_value=mock_pr),
+            ) as get_pr,
+            patch(
+                "eden.agent.PRSuggester",
+                return_value=mock_suggester,
+            ),
+        ):
+            result = await _tool_open_pr_suggestion(
+                "org-1",
+                {"suggestion_id": "prsug_abc"},
+                user_role="admin",
+            )
+
+        get_pr.assert_awaited_once_with("org-1")
+        assert result["pr_number"] == 7
+        assert result["pr_url"] == "https://example.com/pr/7"
+        files = captured["req"].files
+        assert len(files) == 1
+        assert files[0].path == "foo.py"
+        assert files[0].content == "x = 2\n"
+        assert "@@" not in files[0].content
+        mock_suggester.mark_opened.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_fail_closed_on_empty_diff(self):
+        from eden.agent.pr_suggester import PRSuggestion
+        from eden.autonomous.agent import _tool_open_pr_suggestion
+        from eden.providers.repo import FileEntry
+
+        suggestion = PRSuggestion(
+            id="prsug_empty",
+            org_id="org-1",
+            trigger="rca_cluster",
+            trigger_id="clu_1",
+            trigger_summary="noop",
+            files=[FileEntry(path="foo.py", size=6, content="x = 1\n")],
+            patch_diff="",
+            pr_title="Empty",
+            pr_body="",
+            blast_radius=0.1,
+            confidence=0.3,
+            status="pending",
+        )
+        mock_suggester = MagicMock()
+        mock_suggester.get_suggestion = AsyncMock(return_value=suggestion)
+        mock_repo = MagicMock()
+
+        with (
+            patch(
+                "eden.providers.factory.get_repo_provider_for_org",
+                AsyncMock(return_value=mock_repo),
+            ),
+            patch(
+                "eden.agent.PRSuggester",
+                return_value=mock_suggester,
+            ),
+        ):
+            result = await _tool_open_pr_suggestion(
+                "org-1",
+                {"suggestion_id": "prsug_empty"},
+                user_role="admin",
+            )
+
+        assert result["error"] == "empty_or_unparseable_diff"
+
+    @pytest.mark.asyncio
+    async def test_fail_closed_on_create_pr_failure(self):
+        from datetime import UTC, datetime
+
+        from eden.agent.pr_suggester import PRSuggestion
+        from eden.autonomous.agent import _tool_open_pr_suggestion
+        from eden.providers.repo import FileEntry, PullRequestInfo
+
+        suggestion = PRSuggestion(
+            id="prsug_fail",
+            org_id="org-1",
+            trigger="rca_cluster",
+            trigger_id="clu_1",
+            trigger_summary="x should be 2",
+            files=[FileEntry(path="foo.py", size=6, content="x = 1\n")],
+            patch_diff=_FOO_PATCH,
+            pr_title="Fix foo",
+            pr_body="body",
+            blast_radius=0.1,
+            confidence=0.8,
+            status="pending",
+        )
+        mock_suggester = MagicMock()
+        mock_suggester.get_suggestion = AsyncMock(return_value=suggestion)
+        mock_suggester.mark_opened = AsyncMock()
+
+        failed = PullRequestInfo(
+            number=0,
+            title="Fix foo",
+            body="",
+            branch="eden/auto-prsug_fail",
+            base="main",
+            url="",
+            state="failed",
+            created_at=datetime.now(UTC),
+        )
+        mock_pr = MagicMock()
+        mock_pr.create_pr = AsyncMock(return_value=failed)
+        mock_repo = MagicMock()
+        mock_repo.read_file = AsyncMock(return_value="x = 1\n")
+
+        with (
+            patch(
+                "eden.providers.factory.get_repo_provider_for_org",
+                AsyncMock(return_value=mock_repo),
+            ),
+            patch(
+                "eden.providers.factory.get_pr_provider_for_org",
+                AsyncMock(return_value=mock_pr),
+            ),
+            patch(
+                "eden.agent.PRSuggester",
+                return_value=mock_suggester,
+            ),
+        ):
+            result = await _tool_open_pr_suggestion(
+                "org-1",
+                {"suggestion_id": "prsug_fail"},
+                user_role="admin",
+            )
+
+        assert "failed create_pr" in result["error"]
+        mock_suggester.mark_opened.assert_not_awaited()

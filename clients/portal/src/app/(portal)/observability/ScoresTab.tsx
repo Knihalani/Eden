@@ -18,6 +18,8 @@ import { Gauge, RefreshCw, Play, Check, ChevronDown, Loader2 } from "lucide-reac
 import { api } from "@/lib/api";
 import { useToast } from "@/components/ui/toast";
 import { DataTable } from "@/components/ui/data-table";
+import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
 
 interface ScoresTabProps {
   orgId: string;
@@ -131,14 +133,13 @@ export function ScoresTab({ orgId, traceId }: ScoresTabProps) {
 
   if (!traceId) {
     return (
-      <div className="flex h-full items-center justify-center p-6 text-center">
-        <div>
-          <Gauge className="mx-auto mb-2 h-8 w-8 text-[var(--text-muted)]" />
-          <p className="text-sm text-[var(--text-muted)]">
-            Select a trace to view its judge scores.
-          </p>
-        </div>
-      </div>
+      <EmptyState
+        icon={Gauge}
+        title="Select a trace"
+        description="Select a trace to view its judge scores."
+        size="md"
+        className="h-full flex items-center justify-center"
+      />
     );
   }
 
@@ -170,15 +171,17 @@ export function ScoresTab({ orgId, traceId }: ScoresTabProps) {
              know what to filter by). */}
           {availableJudges.length > 0 && (
             <div className="relative">
-              <button
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
                 onClick={() => setJudgePickerOpen((p) => !p)}
-                className="flex items-center gap-1 rounded border border-[var(--border-default)] bg-[var(--bg-primary)] px-2 py-1 text-xs text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)]"
               >
                 {selectedJudges.size === 0
                   ? "All judges"
                   : `${selectedJudges.size} judge${selectedJudges.size === 1 ? "" : "s"}`}
                 <ChevronDown className="h-3 w-3" />
-              </button>
+              </Button>
               {judgePickerOpen && (
                 <div className="absolute right-0 z-10 mt-1 min-w-[180px] rounded border border-[var(--border-default)] bg-[var(--bg-primary)] py-1 shadow-md">
                   {availableJudges.map((name) => {
@@ -186,6 +189,7 @@ export function ScoresTab({ orgId, traceId }: ScoresTabProps) {
                     return (
                       <button
                         key={name}
+                        type="button"
                         onClick={() => toggleJudge(name)}
                         className="flex w-full items-center gap-2 px-2 py-1 text-left text-xs text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)]"
                       >
@@ -198,6 +202,7 @@ export function ScoresTab({ orgId, traceId }: ScoresTabProps) {
                   })}
                   {selectedJudges.size > 0 && (
                     <button
+                      type="button"
                       onClick={() => setSelectedJudges(new Set())}
                       className="block w-full border-t border-[var(--border-default)] px-2 py-1 text-left text-xs text-[var(--text-muted)] hover:bg-[var(--bg-tertiary)]"
                     >
@@ -208,43 +213,44 @@ export function ScoresTab({ orgId, traceId }: ScoresTabProps) {
               )}
             </div>
           )}
-          <button
-            onClick={refresh}
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => void refresh()}
             disabled={loading}
-            className="flex items-center gap-1 rounded border border-[var(--border-default)] bg-[var(--bg-primary)] px-2 py-1 text-xs text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)] disabled:opacity-50"
           >
             <RefreshCw className={`h-3 w-3 ${loading ? "animate-spin" : ""}`} />
             Refresh
-          </button>
-          <button
-            onClick={handleRun}
+          </Button>
+          <Button
+            type="button"
+            variant="default"
+            size="sm"
+            onClick={() => void handleRun()}
             disabled={running}
-            className="flex items-center gap-1 rounded bg-[var(--accent)] px-2 py-1 text-xs font-medium text-[var(--bg-primary)] hover:opacity-90 disabled:opacity-50"
+            loading={running}
           >
-            {running ? (
-              <Loader2 className="h-3 w-3 animate-spin" />
-            ) : (
-              <Play className="h-3 w-3" />
-            )}
+            {!running && <Play className="h-3 w-3" />}
             {running ? "Running…" : "Run judges"}
-          </button>
+          </Button>
         </div>
       </div>
 
       {/* Empty state */}
       {scores.length === 0 && (
-        <div className="flex flex-1 items-center justify-center p-6 text-center">
-          <div>
-            <Gauge className="mx-auto mb-2 h-8 w-8 text-[var(--text-muted)]" />
-            <p className="text-sm text-[var(--text-muted)]">
-              No judge scores for this trace yet.
-            </p>
-            <p className="mt-2 text-xs text-[var(--text-muted)]">
-              Click <span className="font-mono">Run judges</span> to score
-              it against correctness, hallucination, and tone.
-            </p>
-          </div>
-        </div>
+        <EmptyState
+          icon={Gauge}
+          title="No judge scores for this trace yet"
+          description={
+            <>
+              Click <span className="font-mono">Run judges</span> to score it
+              against correctness, hallucination, and tone.
+            </>
+          }
+          size="md"
+          className="flex-1 flex items-center justify-center"
+        />
       )}
 
       {/* Score rows */}

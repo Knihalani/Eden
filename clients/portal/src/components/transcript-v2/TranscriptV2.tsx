@@ -1,27 +1,35 @@
 "use client";
 
-/**
- * N13 TranscriptV2 orchestrator — progressive VirtualizedTranscript + parallel swimlanes + j/k.
- */
-
 import * as React from "react";
-import { TranscriptView, type TranscriptViewProps } from "@/components/observability/TranscriptView";
+import {
+  TranscriptReader,
+  type TranscriptViewProps,
+} from "./TranscriptReader";
 import { ParallelToolLane } from "./ParallelToolLane";
 import { RrwebThumb } from "./RrwebThumb";
 import { useParallelGroups } from "./hooks/useParallelGroups";
 import { useTranscriptKeyboard } from "./hooks/useTranscriptKeyboard";
+import { TranscriptRowItem } from "./TranscriptRowItem";
+import {
+  TRANSCRIPT_ROW_ESTIMATE,
+  TRANSCRIPT_ROW_ESTIMATE_EXPANDED,
+  VirtualTranscript,
+} from "./VirtualTranscript";
+import { classifySpanKind } from "./span-kind";
+import { isInternalFrameworkSpan } from "@/lib/observability/elide";
 import type { TranscriptRow } from "@/lib/observability/types";
-
-const INITIAL_BATCH = 30;
-const BATCH_SIZE = 25;
+import {
+  SpanDetailSidebar,
+  findRowBySpanId,
+} from "./transcript-reader-chrome";
 
 export interface TranscriptV2Props extends TranscriptViewProps {
   virtualize?: boolean;
   sessionId?: string | null;
   showRrwebThumb?: boolean;
-  /** When set, swimlane selection highlights this span. */
   highlightSpanId?: string | null;
-  onSpanSelect?: (spanId: string) => void;
+  /** Write-back selected span (e.g. `?spanId=`). Pass null/empty to clear. */
+  onSpanSelect?: (spanId: string | null) => void;
 }
 
 function flattenSpanIds(rows: TranscriptRow[]): string[] {
@@ -36,6 +44,19 @@ function flattenSpanIds(rows: TranscriptRow[]): string[] {
   return out;
 }
 
+function filterInternal(rows: TranscriptRow[]): TranscriptRow[] {
+  const walk = (rs: TranscriptRow[]): TranscriptRow[] => {
+    const out: TranscriptRow[] = [];
+    for (const r of rs) {
+      if (isInternalFrameworkSpan(r.name)) continue;
+      const child = r.children ? walk(r.children) : undefined;
+      out.push({ ...r, children: child });
+    }
+    return out;
+  };
+  return walk(rows);
+}
+
 export function TranscriptV2({
   rows,
   virtualize = true,
@@ -43,41 +64,28 @@ export function TranscriptV2({
   showRrwebThumb = true,
   highlightSpanId,
   onSpanSelect,
+  hideSummary: _hideSummary,
+  virtualizeList: _virtualizeList,
   ...rest
 }: TranscriptV2Props) {
-  const [visibleCount, setVisibleCount] = React.useState(
-    virtualize ? Math.min(INITIAL_BATCH, rows.length) : rows.length,
-  );
+  const visibleRows = React.useMemo(() => filterInternal(rows), [rows]);
+
   const [selectedSpanId, setSelectedSpanId] = React.useState<string | null>(
-    highlightSpanId ?? rows[0]?.span_id ?? null,
+    highlightSpanId ?? visibleRows[0]?.span_id ?? rows[0]?.span_id ?? null,
   );
-  const sentinelRef = React.useRef<HTMLDivElement | null>(null);
+  /** Inspector closed until explicit selection or URL `spanId`. */
+  const [inspectorSpanId, setInspectorSpanId] = React.useState<string | null>(
+    highlightSpanId ?? null,
+  );
 
   React.useEffect(() => {
-    setVisibleCount(virtualize ? Math.min(INITIAL_BATCH, rows.length) : rows.length);
-  }, [rows, virtualize]);
-
-  React.useEffect(() => {
-    if (highlightSpanId) setSelectedSpanId(highlightSpanId);
+    if (highlightSpanId) {
+      setSelectedSpanId(highlightSpanId);
+      setInspectorSpanId(highlightSpanId);
+    } else {
+      setInspectorSpanId(null);
+    }
   }, [highlightSpanId]);
-
-  React.useEffect(() => {
-    if (!virtualize || visibleCount >= rows.length) return;
-    const el = sentinelRef.current;
-    if (!el) return;
-    const io = new IntersectionObserver(
-      (entries) => {
-        if (entries.some((e) => e.isIntersecting)) {
-          setVisibleCount((c) => Math.min(c + BATCH_SIZE, rows.length));
-        }
-      },
-      { rootMargin: "200px" },
-    );
-    io.observe(el);
-    return () => io.disconnect();
-  }, [virtualize, visibleCount, rows.length]);
-
-  const slice = rows.slice(0, visibleCount);
 
   React.useEffect(() => {
     if (!highlightSpanId) return;
@@ -87,18 +95,24 @@ export function TranscriptV2({
     if (el instanceof HTMLElement) {
       el.scrollIntoView({ block: "nearest", behavior: "smooth" });
     }
-  }, [highlightSpanId, slice.length]);
+  }, [highlightSpanId, visibleRows.length]);
 
-  const blocks = useParallelGroups(slice);
-  const flatIds = React.useMemo(() => flattenSpanIds(slice), [slice]);
+  const blocks = useParallelGroups(visibleRows);
+  const flatIds = React.useMemo(() => flattenSpanIds(visibleRows), [visibleRows]);
 
   const handleSelect = React.useCallback(
     (spanId: string) => {
       setSelectedSpanId(spanId);
+      setInspectorSpanId(spanId);
       onSpanSelect?.(spanId);
     },
     [onSpanSelect],
   );
+
+  const handleCloseInspector = React.useCallback(() => {
+    setInspectorSpanId(null);
+    onSpanSelect?.(null);
+  }, [onSpanSelect]);
 
   useTranscriptKeyboard({
     spanIds: flatIds,
@@ -107,43 +121,82 @@ export function TranscriptV2({
   });
 
   const parallelBlocks = blocks.filter((b) => b.type === "parallel_tools");
+  const inspectorRow = React.useMemo(
+    () => findRowBySpanId(visibleRows, inspectorSpanId),
+    [visibleRows, inspectorSpanId],
+  );
+
+  const virtualItems = React.useMemo(() => {
+    if (!virtualize) return [];
+    return visibleRows.map((row) => {
+      const isSub =
+        classifySpanKind(row) === "subagent" ||
+        !!row.is_subagent ||
+        (row.children?.length ?? 0) > 0;
+      return {
+        key: row.span_id,
+        estimate: isSub ? TRANSCRIPT_ROW_ESTIMATE_EXPANDED : TRANSCRIPT_ROW_ESTIMATE,
+        sticky: isSub,
+        content: (
+          <TranscriptRowItem
+            row={row}
+            selectedSpanId={selectedSpanId}
+            onSelect={handleSelect}
+            orgId={rest.orgId}
+            traceId={rest.traceId}
+            depth={0}
+          />
+        ),
+      };
+    });
+  }, [virtualize, visibleRows, selectedSpanId, handleSelect, rest.orgId, rest.traceId]);
 
   return (
-    <div className="relative space-y-space-2" data-testid="transcript-v2">
-      {showRrwebThumb && (
-        <div className="flex items-center justify-end px-space-1">
-          <RrwebThumb traceId={rest.traceId} sessionId={sessionId} />
-        </div>
-      )}
+    <div
+      className="relative flex min-h-0 gap-0 outline-none"
+      data-testid="transcript-v2"
+      tabIndex={0}
+      aria-label="Transcript — j/k to step spans"
+    >
+      <div className="min-w-0 flex-1 space-y-space-2">
+        {showRrwebThumb && (
+          <div className="flex items-center justify-end px-space-1">
+            <RrwebThumb traceId={rest.traceId} sessionId={sessionId} />
+          </div>
+        )}
 
-      {parallelBlocks.length > 0 && (
-        <div className="space-y-space-2 px-space-1">
-          {parallelBlocks.map((b) =>
-            b.type === "parallel_tools" ? (
-              <ParallelToolLane
-                key={`lane-${b.step_index}`}
-                lanes={b.lanes}
-                selectedSpanId={selectedSpanId}
-                onSelect={handleSelect}
-                orgId={rest.orgId}
-                traceId={rest.traceId}
-              />
-            ) : null,
-          )}
-        </div>
-      )}
+        {parallelBlocks.length > 0 && (
+          <div className="space-y-space-2 px-space-1">
+            {parallelBlocks.map((b) =>
+              b.type === "parallel_tools" ? (
+                <ParallelToolLane
+                  key={`lane-${b.step_index}`}
+                  lanes={b.lanes}
+                  selectedSpanId={selectedSpanId}
+                  onSelect={handleSelect}
+                  orgId={rest.orgId}
+                  traceId={rest.traceId}
+                />
+              ) : null,
+            )}
+          </div>
+        )}
 
-      <TranscriptView {...rest} rows={slice} />
-
-      {virtualize && visibleCount < rows.length && (
-        <div
-          ref={sentinelRef}
-          className="h-8 flex items-center justify-center text-xs text-[var(--text-muted)]"
-          aria-hidden
-        >
-          Loading more steps… ({visibleCount}/{rows.length})
-        </div>
-      )}
+        {virtualize ? (
+          <div className="h-[min(70vh,720px)] min-h-[240px]">
+            <VirtualTranscript items={virtualItems} className="p-space-2" />
+          </div>
+        ) : (
+          <TranscriptReader {...rest} rows={rows} hideSummary />
+        )}
+      </div>
+      {inspectorRow ? (
+        <SpanDetailSidebar
+          row={inspectorRow}
+          orgId={rest.orgId}
+          onClose={handleCloseInspector}
+        />
+      ) : null}
     </div>
   );
 }

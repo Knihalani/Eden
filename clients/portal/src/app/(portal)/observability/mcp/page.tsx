@@ -3,7 +3,11 @@
 import { useCallback, useEffect, useState } from "react";
 import { AlertTriangle, ChevronRight, RefreshCw, Server } from "lucide-react";
 import { PageContent } from "@/components/layout/page-content";
-import { ObserveLeafHeader } from "@/app/(portal)/observability/_components/observe-leaf-shell";
+import {
+  ObserveBackToTraces,
+  ObserveLeafHeader,
+  WAVE10_FACET_ATTR,
+} from "@/app/(portal)/observability/_components/observe-leaf-shell";
 import { Button } from "@/components/ui/button";
 import { NoOrgState } from "@/components/ui/no-org-state";
 import { QueryState } from "@/components/ui/query-state";
@@ -97,49 +101,52 @@ export default function McpObservabilityPage() {
 
   return (
     <PageContent size="wide">
-      <ObserveLeafHeader
-        icon={Server}
-        title="MCP Observability"
-        subtitle="Fleet health, auth failures, trends, and agent → server drill-down (N02)"
-        actions={
-          <div className="flex items-center gap-2">
-            <div
-              role="group"
-              aria-label="Time range"
-              className="inline-flex rounded-lg border border-[var(--border-default)] p-1"
-            >
-              {RANGE_OPTIONS.map((opt) => (
-                <button
-                  key={opt.days}
-                  type="button"
-                  onClick={() => setDays(opt.days)}
-                  className={cn(
-                    "min-h-[44px] min-w-[44px] rounded-md px-3 text-xs font-medium transition-colors",
-                    days === opt.days
-                      ? "bg-[var(--bg-elev-2)] text-[var(--text-primary)]"
-                      : "text-[var(--text-muted)] hover:text-[var(--text-primary)]",
-                  )}
-                >
-                  {opt.label}
-                </button>
-              ))}
+      <div {...WAVE10_FACET_ATTR} className="contents">
+        <ObserveBackToTraces />
+        <ObserveLeafHeader
+          icon={Server}
+          title="MCP"
+          subtitle="Fleet health under Traces facets — not a separate Observe hub"
+          actions={
+            <div className="flex items-center gap-2">
+              <div
+                role="group"
+                aria-label="Time range"
+                className="inline-flex rounded-lg border border-[var(--border-default)] p-1"
+              >
+                {RANGE_OPTIONS.map((opt) => (
+                  <button
+                    key={opt.days}
+                    type="button"
+                    onClick={() => setDays(opt.days)}
+                    className={cn(
+                      "min-h-[44px] min-w-[44px] rounded-md px-3 text-xs font-medium transition-colors",
+                      days === opt.days
+                        ? "bg-[var(--bg-elev-2)] text-[var(--text-primary)]"
+                        : "text-[var(--text-muted)] hover:text-[var(--text-primary)]",
+                    )}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => void load()}
+                disabled={loading}
+                loading={loading}
+                className="min-h-[44px]"
+                aria-label="Refresh MCP fleet data"
+              >
+                <RefreshCw className="h-4 w-4 mr-1.5" aria-hidden />
+                Refresh
+              </Button>
             </div>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => void load()}
-              disabled={loading}
-              loading={loading}
-              className="min-h-[44px]"
-              aria-label="Refresh MCP fleet data"
-            >
-              <RefreshCw className="h-4 w-4 mr-1.5" aria-hidden />
-              Refresh
-            </Button>
-          </div>
-        }
-      />
+          }
+        />
+      </div>
 
       <QueryState
         loading={loading}
@@ -149,11 +156,7 @@ export default function McpObservabilityPage() {
         errorTitle="Could not load MCP dashboard"
         loadingSlot={
           <div className="space-y-space-5" aria-busy="true" aria-live="polite">
-            <div className="grid gap-space-4 md:grid-cols-3">
-              {Array.from({ length: 3 }).map((_, i) => (
-                <Skeleton key={i} className="h-24 w-full rounded-lg" />
-              ))}
-            </div>
+            <Skeleton className="h-5 w-64 rounded" />
             <Skeleton className="h-28 w-full rounded-lg" />
             <Skeleton className="h-64 w-full rounded-lg" />
           </div>
@@ -161,21 +164,34 @@ export default function McpObservabilityPage() {
       >
         {() => (
         <>
-          <div className="grid gap-space-4 md:grid-cols-3">
-            <div className="rounded-lg border border-[var(--border-default)] bg-[var(--bg-primary)] p-space-4">
-              <p className="text-xs text-[var(--text-muted)]">Servers ({days}d)</p>
-              <p className="mt-space-1 text-2xl font-mono tabular-nums">{servers.length}</p>
-            </div>
-            <div className="rounded-lg border border-[var(--border-default)] bg-[var(--bg-primary)] p-space-4">
-              <p className="text-xs text-[var(--text-muted)]">Auth failures (open)</p>
-              <p className="mt-space-1 text-2xl font-mono tabular-nums text-[var(--error)]">
+          {/* Quiet KPI strip — not a 3-card dashboard wall */}
+          <div
+            className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-[var(--text-muted)]"
+            data-testid="mcp-kpi-strip"
+          >
+            <span>
+              <span className="font-mono tabular-nums text-[var(--text-primary)]">
+                {servers.length}
+              </span>{" "}
+              servers ({days}d)
+            </span>
+            <span>
+              <span
+                className={cn(
+                  "font-mono tabular-nums",
+                  failures.length > 0 ? "text-[var(--error)]" : "text-[var(--text-primary)]",
+                )}
+              >
                 {failures.length}
-              </p>
-            </div>
-            <div className="rounded-lg border border-[var(--border-default)] bg-[var(--bg-primary)] p-space-4">
-              <p className="text-xs text-[var(--text-muted)]">Agent → server edges</p>
-              <p className="mt-space-1 text-2xl font-mono tabular-nums">{edges.length}</p>
-            </div>
+              </span>{" "}
+              auth failures
+            </span>
+            <span>
+              <span className="font-mono tabular-nums text-[var(--text-primary)]">
+                {edges.length}
+              </span>{" "}
+              agent → server edges
+            </span>
           </div>
 
           <section className="rounded-lg border border-[var(--border-default)] bg-[var(--bg-primary)] p-space-4">

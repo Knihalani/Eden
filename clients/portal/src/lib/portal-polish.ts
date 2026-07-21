@@ -16,8 +16,24 @@ export const U20_CORE_AXE_ROUTES = [
   "/settings",
 ] as const;
 
-/** Routes where Wave 6 also fails the gate on axe `serious` (nested-interactive / name-role). */
-export const U20_SERIOUS_AXE_ROUTES = ["/traces", "/improve"] as const;
+/** Routes where Wave 5 / 6 / 8 also fails the gate on axe `serious`. */
+export const U20_SERIOUS_AXE_ROUTES = ["/traces", "/improve", "/evals", "/issues"] as const;
+
+/**
+ * Improve V3 Wave 10 — Improve-group routes that must pass axe serious=0
+ * when authenticated audit runs. Keep in sync with scripts/audit-a11y.cjs.
+ */
+export const IMPROVE_V3_AXE_ROUTES = [
+  "/improve",
+  "/artifacts",
+  "/ledger",
+  "/prompts",
+  "/guardrails",
+  "/optimization",
+] as const;
+
+/** Serious-impact gate for Improve V3 Wave 10 (superset of /improve + satellites). */
+export const IMPROVE_V3_SERIOUS_AXE_ROUTES = IMPROVE_V3_AXE_ROUTES;
 
 /** Gap 4.8 empty-state voice — precise, technical, calm (no exclamation marks). */
 export const U20_EMPTY_COPY = {
@@ -43,6 +59,10 @@ export const U20_EMPTY_COPY = {
     "Queue is empty. Needs production traces and Agent Issues before triage items appear.",
   onlineScoring:
     "No scoring rules. Create one to sample production traces (code → SLM → LLM).",
+  alerts:
+    "No notification rules configured. Empty does not mean healthy — create a rule to watch cost, quality, or pipeline thresholds.",
+  alertsClear:
+    "No active alerts for your rules. New rows appear here when thresholds fire.",
 } as const;
 
 /** Filter-empty voice — distinct from never-ingested / zero-data. */
@@ -50,6 +70,7 @@ export const U20_FILTER_EMPTY_COPY = {
   traces: "No rows match the current filters. Clear filters or widen the query.",
   issues: "No issues match this status filter. Clear the filter to see the full queue.",
   agents: "No agents match the current filters. Clear search or framework filter.",
+  alerts: "No alerts match the current filters. Clear filters to see the full feed.",
 } as const;
 
 /**
@@ -70,7 +91,7 @@ export const FIRST_EVENT_WAIT = {
   pollMs: 10_000,
 } as const;
 
-/** Core mutations that must surface toast feedback (U20 WP5). */
+/** Core mutations that must surface toast feedback (U20 WP5). Wave 8 audit complete. */
 export const U20_TOAST_MUTATIONS = [
   "artifact.promote",
   "artifact.archive",
@@ -83,7 +104,26 @@ export const U20_TOAST_MUTATIONS = [
   "alert.acknowledge",
   "issue.resolve",
   "issue.triage",
+  "improve.approve",
+  "plan.approve",
 ] as const;
+
+/** File anchors proving each U20_TOAST_MUTATIONS key has toast.success wiring. */
+export const U20_TOAST_MUTATION_SOURCES: Record<(typeof U20_TOAST_MUTATIONS)[number], string> = {
+  "artifact.promote": "app/(portal)/artifacts/_components/use-artifacts-page.ts",
+  "artifact.archive": "app/(portal)/artifacts/_components/use-artifacts-page.ts",
+  "artifact.author": "app/(portal)/artifacts/_components/use-artifacts-page.ts",
+  "artifact.export": "app/(portal)/artifacts/_components/use-artifacts-page.ts",
+  "promotion.approve": "app/(portal)/promotions/page.tsx",
+  "promotion.reject": "app/(portal)/promotions/page.tsx",
+  "playground.run": "app/(portal)/playgrounds/_components/use-playgrounds-page.ts",
+  "playground.compare": "app/(portal)/playgrounds/_components/use-playgrounds-page.ts",
+  "alert.acknowledge": "app/(portal)/alerts/_components/use-alerts-page.ts",
+  "issue.resolve": "app/(portal)/issues/_components/use-issue-detail.ts",
+  "issue.triage": "app/(portal)/issues/_components/use-issue-detail.ts",
+  "improve.approve": "app/(portal)/improve/_components/use-improve-queue.ts",
+  "plan.approve": "app/(portal)/improve/plans/[id]/_components/use-plan-detail.ts",
+};
 
 /** U20 motion utility class names (see globals.css). */
 export const U20_MOTION_CLASSES = [
@@ -101,4 +141,84 @@ export const W11_OS_HUBS = [
   "experiments",
   "datasets",
   "promotions",
+] as const;
+
+/** Wave 11 overhaul — hubs with j/k + Arrow list keyboard nav. */
+export const WAVE11_LIST_KEYBOARD_HUBS = [
+  "traces",
+  "issues",
+  "alerts",
+  "artifacts",
+] as const;
+
+/** Wave E6 — Evaluate surfaces with j/k list keyboard nav. */
+export const WAVE_E6_LIST_KEYBOARD_HUBS = [
+  "experiments",
+  "playgrounds",
+  "datasets",
+] as const;
+
+/** Wave 11 — mobile card surfaces (not horizontally shrunk tables). Core five + leaves. */
+export const WAVE11_MOBILE_CARD_SURFACES = [
+  "app/(portal)/dashboard/page.tsx",
+  "app/(portal)/observability/_components/TracesTab.tsx",
+  "app/(portal)/issues/_components/issues-list.tsx",
+  "app/(portal)/evals/page.tsx",
+  // W2 peel: mobile cards marker lives on queue-board (hub shell ≤400).
+  "app/(portal)/improve/_components/queue-board.tsx",
+  "app/(portal)/agents/page.tsx",
+  "app/(portal)/fleet/page.tsx",
+  "app/(portal)/improve/runs/page.tsx",
+  // Wave E6 Evaluate leaves
+  "app/(portal)/experiments/_components/experiments-list.tsx",
+  "app/(portal)/datasets/_components/datasets-table.tsx",
+  "app/(portal)/playgrounds/page.tsx",
+] as const;
+
+/** Wave 12 freeze — Observe → Eval → Improve happy-path routes. */
+export const WAVE12_LOOP_ROUTES = [
+  "/traces",
+  "/evals",
+  "/improve",
+] as const;
+
+/**
+ * Wave 12 — authenticated `(portal)` `page.tsx` count (signoff matrix).
+ * Keep in sync with `find src/app/(portal) -name page.tsx | wc -l`.
+ */
+export const WAVE12_PORTAL_ROUTE_COUNT = 75 as const;
+
+/** Wave 12 — visual regression baseline PNG roots under e2e/golden/screenshots/. */
+export const WAVE12_VISUAL_BASELINE_IDS = [
+  "01-sign-in-home",
+  "02-traces-hub",
+  "03-issues",
+  "04-artifacts",
+  "05-playgrounds",
+  "06-alerts",
+  "07-experiments",
+  "08-debugger-sessions",
+] as const;
+
+/**
+ * Wave 12 — peer corpus PNGs used as visual grammar references (path contract).
+ * Full corpus: `.cursor/visual-research/ai-portals/` (+ wave0b OBSERVATIONS).
+ */
+export const WAVE12_PEER_VISUAL_REFS = [
+  "lmnr-home-scroll1.png",
+  "lmnr-home-scroll2.png",
+  "langfuse-public-trace-scroll0.png",
+  "braintrust-observe-scroll0.png",
+  "helicone-home-product-scroll0.png",
+  "arize-phoenix-product-scroll0.png",
+] as const;
+
+/** Wave 12 + Home Shell — always-on chrome sinks (desktop first paint; target ≤6). */
+export const WAVE12_CHROME_SINKS = [
+  "sidebar",
+  "header",
+  "command-palette",
+  "banner",
+  "toast",
+  "ask-ai-fab",
 ] as const;

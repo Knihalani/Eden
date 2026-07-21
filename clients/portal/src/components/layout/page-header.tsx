@@ -1,14 +1,32 @@
 "use client";
 
 import * as React from "react";
-import { Info } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { useEmbeddedSurface } from "@/components/layout/embedded-surface";
 
+/**
+ * Wave 1.5 PageHeader grammar freeze.
+ *
+ * Canonical page identity = `title` (+ optional `actions`, optional
+ * `subtitle` for a page-specific one-liner that is NOT a location cue).
+ *
+ * Location lives in AppShell breadcrumbs — do not pass category
+ * eyebrows (`Observe`, `Settings`, `Eval`, etc.). Eyebrow / description
+ * props are accepted for backward compat but intentionally not rendered.
+ */
 export interface PageHeaderProps {
+  /** Canonical page identity. AppShell breadcrumbs own location. */
   title: string;
+  /**
+   * Optional page-specific supporting one-liner under the title.
+   * Not a location cue (categories belong in breadcrumbs).
+   */
   subtitle?: React.ReactNode;
+  /**
+   * @deprecated Wave 1.5 — unused. Location = AppShell breadcrumbs.
+   * Do not pass category labels (`Observe`, `Settings`, `Eval`, …).
+   * Kept so call sites do not break; never rendered.
+   */
   eyebrow?: string;
   actions?: React.ReactNode;
   /**
@@ -18,13 +36,13 @@ export interface PageHeaderProps {
    */
   icon?: React.ComponentType<{ className?: string }>;
   className?: string;
-  /** Optional "Welcome back, X" badge shown above the title. */
+  /** Optional "Welcome back, X" line above the title (Home only). */
   greeting?: string;
-  /** One-line "what is this page for" hint shown in a tooltip next
-   *  to the title. Critical for navigation clarity — pages like
-   *  "Traces", "Replay", "Inspector", and "Time-Travel" have icons
-   *  and labels that look similar. A hover hint tells the user
-   *  which is which without making them navigate in. */
+  /**
+   * @deprecated Wave 1.5 — unused. Description / Info tooltip removed
+   * from the title row (no eyebrow + hint + title triple). Kept for
+   * call-site compat; never rendered.
+   */
   description?: string;
   /**
    * When true (or under EmbeddedSurface), hide title chrome so shell
@@ -36,12 +54,12 @@ export interface PageHeaderProps {
 export function PageHeader({
   title,
   subtitle,
-  eyebrow,
+  eyebrow: _eyebrow,
   actions,
   icon: Icon,
   className,
   greeting,
-  description,
+  description: _description,
   embedded = false,
 }: PageHeaderProps) {
   const inEmbeddedSurface = useEmbeddedSurface();
@@ -74,35 +92,9 @@ export function PageHeader({
               {greeting}
             </p>
           )}
-          {eyebrow && (
-            <p className="text-2xs font-mono font-semibold uppercase tracking-widest text-[var(--text-muted)] mb-space-1">
-              {eyebrow}
-            </p>
-          )}
-          <div className="flex items-center gap-space-2">
-            <h1 className="text-xl lg:text-2xl font-semibold text-[var(--text-primary)] tracking-tight leading-tight">
-              {title}
-            </h1>
-            {description && (
-              <Tooltip delayDuration={150}>
-                <TooltipTrigger asChild>
-                  <button
-                    type="button"
-                    aria-label={`About ${title}`}
-                    className="p-1 rounded text-[var(--text-muted)] hover:text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)] transition-colors"
-                  >
-                    <Info className="w-3.5 h-3.5" />
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent side="right" sideOffset={6} className="max-w-[280px]">
-                  <div className="font-medium text-[var(--text-primary)]">About this page</div>
-                  <div className="mt-space-1 text-xs text-[var(--text-secondary)] leading-snug">
-                    {description}
-                  </div>
-                </TooltipContent>
-              </Tooltip>
-            )}
-          </div>
+          <h1 className="text-xl lg:text-2xl font-semibold text-[var(--text-primary)] tracking-tight leading-tight">
+            {title}
+          </h1>
           {subtitle && (
             <p className="text-sm text-[var(--text-muted)] mt-space-1">{subtitle}</p>
           )}

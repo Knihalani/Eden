@@ -53,6 +53,6 @@ export function organizationFromCreate(created: CreateOrgResult): Organization {
   };
 }
 
-export const CREATE_ORG_DEGRADED_TITLE = "Organization created — Clerk sync delayed";
+export const CREATE_ORG_DEGRADED_TITLE = "Workspace created — Clerk sync delayed";
 export const CREATE_ORG_DEGRADED_DESCRIPTION =
-  "Your workspace was saved in Eden, but Clerk could not be reached. Invites and the org switcher may not work until you refresh after Clerk reconnects.";
+  "Your workspace was saved in Eden, but Clerk could not be reached. Invites and the workspace switcher may not work until you refresh after Clerk reconnects.";

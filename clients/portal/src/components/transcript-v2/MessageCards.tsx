@@ -89,6 +89,9 @@ export function MessageCards({
 export const TranscriptView = MessageCards;
 export type TranscriptViewProps = MessageCardsProps;
 
+/** Laminar message clamp — max height before expand strip. */
+export const MESSAGE_CARD_MAX_PX = 360;
+
 const MessageCard = memo(function MessageCard({
   message,
   collapseAtChars,
@@ -118,23 +121,52 @@ const MessageCard = memo(function MessageCard({
           ? "space-y-space-1 py-space-2"
           : "rounded-lg border border-[var(--border-default)] bg-[var(--bg-primary)] p-space-3"
       }
+      data-testid="message-card"
     >
       <div className="mb-space-1 flex items-center gap-space-2 text-xs font-medium" style={{ color: meta.color }}>
         <span aria-hidden>{meta.icon}</span>
         {meta.label}
       </div>
-      <pre className="whitespace-pre-wrap break-words font-sans text-sm text-[var(--text-secondary)]">
-        {displayed}
-      </pre>
-      {tooLong && (
+      <div
+        className={cn(
+          "relative",
+          !expanded && "max-h-[360px] overflow-hidden",
+        )}
+        data-message-clamp={MESSAGE_CARD_MAX_PX}
+      >
+        <pre className="whitespace-pre-wrap break-words font-sans text-sm text-[var(--text-secondary)]">
+          {displayed}
+        </pre>
+        {!expanded && (tooLong || message.content.length > 400) ? (
+          <div
+            className="pointer-events-none absolute inset-x-0 bottom-0 flex h-12 items-end justify-center bg-gradient-to-t from-[var(--bg-primary)] to-transparent"
+            data-testid="message-card-expand-strip"
+          >
+            <button
+              type="button"
+              className="pointer-events-auto mb-space-1 min-h-8 rounded border border-[var(--border-default)] bg-[var(--bg-secondary)] px-space-3 text-xs text-[var(--accent)] hover:underline"
+              onClick={(e) => {
+                e.stopPropagation();
+                setExpanded(true);
+              }}
+            >
+              Expand
+            </button>
+          </div>
+        ) : null}
+      </div>
+      {expanded && (tooLong || message.content.length > 400) ? (
         <button
           type="button"
           className="mt-space-1 text-xs text-[var(--accent)] hover:underline"
-          onClick={() => setExpanded((e) => !e)}
+          onClick={(e) => {
+            e.stopPropagation();
+            setExpanded(false);
+          }}
         >
-          {expanded ? "Collapse" : "Expand"}
+          Collapse
         </button>
-      )}
+      ) : null}
       {message.tool_calls && message.tool_calls.length > 0 && (
         <ToolLabelRow
           toolCalls={message.tool_calls}

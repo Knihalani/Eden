@@ -61,9 +61,9 @@ const SECTIONS = [
     icon: Activity,
     body: (
       <p>
-        The free tier is provided best-effort with no SLA. Paid plans include an
-        uptime SLA (99.9% monthly for Team, 99.95% for Enterprise) with service
-        credits defined in your order form.
+        The free tier (public beta) is provided best-effort with no SLA. If paid
+        plans become available later, any uptime SLA and service credits will be
+        defined in an order form — none are offered today.
       </p>
     ),
   },
@@ -73,9 +73,10 @@ const SECTIONS = [
     icon: CreditCard,
     body: (
       <p>
-        Paid plans are billed monthly or annually in advance. You can cancel any
-        time and continue using the paid tier through the end of the current billing
-        period. Refunds are issued at our discretion for documented service issues.
+        Paid plans are not offered during public beta. If billing is enabled later,
+        paid plans would be billed monthly or annually in advance, with cancellation
+        effective at the end of the then-current billing period. Refunds, if any,
+        would be issued at our discretion for documented service issues.
       </p>
     ),
   },
@@ -98,8 +99,8 @@ const SECTIONS = [
     body: (
       <p>
         We may update these terms with 30 days notice for material changes. Continued
-        use after the effective date constitutes acceptance. For enterprise customers,
-        changes follow the change-notification process in your order form.
+        use after the effective date constitutes acceptance. Where a separate order
+        form exists, changes follow the change-notification process in that form.
       </p>
     ),
   },
@@ -110,7 +111,7 @@ export default function TermsPage() {
     <LegalPage
       eyebrow="Legal"
       title="Terms of Service"
-      description="These terms govern your use of Eden. The free tier is offered under these terms as-is. Paid plans add the SLA + DPA in your order form."
+      description="These terms govern your use of Eden. The free public beta is offered under these terms as-is, with no SLA. Paid plans and order-form SLAs are not available yet."
       size="narrow"
       draft
     >

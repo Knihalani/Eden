@@ -61,19 +61,21 @@ describe("W7-D NoOrgState on settings tabs", () => {
 });
 
 describe("W7-D personal-org soft-hide", () => {
-  it("settings soft-hides SCIM and SSO for personal orgs", () => {
+  it("settings soft-hides team-only tabs (SCIM) for personal orgs", () => {
     const src = read("app/(portal)/settings/page.tsx");
-    expect(src).toMatch(/isPersonalOrg && \(id === "scim" \|\| id === "sso"\)/);
+    expect(src).toContain("isTeamOnlyTab");
+    expect(src).toMatch(/isTeamOnlyTab\(id\)\s*&&\s*isPersonalOrg/);
   });
 
-  it("personal-org SCIM/SSO deep-link toast is not Admin only", () => {
+  it("personal-org SCIM deep-link toast is not Admin only", () => {
     const src = read("app/(portal)/settings/page.tsx");
-    expect(src).toContain("Team organizations only");
+    expect(src).toContain("Team workspaces only");
   });
 
   it("security tab soft-hides org 2FA enforcement for personal orgs", () => {
     const src = read("app/(portal)/settings/_components/security-tab.tsx");
-    expect(src).toContain("isPersonalOrg");
-    expect(src).toMatch(/canManageSecurity && currentOrg && !isPersonalOrg/);
+    expect(src).toContain("isPersonalWorkspace");
+    expect(src).toContain("canUseTeamFeatures");
+    expect(src).toContain("showWorkspaceEnforcement");
   });
 });

@@ -56,7 +56,8 @@ describe("W7-C load ErrorState sweep", () => {
     );
     expect(src).toContain('title="Could not load members"');
     expect(src).not.toMatch(/catch\s*\{[^}]*setMembers\(\[\]\)[^}]*\}\s*finally/);
-    expect(src).toContain("setLoadError");
+    expect(src).toContain("membersError");
+    expect(src).toContain("membersQuery.refetch()");
   });
 
   it("status tab uses ErrorState for platform status load", () => {
@@ -66,11 +67,14 @@ describe("W7-C load ErrorState sweep", () => {
     expect(src).not.toMatch(/toast\.error\([\s\S]*Failed to load status/);
   });
 
-  it("profile uses ErrorState for 2FA status load (not toast)", () => {
-    const src = read("app/(portal)/profile/page.tsx");
-    expect(src).toContain('title="Could not load 2FA status"');
-    expect(src).toContain("twoFaError");
-    expect(src).not.toMatch(/toast\.error\(["']Could not load 2FA status/);
+  it("account panel uses ErrorState for 2FA status load (not toast)", () => {
+    const panel = read("app/(portal)/settings/_components/account-panel.tsx");
+    const sections = read(
+      "app/(portal)/settings/_components/account-panel-sections.tsx",
+    );
+    expect(sections).toContain('title="Could not load 2FA status"');
+    expect(panel).toContain("twoFaError");
+    expect(panel).not.toMatch(/toast\.error\(["']Could not load 2FA status/);
   });
 
   it("references tab uses ErrorState for list load (not toast)", () => {
@@ -80,8 +84,8 @@ describe("W7-C load ErrorState sweep", () => {
   });
 
   it("audit log tab uses ErrorState for load (not toast)", () => {
-    const src = read("app/(portal)/settings/_components/audit-log-tab.tsx");
-    expect(src).toContain('title="Could not load audit log"');
+    const src = read("app/(portal)/audit-trail/_components/events-panel.tsx");
+    expect(src).toContain('errorTitle="Could not load audit log"');
     expect(src).not.toMatch(/toast\.error\([\s\S]*Failed to load audit log/);
   });
 });

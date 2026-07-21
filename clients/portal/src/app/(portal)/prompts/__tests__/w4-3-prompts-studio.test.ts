@@ -49,15 +49,17 @@ describe("W4.3 prompts query states + version editor", () => {
 
   it("ships version save editor instead of raw POST API hint", () => {
     const src = read("app/(portal)/prompts/page.tsx");
-    expect(src).toContain("Save version");
-    expect(src).toContain("handleSaveVersion");
-    expect(src).toContain("/versions");
-    expect(src).toContain("Unsaved changes");
-    expect(src).toContain("beforeunload");
-    expect(src).toContain("Discard changes?");
+    const hook = read("app/(portal)/prompts/_components/use-prompts-versions.ts");
+    const editor = read("app/(portal)/prompts/_components/prompts-editor.tsx");
+    expect(editor).toContain("Save version");
+    expect(src).toContain("usePromptsVersions");
+    expect(hook).toContain("/versions");
+    expect(editor).toContain("Unsaved changes");
+    expect(hook).toContain("beforeunload");
+    expect(hook).toContain("Discard changes?");
     expect(src).not.toMatch(/POST to \/prompts\/\{/);
-    expect(src).toContain("<Textarea");
-    expect(src).toContain("<Input");
+    expect(editor).toContain("<Textarea");
+    expect(editor).toContain("<Input");
   });
 
   it("PromptEnvironmentsPanel uses ErrorState (no false empty on load fail)", () => {

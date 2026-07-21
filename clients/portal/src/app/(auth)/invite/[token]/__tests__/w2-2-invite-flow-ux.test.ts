@@ -26,14 +26,14 @@ describe("invite-flow-ux accept → setActive", () => {
     expect(src).toContain("orgListLoaded");
     expect(src).toContain("acceptBlockedByOrgList");
     expect(src).toMatch(/disabled=\{acceptBlockedByOrgList\}/);
-    expect(src).toContain("Organization switcher is still loading");
+    expect(src).toContain("Workspace switcher is still loading");
   });
 
   it("surfaces degraded join when clerk_org_id is missing", () => {
     const src = read();
     expect(src).toContain("joinedDegraded");
     expect(src).toContain("Workspace activation delayed");
-    expect(src).toContain("organization switcher");
+    expect(src).toContain("workspace switcher");
     // Must not silently router.push when clerk_org_id is absent.
     const acceptFn = src.slice(
       src.indexOf("const handleAccept"),

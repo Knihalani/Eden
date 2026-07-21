@@ -268,7 +268,7 @@ function projectionFromApi(p: ApiSwitchProjection): SwitchProjection {
 // ModelAdvisor
 // ─────────────────────────────────────────────────────────────────────
 
-const DEFAULT_BASE_URL = "https://api.eden.ai";
+const DEFAULT_BASE_URL = "https://api.edenobservability.com";
 const DEFAULT_TIMEOUT_MS = 10_000;
 
 export class ModelAdvisor {

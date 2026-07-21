@@ -13,10 +13,11 @@ import Link from "next/link";
 import { Check, Copy, ExternalLink, Key, Terminal } from "lucide-react";
 import { SettingsCard } from "@/components/settings/settings-card";
 import { IntegrationStatusBanner } from "@/components/settings/integration-status-banner";
-import { DOCS_URL } from "@/lib/constants";
+import { DOCS_QUICKSTART_URL } from "@/lib/constants";
 import { api } from "@/lib/api";
 import { useToast } from "@/components/ui/toast";
 import { Button } from "@/components/ui/button";
+import { NoOrgState } from "@/components/ui/no-org-state";
 import { usePermissions } from "@/hooks/use-permissions";
 import { isAdminOrOwner } from "@/lib/roles";
 
@@ -175,15 +176,11 @@ export function McpTab({ org }: McpTabProps) {
   };
 
   if (!org) {
-    return (
-      <div className="text-center py-12 text-[var(--text-secondary)]">
-        Select an organization to configure MCP
-      </div>
-    );
+    return <NoOrgState feature="MCP" />;
   }
 
   return (
-    <div className="space-y-space-4">
+    <div className="space-y-space-4" data-ws8-mcp>
       <IntegrationStatusBanner orgId={org.id} watch={["github_action"]} />
       <SettingsCard>
         <div className="space-y-space-4">
@@ -202,22 +199,20 @@ export function McpTab({ org }: McpTabProps) {
 
           <div className="flex flex-wrap gap-2">
             {(["cursor", "claude", "http"] as const).map((id) => (
-              <button
+              <Button
                 key={id}
                 type="button"
+                variant={target === id ? "secondary" : "ghost"}
+                size="sm"
+                aria-pressed={target === id}
                 onClick={() => setTarget(id)}
-                className={
-                  target === id
-                    ? "px-3 py-1.5 rounded-lg text-sm font-medium bg-[var(--accent-faint)] text-[var(--accent)]"
-                    : "px-3 py-1.5 rounded-lg text-sm font-medium text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)]"
-                }
               >
                 {id === "cursor"
                   ? "Cursor"
                   : id === "claude"
                     ? "Claude Code"
                     : "Streamable HTTP"}
-              </button>
+              </Button>
             ))}
           </div>
 
@@ -317,12 +312,12 @@ export function McpTab({ org }: McpTabProps) {
           ))}
         </ul>
         <a
-          href={`${DOCS_URL}/how-to/mcp-cursor`}
+          href={DOCS_QUICKSTART_URL}
           target="_blank"
           rel="noopener noreferrer"
           className="inline-flex items-center gap-1 mt-3 text-sm text-[var(--accent)] hover:underline"
         >
-          Full MCP setup guide
+          Docs quickstart
           <ExternalLink className="w-3.5 h-3.5" />
         </a>
       </SettingsCard>

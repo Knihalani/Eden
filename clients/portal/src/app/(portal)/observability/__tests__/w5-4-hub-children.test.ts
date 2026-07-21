@@ -26,23 +26,33 @@ const CHILD_PAGES = [
 
 describe("W5-4 observability hub children ErrorState", () => {
   it.each(CHILD_PAGES)("%s uses ErrorState or QueryState with retry", (child) => {
-    const src = read(`app/(portal)/observability/${child}/page.tsx`);
+    let src = read(`app/(portal)/observability/${child}/page.tsx`);
+    if (child === "eval") {
+      src +=
+        read("app/(portal)/observability/eval/_components/versions-panel.tsx") +
+        read("app/(portal)/observability/eval/_components/failure-clusters-panel.tsx");
+    }
     const hasErrorState =
       src.includes('from "@/components/ui/error-state"') && src.includes("ErrorState");
     const hasQueryState =
       src.includes('from "@/components/ui/query-state"') && src.includes("QueryState");
     expect(hasErrorState || hasQueryState).toBe(true);
-    // Retry copy lives on the page or inside QueryState's errorTitle path
+    // Retry copy lives on the page, panels, or inside QueryState's errorTitle path
     expect(
-      src.includes("Try again") || hasQueryState,
+      src.includes("Try again") || src.includes("Dismiss") || hasQueryState,
     ).toBe(true);
   });
 
-  it("hub SUBPAGES includes cohorts and omits apm", () => {
-    const src = read("app/(portal)/observability/page.tsx");
-    expect(src).toContain('href: "/observability/cohorts"');
-    expect(src).not.toContain('href: "/observability/apm"');
-    expect(src).not.toContain('href: "/apm"');
+  it("hub keeps cohorts leaf and omits apm (landing redirects to Traces)", () => {
+    const landing = read("app/(portal)/observability/page.tsx");
+    expect(landing).toContain('redirect("/traces")');
+    expect(
+      existsSync(resolve(portalSrc, "app/(portal)/observability/cohorts/page.tsx")),
+    ).toBe(true);
+    const redirects = read("lib/portal-hub-redirect.ts");
+    expect(redirects).toContain('"/observability/cohorts"');
+    expect(landing).not.toContain('href: "/observability/apm"');
+    expect(landing).not.toContain('href: "/apm"');
   });
 
   it("legacy /apm hub-redirects to /traces (no standalone APM surface)", () => {
@@ -64,17 +74,21 @@ describe("W5 observe-leaves shared template", () => {
     expect(shell).toContain("Advanced under Traces");
   });
 
-  it.each(CHILD_PAGES)("%s uses ObserveLeafHeader", (child) => {
+  it.each(CHILD_PAGES)("%s uses ObserveLeafHeader or PageHeader", (child) => {
     const src = read(`app/(portal)/observability/${child}/page.tsx`);
+    if (child === "eval") {
+      // Scores panel peels to PageHeader (Improve online-scoring link).
+      expect(src).toContain("PageHeader");
+      expect(src).toContain("PageContent");
+      return;
+    }
     expect(src).toContain("ObserveLeafHeader");
     expect(src).toContain("PageContent");
   });
 
-  it("landing uses ObserveLeafHeader and points operators to Traces", () => {
+  it("landing redirects operators to Traces", () => {
     const src = read("app/(portal)/observability/page.tsx");
-    expect(src).toContain("ObserveLeafHeader");
-    expect(src).toContain("Open Traces");
-    expect(src).toContain("Advanced tools");
+    expect(src).toContain('redirect("/traces")');
   });
 });
 
@@ -102,11 +116,15 @@ describe("W5-4 observability loading skeletons", () => {
     expect(retrieval).toContain("Skeleton");
     expect(retrieval).toContain("Could not load knowledge gaps");
 
-    const query = read("app/(portal)/observability/query/page.tsx");
+    const query = read(
+      "app/(portal)/observability/query/_components/query-panels.tsx",
+    );
     expect(query).toContain("Skeleton");
     expect(query).toContain("Could not load alerts");
 
-    const evalPage = read("app/(portal)/observability/eval/page.tsx");
+    const evalPage =
+      read("app/(portal)/observability/eval/page.tsx") +
+      read("app/(portal)/observability/eval/_components/failure-clusters-panel.tsx");
     expect(evalPage).toContain("Skeleton");
     expect(evalPage).toContain("Could not load failure clusters");
   });

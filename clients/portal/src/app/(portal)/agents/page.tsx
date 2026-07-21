@@ -4,7 +4,10 @@
 
 import { PageHeader } from "@/components/layout/page-header";
 import { EmbeddedSurface } from "@/components/layout/embedded-surface";
-import { CoreResourcePage } from "@/components/portal-os";
+import {
+  CoreResourcePage,
+  useResourceUrlState,
+} from "@/components/portal-os";
 import {
   Bot,
   ChevronDown,
@@ -25,8 +28,6 @@ import { NoOrgState } from "@/components/ui/no-org-state";
 import { QueryState } from "@/components/ui/query-state";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Card } from "@/components/ui/card";
-import { Panel } from "@/components/ui/panel";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
@@ -36,7 +37,7 @@ import {
   DropdownMenuLabel,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { agentsApi, type AgentSummary } from "@/lib/api";
+import { agentsApi, ApiError, type AgentSummary } from "@/lib/api";
 import { useOrg } from "@/hooks/use-org";
 import { usePermissions } from "@/hooks/use-permissions";
 import { useState, useMemo, Suspense } from "react";
@@ -44,6 +45,8 @@ import Link from "next/link";
 import dynamic from "next/dynamic";
 import { DOCS_QUICKSTART_URL } from "@/lib/constants";
 import { U20_EMPTY_COPY, U20_FILTER_EMPTY_COPY } from "@/lib/portal-polish";
+import { useListKeyboardNav } from "@/hooks/use-list-keyboard-nav";
+import { AgentsDetailPanel } from "./_components/agents-detail-panel";
 
 const AGENT_TABS = ["agents", "fleet"] as const;
 const FleetView = dynamic(() => import("@/app/(portal)/fleet/page"), {
@@ -104,6 +107,8 @@ function AgentsPageInner() {
   const [limit, setLimit] = useState(PAGE_SIZE);
   const [search, setSearch] = useState("");
   const [frameworkFilter, setFrameworkFilter] = useState<string>("");
+  const { state: urlState, setState: setUrlState } = useResourceUrlState();
+  const agentId = urlState.agentId;
 
   const agentsQuery = useOrgQuery(
     queryKeys.agents.list(orgId, { limit }),
@@ -115,6 +120,17 @@ function AgentsPageInner() {
   const total = agentsQuery.data?.total ?? 0;
   const loading = agentsQuery.isLoading;
   const refreshing = agentsQuery.isFetching;
+
+  const agentDetailQuery = useOrgQuery(
+    queryKeys.agents.detail(orgId, agentId ?? ""),
+    orgId,
+    () => agentsApi.get(orgId!, agentId!),
+    { enabled: Boolean(orgId) && Boolean(agentId) && tab === "agents" },
+  );
+  const selectedAgent = agentDetailQuery.data ?? null;
+  const agentDetailNotFound =
+    agentDetailQuery.error instanceof ApiError && agentDetailQuery.error.status === 404;
+  const agentDetailError = agentDetailQuery.error?.message ?? null;
 
   const frameworks = useMemo(() => {
     const set = new Set<string>();
@@ -134,6 +150,20 @@ function AgentsPageInner() {
     });
   }, [agents, search, frameworkFilter]);
 
+  const agentIndex = agentId
+    ? filtered.findIndex((a) => a.agent_id === agentId)
+    : -1;
+
+  useListKeyboardNav(
+    filtered.length,
+    agentIndex >= 0 ? agentIndex : 0,
+    (idx) => {
+      const row = filtered[idx];
+      if (row) setUrlState({ agentId: row.agent_id });
+    },
+    tab === "agents" && filtered.length > 0,
+  );
+
   if (!currentOrg) {
     return (
       <NoOrgState
@@ -147,13 +177,16 @@ function AgentsPageInner() {
   return (
     <Tabs
       value={tab}
-      onValueChange={(v) => setTab(v as (typeof AGENT_TABS)[number])}
+      onValueChange={(v) => {
+        const next = v as (typeof AGENT_TABS)[number];
+        if (next === "fleet") setUrlState({ agentId: undefined });
+        setTab(next);
+      }}
     >
     <CoreResourcePage
       size="wide"
       header={
         <PageHeader
-          eyebrow="Build"
           title="Agents"
           subtitle={
             loading
@@ -211,23 +244,71 @@ function AgentsPageInner() {
       }
       toolbar={
         <div
-          className="flex flex-col gap-space-3"
+          className="flex flex-wrap items-center gap-space-2"
           data-testid="agents-toolbar"
+          data-wave7-agents="toolbar-one-band"
         >
-          <div className="flex flex-wrap items-end gap-space-2">
-            <TabsList
-              variant="underline"
-              aria-label="Agents sections"
-              className="h-auto flex-1 justify-start gap-1 bg-transparent"
-            >
-              <TabsTrigger variant="underline" value="agents" title="Agents" className="min-h-11 capitalize">
-                Agents
-              </TabsTrigger>
-              <TabsTrigger variant="underline" value="fleet" title="Fleet" className="min-h-11 capitalize">
-                Fleet
-              </TabsTrigger>
-            </TabsList>
-            {tab === "agents" ? (
+          <TabsList
+            variant="underline"
+            aria-label="Agents sections"
+            className="h-auto justify-start gap-1 bg-transparent"
+          >
+            <TabsTrigger variant="underline" value="agents" title="Agents" className="min-h-11 capitalize">
+              Agents
+            </TabsTrigger>
+            <TabsTrigger variant="underline" value="fleet" title="Fleet" className="min-h-11 capitalize">
+              Fleet
+            </TabsTrigger>
+          </TabsList>
+          {tab === "agents" ? (
+            <>
+              <div className="relative min-w-[12rem] flex-1">
+                <Search
+                  aria-hidden="true"
+                  className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--text-muted)]"
+                />
+                <input
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Search agents…"
+                  aria-label="Search agents by name, framework, or repo"
+                  data-filter-search
+                  className="min-h-11 w-full rounded-lg border border-[var(--border-default)] bg-[var(--bg-secondary)] py-2 pl-9 pr-9 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/40"
+                />
+                {search ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => setSearch("")}
+                    aria-label="Clear search"
+                    className="absolute right-1 top-1/2 h-8 w-8 -translate-y-1/2 text-[var(--text-muted)]"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </Button>
+                ) : null}
+              </div>
+              {frameworks.length > 1 ? (
+                <div className="relative">
+                  <Filter
+                    aria-hidden="true"
+                    className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[var(--text-muted)]"
+                  />
+                  <select
+                    value={frameworkFilter}
+                    onChange={(e) => setFrameworkFilter(e.target.value)}
+                    aria-label="Filter agents by framework"
+                    className="min-h-11 cursor-pointer appearance-none rounded-lg border border-[var(--border-default)] bg-[var(--bg-secondary)] py-2 pl-8 pr-8 text-sm text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/40"
+                  >
+                    <option value="">All frameworks</option>
+                    {frameworks.map((f) => (
+                      <option key={f} value={f}>
+                        {f}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              ) : null}
               <Button
                 onClick={() => void agentsQuery.refetch()}
                 variant="ghost"
@@ -239,59 +320,32 @@ function AgentsPageInner() {
               >
                 <RefreshCw className="h-4 w-4" /> Refresh
               </Button>
-            ) : null}
-          </div>
-          {tab === "agents" ? (
-            <div className="flex flex-col sm:flex-row gap-space-3 items-stretch sm:items-center">
-              <div className="relative flex-1 min-w-0">
-                <Search
-                  aria-hidden="true"
-                  className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-muted)] pointer-events-none"
-                />
-                <input
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Search by name, framework, or repo…"
-                  aria-label="Search agents by name, framework, or repo"
-                  className="w-full pl-9 pr-9 py-2 bg-[var(--bg-secondary)] border border-[var(--border-default)] rounded-lg text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/40 min-h-11"
-                />
-                {search && (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => setSearch("")}
-                    aria-label="Clear search"
-                    className="absolute right-1 top-1/2 -translate-y-1/2 h-8 w-8 text-[var(--text-muted)]"
-                  >
-                    <X className="w-3.5 h-3.5" />
-                  </Button>
-                )}
-              </div>
-              {frameworks.length > 1 && (
-                <div className="relative">
-                  <Filter
-                    aria-hidden="true"
-                    className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[var(--text-muted)] pointer-events-none"
-                  />
-                  <select
-                    value={frameworkFilter}
-                    onChange={(e) => setFrameworkFilter(e.target.value)}
-                    aria-label="Filter agents by framework"
-                    className="pl-8 pr-8 py-2 min-h-11 bg-[var(--bg-secondary)] border border-[var(--border-default)] rounded-lg text-sm text-[var(--text-primary)] appearance-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/40"
-                  >
-                    <option value="">All frameworks</option>
-                    {frameworks.map((f) => (
-                      <option key={f} value={f}>
-                        {f}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
-            </div>
+            </>
           ) : null}
         </div>
+      }
+      detail={
+        tab === "agents" && agentId ? (
+          <AgentsDetailPanel
+            agentId={agentId}
+            agent={selectedAgent}
+            loading={agentDetailQuery.isLoading || agentDetailQuery.isPending}
+            notFound={agentDetailNotFound}
+            error={agentDetailError}
+            onClose={() => setUrlState({ agentId: undefined })}
+            onPrev={
+              agentIndex > 0
+                ? () => setUrlState({ agentId: filtered[agentIndex - 1]!.agent_id })
+                : undefined
+            }
+            onNext={
+              agentIndex >= 0 && agentIndex < filtered.length - 1
+                ? () => setUrlState({ agentId: filtered[agentIndex + 1]!.agent_id })
+                : undefined
+            }
+            onRetry={() => void agentDetailQuery.refetch()}
+          />
+        ) : undefined
       }
       table={
         <>
@@ -309,13 +363,16 @@ function AgentsPageInner() {
         errorTitle="Could not load agents"
         isEmpty={(d) => (d?.agents.length ?? 0) === 0}
         loadingSlot={
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-space-3">
+          <div className="space-y-2" data-testid="agents-list-loading">
             {Array.from({ length: 6 }).map((_, i) => (
-              <Panel key={i} tone="flat" padding="md" className="space-y-3">
-                <Skeleton className="h-5 w-32" />
-                <Skeleton className="h-3 w-full" />
-                <Skeleton className="h-3 w-2/3" />
-              </Panel>
+              <div
+                key={i}
+                className="flex items-center gap-3 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-secondary)] px-3 py-2.5"
+              >
+                <Skeleton className="h-4 w-4 rounded" />
+                <Skeleton className="h-4 w-40" />
+                <Skeleton className="h-4 w-24 ml-auto" />
+              </div>
             ))}
           </div>
         }
@@ -384,10 +441,33 @@ function AgentsPageInner() {
                 />
               </div>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-space-3">
-                {filtered.map((a) => (
-                  <AgentCard key={a.agent_id} agent={a} />
-                ))}
+              <div
+                className="overflow-hidden rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-secondary)]"
+                data-testid="agents-table" data-wave10-agents="table" data-wave11-mobile="cards"
+                role="table"
+                aria-label="Agents"
+              >
+                <div
+                  className="hidden sm:grid grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_7rem_8rem] gap-3 border-b border-[var(--border-subtle)] bg-[var(--bg-tertiary)] px-3 py-2 text-xs font-medium uppercase tracking-wide text-[var(--text-muted)]"
+                  role="row"
+                >
+                  <span role="columnheader">Name</span>
+                  <span role="columnheader">Framework / repo</span>
+                  <span role="columnheader">Last seen</span>
+                  <span role="columnheader" className="text-right">
+                    Status
+                  </span>
+                </div>
+                <ul className="divide-y divide-[var(--border-subtle)]" role="rowgroup">
+                  {filtered.map((a) => (
+                    <AgentRow
+                      key={a.agent_id}
+                      agent={a}
+                      selected={a.agent_id === agentId}
+                      onSelect={() => setUrlState({ agentId: a.agent_id })}
+                    />
+                  ))}
+                </ul>
               </div>
             )}
 
@@ -415,7 +495,15 @@ function AgentsPageInner() {
   );
 }
 
-function AgentCard({ agent }: { agent: AgentSummary }) {
+function AgentRow({
+  agent,
+  selected,
+  onSelect,
+}: {
+  agent: AgentSummary;
+  selected: boolean;
+  onSelect: () => void;
+}) {
   const repoHost = (() => {
     if (!agent.repo_url) return null;
     try {
@@ -425,75 +513,80 @@ function AgentCard({ agent }: { agent: AgentSummary }) {
     }
   })();
 
-  // 24h threshold computed once per render — sufficient for a card badge.
-  // The badge will refresh on the next render after the page re-fetches.
   const isLive = agent.last_seen_at
     ? Date.now() - new Date(agent.last_seen_at).getTime() < 1000 * 60 * 60 * 24
     : false;
 
   return (
-    <Link
-      href={`/agents/${encodeURIComponent(agent.agent_id)}`}
-      aria-label={`Open agent ${agent.name}`}
-      className="group"
-    >
-      <Card className="p-5 h-full hover:border-[var(--accent)]/40 hover:bg-[var(--bg-secondary)]/40 transition-colors">
-        <div className="flex items-start gap-3">
-          <div
-            className={cn(
-              "p-2 rounded-lg flex-shrink-0",
-              isLive
-                ? "bg-[var(--terminal-faint)] text-[var(--terminal)]"
-                : "bg-[var(--bg-tertiary)] text-[var(--text-muted)]"
-            )}
-          >
-            <Bot className="w-5 h-5" aria-hidden="true" />
-          </div>
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2">
-              <h3 className="text-sm font-semibold text-[var(--text-primary)] truncate group-hover:text-[var(--accent)] transition-colors">
-                {agent.name}
-              </h3>
-              {isLive && (
-                <span
-                  title="Active in the last 24h"
-                  aria-label="Active in the last 24 hours"
-                  className="w-1.5 h-1.5 rounded-full bg-[var(--terminal)] flex-shrink-0"
-                />
+    <li role="row">
+      <button
+        type="button"
+        onClick={onSelect}
+        aria-label={`Open agent ${agent.name}`}
+        aria-pressed={selected}
+        className={cn(
+          "grid w-full grid-cols-1 items-center gap-1 px-3 py-2.5 text-left transition-colors min-h-11 sm:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_7rem_8rem] sm:gap-3",
+          selected
+            ? "bg-[var(--accent-faint)]"
+            : "hover:bg-[var(--bg-tertiary)]/50",
+        )}
+      >
+        <div className="min-w-0" role="cell">
+          <div className="flex min-w-0 items-center gap-2">
+            <Bot
+              className={cn(
+                "h-4 w-4 shrink-0",
+                isLive ? "text-[var(--terminal)]" : "text-[var(--text-muted)]",
               )}
-            </div>
-            <p className="text-xs font-mono text-[var(--text-muted)] truncate mt-0.5">
-              {agent.agent_id}
-            </p>
+              aria-hidden
+            />
+            <span className="truncate text-sm font-medium text-[var(--text-primary)]">
+              {agent.name}
+            </span>
           </div>
+          <p className="truncate pl-6 font-mono text-xs text-[var(--text-muted)]">
+            {agent.agent_id}
+          </p>
         </div>
-
-        <div className="mt-4 flex flex-wrap items-center gap-1.5">
-          {agent.framework && (
+        <div className="flex min-w-0 flex-wrap items-center gap-1.5 pl-6 sm:pl-0" role="cell">
+          {agent.framework ? (
             <span
               className={cn(
-                "text-xs font-medium uppercase tracking-wide px-1.5 py-1 rounded",
+                "rounded px-1.5 py-0.5 text-xs font-medium uppercase tracking-wide",
                 FRAMEWORK_BADGE[agent.framework] ?? FRAMEWORK_BADGE.none,
               )}
             >
               {agent.framework}
             </span>
+          ) : (
+            <span className="text-xs text-[var(--text-muted)]">—</span>
           )}
-        </div>
-
-        <div className="mt-4 pt-3 border-t border-[var(--border-subtle)] flex items-center justify-between text-xs text-[var(--text-muted)]">
-          <span className="flex items-center gap-1">
-            <Clock className="w-3 h-3" aria-hidden="true" />
-            {formatRelative(agent.last_seen_at)}
-          </span>
-          {repoHost && (
-            <span className="flex items-center gap-1 truncate ml-2">
-              <ExternalLink className="w-3 h-3 flex-shrink-0" aria-hidden="true" />
-              <span className="truncate max-w-[140px]">{repoHost}</span>
+          {repoHost ? (
+            <span className="inline-flex max-w-[160px] items-center gap-1 truncate text-xs text-[var(--text-muted)]">
+              <ExternalLink className="h-3 w-3 shrink-0" aria-hidden />
+              <span className="truncate">{repoHost}</span>
             </span>
+          ) : null}
+        </div>
+        <div
+          className="flex items-center gap-1 pl-6 text-xs text-[var(--text-muted)] sm:pl-0"
+          role="cell"
+        >
+          <Clock className="h-3 w-3 shrink-0" aria-hidden />
+          {formatRelative(agent.last_seen_at)}
+        </div>
+        <div className="pl-6 text-xs sm:pl-0 sm:text-right" role="cell">
+          {isLive ? (
+            <span className="inline-flex items-center gap-1.5 text-[var(--terminal)]">
+              <span className="h-1.5 w-1.5 rounded-full bg-[var(--terminal)]" aria-hidden />
+              Live
+            </span>
+          ) : (
+            <span className="text-[var(--text-muted)]">Idle</span>
           )}
         </div>
-      </Card>
-    </Link>
+      </button>
+    </li>
   );
 }
+

@@ -16,11 +16,13 @@ const py = (rel: string) =>
 describe("W19 Improve cockpit", () => {
   it("sorts queue items by severity and keeps CrossLinks/Empty/Error/NoOrg", () => {
     const page = src("app/(portal)/improve/page.tsx");
-    expect(page).toContain("severityRank");
-    expect(page).toContain("SEVERITY_RANK");
-    expect(page).toContain("CrossLinkBar");
-    expect(page).toContain("EmptyState");
-    expect(page).toContain("ErrorState");
+    const helpers = src("app/(portal)/improve/_components/queue-helpers.ts");
+    const board = src("app/(portal)/improve/_components/queue-board.tsx");
+    expect(helpers).toContain("severityRank");
+    expect(helpers).toContain("SEVERITY_RANK");
+    expect(page).toContain("ImproveRelatedStrip");
+    expect(board).toContain("EmptyState");
+    expect(board).toContain("QueryState");
     expect(page).toContain("NoOrgState");
   });
 
@@ -47,6 +49,8 @@ describe("W19 U05 Book / Drift", () => {
     expect(ledger).toContain("DiffViewer");
     expect(ledger).toContain("CitationChip");
     expect(ledger).toContain("Preview inject");
+    expect(ledger).toContain('data-testid="ledger-markdown-entries"');
+    expect(ledger).not.toContain("<CrossLinkBar");
     const book = src("app/(portal)/agents/[id]/book/page.tsx");
     expect(book).toContain("ledger/page");
     expect(book).not.toContain("redirect(");
@@ -85,18 +89,22 @@ describe("W19 U17 prompt environments + F68", () => {
     const panel = src("components/prompts/PromptEnvironmentsPanel.tsx");
     expect(panel).toContain("listPromptEnvironments");
     expect(panel).toContain("deployPrompt");
-    expect(src("app/(portal)/prompts/page.tsx")).toContain("PromptEnvironmentsPanel");
+    expect(src("app/(portal)/prompts/_components/prompts-editor.tsx")).toContain(
+      "PromptEnvironmentsPanel",
+    );
     expect(apiSrc()).toContain("listPromptEnvironments");
   });
 });
 
-describe("W19 U09 editable Home + cost Δ", () => {
-  it("persists editable layout and surfaces cost delta", () => {
+describe("W19 U09 Home cost Δ (layout locked Wave 11)", () => {
+  it("surfaces cost delta; layout no longer editable", () => {
     const dash = src("app/(portal)/dashboard/page.tsx");
-    expect(dash).toContain("Edit layout");
-    expect(dash).toContain("eden.home.layout");
+    const header = src("app/(portal)/dashboard/_components/home-header-actions.tsx");
+    expect(header).not.toContain("Edit layout");
+    expect(dash).toContain("WAVE11_HOME_PROTECTED");
     expect(dash).toContain("costDeltaPct");
-    expect(dash).toContain("costKpi");
+    const kpi = src("app/(portal)/dashboard/_components/home-kpi-strip.tsx");
+    expect(kpi).toContain("costDeltaPct");
   });
 });
 
@@ -124,9 +132,10 @@ describe("W19 agents/fleet/audit + Settings FinOps", () => {
       true,
     );
     const settings = src("app/(portal)/settings/page.tsx");
+    const registry = src("app/(portal)/settings/_components/settings-tab-registry.ts");
     expect(settings).toContain("finops");
-    expect(settings).toContain("FinOps kills");
-    expect(settings).toContain("keywords");
+    expect(registry).toContain("FinOps kills");
+    expect(registry).toContain("keywords");
     expect(apiSrc()).toContain("setFinopsKillSwitch");
   });
 });

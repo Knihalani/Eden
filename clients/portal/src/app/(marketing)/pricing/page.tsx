@@ -33,13 +33,13 @@ export default function PricingPage() {
   return (
     <LegalPage
       eyebrow="Pricing"
-      title="Free during soft launch"
+      title="Free during public beta"
       description={FREE_TIER_TAGLINE}
       size="medium"
     >
       <div className="border-t border-[var(--border-subtle)] pt-8 md:pt-10">
         <p className="text-[11px] font-mono uppercase tracking-widest text-[var(--accent)] mb-3">
-          Soft launch · Free
+          Public beta · Free
         </p>
         <p className="marketing-brand mb-6 text-[clamp(2.5rem,2rem+2vw,3.5rem)]">
           $0

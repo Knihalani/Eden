@@ -75,9 +75,9 @@ describe("W5-3 signals F48 contract", () => {
     expect(src).toContain("setSeeding");
     expect(src).toContain("Compiled rule");
     expect(src).not.toContain("compile(");
-    expect(src).toContain('from "@/components/ui/error-state"');
+    expect(src).toContain('from "@/components/ui/query-state"');
     expect(src).toContain("Could not load signals");
-    expect(src).toContain("Try again");
+    expect(src).toContain("onRetry={load}");
   });
 
   it("does not show empty table while loading or on list error", () => {
@@ -94,19 +94,14 @@ describe("W5-3 signals F48 contract", () => {
 });
 
 describe("W5-3 users ErrorState vs false empty", () => {
-  it("uses ErrorState with retry per active tab (not banner+empty)", () => {
-    const src = read("app/(portal)/users/page.tsx");
-    expect(src).toContain('from "@/components/ui/error-state"');
+  it("uses QueryState error paths on Analytics users panel (not banner+empty)", () => {
+    const src = read("app/(portal)/analytics/_components/users-panel.tsx");
+    expect(src).toContain("QueryState");
     expect(src).toContain("Could not load sessions");
     expect(src).toContain("Could not load goals");
     expect(src).toContain("Could not load cohorts");
     expect(src).toContain("Could not load segments");
-    expect(src).toContain("activeTabError");
-    expect(src).toContain("Try again");
-    // Stale cross-tab OR of all query errors must not drive the banner.
-    expect(src).not.toMatch(
-      /sessionsQuery\.error\s*\?\?\s*goalsQuery\.error\s*\?\?\s*cohortsQuery\.error/,
-    );
+    expect(src).toContain("errorTitle");
   });
 
   it("does not show empty while loading or on tab error", () => {
@@ -123,19 +118,16 @@ describe("W5-3 users ErrorState vs false empty", () => {
 });
 
 describe("W5-3 insights ErrorState vs false empty", () => {
-  it("overview prefers ErrorState + retry when load fails without data", () => {
-    const src = read("app/(portal)/insights/page.tsx");
-    expect(src).toContain('from "@/components/ui/error-state"');
+  it("overview prefers QueryState error when load fails without data", () => {
+    const src = read("app/(portal)/analytics/_components/insights-panel.tsx");
+    expect(src).toContain("QueryState");
     expect(src).toContain("Could not load insights");
-    expect(src).toContain("isError && !overview");
-    expect(src).toContain("Try again");
+    expect(src).toContain("errorTitle");
   });
 
-  it("closed-loop ErrorState includes retry CTA", () => {
+  it("soft-deleted /insights redirects into Analytics modes", () => {
     const src = read("app/(portal)/insights/page.tsx");
-    expect(src).toContain("Could not load correlation data");
-    expect(src).toContain("correlationQuery.refetch()");
-    expect(src).toMatch(/if \(isError\)/);
+    expect(src).toContain('/analytics?tab=insights');
   });
 
   it("does not show onboarding empty on overview error", () => {

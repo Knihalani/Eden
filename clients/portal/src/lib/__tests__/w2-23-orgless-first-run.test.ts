@@ -16,10 +16,10 @@ function read(rel: string): string {
 }
 
 describe("W2-23 NoOrgState create-org CTA", () => {
-  it("makes Create organization the primary path when not syncing", () => {
+  it("makes Create workspace the primary path when not syncing", () => {
     const src = read("components/ui/no-org-state.tsx");
     expect(src).toContain('const CREATE_ORG_HREF = "/settings?tab=org"');
-    expect(src).toContain("Create organization");
+    expect(src).toContain("Create workspace");
     expect(src).toMatch(/product tour does not create or sync your workspace/i);
     // Default orgless copy must not claim workspace is already being set up.
     expect(src).toContain("orglessDescription");
@@ -31,47 +31,47 @@ describe("W2-23 NoOrgState create-org CTA", () => {
     expect(src).toContain("createOrgPrimary");
   });
 
-  it("on timeout offers retry plus Organization settings", () => {
+  it("on timeout offers retry plus Workspace settings", () => {
     const src = read("components/ui/no-org-state.tsx");
     expect(src).toContain("Retry sync");
-    expect(src).toContain("Open Organization settings");
+    expect(src).toContain("Open Workspace settings");
     expect(src).toContain("syncTimedOut");
   });
 });
 
 describe("W2-23 portal chrome + pages", () => {
   it("redirects orgless users (including dashboard) to settings?tab=org", () => {
-    const chrome = read("app/(portal)/portal-chrome.tsx");
-    expect(chrome).toContain('router.replace("/settings?tab=org")');
-    expect(chrome).toContain("isOrglessFriendly");
+    const chromeFx = read("hooks/use-portal-chrome-effects.ts");
+    expect(chromeFx).toContain('router.replace("/settings?tab=org")');
+    expect(chromeFx).toContain("isOrglessFriendly");
     // Dashboard must not be exempt — create-org is the landing path.
-    expect(chrome).not.toMatch(
+    expect(chromeFx).not.toMatch(
       /isOrglessFriendly\s*=\s*[\s\S]*path\s*===\s*["']\/dashboard["']/,
     );
-    expect(chrome).toMatch(/path\.startsWith\(["']\/invite["']\)/);
-    expect(chrome).toMatch(/path\s*===\s*["']\/settings["']/);
+    expect(chromeFx).toMatch(/path\.startsWith\(["']\/invite["']\)/);
+    expect(chromeFx).toMatch(/path\s*===\s*["']\/settings["']/);
   });
 
   it("dashboard gates org loading before NoOrgState / empty product", () => {
     const src = read("app/(portal)/dashboard/page.tsx");
     expect(src).toMatch(/orgLoading\s*&&\s*!currentOrg/);
     expect(src).toContain("NoOrgState");
-    expect(src).toContain("LoadingSkeleton");
-    expect(src).toMatch(/Create an organization to open the dashboard/);
+    expect(src).toContain("HomeDashboardSkeleton");
+    expect(src).toMatch(/Create a workspace to open the dashboard/);
     expect(src).toMatch(/product tour does not create/);
   });
 
   it("traces gates org loading and avoids false empty when orgless", () => {
-    const src = read("app/(portal)/traces/page.tsx");
-    expect(src).toMatch(/orgLoading\s*&&\s*!currentOrg/);
-    expect(src).toContain("NoOrgState");
-    expect(src).toContain("LoadingSkeleton");
-    expect(src).toMatch(/Create an organization to view traces/);
-    // Empty "Waiting for first event" must stay behind the org guard.
-    const noOrgIdx = src.indexOf("if (!currentOrg && !authError)");
-    const emptyIdx = src.indexOf("<WaitingForFirstEvent");
+    const page = read("app/(portal)/traces/page.tsx");
+    const list = read("app/(portal)/traces/_components/traces-hub-list.tsx");
+    expect(page).toMatch(/hub\.orgLoading\s*&&\s*!hub\.currentOrg/);
+    expect(page).toContain("NoOrgState");
+    expect(page).toContain("LoadingSkeleton");
+    expect(page).toMatch(/Create a workspace to view traces/);
+    // Empty "Waiting for first event" must stay behind the org guard on the page.
+    const noOrgIdx = page.indexOf("if (!hub.currentOrg && !hub.authError)");
     expect(noOrgIdx).toBeGreaterThan(-1);
-    expect(emptyIdx).toBeGreaterThan(noOrgIdx);
+    expect(list).toContain("<WaitingForFirstEvent");
   });
 
   it("onboarding overlay sends orgless ?onboarding=1 to create-org settings", () => {
@@ -114,6 +114,6 @@ describe("W2-23 product tour honesty", () => {
   it("org tab create copy denies tour as workspace creator", () => {
     const src = read("app/(portal)/settings/_components/org-tab.tsx");
     expect(src).toMatch(/product tour does not create or sync your workspace/i);
-    expect(src).toContain("Create Organization");
+    expect(src).toContain("Create workspace");
   });
 });

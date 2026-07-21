@@ -4,15 +4,15 @@ import Link from "next/link";
 import { useCallback, useState } from "react";
 import { Download, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
-import { CrossLinkBar } from "@/components/portal-os/CrossLinkBar";
+import { Panel } from "@/components/ui/panel";
 import {
   issueHref,
   promotionsHref,
   tracesFilteredHref,
 } from "@/lib/portal-cross-links";
 import { learnApi } from "@/lib/api";
+import { cn } from "@/lib/utils";
 
 export type ArtifactDetail = {
   id?: string;
@@ -27,7 +27,42 @@ export type ArtifactDetail = {
   cost?: { est_usd_per_month?: number; value_score?: number; est_tokens_per_match?: number };
 };
 
-type DetailTab = "overview" | "evidence" | "outcomes" | "export";
+type DetailTab = "overview" | "outcomes" | "export";
+
+export type ArtifactGateVerdict = "ready" | "review" | "collecting";
+
+/** Derive promote-gate status from evidence + cost (Wave 4 hard boundary). */
+export function deriveArtifactGate(opts: {
+  evidence?: Record<string, unknown>;
+  cost?: ArtifactDetail["cost"];
+}): {
+  n: number;
+  minN: number;
+  passed: boolean;
+  lowValue: boolean;
+  verdict: ArtifactGateVerdict;
+  /** Hard block — Promote CTA disabled until samples collect or override. */
+  blocked: boolean;
+} {
+  const { evidence, cost } = opts;
+  const n = Number(evidence?.n ?? evidence?.sample_count ?? 0);
+  const minN = Number(evidence?.min_n ?? 30);
+  const passed = Boolean(evidence?.passed ?? evidence?.gate_pass);
+  const lowValue = (cost?.value_score ?? 1) < 0.05;
+  const verdict: ArtifactGateVerdict = passed
+    ? "ready"
+    : n >= minN
+      ? "review"
+      : "collecting";
+  return {
+    n,
+    minN,
+    passed,
+    lowValue,
+    verdict,
+    blocked: verdict === "collecting",
+  };
+}
 
 interface ArtifactDetailPanelProps {
   artifact: ArtifactDetail;
@@ -35,21 +70,33 @@ interface ArtifactDetailPanelProps {
   onPromote?: () => void;
   onArchive?: () => void;
   showPromote?: boolean;
+  /** Promote in flight / parent disables while dialog open. */
+  promoteBusy?: boolean;
 }
 
-function EvidenceGatePanel({ evidence, cost }: { evidence?: Record<string, unknown>; cost?: ArtifactDetail["cost"] }) {
-  const n = Number(evidence?.n ?? evidence?.sample_count ?? 0);
-  const minN = Number(evidence?.min_n ?? 30);
-  const passed = Boolean(evidence?.passed ?? evidence?.gate_pass);
-  const pct = minN > 0 ? Math.min(100, (n / minN) * 100) : 0;
+export function EvidenceGatePanel({
+  evidence,
+  cost,
+}: {
+  evidence?: Record<string, unknown>;
+  cost?: ArtifactDetail["cost"];
+}) {
+  const gate = deriveArtifactGate({ evidence, cost });
+  const pct = gate.minN > 0 ? Math.min(100, (gate.n / gate.minN) * 100) : 0;
+  const statusLabel =
+    gate.verdict === "ready"
+      ? "READY TO PROMOTE"
+      : gate.verdict === "review"
+        ? "REVIEW GATE"
+        : "COLLECTING";
 
   return (
-    <div className="space-y-3 text-sm">
+    <div className="space-y-3 text-sm" data-testid="artifact-evidence-gates">
       <div>
         <div className="mb-1 flex justify-between text-xs text-[var(--text-muted)]">
           <span>Min samples</span>
-          <span>
-            {n}/{minN}
+          <span className="tabular-nums">
+            {gate.n}/{gate.minN}
           </span>
         </div>
         <div className="h-2 overflow-hidden rounded-full bg-[var(--bg-tertiary)]">
@@ -62,11 +109,17 @@ function EvidenceGatePanel({ evidence, cost }: { evidence?: Record<string, unkno
       <dl className="grid gap-2 text-xs">
         <div className="flex justify-between gap-4">
           <dt className="text-[var(--text-muted)]">Effect size</dt>
-          <dd>{evidence?.effect_size != null ? String(evidence.effect_size) : passed ? "✓ OK" : "Collecting"}</dd>
+          <dd>
+            {evidence?.effect_size != null
+              ? String(evidence.effect_size)
+              : gate.passed
+                ? "OK"
+                : "Collecting"}
+          </dd>
         </div>
         <div className="flex justify-between gap-4">
           <dt className="text-[var(--text-muted)]">Regressions</dt>
-          <dd>{evidence?.regressions_ok === false ? "✗ Detected" : "✓ None"}</dd>
+          <dd>{evidence?.regressions_ok === false ? "Detected" : "None"}</dd>
         </div>
         {cost?.est_usd_per_month != null ? (
           <div className="flex justify-between gap-4">
@@ -77,14 +130,89 @@ function EvidenceGatePanel({ evidence, cost }: { evidence?: Record<string, unkno
         {cost?.value_score != null ? (
           <div className="flex justify-between gap-4">
             <dt className="text-[var(--text-muted)]">Value score</dt>
-            <dd>{cost.value_score}</dd>
+            <dd className={cn(gate.lowValue && "text-[var(--warning-strong)]")}>
+              {cost.value_score}
+              {gate.lowValue ? " (low)" : ""}
+            </dd>
           </div>
         ) : null}
       </dl>
-      <p className="text-xs font-medium text-[var(--text-secondary)]">
-        Status: {passed ? "READY TO PROMOTE" : n >= minN ? "REVIEW GATE" : "COLLECTING"}
+      <p
+        className="text-xs font-medium text-[var(--text-secondary)]"
+        data-testid="artifact-gate-verdict"
+        data-verdict={gate.verdict}
+      >
+        Status: {statusLabel}
       </p>
+      {gate.blocked ? (
+        <p className="text-xs text-[var(--text-muted)]" data-testid="artifact-gate-hold">
+          Promote blocked under min samples — need {gate.minN} before the CTA unlocks.
+        </p>
+      ) : null}
     </div>
+  );
+}
+
+/** Hard boundary: evidence gates always sit above the Promote CTA. */
+function PromoteBoundary({
+  artifact,
+  onPromote,
+  promoteBusy,
+}: {
+  artifact: ArtifactDetail;
+  onPromote?: () => void;
+  promoteBusy?: boolean;
+}) {
+  const gate = deriveArtifactGate({
+    evidence: artifact.evidence,
+    cost: artifact.cost,
+  });
+
+  return (
+    <Panel
+      tone="inset"
+      padding="md"
+      className="mx-4 mt-4"
+      data-testid="artifact-promote-boundary"
+      data-gate={gate.verdict}
+    >
+      <p className="text-xs font-medium uppercase tracking-wide text-[var(--text-faint)]">
+        Promote boundary
+      </p>
+      <p className="mt-1 text-xs text-[var(--text-muted)]">
+        Evidence gates must be visible before promote. Shadow stays shadow until gates pass
+        or you accept a review hold.
+      </p>
+      <div className="mt-3">
+        <EvidenceGatePanel evidence={artifact.evidence} cost={artifact.cost} />
+      </div>
+      <div className="mt-4 flex flex-wrap items-center gap-2">
+        {onPromote ? (
+          <Button
+            size="sm"
+            onClick={onPromote}
+            disabled={gate.blocked || promoteBusy}
+            data-testid="artifact-promote-cta"
+            title={
+              gate.blocked
+                ? `Need ${gate.minN} samples before promote`
+                : gate.verdict === "review"
+                  ? "Gates need review — promote may be held"
+                  : undefined
+            }
+          >
+            Promote
+          </Button>
+        ) : null}
+        <Link
+          href={promotionsHref()}
+          className="text-xs text-[var(--accent)] hover:underline"
+          data-testid="artifact-ledger-promotions-scent"
+        >
+          Ledger · Promotions
+        </Link>
+      </div>
+    </Panel>
   );
 }
 
@@ -94,6 +222,7 @@ export function ArtifactDetailPanel({
   onPromote,
   onArchive,
   showPromote,
+  promoteBusy,
 }: ArtifactDetailPanelProps) {
   const [tab, setTab] = useState<DetailTab>("overview");
   const [exportYaml, setExportYaml] = useState<string | null>(null);
@@ -110,26 +239,45 @@ export function ArtifactDetailPanel({
     }
   }, [orgId, artifact.agent_id]);
 
-  const crossLinks = [
-    ...(artifact.source_issue_id
-      ? [{ label: "Source issue", href: issueHref(artifact.source_issue_id) }]
-      : []),
-    ...(artifact.agent_id
-      ? [{ label: "Matching traces", href: tracesFilteredHref({ agent_id: artifact.agent_id }) }]
-      : []),
-    { label: "Promotions inbox", href: promotionsHref() },
-  ];
-
   const tabs: { id: DetailTab; label: string }[] = [
     { id: "overview", label: "Overview" },
-    { id: "evidence", label: "Evidence" },
     { id: "outcomes", label: "Outcomes" },
     { id: "export", label: "Export" },
   ];
 
   return (
     <div className="flex h-full flex-col">
-      <CrossLinkBar links={crossLinks} />
+      {showPromote ? (
+        <PromoteBoundary
+          artifact={artifact}
+          onPromote={onPromote}
+          promoteBusy={promoteBusy}
+        />
+      ) : null}
+      <nav
+        aria-label="Artifact links"
+        className="flex flex-wrap items-center gap-x-space-3 gap-y-1 border-b border-[var(--border-subtle)] px-4 py-2 text-xs text-[var(--text-muted)]"
+      >
+        {artifact.source_issue_id ? (
+          <Link
+            href={issueHref(artifact.source_issue_id)}
+            className="text-[var(--accent)] hover:underline"
+          >
+            Source issue
+          </Link>
+        ) : null}
+        {artifact.agent_id ? (
+          <Link
+            href={tracesFilteredHref({ agent_id: artifact.agent_id })}
+            className="text-[var(--accent)] hover:underline"
+          >
+            Matching traces
+          </Link>
+        ) : null}
+        <Link href={promotionsHref()} className="text-[var(--accent)] hover:underline">
+          Ledger · Promotions
+        </Link>
+      </nav>
       <div className="flex gap-1 border-b border-[var(--border-default)] px-4">
         {tabs.map((t) => (
           <button
@@ -153,47 +301,39 @@ export function ArtifactDetailPanel({
         {tab === "overview" && (
           <div className="space-y-3 text-sm">
             <div className="flex flex-wrap gap-2 text-xs text-[var(--text-muted)]">
-              <span className="rounded bg-[var(--bg-tertiary)] px-2 py-0.5">{artifact.mode ?? "shadow"}</span>
+              <span className="rounded bg-[var(--bg-tertiary)] px-2 py-0.5">
+                {artifact.mode ?? "shadow"}
+              </span>
               {artifact.action_type ? (
-                <span className="rounded bg-[var(--bg-tertiary)] px-2 py-0.5">{artifact.action_type}</span>
+                <span className="rounded bg-[var(--bg-tertiary)] px-2 py-0.5">
+                  {artifact.action_type}
+                </span>
               ) : null}
-              {artifact.agent_id ? <span className="font-mono">{artifact.agent_id}</span> : null}
+              {artifact.agent_id ? (
+                <span className="font-mono">{artifact.agent_id}</span>
+              ) : null}
             </div>
             <pre className="whitespace-pre-wrap rounded bg-[var(--bg-secondary)] p-3 text-xs">
               {String(artifact.content ?? "")}
             </pre>
             {artifact.trigger ? (
               <div>
-                <div className="mb-1 text-xs font-medium text-[var(--text-muted)]">Trigger DSL</div>
+                <div className="mb-1 text-xs font-medium text-[var(--text-muted)]">
+                  Trigger DSL
+                </div>
                 <pre className="whitespace-pre-wrap rounded border border-[var(--border-default)] p-2 text-xs">
                   {JSON.stringify(artifact.trigger, null, 2)}
                 </pre>
               </div>
             ) : null}
-            <div className="flex flex-wrap gap-2 pt-2">
-              {showPromote && onPromote ? (
-                <Button size="sm" onClick={onPromote}>
-                  Promote
-                </Button>
-              ) : null}
-              {onArchive ? (
+            {onArchive ? (
+              <div className="flex flex-wrap gap-2 pt-2">
                 <Button size="sm" variant="outline" onClick={onArchive}>
                   Archive
                 </Button>
-              ) : null}
-            </div>
+              </div>
+            ) : null}
           </div>
-        )}
-        {tab === "evidence" && (
-          <Card className="p-4">
-            <EvidenceGatePanel evidence={artifact.evidence} cost={artifact.cost} />
-            <Link
-              href={promotionsHref()}
-              className="mt-3 inline-block text-xs text-[var(--accent)] hover:underline"
-            >
-              Open promotions inbox →
-            </Link>
-          </Card>
         )}
         {tab === "outcomes" && (
           <EmptyState
@@ -204,7 +344,12 @@ export function ArtifactDetailPanel({
             action={
               artifact.agent_id ? (
                 <Button size="sm" variant="outline" asChild>
-                  <Link href={tracesFilteredHref({ agent_id: artifact.agent_id, outcome: "failure" })}>
+                  <Link
+                    href={tracesFilteredHref({
+                      agent_id: artifact.agent_id,
+                      outcome: "failure",
+                    })}
+                  >
                     View failure traces
                   </Link>
                 </Button>

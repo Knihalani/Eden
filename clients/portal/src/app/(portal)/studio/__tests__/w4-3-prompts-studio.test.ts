@@ -42,10 +42,11 @@ function studioExamplesIsDirty(opts: {
 
 describe("W4.3 studio unsaved guards + template seed", () => {
   it("gates metrics empty behind !loading && !hasError", () => {
-    const src = read("app/(portal)/studio/page.tsx");
-    expect(src).toContain("showStudioMetricsEmpty");
-    expect(src).toContain("Could not load metrics");
-    expect(src).toContain("Try again");
+    const helpers = read("app/(portal)/studio/_components/studio-helpers.ts");
+    const metrics = read("app/(portal)/studio/_components/my-metrics-tab.tsx");
+    expect(helpers).toContain("showStudioMetricsEmpty");
+    expect(metrics).toContain("Could not load metrics");
+    expect(metrics).toContain("Try again");
 
     expect(
       showStudioMetricsEmpty({ loading: true, hasError: false, metricCount: 0 }),
@@ -102,23 +103,33 @@ describe("W4.3 studio unsaved guards + template seed", () => {
   });
 
   it("wires unsaved guards + Start from template into From examples", () => {
-    const src = read("app/(portal)/studio/page.tsx");
-    expect(src).toContain("beforeunload");
-    expect(src).toContain("You have unsaved rubric work");
-    expect(src).toContain("Discard the generated rubric?");
-    expect(src).toContain("Start from template");
-    expect(src).toContain("onUseTemplate");
-    expect(src).toContain("onDirtyChange");
-    expect(src).toContain("requestTabChange");
-    expect(src).toContain("Save failed");
-    expect(src).toContain("createMetric");
+    const page = read("app/(portal)/studio/page.tsx");
+    const fromEx = read("app/(portal)/studio/_components/from-examples-tab.tsx");
+    const templates = read("app/(portal)/studio/_components/templates-tab.tsx");
+    expect(fromEx).toContain("beforeunload");
+    expect(page).toContain("You have unsaved rubric work");
+    expect(fromEx).toContain("Discard the generated rubric?");
+    expect(templates).toContain("Start from template");
+    expect(page).toContain("onUseTemplate");
+    expect(page).toContain("onDirtyChange");
+    expect(page).toContain("requestTabChange");
+    expect(fromEx).toContain("Save failed");
+    expect(fromEx).toContain("createMetric");
   });
 
   it("templates load uses in-page ErrorState without page-level onError side effect", () => {
-    const src = read("app/(portal)/studio/page.tsx");
+    const src = read("app/(portal)/studio/_components/templates-tab.tsx");
     expect(src).toContain("Could not load templates");
     expect(src).not.toMatch(
       /TemplatesTab[\s\S]*useEffect\(\(\) => \{\s*if \(templatesQuery\.error\) \{\s*onError/m,
     );
+  });
+
+  it("Wave 7: studio page is a shell; tabs live in _components", () => {
+    const page = read("app/(portal)/studio/page.tsx");
+    expect(page.split("\n").length).toBeLessThan(200);
+    expect(page).toContain("./_components/templates-tab");
+    expect(page).toContain("./_components/from-examples-tab");
+    expect(page).toContain("./_components/my-metrics-tab");
   });
 });

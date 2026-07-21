@@ -1,5 +1,10 @@
 import { SignUp } from "@clerk/nextjs";
-import { AuthSplitLayout, AuthBrandPanel, ClerkAuthFallback } from "@/components/auth";
+import {
+  AuthSplitLayout,
+  AuthBrandPanel,
+  AuthPageIntro,
+  ClerkAuthFallback,
+} from "@/components/auth";
 import { clerkAppearance } from "@/components/auth/clerk-theme";
 import { buildAuthClerkRedirectProps } from "@/lib/auth-redirect";
 
@@ -25,19 +30,12 @@ export default async function SignupPage({
 
   return (
     <AuthSplitLayout brandPanel={<AuthBrandPanel />}>
-      <div className="w-full max-w-md space-y-space-5">
-        <div className="text-center space-y-space-2">
-          <p className="text-2xs font-mono font-semibold uppercase tracking-[0.18em] text-[var(--accent)]">
-            Get started
-          </p>
-          <h1 className="text-xl font-semibold text-[var(--text-primary)] tracking-tight">
-            Create your account
-          </h1>
-          <p className="text-sm text-[var(--text-muted)]">
-            Create or join an organization first, then take the product tour,
-            create an API key, and send your first trace.
-          </p>
-        </div>
+      <div className="w-full max-w-md space-y-space-5" data-wave11-auth="sign-up">
+        <AuthPageIntro
+          eyebrow="Get started"
+          title="Create your account"
+          description="Create or join an organization first, then take the product tour, create an API key, and send your first trace."
+        />
         <ClerkAuthFallback formLabel="sign-up">
           <SignUp
             path="/signup"

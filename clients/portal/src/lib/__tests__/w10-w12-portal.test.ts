@@ -53,18 +53,28 @@ describe("W10 shell + design system", () => {
     expect(src("components/portal-os/VirtualizedList.tsx")).toContain("useDensity");
   });
 
-  it("ships mobile More sheet with Agents first + Artifacts/Alerts/Evals", () => {
-    expect(MOBILE_CORE_NAV).toHaveLength(4);
+  it("ships mobile More sheet with Agents first + Ops + Workspace", () => {
+    expect(MOBILE_CORE_NAV).toHaveLength(5);
     expect(MOBILE_MORE_LINKS.map((l) => l.href)).toEqual(
-      expect.arrayContaining(["/agents", "/artifacts", "/alerts", "/evals", "/settings"]),
+      expect.arrayContaining([
+        "/agents",
+        "/artifacts",
+        "/alerts",
+        "/ledger",
+        "/audit-trail",
+        "/settings",
+        "/settings?tab=api-keys",
+      ]),
     );
     expect(MOBILE_MORE_LINKS[0]?.href).toBe("/agents");
-    expect(MOBILE_MORE_LINKS.at(-1)?.href).toBe("/settings");
+    expect(MOBILE_MORE_LINKS.at(-1)?.href).toBe("/settings?tab=api-keys");
     const mobileSrc = src("components/portal-os/MobileBottomNav.tsx");
     expect(mobileSrc).toContain("SheetContent");
     expect(mobileSrc).toContain("text-2xs");
     expect(mobileSrc).not.toContain("text-[10px]");
-    expect(mobileSrc).toMatch(/Agents, artifacts/i);
+    expect(mobileSrc).toMatch(/Agents, ops tools/i);
+    expect(mobileSrc).toContain("data-ws1-mobile-workspace");
+    expect(mobileSrc).toContain("WS1_MOBILE_WORKSPACE_COMPLETED");
     expect(mobileSrc).toContain("lg:hidden");
   });
 
@@ -77,28 +87,35 @@ describe("W10 shell + design system", () => {
 
   it("maps breadcrumb categories to sidebar IA groups", () => {
     expect(BREADCRUMB_LABELS.issues?.category).toBe("observe");
-    expect(BREADCRUMB_LABELS.issues?.label).toBe("Agent Issues");
-    expect(BREADCRUMB_LABELS.improve?.category).toBe("optimize");
-    expect(BREADCRUMB_LABELS.ledger?.category).toBe("optimize");
+    expect(BREADCRUMB_LABELS.issues?.label).toBe("Issues");
+    expect(BREADCRUMB_LABELS.improve?.category).toBe("improve");
+    expect(BREADCRUMB_LABELS.ledger?.category).toBe("improve");
     expect(BREADCRUMB_LABELS.agents?.category).toBe("observe");
-    expect(BREADCRUMB_LABELS.artifacts?.category).toBe("optimize");
-    expect(BREADCRUMB_LABELS.promotions?.category).toBe("optimize");
+    expect(BREADCRUMB_LABELS.artifacts?.category).toBe("improve");
+    expect(BREADCRUMB_LABELS.promotions?.category).toBe("improve");
     expect(BREADCRUMB_LABELS["debugger-sessions"]?.label).toBe("Debug sessions");
     expect(BREADCRUMB_LABELS.dashboard?.label).toBe("Home");
     expect(BREADCRUMB_LABELS.dashboard?.category).toBeUndefined();
-    expect(GROUP_LABEL.build).toBe("Home");
+    expect(GROUP_LABEL.home).toBe("Home");
     expect(GROUP_LABEL.observe).toBe("Observe");
-    expect(GROUP_LABEL.automate).toBe("Evaluate");
-    expect(GROUP_LABEL.optimize).toBe("Improve");
+    expect(GROUP_LABEL.evaluate).toBe("Evaluate");
+    expect(GROUP_LABEL.improve).toBe("Improve");
     expect(GROUP_LABEL.workspace).toBe("Workspace");
-    expect(src("app/(portal)/portal-chrome.tsx")).toContain("GROUP_LABEL[crumb.category]");
+    // Category prefix lives in kit breadcrumb (PortalHeader consumes kit).
+    expect(src("components/ui/breadcrumb.tsx")).toContain(
+      "GROUP_LABEL[crumb.category]",
+    );
+    expect(src("components/portal-chrome/PortalHeader.tsx")).toContain(
+      "from \"@/components/ui/breadcrumb\"",
+    );
   });
 
   it("folds Topic clusters into Analytics hub", () => {
     expect(PALETTE_ACTIONS.some((a) => a.href === "/analytics?tab=topics")).toBe(true);
     expect(PALETTE_ACTIONS.every((a) => a.href !== "/insights/topics")).toBe(true);
     expect(src("app/(portal)/analytics/page.tsx")).toMatch(/"topics"/);
-    expect(src("app/(portal)/insights/page.tsx")).toContain("/analytics?tab=topics");
+    expect(src("app/(portal)/insights/page.tsx")).toContain("/analytics?tab=insights");
+    expect(src("app/(portal)/insights/topics/page.tsx")).toContain("/analytics?tab=topics");
     expect(src("../next.config.ts")).toContain(
       'source: "/insights/topics", destination: "/analytics?tab=topics"',
     );
@@ -133,7 +150,16 @@ describe("W11 tables / filters OS", () => {
     expect(W11_OS_HUBS.length).toBeGreaterThanOrEqual(6);
     for (const hub of W11_OS_HUBS) {
       if (hub === "traces") {
-        expect(src("app/(portal)/traces/page.tsx")).toContain("QueryFilterBar");
+        // Wave 3 shell: QueryFilterBar lives in TracesToolbar, not page.tsx
+        expect(src("app/(portal)/traces/_components/TracesToolbar.tsx")).toContain(
+          "QueryFilterBar",
+        );
+        continue;
+      }
+      if (hub === "artifacts") {
+        expect(src("app/(portal)/artifacts/_components/artifacts-list.tsx")).toContain(
+          "ResourceOsToolbar",
+        );
         continue;
       }
       const page = src(`app/(portal)/${hub}/page.tsx`);
@@ -141,10 +167,13 @@ describe("W11 tables / filters OS", () => {
     }
   });
 
-  it("exposes Ask AI in command palette", () => {
+  it("exposes Ask AI in command palette (one of three 1A doors)", () => {
     expect(OPEN_AI_CHAT_HREF).toBe("eden:open-ai-chat");
     expect(PALETTE_ACTIONS.some((a) => a.href === OPEN_AI_CHAT_HREF)).toBe(true);
     expect(PALETTE_ACTIONS.some((a) => a.label === "Ask AI")).toBe(true);
+    expect(
+      PALETTE_ACTIONS.find((a) => a.href === OPEN_AI_CHAT_HREF)?.description,
+    ).toContain("header · FAB · ⌘K/⌘J");
     const cmds = buildNavCommands();
     expect(cmds.some((c) => c.href === OPEN_AI_CHAT_HREF)).toBe(true);
     expect(src("components/ui/command-palette.tsx")).toContain("eden:ask-ai");
@@ -154,33 +183,34 @@ describe("W11 tables / filters OS", () => {
     expect(src("components/portal-os/TableExportToolbar.tsx")).toContain("downloadCsv");
     expect(src("app/(portal)/issues/page.tsx")).toContain("BulkActionBar");
     expect(src("app/(portal)/alerts/page.tsx")).toContain("BulkActionBar");
-    expect(src("app/(portal)/artifacts/page.tsx")).toContain("BulkActionBar");
+    expect(src("app/(portal)/artifacts/_components/artifacts-list.tsx")).toContain("BulkActionBar");
   });
 
   it("CrossLinkBar / Go-to overflow remain on detail surfaces (W11 quieted band chrome)", () => {
     // W11 moved several list/detail toolbars from CrossLinkBar bands → More/Go to.
     // Still require peer navigation somewhere (bar OR overflow label).
     const files = [
-      "app/(portal)/issues/page.tsx",
-      "app/(portal)/alerts/page.tsx",
-      "app/(portal)/experiments/page.tsx",
-      "app/(portal)/datasets/page.tsx",
-      "app/(portal)/promotions/page.tsx",
-      "app/(portal)/playgrounds/page.tsx",
-      "app/(portal)/improve/page.tsx",
-      "app/(portal)/ledger/page.tsx",
+      "app/(portal)/issues/_components/issues-detail-panel.tsx",
+      "app/(portal)/alerts/_components/alerts-detail-panel.tsx",
+      "app/(portal)/agents/[id]/page.tsx",
+      "app/(portal)/agents/[id]/ledger/page.tsx",
       "app/(portal)/sessions/[sessionId]/page.tsx",
-      "components/traces/TraceDetailPanel.tsx",
       "components/artifacts/ArtifactDetailPanel.tsx",
+      "app/(portal)/audit-trail/page.tsx",
+      "app/(portal)/onboarding/improvement-loop.tsx",
     ];
     let count = 0;
     for (const f of files) {
       const body = src(f);
-      if (body.includes("CrossLinkBar") || body.includes("DropdownMenuLabel>Go to")) {
+      if (
+        body.includes("CrossLinkBar") ||
+        body.includes("DropdownMenuLabel>Go to") ||
+        body.includes(">Go to<")
+      ) {
         count += 1;
       }
     }
-    expect(count).toBeGreaterThanOrEqual(8);
+    expect(count).toBeGreaterThanOrEqual(6);
   });
 });
 

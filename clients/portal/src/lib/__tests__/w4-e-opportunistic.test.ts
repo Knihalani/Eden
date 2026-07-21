@@ -18,12 +18,12 @@ function read(rel: string): string {
 describe("W4-E opportunistic bug-fix", () => {
   it("traces/issues/alerts/datasets use router.push (not window.location.href)", () => {
     for (const rel of [
-      "app/(portal)/traces/page.tsx",
+      "app/(portal)/traces/_components/use-traces-hub.ts",
       "app/(portal)/issues/page.tsx",
-      "app/(portal)/alerts/page.tsx",
-      "app/(portal)/datasets/page.tsx",
-      "app/(portal)/datasets/[id]/page.tsx",
-      "app/(portal)/labeling/queues/[id]/page.tsx",
+      "app/(portal)/alerts/_components/use-alerts-page.ts",
+      "app/(portal)/datasets/_components/use-datasets-page.ts",
+      "app/(portal)/datasets/[id]/_components/use-dataset-detail.ts",
+      "app/(portal)/labeling/queues/[id]/_components/use-labeling-queue.ts",
     ]) {
       const src = read(rel);
       expect(src).toMatch(/useRouter/);
@@ -40,7 +40,7 @@ describe("W4-E opportunistic bug-fix", () => {
     ]) {
       const src = read(rel);
       expect(src).toMatch(/NoOrgState/);
-      expect(src).toMatch(/if\s*\(\s*!currentOrg\s*\)/);
+      expect(src).toMatch(/if\s*\(\s*![a-zA-Z0-9_.]*currentOrg\s*\)/);
     }
   });
 

@@ -20,9 +20,11 @@ export type ResourceUrlState = {
   pastHours?: string;
   issueId?: string;
   alertId?: string;
+  agentId?: string;
   experimentId?: string;
   promotionId?: string;
   artifactId?: string;
+  datasetId?: string;
   /**
    * Saved table view id (Laminar §B.1 / §C).
    * Canonical `viewId`; legacy `savedView` still read.
@@ -50,9 +52,11 @@ export function useResourceUrlState() {
       pastHours: searchParams.get("pastHours") ?? undefined,
       issueId: searchParams.get("issueId") ?? undefined,
       alertId: searchParams.get("alertId") ?? undefined,
+      agentId: readMasterDetailParam(searchParams, "agentId"),
       experimentId: searchParams.get("experimentId") ?? undefined,
       promotionId: searchParams.get("promotionId") ?? undefined,
       artifactId: searchParams.get("artifactId") ?? undefined,
+      datasetId: readMasterDetailParam(searchParams, "datasetId"),
       viewId: readMasterDetailParam(searchParams, "viewId"),
     }),
     [searchParams],
@@ -79,9 +83,15 @@ export function useResourceUrlState() {
       if ("pastHours" in patch) apply("pastHours", patch.pastHours);
       if ("issueId" in patch) apply("issueId", patch.issueId);
       if ("alertId" in patch) apply("alertId", patch.alertId);
+      if ("agentId" in patch) {
+        writeMasterDetailParam(params, "agentId", patch.agentId);
+      }
       if ("experimentId" in patch) apply("experimentId", patch.experimentId);
       if ("promotionId" in patch) apply("promotionId", patch.promotionId);
       if ("artifactId" in patch) apply("artifactId", patch.artifactId);
+      if ("datasetId" in patch) {
+        writeMasterDetailParam(params, "datasetId", patch.datasetId);
+      }
       if ("viewId" in patch) {
         writeMasterDetailParam(params, "viewId", patch.viewId);
       }

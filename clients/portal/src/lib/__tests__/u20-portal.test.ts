@@ -76,11 +76,15 @@ describe("U20 toast mutation registry", () => {
   it("lists core mutation keys for audit", () => {
     expect(U20_TOAST_MUTATIONS).toContain("artifact.promote");
     expect(U20_TOAST_MUTATIONS).toContain("playground.run");
+    expect(U20_TOAST_MUTATIONS).toContain("playground.compare");
     expect(U20_TOAST_MUTATIONS.length).toBeGreaterThanOrEqual(10);
   });
 
   it("wires artifact and promotion toasts in page sources", () => {
-    const artifacts = readFileSync(resolve(ROOT, "src/app/(portal)/artifacts/page.tsx"), "utf8");
+    const artifacts = readFileSync(
+      resolve(ROOT, "src/app/(portal)/artifacts/_components/use-artifacts-page.ts"),
+      "utf8",
+    );
     expect(artifacts).toContain('toast.success("Artifact promoted")');
     expect(artifacts).toContain('toast.success("Shadow artifact drafted")');
 

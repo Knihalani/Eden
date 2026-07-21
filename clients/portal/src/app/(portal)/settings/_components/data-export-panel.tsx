@@ -44,7 +44,7 @@ export function DataExportPanel({ orgId, canExport }: DataExportPanelProps) {
       </div>
 
       <p className="text-sm text-[var(--text-secondary)] mb-4">
-        Download all organization data as a ZIP archive for GDPR compliance.
+        Download all workspace data as a ZIP archive for GDPR compliance.
         The export includes members, code references, jobs, audit log, and settings.
       </p>
 

@@ -24,16 +24,16 @@ describe("W15-a portal long-tail Done-when", () => {
 
   it("P6b: migrated batch uses useOrgQuery", () => {
     const files = [
-      "app/(portal)/labeling/page.tsx",
-      "app/(portal)/insights/topics/page.tsx",
-      "app/(portal)/playgrounds/page.tsx",
+      "app/(portal)/labeling/_components/use-labeling-page.ts",
+      "app/(portal)/analytics/_components/topics-panel.tsx",
+      "app/(portal)/playgrounds/_components/use-playgrounds-page.ts",
       "app/(portal)/observability/query/page.tsx",
       "app/(portal)/observability/memory/page.tsx",
-      "app/(portal)/settings/(tabs)/webhooks-dlq/page.tsx",
+      "app/(portal)/settings/_components/webhooks-dlq-tab.tsx",
       "app/(portal)/settings/_components/pii-policy-tab.tsx",
       "app/(portal)/settings/_components/retention-policy-tab.tsx",
       "app/(portal)/settings/_components/analytics-tab.tsx",
-      "app/(portal)/settings/_components/audit-log-tab.tsx",
+      "app/(portal)/audit-trail/_components/events-panel.tsx",
       "app/(portal)/settings/_components/scim-tab.tsx",
       "app/(portal)/settings/_components/sso-tab.tsx",
       "app/(portal)/settings/_components/references-tab.tsx",
@@ -50,10 +50,10 @@ describe("W15-a portal long-tail Done-when", () => {
     const pii = read("app/(portal)/settings/_components/pii-policy-tab.tsx");
     const ret = read("app/(portal)/settings/_components/retention-policy-tab.tsx");
     expect(pii).toMatch(/const dirty = JSON\.stringify\(policy\) !== JSON\.stringify\(draft\)/);
-    expect(pii).toMatch(/if \(!dirty\) return;/);
+    expect(pii).toMatch(/if \(!currentOrg \|\| !draft \|\| !dirty\) return;/);
     // Retention uses `baseline` (saved DraftMap) vs `draft` after Wave 2 rewrite.
     expect(ret).toMatch(/const dirty = JSON\.stringify\(baseline\) !== JSON\.stringify\(draft\)/);
-    expect(ret).toMatch(/if \(!dirty\) return;/);
+    expect(ret).toMatch(/if \(!currentOrg \|\| !dirty\) return;/);
   });
 
   it("P11: high-traffic portal pages drop AnimatePresence/framer-motion", () => {

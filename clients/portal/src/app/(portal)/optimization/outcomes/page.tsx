@@ -1,17 +1,17 @@
 "use client";
 
-import { useState } from "react";
-import { Loader2, AlertTriangle, CheckCircle2, Building2, Sparkles, TrendingUp, Wallet, Target } from "lucide-react";
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { Loader2, AlertTriangle, CheckCircle2, Building2 } from "lucide-react";
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 import { ErrorState } from "@/components/ui/error-state";
-import { StatCard } from "@/components/ui/stat-card";
 import { Panel } from "@/components/ui/panel";
 import { Button } from "@/components/ui/button";
-import { PageHeader } from "@/components/layout/page-header";
 import { PageContent } from "@/components/layout/page-content";
+import { useEmbeddedSurface } from "@/components/layout/embedded-surface";
 import { NoOrgState } from "@/components/ui/no-org-state";
 import { useToast } from "@/components/ui/toast";
 import { useOrg } from "@/hooks/use-org";
@@ -25,6 +25,8 @@ import {
   isRetryableIntelligenceError,
 } from "@/lib/feature-flag-error";
 import { cn } from "@/lib/utils";
+import { OutcomesKpiStrip } from "../_components/outcomes-kpi-strip";
+import { CostImproveCrossLink } from "../_components/cost-improve-cross-link";
 
 /* ----------------------- Helpers -------------------------------------- */
 
@@ -63,7 +65,7 @@ type Department = {
   anomaly: string | null;
 };
 
-function DepartmentsTab() {
+function DepartmentsTab({ onAnomalyCount }: { onAnomalyCount?: (n: number) => void }) {
   const { currentOrg } = useOrg();
   const orgId = currentOrg?.id;
   const {
@@ -89,6 +91,11 @@ function DepartmentsTab() {
     },
   );
   const departments: Department[] = data ?? [];
+  const anomalyCount = departments.filter((d) => d.anomaly).length;
+
+  useEffect(() => {
+    onAnomalyCount?.(anomalyCount);
+  }, [anomalyCount, onAnomalyCount]);
 
   if (isLoading) {
     return (
@@ -328,7 +335,10 @@ function TrackTab() {
 export default function OutcomesPage() {
   const { currentOrg } = useOrg();
   const orgId = currentOrg?.id;
+  const router = useRouter();
+  const embedded = useEmbeddedSurface();
   const [tab, setTab] = useState<"departments" | "track">("departments");
+  const [anomalyCount, setAnomalyCount] = useState(0);
   const {
     data: analytics,
     isLoading: analyticsLoading,
@@ -349,6 +359,21 @@ export default function OutcomesPage() {
     },
   );
 
+  // Soft-redirect orphan leaf → Cost hub tab (keep content when embedded).
+  useEffect(() => {
+    if (!embedded) {
+      router.replace("/optimization?tab=outcomes");
+    }
+  }, [embedded, router]);
+
+  if (!embedded) {
+    return (
+      <div className="flex h-48 items-center justify-center" aria-busy="true">
+        <Loader2 className="h-4 w-4 animate-spin text-[var(--text-muted)]" />
+      </div>
+    );
+  }
+
   if (!currentOrg) {
     return <NoOrgState feature="Outcomes" />;
   }
@@ -360,12 +385,6 @@ export default function OutcomesPage() {
 
   return (
     <PageContent>
-      <PageHeader
-        eyebrow="Optimize"
-        title="Outcomes & ROI"
-        subtitle="See which departments are profitable and attribute wins to specific traces."
-        icon={Target}
-      />
       {analyticsCopy ? (
         <ErrorState
           title={analyticsCopy.title}
@@ -379,50 +398,20 @@ export default function OutcomesPage() {
           }
         />
       ) : null}
-      {/* KPI strip — em-dash while loading or on error (never false $0) */}
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <StatCard
-          title="Total value"
-          value={
-            analyticsLoading || analyticsUnavailable
-              ? "—"
-              : formatCurrency(analytics?.total_revenue ?? 0, { compact: true })
-          }
-          subtitle={
-            analyticsUnavailable ? "unavailable" : analyticsLoading ? "Loading…" : "Tracked outcomes"
-          }
-          icon={TrendingUp}
-          accent="terminal"
-        />
-        <StatCard
-          title="Total cost"
-          value={
-            analyticsLoading || analyticsUnavailable
-              ? "—"
-              : formatCurrency(analytics?.total_cost ?? 0, { compact: true })
-          }
-          subtitle={
-            analyticsUnavailable ? "unavailable" : analyticsLoading ? "Loading…" : "Attributed"
-          }
-          icon={Wallet}
-          accent="warning"
-        />
-        <StatCard
-          title="ROI"
-          value={
-            analyticsLoading || analyticsUnavailable
-              ? "—"
-              : analytics?.roi == null
-                ? "—"
-                : analytics.roi.toFixed(2)
-          }
-          subtitle={
-            analyticsUnavailable ? "unavailable" : analyticsLoading ? "Loading…" : "Value / cost"
-          }
-          icon={Sparkles}
-          accent={(analytics?.roi ?? 0) >= 1 ? "accent" : "warning"}
-        />
-      </div>
+      <OutcomesKpiStrip
+        totalRevenue={analytics?.total_revenue ?? 0}
+        totalCost={analytics?.total_cost ?? 0}
+        roi={analytics?.roi ?? null}
+        loading={analyticsLoading}
+        unavailable={analyticsUnavailable}
+      />
+      {anomalyCount > 0 ? (
+        <div className="mb-space-4">
+          <CostImproveCrossLink
+            reason={`${anomalyCount} department${anomalyCount === 1 ? "" : "s"} with low ROI — open Improve to act on cost plans.`}
+          />
+        </div>
+      ) : null}
 
       <Tabs value={tab} onValueChange={(v) => setTab(v as "departments" | "track")}>
         <TabsList variant="underline" className="w-full">
@@ -437,20 +426,12 @@ export default function OutcomesPage() {
         <>
           {tab === "departments" && (
             <TabsContent value="departments">
-              <div
-                key="departments"
-              >
-                {tab === "departments" && <DepartmentsTab />}
-              </div>
+              <DepartmentsTab onAnomalyCount={setAnomalyCount} />
             </TabsContent>
           )}
           {tab === "track" && (
             <TabsContent value="track">
-              <div
-                key="track"
-              >
-                {tab === "track" && <TrackTab />}
-              </div>
+              <TrackTab />
             </TabsContent>
           )}
         </>

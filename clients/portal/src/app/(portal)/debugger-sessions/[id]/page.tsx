@@ -3,17 +3,19 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { ArrowLeft, Bug, GitCompare, Loader2 } from "lucide-react";
+import { Bug, GitCompare, Loader2 } from "lucide-react";
 import { useOrg } from "@/hooks/use-org";
 import { debugSessionsApi } from "@/lib/api";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorState } from "@/components/ui/error-state";
 import { NoOrgState } from "@/components/ui/no-org-state";
 import { PageContent } from "@/components/layout/page-content";
+import { PageHeader } from "@/components/layout/page-header";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/components/ui/toast";
 import { traceHref } from "@/lib/portal-cross-links";
+import { cn } from "@/lib/utils";
 
 type DebugRun = {
   id: string;
@@ -32,6 +34,8 @@ type DebugSessionDetail = {
   runs: DebugRun[];
 };
 
+const SESSION_MODES = ["runs", "compare"] as const;
+
 export default function DebuggerSessionDetailPage() {
   const { currentOrg } = useOrg();
   const params = useParams<{ id: string }>();
@@ -42,6 +46,7 @@ export default function DebuggerSessionDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [compare, setCompare] = useState<Record<string, unknown> | null>(null);
   const [selected, setSelected] = useState<string[]>([]);
+  const [mode, setMode] = useState<(typeof SESSION_MODES)[number]>("runs");
 
   const load = useCallback(async () => {
     if (!currentOrg?.id || !sessionId) return;
@@ -89,6 +94,7 @@ export default function DebuggerSessionDetailPage() {
         selected[1],
       );
       setCompare(res);
+      setMode("compare");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Compare failed");
     }
@@ -97,14 +103,7 @@ export default function DebuggerSessionDetailPage() {
   if (!currentOrg) return <NoOrgState feature="Debug sessions" icon={Bug} />;
 
   return (
-    <PageContent size="wide">
-      <Link
-        href="/debugger-sessions"
-        className="inline-flex items-center gap-1 text-sm text-[var(--text-muted)] hover:text-[var(--text-primary)] mb-4"
-      >
-        <ArrowLeft className="h-4 w-4" /> All sessions
-      </Link>
-
+    <PageContent size="wide" data-wave7-debugger="session-modes">
       {loading ? (
         <div className="flex items-center gap-2 text-sm text-[var(--text-muted)]">
           <Loader2 className="h-4 w-4 animate-spin" /> Loading session…
@@ -131,83 +130,140 @@ export default function DebuggerSessionDetailPage() {
           }
         />
       ) : (
-        <div className="space-y-4">
-          <div>
-            <h1 className="text-lg font-semibold">{session.title}</h1>
-            {session.source_trace_id && (
-              <p className="text-xs font-mono text-[var(--text-muted)] mt-1">
-                source trace:{" "}
+        <div className="space-y-space-4">
+          <PageHeader
+            title={session.title}
+            subtitle={
+              <>
                 <Link
-                  href={traceHref(session.source_trace_id)}
-                  className="text-[var(--accent)] hover:underline"
+                  href="/debugger-sessions"
+                  className="text-[var(--text-muted)] hover:text-[var(--text-primary)]"
                 >
-                  {session.source_trace_id}
+                  Debug sessions
                 </Link>
-              </p>
-            )}
-          </div>
-
-          <Card className="p-4">
-            <div className="flex items-center justify-between mb-3">
-              <h2 className="text-sm font-semibold">Runs ({session.runs.length})</h2>
+                {session.source_trace_id ? (
+                  <>
+                    {" · source "}
+                    <Link
+                      href={traceHref(session.source_trace_id)}
+                      className="font-mono text-[var(--accent)] hover:underline"
+                    >
+                      {session.source_trace_id}
+                    </Link>
+                  </>
+                ) : null}
+              </>
+            }
+            actions={
               <Button
                 size="sm"
                 variant="outline"
                 disabled={selected.length !== 2}
                 onClick={() => void onCompare()}
               >
-                <GitCompare className="h-3.5 w-3.5 mr-1" /> Compare selected
+                <GitCompare className="mr-1 h-3.5 w-3.5" /> Compare selected
               </Button>
-            </div>
-            {session.runs.length === 0 ? (
-              <EmptyState
-                icon={Bug}
-                title="No runs yet"
-                description="Rerun from the Debugger with a session id to record runs here."
-                size="sm"
-                variant="plain"
-                action={
-                  <Button size="sm" asChild variant="outline">
-                    <Link href="/traces?view=debug">Open debugger</Link>
-                  </Button>
-                }
-              />
-            ) : (
-              <ul className="space-y-2">
-                {session.runs.map((run) => (
-                  <li
-                    key={run.id}
-                    className="flex items-start gap-3 rounded border border-[var(--border-subtle)] p-3 text-xs"
-                  >
-                    <input
-                      type="checkbox"
-                      checked={selected.includes(run.id)}
-                      onChange={() => toggleRun(run.id)}
-                      aria-label={`Select run ${run.id}`}
-                    />
-                    <div className="flex-1 font-mono">
-                      <div>
-                        step {run.from_step} · {run.rerun_mode} · {run.source_trace_id}
-                      </div>
-                      <div className="text-[var(--text-muted)] mt-1">
-                        {run.diff_summary?.length ?? 0} diff steps
-                        {run.created_at ? ` · ${new Date(run.created_at).toLocaleString()}` : ""}
-                      </div>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </Card>
+            }
+          />
 
-          {compare && (
-            <Card className="p-4">
-              <h3 className="text-sm font-semibold mb-2">Run comparison</h3>
-              <pre className="text-[11px] font-mono overflow-auto bg-[var(--bg-tertiary)] p-3 rounded">
-                {JSON.stringify(compare, null, 2)}
-              </pre>
-            </Card>
-          )}
+          {/* Trace-detail grammar: one segmented mode control (Runs | Compare) */}
+          <Tabs
+            value={mode}
+            onValueChange={(v) => setMode(v as (typeof SESSION_MODES)[number])}
+          >
+            <TabsList
+              variant="underline"
+              aria-label="Session modes"
+              className="h-auto w-full justify-start gap-1 bg-transparent"
+              data-wave7-debugger="mode-tabs"
+            >
+              <TabsTrigger variant="underline" value="runs" className="min-h-11">
+                Runs ({session.runs.length})
+              </TabsTrigger>
+              <TabsTrigger variant="underline" value="compare" className="min-h-11">
+                Compare
+              </TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="runs" className="mt-3">
+              {session.runs.length === 0 ? (
+                <EmptyState
+                  icon={Bug}
+                  title="No runs yet"
+                  description="Rerun from the Debugger with a session id to record runs here."
+                  size="sm"
+                  variant="plain"
+                  action={
+                    <Button size="sm" asChild variant="outline">
+                      <Link href="/traces?view=debug">Open debugger</Link>
+                    </Button>
+                  }
+                />
+              ) : (
+                <ul className="divide-y divide-[var(--border-subtle)] rounded-lg border border-[var(--border-subtle)]">
+                  {session.runs.map((run) => (
+                    <li key={run.id}>
+                      <label
+                        className={cn(
+                          "flex cursor-pointer items-start gap-3 px-3 py-2.5 text-xs transition-colors min-h-11",
+                          selected.includes(run.id)
+                            ? "bg-[var(--accent-faint)]"
+                            : "hover:bg-[var(--bg-tertiary)]/50",
+                        )}
+                      >
+                        <input
+                          type="checkbox"
+                          className="mt-0.5"
+                          checked={selected.includes(run.id)}
+                          onChange={() => toggleRun(run.id)}
+                          aria-label={`Select run ${run.id}`}
+                        />
+                        <div className="min-w-0 flex-1 font-mono">
+                          <div>
+                            step {run.from_step} · {run.rerun_mode} ·{" "}
+                            <Link
+                              href={traceHref(run.source_trace_id)}
+                              className="text-[var(--accent)] hover:underline"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              {run.source_trace_id}
+                            </Link>
+                          </div>
+                          <div className="mt-1 text-[var(--text-muted)]">
+                            {run.diff_summary?.length ?? 0} diff steps
+                            {run.created_at
+                              ? ` · ${new Date(run.created_at).toLocaleString()}`
+                              : ""}
+                          </div>
+                        </div>
+                      </label>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </TabsContent>
+
+            <TabsContent value="compare" className="mt-3">
+              {compare ? (
+                <pre className="overflow-auto rounded-lg bg-[var(--bg-secondary)] p-3 font-mono text-xs">
+                  {JSON.stringify(compare, null, 2)}
+                </pre>
+              ) : (
+                <EmptyState
+                  icon={GitCompare}
+                  title="Select two runs"
+                  description="Check two runs in Runs mode, then Compare selected."
+                  size="sm"
+                  variant="plain"
+                  action={
+                    <Button size="sm" variant="outline" onClick={() => setMode("runs")}>
+                      Back to Runs
+                    </Button>
+                  }
+                />
+              )}
+            </TabsContent>
+          </Tabs>
         </div>
       )}
     </PageContent>

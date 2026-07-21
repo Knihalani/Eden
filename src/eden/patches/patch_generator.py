@@ -260,27 +260,15 @@ async def _is_similar_to_recent_patch(
     threshold: float,
     lookback_days: int,
 ) -> dict[str, Any] | None:
-    """Return the matching recent ``proposed_patches`` row if any.
+    """Return the matching recent patch row if any.
 
-    The match logic:
-
-    1. Query ``proposed_patches`` for the same org in the last
-       ``lookback_days`` (default 14). Only 50 most-recent rows
-       to keep the SequenceMatcher cost bounded.
-    2. For each candidate, run ``difflib.SequenceMatcher.ratio``
-       against the new diff. If any ratio > ``threshold``,
-       return that row.
-
-    Returns ``None`` when no match is found (i.e. it's safe to
-    persist the new patch). Pure stdlib ``difflib`` — no extra
-    dep, fast enough for the 50-row window.
-
-    Best-effort: DB errors return ``None`` so the caller falls
-    through to "save it, let humans sort it out" rather than
-    blocking the pipeline on a transient error.
+    Checks both ``proposed_patches.diff`` and
+    ``improvement_plans.diff_unified`` so N23 ``persist=False``
+    callers still dedupe against prior inbox plans.
     """
     if not diff or threshold <= 0.0:
         return None
+    candidates: list[dict[str, Any]] = []
     try:
         rows = await _select_rows(
             org_id,
@@ -289,11 +277,51 @@ async def _is_similar_to_recent_patch(
             order_by="created_at DESC",
             limit=50,
         )
+        for row in rows or []:
+            candidates.append(
+                {
+                    "id": row.get("id"),
+                    "created_at": row.get("created_at"),
+                    "diff": row.get("diff") or "",
+                    "source": "proposed_patches",
+                }
+            )
     except Exception as exc:
-        logger.debug("patch_gen: dedup select failed: %s", exc)
-        return None
+        logger.debug("patch_gen: dedup proposed_patches select failed: %s", exc)
+
+    try:
+        from eden.storage.postgres import get_postgres_client
+
+        client = await get_postgres_client()
+        if client is not None:
+            plan_rows = await client.fetch(
+                f"""
+                SELECT id, created_at, diff_unified
+                FROM improvement_plans
+                WHERE org_id = $1
+                  AND plan_kind = 'code_patch'
+                  AND diff_unified IS NOT NULL
+                  AND diff_unified <> ''
+                  AND created_at > NOW() - INTERVAL '{int(lookback_days)} days'
+                ORDER BY created_at DESC
+                LIMIT 50
+                """,
+                org_id,
+            )
+            for row in plan_rows or []:
+                candidates.append(
+                    {
+                        "id": row.get("id"),
+                        "created_at": row.get("created_at"),
+                        "diff": row.get("diff_unified") or "",
+                        "source": "improvement_plans",
+                    }
+                )
+    except Exception as exc:
+        logger.debug("patch_gen: dedup improvement_plans select failed: %s", exc)
+
     matcher = difflib.SequenceMatcher(a=diff, b="", autojunk=False)
-    for row in rows:
+    for row in candidates:
         candidate = row.get("diff") or ""
         if not candidate:
             continue
@@ -306,6 +334,7 @@ async def _is_similar_to_recent_patch(
                 "similarity": round(ratio, 4),
                 "lookback_days": lookback_days,
                 "threshold": threshold,
+                "source": row.get("source"),
             }
     return None
 
@@ -357,20 +386,24 @@ async def _critic_review(
     diff: str,
     *,
     rca_summary: str,
+    fail_closed: bool = False,
 ) -> dict[str, Any]:
     """Run the Phase 3b critic loop on a generated diff.
 
-    Asks a T2 model to evaluate the diff along 4 axes: does it
-    actually fix the RCA, does it avoid security footguns, does
-    it match the existing style, and would it pass lint/tests.
-
     Returns ``{"passed": bool, "reason": str, "raw": str}``.
-    Never raises — on LLM failure returns ``{"passed": True,
-    "reason": "critic_skipped"}`` so a transient critic outage
-    doesn't block generation. The trade-off: false negatives
-    (over-permissive) are preferable to false positives when
-    the critic is itself unreliable.
+    When ``fail_closed`` is True (inbox / ``persist=False`` path),
+    critic outages return ``passed=False`` so bad patches never
+    enter the Improve inbox. Legacy persist path still fail-opens.
     """
+    from eden.improvement.sweep_budget import try_consume_llm_call
+
+    if not try_consume_llm_call():
+        return {
+            "passed": False if fail_closed else True,
+            "reason": "llm_budget_exhausted" if fail_closed else "critic_skipped",
+            "raw": "",
+        }
+
     # Lazy import — see module-level __getattr__.
     from eden.optimization.model_router import PipelineTask
     task = PipelineTask(
@@ -405,14 +438,18 @@ async def _critic_review(
                 "passed": False,
                 "reason": first_line[5:].strip(" :") or "critic_rejected",
                 "raw": raw,
+                "cost_usd": float(getattr(getattr(response, "usage", None), "cost", 0) or 0),
             }
         return {
             "passed": True,
             "reason": first_line[4:].strip(" :") or "critic_passed",
             "raw": raw,
+            "cost_usd": float(getattr(getattr(response, "usage", None), "cost", 0) or 0),
         }
     except Exception as exc:
         logger.debug("patch_gen: critic failed: %s", exc)
+        if fail_closed:
+            return {"passed": False, "reason": "critic_error", "raw": ""}
         return {"passed": True, "reason": "critic_skipped", "raw": ""}
 
 
@@ -604,12 +641,19 @@ class PatchGenerator:
         # also reads these but we read here so the per-call path
         # works without the scheduler in the loop.
         from eden.config import get_settings
+        from eden.improvement.sweep_budget import try_consume_llm_call
+        from eden.patches._common import DEFAULT_POLICY
+
         settings = get_settings()
         soft_cap = settings.patch_max_diff_lines_soft
         hard_cap = settings.patch_max_diff_lines_hard
         dedup_threshold = settings.patch_similarity_threshold
         dedup_lookback_days = settings.patch_similarity_lookback_days
         quality_floor = settings.patch_quality_floor
+        max_cost_per_patch = float(
+            DEFAULT_POLICY.get("max_cost_per_patch_usd") or 5.0
+        )
+        critic_fail_closed = not persist
 
         # ── Generate → critic loop (max 2 attempts) ────────────────
         diff = ""
@@ -619,6 +663,41 @@ class PatchGenerator:
         critic_attempts = 0
         last_response_content = ""
         for attempt in range(2):
+            if cost_usd >= max_cost_per_patch:
+                return _ok_envelope(
+                    self.name,
+                    {
+                        "rca_id": rca_id,
+                        "trace_id": trace_id,
+                        "repo_id": repo_id,
+                        "diff": "",
+                        "model_used": model_used,
+                        "cost_usd": cost_usd,
+                        "status": "low_quality",
+                        "reason": (
+                            f"max_cost_per_patch_usd exceeded "
+                            f"({cost_usd:.4f}>={max_cost_per_patch})"
+                        ),
+                        "critic_verdict": critic_verdict or {},
+                        "attempts": critic_attempts,
+                    },
+                )
+            if not try_consume_llm_call():
+                return _ok_envelope(
+                    self.name,
+                    {
+                        "rca_id": rca_id,
+                        "trace_id": trace_id,
+                        "repo_id": repo_id,
+                        "diff": "",
+                        "model_used": model_used,
+                        "cost_usd": cost_usd,
+                        "status": "low_quality",
+                        "reason": "llm_budget_exhausted",
+                        "critic_verdict": critic_verdict or {},
+                        "attempts": critic_attempts,
+                    },
+                )
             try:
                 response = await self._router.aroute(
                     task,
@@ -649,12 +728,34 @@ class PatchGenerator:
             last_response_content = response.content
             cost_usd += float(getattr(response.usage, "cost", 0.0) or 0.0)
             model_used = getattr(response, "model", model_used)
+            if cost_usd >= max_cost_per_patch:
+                return _ok_envelope(
+                    self.name,
+                    {
+                        "rca_id": rca_id,
+                        "trace_id": trace_id,
+                        "repo_id": repo_id,
+                        "diff": candidate if _is_valid_diff(candidate) else "",
+                        "model_used": model_used,
+                        "cost_usd": cost_usd,
+                        "status": "low_quality",
+                        "reason": (
+                            f"max_cost_per_patch_usd exceeded "
+                            f"({cost_usd:.4f}>={max_cost_per_patch})"
+                        ),
+                        "attempts": critic_attempts,
+                    },
+                )
             if not _is_valid_diff(candidate):
                 critic_attempts += 1
                 continue
             critic_verdict = await _critic_review(
-                self._router, candidate, rca_summary=rca_summary,
+                self._router,
+                candidate,
+                rca_summary=rca_summary,
+                fail_closed=critic_fail_closed,
             )
+            cost_usd += float(critic_verdict.get("cost_usd") or 0.0)
             critic_attempts += 1
             if critic_verdict.get("passed"):
                 diff = candidate
@@ -662,17 +763,33 @@ class PatchGenerator:
             # Critic rejected. Inject the reason into the prompt and
             # retry once. If still rejected, leave diff empty so the
             # caller gets a low_quality envelope.
-            if attempt == 0:
+            if attempt == 0 and critic_verdict.get("reason") != "critic_error":
                 prompt = (
                     prompt
                     + "\n\n## Critic feedback (must address)\n"
                     + str(critic_verdict.get("reason", ""))
                 )
             else:
-                # Second attempt also failed. The diff is the most
-                # recent (still invalid) candidate — surface it as
-                # low_quality below.
-                diff = candidate
+                # Second attempt also failed, or critic hard-failed.
+                diff = candidate if not critic_fail_closed else ""
+                break
+
+        if critic_fail_closed and critic_verdict and not critic_verdict.get("passed"):
+            return _ok_envelope(
+                self.name,
+                {
+                    "rca_id": rca_id,
+                    "trace_id": trace_id,
+                    "repo_id": repo_id,
+                    "diff": "",
+                    "model_used": model_used,
+                    "cost_usd": cost_usd,
+                    "status": "low_quality",
+                    "reason": str(critic_verdict.get("reason") or "critic_failed"),
+                    "critic_verdict": critic_verdict,
+                    "attempts": critic_attempts,
+                },
+            )
 
         if not diff:
             error_code = (

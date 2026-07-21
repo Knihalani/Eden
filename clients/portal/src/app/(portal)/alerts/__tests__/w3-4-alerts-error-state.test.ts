@@ -39,36 +39,36 @@ function showAlertsEmpty(opts: {
 
 describe("W3-4 alerts query states", () => {
   it("uses in-page ErrorState with retry for feed load failures", () => {
-    const src = read("app/(portal)/alerts/page.tsx");
-    expect(src).toContain('from "@/components/ui/error-state"');
-    expect(src).toContain("Could not load alerts");
-    expect(src).toContain("Try again");
-    expect(src).toContain("onClick={fetchAlerts}");
+    const feed = read("app/(portal)/alerts/_components/alerts-feed.tsx");
+    expect(feed).toContain('from "@/components/ui/error-state"');
+    expect(feed).toContain("Could not load alerts");
+    expect(feed).toContain("Try again");
+    expect(feed).toContain("onRetry={onRetryFeed}");
   });
 
   it("rules verify failure on empty feed uses ErrorState + retry CTA", () => {
-    const src = read("app/(portal)/alerts/page.tsx");
-    expect(src).toContain("Could not verify alert rules");
-    expect(src).toContain('data-testid="alerts-rules-retry"');
-    expect(src).toContain("rulesQuery.refetch()");
-    // Must not leave rulesError as EmptyState without action.
-    expect(src).not.toMatch(
+    const feed = read("app/(portal)/alerts/_components/alerts-feed.tsx");
+    expect(feed).toContain("Could not verify alert rules");
+    expect(feed).toContain('data-testid="alerts-rules-retry"');
+    expect(feed).toContain("onRetryRules");
+    expect(feed).not.toMatch(
       /rulesError\s*\?\s*"Could not verify alert rules"[\s\S]{0,400}!rulesReady \? null/,
     );
   });
 
   it("clear filters resets severity, acknowledged, and verdict", () => {
-    const src = read("app/(portal)/alerts/page.tsx");
-    expect(src).toContain('data-testid="alerts-clear-filters"');
-    expect(src).toMatch(
+    const feed = read("app/(portal)/alerts/_components/alerts-feed.tsx");
+    const hook = read("app/(portal)/alerts/_components/use-alerts-page.ts");
+    expect(feed).toContain('data-testid="alerts-clear-filters"');
+    expect(hook).toMatch(
       /setSeverityFilter\("all"\);\s*setAcknowledgedFilter\(null\);\s*setVerdictFilter\("all"\);/,
     );
   });
 
   it("triage events offset is independent of alert list pagination", () => {
-    const src = read("app/(portal)/alerts/page.tsx");
-    expect(src).toMatch(/offset:\s*0,\s*\n\s*\}\),\s*\n\s*\[verdictFilter,\s*limit\]/);
-    expect(src).not.toMatch(
+    const hook = read("app/(portal)/alerts/_components/use-alerts-page.ts");
+    expect(hook).toMatch(/offset:\s*0,\s*\n\s*\}\),\s*\n\s*\[verdictFilter,\s*limit\]/);
+    expect(hook).not.toMatch(
       /listAlertEvents[\s\S]{0,200}offset,\s*\n\s*\}\),\s*\n\s*\[verdictFilter,\s*limit,\s*offset\]/,
     );
   });

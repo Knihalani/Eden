@@ -116,7 +116,7 @@ async def test_from_repo_health_cve_finding() -> None:
         out = await agent._from_repo_health("org-1", None)
 
     assert len(out) == 1
-    assert out[0].plan_kind == "code_patch"
+    assert out[0].plan_kind == "config_change"
     assert any(f["kind"] == "cve_advisory" for f in out[0].evidence["findings"])
 
 

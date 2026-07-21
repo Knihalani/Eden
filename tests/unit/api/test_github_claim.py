@@ -8,7 +8,7 @@ import pytest
 from pydantic import ValidationError
 
 from eden.api.routes import github
-from eden.api.routes.github import ClaimInstallationRequest
+from eden.api.routes.github import ClaimInstallationRequest, ConnectRepoRequest
 
 
 def test_claim_installation_id_accepts_int():
@@ -35,3 +35,44 @@ def test_github_authorize_merges_oauth_state_on_conflict():
     assert '"oauth_state"' in src or "'oauth_state'" in src
     assert "oauth_state" in src
     assert 'isinstance(entry, dict) and "oauth_state" in entry' in src
+
+
+def test_connect_repo_request_accepts_valid():
+    req = ConnectRepoRequest(
+        installation_id=42,
+        repo_full_name="acme/widgets",
+        default_branch="develop",
+    )
+    assert req.installation_id == 42
+    assert req.repo_full_name == "acme/widgets"
+    assert req.default_branch == "develop"
+
+
+def test_connect_repo_request_defaults_branch():
+    req = ConnectRepoRequest(
+        installation_id=1,
+        repo_full_name="acme/widgets",
+        default_branch="  ",
+    )
+    assert req.default_branch == "main"
+
+
+@pytest.mark.parametrize(
+    "bad_name",
+    ["", "norepo", "a/b/c", "/repo", "owner/", "  "],
+)
+def test_connect_repo_request_rejects_bad_full_name(bad_name):
+    with pytest.raises(ValidationError):
+        ConnectRepoRequest(installation_id=1, repo_full_name=bad_name)
+
+
+def test_connect_org_repo_upserts_repo_connections():
+    """Connect route must write repo_connections (not only claim install)."""
+    src = inspect.getsource(github.connect_org_repo)
+    assert "INSERT INTO repo_connections" in src
+    assert "UPDATE repo_connections" in src
+    assert "default_branch" in src
+    assert "installation_id" in src
+    assert "repo_full_name" in src
+    assert "'active'" in src
+    assert "'inactive'" in src

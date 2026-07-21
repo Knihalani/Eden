@@ -13,17 +13,19 @@ function read(rel: string): string {
 
 describe("W6-B guardrails stats ready", () => {
   it("loads policies on org mount (not only Policies tab)", () => {
-    const src = read("app/(portal)/guardrails/page.tsx");
-    expect(src).toContain("policiesReady");
-    expect(src).toContain("statsPending");
-    expect(src).toMatch(/if \(currentOrg\) void loadPolicies\(\)/);
-    expect(src).not.toMatch(/activeTab === ["']policies["']\) loadPolicies/);
+    const page = read("app/(portal)/guardrails/page.tsx");
+    const hook = read("app/(portal)/guardrails/_components/use-guardrails.ts");
+    expect(hook).toContain("policiesReady");
+    expect(page).toContain("statsPending");
+    expect(hook).toMatch(/if \(orgId\) void loadPolicies\(\)/);
+    expect(hook).not.toMatch(/activeTab === ["']policies["']\) loadPolicies/);
   });
 
   it("stat cards show em-dash while policies are pending", () => {
-    const src = read("app/(portal)/guardrails/page.tsx");
-    expect(src).toMatch(/statsPending \? ["']—["'] : policies\.length/);
-    expect(src).toMatch(/statsPending \? ["']—["'] : enabledCount/);
+    const kpi = read("app/(portal)/guardrails/_components/guardrails-kpi.tsx");
+    expect(kpi).toMatch(/statsPending \? ["']—["'] : policiesLength/);
+    expect(kpi).toMatch(/statsPending\s*\?\s*["']Loading…["']/);
+    expect(kpi).toContain("enabledCount");
   });
 });
 
@@ -43,15 +45,19 @@ describe("W6-B ErrorState sweep", () => {
   });
 
   it("prompt versions load failure uses ErrorState not toast", () => {
-    const src = read("app/(portal)/prompts/page.tsx");
-    expect(src).toContain('title="Could not load prompt versions"');
-    expect(src).toContain("versionsError");
-    expect(src).not.toMatch(/toast\.error\(["']Failed to load prompt versions/);
+    const page = read("app/(portal)/prompts/page.tsx");
+    const editor = read("app/(portal)/prompts/_components/prompts-editor.tsx");
+    expect(editor).toContain('title="Could not load prompt versions"');
+    expect(page).toContain("versionsError");
+    expect(page).not.toMatch(/toast\.error\(["']Failed to load prompt versions/);
+    expect(editor).not.toMatch(/toast\.error\(["']Failed to load prompt versions/);
   });
 
-  it("insights overview drops duplicate ad-hoc error banner", () => {
-    const src = read("app/(portal)/insights/page.tsx");
-    expect(src).toContain('title="Could not load insights"');
+  it("insights soft-redirect; panel uses QueryState (no ad-hoc error banner)", () => {
+    const redirect = read("app/(portal)/insights/page.tsx");
+    expect(redirect).toContain('/analytics?tab=insights');
+    const src = read("app/(portal)/analytics/_components/insights-panel.tsx");
+    expect(src).toContain('errorTitle="Could not load insights"');
     expect(src).not.toMatch(
       /\{error && <div className="bg-\[var\(--error-bg\)\]/,
     );
