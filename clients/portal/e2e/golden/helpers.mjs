@@ -146,11 +146,46 @@ export async function assertNoCrash(page) {
 }
 
 /**
+ * Dismiss cookie / product-tour overlays that hide headings on deep routes.
+ */
+export async function dismissTransientOverlays(page) {
+  for (const label of ["Accept", "Decline", "Skip", "Skip tour"]) {
+    const btn = page.getByRole("button", { name: label }).first();
+    if ((await btn.count()) > 0 && (await btn.isVisible().catch(() => false))) {
+      await btn.click({ timeout: 1500 }).catch(() => {});
+    }
+  }
+  const skipLink = page.getByRole("link", { name: /^Skip$/i }).first();
+  if ((await skipLink.count()) > 0 && (await skipLink.isVisible().catch(() => false))) {
+    await skipLink.click({ timeout: 1500 }).catch(() => {});
+  }
+}
+
+/** Wait until portal-chrome leaves the “Signing you in” loading shell. */
+export async function waitForAuthHydrated(page, { timeout = 45_000 } = {}) {
+  const signingIn = page.getByText("Signing you in", { exact: false });
+  const deadline = Date.now() + timeout;
+  while (Date.now() < deadline) {
+    const stuck =
+      (await signingIn.count().catch(() => 0)) > 0 &&
+      (await signingIn.first().isVisible().catch(() => false));
+    if (!stuck) return;
+    await page.waitForTimeout(500);
+  }
+  throw new Error(
+    `Auth chrome stuck on “Signing you in” (url: ${page.url()}). ` +
+      "Clerk session may not have hydrated — re-run seed-auth or setupClerkTestingToken.",
+  );
+}
+
+/**
  * Asserts the authenticated portal shell is visible: at least one sidebar
  * navigation link rendered. When Clerk auth is not working the browser is
  * redirected to /sign-in and no nav links exist.
  */
 export async function assertAuthShell(page) {
+  await waitForAuthHydrated(page);
+  await dismissTransientOverlays(page);
   const navLinks = page.locator("nav a[href], aside a[href]");
   const signingIn = page.getByText("Signing you in", { exact: false });
   try {
@@ -184,8 +219,13 @@ export async function assertAuthShell(page) {
  * Throws if neither resolves within the timeout, indicating a render failure.
  */
 export async function assertPageLoaded(page, { timeout = 15_000 } = {}) {
+  await dismissTransientOverlays(page).catch(() => {});
   const heading = page.locator("h1").first();
-  const noOrg = page.locator('text="Finish setup"').or(page.locator('text="No organisation"'));
+  const noOrg = page
+    .locator('text="Finish setup"')
+    .or(page.locator('text="No organisation"'))
+    .or(page.locator('text="No workspace yet"'))
+    .or(page.locator('text="Syncing your workspace"'));
   const emptyState = page.locator('[data-testid="empty-state"], [data-testid="no-data"]');
 
   try {
