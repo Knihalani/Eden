@@ -61,8 +61,8 @@ def test_record_and_list_tenant_scoped() -> None:
     assert len(payload["events"]) == 1
 
 
-def test_admin_route_wires_module() -> None:
-    """Static: admin_status slow-queries uses slow_query module (no pg_stat)."""
+def test_admin_route_is_tenant_safe_stub() -> None:
+    """Static: admin slow-queries stays a Wave 1 stub (no pg_stat)."""
     from pathlib import Path
 
     src = (
@@ -70,5 +70,9 @@ def test_admin_route_wires_module() -> None:
         / "src/eden/api/routes/admin_status.py"
     )
     text = src.read_text(encoding="utf-8")
-    assert "admin_slow_queries_payload" in text
     assert "pg_stat_activity" not in text
+    assert '"available": False' in text
+    assert "Cluster query stats are not exposed to tenants" in text
+    assert "slow_query_count" in text
+    # Intentional: route does not call the in-process ring buffer helper.
+    assert "admin_slow_queries_payload" not in text

@@ -304,9 +304,9 @@ class TestTelemetryCollectorWiring:
             )
 
     def test_write_path_placeholder_count_updated(self, write_source):
-        """The INSERT must have $46 (the last new column)."""
+        """The INSERT must have $48 (last column before created_at NOW())."""
         # ast-parsed would be ideal but we're matching text.
-        # The last positional placeholder before NOW() must be $46.
-        assert "$46, NOW()" in write_source, (
-            "INSERT must end with $46, NOW() after adding 6 new columns"
+        # Last positional placeholder before NOW(): zstd cols + message hashes.
+        assert "$48, NOW()" in write_source, (
+            "INSERT must end with $48, NOW() after zstd cols + message hashes"
         )

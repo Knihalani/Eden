@@ -234,8 +234,17 @@ class TestPlayground:
 
     @pytest.mark.asyncio
     async def test_compare_returns_both(self) -> None:
+        async def handler(prompt: dict) -> PlaygroundResult:
+            return PlaygroundResult(
+                template_name="",
+                template_version=0,
+                model=str(prompt.get("model") or ""),
+                response="ok",
+                latency_ms=1.0,
+            )
+
         t = PromptTemplate(name="x", user="hi", model="model-a")
-        pg = Playground()
+        pg = Playground(handler=handler)
         a, b = await pg.compare(t, {}, "model-b")
         assert a.model == "model-a"
         assert b.model == "model-b"

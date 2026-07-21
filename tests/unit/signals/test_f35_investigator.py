@@ -2,7 +2,7 @@
 
 Covers WP6 acceptance criteria:
 * StatGate rules (``looping`` / ``cost_spike``) evaluate at **$0** — no LLM.
-* Every enabled LLM schema is investigated in a **single** LLM call.
+* Investigator-prompt schemas use heuristics (per-signal LLM batch retired).
 * A matched frustration signal writes a stumble (feeds F28→F29→F30).
 * ``upsert_signal_definitions`` bridges the library into the table the
   investigator reads.
@@ -110,7 +110,8 @@ def test_statgate_looping_no_repeat_does_not_match() -> None:
 
 
 @pytest.mark.asyncio
-async def test_multi_schema_single_llm_call() -> None:
+async def test_multi_schema_heuristics_no_llm_batch() -> None:
+    """LLM batch path removed — heuristics + StatGate only."""
     definitions = [
         _def(
             name="Forgetting",
@@ -140,12 +141,9 @@ async def test_multi_schema_single_llm_call() -> None:
     ):
         written = await inv.investigate_trace("org", "trace-1", events=_loop_events())
 
-    # Exactly ONE LLM call regardless of how many LLM schemas are enabled.
-    assert batch_mock.call_count == 1
-    # The single call received BOTH LLM schemas (multi-schema).
-    _, called_batch, _ = batch_mock.call_args.args
-    assert len(called_batch) == 2
-    # One event row per definition (2 LLM + 1 statgate).
+    # Per-signal LLM batch retired; heuristics cover investigator_prompt rows.
+    assert batch_mock.call_count == 0
+    # One event row per definition (2 heuristic + 1 statgate).
     assert len(written) == 3
     assert len(pg.events) == 3
 
@@ -171,27 +169,28 @@ async def test_frustration_match_writes_stumble() -> None:
         ),
     ]
     pg = _FakePg(definitions)
-    sig_id = str(definitions[0]["id"])
 
-    async def _batch(org_id, batch, events):  # noqa: ANN001
-        return {
-            sig_id: {
-                "matched": True,
-                "confidence": 0.9,
-                "payload": {"method": "llm", "cost_usd": 0.0, "frustrated": True},
-            }
-        }
+    # Heuristic matcher needs frustration keywords in the compressed summary.
+    events = [
+        {
+            "event_type": "user.message",
+            "name": "user",
+            "outcome": "success",
+            "input_text": "This is wrong and not helpful, I'm frustrated, try again",
+        },
+        {"event_type": "llm.call", "name": "assistant", "outcome": "success"},
+        {"event_type": "llm.call", "name": "assistant", "outcome": "success"},
+    ]
 
     writer = AsyncMock()
     writer.create = AsyncMock(return_value={"stumble_id": "s1", "inserted": True})
 
     with (
         patch("eden.signals.investigator.get_postgres_client", AsyncMock(return_value=pg)),
-        patch("eden.signals.investigator.run_investigator_llm_batch", _batch),
         patch("eden.issues.stumble_writer.StumbleWriter", return_value=writer),
     ):
         written = await inv.investigate_trace(
-            "org", "trace-1", events=_loop_events(), agent_id="agent-a"
+            "org", "trace-1", events=events, agent_id="agent-a"
         )
 
     assert written and written[0]["matched"] is True
