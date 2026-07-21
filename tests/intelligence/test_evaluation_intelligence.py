@@ -843,10 +843,12 @@ class TestCLHFGenerator:
             content="0.0", usage=UsageStats(),
             model="m", finish_reason="stop",
         )
-        call_mock = MagicMock(side_effect=[spec_resp, reeval_resp, reeval_resp, reeval_resp])
         with patch(
             "eden.evaluation.eval_intel.clhf.OpenRouterClient",
-            return_value=MagicMock(call=call_mock),
+            return_value=MagicMock(),
+        ), patch(
+            "eden.llm.internal_router.route_sync",
+            side_effect=[spec_resp, reeval_resp, reeval_resp, reeval_resp],
         ), patch(
             "eden.evaluation.eval_intel.clhf._insert_clhf_run",
             new=AsyncMock(),
