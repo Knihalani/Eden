@@ -114,7 +114,7 @@ def pii_policy_auth(api_client: TestClient, mock_collector, monkeypatch):
     override by calling ``set_policy(...)``.
     """
     from eden.api.app import app
-    from eden.api.deps import get_ingestion_auth
+    from eden.api.deps import get_gateway_auth
     from eden.api.routes import gateway as gateway_module
     from eden.config import Settings, get_settings
     from eden.observability import telemetry_collector as tc_module
@@ -126,7 +126,7 @@ def pii_policy_auth(api_client: TestClient, mock_collector, monkeypatch):
         "api_key_id": "key-1",
         "auth_method": "api_key",
     }
-    app.dependency_overrides[get_ingestion_auth] = lambda: fake_auth
+    app.dependency_overrides[get_gateway_auth] = lambda: fake_auth
 
     async def _get():
         return mock_collector
@@ -181,7 +181,7 @@ def pii_policy_auth(api_client: TestClient, mock_collector, monkeypatch):
     try:
         yield {"auth": fake_auth, "set_policy": _set_policy}
     finally:
-        app.dependency_overrides.pop(get_ingestion_auth, None)
+        app.dependency_overrides.pop(get_gateway_auth, None)
         get_settings.cache_clear()
 
 
