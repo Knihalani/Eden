@@ -62,6 +62,11 @@ describe("W27 N11 live streaming", () => {
     expect(hook).toContain("MAX_RECONNECT_ATTEMPTS");
     expect(hook).toContain("retry");
     expect(panel).toContain("live-trace-retry");
+    // Cost: SSE only when ?live=1 or in-flight; never use traceId as sessionId.
+    expect(panel).toContain('searchParams.get("live") === "1"');
+    expect(panel).toContain("outcomeInFlight");
+    expect(panel).not.toContain("sessionId ?? traceId");
+    expect(panel).toMatch(/sessionId,\s*\n\s*enabled:/);
   });
 
   it("MCP tail_trace registered", () => {

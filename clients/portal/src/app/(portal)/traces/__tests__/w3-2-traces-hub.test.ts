@@ -158,6 +158,10 @@ describe("W3-2 traces hub list UI gate", () => {
     expect(noOrgIdx).toBeGreaterThan(-1);
     expect(emptyIdx).toBeGreaterThan(-1);
     expect(src).toMatch(/hub\.orgLoading\s*&&\s*!hub\.currentOrg/);
+    // authError must not blank-page — show ErrorState instead of return null.
+    expect(src).toContain('title="Could not load workspace"');
+    expect(src).toContain("hub.authError");
+    expect(src).not.toMatch(/if\s*\(\s*!hub\.currentOrg\s*\)\s*return\s+null/);
   });
 
   it("first-run empty polls and offers doctor + check CTA", () => {
@@ -167,6 +171,11 @@ describe("W3-2 traces hub list UI gate", () => {
     expect(hook).toContain("FIRST_EVENT_WAIT.pollMs");
     expect(hook).toContain("onboardingV2Api.getState");
     expect(list).toContain('data-testid="traces-first-run-hint"');
+    // Dual-poll collapse: tracesQuery owns interval; firstTraceSignal does not.
+    expect(hook).toContain("refetchInterval: false");
+    expect(hook).not.toContain(
+      "refetchInterval: showFirstRunEmpty ? FIRST_EVENT_WAIT.pollMs : false",
+    );
 
     const wait = read("components/onboarding/WaitingForFirstEvent.tsx");
     expect(wait).toContain("FIRST_EVENT_WAIT.title");
@@ -344,6 +353,11 @@ describe("W3-2 traces hub list UI gate", () => {
     expect(hook).toContain("TRACES_BUILTIN_VIEW_PRESETS");
     expect(hook).toContain("resolveTracesBuiltinView");
     expect(hook).toContain("filterDirty: hasListConstraints");
+    // Query honesty: unsupported q tokens must not count as list constraints.
+    expect(hook).not.toContain("Boolean(query)");
+    expect(hook).toContain("effectiveFilter.realm");
+    expect(hook).toContain("effectiveFilter.outcome");
+    expect(hook).toContain("effectiveFilter.agent_id");
 
     const toolbar = read("app/(portal)/traces/_components/TracesToolbar.tsx");
     expect(toolbar).toContain("presets={viewPresets}");

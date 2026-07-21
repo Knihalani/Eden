@@ -70,7 +70,7 @@ def test_shadow_nudge_does_not_mutate_prompt(monkeypatch):
     engine._NUDGE_CACHE = {}  # noqa: SLF001 — test setup
     from eden.nudges import engine as engine_mod
 
-    engine_mod._NUDGE_CACHE["org-1:checkout-agent"] = [nudge]
+    engine_mod._NUDGE_CACHE["org-1:checkout-agent:promoted,shadow"] = [nudge]
 
     filt = NudgeGatewayFilter(engine)
     req = _req()
@@ -100,7 +100,7 @@ def test_promoted_nudge_appends_to_prompt(monkeypatch):
     )
     from eden.nudges import engine as engine_mod
 
-    engine_mod._NUDGE_CACHE["org-1:checkout-agent"] = [nudge]
+    engine_mod._NUDGE_CACHE["org-1:checkout-agent:promoted,shadow"] = [nudge]
 
     filt = NudgeGatewayFilter(NudgeEngine())
     req = _req()

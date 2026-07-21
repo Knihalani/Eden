@@ -433,7 +433,11 @@ async def list_traces(
                        coalesce(
                            max(model),
                            max(model_name),
-                           max(attributes->>'model')
+                           max(attributes->>'model'),
+                           max(attributes->>'openai.model'),
+                           max(attributes->>'anthropic.model'),
+                           max(attributes->>'bedrock.model_id'),
+                           max(attributes->>'gen_ai.request.model')
                        ) AS model,
                        coalesce(
                            max(provider_name),
@@ -964,7 +968,7 @@ async def observability_summary(
                 *common_args,
             ),
             client.fetch(
-                f"SELECT coalesce(model, model_name, attributes->>'model') AS model, "
+                f"SELECT coalesce(model, model_name, attributes->>'model', attributes->>'openai.model', attributes->>'anthropic.model') AS model, "
                 f"count(*) AS calls, "
                 f"coalesce(sum(coalesce("
                 f"  NULLIF(metrics->>'cost_usd','')::float,"

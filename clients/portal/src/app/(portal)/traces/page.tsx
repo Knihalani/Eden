@@ -8,6 +8,7 @@
 import { Suspense } from "react";
 import { PageHeader } from "@/components/layout/page-header";
 import { PageContent } from "@/components/layout/page-content";
+import { ErrorState } from "@/components/ui/error-state";
 import { NoOrgState } from "@/components/ui/no-org-state";
 import { LoadingSkeleton } from "@/components/ui/skeleton";
 import {
@@ -62,7 +63,15 @@ function TracesPageInner() {
       />
     );
   }
-  if (!hub.currentOrg) return null;
+  if (!hub.currentOrg) {
+    return (
+      <ErrorState
+        title="Could not load workspace"
+        message={hub.authError ?? "Authentication required"}
+        onRetry={() => void hub.refreshOrgs()}
+      />
+    );
+  }
 
   const toolbar = (
     <TracesToolbar

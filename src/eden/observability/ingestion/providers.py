@@ -244,6 +244,7 @@ def _openai_to_raw(item: dict[str, Any]) -> dict[str, Any]:
 
     attributes: dict[str, str] = {}
     if model:
+        attributes["model"] = model
         attributes["openai.model"] = model
     if response_id:
         attributes["openai.response_id"] = response_id
@@ -275,6 +276,8 @@ def _openai_to_raw(item: dict[str, Any]) -> dict[str, Any]:
         "event_id": response_id or f"openai_{model}_{usage.get('total_tokens', '')}",
         "trace_id": str(item.get("user") or response_id or ""),
         "name": model or None,
+        "model": model or None,
+        "model_name": model or None,
         "event_type": "openai.chat_completion",
         "timestamp": (
             item.get("created")
@@ -503,6 +506,7 @@ def _anthropic_to_raw(item: dict[str, Any]) -> dict[str, Any]:
 
     attributes: dict[str, str] = {}
     if model:
+        attributes["model"] = model
         attributes["anthropic.model"] = model
     if response_id:
         attributes["anthropic.response_id"] = response_id
@@ -540,6 +544,8 @@ def _anthropic_to_raw(item: dict[str, Any]) -> dict[str, Any]:
         "event_id": response_id or f"anthropic_{model}",
         "trace_id": response_id or "",
         "name": model or None,
+        "model": model or None,
+        "model_name": model or None,
         "event_type": "anthropic.message",
         "timestamp": None,  # Anthropic responses don't carry created_at
         "realm": "production",

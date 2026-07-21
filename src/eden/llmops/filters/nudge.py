@@ -61,8 +61,10 @@ class NudgeGatewayFilter:
             return request, []
 
         if not artifacts_enabled_sync(org_id):
-            schedule_warm_learn(org_id, agent_id, task_text=str(ctx.get("prompt") or ""))
             return request, []
+
+        if not self._engine.cache_warmed(org_id, agent_id):
+            schedule_warm_learn(org_id, agent_id, task_text=str(ctx.get("prompt") or ""))
 
         matched = self._composer.compose(self._engine.evaluate_sync(ctx))
         findings: list[str] = []

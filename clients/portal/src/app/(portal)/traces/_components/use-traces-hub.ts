@@ -337,9 +337,11 @@ export function useTracesHub() {
   );
   const filterDirty = isViewDirty(currentViewState, savedState);
   const hasListConstraints =
-    Boolean(query) ||
-    Boolean(filter.realm || filter.outcome || filter.agent_id) ||
-    Boolean(savedViewId);
+    Boolean(
+      effectiveFilter.realm ||
+        effectiveFilter.outcome ||
+        effectiveFilter.agent_id,
+    ) || Boolean(savedViewId);
 
   const tracesQuery = useOrgQuery(
     queryKeys.observability.traces(orgId, traceFilterParams),
@@ -396,7 +398,7 @@ export function useTracesHub() {
     {
       enabled: showFirstRunEmpty,
       staleTime: FIRST_EVENT_WAIT.pollMs,
-      refetchInterval: showFirstRunEmpty ? FIRST_EVENT_WAIT.pollMs : false,
+      refetchInterval: false,
     },
   );
   const firstTraceAt = firstTraceSignal.data ?? null;
