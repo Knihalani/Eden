@@ -426,11 +426,9 @@ class TestAiInsightsDefensiveDB:
         ai_mod = _load_ai_insights_module()
         _patch_blip(monkeypatch, ai_mod)
 
-        org = {"user_id": "00000000-0000-0000-0000-000000000001"}
         user = {"user_id": "00000000-0000-0000-0000-000000000001"}
         result = await ai_mod.list_sessions(
             org_id="00000000-0000-0000-0000-000000000002",
-            org=org,
             user=user,
             limit=10,
         )
