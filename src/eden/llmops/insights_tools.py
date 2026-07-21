@@ -2223,9 +2223,9 @@ async def list_datasets(org_id: str, limit: int = 20) -> dict[str, Any]:
         "type": "object",
         "properties": {
             "name": {"type": "string", "description": "Dataset name."},
-            "description": {"type": "string"},
-            "source_type": {"type": "string"},
-            "source_ref": {"type": "string"},
+            "description": {"type": "string", "description": "Optional human-readable dataset description."},
+            "source_type": {"type": "string", "description": "Dataset provenance kind (e.g. manual, promote, import)."},
+            "source_ref": {"type": "string", "description": "Optional external/source reference id."},
         },
         "required": ["name"],
     },
@@ -2263,9 +2263,9 @@ async def create_dataset(
     input_schema={
         "type": "object",
         "properties": {
-            "trace_id": {"type": "string"},
-            "dataset_id": {"type": "string"},
-            "dataset_name": {"type": "string"},
+            "trace_id": {"type": "string", "description": "Trace id to operate on."},
+            "dataset_id": {"type": "string", "description": "Existing dataset id."},
+            "dataset_name": {"type": "string", "description": "Dataset name when creating/looking up by name."},
         },
         "required": ["trace_id"],
     },
@@ -2294,7 +2294,7 @@ async def promote_trace_to_dataset(
     input_schema={
         "type": "object",
         "properties": {
-            "limit": {"type": "integer"},
+            "limit": {"type": "integer", "description": "Maximum rows to return."},
         },
     },
 )
@@ -2316,8 +2316,8 @@ async def list_experiments(org_id: str, limit: int = 20) -> dict[str, Any]:
     input_schema={
         "type": "object",
         "properties": {
-            "experiment_id": {"type": "string"},
-            "baseline_id": {"type": "string"},
+            "experiment_id": {"type": "string", "description": "Experiment id to summarize or compare."},
+            "baseline_id": {"type": "string", "description": "Optional baseline experiment id for comparison."},
         },
         "required": ["experiment_id"],
     },
@@ -2351,11 +2351,11 @@ async def summarize_experiment(
     input_schema={
         "type": "object",
         "properties": {
-            "name": {"type": "string"},
-            "dataset_id": {"type": "string"},
-            "config": {"type": "object"},
-            "baseline_experiment_id": {"type": "string"},
-            "source_issue_id": {"type": "string"},
+            "name": {"type": "string", "description": "Display name for the new resource."},
+            "dataset_id": {"type": "string", "description": "Existing dataset id."},
+            "config": {"type": "object", "description": "Optional JSON config payload."},
+            "baseline_experiment_id": {"type": "string", "description": "Optional baseline experiment id."},
+            "source_issue_id": {"type": "string", "description": "Optional originating issue id."},
         },
         "required": ["name", "dataset_id"],
     },
@@ -2392,7 +2392,7 @@ async def create_experiment(
     input_schema={
         "type": "object",
         "properties": {
-            "limit": {"type": "integer"},
+            "limit": {"type": "integer", "description": "Maximum rows to return."},
         },
     },
 )
@@ -2415,8 +2415,8 @@ async def list_playgrounds(org_id: str, limit: int = 20) -> dict[str, Any]:
     input_schema={
         "type": "object",
         "properties": {
-            "name": {"type": "string"},
-            "config": {"type": "object"},
+            "name": {"type": "string", "description": "Display name for the new resource."},
+            "config": {"type": "object", "description": "Optional JSON config payload."},
         },
         "required": ["name"],
     },
@@ -2447,9 +2447,9 @@ async def create_playground(
     input_schema={
         "type": "object",
         "properties": {
-            "trace_id": {"type": "string"},
-            "span_id": {"type": "string"},
-            "model": {"type": "string"},
+            "trace_id": {"type": "string", "description": "Trace id to operate on."},
+            "span_id": {"type": "string", "description": "Span id within the trace."},
+            "model": {"type": "string", "description": "Model identifier (e.g. gpt-4o-mini)."},
         },
         "required": ["trace_id"],
     },
@@ -2487,9 +2487,9 @@ async def playground_from_span(
     input_schema={
         "type": "object",
         "properties": {
-            "model": {"type": "string"},
-            "prompt_tokens": {"type": "integer"},
-            "completion_tokens": {"type": "integer"},
+            "model": {"type": "string", "description": "Model identifier (e.g. gpt-4o-mini)."},
+            "prompt_tokens": {"type": "integer", "description": "Estimated prompt token count."},
+            "completion_tokens": {"type": "integer", "description": "Estimated completion token count."},
             "tier": {"type": "string", "description": "ignored — chat is always t2"},
         },
     },
@@ -2543,7 +2543,7 @@ async def estimate_chat_cost(
                 "type": "integer",
                 "description": "Resume after this event id.",
             },
-            "max_events": {"type": "integer"},
+            "max_events": {"type": "integer", "description": "Maximum live events to return."},
         },
         "required": ["session_id"],
     },

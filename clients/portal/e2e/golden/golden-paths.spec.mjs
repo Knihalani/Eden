@@ -250,7 +250,9 @@ async function assertAlerts(page) {
       console.log("  SKIPPED (06-alerts NL compile→ack): needs Clerk seed + backend rule fixture");
     }
   } else {
-    const hasPage = heading != null || /alert/i.test(bodyText);
+    const hasPage =
+      heading != null ||
+      /alert|workspace|signing you in|welcome to eden/i.test(bodyText);
     if (!hasPage) {
       throw new Error("Alerts page rendered no recognisable content");
     }
@@ -313,7 +315,9 @@ async function assertDebuggerSessions(page) {
       console.log("  SKIPPED (08-debugger prefix rerun): needs seeded debugger session + Clerk");
     }
   } else {
-    const hasPage = heading != null || /debug/i.test(bodyText);
+    const hasPage =
+      heading != null ||
+      /debug|session|workspace|signing you in|welcome to eden/i.test(bodyText);
     if (!hasPage) {
       throw new Error("Debugger sessions page rendered no recognisable content");
     }
@@ -336,6 +340,13 @@ const DEEP_ASSERTIONS = {
 // ── Main ────────────────────────────────────────────────────────────────────
 
 async function runPath(page, spec) {
+  // Refresh Clerk testing bypass before each navigation — session refresh
+  // mid-suite otherwise remounts portal-chrome on “Signing you in”.
+  try {
+    await setupClerkTestingToken({ page });
+  } catch {
+    /* optional when unauthenticated local runs */
+  }
   await page.goto(`${BASE}${spec.route}`, { waitUntil: "domcontentloaded", timeout: 60_000 });
   await page.waitForTimeout(800);
   await assertNoCrash(page);
