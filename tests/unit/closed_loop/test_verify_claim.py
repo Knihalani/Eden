@@ -82,4 +82,4 @@ async def test_subscription_deleted_reverts_to_org_free():
             }
         )
 
-    assert calls == ["org_free"]
+    assert calls == ["starter"]

@@ -3,10 +3,10 @@
 Five audit items from Part G "Portal polish" final pass:
 
 * **PQ-7** — Replace bare ``Loader2`` spinners in the loading
-  states of ``TracesTab`` (``observability/_components``) and the
-  ``HubTile`` value slot in ``observability/page.tsx`` with the
-  shared ``Skeleton`` / ``SkeletonTableRow`` components so the
-  page doesn't visually "jump" when data arrives.
+  states of ``TracesTab`` (``observability/_components``) with
+  shared ``Skeleton`` / ``SkeletonTableRow``. The old
+  ``observability/page.tsx`` HubTile landing is retired (redirect
+  to ``/traces``); hub loading polish lives on the traces shell.
 * **PQ-9** — The previously orphan "Add / Update payment method"
   button in ``billing/page.tsx`` is wired through a handler with
   a ``try/catch`` + ``toast.error`` so backend failures surface
@@ -16,7 +16,7 @@ Five audit items from Part G "Portal polish" final pass:
   ``err instanceof ApiError && err.status === 401`` instead of
   regex-parsing the message string. Both throw sites (the
   generic ``fetchApi`` and the exportOrgData 2nd-fetch) use it.
-* **PQ-14** — The seven pages that previously re-defined
+* **PQ-14** — Pages that previously re-defined
   ``const API_BASE = NEXT_PUBLIC_API_URL || "http://localhost:8000"``
   now import the canonical ``API_BASE`` from ``@/lib/api``. The
   pre-fix local definitions silently bypassed the proxy in
@@ -90,28 +90,44 @@ class TestTracesTabSkeletonRows:
 
 
 class TestObservabilityHubTileSkeleton:
-    """``observability/page.tsx``'s ``HubTile`` uses a Skeleton bar
-    instead of a tiny spinning Loader2 when the stat value is null
-    (loading).
+    """``/observability`` landing is retired (redirect → ``/traces``).
+
+    HubTile Skeleton polish no longer applies on that route; the
+    traces shell must still use shared skeleton loading.
     """
 
     def test_uses_skeleton_class(self) -> None:
-        source = _read(
-            "src/app/(portal)/observability/page.tsx"
-        )
-        assert "Skeleton" in source, (
+        obs = _read("src/app/(portal)/observability/page.tsx")
+        if "redirect(" in obs and "Skeleton" not in obs:
+            traces = _read("src/app/(portal)/traces/page.tsx")
+            assert "LoadingSkeleton" in traces or "Skeleton" in traces, (
+                "PQ-7 regression: traces hub (successor to "
+                "observability landing) must use Skeleton loading"
+            )
+            return
+        assert "Skeleton" in obs, (
             "PQ-7 regression: observability page must import and "
             "use Skeleton (HubTile's value === null branch)"
         )
 
     def test_imports_skeleton(self) -> None:
-        """The page imports ``Skeleton`` from the shared module."""
-        source = _read(
-            "src/app/(portal)/observability/page.tsx"
+        """Landing redirect is N/A; traces imports shared skeleton."""
+        obs_path = (
+            _PORTAL_ROOT / "src/app/(portal)/observability/page.tsx"
         )
+        obs = _read("src/app/(portal)/observability/page.tsx")
+        if obs_path.is_file() and "redirect(" in obs and "Skeleton" not in obs:
+            traces = _read("src/app/(portal)/traces/page.tsx")
+            assert (
+                'from "@/components/ui/skeleton"' in traces
+            ), (
+                "PQ-7 regression: traces page must import skeleton "
+                "from /components/ui/skeleton"
+            )
+            return
         assert (
             'import { Skeleton } from "@/components/ui/skeleton"'
-            in source
+            in obs
         ), "PQ-7 regression: must import Skeleton from /components/ui/skeleton"
 
 
@@ -220,10 +236,11 @@ class TestApiErrorClass:
 
 
 # Files that previously re-defined API_BASE; each must now import
-# from @/lib/api.
+# from @/lib/api. webhooks-dlq FS route is redirect-only — canonical
+# UI is the settings tab component.
 _PQ14_FILES = [
     "src/app/(portal)/optimization/budget/page.tsx",
-    "src/app/(portal)/settings/(tabs)/webhooks-dlq/page.tsx",
+    "src/app/(portal)/settings/_components/webhooks-dlq-tab.tsx",
     "src/app/(portal)/observability/cohorts/page.tsx",
     "src/app/(portal)/observability/time-travel/page.tsx",
     "src/app/(portal)/prompts/page.tsx",

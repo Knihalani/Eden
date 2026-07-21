@@ -193,7 +193,8 @@ class TestRubricSynthesiser:
         fake_client.call = MagicMock(return_value=fake_response)
 
         with patch(
-            "eden.llm.client.get_llm_client", return_value=fake_client
+            "eden.metric_studio.synthesiser._call_synthesis_llm",
+            new=AsyncMock(return_value=fake_rubric),
         ), patch(
             "eden.metric_studio.synthesiser._delete_then_insert",
             new=AsyncMock(),
@@ -214,10 +215,8 @@ class TestRubricSynthesiser:
         assert "rubric_id" in result["data"]
         # The persistence was called once.
         persist.assert_awaited_once()
-        # The LLM call was made with the "fast" slot.
-        call_kwargs = fake_client.call.call_args.kwargs
-        assert call_kwargs.get("slot") == "fast"
-        assert call_kwargs.get("agent") == "metric_studio_synthesiser"
+        # Synthesis still targets the fast slot (via route_async).
+        assert RubricSynthesiser.MODEL_SLOT == "fast"
 
     @pytest.mark.asyncio
     async def test_token_cap_enforced(self) -> None:
@@ -834,7 +833,8 @@ class TestRoutes:
         fake_client = MagicMock()
         fake_client.call = MagicMock(return_value=fake_response)
         with patch(
-            "eden.llm.client.get_llm_client", return_value=fake_client
+            "eden.metric_studio.synthesiser._call_synthesis_llm",
+            new=AsyncMock(return_value=fake_rubric),
         ), patch(
             "eden.metric_studio.synthesiser._delete_then_insert",
             new=AsyncMock(),

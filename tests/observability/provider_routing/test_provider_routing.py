@@ -25,7 +25,7 @@ FastAPI pattern from the D.12.1-5 tests).
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
@@ -82,12 +82,16 @@ def routing_client(mock_postgres_client: MagicMock) -> TestClient:
     )
     app.dependency_overrides[get_current_user] = _fake_user
     app.dependency_overrides[require_org_member] = _fake_member
-    app.dependency_overrides[require_path_org_access] = lambda: "org_test"
+    app.dependency_overrides[require_path_org_access] = lambda: "org-1"
     app.dependency_overrides[require_org_admin] = _fake_admin
     try:
-        client = TestClient(app)
-        client.cookies.set("authorization", "test-token-for-default-deny")
-        yield client
+        with patch(
+            "eden.api.routes.observability_provider_routing.resolve_eden_org_id",
+            new=AsyncMock(side_effect=lambda oid: oid),
+        ):
+            client = TestClient(app)
+            client.cookies.set("authorization", "test-token-for-default-deny")
+            yield client
     finally:
         app.dependency_overrides.clear()
 

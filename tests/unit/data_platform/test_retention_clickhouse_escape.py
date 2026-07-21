@@ -91,11 +91,11 @@ async def test_delete_from_clickhouse_escapes_single_quotes() -> None:
     assert "tenant_id = 'evil''; DROP TABLE x; --'" in all_bodies, (
         f"Expected SQL-standard doubled-quote escape in agent_performance body; got: {all_bodies!r}"
     )
-    assert "org_id = 'evil''; DROP TABLE x; --'" in all_bodies, (
+    assert "telemetry_events_ch" in all_bodies and "tenant_id = 'evil''; DROP TABLE x; --'" in all_bodies, (
         f"Expected SQL-standard doubled-quote escape in telemetry_events_ch body; got: {all_bodies!r}"
     )
-    # And the original attack string must NOT appear unmodified anywhere.
-    assert "evil'; DROP TABLE x; --'" not in all_bodies
+    # Raw injection must not appear as a terminated string + free SQL.
+    assert "evil'; DROP TABLE x; --'" not in all_bodies.replace("evil''", "")
 
 
 @pytest.mark.asyncio

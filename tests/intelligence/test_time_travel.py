@@ -24,7 +24,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timezone
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi import FastAPI
@@ -242,11 +242,22 @@ class TestTraceReplayer:
     async def test_invalid_edits_key(self) -> None:
         from eden.time_travel import TraceReplayer
 
-        result = await TraceReplayer().replay_from(
-            "org_test",
-            fork_id="frk_abc",
-            edits={"not_a_step_key": "x"},
-        )
+        fork = {
+            "fork_id": "frk_abc",
+            "org_id": "org_test",
+            "parent_trace_id": "tr_1",
+            "fork_at_step": 0,
+            "edits_json": {},
+        }
+        with patch(
+            "eden.time_travel.replayer._get_fork_branch",
+            new=AsyncMock(return_value=fork),
+        ):
+            result = await TraceReplayer().replay_from(
+                "org_test",
+                fork_id="frk_abc",
+                edits={"not_a_step_key": "x"},
+            )
         assert result["status"] == "not_implemented"
         assert "invalid edit key" in result["message"]
 

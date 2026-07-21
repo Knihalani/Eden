@@ -15,6 +15,7 @@ require a valid user (org_member).
 
 from __future__ import annotations
 
+from eden.api.utils.redact import redact_all
 import logging
 from typing import Any
 
@@ -415,7 +416,7 @@ async def list_saved_searches(
             searches = await svc.list_recent(org_id, user_id, limit=limit)
     except Exception as exc:
         # Schema drift must not crash every hub that mounts ViewsMenu.
-        logger.exception("list saved-searches failed: %s", exc)
+        logger.exception("list saved-searches failed: %s", redact_all(str(exc)))
         raise HTTPException(
             status_code=503,
             detail="Saved searches temporarily unavailable",

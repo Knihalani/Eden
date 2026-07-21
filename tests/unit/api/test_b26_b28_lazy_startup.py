@@ -24,7 +24,18 @@ _HOT_MODULES = (
 
 
 def _run(code: str) -> dict:
-    env = {**os.environ, "EDEN_TESTING": "1", "PYTEST_CURRENT_TEST": "b26_b28"}
+    # Subprocess does not inherit pytest's pythonpath=["src"]; put src
+    # first so ``import eden.api`` resolves like the main test process.
+    existing = os.environ.get("PYTHONPATH", "")
+    pythonpath = os.pathsep.join(
+        p for p in (str(SRC), str(REPO_ROOT), existing) if p
+    )
+    env = {
+        **os.environ,
+        "EDEN_TESTING": "1",
+        "PYTEST_CURRENT_TEST": "b26_b28",
+        "PYTHONPATH": pythonpath,
+    }
     full = "import json, sys\n" + code + "\nprint(json.dumps(out))"
     result = subprocess.run(
         [sys.executable, "-c", full],

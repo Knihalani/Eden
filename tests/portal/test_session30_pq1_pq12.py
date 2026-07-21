@@ -2,9 +2,12 @@
 
 Six audit items:
 
-* **PQ-1** — ``optimization/budget/page.tsx`` swaps raw
-  ``setInterval`` for ``usePolling({fetch, intervalMs, deps})``.
-* **PQ-2** — ``onboarding/_steps/wait.tsx`` same swap.
+* **PQ-1** — ``optimization/budget/page.tsx`` must not use raw
+  ``setInterval``; polling is via React Query ``refetchInterval``
+  (supersedes the earlier ``usePolling`` swap).
+* **PQ-2** — First-event wait surface must not use raw
+  ``setInterval`` (``WaitingForFirstEvent`` is CTA-driven; the old
+  ``onboarding/_steps/wait.tsx`` poller is gone).
 * **PQ-3** — ``components/ai-insights/ChatSidebar.tsx`` drops the
   dead ``eventSourceRef``, adds an ``AbortController``, passes
   ``signal`` to POST, and ``reader.cancel()`` on abort.
@@ -41,7 +44,9 @@ def _read(rel: str) -> str:
 
 
 class TestBudgetPageUsesPolling:
-    """``optimization/budget/page.tsx`` polls via ``usePolling``."""
+    """``optimization/budget/page.tsx`` polls via React Query, not
+    raw ``setInterval``.
+    """
 
     def test_no_raw_setInterval(self) -> None:
         source = _read(
@@ -49,36 +54,59 @@ class TestBudgetPageUsesPolling:
         )
         assert "setInterval" not in source, (
             "PQ-1 regression: budget page still uses raw setInterval "
-            "(should be usePolling)"
+            "(should poll via React Query refetchInterval)"
         )
 
     def test_calls_use_polling(self) -> None:
+        """Budget refresh uses ``refetchInterval`` on ``useOrgQuery``
+        (React Query pauses when the tab is hidden).
+        """
         source = _read(
             "src/app/(portal)/optimization/budget/page.tsx"
         )
-        assert "usePolling" in source, (
-            "PQ-1 regression: budget page must use usePolling hook"
+        assert "refetchInterval" in source, (
+            "PQ-1 regression: budget page must poll via "
+            "React Query refetchInterval"
+        )
+        assert "useOrgQuery" in source, (
+            "PQ-1 regression: budget page must load via useOrgQuery"
         )
 
 
 class TestOnboardingWaitUsesPolling:
-    """``onboarding/_steps/wait.tsx`` polls via ``usePolling``."""
+    """First-event wait is CTA-driven (no background poller).
+
+    The old ``onboarding/_steps/wait.tsx`` ``usePolling`` surface was
+    replaced by ``WaitingForFirstEvent`` — still must not reintroduce
+    raw ``setInterval``.
+    """
+
+    _WAIT = "src/components/onboarding/WaitingForFirstEvent.tsx"
 
     def test_no_raw_setInterval(self) -> None:
-        source = _read(
-            "src/app/(portal)/onboarding/_steps/wait.tsx"
-        )
+        path = _PORTAL_ROOT / self._WAIT
+        if not path.is_file():
+            pytest.skip("WaitingForFirstEvent removed; PQ-2 surface N/A")
+        source = _read(self._WAIT)
         assert "setInterval" not in source, (
-            "PQ-2 regression: wait.tsx still uses raw setInterval "
-            "(should be usePolling)"
+            "PQ-2 regression: WaitingForFirstEvent still uses raw "
+            "setInterval (must stay CTA-driven / no background poll)"
         )
 
     def test_calls_use_polling(self) -> None:
-        source = _read(
-            "src/app/(portal)/onboarding/_steps/wait.tsx"
+        """Wait surface is manual ``onCheck`` — no ``usePolling`` /
+        ``setInterval`` poller.
+        """
+        path = _PORTAL_ROOT / self._WAIT
+        if not path.is_file():
+            pytest.skip("WaitingForFirstEvent removed; PQ-2 surface N/A")
+        source = _read(self._WAIT)
+        assert "usePolling" not in source, (
+            "PQ-2 regression: WaitingForFirstEvent must not poll via "
+            "usePolling (CTA onCheck is intentional)"
         )
-        assert "usePolling" in source, (
-            "PQ-2 regression: wait.tsx must use usePolling hook"
+        assert "onCheck" in source, (
+            "PQ-2 regression: WaitingForFirstEvent must expose onCheck"
         )
 
 

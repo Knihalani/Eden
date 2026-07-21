@@ -20,7 +20,7 @@ FastAPI pattern from the D.12.1-3 tests).
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
@@ -65,11 +65,11 @@ async def _fake_user() -> dict:
 
 
 async def _fake_member() -> dict:
-    return {"id": "u-1", "role": "member"}
+    return {"id": "u-1", "role": "member", "org_id": "org-1"}
 
 
 async def _fake_admin() -> dict:
-    return {"id": "u-1", "role": "admin"}
+    return {"id": "u-1", "role": "admin", "org_id": "org-1"}
 
 
 @pytest.fixture
@@ -84,12 +84,16 @@ def voice_client(mock_postgres_client: MagicMock) -> TestClient:
     )
     app.dependency_overrides[get_current_user] = _fake_user
     app.dependency_overrides[require_org_member] = _fake_member
-    app.dependency_overrides[require_path_org_access] = lambda: "org_test"
+    app.dependency_overrides[require_path_org_access] = lambda: "org-1"
     app.dependency_overrides[require_org_admin] = _fake_admin
     try:
-        client = TestClient(app)
-        client.cookies.set("authorization", "test-token-for-default-deny")
-        yield client
+        with patch(
+            "eden.api.routes.observability_voice.resolve_eden_org_id",
+            new=AsyncMock(side_effect=lambda oid: oid),
+        ):
+            client = TestClient(app)
+            client.cookies.set("authorization", "test-token-for-default-deny")
+            yield client
     finally:
         app.dependency_overrides.clear()
 

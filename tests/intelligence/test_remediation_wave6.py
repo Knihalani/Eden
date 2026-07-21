@@ -185,11 +185,24 @@ async def test_patch_trigger_disabled_when_flag_off() -> None:
     assert res["status"] == "disabled"
 
 
+def _patchable_issue(**kw: Any) -> Issue:
+    """Issue that clears the cheap value gates (confidence + code action)."""
+    triage = kw.pop(
+        "triage_result",
+        {
+            "confidence": 0.9,
+            "recommended_action": "code_change",
+            "summary": "fix the tool path",
+        },
+    )
+    return _issue(agent_id="agent-a", stumble_count=5, triage_result=triage, **kw)
+
+
 @pytest.mark.asyncio
 async def test_patch_trigger_generates_when_enabled() -> None:
     from eden.improvement import issue_patch_trigger as ipt
 
-    issue = _issue(agent_id="agent-a", stumble_count=5)
+    issue = _patchable_issue()
     repo = MagicMock()
     repo.get_issue = AsyncMock(return_value=issue)
     repo.list_stumbles = AsyncMock(return_value=[])
@@ -230,6 +243,16 @@ async def test_patch_trigger_generates_when_enabled() -> None:
         ipt, "_resolve_repo_id", AsyncMock(return_value="repo-conn-1")
     ), patch.object(
         ipt, "_find_open_plan", AsyncMock(return_value=None)
+    ), patch.object(
+        ipt, "_extract_linker_inputs", AsyncMock(return_value={
+            "stack_trace": None,
+            "candidate_files": [],
+            "trace_id": None,
+            "request_path": None,
+        })
+    ), patch(
+        "eden.improvement.plans_repo.is_rejection_active",
+        AsyncMock(return_value=False),
     ), patch(
         "eden.improvement.plans_repo.create_plan",
         AsyncMock(return_value={"id": "plan-9"}),
@@ -255,7 +278,7 @@ async def test_patch_trigger_generates_when_enabled() -> None:
 async def test_patch_trigger_suppresses_duplicate_open() -> None:
     from eden.improvement import issue_patch_trigger as ipt
 
-    issue = _issue(agent_id="agent-a", stumble_count=5)
+    issue = _patchable_issue()
     repo = MagicMock()
     repo.get_issue = AsyncMock(return_value=issue)
 

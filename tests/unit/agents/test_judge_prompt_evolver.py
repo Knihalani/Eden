@@ -134,6 +134,21 @@ def _patch_dependencies(monkeypatch, pv: _FakePromptVersions, pg: _FakePostgres,
 
     llm = MagicMock()
     llm.call = MagicMock(return_value=_fake_response(llm_content))
+
+    # Production calls ``route_sync`` (ModelRouter), not ``llm.call``
+    # directly. Bypass the router so short fixture prompts are not
+    # rejected as ``incomplete`` (expected_min_length default 50).
+    def _route_sync(agent, prompt, **kwargs):
+        return llm.call(
+            agent=agent,
+            prompt=prompt,
+            slot=kwargs.get("slot", "reasoning"),
+            system_prompt=kwargs.get("system_prompt"),
+            model=kwargs.get("model"),
+            max_tokens=kwargs.get("max_tokens"),
+        )
+
+    monkeypatch.setattr("eden.llm.internal_router.route_sync", _route_sync)
     return llm
 
 

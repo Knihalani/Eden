@@ -180,6 +180,32 @@ async def test_redis_incr_used_when_step_omitted() -> None:
         async def expire(self, key: str, seconds: int) -> None:
             pass
 
+        def pipeline(self, transaction: bool = False) -> "_Pipe":
+            return _Pipe(self)
+
+    class _Pipe:
+        def __init__(self, redis: FakeRedis) -> None:
+            self._redis = redis
+            self._ops: list[tuple[str, tuple]] = []
+
+        def incr(self, key: str) -> "_Pipe":
+            self._ops.append(("incr", (key,)))
+            return self
+
+        def expire(self, key: str, ttl: int) -> "_Pipe":
+            self._ops.append(("expire", (key, ttl)))
+            return self
+
+        async def execute(self) -> list:
+            out: list = []
+            for op, args in self._ops:
+                if op == "incr":
+                    out.append(await self._redis.incr(args[0]))
+                elif op == "expire":
+                    await self._redis.expire(args[0], args[1])
+                    out.append(True)
+            return out
+
     event = SimpleNamespace(
         event_type="llm.completion",
         trace_id="tr_redis",

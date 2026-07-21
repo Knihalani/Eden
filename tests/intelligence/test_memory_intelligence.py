@@ -555,7 +555,9 @@ async def test_reaver_flags_near_duplicate(
             ]
         if "DISTINCT memory_id" in query:
             return [{"memory_id": target}]
-        if "jsonb_each" in query:
+        # Corpus for near-dup scan comes from telemetry_events
+        # (not jsonb_each — see `_fetch_memories_metadata_for_org`).
+        if "telemetry_events" in query and "memory_id" in query:
             return [
                 {"memory_id": target, "memory_text": text},
                 {"memory_id": other, "memory_text": text},

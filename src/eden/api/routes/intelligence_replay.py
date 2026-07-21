@@ -23,6 +23,7 @@ See ``docs/observability-gap/01-trace-replay.md``.
 
 from __future__ import annotations
 
+from eden.api.utils.redact import redact_all
 import logging
 from typing import Any
 
@@ -161,7 +162,7 @@ async def create_replay_session(
             raise HTTPException(status_code=404, detail="Organization not found") from exc
         if "unique" in msg or "duplicate" in msg:
             raise HTTPException(status_code=409, detail="Replay session conflict") from exc
-        logger.warning("create_replay_session failed: %s", exc)
+        logger.warning("create_replay_session failed: %s", redact_all(str(exc)))
         raise HTTPException(status_code=503, detail="Failed to create replay session") from exc
 
 
