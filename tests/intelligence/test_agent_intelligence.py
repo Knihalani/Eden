@@ -818,6 +818,8 @@ def agents_app() -> FastAPI:
     # stub path-org resolution so smoke tests don't need a real users row.
     app.dependency_overrides[require_path_org_access] = lambda: "org_x"
     mod = importlib.import_module("eden.api.routes.intelligence_agents")
+    if hasattr(mod, "_require_path_org"):
+        app.dependency_overrides[mod._require_path_org] = lambda: "org_x"
     app.include_router(mod.router)
     return app
 

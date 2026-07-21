@@ -647,6 +647,8 @@ def decision_app() -> FastAPI:
     app.dependency_overrides[require_org_member] = lambda: {"sub": "test-user", "org_id": "org_test"}
     app.dependency_overrides[require_path_org_access] = lambda: "org_x"
     mod = importlib.import_module("eden.api.routes.intelligence_replay")
+    if hasattr(mod, "_require_path_org"):
+        app.dependency_overrides[mod._require_path_org] = lambda: "org_x"
     app.include_router(mod.router)
     return app
 

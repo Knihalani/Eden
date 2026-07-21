@@ -9,7 +9,7 @@ from fastapi import HTTPException
 from httpx import ASGITransport, AsyncClient
 from fastapi import FastAPI
 
-from eden.api.deps import get_current_user, resolve_path_org_access
+from eden.api.deps import get_current_user, resolve_path_org_access, require_path_org_access
 from eden.api.routes import replay
 
 
@@ -129,6 +129,7 @@ async def test_list_alerts_returns_empty_200_for_member(monkeypatch):
     application.dependency_overrides[get_current_user] = lambda: {
         "user_id": "user-1",
     }
+    application.dependency_overrides[require_path_org_access] = lambda: "org_test"
     application.dependency_overrides[replay.require_path_org_access] = (
         lambda: "org-eden-1"
     )
@@ -171,6 +172,7 @@ async def test_list_alerts_clerk_path_uses_eden_uuid_not_500(monkeypatch):
     eden = "f4dc4575-ebd5-47a2-8541-42b9e41c1148"
     application = FastAPI()
     application.dependency_overrides[get_current_user] = lambda: {"user_id": "user-1"}
+    application.dependency_overrides[require_path_org_access] = lambda: "org_test"
     application.dependency_overrides[replay.require_path_org_access] = lambda: eden
     application.include_router(replay.router)
 

@@ -173,13 +173,14 @@ def _client() -> Any:
     from fastapi import FastAPI
     from fastapi.testclient import TestClient
 
-    from eden.api.deps import get_current_user
+    from eden.api.deps import get_current_user, require_path_org_access
 
     app = FastAPI()
     app.dependency_overrides[get_current_user] = lambda: {
         "sub": "u1",
         "org_id": "org_test",
     }
+    app.dependency_overrides[require_path_org_access] = lambda: "org_test"
     import eden.api.routes.autonomy as mod
 
     async def _flag_on() -> None:
@@ -191,6 +192,8 @@ def _client() -> Any:
         for d in r.dependant.dependencies:
             if d.call.__name__ == "_dependency":
                 app.dependency_overrides[d.call] = _flag_on
+    if hasattr(mod, "_require_path_org"):
+        app.dependency_overrides[mod._require_path_org] = lambda: "org_test"
     app.include_router(mod.router)
     return TestClient(app)
 

@@ -75,6 +75,8 @@ def test_app() -> FastAPI:
     app.dependency_overrides[require_path_org_access] = lambda: "org_x"
     for mod_name in ROUTER_MODULES:
         mod = importlib.import_module(mod_name)
+        if hasattr(mod, "_require_path_org"):
+            app.dependency_overrides[mod._require_path_org] = lambda: "org_x"
         app.include_router(mod.router)
     return app
 

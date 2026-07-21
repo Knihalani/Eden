@@ -851,13 +851,16 @@ def cat1_test_app(test_settings, monkeypatch) -> FastAPI:
     # or Mock) will see the flag.
     import eden.config
     eden.config.get_settings.cache_clear()
-    from eden.api.deps import get_current_user
+    from eden.api.deps import get_current_user, require_path_org_access
     app = FastAPI(title="eden-cat1-test")
     app.dependency_overrides[get_current_user] = lambda: {
         "sub": "test",
         "org_id": "org_test",
     }
+    app.dependency_overrides[require_path_org_access] = lambda: "org_test"
     mod = importlib.import_module("eden.api.routes.intelligence_replay")
+    if hasattr(mod, "_require_path_org"):
+        app.dependency_overrides[mod._require_path_org] = lambda: "org_test"
     app.include_router(mod.router)
     return app
 

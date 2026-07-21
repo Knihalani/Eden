@@ -768,7 +768,7 @@ class TestMetricStudioHook:
 
 def _build_metric_studio_app() -> FastAPI:
     """A minimal FastAPI app for the Cat 21 router smoke tests."""
-    from eden.api.deps import get_current_user, require_org_admin
+    from eden.api.deps import get_current_user, require_org_admin, require_path_org_access
     from eden.api.routes import intelligence_metric_studio
 
     app = FastAPI()
@@ -778,6 +778,7 @@ def _build_metric_studio_app() -> FastAPI:
         "sub": "test-user",
         "org_id": "org_test",
     }
+    app.dependency_overrides[require_path_org_access] = lambda: "org_test"
     # The admin dependency returns a fake admin record.
     app.dependency_overrides[require_org_admin] = lambda: {
         "id": "org_test",

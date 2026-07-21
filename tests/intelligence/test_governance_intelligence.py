@@ -1217,6 +1217,8 @@ def gov_test_app() -> FastAPI:
     mod = importlib.import_module(
         "eden.api.routes.intelligence_governance"
     )
+    if hasattr(mod, "_require_path_org"):
+        app.dependency_overrides[mod._require_path_org] = lambda: "org_test"
     app.include_router(mod.router)
     return app
 

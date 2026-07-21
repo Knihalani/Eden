@@ -894,7 +894,7 @@ def _build_experiments_app() -> FastAPI:
     """A minimal FastAPI app for the Cat 12 router smoke
     tests. Mirrors the pattern in
     :mod:`tests.intelligence.test_metric_studio`."""
-    from eden.api.deps import get_current_user
+    from eden.api.deps import get_current_user, require_path_org_access
     from eden.api.routes import intelligence_experiments
 
     app = FastAPI()
@@ -902,6 +902,7 @@ def _build_experiments_app() -> FastAPI:
         "sub": "test-user",
         "org_id": "org_test",
     }
+    app.dependency_overrides[require_path_org_access] = lambda: "org_test"
     app.include_router(intelligence_experiments.router)
     return app
 
