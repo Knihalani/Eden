@@ -363,10 +363,13 @@ class TestEndToEndEmit:
                     name="app", level=logging.INFO, pathname="/x", lineno=1,
                     msg="user logged in", args=(), exc_info=None,
                 )
-                handler.emit(record)
-                # Drain whatever was queued.
-                await handler._ingest_batch(handler._queue)
-                handler._queue.clear()
+                # Suppress auto-drain scheduling so this test owns the
+                # single ingest (avoids double-fire with call_soon).
+                with patch.object(handler, "_drain_async_safe"):
+                    handler.emit(record)
+                    assert handler._queue, "emit must enqueue the event"
+                    await handler._ingest_batch(handler._queue)
+                    handler._queue.clear()
 
         asyncio.run(run())
         # Exactly one ingest call.

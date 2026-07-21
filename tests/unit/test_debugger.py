@@ -92,15 +92,18 @@ class FakePg:
             if r["trace_id"] == args[0]
             and r["event_type"] == "debugger.checkpoint"
         ]
+        # list_for_trace: (trace_id, tenant_id) — ORDER BY mentions step_number
+        # get_at_step:    (trace_id, step_number, tenant_id)
         if "tenant_id" in sql and len(args) > 1:
-            tenant = args[1]
+            tenant = args[2] if len(args) > 2 else args[1]
             rows = [r for r in rows if r.get("tenant_id") == tenant]
         out = [{"payload": r["payload"]} for r in rows]
-        # get_at_step: filter by step_number (args[1]) and LIMIT 1.
-        if "step_number" in sql and "tenant_id" not in sql and len(args) > 1:
+        # Equality filter only present on get_at_step (3 args).
+        if "step_number" in sql and len(args) > 2:
+            step = args[1]
             out = [
                 r for r in out
-                if r["payload"].get("step_number") == args[1]
+                if r["payload"].get("step_number") == step
             ][:1]
         return out
 

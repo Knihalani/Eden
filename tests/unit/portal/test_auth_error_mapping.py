@@ -156,19 +156,22 @@ def test_real_world_error_messages():
 
 
 def test_actual_use_org_hook_uses_same_mapping():
-    """Read the live use-org.tsx file and confirm its catch block
-    uses status + raw-detail branches (Wave 4 sanitize-race fix).
+    """Confirm status→copy mapping lives in org-load-error.ts and
+    use-org.tsx still delegates via classifyOrgLoadError.
     """
     from pathlib import Path
 
     root = Path(__file__).resolve().parents[3]
+    org_load = (
+        root / "clients" / "portal" / "src" / "lib" / "org-load-error.ts"
+    ).read_text()
     use_org = (
         root / "clients" / "portal" / "src" / "hooks" / "use-org.tsx"
     ).read_text()
     use_me = (
         root / "clients" / "portal" / "src" / "hooks" / "use-me-query.ts"
     ).read_text()
-    # Status-keyed auth branches + provision-race helper must remain.
+    # Status-keyed auth branches live in the shared classifier.
     for token in [
         "status === 401 || status === 403",
         "isUserNotFoundRace",
@@ -176,7 +179,8 @@ def test_actual_use_org_hook_uses_same_mapping():
         "status === 429",
         "status >= 500",
     ]:
-        assert token in use_org, f"use-org.tsx missing {token!r} branch"
+        assert token in org_load, f"org-load-error.ts missing {token!r} branch"
+    assert "classifyOrgLoadError" in use_org
     assert "user\\s*not\\s*found" in use_me
     assert "isUserNotFoundRace" in use_me
 
