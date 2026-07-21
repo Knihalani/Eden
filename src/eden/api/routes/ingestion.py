@@ -31,6 +31,7 @@ tier or by API-key. Returns 429 on cap exhaustion.
 
 from __future__ import annotations
 
+from eden.api.utils.redact import redact_all
 import logging
 import time
 from collections import OrderedDict, deque
@@ -298,7 +299,7 @@ async def _ingest_handler(
     except (ValueError, TypeError, UnicodeDecodeError, KeyError) as exc:
         # Client/payload faults (e.g. invalid gzip, unexpected shapes)
         # must be 4xx — never 500.
-        logger.warning("ingest decode client error: %s", exc)
+        logger.warning("ingest decode client error: %s", redact_all(str(exc)))
         raise HTTPException(
             status_code=400,
             detail=str(exc) or "Invalid ingest payload",
@@ -307,7 +308,7 @@ async def _ingest_handler(
         # True infra / unexpected decoder faults → 503 so SDKs retry.
         from eden.api.utils.safe_error import safe_detail
 
-        logger.exception("ingest decode failed: %s", exc)
+        logger.exception("ingest decode failed: %s", redact_all(str(exc)))
         raise HTTPException(
             status_code=503,
             detail=safe_detail(
@@ -334,7 +335,7 @@ async def _ingest_handler(
     except Exception as exc:
         from eden.api.utils.safe_error import safe_detail
 
-        logger.exception("ingest write failed: %s", exc)
+        logger.exception("ingest write failed: %s", redact_all(str(exc)))
         raise HTTPException(
             status_code=503,
             detail=safe_detail(

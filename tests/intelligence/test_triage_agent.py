@@ -450,6 +450,29 @@ async def test_manual_rate_limit_counter() -> None:
 
     counter = {"n": 0}
 
+    class _Pipe:
+        def __init__(self, redis: "_R") -> None:
+            self._redis = redis
+            self._ops: list[tuple[str, tuple]] = []
+
+        def incr(self, key: str) -> "_Pipe":
+            self._ops.append(("incr", (key,)))
+            return self
+
+        def expire(self, key: str, ttl: int) -> "_Pipe":
+            self._ops.append(("expire", (key, ttl)))
+            return self
+
+        async def execute(self) -> list:
+            out: list = []
+            for op, args in self._ops:
+                if op == "incr":
+                    out.append(await self._redis.incr(args[0]))
+                elif op == "expire":
+                    await self._redis.expire(args[0], args[1])
+                    out.append(True)
+            return out
+
     class _R:
         async def incr(self, key: str) -> int:
             counter["n"] += 1
@@ -457,6 +480,9 @@ async def test_manual_rate_limit_counter() -> None:
 
         async def expire(self, key: str, ttl: int) -> None:
             return None
+
+        def pipeline(self, transaction: bool = False) -> _Pipe:
+            return _Pipe(self)
 
     agent = TriageAgent(repo=MagicMock())
     with patch("eden.storage.redis.get_redis_client", AsyncMock(return_value=_R())):

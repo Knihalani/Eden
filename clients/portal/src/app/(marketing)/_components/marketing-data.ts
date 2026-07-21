@@ -113,8 +113,8 @@ import OpenAI from "openai";
 import { configure, instrument, getDefaultClient } from "@eden-ai/sdk";
 
 configure({
-  orgId: process.env.EDEN_ORG_ID!,
-  apiKey: process.env.EDEN_API_KEY!,
+  orgId: process.env.EDEN_ORG_ID ?? "your-org-id",
+  apiKey: process.env.EDEN_API_KEY ?? "your-api-key",
 });
 
 const { wrapOpenAI } = instrument();

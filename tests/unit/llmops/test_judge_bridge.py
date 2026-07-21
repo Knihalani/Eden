@@ -2,7 +2,6 @@
 ``ProductionMonitor.evaluate_hallucination``."""
 
 from datetime import UTC
-from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -91,8 +90,12 @@ async def test_evaluate_hallucination_heuristic_only_when_toggle_off(monkeypatch
 
 @pytest.mark.asyncio
 async def test_evaluate_hallucination_llm_judge_when_toggle_on(monkeypatch):
-    """When the toggle is on, the LLM judge is called and its score
-    is the primary confidence."""
+    """Toggle on: inline LLM path is retired; heuristic + note returned.
+
+    Production scoring moved to UnifiedJudge; the monitor no longer
+    calls OpenRouter directly when ``production_monitor_use_llm_judge``
+    is True.
+    """
     from eden.config import get_settings
     from eden.llmops.production_monitor import ProductionMonitor
     settings = get_settings()
@@ -100,34 +103,25 @@ async def test_evaluate_hallucination_llm_judge_when_toggle_on(monkeypatch):
         settings, "production_monitor_use_llm_judge", True
     )
 
-    # Stub the LLM client's call() to return a fixed response.
-    class _FakeResp:
-        content = '{"score": 0.42, "rationale": "looks decent"}'
-        model = "claude-haiku"
-    fake_client = MagicMock()
-    fake_client.call = MagicMock(return_value=_FakeResp())
-
-    with patch(
-        "eden.llm.client.OpenRouterClient",
-        return_value=fake_client,
-    ):
-        pm = ProductionMonitor()
-        out = await pm.evaluate_hallucination(
-            generated_code="import os; print('hi')",
-            spec="print hello",
-        )
-    # The LLM score (0.42) becomes the primary confidence.
-    assert abs(out["confidence"] - 0.42) < 0.01
-    assert out["rationale"] == "looks decent"
-    assert out["judge_model"] == "claude-haiku"
-    # Heuristic score is preserved for transparency.
+    pm = ProductionMonitor()
+    out = await pm.evaluate_hallucination(
+        generated_code="import os; print('hi')",
+        spec="print hello",
+    )
+    assert 0.0 <= out["confidence"] <= 1.0
     assert "heuristic_score" in out
+    assert out.get("note") == "llm_judge_path_removed"
+    assert "judge_model" not in out
 
 
 @pytest.mark.asyncio
 async def test_evaluate_hallucination_llm_failure_falls_back(monkeypatch):
-    """If the LLM judge throws, the heuristic result is returned with
-    a ``judge_error`` field — the pipeline never blocks."""
+    """Toggle on with no inline LLM: heuristic still returns safely.
+
+    The retired LLM path never blocks the pipeline; failures that used
+    to surface as ``judge_error`` / ``no_score`` are no longer possible
+    because OpenRouter is not invoked here.
+    """
     from eden.config import get_settings
     from eden.llmops.production_monitor import ProductionMonitor
     settings = get_settings()
@@ -135,25 +129,11 @@ async def test_evaluate_hallucination_llm_failure_falls_back(monkeypatch):
         settings, "production_monitor_use_llm_judge", True
     )
 
-    # Force the LLM call to raise.
-    fake_client = MagicMock()
-    fake_client.call = MagicMock(side_effect=RuntimeError("LLM down"))
-
-    with patch(
-        "eden.llm.client.OpenRouterClient",
-        return_value=fake_client,
-    ):
-        pm = ProductionMonitor()
-        out = await pm.evaluate_hallucination(
-            generated_code="import os",
-            spec="print hi",
-        )
-    # Should still have a confidence (the heuristic value).
+    pm = ProductionMonitor()
+    out = await pm.evaluate_hallucination(
+        generated_code="import os",
+        spec="print hi",
+    )
     assert 0.0 <= out["confidence"] <= 1.0
-    # The judge catches the LLM error itself and returns a 0.5 with
-    # a no_score rationale. Production monitor surfaces that as
-    # ``rationale`` so the pipeline never blocks.
-    assert "judge_error" in out.get("rationale", "") or "no_score" in out.get("rationale", "")
-    # The judge model is still reported even when the call errored —
-    # it's the LLM slot, not the call result.
-    # (The test only asserts the failure path is graceful.)
+    assert out.get("note") == "llm_judge_path_removed"
+    assert "heuristic_score" in out

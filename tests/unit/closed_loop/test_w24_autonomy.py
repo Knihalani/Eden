@@ -320,6 +320,30 @@ async def test_record_spend_tags_cost_event() -> None:
     redis.incrbyfloat = AsyncMock(return_value=1.25)
     redis.expire = AsyncMock()
 
+    class _Pipe:
+        def __init__(self) -> None:
+            self._ops: list[tuple[str, tuple]] = []
+
+        def incrbyfloat(self, key: str, amount: float) -> "_Pipe":
+            self._ops.append(("incrbyfloat", (key, amount)))
+            return self
+
+        def expire(self, key: str, ttl: int) -> "_Pipe":
+            self._ops.append(("expire", (key, ttl)))
+            return self
+
+        async def execute(self) -> list:
+            out: list = []
+            for op, args in self._ops:
+                if op == "incrbyfloat":
+                    out.append(await redis.incrbyfloat(args[0], args[1]))
+                elif op == "expire":
+                    await redis.expire(args[0], args[1])
+                    out.append(True)
+            return out
+
+    redis.pipeline = MagicMock(return_value=_Pipe())
+
     with patch.object(ap, "_redis", new=AsyncMock(return_value=redis)), patch(
         "eden.llmops.cost_ledger.record_cost_event", new=_capture
     ):

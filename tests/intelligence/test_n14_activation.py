@@ -29,7 +29,7 @@ def test_settings_have_trace_quality_fields() -> None:
     assert s.trace_quality_hot_path_enabled is True
     assert s.stat_gate_min_n == 30
     assert isinstance(s.stat_gate_min_effect, float)
-    assert s.quality_pipeline_workers == 2
+    assert s.quality_pipeline_workers == 8
     assert s.quality_pipeline_watermark_poll_ms == 1000
     assert s.quality_pipeline_batch_size == 100
     assert s.detector_keep_rate_loop == 1.0

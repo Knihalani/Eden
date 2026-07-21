@@ -704,10 +704,16 @@ def _clhf_examples(n: int = 3) -> list[dict[str, Any]]:
 
 
 def _patched_openrouter(content: str, *, module: str = "clhf"):
-    """Return a context-manager that patches the LLM client
-    in the given service module to return ``content`` for
-    every call. ``module`` is the bare module name
-    (``"clhf"`` or ``"multimodal"``)."""
+    """Return a context-manager that patches the LLM path
+    used by the given service module.
+
+    Services route through ``eden.llm.internal_router.route_sync``
+    (not ``OpenRouterClient.call`` directly). We still stub
+    ``OpenRouterClient`` so client construction succeeds, and
+    patch ``route_sync`` so the judge response is deterministic.
+    """
+    from contextlib import ExitStack, contextmanager
+
     from eden.llm.client import LLMResponse, UsageStats
 
     resp = LLMResponse(
@@ -716,10 +722,25 @@ def _patched_openrouter(content: str, *, module: str = "clhf"):
         model="test-model",
         finish_reason="stop",
     )
-    return patch(
-        f"eden.evaluation.eval_intel.{module}.OpenRouterClient",
-        return_value=MagicMock(call=MagicMock(return_value=resp)),
-    )
+
+    @contextmanager
+    def _cm():
+        with ExitStack() as stack:
+            stack.enter_context(
+                patch(
+                    f"eden.evaluation.eval_intel.{module}.OpenRouterClient",
+                    return_value=MagicMock(call=MagicMock(return_value=resp)),
+                )
+            )
+            stack.enter_context(
+                patch(
+                    "eden.llm.internal_router.route_sync",
+                    return_value=resp,
+                )
+            )
+            yield
+
+    return _cm()
 
 
 def _patched_openrouter_sequence(contents: list[str], *, module: str = "clhf"):
@@ -2141,12 +2162,11 @@ class TestPackageContract:
         assert v1 is v2  # cached after first access
 
     def test_versioner_shim_re_exports(self) -> None:
-        """The ``versioner.py`` back-compat shim still
-        re-exports the 13 service classes."""
+        """EvalVersioner is lazy-exported from the package root."""
         from eden.evaluation.eval_intel import EvalVersioner
-        from eden.evaluation.eval_intel import versioner as shim
+        from eden.evaluation.eval_intel.versioning import EvalVersioner as Direct
 
-        assert shim.EvalVersioner is EvalVersioner
+        assert EvalVersioner is Direct
 
 
 # ─── 16. Route-level smoke tests ─────────────────────────────────────

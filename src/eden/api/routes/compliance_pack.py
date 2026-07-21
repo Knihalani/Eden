@@ -58,7 +58,7 @@ async def verify_chain(
     try:
         report = await _ledger.verify_chain(org_id, agent_id=agent_id, limit=limit)
     except Exception as exc:
-        logger.warning("compliance verify failed: %s", exc)
+        logger.warning("compliance verify failed: %s", redact_all(str(exc)))
         raise HTTPException(status_code=503, detail="Audit ledger unavailable") from exc
     return _ok("agent_audit_ledger_verify", report)
 
@@ -75,7 +75,7 @@ async def query_ledger(
             org_id, agent_id=agent_id, event_type=event_type, limit=limit
         )
     except Exception as exc:
-        logger.warning("compliance ledger query failed: %s", exc)
+        logger.warning("compliance ledger query failed: %s", redact_all(str(exc)))
         raise HTTPException(status_code=503, detail="Audit ledger unavailable") from exc
     return _ok("agent_audit_ledger", {"events": events, "count": len(events)})
 
@@ -94,3 +94,4 @@ async def export_agent_pack(
         framework=body.framework,
     )
     return result
+from eden.api.utils.redact import redact_all

@@ -47,12 +47,18 @@ class _StubPostgresClient:
                     framework = a
             limit = kwargs.get("limit", 50)
             offset = kwargs.get("offset", 0)
+            # Positional LIMIT/OFFSET follow optional filter args.
+            trailing = [a for a in args[1:] if isinstance(a, int)]
+            if len(trailing) >= 2:
+                limit, offset = trailing[-2], trailing[-1]
+            elif len(trailing) == 1:
+                limit = trailing[0]
             rows = [
-                {"agent_id": k[1], "name": v["name"], "framework": v.get("framework"),
+                {"agent_id": aid, "name": v["name"], "framework": v.get("framework"),
                      "repo_url": v.get("repo_url"), "last_seen_at": v.get("last_seen_at", "2026-06-09T12:00:00Z"),
                      "created_at": v.get("created_at", "2026-06-09T12:00:00Z"),
                      "updated_at": v.get("updated_at", "2026-06-09T12:00:00Z")}
-                for (org_id, k), v in self.agents.items()
+                for (org_id, aid), v in self.agents.items()
                 if org_id == org
                 and (framework is None or v.get("framework") == framework)
                 and (name_substr is None or name_substr.strip("%").lower() in v["name"].lower())
@@ -85,15 +91,29 @@ class _StubPostgresClient:
             return {"p50": pct(0.5), "p95": pct(0.95), "p99": pct(0.99), "cost": cost}
         # The remaining branches all have ``GROUP BY 1``. Dispatch
         # by the most specific column in the SELECT list.
-        if "error->>'type'" in q and "sample_trace_ids" in q:
-            # Top failure modes (looks for error type, returns sample_trace_ids)
+        if "sample_trace_ids" in q and (
+            "error_type" in q or "error->>'type'" in q or "attributes->>'error'" in q
+        ):
+            # Top failure modes (error_type / attributes error / legacy error JSON)
             org = args[0] if args else None
             counts: dict[str, dict[str, Any]] = {}
             for e in self.events:
-                if e.get("tenant_id") != org or not e.get("error"):
+                if e.get("tenant_id") != org:
                     continue
-                err = e.get("error") or {}
-                name = err.get("type") or err.get("category") or e.get("event_type")
+                err = e.get("error")
+                attrs = e.get("attributes") or {}
+                if not (e.get("error_type") or err or attrs.get("error")):
+                    continue
+                if isinstance(err, dict):
+                    name = (
+                        e.get("error_type")
+                        or err.get("type")
+                        or err.get("category")
+                        or attrs.get("error")
+                        or e.get("event_type")
+                    )
+                else:
+                    name = e.get("error_type") or attrs.get("error") or e.get("event_type")
                 if name not in counts:
                     counts[name] = {"count": 0, "sample_trace_ids": []}
                 counts[name]["count"] += 1
@@ -330,9 +350,10 @@ def app():
 
     from eden.api.deps import get_current_user, require_org_member, require_path_org_access
 
-    def _override_user():
+    async def _override_user():
         return {
             "user_id": "u-1",
+            "id": "u-1",
             "org_id": "org-test",
             "org_ids": ["org-test"],
             "is_superuser": False,
@@ -351,9 +372,14 @@ def app():
         # the caller is a member of ``org-test``.
         return {"org_id": org_id, "role": "admin"}
 
+    async def _override_path_org():
+        return "org-test"
+
     test_app.dependency_overrides[get_current_user] = _override_user
     test_app.dependency_overrides[require_org_member] = _override_org_member
-    test_app.dependency_overrides[require_path_org_access] = lambda: "org_test"
+    test_app.dependency_overrides[require_path_org_access] = _override_path_org
+    test_app.dependency_overrides[agents.require_path_org_access] = _override_path_org
+    test_app.dependency_overrides[observability.require_path_org_access] = _override_path_org
 
     stub = _StubPostgresClient()
     # Seed events so /summary has something to aggregate

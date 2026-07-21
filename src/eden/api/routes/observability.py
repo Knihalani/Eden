@@ -256,12 +256,12 @@ async def ingest_telemetry_event(
             headers={"Retry-After": "5"},
         ) from exc
     except (ValueError, TypeError, KeyError) as exc:
-        logger.warning("Telemetry ingest client error for org %s: %s", org_id, exc)
+        logger.warning("Telemetry ingest client error for org %s: %s", org_id, redact_all(str(exc)))
         raise HTTPException(status_code=400, detail=str(exc) or "Invalid telemetry event") from exc
     except Exception as exc:
         from eden.api.utils.safe_error import safe_detail
 
-        logger.warning("Telemetry ingest failed for org %s: %s", org_id, exc)
+        logger.warning("Telemetry ingest failed for org %s: %s", org_id, redact_all(str(exc)))
         raise HTTPException(
             status_code=503,
             detail=safe_detail(
@@ -294,14 +294,14 @@ async def ingest_telemetry_batch(
             headers={"Retry-After": "5"},
         ) from exc
     except (ValueError, TypeError, KeyError) as exc:
-        logger.warning("Telemetry batch ingest client error for org %s: %s", org_id, exc)
+        logger.warning("Telemetry batch ingest client error for org %s: %s", org_id, redact_all(str(exc)))
         raise HTTPException(
             status_code=400, detail=str(exc) or "Invalid telemetry batch"
         ) from exc
     except Exception as exc:
         from eden.api.utils.safe_error import safe_detail
 
-        logger.warning("Telemetry batch ingest failed for org %s: %s", org_id, exc)
+        logger.warning("Telemetry batch ingest failed for org %s: %s", org_id, redact_all(str(exc)))
         raise HTTPException(
             status_code=503,
             detail=safe_detail(

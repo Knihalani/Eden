@@ -20,7 +20,11 @@ def _settings(**kw: Any) -> Any:
 
 
 class _Redis:
-    """Fake redis where SET NX always succeeds and INCR counts up."""
+    """Fake redis where SET NX always succeeds and INCR counts up.
+
+    Storm-cap code uses ``pipeline().incr().expire().execute()``;
+    the fake mirrors that so rate-cap tests exercise the real path.
+    """
 
     def __init__(self) -> None:
         self.counters: dict[str, int] = {}
@@ -38,6 +42,35 @@ class _Redis:
 
     async def expire(self, key: str, ttl: int) -> None:
         return None
+
+    def pipeline(self, transaction: bool = False) -> "_RedisPipeline":
+        return _RedisPipeline(self)
+
+
+class _RedisPipeline:
+    """Minimal async pipeline matching redis.asyncio pipe.incr/expire/execute."""
+
+    def __init__(self, redis: _Redis) -> None:
+        self._redis = redis
+        self._ops: list[tuple[str, tuple]] = []
+
+    def incr(self, key: str) -> "_RedisPipeline":
+        self._ops.append(("incr", (key,)))
+        return self
+
+    def expire(self, key: str, ttl: int) -> "_RedisPipeline":
+        self._ops.append(("expire", (key, ttl)))
+        return self
+
+    async def execute(self) -> list[Any]:
+        out: list[Any] = []
+        for op, args in self._ops:
+            if op == "incr":
+                out.append(await self._redis.incr(args[0]))
+            elif op == "expire":
+                await self._redis.expire(args[0], args[1])
+                out.append(True)
+        return out
 
 
 @pytest.mark.asyncio

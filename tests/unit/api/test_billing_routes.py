@@ -87,6 +87,8 @@ def app(monkeypatch):
     # Mock settings to have a stripe_secret_key (lazy get_settings path).
     fake_settings = MagicMock(stripe_secret_key="sk_test_xxx")
     monkeypatch.setattr(billing, "get_settings", lambda: fake_settings)
+    # Payment-method is gated behind paid plans; free-only mode 503s.
+    monkeypatch.setattr(billing, "PAID_PLANS_ENABLED", True)
 
     # Auth: stub require_org_permission to a no-op (the route's auth
     # bypasses the Depends() chain by calling require_org_permission
@@ -100,7 +102,13 @@ def app(monkeypatch):
     monkeypatch.setattr(billing, "require_org_permission", _noop_perm)
 
     async def _get_user():
-        return {"id": "u-test", "email": "t@test.io", "org_id": "org-test"}
+        return {
+            "id": "u-test",
+            "user_id": "u-test",
+            "email": "t@test.io",
+            "org_id": "org-test",
+            "org_ids": ["org-test"],
+        }
 
     async def _path_org():
         return "org-test"

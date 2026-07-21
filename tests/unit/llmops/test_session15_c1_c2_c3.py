@@ -12,15 +12,16 @@ Three audit items:
   ``/{judge_run_id}`` with only ``Depends(get_current_user)``. Any
   authenticated user could read or run judges on any tenant's
   trace_id by guessing ``org_id`` in the path.
-  Fix: add ``Depends(require_org_member)`` so the path's org_id
-  is verified against the caller's org membership.
+  Fix: router ``dependencies=[Depends(_require_path_org)]`` so the
+  path's org_id is verified via ``resolve_path_org_access``.
 
 * **C-3** — Six intelligence routers mounted ``get_current_user``
   only at the router level (no org-membership check). A user
   authenticated to org A could read or mutate org B's
   governance/cost/eval/memory/agents/code-change data.
-  Fix: add ``Depends(require_org_member)`` to each router's
-  ``dependencies=[...]``.
+  Fix: each router depends on ``require_path_org_access`` (or a
+  module-local ``_require_path_org`` wrapper around
+  ``resolve_path_org_access``).
 """
 
 from __future__ import annotations
@@ -174,77 +175,17 @@ class TestC1JudgeRunnerConcurrent:
         assert results == []
 
 
-# ─── C-2: Judges API requires org membership ─────────────────────
+# ─── C-2: Judges API requires path-org access ─────────────────────
 
 
-def _make_judges_app(
-    *,
-    member_org_id: str | None = "org-A",
-) -> TestClient:
-    """Build a TestClient for the judges router with overridable
-    ``require_org_member`` so we can simulate in-org vs cross-org."""
-
-    from eden.api.routes import judges as judges_routes
-
-    app = FastAPI()
-    app.include_router(judges_routes.router)
-
-    # Stub require_org_member: succeeds iff path org_id == member_org_id.
-    async def _fake_require_org_member(
-        x_org_id: str | None = None,
-        payload: dict | None = None,
-    ) -> dict:
-        # Match the real ``require_org_member`` signature so FastAPI
-        # doesn't try to bind the path's org_id as a query param.
-        if member_org_id is None:
-            raise HTTPException(
-                status_code=403,
-                detail="Not a member of this organization",
-            )
-        return {"id": member_org_id, "role": "owner"}
-
-    # Stub postgres (no real DB hit).
-    class _StubPG:
-        async def fetch(self, *a, **k):
-            return []
-
-        async def fetchrow(self, *a, **k):
-            return None
-
-        async def fetchval(self, *a, **k):
-            return 0
-
-        async def execute(self, *a, **k):
-            return None
-
-    async def _fake_get_postgres_client():
-        return _StubPG()
-
-    app.dependency_overrides[judges_routes.get_current_user] = lambda: {
-        "user_id": "u-1", "email": "x@y.z",
-    }
-    app.dependency_overrides[judges_routes.require_org_member] = (
-        _fake_require_org_member
-    )
-
-    # Patch _fetch_events_for_trace at the module level.
-    judges_routes._fetch_events_for_trace = AsyncMock(return_value=[])
-
-    # Patch get_judge_registry + get_postgres_client module-globals.
-    with patch.object(
-        judges_routes, "get_judge_registry",
-        return_value=MagicMock(all=lambda: [], get=lambda n: None),
-    ), patch(
-        "eden.storage.postgres.get_postgres_client",
-        _fake_get_postgres_client,
-    ):
-        # Yield inside the patch context so the overrides see it.
-        yield TestClient(app)
+def _deny_path_org() -> str:
+    raise HTTPException(403, "Not a member of this organization")
 
 
 class TestC2JudgesApiRequiresOrgMember:
     """Pre-fix: any authenticated user could read or run judges on
-    any org's traces. Post-fix: the path's org_id is checked."""
+    any org's traces. Post-fix: the path's org_id is checked via
+    ``_require_path_org``."""
 
     def test_run_requires_org_membership(self) -> None:
         """A user authenticated to org-A calling /orgs/org-B/...
@@ -254,19 +195,11 @@ class TestC2JudgesApiRequiresOrgMember:
         app = FastAPI()
         app.include_router(judges_routes.router)
 
-        async def _fail_require_org_member(
-            x_org_id: str | None = None,
-            payload: dict | None = None,
-        ) -> dict:
-            # Match require_org_member's real signature so FastAPI
-            # doesn't bind path/query params.
-            raise HTTPException(403, "Not a member of this organization")
-
         app.dependency_overrides[judges_routes.get_current_user] = lambda: {
             "user_id": "u-1", "email": "x@y.z",
         }
-        app.dependency_overrides[judges_routes.require_org_member] = (
-            _fail_require_org_member
+        app.dependency_overrides[judges_routes._require_path_org] = (
+            _deny_path_org
         )
         with patch.object(
             judges_routes, "get_judge_registry",
@@ -288,19 +221,11 @@ class TestC2JudgesApiRequiresOrgMember:
         app = FastAPI()
         app.include_router(judges_routes.router)
 
-        async def _fail_require_org_member(
-            x_org_id: str | None = None,
-            payload: dict | None = None,
-        ) -> dict:
-            # Match require_org_member's real signature so FastAPI
-            # doesn't bind path/query params.
-            raise HTTPException(403, "Not a member of this organization")
-
         app.dependency_overrides[judges_routes.get_current_user] = lambda: {
             "user_id": "u-1", "email": "x@y.z",
         }
-        app.dependency_overrides[judges_routes.require_org_member] = (
-            _fail_require_org_member
+        app.dependency_overrides[judges_routes._require_path_org] = (
+            _deny_path_org
         )
         client = TestClient(app)
         r = client.get("/orgs/org-B/observability/judges")
@@ -314,19 +239,11 @@ class TestC2JudgesApiRequiresOrgMember:
         app = FastAPI()
         app.include_router(judges_routes.router)
 
-        async def _fail_require_org_member(
-            x_org_id: str | None = None,
-            payload: dict | None = None,
-        ) -> dict:
-            # Match require_org_member's real signature so FastAPI
-            # doesn't bind path/query params.
-            raise HTTPException(403, "Not a member of this organization")
-
         app.dependency_overrides[judges_routes.get_current_user] = lambda: {
             "user_id": "u-1", "email": "x@y.z",
         }
-        app.dependency_overrides[judges_routes.require_org_member] = (
-            _fail_require_org_member
+        app.dependency_overrides[judges_routes._require_path_org] = (
+            _deny_path_org
         )
         client = TestClient(app)
         r = client.get("/orgs/org-B/observability/judges/abc-123")
@@ -337,27 +254,30 @@ class TestC2JudgesApiRequiresOrgMember:
 
     def test_route_depends_on_require_org_member(self) -> None:
         """Static check: the route declarations include
-        ``Depends(require_org_member)``."""
+        ``Depends(_require_path_org)``."""
         from eden.api.routes import judges as judges_routes
 
         app = FastAPI()
         app.include_router(judges_routes.router)
-        # Check the runtime dependency tree.
-        # FastAPI stores the dependant tree per route.
         any_check = False
         for route in app.routes:
             if not hasattr(route, "dependant"):
                 continue
-            for dep in route.dependant.dependencies:
-                if dep.call is judges_routes.require_org_member:
+            stack = [route.dependant]
+            while stack:
+                d = stack.pop()
+                stack.extend(d.dependencies)
+                if d.call is judges_routes._require_path_org:
                     any_check = True
                     break
+            if any_check:
+                break
         assert any_check, (
-            "C-2 regression: no judges route uses require_org_member"
+            "C-2 regression: no judges route uses _require_path_org"
         )
 
 
-# ─── C-3: Intelligence routers require org membership ─────────────
+# ─── C-3: Intelligence routers require path-org access ─────────────
 
 
 _INTEL_ROUTERS = [
@@ -370,76 +290,80 @@ _INTEL_ROUTERS = [
 ]
 
 
+def _path_org_guards(mod: Any) -> set[Any]:
+    """Callables that count as the intentional path-org RBAC gate."""
+    from eden.api.deps import require_path_org_access
+
+    guards: set[Any] = {require_path_org_access}
+    if hasattr(mod, "require_path_org_access"):
+        guards.add(mod.require_path_org_access)
+    if hasattr(mod, "_require_path_org"):
+        guards.add(mod._require_path_org)
+    return guards
+
+
 class TestC3IntelligenceRbac:
-    """Six routers mounted ``get_current_user`` only at the
-    router-level. Post-fix: each requires ``require_org_member``
-    so cross-org access is 403."""
+    """Six routers must gate on path-org access so cross-org is 403."""
 
     @pytest.mark.parametrize("router_module", _INTEL_ROUTERS)
     def test_router_depends_on_require_org_member(
         self, router_module: str,
     ) -> None:
         """Static check: the router's dependency tree includes
-        ``require_org_member``."""
-        from eden.api.deps import require_org_member, require_path_org_access
-        from eden.api.routes import judges as judges_routes
-
+        ``require_path_org_access`` or a module ``_require_path_org``."""
         mod = __import__(
             f"eden.api.routes.{router_module}", fromlist=["router"],
         )
         app = FastAPI()
         app.include_router(mod.router)
+        guards = _path_org_guards(mod)
 
         any_check = False
         for route in app.routes:
             if not hasattr(route, "dependant"):
                 continue
-            # Walk the dependant tree (router-level deps are
-            # attached as dependencies of the route's dependant).
             stack = [route.dependant]
             while stack:
                 d = stack.pop()
                 stack.extend(d.dependencies)
-                if d.call is require_org_member:
+                if d.call in guards:
                     any_check = True
                     break
             if any_check:
                 break
         assert any_check, (
             f"C-3 regression: {router_module} has no route guarded "
-            f"by require_org_member"
+            f"by require_path_org_access / _require_path_org"
         )
 
     def test_cross_org_request_returns_403(self) -> None:
         """End-to-end: hit /orgs/org-B/intelligence/user/... as
         a user authenticated to org-A → 403."""
-        from eden.api.deps import require_org_member, require_path_org_access
+        from eden.api.deps import require_feature_flag, require_path_org_access
         from eden.api.routes import intelligence_user
 
         app = FastAPI()
         app.include_router(intelligence_user.router)
 
-        async def _fail_member(
-            x_org_id: str | None = None,
-            payload: dict | None = None,
-        ) -> dict:
-            # Match require_org_member's real signature so FastAPI
-            # doesn't bind path/query params.
-            raise HTTPException(403, "Not a member of this organization")
-
-        app.dependency_overrides[require_org_member] = _fail_member
-        app.dependency_overrides[require_path_org_access] = lambda: "org_test"
+        app.dependency_overrides[require_path_org_access] = _deny_path_org
+        if hasattr(intelligence_user, "require_path_org_access"):
+            app.dependency_overrides[
+                intelligence_user.require_path_org_access
+            ] = _deny_path_org
+        if hasattr(intelligence_user, "_require_path_org"):
+            app.dependency_overrides[
+                intelligence_user._require_path_org
+            ] = _deny_path_org
         app.dependency_overrides[intelligence_user.get_current_user] = (
             lambda: {"user_id": "u-1", "email": "x@y.z"}
         )
-        # Disable the feature-flag dep so we don't need to set env.
-        from eden.api.deps import require_feature_flag
+
         async def _no_flag(*a, **k):
             return True
+
         app.dependency_overrides[require_feature_flag] = _no_flag
 
         client = TestClient(app)
-        # A GET that exists on the router (no auth-failure precedence).
         r = client.get(
             "/orgs/org-B/intelligence/user/goals?user_id=u-1"
         )

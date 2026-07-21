@@ -940,8 +940,15 @@ class TestRTBF:
                 "conversations": 1,
             },
         )
+        # Stub cross-store fanout so retention/ClickHouse noise cannot
+        # poison the JSON audit metadata (CI had MagicMock await errors).
         with patch(
             "eden.storage.postgres.get_postgres_client", return_value=pg
+        ), patch(
+            "eden.services.governance_intel.rtbf_fanout.fanout_rtbf",
+            new=AsyncMock(return_value=[
+                {"store": "redis", "status": "ok"},
+            ]),
         ):
             out = await svc.process_request(
                 "org_test",

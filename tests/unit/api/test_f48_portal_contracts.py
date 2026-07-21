@@ -117,10 +117,16 @@ def test_backend_nl_alert_routes_are_mounted() -> None:
 
 
 def test_sidebar_signals_nav_is_visible() -> None:
+    """Signals lives under Alerts (overflow), not a dedicated sidebar row."""
     text = SIDEBAR.read_text(encoding="utf-8")
-    signal_lines = [ln for ln in text.splitlines() if 'href: "/alerts?tab=signals"' in ln]
-    assert signal_lines, 'expected Signals nav entry with href: "/alerts?tab=signals"'
-    assert any('id: "signals"' in ln for ln in text.splitlines())
+    alert_lines = [
+        ln for ln in text.splitlines()
+        if 'id: "alerts"' in ln or 'href: "/alerts"' in ln
+    ]
+    assert alert_lines, 'expected Alerts nav entry (Signals via overflow)'
+    assert 'href: "/alerts"' in text
+    # Dedicated Signals href was intentionally folded into Alerts.
+    assert 'href: "/alerts?tab=signals"' not in text
 
 
 @pytest.mark.asyncio

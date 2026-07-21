@@ -9,6 +9,7 @@ module is freshly imported in a clean process.
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -16,6 +17,7 @@ from pathlib import Path
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
+SRC = REPO_ROOT / "src"
 
 
 def _run_in_subprocess(code: str) -> dict:
@@ -30,12 +32,17 @@ def _run_in_subprocess(code: str) -> dict:
         f"{code}\n"
         "print(json.dumps({'loaded': sorted(m for m in sys.modules if not m.startswith('_') and not m.startswith('pytest'))[:80]}))"
     )
+    existing = os.environ.get("PYTHONPATH", "")
+    pythonpath = os.pathsep.join(
+        p for p in (str(SRC), str(REPO_ROOT), existing) if p
+    )
     result = subprocess.run(
         [sys.executable, "-c", full_code],
         capture_output=True,
         text=True,
         cwd=REPO_ROOT,
         timeout=60,
+        env={**os.environ, "PYTHONPATH": pythonpath},
     )
     if result.returncode != 0:
         raise RuntimeError(
@@ -163,6 +170,12 @@ def test_smoke_full_app_still_works():
         text=True,
         cwd=REPO_ROOT,
         timeout=60,
+        env={
+            **os.environ,
+            "PYTHONPATH": os.pathsep.join(
+                p for p in (str(SRC), str(REPO_ROOT), os.environ.get("PYTHONPATH", "")) if p
+            ),
+        },
     )
     assert result.returncode == 0, (
         f"App import failed: {result.stderr}"

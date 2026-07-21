@@ -167,11 +167,20 @@ async def _fanout_s3(
                 report.get("errors") if isinstance(report, dict) else None
             )
             if errors:
+                # Keep detail JSON-serializable for the RTBF audit log.
+                if hasattr(report, "__dataclass_fields__"):
+                    from dataclasses import asdict
+
+                    detail: Any = asdict(report)
+                elif isinstance(report, dict):
+                    detail = report
+                else:
+                    detail = str(report)
                 return {
                     "store": store,
                     "status": "failed",
                     "error": str(errors),
-                    "detail": report,
+                    "detail": detail,
                     "user_id": user_id,
                 }
             return {

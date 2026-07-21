@@ -11,6 +11,7 @@ and would 401 Clerk-less SDK callers before ingest auth runs.
 
 from __future__ import annotations
 
+from eden.api.utils.redact import redact_all
 import logging
 import uuid
 from datetime import UTC, datetime
@@ -108,7 +109,7 @@ async def start_session(
     except HTTPException:
         raise
     except Exception as exc:
-        logger.exception("ingest agent-session start failed: %s", exc)
+        logger.exception("ingest agent-session start failed: %s", redact_all(str(exc)))
         raise HTTPException(
             status_code=503,
             detail=safe_detail(
@@ -141,7 +142,7 @@ async def end_session(
     except HTTPException:
         raise
     except Exception as exc:
-        logger.exception("ingest agent-session end failed: %s", exc)
+        logger.exception("ingest agent-session end failed: %s", redact_all(str(exc)))
         raise HTTPException(
             status_code=503,
             detail=safe_detail(
@@ -177,7 +178,7 @@ async def identify_session(
     except HTTPException:
         raise
     except Exception as exc:
-        logger.exception("ingest agent-session identify failed: %s", exc)
+        logger.exception("ingest agent-session identify failed: %s", redact_all(str(exc)))
         raise HTTPException(
             status_code=503,
             detail=safe_detail(
@@ -203,7 +204,7 @@ async def attach_trace(
     except HTTPException:
         raise
     except Exception as exc:
-        logger.exception("ingest agent-session attach_trace failed: %s", exc)
+        logger.exception("ingest agent-session attach_trace failed: %s", redact_all(str(exc)))
         raise HTTPException(
             status_code=503,
             detail=safe_detail(

@@ -35,9 +35,15 @@ Five audit items:
 from __future__ import annotations
 
 import json
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+
+
+def _fresh_ts() -> str:
+    """Timestamp within late-span max age so DL-2 isn't masked by W9 rejects."""
+    return datetime.now(UTC).isoformat().replace("+00:00", "Z")
 
 
 # ─── DL-1: publish_trace_event invoked after successful Redis write ─
@@ -200,7 +206,7 @@ class TestDl2TenantCounterReset:
                 trace_id=f"trace-{idx}",
                 realm="eden",
                 event_type="llm.call",
-                timestamp="2026-06-27T00:00:00Z",
+                timestamp=_fresh_ts(),
                 agent_id="agent-1",
             )
 
@@ -240,7 +246,7 @@ class TestDl2TenantCounterReset:
                 trace_id=f"trace-{idx}",
                 realm="eden",
                 event_type="llm.call",
-                timestamp="2026-06-27T00:00:00Z",
+                timestamp=_fresh_ts(),
                 agent_id="agent-1",
             )
 

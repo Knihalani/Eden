@@ -68,12 +68,16 @@ async def test_keep_when_candidate_below_min_calls(loop, monkeypatch):
 @pytest.mark.asyncio
 async def test_promote_when_candidate_wins(loop, monkeypatch):
     """candidate success rate > control by >=5% AND p95 ≤ 110% of
-    control → promote."""
+    control → promote (after EvidenceGate passes)."""
     from eden.config import get_settings
     s = get_settings()
     monkeypatch.setattr(s, "promotion_min_calls", 30)
     monkeypatch.setattr(s, "promotion_min_success_rate_lift", 0.05)
     monkeypatch.setattr(s, "promotion_max_latency_ratio", 1.10)
+    # W25: full promote requires EvidenceGate; stub pass for threshold math.
+    monkeypatch.setattr(
+        loop, "_evidence_gate_promote", AsyncMock(return_value=True)
+    )
 
     fake_client = MagicMock()
     # candidate: 50 calls, 45 successes (90%), p95=500ms

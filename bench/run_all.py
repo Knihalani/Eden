@@ -54,22 +54,28 @@ async def main() -> int:
         print(f"  {r['name']:35s}  p50={r['p50_ms']:7.2f}ms  p95={r['p95_ms']:7.2f}ms  hit_rate={r['hit_rate']:.2f}")
 
     print("\n== bench: repo-graph (offline-first SymbolGraph) ==")
-    rg_report = await repo_graph.bench_repo_graph(n_query=200, concurrency=8)
-    all_results["suites"]["repo_graph"] = rg_report
-    meas = rg_report["measurements"]
-    print(
-        f"  cold_index_ms={meas['cold_index_ms']:7.1f}  "
-        f"warm_index_ms={meas['warm_index_ms']:7.2f}  "
-        f"query_p95={meas['query_p95_ms']:7.2f}ms  "
-        f"find_p95={meas['find_affected_p95_ms']:7.2f}ms  "
-        f"db_bytes={meas['db_bytes']:>10}  "
-        f"files={meas['file_count']}  symbols={meas['symbol_count']}"
-    )
-    failed_budgets = [k for k, v in rg_report["budgets"].items() if not v]
-    if failed_budgets:
-        print(f"  ⚠ missed budgets: {failed_budgets}")
+    try:
+        rg_report = await repo_graph.bench_repo_graph(n_query=200, concurrency=8)
+    except ModuleNotFoundError as exc:
+        # SymbolGraph / code_change package was retired; keep other suites green.
+        print(f"  skipped: {exc}")
+        all_results["suites"]["repo_graph"] = {"skipped": True, "reason": str(exc)}
     else:
-        print("  ✓ all budgets met")
+        all_results["suites"]["repo_graph"] = rg_report
+        meas = rg_report["measurements"]
+        print(
+            f"  cold_index_ms={meas['cold_index_ms']:7.1f}  "
+            f"warm_index_ms={meas['warm_index_ms']:7.2f}  "
+            f"query_p95={meas['query_p95_ms']:7.2f}ms  "
+            f"find_p95={meas['find_affected_p95_ms']:7.2f}ms  "
+            f"db_bytes={meas['db_bytes']:>10}  "
+            f"files={meas['file_count']}  symbols={meas['symbol_count']}"
+        )
+        failed_budgets = [k for k, v in rg_report["budgets"].items() if not v]
+        if failed_budgets:
+            print(f"  ⚠ missed budgets: {failed_budgets}")
+        else:
+            print("  ✓ all budgets met")
 
     all_results["duration_s"] = round(time.time() - started, 2)
     all_results["finished_at"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())

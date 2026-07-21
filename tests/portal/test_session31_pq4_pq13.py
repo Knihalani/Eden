@@ -2,20 +2,18 @@
 
 Three audit items from Part G "Portal polish":
 
-* **PQ-4** — ``onboarding/install/page.tsx`` drops the
-  TypeScript-style ``!`` non-null assertions from the
-  user-facing TypeScript snippet (was: ``process.env.X!`` which
-  told the user "this is non-null but actually IS undefined at
-  runtime"). Snippets now use ``?? "<placeholder>"`` so the
-  user can copy-paste them safely.
+* **PQ-4** — User-facing TypeScript install snippets must not use
+  ``process.env.X!`` non-null assertions (unsafe copy-paste). The
+  old ``onboarding/install/page.tsx`` is gone; marketing SDK snippets
+  are the remaining surface.
 * **PQ-8** — ``hooks/use-org.tsx`` picks the **current** Clerk
   org's membership from ``userMemberships.data`` via
   ``.find(...)``, not the ``[0]`` first membership (pre-fix
   multi-org users always saw the role of their alphabetically-
   first org).
-* **PQ-13** — ``hooks/use-auth.tsx`` re-fetches the Eden profile
-  on ``clerkUser?.updatedAt`` change (not just ``id``), so
-  accepting a new org invite refreshes the org list.
+* **PQ-13** — ``hooks/use-auth.tsx`` loads the Eden profile via
+  shared ``useMeQuery`` / ``fetchMeQuery`` (React Query), not an
+  id-only effect — org refresh is driven by invalidate/refetch.
 """
 
 from __future__ import annotations
@@ -41,52 +39,77 @@ def _read(rel: str) -> str:
 
 
 class TestInstallPageTypeScriptSnippet:
-    """The TypeScript ``init({...})`` snippet shown to users must
-    not tell them to write ``!`` non-null assertions on missing
-    env vars — placeholders are safer to copy-paste.
+    """User-facing TypeScript SDK snippets must not use ``!``
+    non-null assertions on env vars.
+
+    ``onboarding/install/page.tsx`` was removed; the remaining
+    copy-paste surface is marketing ``SDK_SNIPPETS`` / equivalent.
     """
 
+    _SNIPPET = "src/app/(marketing)/_components/marketing-data.ts"
+    _LEGACY_INSTALL = "src/app/(portal)/onboarding/install/page.tsx"
+
+    def _snippet_source(self) -> str:
+        legacy = _PORTAL_ROOT / self._LEGACY_INSTALL
+        if legacy.is_file():
+            return _read(self._LEGACY_INSTALL)
+        path = _PORTAL_ROOT / self._SNIPPET
+        if not path.is_file():
+            pytest.skip("install / marketing snippet surface N/A")
+        return _read(self._SNIPPET)
+
     def test_no_bang_on_api_key(self) -> None:
-        source = _read(
-            "src/app/(portal)/onboarding/install/page.tsx"
-        )
+        source = self._snippet_source()
         assert "EDEN_API_KEY!" not in source, (
-            "PQ-4 regression: install snippet still uses "
+            "PQ-4 regression: TypeScript snippet still uses "
             "`process.env.EDEN_API_KEY!` — drop the `!`"
         )
 
     def test_no_bang_on_org_id(self) -> None:
-        source = _read(
-            "src/app/(portal)/onboarding/install/page.tsx"
-        )
+        source = self._snippet_source()
+        # Install used EDEN_DEFAULT_ORG; marketing uses EDEN_ORG_ID.
         assert "EDEN_DEFAULT_ORG!" not in source, (
-            "PQ-4 regression: install snippet still uses "
+            "PQ-4 regression: snippet still uses "
             "`process.env.EDEN_DEFAULT_ORG!` — drop the `!`"
+        )
+        assert "EDEN_ORG_ID!" not in source, (
+            "PQ-4 regression: snippet still uses "
+            "`process.env.EDEN_ORG_ID!` — drop the `!`"
         )
 
     def test_uses_nullish_coalescing(self) -> None:
-        """Both env-var references now use ``??`` so the snippet
-        type-checks without ``!`` and is human-readable with a
-        visible placeholder when the env var is unset."""
-        source = _read(
-            "src/app/(portal)/onboarding/install/page.tsx"
+        """Env-var references use ``??`` (or bracket access) so the
+        snippet type-checks without ``!`` and shows a placeholder
+        when unset."""
+        source = self._snippet_source()
+        has_api_key_fallback = (
+            "EDEN_API_KEY ?? " in source
+            or 'os.environ["EDEN_API_KEY"]' in source
         )
-        assert "EDEN_API_KEY ?? " in source, (
-            "PQ-4 regression: EDEN_API_KEY must use `??` fallback"
+        has_org_fallback = (
+            "EDEN_DEFAULT_ORG ?? " in source
+            or "EDEN_ORG_ID ?? " in source
+            or 'os.environ["EDEN_ORG_ID"]' in source
         )
-        assert "EDEN_DEFAULT_ORG ?? " in source, (
-            "PQ-4 regression: EDEN_DEFAULT_ORG must use `??` fallback"
+        assert has_api_key_fallback, (
+            "PQ-4 regression: EDEN_API_KEY must use a safe fallback "
+            "(?? or os.environ[...]), not `!`"
+        )
+        assert has_org_fallback, (
+            "PQ-4 regression: org id env must use a safe fallback "
+            "(?? or os.environ[...]), not `!`"
         )
 
     def test_base_url_pattern_intact(self) -> None:
-        """The existing ``baseUrl`?`` \"...\"`` pattern is the model
-        for the fix — confirm it was preserved when the siblings
-        were rewritten."""
-        source = _read(
-            "src/app/(portal)/onboarding/install/page.tsx"
+        """Base URL either uses ``??`` or is omitted (SDK defaults)."""
+        source = self._snippet_source()
+        if "EDEN_BASE_URL" not in source:
+            return  # marketing snippets omit base URL — OK
+        assert "EDEN_BASE_URL!" not in source, (
+            "PQ-4 regression: EDEN_BASE_URL must not use `!`"
         )
-        assert "EDEN_BASE_URL ?? " in source, (
-            "PQ-4 sanity: EDEN_BASE_URL must keep the ?? fallback"
+        assert "EDEN_BASE_URL ?? " in source or 'os.environ["EDEN_BASE_URL"]' in source, (
+            "PQ-4 sanity: EDEN_BASE_URL must use a safe fallback"
         )
 
 
@@ -132,8 +155,8 @@ class TestUseOrgPicksCurrentOrgRole:
 
 
 class TestUseAuthRefetchesOnUpdatedAt:
-    """``hooks/use-auth.tsx`` must depend on ``clerkUser?.updatedAt``
-    so that accepting a new org invite triggers a re-fetch.
+    """``hooks/use-auth.tsx`` loads Eden profile via shared React
+    Query (``useMeQuery`` / ``fetchMeQuery``), not an id-only effect.
     """
 
     def test_no_id_only_dep(self) -> None:
@@ -141,30 +164,29 @@ class TestUseAuthRefetchesOnUpdatedAt:
         gone — pre-fix this left the org list stale after a user
         accepted an invite in another tab."""
         source = _read("src/hooks/use-auth.tsx")
-        # The fix changes the dep array to include updatedAt.
-        # Acceptable forms:
-        #   [clerkUser?.id, clerkUser?.updatedAt]
-        # We assert id-alone is GONE.
         assert "}, [clerkUser?.id]);" not in source and (
             "}, [clerkUser?.id])" not in source
         ), (
-            "PQ-13 regression: use-auth effect must depend on "
-            "updatedAt in addition to id"
+            "PQ-13 regression: use-auth must not depend on id alone"
         )
 
     def test_depends_on_updated_at(self) -> None:
-        """The effect's dep array includes ``clerkUser?.updatedAt``."""
+        """Profile load goes through ``useMeQuery`` + ``fetchMeQuery``
+        (invalidate/refetch), replacing the old ``updatedAt`` effect.
+        """
         source = _read("src/hooks/use-auth.tsx")
-        assert "clerkUser?.updatedAt" in source, (
-            "PQ-13 regression: effect dep array must include "
-            "clerkUser?.updatedAt"
+        assert "useMeQuery" in source, (
+            "PQ-13 regression: AuthProvider must use useMeQuery"
+        )
+        assert "fetchMeQuery" in source, (
+            "PQ-13 regression: refreshUser must call fetchMeQuery"
         )
 
     def test_updatedAt_not_snake_case(self) -> None:
         """Clerk's React SDK exposes camelCase ``updatedAt`` (not
-        snake-case ``updated_at`` — that's only on the raw JSON
-        type). Using snake_case here would silently never
-        trigger."""
+        snake-case ``updated_at``). Do not introduce a silent
+        snake_case dep if an effect is re-added later.
+        """
         source = _read("src/hooks/use-auth.tsx")
         assert "clerkUser?.updated_at" not in source, (
             "PQ-13 regression: Clerk React SDK uses updatedAt, "

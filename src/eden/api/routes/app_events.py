@@ -16,6 +16,7 @@ window, separate cap from the agent telemetry ingest
 """
 from __future__ import annotations
 
+from eden.api.utils.redact import redact_all
 import logging
 import time
 from collections import OrderedDict, deque
@@ -216,7 +217,7 @@ async def ingest_app_events(
         # so SDKs retry instead of treating a bare 500 as fatal.
         from eden.api.utils.safe_error import safe_detail
 
-        logger.exception("app ingest failed for org %s: %s", org_id, exc)
+        logger.exception("app ingest failed for org %s: %s", org_id, redact_all(str(exc)))
         raise HTTPException(
             status_code=503,
             detail=safe_detail(
