@@ -134,7 +134,7 @@ packages/eden-mcp-server/
       "args": ["eden-mcp-server"],
       "env": {
         "EDEN_API_KEY": "eden_sk_...",
-        "EDEN_BASE_URL": "https://api.eden.ai"
+        "EDEN_BASE_URL": "https://api.edenobservability.com"
       }
     }
   }

@@ -3,6 +3,18 @@
 import { Filter, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { FOCUS_RING_CLASS } from "@/components/ui/focus-ring";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { useDensity } from "@/components/portal-os/DensityProvider";
+
+/** Sentinel for “all / unset” — Radix Select disallows empty string values. */
+const SELECT_ALL = "__all__";
 
 interface FilterBarProps {
   /** Current filter state — passed back via onChange. */
@@ -16,7 +28,14 @@ interface FilterBarProps {
     value: string;
   }>;
   /** Optional search input on the right side. */
-  search?: { value: string; onChange: (v: string) => void; placeholder?: string; key?: string };
+  search?: {
+    value: string;
+    onChange: (v: string) => void;
+    placeholder?: string;
+    key?: string;
+    /** Show a quiet kbd chip (e.g. `/`) — Traces hub Wave 6. */
+    shortcutHint?: string;
+  };
   /** Stick under shell header (`h-11`); uses `py-space-2` min padding. */
   sticky?: boolean;
   className?: string;
@@ -39,7 +58,8 @@ export function clearedFilters(
 
 /**
  * FilterBar — search input + filter dropdowns + clear-all button.
- * Spacing rhythm: `p-space-3` / `gap-space-3` (w3-spacing-tokens §5.3).
+ * Spacing rhythm: comfortable `p-space-3` / `gap-space-3`; compact tightens.
+ * Control height: `h-8` desktop / `max-md:min-h-11` touch (DESIGN.md density).
  */
 export function FilterBar({
   filters,
@@ -49,6 +69,8 @@ export function FilterBar({
   sticky = false,
   className,
 }: FilterBarProps) {
+  const density = useDensity();
+  const compact = density === "compact";
   const hasActiveFilters = Object.values(filters).some(Boolean) || Boolean(search?.value);
 
   const appliedChips: Array<{ key: string; label: string }> = [];
@@ -79,50 +101,76 @@ export function FilterBar({
     <div className={cn("space-y-space-2", sticky && "sticky top-11 z-10")}>
       <div
         className={cn(
-          "flex flex-wrap items-center gap-space-3 bg-[var(--bg-primary)] border border-[var(--border-subtle)] rounded-lg px-space-3",
-          sticky ? "py-space-2" : "py-space-3",
+          "flex flex-wrap items-center bg-[var(--bg-primary)] border border-[var(--border-subtle)] rounded-lg",
+          compact
+            ? "gap-space-2 px-space-2"
+            : "gap-space-3 px-space-3",
+          sticky
+            ? compact
+              ? "py-space-1"
+              : "py-space-2"
+            : compact
+              ? "py-space-2"
+              : "py-space-3",
           className,
         )}
+        data-density={density}
       >
         <Filter className="w-4 h-4 text-[var(--text-muted)]" />
         {selects.map((s) => (
-          <select
+          <Select
             key={s.key}
-            value={s.value}
-            onChange={(e) => setFilter(s.key, e.target.value)}
-            aria-label={`${s.label} filter`}
-            className={cn(
-              "min-h-11 px-space-3 py-1.5 bg-[var(--bg-secondary)] border border-[var(--border-subtle)] rounded-lg text-sm text-[var(--text-primary)]",
-              FOCUS_RING_CLASS,
-            )}
+            value={s.value || SELECT_ALL}
+            onValueChange={(v) => setFilter(s.key, v === SELECT_ALL ? "" : v)}
           >
-            <option value="">{s.label}</option>
-            {s.options.map((o) => (
-              <option key={o.value} value={o.value}>
-                {o.label}
-              </option>
-            ))}
-          </select>
+            <SelectTrigger
+              aria-label={`${s.label} filter`}
+              className="w-auto min-w-[8rem]"
+            >
+              <SelectValue placeholder={s.label} />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={SELECT_ALL}>{s.label}</SelectItem>
+              {s.options.map((o) => (
+                <SelectItem key={o.value} value={o.value}>
+                  {o.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         ))}
         {search && (
-          <input
-            type="text"
-            placeholder={search.placeholder ?? "Search…"}
-            value={search.value}
-            onChange={(e) => search.onChange(e.target.value)}
-            aria-label={search.placeholder ?? "Search filters"}
-            className={cn(
-              "min-h-11 px-space-3 py-1.5 bg-[var(--bg-secondary)] border border-[var(--border-subtle)] rounded-lg text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)]",
-              FOCUS_RING_CLASS,
-            )}
-          />
+          <div className="relative inline-flex min-w-[12rem] flex-1 items-center">
+            <Input
+              type="text"
+              placeholder={search.placeholder ?? "Search…"}
+              value={search.value}
+              onChange={(e) => search.onChange(e.target.value)}
+              aria-label={search.placeholder ?? "Search filters"}
+              data-testid="filter-bar-search"
+              data-filter-search
+              className={cn(
+                "h-8 min-h-8 w-full min-w-[12rem] max-md:min-h-11",
+                search.shortcutHint && "pr-8",
+              )}
+            />
+            {search.shortcutHint ? (
+              <kbd
+                className="pointer-events-none absolute right-2 hidden sm:inline-block rounded border border-[var(--border-subtle)] px-1 py-0.5 font-mono text-2xs text-[var(--text-muted)]"
+                data-shortcut-chip="filter-focus"
+                aria-hidden
+              >
+                {search.shortcutHint}
+              </kbd>
+            ) : null}
+          </div>
         )}
         {hasActiveFilters && (
           <button
             type="button"
             onClick={clearAll}
             className={cn(
-              "ml-auto inline-flex items-center justify-center gap-space-1 px-space-2 min-h-11 min-w-11 text-xs text-[var(--text-muted)] hover:text-[var(--text-primary)] rounded-lg hover:bg-[var(--bg-tertiary)]",
+              "ml-auto inline-flex items-center justify-center gap-space-1 px-space-2 h-8 min-h-8 max-md:min-h-11 min-w-11 text-xs text-[var(--text-muted)] hover:text-[var(--text-primary)] rounded-lg hover:bg-[var(--bg-tertiary)]",
               FOCUS_RING_CLASS,
             )}
             aria-label="Clear all filters"
@@ -133,13 +181,19 @@ export function FilterBar({
         )}
       </div>
       {appliedChips.length > 0 && (
-        <div className="flex flex-wrap items-center gap-space-2" aria-label="Applied filters">
+        <div
+          className={cn(
+            "flex flex-wrap items-center",
+            compact ? "gap-space-1" : "gap-space-2",
+          )}
+          aria-label="Applied filters"
+        >
           {appliedChips.map((chip) => (
             <button
               key={chip.key}
               type="button"
               className={cn(
-                "inline-flex items-center gap-space-1 min-h-11 rounded-md border border-[var(--border-subtle)] bg-[var(--bg-secondary)] px-space-3 py-space-1 text-xs text-[var(--text-secondary)] hover:border-[var(--border-default)] hover:text-[var(--text-primary)]",
+                "inline-flex items-center gap-space-1 h-8 min-h-8 max-md:min-h-11 rounded-md border border-[var(--border-subtle)] bg-[var(--bg-secondary)] px-space-3 py-space-1 text-xs text-[var(--text-secondary)] hover:border-[var(--border-default)] hover:text-[var(--text-primary)]",
                 FOCUS_RING_CLASS,
               )}
               aria-label={`Remove filter ${chip.label}`}

@@ -23,6 +23,18 @@ async def test_improvement_agent_enabled_from_org_features() -> None:
 
 
 @pytest.mark.asyncio
+async def test_improvement_agent_org_kill_switch_when_global_on() -> None:
+    from eden.preview.gates import improvement_agent_enabled
+
+    with patch(
+        "eden.preview.gates._load_org_features",
+        new=AsyncMock(return_value={"improvement_agent_v1": False}),
+    ), patch("eden.config.get_settings") as mock_settings:
+        mock_settings.return_value.improvement_agent_v1 = True
+        assert await improvement_agent_enabled("org_killed") is False
+
+
+@pytest.mark.asyncio
 async def test_slm_hook_parses_llm_json() -> None:
     from eden.evaluation.online.slm_hook import score_with_slm
 

@@ -6,6 +6,12 @@ installation token. Falls back to env-based defaults /
 :class:`LocalPRProvider` / :class:`LocalRepoProvider` only when
 the org has no connection or ``EDEN_PR_PROVIDER=local``.
 
+When an active connection exists but the installation token
+cannot be minted, resolution **fail-closes** (raises
+:class:`RepoConnectionError`) instead of falling back to
+``EDEN_GITHUB_TOKEN`` / Local — so tenant approve never opens
+a PR on the wrong repo.
+
 Call sites that previously used :func:`get_default_pr_provider`
 / :func:`get_default_repo_provider` for multi-tenant work
 should prefer these helpers so installation tokens never
@@ -34,6 +40,15 @@ from .repo import (
 logger = logging.getLogger(__name__)
 
 
+class RepoConnectionError(RuntimeError):
+    """Active repo connection cannot be used (e.g. mint failed)."""
+
+    def __init__(self, reason: str, *, org_id: str | None = None) -> None:
+        self.reason = reason
+        self.org_id = org_id
+        super().__init__(reason)
+
+
 async def active_repo_connection(org_id: str) -> dict[str, Any] | None:
     """Return the org's newest active ``repo_connections`` row, or ``None``.
 
@@ -59,7 +74,8 @@ async def active_repo_connection(org_id: str) -> dict[str, Any] | None:
         async with client.acquire() as conn:
             row = await conn.fetchrow(
                 """
-                SELECT installation_id, repo_full_name, provider, id
+                SELECT installation_id, repo_full_name, default_branch,
+                       provider, id
                 FROM repo_connections
                 WHERE org_id = $1 AND status = 'active'
                 ORDER BY created_at DESC
@@ -125,6 +141,15 @@ async def _mint_installation_token(installation_id: str | int) -> str | None:
         return None
 
 
+def _github_connection_fields(conn: dict[str, Any]) -> tuple[Any, str] | None:
+    """Return ``(installation_id, repo_full_name)`` when the row is GitHub-shaped."""
+    installation_id = conn.get("installation_id")
+    repo_full_name = (conn.get("repo_full_name") or "").strip()
+    if installation_id and repo_full_name and "/" in repo_full_name:
+        return installation_id, repo_full_name
+    return None
+
+
 async def get_pr_provider_for_org(org_id: str) -> PRProvider:
     """Return a :class:`PRProvider` scoped to ``org_id``'s active repo.
 
@@ -133,7 +158,9 @@ async def get_pr_provider_for_org(org_id: str) -> PRProvider:
     1. ``EDEN_PR_PROVIDER=local`` → :class:`LocalPRProvider`.
     2. Active ``repo_connections`` row with a mintable installation
        token → :class:`GitHubPRProvider` for that ``repo_full_name``.
-    3. Otherwise → :func:`get_default_pr_provider` (env token/repo
+    3. Active connection but mint fails → raise
+       :class:`RepoConnectionError` (fail closed; no env/Local fallback).
+    4. Otherwise → :func:`get_default_pr_provider` (env token/repo
        or local fallback).
     """
     if _force_local():
@@ -143,16 +170,21 @@ async def get_pr_provider_for_org(org_id: str) -> PRProvider:
 
     conn = await active_repo_connection(org_id)
     if conn is not None:
-        installation_id = conn.get("installation_id")
-        repo_full_name = (conn.get("repo_full_name") or "").strip()
-        if installation_id and repo_full_name and "/" in repo_full_name:
+        fields = _github_connection_fields(conn)
+        if fields is not None:
+            installation_id, repo_full_name = fields
             token = await _mint_installation_token(installation_id)
             if token:
                 return GitHubPRProvider(token=token, repo=repo_full_name)
-            logger.debug(
+            logger.warning(
                 "factory: get_pr_provider_for_org(%s) could not mint token; "
-                "falling back to defaults",
+                "fail-closed (no env/Local fallback)",
                 org_id,
+            )
+            raise RepoConnectionError(
+                "Could not mint GitHub App installation token for the "
+                "active repo connection",
+                org_id=org_id,
             )
 
     return get_default_pr_provider()
@@ -163,7 +195,8 @@ async def get_repo_provider_for_org(org_id: str) -> RepoProvider:
 
     Same resolution order as :func:`get_pr_provider_for_org`, but
     returns the read-side :class:`GitHubRepoProvider` /
-    :class:`LocalRepoProvider`.
+    :class:`LocalRepoProvider`. Local-style ``repo_connections``
+    rows (``provider=local``) still resolve to Local without minting.
     """
     if _force_local():
         return LocalRepoProvider(
@@ -172,26 +205,33 @@ async def get_repo_provider_for_org(org_id: str) -> RepoProvider:
 
     conn = await active_repo_connection(org_id)
     if conn is not None:
-        installation_id = conn.get("installation_id")
+        provider_name = (conn.get("provider") or "").strip().lower()
         repo_full_name = (conn.get("repo_full_name") or "").strip()
-        if installation_id and repo_full_name and "/" in repo_full_name:
+        if provider_name == "local" and repo_full_name:
+            return LocalRepoProvider(repo_path=repo_full_name)
+
+        fields = _github_connection_fields(conn)
+        if fields is not None:
+            installation_id, repo_full_name = fields
             token = await _mint_installation_token(installation_id)
             if token:
                 return GitHubRepoProvider(token=token, repo=repo_full_name)
-            logger.debug(
+            logger.warning(
                 "factory: get_repo_provider_for_org(%s) could not mint token; "
-                "falling back to defaults",
+                "fail-closed (no env/Local fallback)",
                 org_id,
             )
-        # Local-style connection: repo_full_name may be a filesystem path.
-        provider_name = (conn.get("provider") or "").strip().lower()
-        if provider_name == "local" and repo_full_name:
-            return LocalRepoProvider(repo_path=repo_full_name)
+            raise RepoConnectionError(
+                "Could not mint GitHub App installation token for the "
+                "active repo connection",
+                org_id=org_id,
+            )
 
     return get_default_repo_provider()
 
 
 __all__ = [
+    "RepoConnectionError",
     "active_repo_connection",
     "resolve_active_repo_id",
     "get_pr_provider_for_org",

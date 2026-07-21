@@ -9,8 +9,16 @@ import { ViewsMenuTrigger } from "./QueryFilterBar";
 import type { ViewState } from "./useSavedViews";
 import type { SavedViewRecord } from "@/lib/api";
 
+export type ViewPreset = {
+  id: string;
+  name: string;
+  state: ViewState;
+};
+
 export interface ViewsMenuProps {
   views: Array<SavedViewRecord & { state: ViewState }>;
+  /** Built-in status/filter presets (e.g. Issues Open / Triaged). */
+  presets?: ViewPreset[];
   activeViewId?: string;
   /** Amber when filters|sort|columns diverge from active saved view / Default. */
   dirty?: boolean;
@@ -26,6 +34,7 @@ export interface ViewsMenuProps {
 
 export function ViewsMenu({
   views,
+  presets = [],
   activeViewId,
   dirty,
   onSelect,
@@ -37,6 +46,7 @@ export function ViewsMenu({
 }: ViewsMenuProps) {
   const [open, setOpen] = useState(false);
   const [saveName, setSaveName] = useState("");
+  const [shareWithProject, setShareWithProject] = useState(false);
   const [saving, setSaving] = useState(false);
   const menuId = useId();
   const rootRef = useRef<HTMLDivElement>(null);
@@ -70,8 +80,9 @@ export function ViewsMenu({
     if (!saveName.trim()) return;
     setSaving(true);
     try {
-      await onSave(saveName.trim());
+      await onSave(saveName.trim(), shareWithProject);
       setSaveName("");
+      setShareWithProject(false);
       setOpen(false);
     } finally {
       setSaving(false);
@@ -124,6 +135,41 @@ export function ViewsMenu({
             <Check className={cn("w-3.5 h-3.5", !activeViewId ? "opacity-100" : "opacity-0")} />
             Default
           </button>
+
+          {presets.length > 0 && (
+            <>
+              <p
+                className="px-2 pt-2 pb-1 text-2xs uppercase tracking-wide text-[var(--text-muted)]"
+                data-testid="views-status-presets"
+              >
+                Status
+              </p>
+              {presets.map((p) => (
+                <button
+                  key={p.id}
+                  type="button"
+                  role="menuitem"
+                  data-testid={`views-preset-${p.id}`}
+                  className={cn(
+                    "w-full text-left px-2 min-h-11 rounded-lg hover:bg-[var(--bg-tertiary)] flex items-center gap-2",
+                    FOCUS_RING_CLASS,
+                  )}
+                  onClick={() => {
+                    onSelect(p.id);
+                    setOpen(false);
+                  }}
+                >
+                  <Check
+                    className={cn(
+                      "w-3.5 h-3.5",
+                      activeViewId === p.id ? "opacity-100" : "opacity-0",
+                    )}
+                  />
+                  {p.name}
+                </button>
+              ))}
+            </>
+          )}
 
           {personal.length > 0 && (
             <>
@@ -208,6 +254,16 @@ export function ViewsMenu({
                 Save as
               </Button>
             </div>
+            <label className="flex min-h-11 items-center gap-2 px-1 text-xs text-[var(--text-secondary)]">
+              <input
+                type="checkbox"
+                checked={shareWithProject}
+                onChange={(e) => setShareWithProject(e.target.checked)}
+                data-testid="views-share-checkbox"
+                className="rounded border-[var(--border-default)]"
+              />
+              Share with project
+            </label>
             {dirty ? (
               <button
                 type="button"

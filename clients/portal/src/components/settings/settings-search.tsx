@@ -30,7 +30,7 @@ export function SettingsSearch({ value, onChange, totalLabel, className }: Setti
           type="search"
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          placeholder="Search settings…"
+          placeholder="Search settings… (api, billing, pii)"
           aria-label="Search settings"
           autoComplete="off"
           spellCheck={false}

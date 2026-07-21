@@ -383,6 +383,48 @@ async def snooze_plan(
     return await get_plan(org_id, plan_id)
 
 
+def _rejection_title_hash(title: str) -> str:
+    import hashlib
+
+    return hashlib.sha256((title or "")[:200].encode()).hexdigest()[:16]
+
+
+def _first_file_path(files: list[Any] | None) -> str | None:
+    if not files:
+        return None
+    first = files[0]
+    if isinstance(first, str) and first:
+        return first
+    if isinstance(first, dict):
+        path = first.get("path") or first.get("file")
+        if isinstance(path, str) and path:
+            return path
+    return None
+
+
+def _rejection_ttl_days(rejection_type: str) -> int:
+    try:
+        from eden.config import get_settings
+
+        settings = get_settings()
+        if rejection_type == "user_fixed":
+            return int(
+                getattr(settings, "patch_rejection_memory_user_fixed_days", 90) or 90
+            )
+        return int(getattr(settings, "patch_rejection_memory_wontfix_days", 30) or 30)
+    except Exception:
+        return 90 if rejection_type == "user_fixed" else 30
+
+
+def _infer_rejection_type(reason: str) -> str:
+    lowered = (reason or "").lower()
+    if "user_fixed" in lowered or "already fixed" in lowered:
+        return "user_fixed"
+    if "outdated" in lowered:
+        return "outdated"
+    return "wontfix"
+
+
 async def write_rejection_memory(
     org_id: str,
     plan: dict[str, Any],
@@ -393,11 +435,11 @@ async def write_rejection_memory(
     """Best-effort pr_rejection_memory row for dedupe across sweeps."""
     fp = plan.get("source_fingerprint") or ""
     files = plan.get("files_changed") or []
-    file_path = files[0] if files else fp or "unknown"
+    file_path = _first_file_path(files) or fp or "unknown"
     title = (plan.get("title") or "")[:200]
-    import hashlib
-
-    title_hash = hashlib.sha256(title.encode()).hexdigest()[:16]
+    title_hash = _rejection_title_hash(title)
+    rejection_type = _infer_rejection_type(rejection_reason)
+    ttl_days = max(1, _rejection_ttl_days(rejection_type))
     mem_id = f"rej_{uuid.uuid4().hex[:16]}"
     try:
         client = await get_postgres_client()
@@ -410,15 +452,112 @@ async def write_rejection_memory(
                 rejection_type, rejected_by_user_id, reason, expires_at
             ) VALUES (
                 $1, $2, $3, 'improvement_plan', $4,
-                'wontfix', $5, $6, NOW() + INTERVAL '7 days'
+                $5, $6, $7, NOW() + make_interval(days => $8::int)
             )
             """,
             mem_id,
             org_id,
             file_path,
             title_hash,
+            rejection_type,
             rejected_by,
             rejection_reason,
+            ttl_days,
         )
     except Exception:
         pass
+
+
+async def is_rejection_active(
+    org_id: str,
+    *,
+    title: str | None = None,
+    file_paths: list[str] | None = None,
+    fingerprint: str | None = None,
+) -> bool:
+    """Return True when an unexpired rejection-memory row matches."""
+    paths = [p for p in (file_paths or []) if p]
+    if fingerprint:
+        paths.append(fingerprint)
+    title_hash = _rejection_title_hash(title or "") if title else None
+    if not paths and not title_hash:
+        return False
+    try:
+        client = await get_postgres_client()
+        if client is None:
+            return False
+        clauses = ["org_id = $1", "expires_at > NOW()"]
+        args: list[Any] = [org_id]
+        path_clause = ""
+        title_clause = ""
+        if paths:
+            args.append(paths)
+            path_clause = f"file_path = ANY(${len(args)}::text[])"
+        if title_hash:
+            args.append(title_hash)
+            title_clause = f"title_hash = ${len(args)}"
+        match = " OR ".join(c for c in (path_clause, title_clause) if c)
+        if not match:
+            return False
+        clauses.append(f"({match})")
+        row = await client.fetchrow(
+            f"""
+            SELECT 1 FROM pr_rejection_memory
+            WHERE {' AND '.join(clauses)}
+            LIMIT 1
+            """,
+            *args,
+        )
+        return row is not None
+    except Exception:
+        return False
+
+
+async def count_code_patches_today(org_id: str) -> int:
+    """Count code_patch plans created for org since UTC midnight."""
+    try:
+        client = await get_postgres_client()
+        if client is None:
+            return 0
+        row = await client.fetchrow(
+            """
+            SELECT COUNT(*)::int AS n
+            FROM improvement_plans
+            WHERE org_id = $1
+              AND plan_kind = 'code_patch'
+              AND created_at >= date_trunc('day', NOW() AT TIME ZONE 'UTC')
+            """,
+            org_id,
+        )
+        return int((row or {}).get("n") or 0)
+    except Exception:
+        return 0
+
+
+async def find_blocking_by_fingerprint(
+    org_id: str, source_fingerprint: str
+) -> dict[str, Any] | None:
+    """Open plan or active snooze for fingerprint (blocks recreate)."""
+    if not source_fingerprint:
+        return None
+    existing = await find_open_by_fingerprint(org_id, source_fingerprint)
+    if existing is not None:
+        return existing
+    client = await get_postgres_client()
+    if client is None:
+        return None
+    try:
+        row = await client.fetchrow(
+            """
+            SELECT * FROM improvement_plans
+            WHERE org_id = $1 AND source_fingerprint = $2
+              AND status = 'snoozed'
+              AND (snoozed_until IS NULL OR snoozed_until > NOW())
+            LIMIT 1
+            """,
+            org_id,
+            source_fingerprint,
+        )
+        return _row(row) if row else None
+    except Exception:
+        return None

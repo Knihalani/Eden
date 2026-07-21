@@ -25,6 +25,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { ArrowRight, ArrowLeft, SkipForward } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 
 export interface WizardContext {
@@ -322,32 +323,37 @@ export function Wizard({
       {!isComplete && activeStep && !hideBottomNav && (
         <div className="sticky bottom-0 z-10 mx-auto w-full max-w-3xl bg-[var(--bg-primary)]/95 backdrop-blur-sm border-t border-[var(--border-default)] px-6 py-3">
           <div className="flex items-center justify-between">
-            <button
+            <Button
+              type="button"
+              variant="ghost"
               onClick={onBack}
               disabled={activeIdx === 0}
-              className="inline-flex items-center gap-1.5 px-3 py-2 text-sm text-[var(--text-muted)] hover:text-[var(--text-primary)] disabled:opacity-30 disabled:cursor-not-allowed"
+              className="gap-1.5 text-[var(--text-muted)] hover:text-[var(--text-primary)] disabled:opacity-30"
             >
               <ArrowLeft className="w-4 h-4" />
               Back
-            </button>
+            </Button>
             <div className="flex items-center gap-2">
               {activeStep.optional && (
-                <button
+                <Button
+                  type="button"
+                  variant="ghost"
                   onClick={onSkipStep}
-                  className="inline-flex items-center gap-1.5 px-3 py-2 text-sm text-[var(--text-muted)] hover:text-[var(--text-primary)] rounded-lg hover:bg-[var(--bg-tertiary)]"
+                  className="gap-1.5 text-[var(--text-muted)] hover:text-[var(--text-primary)]"
                 >
                   <SkipForward className="w-4 h-4" />
                   Skip this step
-                </button>
+                </Button>
               )}
-              <button
+              <Button
+                type="button"
                 onClick={onNext}
                 disabled={busy}
-                className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium bg-[var(--accent)] text-[var(--accent-foreground)] rounded-lg hover:bg-[var(--accent-hover)] disabled:opacity-50"
+                loading={busy}
               >
                 {busy ? "Working…" : activeStep.id === "done" ? "Finish" : "Next"}
-                <ArrowRight className="w-4 h-4" />
-              </button>
+                {!busy && <ArrowRight className="w-4 h-4" />}
+              </Button>
             </div>
           </div>
         </div>

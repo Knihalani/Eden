@@ -13,31 +13,39 @@ export interface CrossLinkItem {
 export interface CrossLinkBarProps {
   links: CrossLinkItem[];
   className?: string;
+  /** Hard cap — Wave 6 diet; default 4 related links. */
+  maxLinks?: number;
 }
 
-/** Compact cross-link row for detail panels (U19 matrix). */
-export function CrossLinkBar({ links, className }: CrossLinkBarProps) {
-  if (links.length === 0) return null;
+/** Compact cross-link row for detail panels — muted text links, not accent chip walls. */
+export function CrossLinkBar({
+  links,
+  className,
+  maxLinks = 4,
+}: CrossLinkBarProps) {
+  const shown = links.slice(0, maxLinks);
+  if (shown.length === 0) return null;
   return (
     <div
       className={cn(
-        "flex flex-wrap items-center gap-2 border-b border-[var(--border-default)] px-4 py-2",
+        "flex flex-wrap items-center gap-x-3 gap-y-1 px-1 py-1.5",
         className,
       )}
       role="navigation"
       aria-label="Related resources"
+      data-wave6-crosslink="diet"
     >
       <span className="text-[length:var(--font-size-2xs)] font-medium uppercase tracking-wide text-[var(--text-muted)]">
-        Go to
+        Related
       </span>
-      {links.map((link) => (
+      {shown.map((link) => (
         <Link
           key={`${link.href}-${link.label}`}
           href={link.href}
-          className="inline-flex items-center gap-1 rounded-md bg-[var(--bg-secondary)] px-2 py-1 text-xs font-medium text-[var(--accent)] hover:bg-[var(--accent-faint)]"
+          className="inline-flex items-center gap-1 text-xs text-[var(--text-secondary)] underline-offset-2 hover:text-[var(--text-primary)] hover:underline"
         >
           {link.label}
-          {link.external ? <ExternalLink className="h-3 w-3" /> : null}
+          {link.external ? <ExternalLink className="h-3 w-3" aria-hidden /> : null}
         </Link>
       ))}
     </div>

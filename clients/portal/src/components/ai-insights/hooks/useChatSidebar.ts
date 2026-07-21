@@ -30,10 +30,9 @@ export function useChatSidebar() {
   const pathname = usePathname();
   const router = useRouter();
 
-  const [open, setOpen] = useState<boolean>(() => {
-    if (typeof window === "undefined") return false;
-    return window.sessionStorage.getItem("eden:ai-sidebar:open") === "1";
-  });
+  // Collapsed by default (open=false). Never restore open from sessionStorage —
+  // Ask AI via header · FAB · ⌘K/⌘J (1A).
+  const [open, setOpen] = useState<boolean>(false);
   // Fail-closed until the public flag probe confirms f70=true.
   const [f70Enabled, setF70Enabled] = useState(false);
   const [sessions, setSessions] = useState<Session[]>([]);
@@ -51,6 +50,8 @@ export function useChatSidebar() {
   const [sessionMenuOpen, setSessionMenuOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const [showCoach, setShowCoach] = useState(false);
+  /** Home Shell W9 — hide FAB while cookie banner owns the thumb zone. */
+  const [cookieAwaiting, setCookieAwaiting] = useState(false);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const stickToBottomRef = useRef(true);
   const panelRef = useRef<HTMLElement | null>(null);
@@ -69,7 +70,34 @@ export function useChatSidebar() {
   useEffect(() => {
     if (typeof window === "undefined") return;
     window.sessionStorage.setItem("eden:ai-sidebar:open", open ? "1" : "0");
+    document.documentElement.setAttribute(
+      "data-ai-rail-open",
+      open ? "1" : "0",
+    );
+    window.dispatchEvent(
+      new CustomEvent("eden:ai-rail-open", { detail: { open } }),
+    );
+    return () => {
+      document.documentElement.removeAttribute("data-ai-rail-open");
+    };
   }, [open]);
+
+  // Wave 9 — FAB yields to cookie banner (data-cookie-awaiting on <html>).
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    const sync = () => {
+      setCookieAwaiting(
+        document.documentElement.getAttribute("data-cookie-awaiting") === "1",
+      );
+    };
+    sync();
+    const obs = new MutationObserver(sync);
+    obs.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["data-cookie-awaiting"],
+    });
+    return () => obs.disconnect();
+  }, []);
 
   useEffect(() => {
     navigateRef.current = (href: string) => {
@@ -113,18 +141,6 @@ export function useChatSidebar() {
     window.history.replaceState({}, "", next);
   }, []);
 
-  // Coach mark once per browser until dismissed.
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    try {
-      if (window.localStorage.getItem("eden:ai-coach-seen") !== "1") {
-        setShowCoach(true);
-      }
-    } catch {
-      /* ignore */
-    }
-  }, []);
-
   useEffect(() => {
     if (typeof window === "undefined") return;
     const mq = window.matchMedia("(max-width: 1023px)");
@@ -132,6 +148,17 @@ export function useChatSidebar() {
     apply();
     mq.addEventListener("change", apply);
     return () => mq.removeEventListener("change", apply);
+  }, []);
+
+  // One-time dismissible coach tip after Ask AI restore (1A) — not sticky noise.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      if (window.localStorage.getItem("eden:ai-coach-seen") === "1") return;
+      setShowCoach(true);
+    } catch {
+      /* ignore */
+    }
   }, []);
 
   // features.f70 — public flag; fail-closed (hide) when probe fails or f70=false.
@@ -877,5 +904,6 @@ export function useChatSidebar() {
     refreshSessions,
     showCoach,
     dismissCoach,
+    cookieAwaiting,
   };
 }

@@ -37,33 +37,39 @@ function canLoadMoreAudit(opts: {
 
 describe("W6-4 profile auth ErrorState vs blank", () => {
   it("shows loading skeleton and ErrorState instead of blank !user", () => {
-    const src = read("app/(portal)/profile/page.tsx");
+    // /profile is a thin redirect shell; auth UX lives on AccountPanel.
+    const src = read("app/(portal)/settings/_components/account-panel.tsx");
     expect(src).toContain("authLoading");
     expect(src).toContain("authError");
     expect(src).toContain("LoadingSkeleton");
-    expect(src).toContain("Could not load profile");
+    expect(src).toContain("Could not load account");
     expect(src).toContain("Try again");
     expect(src).toMatch(/if \(authLoading\)/);
     expect(src).toMatch(/if \(authError && !user\)/);
   });
 
   it("keeps 2FA load failure on ErrorState (not empty)", () => {
-    const src = read("app/(portal)/profile/page.tsx");
-    expect(src).toContain("Could not load 2FA status");
-    expect(src).toContain('from "@/components/ui/error-state"');
+    const panel = read("app/(portal)/settings/_components/account-panel.tsx");
+    const sections = read(
+      "app/(portal)/settings/_components/account-panel-sections.tsx",
+    );
+    expect(panel).toContain("Could not load 2FA status");
+    expect(sections).toContain('title="Could not load 2FA status"');
+    expect(sections).toContain('from "@/components/ui/error-state"');
   });
 });
 
 describe("W6-4 audit-trail ErrorState + pagination + deep link", () => {
   it("keeps QueryState error before empty and Load more", () => {
-    const src = read("app/(portal)/audit-trail/page.tsx");
-    expect(src).toContain("Could not load audit trail");
-    expect(src).toContain("QueryState");
-    expect(src).toContain("Load more events");
-    expect(src).toContain("PAGE_SIZE");
-    expect(src).toContain("MAX_LIMIT");
-    expect(src).toContain('searchParams.get("agent")');
-    expect(src).not.toMatch(/ledgerQuery\.error[\s\S]{0,80}toast\.error/);
+    const page = read("app/(portal)/audit-trail/page.tsx");
+    const chain = read("app/(portal)/audit-trail/_components/chain-panel.tsx");
+    expect(chain).toContain("Could not load audit trail");
+    expect(chain).toContain("QueryState");
+    expect(chain).toContain("Load more events");
+    expect(chain).toContain("PAGE_SIZE");
+    expect(chain).toContain("MAX_LIMIT");
+    expect(page).toContain('searchParams.get("agent")');
+    expect(chain).not.toMatch(/ledgerQuery\.error[\s\S]{0,80}toast\.error/);
   });
 
   it("does not show empty while loading or on error", () => {
@@ -124,7 +130,7 @@ describe("W6-4 ledger picker ErrorState vs empty", () => {
     expect(src).toContain('from "@/components/ui/error-state"');
     expect(src).toContain("Could not load ledgers");
     expect(src).toContain("Try again");
-    expect(src).toMatch(/error \? \(/);
+    expect(src).toMatch(/if \(error\)/);
     expect(src).toContain("No ledgers yet");
     expect(src).toContain("Showing first 100 ledgers");
   });

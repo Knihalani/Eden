@@ -1,6 +1,6 @@
 """Issue → improvement_plan trigger (N20 / N23).
 
-Fingerprint ≥5× → N22 gate → PatchGenerator → improvement_plans.
+Fingerprint ≥5× → value gates → N22 → PatchGenerator → improvement_plans.
 Portal fix-chat is deleted — this is the only issue→code path.
 """
 
@@ -14,6 +14,30 @@ from eden.improvement import plans_repo
 logger = logging.getLogger(__name__)
 
 _MIN_FINGERPRINT_COUNT = 5
+_MIN_TRIAGE_CONFIDENCE = 0.65
+_CODE_ACTIONS = frozenset({"code_change", "propose_patch"})
+_SEVERITY_RANK = {
+    "critical": 4,
+    "p0": 4,
+    "high": 3,
+    "p1": 3,
+    "medium": 2,
+    "p2": 2,
+    "low": 1,
+    "p3": 1,
+    "info": 0,
+}
+_SEVERITY_NORMALIZE = {
+    "p0": "critical",
+    "critical": "critical",
+    "p1": "high",
+    "high": "high",
+    "p2": "medium",
+    "medium": "medium",
+    "p3": "low",
+    "low": "low",
+    "info": "info",
+}
 
 
 def _improvement_enabled_sync() -> bool:
@@ -44,6 +68,36 @@ def _min_fingerprint_count() -> int:
     return max(_MIN_FINGERPRINT_COUNT, configured)
 
 
+def _min_confidence() -> float:
+    try:
+        from eden.config import get_settings
+
+        return float(
+            getattr(get_settings(), "patch_min_triage_confidence", _MIN_TRIAGE_CONFIDENCE)
+            or _MIN_TRIAGE_CONFIDENCE
+        )
+    except Exception:
+        return _MIN_TRIAGE_CONFIDENCE
+
+
+def normalize_severity(raw: str | None) -> str:
+    key = (raw or "medium").lower().strip()
+    return _SEVERITY_NORMALIZE.get(key, "medium" if key not in _SEVERITY_RANK else key)
+
+
+def severity_meets_floor(raw: str | None, *, floor: str = "medium") -> bool:
+    return _SEVERITY_RANK.get(normalize_severity(raw), 0) >= _SEVERITY_RANK.get(
+        normalize_severity(floor), 2
+    )
+
+
+def _recommended_action(triage: dict[str, Any]) -> str | None:
+    action = triage.get("recommended_action") or triage.get("recommended")
+    if action is None:
+        return None
+    return str(action).strip().lower() or None
+
+
 async def _issue_context(org_id: str, issue_id: str) -> dict[str, Any] | None:
     try:
         from eden.issues.repo import IssuesRepo
@@ -71,15 +125,18 @@ async def _issue_context(org_id: str, issue_id: str) -> dict[str, Any] | None:
 
 
 async def _find_open_plan(org_id: str, fingerprint: str) -> dict[str, Any] | None:
-    return await plans_repo.find_open_by_fingerprint(org_id, fingerprint)
+    return await plans_repo.find_blocking_by_fingerprint(org_id, fingerprint)
 
 
 async def build_candidate_from_issue(org_id: str, issue: Any) -> Any | None:
+    """Cheap rank candidate — never persisted as empty code_patch."""
     from eden.improvement.planner import PlanCandidate
 
     triage = issue.triage_result or {}
-    sev = (issue.severity or "medium").lower()
+    sev = normalize_severity(issue.severity)
     fp = f"issue:{issue.id}"
+    conf = float(triage.get("confidence", 0.0) or 0.0)
+    stumble = int(getattr(issue, "stumble_count", 0) or 0)
     return PlanCandidate(
         plan_kind="code_patch",
         title=issue.title or issue.fingerprint,
@@ -91,13 +148,32 @@ async def build_candidate_from_issue(org_id: str, issue: Any) -> Any | None:
             "issue_id": issue.id,
             "fingerprint": issue.fingerprint,
             "severity": sev,
-            "confidence": float(triage.get("confidence", 0.6)),
-            "stumble_count": int(getattr(issue, "stumble_count", 0) or 0),
+            "confidence": conf,
+            "stumble_count": stumble,
+            "recommended_action": _recommended_action(triage),
         },
         triage_snapshot=triage,
         severity=sev,
-        confidence=float(triage.get("confidence", 0.6)),
+        confidence=conf,
     )
+
+
+def issue_passes_cheap_gates(issue: Any) -> tuple[bool, str]:
+    """Pre-LLM value funnel (DB fields only)."""
+    triage = getattr(issue, "triage_result", None) or {}
+    stumble = int(getattr(issue, "stumble_count", 0) or 0)
+    min_count = _min_fingerprint_count()
+    if stumble < min_count:
+        return False, "fingerprint_below_threshold"
+    if not severity_meets_floor(getattr(issue, "severity", None)):
+        return False, "severity_below_floor"
+    conf = float(triage.get("confidence", 0.0) or 0.0)
+    if conf < _min_confidence():
+        return False, "confidence_below_floor"
+    action = _recommended_action(triage)
+    if action not in _CODE_ACTIONS:
+        return False, "recommended_action_not_code"
+    return True, "ok"
 
 
 def _plan_payload_from_patch(
@@ -111,6 +187,7 @@ def _plan_payload_from_patch(
     issue = ctx["issue"]
     triage = ctx.get("triage") or {}
     files = patch_data.get("files") or []
+    sev = normalize_severity(issue.severity)
     return {
         "org_id": org_id,
         "run_id": run_id,
@@ -125,8 +202,8 @@ def _plan_payload_from_patch(
         "evidence": {
             "issue_id": issue_id,
             "patch_id": patch_data.get("patch_id"),
-            "severity": (issue.severity or "medium").lower(),
-            "confidence": float(triage.get("confidence", 0.6)),
+            "severity": sev,
+            "confidence": float(triage.get("confidence", 0.0) or 0.0),
             "stumble_count": int(getattr(issue, "stumble_count", 0) or 0),
         },
         "triage_snapshot": triage,
@@ -157,18 +234,25 @@ async def _n22_may_propose(org_id: str, agent_id: str | None) -> tuple[bool, str
 
 
 async def _budget_ok(org_id: str) -> tuple[bool, str]:
-    """Budgets from cost ledger (W7/W8) + daily maintenance cap."""
+    """Budgets from cost ledger (W7/W8) + daily maintenance cap + patch_max_per_day."""
     try:
         from eden.config import get_settings
         from eden.llmops.cost_ledger import sum_feature_spend_today
 
-        cap = float(getattr(get_settings(), "daily_maintenance_budget_usd", 25.0) or 0)
+        settings = get_settings()
+        cap = float(getattr(settings, "daily_maintenance_budget_usd", 25.0) or 0)
         if cap > 0:
             spent = await sum_feature_spend_today(
                 org_id, features=("patches", "autonomy")
             )
             if spent >= cap:
                 return False, f"budget_exhausted:{spent:.2f}>={cap:.2f}"
+
+        day_cap = int(getattr(settings, "patch_max_per_day", 10) or 10)
+        if day_cap > 0:
+            used = await plans_repo.count_code_patches_today(org_id)
+            if used >= day_cap:
+                return False, f"patch_max_per_day:{used}>={day_cap}"
     except Exception as exc:
         logger.debug("issue_patch_trigger: cost_ledger budget: %s", exc)
 
@@ -190,16 +274,17 @@ async def propose_plan_for_issue(
         return {"status": "not_found", "reason": f"issue {issue_id!r} not found"}
 
     issue = ctx["issue"]
-    min_count = _min_fingerprint_count()
-    stumble_count = int(getattr(issue, "stumble_count", 0) or 0)
-    if stumble_count < min_count:
+    ok, gate_reason = issue_passes_cheap_gates(issue)
+    if not ok:
         return {
             "status": "suppressed",
-            "reason": "fingerprint_below_threshold",
-            "stumble_count": stumble_count,
-            "min_required": min_count,
+            "reason": gate_reason,
+            "stumble_count": int(getattr(issue, "stumble_count", 0) or 0),
+            "min_required": _min_fingerprint_count(),
             "issue_id": issue_id,
         }
+
+    stumble_count = int(getattr(issue, "stumble_count", 0) or 0)
 
     allowed, n22_reason = await _n22_may_propose(org_id, ctx.get("agent_id") or None)
     if not allowed:
@@ -224,6 +309,19 @@ async def propose_plan_for_issue(
             "status": "suppressed",
             "reason": "duplicate_open_plan",
             "plan_id": existing.get("id"),
+            "issue_id": issue_id,
+        }
+
+    rejected = await plans_repo.is_rejection_active(
+        org_id,
+        title=issue.title or issue.fingerprint,
+        fingerprint=fp,
+        file_paths=[fp, str(issue.fingerprint or "")],
+    )
+    if rejected:
+        return {
+            "status": "suppressed",
+            "reason": "rejection_memory",
             "issue_id": issue_id,
         }
 
@@ -255,6 +353,26 @@ async def propose_plan_for_issue(
         }
 
     linked_files = await _linked_files(org_id, rca_id, ctx, repo_id=repo_id)
+    if not linked_files:
+        return {
+            "status": "suppressed",
+            "reason": "no_linked_files",
+            "issue_id": issue_id,
+        }
+
+    linked_paths = [str(f.get("path") or "") for f in linked_files if f.get("path")]
+    rejected = await plans_repo.is_rejection_active(
+        org_id,
+        title=issue.title or issue.fingerprint,
+        fingerprint=fp,
+        file_paths=linked_paths + [fp],
+    )
+    if rejected:
+        return {
+            "status": "suppressed",
+            "reason": "rejection_memory",
+            "issue_id": issue_id,
+        }
 
     try:
         from eden.patches.patch_generator import PatchGenerator
@@ -275,10 +393,24 @@ async def propose_plan_for_issue(
 
     data = result.get("data", {}) if isinstance(result, dict) else {}
     status = data.get("status") or "proposed"
-    if status in ("deduplicated", "investigation"):
+    # Never inbox: empty / investigation / dedup / low_quality / critic fail
+    if status in ("deduplicated", "investigation", "low_quality"):
         return {
             "status": "suppressed",
             "reason": status,
+            "issue_id": issue_id,
+        }
+    critic = data.get("critic_verdict") or {}
+    if critic and critic.get("passed") is False:
+        return {
+            "status": "suppressed",
+            "reason": "critic_failed",
+            "issue_id": issue_id,
+        }
+    if critic.get("reason") == "critic_error":
+        return {
+            "status": "suppressed",
+            "reason": "critic_failed",
             "issue_id": issue_id,
         }
     if not data.get("diff"):

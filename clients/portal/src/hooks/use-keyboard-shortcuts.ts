@@ -23,8 +23,11 @@ export interface ShortcutMap {
   j?: () => void;
   k?: () => void;
   o?: () => void;
+  /** Prefer `Escape` — matches `KeyboardEvent.key`. */
   esc?: () => void;
-  "/"? : () => void;
+  Escape?: () => void;
+  Enter?: () => void;
+  "/"?: () => void;
   "1"?: () => void;
   "2"?: () => void;
   "3"?: () => void;
@@ -42,15 +45,21 @@ function isTextInput(target: EventTarget | null): boolean {
   return false;
 }
 
+/**
+ * Document-level shortcuts. Modifier chords (⌘K / Ctrl+K, etc.) are ignored
+ * so portal chrome owns the command palette — never steal filter focus via ⌘K.
+ */
 export function useKeyboardShortcuts(map: ShortcutMap, enabled: boolean = true): void {
   React.useEffect(() => {
     if (!enabled) return;
     const handler = (e: KeyboardEvent) => {
       if (isTextInput(e.target)) return;
-      // Don't trigger with modifier keys
+      // Don't trigger with modifier keys — ⌘K / Ctrl+K stay on chrome palette.
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       const key = e.key;
-      const fn = map[key];
+      const fn =
+        map[key] ??
+        (key === "Escape" ? map.esc : undefined);
       if (fn) {
         e.preventDefault();
         fn();

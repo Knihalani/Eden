@@ -32,11 +32,39 @@ export interface SidebarPrefs {
   density: Density;
 }
 
+/** Wave 3 group-id rename — migrate persisted prefs / session cache. */
+const LEGACY_GROUP_IDS: Record<string, SidebarGroup["id"]> = {
+  build: "home",
+  automate: "evaluate",
+  optimize: "improve",
+};
+
+const KNOWN_GROUP_IDS = new Set<SidebarGroup["id"]>([
+  "home",
+  "observe",
+  "evaluate",
+  "improve",
+  "workspace",
+]);
+
+export function migrateGroupOrder(order: string[] | undefined): SidebarGroup["id"][] {
+  if (!Array.isArray(order) || order.length !== 5) {
+    return DEFAULT_PREFS.groupOrder;
+  }
+  const mapped = order.map(
+    (id) => LEGACY_GROUP_IDS[id] ?? (id as SidebarGroup["id"]),
+  );
+  if (mapped.every((id) => KNOWN_GROUP_IDS.has(id))) {
+    return mapped;
+  }
+  return DEFAULT_PREFS.groupOrder;
+}
+
 export const DEFAULT_PREFS: SidebarPrefs = {
   pinned: [],
   hidden: [],
   // Home → Observe → Evaluate → Improve → Workspace (product path).
-  groupOrder: ["build", "observe", "automate", "optimize", "workspace"],
+  groupOrder: ["home", "observe", "evaluate", "improve", "workspace"],
   density: "comfortable",
 };
 
@@ -104,9 +132,7 @@ function fromApiPrefs(p: ApiSidebarPrefs | null | Record<string, unknown>): Side
   return {
     pinned: Array.isArray(prefs.pinned) ? prefs.pinned : [],
     hidden: Array.isArray(prefs.hidden) ? prefs.hidden : [],
-    groupOrder: Array.isArray(prefs.group_order) && prefs.group_order.length === 5
-      ? (prefs.group_order as SidebarGroup["id"][])
-      : DEFAULT_PREFS.groupOrder,
+    groupOrder: migrateGroupOrder(prefs.group_order),
     density: prefs.density === "compact" ? "compact" : "comfortable",
   };
 }
@@ -120,9 +146,7 @@ function readCached(orgId: string | null | undefined): SidebarPrefs | null {
     return {
       pinned: Array.isArray(parsed.pinned) ? parsed.pinned : DEFAULT_PREFS.pinned,
       hidden: Array.isArray(parsed.hidden) ? parsed.hidden : DEFAULT_PREFS.hidden,
-      groupOrder: Array.isArray(parsed.groupOrder) && parsed.groupOrder.length === 5
-        ? (parsed.groupOrder as SidebarGroup["id"][])
-        : DEFAULT_PREFS.groupOrder,
+      groupOrder: migrateGroupOrder(parsed.groupOrder),
       density: parsed.density === "compact" ? "compact" : "comfortable",
     };
   } catch {

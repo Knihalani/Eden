@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useOrgQuery } from "@/hooks/use-api-query";
 import { queryKeys } from "@/lib/query-keys";
 import { usePermissions } from "@/hooks/use-permissions";
@@ -9,7 +10,13 @@ import { Loader2, Shield, RefreshCw, Copy, Check, Key, AlertTriangle, Users } fr
 import { cn } from "@/lib/utils";
 import { errorFromCaught } from "@/lib/safe-error-message";
 import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorState } from "@/components/ui/error-state";
+import { Switch } from "@/components/ui/switch";
+import {
+  isPersonalWorkspace,
+  canUseTeamFeatures,
+} from "@/lib/workspace-mode";
 
 interface ScimConfig {
   scim_enabled: boolean;
@@ -17,6 +24,9 @@ interface ScimConfig {
   provisioned_user_count: number;
   has_token: boolean;
 }
+
+/** Wave 8 advanced ops exit marker (S15–S16 / M5 / M7). */
+export const WS8_ADVANCED_OPS_COMPLETED = true as const;
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function ScimTab({ org }: { org: any }) {
@@ -29,10 +39,14 @@ export function ScimTab({ org }: { org: any }) {
   const canManageScim = hasPermission("settings:edit");
   const currentOrg = org;
   const orgId = currentOrg?.id ?? null;
+  const isPersonal = isPersonalWorkspace(currentOrg);
+  const teamOk = canUseTeamFeatures(currentOrg);
+
   const configQuery = useOrgQuery(
     queryKeys.scim.config(orgId),
     orgId,
     () => api.getScimConfig(orgId!),
+    { enabled: Boolean(orgId) && teamOk && canManageScim },
   );
   const config = configQuery.data ?? null;
   const loading = configQuery.isLoading;
@@ -41,7 +55,7 @@ export function ScimTab({ org }: { org: any }) {
     : null;
 
   const handleToggle = async (enabled: boolean) => {
-    if (!currentOrg) return;
+    if (!currentOrg || !teamOk) return;
     setSaving(true);
     setError(null);
     setNewToken(null);
@@ -59,7 +73,7 @@ export function ScimTab({ org }: { org: any }) {
   };
 
   const handleRotateToken = async () => {
-    if (!currentOrg) return;
+    if (!currentOrg || !teamOk) return;
     setSaving(true);
     setError(null);
     setNewToken(null);
@@ -96,11 +110,31 @@ export function ScimTab({ org }: { org: any }) {
     return date.toLocaleDateString();
   };
 
+  // Reinforce hub `isTeamOnlyTab("scim")` — personal workspaces never paint SCIM controls.
+  if (isPersonal || !teamOk) {
+    return (
+      <div data-ws8-scim data-ws8-scim-personal="true">
+        <EmptyState
+          icon={Users}
+          title="SCIM needs a team workspace"
+          description="Personal workspaces are solo — SCIM provisioning is unavailable. Create a team workspace to connect your identity provider."
+          size="md"
+          variant="panel"
+          action={
+            <Button asChild variant="default" className="min-h-11">
+              <Link href="/settings?tab=org&create=1">Create a team workspace</Link>
+            </Button>
+          }
+        />
+      </div>
+    );
+  }
+
   if (!canManageScim) {
     return (
-      <div className="p-6 bg-[var(--error-dim)] rounded-lg border border-[var(--error)]">
+      <div data-ws8-scim className="p-6 bg-[var(--error-dim)] rounded-lg border border-[var(--error)]">
         <p className="text-sm text-[var(--error)]">
-          You do not have permission to manage SCIM settings. Contact your organization admin.
+          You do not have permission to manage SCIM settings. Contact your workspace admin.
         </p>
       </div>
     );
@@ -108,7 +142,7 @@ export function ScimTab({ org }: { org: any }) {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-12">
+      <div data-ws8-scim className="flex items-center justify-center py-12">
         <Loader2 className="w-6 h-6 animate-spin text-[var(--accent)]" />
         <span className="ml-2 text-[var(--text-muted)]">Loading SCIM configuration...</span>
       </div>
@@ -118,26 +152,28 @@ export function ScimTab({ org }: { org: any }) {
   // Load failure with no config — do not paint a false "Disabled" toggle.
   if (queryError && !config) {
     return (
-      <ErrorState
-        title="Could not load SCIM configuration"
-        message={queryError}
-        action={
-          <Button
-            type="button"
-            variant="outline"
-            size="default"
-            onClick={() => void configQuery.refetch()}
-          >
-            <RefreshCw className="h-4 w-4" />
-            Try again
-          </Button>
-        }
-      />
+      <div data-ws8-scim>
+        <ErrorState
+          title="Could not load SCIM configuration"
+          message={queryError}
+          action={
+            <Button
+              type="button"
+              variant="outline"
+              size="default"
+              onClick={() => void configQuery.refetch()}
+            >
+              <RefreshCw className="h-4 w-4" />
+              Try again
+            </Button>
+          }
+        />
+      </div>
     );
   }
 
   return (
-    <div className="space-y-space-6">
+    <div className="space-y-space-6" data-ws8-scim>
       {/* Header */}
       <div className="flex items-center gap-3">
         <div className="p-2 bg-[var(--accent-faint)] rounded-lg">
@@ -172,13 +208,16 @@ export function ScimTab({ org }: { org: any }) {
               </p>
               <div className="flex items-center gap-2 p-2 bg-[var(--bg-primary)] border border-[var(--terminal)] rounded">
                 <code className="flex-1 text-sm font-mono break-all">{newToken}</code>
-                <button
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
                   onClick={() => copyToClipboard(newToken)}
-                  className="p-1.5 hover:bg-[var(--terminal-faint)] rounded"
                   title="Copy to clipboard"
+                  aria-label="Copy SCIM token"
                 >
                   {copied ? <Check className="w-4 h-4 text-[var(--terminal)]" /> : <Copy className="w-4 h-4" />}
-                </button>
+                </Button>
               </div>
             </div>
           </div>
@@ -205,24 +244,12 @@ export function ScimTab({ org }: { org: any }) {
               </p>
             </div>
           </div>
-          <button
-            type="button"
-            onClick={() => handleToggle(!config?.scim_enabled)}
+          <Switch
+            checked={Boolean(config?.scim_enabled)}
             disabled={saving}
+            onCheckedChange={(v) => void handleToggle(v)}
             aria-label={config?.scim_enabled ? "Disable SCIM provisioning" : "Enable SCIM provisioning"}
-            aria-pressed={Boolean(config?.scim_enabled)}
-            className={cn(
-              "relative w-12 h-6 rounded-full transition-colors",
-              config?.scim_enabled ? "bg-[var(--accent)]" : "bg-[var(--border-default)]"
-            )}
-          >
-            <span
-              className={cn(
-                "absolute top-0.5 left-0.5 w-5 h-5 bg-[var(--bg-primary)] rounded-full transition-transform",
-                config?.scim_enabled && "translate-x-6"
-              )}
-            />
-          </button>
+          />
         </div>
       </div>
 
@@ -254,14 +281,16 @@ export function ScimTab({ org }: { org: any }) {
               Use this token to authenticate SCIM requests from your Identity Provider.
               The endpoint base is: <code className="bg-[var(--bg-tertiary)] px-1 rounded">/orgs/{currentOrg?.id}/scim/v2</code>
             </p>
-            <button
-              onClick={handleRotateToken}
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => void handleRotateToken()}
               disabled={saving}
-              className="px-4 py-2 bg-[var(--warning-bg)] text-[var(--warning)] rounded-lg text-sm font-medium hover:bg-[var(--warning-bg)] transition-colors disabled:opacity-50 flex items-center gap-2"
+              loading={saving}
             >
               <RefreshCw className="w-4 h-4" />
               Rotate Token
-            </button>
+            </Button>
           </div>
 
           {/* SCIM Endpoint Info */}
@@ -303,7 +332,7 @@ export function ScimTab({ org }: { org: any }) {
         <p className="text-sm text-[var(--text-secondary)]">
           <strong>How it works:</strong> SCIM 2.0 allows your Identity Provider (Okta, Azure AD, etc.)
           to automatically provision and de-provision user accounts. When a user is de-provisioned
-          via SCIM, their organization membership is suspended (not deleted) to preserve data.
+          via SCIM, their workspace membership is suspended (not deleted) to preserve data.
         </p>
       </div>
     </div>

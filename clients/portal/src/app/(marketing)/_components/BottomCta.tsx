@@ -103,7 +103,7 @@ export function BottomCta({ signedIn }: { signedIn: boolean }) {
                 ))}
               </ol>
               <p className="mt-space-2 border-t border-[var(--border-subtle)] pt-space-3 text-xs font-mono text-[var(--text-muted)]">
-                Soft launch · free · {FREE_TIER_CAP_SHORT}
+                Public beta · free · {FREE_TIER_CAP_SHORT}
               </p>
             </div>
           </div>

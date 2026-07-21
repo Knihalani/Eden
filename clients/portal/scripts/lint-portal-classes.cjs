@@ -16,7 +16,9 @@
 // Wave 13–15 ratchets (re-measured 2026-07-20; W15 locks post-interaction floor):
 //   MICRO_TEXT   91  — text-[9|10|11px] (was 112 → 96 → 91)
 //   HALF_STEP   112  — \b(py|px|gap|p|m)-0.5\b (was 139 → 138 → 121 → 112)
-//   ACCENT_CTA    6  — raw <button … bg-[var(--accent)] opening tags
+//   ACCENT_CTA    2  — raw <button … bg-[var(--accent)] opening tags (was 6)
+// Wave 1 V2 kit freeze (2026-07-21): MICRO_TEXT 91→79
+// Wave 6 Home shell buttons (2026-07-21): ACCENT_CTA 2→1; chrome path hard-fail
 
 const fs = require("node:fs");
 const path = require("node:path");
@@ -24,14 +26,24 @@ const { execSync } = require("node:child_process");
 
 const ROOT = path.resolve(__dirname, "..");
 
-// Wave 15 ratchet baselines (occurrence counts; raise only if intentional) ---
-const BASELINE_MICRO_TEXT = 91;
+// Wave 1 V2 kit freeze baselines (occurrence counts; raise only if intentional) ---
+const BASELINE_MICRO_TEXT = 79;
 const BASELINE_HALF_STEP = 112;
-const BASELINE_ACCENT_CTA = 6;
+const BASELINE_ACCENT_CTA = 1;
 
 const MICRO_TEXT_RE = /text-\[(?:9|10|11)px\]/g;
 const HALF_STEP_RE = /\b(?:py|px|gap|p|m)-0\.5\b/g;
 const ACCENT_IN_TAG_RE = /bg-\[var\(--accent\)\]/;
+
+/** Shell Home path — zero hand-rolled accent buttons (W6). */
+const SHELL_ACCENT_BAN_PATHS = [
+  path.join(ROOT, "src/components/portal-chrome"),
+  path.join(ROOT, "src/components/cookie-consent.tsx"),
+  path.join(
+    ROOT,
+    "src/app/(portal)/dashboard/_components/home-header-actions.tsx"
+  ),
+];
 
 const SKIP_DIR = new Set([
   "node_modules",
@@ -68,6 +80,21 @@ function walkFiles(dir, out = []) {
       if (isTestFile(full)) continue;
       out.push(full);
     }
+  }
+  return out;
+}
+
+function collectShellFiles() {
+  const out = [];
+  for (const p of SHELL_ACCENT_BAN_PATHS) {
+    let st;
+    try {
+      st = fs.statSync(p);
+    } catch {
+      continue;
+    }
+    if (st.isDirectory()) walkFiles(p, out);
+    else if (st.isFile() && !isTestFile(p)) out.push(p);
   }
   return out;
 }
@@ -222,6 +249,21 @@ if (accent.total > BASELINE_ACCENT_CTA) {
   console.log(
     `lint:portal-classes accent-cta OK (${accent.total}/${BASELINE_ACCENT_CTA})`
   );
+}
+
+// --- 5. Wave 6: shell Home path — hard fail any raw accent button ---
+const shellAccent = countAccentCtaButtons(collectShellFiles());
+if (shellAccent.total > 0) {
+  console.error(
+    `✗ eden/no-shell-raw-accent-button: ${shellAccent.total} hand-rolled accent <button> in shell Home path.\n` +
+      `  Use kit <Button variant="default"> — portal-chrome/, cookie-consent, home-header-actions.\n` +
+      (shellAccent.samples.length
+        ? `  samples:\n    ${shellAccent.samples.join("\n    ")}\n`
+        : "")
+  );
+  process.exitCode = 1;
+} else {
+  console.log("lint:portal-classes shell-accent OK (0)");
 }
 
 if (process.exitCode) {

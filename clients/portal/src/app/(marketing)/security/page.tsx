@@ -14,7 +14,7 @@ import {
 export const metadata: Metadata = {
   title: "Security · Eden",
   description:
-    "How Eden protects your data during soft launch — TLS, Clerk auth, org RBAC, API keys, and PII masking at ingest.",
+    "How Eden protects your data during public beta — TLS, Clerk auth, org RBAC, API keys, and PII masking at ingest.",
 };
 
 const CONTROLS = [
@@ -55,7 +55,7 @@ export default function SecurityPage() {
     <LegalPage
       eyebrow="Trust Center"
       title="Security"
-      description="Eden is in soft launch. Observability data is sensitive — this page states what we do today and how to reach us for security questions. We do not claim third-party certifications on marketing surfaces."
+      description="Eden is in public beta. Observability data is sensitive — this page states what we do today and how to reach us for security questions. We do not claim third-party certifications on marketing surfaces."
       size="narrow"
     >
       <section className="mb-12">
@@ -110,7 +110,7 @@ export default function SecurityPage() {
             </p>
             <p className="text-xs text-[var(--text-muted)]">
               Enterprise security questionnaires and formal audit artifacts are not
-              available during soft launch — contact us to discuss your requirements.
+              available during public beta — contact us to discuss your requirements.
             </p>
           </div>
         </div>

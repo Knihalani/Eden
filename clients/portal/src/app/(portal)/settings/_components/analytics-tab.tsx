@@ -40,9 +40,9 @@ export function AnalyticsTab() {
 
   if (!canViewAnalytics) {
     return (
-      <div className="p-6 bg-[var(--error-dim)] rounded-lg border border-[var(--error)]">
+      <div data-ws8-analytics className="p-6 bg-[var(--error-dim)] rounded-lg border border-[var(--error)]">
         <p className="text-sm text-[var(--error)]">
-          You do not have permission to view organization analytics. Contact your organization admin.
+          You do not have permission to view workspace analytics. Contact your workspace admin.
         </p>
       </div>
     );
@@ -102,7 +102,7 @@ export function AnalyticsTab() {
   ];
 
   return (
-    <div className="space-y-space-6">
+    <div className="space-y-space-6" data-ws8-analytics>
       {/* Summary Stats */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div className="bg-[var(--bg-primary)] p-4 rounded-lg border border-[var(--border-default)]">

@@ -3,7 +3,7 @@
 import type { ComponentPropsWithoutRef } from "react";
 import Link from "next/link";
 import { ExternalLink } from "lucide-react";
-import { cn, isExternalHref } from "@/lib/utils";
+import { isExternalHref } from "@/lib/utils";
 
 type PortalNavLinkProps = ComponentPropsWithoutRef<"a"> & {
   href: string;
@@ -45,15 +45,5 @@ export function PortalNavLink({
     <Link href={href} className={className} onClick={onClick} {...rest}>
       {children}
     </Link>
-  );
-}
-
-/** Shared row styles for sidebar search result links. */
-export function sidebarSearchResultClass(isActive: boolean): string {
-  return cn(
-    "flex items-center gap-2.5 px-3 py-2 text-xs transition-colors",
-    isActive
-      ? "bg-[var(--accent-faint)] text-[var(--text-primary)]"
-      : "text-[var(--text-secondary)] hover:bg-[var(--bg-secondary)]",
   );
 }

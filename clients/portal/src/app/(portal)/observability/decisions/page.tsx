@@ -11,7 +11,11 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Compass, GitBranch, Lightbulb, Info, Sparkles, Play, ArrowRight } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { PageContent } from "@/components/layout/page-content";
-import { ObserveLeafHeader } from "@/app/(portal)/observability/_components/observe-leaf-shell";
+import {
+  ObserveBackToTraces,
+  ObserveLeafHeader,
+  WAVE10_FACET_ATTR,
+} from "@/app/(portal)/observability/_components/observe-leaf-shell";
 import { errorFromCaught } from "@/lib/safe-error-message";
 
 interface DecisionPath {
@@ -110,7 +114,14 @@ export default function DecisionsPage() {
 
   return (
     <PageContent size="wide">
-      <ObserveLeafHeader title="Decisions" subtitle="Trace the choice points in your agent's reasoning" icon={Compass} />
+      <div {...WAVE10_FACET_ATTR} className="contents">
+        <ObserveBackToTraces />
+        <ObserveLeafHeader
+          title="Decisions"
+          subtitle="Choice points for one trace — under Traces facets"
+          icon={Compass}
+        />
+      </div>
 
       {error ? (
         <ErrorState

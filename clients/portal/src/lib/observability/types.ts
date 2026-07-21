@@ -63,6 +63,11 @@ export interface TranscriptRow {
   timestamp: string;
   duration_ms: number;
   outcome?: string | null;
+  /** Token / cost from getTraceTree metrics (or child rollup). */
+  input_tokens?: number | null;
+  output_tokens?: number | null;
+  /** USD cost when present on span metrics/payload/attributes. */
+  cost_usd?: number | null;
   // ── Provider-specific extensions ──
   request_body?: {
     model?: string;

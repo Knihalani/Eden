@@ -7,6 +7,7 @@ import { Download } from "lucide-react";
 import type { AiChartSpec } from "@/lib/api";
 import { downloadCsv, downloadXlsx } from "@/lib/export";
 import { Button } from "@/components/ui/button";
+import { citationJumpHref } from "@/lib/portal-cross-links";
 import { cn } from "@/lib/utils";
 import { ToolCallCard } from "./ToolCallCard";
 import { ApprovalCard } from "./ApprovalCard";
@@ -23,29 +24,29 @@ const AiChartRenderer = dynamic(
 );
 
 function CitationChip({ cite }: { cite: ChatCitation }) {
-  const traceId =
-    cite.kind === "trace"
-      ? cite.id
-      : cite.trace_id || (cite.kind === "span" ? cite.trace_id : undefined);
-  const href = traceId
-    ? `/traces?trace_id=${encodeURIComponent(traceId)}`
-    : cite.kind === "incident"
-      ? `/issues/${encodeURIComponent(cite.id)}`
-      : null;
+  const href = citationJumpHref(cite);
   const label = cite.label || `${cite.kind}:${cite.id.slice(0, 8)}`;
+  const spanId = cite.kind === "span" ? cite.id : undefined;
   if (href) {
     return (
       <Link
         href={href}
         className="inline-flex rounded bg-[var(--bg-tertiary)] px-space-2 py-space-1 text-2xs text-[var(--accent)] hover:underline"
         data-citation-chip
+        data-citation-kind={cite.kind}
+        {...(spanId ? { "data-span-id": spanId } : {})}
       >
         {label}
       </Link>
     );
   }
   return (
-    <span className="inline-flex rounded bg-[var(--bg-tertiary)] px-space-2 py-space-1 text-2xs text-[var(--text-muted)]">
+    <span
+      className="inline-flex rounded bg-[var(--bg-tertiary)] px-space-2 py-space-1 text-2xs text-[var(--text-muted)]"
+      data-citation-chip
+      data-citation-kind={cite.kind}
+      {...(spanId ? { "data-span-id": spanId } : {})}
+    >
       {label}
     </span>
   );

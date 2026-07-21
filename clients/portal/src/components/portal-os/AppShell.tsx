@@ -49,6 +49,9 @@ export function AppShell({
         data-density={density}
         data-shell={hideChrome ? "minimal" : "full"}
         data-shell-sticky-layers="1"
+        data-bottom-exclusivity="1"
+        data-wave11-shell="bottom-exclusive"
+        data-wave9-shell="bottom-exclusive"
       >
         <a href="#main-content" className="skip-to-content">
           Skip to main content
@@ -58,12 +61,11 @@ export function AppShell({
           id="main-content"
           className={cn(
             // Work surface: min-w-0 + fill viewport so secondary shell frames sidebar only.
-            "flex-1 min-w-0 flex flex-col bg-[var(--bg-primary)] lg:min-h-dvh",
+            "flex-1 min-w-0 flex flex-col bg-[var(--bg-primary)] lg:min-h-dvh overflow-x-hidden",
             hideChrome
               ? "pb-0"
-              : density === "comfortable"
-                ? "pb-24 lg:pb-0"
-                : "pb-20 lg:pb-0",
+              : // Clear MobileBottomNav + iOS home indicator (W9 safe-area).
+                "pb-[calc(var(--mobile-nav-height)+env(safe-area-inset-bottom,0px)+1rem)] lg:pb-0",
           )}
           data-shell-surface="work"
           tabIndex={-1}

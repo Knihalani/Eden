@@ -63,7 +63,7 @@ describe("W6 mobile table surfaces", () => {
   });
 
   it("observability query run results sticky-pin first column", () => {
-    const src = read("app/(portal)/observability/query/page.tsx");
+    const src = read("app/(portal)/observability/query/_components/query-panels.tsx");
     expect(src).toContain("STICKY_FIRST_TH");
     expect(src).toContain("STICKY_FIRST_TD");
     expect(src).toContain("colIdx === 0 && STICKY_FIRST_TH");

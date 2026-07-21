@@ -257,6 +257,13 @@ def _build_settings_class():
         # post-generation); these caps stop generation itself.
         patch_max_per_day: int = 10
         patch_max_per_week: int = 30
+        # Rank-then-generate sweep caps (N23). Max PatchGenerator invokes
+        # per sweep is stricter than the inbox code_patch lane (also 3).
+        patch_max_generates_per_sweep: int = 3
+        # Hard stop on LLM calls inside one sweep (gen+critic+margin).
+        patch_max_llm_calls_per_sweep: int = 8
+        # Triage confidence floor before PatchGenerator runs.
+        patch_min_triage_confidence: float = 0.65
         # ``patch_similarity_threshold`` (0.0-1.0) — when a freshly-generated
         # diff has ``difflib.SequenceMatcher.ratio() > threshold`` against
         # any proposed_patches row from the last 14 days, the new patch is

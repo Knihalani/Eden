@@ -129,7 +129,7 @@ await getDefaultClient().flush();
   },
 ] as const;
 
-/** Honest soft-launch facts — kept for reuse; hero first-viewport omits KPI theatre. */
+/** Honest public-beta facts — kept for reuse; hero first-viewport omits KPI theatre. */
 export const HERO_METRICS = [
   { kpi: "$1/$3", unit: "spend caps", label: "Free tier" },
   { kpi: "1-line", unit: "swap", label: "Drop-in gateway" },
@@ -160,7 +160,7 @@ export const FAQS = [
   },
   {
     q: "What does the free tier include?",
-    a: `Soft launch is free — no credit card. Caps are $${FREE_TIER_PERSONAL_CAP_USD}/mo LLM spend on a personal workspace (1 seat) and $${FREE_TIER_ORG_CAP_USD}/mo on an org workspace (up to 3 seats). Paid Team / Pro plans are not available yet.`,
+    a: `Public beta is free — no credit card. Caps are $${FREE_TIER_PERSONAL_CAP_USD}/mo LLM spend on a personal workspace (1 seat) and $${FREE_TIER_ORG_CAP_USD}/mo on an org workspace (up to 3 seats). Paid Team / Pro plans are not available yet.`,
   },
   {
     q: "Does PII get stored?",

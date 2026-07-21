@@ -54,11 +54,11 @@ describe("W24 N22 Settings UX + API client", () => {
 
 describe("W24 Improve cockpit heal + denials", () => {
   it("renders auto_heal and policy_denial badges", () => {
-    const page = src("app/(portal)/improve/page.tsx");
-    expect(page).toContain('item.item_type === "auto_heal"');
-    expect(page).toContain('item.item_type === "policy_denial"');
-    expect(page).toContain("Auto-heal event");
-    expect(page).toContain("Policy denial");
+    const card = src("app/(portal)/improve/_components/queue-item-card.tsx");
+    expect(card).toContain('item.item_type === "auto_heal"');
+    expect(card).toContain('item.item_type === "policy_denial"');
+    expect(card).toContain("Auto-heal event");
+    expect(card).toContain("Policy denial");
   });
 
   it("cockpit aggregator sources self_heals + autonomy denials", () => {

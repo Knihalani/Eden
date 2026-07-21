@@ -3,37 +3,50 @@
 /**
  * TracesTab — the trace list surface for /traces.
  *
- * Wave 6: filters live in the hub QueryFilterBar (≤2 chrome bands).
- * This component is table-only: sort, selection, and Display-driven columns.
+ * Wave 3 column defaults (Laminar scan):
+ * Status 40 · id · type · time · duration · cost · tokens
+ * Optional Display cols: agent · spans · streaming · actions
  */
 import { TreePine, Clock, PlayCircle, Download, Layers, Tag } from "lucide-react";
 import Link from "next/link";
 import { useMemo } from "react";
 import { SkeletonTableRow } from "@/components/ui/skeleton";
-import { TraceOutcomeBadge } from "@/components/ui/status-badge";
 import type { DataTableColumn, DataTableBulkAction } from "@/components/ui/data-table";
 import { InfiniteDataTable } from "@/components/portal-os";
 import { U20_EMPTY_COPY } from "@/lib/portal-polish";
 import type { TraceFilter, TraceItem } from "../_lib/types";
 import { Card } from "@/components/ui/card";
+import { cn } from "@/lib/utils";
+
+/** Laminar status strip width (px) — Wave 2–3 numeric contract. */
+export const TRACES_STATUS_COL_PX = 40;
 
 /** Optional columns controlled by Display — never a third chrome band. */
 export const TRACES_OPTIONAL_COLUMNS = [
+  { id: "agent", label: "Agent" },
+  { id: "spans", label: "Spans" },
+  { id: "input", label: "Input" },
+  { id: "output", label: "Output" },
   { id: "streaming_metrics", label: "Streaming" },
-  { id: "input_tokens", label: "In tok" },
-  { id: "output_tokens", label: "Out tok" },
-  { id: "cost_cents", label: "Cost" },
+  { id: "actions", label: "Actions" },
 ] as const;
 
 export type TracesOptionalColumnId =
   (typeof TRACES_OPTIONAL_COLUMNS)[number]["id"];
 
-/** Default visible optional cols — streaming stays hidden until Display. */
-export const TRACES_DEFAULT_VISIBLE_OPTIONAL: TracesOptionalColumnId[] = [
-  "input_tokens",
-  "output_tokens",
-  "cost_cents",
-];
+/** Default visible optional cols — core scan cols are always on. */
+export const TRACES_DEFAULT_VISIBLE_OPTIONAL: TracesOptionalColumnId[] = [];
+
+/** Core Wave 3 default column keys (always rendered). */
+export const TRACES_CORE_COLUMNS = [
+  "status",
+  "id",
+  "type",
+  "time",
+  "duration",
+  "cost",
+  "tokens",
+] as const;
 
 interface TracesTabProps {
   traces: TraceItem[];
@@ -101,12 +114,64 @@ function formatRelativeTime(iso: string | null | undefined): string {
   });
 }
 
-function identityLabel(t: TraceItem): string {
-  const agent = t.agent_id?.trim();
-  if (agent) return agent;
+function typeLabel(t: TraceItem): string {
   const model = t.model?.trim();
   if (model) return model;
-  return t.trace_id.slice(0, 12);
+  const realm = t.realm?.trim();
+  if (realm) return realm;
+  return "trace";
+}
+
+const PREVIEW_MAX = 80;
+
+function truncatePreview(raw: string | null | undefined): string | null {
+  if (raw == null) return null;
+  const text = String(raw).replace(/\s+/g, " ").trim();
+  if (!text) return null;
+  if (text.length <= PREVIEW_MAX) return text;
+  return `${text.slice(0, PREVIEW_MAX)}…`;
+}
+
+/** Prefer list I/O fields; fall back to name/preview/error when present. */
+function inputPreview(t: TraceItem): string {
+  return (
+    truncatePreview(t.input_text) ??
+    truncatePreview(t.input) ??
+    truncatePreview(t.preview) ??
+    truncatePreview(t.name) ??
+    "—"
+  );
+}
+
+function outputPreview(t: TraceItem): string {
+  return (
+    truncatePreview(t.output_text) ??
+    truncatePreview(t.output) ??
+    truncatePreview(t.error) ??
+    "—"
+  );
+}
+
+function StatusStrip({ outcome }: { outcome: string | null }) {
+  const color =
+    outcome === "success"
+      ? "bg-[var(--success)]"
+      : outcome === "failure" || outcome === "crash"
+        ? "bg-[var(--error)]"
+        : outcome === "partial" || outcome === "timeout"
+          ? "bg-[var(--warning)]"
+          : "bg-[var(--text-muted)]";
+  return (
+    <div
+      className="flex h-full w-10 items-center justify-center"
+      data-testid="trace-status-strip"
+      data-status-col-px={TRACES_STATUS_COL_PX}
+      role="status"
+      aria-label={outcome ? `Outcome: ${outcome}` : "Outcome: unknown"}
+    >
+      <span className={cn("h-8 w-1 rounded-full", color)} aria-hidden />
+    </div>
+  );
 }
 
 export function TracesTab({
@@ -129,215 +194,251 @@ export function TracesTab({
   bulkActions,
 }: TracesTabProps) {
   const visibleKey = visibleColumns.join("\0");
-  const showTokenCostCols = traces.some(
-    (t) =>
-      t.input_tokens != null || t.output_tokens != null || t.cost_cents != null,
-  );
 
-  // Stable column identity — avoids InfiniteDataTable/DataTable re-sorting
-  // and header remounts on every parent re-render (W12 table perf).
   const columns: DataTableColumn<TraceItem>[] = useMemo(() => {
     const visible = new Set(visibleColumns);
-    return [
-    {
-      key: "agent_id",
-      header: "Agent",
-      sortable: true,
-      sticky: true,
-      cell: (t) => (
-        <div className="min-w-0 max-w-[220px]">
-          <div className="truncate text-sm font-medium text-[var(--text-primary)]">
-            {identityLabel(t)}
-          </div>
-          <div className="truncate font-mono text-2xs text-[var(--text-muted)]">
-            {t.trace_id.slice(0, 16)}…
-          </div>
-        </div>
-      ),
-    },
-    {
-      key: "started_at",
-      header: "When",
-      sortable: true,
-      cell: (t) => (
-        <span
-          className="text-xs text-[var(--text-secondary)] tabular-nums"
-          title={t.started_at ?? undefined}
-        >
-          {formatRelativeTime(t.started_at)}
-        </span>
-      ),
-    },
-    {
-      key: "model",
-      header: "Model",
-      sortable: true,
-      cell: (t) => (
-        <span className="block max-w-[140px] truncate text-xs text-[var(--text-secondary)]">
-          {t.model?.trim() || "—"}
-        </span>
-      ),
-    },
-    {
-      key: "outcome",
-      header: "Outcome",
-      sortable: true,
-      cell: (t) => <TraceOutcomeBadge outcome={t.outcome} />,
-    },
-    {
-      key: "duration_ms",
-      header: "Duration",
-      sortable: true,
-      align: "right",
-      cell: (t) => (
-        <span className="tabular-nums text-[var(--text-secondary)]">
-          {formatDurationMs(t.duration_ms)}
-        </span>
-      ),
-    },
-    {
-      key: "span_count",
-      header: "Spans",
-      sortable: true,
-      align: "right",
-      cell: (t) => (
-        <span className="tabular-nums text-[var(--text-secondary)]">{t.span_count}</span>
-      ),
-    },
-    ...(showTokenCostCols && visible.has("input_tokens")
-      ? [
-          {
-            key: "input_tokens" as const,
-            header: "In tok",
-            sortable: true,
-            align: "right" as const,
-            cell: (t: TraceItem) => (
-              <span className="font-mono text-[var(--text-secondary)] tabular-nums">
-                {formatTokens(t.input_tokens)}
-              </span>
-            ),
-          },
-        ]
-      : []),
-    ...(showTokenCostCols && visible.has("output_tokens")
-      ? [
-          {
-            key: "output_tokens" as const,
-            header: "Out tok",
-            sortable: true,
-            align: "right" as const,
-            cell: (t: TraceItem) => (
-              <span className="font-mono text-[var(--text-secondary)] tabular-nums">
-                {formatTokens(t.output_tokens)}
-              </span>
-            ),
-          },
-        ]
-      : []),
-    ...(showTokenCostCols && visible.has("cost_cents")
-      ? [
-          {
-            key: "cost_cents" as const,
-            header: "Cost",
-            sortable: true,
-            align: "right" as const,
-            cell: (t: TraceItem) => (
-              <span className="font-mono text-[var(--text-primary)] tabular-nums font-medium">
-                {formatCostUSD(t.cost_cents)}
-              </span>
-            ),
-          },
-        ]
-      : []),
-    ...(visible.has("streaming_metrics")
-      ? [
-          {
-            key: "streaming_metrics" as const,
-            header: "Streaming",
-            cell: (t: TraceItem) =>
-              t.streaming_metrics ? (
-                <div className="flex flex-col gap-0.5 text-[var(--text-muted)] text-xs">
-                  <span>TTFT {t.streaming_metrics.ttft_ms?.toFixed(0)}ms</span>
-                  <span>ITL {t.streaming_metrics.itl_ms_avg?.toFixed(1)}ms</span>
-                  <span>TPOT {t.streaming_metrics.tpot_ms?.toFixed(1)}ms</span>
-                </div>
-              ) : (
-                <span className="text-[var(--text-muted)] text-xs">—</span>
-              ),
-          },
-        ]
-      : []),
-    {
-      key: "actions",
-      header: "Actions",
-      align: "right",
-      cell: (t) => (
-        <div className="flex items-center justify-end gap-1">
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              (onViewTree ?? onSelectTrace)(t.trace_id);
-            }}
-            className="p-1.5 text-[var(--text-muted)] hover:text-[var(--accent)] hover:bg-[var(--accent-faint)] rounded-lg transition-colors"
-            title="View Trace Tree"
-            aria-label="View Trace Tree"
+    const cols: DataTableColumn<TraceItem>[] = [
+      {
+        key: "outcome",
+        header: "",
+        sortable: true,
+        sticky: true,
+        className: "w-10 max-w-10 px-0",
+        headerClassName: "w-10 max-w-10 px-0",
+        cell: (t) => <StatusStrip outcome={t.outcome} />,
+      },
+      {
+        key: "trace_id",
+        header: "Id",
+        sortable: true,
+        cell: (t) => (
+          <span className="font-mono text-xs text-[var(--text-primary)]">
+            {t.trace_id.slice(0, 12)}…
+          </span>
+        ),
+      },
+      {
+        key: "model",
+        header: "Type",
+        sortable: true,
+        cell: (t) => (
+          <span className="block max-w-[140px] truncate text-xs text-[var(--text-secondary)]">
+            {typeLabel(t)}
+          </span>
+        ),
+      },
+      {
+        key: "started_at",
+        header: "Time",
+        sortable: true,
+        cell: (t) => (
+          <span
+            className="text-xs text-[var(--text-secondary)] tabular-nums"
+            title={t.started_at ?? undefined}
           >
-            <TreePine className="w-4 h-4" />
-          </button>
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onViewTimeline(t.trace_id);
-            }}
-            className="p-1.5 text-[var(--text-muted)] hover:text-[var(--accent)] hover:bg-[var(--accent-faint)] rounded-lg transition-colors"
-            title="View Timeline"
-            aria-label="View Timeline"
+            {formatRelativeTime(t.started_at)}
+          </span>
+        ),
+      },
+      {
+        key: "duration_ms",
+        header: "Duration",
+        sortable: true,
+        align: "right",
+        cell: (t) => (
+          <span className="tabular-nums text-[var(--text-secondary)]">
+            {formatDurationMs(t.duration_ms)}
+          </span>
+        ),
+      },
+      {
+        key: "cost_cents",
+        header: "Cost",
+        sortable: true,
+        align: "right",
+        cell: (t) => (
+          <span className="font-mono text-[var(--text-primary)] tabular-nums font-medium">
+            {formatCostUSD(t.cost_cents)}
+          </span>
+        ),
+      },
+      {
+        key: "input_tokens",
+        header: "Tokens",
+        sortable: true,
+        align: "right",
+        cell: (t) => (
+          <span
+            className="font-mono text-[var(--text-secondary)] tabular-nums"
+            title={
+              t.input_tokens != null || t.output_tokens != null
+                ? `${formatTokens(t.input_tokens)} in → ${formatTokens(t.output_tokens)} out`
+                : undefined
+            }
           >
-            <Clock className="w-4 h-4" />
-          </button>
-          {showReplayLink && (
-            <Link
-              href={`/replay?trace_id=${t.trace_id}`}
-              onClick={(e) => e.stopPropagation()}
-              className="p-1.5 text-[var(--text-muted)] hover:text-[var(--accent)] hover:bg-[var(--accent-faint)] rounded-lg transition-colors"
-              title="Open in Replay"
-              aria-label="Open in Replay"
+            {t.input_tokens != null || t.output_tokens != null
+              ? `${formatTokens(t.input_tokens)}→${formatTokens(t.output_tokens)}`
+              : "—"}
+          </span>
+        ),
+      },
+    ];
+
+    if (visible.has("agent")) {
+      cols.splice(2, 0, {
+        key: "agent_id",
+        header: "Agent",
+        sortable: true,
+        cell: (t) => (
+          <span className="block max-w-[160px] truncate text-xs text-[var(--text-secondary)]">
+            {t.agent_id?.trim() || "—"}
+          </span>
+        ),
+      });
+    }
+
+    if (visible.has("spans")) {
+      cols.push({
+        key: "span_count",
+        header: "Spans",
+        sortable: true,
+        align: "right",
+        cell: (t) => (
+          <span className="tabular-nums text-[var(--text-secondary)]">
+            {t.span_count}
+          </span>
+        ),
+      });
+    }
+
+    if (visible.has("input")) {
+      cols.push({
+        key: "input",
+        header: "Input",
+        cell: (t) => {
+          const text = inputPreview(t);
+          return (
+            <span
+              className="block max-w-[12rem] truncate text-xs text-[var(--text-muted)]"
+              title={text === "—" ? undefined : text}
+              data-testid="trace-input-preview"
             >
-              <PlayCircle className="w-4 h-4" />
-            </Link>
-          )}
-          {onAnnotate && (
+              {text}
+            </span>
+          );
+        },
+      });
+    }
+
+    if (visible.has("output")) {
+      cols.push({
+        key: "output",
+        header: "Output",
+        cell: (t) => {
+          const text = outputPreview(t);
+          return (
+            <span
+              className="block max-w-[12rem] truncate text-xs text-[var(--text-muted)]"
+              title={text === "—" ? undefined : text}
+              data-testid="trace-output-preview"
+            >
+              {text}
+            </span>
+          );
+        },
+      });
+    }
+
+    if (visible.has("streaming_metrics")) {
+      cols.push({
+        key: "streaming_metrics",
+        header: "Streaming",
+        cell: (t) =>
+          t.streaming_metrics ? (
+            <div className="flex flex-col gap-0.5 text-[var(--text-muted)] text-xs">
+              <span>TTFT {t.streaming_metrics.ttft_ms?.toFixed(0)}ms</span>
+              <span>ITL {t.streaming_metrics.itl_ms_avg?.toFixed(1)}ms</span>
+              <span>TPOT {t.streaming_metrics.tpot_ms?.toFixed(1)}ms</span>
+            </div>
+          ) : (
+            <span className="text-[var(--text-muted)] text-xs">—</span>
+          ),
+      });
+    }
+
+    if (visible.has("actions")) {
+      cols.push({
+        key: "actions",
+        header: "Actions",
+        align: "right",
+        cell: (t) => (
+          <div className="flex items-center justify-end gap-1">
             <button
               onClick={(e) => {
                 e.stopPropagation();
-                onAnnotate(t.trace_id);
+                (onViewTree ?? onSelectTrace)(t.trace_id);
               }}
               className="p-1.5 text-[var(--text-muted)] hover:text-[var(--accent)] hover:bg-[var(--accent-faint)] rounded-lg transition-colors"
-              title="Annotate"
-              aria-label="Annotate"
+              title="View Trace Tree"
+              aria-label="View Trace Tree"
             >
-              <Tag className="w-4 h-4" />
+              <TreePine className="w-4 h-4" />
             </button>
-          )}
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onExport(t.trace_id);
-            }}
-            className="p-1.5 text-[var(--text-muted)] hover:text-[var(--accent)] hover:bg-[var(--accent-faint)] rounded-lg transition-colors"
-            title="Export"
-            aria-label="Export"
-          >
-            <Download className="w-4 h-4" />
-          </button>
-        </div>
-      ),
-    },
-  ];
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onViewTimeline(t.trace_id);
+              }}
+              className="p-1.5 text-[var(--text-muted)] hover:text-[var(--accent)] hover:bg-[var(--accent-faint)] rounded-lg transition-colors"
+              title="View Timeline"
+              aria-label="View Timeline"
+            >
+              <Clock className="w-4 h-4" />
+            </button>
+            {showReplayLink && (
+              <Link
+                href={`/replay?trace_id=${t.trace_id}`}
+                onClick={(e) => e.stopPropagation()}
+                className="p-1.5 text-[var(--text-muted)] hover:text-[var(--accent)] hover:bg-[var(--accent-faint)] rounded-lg transition-colors"
+                title="Open in Replay"
+                aria-label="Open in Replay"
+              >
+                <PlayCircle className="w-4 h-4" />
+              </Link>
+            )}
+            {onAnnotate && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onAnnotate(t.trace_id);
+                }}
+                className="p-1.5 text-[var(--text-muted)] hover:text-[var(--accent)] hover:bg-[var(--accent-faint)] rounded-lg transition-colors"
+                title="Annotate"
+                aria-label="Annotate"
+              >
+                <Tag className="w-4 h-4" />
+              </button>
+            )}
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onExport(t.trace_id);
+              }}
+              className="p-1.5 text-[var(--text-muted)] hover:text-[var(--accent)] hover:bg-[var(--accent-faint)] rounded-lg transition-colors"
+              title="Export"
+              aria-label="Export"
+            >
+              <Download className="w-4 h-4" />
+            </button>
+          </div>
+        ),
+      });
+    }
+
+    return cols;
   }, [
     visibleKey,
     visibleColumns,
-    showTokenCostCols,
     showReplayLink,
     onSelectTrace,
     onViewTimeline,
@@ -364,11 +465,59 @@ export function TracesTab({
           {Array.from({ length: 8 }).map((_, i) => (
             <SkeletonTableRow
               key={i}
-              columns={["w-32", "w-24", "w-20", "w-28", "w-16"]}
+              columns={["w-10", "w-24", "w-20", "w-16", "w-16", "w-14", "w-20"]}
             />
           ))}
         </Card>
       ) : (
+        <>
+          {/* Wave 11.8 — mobile cards, not shrunk tables */}
+          <ul
+            className="flex flex-col gap-space-2 md:hidden m-0 p-0 list-none"
+            data-wave11-mobile="cards"
+            aria-label="Traces"
+          >
+            {traces.map((t) => (
+              <li key={t.trace_id}>
+                <button
+                  type="button"
+                  onClick={() => onSelectTrace(t.trace_id)}
+                  className={cn(
+                    "w-full text-left rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-secondary)]",
+                    "px-space-3 py-space-3 min-h-11 hover:bg-[var(--bg-tertiary)]/50 transition-colors",
+                    initialTraceId === t.trace_id && "ring-1 ring-[var(--accent)]",
+                  )}
+                >
+                  <div className="flex items-start justify-between gap-space-2">
+                    <div className="min-w-0 flex flex-col gap-0.5">
+                      <span className="font-mono text-xs text-[var(--text-primary)] truncate">
+                        {t.trace_id.slice(0, 12)}…
+                      </span>
+                      <span className="text-xs text-[var(--text-muted)] truncate">
+                        {typeLabel(t)}
+                      </span>
+                    </div>
+                    <span
+                      className={cn(
+                        "shrink-0 text-2xs font-medium uppercase tracking-wide",
+                        t.outcome === "failure" || t.outcome === "crash"
+                          ? "text-[var(--error)]"
+                          : "text-[var(--text-muted)]",
+                      )}
+                    >
+                      {t.outcome ?? "ok"}
+                    </span>
+                  </div>
+                  <div className="mt-space-2 flex flex-wrap gap-space-3 text-xs text-[var(--text-muted)]">
+                    <span>{formatRelativeTime(t.started_at)}</span>
+                    <span>{formatDurationMs(t.duration_ms)}</span>
+                    <span>{formatCostUSD(t.cost_cents)}</span>
+                  </div>
+                </button>
+              </li>
+            ))}
+          </ul>
+          <div className="hidden md:block">
         <InfiniteDataTable
           columns={columns}
           rows={traces}
@@ -431,6 +580,8 @@ export function TracesTab({
           })}
           highlightRowId={initialTraceId}
         />
+          </div>
+        </>
       )}
     </div>
   );

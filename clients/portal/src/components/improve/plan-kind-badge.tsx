@@ -1,9 +1,11 @@
 "use client";
 
+import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { FileCode, MessageSquare, Shield, Settings, Sparkles } from "lucide-react";
 import type { ImprovementPlanKind } from "@/lib/api";
+import { promptHref } from "@/lib/portal-cross-links";
 
 const KIND_LABELS: Record<ImprovementPlanKind, string> = {
   code_patch: "Code patch",
@@ -29,6 +31,12 @@ const KIND_ICONS: Record<ImprovementPlanKind, React.ComponentType<{ className?: 
   config_change: Settings,
 };
 
+/** Deep-link targets for plan kinds that have a sibling Improve leaf. */
+const KIND_HREFS: Partial<Record<ImprovementPlanKind, string>> = {
+  prompt_update: promptHref(),
+  guardrail_tune: "/guardrails",
+};
+
 export function PlanKindBadge({
   kind,
   className,
@@ -38,10 +46,21 @@ export function PlanKindBadge({
 }) {
   const key = (kind in KIND_LABELS ? kind : "code_patch") as ImprovementPlanKind;
   const Icon = KIND_ICONS[key];
-  return (
+  const href = KIND_HREFS[key];
+  const badge = (
     <Badge variant="outline" className={cn("text-xs", KIND_COLORS[key], className)}>
       <Icon className="h-3 w-3 mr-1" />
       {KIND_LABELS[key]}
     </Badge>
+  );
+  if (!href) return badge;
+  return (
+    <Link
+      href={href}
+      className="inline-flex hover:opacity-90"
+      title={`Open ${KIND_LABELS[key]} destination`}
+    >
+      {badge}
+    </Link>
   );
 }

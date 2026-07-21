@@ -14,7 +14,11 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { QueryState } from "@/components/ui/query-state";
 import { PageContent } from "@/components/layout/page-content";
 import { useEmbeddedSurface } from "@/components/layout/embedded-surface";
-import { ObserveLeafHeader } from "@/app/(portal)/observability/_components/observe-leaf-shell";
+import {
+  ObserveBackToTraces,
+  ObserveLeafHeader,
+  WAVE10_SHELL_ATTR,
+} from "@/app/(portal)/observability/_components/observe-leaf-shell";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Archive, Brain, Combine, Search, TrendingDown, Zap } from "lucide-react";
 import { DataTable } from "@/components/ui/data-table";
@@ -40,12 +44,14 @@ export default function MemoryIntelligencePage() {
   }
   return (
     <PageContent size="wide">
-      <ObserveLeafHeader
-        title="Memory"
-        subtitle="Episodic + semantic memory attribution and reweaving"
-        icon={Brain}
-        description="Advanced under Traces — attributes memories that influenced a trace; not a knowledge-base browser."
-      />
+      <div {...WAVE10_SHELL_ATTR} className="contents">
+        <ObserveBackToTraces />
+        <ObserveLeafHeader
+          title="Memory"
+          subtitle="Attribution + reweave for one trace — not a knowledge-base browser"
+          icon={Brain}
+        />
+      </div>
 
       {error ? (
         <ErrorState

@@ -137,6 +137,9 @@ export const queryKeys = {
       ["improve", "plan", orgId, planId] as const,
     runs: (orgId: string | null | undefined) => ["improve", "runs", orgId] as const,
     schedule: (orgId: string | null | undefined) => ["improve", "schedule", orgId] as const,
+    /** Online scoring production rules (was ad-hoc ["wave6","scoring-rules"]). */
+    scoringRules: (orgId: string | null | undefined) =>
+      ["improve", "scoring-rules", orgId] as const,
   },
   settings: {
     all: ["settings"] as const,

@@ -44,12 +44,21 @@ class PlanCandidate:
         blast = _BLAST_SCORE.get(
             (self.estimated_blast_radius or "medium").lower(), 0.5
         )
-        return sev * self.confidence * blast
+        stumble = int((self.evidence or {}).get("stumble_count") or 0)
+        # Mild boost for recurring bugs without drowning severity×confidence.
+        stumble_boost = 1.0 + min(stumble, 50) / 50.0
+        return sev * self.confidence * blast * stumble_boost
 
 
 def rank_candidates(candidates: list[PlanCandidate]) -> list[PlanCandidate]:
-    """Sort by severity × confidence × inverse blast radius."""
+    """Sort by severity × confidence × inverse blast × stumble boost."""
     return sorted(candidates, key=lambda c: c.score, reverse=True)
+
+
+def _is_empty_code_patch(cand: PlanCandidate) -> bool:
+    if cand.plan_kind != "code_patch":
+        return False
+    return not (cand.diff_unified and str(cand.diff_unified).strip())
 
 
 async def persist_candidates(
@@ -58,25 +67,48 @@ async def persist_candidates(
     *,
     run_id: str | None = None,
     max_plans: int = 10,
+    max_code_patch: int | None = None,
+    max_advisory: int | None = None,
 ) -> tuple[list[dict[str, Any]], int]:
-    """Dedupe, supersede stale drafts, cap at max_plans.
+    """Dedupe, supersede stale drafts, cap at max_plans / lane caps.
+
+    Never persists empty ``code_patch`` candidates (fake PR cards).
 
     Returns ``(created_plans, skipped_dedup_count)``.
     """
     ranked = rank_candidates(candidates)
     created: list[dict[str, Any]] = []
     skipped = 0
+    code_n = 0
+    advisory_n = 0
 
     for cand in ranked:
         if len(created) >= max_plans:
             break
+        if _is_empty_code_patch(cand):
+            skipped += 1
+            continue
+        is_code = cand.plan_kind == "code_patch"
+        if is_code and max_code_patch is not None and code_n >= max_code_patch:
+            skipped += 1
+            continue
+        if (
+            not is_code
+            and max_advisory is not None
+            and advisory_n >= max_advisory
+        ):
+            skipped += 1
+            continue
         if not cand.source_fingerprint:
             skipped += 1
             continue
-        existing = await plans_repo.find_open_by_fingerprint(
+        existing = await plans_repo.find_blocking_by_fingerprint(
             org_id, cand.source_fingerprint
         )
         if existing is not None:
+            if existing.get("status") == "snoozed":
+                skipped += 1
+                continue
             if cand.score > _existing_score(existing):
                 await plans_repo.supersede_drafts(
                     org_id, cand.source_fingerprint
@@ -103,6 +135,10 @@ async def persist_candidates(
         )
         if plan:
             created.append(plan)
+            if is_code:
+                code_n += 1
+            else:
+                advisory_n += 1
             await _emit_plan_created(org_id, plan)
         else:
             skipped += 1

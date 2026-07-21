@@ -16,11 +16,28 @@ import { ErrorState } from "@/components/ui/error-state";
 import { LoadingSkeleton } from "@/components/ui/skeleton";
 import { SessionHeader } from "@/components/sessions/SessionHeader";
 import { SessionTurnTimeline } from "@/components/sessions/SessionTurnTimeline";
+import {
+  buildSessionTurns,
+  type SessionTracePreviewRow,
+} from "@/components/sessions/session-turn-preview";
+import type { DetailMode } from "@/components/traces/TraceDetailPanel";
 import { useOrg } from "@/hooks/use-org";
 import { agentSessionsApi } from "@/lib/api";
 import { fetchApi } from "@/lib/api/core";
 import { useOrgQuery } from "@/hooks/use-api-query";
 import { queryKeys } from "@/lib/query-keys";
+import {
+  preserveFromSearchParams,
+} from "@/lib/portal-cross-links";
+
+/** Align with hub `DETAIL_MODES` / TraceDetailPanel tabs — transcript default. */
+const SESSION_DETAIL_MODES = [
+  "transcript",
+  "tree",
+  "timeline",
+  "meta",
+  "scores",
+] as const satisfies readonly DetailMode[];
 
 /** Trace detail + rrweb replay stay off the session shell first paint (W12). */
 const TraceDetailPanel = dynamic(
@@ -46,16 +63,44 @@ function SessionPageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const selectedTraceId = readMasterDetailParam(searchParams, "traceId");
+  const selectedSpanId = readMasterDetailParam(searchParams, "spanId");
+  const modeParam = searchParams.get("mode");
+  const linkPreserve = preserveFromSearchParams(searchParams);
+  const detailMode: DetailMode =
+    modeParam && (SESSION_DETAIL_MODES as readonly string[]).includes(modeParam)
+      ? (modeParam as DetailMode)
+      : "transcript";
   const [activeReplayStep, setActiveReplayStep] = useState(0);
 
-  const setSelectedTraceId = (id: string | undefined) => {
+  const replaceSessionParams = (mutate: (next: URLSearchParams) => void) => {
     const next = new URLSearchParams(searchParams.toString());
-    writeMasterDetailParam(next, "traceId", id);
+    mutate(next);
     const qs = next.toString();
     router.replace(
       `${window.location.pathname}${qs ? `?${qs}` : ""}`,
       { scroll: false },
     );
+  };
+
+  const setSelectedTraceId = (id: string | undefined) => {
+    replaceSessionParams((next) => {
+      writeMasterDetailParam(next, "traceId", id);
+      writeMasterDetailParam(next, "spanId", undefined);
+      if (!id) next.delete("mode");
+    });
+  };
+
+  const handleSelectSpan = (spanId: string | null) => {
+    replaceSessionParams((next) => {
+      writeMasterDetailParam(next, "spanId", spanId || undefined);
+    });
+  };
+
+  const handleDetailModeChange = (mode: DetailMode) => {
+    replaceSessionParams((next) => {
+      if (mode === "transcript") next.delete("mode");
+      else next.set("mode", mode);
+    });
   };
 
   const sessionQuery = useOrgQuery(
@@ -75,39 +120,22 @@ function SessionPageInner() {
     orgId && session?.trace_ids?.length ? orgId : null,
     async () => {
       const ids = (session!.trace_ids ?? []).slice(0, 100);
-      if (ids.length === 0) return [];
+      if (ids.length === 0) return [] as SessionTracePreviewRow[];
       // K5: one batch request for all session traces (not N× listObservabilityTraces).
       const q = new URLSearchParams();
       for (const tid of ids) q.append("trace_ids", tid);
       q.set("limit", String(Math.min(100, Math.max(ids.length, 1))));
-      const res = await fetchApi<{ traces: Array<{
-        trace_id: string;
-        duration_ms?: number;
-        cost_cents?: number | null;
-        outcome?: string | null;
-        realm?: string | null;
-      }> }>(`/orgs/${orgId}/observability/traces?${q.toString()}`);
+      const res = await fetchApi<{ traces: SessionTracePreviewRow[] }>(
+        `/orgs/${orgId}/observability/traces?${q.toString()}`,
+      );
       return res.traces ?? [];
     },
   );
 
-  const turns = useMemo(() => {
-    const traces = tracesQuery.data ?? [];
-    const byId = new Map(traces.map((t) => [t.trace_id, t]));
-    const ordered = (session?.trace_ids ?? []).map((tid, i) => {
-      const t = byId.get(tid);
-      return {
-        trace_id: tid,
-        summary: t?.realm ? `${t.realm} run` : undefined,
-        duration_ms: t?.duration_ms,
-        cost_cents: t?.cost_cents,
-        outcome: t?.outcome,
-        had_stumble: t?.outcome === "failure" || t?.outcome === "crash",
-        sort_index: i,
-      };
-    });
-    return ordered;
-  }, [session?.trace_ids, tracesQuery.data]);
+  const turns = useMemo(
+    () => buildSessionTurns(session?.trace_ids ?? [], tracesQuery.data ?? []),
+    [session?.trace_ids, tracesQuery.data],
+  );
 
   useEffect(() => {
     if (!selectedTraceId && turns.length > 0) {
@@ -157,7 +185,19 @@ function SessionPageInner() {
 
       <CrossLinkBar
         links={[
-          { label: "All traces", href: "/traces?view=sessions" },
+          {
+            label: "All traces",
+            href: (() => {
+              const q = new URLSearchParams();
+              q.set("view", "sessions");
+              if (linkPreserve?.q) q.set("q", linkPreserve.q);
+              if (linkPreserve?.pastHours) q.set("pastHours", linkPreserve.pastHours);
+              if (linkPreserve?.realm) q.set("realm", linkPreserve.realm);
+              if (linkPreserve?.outcome) q.set("outcome", linkPreserve.outcome);
+              if (linkPreserve?.agent_id) q.set("agent_id", linkPreserve.agent_id);
+              return `/traces?${q.toString()}`;
+            })(),
+          },
           { label: "Issues", href: "/issues" },
           ...(session.agent_id
             ? [{ label: "Agent ledger", href: `/agents/${session.agent_id}/ledger` }]
@@ -168,6 +208,9 @@ function SessionPageInner() {
       <SessionTurnTimeline
         turns={turns}
         selectedTraceId={selectedTraceId}
+        layout="rail"
+        openTraceView="sessions"
+        preserve={{ ...linkPreserve, view: "sessions" }}
         onSelectTurn={(id) => {
           setSelectedTraceId(id);
           const idx = turns.findIndex((t) => t.trace_id === id);
@@ -191,6 +234,10 @@ function SessionPageInner() {
             traceId={selectedTraceId}
             onClose={() => setSelectedTraceId(undefined)}
             hideCloseControl
+            initialMode={detailMode}
+            onModeChange={handleDetailModeChange}
+            highlightSpanId={selectedSpanId}
+            onSpanSelect={handleSelectSpan}
           />
         </DetailPanelShell>
       ) : (

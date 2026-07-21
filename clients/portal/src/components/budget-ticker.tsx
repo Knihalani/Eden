@@ -119,7 +119,7 @@ export function BudgetTicker() {
 
   return (
     <Link
-      href="/optimization/budget"
+      href="/optimization?tab=budget"
       className={cn(
         "block rounded-md border p-3 transition-colors hover:border-[var(--accent)]/40",
         status === "exceeded"

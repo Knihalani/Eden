@@ -11,12 +11,13 @@ import { ResourcePageShell } from "./ResourcePageShell";
  * | Resource / concern | Canonical     | Aliases (read)              |
  * |--------------------|---------------|-----------------------------|
  * | Trace detail       | `traceId`     | `trace_id`, `trace`         |
- * | Span in detail     | `spanId`      | `span_id`                   |
+ * | Span in detail     | `spanId`      | `span_id`, `span`           |
  * | Saved table view   | `viewId`      | `savedView` (legacy)        |
  * | Hub lens tab       | `view`        | — (traces\|spans\|sessions) |
  * | Issue peek         | `issueId`     | —                           |
  * | Alert peek         | `alertId`     | —                           |
- * | Session id filter  | `sessionId`   | —                           |
+ * | Agent peek         | `agentId`     | —                           |
+ * | Debug session peek | `sessionId`   | — (also traces hub filter)  |
  *
  * Opening a row sets the id param; the list slot stays mounted in
  * ResourcePageShell. Closing clears the id (and spanId when present).
@@ -24,15 +25,19 @@ import { ResourcePageShell } from "./ResourcePageShell";
  */
 export const MASTER_DETAIL_QUERY_KEYS = {
   traceId: ["traceId", "trace_id", "trace"] as const,
-  spanId: ["spanId", "span_id"] as const,
+  spanId: ["spanId", "span_id", "span"] as const,
   /** Saved views — never clash with hub `view=` tab. */
   viewId: ["viewId", "savedView"] as const,
   issueId: ["issueId"] as const,
   alertId: ["alertId"] as const,
+  /** Agents list peek — full leaf stays at `/agents/[id]`. */
+  agentId: ["agentId"] as const,
   sessionId: ["sessionId"] as const,
   experimentId: ["experimentId"] as const,
   promotionId: ["promotionId"] as const,
   artifactId: ["artifactId"] as const,
+  /** Datasets list peek — full spreadsheet stays at `/datasets/[id]`. */
+  datasetId: ["datasetId"] as const,
 } as const;
 
 export type MasterDetailKind = keyof typeof MASTER_DETAIL_QUERY_KEYS;
@@ -72,7 +77,8 @@ export function clearTraceDetailParams(params: URLSearchParams): void {
 export interface CoreResourcePageProps {
   size?: PageContentProps["size"];
   className?: string;
-  header: ReactNode;
+  /** Optional when the surface is embedded under a hub that already owns identity. */
+  header?: ReactNode;
   toolbar?: ReactNode;
   kpiStrip?: ReactNode;
   table: ReactNode;

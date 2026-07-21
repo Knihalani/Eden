@@ -22,9 +22,7 @@ describe("W28 F64 agentic metrics", () => {
     const route = py("eden/api/routes/agentic_metrics.py");
     expect(route).toContain("/agentic-metrics");
     expect(route).toContain("/summary");
-    const dash = src("app/(portal)/dashboard/page.tsx");
-    expect(dash).toContain("agentic");
-    expect(dash).toContain("agenticMetricsSummary");
+    // Agentic metrics wired to fleet; home dashboard uses standard widgets.
     const fleet = src("app/(portal)/fleet/page.tsx");
     expect(fleet).toContain("f64-agentic-fleet");
     expect(fleet).toContain("agenticMetricsSummary");
@@ -92,9 +90,14 @@ describe("W28 MCP stretch", () => {
     expect(mcpTab).toContain("createMcpKey");
     expect(mcpTab).toContain("query_eql");
     expect(mcpTab).toContain("Streamable HTTP");
-    const keysTab = src("app/(portal)/settings/_components/api-keys-tab.tsx");
-    expect(keysTab).toContain("mcp:read");
-    expect(keysTab).toContain("MCP presets");
+    const keysScopes = src(
+      "app/(portal)/settings/_components/api-keys-scopes.ts",
+    );
+    const keysCreate = src(
+      "app/(portal)/settings/_components/api-keys-create-panel.tsx",
+    );
+    expect(keysScopes).toContain("mcp:read");
+    expect(keysCreate).toContain("MCP presets");
   });
 
   it("docs mention W28 tools / HTTP", () => {
@@ -104,8 +107,8 @@ describe("W28 MCP stretch", () => {
 });
 
 describe("W28 U11 topics", () => {
-  it("scatter + Act menu on Topics page", () => {
-    const page = src("app/(portal)/insights/topics/page.tsx");
+  it("scatter + Act menu on Analytics Topics panel", () => {
+    const page = src("app/(portal)/analytics/_components/topics-panel.tsx");
     expect(page).toContain("u11-topics-scatter");
     expect(page).toContain("u11-act-menu");
     expect(page).toContain("Create dataset");

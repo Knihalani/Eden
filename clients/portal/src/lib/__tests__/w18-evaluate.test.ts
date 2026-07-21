@@ -22,10 +22,11 @@ describe("W18 playgrounds U03/F49", () => {
 
   it("playground page reads trace_id and binds dataset", () => {
     const page = src("app/(portal)/playgrounds/page.tsx");
-    expect(page).toContain("trace_id");
-    expect(page).toContain("fromSpan");
-    expect(page).toContain("promoteExperiment");
-    expect(page).toContain("cost_usd");
+    const hook = src("app/(portal)/playgrounds/_components/use-playgrounds-page.ts");
+    expect(hook).toContain("trace_id");
+    expect(hook).toContain("fromSpan");
+    expect(hook).toContain("promoteExperiment");
+    expect(hook).toContain("cost_usd");
     expect(page).toContain("Bind dataset");
   });
 });
@@ -41,17 +42,19 @@ describe("W18 datasets U10/F53", () => {
 
   it("dataset detail has inline edit + import + snapshots", () => {
     const page = src("app/(portal)/datasets/[id]/page.tsx");
-    expect(page).toContain("updateRow");
-    expect(page).toContain("createSnapshot");
-    expect(page).toContain("importRows");
+    const hook = src("app/(portal)/datasets/[id]/_components/use-dataset-detail.ts");
+    const sheet = src("app/(portal)/datasets/[id]/_components/dataset-spreadsheet.tsx");
+    expect(hook).toContain("updateRow");
+    expect(hook).toContain("createSnapshot");
+    expect(hook).toContain("importRows");
     expect(page).toContain("Import");
-    expect(page).toContain("VirtualizedList");
+    expect(sheet).toContain("VirtualizedList");
   });
 
   it("datasets list handles promote_trace query", () => {
-    const page = src("app/(portal)/datasets/page.tsx");
-    expect(page).toContain("promote_trace");
-    expect(page).toContain("promoteFromTrace");
+    const hook = src("app/(portal)/datasets/_components/use-datasets-page.ts");
+    expect(hook).toContain("promote_trace");
+    expect(hook).toContain("promoteFromTrace");
   });
 });
 
@@ -64,20 +67,27 @@ describe("W18 labeling U06/F50", () => {
 
   it("workstation has hotkeys 1-9 and transcript pane", () => {
     const page = src("app/(portal)/labeling/queues/[id]/page.tsx");
-    expect(page).toContain("HOTKEY_LABELS");
-    expect(page).toContain("Transcript");
-    expect(page).toContain("pushToDataset");
+    const hotkeys = src("app/(portal)/labeling/queues/[id]/_components/queue-hotkeys.ts");
+    const hook = src("app/(portal)/labeling/queues/[id]/_components/use-labeling-queue.ts");
+    const transcript = src(
+      "app/(portal)/labeling/queues/[id]/_components/queue-transcript.tsx",
+    );
+    expect(hotkeys).toContain("HOTKEY_LABELS");
+    expect(transcript).toContain("Transcript");
+    expect(hook).toContain("pushToDataset");
     expect(page).toContain("IAA");
-    expect(page).toContain("pairwise");
+    expect(hook).toContain("pairwise");
   });
 });
 
 describe("W18 experiments U07/F51", () => {
   it("multi-select compare + charDiff datapoints", () => {
     const page = src("app/(portal)/experiments/page.tsx");
+    const panel = src("app/(portal)/experiments/_components/compare-panel.tsx");
     expect(page).toContain("Compare selected");
-    expect(page).toContain("charDiff");
+    expect(panel).toContain("charDiff");
     expect(page).toContain("datapoints");
+    expect(panel).toContain("Side-by-side scores");
   });
 
   it("charDiff util detects prefix hunks", () => {
@@ -90,12 +100,15 @@ describe("W18 experiments U07/F51", () => {
 describe("W18 online scoring U14/F52", () => {
   it("create/edit/enable/test/rewind UI + SLM badge", () => {
     const page = src("app/(portal)/improve/online-scoring/page.tsx");
+    const rules = src(
+      "app/(portal)/improve/online-scoring/_components/online-scoring-rules.tsx",
+    );
     expect(page).toContain("createScoringRule");
     expect(page).toContain("patchScoringRule");
     expect(page).toContain("rewindScoringRule");
     expect(page).toContain("applyScoring");
-    expect(page).toContain("SlmBadge");
-    expect(page).toContain("Switch");
+    expect(rules).toContain("SlmBadge");
+    expect(rules).toContain("Switch");
   });
 });
 

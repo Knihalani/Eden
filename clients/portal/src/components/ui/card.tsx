@@ -5,9 +5,9 @@ import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/utils";
 
 /**
- * Card — bordered surface for interactive islands or true containers
- * (clickable rows, form shells, discrete widgets). Prefer Panel for
- * non-interactive grouping so pages do not stack border-on-border.
+ * Card — interactive units only: click, expand, submit, or other
+ * discrete affordances (clickable rows, form shells, expandable widgets).
+ * Decorative grouping / tonal sectioning → use Panel (no card chrome).
  * Do not nest Card inside Card; flatten with Panel or open background.
  *
  * Padding contract: use root `padding` for simple children, OR set

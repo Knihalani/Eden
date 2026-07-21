@@ -984,16 +984,21 @@ async def _tool_open_pr_suggestion(tenant_id: str, args: dict[str, Any],
 
     try:
         from eden.agent import PRSuggester
-        from eden.providers import (
-            FileEntry,
-            PRCreateRequest,
-            get_default_pr_provider,
+        from eden.patches.diff_materializer import (
+            DiffMaterializeError,
+            materialize_unified_diff,
+        )
+        from eden.providers import PRCreateRequest
+        from eden.providers.factory import (
+            get_pr_provider_for_org,
+            get_repo_provider_for_org,
         )
     except Exception as exc:
         return {"error": f"PR tooling unavailable: {exc}"}
 
     try:
-        suggester = PRSuggester()
+        repo_provider = await get_repo_provider_for_org(tenant_id)
+        suggester = PRSuggester(repo_provider=repo_provider)
         suggestion = await suggester.get_suggestion(tenant_id, suggestion_id)
     except Exception as exc:
         return {"error": f"get_suggestion failed: {exc}"}
@@ -1009,8 +1014,30 @@ async def _tool_open_pr_suggestion(tenant_id: str, args: dict[str, Any],
             )
         }
 
+    diff = (suggestion.patch_diff or "").strip()
+    if not diff:
+        return {"error": "empty_or_unparseable_diff"}
+
+    originals = {
+        f.path: f.content
+        for f in (suggestion.files or [])
+        if getattr(f, "path", None)
+    }
+
+    async def read_file(path: str) -> str:
+        if path in originals:
+            return originals[path]
+        return await repo_provider.read_file(path)
+
     try:
-        pr_provider = get_default_pr_provider()
+        files = await materialize_unified_diff(diff, read_file=read_file)
+    except DiffMaterializeError as exc:
+        return {"error": f"diff_materialize_failed: {exc}"}
+    if not files:
+        return {"error": "empty_or_unparseable_diff"}
+
+    try:
+        pr_provider = await get_pr_provider_for_org(tenant_id)
         pr_req = PRCreateRequest(
             title=args.get("pr_title") or suggestion.pr_title,
             body=args.get("pr_body") or suggestion.pr_body,
@@ -1019,10 +1046,7 @@ async def _tool_open_pr_suggestion(tenant_id: str, args: dict[str, Any],
             labels=list(args.get("labels") or []),
             reviewers=[],
             draft=bool(args.get("draft") or False),
-            files=[
-                FileEntry(path=f.path, size=f.size, content=f.content)
-                for f in suggestion.files
-            ],
+            files=files,
             commit_message=(
                 f"[Eden Agent] {suggestion.pr_title}\n\n"
                 f"Trigger: {suggestion.trigger} {suggestion.trigger_id}\n"
@@ -1040,6 +1064,12 @@ async def _tool_open_pr_suggestion(tenant_id: str, args: dict[str, Any],
         }
     except Exception as exc:
         return {"error": f"open_pr failed: {exc}"}
+
+    state = (getattr(pr_info, "state", None) or "").lower()
+    number = int(getattr(pr_info, "number", 0) or 0)
+    url = (getattr(pr_info, "url", None) or "").strip()
+    if state == "failed" or number == 0 or not url:
+        return {"error": "PR provider returned a failed create_pr result"}
 
     try:
         await suggester.mark_opened(tenant_id, suggestion_id, pr_info.number)

@@ -25,7 +25,7 @@ const path = require("node:path");
 const fs = require("node:fs");
 
 const PORT = process.env.PORT || "3000";
-// Keep in sync with src/lib/portal-polish.ts U20_CORE_AXE_ROUTES
+// Keep in sync with src/lib/portal-polish.ts U20_CORE_AXE_ROUTES + IMPROVE_V3_AXE_ROUTES
 const ROUTES = [
   "/dashboard",
   "/traces",
@@ -37,9 +37,28 @@ const ROUTES = [
   "/alerts",
   "/agents",
   "/settings",
+  // Improve V3 Wave 10 — Improve-group satellites
+  "/ledger",
+  "/prompts",
+  "/guardrails",
+  "/optimization",
 ];
-/** Keep in sync with U20_SERIOUS_AXE_ROUTES — fail gate on serious here. */
-const SERIOUS_GATE_ROUTES = new Set(["/traces", "/improve"]);
+/**
+ * Keep in sync with U20_SERIOUS_AXE_ROUTES + IMPROVE_V3_SERIOUS_AXE_ROUTES —
+ * fail gate on serious here.
+ */
+const SERIOUS_GATE_ROUTES = new Set([
+  "/traces",
+  "/improve",
+  "/evals",
+  "/issues",
+  // Improve V3 Wave 10
+  "/artifacts",
+  "/ledger",
+  "/prompts",
+  "/guardrails",
+  "/optimization",
+]);
 const BLOCKING_IMPACTS = new Set(["critical"]);
 const STATE_PATH = path.join(__dirname, "../e2e/.auth-state.json");
 

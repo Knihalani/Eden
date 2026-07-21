@@ -8,7 +8,7 @@ REST API exposes::
     POST /gateway/v1/embeddings
     GET  /gateway/v1/models
 
-Customers point their app at ``https://gateway.eden.ai/v1`` and the
+Customers point their app at ``https://api.edenobservability.com/gateway/v1`` and the
 existing AIGateway (PII, caching, circuit breakers, budgets) is in
 the path — but the wire format is OpenAI's, so the OpenAI Python
 SDK / Vercel AI / LangChain / LlamaIndex clients Just Work.

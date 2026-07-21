@@ -10,6 +10,7 @@ interface PlanLimitsDisplayProps {
   jobs_used: number;
   jobs_limit: number;
   compact?: boolean;
+  className?: string;
 }
 
 export function PlanLimitsDisplay({
@@ -20,6 +21,7 @@ export function PlanLimitsDisplay({
   jobs_used,
   jobs_limit,
   compact = false,
+  className,
 }: PlanLimitsDisplayProps) {
   const limits = [
     { label: "Seats", used: seats_used, limit: seats_limit },
@@ -29,19 +31,23 @@ export function PlanLimitsDisplay({
 
   if (compact) {
     return (
-      <div className="flex items-center gap-4 text-sm">
+      <div
+        data-ws5-plan-limits="compact"
+        className={cn("flex flex-wrap items-center gap-x-4 gap-y-1 text-sm", className)}
+      >
         {limits.map((item) => {
-          const percentage = item.limit > 0 ? Math.min((item.used / item.limit) * 100, 100) : 0;
-          const isAtLimit = percentage >= 100;
+          const percentage =
+            item.limit > 0 ? Math.min((item.used / item.limit) * 100, 100) : 0;
+          const isAtLimit = item.limit > 0 && percentage >= 100;
           return (
             <span
               key={item.label}
               className={cn(
-                "font-medium",
-                isAtLimit ? "text-[var(--error)]" : "text-[var(--text-secondary)]"
+                "font-medium tabular-nums",
+                isAtLimit ? "text-[var(--error)]" : "text-[var(--text-secondary)]",
               )}
             >
-              {item.used}/{item.limit} {item.label.toLowerCase()}
+              {item.used}/{item.limit > 0 ? item.limit : "—"} {item.label.toLowerCase()}
             </span>
           );
         })}
@@ -50,39 +56,50 @@ export function PlanLimitsDisplay({
   }
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+    <div data-ws5-plan-limits className={cn("space-y-space-4", className)}>
       {limits.map((item) => {
-        const percentage = item.limit > 0 ? Math.min((item.used / item.limit) * 100, 100) : 0;
-        const isNearLimit = percentage >= 80;
-        const isAtLimit = percentage >= 100;
+        const percentage =
+          item.limit > 0 ? Math.min((item.used / item.limit) * 100, 100) : 0;
+        const isNearLimit = item.limit > 0 && percentage >= 80;
+        const isAtLimit = item.limit > 0 && percentage >= 100;
+        const displayLimit =
+          item.limit > 0 ? item.limit.toLocaleString() : "—";
 
         return (
-          <div
-            key={item.label}
-            className={cn(
-              "p-4 rounded-lg border",
-              isAtLimit ? "border-[var(--error)] bg-[var(--error-dim)]" : isNearLimit ? "border-[var(--warning)] bg-[var(--warning-bg)]" : "border-[var(--border)] bg-[var(--bg-primary)]"
-            )}
-          >
-            <div className="text-sm text-[var(--text-secondary)] mb-1">{item.label}</div>
-            <div className="flex items-baseline gap-1">
-              <span className={cn(
-                "text-2xl font-bold",
-                isAtLimit ? "text-[var(--error)]" : "text-[var(--text-primary)]"
-              )}>
-                {item.used}
+          <div key={item.label}>
+            <div className="mb-1 flex items-center justify-between gap-3">
+              <span className="text-sm font-medium text-[var(--text-primary)]">
+                {item.label}
               </span>
-              <span className="text-sm text-[var(--text-muted)]">/ {item.limit}</span>
-            </div>
-            <div className="mt-2 h-1.5 bg-[var(--bg-primary)] rounded-full overflow-hidden">
-              <div
+              <span
                 className={cn(
-                  "h-full rounded-full",
-                  isAtLimit ? "bg-[var(--error)]" : isNearLimit ? "bg-[var(--warning)]" : "bg-[var(--accent)]"
+                  "text-sm tabular-nums",
+                  isAtLimit
+                    ? "text-[var(--error)]"
+                    : "text-[var(--text-secondary)]",
                 )}
-                style={{ width: `${percentage}%` }}
-              />
+              >
+                {item.used.toLocaleString()}
+                {item.limit > 0 ? ` / ${displayLimit}` : ""}
+              </span>
             </div>
+            {item.limit > 0 ? (
+              <div className="h-1.5 overflow-hidden rounded-full bg-[var(--bg-muted)]">
+                <div
+                  className={cn(
+                    "h-full rounded-full transition-all",
+                    isAtLimit
+                      ? "bg-[var(--error)]"
+                      : isNearLimit
+                        ? "bg-[var(--warning)]"
+                        : "bg-[var(--accent)]",
+                  )}
+                  style={{ width: `${percentage}%` }}
+                />
+              </div>
+            ) : (
+              <p className="text-xs text-[var(--text-muted)]">No quota on this plan</p>
+            )}
           </div>
         );
       })}

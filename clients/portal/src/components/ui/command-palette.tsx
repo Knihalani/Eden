@@ -17,7 +17,11 @@ import {
   COMMAND_PALETTE_RECENT_KEY,
   COMMAND_PALETTE_RECENT_LIMIT,
 } from "@/lib/constants";
-import { buildNavCommands, type NavCommand } from "@/lib/nav-commands";
+import {
+  OPEN_AI_CHAT_HREF,
+  buildNavCommands,
+  type NavCommand,
+} from "@/lib/nav-commands";
 
 /** Focusable controls inside the palette dialog (Tab trap). */
 const FOCUSABLE_SELECTOR =
@@ -69,6 +73,7 @@ function writeRecent(items: string[]) {
   }
 }
 
+/** Canonical CommandPalette — prefer `@/components/ui` or this file; portal-os re-exports for AppShell. */
 export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
   const router = useRouter();
   const pathname = usePathname();
@@ -199,9 +204,42 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
     [recentHrefs],
   );
 
+  const askAiEntry = useMemo(
+    () => COMMANDS.find((c) => c.href === OPEN_AI_CHAT_HREF) ?? null,
+    [],
+  );
+
   const hasResults = search.trim().length > 0;
   const showFooter = !hasResults;
+  /** Empty palette: Recents + Ask AI first; full nav groups still listed below. */
   const showRecent = recentEntries.length > 0 && !hasResults;
+  const showPinnedAskAi = Boolean(askAiEntry) && !hasResults;
+
+  function renderCommandItem(item: NavEntry, keyPrefix = "") {
+    const Icon = item.icon;
+    const accentClass = item.accent
+      ? ACCENT_BG[item.accent]
+      : "bg-[var(--bg-tertiary)] text-[var(--text-secondary)]";
+    return (
+      <Cmnd.Item
+        key={`${keyPrefix}${item.href}`}
+        value={`${item.label} ${item.href} ${item.group}`}
+        onSelect={() => runCommand(item.href)}
+        className="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-[var(--bg-secondary)] cursor-pointer transition-colors"
+      >
+        <div className={cn("w-8 h-8 rounded-lg flex items-center justify-center", accentClass)}>
+          <Icon className="w-4 h-4" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-medium text-[var(--text-primary)]">{item.label}</p>
+          {item.description && (
+            <p className="text-xs text-[var(--text-muted)]">{item.description}</p>
+          )}
+        </div>
+        <ChevronRight className="w-4 h-4 text-[var(--text-muted)]" />
+      </Cmnd.Item>
+    );
+  }
 
   // Conditionally render the entire tree. The previous version
   // always mounted a ``fixed inset-0 z-50`` wrapper even when
@@ -266,63 +304,29 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
 
           {showRecent && (
             <Cmnd.Group heading="Recent" className="px-2 mt-2 first:mt-0">
-              {recentEntries.map((item) => {
-                const Icon = item.icon;
-                const accentClass = item.accent
-                  ? ACCENT_BG[item.accent]
-                  : "bg-[var(--bg-tertiary)] text-[var(--text-secondary)]";
-                return (
-                  <Cmnd.Item
-                    key={`recent-${item.href}`}
-                    value={`${item.label} ${item.href} Recent`}
-                    onSelect={() => runCommand(item.href)}
-                    className="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-[var(--bg-secondary)] cursor-pointer transition-colors"
-                  >
-                    <div className={cn("w-8 h-8 rounded-lg flex items-center justify-center", accentClass)}>
-                      <Icon className="w-4 h-4" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-[var(--text-primary)]">{item.label}</p>
-                      {item.description && (
-                        <p className="text-xs text-[var(--text-muted)]">{item.description}</p>
-                      )}
-                    </div>
-                    <ChevronRight className="w-4 h-4 text-[var(--text-muted)]" />
-                  </Cmnd.Item>
-                );
-              })}
+              {recentEntries.map((item) => renderCommandItem(item, "recent-"))}
             </Cmnd.Group>
           )}
 
-          {Object.entries(grouped).map(([group, items]) => (
-            <Cmnd.Group key={group} heading={group} className="px-2 mt-2 first:mt-0">
-              {items.map((item) => {
-                const Icon = item.icon;
-                const accentClass = item.accent
-                  ? ACCENT_BG[item.accent]
-                  : "bg-[var(--bg-tertiary)] text-[var(--text-secondary)]";
-                return (
-                  <Cmnd.Item
-                    key={item.href}
-                    value={`${item.label} ${item.href} ${group}`}
-                    onSelect={() => runCommand(item.href)}
-                    className="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-[var(--bg-secondary)] cursor-pointer transition-colors"
-                  >
-                    <div className={cn("w-8 h-8 rounded-lg flex items-center justify-center", accentClass)}>
-                      <Icon className="w-4 h-4" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-[var(--text-primary)]">{item.label}</p>
-                      {item.description && (
-                        <p className="text-xs text-[var(--text-muted)]">{item.description}</p>
-                      )}
-                    </div>
-                    <ChevronRight className="w-4 h-4 text-[var(--text-muted)]" />
-                  </Cmnd.Item>
-                );
-              })}
+          {showPinnedAskAi && askAiEntry && (
+            <Cmnd.Group heading="Ask AI" className="px-2 mt-2 first:mt-0">
+              {renderCommandItem(askAiEntry, "pinned-")}
             </Cmnd.Group>
-          ))}
+          )}
+
+          {Object.entries(grouped).map(([group, items]) => {
+            // Empty state already pins Ask AI above — skip duplicate in Actions.
+            const list =
+              showPinnedAskAi && group === "Actions"
+                ? items.filter((i) => i.href !== OPEN_AI_CHAT_HREF)
+                : items;
+            if (list.length === 0) return null;
+            return (
+              <Cmnd.Group key={group} heading={group} className="px-2 mt-2 first:mt-0">
+                {list.map((item) => renderCommandItem(item))}
+              </Cmnd.Group>
+            );
+          })}
 
           {showFooter && (
             <div className="px-4 py-3 border-t border-[var(--border-subtle)] mt-2">

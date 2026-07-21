@@ -2,21 +2,18 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useState, Suspense } from "react";
-import { ChevronDown, Loader2 } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Loader2 } from "lucide-react";
 
 import { PageHeader } from "@/components/layout/page-header";
+import { useEmbeddedSurface } from "@/components/layout/embedded-surface";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorState } from "@/components/ui/error-state";
 import { NoOrgState } from "@/components/ui/no-org-state";
+import { Panel } from "@/components/ui/panel";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/components/ui/toast";
 import { useOrg } from "@/hooks/use-org";
 import { learnApi } from "@/lib/api";
@@ -28,7 +25,7 @@ import {
   BulkActionBar,
 } from "@/components/portal-os";
 import { cn } from "@/lib/utils";
-import { artifactHref } from "@/lib/portal-cross-links";
+import { artifactHref, promotionsHref } from "@/lib/portal-cross-links";
 import { errorFromCaught } from "@/lib/safe-error-message";
 
 type PromoRow = Record<string, unknown> & {
@@ -109,6 +106,8 @@ function EvidenceGateSummary({
 function PromotionsPageInner() {
   const { currentOrg } = useOrg();
   const toast = useToast();
+  const router = useRouter();
+  const embedded = useEmbeddedSurface();
   const { state: urlState, setState: setUrlState } = useResourceUrlState();
   const promotionId = urlState.promotionId;
   const [loading, setLoading] = useState(true);
@@ -118,6 +117,13 @@ function PromotionsPageInner() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [detailReport, setDetailReport] = useState<Record<string, unknown> | null>(null);
   const [bulkBusy, setBulkBusy] = useState(false);
+
+  // Standalone /promotions → Ledger promotions mode (institutional memory one model).
+  useEffect(() => {
+    if (!embedded) {
+      router.replace(promotionsHref());
+    }
+  }, [embedded, router]);
 
   const load = useCallback(async () => {
     if (!currentOrg) return;
@@ -238,50 +244,51 @@ function PromotionsPageInner() {
   return (
     <CoreResourcePage
       header={
-        <PageHeader
-          title="Promotions inbox"
-          description="Evidence-gated candidates — shadow, pending review, promoted, demoted."
-          actions={
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="sm" className="min-h-11" aria-label="Promotions path links">
-                  More
-                  <ChevronDown className="h-4 w-4" aria-hidden />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="min-w-[12rem]">
-                <DropdownMenuLabel>Go to</DropdownMenuLabel>
-                <DropdownMenuItem asChild>
-                  <Link href={artifactHref()}>Artifacts</Link>
-                </DropdownMenuItem>
-                <DropdownMenuItem asChild>
-                  <Link href="/improve">Improve</Link>
-                </DropdownMenuItem>
-                <DropdownMenuItem asChild>
-                  <Link href="/issues">Issues</Link>
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          }
-        />
+        embedded ? null : (
+          <PageHeader
+            title="Promotions inbox"
+            description="Evidence-gated candidates — shadow, pending review, promoted, demoted."
+            actions={
+              <nav
+                data-testid="promotions-related-strip"
+                aria-label="Related"
+                className="flex flex-wrap items-center gap-x-space-3 gap-y-1 text-xs text-[var(--text-muted)]"
+              >
+                <Link href="/improve" className="text-[var(--accent)] hover:underline">
+                  Queue
+                </Link>
+                <Link href={artifactHref()} className="text-[var(--accent)] hover:underline">
+                  Artifacts
+                </Link>
+                <Link href="/ledger" className="text-[var(--accent)] hover:underline">
+                  Ledger
+                </Link>
+              </nav>
+            }
+          />
+        )
       }
       toolbar={
         <div className="space-y-space-3" data-testid="promotions-toolbar">
-          <div className="flex flex-wrap gap-space-1">
-            {["shadow", "promoted", "demoted", "all"].map((s) => (
-              <Button
-                key={s}
-                size="sm"
-                variant={tab === s ? "default" : "ghost"}
-                onClick={() => {
-                  setTab(s);
-                  setUrlState({ promotionId: undefined });
-                }}
-              >
-                {s}
-              </Button>
-            ))}
-          </div>
+          <Tabs
+            value={tab}
+            onValueChange={(s) => {
+              setTab(s);
+              setUrlState({ promotionId: undefined });
+            }}
+          >
+            <TabsList
+              variant="pills"
+              aria-label="Promotion status"
+              className="h-auto flex-wrap justify-start"
+            >
+              {["shadow", "promoted", "demoted", "all"].map((s) => (
+                <TabsTrigger key={s} value={s} variant="pills" className="min-h-11 capitalize">
+                  {s}
+                </TabsTrigger>
+              ))}
+            </TabsList>
+          </Tabs>
           <ResourceOsToolbar
             resourceKey="promotions"
             exportRows={items.map((p) => ({
@@ -313,7 +320,7 @@ function PromotionsPageInner() {
             description="Shadow Artifacts appear here after detectors or manual create."
           />
         ) : (
-          <div className="divide-y divide-[var(--border-subtle)]">
+          <div className="divide-y divide-[var(--border-subtle)]" data-testid="promotions-mode-list">
             {items.map((p) => {
               const id = String(p.id);
               const active = promotionId === id;
@@ -324,7 +331,9 @@ function PromotionsPageInner() {
                   tabIndex={0}
                   className={cn(
                     "flex cursor-pointer items-center justify-between gap-3 px-1 py-3.5 transition-colors rounded-lg",
-                    active ? "bg-[var(--accent-faint)]/40 ring-1 ring-[var(--accent)]/30" : "hover:bg-[var(--bg-secondary)]",
+                    active
+                      ? "bg-[var(--accent-faint)]/40 ring-1 ring-[var(--accent)]/30"
+                      : "hover:bg-[var(--bg-secondary)]",
                   )}
                   onClick={() => setUrlState({ promotionId: active ? undefined : id })}
                   onKeyDown={(e) => {
@@ -351,16 +360,7 @@ function PromotionsPageInner() {
                       <div className="text-xs text-[var(--text-muted)]">{String(p.status)}</div>
                     </div>
                   </div>
-                  {tab === "shadow" ? (
-                    <div className="flex gap-2" onClick={(e) => e.stopPropagation()}>
-                      <Button size="sm" onClick={() => void act(id, "approve")}>
-                        Approve
-                      </Button>
-                      <Button size="sm" variant="outline" onClick={() => void act(id, "reject")}>
-                        Reject
-                      </Button>
-                    </div>
-                  ) : (
+                  {tab !== "shadow" ? (
                     <Button
                       variant="outline"
                       size="sm"
@@ -371,6 +371,8 @@ function PromotionsPageInner() {
                         View
                       </Link>
                     </Button>
+                  ) : (
+                    <span className="text-xs text-[var(--text-muted)]">Open for evidence</span>
                   )}
                 </div>
               );
@@ -410,30 +412,6 @@ function PromotionsPageInner() {
                 ? () => setUrlState({ promotionId: String(items[selectedIndex + 1]?.id) })
                 : undefined
             }
-            headerActions={
-              tab === "shadow" ? (
-                <div className="flex gap-1">
-                  <Button size="sm" onClick={() => void act(String(selectedRow.id), "approve")}>
-                    Approve
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => void act(String(selectedRow.id), "reject")}
-                  >
-                    Reject
-                  </Button>
-                </div>
-              ) : (
-                <Button variant="outline" size="sm" asChild>
-                  <Link
-                    href={`/artifacts?ref=${encodeURIComponent(String(selectedRow.ref_id))}`}
-                  >
-                    View artifact
-                  </Link>
-                </Button>
-              )
-            }
           >
             <div className="space-y-4 p-4 text-sm">
               <dl className="grid gap-2 text-xs">
@@ -450,10 +428,47 @@ function PromotionsPageInner() {
                   <dd>{String(selectedRow.status)}</dd>
                 </div>
               </dl>
-              <EvidenceGateSummary
-                evidence={selectedRow.evidence}
-                report={detailReport}
-              />
+              <Panel
+                tone="inset"
+                padding="md"
+                data-testid="promotion-approve-boundary"
+              >
+                <p className="mb-3 text-xs font-medium uppercase tracking-wide text-[var(--text-faint)]">
+                  Evidence before approve
+                </p>
+                <EvidenceGateSummary
+                  evidence={selectedRow.evidence}
+                  report={detailReport}
+                />
+                {tab === "shadow" ? (
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    <Button
+                      size="sm"
+                      onClick={() => void act(String(selectedRow.id), "approve")}
+                      data-testid="promotion-approve-cta"
+                    >
+                      Approve
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => void act(String(selectedRow.id), "reject")}
+                    >
+                      Reject
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="mt-4">
+                    <Button variant="outline" size="sm" asChild>
+                      <Link
+                        href={`/artifacts?ref=${encodeURIComponent(String(selectedRow.ref_id))}`}
+                      >
+                        View artifact
+                      </Link>
+                    </Button>
+                  </div>
+                )}
+              </Panel>
             </div>
           </DetailPanelShell>
         ) : null

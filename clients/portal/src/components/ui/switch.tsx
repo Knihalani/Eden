@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { cn } from "@/lib/utils";
+import { FOCUS_RING_CLASS } from "./focus-ring";
 
 export interface SwitchProps
   extends Omit<React.ButtonHTMLAttributes<HTMLButtonElement>, "onChange"> {
@@ -31,6 +32,7 @@ export const Switch = React.forwardRef<HTMLButtonElement, SwitchProps>(
           className={cn(
             "relative inline-flex h-6 w-11 shrink-0 rounded-full border transition-colors",
             "min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 sm:h-6 sm:w-11",
+            FOCUS_RING_CLASS,
             checked
               ? "bg-[var(--accent)] border-[var(--accent)]"
               : "bg-[var(--bg-tertiary)] border-[var(--border-default)]",

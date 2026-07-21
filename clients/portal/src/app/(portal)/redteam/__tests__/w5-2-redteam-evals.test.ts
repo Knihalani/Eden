@@ -106,29 +106,31 @@ describe("W5-2 redteam page wiring", () => {
 
 describe("W5-2 experiments offline wiring", () => {
   it("checks run result status and polls until terminal", () => {
-    const src = read("app/(portal)/experiments/page.tsx");
-    expect(src).toContain("interpretOfflineRunResult");
-    expect(src).toContain("pollUntilTerminal");
-    expect(src).toContain("runningId");
-    expect(src).toContain("Could not start run");
-    expect(src).toContain("runError");
-    expect(src).not.toMatch(
+    const hook = read("app/(portal)/experiments/_components/use-experiments-page.ts");
+    const list = read("app/(portal)/experiments/_components/experiments-list.tsx");
+    expect(hook).toContain("interpretOfflineRunResult");
+    expect(hook).toContain("pollUntilTerminal");
+    expect(hook).toContain("runningId");
+    expect(list).toContain("Could not start run");
+    expect(list).toContain("runError");
+    expect(hook).not.toMatch(
       /await offlineExperimentsApi\.run\([\s\S]{0,80}toast\.success\(["']Experiment completed["']\)/,
     );
   });
 
   it("keeps list/compare ErrorState (no false empty on outage)", () => {
-    const src = read("app/(portal)/experiments/page.tsx");
-    expect(src).toContain("Could not load experiments");
-    expect(src).toContain("Could not load compare");
-    expect(src).toMatch(/loadError && !loading/);
+    const list = read("app/(portal)/experiments/_components/experiments-list.tsx");
+    const panel = read("app/(portal)/experiments/_components/compare-panel.tsx");
+    expect(list).toContain("Could not load experiments");
+    expect(panel).toContain("Could not load compare");
+    expect(list).toMatch(/loadError && !loading/);
   });
 });
 
 describe("W5-2 evals hub embeds experiments", () => {
   it("experiments tab loads offline experiments surface", () => {
     const src = read("app/(portal)/evals/page.tsx");
-    expect(src).toContain('tab === "experiments"');
+    expect(src).toContain('TabsContent value="experiments"');
     expect(src).toContain("ExperimentsView");
   });
 });

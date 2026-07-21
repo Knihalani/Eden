@@ -10,7 +10,11 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PageContent } from "@/components/layout/page-content";
 import { useEmbeddedSurface } from "@/components/layout/embedded-surface";
-import { ObserveLeafHeader } from "@/app/(portal)/observability/_components/observe-leaf-shell";
+import {
+  ObserveBackToTraces,
+  ObserveLeafHeader,
+  WAVE10_SHELL_ATTR,
+} from "@/app/(portal)/observability/_components/observe-leaf-shell";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { CheckCircle2, Database, Lightbulb, Network, Search, Shuffle, Sparkles, XCircle, Zap } from "lucide-react";
 import { DataTable } from "@/components/ui/data-table";
@@ -44,7 +48,14 @@ export default function RetrievalIntelligencePage() {
 
   return (
     <PageContent size="wide">
-      <ObserveLeafHeader title="Retrieval" subtitle="Chunk attribution, gap detection, and reorder signals" icon={Network} />
+      <div {...WAVE10_SHELL_ATTR} className="contents">
+      <ObserveBackToTraces />
+      <ObserveLeafHeader
+        title="Retrieval"
+        subtitle="Chunk attribution, gaps, reorder — advanced under Traces facets"
+        icon={Network}
+      />
+      </div>
 
       {error ? (
         <ErrorState

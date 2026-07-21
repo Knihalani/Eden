@@ -52,7 +52,9 @@ describe("W10-2 error-empty-loading consistency", () => {
   });
 
   it("org-tab transfer members use ErrorState (not false empty list)", () => {
-    const src = read("app/(portal)/settings/_components/org-tab.tsx");
+    const src = read(
+      "app/(portal)/settings/_components/transfer-ownership-section.tsx",
+    );
     expect(src).toContain('title="Could not load members"');
     expect(src).toContain("membersError");
     expect(src).toContain("membersQuery.refetch()");

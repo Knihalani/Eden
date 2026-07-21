@@ -1,5 +1,6 @@
 /**
  * W3-5 — Experiments false empty / in-page errors (list + compare).
+ * Wave E4: list/compare ErrorState live in _components (shell split).
  */
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -29,12 +30,13 @@ function showCompareEmpty(opts: {
 
 describe("W3-5 experiments query states", () => {
   it("list uses ErrorState with retry (not toast-only empty)", () => {
-    const src = read("app/(portal)/experiments/page.tsx");
-    expect(src).toContain('from "@/components/ui/error-state"');
-    expect(src).toContain("Could not load experiments");
-    expect(src).toContain("Try again");
-    expect(src).toMatch(/loadError && !loading/);
-    expect(src).toMatch(/useState\(true\)/);
+    const list = read("app/(portal)/experiments/_components/experiments-list.tsx");
+    const hook = read("app/(portal)/experiments/_components/use-experiments-page.ts");
+    expect(list).toContain('from "@/components/ui/error-state"');
+    expect(list).toContain("Could not load experiments");
+    expect(list).toContain("Try again");
+    expect(list).toMatch(/loadError && !loading/);
+    expect(hook).toMatch(/useState\(true\)/);
   });
 
   it("does not show list empty while loading or on error", () => {
@@ -54,10 +56,10 @@ describe("W3-5 experiments query states", () => {
   });
 
   it("compare panel uses ErrorState (no false empty on compare failure)", () => {
-    const src = read("app/(portal)/experiments/page.tsx");
-    expect(src).toContain("Could not load compare");
-    expect(src).toContain("compareError");
-    expect(src).toMatch(/compareError \?/);
+    const panel = read("app/(portal)/experiments/_components/compare-panel.tsx");
+    expect(panel).toContain("Could not load compare");
+    expect(panel).toContain("compareError");
+    expect(panel).toMatch(/compareError \?/);
     expect(
       showCompareEmpty({
         summaryLoading: false,

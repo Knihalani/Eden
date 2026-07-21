@@ -70,11 +70,12 @@ export default function ImprovementLoopOnboardingPage() {
   if (!currentOrg) return <NoOrgState feature="Improvement loop" />;
 
   return (
+    <div data-wave11-onboarding="improvement-loop">
     <CoreResourcePage
       header={
         <PageHeader
           title="Improvement loop"
-          description="Live progress from your org — Autonomy stays Off or Preview only until you promote."
+          description="Live progress from your org — V3 path: Issues → Improve queue (master–detail) → Artifacts → Prompts → Ledger. Autonomy stays Off or Preview only until you promote."
           actions={
             <div className="flex flex-wrap items-center gap-space-2">
               <Button variant="outline" size="sm" onClick={() => void load()} disabled={loading}>
@@ -91,10 +92,13 @@ export default function ImprovementLoopOnboardingPage() {
                 <DropdownMenuContent align="end" className="min-w-[12rem]">
                   <DropdownMenuLabel>Go to</DropdownMenuLabel>
                   <DropdownMenuItem asChild>
-                    <Link href="/improve">Improve</Link>
+                    <Link href="/improve">Improve queue</Link>
                   </DropdownMenuItem>
                   <DropdownMenuItem asChild>
                     <Link href="/artifacts">Artifacts</Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild>
+                    <Link href="/prompts">Prompts</Link>
                   </DropdownMenuItem>
                   <DropdownMenuItem asChild>
                     <Link href="/ledger">Ledger</Link>
@@ -131,16 +135,11 @@ export default function ImprovementLoopOnboardingPage() {
               title="Loop status unavailable"
               description="Send traces via SDK or gateway first. Linking a GitHub repo is optional — Connect is not required to teach the loop."
               action={
-                <div className="flex flex-wrap items-center justify-center gap-space-2">
-                  <Button asChild className="min-h-11">
-                    <a href={DOCS_QUICKSTART_URL} target="_blank" rel="noopener noreferrer">
-                      Docs quickstart
-                    </a>
-                  </Button>
-                  <Button asChild variant="outline" className="min-h-11">
-                    <Link href="/settings?tab=api-keys">Create API key</Link>
-                  </Button>
-                </div>
+                <Button asChild className="min-h-11">
+                  <a href={DOCS_QUICKSTART_URL} target="_blank" rel="noopener noreferrer">
+                    Docs quickstart
+                  </a>
+                </Button>
               }
             />
           ) : (
@@ -159,7 +158,10 @@ export default function ImprovementLoopOnboardingPage() {
                   " · Loop teachable — keep promoting proven Artifacts into the Ledger."
                 )}
               </p>
-              <Card className="divide-y">
+              <Card
+                className="divide-y"
+                data-wave9-improve-crossloop="onboarding"
+              >
                 {steps.map((step) => (
                   <Link
                     key={step.id}
@@ -176,13 +178,14 @@ export default function ImprovementLoopOnboardingPage() {
                 ))}
               </Card>
               <p className="mt-space-4 text-sm text-[var(--text-secondary)]">
-                Production traces become Artifacts; proven Artifacts and resolved issues write the
-                Ledger.
+                Queue is master–detail (Needs you / In progress / Verify). Prompts sit in
+                Improve core — iterate in Evaluate playground, then publish and pin.
               </p>
             </>
           )}
         </>
       }
     />
+    </div>
   );
 }

@@ -11,6 +11,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowRight, KeyRound } from "lucide-react";
 import { AuthSplitLayout, AuthBrandPanel, AuthFormCard } from "@/components/auth";
+import { Button } from "@/components/ui/button";
 
 export default function ResetPasswordPage() {
   const router = useRouter();
@@ -24,6 +25,7 @@ export default function ResetPasswordPage() {
 
   return (
     <AuthSplitLayout brandPanel={<AuthBrandPanel />}>
+      <div data-wave11-auth="reset-password">
       <AuthFormCard
         title="Use Clerk to reset your password"
         subtitle="Native reset links are retired. Sign in with Clerk and use Forgot password? instead."
@@ -40,15 +42,15 @@ export default function ResetPasswordPage() {
               Clerk sign-in screen. Redirecting you there…
             </span>
           </div>
-          <Link
-            href="/sign-in"
-            className="inline-flex min-h-11 items-center gap-space-2 rounded-lg bg-[var(--accent)] px-space-4 py-space-3 text-sm font-medium text-[var(--bg-primary)] hover:opacity-90"
-          >
-            Continue to sign in
-            <ArrowRight className="w-4 h-4" aria-hidden="true" />
-          </Link>
+          <Button asChild className="min-h-11">
+            <Link href="/sign-in">
+              Continue to sign in
+              <ArrowRight className="w-4 h-4" aria-hidden="true" />
+            </Link>
+          </Button>
         </div>
       </AuthFormCard>
+      </div>
     </AuthSplitLayout>
   );
 }

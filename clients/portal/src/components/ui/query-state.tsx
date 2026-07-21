@@ -1,5 +1,17 @@
 "use client";
 
+/**
+ * Hub adoption (Wave 1.7):
+ * - List hubs MUST use QueryState for loading / error / empty / filter-empty.
+ * - Ban new bare EmptyState as the sole hub shell without QueryState.
+ * - EmptyState remains the emptySlot / nested empty UI inside QueryState.
+ *
+ * Adopted list hubs (current): /issues, /alerts, /agents, /fleet,
+ * /datasets, /labeling, /incidents, /signals, /audit-trail, and peers
+ * that already wrap list queries in QueryState. Detail / non-list
+ * surfaces may still use EmptyState alone when there is no list query.
+ */
+
 import type { ReactNode } from "react";
 import { ErrorState } from "@/components/ui/error-state";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -63,9 +75,9 @@ interface QueryStateProps<T> {
 
 /**
  * QueryState — mechanical loading → error+retry → empty → children
- * shell for a single React Query result. Wraps the four states every
- * page in the quality-bar checklist must handle so wave migrations
- * don't hand-roll the same four branches per page.
+ * shell for a single React Query result. Required shell for list hubs
+ * (see file-top adoption block). Pass EmptyState via emptySlot /
+ * filterEmptySlot — do not replace this shell with bare EmptyState.
  *
  * Usage:
  *   const query = useOrgQuery(queryKeys.agents.list(orgId), orgId, () => agentsApi.list(orgId!));

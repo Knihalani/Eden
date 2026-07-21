@@ -1,26 +1,14 @@
 "use client";
 
-import { useCallback, useEffect, useState, Suspense } from "react";
-import { useOrgQuery } from "@/hooks/use-api-query";
-import { queryKeys } from "@/lib/query-keys";
+import { Suspense } from "react";
 import Link from "next/link";
-import { useSearchParams, useRouter } from "next/navigation";
 import { FlaskConical, Play, Loader2, ArrowUpRight, ExternalLink } from "lucide-react";
 import { PageHeader } from "@/components/layout/page-header";
 import { NoOrgState } from "@/components/ui/no-org-state";
 import { Button } from "@/components/ui/button";
 import { FormField } from "@/components/ui/form-field";
-import { useOrg } from "@/hooks/use-org";
-import { useToast } from "@/components/ui/toast";
-import {
-  playgroundApi,
-  datasetsApi,
-  type PersistedPlayground,
-  type Dataset,
-} from "@/lib/api";
 import { DOCS_QUICKSTART_URL } from "@/lib/constants";
 import { U20_EMPTY_COPY } from "@/lib/portal-polish";
-import { useEmbeddedSurface } from "@/components/layout/embedded-surface";
 import { CoreResourcePage } from "@/components/portal-os";
 import { EmptyState } from "@/components/ui/empty-state";
 import { QueryState } from "@/components/ui/query-state";
@@ -32,217 +20,65 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { RunMatrixResults, WAVE_E3_MATRIX_COMPLETED } from "./_components/run-matrix";
+import {
+  usePlaygroundsPage,
+  WAVE_E3_PLAYGROUNDS_COMPLETED,
+  WAVE_E3_FROM_SPAN_COMPLETED,
+  WAVE_E3_PROMOTE_COMPARE_READY,
+} from "./_components/use-playgrounds-page";
 
-type RunMatrix = {
-  run_id?: string;
-  cost_usd?: number;
-  matrix?: Array<{
-    row_id: string;
-    input?: string;
-    grade?: string;
-    score_delta?: number;
-    tasks?: Array<{ label?: string; model?: string; response?: string; cost_usd?: number }>;
-  }>;
-};
+void WAVE_E3_PLAYGROUNDS_COMPLETED;
+void WAVE_E3_FROM_SPAN_COMPLETED;
+void WAVE_E3_PROMOTE_COMPARE_READY;
+void WAVE_E3_MATRIX_COMPLETED;
 
 function PlaygroundsInner() {
-  const { currentOrg } = useOrg();
-  const toast = useToast();
-  const searchParams = useSearchParams();
-  const router = useRouter();
-  const embedded = useEmbeddedSurface();
-  const orgId = currentOrg?.id ?? null;
-  const [active, setActive] = useState<PersistedPlayground | null>(null);
-  const [userPrompt, setUserPrompt] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [run, setRun] = useState<RunMatrix | null>(null);
-
-  const listQuery = useOrgQuery(
-    queryKeys.playgrounds.list(orgId),
-    orgId,
-    async () => {
-      const { fetchApi } = await import("@/lib/api/core");
-      // Playgrounds list is authoritative; datasets are soft-fail so a
-      // datasets outage cannot false-empty / false-error the playground list.
-      const pg = await fetchApi<{ playgrounds: PersistedPlayground[]; total: number }>(
-        `/orgs/${orgId}/playgrounds?limit=100`,
-        { headers: { "X-Org-Id": orgId! } },
-      );
-      let datasets: Dataset[] = [];
-      try {
-        const ds = await datasetsApi.list(orgId!);
-        datasets = (ds.datasets || []).slice(0, 100) as Dataset[];
-      } catch {
-        datasets = [];
-      }
-      // B13: portal requests bounded playground lists (A7 owns API defaults).
-      return {
-        playgrounds: pg.playgrounds || [],
-        datasets,
-      };
-    },
-  );
-  const playgrounds = listQuery.data?.playgrounds ?? [];
-  const datasets = listQuery.data?.datasets ?? [];
-  const loading =
-    (listQuery.isLoading || listQuery.isPending) && playgrounds.length === 0;
-  const listError = listQuery.isError
-    ? (listQuery.error?.message ?? "Load failed")
-    : null;
-  useEffect(() => {
-    if (!active && playgrounds[0]) setActive(playgrounds[0]);
-  }, [playgrounds, active]);
-  const load = useCallback(async () => {
-    try {
-      await listQuery.refetch();
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Load failed");
-    }
-  }, [listQuery, toast]);
-
-  // Open-from-span: ?trace_id=&span_id=
-  useEffect(() => {
-    const traceId = searchParams.get("trace_id");
-    if (!traceId || !currentOrg?.id) return;
-    const spanId = searchParams.get("span_id") || undefined;
-    void (async () => {
-      try {
-        const res = await playgroundApi.fromSpan(currentOrg.id, {
-          trace_id: traceId,
-          span_id: spanId,
-          messages: [{ role: "user", content: `Replay from trace ${traceId}` }],
-        });
-        setActive(res.playground);
-        await listQuery.refetch();
-        toast.success("Playground created from span");
-        router.replace("/evals?tab=playgrounds");
-      } catch (e) {
-        toast.error(e instanceof Error ? e.message : "from-span failed");
-      }
-    })();
-  }, [searchParams, currentOrg?.id]);
-
-  const createNew = async () => {
-    if (!currentOrg?.id) return;
-    setBusy(true);
-    try {
-      const res = await playgroundApi.create(currentOrg.id, {
-        name: `Playground ${new Date().toLocaleString()}`,
-        config: {
-          tasks: [
-            { id: "task_a", label: "A", system: "", user: "{{user}}", model: "t1", tools: [] },
-            { id: "task_b", label: "B", system: "", user: "{{user}}", model: "t2", tools: [] },
-          ],
-          scorers: [{ name: "exact_match" }],
-        },
-      });
-      setActive(res.playground);
-      await load();
-      toast.success("Playground saved");
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Create failed");
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const bindDataset = async (datasetId: string) => {
-    if (!currentOrg?.id || !active) return;
-    const cfg = { ...(active.config || {}), dataset_id: datasetId || null };
-    const res = await playgroundApi.patch(currentOrg.id, active.id, { config: cfg });
-    setActive(res.playground);
-    toast.success(datasetId ? "Dataset bound" : "Dataset unbound");
-  };
-
-  /** E-04: create + bind without leaving Playground tab (upload stays on Datasets). */
-  const createAndBindDataset = async () => {
-    if (!currentOrg?.id || !active) return;
-    setBusy(true);
-    try {
-      const created = await datasetsApi.create(currentOrg.id, {
-        name: `Dataset ${new Date().toLocaleString()}`,
-        description: "Created from Playground",
-      });
-      const cfg = { ...(active.config || {}), dataset_id: created.id };
-      const res = await playgroundApi.patch(currentOrg.id, active.id, { config: cfg });
-      setActive(res.playground);
-      await load();
-      toast.success("Dataset created and bound");
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Create dataset failed");
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const runMatrix = async () => {
-    if (!currentOrg?.id || !active) return;
-    setBusy(true);
-    try {
-      let datasetRows: Array<Record<string, unknown>> | undefined;
-      const dsId = active.config?.dataset_id as string | undefined;
-      if (dsId) {
-        const detail = await datasetsApi.get(currentOrg.id, dsId);
-        datasetRows = (detail.rows || []).slice(0, 20).map((r) => ({
-          id: r.id,
-          input: String(r.values?.input ?? r.values?.prompt ?? userPrompt),
-          expected_output: String(r.values?.expected_output ?? r.values?.expected ?? ""),
-        }));
-      }
-      const res = await playgroundApi.runPersisted(currentOrg.id, active.id, {
-        params: { user: userPrompt },
-        dataset_rows: datasetRows,
-      });
-      setRun(res.run as RunMatrix);
-      toast.success(`Run complete · $${Number(res.run.cost_usd ?? 0).toFixed(4)}`);
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Run failed");
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const promote = async () => {
-    if (!currentOrg?.id || !active) return;
-    const dsId = active.config?.dataset_id as string | undefined;
-    if (!dsId) {
-      toast.error("Bind a dataset before promoting to experiment");
-      return;
-    }
-    try {
-      const res = await playgroundApi.promoteExperiment(currentOrg.id, active.id, {
-        dataset_id: dsId,
-      });
-      const expId = String(res.experiment?.id || "");
-      toast.success("Promoted to experiment");
-      router.push(
-        expId ? `/evals?tab=experiments&experimentId=${expId}` : "/evals?tab=experiments",
-      );
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Promote failed");
-    }
-  };
+  const {
+    currentOrg,
+    embedded,
+    loading,
+    listError,
+    playgrounds,
+    datasets,
+    load,
+    active,
+    setActive,
+    userPrompt,
+    setUserPrompt,
+    busy,
+    run,
+    fromProduction,
+    dismissFromProduction,
+    createNew,
+    bindDataset,
+    createAndBindDataset,
+    runMatrix,
+    promote,
+    boundDatasetId,
+    canPromote,
+    canRun,
+    runDisabledReason,
+    promoteDisabledReason,
+  } = usePlaygroundsPage();
 
   if (!currentOrg) return <NoOrgState feature="Playground" />;
-
-  const boundDatasetId = (active?.config?.dataset_id as string) || "";
-  const canPromote = Boolean(boundDatasetId);
-  const canRun = Boolean(userPrompt.trim() || boundDatasetId);
-  const runDisabledReason = !canRun
-    ? "Enter a user message or bind a dataset to run"
-    : undefined;
-  const promoteDisabledReason = !canPromote
-    ? "Bind a dataset before promoting to an experiment"
-    : undefined;
 
   const primaryActions =
     !loading && !listError && playgrounds.length === 0 ? null : (
       <>
-        <Button className="min-h-11" onClick={createNew} disabled={busy} loading={busy}>
+        <Button
+          variant="outline"
+          className="h-8 min-h-11 md:min-h-8"
+          onClick={createNew}
+          disabled={busy}
+          loading={busy}
+          data-wave-e3-cta="new"
+        >
           New playground
         </Button>
         {!embedded ? (
-          <Button asChild variant="outline" className="hidden min-h-11 sm:inline-flex">
+          <Button asChild variant="ghost" className="hidden h-8 sm:inline-flex">
             <a href={DOCS_QUICKSTART_URL} target="_blank" rel="noopener noreferrer">
               Docs quickstart
               <ExternalLink className="h-3.5 w-3.5" aria-hidden />
@@ -262,10 +98,17 @@ function PlaygroundsInner() {
           subtitle="Compare prompts side-by-side, bind a dataset, then promote to an offline experiment."
           icon={FlaskConical}
           actions={primaryActions}
+          embedded={embedded}
         />
       }
       table={
-        <>
+        <div
+          data-wave-e1-embed="playgrounds"
+          data-wave-e3-playgrounds="shell"
+          data-wave11-mobile="cards"
+          data-wave-e6-keyboard="playgrounds"
+          data-wave-e6-perf="playgrounds"
+        >
           {!embedded ? (
             <p className="mb-space-4 text-sm text-[var(--text-muted)]">
               Offline Evaluate only.{" "}
@@ -286,6 +129,38 @@ function PlaygroundsInner() {
             </p>
           ) : null}
 
+          {fromProduction ? (
+            <div
+              className="mb-space-3 inline-flex flex-wrap items-center gap-2 rounded border border-[var(--border-default)] bg-[var(--bg-secondary)] px-2.5 py-1.5 text-xs text-[var(--text-secondary)]"
+              data-wave-e1-from-production="chip"
+              data-wave-e3-from-production="chip"
+              data-testid="playground-from-production"
+            >
+              <span className="font-medium text-[var(--accent)]">From production</span>
+              <span className="font-mono text-[var(--text-muted)]">
+                {fromProduction.traceId.slice(0, 12)}…
+                {fromProduction.spanId
+                  ? ` · span ${fromProduction.spanId.slice(0, 8)}…`
+                  : null}
+              </span>
+              <Link
+                href={`/traces?traceId=${encodeURIComponent(fromProduction.traceId)}`}
+                className="text-[var(--accent)] underline-offset-2 hover:underline"
+                data-wave-e3-from-production="trace-link"
+              >
+                View trace
+              </Link>
+              <button
+                type="button"
+                className="text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+                onClick={dismissFromProduction}
+                aria-label="Dismiss from-production chip"
+              >
+                Dismiss
+              </button>
+            </div>
+          ) : null}
+
           <QueryState
             loading={loading}
             error={listError ? new Error(listError) : null}
@@ -301,9 +176,23 @@ function PlaygroundsInner() {
                 variant="plain"
                 className="mb-space-4"
                 action={
-                  <Button className="min-h-11" onClick={createNew} disabled={busy}>
-                    Create playground
-                  </Button>
+                  <div
+                    className="flex flex-wrap items-center justify-center gap-2"
+                    data-wave-e1-empty="playgrounds"
+                    data-wave-e3-empty="playgrounds"
+                  >
+                    <Button className="h-8 min-h-11 md:min-h-8" onClick={createNew} disabled={busy}>
+                      Create playground
+                    </Button>
+                    <Button asChild className="h-8 min-h-11 md:min-h-8" variant="outline">
+                      <Link href="/traces">From traces</Link>
+                    </Button>
+                    <Button asChild className="h-8 min-h-11 md:min-h-8" variant="ghost">
+                      <a href={DOCS_QUICKSTART_URL} target="_blank" rel="noopener noreferrer">
+                        Docs <ExternalLink className="h-3.5 w-3.5" aria-hidden />
+                      </a>
+                    </Button>
+                  </div>
                 }
               />
             }
@@ -314,6 +203,9 @@ function PlaygroundsInner() {
                   className="mb-space-3 flex flex-wrap gap-2"
                   role="group"
                   aria-label="Saved playgrounds"
+                  data-wave-e3-playgrounds="switcher"
+                  data-wave11-mobile="cards"
+                  data-wave-e6-keyboard="playgrounds"
                 >
                   {rows.map((p) => (
                     <button
@@ -321,7 +213,7 @@ function PlaygroundsInner() {
                       type="button"
                       onClick={() => setActive(p)}
                       aria-pressed={active?.id === p.id}
-                      className={`min-h-11 rounded border px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] ${
+                      className={`h-8 min-h-11 rounded border px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] md:min-h-8 ${
                         active?.id === p.id
                           ? "border-[var(--accent)] text-[var(--accent)]"
                           : "border-[var(--border-default)] text-[var(--text-muted)]"
@@ -333,7 +225,10 @@ function PlaygroundsInner() {
                 </div>
 
                 {active ? (
-                  <div className="mb-space-4 space-y-space-3 border-y border-[var(--border-subtle)] py-space-4">
+                  <div
+                    className="mb-space-4 space-y-space-3 border-y border-[var(--border-subtle)] py-space-4"
+                    data-wave-e3-playgrounds="editor"
+                  >
                     <FormField label="User message" htmlFor="pg-user">
                       <Textarea
                         id="pg-user"
@@ -348,7 +243,11 @@ function PlaygroundsInner() {
                         value={boundDatasetId || "none"}
                         onValueChange={(v) => void bindDataset(v === "none" ? "" : v)}
                       >
-                        <SelectTrigger id="pg-ds" className="mt-1 min-h-11">
+                        <SelectTrigger
+                          id="pg-ds"
+                          className="mt-1 h-8 min-h-11 md:min-h-8"
+                          data-wave-e3-dataset-bind="select"
+                        >
                           <SelectValue placeholder="None (adhoc run)" />
                         </SelectTrigger>
                         <SelectContent>
@@ -363,7 +262,7 @@ function PlaygroundsInner() {
                       <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[var(--text-muted)]">
                         <button
                           type="button"
-                          className="min-h-11 text-[var(--accent)] underline-offset-2 hover:underline disabled:opacity-50"
+                          className="min-h-11 text-[var(--accent)] underline-offset-2 hover:underline disabled:opacity-50 md:min-h-8"
                           disabled={busy || !active}
                           onClick={() => void createAndBindDataset()}
                         >
@@ -371,33 +270,48 @@ function PlaygroundsInner() {
                         </button>
                         <Link
                           href="/evals?tab=datasets"
-                          className="min-h-11 inline-flex items-center text-[var(--accent)] underline-offset-2 hover:underline"
+                          className="inline-flex min-h-11 items-center text-[var(--accent)] underline-offset-2 hover:underline md:min-h-8"
                         >
                           Upload / manage
                         </Link>
                       </div>
+                      {!boundDatasetId ? (
+                        <p
+                          className="mt-1 text-xs text-[var(--text-muted)]"
+                          data-wave-e3-dataset-bind="unbound"
+                        >
+                          Bind a dataset to promote an immutable experiment. Adhoc runs stay mutable.
+                        </p>
+                      ) : null}
                     </FormField>
-                    <div className="flex flex-wrap items-center gap-2">
+                    <div
+                      className="flex flex-wrap items-center gap-2"
+                      data-wave-e3-cta="hierarchy"
+                    >
                       <span title={runDisabledReason} className="inline-flex">
                         <Button
-                          className="min-h-11"
+                          className="h-8 min-h-11 md:min-h-8"
                           onClick={runMatrix}
                           disabled={busy || !canRun}
                           loading={busy}
                           aria-disabled={busy || !canRun}
                           aria-describedby={!canRun ? "pg-run-reason" : undefined}
+                          data-testid="playground-run-cta"
+                          data-wave-e3-cta="run"
                         >
-                          <Play className="h-3.5 w-3.5" /> Run matrix
+                          <Play className="h-3.5 w-3.5" /> Run
                         </Button>
                       </span>
                       <span title={promoteDisabledReason} className="inline-flex">
                         <Button
-                          className="min-h-11"
+                          className="h-8 min-h-11 md:min-h-8"
                           variant="outline"
                           onClick={promote}
                           disabled={busy || !canPromote}
                           aria-disabled={busy || !canPromote}
                           aria-describedby={!canPromote ? "pg-promote-reason" : undefined}
+                          data-wave-e3-cta="promote"
+                          data-wave-e3-promote="compare-ready"
                         >
                           <ArrowUpRight className="h-3.5 w-3.5" /> Promote → experiment
                         </Button>
@@ -416,41 +330,11 @@ function PlaygroundsInner() {
                   </div>
                 ) : null}
 
-                {run ? (
-                  <div className="space-y-space-3 border-t border-[var(--border-subtle)] pt-space-4">
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="font-medium">Matrix results</span>
-                      <span className="text-[var(--text-muted)]">
-                        cost_usd ${Number(run.cost_usd ?? 0).toFixed(4)}
-                      </span>
-                    </div>
-                    {(run.matrix || []).map((row) => (
-                      <div
-                        key={row.row_id}
-                        className="rounded border border-[var(--border-default)] p-space-3"
-                      >
-                        <div className="mb-2 flex gap-3 text-xs text-[var(--text-muted)]">
-                          <span>grade: {row.grade}</span>
-                          <span>Δ {Number(row.score_delta ?? 0).toFixed(3)}</span>
-                        </div>
-                        <div className="grid gap-2 md:grid-cols-2">
-                          {(row.tasks || []).map((t, i) => (
-                            <div key={i} className="rounded bg-[var(--surface-raised)] p-2">
-                              <div className="mb-1 text-xs font-medium">
-                                {t.label || t.model} · ${Number(t.cost_usd ?? 0).toFixed(4)}
-                              </div>
-                              <pre className="whitespace-pre-wrap text-xs">{t.response}</pre>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : null}
+                {run ? <RunMatrixResults run={run} /> : null}
               </>
             )}
           </QueryState>
-        </>
+        </div>
       }
     />
   );

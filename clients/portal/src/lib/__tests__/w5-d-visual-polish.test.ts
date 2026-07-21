@@ -23,17 +23,22 @@ describe("W5-D playgrounds shared Input/Select", () => {
   });
 });
 
-describe("W5-D scorecard quick-link honesty", () => {
+describe("W5-D scorecard quiet-link honesty", () => {
   it("does not claim org evolution lift / cost KPIs", () => {
-    const src = read("app/(portal)/dashboard/_components/quick-links.tsx");
-    expect(src).toContain("Synthetic process gates");
-    expect(src).not.toContain("Evolution lift & cost gates");
+    const widgets = read(
+      "app/(portal)/dashboard/_components/home-widgets.ts",
+    );
+    expect(widgets).toContain("/improve/scorecard");
+    expect(widgets).toContain('label: "Scorecard"');
+    expect(widgets).not.toContain("Evolution lift & cost gates");
   });
 });
 
 describe("W5-D online-scoring amber tokenized", () => {
   it("uses warning tokens instead of amber Tailwind", () => {
-    const src = read("app/(portal)/improve/online-scoring/page.tsx");
+    const src = read(
+      "app/(portal)/improve/online-scoring/_components/online-scoring-rules.tsx",
+    );
     expect(src).toContain("var(--warning");
     expect(src).not.toMatch(/amber-/);
   });

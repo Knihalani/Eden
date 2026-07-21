@@ -29,6 +29,10 @@ import { Button } from "@/components/ui/button";
 import { ErrorState } from "@/components/ui/error-state";
 import { AuthSplitLayout, AuthBrandPanel, AuthFormCard } from "@/components/auth";
 
+/** Wave 10 — invite accept teaches Workspace (M16); kit Button + a11y. */
+/** Wave 10 — invite flow exit marker (keep off page module export). */
+const WS10_INVITE_COMPLETED = true;
+
 type InviteFailureKind = "expired" | "invalid" | "unavailable";
 
 function signedInPrimaryEmail(user: {
@@ -90,7 +94,7 @@ function classifyInviteFailure(err: unknown): {
       title: "Invitation expired",
       subtitle: "This invite link is no longer valid",
       detail:
-        "Ask your teammate to send a new invitation from Organization settings.",
+        "Ask your teammate to send a new invitation from Workspace settings.",
     };
   }
 
@@ -199,7 +203,7 @@ export default function InvitePage() {
       if (accepted.clerk_org_id) {
         if (!orgListLoaded || !setActiveOrg) {
           throw new Error(
-            "Organization switcher is still loading. Wait a moment and try again so you land in the invited workspace.",
+            "Workspace switcher is still loading. Wait a moment and try again so you land in the invited workspace.",
           );
         }
         await setActiveOrg({ organization: accepted.clerk_org_id });
@@ -209,7 +213,7 @@ export default function InvitePage() {
       // Clerk sync degraded: Eden membership exists but session org
       // cannot be activated — do not silently dump into the wrong org.
       setJoinedDegraded({
-        org_name: accepted.org_name || inviteData?.org_name || "the organization",
+        org_name: accepted.org_name || inviteData?.org_name || "the workspace",
         role: accepted.role || inviteData?.role || "member",
       });
     } catch (err) {
@@ -227,8 +231,14 @@ export default function InvitePage() {
     return (
       <AuthSplitLayout brandPanel={<AuthBrandPanel />}>
         <AuthFormCard title="Verifying invitation" subtitle="One moment…">
-          <div className="flex items-center justify-center py-8" aria-busy="true" aria-live="polite">
-            <Loader2 className="w-6 h-6 animate-spin text-[var(--accent)]" />
+          <div
+            className="flex items-center justify-center py-8"
+            role="status"
+            aria-busy="true"
+            aria-live="polite"
+            aria-label="Verifying workspace invitation"
+          >
+            <Loader2 className="w-6 h-6 animate-spin text-[var(--accent)]" aria-hidden />
           </div>
         </AuthFormCard>
       </AuthSplitLayout>
@@ -245,14 +255,13 @@ export default function InvitePage() {
           <div className="space-y-space-5">
             <ErrorState
               title="Workspace activation delayed"
-              message={`You’re a ${joinedDegraded.role} in ${joinedDegraded.org_name}, but Clerk could not activate that workspace yet. Open the dashboard and pick it from the organization switcher.`}
+              message={`You’re a ${joinedDegraded.role} in ${joinedDegraded.org_name}, but Clerk could not activate that workspace yet. Open the dashboard and pick it from the workspace switcher.`}
               action={
-                <Link
-                  href="/dashboard"
-                  className="inline-flex min-h-11 items-center justify-center gap-space-2 px-space-4 rounded-lg bg-[var(--accent)] text-[var(--accent-foreground)] text-sm font-medium"
-                >
-                  Continue to dashboard
-                </Link>
+                <Button asChild className="min-h-11">
+                  <Link href="/dashboard" aria-label="Continue to dashboard and pick workspace">
+                    Continue to dashboard
+                  </Link>
+                </Button>
               }
             />
           </div>
@@ -272,16 +281,21 @@ export default function InvitePage() {
               message={ui.detail}
               action={
                 <div className="flex flex-col sm:flex-row items-center justify-center gap-space-2">
-                  <Button type="button" variant="outline" className="min-h-11" onClick={() => void verifyToken()}>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="min-h-11"
+                    aria-label={ui.kind === "unavailable" ? "Retry invitation verification" : "Check invitation again"}
+                    onClick={() => void verifyToken()}
+                  >
                     <RefreshCw className="w-4 h-4" />
                     {ui.kind === "unavailable" ? "Try again" : "Check again"}
                   </Button>
-                  <Link
-                    href="/sign-in"
-                    className="inline-flex min-h-11 items-center justify-center gap-space-2 px-space-4 rounded-lg bg-[var(--accent)] text-[var(--accent-foreground)] text-sm font-medium"
-                  >
-                    Go to sign in
-                  </Link>
+                  <Button asChild className="min-h-11">
+                    <Link href="/sign-in" aria-label="Go to sign in">
+                      Go to sign in
+                    </Link>
+                  </Button>
                 </div>
               }
             />
@@ -315,6 +329,7 @@ export default function InvitePage() {
                     type="button"
                     className="min-h-11"
                     loading={switchingAccount}
+                    aria-label="Switch account to accept workspace invite"
                     onClick={() => void handleSwitchAccount()}
                   >
                     Switch account
@@ -332,12 +347,20 @@ export default function InvitePage() {
 
   return (
     <AuthSplitLayout brandPanel={<AuthBrandPanel />}>
+      <div
+        data-wave11-auth="invite"
+        data-ws10-invite
+        data-ws10-invite-completed={WS10_INVITE_COMPLETED ? "true" : "false"}
+      >
       <AuthFormCard
         title={`Join ${inviteData.org_name}`}
-        subtitle={`${inviteData.inviter_name} invited you as ${inviteData.role}`}
+        subtitle={`${inviteData.inviter_name} invited you to this workspace as ${inviteData.role}`}
       >
         <div className="space-y-space-5">
-          <div className="flex items-start gap-space-3 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-secondary)] p-space-4">
+          <div
+            className="flex items-start gap-space-3 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-secondary)] p-space-4"
+            aria-label={`Workspace invitation for ${inviteData.org_name}`}
+          >
             <Building2 className="w-5 h-5 text-[var(--accent)] mt-0.5" aria-hidden />
             <div className="text-sm text-[var(--text-secondary)]">
               <p className="font-medium text-[var(--text-primary)]">{inviteData.org_name}</p>
@@ -352,7 +375,8 @@ export default function InvitePage() {
             <>
               <p className="text-sm text-[var(--text-secondary)]">
                 Sign in or create an account with <strong>{inviteData.email}</strong>, then
-                accept to join this organization.
+                accept to join this workspace. After accept you land in Workspace via the
+                dashboard switcher.
               </p>
               <div className="flex flex-col sm:flex-row gap-space-2">
                 <SignUpButton
@@ -360,14 +384,20 @@ export default function InvitePage() {
                   forceRedirectUrl={`/invite/${token}`}
                   fallbackRedirectUrl={`/invite/${token}`}
                 >
-                  <Button className="w-full min-h-11">Create account</Button>
+                  <Button className="w-full min-h-11" aria-label="Create account to join workspace">
+                    Create account
+                  </Button>
                 </SignUpButton>
                 <SignInButton
                   mode="modal"
                   forceRedirectUrl={`/invite/${token}`}
                   fallbackRedirectUrl={`/invite/${token}`}
                 >
-                  <Button variant="outline" className="w-full min-h-11">
+                  <Button
+                    variant="outline"
+                    className="w-full min-h-11"
+                    aria-label="Sign in to accept workspace invite"
+                  >
                     Sign in
                   </Button>
                 </SignInButton>
@@ -376,12 +406,12 @@ export default function InvitePage() {
           ) : (
             <>
               <p className="text-sm text-[var(--text-secondary)]">
-                Accepting adds you to <strong>{inviteData.org_name}</strong> as{" "}
-                <strong>{inviteData.role}</strong>. It does not create a new organization.
+                Accepting adds you to the <strong>{inviteData.org_name}</strong> workspace as{" "}
+                <strong>{inviteData.role}</strong>. It does not create a new workspace.
               </p>
               {acceptBlockedByOrgList && (
-                <p className="text-sm text-[var(--text-muted)]" aria-live="polite">
-                  Preparing organization switcher…
+                <p className="text-sm text-[var(--text-muted)]" role="status" aria-live="polite">
+                  Preparing workspace switcher…
                 </p>
               )}
               {acceptError && (
@@ -396,6 +426,7 @@ export default function InvitePage() {
                       className="min-h-11"
                       loading={accepting}
                       disabled={acceptBlockedByOrgList}
+                      aria-label="Retry accept workspace invitation"
                       onClick={() => void handleAccept()}
                     >
                       <RefreshCw className="w-4 h-4" />
@@ -408,6 +439,7 @@ export default function InvitePage() {
                 className="w-full min-h-11"
                 loading={accepting || acceptBlockedByOrgList}
                 disabled={acceptBlockedByOrgList}
+                aria-label="Accept workspace invitation"
                 onClick={() => void handleAccept()}
               >
                 Accept invitation
@@ -416,6 +448,7 @@ export default function InvitePage() {
           )}
         </div>
       </AuthFormCard>
+      </div>
     </AuthSplitLayout>
   );
 }

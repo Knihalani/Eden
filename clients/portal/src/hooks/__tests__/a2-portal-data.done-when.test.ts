@@ -14,9 +14,16 @@ function read(rel: string): string {
 
 describe("A2 portal data Done-when", () => {
   it("K3: no home-dashboard query on dashboard", () => {
-    const src = read("app/(portal)/dashboard/page.tsx");
-    expect(src).not.toMatch(/home-dashboard/);
-    expect(src).not.toMatch(/getHomeDashboard/);
+    // Home data lives in use-home-dashboard (peeled); must not call the
+    // monolithic getHomeDashboard API.
+    const page = read("app/(portal)/dashboard/page.tsx");
+    const hook = read(
+      "app/(portal)/dashboard/_components/use-home-dashboard.ts",
+    );
+    expect(page).toMatch(/useHomeDashboard|use-home-dashboard/);
+    expect(page).not.toMatch(/getHomeDashboard/);
+    expect(hook).not.toMatch(/getHomeDashboard/);
+    expect(hook).not.toMatch(/\/dashboards\/home/);
   });
 
   it("P26: IntelligenceGrid module removed", () => {
@@ -33,9 +40,9 @@ describe("A2 portal data Done-when", () => {
   });
 
   it("K7: users/analytics tab-gate fetches", () => {
-    const users = read("app/(portal)/users/page.tsx");
-    expect(users).toMatch(/enabled:\s*activeTab\s*===\s*"sessions"/);
-    expect(users).toMatch(/enabled:\s*activeTab\s*===\s*"goals"/);
+    const users = read("app/(portal)/analytics/_components/users-panel.tsx");
+    expect(users).toMatch(/enabled:\s*mode\s*===\s*"sessions"/);
+    expect(users).toMatch(/enabled:\s*mode\s*===\s*"goals"/);
     const analytics = read("app/(portal)/analytics/page.tsx");
     expect(analytics).toMatch(/enabled:\s*tab\s*===\s*"overview"/);
   });
@@ -54,10 +61,17 @@ describe("A2 portal data Done-when", () => {
   });
 
   it("K8/P7: dashboard+traces share days in traces query key", () => {
-    const dash = read("app/(portal)/dashboard/page.tsx");
-    const traces = read("app/(portal)/traces/page.tsx");
-    expect(dash).toMatch(/days:\s*7/);
-    expect(traces).toMatch(/days:\s*7/);
+    // Observe V3: days derived from windowHours / pastHours (not hardcoded days:7).
+    const dash = read(
+      "app/(portal)/dashboard/_components/use-home-dashboard.ts",
+    );
+    const traces = read("app/(portal)/traces/_components/use-traces-hub.ts");
+    expect(dash).toMatch(/days:\s*traceDays/);
+    expect(traces).toMatch(/days:\s*listDays/);
+    expect(traces).toMatch(/pastHours/);
+    expect(traces).toMatch(
+      /pastHours\s*=\s*urlState\.pastHours\s*\?\?\s*["']168["']/,
+    );
     expect(dash).toMatch(/queryKeys\.observability\.traces/);
     expect(traces).toMatch(/queryKeys\.observability\.traces/);
     const keys = read("lib/query-keys.ts");
@@ -66,7 +80,7 @@ describe("A2 portal data Done-when", () => {
   });
 
   it("P4: alerts poll ≥30s and tab-gated", () => {
-    const src = read("app/(portal)/alerts/page.tsx");
+    const src = read("app/(portal)/alerts/_components/use-alerts-page.ts");
     expect(src).toMatch(/refetchInterval:\s*30_000/);
     expect(src).not.toMatch(/refetchInterval:\s*15_000/);
     expect(src).toMatch(
@@ -88,11 +102,11 @@ describe("A2 portal data Done-when", () => {
 
   it("P6 top-8: pages use useOrgQuery", () => {
     const files = [
-      "app/(portal)/audit-trail/page.tsx",
-      "app/(portal)/artifacts/page.tsx",
+      "app/(portal)/audit-trail/_components/chain-panel.tsx",
+      "app/(portal)/artifacts/_components/use-artifacts-page.ts",
       "app/(portal)/synthetic/page.tsx",
-      "app/(portal)/studio/page.tsx",
-      "app/(portal)/observability/eval/page.tsx",
+      "app/(portal)/studio/_components/templates-tab.tsx",
+      "app/(portal)/observability/eval/_components/versions-panel.tsx",
       "app/(portal)/observability/retrieval/page.tsx",
       "app/(portal)/settings/_components/gateway-tab.tsx",
       "app/(portal)/settings/_components/exports-tab.tsx",
@@ -104,10 +118,11 @@ describe("A2 portal data Done-when", () => {
   });
 
   it("P12: alerts + improve use virtualization", () => {
-    const alerts = read("app/(portal)/alerts/page.tsx");
-    const improve = read("app/(portal)/improve/page.tsx");
+    const alerts = read("app/(portal)/alerts/_components/alerts-feed.tsx");
+    // W2 peel: queue VirtualizedList lives in queue-board (hub shell ≤400).
+    const improveQueue = read("app/(portal)/improve/_components/queue-board.tsx");
     expect(alerts).toMatch(/VirtualizedList|InfiniteDataTable/);
-    expect(improve).toMatch(/VirtualizedList|InfiniteDataTable/);
+    expect(improveQueue).toMatch(/VirtualizedList|InfiniteDataTable/);
   });
 
   it("P18: dehydrate helpers + dashboard/traces layouts consume them", () => {
@@ -135,8 +150,12 @@ describe("A2 portal data Done-when", () => {
   });
 
   it("B12/B13: labeling+playgrounds request limit", () => {
-    const labeling = read("app/(portal)/labeling/page.tsx");
-    const playgrounds = read("app/(portal)/playgrounds/page.tsx");
+    const labeling = read(
+      "app/(portal)/labeling/_components/use-labeling-page.ts",
+    );
+    const playgrounds = read(
+      "app/(portal)/playgrounds/_components/use-playgrounds-page.ts",
+    );
     expect(labeling).toMatch(/limit=100/);
     expect(playgrounds).toMatch(/limit=100/);
   });

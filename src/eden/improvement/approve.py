@@ -1,13 +1,15 @@
-"""Approve flow: N22 gate → PRCreator → plan status update (N23)."""
+"""Approve flow: N22 gate → materialize diff → draft PR → plan status (N23)."""
 
 from __future__ import annotations
 
 import logging
-import uuid
 from typing import Any
 
 from eden.improvement import plans_repo
-from eden.patches.pr_creator import _parse_unified_diff
+from eden.patches.diff_materializer import (
+    DiffMaterializeError,
+    materialize_unified_diff,
+)
 from eden.providers import PRCreateRequest, PRProvider
 
 logger = logging.getLogger(__name__)
@@ -28,6 +30,45 @@ async def _resolve_repo_id(org_id: str) -> str | None:
     from eden.providers.factory import resolve_active_repo_id
 
     return await resolve_active_repo_id(org_id)
+
+
+async def _resolve_base_branch(org_id: str, repo_provider: Any) -> str:
+    """Resolve the PR base branch — never hardcode ``main``.
+
+    Preference order:
+    1. ``repo_connections.default_branch`` when set
+    2. :meth:`RepoProvider.get_default_branch`
+    """
+    try:
+        from eden.providers.factory import active_repo_connection
+
+        conn = await active_repo_connection(org_id)
+    except Exception as exc:
+        logger.debug("approve: active_repo_connection failed: %s", exc)
+        conn = None
+    if conn:
+        branch = (conn.get("default_branch") or "").strip()
+        if branch:
+            return branch
+    try:
+        branch = await repo_provider.get_default_branch()
+    except Exception as exc:
+        logger.warning("approve: get_default_branch failed: %s", exc)
+        raise RuntimeError(
+            "could not resolve default branch for approve"
+        ) from exc
+    branch = (branch or "").strip()
+    if not branch:
+        raise RuntimeError("could not resolve default branch for approve")
+    return branch
+
+
+def _pr_create_failed(info: Any) -> bool:
+    """True when create_pr returned a silent failure envelope."""
+    state = (getattr(info, "state", None) or "").lower()
+    number = int(getattr(info, "number", 0) or 0)
+    url = (getattr(info, "url", None) or "").strip()
+    return state == "failed" or number == 0 or not url
 
 
 async def approve_plan(
@@ -70,16 +111,43 @@ async def approve_plan(
             "message": "Connect GitHub App in Settings",
         }
 
-    files = _parse_unified_diff(diff)
+    from eden.providers.factory import (
+        get_pr_provider_for_org,
+        get_repo_provider_for_org,
+    )
+
+    repo_provider = await get_repo_provider_for_org(org_id)
+    try:
+        files = await materialize_unified_diff(
+            diff,
+            read_file=repo_provider.read_file,
+        )
+    except DiffMaterializeError as exc:
+        logger.warning("approve_plan: materialize failed: %s", exc)
+        return {
+            "status": "error",
+            "plan_id": plan_id,
+            "error": "diff_materialize_failed",
+            "message": str(exc),
+        }
     if not files:
         return {"status": "error", "plan_id": plan_id, "error": "unparseable_diff"}
+
+    try:
+        base = await _resolve_base_branch(org_id, repo_provider)
+    except RuntimeError as exc:
+        return {
+            "status": "error",
+            "plan_id": plan_id,
+            "error": "base_branch_unresolved",
+            "message": str(exc),
+        }
 
     if provider is not None:
         pr_provider = provider
     else:
-        from eden.providers.factory import get_pr_provider_for_org
-
         pr_provider = await get_pr_provider_for_org(org_id)
+
     branch = f"eden/improve-{plan_id[:12]}"
     title = f"[Eden] {plan.get('title', 'Improvement plan')[:120]}"
     body = plan.get("summary") or f"Eden improvement plan `{plan_id}`"
@@ -87,7 +155,7 @@ async def approve_plan(
         title=title,
         body=body,
         branch=branch,
-        base="main",
+        base=base,
         draft=True,
         repo_id=repo_id,
         files=files,
@@ -109,6 +177,21 @@ async def approve_plan(
             "plan_id": plan_id,
             "error": "pr_create_failed",
             "message": str(exc),
+        }
+
+    if _pr_create_failed(info):
+        logger.warning(
+            "approve_plan: create_pr returned failure envelope "
+            "(state=%s number=%s url=%r)",
+            getattr(info, "state", None),
+            getattr(info, "number", None),
+            getattr(info, "url", None),
+        )
+        return {
+            "status": "error",
+            "plan_id": plan_id,
+            "error": "pr_create_failed",
+            "message": "PR provider returned a failed create_pr result",
         }
 
     opened_branch = info.branch or branch
@@ -312,8 +395,8 @@ async def _queue_verify(
     try:
         from eden.closed_loop.verify import schedule_verify
 
-        ok = await schedule_verify(org_id, str(issue_id), ref=verify_ref)
-        return str(uuid.uuid4()) if ok else None
+        # schedule_verify returns the real verification row id (or None).
+        return await schedule_verify(org_id, str(issue_id), ref=verify_ref)
     except Exception as exc:
         logger.debug("approve verify queue failed: %s", exc)
         return None

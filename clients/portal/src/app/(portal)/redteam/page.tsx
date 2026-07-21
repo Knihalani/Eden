@@ -78,6 +78,7 @@ export default function RedteamPage() {
   };
 
   return (
+    <div data-wave10-redteam="signed">
     <PageContent size="wide">
       <PageHeader
         eyebrow="Safety"
@@ -200,5 +201,6 @@ export default function RedteamPage() {
         )}
       </QueryState>
     </PageContent>
+    </div>
   );
 }

@@ -8,7 +8,7 @@ import { FOCUS_RING_CLASS } from "./focus-ring";
 
 const Tabs = TabsPrimitive.Root;
 
-/** Hub default grammar: `variant="underline"` (w3-component-contract R3). */
+/** Hub default is underline; `default` (boxed) and `pills` remain for Settings/embedded. */
 const tabsListVariants = cva("inline-flex max-w-full items-center justify-center", {
   variants: {
     variant: {
@@ -18,7 +18,7 @@ const tabsListVariants = cva("inline-flex max-w-full items-center justify-center
     },
   },
   defaultVariants: {
-    variant: "default",
+    variant: "underline",
   },
 });
 
@@ -37,7 +37,7 @@ const tabsTriggerVariants = cva(
       },
     },
     defaultVariants: {
-      variant: "default",
+      variant: "underline",
     },
   }
 );

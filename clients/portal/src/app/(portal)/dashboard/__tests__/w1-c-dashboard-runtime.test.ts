@@ -14,7 +14,7 @@ function read(rel: string): string {
   return readFileSync(resolve(portalSrc, rel), "utf8");
 }
 
-/** Mirror of dashboard first-run derivation (keep in sync with page.tsx). */
+/** Mirror of dashboard first-run derivation (keep in sync with hook). */
 function deriveIsFirstRun(opts: {
   hasTraceTraffic: boolean;
   isError: boolean;
@@ -38,9 +38,13 @@ function deriveIsFirstRun(opts: {
 
 describe("W1-C dashboard runtime", () => {
   it("derives isFirstRun without installPath setState effect", () => {
-    const src = read("app/(portal)/dashboard/page.tsx");
+    const src = read(
+      "app/(portal)/dashboard/_components/use-home-dashboard.ts",
+    );
     expect(src).not.toMatch(/setInstallPath/);
-    expect(src).not.toMatch(/useState\(true\);\s*\n\s*useEffect\(\(\) => \{[^}]*setInstallPath/s);
+    expect(src).not.toMatch(
+      /useState\(true\);\s*\n\s*useEffect\(\(\) => \{[\s\S]*?setInstallPath/,
+    );
     expect(src).toMatch(/const isFirstRun =/);
     expect(src).toMatch(/!tracesQuery\.isError/);
   });
@@ -100,35 +104,37 @@ describe("W1-C dashboard runtime", () => {
   });
 
   it("chrome Logos use href={null} inside outer Link (no nested <a>)", () => {
-    const chrome = read("app/(portal)/portal-chrome.tsx");
-    // Both sidebar + mobile header Logos must opt out of Logo's default Link.
-    const logoNullCount = (chrome.match(/<Logo[^>]*href=\{null\}/g) ?? []).length;
+    const sidebar = read("components/portal-chrome/SidebarNav.tsx");
+    const header = read("components/portal-chrome/PortalHeader.tsx");
+    const logoNullCount =
+      (sidebar.match(/<Logo[^>]*href=\{null\}/g) ?? []).length +
+      (header.match(/<Logo[^>]*href=\{null\}/g) ?? []).length;
     expect(logoNullCount).toBeGreaterThanOrEqual(2);
-    // TooltipTrigger must not wrap a div that contains the nav <a>.
-    expect(chrome).not.toMatch(
+    expect(sidebar).not.toMatch(
       /TooltipTrigger asChild>\{\s*linkWithPin\s*\}/,
     );
   });
 
-  it("gates cost/alerts/agentic shards behind layoutReady + show(widget)", () => {
-    const src = read("app/(portal)/dashboard/page.tsx");
+  it("gates cost/alerts shards behind layoutReady + show(widget)", () => {
+    const src = read(
+      "app/(portal)/dashboard/_components/use-home-dashboard.ts",
+    );
     expect(src).toMatch(/layoutReady/);
-    expect(src).toMatch(/enabled:\s*layoutReady\s*&&\s*show\(["']cost["']\)/);
-    expect(src).toMatch(/enabled:\s*layoutReady\s*&&\s*!orgSyncing\s*&&\s*show\(["']anomalies["']\)/);
-    expect(src).toMatch(/enabled:\s*layoutReady\s*&&\s*show\(["']agentic["']\)/);
+    expect(src).toMatch(
+      /enabled:\s*layoutReady\s*&&\s*show\(["']cost["']\)/,
+    );
+    expect(src).toMatch(/show\(["']failures["']\)/);
+    expect(src).not.toContain("agenticQuery");
+    expect(src).not.toContain('show("agentic")');
   });
 
-  it("latency/throughput wrap Card (div) in a single Link — no nested anchors", () => {
-    const latency = read(
-      "app/(portal)/dashboard/_components/latency-card.tsx",
+  it("KPI restraint strip has no nested card anchors", () => {
+    const kpi = read(
+      "app/(portal)/dashboard/_components/home-kpi-strip.tsx",
     );
-    const throughput = read(
-      "app/(portal)/dashboard/_components/throughput-card.tsx",
-    );
-    for (const src of [latency, throughput]) {
-      expect(src).toMatch(/<Link[\s\S]*?<Card/);
-      expect(src).not.toMatch(/<Card[\s\S]*?<Link/);
-      expect(src).not.toMatch(/<a[\s>]/);
-    }
+    expect(kpi).toContain('data-home-shell-kpi="restraint"');
+    expect(kpi).not.toContain("<Link");
+    expect(kpi).not.toContain("<Card");
+    expect(kpi).not.toMatch(/from ["']@\/components\/ui\/stat-card["']/);
   });
 });

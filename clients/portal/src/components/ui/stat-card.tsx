@@ -4,6 +4,11 @@ import Link from "next/link";
 import { ArrowUpRight, ArrowDownRight, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
+/**
+ * StatCard — KPI interaction / summary unit (value + label + optional
+ * trend / href). OK to keep for real metrics the user scans or clicks.
+ * Not for decorative soup — static groupings without a KPI story → Panel.
+ */
 export type StatCardAccent = "neutral" | "accent" | "terminal" | "warning" | "error" | "info";
 
 export interface StatCardProps {
@@ -33,6 +38,11 @@ export interface StatCardProps {
   emptyText?: string;
   /** Wrap the card in a clickable link. */
   href?: string;
+  /**
+   * Quiet — flat KPI without border/shadow/hover lift (Wave 6 Analytics).
+   * Prefer for strips that sit above tables/charts.
+   */
+  quiet?: boolean;
   className?: string;
 }
 
@@ -70,20 +80,30 @@ export function StatCard({
   empty = false,
   emptyText = "No data yet",
   href,
+  quiet = false,
   className,
 }: StatCardProps) {
   const inner = (
     <div
       className={cn(
-        "bg-[var(--bg-primary)] rounded-xl p-5 border border-[var(--border-default)] h-full",
-        "transition-all duration-200 ease-out hover:border-[var(--border-strong)]",
+        "h-full",
+        quiet
+          ? "rounded-lg bg-transparent p-0"
+          : "rounded-xl border border-[var(--border-default)] bg-[var(--bg-primary)] p-5 transition-all duration-200 ease-out hover:border-[var(--border-strong)]",
         className,
       )}
     >
-      <div className="flex items-start justify-between mb-3">
-        <div className={cn("p-2.5 rounded-lg", resolveIconClass(iconClassName, accent))}>
-          <Icon className="w-5 h-5" aria-hidden />
-        </div>
+      <div className={cn("mb-3 flex items-start justify-between", quiet && "mb-1")}>
+        {!quiet ? (
+          <div className={cn("rounded-lg p-2.5", resolveIconClass(iconClassName, accent))}>
+            <Icon className="h-5 w-5" aria-hidden />
+          </div>
+        ) : (
+          <Icon
+            className="h-3.5 w-3.5 text-[var(--text-muted)]"
+            aria-hidden
+          />
+        )}
         {trend && trendValue && !loading && !empty && (
           <div
             className={cn(
@@ -104,7 +124,12 @@ export function StatCard({
         )}
       </div>
       <div className="space-y-1">
-        <p className="text-3xl font-bold text-[var(--text-primary)] tracking-tight font-mono">
+        <p
+          className={cn(
+            "font-mono tracking-tight text-[var(--text-primary)]",
+            quiet ? "text-2xl font-semibold" : "text-3xl font-bold",
+          )}
+        >
           {loading ? (
             <Loader2 className="w-6 h-6 animate-spin text-[var(--text-muted)]" aria-label="Loading" />
           ) : empty ? (
@@ -128,7 +153,10 @@ export function StatCard({
     return (
       <Link
         href={href}
-        className="block transition-transform hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--border-glow)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-base)] rounded-xl"
+        className={cn(
+          "block rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--border-glow)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-base)]",
+          !quiet && "transition-transform hover:-translate-y-0.5",
+        )}
       >
         {inner}
       </Link>

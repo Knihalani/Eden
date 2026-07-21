@@ -7,7 +7,7 @@ import { FileText, Users, Globe, ShieldCheck, Inbox, AlertTriangle, Trash2, Mail
 export const metadata: Metadata = {
   title: "Data Processing Addendum · Eden",
   description:
-    "GDPR-compliant DPA. Standard Contractual Clauses (SCCs). Auto-attached to enterprise contracts.",
+    "GDPR-oriented DPA draft. Standard Contractual Clauses (SCCs). Intended for paid/enterprise order forms when those plans ship — not auto-attached during public beta.",
 };
 
 // TODO: legal review — every clause below needs counsel sign-off before launch.
@@ -65,7 +65,7 @@ const SECTIONS = [
         including encryption in transit (HTTPS/TLS), per-tenant data isolation,
         RBAC with audit logging where implemented, and the controls described on
         our Security page. Formal third-party audit reports are not offered during
-        soft launch.
+        public beta.
       </p>
     ),
   },
@@ -121,7 +121,8 @@ export default function DpaPage() {
       title="Data Processing Addendum"
       description={
         <>
-          Eden&apos;s DPA is auto-attached to every paid order form. It incorporates the EU Standard
+          Eden&apos;s DPA is intended for paid order forms when those plans become
+          available; it is not auto-attached during public beta. It incorporates the EU Standard
           Contractual Clauses (SCCs) for international data transfers and designates Eden as a{" "}
           <strong>Processor</strong>{" "}
           acting on the Customer&apos;s documented instructions.

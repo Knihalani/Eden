@@ -3,43 +3,27 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useQueryClient } from "@tanstack/react-query";
-import { useOrgQuery } from "@/hooks/use-api-query";
-import { useOrg } from "@/hooks/use-org";
-import { wave6Api } from "@/lib/api";
+import { ArrowLeft, Loader2, Plus, Sparkles } from "lucide-react";
+
 import { PageHeader } from "@/components/layout/page-header";
-import { PageContent } from "@/components/layout/page-content";
-import { Card } from "@/components/ui/card";
+import { CoreResourcePage } from "@/components/portal-os";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { FormField } from "@/components/ui/form-field";
-import { Switch } from "@/components/ui/switch";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorState } from "@/components/ui/error-state";
 import { NoOrgState } from "@/components/ui/no-org-state";
 import { useToast } from "@/components/ui/toast";
-import { cn } from "@/lib/utils";
+import { useOrgQuery } from "@/hooks/use-api-query";
+import { useOrg } from "@/hooks/use-org";
+import { wave6Api } from "@/lib/api";
+import { queryKeys } from "@/lib/query-keys";
 import { U20_EMPTY_COPY } from "@/lib/portal-polish";
-import { Loader2, Sparkles, Plus, RotateCcw, FlaskConical, ArrowLeft } from "lucide-react";
 
-type ScoringRule = {
-  id: string;
-  name: string;
-  scope?: string;
-  scorer_type?: string;
-  sample_rate?: number;
-  enabled?: boolean;
-  filter_query?: string;
-  description?: string;
-};
-
-function SlmBadge({ type }: { type?: string }) {
-  if ((type || "").toLowerCase() !== "slm") return null;
-  return (
-    <span className="rounded bg-[var(--warning-bg)] px-1.5 py-0.5 text-2xs font-semibold uppercase tracking-wide text-[var(--warning)]">
-      SLM
-    </span>
-  );
-}
+import { OnlineScoringForm } from "./_components/online-scoring-form";
+import {
+  OnlineScoringRulesTable,
+  OnlineScoringTestPanel,
+  type ScoringRule,
+} from "./_components/online-scoring-rules";
 
 export default function OnlineScoringPage() {
   const { currentOrg, authError } = useOrg();
@@ -56,8 +40,10 @@ export default function OnlineScoringPage() {
   const [rewindJob, setRewindJob] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
+  const scoringRulesKey = queryKeys.improve.scoringRules(orgId);
+
   const rulesQuery = useOrgQuery(
-    ["wave6", "scoring-rules", orgId],
+    scoringRulesKey,
     orgId,
     () => wave6Api.listScoringRules(orgId!),
   );
@@ -67,8 +53,7 @@ export default function OnlineScoringPage() {
   if (!currentOrg && !authError) return <NoOrgState feature="Online scoring" />;
   if (!currentOrg) return null;
 
-  const refresh = () =>
-    qc.invalidateQueries({ queryKey: ["wave6", "scoring-rules", orgId] });
+  const refresh = () => qc.invalidateQueries({ queryKey: scoringRulesKey });
 
   const resetForm = () => {
     setEditingId(null);
@@ -162,183 +147,115 @@ export default function OnlineScoringPage() {
   };
 
   return (
-    <>
-      <PageHeader
-        title="Online scoring rules"
-        description="Sampled production scorers (code → SLM → LLM). Reachable from Improve → Go to."
-        actions={
-          <div className="flex flex-wrap items-center gap-space-2">
-            <Button asChild variant="ghost" className="min-h-11">
-              <Link href="/improve">
-                <ArrowLeft className="h-3.5 w-3.5" />
-                Improve
-              </Link>
-            </Button>
-            <Button className="min-h-11" onClick={() => { resetForm(); setShowForm(true); }}>
-              <Plus className="h-3.5 w-3.5" /> New rule
-            </Button>
+    <div className="contents" data-wave8-improve-advanced="completed">
+      <CoreResourcePage
+        header={
+          <PageHeader
+            eyebrow="Advanced · Improve"
+            title="Online scoring rules"
+            description="Sampled production scorers (code → SLM → LLM). Open via Advanced nav or ⌘K."
+            actions={
+              <div className="flex flex-wrap items-center gap-space-2">
+                <Button asChild variant="ghost" className="min-h-11">
+                  <Link href="/improve">
+                    <ArrowLeft className="h-3.5 w-3.5" />
+                    Improve
+                  </Link>
+                </Button>
+                <Button
+                  className="min-h-11"
+                  onClick={() => {
+                    resetForm();
+                    setShowForm(true);
+                  }}
+                >
+                  <Plus className="h-3.5 w-3.5" /> New rule
+                </Button>
+              </div>
+            }
+          />
+        }
+        table={
+          <div className="space-y-space-4">
+            {rewindJob ? (
+              <p className="text-xs text-[var(--accent)]">
+                Rewind job in progress: {rewindJob}
+              </p>
+            ) : null}
+
+            {showForm ? (
+              <OnlineScoringForm
+                editingId={editingId}
+                name={name}
+                filterQuery={filterQuery}
+                scorerType={scorerType}
+                sampleRate={sampleRate}
+                busy={busy}
+                onName={setName}
+                onFilter={setFilterQuery}
+                onType={setScorerType}
+                onRate={setSampleRate}
+                onSave={() => void save()}
+                onCancel={resetForm}
+              />
+            ) : null}
+
+            <OnlineScoringTestPanel
+              testTraceId={testTraceId}
+              busy={busy}
+              onTraceId={setTestTraceId}
+              onApply={() => void testApply()}
+            />
+
+            {rulesQuery.isLoading ? (
+              <div className="flex items-center gap-2 text-sm text-[var(--text-muted)]">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Loading rules…
+              </div>
+            ) : rulesQuery.isError ? (
+              <ErrorState
+                title="Could not load scoring rules"
+                message={
+                  rulesQuery.error instanceof Error
+                    ? rulesQuery.error.message
+                    : "Online scoring rules could not be loaded."
+                }
+                onRetry={() => void refresh()}
+              />
+            ) : rules.length === 0 ? (
+              <EmptyState
+                icon={Sparkles}
+                title="No online scoring rules yet"
+                description={U20_EMPTY_COPY.onlineScoring}
+                action={
+                  <Button className="min-h-11" onClick={() => setShowForm(true)}>
+                    Create rule
+                  </Button>
+                }
+              />
+            ) : (
+              <OnlineScoringRulesTable
+                rules={rules}
+                busy={busy}
+                onToggle={(r) => void toggleEnabled(r)}
+                onEdit={startEdit}
+                onRewind={(id) => void rewind(id)}
+              />
+            )}
+
+            <p className="text-xs text-[var(--text-muted)]">
+              Tip: start a scorer from the{" "}
+              <Link
+                href="/evals?tab=playgrounds"
+                className="text-[var(--accent)] hover:underline"
+              >
+                playground
+              </Link>{" "}
+              then enable it here for production sampling.
+            </p>
           </div>
         }
       />
-      <PageContent>
-        {rewindJob ? (
-          <p className="mb-3 text-xs text-[var(--accent)]">
-            Rewind job in progress: {rewindJob}
-          </p>
-        ) : null}
-
-        {showForm ? (
-          <Card className="mb-4 space-y-3 p-4">
-            <h3 className="text-sm font-medium">{editingId ? "Edit rule" : "Create rule"}</h3>
-            <FormField label="Name" htmlFor="os-name" required>
-              <Input id="os-name" value={name} onChange={(e) => setName(e.target.value)} />
-            </FormField>
-            <FormField label="Filter query" htmlFor="os-filter">
-              <Input
-                id="os-filter"
-                value={filterQuery}
-                onChange={(e) => setFilterQuery(e.target.value)}
-                placeholder='agent="…" outcome=failure'
-              />
-            </FormField>
-            <div className="grid gap-3 md:grid-cols-2">
-              <FormField label="Scorer type" htmlFor="os-type">
-                <select
-                  id="os-type"
-                  className="w-full rounded-md border border-[var(--border-default)] bg-[var(--surface-raised)] p-2 text-sm"
-                  value={scorerType}
-                  onChange={(e) => setScorerType(e.target.value)}
-                >
-                  <option value="code">code</option>
-                  <option value="slm">slm</option>
-                  <option value="llm">llm</option>
-                </select>
-              </FormField>
-              <FormField label="Sample rate (0–1)" htmlFor="os-rate">
-                <Input
-                  id="os-rate"
-                  type="number"
-                  min={0}
-                  max={1}
-                  step={0.05}
-                  value={sampleRate}
-                  onChange={(e) => setSampleRate(Number(e.target.value))}
-                />
-              </FormField>
-            </div>
-            <div className="flex gap-2">
-              <Button className="min-h-11" onClick={save} disabled={busy || !name.trim()} loading={busy}>
-                Save
-              </Button>
-              <Button variant="ghost" className="min-h-11" onClick={resetForm}>
-                Cancel
-              </Button>
-            </div>
-          </Card>
-        ) : null}
-
-        <Card className="mb-4 space-y-2 p-4">
-          <h3 className="text-sm font-medium">Test on trace</h3>
-          <div className="flex flex-wrap gap-2">
-            <Input
-              placeholder="trace id"
-              value={testTraceId}
-              onChange={(e) => setTestTraceId(e.target.value)}
-              className="max-w-md"
-            />
-            <Button variant="outline" size="sm" className="min-h-11" onClick={testApply} disabled={busy}>
-              <FlaskConical className="h-3.5 w-3.5" /> Apply rules
-            </Button>
-          </div>
-        </Card>
-
-        {rulesQuery.isLoading ? (
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Loader2 className="h-4 w-4 animate-spin" />
-            Loading rules…
-          </div>
-        ) : rulesQuery.isError ? (
-          <ErrorState
-            title="Could not load scoring rules"
-            message={
-              rulesQuery.error instanceof Error
-                ? rulesQuery.error.message
-                : "Online scoring rules could not be loaded."
-            }
-            onRetry={() => void refresh()}
-          />
-        ) : rules.length === 0 ? (
-          <EmptyState
-            icon={Sparkles}
-            title="No online scoring rules yet"
-            description={U20_EMPTY_COPY.onlineScoring}
-            action={
-              <Button className="min-h-11" onClick={() => setShowForm(true)}>
-                Create rule
-              </Button>
-            }
-          />
-        ) : (
-          <div className="grid gap-3">
-            {rules.map((rule) => (
-              <Card key={String(rule.id)} className="p-4">
-                <div className="flex flex-wrap items-center justify-between gap-4">
-                  <div className="min-w-0 space-y-1">
-                    <p className="font-medium text-[var(--text-primary)]">{String(rule.name)}</p>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span
-                        className={cn(
-                          "text-xs font-medium",
-                          rule.enabled ? "text-[var(--terminal)]" : "text-[var(--text-muted)]",
-                        )}
-                      >
-                        {rule.enabled ? "Enabled" : "Disabled"}
-                      </span>
-                      <SlmBadge type={rule.scorer_type} />
-                    </div>
-                    <p className="text-2xs text-[var(--text-muted)]">
-                      {String(rule.scope || "trace")} · {String(rule.scorer_type)} · sample{" "}
-                      {Math.round(Number(rule.sample_rate ?? 1) * 100)}%
-                    </p>
-                    {rule.filter_query ? (
-                      <p className="font-mono text-2xs text-[var(--text-muted)]">
-                        {rule.filter_query}
-                      </p>
-                    ) : null}
-                  </div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Switch
-                      checked={Boolean(rule.enabled)}
-                      onCheckedChange={() => void toggleEnabled(rule)}
-                      label={rule.enabled ? "Enabled" : "Disabled"}
-                    />
-                    <Button size="sm" variant="outline" className="min-h-11" onClick={() => startEdit(rule)}>
-                      Edit
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="min-h-11"
-                      onClick={() => void rewind(rule.id)}
-                      disabled={busy}
-                    >
-                      <RotateCcw className="h-3.5 w-3.5" /> Rewind
-                    </Button>
-                  </div>
-                </div>
-              </Card>
-            ))}
-          </div>
-        )}
-
-        <p className="mt-4 text-xs text-[var(--text-muted)]">
-          Tip: start a scorer from the{" "}
-          <Link href="/evals?tab=playgrounds" className="text-[var(--accent)] hover:underline">
-            playground
-          </Link>{" "}
-          then enable it here for production sampling.
-        </p>
-      </PageContent>
-    </>
+    </div>
   );
 }

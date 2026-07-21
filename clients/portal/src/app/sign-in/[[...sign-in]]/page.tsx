@@ -46,7 +46,7 @@ export default async function SignInPage({
             <SignIn /> component hides its own header via
             the appearance config in clerk-theme.ts. */}
         <div className="text-center space-y-space-2">
-          <p className="text-2xs font-mono font-semibold uppercase tracking-[0.18em] text-[var(--accent)]">
+          <p className="text-xs font-mono font-semibold uppercase tracking-[0.18em] text-[var(--accent)]">
             Account access
           </p>
           <h1 className="text-xl font-semibold text-[var(--text-primary)] tracking-tight">

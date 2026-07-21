@@ -85,14 +85,17 @@ async def improvement_loop_preview_enabled(org_id: str) -> bool:
 
 
 async def improvement_agent_enabled(org_id: str) -> bool:
-    """N23 — per-org improvement agent (new-org default via features)."""
+    """N23 — per-org improvement agent.
+
+    Explicit org ``False`` is a kill-switch even when the global setting is ON.
+    Missing org key falls back to ``Settings.improvement_agent_v1``.
+    """
     from eden.config import get_settings
 
-    settings = get_settings()
-    if getattr(settings, "improvement_agent_v1", False):
-        return True
     features = await _load_org_features(org_id)
-    return _org_flag(features, "improvement_agent_v1")
+    if "improvement_agent_v1" in features:
+        return bool(features["improvement_agent_v1"])
+    return bool(getattr(get_settings(), "improvement_agent_v1", False))
 
 
 async def improvement_schedule_enabled_for_org(org_id: str) -> bool:

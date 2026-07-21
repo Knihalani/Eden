@@ -67,7 +67,7 @@ describe("W20 rehydrate + charts + citations", () => {
   it("MessageList renders AiChartRenderer and cite→trace links", () => {
     const list = src("components/ai-insights/MessageList.tsx");
     expect(list).toContain("AiChartRenderer");
-    expect(list).toContain("/traces?trace_id=");
+    expect(list).toContain("citationJumpHref");
     expect(list).toContain("CitationChip");
   });
 
@@ -118,11 +118,17 @@ describe("W20 approvals + dual surface gone", () => {
 describe("W20 open→send→tool_card structural path", () => {
   it("wires open toggle, submit, and tool card rendering", () => {
     const shell = src("components/ai-insights/ChatSidebar.tsx");
-    expect(shell).toContain("Open AI assistant");
+    // Home Shell 1A / W3: redesigned FAB (secondary + label), not quiet ghost.
+    expect(shell).toContain('aria-label="Ask AI"');
+    expect(shell).toContain('data-ai-fab');
+    expect(shell).toContain('variant="secondary"');
+    expect(shell).toContain("Ask AI — header icon");
     const hook = src("components/ai-insights/hooks/useChatSidebar.ts");
     expect(hook).toContain("eden:toggle-ai-chat");
     expect(hook).toContain("tool_call");
     expect(hook).toContain("tool_result");
+    // Coach: optional one-time tip after restore (W3).
+    expect(hook).toContain('setShowCoach(true)');
     const list = src("components/ai-insights/MessageList.tsx");
     expect(list).toContain("ToolCallCard");
     expect(list).toContain("ApprovalCard");

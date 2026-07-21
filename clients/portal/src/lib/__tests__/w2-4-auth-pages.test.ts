@@ -197,17 +197,21 @@ describe("W2.4 auth page source guards", () => {
     expect(src).toContain("onAuthRoute");
   });
 
-  it("cookie consent auto-collapses on short pages and reserves full/pill offset", () => {
+  it("cookie consent auto-collapses on short pages and reserves banner offset", () => {
     const src = read("components/cookie-consent.tsx");
     expect(src).toContain("SHORT_PAGE_MAX_SCROLLABLE_PX");
     expect(src).toContain("FULL_BANNER_OFFSET_PX");
-    expect(src).toContain("PILL_OFFSET_PX");
     // Short pages must collapse — never force collapsed=false when
     // there is no scroll room (that occluded primary CTAs).
     expect(src).toMatch(
       /scrollable\s*<=\s*SHORT_PAGE_MAX_SCROLLABLE_PX[\s\S]*?setCollapsed\(true\)/,
     );
-    expect(src).toContain("showFull ? FULL_BANNER_OFFSET_PX : PILL_OFFSET_PX");
+    // Home Shell 2A: after choice render null — no fixed preferences pill.
+    expect(src).toMatch(
+      /if\s*\(\s*ready\s*&&\s*hasChoice\s*&&\s*!visible\s*\)\s*return\s*null/,
+    );
+    expect(src).not.toContain("Compact re-open control after a choice");
+    expect(src).toContain("OPEN_COOKIE_PREFERENCES_EVENT");
   });
 
   it("reset-password CTA matches forgot-password touch target", () => {

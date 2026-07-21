@@ -7,6 +7,16 @@ import { Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { FOCUS_RING_CLASS } from "./focus-ring";
 
+/**
+ * Button grammar (Wave 2 freeze):
+ * - `default` — sole solid accent CTA (one per screen)
+ * - `secondary` — quiet / outline (aliases the old competing solid secondary)
+ * - `destructive` / `danger` — one error delete style (aliases)
+ * - `outline` / `ghost` / `link` — quiet utilities
+ * - `emerald` — deprecated alias of `default` (do not use for new CTAs)
+ *
+ * Visual height 28–32px (`h-8`); `max-md:min-h-11` keeps touch targets on mobile.
+ */
 const buttonVariants = cva(
   cn(
     "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-lg text-sm font-medium transition-colors disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0",
@@ -16,26 +26,28 @@ const buttonVariants = cva(
     variants: {
       variant: {
         default:
-          "bg-[var(--accent)] text-[var(--bg-primary)] hover:bg-[var(--accent-hover)]",
+          "bg-[var(--accent)] text-[var(--accent-foreground)] hover:bg-[var(--accent-hover)]",
+        /** Quiet secondary — same grammar as outline (collapsed solid secondary). */
+        secondary:
+          "border border-[var(--border-default)] bg-[var(--bg-secondary)] text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)]",
         destructive:
           "bg-[var(--error)] text-[var(--bg-primary)] hover:bg-[var(--error)]/90",
-        outline:
-          "border border-[var(--border)] bg-transparent hover:bg-[var(--accent-bg)] hover:text-[var(--accent)]",
-        ghost: "hover:bg-[var(--accent-bg)] hover:text-[var(--accent)]",
-        secondary:
-          "bg-[var(--primary)] text-[var(--bg-primary)] hover:bg-[var(--primary-hover)]",
-        emerald:
-          "bg-[var(--accent-2)] text-[var(--bg-base)] hover:bg-[var(--accent-2)]/90",
+        /** Alias of destructive — one error delete style. */
         danger:
-          "bg-[var(--error-dim)] text-[var(--error)] border border-[var(--error)]/30 hover:bg-[var(--error)]/20",
+          "bg-[var(--error)] text-[var(--bg-primary)] hover:bg-[var(--error)]/90",
+        outline:
+          "border border-[var(--border-default)] bg-transparent hover:bg-[var(--bg-secondary)] hover:text-[var(--text-primary)]",
+        ghost: "hover:bg-[var(--bg-secondary)] hover:text-[var(--text-primary)]",
+        /** @deprecated Use `default`. Kept as alias for call-site safety. */
+        emerald:
+          "bg-[var(--accent)] text-[var(--accent-foreground)] hover:bg-[var(--accent-hover)]",
         link: "text-[var(--accent)] underline-offset-4 hover:underline",
       },
       size: {
-        default: "min-h-11 h-11 px-4 py-2",
-        // Dense secondary: compact type/padding, still ≥44px touch (W15).
-        sm: "min-h-11 h-11 px-3 text-xs",
-        lg: "h-12 px-6 text-base",
-        icon: "min-h-11 min-w-11 h-11 w-11",
+        default: "h-8 min-h-8 max-md:min-h-11 px-3 py-1.5",
+        sm: "h-7 min-h-7 max-md:min-h-11 px-2.5 text-xs",
+        lg: "h-9 min-h-9 max-md:min-h-11 px-5 text-sm",
+        icon: "h-8 w-8 min-h-8 min-w-8 max-md:min-h-11 max-md:min-w-11",
       },
     },
     defaultVariants: {
@@ -49,8 +61,7 @@ export interface ButtonProps
   extends React.ButtonHTMLAttributes<HTMLButtonElement>,
     VariantProps<typeof buttonVariants> {
   asChild?: boolean;
-  /** ponytail: aligned with StatCard's `loading` prop. Shows a
-   *  spinner + disables the button while true. */
+  /** Shows a spinner + disables the button while true. */
   loading?: boolean;
 }
 

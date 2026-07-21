@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import Link from "next/link";
 import { AlertTriangle, RefreshCw, Home } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 /** Global 500 — ponytail: matches (portal)/error.tsx styling but lives
  *  at the root so it catches errors that escape the (portal) error
@@ -52,20 +53,16 @@ export default function GlobalError({
             )}
 
             <div className="flex items-center justify-center gap-3">
-              <button
-                onClick={reset}
-                className="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-[var(--bg-primary)] bg-[var(--accent)] hover:bg-[var(--accent-hover)] rounded-xl transition-colors"
-              >
+              <Button type="button" onClick={reset}>
                 <RefreshCw className="w-4 h-4" />
                 Reload
-              </button>
-              <Link
-                href="/dashboard"
-                className="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-[var(--text-primary)] bg-[var(--bg-primary)] hover:bg-[var(--bg-tertiary)] border border-[var(--border-default)] rounded-xl transition-colors"
-              >
-                <Home className="w-4 h-4" />
-                Dashboard
-              </Link>
+              </Button>
+              <Button asChild variant="outline">
+                <Link href="/dashboard">
+                  <Home className="w-4 h-4" />
+                  Dashboard
+                </Link>
+              </Button>
             </div>
           </div>
         </div>

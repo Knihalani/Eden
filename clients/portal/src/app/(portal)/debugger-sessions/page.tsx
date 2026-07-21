@@ -9,11 +9,14 @@ import { debugSessionsApi } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorState } from "@/components/ui/error-state";
-import { PageHeader } from "@/components/layout/page-header";
 import { CoreResourcePage } from "@/components/portal-os";
 import { NoOrgState } from "@/components/ui/no-org-state";
 import { useToast } from "@/components/ui/toast";
 import { traceHref } from "@/lib/portal-cross-links";
+import {
+  ObserveLeafHeader,
+  WAVE10_POWER_ATTR,
+} from "@/app/(portal)/observability/_components/observe-leaf-shell";
 
 type DebugSessionRow = {
   id: string;
@@ -66,20 +69,22 @@ export default function DebuggerSessionsPage() {
   if (!currentOrg) return <NoOrgState feature="Debug sessions" icon={Bug} />;
 
   return (
+    <div {...WAVE10_POWER_ATTR}>
     <CoreResourcePage
       header={
-        <PageHeader
+        <ObserveLeafHeader
           title="Debug sessions"
-          subtitle="Multi-run iteration timeline — compare reruns from the same investigation."
+          subtitle="Multi-run iteration — Laminar-style list, one primary New"
           actions={
-            <Button size="sm" onClick={() => void onCreate()}>
+            <Button size="sm" className="min-h-11" onClick={() => void onCreate()}>
               <Plus className="h-3.5 w-3.5" /> New session
             </Button>
           }
         />
       }
       table={
-        error ? (
+        <div data-testid="debugger-sessions-list" data-wave10-debugger="calm">
+        {error ? (
           <ErrorState
             title="Could not load sessions"
             message={error}
@@ -110,12 +115,15 @@ export default function DebuggerSessionsPage() {
             }
           />
         ) : (
-          <ul className="divide-y divide-[var(--border-subtle)] rounded-xl bg-[var(--bg-secondary)] overflow-hidden">
+          <ul
+            className="divide-y divide-[var(--border-subtle)] overflow-hidden rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-secondary)]"
+            data-wave7-debugger="dense-list"
+          >
             {sessions.map((s) => (
               <li key={s.id}>
                 <Link
                   href={`/debugger-sessions/${s.id}`}
-                  className="flex items-center justify-between gap-4 px-4 py-3 hover:bg-[var(--bg-tertiary)]/50 transition-colors"
+                  className="flex items-center justify-between gap-4 px-3 py-2 min-h-11 hover:bg-[var(--bg-tertiary)]/50 transition-colors"
                 >
                   <div className="min-w-0">
                     <div className="font-medium text-sm text-[var(--text-primary)] truncate">
@@ -150,7 +158,7 @@ export default function DebuggerSessionsPage() {
                     </div>
                   </div>
                   {s.updated_at ? (
-                    <span className="text-xs text-[var(--text-muted)] shrink-0">
+                    <span className="text-xs text-[var(--text-muted)] shrink-0 tabular-nums">
                       {new Date(s.updated_at).toLocaleString()}
                     </span>
                   ) : null}
@@ -158,8 +166,11 @@ export default function DebuggerSessionsPage() {
               </li>
             ))}
           </ul>
-        )
+        )}
+        </div>
       }
     />
+    </div>
   );
 }
+

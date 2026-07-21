@@ -3,6 +3,7 @@
 import * as React from "react";
 import { Check } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { FOCUS_RING_CLASS } from "./focus-ring";
 
 export interface CheckboxProps
   extends Omit<React.ButtonHTMLAttributes<HTMLButtonElement>, "onChange"> {
@@ -32,6 +33,7 @@ export const Checkbox = React.forwardRef<HTMLButtonElement, CheckboxProps>(
           className={cn(
             "flex h-5 w-5 shrink-0 items-center justify-center rounded border transition-colors",
             "min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 sm:h-5 sm:w-5",
+            FOCUS_RING_CLASS,
             checked
               ? "bg-[var(--accent)] border-[var(--accent)] text-[var(--bg-primary)]"
               : "border-[var(--border-default)] bg-[var(--bg-primary)] hover:border-[var(--border-strong)]",

@@ -38,6 +38,18 @@ export interface TraceItem {
   session_id?: string | null;
   /** Free-form tags from telemetry_events (e.g. ``mcp:server``, ``facet:retrieval``). */
   tags?: string[] | null;
+  /** Optional I/O preview text when list payload includes it. */
+  input_text?: string | null;
+  output_text?: string | null;
+  input?: string | null;
+  output?: string | null;
+  preview?: string | null;
+  name?: string | null;
+  error?: string | null;
+  /** Soft unreviewed filter — present when API exposes review/score state. */
+  score?: number | null;
+  reviewed?: boolean | null;
+  has_score?: boolean | null;
 }
 
 export interface TraceTreeData {
@@ -59,6 +71,8 @@ export interface TimelineData {
     duration_ms: number;
     event_type: string;
     outcome: Outcome | null;
+    /** Present when API provides it; Wave 4 enriches from transcript otherwise. */
+    span_id?: string;
   }>;
   total_duration_ms: number;
   markers: Array<{

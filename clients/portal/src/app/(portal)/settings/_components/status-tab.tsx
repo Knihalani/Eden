@@ -97,7 +97,7 @@ export function StatusTab() {
   };
 
   return (
-    <div className="space-y-space-4">
+    <div className="space-y-space-4" data-ws8-status>
       <div className="flex items-center justify-between gap-3">
         <p className="text-sm text-[var(--text-muted)]">
           Worker health, queue depths, and ingest lag — no infra SSH required.

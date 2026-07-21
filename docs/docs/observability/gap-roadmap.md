@@ -3373,7 +3373,7 @@ already implemented, no work needed):
   (`_maybe_emit_cache_hit` → `cache_lookups` table)
 * `src/eden/api/routes/gateway.py` — OpenAI-compatible
   `/gateway/v1/chat/completions`, `/completions`, `/embeddings`,
-  `/models` mounted at `https://gateway.eden.ai/v1`; the
+  `/models` mounted at `https://api.edenobservability.com/gateway/v1`; the
   existing `AIGateway` is in the path
 * `src/eden/evaluation/auto_dataset.py` — `AutoDatasetPromoter` +
   `TraceQualityScorer` (4-factor scoring: correctness /

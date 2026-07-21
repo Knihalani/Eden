@@ -203,7 +203,7 @@ In the browser, open the Vercel portal URL and:
 | Upstash free = 10k commands/day | Rate-limit 503s after 10k Redis calls | Either upgrade Upstash to fixed $1/mo for 100k/day, or set a per-day cap in the app and fail open |
 | Postgres addon is 1 GB | Migration fails on large inserts (Cat 18 columnar) | Bump to 5 GB plan; the addon is the one free slot so this is the first thing to upgrade |
 | 512 MB container cap on the free sandbox | OOM kills during alembic on a heavy migration | Run the migration once via `northflank exec` with a bigger container, then scale back |
-| Northflank `*.northflank.app` URLs are not stable across project recreate | Docs/cron references break | Add a custom domain `api.eden.ai` once you're off the free tier |
+| Northflank `*.northflank.app` URLs are not stable across project recreate | Docs/cron references break | Add a custom domain `api.edenobservability.com` once you're off the free tier |
 | Vercel Hobby plan bans commercial use | T&Cs violation once Eden has paying customers | Upgrade Vercel → Pro ($20/seat) before charging |
 | No automatic Postgres backups on free tier | Data loss if the addon dies | Manually snapshot weekly: `northflank exec --service eden-api -- pg_dump -U eden eden > backup.sql` |
 

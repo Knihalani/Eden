@@ -19,6 +19,7 @@ export const HUB_REDIRECT_RULES: Record<string, HubRedirectRule> = {
   "/studio": { destination: "/evals", tab: "studio" },
   "/synthetic": { destination: "/evals", tab: "synthetic" },
   "/signals": { destination: "/alerts", tab: "signals" },
+  "/promotions": { destination: "/ledger", tab: "promotions" },
   "/fleet": { destination: "/agents", tab: "fleet" },
   "/incidents": { destination: "/issues", tab: "incidents" },
   "/users": { destination: "/analytics", tab: "users" },
@@ -30,6 +31,10 @@ export const HUB_REDIRECT_RULES: Record<string, HubRedirectRule> = {
   "/replay": { destination: "/traces", defaultParams: { view: "replay" } },
   "/debugger": { destination: "/traces", defaultParams: { view: "debug" } },
   "/observability": { destination: "/traces" },
+  "/optimization/predict": {
+    destination: "/optimization",
+    tab: "forecast",
+  },
   // W3 UX-P0-13 GAP: query-preserving soft nests (next.config drops source query).
   "/observability/mcp": { destination: "/traces", defaultParams: { facet: "mcp" } },
   "/observability/decisions": {
@@ -52,6 +57,7 @@ export const HUB_REDIRECT_RULES: Record<string, HubRedirectRule> = {
     destination: "/traces",
     defaultParams: { view: "cohorts" },
   },
+  "/observability/eval": { destination: "/evals", tab: "eval" },
   "/redteam": { destination: "/guardrails", tab: "redteam" },
   "/profile": { destination: "/settings", tab: "account" },
   "/billing": { destination: "/settings", tab: "billing" },
@@ -59,6 +65,15 @@ export const HUB_REDIRECT_RULES: Record<string, HubRedirectRule> = {
   "/optimization/model-advisor": {
     destination: "/optimization",
     tab: "advisor",
+  },
+  // Wave 7: Budget / Outcomes orphans → Cost hub tabs.
+  "/optimization/budget": {
+    destination: "/optimization",
+    tab: "budget",
+  },
+  "/optimization/outcomes": {
+    destination: "/optimization",
+    tab: "outcomes",
   },
 };
 

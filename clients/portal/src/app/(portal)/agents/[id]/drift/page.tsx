@@ -13,6 +13,7 @@ import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorState } from "@/components/ui/error-state";
 import { NoOrgState } from "@/components/ui/no-org-state";
+import { Panel } from "@/components/ui/panel";
 import { useOrg } from "@/hooks/use-org";
 import { useKeyboardShortcuts } from "@/hooks/use-keyboard-shortcuts";
 import { learnApi } from "@/lib/api";
@@ -179,12 +180,12 @@ function AgentDriftPageInner() {
       ) : null}
 
       {!error && summary ? (
-        <Card className="mb-4 p-4">
+        <Panel tone="flat" padding="md" className="mb-4">
           <div className="flex items-start gap-2">
             <Activity className="mt-0.5 h-5 w-5 text-[var(--accent)]" />
             <p className="text-sm text-[var(--text-secondary)]">{summary}</p>
           </div>
-        </Card>
+        </Panel>
       ) : null}
 
       {error ? null : loading ? (

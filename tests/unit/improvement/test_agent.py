@@ -11,7 +11,10 @@ from eden.improvement.agent import ImprovementAgent
 
 @pytest.mark.asyncio
 async def test_sweep_disabled_when_flag_off() -> None:
-    with patch("eden.improvement.agent._agent_enabled", return_value=False):
+    with patch(
+        "eden.improvement.agent._agent_enabled_for_org",
+        AsyncMock(return_value=False),
+    ):
         result = await ImprovementAgent().sweep("org-1")
     assert result["status"] == "disabled"
 
@@ -36,7 +39,18 @@ async def test_sweep_completes_with_no_candidates(monkeypatch) -> None:
             "eden.improvement.agent.imp_settings.get_settings",
             AsyncMock(return_value={"improvement_max_plans_per_sweep": 10}),
         ),
-        patch.object(ImprovementAgent, "_from_issues", AsyncMock(return_value=[])),
+        patch.object(
+            ImprovementAgent,
+            "_rank_and_generate_issue_patches",
+            AsyncMock(
+                return_value={
+                    "created": 0,
+                    "skipped": 0,
+                    "cost_usd": 0.0,
+                    "plan_ids": [],
+                }
+            ),
+        ),
         patch.object(ImprovementAgent, "_from_traces", AsyncMock(return_value=[])),
         patch.object(ImprovementAgent, "_from_metrics", AsyncMock(return_value=[])),
         patch.object(ImprovementAgent, "_from_repo_health", AsyncMock(return_value=[])),

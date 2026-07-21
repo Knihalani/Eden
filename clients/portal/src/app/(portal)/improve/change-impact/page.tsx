@@ -2,25 +2,25 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { ChevronDown, GitCompareArrows, Play, AlertTriangle, CheckCircle2, Ban } from "lucide-react";
+import {
+  AlertTriangle,
+  Ban,
+  CheckCircle2,
+  GitCompareArrows,
+  Play,
+} from "lucide-react";
+
 import { PageHeader } from "@/components/layout/page-header";
 import { CoreResourcePage } from "@/components/portal-os";
-import { NoOrgState } from "@/components/ui/no-org-state";
+import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorState } from "@/components/ui/error-state";
-import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { FormField } from "@/components/ui/form-field";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { useOrg } from "@/hooks/use-org";
+import { Input } from "@/components/ui/input";
+import { NoOrgState } from "@/components/ui/no-org-state";
+import { Panel } from "@/components/ui/panel";
 import { useToast } from "@/components/ui/toast";
+import { useOrg } from "@/hooks/use-org";
 import { changeImpactApi } from "@/lib/api";
 import {
   FEATURE_NOT_ENABLED_MESSAGE,
@@ -98,7 +98,10 @@ export default function ChangeImpactPage() {
     try {
       const res = await changeImpactApi.preview(currentOrg.id, {
         change_id: changeId,
-        changed_files: files.split(",").map((f) => f.trim()).filter(Boolean),
+        changed_files: files
+          .split(",")
+          .map((f) => f.trim())
+          .filter(Boolean),
         agent_id: agentId || undefined,
       });
       setReport((res.data?.report as ImpactReport) || null);
@@ -125,202 +128,221 @@ export default function ChangeImpactPage() {
   const RecIcon = meta.icon;
 
   return (
-    <CoreResourcePage
-      size="wide"
-      header={
-        <PageHeader
-          eyebrow="Improve"
-          title="Change impact preview"
-          subtitle="Replay stratified production traffic before prompt or model changes land."
-          icon={GitCompareArrows}
-          actions={
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="outline" className="min-h-11" aria-label="Related surfaces">
-                  More
-                  <ChevronDown className="h-4 w-4" aria-hidden />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="min-w-[12rem]">
-                <DropdownMenuLabel>Go to</DropdownMenuLabel>
-                <DropdownMenuItem asChild>
-                  <Link href="/improve">Improve queue</Link>
-                </DropdownMenuItem>
-                <DropdownMenuItem asChild>
-                  <Link href="/improve/scorecard">Scorecard</Link>
-                </DropdownMenuItem>
-                <DropdownMenuItem asChild>
-                  <Link href="/promotions">Promotions</Link>
-                </DropdownMenuItem>
-                <DropdownMenuItem asChild>
-                  <Link href="/traces">Traces</Link>
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          }
-        />
-      }
-      toolbar={undefined}
-      table={
-        <>
-          <Card className="mb-4 space-y-3 p-4">
-            <FormField label="Change ID" htmlFor="change-id">
-              <Input
-                id="change-id"
-                value={changeId}
-                onChange={(e) => setChangeId(e.target.value)}
-              />
-            </FormField>
-            <FormField label="Agent ID (optional)" htmlFor="agent-id">
-              <Input
-                id="agent-id"
-                value={agentId}
-                onChange={(e) => setAgentId(e.target.value)}
-                placeholder="checkout-agent"
-              />
-            </FormField>
-            <FormField label="Changed files (comma-separated)" htmlFor="files">
-              <Input
-                id="files"
-                value={files}
-                onChange={(e) => setFiles(e.target.value)}
-              />
-            </FormField>
-            <Button onClick={() => void run()} disabled={busy} loading={busy} className="min-h-11">
-              <Play className="h-3.5 w-3.5" /> Generate preview
-            </Button>
-          </Card>
+    <div className="contents" data-wave8-improve-advanced="completed">
+      <CoreResourcePage
+        size="wide"
+        header={
+          <PageHeader
+            eyebrow="Advanced · Improve"
+            title="Change impact preview"
+            subtitle="Replay stratified production traffic before prompt or model changes land."
+            icon={GitCompareArrows}
+            actions={
+              <nav
+                data-testid="change-impact-related-strip"
+                aria-label="Related"
+                className="flex flex-wrap items-center gap-x-space-3 gap-y-1 text-xs text-[var(--text-muted)]"
+              >
+                <Link href="/improve" className="text-[var(--accent)] hover:underline">
+                  Improve
+                </Link>
+                <Link
+                  href="/improve/scorecard"
+                  className="text-[var(--accent)] hover:underline"
+                >
+                  Scorecard
+                </Link>
+                <Link
+                  href="/ledger?tab=promotions"
+                  className="text-[var(--accent)] hover:underline"
+                >
+                  Promotions
+                </Link>
+              </nav>
+            }
+          />
+        }
+        toolbar={undefined}
+        table={
+          <div className="space-y-space-4">
+            <Panel
+              tone="flat"
+              padding="md"
+              className="space-y-3"
+              data-testid="change-impact-preview"
+            >
+              <FormField label="Change ID" htmlFor="change-id">
+                <Input
+                  id="change-id"
+                  value={changeId}
+                  onChange={(e) => setChangeId(e.target.value)}
+                />
+              </FormField>
+              <FormField label="Agent ID (optional)" htmlFor="agent-id">
+                <Input
+                  id="agent-id"
+                  value={agentId}
+                  onChange={(e) => setAgentId(e.target.value)}
+                  placeholder="checkout-agent"
+                />
+              </FormField>
+              <FormField label="Changed files (comma-separated)" htmlFor="files">
+                <Input
+                  id="files"
+                  value={files}
+                  onChange={(e) => setFiles(e.target.value)}
+                />
+              </FormField>
+              <Button
+                onClick={() => void run()}
+                disabled={busy}
+                loading={busy}
+                className="min-h-11"
+                data-testid="change-impact-run"
+              >
+                <Play className="h-3.5 w-3.5" /> Run preview
+              </Button>
+            </Panel>
 
-          {error ? (
-            <ErrorState
-              className="mb-4"
-              title={
-                error === FEATURE_NOT_ENABLED_TITLE
-                  ? FEATURE_NOT_ENABLED_TITLE
-                  : "Preview failed"
-              }
-              message={
-                error === FEATURE_NOT_ENABLED_TITLE
-                  ? FEATURE_NOT_ENABLED_MESSAGE
-                  : error
-              }
-              action={
-                error === FEATURE_NOT_ENABLED_TITLE ? undefined : (
-                  <Button variant="outline" size="sm" onClick={() => void run()}>
-                    Try again
-                  </Button>
-                )
-              }
-            />
-          ) : null}
+            <div data-testid="change-impact-result">
+              {error ? (
+                <ErrorState
+                  className="mb-4"
+                  title={
+                    error === FEATURE_NOT_ENABLED_TITLE
+                      ? FEATURE_NOT_ENABLED_TITLE
+                      : "Preview failed"
+                  }
+                  message={
+                    error === FEATURE_NOT_ENABLED_TITLE
+                      ? FEATURE_NOT_ENABLED_MESSAGE
+                      : error
+                  }
+                  action={
+                    error === FEATURE_NOT_ENABLED_TITLE ? undefined : (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => void run()}
+                      >
+                        Try again
+                      </Button>
+                    )
+                  }
+                />
+              ) : null}
 
-          {!report && !error && !busy ? (
-            <EmptyState
-              title="No preview yet"
-              description="No preview generated yet. Run a preview to see divergence, cost Δ, and a ship/block recommendation. Needs production traces for meaningful replay."
-              action={
-                <div className="flex flex-wrap items-center justify-center gap-2">
-                  <Button
-                    className="min-h-11"
-                    onClick={() => void run()}
-                    disabled={busy}
-                    loading={busy}
+              {!report && !error && !busy ? (
+                <EmptyState
+                  title="No result yet"
+                  description="Fill the preview form above and run once. Needs production traces for meaningful replay — divergence, cost Δ, and ship/block recommendation appear here."
+                  action={
+                    <Button asChild variant="outline" className="min-h-11">
+                      <Link href="/traces">Open Traces</Link>
+                    </Button>
+                  }
+                />
+              ) : null}
+
+              {report ? (
+                <div className="space-y-4">
+                  <Panel
+                    tone="flat"
+                    padding="md"
+                    className={cn("flex items-start gap-3 border", meta.tone)}
                   >
-                    <Play className="h-3.5 w-3.5" /> Generate preview
-                  </Button>
-                  <Button asChild variant="outline" className="min-h-11">
-                    <Link href="/traces">Open Traces</Link>
-                  </Button>
-                  <Button asChild variant="ghost" className="min-h-11">
-                    <Link href="/improve">Improve queue</Link>
-                  </Button>
-                </div>
-              }
-            />
-          ) : null}
+                    <RecIcon className="mt-0.5 h-5 w-5 shrink-0" />
+                    <div>
+                      <p className="text-sm font-semibold">{meta.label}</p>
+                      <p className="mt-1 text-xs opacity-80">
+                        Policy tier {String(report.policy_tier ?? "T2")} · change{" "}
+                        <code>{String(report.change_id ?? changeId)}</code>
+                      </p>
+                      {(report.recommendation_reasons ?? []).length > 0 ? (
+                        <ul className="mt-2 list-disc space-y-1 pl-4 text-xs">
+                          {(report.recommendation_reasons ?? []).map((r) => (
+                            <li key={r}>{r}</li>
+                          ))}
+                        </ul>
+                      ) : null}
+                    </div>
+                  </Panel>
 
-          {report ? (
-            <div className="space-y-4">
-              <Card className={cn("flex items-start gap-3 border p-4", meta.tone)}>
-                <RecIcon className="mt-0.5 h-5 w-5 shrink-0" />
-                <div>
-                  <p className="text-sm font-semibold">{meta.label}</p>
-                  <p className="mt-1 text-xs opacity-80">
-                    Policy tier {String(report.policy_tier ?? "T2")} · change{" "}
-                    <code>{String(report.change_id ?? changeId)}</code>
-                  </p>
-                  {(report.recommendation_reasons ?? []).length > 0 ? (
-                    <ul className="mt-2 list-disc space-y-1 pl-4 text-xs">
-                      {(report.recommendation_reasons ?? []).map((r) => (
-                        <li key={r}>{r}</li>
-                      ))}
-                    </ul>
+                  <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                    <Panel tone="flat" padding="sm">
+                      <p className="text-xs text-[var(--text-muted)]">Traces replayed</p>
+                      <p className="text-lg font-semibold">
+                        {String(report.traces_replayed ?? 0)}
+                      </p>
+                    </Panel>
+                    <Panel tone="flat" padding="sm">
+                      <p className="text-xs text-[var(--text-muted)]">
+                        Trajectory divergence
+                      </p>
+                      <p className="text-lg font-semibold">
+                        {pct(report.trajectory_divergence_rate)}
+                      </p>
+                    </Panel>
+                    <Panel tone="flat" padding="sm">
+                      <p className="text-xs text-[var(--text-muted)]">Cost Δ</p>
+                      <p className="text-lg font-semibold">
+                        {pct(report.cost_delta_pct)}
+                      </p>
+                    </Panel>
+                    <Panel tone="flat" padding="sm">
+                      <p className="text-xs text-[var(--text-muted)]">Latency Δ</p>
+                      <p className="text-lg font-semibold">
+                        {pct(report.latency_delta_pct)}
+                      </p>
+                    </Panel>
+                  </div>
+
+                  {(report.top_divergences ?? []).length > 0 ? (
+                    <Panel tone="flat" padding="md">
+                      <h3 className="mb-2 text-sm font-medium">Top divergences</h3>
+                      <ul className="space-y-2 text-sm">
+                        {(report.top_divergences ?? []).slice(0, 8).map((d, i) => (
+                          <li key={i} className="text-[var(--text-secondary)]">
+                            {String(d.summary ?? d.trace_id ?? JSON.stringify(d))}
+                            {d.trace_id ? (
+                              <>
+                                {" · "}
+                                <Link
+                                  href={`/traces?traceId=${encodeURIComponent(String(d.trace_id))}`}
+                                  className="text-[var(--accent)] hover:underline"
+                                >
+                                  Open trace
+                                </Link>
+                              </>
+                            ) : null}
+                          </li>
+                        ))}
+                      </ul>
+                    </Panel>
+                  ) : null}
+
+                  {report.regression_eval &&
+                  Object.keys(report.regression_eval).length > 0 ? (
+                    <Panel tone="flat" padding="md">
+                      <h3 className="mb-2 text-sm font-medium">Regression eval</h3>
+                      <dl className="grid gap-2 text-xs sm:grid-cols-2">
+                        {Object.entries(report.regression_eval).map(([k, v]) => (
+                          <div key={k} className="flex justify-between gap-4">
+                            <dt className="text-[var(--text-muted)]">
+                              {k.replace(/_/g, " ")}
+                            </dt>
+                            <dd className="font-medium">{String(v)}</dd>
+                          </div>
+                        ))}
+                      </dl>
+                    </Panel>
                   ) : null}
                 </div>
-              </Card>
-
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                <Card className="p-3">
-                  <p className="text-xs text-[var(--text-muted)]">Traces replayed</p>
-                  <p className="text-lg font-semibold">{String(report.traces_replayed ?? 0)}</p>
-                </Card>
-                <Card className="p-3">
-                  <p className="text-xs text-[var(--text-muted)]">Trajectory divergence</p>
-                  <p className="text-lg font-semibold">
-                    {pct(report.trajectory_divergence_rate)}
-                  </p>
-                </Card>
-                <Card className="p-3">
-                  <p className="text-xs text-[var(--text-muted)]">Cost Δ</p>
-                  <p className="text-lg font-semibold">{pct(report.cost_delta_pct)}</p>
-                </Card>
-                <Card className="p-3">
-                  <p className="text-xs text-[var(--text-muted)]">Latency Δ</p>
-                  <p className="text-lg font-semibold">{pct(report.latency_delta_pct)}</p>
-                </Card>
-              </div>
-
-              {(report.top_divergences ?? []).length > 0 ? (
-                <Card className="p-4">
-                  <h3 className="mb-2 text-sm font-medium">Top divergences</h3>
-                  <ul className="space-y-2 text-sm">
-                    {(report.top_divergences ?? []).slice(0, 8).map((d, i) => (
-                      <li key={i} className="text-[var(--text-secondary)]">
-                        {String(d.summary ?? d.trace_id ?? JSON.stringify(d))}
-                        {d.trace_id ? (
-                          <>
-                            {" · "}
-                            <Link
-                              href={`/traces?traceId=${encodeURIComponent(String(d.trace_id))}`}
-                              className="text-[var(--accent)] hover:underline"
-                            >
-                              Open trace
-                            </Link>
-                          </>
-                        ) : null}
-                      </li>
-                    ))}
-                  </ul>
-                </Card>
-              ) : null}
-
-              {report.regression_eval && Object.keys(report.regression_eval).length > 0 ? (
-                <Card className="p-4">
-                  <h3 className="mb-2 text-sm font-medium">Regression eval</h3>
-                  <dl className="grid gap-2 text-xs sm:grid-cols-2">
-                    {Object.entries(report.regression_eval).map(([k, v]) => (
-                      <div key={k} className="flex justify-between gap-4">
-                        <dt className="text-[var(--text-muted)]">{k.replace(/_/g, " ")}</dt>
-                        <dd className="font-medium">{String(v)}</dd>
-                      </div>
-                    ))}
-                  </dl>
-                </Card>
               ) : null}
             </div>
-          ) : null}
-        </>
-      }
-    />
+          </div>
+        }
+      />
+    </div>
   );
 }

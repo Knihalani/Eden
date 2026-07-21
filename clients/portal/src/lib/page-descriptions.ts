@@ -20,13 +20,23 @@ export const PAGE_DESCRIPTIONS: Record<string, string> = {
   "/evals":
     "Datasets, labeling, studio metrics, synthetic data, and eval scores.",
   "/improve":
-    "Action queue, improvement plans, and sweep history.",
-  "/optimization":
-    "Spend, budgets, outcomes, forecasts, and model advice.",
-  "/guardrails":
-    "Safety policies and red-team tests.",
+    "Action queue, improvement plans, and sweep history — core Improve act path.",
+  "/artifacts":
+    "Versioned runtime fixes with evidence-gated promotion — core Improve.",
+  "/ledger":
+    "Institutional memory; promotions nest as a Ledger mode — core Improve.",
   "/prompts":
-    "Version and manage prompt templates.",
+    "Version and manage prompt templates — core Improve (iterate via Evaluate playground).",
+  "/optimization":
+    "Spend, budgets, outcomes, forecasts, and model advice — Advanced Improve.",
+  "/guardrails":
+    "Safety policies and red-team tests — Advanced Improve.",
+  "/improve/scorecard":
+    "Synthetic process-gate microbench — Advanced Improve only.",
+  "/improve/online-scoring":
+    "Production scorers on sampled traces — Advanced Improve.",
+  "/improve/change-impact":
+    "Replay traffic before shipping prompt or model changes — Advanced Improve.",
   "/settings":
     "Members, billing, account, gateway, retention, PII, and exports.",
   "/runs":

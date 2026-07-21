@@ -21,6 +21,9 @@ Routes:
     Member — list installations for the org.
 * ``GET  /orgs/{org_id}/github/repos``
     Owner/admin — list repos the org's installations have access to.
+* ``POST /orgs/{org_id}/github/repos/connect``
+    Owner/admin — upsert ``repo_connections`` for the linked repo
+    (installation_id, repo_full_name, default_branch, status=active).
 * ``POST /orgs/{org_id}/github/integrate``
     Retired — returns 410. Manual SDK install replaces auto-PR.
 * ``GET  /orgs/{org_id}/onboarding/state``
@@ -39,6 +42,7 @@ from __future__ import annotations
 
 import json
 import logging
+import uuid
 from datetime import UTC, datetime
 from typing import Any
 
@@ -147,6 +151,57 @@ class ClaimInstallationRequest(BaseModel):
         if v <= 0:
             raise ValueError("installation_id must be a positive integer")
         return v
+
+
+class ConnectRepoRequest(BaseModel):
+    installation_id: int
+    repo_full_name: str
+    default_branch: str = "main"
+
+    @field_validator("installation_id", mode="before")
+    @classmethod
+    def _coerce_installation_id(cls, v: object) -> object:
+        if v is None or v == "":
+            raise ValueError("installation_id is required")
+        if isinstance(v, str) and not v.strip().isdigit():
+            raise ValueError("installation_id must be a positive integer")
+        return int(v)
+
+    @field_validator("installation_id")
+    @classmethod
+    def _positive_installation_id(cls, v: int) -> int:
+        if v <= 0:
+            raise ValueError("installation_id must be a positive integer")
+        return v
+
+    @field_validator("repo_full_name")
+    @classmethod
+    def _valid_repo_full_name(cls, v: str) -> str:
+        name = (v or "").strip()
+        if not name or "/" not in name or name.count("/") != 1:
+            raise ValueError("repo_full_name must be owner/repo")
+        owner, repo = name.split("/", 1)
+        if not owner or not repo:
+            raise ValueError("repo_full_name must be owner/repo")
+        return name
+
+    @field_validator("default_branch")
+    @classmethod
+    def _nonempty_default_branch(cls, v: str) -> str:
+        branch = (v or "").strip() or "main"
+        if len(branch) > 128:
+            raise ValueError("default_branch is too long")
+        return branch
+
+
+class RepoConnectionOut(BaseModel):
+    id: str
+    org_id: str
+    provider: str
+    installation_id: str
+    repo_full_name: str
+    default_branch: str
+    status: str
 
 
 class PRRunOut(BaseModel):
@@ -906,6 +961,125 @@ async def list_org_repos(
     for batch in results:
         out.extend(batch)
     return out
+
+
+@org_router.post("/github/repos/connect", response_model=RepoConnectionOut)
+async def connect_org_repo(
+    req: ConnectRepoRequest,
+    org_id: str = Depends(require_path_org_access),
+    user: dict = Depends(get_current_user),
+    org: dict = Depends(require_org_permission_dep("integrations:write")),
+) -> RepoConnectionOut:
+    """Upsert an active ``repo_connections`` row for the linked GitHub repo.
+
+    Called from the portal Connect flow after the user picks a repo.
+    Approve / Improve PR paths resolve providers from this row.
+    """
+    eden_org_id = str(org["org_id"])
+    pg = await get_postgres_client()
+    installation_id = int(req.installation_id)
+    repo_full_name = req.repo_full_name
+    default_branch = req.default_branch
+
+    owned = await pg.fetchrow(
+        """
+        SELECT installation_id FROM org_github_installations
+        WHERE org_id = $1
+          AND installation_id = $2
+          AND suspended_at IS NULL
+        """,
+        eden_org_id,
+        installation_id,
+    )
+    if not owned:
+        raise HTTPException(
+            400,
+            "GitHub installation is not registered for this organization "
+            "(or is suspended). Claim the installation first.",
+        )
+
+    connected_by = await resolve_eden_user_id(user.get("user_id"))
+    if not connected_by:
+        connected_by = str(user.get("user_id") or "unknown")
+
+    existing = await pg.fetchrow(
+        """
+        SELECT id FROM repo_connections
+        WHERE org_id = $1 AND repo_full_name = $2
+        LIMIT 1
+        """,
+        eden_org_id,
+        repo_full_name,
+    )
+
+    await pg.execute(
+        """
+        UPDATE repo_connections
+        SET status = 'inactive'
+        WHERE org_id = $1
+          AND status = 'active'
+          AND repo_full_name <> $2
+        """,
+        eden_org_id,
+        repo_full_name,
+    )
+
+    if existing:
+        row = await pg.fetchrow(
+            """
+            UPDATE repo_connections
+            SET installation_id = $3,
+                default_branch = $4,
+                status = 'active',
+                provider = 'github',
+                connected_by_user_id = $5,
+                connected_at = NOW(),
+                last_synced_at = NOW()
+            WHERE org_id = $1 AND id = $2
+            RETURNING id, org_id, provider, installation_id,
+                      repo_full_name, default_branch, status
+            """,
+            eden_org_id,
+            str(existing["id"]),
+            str(installation_id),
+            default_branch,
+            connected_by,
+        )
+    else:
+        conn_id = f"rc_{uuid.uuid4().hex[:12]}"
+        row = await pg.fetchrow(
+            """
+            INSERT INTO repo_connections (
+                id, org_id, provider, installation_id, repo_full_name,
+                default_branch, status, connected_by_user_id,
+                connected_at, last_synced_at
+            )
+            VALUES (
+                $1, $2, 'github', $3, $4, $5, 'active', $6, NOW(), NOW()
+            )
+            RETURNING id, org_id, provider, installation_id,
+                      repo_full_name, default_branch, status
+            """,
+            conn_id,
+            eden_org_id,
+            str(installation_id),
+            repo_full_name,
+            default_branch,
+            connected_by,
+        )
+
+    if not row:
+        raise HTTPException(500, "Failed to persist repo connection")
+
+    return RepoConnectionOut(
+        id=str(row["id"]),
+        org_id=str(row["org_id"]),
+        provider=str(row["provider"]),
+        installation_id=str(row["installation_id"]),
+        repo_full_name=str(row["repo_full_name"]),
+        default_branch=str(row["default_branch"]),
+        status=str(row["status"]),
+    )
 
 
 @org_router.post("/github/integrate")

@@ -97,7 +97,31 @@ describe("ViewsMenu (UX-P0-10)", () => {
     fireEvent.click(screen.getByTestId("views-save-as"));
 
     await waitFor(() => {
-      expect(onSave).toHaveBeenCalledWith("My view");
+      expect(onSave).toHaveBeenCalledWith("My view", false);
+    });
+  });
+
+  it("Save as with Share with project passes isShared true", async () => {
+    const onSave = vi.fn(async () => undefined);
+    render(
+      <ViewsMenu
+        views={[]}
+        dirty
+        onSelect={vi.fn()}
+        onSave={onSave}
+        onDiscard={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { expanded: false }));
+    fireEvent.click(screen.getByTestId("views-share-checkbox"));
+    fireEvent.change(screen.getByLabelText("Save as new view name"), {
+      target: { value: "Shared view" },
+    });
+    fireEvent.click(screen.getByTestId("views-save-as"));
+
+    await waitFor(() => {
+      expect(onSave).toHaveBeenCalledWith("Shared view", true);
     });
   });
 

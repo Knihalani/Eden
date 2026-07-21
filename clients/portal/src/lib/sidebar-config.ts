@@ -1,15 +1,13 @@
 "use client";
 
 /**
- * U12 IA freeze — ≤12 core nav items (July 2026 Wave 3 / Wave 4 foundation).
+ * Sidebar IA — places, not verbs. Core ≤12; Advanced collapsed by default.
  *
- * Product path order: Home → Observe → Evaluate → Improve → Workspace.
- * Advanced surfaces (agents, prompts, analytics, guardrails, cost) stay
- * behind the Advanced toggle until expanded.
+ * Product path: Home → Observe → Evaluate → Improve → Workspace.
+ * Improve core: Queue · Artifacts · Ledger · Prompts.
+ * Advanced (agents, analytics, scorecard, guardrails, cost, …) behind Show Advanced.
  *
- * Group `id` values are stable keys (legacy); display labels live on
- * `label` and in `GROUP_LABEL` (nav-commands). Do not rename ids without
- * migrating breadcrumb category maps.
+ * Group `id` values match product labels. Legacy prefs migrate in use-sidebar-prefs.
  */
 
 import type { ComponentType } from "react";
@@ -21,12 +19,13 @@ import {
   ShieldCheck,
   KeyRound,
   Package,
-  TrendingUp,
   BookOpen,
-  Radio,
   Bug,
   Inbox,
   FileCode,
+  Trophy,
+  Sparkles,
+  GitCompareArrows,
   type LucideIcon,
 } from "lucide-react";
 import {
@@ -55,16 +54,16 @@ export interface SidebarItem {
 }
 
 export interface SidebarGroup {
-  /** Stable key — display via `label` / GROUP_LABEL, not this id. */
-  id: "build" | "observe" | "optimize" | "automate" | "workspace";
+  /** Stable key — matches product IA label. */
+  id: "home" | "observe" | "evaluate" | "improve" | "workspace";
   label: string;
   items: SidebarItem[];
 }
 
-/** Core leaf count: ≤12 per U12. Advanced items excluded from default count. */
+/** Core leaf count: ≤12. Advanced items excluded from default count. */
 export const DEFAULT_SIDEBAR: SidebarGroup[] = [
   {
-    id: "build",
+    id: "home",
     label: "Home",
     items: [
       {
@@ -72,7 +71,7 @@ export const DEFAULT_SIDEBAR: SidebarGroup[] = [
         href: "/dashboard",
         label: "Home",
         icon: LayoutDashboard,
-        description: "One-glance view of agents, traces, costs, and alerts.",
+        description: "Status, diagnosis, and the next action.",
       },
     ],
   },
@@ -85,12 +84,12 @@ export const DEFAULT_SIDEBAR: SidebarGroup[] = [
         href: "/traces",
         label: "Traces",
         icon: TraceIcon,
-        description: "Traces, spans, and sessions — inspect without leaving the hub.",
+        description: "Traces, spans, and sessions.",
       },
       {
         id: "issues",
         href: "/issues",
-        label: "Agent Issues",
+        label: "Issues",
         icon: ShieldAlert,
         description: "Grouped failures and incident clusters.",
       },
@@ -99,7 +98,7 @@ export const DEFAULT_SIDEBAR: SidebarGroup[] = [
         href: "/alerts",
         label: "Alerts",
         icon: AlertNavIcon,
-        description: "Threshold notifications and custom signal rules.",
+        description: "Threshold notifications; Signals via overflow.",
       },
       {
         id: "agents",
@@ -118,25 +117,17 @@ export const DEFAULT_SIDEBAR: SidebarGroup[] = [
         description: "Usage, tools, users, and trend insights.",
       },
       {
-        id: "signals",
-        href: "/alerts?tab=signals",
-        label: "Signals",
-        icon: Radio,
-        category: "advanced",
-        description: "Deep search signals and classifier rules.",
-      },
-      {
         id: "debugger-sessions",
         href: "/debugger-sessions",
         label: "Debug sessions",
         icon: Bug,
         category: "advanced",
-        description: "Multi-run debugger timeline and compare (F74).",
+        description: "Multi-run debugger timeline and compare.",
       },
     ],
   },
   {
-    id: "automate",
+    id: "evaluate",
     label: "Evaluate",
     items: [
       {
@@ -149,7 +140,7 @@ export const DEFAULT_SIDEBAR: SidebarGroup[] = [
     ],
   },
   {
-    id: "optimize",
+    id: "improve",
     label: "Improve",
     items: [
       {
@@ -171,22 +162,38 @@ export const DEFAULT_SIDEBAR: SidebarGroup[] = [
         href: "/ledger",
         label: "Ledger",
         icon: BookOpen,
-        description: "Compounding institutional memory for your agents.",
+        description: "Institutional memory — promotions nest as a Ledger mode.",
       },
       {
-        id: "promotions",
-        href: "/promotions",
-        label: "Promotions",
-        icon: TrendingUp,
-        description: "EvidenceGate inbox — approve or reject shadow candidates.",
+        id: "prompts",
+        href: "/prompts",
+        label: "Prompts",
+        icon: FileCode,
+        description: "Version and manage prompt templates.",
       },
       {
-        id: "optimization",
-        href: "/optimization",
-        label: "Cost",
-        icon: CostIcon,
+        id: "scorecard",
+        href: "/improve/scorecard",
+        label: "Scorecard",
+        icon: Trophy,
         category: "advanced",
-        description: "Spend, budgets, outcomes, forecasts, and model advice.",
+        description: "Synthetic process-gate microbench — not org KPIs.",
+      },
+      {
+        id: "online-scoring",
+        href: "/improve/online-scoring",
+        label: "Online scoring",
+        icon: Sparkles,
+        category: "advanced",
+        description: "Production scorers on sampled traces.",
+      },
+      {
+        id: "change-impact",
+        href: "/improve/change-impact",
+        label: "Change impact",
+        icon: GitCompareArrows,
+        category: "advanced",
+        description: "Replay traffic before shipping prompt or model changes.",
       },
       {
         id: "guardrails",
@@ -197,12 +204,12 @@ export const DEFAULT_SIDEBAR: SidebarGroup[] = [
         description: "Safety policies and red-team tests.",
       },
       {
-        id: "prompts",
-        href: "/prompts",
-        label: "Prompts",
-        icon: FileCode,
+        id: "optimization",
+        href: "/optimization",
+        label: "Cost",
+        icon: CostIcon,
         category: "advanced",
-        description: "Version and manage prompt templates.",
+        description: "Spend, budgets, outcomes, forecasts, and model advice.",
       },
     ],
   },
@@ -215,15 +222,23 @@ export const DEFAULT_SIDEBAR: SidebarGroup[] = [
         href: "/audit-trail",
         label: "Audit trail",
         icon: ShieldCheck,
-        description: "Chain-verified compliance packs and agent audit events (N06).",
+        description: "Chain-verified compliance packs and agent audit events.",
       },
       {
         id: "settings",
         href: "/settings",
         label: "Settings",
         icon: Settings,
-        description: "Members, billing, account, gateway, retention, PII, exports.",
+        description:
+          "Workspace overview, members, billing, account, gateway, retention, PII, exports.",
         children: [
+          {
+            id: "settings-overview",
+            href: "/settings?tab=overview",
+            label: "Overview",
+            icon: LayoutDashboard,
+            description: "Identity, plan pulse, and workspace recovery paths.",
+          },
           {
             id: "api-keys",
             href: "/settings?tab=api-keys",
@@ -233,7 +248,7 @@ export const DEFAULT_SIDEBAR: SidebarGroup[] = [
           },
           {
             id: "settings-webhooks-dlq",
-            href: "/settings/webhooks-dlq",
+            href: "/settings?tab=webhooks-dlq",
             label: "Webhook DLQ",
             icon: Inbox,
             category: "advanced",
@@ -252,6 +267,9 @@ export const DEFAULT_SIDEBAR: SidebarGroup[] = [
   },
 ];
 
+/** Workspace sidebar group + overview entry complete. */
+export const WS1_SIDEBAR_COMPLETED = true;
+
 export const ALL_ITEM_IDS: string[] = (() => {
   const out: string[] = [];
   for (const group of DEFAULT_SIDEBAR) {
@@ -265,7 +283,16 @@ export const ALL_ITEM_IDS: string[] = (() => {
   return out;
 })();
 
-/** U12 core visible items (excludes advanced category). */
+/** Core visible items (excludes advanced category). Cap ≤12. */
 export const CORE_NAV_ITEM_COUNT = DEFAULT_SIDEBAR.flatMap((g) => g.items).filter(
   (i) => i.category !== "advanced",
 ).length;
+
+/** Desktop + mobile primary five. */
+export const CORE_MOBILE_HREFS = [
+  "/dashboard",
+  "/traces",
+  "/issues",
+  "/evals",
+  "/improve",
+] as const;

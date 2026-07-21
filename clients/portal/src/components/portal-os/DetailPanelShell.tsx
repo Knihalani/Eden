@@ -45,7 +45,7 @@ export function DetailPanelShell({
   onTabChange,
   headerActions,
   children,
-  widthClassName = "xl:w-[min(720px,45vw)]",
+  widthClassName = "xl:min-w-[400px] xl:w-[min(720px,45vw)]",
   onPrev,
   onNext,
   mobileDrawer = true,
@@ -159,10 +159,16 @@ export function DetailPanelShell({
             <button
               type="button"
               onClick={onClose}
-              aria-label="Close detail panel"
-              className="text-xs text-[var(--text-muted)] hover:text-[var(--text-primary)] px-2 py-1 rounded hover:bg-[var(--bg-tertiary)]"
+              aria-label="Close detail panel (Esc)"
+              className="inline-flex items-center gap-1.5 text-xs text-[var(--text-muted)] hover:text-[var(--text-primary)] px-2 py-1 rounded hover:bg-[var(--bg-tertiary)]"
             >
               Close
+              <kbd
+                className="hidden sm:inline-block px-1 py-0.5 border border-[var(--border-subtle)] rounded font-mono text-2xs text-[var(--text-muted)]"
+                data-shortcut-chip="esc"
+              >
+                Esc
+              </kbd>
             </button>
           </div>
         </header>

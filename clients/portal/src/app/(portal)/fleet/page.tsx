@@ -21,7 +21,6 @@ import { api, fleetApi } from "@/lib/api";
 import { ApiError } from "@/lib/api/core";
 import { useOrgQuery } from "@/hooks/use-api-query";
 import { queryKeys } from "@/lib/query-keys";
-import { Card } from "@/components/ui/card";
 import { NoOrgState } from "@/components/ui/no-org-state";
 import { EmptyState } from "@/components/ui/empty-state";
 import { QueryState } from "@/components/ui/query-state";
@@ -200,36 +199,35 @@ export default function FleetPage() {
         // Standalone keeps thin status chips; Cards only on the full leaf.
         showKpis && !embedded ? (
           <div
-            className="grid grid-cols-2 md:grid-cols-5 gap-space-3"
+            className="flex flex-wrap gap-space-4 text-sm"
             data-testid="fleet-kpi-strip"
           >
-            <Card padding="sm" className="text-center">
-              <div className="text-2xl font-semibold tabular-nums">{agents.length}</div>
-              <div className="text-xs uppercase tracking-wide text-[var(--text-muted)]">Agents</div>
-            </Card>
-            <Card padding="sm" className="text-center">
-              <div className={cn("text-2xl font-semibold tabular-nums", slaCount > 0 && "text-[var(--error)]")}>
+            <div>
+              <p className="text-xs uppercase tracking-wide text-[var(--text-muted)]">Agents</p>
+              <p className="text-lg font-semibold tabular-nums text-[var(--text-primary)]">{agents.length}</p>
+            </div>
+            <div>
+              <p className="text-xs uppercase tracking-wide text-[var(--text-muted)]">SLO breaches</p>
+              <p className={cn("text-lg font-semibold tabular-nums", slaCount > 0 ? "text-[var(--error)]" : "text-[var(--text-primary)]")}>
                 {slaCount}
-              </div>
-              <div className="text-xs uppercase tracking-wide text-[var(--text-muted)]">SLO breaches</div>
-            </Card>
-            <Card padding="sm" className="text-center">
-              <div className="text-2xl font-semibold tabular-nums">{criticalCount}</div>
-              <div className="text-xs uppercase tracking-wide text-[var(--text-muted)]">Critical tier</div>
-            </Card>
-            <Card padding="sm" className="text-center">
-              <div className="text-2xl font-semibold tabular-nums">                {delegationQuery.isSuccess ? edges.length : "—"}
-              </div>
-              <div className="text-xs uppercase tracking-wide text-[var(--text-muted)]">Delegation edges</div>
-            </Card>
-            <Card padding="sm" className="text-center" data-testid="f64-agentic-fleet">
-              <div className="text-2xl font-semibold tabular-nums">
+              </p>
+            </div>
+            <div>
+              <p className="text-xs uppercase tracking-wide text-[var(--text-muted)]">Critical</p>
+              <p className="text-lg font-semibold tabular-nums text-[var(--text-primary)]">{criticalCount}</p>
+            </div>
+            <div>
+              <p className="text-xs uppercase tracking-wide text-[var(--text-muted)]">Delegation</p>
+              <p className="text-lg font-semibold tabular-nums text-[var(--text-primary)]">
+                {delegationQuery.isSuccess ? edges.length : "—"}
+              </p>
+            </div>
+            <div data-testid="f64-agentic-fleet">
+              <p className="text-xs uppercase tracking-wide text-[var(--text-muted)]">Agentic quality</p>
+              <p className="text-lg font-semibold tabular-nums text-[var(--text-primary)]">
                 {agenticScore == null ? "—" : `${Math.round(agenticScore * 100)}%`}
-              </div>
-              <div className="text-xs uppercase tracking-wide text-[var(--text-muted)]">
-                Agentic quality
-              </div>
-            </Card>
+              </p>
+            </div>
           </div>
         ) : null
       }
@@ -288,94 +286,78 @@ export default function FleetPage() {
                   <EmptyState
                     icon={Network}
                     title="No agents in the fleet yet"
-                    description="No fleet agents yet. Cards appear after agents send traces or stumbles. Triage failures in Issues, or install the SDK to begin ingest."
+                    description="No fleet agents yet. Rows appear after agents send traces or stumbles. Triage failures in Issues, or install the SDK to begin ingest."
                     size="lg"
                     action={<FleetOnboardingActions />}
                   />
                 ) : (
-                  <div className="grid gap-space-3 md:grid-cols-2 xl:grid-cols-3">
-                    {agents.map((a) => (
-                      <div
-                        key={a.agent_id}
-                        className="rounded-lg border border-[var(--border-default)] bg-[var(--bg-primary)] p-4"
-                      >
-                        <div className="flex items-center justify-between gap-2 mb-2">
-                          <h2 className="text-sm font-semibold text-[var(--text-primary)] truncate">
-                            {a.display_name || a.agent_id}
-                          </h2>
-                          <span className="text-xs uppercase tracking-wide px-1.5 py-1 rounded border border-[var(--border-subtle)] text-[var(--text-muted)]">
-                            {a.tier}
+                  <div
+                    className="overflow-hidden rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-secondary)]"
+                    data-testid="fleet-agents-table" data-wave10-fleet="table" data-wave11-mobile="cards"
+                  >
+                    <div className="hidden md:grid grid-cols-[minmax(0,1.5fr)_5rem_6rem_5rem_5rem_5rem_auto] gap-2 border-b border-[var(--border-subtle)] bg-[var(--bg-tertiary)] px-3 py-2 text-xs font-medium uppercase tracking-wide text-[var(--text-muted)]">
+                      <span>Agent</span>
+                      <span>Tier</span>
+                      <span>Issues</span>
+                      <span>Stumbles</span>
+                      <span>Eval</span>
+                      <span>Severity</span>
+                      <span className="text-right">Links</span>
+                    </div>
+                    <ul className="divide-y divide-[var(--border-subtle)]">
+                      {agents.map((a) => (
+                        <li
+                          key={a.agent_id}
+                          className="grid grid-cols-1 md:grid-cols-[minmax(0,1.5fr)_5rem_6rem_5rem_5rem_5rem_auto] gap-1 md:gap-2 px-3 py-2.5 items-center hover:bg-[var(--bg-tertiary)]/40"
+                        >
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <span className="text-sm font-medium text-[var(--text-primary)] truncate">
+                                {a.display_name || a.agent_id}
+                              </span>
+                              {a.drift_flagged ? (
+                                <span className="text-xs px-1.5 py-0.5 rounded bg-[var(--error-dim)] text-[var(--error)] flex items-center gap-0.5 shrink-0">
+                                  <Activity className="h-3 w-3" /> Drift
+                                </span>
+                              ) : null}
+                              {a.slo_breach ? (
+                                <span className="text-xs text-[var(--error)] flex items-center gap-0.5 shrink-0">
+                                  <ShieldAlert className="h-3 w-3" /> SLO
+                                </span>
+                              ) : null}
+                            </div>
+                            <p className="text-xs font-mono text-[var(--text-muted)] truncate">{a.agent_id}</p>
+                            <div className="flex flex-wrap gap-1 mt-1 md:hidden">
+                              {a.autonomy_mode ? (
+                                <span className="text-xs px-1.5 py-0.5 rounded bg-[var(--accent-faint)] text-[var(--accent)]">
+                                  {AUTONOMY_LABEL[a.autonomy_mode] ?? a.autonomy_mode}
+                                </span>
+                              ) : null}
+                            </div>
+                          </div>
+                          <span className="text-xs uppercase tracking-wide text-[var(--text-muted)]">{a.tier}</span>
+                          <span className="text-sm tabular-nums text-[var(--text-primary)]">
+                            {a.open_issues}
+                            {(a.open_p0_issues ?? 0) > 0 ? (
+                              <span className="text-[var(--error)] ml-1 text-xs">({a.open_p0_issues} P0)</span>
+                            ) : null}
                           </span>
-                        </div>
-                        <p className="text-xs font-mono text-[var(--text-muted)] truncate mb-2">{a.agent_id}</p>
-                        <div className="flex flex-wrap gap-1 mb-3">
-                          {a.autonomy_mode && (
-                            <span className="text-xs px-1.5 py-1 rounded bg-[var(--accent-faint)] text-[var(--accent)]">
-                              {AUTONOMY_LABEL[a.autonomy_mode] ?? a.autonomy_mode}
-                            </span>
-                          )}
-                          {a.compliance_profile && a.compliance_profile !== "standard" && (
-                            <span className="text-xs px-1.5 py-1 rounded bg-[var(--warning-bg)] text-[var(--warning)]">
-                              {a.compliance_profile}
-                            </span>
-                          )}
-                          {a.drift_flagged && (
-                            <span className="text-xs px-1.5 py-1 rounded bg-[var(--error-dim)] text-[var(--error)] flex items-center gap-0.5">
-                              <Activity className="h-3 w-3" /> Drift
-                            </span>
-                          )}
-                        </div>
-                        <dl className="grid grid-cols-2 gap-2 text-xs">
-                          <div>
-                            <dt className="text-[var(--text-muted)]">Open issues</dt>
-                            <dd className="font-semibold text-[var(--text-primary)]">
-                              {a.open_issues}
-                              {(a.open_p0_issues ?? 0) > 0 && (
-                                <span className="text-[var(--error)] ml-1">({a.open_p0_issues} P0)</span>
-                              )}
-                            </dd>
+                          <span className="text-sm tabular-nums text-[var(--text-primary)]">{a.stumble_count_7d}</span>
+                          <span className={cn("text-sm tabular-nums", a.slo_breach ? "text-[var(--error)]" : "text-[var(--text-primary)]")}>
+                            {a.eval_pass_rate_24h != null ? `${Math.round(a.eval_pass_rate_24h * 100)}%` : "—"}
+                          </span>
+                          <span className="text-sm tabular-nums text-[var(--text-primary)]">{a.severity_score}</span>
+                          <div className="flex flex-wrap gap-2 md:justify-end">
+                            <Button asChild variant="link" size="sm" className="min-h-11 px-0 h-auto">
+                              <Link href={`/issues?agent=${encodeURIComponent(a.agent_id)}`}>Issues</Link>
+                            </Button>
+                            <Button asChild variant="link" size="sm" className="min-h-11 px-0 h-auto">
+                              <Link href={`/improve?agent=${encodeURIComponent(a.agent_id)}`}>Improve</Link>
+                            </Button>
                           </div>
-                          <div>
-                            <dt className="text-[var(--text-muted)]">Stumbles (7d)</dt>
-                            <dd className="font-semibold text-[var(--text-primary)]">{a.stumble_count_7d}</dd>
-                          </div>
-                          <div>
-                            <dt className="text-[var(--text-muted)]">Eval pass (24h)</dt>
-                            <dd className={a.slo_breach ? "font-semibold text-[var(--error)]" : "font-semibold text-[var(--text-primary)]"}>
-                              {a.eval_pass_rate_24h != null ? `${Math.round(a.eval_pass_rate_24h * 100)}%` : "—"}
-                            </dd>
-                          </div>
-                          <div>
-                            <dt className="text-[var(--text-muted)]">Severity</dt>
-                            <dd className="font-semibold text-[var(--text-primary)]">{a.severity_score}</dd>
-                          </div>
-                        </dl>
-                        {a.slo_breach && (
-                          <p className="mt-2 text-xs text-[var(--error)] flex items-center gap-1">
-                            <ShieldAlert className="h-3 w-3" /> SLO breach
-                          </p>
-                        )}
-                        <div className="mt-3 flex flex-wrap gap-3">
-                          <Button asChild variant="link" size="sm" className="min-h-11 px-0">
-                            <Link href={`/issues?agent=${encodeURIComponent(a.agent_id)}`}>
-                              Issues →
-                            </Link>
-                          </Button>
-                          <Button asChild variant="link" size="sm" className="min-h-11 px-0">
-                            <Link href={`/improve?agent=${encodeURIComponent(a.agent_id)}`}>
-                              Improve →
-                            </Link>
-                          </Button>
-                          <Button asChild variant="link" size="sm" className="min-h-11 px-0">
-                            <Link
-                              href={`/audit-trail?agent=${encodeURIComponent(a.agent_id)}`}
-                            >
-                              Audit trail →
-                            </Link>
-                          </Button>
-                        </div>
-                      </div>
-                    ))}
+                        </li>
+                      ))}
+                    </ul>
                   </div>
                 )}
               </TabsContent>
@@ -482,3 +464,4 @@ export default function FleetPage() {
     />
   );
 }
+

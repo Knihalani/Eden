@@ -43,19 +43,26 @@ describe("W10.1 command palette focus return (F4)", () => {
 });
 
 describe("W10.1 sidebar collapsed tooltips (F1)", () => {
-  const chrome = read("app/(portal)/portal-chrome.tsx");
+  const navItems = read("components/portal-chrome/sidebar-nav-items.tsx");
+  const header = read("components/portal-chrome/PortalHeader.tsx");
+  const notifications = read("components/portal-chrome/NotificationsDropdown.tsx");
 
   it("uses Radix Tooltip for collapsed nav labels (no CSS nav-tooltip)", () => {
-    expect(chrome).toContain("TooltipTrigger asChild");
-    expect(chrome).toContain("TooltipContent");
-    expect(chrome).toMatch(/collapsed\s*\?\s*\([\s\S]*?Tooltip/);
-    expect(chrome).not.toContain("nav-tooltip");
+    expect(navItems).toContain("TooltipTrigger asChild");
+    expect(navItems).toContain("TooltipContent");
+    expect(navItems).toMatch(/collapsed\s*\?\s*\([\s\S]*?Tooltip/);
+    expect(navItems).not.toContain("nav-tooltip");
   });
 
   it("search triggers announce ⌘K and meet 44px on touch chrome", () => {
-    expect(chrome).toContain('aria-label="Search (⌘K)"');
-    expect(chrome).toMatch(/lg:hidden[\s\S]*?min-h-\[44px\][\s\S]*?min-w-\[44px\]/);
-    expect(chrome).toMatch(/Notifications[\s\S]*?min-h-\[44px\]|min-h-\[44px\][\s\S]*?Notifications/);
+    expect(header).toContain('aria-label="Search (⌘K)"');
+    // W6: kit Button size="icon" owns touch via max-md:min-h-11 / min-w-11
+    expect(header).toContain('size="icon"');
+    expect(header).toMatch(/lg:hidden[\s\S]*?size="icon"/);
+    expect(notifications).toContain('aria-label="Notifications"');
+    expect(notifications).toContain('size="icon"');
+    const buttonSrc = read("components/ui/button.tsx");
+    expect(buttonSrc).toMatch(/icon:[\s\S]*?max-md:min-h-11[\s\S]*?max-md:min-w-11/);
   });
 });
 
@@ -80,18 +87,20 @@ describe("W10.1 cookie banner scope (F3) + touch targets", () => {
 describe("W10.1 high-traffic hub tabs ≥44px (min-h-11)", () => {
   it("issues section tabs + status filter select + detail section tabs", () => {
     const list = read("app/(portal)/issues/page.tsx");
-    const detail = read("app/(portal)/issues/[id]/page.tsx");
+    const detailHeader = read("app/(portal)/issues/_components/issue-detail-header.tsx");
     const filterBar = read("components/ui/filter-bar.tsx");
     // Wave 7 moved status into ResourceOsToolbar → FilterBar selects
     expect(list).toMatch(/Issues sections[\s\S]*?min-h-11/);
     expect(list).toContain('key: "status"');
     expect(filterBar).toMatch(/aria-label=\{\`\$\{s\.label\} filter\`\}/);
     expect(filterBar).toMatch(/min-h-11[\s\S]*?s\.label|aria-label=\{\`\$\{s\.label\} filter\`\}[\s\S]*?min-h-11/);
-    expect(detail).toMatch(/Issue sections[\s\S]*?min-h-11/);
+    expect(detailHeader).toMatch(/Issue sections[\s\S]*?min-h-11/);
   });
 
   it("traces observe hub tabs", () => {
-    const traces = read("app/(portal)/traces/page.tsx");
-    expect(traces).toMatch(/Observe hub[\s\S]*?min-h-11/);
+    const traces =
+      read("app/(portal)/traces/page.tsx") +
+      read("app/(portal)/traces/_components/TracesToolbar.tsx");
+    expect(traces).toMatch(/Observe hub[\s\S]*?min-h-11|TracesToolbar[\s\S]*?min-h-11|min-h-11[\s\S]*?Traces/);
   });
 });

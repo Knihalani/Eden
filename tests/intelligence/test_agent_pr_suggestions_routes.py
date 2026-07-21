@@ -22,9 +22,39 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 
+_FOO_PATCH = (
+    "--- a/foo.py\n"
+    "+++ b/foo.py\n"
+    "@@ -1 +1 @@\n"
+    "-x = 1\n"
+    "+x = 2\n"
+)
+
+
+def _inject_patch_diff(repo: str, suggestion_id: str, diff: str) -> None:
+    """Rewrite patch_diff on a stored suggestion (heuristic = empty)."""
+    path = Path(repo) / ".eden" / "pr_suggestions.jsonl"
+    lines = path.read_text(encoding="utf-8").splitlines()
+    out: list[str] = []
+    for line in lines:
+        if not line.strip():
+            continue
+        row = json.loads(line)
+        if row.get("id") == suggestion_id:
+            row["patch_diff"] = diff
+        out.append(json.dumps(row))
+    path.write_text("\n".join(out) + "\n", encoding="utf-8")
+
+
 @pytest.fixture(scope="module")
 def client() -> TestClient:
-    from eden.api.deps import get_current_user, require_org_member
+    from fastapi import Path
+
+    from eden.api.deps import (
+        get_current_user,
+        require_org_member,
+        require_path_org_access,
+    )
     from eden.api.routes.agent_pr_suggestions import router
     from eden.config import get_settings
 
@@ -34,9 +64,17 @@ def client() -> TestClient:
     async def _fake_user() -> dict:
         return {"sub": "test-user", "org_id": "org_test"}
 
+    async def _fake_path_org(
+        org_id: str = Path(..., description="Organization ID"),
+    ) -> str:
+        return org_id
+
     app = FastAPI(title="eden-agent-pr-suggestions-test")
     app.dependency_overrides[get_current_user] = _fake_user
-    app.dependency_overrides[require_org_member] = lambda: {"sub": "test-user", "org_id": "org_test"}
+    app.dependency_overrides[require_org_member] = lambda: {
+        "sub": "test-user", "org_id": "org_test",
+    }
+    app.dependency_overrides[require_path_org_access] = _fake_path_org
     app.include_router(router)
     return TestClient(app)
 
@@ -175,6 +213,9 @@ class TestAgentPRSugRoutes:
             },
         )
         sid = create_resp.json()["data"]["suggestion_id"]
+        # Heuristic suggestions ship empty diffs — inject a real
+        # unified diff so open-pr materializes patched content.
+        _inject_patch_diff(temp_git_repo, sid, _FOO_PATCH)
         # 2. Open the PR — LocalPRProvider writes the
         # JSON record to .eden/prs/1.json.
         open_resp = client.post(
@@ -197,6 +238,88 @@ class TestAgentPRSugRoutes:
         with open(record_path, encoding="utf-8") as fh:
             data = json.load(fh)
         assert data["title"] == "[Eden Agent] Test open"
+        # 4. Committed content is patched source, not originals/hunks.
+        show = subprocess.run(
+            ["git", "show", "eden/test-open:foo.py"],
+            cwd=temp_git_repo,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        assert show.stdout == "x = 2\n"
+        assert "@@" not in show.stdout
+
+    def test_open_pr_empty_diff_fail_closed(
+        self, client: TestClient, temp_git_repo: str,
+    ) -> None:
+        create_resp = client.post(
+            "/orgs/org_x/agent/pr-suggestions",
+            json={
+                "trigger": "rca_cluster",
+                "trigger_id": "clu_empty",
+                "trigger_payload": {"affected_files": ["foo.py"]},
+            },
+        )
+        sid = create_resp.json()["data"]["suggestion_id"]
+        # Leave heuristic empty patch_diff.
+        open_resp = client.post(
+            f"/orgs/org_x/agent/pr-suggestions/{sid}/open-pr",
+            json={"branch": "eden/empty", "base": "main"},
+        )
+        assert open_resp.status_code == 200
+        body = open_resp.json()
+        assert body["status"] == "error"
+        assert "empty_or_unparseable_diff" in body["data"]["message"]
+
+    def test_open_pr_fail_closed_on_create_pr_failure(
+        self, client: TestClient, temp_git_repo: str,
+    ) -> None:
+        from datetime import UTC, datetime
+        from unittest.mock import AsyncMock
+
+        from eden.providers.repo import PullRequestInfo
+
+        create_resp = client.post(
+            "/orgs/org_x/agent/pr-suggestions",
+            json={
+                "trigger": "rca_cluster",
+                "trigger_id": "clu_fail",
+                "trigger_payload": {"affected_files": ["foo.py"]},
+            },
+        )
+        sid = create_resp.json()["data"]["suggestion_id"]
+        _inject_patch_diff(temp_git_repo, sid, _FOO_PATCH)
+
+        failed = PullRequestInfo(
+            number=0,
+            title="fail",
+            body="",
+            branch="eden/fail",
+            base="main",
+            url="",
+            state="failed",
+            created_at=datetime.now(UTC),
+        )
+        mock_pr = AsyncMock()
+        mock_pr.create_pr = AsyncMock(return_value=failed)
+
+        with patch(
+            "eden.api.routes.agent_pr_suggestions.get_pr_provider_for_org",
+            AsyncMock(return_value=mock_pr),
+        ):
+            open_resp = client.post(
+                f"/orgs/org_x/agent/pr-suggestions/{sid}/open-pr",
+                json={"branch": "eden/fail", "base": "main"},
+            )
+        assert open_resp.status_code == 200
+        body = open_resp.json()
+        assert body["status"] == "error"
+        assert "failed create_pr" in body["data"]["message"]
+        # Suggestion must not be marked opened.
+        get_resp = client.get(
+            f"/orgs/org_x/agent/pr-suggestions/{sid}"
+        )
+        assert get_resp.json()["data"]["suggestion"]["status"] == "pending"
 
 
 # ── v1.7 endpoints: file / status / regenerate / bulk ──────────
@@ -273,6 +396,7 @@ class TestAgentPRStatusRoute:
             },
         )
         sid = create_resp.json()["data"]["suggestion_id"]
+        _inject_patch_diff(temp_git_repo, sid, _FOO_PATCH)
         # First open the PR (status -> opened).
         client.post(
             f"/orgs/org_x/agent/pr-suggestions/{sid}/open-pr",

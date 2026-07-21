@@ -1,27 +1,25 @@
 "use client";
 
-import { RetentionPolicyTab } from "../../_components/retention-policy-tab";
-import { PageHeader } from "@/components/layout/page-header";
-import { PageContent } from "@/components/layout/page-content";
-import { Database } from "lucide-react";
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { Loader2 } from "lucide-react";
 
-/**
- * Deep-link route — mirrors the in-page "Retention policy" tab
- * on /settings. The tab renders its own card-level header; we
- * add a page-level header here so deep links have proper
- * PageHeader with eyebrow/back context.
- */
-export default function RetentionSettingsPage() {
+export default function RetentionSettingsRedirect() {
+  const router = useRouter();
+
+  useEffect(() => {
+    router.replace("/settings?tab=retention");
+  }, [router]);
+
   return (
-    <PageContent size="default">
-      <PageHeader
-        eyebrow="Settings"
-        title="Data retention policy"
-        icon={Database}
-        subtitle="Per-table TTLs across hot/warm/cold tiers, with auto-deletion after the cold window expires."
-      />
-      <RetentionPolicyTab />
-    
-    </PageContent>
+    <div
+      className="flex h-48 items-center justify-center gap-2 text-sm text-[var(--text-muted)]"
+      role="status"
+      aria-live="polite"
+      aria-busy="true"
+    >
+      <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+      Redirecting…
+    </div>
   );
 }

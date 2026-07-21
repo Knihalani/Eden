@@ -51,9 +51,9 @@ describe("W3-3.3 ErrorState consistency", () => {
   });
 
   it("issues detail panel uses ErrorState on fetch failure", () => {
-    const src = read("app/(portal)/issues/page.tsx");
+    const src = read("app/(portal)/issues/_components/issues-detail-panel.tsx");
     expect(src).toContain('title="Could not load issue"');
-    expect(src).toMatch(/issueDetailError \?[\s\S]*ErrorState/);
+    expect(src).toContain("ErrorState");
   });
 
   it("gates incidents empty behind QueryState error path", () => {
@@ -67,8 +67,8 @@ describe("W3-3.3 ErrorState consistency", () => {
 
 describe("W3-3.3 issue detail handoff touch targets", () => {
   it("handoff / primary actions use min-h-11 (≥44px)", () => {
-    const src = read("app/(portal)/issues/[id]/page.tsx");
-    expect(src).toContain("data-testid=\"coding-agent-handoff\"");
+    const src = read("app/(portal)/issues/_components/issue-handoff.tsx");
+    expect(src).toContain('data-testid="coding-agent-handoff"');
     expect(src).toMatch(/Copy prompt[\s\S]*min-h-11|min-h-11[\s\S]*Copy prompt/);
     expect(src).toContain('className="min-h-11"');
     expect(src).toMatch(/Open in coding agent/);

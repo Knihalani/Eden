@@ -162,14 +162,21 @@ describe("W21 slash + @ + page_context + coach", () => {
     expect(shell).toContain("data-ai-coach-mark");
     expect(shell).toContain("Tooltip");
     expect(shell).toContain("Ask Eden AI");
+    expect(shell).toContain("header Ask AI icon");
+    expect(shell).toContain("!chat.isMobile");
     expect(existsSync(resolve(ROOT, "src/components/ai-insights/clientToolExecutors.ts"))).toBe(
       true,
     );
     expect(existsSync(resolve(ROOT, "src/components/ai-insights/slashCommands.ts"))).toBe(
       true,
     );
+    const hook = src("components/ai-insights/hooks/useChatSidebar.ts");
+    expect(hook).toContain("showCoach");
+    expect(hook).toContain("eden:ai-coach-seen");
+    expect(hook).toContain("setShowCoach(true)");
     const nav = src("lib/nav-commands.ts");
     expect(nav).toContain('label: "Ask AI"');
+    expect(nav).toContain("header · FAB · ⌘K/⌘J");
     const palette = src("components/ui/command-palette.tsx");
     expect(palette).toContain("eden:ask-ai");
   });

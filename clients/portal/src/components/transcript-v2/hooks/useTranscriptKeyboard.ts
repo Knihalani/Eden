@@ -10,7 +10,9 @@ export interface UseTranscriptKeyboardOptions {
 }
 
 /**
- * N13 keyboard: j/k (and ↑/↓) move between transcript steps.
+ * N13 / Observe V3 Wave 6: j/k (and ↑/↓) move between transcript steps.
+ * Only when focus is inside the transcript root — list hub owns j/k otherwise.
+ * Modifier chords (⌘K) are ignored.
  */
 export function useTranscriptKeyboard({
   spanIds,
@@ -22,6 +24,7 @@ export function useTranscriptKeyboard({
     if (!enabled || spanIds.length === 0) return;
 
     const onKey = (e: KeyboardEvent) => {
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
       const target = e.target as HTMLElement | null;
       if (
         target &&
@@ -31,6 +34,8 @@ export function useTranscriptKeyboard({
       ) {
         return;
       }
+      // Scope to transcript so hub list j/k / Enter stay intact.
+      if (!target?.closest?.('[data-testid="transcript-v2"]')) return;
 
       const down = e.key === "j" || e.key === "ArrowDown";
       const up = e.key === "k" || e.key === "ArrowUp";

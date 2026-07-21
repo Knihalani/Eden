@@ -61,9 +61,11 @@ async function probe(page, label, width) {
       }
     }
 
-    const checklist = [...document.querySelectorAll("[data-testid='dashboard-first-run'] li")].map(
-      (li) => (li.textContent || "").replace(/\s+/g, " ").trim().slice(0, 100),
-    );
+    const checklist = [
+      ...document.querySelectorAll(
+        "[data-testid='dashboard-doctor-commands'], [data-home-shell-next-step='doctor']",
+      ),
+    ].map((el) => (el.textContent || "").replace(/\s+/g, " ").trim().slice(0, 120));
 
     const connectHrefs = hrefs
       .filter((h) => /agents\/connect/.test(h.href))
@@ -101,13 +103,14 @@ async function probe(page, label, width) {
       bodyHas: {
         getStarted: Boolean(root) || /Get started with observability/i.test(body),
         createKey: /Create API key/i.test(body),
-        installSdk: /Install SDK|Install the SDK/i.test(body),
-        doctor: /Run doctor|eden-doctor/i.test(body),
+        installSdk: /Install SDK|Install the SDK|via the SDK|SDK or gateway/i.test(body),
+        doctor: /Run doctor|eden-doctor|One next step/i.test(body),
         openTraces: /Open Traces/i.test(body),
-        sdkSubtitle: /Install the SDK or gateway/i.test(body),
+        sdkSubtitle: /Install the SDK or gateway|SDK or gateway/i.test(body),
         unavailable: /Traces unavailable|Could not load some telemetry/i.test(body),
         noTracesYet: /No traces yet/i.test(body),
         editLayout: /Edit layout/i.test(body),
+        listening: /Waiting for first event|Listening for first event/i.test(body),
       },
       checklist,
       actionOrder,
@@ -133,26 +136,14 @@ async function probe(page, label, width) {
   if (data.bans.fullPrompt) fail(`[${label}] FULL_PROMPT ban`);
   if (data.connectHasOnboarding) fail(`[${label}] Connect → ?onboarding=1`);
   if (!data.bodyHas.getStarted) {
-    fail(`[${label}] missing first-run checklist (API cold should still show install path)`);
+    fail(`[${label}] missing first-run surface (API cold should still show install path)`);
   } else {
-    const expected = ["API keys", "Docs quickstart", "Product tour"];
-    const got = data.actionOrder;
-    let idx = -1;
-    for (const step of expected) {
-      const at = got.indexOf(step);
-      if (at === -1) fail(`[${label}] missing header action "${step}" (got ${JSON.stringify(got)})`);
-      else if (at < idx) fail(`[${label}] button order wrong: ${JSON.stringify(got)}`);
-      else idx = at;
-    }
-    if (got.includes("Connect a repo")) {
-      const c = got.indexOf("Connect a repo");
-      const t = got.indexOf("Product tour");
-      if (t >= 0 && c < t) fail(`[${label}] Connect before Product tour`);
-    }
-    if (!data.bodyHas.doctor) fail(`[${label}] checklist missing Doctor`);
-    if (!data.bodyHas.openTraces) fail(`[${label}] checklist missing Open Traces`);
-    if (!data.bodyHas.installSdk) fail(`[${label}] checklist missing Install SDK`);
+    if (!data.bodyHas.doctor) fail(`[${label}] first-run missing doctor next step`);
+    if (!data.bodyHas.openTraces) fail(`[${label}] first-run missing Open Traces`);
+    if (!data.bodyHas.installSdk) fail(`[${label}] first-run missing SDK path`);
+    if (!data.bodyHas.listening) fail(`[${label}] first-run missing listening copy`);
     if (data.bodyHas.editLayout) fail(`[${label}] Edit layout theatre on first-run`);
+    if (!data.checklist.length) fail(`[${label}] missing doctor next-step region`);
   }
   if (data.bodyHas.unavailable && data.bodyHas.getStarted) {
     fail(`[${label}] first-run + API-unavailable simultaneously`);

@@ -5,9 +5,10 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useOrg } from "@/hooks/use-org";
 import { fineTuneApi, type FineTuneLineage } from "@/lib/api";
-import { Card } from "@/components/ui/card";
+import { Panel } from "@/components/ui/panel";
 import { NoOrgState } from "@/components/ui/no-org-state";
 import { ErrorState } from "@/components/ui/error-state";
+import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/layout/page-header";
 import { PageContent, PageLoading } from "@/components/layout/page-content";
 import {
@@ -17,7 +18,6 @@ import {
   Clock,
   Loader2,
   XCircle,
-  
   Database,
   ArrowRight } from "lucide-react";
 import { LineageGraph } from "./_components/LineageGraph";
@@ -85,27 +85,26 @@ export default function FineTuneLineagePage() {
   if (error || !lineage) {
     return (
       <PageContent size="narrow" className="space-y-4">
-        <Link
-          href="/traces"
-          className="inline-flex items-center gap-2 text-sm text-[var(--text-secondary)] hover:text-[var(--accent)]"
-        >
-          <ArrowLeft className="w-4 h-4" />
-          Back to traces
-        </Link>
+        <Button asChild variant="ghost" size="sm" className="min-h-11 px-0 w-fit">
+          <Link href="/traces">
+            <ArrowLeft className="w-4 h-4" />
+            Back to traces
+          </Link>
+        </Button>
         <ErrorState
           title="Could not load lineage"
           message={error || `No lineage found for run ${runId}.`}
           size="md"
           action={
-            <button
+            <Button
               type="button"
+              size="sm"
               onClick={() => void load()}
               disabled={loading}
-              className="inline-flex items-center gap-2 px-3 py-1.5 bg-[var(--accent)] text-[var(--bg-base)] rounded-lg text-xs font-medium hover:bg-[var(--accent-hover)] disabled:opacity-50 transition-colors"
+              loading={loading}
             >
-              {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
               Try again
-            </button>
+            </Button>
           }
         />
       </PageContent>
@@ -120,14 +119,14 @@ export default function FineTuneLineagePage() {
 
   return (
     <PageContent size="default">
-      <Link
-        href="/traces"
-        className="inline-flex items-center gap-2 text-sm text-[var(--text-secondary)] hover:text-[var(--accent)]"
-      >
-        <ArrowLeft className="w-4 h-4" />
-        Back to traces
-      </Link>
+      <Button asChild variant="ghost" size="sm" className="min-h-11 px-0 w-fit">
+        <Link href="/traces">
+          <ArrowLeft className="w-4 h-4" />
+          Back to traces
+        </Link>
+      </Button>
 
+      <div data-wave10-lineage="signed" className="contents" />
       <PageHeader
         eyebrow="Fine-tune"
         title="Lineage"
@@ -141,7 +140,7 @@ export default function FineTuneLineagePage() {
       />
 
       {/* Run summary */}
-      <Card className="p-4 space-y-3">
+      <Panel tone="flat" padding="md" className="space-y-3">
         <div className="flex items-center gap-3">
           <StatusIcon className="w-5 h-5" />
           <span
@@ -172,20 +171,20 @@ export default function FineTuneLineagePage() {
             value={lineage.run.provider_fine_tune_id ?? "—"}
           />
         </div>
-      </Card>
+      </Panel>
 
       {/* Lineage graph */}
-      <Card className="p-4 space-y-3">
+      <Panel tone="flat" padding="md" className="space-y-3">
         <h2 className="text-sm font-semibold text-[var(--text-primary)] flex items-center gap-2">
           <Network className="w-4 h-4" />
           Dataset → Run → Production traces
         </h2>
         <LineageGraph lineage={lineage} />
-      </Card>
+      </Panel>
 
       {/* Backward + forward trace lists */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <Card className="p-4 space-y-2">
+        <Panel tone="flat" padding="md" className="space-y-2">
           <h3 className="text-sm font-semibold text-[var(--text-primary)] flex items-center gap-2">
             <Database className="w-4 h-4" />
             Backward ({lineage.backward.trace_ids.length} traces)
@@ -209,8 +208,8 @@ export default function FineTuneLineagePage() {
               </li>
             )}
           </ul>
-        </Card>
-        <Card className="p-4 space-y-2">
+        </Panel>
+        <Panel tone="flat" padding="md" className="space-y-2">
           <h3 className="text-sm font-semibold text-[var(--text-primary)] flex items-center gap-2">
             <ArrowRight className="w-4 h-4" />
             Forward ({lineage.forward.trace_ids.length} traces)
@@ -234,7 +233,7 @@ export default function FineTuneLineagePage() {
               </li>
             )}
           </ul>
-        </Card>
+        </Panel>
       </div>
     
     </PageContent>

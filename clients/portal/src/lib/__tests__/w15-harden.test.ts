@@ -20,7 +20,8 @@ function read(rel: string): string {
 describe("W15 Button sm + DataTable checkbox touch", () => {
   it("Button size=sm keeps ≥44px min-h", () => {
     const button = read("components/ui/button.tsx");
-    expect(button).toMatch(/sm:\s*"min-h-11/);
+    // Desktop can be shorter; mobile keeps max-md:min-h-11 (≥44px).
+    expect(button).toMatch(/sm:\s*"h-7 min-h-7 max-md:min-h-11/);
     expect(button).not.toMatch(/sm:\s*"h-8 /);
   });
 
@@ -52,8 +53,11 @@ describe("W15 peer closures (E-08 / E-04 / S-06 / I-02)", () => {
 
   it("Playground creates dataset without leaving tab (E-04)", () => {
     const pg = read("app/(portal)/playgrounds/page.tsx");
+    const hook = read(
+      "app/(portal)/playgrounds/_components/use-playgrounds-page.ts",
+    );
     expect(pg).toContain("createAndBindDataset");
-    expect(pg).toContain("datasetsApi.create");
+    expect(hook).toContain("datasetsApi.create");
     expect(pg).toContain("Create dataset");
     expect(pg).toContain("Upload / manage");
   });
@@ -76,9 +80,9 @@ describe("W15 lint ratchet floors", () => {
       resolve(root, "scripts/lint-portal-clutter.cjs"),
       "utf8",
     );
-    expect(classes).toMatch(/BASELINE_MICRO_TEXT\s*=\s*91/);
+    expect(classes).toMatch(/BASELINE_MICRO_TEXT\s*=\s*79/);
     expect(classes).toMatch(/BASELINE_HALF_STEP\s*=\s*112/);
-    expect(classes).toMatch(/BASELINE_ACCENT_CTA\s*=\s*6/);
+    expect(classes).toMatch(/BASELINE_ACCENT_CTA\s*=\s*1/);
     expect(clutter).toMatch(/BASELINE_TABLIST_OUTSIDE\s*=\s*2/);
   });
 });

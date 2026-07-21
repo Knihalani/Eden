@@ -57,7 +57,7 @@ function ConnectAgentPageInner() {
 
   return (
     <PageContent size="narrow">
-      <div className="space-y-space-6">
+      <div className="space-y-space-6" data-wave10-connect="polished">
         <Button asChild variant="ghost" className="min-h-11 -ml-2 w-fit px-2">
           <Link href="/agents">
             <ArrowLeft className="h-4 w-4" aria-hidden="true" />

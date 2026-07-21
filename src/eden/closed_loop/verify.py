@@ -44,11 +44,14 @@ async def schedule_verify(
     *,
     ref: str = "",
     delay_seconds: int | None = None,
-) -> bool:
-    """Insert (or replace) a pending verify row for an issue."""
+) -> str | None:
+    """Insert (or replace) a pending verify row for an issue.
+
+    Returns the verification row id on success, or ``None`` on failure.
+    """
     client = await _pg()
     if client is None:
-        return False
+        return None
     delay = delay_seconds if delay_seconds is not None else _cfg("verify_delay_seconds", 1800)
     fingerprint = ref
     if not fingerprint:
@@ -59,8 +62,9 @@ async def schedule_verify(
             fingerprint = issue.fingerprint if issue else ""
         except Exception:
             fingerprint = ""
+    verify_id = str(uuid.uuid4())
     try:
-        await client.execute(
+        row = await client.fetchrow(
             """
             INSERT INTO issue_verifications
                 (id, org_id, issue_id, fingerprint, ref, scheduled_at, status)
@@ -72,8 +76,9 @@ async def schedule_verify(
                 fingerprint = EXCLUDED.fingerprint,
                 ref = EXCLUDED.ref,
                 attempts = 0
+            RETURNING id
             """,
-            str(uuid.uuid4()),
+            verify_id,
             org_id,
             issue_id,
             (fingerprint or "")[:64],
@@ -86,10 +91,12 @@ async def schedule_verify(
             delay,
             fingerprint,
         )
-        return True
+        if row and row.get("id") is not None:
+            return str(row["id"])
+        return verify_id
     except Exception as exc:
         logger.debug("verify: schedule failed: %s", exc)
-        return False
+        return None
 
 
 # ── Checks ──────────────────────────────────────────────────────────

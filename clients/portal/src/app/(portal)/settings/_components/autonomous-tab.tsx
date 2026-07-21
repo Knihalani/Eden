@@ -232,7 +232,7 @@ export default function AutonomousTab() {
   }
 
   return (
-    <div className="space-y-space-6">
+    <div className="space-y-space-6" data-ws8-autonomous>
       <IntegrationStatusBanners integration="github" orgId={currentOrg.id} />
 
       <div className="rounded-xl border border-[var(--border-default)] bg-[var(--bg-secondary)]/40 p-space-5 flex items-start gap-space-4">

@@ -1,12 +1,25 @@
 "use client";
 
-/**
- * /settings/sidebar deep-link — full-page chrome around SidebarSettingsView.
- * Tab-rail embedding uses `_components/sidebar-settings-tab.tsx` instead.
- */
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { Loader2 } from "lucide-react";
 
-import { SidebarSettingsView } from "../../_components/sidebar-settings-view";
+export default function SidebarSettingsRedirect() {
+  const router = useRouter();
 
-export default function SidebarSettingsPage() {
-  return <SidebarSettingsView embedded={false} />;
+  useEffect(() => {
+    router.replace("/settings?tab=sidebar");
+  }, [router]);
+
+  return (
+    <div
+      className="flex h-48 items-center justify-center gap-2 text-sm text-[var(--text-muted)]"
+      role="status"
+      aria-live="polite"
+      aria-busy="true"
+    >
+      <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+      Redirecting…
+    </div>
+  );
 }
