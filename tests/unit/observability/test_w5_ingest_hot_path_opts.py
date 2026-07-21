@@ -241,7 +241,7 @@ class TestLoadsBodyOrjson:
 
         Absolute times vary by machine/CI load; we assert jsonx is within
         2.5× of stdlib when the runner is quiet. On shared CI hosts this
-        microbench is skipped rather than red-flagging noise.
+        microbench is skipped rather than red-flagging noise. Stress suite median budget is similarly softened.
         """
         import os
 
