@@ -13,10 +13,17 @@ from eden.nudges.trigger_eval import evaluate_trigger
 logger = logging.getLogger(__name__)
 
 _NUDGE_CACHE: dict[str, list[Nudge]] = {}
+_GATEWAY_MODES: tuple[str, ...] = ("shadow", "promoted")
 
 
-def _cache_key(org_id: str, agent_id: str) -> str:
-    return f"{org_id}:{agent_id}"
+def _cache_key(
+    org_id: str, agent_id: str, modes: tuple[str, ...] = _GATEWAY_MODES
+) -> str:
+    return f"{org_id}:{agent_id}:{','.join(sorted(modes))}"
+
+
+def _agent_prefix(org_id: str, agent_id: str) -> str:
+    return f"{org_id}:{agent_id}:"
 
 
 class NudgeEngine:
@@ -25,7 +32,7 @@ class NudgeEngine:
     async def list_active(
         self, org_id: str, agent_id: str, *, modes: tuple[str, ...] = ("shadow", "promoted")
     ) -> list[Nudge]:
-        key = _cache_key(org_id, agent_id)
+        key = _cache_key(org_id, agent_id, modes)
         if key in _NUDGE_CACHE:
             return _NUDGE_CACHE[key]
 
@@ -49,6 +56,7 @@ class NudgeEngine:
                 list(modes),
             )
             nudges = [Nudge.from_row(dict(r)) for r in rows]
+            # Modes-aware key: portal archived listings never overwrite gateway cache.
             _NUDGE_CACHE[key] = nudges
             return nudges
         except Exception as exc:
@@ -61,14 +69,25 @@ class NudgeEngine:
         agent_id = str(context.get("agent_id") or "")
         if not org_id or not agent_id:
             return []
-        nudges = _NUDGE_CACHE.get(_cache_key(org_id, agent_id), [])
-        return [n for n in nudges if evaluate_trigger(n.trigger, context)]
+        nudges = _NUDGE_CACHE.get(_cache_key(org_id, agent_id, _GATEWAY_MODES), [])
+        return [
+            n
+            for n in nudges
+            if n.mode in ("shadow", "promoted") and evaluate_trigger(n.trigger, context)
+        ]
+
+    def cache_warmed(self, org_id: str, agent_id: str) -> bool:
+        """True when gateway modes cache has been populated for this agent."""
+        return _cache_key(org_id, agent_id, _GATEWAY_MODES) in _NUDGE_CACHE
 
     async def warm_cache(self, org_id: str, agent_id: str) -> None:
         await self.list_active(org_id, agent_id)
 
     def invalidate_cache(self, org_id: str, agent_id: str) -> None:
-        _NUDGE_CACHE.pop(_cache_key(org_id, agent_id), None)
+        prefix = _agent_prefix(org_id, agent_id)
+        for key in list(_NUDGE_CACHE):
+            if key.startswith(prefix):
+                _NUDGE_CACHE.pop(key, None)
 
     async def log_shadow(
         self,

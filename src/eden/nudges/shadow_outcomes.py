@@ -26,7 +26,14 @@ class ShadowOutcomeJoiner:
                        ai.fingerprint
                 FROM nudge_outcomes no
                 JOIN nudges n ON n.id = no.nudge_id
-                JOIN agent_issues ai ON ai.fingerprint IS NOT NULL
+                JOIN agent_issues ai
+                  ON ai.org_id = n.org_id
+                 AND ai.agent_id = n.agent_id
+                 AND ai.fingerprint IS NOT NULL
+                 AND (
+                       n.source_issue_id IS NULL
+                    OR ai.id::text = n.source_issue_id
+                 )
                 WHERE no.mode = 'shadow'
                   AND no.outcome_success IS NULL
                   AND no.matched = true

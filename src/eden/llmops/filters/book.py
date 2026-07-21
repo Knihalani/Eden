@@ -39,8 +39,10 @@ class BookGatewayFilter:
         agent_s = str(agent_id)
         if ledger_enabled_sync(org_s):
             text, audit = LedgerRetriever().pack_sync(org_s, agent_s)
-            if not text:
-                schedule_warm_learn(org_s, agent_s, task_text=str(getattr(request, "prompt", "") or ""))
+            if audit.get("cache_miss"):
+                schedule_warm_learn(
+                    org_s, agent_s, task_text=str(getattr(request, "prompt", "") or "")
+                )
             elif text:
                 setattr(request, "_ledger_inject_text", text)
                 setattr(request, "inject_tokens", audit.get("inject_tokens", 0))

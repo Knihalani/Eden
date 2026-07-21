@@ -11,7 +11,9 @@ from eden.llmops.inject_budget import InjectBudget, InjectItem
 logger = logging.getLogger(__name__)
 
 _PACK_CACHE: dict[str, tuple[str, int, bool]] = {}
+_PACK_CACHE_BY_AGENT: dict[str, set[str]] = {}
 _LEDGER_SYNC_CACHE: dict[str, str] = {}
+_LEDGER_SYNC_READY: set[str] = set()
 _CACHE_TTL_SEC = 120
 
 
@@ -20,13 +22,18 @@ class LedgerRetriever:
 
     @staticmethod
     def cache_packed(org_id: str, agent_id: str, text: str) -> None:
-        _LEDGER_SYNC_CACHE[f"{org_id}:{agent_id}"] = text
+        key = f"{org_id}:{agent_id}"
+        _LEDGER_SYNC_CACHE[key] = text
+        _LEDGER_SYNC_READY.add(key)
 
     def pack_sync(self, org_id: str, agent_id: str) -> tuple[str, dict[str, Any]]:
         """Sync hot-path read from warmed cache."""
-        text = _LEDGER_SYNC_CACHE.get(f"{org_id}:{agent_id}", "")
+        key = f"{org_id}:{agent_id}"
+        if key not in _LEDGER_SYNC_READY:
+            return "", {"cache_miss": True}
+        text = _LEDGER_SYNC_CACHE.get(key, "")
         if not text:
-            return "", {}
+            return "", {"cache_hit": True}
         tokens = len(text) // 4
         return text, {"inject_tokens": tokens, "inject_truncated": False, "cache_hit": True}
 
@@ -42,10 +49,12 @@ class LedgerRetriever:
         from eden.preview.gates import ledger_enabled
 
         if not await ledger_enabled(org_id):
-            return "", {}
+            self.cache_packed(org_id, agent_id, "")
+            return "", {"inject_skipped": "ledger_disabled"}
 
         config = await LedgerGenerator().get_config(org_id, agent_id)
         if not config.get("enabled"):
+            self.cache_packed(org_id, agent_id, "")
             return "", {"inject_skipped": "ledger_disabled"}
 
         max_tokens = int(config.get("max_tokens") or 800)
@@ -79,7 +88,9 @@ class LedgerRetriever:
 
         budget = InjectBudget(ledger_share=soft_share, hard_cap=hard_cap)
         packed = budget.pack(items)
+        agent_key = f"{org_id}:{agent_id}"
         _PACK_CACHE[cache_key] = (packed.text, packed.tokens, packed.truncated)
+        _PACK_CACHE_BY_AGENT.setdefault(agent_key, set()).add(cache_key)
         self.cache_packed(org_id, agent_id, packed.text)
         return packed.text, packed.audit
 
@@ -144,7 +155,8 @@ class LedgerRetriever:
 
     @staticmethod
     def invalidate(org_id: str, agent_id: str) -> None:
-        prefix = f"{org_id}:{agent_id}"
-        for key in list(_PACK_CACHE):
-            if key.startswith(hashlib.sha256(prefix.encode()).hexdigest()[:8]):
-                _PACK_CACHE.pop(key, None)
+        agent_key = f"{org_id}:{agent_id}"
+        _LEDGER_SYNC_CACHE.pop(agent_key, None)
+        _LEDGER_SYNC_READY.discard(agent_key)
+        for pack_key in list(_PACK_CACHE_BY_AGENT.pop(agent_key, set())):
+            _PACK_CACHE.pop(pack_key, None)

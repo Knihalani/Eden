@@ -108,10 +108,24 @@ export function TraceDetailPanel({
   const [treeRows, setTreeRows] = useState<ReturnType<typeof buildSpanTree>>([]);
 
   const sessionId = meta?.session_id ?? null;
+  const liveOptIn = searchParams.get("live") === "1";
+  const outcomeRaw = meta?.outcome?.trim().toLowerCase() ?? "";
+  const outcomeInFlight =
+    meta != null &&
+    (outcomeRaw === "" ||
+      outcomeRaw === "running" ||
+      outcomeRaw === "pending" ||
+      outcomeRaw === "in_flight" ||
+      outcomeRaw === "in-flight");
   const liveStream = useLiveTraceStream({
     orgId: currentOrg?.id,
-    sessionId: sessionId ?? traceId,
-    enabled: Boolean(currentOrg?.id && (sessionId || phase === "ready")),
+    sessionId,
+    enabled: Boolean(
+      currentOrg?.id &&
+        sessionId &&
+        phase === "ready" &&
+        (liveOptIn || outcomeInFlight),
+    ),
   });
 
   const timelineQuery = useTraceTimeline(

@@ -728,7 +728,7 @@ async def improvement_loop_status(org_id: str = Depends(require_path_org_access)
                 await client.fetchval(
                     """
                     SELECT COUNT(*) FROM agent_ledgers
-                    WHERE org_id = $1 AND coalesce(enabled, false) = true
+                    WHERE org_id = $1 AND inject_enabled = true
                     """,
                     org_id,
                 )

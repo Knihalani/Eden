@@ -211,4 +211,12 @@ async def normalize_to_telemetry_event(
         prompt_cache_savings_usd=raw.get("prompt_cache_savings_usd"),
         model_version=raw.get("model_version"),
         service_tier=raw.get("service_tier"),
+        model=(
+            raw.get("model")
+            or raw.get("model_name")
+            or (attributes.get("model") if isinstance(attributes, dict) else None)
+            or (attributes.get("openai.model") if isinstance(attributes, dict) else None)
+            or (attributes.get("anthropic.model") if isinstance(attributes, dict) else None)
+        ),
+        model_name=raw.get("model_name") or raw.get("model"),
     )

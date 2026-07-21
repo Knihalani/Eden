@@ -76,6 +76,9 @@ class TelemetryEvent:
     prompt_cache_savings_usd: float | None = None
     model_version: str | None = None
     service_tier: str | None = None
+    # Canonical model id for list/filter UI (also mirrored in attributes).
+    model: str | None = None
+    model_name: str | None = None
     # Phase A (Laminar 20x dedup) — content-addressed dedup of the
     # request/response message arrays. Each entry is the 64-char hex
     # SHA-256 of the canonical-JSON form of one message. Spans store
@@ -824,7 +827,7 @@ class TelemetryCollector:
                     tool_calls_full, tool_results, images, audio,
                     logprobs, citations, finish_reason, stop_sequence,
                     system_fingerprint, cache_hit, prompt_cache_savings_usd,
-                    model_version, service_tier,
+                    model_version, service_tier, model, model_name,
                     request_body_zstd, response_body_zstd,
                     reasoning_zstd, tool_calls_full_zstd, tool_results_zstd,
                     payload_zstd, metrics_zstd, attributes_zstd,
@@ -836,7 +839,7 @@ class TelemetryCollector:
                     $11, $12, $13, $14, $15, $16, $17, $18, $19, $20,
                     $21, $22, $23, $24, $25, $26, $27, $28, $29, $30,
                     $31, $32, $33, $34, $35, $36, $37, $38, $39, $40,
-                    $41, $42, $43, $44, $45, $46, NOW()
+                    $41, $42, $43, $44, $45, $46, $47, $48, NOW()
                 )
                 ON CONFLICT (event_id, timestamp) DO NOTHING
                 """,
@@ -885,6 +888,11 @@ class TelemetryCollector:
                 event.prompt_cache_savings_usd,
                 event.model_version,
                 event.service_tier,
+                event.model
+                or (event.attributes or {}).get("model")
+                or (event.attributes or {}).get("openai.model")
+                or (event.attributes or {}).get("anthropic.model"),
+                event.model_name or event.model,
                 request_body_zstd,
                 response_body_zstd,
                 reasoning_zstd,
