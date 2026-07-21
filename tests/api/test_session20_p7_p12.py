@@ -17,10 +17,8 @@ Six audit items:
 
 * **P-10** — ``sdk.streaming.StreamingTokenCapture.write_batch``
   awaited each ``client.execute`` in a for-loop. Post-fix: pre-
-  allocate indices in serial, then ``asyncio.gather`` the N
-  inserts. Ponytail: gather over executemany because the index
-  dict MUST be allocated serially + the best-effort "one failure
-  doesn't kill batch" semantics are easier with gather.
+  allocate indices in serial, then a single ``executemany`` INSERT
+  (one round-trip; better than N gathered inserts).
 
 * **P-11** — exploration sweep: no additional gather candidates
   beyond P-7/8/9. Transaction bodies must stay serial.
@@ -149,25 +147,27 @@ class TestP9AgentIntelParallel:
 
 class TestP10StreamingBatchParallel:
     """``StreamingTokenCapture.write_batch`` pre-allocates per-span
-    indices serially, then fires the N inserts via
-    ``asyncio.gather``."""
+    indices serially, then writes via a single ``executemany``
+    (one round-trip; better than N gathered INSERTs)."""
 
-    def test_write_batch_uses_gather(self) -> None:
-        """Static check: ``write_batch`` body uses ``asyncio.gather``
-        for the parallel insert fan-out."""
+    def test_write_batch_uses_executemany(self) -> None:
+        """Static check: ``write_batch`` uses ``executemany`` for the
+        insert fan-out (not N sequential or gathered executes)."""
         from eden.sdk.streaming import StreamingTokenCapture
 
         source = inspect.getsource(StreamingTokenCapture.write_batch)
-        assert "asyncio.gather" in source, (
+        assert "executemany" in source, (
             "P-10 regression: StreamingTokenCapture.write_batch "
-            "doesn't use asyncio.gather"
+            "doesn't use executemany"
+        )
+        assert "asyncio.gather" not in source, (
+            "P-10: write_batch should use executemany, not gather of N inserts"
         )
 
-    def test_write_batch_indexes_allocated_before_gather(self) -> None:
+    def test_write_batch_indexes_allocated_before_executemany(self) -> None:
         """Static check: the index pre-allocation
         (``self._last_index[span_id] = idx``) happens BEFORE
-        the gather call (so each token's index is stable
-        regardless of gather completion order). Use AST to
+        ``executemany`` (so each token's index is stable). Use AST to
         find the actual code positions, skipping docstrings
         and comments."""
         import ast
@@ -198,27 +198,27 @@ class TestP10StreamingBatchParallel:
                             return node.lineno
             return None
 
-        def _find_gather_call(body: list[ast.stmt]) -> int | None:
+        def _find_executemany_call(body: list[ast.stmt]) -> int | None:
             for node in ast.walk(ast.Module(body=body, type_ignores=[])):
                 if (
                     isinstance(node, ast.Call)
                     and isinstance(node.func, ast.Attribute)
-                    and node.func.attr == "gather"
+                    and node.func.attr == "executemany"
                 ):
                     return node.lineno
             return None
 
         idx_line = _find_index_pre_allocation(func.body)
-        gather_line = _find_gather_call(func.body)
+        exec_line = _find_executemany_call(func.body)
         assert idx_line is not None, (
             "P-10 regression: no _last_index assignment in write_batch"
         )
-        assert gather_line is not None, (
-            "P-10 regression: no asyncio.gather call in write_batch"
+        assert exec_line is not None, (
+            "P-10 regression: no executemany call in write_batch"
         )
-        assert idx_line < gather_line, (
+        assert idx_line < exec_line, (
             f"P-10 regression: index alloc at line {idx_line} must "
-            f"precede gather at line {gather_line}"
+            f"precede executemany at line {exec_line}"
         )
 
 
