@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import asyncio
 import time
+from datetime import UTC, datetime
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -132,6 +133,9 @@ class TestP2IngestBatchParallel:
 
         c._route = _slow_route  # type: ignore[method-assign]
 
+        # Fresh timestamps — late_span_max_age_seconds (default 1d)
+        # would hard-reject a fixed June fixture on a July CI clock.
+        now_ts = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
         events = [
             TelemetryEvent(
                 event_id=f"e{i}",
@@ -140,7 +144,7 @@ class TestP2IngestBatchParallel:
                 trace_id="tr",
                 realm="production",
                 event_type="otel.chat",
-                timestamp="2026-06-28T00:00:00Z",
+                timestamp=now_ts,
                 # Distinct payload per event so dedup doesn't
                 # collapse them — proves the gather actually
                 # routes 10 events, not 1.
@@ -176,7 +180,11 @@ class TestP2IngestBatchParallel:
         c = TelemetryCollector()
         c._route = AsyncMock()  # type: ignore[method-assign]
 
-        # Two events with identical content → second is a dup.
+        # Fresh timestamps — late_span_max_age_seconds (default 1d)
+        # would hard-reject a fixed June fixture on a July CI clock.
+        now_ts = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+        # Two events with identical content-hash inputs → second is a dup.
+        # (_enrich hashes trace_id|event_type|span_id|timestamp|event_id.)
         ev = TelemetryEvent(
             event_id="e1",
             tenant_id="t",
@@ -184,17 +192,17 @@ class TestP2IngestBatchParallel:
             trace_id="tr",
             realm="production",
             event_type="otel.chat",
-            timestamp="2026-06-28T00:00:00Z",
+            timestamp=now_ts,
             payload={"x": 1},
         )
         ev_copy = TelemetryEvent(
-            event_id="e2",  # different event_id, same content
+            event_id="e1",
             tenant_id="t",
             project_id="p",
             trace_id="tr",
             realm="production",
             event_type="otel.chat",
-            timestamp="2026-06-28T00:00:00Z",
+            timestamp=now_ts,
             payload={"x": 1},
         )
 

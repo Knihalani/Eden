@@ -107,16 +107,28 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: portal-next-build-${{ github.run_id }}
-          path: clients/portal/.next
+          # .next is a hidden directory — upload-artifact@v4 skips hidden
+          # paths unless include-hidden-files is true (otherwise a11y/golden
+          # fail with "Artifact not found" after a successful build).
+          path: |
+            clients/portal/.next/**
+            !clients/portal/.next/cache/**
+          include-hidden-files: true
+          if-no-files-found: error
           retention-days: 3
+          compression-level: 6
 
       - name: Upload .next for inspection
         if: failure()
         uses: actions/upload-artifact@v4
         with:
           name: next-build-${{ github.run_id }}
-          path: clients/portal/.next
+          path: |
+            clients/portal/.next/**
+            !clients/portal/.next/cache/**
+          include-hidden-files: true
           retention-days: 3
+          compression-level: 6
 
   # U20 axe gate — polls localhost after production build + start.
   # Runs authenticated (using Clerk testing token) so the real shell is audited.

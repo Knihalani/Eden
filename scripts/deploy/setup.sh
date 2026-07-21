@@ -49,7 +49,6 @@ ${BOLD}Commands:${NC}
 ${BOLD}Providers:${NC}
     railway            ${YELLOW}# Recommended for $20/mo startup${NC}
     render             # Alternative PaaS
-    fly               # Edge deployment
     vultr             # Budget VPS with K8s ($20-40/mo nodes)
     digitalocean       # Simple K8s ($24/mo nodes)
     civo               # K3s-based K8s ($5-21/mo)
@@ -336,53 +335,6 @@ EOF
     echo "  2. Create Blueprint from render.yaml"
     echo "  3. Add PostgreSQL database"
     echo "  4. Set environment variables"
-}
-
-#===============================================================================
-# FLY.IO (Edge Deployment)
-#===============================================================================
-
-fly_init() {
-    log_header "Initializing Fly.io Deployment"
-
-    mkdir -p "$SCRIPT_DIR/deploy/fly"
-
-    cat > "$SCRIPT_DIR/deploy/fly/Dockerfile" << 'EOF'
-FROM python:3.11-slim
-
-WORKDIR /app
-COPY . /app
-RUN pip install --no-cache-dir -e .
-
-EXPOSE 8000
-CMD ["uvicorn", "src.eden.api.app:app", "--host", "0.0.0.0", "--port", "8000"]
-EOF
-
-    cat > "$SCRIPT_DIR/deploy/fly/fly.toml" << 'EOF'
-app = "eden-api"
-primary_region = "iad"
-
-[build]
-  dockerfile = "Dockerfile"
-
-[env]
-  PORT = "8000"
-
-[http_service]
-  auto_stop_machines = true
-  auto_start_machines = true
-  min_machines_running = 0
-  processes = ["app"]
-
-[[vm]]
-  memory = "512mb"
-  cpu_kind = "shared"
-  vms = 1
-EOF
-
-    log_success "Fly.io config written"
-    echo ""
-    log_info "Run: fly launch --image python:3.11-slim"
 }
 
 #===============================================================================
@@ -1332,7 +1284,7 @@ deploy() {
     log_info "Deploying Eden..."
 
     case $PROVIDER in
-        railway|render|fly)
+        railway|render)
             log_info "PaaS deployment - use provider dashboard or CLI"
             log_info "Push to GitHub and deploy automatically"
             ;;
@@ -1407,7 +1359,7 @@ destroy_infra() {
                 terraform destroy || \
                 log_error "Failed to destroy - check terraform configuration"
             ;;
-        railway|render|fly)
+        railway|render)
             log_info "Destroy via provider dashboard"
             ;;
         *)
@@ -1460,7 +1412,6 @@ main() {
             case $PROVIDER in
                 railway)     railway_init ;;
                 render)      render_init ;;
-                fly)         fly_init ;;
                 vultr)       vultr_init ;;
                 digitalocean) digitalocean_init ;;
                 civo)        civo_init ;;

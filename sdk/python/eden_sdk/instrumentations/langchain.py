@@ -14,7 +14,6 @@ from __future__ import annotations
 
 import logging
 import time
-import uuid
 from collections.abc import Mapping
 from contextvars import ContextVar
 from typing import Any, Optional
@@ -23,7 +22,6 @@ from eden_sdk._instrumentation_ids import _trace_id_or_random
 from eden_sdk._tokens import extract_usage, normalize_model_name
 from eden_sdk.client import TraceEvent, get_default_client
 from eden_sdk.config import get_config
-from eden_sdk.trace import current_trace
 
 logger = logging.getLogger("eden_sdk.instrumentation.langchain")
 

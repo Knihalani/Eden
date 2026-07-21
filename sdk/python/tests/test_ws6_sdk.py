@@ -5,7 +5,6 @@ from __future__ import annotations
 import logging
 import sys
 import types
-from unittest.mock import MagicMock
 
 import httpx
 import pytest
@@ -41,7 +40,7 @@ def test_http_capture_patches_httpx_and_emits(respx_mock: respx.MockRouter) -> N
     route = respx_mock.post("http://localhost:8000/orgs/org_test/ingest/openai").mock(
         return_value=httpx.Response(200, json={"accepted": 1})
     )
-    openai_route = respx_mock.post("https://api.openai.com/v1/chat/completions").mock(
+    respx_mock.post("https://api.openai.com/v1/chat/completions").mock(
         return_value=httpx.Response(
             200,
             json={
@@ -92,6 +91,6 @@ def test_pydantic_ai_install_patches_agent_run() -> None:
     from eden_sdk.instrumentations import pydantic_ai as pai
 
     pai.install()
-    assert getattr(pai, "_installed") is True
+    assert pai._installed is True
     pai.uninstall()
-    assert getattr(pai, "_installed") is False
+    assert pai._installed is False

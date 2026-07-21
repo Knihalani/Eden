@@ -3,7 +3,11 @@
 Validates 20-point contract + streaming-specific behavior against the
 freshly built wheel at /tmp/wheel-extract.
 """
-import sys, json, time, threading, asyncio, http.server, socketserver, inspect, dataclasses
+import asyncio
+import dataclasses
+import json
+import sys
+
 sys.path.insert(0, "/tmp/wheel-extract")
 
 failures = []
@@ -15,6 +19,7 @@ def check(name, cond, detail=""):
 
 # ── 1. Public surface ─────────────────────────────────────────────────
 import eden
+
 check("import eden", eden is not None)
 check("eden.__version__", hasattr(eden, "__version__") and eden.__version__ == "0.3.0", eden.__version__)
 check("eden.__all__", isinstance(eden.__all__, list) and "configure" in eden.__all__ and "trace" in eden.__all__,
@@ -26,7 +31,8 @@ for must_have in ["EdenConfig", "EdenClient", "configure", "get_config", "trace"
     check(f"  exports {must_have}", must_have in eden.__all__, "")
 
 # ── 2. configure / get_config ────────────────────────────────────────
-from eden import configure, get_config, reset_config
+from eden import configure, get_config
+
 configure(org_id="acme", api_key="sk-test", base_url="https://api.example.com",
           gateway_url="https://gw.example.com/v1")
 cfg = get_config()
@@ -47,6 +53,7 @@ check("auth_headers X-Project-Id default", auth.get("X-Project-Id") == "default"
 
 # ── 3. FilterConfig / PIIConfig ───────────────────────────────────────
 from eden import FilterConfig, PIIConfig
+
 p_cfg = PIIConfig(mode="redact", disabled_categories=["credit_cards", "ssn"], bypass=False)
 f = FilterConfig(pii=p_cfg)
 check("FilterConfig holds PIIConfig", f.pii is p_cfg)
@@ -65,7 +72,9 @@ except TypeError:
 
 # ── 4. ModelAdvisor (mocked httpx) ────────────────────────────────────
 import httpx
+
 from eden import ModelAdvisor
+
 
 class _MockResp:
     status_code = 200
@@ -97,7 +106,8 @@ check("ModelAdvisor.recommend carries savings", rec.monthly_savings_usd == 12.5)
 advisor.close()
 
 # ── 5. trace_agent decorator + trace context manager ─────────────────
-from eden import trace_agent, trace, current_span
+from eden import current_span, trace, trace_agent
+
 
 @trace_agent("acme", tags=["prod"])
 def my_agent(prompt: str) -> str:
@@ -114,10 +124,12 @@ check("trace() ctx.trace_id is hex uuid", len(ctx.trace_id) == 32)
 
 # ── 6. Span dataclass ────────────────────────────────────────────────
 from eden import Span
+
 check("Span is a dataclass", dataclasses.is_dataclass(Span))
 
 # ── 7. EdenClient construction + counters ────────────────────────────
 from eden import EdenClient
+
 client = EdenClient(config=cfg, transport=httpx.MockTransport(lambda req: httpx.Response(200, json={"ok": True})))
 check("EdenClient initial counters", client._sent_total == 0 and client._failed_total == 0)
 check("EdenClient has _chunk_buffer", hasattr(client, "_chunk_buffer"))
@@ -126,13 +138,16 @@ check("EdenClient has ingest_chunks_url", hasattr(client, "ingest_chunks_url"))
 
 # ── 8. Instrumentations loaded ───────────────────────────────────────
 from eden_sdk.instrumentations import openai as eden_oa
+
 check("OpenAI _wrap_sync_stream exists", hasattr(eden_oa, "_wrap_sync_stream"))
 check("OpenAI _wrap_async_stream exists", hasattr(eden_oa, "_wrap_async_stream"))
 from eden_sdk.instrumentations import anthropic as eden_an
+
 check("Anthropic _wrap_sync_stream exists", hasattr(eden_an, "_wrap_sync_stream"))
 check("Anthropic _wrap_async_stream exists", hasattr(eden_an, "_wrap_async_stream"))
 # All 7 instrumentations packaged
-from eden_sdk.instrumentations import (langchain, llama_index, crewai, autogen, mastra)
+from eden_sdk.instrumentations import autogen, crewai, langchain, llama_index, mastra
+
 check("All 7 instrumentations packaged", all([langchain, llama_index, crewai, autogen, mastra]))
 
 # ── 9. ingest_chunks_url matches /ingest/chunks path ─────────────────
@@ -240,10 +255,9 @@ check("Anthropic async streaming yielded 7 events", an_count == 7, f"got {an_cou
 async def chunk_buffer_test():
     # Use httpx.MockTransport so we capture every POST without real I/O
     # (sandbox blocks TCP bind).
-    from eden_sdk.config import EdenConfig
-    from eden_sdk.client import EdenClient as _Client
     import eden_sdk.client as _client_mod
-    import eden_sdk.instrumentations.openai as _oa_mod
+    from eden_sdk.client import EdenClient as _Client
+    from eden_sdk.config import EdenConfig
 
     captured: list[dict] = []
     def handler(request):
@@ -331,7 +345,9 @@ async def empty_flush():
 check("flush_chunks() on empty buffer is a safe no-op", asyncio.run(empty_flush()))
 
 # ── 14. Auto-instrument functions exist ──────────────────────────────
-from eden_sdk import instrument as _instrument, uninstrument as _uninstrument
+from eden_sdk import instrument as _instrument
+from eden_sdk import uninstrument as _uninstrument
+
 check("instrument() callable", callable(_instrument))
 check("uninstrument() callable", callable(_uninstrument))
 # Should be safe to call uninstrument without prior instrument

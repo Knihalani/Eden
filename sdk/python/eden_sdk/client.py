@@ -41,9 +41,9 @@ from typing import Any
 import httpx
 
 from eden_sdk.config import EdenConfig, get_config
-from eden_sdk.ingest_format import resolve_ingest_path
 from eden_sdk.filters import _redact_string as _redact_text
 from eden_sdk.filters import redact_payload
+from eden_sdk.ingest_format import resolve_ingest_path
 
 # Compact JSON for the wire — fewer bytes to gzip, faster dumps.
 _JSON_SEPARATORS = (",", ":")

@@ -5,7 +5,9 @@ Verifies that:
 2. A chat completion flows through and lands at our mock ingest endpoint
 3. Streaming also works and chunks land at /ingest/chunks
 """
-import sys, os, json, asyncio, subprocess
+import subprocess
+import sys
+
 sys.path.insert(0, "/tmp/wheel-extract")
 
 # Install openai if not present (we need it to patch)
@@ -25,7 +27,9 @@ eden.configure(org_id="e2e", api_key="e2e", base_url="http://127.0.0.1:0",
                 dry_run=True, debug=True)
 
 # Capture all events via the default client (dry_run just logs them)
-import io, logging
+import io
+import logging
+
 log_stream = io.StringIO()
 handler = logging.StreamHandler(log_stream)
 handler.setLevel(logging.DEBUG)
@@ -40,6 +44,7 @@ print("[OK] eden.instrument('openai') succeeded")
 # Build an OpenAI client pointed at a local mock that returns canned data
 import httpx
 
+
 class _MockTransport(httpx.BaseTransport):
     def __init__(self, response_json):
         self.response_json = response_json
@@ -48,6 +53,7 @@ class _MockTransport(httpx.BaseTransport):
 
 # Create OpenAI client with the mock transport (it uses httpx under the hood)
 import openai as _openai
+
 mock_client = _openai.OpenAI(
     api_key="sk-test",
     http_client=httpx.Client(transport=_MockTransport({
@@ -75,9 +81,9 @@ print(f"[OK] response: {result.choices[0].message.content}")
 eden.get_default_client().flush(timeout=2.0)
 log_content = log_stream.getvalue()
 if "dry-run" in log_content or "fmt=" in log_content:
-    print(f"[OK] dry-run logged the event")
+    print("[OK] dry-run logged the event")
 else:
-    print(f"[INFO] no dry-run log lines (queue may have been empty)")
+    print("[INFO] no dry-run log lines (queue may have been empty)")
 
 # Now try streaming
 print("\n=== streaming call ===")

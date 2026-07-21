@@ -16,7 +16,6 @@ from typing import Any
 from eden_sdk._instrumentation_ids import _trace_id_or_random
 from eden_sdk.client import TraceEvent, get_default_client
 from eden_sdk.config import get_config
-from eden_sdk.trace import current_trace
 
 logger = logging.getLogger("eden_sdk.instrumentation.pydantic_ai")
 

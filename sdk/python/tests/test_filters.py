@@ -229,7 +229,7 @@ class TestRedactPayload:
     def test_redacts_phones_with_separators(self) -> None:
         # Real phone formats (parentheses, hyphens, dots, spaces)
         # must still be caught.
-        for fmt, expected in [
+        for fmt, _expected in [
             ("415-555-2671", "[REDACTED]"),
             ("(415) 555-2671", "(415) [REDACTED]"),
             ("+1 415 555 2671", "+1 [REDACTED]"),
