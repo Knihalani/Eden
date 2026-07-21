@@ -1200,7 +1200,7 @@ class TestCommon:
 @pytest.fixture(scope="module")
 def gov_test_app() -> FastAPI:
     """Minimal app mounting only the governance router."""
-    from eden.api.deps import get_current_user, require_org_member
+    from eden.api.deps import get_current_user, require_org_member, require_path_org_access
     from eden.config import get_settings
 
     settings = get_settings()
@@ -1213,6 +1213,7 @@ def gov_test_app() -> FastAPI:
     app.dependency_overrides[require_org_member] = lambda: {
         "sub": "user_test", "org_id": "org_test",
     }
+    app.dependency_overrides[require_path_org_access] = lambda: "org_test"
     mod = importlib.import_module(
         "eden.api.routes.intelligence_governance"
     )

@@ -381,7 +381,7 @@ class TestC3IntelligenceRbac:
     ) -> None:
         """Static check: the router's dependency tree includes
         ``require_org_member``."""
-        from eden.api.deps import require_org_member
+        from eden.api.deps import require_org_member, require_path_org_access
         from eden.api.routes import judges as judges_routes
 
         mod = __import__(
@@ -413,7 +413,7 @@ class TestC3IntelligenceRbac:
     def test_cross_org_request_returns_403(self) -> None:
         """End-to-end: hit /orgs/org-B/intelligence/user/... as
         a user authenticated to org-A → 403."""
-        from eden.api.deps import require_org_member
+        from eden.api.deps import require_org_member, require_path_org_access
         from eden.api.routes import intelligence_user
 
         app = FastAPI()
@@ -428,6 +428,7 @@ class TestC3IntelligenceRbac:
             raise HTTPException(403, "Not a member of this organization")
 
         app.dependency_overrides[require_org_member] = _fail_member
+        app.dependency_overrides[require_path_org_access] = lambda: "org_test"
         app.dependency_overrides[intelligence_user.get_current_user] = (
             lambda: {"user_id": "u-1", "email": "x@y.z"}
         )

@@ -17,7 +17,7 @@ from fastapi.testclient import TestClient
 
 
 def _make_client() -> tuple[TestClient, Any]:
-    from eden.api.deps import get_current_user, require_org_member
+    from eden.api.deps import get_current_user, require_org_member, require_path_org_access
 
     app = FastAPI()
     app.dependency_overrides[get_current_user] = lambda: {
@@ -28,6 +28,7 @@ def _make_client() -> tuple[TestClient, Any]:
         "sub": "u1",
         "org_id": "org_test",
     }
+    app.dependency_overrides[require_path_org_access] = lambda: "org_test"
 
     import eden.api.routes.intelligence_autonomous as mod
 

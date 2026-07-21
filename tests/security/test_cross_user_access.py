@@ -37,7 +37,7 @@ def _client_for(router, *, current_user: dict) -> TestClient:
     org id; tests that need to enforce cross-org checks add
     their own override.
     """
-    from eden.api.deps import get_current_user, require_org_member
+    from eden.api.deps import get_current_user, require_org_member, require_path_org_access
 
     app = FastAPI()
     app.include_router(router)
@@ -48,6 +48,7 @@ def _client_for(router, *, current_user: dict) -> TestClient:
             "org_id": current_user["org_id"],
         }
     )
+    app.dependency_overrides[require_path_org_access] = lambda: "org_test"
     return TestClient(app)
 
 

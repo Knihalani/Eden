@@ -888,7 +888,7 @@ def _fake_user() -> dict:
 
 @pytest.fixture(scope="module")
 def retrieval_app() -> FastAPI:
-    from eden.api.deps import get_current_user, require_org_member
+    from eden.api.deps import get_current_user, require_org_member, require_path_org_access
     from eden.config import get_settings
 
     settings = get_settings()
@@ -896,6 +896,7 @@ def retrieval_app() -> FastAPI:
     app = FastAPI(title="eden-retrieval-test")
     app.dependency_overrides[get_current_user] = _fake_user
     app.dependency_overrides[require_org_member] = lambda: {"sub": "test-user", "org_id": "org_test"}
+    app.dependency_overrides[require_path_org_access] = lambda: "org_x"
     mod = importlib.import_module("eden.api.routes.intelligence_retrieval")
     app.include_router(mod.router)
     return app

@@ -757,7 +757,7 @@ def test_package_exports_four_classes() -> None:
 def test_app() -> FastAPI:
     """Minimal FastAPI app with the Cat 5 router mounted and
     ``get_current_user`` + the feature flag overridden."""
-    from eden.api.deps import get_current_user, require_org_member
+    from eden.api.deps import get_current_user, require_org_member, require_path_org_access
     from eden.config import get_settings
 
     settings = get_settings()
@@ -770,6 +770,7 @@ def test_app() -> FastAPI:
     app.dependency_overrides[require_org_member] = lambda: {
         "sub": "test-user", "org_id": "org_test",
     }
+    app.dependency_overrides[require_path_org_access] = lambda: "org_test"
     mod = importlib.import_module("eden.api.routes.intelligence_memory")
     app.include_router(mod.router)
     return app
