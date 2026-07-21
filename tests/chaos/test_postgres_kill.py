@@ -24,12 +24,12 @@ def _build_minimal_app() -> FastAPI:
     """Build a minimal FastAPI app with the ingestion router
     mounted + the auth dep overridden (the ingestion endpoint
     requires an API key or session cookie)."""
-    from eden.api.deps import get_ingestion_auth
+    from eden.api.deps import get_ingest_auth
     from eden.api.routes.ingestion import router as ingestion_router
 
     app = FastAPI()
     app.include_router(ingestion_router)
-    app.dependency_overrides[get_ingestion_auth] = lambda: {
+    app.dependency_overrides[get_ingest_auth] = lambda: {
         "org_id": "org_test",
         "user_id": None,
         "api_key_id": "key_chaos",
