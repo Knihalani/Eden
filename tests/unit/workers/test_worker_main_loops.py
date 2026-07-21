@@ -131,7 +131,74 @@ async def test_supervise_restarts_after_crash() -> None:
     assert stop.is_set()
 
 
-# ── Webhook drain uses process singleton ────────────────────────────
+# ── Quality / evolution sidecars on eden-worker ─────────────────────
+
+
+@pytest.mark.asyncio
+async def test_run_forever_starts_and_stops_sidecars() -> None:
+    """eden-worker must host quality (+ evolution) — API leaves them off."""
+    from eden.workers import main as worker_main
+
+    started: list[str] = []
+    stopped: list[str] = []
+    stop_holder: list[asyncio.Event] = []
+
+    async def _fake_start() -> None:
+        started.append("sidecars")
+
+    async def _fake_stop() -> None:
+        stopped.append("sidecars")
+
+    async def _noop_supervise(
+        name: str,
+        factory: Any,
+        stop: asyncio.Event,
+        *,
+        backoff: float = 5.0,
+    ) -> None:
+        await stop.wait()
+
+    def _capture_handlers(stop: asyncio.Event) -> None:
+        stop_holder.append(stop)
+
+    with patch.object(
+        worker_main, "_start_sidecar_workers", _fake_start
+    ), patch.object(
+        worker_main, "_stop_sidecar_workers", _fake_stop
+    ), patch.object(
+        worker_main, "_supervise", _noop_supervise
+    ), patch.object(
+        worker_main, "_install_signal_handlers", _capture_handlers
+    ):
+        task = asyncio.create_task(worker_main._run_forever())
+        for _ in range(50):
+            if stop_holder:
+                break
+            await asyncio.sleep(0.01)
+        assert started == ["sidecars"]
+        assert stop_holder, "signal handlers should capture stop event"
+        stop_holder[0].set()
+        await asyncio.wait_for(task, timeout=2.0)
+
+    assert started == ["sidecars"]
+    assert stopped == ["sidecars"]
+
+
+@pytest.mark.asyncio
+async def test_start_sidecar_workers_calls_quality_and_evolution() -> None:
+    from eden.workers import main as worker_main
+
+    with patch(
+        "eden.observability.quality_pipeline.worker.start_worker",
+        new_callable=AsyncMock,
+    ) as start_q, patch(
+        "eden.agents.evolution.loop.start_evolution_loop",
+        new_callable=AsyncMock,
+    ) as start_e:
+        await worker_main._start_sidecar_workers()
+
+    start_q.assert_awaited_once()
+    start_e.assert_awaited_once()
 
 
 def test_worker_webhook_drain_uses_singleton() -> None:
