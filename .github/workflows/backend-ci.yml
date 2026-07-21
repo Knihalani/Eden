@@ -141,12 +141,15 @@ jobs:
         run: uv run alembic upgrade head
       - name: Run tests
         run: >-
-          uv run pytest -q --tb=short -x
+          uv run pytest -q --tb=short --maxfail=15
           --ignore=tests/e2e
           --ignore=supplementaries/phase_4_guardrails
           --cov=eden
           --cov-report=term-missing:skip-covered
           --cov-fail-under=55
+        # --maxfail=15 (not -x): path-org / LLM-router test drift should
+        # surface a batch of failures per run instead of stopping at the
+        # first, and coverage is computed over more of the suite.
         # tests/e2e requires the `playwright` Python package and the
         # playwright browser binary, neither of which is installed in
         # this CI image. The e2e suite is exercised on a separate
