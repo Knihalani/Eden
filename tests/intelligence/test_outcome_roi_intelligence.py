@@ -901,7 +901,7 @@ class TestWindowParser:
 # :mod:`tests.intelligence.test_intelligence_gap_stubs`.
 @pytest.fixture(scope="module")
 def outcomes_test_app() -> FastAPI:
-    from eden.api.deps import get_current_user
+    from eden.api.deps import get_current_user, require_path_org_access
     from eden.config import get_settings
 
     settings = get_settings()
@@ -912,7 +912,10 @@ def outcomes_test_app() -> FastAPI:
         "sub": "test-user",
         "org_id": "org_test",
     }
+    app.dependency_overrides[require_path_org_access] = lambda: "org_test"
     mod = importlib.import_module("eden.api.routes.intelligence_outcomes")
+    if hasattr(mod, "_require_path_org"):
+        app.dependency_overrides[mod._require_path_org] = lambda: "org_test"
     app.include_router(mod.router)
     return app
 

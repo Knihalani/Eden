@@ -553,6 +553,8 @@ class TestRoutes:
         mod._investigator.investigate = _stub  # type: ignore[assignment]
         mod._healer.heal = _stub  # type: ignore[assignment]
         mod._nl_report.generate = _stub  # type: ignore[assignment]
+        if hasattr(mod, "_require_path_org"):
+            app.dependency_overrides[mod._require_path_org] = lambda: "org_test"
         app.include_router(mod.router)
         return TestClient(app)
 
@@ -607,6 +609,8 @@ class TestRoutes:
             for d in r.dependant.dependencies:
                 if d.call.__name__ == "_dependency":
                     app.dependency_overrides[d.call] = _flag_on
+        if hasattr(mod, "_require_path_org"):
+            app.dependency_overrides[mod._require_path_org] = lambda: "org_test"
         app.include_router(mod.router)
         c = TestClient(app)
         r = c.post(

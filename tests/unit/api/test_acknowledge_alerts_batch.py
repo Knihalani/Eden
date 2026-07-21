@@ -12,7 +12,7 @@ import pytest
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
-from eden.api.deps import get_current_user
+from eden.api.deps import get_current_user, require_path_org_access
 from eden.api.routes import replay
 
 
@@ -57,6 +57,7 @@ async def test_acknowledge_alerts_batch_single_sql(
         "sub": "clerk_u1",
         "user_id": "user-1",
     }
+    application.dependency_overrides[require_path_org_access] = lambda: "org_test"
     application.dependency_overrides[replay.require_path_org_access] = (
         lambda: "org-eden-1"
     )

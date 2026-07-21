@@ -772,6 +772,8 @@ def test_app() -> FastAPI:
     }
     app.dependency_overrides[require_path_org_access] = lambda: "org_test"
     mod = importlib.import_module("eden.api.routes.intelligence_memory")
+    if hasattr(mod, "_require_path_org"):
+        app.dependency_overrides[mod._require_path_org] = lambda: "org_test"
     app.include_router(mod.router)
     return app
 

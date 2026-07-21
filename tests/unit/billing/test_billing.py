@@ -11,7 +11,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from eden.api.deps import get_current_user, require_org_permission_dep
+from eden.api.deps import get_current_user, require_org_permission_dep, require_path_org_access
 from eden.api.routes import billing
 
 
@@ -33,6 +33,7 @@ def _billing_client(monkeypatch, *, stripe_secret_key: str) -> TestClient:
     app = FastAPI()
     app.include_router(billing.router)
     app.dependency_overrides[get_current_user] = _get_user
+    app.dependency_overrides[require_path_org_access] = lambda: "org_test"
     app.dependency_overrides[billing.get_current_user] = _get_user
     # require_org_permission_dep returns a new closure each call;
     # override every Depends call on the invoices route.

@@ -238,6 +238,11 @@ async def test_triage_completed_autonomous_heals() -> None:
 
     with patch.object(
         ClosedLoopOrchestrator, "_gate", new=AsyncMock(return_value="autonomous")
+    ), patch.object(
+        ClosedLoopOrchestrator, "_decide_action", new=AsyncMock(return_value="allow")
+    ), patch(
+        "eden.llmops.feature_kills.is_autonomy_action_enabled",
+        new=AsyncMock(return_value=True),
     ), patch(
         "eden.closed_loop.orchestrator.apply_transition", new=AsyncMock()
     ), patch(
@@ -360,6 +365,16 @@ async def test_consumer_dedups_on_idempotency_key() -> None:
 # ── G8: apply_approved dispatch ─────────────────────────────────────
 
 
+def _policy_allow():
+    from eden.closed_loop.autonomy_policy import AutonomousMaintenancePolicy
+
+    return AutonomousMaintenancePolicy(
+        org_id="org_test",
+        maintenance_mode="autonomous",
+        auto_runtime_heal=True,
+    )
+
+
 @pytest.mark.asyncio
 async def test_apply_approved_dispatches_cache_bust() -> None:
     from eden.llmops.closed_loop_executor import ClosedLoopExecutor
@@ -379,6 +394,14 @@ async def test_apply_approved_dispatches_cache_bust() -> None:
     ), patch(
         "eden.llmops.closed_loop_executor._update_status",
         new=AsyncMock(return_value=True),
+    ), patch(
+        "eden.closed_loop.autonomy_policy.resolve",
+        new=AsyncMock(
+            return_value=_policy_allow()
+        ),
+    ), patch(
+        "eden.closed_loop.autonomy_policy.audit",
+        new=AsyncMock(),
     ), patch(
         "eden.autonomous.investigation._execute_cache_bust",
         new=AsyncMock(return_value={"flushed": 10}),

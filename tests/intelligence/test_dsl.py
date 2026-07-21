@@ -527,7 +527,7 @@ class TestDSLHook:
 
 def _pg_router(mock_postgres_client: MagicMock) -> Any:
     """Build a FastAPI app with the DSL router mounted."""
-    from eden.api.deps import get_current_user
+    from eden.api.deps import get_current_user, require_path_org_access
     from eden.api.routes import intelligence_dsl
 
     app = FastAPI()
@@ -535,6 +535,7 @@ def _pg_router(mock_postgres_client: MagicMock) -> Any:
     app.dependency_overrides[get_current_user] = lambda: {
         "user_id": "user_test"
     }
+    app.dependency_overrides[require_path_org_access] = lambda: "org_test"
     return app
 
 

@@ -346,6 +346,8 @@ def _client(pg: _FakePG) -> TestClient:
         for d in r.dependant.dependencies:
             if d.call.__name__ == "_dependency":
                 app.dependency_overrides[d.call] = _flag_on
+    if hasattr(mod, "_require_path_org"):
+        app.dependency_overrides[mod._require_path_org] = lambda: "org_test"
     app.include_router(mod.router)
     return TestClient(app)
 
