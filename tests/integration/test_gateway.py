@@ -1,7 +1,7 @@
 """Integration tests for the Batch A1 OpenAI-compatible gateway.
 
 Mirrors the canonical ``test_ingestion.py`` pattern:
-  * ``app.dependency_overrides[get_ingestion_auth]`` for auth
+  * ``app.dependency_overrides[get_gateway_auth]`` for auth
   * ``monkeypatch`` of the upstream async OpenAI client so we never
     hit the network
   * ``monkeypatch`` of ``get_telemetry_collector`` to capture emitted
@@ -160,7 +160,7 @@ def mock_collector() -> AsyncMock:
 def mock_auth(api_client: TestClient, mock_collector, monkeypatch):
     """Override auth + collector + the cached AsyncOpenAI client."""
     from eden.api.app import app
-    from eden.api.deps import get_ingestion_auth
+    from eden.api.deps import get_gateway_auth
     from eden.api.routes import gateway as gateway_module
     from eden.config import Settings, get_settings
     from eden.observability import telemetry_collector as tc_module
@@ -178,7 +178,7 @@ def mock_auth(api_client: TestClient, mock_collector, monkeypatch):
         "api_key_id": "key-abc",
         "auth_method": "api_key",
     }
-    app.dependency_overrides[get_ingestion_auth] = lambda: fake_auth
+    app.dependency_overrides[get_gateway_auth] = lambda: fake_auth
 
     async def _get():
         return mock_collector
@@ -238,7 +238,7 @@ def mock_auth(api_client: TestClient, mock_collector, monkeypatch):
     try:
         yield {"auth": fake_auth, "client": stub_client, "redis_store": redis_store}
     finally:
-        app.dependency_overrides.pop(get_ingestion_auth, None)
+        app.dependency_overrides.pop(get_gateway_auth, None)
         get_settings.cache_clear()
 
 
