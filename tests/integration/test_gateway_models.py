@@ -196,16 +196,19 @@ def gateway_store() -> GatewayModelStore:
 def api_client_with_gateway(gateway_store: GatewayModelStore) -> TestClient:
     """A TestClient with the gateway router's auth deps overridden."""
     from eden.api.app import app
-    from eden.api.deps import get_current_org_member
+    from eden.api.deps import get_current_org_member, require_path_org_access
     from eden.llmops import registry_store as rs
     from eden.storage.postgres import get_postgres_client
 
     pg = _make_pg(gateway_store)
 
-    # Override the auth dep so tests don't need a real cookie.
+    # Override the auth deps so tests don't need a real cookie.
     # Default: owner. Tests can call ``app.dependency_overrides[...]``
     # to swap in a different role.
+    # Router also gates on ``require_path_org_access`` (path-org → Eden
+    # UUID); stub that to the fixture org id so list/create don't 401.
     app.dependency_overrides[get_current_org_member] = lambda: _admin_member()
+    app.dependency_overrides[require_path_org_access] = lambda: "org-abc"
 
     # Patch the postgres client AND the registry store module so
     # the route (which imports the store) sees the same fake. We
@@ -232,6 +235,7 @@ def api_client_with_gateway(gateway_store: GatewayModelStore) -> TestClient:
         yield client, pg, gateway_store
     finally:
         app.dependency_overrides.pop(get_current_org_member, None)
+        app.dependency_overrides.pop(require_path_org_access, None)
         app.dependency_overrides.pop(get_postgres_client, None)
         rs_module.get_postgres_client = rs_original
         gm_module.get_postgres_client = gm_original
