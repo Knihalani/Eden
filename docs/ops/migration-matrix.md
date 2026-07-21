@@ -143,6 +143,15 @@
 | 106_filterbar_indexes | filterbar_indexes | yes | forever | none | low | F83 composite indexes on `telemetry_events(tenant_id, agent_id/outcome, timestamp)` for FilterBar query paths | GA Wave (F83 optimization) |
 | 107_customer_cost_events | customer_cost_events | yes | forever | none | low | SOTA W7/W8 CostEvent ledger + FinOps thresholds | SOTA W7/W8 |
 | 108_f84_heartbeats | eden_component_heartbeats | yes | forever | none | low | F84 component heartbeats (SOTA W9) | SOTA W9 |
+| 109_w18_playgrounds | playgrounds + prompt templates | yes | forever | none | medium | Wave 18 U03/F49 persisted playgrounds | Portal UX |
+| 110_w26_drop_issue_fix_sessions | drop issue_fix_sessions | no | instant | hard | medium | Wave 26 DELETE F22 `issue_fix_sessions` | Portal UX |
+| 111_w27_live_labels | live labels + calibrators | yes | forever | none | medium | Wave 27 F21 calibrators + N11 live session metadata | Portal UX |
+| 112_w28_f64_f34_mcp | classifier + investigator flag | yes | forever | none | medium | Wave 28 F34 predictions + `investigator_disabled` | Portal UX |
+| 113_a7_search_trgm_indexes | search trgm indexes | yes | forever | none | low | A7 pg_trgm indexes for search | Search |
+| 114_org_api_keys_soft_revoke | org_api_keys soft revoke | yes | forever | none | medium | `org_api_keys.active` / `revoked_at` | Auth |
+| 115_api_keys_prefix | org_api_keys prefix + created_by | yes | forever | none | low | API key prefix display + `created_by` | Auth |
+| 116_saved_searches_phase_n | saved_searches schema fix | yes | forever | soft | medium | Fix saved_searches collision (portal ViewsMenu) | Portal UX |
+| 117_portal_schema_drift | portal hub schema drift | yes | forever | none | medium | Invites / domains / annotate / prefs drift close | Portal UX |
 
 ### Migration chain repair (2026-07-17, GA hardening)
 
