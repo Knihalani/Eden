@@ -94,7 +94,9 @@ jobs:
           NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY }}
       - run: bun run build
         env:
-          NEXT_PUBLIC_API_URL: "http://localhost:8000"
+          # Production-parity client base: browser must hit same-origin /api/proxy
+          # (not http://localhost:8000). Proxy upstream is API_INTERNAL_URL at runtime.
+          NEXT_PUBLIC_API_URL: "/api/proxy"
           # NEXT_PUBLIC_* must be present at build time for Clerk JS to mount in production start.
           CLERK_SECRET_KEY: ${{ env.CLERK_SECRET_KEY }}
           NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY }}
@@ -162,32 +164,50 @@ jobs:
         env:
           CLERK_SECRET_KEY: ${{ secrets.CLERK_SECRET_KEY }}
           NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY }}
+      # Bind 0.0.0.0 so both localhost and 127.0.0.1 reach the server.
+      # audit-a11y.cjs pings/navigates 127.0.0.1 — `-H localhost` rejects that on Linux.
+      - name: Start portal
+        env:
+          API_INTERNAL_URL: "http://127.0.0.1:8000"
+          CLERK_SECRET_KEY: ${{ env.CLERK_SECRET_KEY }}
+          NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY }}
+          NEXT_PUBLIC_SITE_URL: "http://127.0.0.1:3000"
+          PORT: "3000"
+        run: |
+          bun run start -- -p 3000 -H 0.0.0.0 &
+          for i in $(seq 1 60); do
+            if curl -sf "http://127.0.0.1:3000/" >/dev/null; then break; fi
+            sleep 2
+          done
+          echo "Portal is up"
       - name: Seed Clerk auth state (headless)
         # Prefer GitHub Actions secrets; fall back to committed test-mode keys only
         # when neither secret is set. The fallback keys are TEST-mode credentials
         # for the modest-bug-7.clerk.accounts.dev instance — safe for CI.
         env:
-          NEXT_PUBLIC_API_URL: "http://localhost:8000"
+          API_INTERNAL_URL: "http://127.0.0.1:8000"
           # Required: set CLERK_SECRET_KEY and NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY
           # as repository secrets for production-parity auth in CI.
           CLERK_SECRET_KEY: ${{ env.CLERK_SECRET_KEY }}
           NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY }}
-          BASE_URL: "http://localhost:3000"
+          # Must match audit-a11y host (127.0.0.1) so Clerk cookies apply.
+          BASE_URL: "http://127.0.0.1:3000"
           PORT: "3000"
-          NEXT_PUBLIC_SITE_URL: "http://localhost:3000"
+          NEXT_PUBLIC_SITE_URL: "http://127.0.0.1:3000"
         run: |
-          bun run start -- -p 3000 -H localhost &
-          for i in $(seq 1 60); do
-            if curl -sf "http://localhost:3000/" >/dev/null; then break; fi
-            sleep 2
-          done
+          set -euo pipefail
           # seed-auth writes e2e/.auth-state.json used by audit:a11y.
           # Fails loudly if Clerk secrets are misconfigured — no silent unauthenticated pass.
           node e2e/golden/seed-auth.mjs
+          if [[ ! -f e2e/.auth-state.json ]]; then
+            echo "[a11y-ci] FATAL: seed-auth did not write e2e/.auth-state.json"
+            exit 1
+          fi
       - name: Run authenticated axe audit
         env:
-          NEXT_PUBLIC_API_URL: "http://localhost:8000"
+          API_INTERNAL_URL: "http://127.0.0.1:8000"
           PORT: "3000"
+          BASE_URL: "http://127.0.0.1:3000"
         run: bun run audit:a11y
       - uses: actions/upload-artifact@v4
         if: always()
@@ -233,15 +253,17 @@ jobs:
           NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY }}
       - name: Start portal
         env:
-          NEXT_PUBLIC_API_URL: "http://localhost:8000"
+          # Upstream for /api/proxy (backend may be down — proxy returns 502; shell still renders).
+          API_INTERNAL_URL: "http://127.0.0.1:8000"
           CLERK_SECRET_KEY: ${{ env.CLERK_SECRET_KEY }}
           NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY }}
-          NEXT_PUBLIC_SITE_URL: "http://localhost:3000"
+          NEXT_PUBLIC_SITE_URL: "http://127.0.0.1:3000"
           PORT: "3000"
         run: |
-          bun run start -- -p 3000 -H localhost &
+          # 0.0.0.0: accept both localhost and 127.0.0.1 (helpers/audit default to 127.0.0.1).
+          bun run start -- -p 3000 -H 0.0.0.0 &
           for i in $(seq 1 60); do
-            if curl -sf "http://localhost:3000/" >/dev/null; then break; fi
+            if curl -sf "http://127.0.0.1:3000/" >/dev/null; then break; fi
             sleep 2
           done
           echo "Portal is up"
@@ -249,10 +271,12 @@ jobs:
         # Hard-fail when seed-auth exits non-zero or does not write storageState.
         # Do not soft-pass golden paths without usable auth.
         env:
+          API_INTERNAL_URL: "http://127.0.0.1:8000"
           CLERK_SECRET_KEY: ${{ env.CLERK_SECRET_KEY }}
           NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY }}
-          BASE_URL: "http://localhost:3000"
-          NEXT_PUBLIC_SITE_URL: "http://localhost:3000"
+          # Keep host identical to helpers.mjs / audit-a11y defaults (127.0.0.1).
+          BASE_URL: "http://127.0.0.1:3000"
+          NEXT_PUBLIC_SITE_URL: "http://127.0.0.1:3000"
           PORT: "3000"
         run: |
           set -euo pipefail
@@ -264,9 +288,9 @@ jobs:
           fi
       - name: Run golden paths (deep assertions)
         env:
-          NEXT_PUBLIC_API_URL: "http://localhost:8000"
-          BASE_URL: "http://localhost:3000"
-          NEXT_PUBLIC_SITE_URL: "http://localhost:3000"
+          API_INTERNAL_URL: "http://127.0.0.1:8000"
+          BASE_URL: "http://127.0.0.1:3000"
+          NEXT_PUBLIC_SITE_URL: "http://127.0.0.1:3000"
           GOLDEN_CI: "1"
           # Intentionally unset — GOLDEN_ALLOW_FAIL=1 would soft-exit 0 on path failures.
         run: node e2e/golden/golden-paths.spec.mjs

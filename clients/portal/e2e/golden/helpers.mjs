@@ -152,6 +152,21 @@ export async function assertNoCrash(page) {
  */
 export async function assertAuthShell(page) {
   const navLinks = page.locator("nav a[href], aside a[href]");
+  const signingIn = page.getByText("Signing you in", { exact: false });
+  try {
+    await navLinks.first().waitFor({ state: "attached", timeout: 30_000 });
+  } catch {
+    const url = page.url();
+    const stillSigningIn = (await signingIn.count().catch(() => 0)) > 0;
+    throw new Error(
+      `Auth shell not visible — no portal nav links (url: ${url}).\n` +
+        (stillSigningIn
+          ? "  Portal chrome stuck on “Signing you in” (Clerk session may not have hydrated).\n"
+          : "") +
+        "  storageState may be expired or cookies may not match BASE.\n" +
+        "  Re-run seed-auth.mjs (local) or wait-for-signin.mjs (prod).",
+    );
+  }
   const count = await navLinks.count();
   if (count === 0) {
     const url = page.url();

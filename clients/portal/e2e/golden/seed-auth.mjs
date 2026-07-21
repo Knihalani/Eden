@@ -206,15 +206,18 @@ async function main() {
   // clerk.signIn uses the Clerk Backend API (via CLERK_SECRET_KEY) to create
   // a sign-in ticket, then activates the session in the browser — no form
   // filling, no Turnstile.
-  console.log("[seed-auth] clerk.signIn()…");
+  // Prefer emailAddress helper — ticket strategy often fails in CI and left
+  // a half-baked session that still saved storageState while chrome stayed on
+  // “Signing you in”.
+  console.log("[seed-auth] clerk.signIn({ emailAddress })…");
   try {
-    await clerk.signIn({ page, signInParams: { strategy: "ticket", emailAddress: EMAIL } });
+    await clerk.signIn({ page, emailAddress: EMAIL });
   } catch (e1) {
-    console.log("[seed-auth] ticket strategy threw, trying emailAddress fallback:", String(e1).slice(0, 200));
+    console.log("[seed-auth] emailAddress threw, trying ticket strategy:", String(e1).slice(0, 200));
     try {
-      await clerk.signIn({ page, emailAddress: EMAIL });
+      await clerk.signIn({ page, signInParams: { strategy: "ticket", emailAddress: EMAIL } });
     } catch (e2) {
-      console.log("[seed-auth] emailAddress strategy also threw:", String(e2).slice(0, 200));
+      console.log("[seed-auth] ticket strategy also threw:", String(e2).slice(0, 200));
     }
   }
 
@@ -275,6 +278,24 @@ async function main() {
       "  Clerk session appears valid (not on sign-in). Saving storageState anyway.\n" +
       "  Golden-path tests will see authenticated shell but empty data states.",
     );
+  }
+
+  // Wait for portal chrome nav before saving — otherwise golden/a11y load a
+  // storageState that still shows “Signing you in” with an empty aside.
+  const navLinks = page.locator("nav a[href], aside a[href]");
+  try {
+    await navLinks.first().waitFor({ state: "attached", timeout: 45_000 });
+    console.log("[seed-auth] auth shell nav visible");
+  } catch {
+    const bodyText = (await page.locator("body").innerText().catch(() => "")).slice(0, 200);
+    await browser.close();
+    console.error(
+      "[seed-auth] FATAL: Clerk session present but auth shell never rendered nav links.\n" +
+        `  url=${finalUrl}\n` +
+        `  body≈${JSON.stringify(bodyText)}\n` +
+        "  Check NEXT_PUBLIC_API_URL=/api/proxy at build time and BASE_URL host match.",
+    );
+    process.exit(1);
   }
 
   // Save the storageState so golden-paths and a11y tests can reuse it.
