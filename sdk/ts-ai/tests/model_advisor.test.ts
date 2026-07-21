@@ -384,7 +384,9 @@ describe("ModelAdvisor configuration", () => {
 
   it("omits Authorization header when apiKey is empty", async () => {
     const { fetchImpl, calls } = makeFakeFetch({ body: FAKE_COMPARE_RESPONSE });
+    // Explicit empty string — do not fall through to SDK configure().
     const advisor = new ModelAdvisor({
+      apiKey: "",
       baseUrl: "https://test.eden.local",
       fetchImpl,
     });
