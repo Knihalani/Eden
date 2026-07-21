@@ -189,11 +189,11 @@ def client(test_app):
 
 
 def test_feature_flags_default_off(client):
-    """/feature-flags must be reachable without auth and report experiments_v1=false by default."""
+    """/feature-flags must be reachable without auth and report flags off by default."""
     res = client.get("/feature-flags")
     assert res.status_code == 200, res.text
     body = res.json()
-    assert body == {"experiments_v1": False}
+    assert body == {"experiments_v1": False, "f70": False}
 
 
 def test_feature_flags_endpoint_unauthenticated(client):
@@ -299,7 +299,7 @@ def test_flag_toggle_roundtrip(monkeypatch, test_app):
         # /feature-flags now reports the flag as enabled.
         res = client.get("/feature-flags")
         assert res.status_code == 200
-        assert res.json() == {"experiments_v1": True}
+        assert res.json() == {"experiments_v1": True, "f70": False}
 
         # The gated routes are no longer 404'd by the feature-flag dep.
         # (They may still 401/403/500 because they are stubs without real
