@@ -55,7 +55,7 @@ sidebar_label: Security launch checklist
 | 17 | Postgres backups running | CronJob or `scripts/dr_drill.sh` restore succeeds | DR drill JSON report |
 | 18 | `/health` wired to LB | External health check returns `healthy` | LB config |
 | 19 | Helm smoke test passed | [Deploy guide — Helm smoke test](/how-to/deploy#helm-smoke-test-kind--minikube) | Checklist in release ticket |
-| 20 | Rollback window documented | 5-day Fly.io rollback noted in cutover runbook | `docs/deploy/cutover-checklist.md` link |
+| 20 | Rollback window documented | Northflank previous-SHA / `API_INTERNAL_URL` rollback in cutover runbook | `docs/deploy/cutover-checklist.md` link |
 
 ## Legal & compliance
 

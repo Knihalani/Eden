@@ -57,7 +57,6 @@ tinybird/
 bench/
 examples/
 playwright.config.ts
-fly.toml
 northflank.yml
 alembic.ini
 mypy.ini

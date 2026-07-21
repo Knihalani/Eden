@@ -181,6 +181,7 @@ def test_trace_agent_decorator_emits_tag_list_not_per_char() -> None:
 def test_trace_agent_decorator_async_emits_tag_list_not_per_char() -> None:
     """Async decorator path — same regression check."""
     import asyncio
+
     import eden
     from eden_sdk.trace import trace_agent
 

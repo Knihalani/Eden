@@ -33,10 +33,10 @@ eden.instrument("openai", "llama_index")
 @eden.trace_agent(name="llamaindex-rag", tags=["example", "llamaindex"])
 def answer(question: str) -> str:
     from llama_index.core import Settings, VectorStoreIndex
-    from llama_index.core.query_engine import RetrieverQueryEngine
-    from llama_index.core.retrievers import VectorIndexRetriever
     from llama_index.llms.openai import OpenAI
-    from llama_index.readers.documents import SimpleDirectoryReader  # type: ignore[import-not-found]
+    from llama_index.readers.documents import (
+        SimpleDirectoryReader,  # type: ignore[import-not-found]
+    )
 
     # Cheap in-memory corpus so the example runs without external files.
     docs = SimpleDirectoryReader.from_texts(

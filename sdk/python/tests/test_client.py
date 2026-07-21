@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
-import json
 import time
 
 import httpx
+import pytest
+from _http_body import decode_ingest_body
 
 import eden
 from eden_sdk.client import EdenClient, TraceEvent, get_default_client
-from _http_body import decode_ingest_body
 from eden_sdk.config import EdenConfig
 
 
@@ -400,9 +400,6 @@ def test_send_batch_honors_retry_after_header() -> None:
 # ── Chunk redaction ────────────────────────────────────────────────
 
 
-import pytest
-
-
 @pytest.mark.asyncio
 async def test_send_chunks_redacts_pii_in_delta_text() -> None:
     """The streaming /ingest/chunks path must apply the PII safety
@@ -727,9 +724,9 @@ def test_start_raises_runtime_error_when_async_client_init_fails(
         # shut everything down, but the test monkey-patches the
         # constructor so the loop never actually starts).
         try:
-            loop = asyncio.get_event_loop()
+            asyncio.get_event_loop()
         except RuntimeError:
-            loop = None
+            pass
         client.shutdown()
 
 

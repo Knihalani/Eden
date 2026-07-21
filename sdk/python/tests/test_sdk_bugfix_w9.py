@@ -11,10 +11,11 @@ from pathlib import Path
 
 import httpx
 import pytest
+from _http_body import decode_ingest_body
 
 import eden
-from _http_body import decode_ingest_body
-from eden_sdk.client import EdenClient, TraceEvent, __version__ as client_version
+from eden_sdk.client import EdenClient, TraceEvent
+from eden_sdk.client import __version__ as client_version
 from eden_sdk.config import EdenConfig, configure, reset_config
 from eden_sdk.logging_forwarder import EdenLoggingHandler, uninstall_logging
 from eden_sdk.offline_queue import OfflineQueue
@@ -371,11 +372,11 @@ def get_default_client_sent() -> int:
 def test_langchain_stream_and_framework_share_trace_id(monkeypatch: pytest.MonkeyPatch) -> None:
     """Chunks and the aggregate llm.end event must share one trace_id."""
     import sys
+
     from eden_sdk.client import get_default_client, reset_default_client
     from eden_sdk.instrumentations import langchain as lc
 
     # Minimal langchain-core fake (fixture lives in test_instrumentations).
-    events: list = []
     callbacks = types.ModuleType("langchain_core.callbacks")
 
     class BaseCallbackHandler:

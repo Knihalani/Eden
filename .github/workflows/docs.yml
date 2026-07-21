@@ -5,6 +5,11 @@ name: docs (Docusaurus build + Pages deploy)
 # or the workflow file itself. Manual dispatch available for
 # ad-hoc rebuilds.
 #
+# Deploy is skipped (workflow stays green) when GitHub Pages is
+# not enabled for the repo — `actions/deploy-pages` returns 404 in
+# that case. Enable Pages at Settings → Pages (source: GitHub
+# Actions) to turn deploy back on.
+#
 # Two non-obvious things:
 #   1. sidebars.js was rewritten to use the actual doc IDs that
 #      Docusaurus derives from the file paths (e.g.
@@ -56,6 +61,7 @@ jobs:
       - uses: actions/upload-pages-artifact@v3
         with:
           path: docs/build
+
   deploy:
     needs: build
     runs-on: ubuntu-latest
@@ -64,5 +70,22 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
+      - name: Check whether GitHub Pages is enabled
+        id: pages
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh api "repos/${{ github.repository }}/pages" >/dev/null 2>&1; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::GitHub Pages is not enabled for this repo; skipping deploy. Build still succeeded. Enable at Settings → Pages (source: GitHub Actions)."
+          fi
       - id: deployment
+        if: steps.pages.outputs.enabled == 'true'
+        continue-on-error: true
         uses: actions/deploy-pages@v4
+      - name: Soft-skip when Pages deploy is unavailable
+        if: steps.pages.outputs.enabled != 'true' || steps.deployment.outcome == 'failure'
+        run: |
+          echo "::notice::GitHub Pages deploy skipped or failed (often: Pages source not set to GitHub Actions). Docs build succeeded; canonical docs host is Vercel (eden-docs / docs.edenobservability.com)."

@@ -1,6 +1,8 @@
 # Eden on Northflank — Free-Tier Cutover Guide
 
-**Audience:** the engineer migrating the FastAPI backend + workers from Fly.io to the Northflank Developer Sandbox, and wiring the Vercel portal to it.
+**Audience:** the engineer standing the FastAPI backend + workers on the Northflank Developer Sandbox (or `eden-prod`), and wiring the Vercel portal to it.
+
+Northflank is the **only** supported API host. Fly.io has been removed from this repo.
 
 **Status:** Day 1 deploy. Free-tier allocations are tight; this doc shows what fits and what's left for paid-tier upgrades.
 
@@ -182,15 +184,9 @@ In the browser, open the Vercel portal URL and:
 
 ## 7. Cutover + rollback
 
-1. **Point DNS (only if you have a custom domain).** For now, the Vercel portal URL and the Northflank-provided API URL are the canonical hosts. No DNS to flip.
-2. **Leave Fly.io running for 3-5 days as a rollback target.** The Fly.io backend is untouched.
-3. **Watch Northflank logs + Sentry for 24h.** Look for: 5xx spike, Postgres connection errors, alembic migration errors.
-4. **If green, decommission Fly.io:**
-   ```bash
-   fly apps destroy eden-staging --yes
-   fly volumes destroy --app eden-staging --yes   # stops the volume-snapshot billing
-   ```
-5. **Update `docs/DEPLOYMENT.md` and `docs/deploy/northflank-free-tier.md`** to point at Northflank as the canonical PaaS, with Fly.io as legacy.
+1. **Point DNS (only if you have a custom domain).** Canonical hosts today: Vercel portal URL + `api.edenobservability.com` (Northflank).
+2. **Watch Northflank logs + Sentry for 24h.** Look for: 5xx spike, Postgres connection errors, alembic migration errors.
+3. **Rollback** by redeploying the previous known-good `eden-api` image/SHA on Northflank (or flipping `API_INTERNAL_URL` to a prior healthy service URL and redeploying Vercel). Do not resurrect Fly.io.
 
 ---
 

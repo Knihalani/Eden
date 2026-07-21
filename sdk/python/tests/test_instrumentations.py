@@ -13,10 +13,10 @@ import types
 from typing import Any
 
 import pytest
+from _http_body import decode_ingest_body
 
 import eden
 from eden_sdk.client import get_default_client
-from _http_body import decode_ingest_body
 
 # ── Wire contract: framework instrumentations emit ``agent.run`` ──────
 
@@ -37,19 +37,19 @@ def test_framework_instrumentations_emit_agent_run_event_type() -> None:
     # instrumentation. The constant lives in either the
     # top-level ``_emit`` helper (crewai / autogen) or the
     # per-callback event dict (langchain / llama_index).
-    from eden_sdk.instrumentations import (
-        autogen,
-        crewai,
-        langchain,
-        llama_index,
-    )
-
     # ``crewai`` exposes a single ``_emit`` helper that
     # builds the event dict. The simplest way to assert
     # the event_type is to read the source string and
     # confirm it now references ``"agent.run"`` (and no
     # longer references the old ``"framework.callback"``).
     import inspect
+
+    from eden_sdk.instrumentations import (
+        autogen,
+        crewai,
+        langchain,
+        llama_index,
+    )
 
     def _has_agent_run(module) -> bool:
         src = inspect.getsource(module)
@@ -583,7 +583,6 @@ def test_openai_streaming_async_emits_stream_event(fake_streaming_openai):
 def test_client_flush_chunks_is_safe_with_empty_buffer():
     """flush_chunks must be a no-op when nothing is buffered."""
     import httpx
-    from _http_body import decode_ingest_body
 
     from eden_sdk.client import EdenClient
     from eden_sdk.config import EdenConfig
@@ -765,8 +764,8 @@ def test_langchain_streaming_emits_per_chunk_events(fake_langchain):
     or input_tokens on the wire. Pricing lookups could not
     roll them up.
     """
-    from langchain_core.callbacks import BaseCallbackHandler
     import langchain_core.callbacks as _callbacks
+    from langchain_core.callbacks import BaseCallbackHandler
 
     eden.configure(org_id="o", api_key="k", capture_chunk_text=True, dry_run=True)
     eden.instrument("langchain")
@@ -870,13 +869,12 @@ def test_langchain_streaming_aggregate_event_carries_model_and_usage(fake_langch
     Uses a ``MockTransport`` so we can assert on the actual
     JSON the sender thread ships.
     """
-    import json
-    from langchain_core.callbacks import BaseCallbackHandler
     import httpx
+    from langchain_core.callbacks import BaseCallbackHandler
 
     # Install a mock transport on the default client so we
     # can capture the wire body the SDK actually ships.
-    from eden_sdk.client import EdenClient, TraceEvent
+    from eden_sdk.client import EdenClient
     from eden_sdk.config import EdenConfig
 
     captured: list[dict] = []
@@ -1025,9 +1023,9 @@ def test_langchain_non_streaming_extracts_usage_metadata_per_generation(fake_lan
     that the test can assert on (avoids a race with the
     sender draining the in-memory queue).
     """
-    import json
-    from langchain_core.callbacks import BaseCallbackHandler
     import httpx
+    from langchain_core.callbacks import BaseCallbackHandler
+
     from eden_sdk.client import EdenClient
     from eden_sdk.config import EdenConfig
 
@@ -1122,9 +1120,9 @@ def test_langchain_non_streaming_legacy_path_still_works(fake_langchain, monkeyp
     are still hoisted (and win, because we use ``setdefault``
     on the top-level fields).
     """
-    import json
-    from langchain_core.callbacks import BaseCallbackHandler
     import httpx
+    from langchain_core.callbacks import BaseCallbackHandler
+
     from eden_sdk.client import EdenClient
     from eden_sdk.config import EdenConfig
 

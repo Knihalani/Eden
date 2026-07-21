@@ -152,7 +152,7 @@ def run_doctor(*, emit_test_event: bool = True, timeout_s: float = 5.0) -> Docto
             session_ok,
             (
                 "Session ingest path ready "
-                f"(/orgs/{{org_id}}/ingest/agent-sessions)"
+                "(/orgs/{org_id}/ingest/agent-sessions)"
                 if session_ok
                 else "Session config incomplete — need org_id + api_key + base_url"
             ),

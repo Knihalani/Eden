@@ -16,12 +16,12 @@ from eden_sdk.trace import TraceContext, current_trace, trace
 
 logger = logging.getLogger("eden_sdk.session")
 
-_current_session: ContextVar["AgentSession | None"] = ContextVar(
+_current_session: ContextVar[AgentSession | None] = ContextVar(
     "eden_current_session", default=None
 )
 
 
-def current_session() -> "AgentSession | None":
+def current_session() -> AgentSession | None:
     return _current_session.get()
 
 

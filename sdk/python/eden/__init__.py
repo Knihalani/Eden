@@ -19,35 +19,27 @@ from eden_sdk import (  # noqa: F401,F403
     __version__,
     autoInstrument,
     configure,
+    configure_otel_exporter,
     current_span,
     current_trace,
     detect_installed_frameworks,
     get_config,
     get_default_client,
     init,
-    instrument,
     install_http_capture,
-    uninstall_http_capture,
     install_logging,
-    uninstall_logging,
-    configure_otel_exporter,
-    run_doctor,
+    instrument,
     reset_config,
+    run_doctor,
     trace,
     trace_agent,
+    uninstall_http_capture,
+    uninstall_logging,
     uninstrument,
 )
 from eden_sdk._tokens import extract_usage, normalize_model_name  # noqa: F401
 from eden_sdk.filters import FilterConfig, PIIConfig, redact_payload  # noqa: F401
 from eden_sdk.gateway_session import chat_completion, openai_client  # noqa: F401
-from eden_sdk.stumbles import record_stumble  # noqa: F401
-from eden_sdk.session import (  # noqa: F401
-    AgentSession,
-    begin,
-    complete_session,
-    current_session,
-    identify,
-)
 from eden_sdk.model_advisor import (  # noqa: F401
     ModelAdvisor,
     ModelAdvisorError,
@@ -57,6 +49,14 @@ from eden_sdk.model_advisor import (  # noqa: F401
     RunnerUp,
     SwitchProjection,
 )
+from eden_sdk.session import (  # noqa: F401
+    AgentSession,
+    begin,
+    complete_session,
+    current_session,
+    identify,
+)
+from eden_sdk.stumbles import record_stumble  # noqa: F401
 
 __all__ = [
     # Configuration

@@ -136,7 +136,7 @@ The goal is to keep the Northflank addon (now read-only) as the system of record
 2. **Mirror rows Northflank → Neon.** Two options:
    - **Logical replication** (preferred): on the Northflank addon, run `CREATE PUBLICATION eden_pub FOR ALL TABLES;` and on Neon, `CREATE SUBSCRIPTION eden_sub CONNECTION '…' PUBLICATION eden_pub;`. Verify replication lag with `SELECT now() - pg_last_xact_replay_timestamp();` — must stay < 5 s.
    - **`pg_dump | psql` fallback:** every 5 min, dump the Northflank DB with `pg_dump --schema-only` plus incremental row dumps; restore into Neon. (Slower; acceptable for staging but not prod.)
-3. **Point a separate test API at Neon.** Deploy a separate Northflank service (or a Heroku / Fly.io instance) with the same image, the same code, but the Neon connection string. Run a smoke-test suite against it: login, signup, 2FA, the 23 cat endpoints, the agent push endpoint, the trace view.
+3. **Point a separate test API at Neon.** Deploy a separate Northflank service with the same image and code but the Neon connection string. Run a smoke-test suite against it: login, signup, 2FA, the 23 cat endpoints, the agent push endpoint, the trace view.
 4. **Run the backfill for zstd payloads.** Once the test API is stable, run:
    ```bash
    uv run python scripts/backfill_zstd_payloads.py \

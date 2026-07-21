@@ -19,7 +19,6 @@ import sys
 
 from eden import redact_payload
 
-
 CASES: list[tuple[str, str, str, str]] = [
     # (name, input json, must-contain substring, must-NOT-contain substring)
     ("email",

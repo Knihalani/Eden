@@ -23,8 +23,7 @@ import uuid
 from types import SimpleNamespace
 
 from eden_sdk._instrumentation_ids import _get_attr, _trace_id_or_random
-from eden_sdk.trace import current_trace
-from eden_sdk.trace import _active_trace, TraceContext
+from eden_sdk.trace import TraceContext, _active_trace, current_trace
 
 
 def test_trace_id_or_random_returns_uuid_hex_when_no_context():

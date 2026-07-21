@@ -22,10 +22,11 @@ function _safeRequire(name: string): unknown {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const proc = (globalThis as any).process;
       if (!proc) return null;
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const m = (proc as NodeJS.Process).getBuiltinModule
-        ? (proc as NodeJS.Process).getBuiltinModule("module")
-        : null;
+      // eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-explicit-any
+      const getBuiltin = (proc as any).getBuiltinModule as
+        | ((name: string) => { createRequire?: (url: string) => (id: string) => unknown } | undefined)
+        | undefined;
+      const m = typeof getBuiltin === "function" ? getBuiltin("module") : null;
       if (m && typeof m.createRequire === "function") {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const meta = (import.meta as any) ?? { url: `file://${proc.cwd()}/index.js` };
