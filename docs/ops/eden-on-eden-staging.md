@@ -11,7 +11,7 @@ Eden's staging org ingests its own API, worker, and portal traffic so N14 qualit
 1. Point the Eden SDK / OTLP exporter at the staging gateway with a dedicated **dogfood** org API key.
 2. Artifacts + Ledger are GA (Settings defaults `artifacts_v1` / `ledger_v1` True; missing org flags count as enabled). Dogfood org may still set explicit False for kill-switch drills.
 3. Tag spans with `eden.component` ∈ `{api, worker, portal, gateway}`.
-4. Confirm `/health` shows `statgate_installed`, `quality_worker_running`, `evolution_loop_running` on the leader pod.
+4. On **API** `/health`, expect `background_workers_expected: false` and in-process `quality_worker_running` / `evolution_loop_running` false (workers live on `eden-worker`). Confirm the worker job logs `worker: quality_pipeline started`.
 
 ## Request ID continuity
 

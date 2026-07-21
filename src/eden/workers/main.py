@@ -7,10 +7,14 @@ crash here doesn't take the API down).
 
 Currently hosted loops:
 
-* :class:`eden.services.webhook_delivery.WebhookDeliveryService`
-  — async webhook retry + DLQ drain
-* :class:`eden.insights.detector_loop.InsightsDetectorLoop`
-  — per-tenant poll of new ``judge_scores`` rows → ``insights``
+    * :class:`eden.services.webhook_delivery.WebhookDeliveryService`
+      — async webhook retry + DLQ drain
+    * :class:`eden.insights.detector_loop.InsightsDetectorLoop`
+      — per-tenant poll of new ``judge_scores`` rows → ``insights``
+    * :func:`eden.observability.quality_pipeline.worker.start_worker`
+      — async trace-quality sidecar (API keeps workers off)
+    * :func:`eden.agents.evolution.loop.start_evolution_loop`
+      — opt-in evolution loop when ``evolution_loop_enabled``
 
 NF manifest runs this as ``python -m eden.workers.main`` on the
 ``eden-worker`` job. ``SKIP_MIGRATIONS=1`` is set — the API
@@ -87,20 +91,56 @@ async def _supervise(
                 continue
 
 
+async def _start_sidecar_workers() -> None:
+    """Start quality (+ optional evolution) owned by this process.
+
+    The API sets ``EDEN_RUN_BACKGROUND_WORKERS=0`` so these never start
+    in-process there. ``eden-worker`` is the dedicated host; without this
+    call ``/health`` on the API correctly reports the flags false and the
+    quality pipeline never runs in production.
+    """
+    try:
+        from eden.observability.quality_pipeline.worker import start_worker
+
+        await start_worker()
+        logger.info("worker: quality_pipeline started")
+    except Exception as exc:
+        logger.warning("worker: quality_pipeline skipped: %s", exc)
+
+    try:
+        from eden.agents.evolution.loop import start_evolution_loop
+
+        await start_evolution_loop()
+        logger.info("worker: evolution_loop start attempted")
+    except Exception as exc:
+        logger.warning("worker: evolution_loop skipped: %s", exc)
+
+
+async def _stop_sidecar_workers() -> None:
+    """Drain quality + evolution sidecars started by this process."""
+    try:
+        from eden.agents.evolution.loop import stop_evolution_loop
+
+        await stop_evolution_loop()
+    except Exception as exc:
+        logger.warning("worker: evolution_loop stop failed: %s", exc)
+
+    try:
+        from eden.observability.quality_pipeline.worker import stop_worker
+
+        await stop_worker()
+    except Exception as exc:
+        logger.warning("worker: quality_pipeline stop failed: %s", exc)
+
+
 async def _run_forever() -> None:
     """Instantiate every hosted loop and wait for SIGTERM.
 
-    Two long-running tasks share the worker's event loop:
+    Long-running tasks share the worker's event loop:
 
-    1. ``InsightsDetectorLoop.start()`` — polls new ``judge_scores``
-       rows and converts them into ``insights`` records. The loop
-       owns its own task internally; ``stop()`` sets the cancel
-       event.
-    2. ``_webhook_drain_loop`` — runs
-       :meth:`WebhookDeliveryService.process_pending_deliveries`
-       on a 30s cadence. The webhook service is a process singleton
-       so in-flight deliveries survive across ticks and can be
-       drained on SIGTERM.
+    1. Insights detector — leader-gated poll of ``judge_scores``.
+    2. Webhook drain — leader-gated 30s delivery cadence.
+    3. Quality pipeline sidecar + optional evolution loop (process-local).
     """
     loops: list[tuple[str, asyncio.Task]] = []
     stop = asyncio.Event()
@@ -119,6 +159,10 @@ async def _run_forever() -> None:
     )
     loops.append(("webhook_drain", webhook_task))
 
+    # 3. Quality + evolution — hosted here because the API disables
+    # in-process background workers (see northflank.yml eden-api).
+    await _start_sidecar_workers()
+
     if not loops:
         logger.warning("worker: no loops started — sleeping to keep the container alive")
         # NF will SIGTERM the container after the grace period;
@@ -126,6 +170,7 @@ async def _run_forever() -> None:
         # mark the deploy as crashed.
         _install_signal_handlers(stop)
         await stop.wait()
+        await _stop_sidecar_workers()
         return
 
     _install_signal_handlers(stop)
@@ -152,6 +197,8 @@ async def _run_forever() -> None:
                 await asyncio.gather(
                     *(t for _, t in loops), return_exceptions=True
                 )
+
+        await _stop_sidecar_workers()
 
         # Drain in-flight webhook deliveries + release the HTTP pool.
         try:

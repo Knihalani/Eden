@@ -359,6 +359,10 @@ class HealthResponse(BaseModel):
     quality_worker_running: bool = False
     statgate_installed: bool = False
     evolution_loop_running: bool = False
+    # False on API when workers run on ``eden-worker``; then
+    # ``quality_worker_running`` / ``evolution_loop_running`` being
+    # false is expected for this process, not a crash signal.
+    background_workers_expected: bool = False
 
 
 # ============================================================================
@@ -1193,6 +1197,9 @@ async def health_check():
         quality_worker_running=worker_running,
         statgate_installed=statgate_installed,
         evolution_loop_running=evolution_loop_running,
+        background_workers_expected=bool(
+            getattr(settings, "run_background_workers", False)
+        ),
     )
 
     mode = getattr(settings, "health_probe_mode", "auto")
