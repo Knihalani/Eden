@@ -163,15 +163,18 @@ describe("W3 traces hub — Laminar-class chrome", () => {
 
     // Failure → cause ≤2 clicks: row select opens transcript-first fullscreen modal
     const page = read("app/(portal)/traces/page.tsx");
-    expect(page).toContain("TraceViewerModal");
-    expect(page).toContain("TraceDetailPanel");
-    expect(page).toContain('initialMode={hub.detailMode}');
-    expect(page).toContain('layout="fullscreen"');
+    expect(page).toContain("TraceViewer");
+    expect(page).not.toContain("TraceViewerModal");
+    expect(page).not.toContain("TraceDetailPanel");
+    expect(page).toContain("initialMode={hub.detailMode}");
+    expect(page).not.toContain('layout="fullscreen"');
     expect(hook).toContain(': "transcript"');
 
     // Wave 2 transcript stack preserved
-    const detail = read("components/traces/TraceDetailPanel.tsx");
-    expect(detail).toContain("VirtualizedTranscript");
-    expect(detail).toContain('initialMode = "transcript"');
+    const viewer = read("components/trace-viewer/TraceViewer.tsx");
+    expect(viewer).toContain("TranscriptCanvas");
+    expect(viewer).toContain('initialMode = "transcript"');
+    const virt = read("components/transcript-v2/VirtualTranscript.tsx");
+    expect(virt).toContain("useVirtualizer");
   });
 });

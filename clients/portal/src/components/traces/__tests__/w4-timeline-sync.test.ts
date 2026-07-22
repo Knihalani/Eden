@@ -10,21 +10,23 @@ const ROOT = resolve(__dirname, "../../../..");
 const src = (rel: string) => readFileSync(resolve(ROOT, "src", rel), "utf8");
 
 describe("W4 timeline sync wiring", () => {
-  it("TraceDetailPanel resolves steps with span_id enrichment", () => {
-    const panel = src("components/traces/TraceDetailPanel.tsx");
-    expect(panel).toContain("resolveTimelineSteps");
-    expect(panel).toContain("selectedSpanId={highlightSpanId}");
-    expect(panel).toContain("onSpanSelect={(spanId) => onSpanSelect?.(spanId)}");
-    expect(panel).toContain('initialMode = "transcript"');
+  it("TraceViewer resolves steps with span_id enrichment", () => {
+    const data = src("components/trace-viewer/use-trace-viewer-data.ts");
+    const viewer = src("components/trace-viewer/TraceViewer.tsx");
+    expect(data).toContain("resolveTimelineSteps");
+    expect(viewer).toContain("selectedSpanId={selection.selectedSpanId}");
+    expect(viewer).toContain("onSpanSelect={(id) => selection.selectSpan(id)}");
+    expect(viewer).toContain('initialMode = "transcript"');
   });
 
   it("transcript mode exposes collapsed Gantt strip toggle (option A)", () => {
-    const panel = src("components/traces/TraceDetailPanel.tsx");
-    expect(panel).toContain('data-testid="transcript-gantt-strip"');
-    expect(panel).toContain('data-testid="transcript-gantt-toggle"');
-    expect(panel).toContain("ganttStripOpen");
-    expect(panel).toContain('variant="strip"');
-    expect(panel).toContain("Timeline overview");
+    const canvas = src("components/trace-viewer/canvases/TranscriptCanvas.tsx");
+    const viewer = src("components/trace-viewer/TraceViewer.tsx");
+    expect(canvas).toContain('data-testid="transcript-gantt-strip"');
+    expect(canvas).toContain('data-testid="transcript-gantt-toggle"');
+    expect(viewer).toContain("ganttStripOpen");
+    expect(canvas).toContain('variant="strip"');
+    expect(canvas).toContain("Timeline overview");
   });
 
   it("TraceTimelineView supports zoom, brush, error tint, strip variant", () => {

@@ -125,7 +125,7 @@ describe("Wave 11 virtualization + lazy islands", () => {
   it("large lists stay virtualized", () => {
     expect(src("components/portal-os/InfiniteDataTable.tsx")).toContain("@tanstack/react-virtual");
     expect(src("components/portal-os/VirtualizedList.tsx")).toContain("useVirtualizer");
-    expect(src("components/traces/TraceDetailPanel.tsx")).toContain("VirtualizedTranscript");
+    expect(src("components/trace-viewer/canvases/TranscriptCanvas.tsx")).toContain("VirtualTranscript");
     expect(src("app/(portal)/issues/_components/issues-list.tsx")).toContain("VirtualizedList");
     // W2 peel: queue virtualization lives in queue-board; History (runs) also virtualized.
     expect(src("app/(portal)/improve/_components/queue-board.tsx")).toContain(

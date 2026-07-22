@@ -14,18 +14,17 @@ function read(rel: string): string {
 
 describe("W6 closed-loop A — inspector secondary actions", () => {
   it("promotes Add to dataset / Iterate in playground as ghost secondary CTAs", () => {
-    const panel = read("components/traces/TraceDetailPanel.tsx");
-    expect(panel).toContain('data-wave-v3-6-loop="secondary"');
-    expect(panel).toContain("Iterate in playground");
-    expect(panel).toContain("Add to dataset");
-    expect(panel).toContain('variant="ghost"');
-    expect(panel).toContain('data-testid="trace-add-to-dataset"');
-    expect(panel).toContain('data-testid="trace-open-playground"');
-    expect(panel).toContain("playgroundHref(traceId, spanForPlayground, linkPreserve)");
-    expect(panel).toContain("promoteTraceToDatasetHref(traceId, linkPreserve)");
-    expect(panel).toContain('data-testid="trace-actions-overflow"');
-    // Still one solid primary max — closed-loop actions stay ghost, not default/solid.
-    expect(panel).not.toMatch(
+    const toolbar = read("components/trace-viewer/TraceViewerToolbar.tsx");
+    expect(toolbar).toContain('data-wave-v3-6-loop="secondary"');
+    expect(toolbar).toContain("Iterate in playground");
+    expect(toolbar).toContain("Add to dataset");
+    expect(toolbar).toContain('variant="ghost"');
+    expect(toolbar).toContain('data-testid="trace-add-to-dataset"');
+    expect(toolbar).toContain('data-testid="trace-open-playground"');
+    expect(toolbar).toContain("playgroundHref(traceId, spanForPlayground, linkPreserve)");
+    expect(toolbar).toContain("promoteTraceToDatasetHref(traceId, linkPreserve)");
+    expect(toolbar).toContain('data-testid="trace-actions-overflow"');
+    expect(toolbar).not.toMatch(
       /data-wave-v3-6-loop="secondary"[\s\S]{0,600}variant="default"/,
     );
   });

@@ -94,15 +94,17 @@ describe("W2 span kinds + subagent collapse", () => {
 });
 
 describe("W2 detail chrome", () => {
-  it("TraceDetailPanel uses TraceHeader (2-row) + metrics + overflow", () => {
-    const panel = src("components/traces/TraceDetailPanel.tsx");
-    expect(panel).toContain("TraceHeader");
-    expect(panel).toContain('data-testid="trace-actions-overflow"');
-    expect(panel).toContain("VirtualizedTranscript");
-    expect(panel).toContain("headerMetrics");
-    const header = src("components/traces/TraceHeader.tsx");
-    expect(header).toContain('data-rows="2"');
-    expect(header).toContain('data-testid="trace-header-metrics"');
+  it("TraceViewer uses Z0/Z1 chrome + metrics + overflow (no dual headers)", () => {
+    const viewer = src("components/trace-viewer/TraceViewer.tsx");
+    expect(viewer).toContain("TraceViewerChrome");
+    expect(viewer).toContain("TraceViewerToolbar");
+    expect(viewer).toContain("TranscriptCanvas");
+    expect(viewer).not.toContain("TraceHeader");
+    const toolbar = src("components/trace-viewer/TraceViewerToolbar.tsx");
+    expect(toolbar).toContain('data-testid="trace-actions-overflow"');
+    expect(toolbar).toContain('data-testid="trace-header-metrics"');
+    const chrome = src("components/trace-viewer/TraceViewerChrome.tsx");
+    expect(chrome).toContain('data-testid="trace-viewer-chrome"');
   });
 
   it("TranscriptV2 uses TanStack VirtualTranscript + hideSummary", () => {
@@ -115,10 +117,11 @@ describe("W2 detail chrome", () => {
     expect(virt).toContain("useVirtualizer");
   });
 
-  it("traces hub wires TraceViewerModal fullscreen", () => {
+  it("traces hub wires TraceViewer (no modal+panel wrap)", () => {
     const page = src("app/(portal)/traces/page.tsx");
-    expect(page).toContain("TraceViewerModal");
-    expect(page).toContain('layout="fullscreen"');
+    expect(page).toContain("TraceViewer");
+    expect(page).not.toContain("TraceViewerModal");
+    expect(page).not.toContain('layout="fullscreen"');
     expect(page).toContain("hub.handleCloseDetail");
     expect(page).not.toContain("TraceSplitLayout");
   });

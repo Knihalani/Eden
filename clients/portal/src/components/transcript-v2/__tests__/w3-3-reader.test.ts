@@ -11,14 +11,14 @@ const ROOT = resolve(__dirname, "../../../..");
 const src = (rel: string) => readFileSync(resolve(ROOT, "src", rel), "utf8");
 
 describe("W3.3 metadata pill strip", () => {
-  it("TraceDetailPanel context pills cover model · latency · tokens · cost · session", () => {
-    const panel = src("components/traces/TraceDetailPanel.tsx");
-    expect(panel).toContain('data-testid="trace-context-pills"');
-    expect(panel).toContain('data-pill="latency"');
-    expect(panel).toContain('data-pill="tokens"');
-    expect(panel).toContain('data-pill="cost"');
-    expect(panel).toContain('data-pill="session"');
-    expect(panel).toContain("TraceHeader");
+  it("TraceViewer toolbar pills cover latency · tokens · cost · session", () => {
+    const toolbar = src("components/trace-viewer/TraceViewerToolbar.tsx");
+    expect(toolbar).toContain('data-testid="trace-context-pills"');
+    expect(toolbar).toContain('data-pill="latency"');
+    expect(toolbar).toContain('data-pill="tokens"');
+    expect(toolbar).toContain('data-pill="cost"');
+    expect(toolbar).toContain('data-pill="session"');
+    expect(toolbar).toContain('data-testid="trace-header-metrics"');
   });
 });
 
@@ -56,12 +56,21 @@ describe("W3.3 persistent span I/O inspector + spanId write-back", () => {
     expect(chrome).toContain("min-w-[360px]");
   });
 
+  it("SpanInspector owns deep I/O for TraceViewer", () => {
+    const insp = src("components/trace-viewer/SpanInspector.tsx");
+    expect(insp).toContain('data-testid="span-inspector"');
+    expect(insp).toContain('data-testid="span-inspector-close"');
+    expect(insp).toContain('title="Input"');
+    expect(insp).toContain("ResponsePanel");
+    expect(insp).toContain("min-w-[360px]");
+  });
+
   it("hub wires onSpanSelect → handleSelectSpan → ?spanId=", () => {
     const page = src("app/(portal)/traces/page.tsx");
     const hub = src("app/(portal)/traces/_components/use-traces-hub.ts");
-    const panel = src("components/traces/TraceDetailPanel.tsx");
-    expect(panel).toContain("onSpanSelect?: (spanId: string | null) => void");
-    expect(panel).toContain("onSpanSelect={onSpanSelect}");
+    const viewer = src("components/trace-viewer/TraceViewer.tsx");
+    expect(viewer).toContain("onSpanSelect?: (spanId: string | null) => void");
+    expect(viewer).toContain("useTraceViewerSelection");
     expect(page).toContain("onSpanSelect={hub.handleSelectSpan}");
     expect(hub).toContain("handleSelectSpan");
     expect(hub).toContain("spanId: nextSpanId || undefined");
@@ -70,11 +79,12 @@ describe("W3.3 persistent span I/O inspector + spanId write-back", () => {
 
 describe("W3.3 failure callout + subagent preview", () => {
   it("failure callout sits above transcript with Issues link", () => {
-    const panel = src("components/traces/TraceDetailPanel.tsx");
-    expect(panel).toContain('data-testid="trace-failure-callout"');
-    expect(panel).toContain("View related issues");
-    expect(panel).toContain("/issues?");
-    expect(panel).not.toContain("sticky top-0 z-20"); // soft, not third sticky band
+    const canvas = src("components/trace-viewer/canvases/TranscriptCanvas.tsx");
+    const viewer = src("components/trace-viewer/TraceViewer.tsx");
+    expect(canvas).toContain('data-testid="trace-failure-callout"');
+    expect(canvas).toContain("View related issues");
+    expect(viewer).toContain("/issues?");
+    expect(canvas).not.toContain("sticky top-0 z-20");
   });
 
   it("SubagentGroup uses 1-line In/Out preview", () => {

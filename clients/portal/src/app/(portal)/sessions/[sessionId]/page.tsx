@@ -19,8 +19,7 @@ import {
   buildSessionTurns,
   type SessionTracePreviewRow,
 } from "@/components/sessions/session-turn-preview";
-import type { DetailMode } from "@/components/traces/TraceDetailPanel";
-import { TraceViewerModal } from "@/components/traces/TraceViewerModal";
+import type { DetailMode } from "@/components/trace-viewer";
 import { useOrg } from "@/hooks/use-org";
 import { agentSessionsApi } from "@/lib/api";
 import { fetchApi } from "@/lib/api/core";
@@ -30,7 +29,7 @@ import {
   preserveFromSearchParams,
 } from "@/lib/portal-cross-links";
 
-/** Align with hub `DETAIL_MODES` / TraceDetailPanel tabs — transcript default. */
+/** Align with hub `DETAIL_MODES` / TraceViewer tabs — transcript default. */
 const SESSION_DETAIL_MODES = [
   "transcript",
   "tree",
@@ -39,11 +38,11 @@ const SESSION_DETAIL_MODES = [
   "scores",
 ] as const satisfies readonly DetailMode[];
 
-/** Trace detail + rrweb replay stay off the session shell first paint (W12). */
-const TraceDetailPanel = dynamic(
+/** Trace viewer + rrweb replay stay off the session shell first paint (W12). */
+const TraceViewer = dynamic(
   () =>
-    import("@/components/traces/TraceDetailPanel").then((m) => ({
-      default: m.TraceDetailPanel,
+    import("@/components/trace-viewer").then((m) => ({
+      default: m.TraceViewer,
     })),
   { ssr: false, loading: () => <LoadingSkeleton variant="detail" lines={4} /> },
 );
@@ -219,7 +218,7 @@ function SessionPageInner() {
       />
 
       {selectedTraceId ? (
-        <TraceViewerModal
+        <TraceViewer
           open
           onClose={() => setSelectedTraceId(undefined)}
           traceId={selectedTraceId}
@@ -231,18 +230,11 @@ function SessionPageInner() {
           outcome={
             turns.find((t) => t.trace_id === selectedTraceId)?.outcome ?? null
           }
-        >
-          <TraceDetailPanel
-            traceId={selectedTraceId}
-            onClose={() => setSelectedTraceId(undefined)}
-            hideCloseControl
-            layout="fullscreen"
-            initialMode={detailMode}
-            onModeChange={handleDetailModeChange}
-            highlightSpanId={selectedSpanId}
-            onSpanSelect={handleSelectSpan}
-          />
-        </TraceViewerModal>
+          initialMode={detailMode}
+          onModeChange={handleDetailModeChange}
+          highlightSpanId={selectedSpanId}
+          onSpanSelect={handleSelectSpan}
+        />
       ) : (
         <div className="rounded-xl border border-[var(--border-default)] bg-[var(--bg-primary)]">
           <p className="p-6 text-sm text-[var(--text-muted)]">
