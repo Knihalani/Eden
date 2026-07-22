@@ -140,7 +140,7 @@ describe("W4 traces hub — Laminar-class triage", () => {
     const loc = page.split("\n").length;
     expect(loc).toBeLessThanOrEqual(400);
     expect(page).toContain('from "./_components/TracesToolbar"');
-    expect(page).toContain("TraceSplitLayout");
+    expect(page).toContain("TraceViewerModal");
     expect(page).toContain("useTracesHub");
   });
 

@@ -52,7 +52,8 @@ describe("W3.3 persistent span I/O inspector + spanId write-back", () => {
     expect(chrome).toContain('data-testid="span-inspector-close"');
     expect(chrome).toContain('title="Input"');
     expect(chrome).toContain("ResponsePanel");
-    expect(chrome).toContain("sticky top-0");
+    expect(chrome).toContain('layout?: "default" | "fullscreen"');
+    expect(chrome).toContain("min-w-[360px]");
   });
 
   it("hub wires onSpanSelect → handleSelectSpan → ?spanId=", () => {

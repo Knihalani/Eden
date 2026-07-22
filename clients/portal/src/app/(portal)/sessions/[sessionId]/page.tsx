@@ -7,7 +7,6 @@ import { PageHeader } from "@/components/layout/page-header";
 import { PageContent } from "@/components/layout/page-content";
 import {
   CrossLinkBar,
-  DetailPanelShell,
   readMasterDetailParam,
   writeMasterDetailParam,
 } from "@/components/portal-os";
@@ -21,6 +20,7 @@ import {
   type SessionTracePreviewRow,
 } from "@/components/sessions/session-turn-preview";
 import type { DetailMode } from "@/components/traces/TraceDetailPanel";
+import { TraceViewerModal } from "@/components/traces/TraceViewerModal";
 import { useOrg } from "@/hooks/use-org";
 import { agentSessionsApi } from "@/lib/api";
 import { fetchApi } from "@/lib/api/core";
@@ -219,27 +219,30 @@ function SessionPageInner() {
       />
 
       {selectedTraceId ? (
-        <DetailPanelShell
+        <TraceViewerModal
           open
           onClose={() => setSelectedTraceId(undefined)}
+          traceId={selectedTraceId}
           title={
             <span className="font-mono text-xs truncate">
               {selectedTraceId.slice(0, 20)}…
             </span>
           }
-          widthClassName="xl:w-full xl:max-w-none"
-          mobileDrawer
+          outcome={
+            turns.find((t) => t.trace_id === selectedTraceId)?.outcome ?? null
+          }
         >
           <TraceDetailPanel
             traceId={selectedTraceId}
             onClose={() => setSelectedTraceId(undefined)}
             hideCloseControl
+            layout="fullscreen"
             initialMode={detailMode}
             onModeChange={handleDetailModeChange}
             highlightSpanId={selectedSpanId}
             onSpanSelect={handleSelectSpan}
           />
-        </DetailPanelShell>
+        </TraceViewerModal>
       ) : (
         <div className="rounded-xl border border-[var(--border-default)] bg-[var(--bg-primary)]">
           <p className="p-6 text-sm text-[var(--text-muted)]">

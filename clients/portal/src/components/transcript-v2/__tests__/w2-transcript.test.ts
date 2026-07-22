@@ -94,7 +94,7 @@ describe("W2 span kinds + subagent collapse", () => {
 });
 
 describe("W2 detail chrome", () => {
-  it("TraceDetailPanel uses TraceHeader (2-row) + ≤4 metrics + overflow", () => {
+  it("TraceDetailPanel uses TraceHeader (2-row) + metrics + overflow", () => {
     const panel = src("components/traces/TraceDetailPanel.tsx");
     expect(panel).toContain("TraceHeader");
     expect(panel).toContain('data-testid="trace-actions-overflow"');
@@ -115,10 +115,11 @@ describe("W2 detail chrome", () => {
     expect(virt).toContain("useVirtualizer");
   });
 
-  it("traces hub wires TraceSplitLayout", () => {
+  it("traces hub wires TraceViewerModal fullscreen", () => {
     const page = src("app/(portal)/traces/page.tsx");
-    expect(page).toContain("TraceSplitLayout");
-    expect(page).toContain("panelMinPx={400}");
-    expect(page).toContain("stackBelowPx={800}");
+    expect(page).toContain("TraceViewerModal");
+    expect(page).toContain('layout="fullscreen"');
+    expect(page).toContain("hub.handleCloseDetail");
+    expect(page).not.toContain("TraceSplitLayout");
   });
 });

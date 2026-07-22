@@ -101,21 +101,30 @@ export function SpanDetailSidebar({
   row,
   orgId: _orgId,
   onClose,
+  layout = "default",
 }: {
   row: TR;
   orgId?: string;
   onClose?: () => void;
+  /** Fullscreen: full-height right rail (~28–32% / min 360px). */
+  layout?: "default" | "fullscreen";
 }) {
   const hasMessages = Boolean(row.request_body?.messages?.length);
   const hasResponse = row.response_body != null;
+  const fullscreen = layout === "fullscreen";
 
   return (
     <aside
-      className="sticky top-0 w-80 shrink-0 self-start border-l border-[var(--border-default)] bg-[var(--bg-secondary)] max-h-[min(70vh,720px)] overflow-y-auto"
+      className={
+        fullscreen
+          ? "absolute inset-y-0 right-0 z-10 flex h-full min-h-0 w-[min(100%,22rem)] shrink-0 flex-col self-stretch overflow-hidden border-l border-[var(--border-default)] bg-[var(--bg-secondary)] shadow-lg sm:static sm:z-auto sm:w-[min(32%,28rem)] sm:min-w-[360px] sm:shadow-none"
+          : "sticky top-0 w-80 shrink-0 self-start border-l border-[var(--border-default)] bg-[var(--bg-secondary)] max-h-[min(70vh,720px)] overflow-y-auto"
+      }
       data-testid="span-detail-sidebar"
+      data-layout={layout}
       aria-label="Span I/O inspector"
     >
-      <div className="border-b border-[var(--border-default)] px-space-3 py-space-2">
+      <div className="shrink-0 border-b border-[var(--border-default)] px-space-3 py-space-2">
         <div className="flex items-start justify-between gap-space-2">
           <div className="min-w-0">
             <div className="text-2xs font-mono uppercase tracking-wider text-[var(--text-muted)]">
@@ -139,33 +148,53 @@ export function SpanDetailSidebar({
           ) : null}
         </div>
       </div>
-      <div className="space-y-space-2 p-space-3 text-xs">
-        <KV k="duration" v={formatDuration(row.duration_ms)} />
-        <KV k="outcome" v={row.outcome || "—"} />
-        {row.finish_reason && <KV k="finish_reason" v={row.finish_reason} />}
-        {row.system_fingerprint && <KV k="fingerprint" v={row.system_fingerprint} />}
-        {row.model_version && <KV k="model_version" v={row.model_version} />}
-        {row.service_tier && <KV k="service_tier" v={row.service_tier} />}
-        {row.cache_hit && <KV k="cache" v="HIT" />}
-        {row.streaming_metrics?.ttft_ms != null && (
-          <KV k="ttft_ms" v={row.streaming_metrics.ttft_ms.toFixed(0)} />
-        )}
-        {row.streaming_metrics?.itl_ms_avg != null && (
-          <KV k="itl_ms_avg" v={row.streaming_metrics.itl_ms_avg.toFixed(1)} />
-        )}
-        {row.streaming_metrics?.tpot_ms != null && (
-          <KV k="tpot_ms" v={row.streaming_metrics.tpot_ms.toFixed(1)} />
-        )}
-        <KV k="timestamp" v={row.timestamp} />
-      </div>
-      {(hasMessages || hasResponse) && (
-        <div className="space-y-space-3 border-t border-[var(--border-default)] p-space-3">
-          {hasMessages ? (
-            <MessagesPanel title="Input" messages={row.request_body!.messages!} />
-          ) : null}
-          {hasResponse ? <ResponsePanel response={row.response_body as never} /> : null}
+      <div
+        className={
+          fullscreen
+            ? "flex min-h-0 flex-1 flex-col overflow-y-auto"
+            : undefined
+        }
+      >
+        <div className="space-y-space-2 p-space-3 text-xs">
+          <KV k="duration" v={formatDuration(row.duration_ms)} />
+          <KV k="outcome" v={row.outcome || "—"} />
+          {row.finish_reason && <KV k="finish_reason" v={row.finish_reason} />}
+          {row.system_fingerprint && <KV k="fingerprint" v={row.system_fingerprint} />}
+          {row.model_version && <KV k="model_version" v={row.model_version} />}
+          {row.service_tier && <KV k="service_tier" v={row.service_tier} />}
+          {row.cache_hit && <KV k="cache" v="HIT" />}
+          {row.streaming_metrics?.ttft_ms != null && (
+            <KV k="ttft_ms" v={row.streaming_metrics.ttft_ms.toFixed(0)} />
+          )}
+          {row.streaming_metrics?.itl_ms_avg != null && (
+            <KV k="itl_ms_avg" v={row.streaming_metrics.itl_ms_avg.toFixed(1)} />
+          )}
+          {row.streaming_metrics?.tpot_ms != null && (
+            <KV k="tpot_ms" v={row.streaming_metrics.tpot_ms.toFixed(1)} />
+          )}
+          <KV k="timestamp" v={row.timestamp} />
         </div>
-      )}
+        {(hasMessages || hasResponse) && (
+          <div
+            className={
+              fullscreen
+                ? "space-y-space-4 border-t border-[var(--border-default)] p-space-3"
+                : "space-y-space-3 border-t border-[var(--border-default)] p-space-3"
+            }
+          >
+            {hasMessages ? (
+              <div data-plane="input">
+                <MessagesPanel title="Input" messages={row.request_body!.messages!} />
+              </div>
+            ) : null}
+            {hasResponse ? (
+              <div data-plane="output">
+                <ResponsePanel response={row.response_body as never} />
+              </div>
+            ) : null}
+          </div>
+        )}
+      </div>
     </aside>
   );
 }

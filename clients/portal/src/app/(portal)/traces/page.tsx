@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * /traces — U01 Traces Hub: Traces | Spans | Sessions with split-pane detail.
+ * /traces — U01 Traces Hub: Traces | Spans | Sessions with fullscreen modal detail.
  * Wave 3 shell ≤400 LOC — state in use-traces-hub, list in traces-hub-list.
  */
 
@@ -11,11 +11,8 @@ import { PageContent } from "@/components/layout/page-content";
 import { ErrorState } from "@/components/ui/error-state";
 import { NoOrgState } from "@/components/ui/no-org-state";
 import { LoadingSkeleton } from "@/components/ui/skeleton";
-import {
-  ResourcePageShell,
-  DetailPanelShell,
-} from "@/components/portal-os";
-import { TraceSplitLayout } from "@/components/traces/TraceSplitLayout";
+import { ResourcePageShell } from "@/components/portal-os";
+import { TraceViewerModal } from "@/components/traces/TraceViewerModal";
 import { EmbeddedSurface } from "@/components/layout/embedded-surface";
 import { TracesToolbar } from "./_components/TracesToolbar";
 import { TracesHubList } from "./_components/traces-hub-list";
@@ -136,42 +133,16 @@ function TracesPageInner() {
     />
   );
 
-  const detailPanel = hub.traceId ? (
-    <DetailPanelShell
-      open
-      onClose={hub.handleCloseDetail}
-      mobileDrawer={false}
-      widthClassName="w-full min-w-0"
-      title={(() => {
-        const selected = hub.traces.find((t) => t.trace_id === hub.traceId);
-        const primary =
-          selected?.agent_id ||
-          selected?.model ||
-          `${hub.traceId.slice(0, 20)}…`;
-        const showUuid = Boolean(selected?.agent_id || selected?.model);
-        return (
-          <span className="flex min-w-0 flex-col gap-space-1">
-            <span className="truncate text-sm font-medium">{primary}</span>
-            {showUuid ? (
-              <span className="truncate font-mono text-2xs text-[var(--text-muted)]">
-                {hub.traceId.slice(0, 20)}…
-              </span>
-            ) : null}
-          </span>
-        );
-      })()}
-    >
-      <TraceDetailPanel
-        traceId={hub.traceId}
-        highlightSpanId={hub.spanId}
-        onClose={hub.handleCloseDetail}
-        hideCloseControl
-        initialMode={hub.detailMode}
-        onModeChange={hub.handleDetailModeChange}
-        onSpanSelect={hub.handleSelectSpan}
-      />
-    </DetailPanelShell>
-  ) : null;
+  const selectedTrace = hub.traceId
+    ? hub.traces.find((t) => t.trace_id === hub.traceId)
+    : undefined;
+  const traceIndex = hub.traceId
+    ? hub.traces.findIndex((t) => t.trace_id === hub.traceId)
+    : -1;
+  const modalTitle =
+    selectedTrace?.agent_id ||
+    selectedTrace?.model ||
+    (hub.traceId ? `${hub.traceId.slice(0, 20)}…` : undefined);
 
   const hubTable =
     hub.isLegacyView || hub.isFacetView ? (
@@ -197,24 +168,43 @@ function TracesPageInner() {
           <PageHeader
             eyebrow="Observe"
             title="Traces"
-            subtitle="Traces, spans, and sessions — shareable filters and inline transcript detail."
+            subtitle="Traces, spans, and sessions — shareable filters and fullscreen transcript detail."
           />
         }
         toolbar={hub.isLegacyView ? undefined : toolbar}
-        table={
-          hub.isLegacyView || hub.isFacetView ? (
-            hubTable
-          ) : (
-            <TraceSplitLayout
-              panelMinPx={400}
-              stackBelowPx={800}
-              master={hubTable}
-              detail={detailPanel}
-            />
-          )
-        }
-        detail={hub.isLegacyView || hub.isFacetView ? detailPanel : null}
+        table={hubTable}
       />
+
+      {hub.traceId ? (
+        <TraceViewerModal
+          open
+          onClose={hub.handleCloseDetail}
+          traceId={hub.traceId}
+          title={modalTitle}
+          outcome={selectedTrace?.outcome ?? null}
+          onPrev={
+            traceIndex > 0
+              ? () => hub.handleSelectTrace(hub.traces[traceIndex - 1]!.trace_id)
+              : undefined
+          }
+          onNext={
+            traceIndex >= 0 && traceIndex < hub.traces.length - 1
+              ? () => hub.handleSelectTrace(hub.traces[traceIndex + 1]!.trace_id)
+              : undefined
+          }
+        >
+          <TraceDetailPanel
+            traceId={hub.traceId}
+            highlightSpanId={hub.spanId}
+            onClose={hub.handleCloseDetail}
+            hideCloseControl
+            layout="fullscreen"
+            initialMode={hub.detailMode}
+            onModeChange={hub.handleDetailModeChange}
+            onSpanSelect={hub.handleSelectSpan}
+          />
+        </TraceViewerModal>
+      ) : null}
 
       <TraceExportModal
         open={hub.exportOpen}
