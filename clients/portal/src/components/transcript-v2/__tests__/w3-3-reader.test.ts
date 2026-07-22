@@ -11,14 +11,14 @@ const ROOT = resolve(__dirname, "../../../..");
 const src = (rel: string) => readFileSync(resolve(ROOT, "src", rel), "utf8");
 
 describe("W3.3 metadata pill strip", () => {
-  it("TraceViewer toolbar pills cover latency · tokens · cost · session", () => {
-    const toolbar = src("components/trace-viewer/TraceViewerToolbar.tsx");
-    expect(toolbar).toContain('data-testid="trace-context-pills"');
-    expect(toolbar).toContain('data-pill="latency"');
-    expect(toolbar).toContain('data-pill="tokens"');
-    expect(toolbar).toContain('data-pill="cost"');
-    expect(toolbar).toContain('data-pill="session"');
-    expect(toolbar).toContain('data-testid="trace-header-metrics"');
+  it("TraceViewer top bar pills cover latency · tokens · cost · session", () => {
+    const topbar = src("components/trace-viewer/UnifiedTopBar.tsx");
+    expect(topbar).toContain('data-testid="trace-context-pills"');
+    expect(topbar).toContain('data-pill="latency"');
+    expect(topbar).toContain('data-pill="tokens"');
+    expect(topbar).toContain('data-pill="cost"');
+    expect(topbar).toContain('data-pill="session"');
+    expect(topbar).toContain('data-testid="trace-header-metrics"');
   });
 });
 

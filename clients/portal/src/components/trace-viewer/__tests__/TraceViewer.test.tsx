@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, fireEvent, cleanup } from "@testing-library/react";
+import { render, screen, fireEvent, cleanup, waitFor } from "@testing-library/react";
 import * as React from "react";
 
 vi.mock("next/navigation", () => ({
@@ -86,6 +86,16 @@ vi.mock("@/components/transcript-v2/VirtualTranscript", () => ({
   ),
 }));
 
+const listJudgeScores = vi.fn();
+const runJudges = vi.fn();
+
+vi.mock("@/lib/api", () => ({
+  api: {
+    listJudgeScores: (...args: unknown[]) => listJudgeScores(...args),
+    runJudges: (...args: unknown[]) => runJudges(...args),
+  },
+}));
+
 import { TraceViewer } from "../TraceViewer";
 
 describe("TraceViewer", () => {
@@ -94,6 +104,9 @@ describe("TraceViewer", () => {
       ...navigator,
       clipboard: { writeText: vi.fn().mockResolvedValue(undefined) },
     });
+    listJudgeScores.mockReset();
+    runJudges.mockReset();
+    listJudgeScores.mockResolvedValue({ scores: [], next_cursor: null });
   });
 
   afterEach(() => {
@@ -101,15 +114,15 @@ describe("TraceViewer", () => {
     vi.unstubAllGlobals();
   });
 
-  it("renders dialog with single Z0 chrome band when open", () => {
+  it("renders dialog with single unified top bar when open", () => {
     render(
       <TraceViewer open onClose={vi.fn()} traceId="tr_abc123" title="Agent X" outcome="success" />,
     );
     expect(screen.getByTestId("trace-viewer")).toHaveAttribute("aria-modal", "true");
-    expect(screen.getByTestId("trace-viewer-chrome")).toBeInTheDocument();
-    expect(screen.getByTestId("trace-viewer-toolbar")).toBeInTheDocument();
+    expect(screen.getByTestId("trace-viewer-topbar")).toBeInTheDocument();
+    expect(screen.getByTestId("span-nav-tree")).toBeInTheDocument();
     expect(screen.queryByTestId("trace-header")).not.toBeInTheDocument();
-    expect(screen.getAllByTestId("trace-viewer-chrome")).toHaveLength(1);
+    expect(screen.getAllByTestId("trace-viewer-topbar")).toHaveLength(1);
   });
 
   it("returns nothing when closed", () => {
@@ -145,7 +158,9 @@ describe("TraceViewer", () => {
         onModeChange={onModeChange}
       />,
     );
-    expect(screen.getByTestId("tree-canvas")).toBeInTheDocument();
+    // tree alias → Transcript + span nav
+    expect(screen.getByTestId("transcript-canvas")).toBeInTheDocument();
+    expect(screen.getByTestId("span-nav-tree")).toBeInTheDocument();
     rerender(
       <TraceViewer
         open
@@ -157,7 +172,41 @@ describe("TraceViewer", () => {
     );
     expect(screen.getByTestId("timeline-canvas")).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Transcript" })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "Tree" })).toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: "Tree" })).not.toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Scores" })).toBeInTheDocument();
+  });
+
+  it("scores mode shows scores-canvas and leaves loading after API resolve", async () => {
+    listJudgeScores.mockResolvedValue({
+      scores: [
+        {
+          judge_run_id: "jr_1",
+          trace_id: "tr_scores",
+          judge_name: "correctness",
+          judge_version: "v1",
+          score: 0.9,
+          rationale: "ok",
+          model: "gpt-4o",
+          scored_at: "2026-01-01T00:00:00Z",
+        },
+      ],
+      next_cursor: null,
+    });
+    render(
+      <TraceViewer
+        open
+        onClose={vi.fn()}
+        traceId="tr_scores"
+        initialMode="scores"
+      />,
+    );
+    expect(screen.getByTestId("scores-canvas")).toBeInTheDocument();
+    expect(screen.queryByTestId("transcript-canvas")).not.toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.queryByTestId("scores-canvas-loading")).not.toBeInTheDocument();
+    });
+    expect(screen.getByTestId("scores-canvas-list")).toBeInTheDocument();
+    expect(listJudgeScores).toHaveBeenCalled();
   });
 
   it("opens span inspector from highlightSpanId and closes with Esc first", () => {

@@ -40,6 +40,9 @@ function scoreSeverity(score: number): "high" | "warning" | "low" {
 
 export function ScoresTab({ orgId, traceId }: ScoresTabProps) {
   const toast = useToast();
+  // Stable toast methods — avoid refresh→effect loops when toast identity churns.
+  const toastRef = React.useRef(toast);
+  toastRef.current = toast;
   const [scores, setScores] = React.useState<Array<{
     judge_run_id: string;
     trace_id: string;
@@ -80,11 +83,11 @@ export function ScoresTab({ orgId, traceId }: ScoresTabProps) {
       );
     } catch (err) {
       console.warn("Failed to load judge scores", err);
-      toast.error("Failed to load judge scores");
+      toastRef.current.error("Failed to load judge scores");
     } finally {
       setLoading(false);
     }
-  }, [orgId, traceId, toast]);
+  }, [orgId, traceId]);
 
   React.useEffect(() => {
     refresh();
@@ -103,7 +106,7 @@ export function ScoresTab({ orgId, traceId }: ScoresTabProps) {
     try {
       const judge_names = selectedJudges.size > 0 ? Array.from(selectedJudges) : null;
       await api.runJudges(orgId, { trace_id: traceId, judge_names });
-      toast.success(
+      toastRef.current.success(
         judge_names
           ? `Running ${judge_names.length} judge${judge_names.length === 1 ? "" : "s"}…`
           : "Running all judges…",
@@ -117,10 +120,12 @@ export function ScoresTab({ orgId, traceId }: ScoresTabProps) {
       }, 1500);
     } catch (err) {
       console.warn("Failed to run judges", err);
-      toast.error(err instanceof Error ? err.message : "Failed to run judges");
+      toastRef.current.error(
+        err instanceof Error ? err.message : "Failed to run judges",
+      );
       setRunning(false);
     }
-  }, [orgId, traceId, refresh, selectedJudges, toast]);
+  }, [orgId, traceId, refresh, selectedJudges]);
 
   const toggleJudge = React.useCallback((name: string) => {
     setSelectedJudges((prev) => {

@@ -3,8 +3,7 @@
 import * as React from "react";
 import { ChevronRight } from "lucide-react";
 import type { TranscriptRow as TR } from "@/lib/observability/types";
-import { classifySpanKind, spanKindLabel } from "@/components/transcript-v2/span-kind";
-import { SpanKindPill } from "@/components/transcript-v2/SpanTypeIcon";
+import { classifySpanKind, spanKindColor, spanKindLabel } from "@/components/transcript-v2/span-kind";
 import { formatDuration } from "@/components/transcript-v2/transcript-format";
 import { cn } from "@/lib/utils";
 
@@ -54,7 +53,7 @@ export interface TranscriptStepRowProps {
   onToggleCollapse?: () => void;
 }
 
-/** Flat chronological step row — kind · name · preview · duration/tokens/$ · selection. */
+/** Chronological step — kind rail · name · muted preview · metrics. */
 export function TranscriptStepRow({
   row,
   selected,
@@ -65,6 +64,7 @@ export function TranscriptStepRow({
   onToggleCollapse,
 }: TranscriptStepRowProps) {
   const kind = classifySpanKind(row);
+  const rail = spanKindColor(kind);
   const preview = oneLinePreview(row);
   const tokens =
     row.input_tokens != null || row.output_tokens != null
@@ -85,11 +85,11 @@ export function TranscriptStepRow({
       data-testid="transcript-step-row"
       data-kind={kind}
       className={cn(
-        "group flex cursor-pointer items-center gap-2 border-b border-[var(--border-subtle)] px-3 py-2 text-xs hover:bg-[var(--bg-secondary)]",
-        selected && "bg-[var(--bg-secondary)] ring-1 ring-inset ring-[var(--border-default)]",
-        failed && "border-l-2 border-l-[var(--error)]",
+        "group flex cursor-pointer items-stretch gap-0 border-b border-[var(--border-subtle)] hover:bg-[var(--bg-secondary)]",
+        selected && "bg-[var(--bg-secondary)]",
+        failed && "bg-[var(--error)]/[0.03]",
       )}
-      style={{ paddingLeft: `${0.75 + depth * 0.75}rem` }}
+      style={{ paddingLeft: `${depth * 0.75}rem` }}
       onClick={onSelect}
       onKeyDown={(e) => {
         if (e.key === "Enter" || e.key === " ") {
@@ -99,51 +99,60 @@ export function TranscriptStepRow({
       }}
       tabIndex={0}
     >
-      {childCount > 0 && onToggleCollapse ? (
-        <button
-          type="button"
-          aria-expanded={!collapsed}
-          aria-label={collapsed ? "Expand subagent" : "Collapse subagent"}
-          className="shrink-0 text-[var(--text-muted)] hover:text-[var(--text-primary)]"
-          onClick={(e) => {
-            e.stopPropagation();
-            onToggleCollapse();
-          }}
-        >
-          <ChevronRight
-            className={cn("h-3.5 w-3.5 transition-transform", !collapsed && "rotate-90")}
-          />
-        </button>
-      ) : (
-        <span className="inline-block w-3.5 shrink-0" aria-hidden />
-      )}
-
-      <SpanKindPill kind={kind} className="shrink-0" />
-      <span className="sr-only">{spanKindLabel(kind)}</span>
-
-      <div className="min-w-0 flex-1">
-        <div className="truncate font-mono text-[var(--text-primary)]" title={row.name}>
-          {row.name}
-        </div>
-        {preview ? (
-          <div
-            className="truncate text-2xs text-[var(--text-muted)]"
-            data-testid="transcript-step-preview"
+      <span
+        className="w-1 shrink-0 self-stretch"
+        style={{ background: rail }}
+        aria-hidden
+      />
+      <div className="flex min-w-0 flex-1 items-center gap-2 px-3 py-2.5">
+        {childCount > 0 && onToggleCollapse ? (
+          <button
+            type="button"
+            aria-expanded={!collapsed}
+            aria-label={collapsed ? "Expand subagent" : "Collapse subagent"}
+            className="shrink-0 text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleCollapse();
+            }}
           >
-            {preview}
-          </div>
-        ) : null}
-        {collapsed && childCount > 0 ? (
-          <div className="text-2xs text-[var(--text-muted)]">
-            {childCount} nested span{childCount === 1 ? "" : "s"}
-          </div>
-        ) : null}
-      </div>
+            <ChevronRight
+              className={cn("h-3.5 w-3.5 transition-transform", !collapsed && "rotate-90")}
+            />
+          </button>
+        ) : (
+          <span className="inline-block w-3.5 shrink-0" aria-hidden />
+        )}
 
-      <div className="ml-auto flex shrink-0 items-center gap-2 font-mono tabular-nums text-[var(--text-muted)]">
-        <span>{formatDuration(row.duration_ms)}</span>
-        {tokens ? <span className="hidden sm:inline">{tokens}</span> : null}
-        {cost ? <span className="hidden md:inline">{cost}</span> : null}
+        <span className="sr-only">{spanKindLabel(kind)}</span>
+
+        <div className="min-w-0 flex-1">
+          <div
+            className="truncate text-sm font-medium text-[var(--text-primary)]"
+            title={row.name}
+          >
+            {row.name}
+          </div>
+          {preview ? (
+            <div
+              className="mt-0.5 truncate text-xs text-[var(--text-muted)]"
+              data-testid="transcript-step-preview"
+            >
+              {preview}
+            </div>
+          ) : null}
+          {collapsed && childCount > 0 ? (
+            <div className="text-2xs text-[var(--text-muted)]">
+              {childCount} nested span{childCount === 1 ? "" : "s"}
+            </div>
+          ) : null}
+        </div>
+
+        <div className="ml-auto flex shrink-0 items-center gap-2.5 font-mono text-xs tabular-nums text-[var(--text-muted)]">
+          <span>{formatDuration(row.duration_ms)}</span>
+          {tokens ? <span className="hidden sm:inline">{tokens}</span> : null}
+          {cost ? <span className="hidden md:inline">{cost}</span> : null}
+        </div>
       </div>
     </div>
   );

@@ -323,17 +323,18 @@ describe("W3-2 traces hub list UI gate", () => {
   it("Wave 6: transcript modes live in detail tabs; default Transcript", () => {
     const types = read("components/trace-viewer/types.ts");
     const viewer = read("components/trace-viewer/TraceViewer.tsx");
-    const toolbar = read("components/trace-viewer/TraceViewerToolbar.tsx");
+    const topbar = read("components/trace-viewer/UnifiedTopBar.tsx");
     const canvas = read("components/trace-viewer/canvases/TranscriptCanvas.tsx");
     const data = read("components/trace-viewer/use-trace-viewer-data.ts");
     expect(types).toContain('{ id: "transcript", label: "Transcript" }');
-    expect(types).toContain('{ id: "tree", label: "Tree" }');
+    expect(types).toContain("tree");
     expect(types).toContain('{ id: "timeline", label: "Timeline" }');
     expect(types).toContain('{ id: "meta", label: "Metadata" }');
     expect(viewer).toContain('initialMode = "transcript"');
-    expect(toolbar).toContain('aria-label="Trace detail modes"');
+    expect(viewer).toContain("SpanNavTree");
+    expect(topbar).toContain('aria-label="Trace detail modes"');
     expect(canvas).toContain("VirtualTranscript");
-    expect(toolbar).toContain('data-testid="trace-actions-overflow"');
+    expect(topbar).toContain('data-testid="trace-actions-overflow"');
     expect(data).toContain("useTraceTimeline");
     const views = read("components/traces/trace-detail-views.tsx");
     expect(views).toContain('data-testid="trace-timeline"');

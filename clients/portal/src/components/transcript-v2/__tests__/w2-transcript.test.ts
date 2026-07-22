@@ -94,17 +94,16 @@ describe("W2 span kinds + subagent collapse", () => {
 });
 
 describe("W2 detail chrome", () => {
-  it("TraceViewer uses Z0/Z1 chrome + metrics + overflow (no dual headers)", () => {
+  it("TraceViewer uses UnifiedTopBar + metrics + overflow (no dual headers)", () => {
     const viewer = src("components/trace-viewer/TraceViewer.tsx");
-    expect(viewer).toContain("TraceViewerChrome");
-    expect(viewer).toContain("TraceViewerToolbar");
+    expect(viewer).toContain("UnifiedTopBar");
+    expect(viewer).toContain("SpanNavTree");
     expect(viewer).toContain("TranscriptCanvas");
     expect(viewer).not.toContain("TraceHeader");
-    const toolbar = src("components/trace-viewer/TraceViewerToolbar.tsx");
-    expect(toolbar).toContain('data-testid="trace-actions-overflow"');
-    expect(toolbar).toContain('data-testid="trace-header-metrics"');
-    const chrome = src("components/trace-viewer/TraceViewerChrome.tsx");
-    expect(chrome).toContain('data-testid="trace-viewer-chrome"');
+    const topbar = src("components/trace-viewer/UnifiedTopBar.tsx");
+    expect(topbar).toContain('data-testid="trace-actions-overflow"');
+    expect(topbar).toContain('data-testid="trace-header-metrics"');
+    expect(topbar).toContain('data-testid="trace-viewer-topbar"');
   });
 
   it("TranscriptV2 uses TanStack VirtualTranscript + hideSummary", () => {

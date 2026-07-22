@@ -60,7 +60,7 @@ describe("Wave 9 improve V3 cross-loop", () => {
     const issueHeader = read("app/(portal)/issues/_components/issue-detail-header.tsx");
     expect(issueHeader).toContain("improveHref");
 
-    const traces = read("components/trace-viewer/TraceViewerToolbar.tsx");
+    const traces = read("components/trace-viewer/UnifiedTopBar.tsx");
     expect(traces).toContain("improveHref");
     expect(traces).toContain("Open Improve");
     expect(traces).toContain('data-wave9-improve-crossloop=');

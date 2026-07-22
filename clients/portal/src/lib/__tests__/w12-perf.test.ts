@@ -64,10 +64,12 @@ describe("W12 bundle hotspots", () => {
     );
   });
 
-  it("TraceViewer canvases dynamic-import ScoresTab + LatencyHistogram", () => {
+  it("TraceViewer ScoresCanvas is native; MetadataCanvas dynamic-imports LatencyHistogram", () => {
     const scores = read("components/trace-viewer/canvases/ScoresCanvas.tsx");
     const meta = read("components/trace-viewer/canvases/MetadataCanvas.tsx");
-    expect(scores).toMatch(/const ScoresTab = dynamic\(/);
+    expect(scores).toContain('data-testid="scores-canvas"');
+    expect(scores).toContain("listJudgeScores");
+    expect(scores).not.toMatch(/const ScoresTab = dynamic\(/);
     expect(meta).toMatch(/const LatencyHistogram = dynamic\(/);
   });
 

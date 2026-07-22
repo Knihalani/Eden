@@ -14,17 +14,17 @@ function read(rel: string): string {
 
 describe("W6 closed-loop A — inspector secondary actions", () => {
   it("promotes Add to dataset / Iterate in playground as ghost secondary CTAs", () => {
-    const toolbar = read("components/trace-viewer/TraceViewerToolbar.tsx");
-    expect(toolbar).toContain('data-wave-v3-6-loop="secondary"');
-    expect(toolbar).toContain("Iterate in playground");
-    expect(toolbar).toContain("Add to dataset");
-    expect(toolbar).toContain('variant="ghost"');
-    expect(toolbar).toContain('data-testid="trace-add-to-dataset"');
-    expect(toolbar).toContain('data-testid="trace-open-playground"');
-    expect(toolbar).toContain("playgroundHref(traceId, spanForPlayground, linkPreserve)");
-    expect(toolbar).toContain("promoteTraceToDatasetHref(traceId, linkPreserve)");
-    expect(toolbar).toContain('data-testid="trace-actions-overflow"');
-    expect(toolbar).not.toMatch(
+    const topbar = read("components/trace-viewer/UnifiedTopBar.tsx");
+    expect(topbar).toContain('data-wave-v3-6-loop="secondary"');
+    expect(topbar).toContain("Iterate in playground");
+    expect(topbar).toContain("Add to dataset");
+    expect(topbar).toContain('variant="ghost"');
+    expect(topbar).toContain('data-testid="trace-add-to-dataset"');
+    expect(topbar).toContain('data-testid="trace-open-playground"');
+    expect(topbar).toContain("playgroundHref(traceId, spanForPlayground, linkPreserve)");
+    expect(topbar).toContain("promoteTraceToDatasetHref(traceId, linkPreserve)");
+    expect(topbar).toContain('data-testid="trace-actions-overflow"');
+    expect(topbar).not.toMatch(
       /data-wave-v3-6-loop="secondary"[\s\S]{0,600}variant="default"/,
     );
   });
