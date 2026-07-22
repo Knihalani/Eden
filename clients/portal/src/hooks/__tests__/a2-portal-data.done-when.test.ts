@@ -47,11 +47,11 @@ describe("A2 portal data Done-when", () => {
     expect(analytics).toMatch(/enabled:\s*tab\s*===\s*"overview"/);
   });
 
-  it("K4: TraceDetail meta+tree parallel", () => {
-    const src = read("components/traces/TraceDetailPanel.tsx");
-    expect(src).toMatch(/Promise\.all\(/);
+  it("K4: TraceViewer meta+tree parallel via React Query", () => {
+    const src = read("components/trace-viewer/use-trace-viewer-data.ts");
+    expect(src).toMatch(/useTraceTree/);
     expect(src).toMatch(/listObservabilityTraces/);
-    expect(src).toMatch(/getTraceTree/);
+    expect(src).toMatch(/useApiQuery/);
   });
 
   it("K5: session traces use batch trace_ids request", () => {

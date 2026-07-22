@@ -136,11 +136,11 @@ describe("W4 sessions cards — hub expand + session page modes", () => {
 
   it("hub Open-session and detail Open-session preserve filters via sessionHref", () => {
     const tab = read("components/traces/SessionsTab.tsx");
-    const panel = read("components/traces/TraceDetailPanel.tsx");
+    const toolbar = read("components/trace-viewer/TraceViewerToolbar.tsx");
     const cross = read("lib/portal-cross-links.ts");
     expect(cross).toContain("export function sessionHref");
     expect(tab).toContain("sessionHref(expanded.id, preserve)");
-    expect(panel).toContain("sessionHref(sessionId, linkPreserve)");
+    expect(toolbar).toContain("sessionHref(sessionId, linkPreserve)");
   });
 
   it("session timeline arrow keys are scoped to timeline root", () => {

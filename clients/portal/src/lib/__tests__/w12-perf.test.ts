@@ -55,19 +55,20 @@ describe("W12 bundle hotspots", () => {
     );
   });
 
-  it("session detail dynamic-imports TraceDetailPanel + BrowserReplayPanel", () => {
+  it("session detail dynamic-imports TraceViewer + BrowserReplayPanel", () => {
     const src = read("app/(portal)/sessions/[sessionId]/page.tsx");
-    expect(src).toMatch(/const TraceDetailPanel = dynamic\(/);
+    expect(src).toMatch(/const TraceViewer = dynamic\(/);
     expect(src).toMatch(/const BrowserReplayPanel = dynamic\(/);
     expect(src).not.toMatch(
       /import\s+\{\s*BrowserReplayPanel\s*\}\s+from\s+["']@\/components\/browser\/BrowserReplayPanel["']/,
     );
   });
 
-  it("TraceDetailPanel dynamic-imports ScoresTab + LatencyHistogram", () => {
-    const src = read("components/traces/TraceDetailPanel.tsx");
-    expect(src).toMatch(/const ScoresTab = dynamic\(/);
-    expect(src).toMatch(/const LatencyHistogram = dynamic\(/);
+  it("TraceViewer canvases dynamic-import ScoresTab + LatencyHistogram", () => {
+    const scores = read("components/trace-viewer/canvases/ScoresCanvas.tsx");
+    const meta = read("components/trace-viewer/canvases/MetadataCanvas.tsx");
+    expect(scores).toMatch(/const ScoresTab = dynamic\(/);
+    expect(meta).toMatch(/const LatencyHistogram = dynamic\(/);
   });
 
   it("rrweb stays iframe-UMD (not parent import)", () => {
@@ -84,8 +85,8 @@ describe("W12 virtualization + table perf", () => {
     );
     expect(read("components/traces/SpansTab.tsx")).toContain("InfiniteDataTable");
     expect(read("components/traces/SessionsTab.tsx")).toContain("InfiniteDataTable");
-    expect(read("components/traces/TraceDetailPanel.tsx")).toContain(
-      "VirtualizedTranscript",
+    expect(read("components/trace-viewer/canvases/TranscriptCanvas.tsx")).toContain(
+      "VirtualTranscript",
     );
     expect(read("components/portal-os/InfiniteDataTable.tsx")).toContain(
       "@tanstack/react-virtual",

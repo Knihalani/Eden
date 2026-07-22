@@ -30,10 +30,10 @@ export const SessionsTab = dynamic(
   { ssr: false, loading: () => <ViewLoading /> },
 );
 
-export const TraceDetailPanel = dynamic(
+export const TraceViewer = dynamic(
   () =>
-    import("@/components/traces/TraceDetailPanel").then((m) => ({
-      default: m.TraceDetailPanel,
+    import("@/components/trace-viewer").then((m) => ({
+      default: m.TraceViewer,
     })),
   { ssr: false, loading: () => <ViewLoading /> },
 );

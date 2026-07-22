@@ -68,19 +68,18 @@ describe("W4 traces hub — Laminar-class triage", () => {
     expect(modeToggleIdx).toBeGreaterThan(panelIdx);
   });
 
-  it("detail defaults to Transcript; header metrics ≤4; actions in overflow", () => {
-    const detail = read("components/traces/TraceDetailPanel.tsx");
-    expect(detail).toContain("TRACE_DETAIL_MODE_TABS");
-    expect(detail).toContain('{ id: "transcript", label: "Transcript" }');
-    expect(detail).toContain("initialMode = \"transcript\"");
-    expect(detail).toContain("TraceHeader");
-    expect(detail).toContain('data-testid="trace-actions-overflow"');
-    expect(detail).toContain("VirtualizedTranscript");
-    expect(detail).not.toContain("<CrossLinkBar");
-
-    const header = read("components/traces/TraceHeader.tsx");
-    expect(header).toContain('data-testid="trace-header-metrics"');
-    expect(header).toContain("data-metric-count={metrics.length}");
+  it("detail defaults to Transcript; metrics in Z1; actions in overflow", () => {
+    const types = read("components/trace-viewer/types.ts");
+    const viewer = read("components/trace-viewer/TraceViewer.tsx");
+    const toolbar = read("components/trace-viewer/TraceViewerToolbar.tsx");
+    const canvas = read("components/trace-viewer/canvases/TranscriptCanvas.tsx");
+    expect(types).toContain('{ id: "transcript", label: "Transcript" }');
+    expect(viewer).toContain('initialMode = "transcript"');
+    expect(viewer).toContain("TraceViewerChrome");
+    expect(toolbar).toContain('data-testid="trace-actions-overflow"');
+    expect(canvas).toContain("VirtualTranscript");
+    expect(viewer).not.toContain("<CrossLinkBar");
+    expect(toolbar).toContain('data-testid="trace-header-metrics"');
 
     const hook = read("app/(portal)/traces/_components/use-traces-hub.ts");
     expect(hook).toContain('export const DETAIL_MODES = [');
@@ -140,7 +139,8 @@ describe("W4 traces hub — Laminar-class triage", () => {
     const loc = page.split("\n").length;
     expect(loc).toBeLessThanOrEqual(400);
     expect(page).toContain('from "./_components/TracesToolbar"');
-    expect(page).toContain("TraceViewerModal");
+    expect(page).toContain("TraceViewer");
+    expect(page).not.toContain("TraceViewerModal");
     expect(page).toContain("useTracesHub");
   });
 

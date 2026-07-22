@@ -12,7 +12,7 @@ import { ErrorState } from "@/components/ui/error-state";
 import { NoOrgState } from "@/components/ui/no-org-state";
 import { LoadingSkeleton } from "@/components/ui/skeleton";
 import { ResourcePageShell } from "@/components/portal-os";
-import { TraceViewerModal } from "@/components/traces/TraceViewerModal";
+import { TraceViewer } from "@/components/trace-viewer";
 import { EmbeddedSurface } from "@/components/layout/embedded-surface";
 import { TracesToolbar } from "./_components/TracesToolbar";
 import { TracesHubList } from "./_components/traces-hub-list";
@@ -28,7 +28,6 @@ import {
   ReplayView,
   RetrievalFacetView,
   TimeTravelView,
-  TraceDetailPanel,
   TraceExportModal,
 } from "./_components/traces-hub-dynamics";
 
@@ -176,7 +175,7 @@ function TracesPageInner() {
       />
 
       {hub.traceId ? (
-        <TraceViewerModal
+        <TraceViewer
           open
           onClose={hub.handleCloseDetail}
           traceId={hub.traceId}
@@ -192,18 +191,12 @@ function TracesPageInner() {
               ? () => hub.handleSelectTrace(hub.traces[traceIndex + 1]!.trace_id)
               : undefined
           }
-        >
-          <TraceDetailPanel
-            traceId={hub.traceId}
-            highlightSpanId={hub.spanId}
-            onClose={hub.handleCloseDetail}
-            hideCloseControl
-            layout="fullscreen"
-            initialMode={hub.detailMode}
-            onModeChange={hub.handleDetailModeChange}
-            onSpanSelect={hub.handleSelectSpan}
-          />
-        </TraceViewerModal>
+          highlightSpanId={hub.spanId}
+          initialMode={hub.detailMode}
+          onModeChange={hub.handleDetailModeChange}
+          onSpanSelect={hub.handleSelectSpan}
+          onAnnotate={() => hub.handleAnnotate(hub.traceId!)}
+        />
       ) : null}
 
       <TraceExportModal
