@@ -8,17 +8,16 @@ import { ErrorState } from "@/components/ui/error-state";
 import { cn } from "@/lib/utils";
 import { preserveFromSearchParams } from "@/lib/portal-cross-links";
 import { findRowBySpanId } from "@/components/transcript-v2/transcript-reader-chrome";
-import { TraceViewerChrome } from "./TraceViewerChrome";
-import { TraceViewerLiveSlot, TraceViewerToolbar } from "./TraceViewerToolbar";
+import { UnifiedTopBar, TraceViewerLiveSlot } from "./UnifiedTopBar";
+import { SpanNavTree } from "./SpanNavTree";
 import { useTraceViewerData } from "./use-trace-viewer-data";
 import { useTraceViewerSelection } from "./use-trace-viewer-selection";
 import { SpanInspector } from "./SpanInspector";
 import { TranscriptCanvas } from "./canvases/TranscriptCanvas";
-import { TreeCanvas } from "./canvases/TreeCanvas";
 import { TimelineCanvas } from "./canvases/TimelineCanvas";
 import { MetadataCanvas } from "./canvases/MetadataCanvas";
 import { ScoresCanvas } from "./canvases/ScoresCanvas";
-import type { DetailMode } from "./types";
+import { toCanvasMode, type DetailMode } from "./types";
 
 export type { DetailMode } from "./types";
 export { TRACE_VIEWER_MODES } from "./types";
@@ -42,7 +41,7 @@ export interface TraceViewerProps {
 
 /**
  * Purpose-built fullscreen trace viewer — sole public entry.
- * Z0 chrome · Z1 toolbar · Z2 reader · optional Z3 inspector.
+ * Unified top bar · always-on span nav · mode canvas · optional inspector.
  */
 export function TraceViewer({
   open,
@@ -75,6 +74,14 @@ export function TraceViewer({
     setMode(initialMode);
   }, [initialMode, traceId]);
 
+  // ?mode=tree → Transcript + focus span nav search
+  React.useEffect(() => {
+    if (!open) return;
+    if (initialMode === "tree" || mode === "tree") {
+      window.requestAnimationFrame(() => searchInputRef.current?.focus());
+    }
+  }, [open, initialMode, mode, traceId]);
+
   const setModeAndNotify = (next: DetailMode) => {
     setMode(next);
     onModeChange?.(next);
@@ -87,9 +94,11 @@ export function TraceViewer({
     open,
   });
 
+  const canvasMode = toCanvasMode(mode);
+
   const data = useTraceViewerData({
     traceId,
-    mode,
+    mode: canvasMode,
     ganttStripOpen,
   });
 
@@ -114,13 +123,12 @@ export function TraceViewer({
     return () => document.removeEventListener("keydown", onKey);
   }, [open]);
 
-  const inspectorModes: DetailMode[] = ["transcript", "tree", "timeline"];
-  const showInspector =
+  const inspectorVisible =
     selection.inspectorOpen &&
     selection.selectedSpanId != null &&
-    inspectorModes.includes(mode);
+    (canvasMode === "transcript" || canvasMode === "timeline");
 
-  const selectedRow = showInspector
+  const selectedRow = inspectorVisible
     ? findRowBySpanId(data.rows, selection.selectedSpanId) ??
       findRowBySpanId(data.treeRows, selection.selectedSpanId)
     : null;
@@ -144,6 +152,7 @@ export function TraceViewer({
   })();
 
   const chromeOutcome = outcomeProp ?? data.meta?.outcome ?? null;
+  const spanNavRoots = data.treeRows.length > 0 ? data.treeRows : data.rows;
 
   return (
     <DialogPrimitive.Root
@@ -183,47 +192,71 @@ export function TraceViewer({
             (e.currentTarget as HTMLElement).focus({ preventScroll: true });
           }}
           onEscapeKeyDown={(e) => {
-            // Selection hook owns Esc (inspector → close).
             if (selection.inspectorOpen) {
               e.preventDefault();
             }
           }}
         >
-          <TraceViewerChrome
-            traceId={traceId}
-            title={title}
-            outcome={chromeOutcome}
-            onClose={onClose}
-            onPrev={onPrev}
-            onNext={onNext}
-          />
-
           {data.phase === "loading" ? (
-            <div className="flex flex-1 flex-col items-center justify-center gap-2">
-              <Loader2 className="h-5 w-5 animate-spin text-[var(--text-muted)]" />
-              <p className="text-xs text-[var(--text-muted)]">Loading trace summary…</p>
-            </div>
+            <>
+              <UnifiedTopBar
+                traceId={traceId}
+                title={title}
+                outcome={chromeOutcome}
+                onClose={onClose}
+                onPrev={onPrev}
+                onNext={onNext}
+                mode={mode}
+                onModeChange={setModeAndNotify}
+                meta={null}
+                selectedSpanId={selection.selectedSpanId}
+                onAnnotate={onAnnotate}
+                onShare={onShare}
+              />
+              <div className="flex flex-1 flex-col items-center justify-center gap-2">
+                <Loader2 className="h-5 w-5 animate-spin text-[var(--text-muted)]" />
+                <p className="text-xs text-[var(--text-muted)]">Loading trace summary…</p>
+              </div>
+            </>
           ) : data.phase === "error" || data.phase === "not_found" ? (
-            <ErrorState
-              title="Could not load trace"
-              message={data.error ?? "Unknown error"}
-            />
+            <>
+              <UnifiedTopBar
+                traceId={traceId}
+                title={title}
+                outcome={chromeOutcome}
+                onClose={onClose}
+                onPrev={onPrev}
+                onNext={onNext}
+                mode={mode}
+                onModeChange={setModeAndNotify}
+                meta={null}
+                selectedSpanId={selection.selectedSpanId}
+                onAnnotate={onAnnotate}
+                onShare={onShare}
+              />
+              <ErrorState
+                title="Could not load trace"
+                message={data.error ?? "Unknown error"}
+              />
+            </>
           ) : (
             <>
-              <TraceViewerToolbar
+              <UnifiedTopBar
+                traceId={traceId}
+                title={title}
+                outcome={chromeOutcome}
+                onClose={onClose}
+                onPrev={onPrev}
+                onNext={onNext}
                 mode={mode}
                 onModeChange={setModeAndNotify}
                 meta={data.meta}
                 totalTokens={data.totalTokens}
-                traceId={traceId}
                 selectedSpanId={selection.selectedSpanId}
-                spanSearch={spanSearch}
-                onSpanSearchChange={setSpanSearch}
                 onAnnotate={onAnnotate}
                 onShare={onShare}
                 ganttStripOpen={ganttStripOpen}
                 onToggleGantt={() => setGanttStripOpen((v) => !v)}
-                searchInputRef={searchInputRef}
                 liveSlot={
                   <TraceViewerLiveSlot
                     live={data.liveStream.live}
@@ -236,22 +269,39 @@ export function TraceViewer({
               />
 
               <div
-                className={cn(
-                  "relative flex min-h-0 flex-1 overflow-hidden",
-                  showInspector && "xl:flex-row",
-                )}
+                className="relative flex min-h-0 flex-1 overflow-hidden"
                 data-testid="trace-viewer-body"
               >
+                {/* Span nav — always on (~26%) */}
+                <div className="flex min-h-0 w-[26%] min-w-[160px] max-w-[320px] shrink-0">
+                  <SpanNavTree
+                    roots={spanNavRoots}
+                    selectedSpanId={selection.selectedSpanId}
+                    onSpanSelect={(id) => selection.selectSpan(id)}
+                    searchQuery={spanSearch}
+                    onSearchQueryChange={setSpanSearch}
+                    searchInputRef={searchInputRef}
+                  />
+                </div>
+
+                {/* Center canvas */}
                 <div
                   className={cn(
                     "flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden p-space-3",
-                    showInspector && "xl:w-[70%]",
+                    inspectorVisible && "xl:max-w-[none]",
                   )}
                   data-testid="trace-viewer-reader"
                 >
-                  {mode === "scores" && data.orgId ? (
-                    <ScoresCanvas orgId={data.orgId} traceId={traceId} />
-                  ) : mode === "timeline" ? (
+                  {canvasMode === "scores" ? (
+                    data.orgId ? (
+                      <ScoresCanvas orgId={data.orgId} traceId={traceId} />
+                    ) : (
+                      <ErrorState
+                        title="Organization required"
+                        message="Select an organization to view judge scores for this trace."
+                      />
+                    )
+                  ) : canvasMode === "timeline" ? (
                     <TimelineCanvas
                       loading={
                         data.timelineQuery.isLoading && data.timelineSteps.length === 0
@@ -263,19 +313,13 @@ export function TraceViewer({
                       selectedSpanId={selection.selectedSpanId}
                       onSpanSelect={(id) => selection.selectSpan(id)}
                     />
-                  ) : mode === "meta" ? (
+                  ) : canvasMode === "meta" ? (
                     <MetadataCanvas
                       traceId={traceId}
                       meta={data.meta}
                       sessionId={data.sessionId}
                       totalTokens={data.totalTokens}
                       rows={data.rows}
-                    />
-                  ) : mode === "tree" ? (
-                    <TreeCanvas
-                      roots={data.treeRows}
-                      selectedSpanId={selection.selectedSpanId}
-                      onSpanSelect={(id) => selection.selectSpan(id)}
                     />
                   ) : (
                     <TranscriptCanvas
@@ -298,11 +342,10 @@ export function TraceViewer({
                   )}
                 </div>
 
-                {showInspector && selectedRow ? (
+                {inspectorVisible && selectedRow ? (
                   <div
                     className={cn(
                       "flex min-h-0 shrink-0",
-                      // Desktop ≥1280: side-by-side; mid: overlay drawer; mobile: full sheet
                       "absolute inset-0 z-20 xl:static xl:inset-auto xl:z-auto",
                       "w-full xl:w-[30%] xl:min-w-[360px] xl:max-w-[28rem]",
                     )}

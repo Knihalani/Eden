@@ -180,12 +180,12 @@ describe("W8 evals-ecosystem", () => {
     expect(promote).toContain("promote_trace=t9");
     expect(promote).toContain("pastHours=12");
 
-    const toolbar = read("components/trace-viewer/TraceViewerToolbar.tsx");
-    expect(toolbar).toContain("preserveFromSearch");
-    expect(toolbar).toContain("playgroundHref(traceId, spanForPlayground, linkPreserve)");
-    expect(toolbar).toContain("promoteTraceToDatasetHref(traceId, linkPreserve)");
-    expect(toolbar).toContain('data-testid="trace-add-to-dataset"');
-    expect(toolbar).toContain('data-testid="trace-open-playground"');
+    const topbar = read("components/trace-viewer/UnifiedTopBar.tsx");
+    expect(topbar).toContain("preserveFromSearch");
+    expect(topbar).toContain("playgroundHref(traceId, spanForPlayground, linkPreserve)");
+    expect(topbar).toContain("promoteTraceToDatasetHref(traceId, linkPreserve)");
+    expect(topbar).toContain('data-testid="trace-add-to-dataset"');
+    expect(topbar).toContain('data-testid="trace-open-playground"');
   });
 
   it("Scores quiet under Advanced — no Card walls; embedded hides header", () => {

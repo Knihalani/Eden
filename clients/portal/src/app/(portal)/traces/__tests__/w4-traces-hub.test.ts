@@ -68,18 +68,18 @@ describe("W4 traces hub — Laminar-class triage", () => {
     expect(modeToggleIdx).toBeGreaterThan(panelIdx);
   });
 
-  it("detail defaults to Transcript; metrics in Z1; actions in overflow", () => {
+  it("detail defaults to Transcript; metrics in top bar; actions in overflow", () => {
     const types = read("components/trace-viewer/types.ts");
     const viewer = read("components/trace-viewer/TraceViewer.tsx");
-    const toolbar = read("components/trace-viewer/TraceViewerToolbar.tsx");
+    const topbar = read("components/trace-viewer/UnifiedTopBar.tsx");
     const canvas = read("components/trace-viewer/canvases/TranscriptCanvas.tsx");
     expect(types).toContain('{ id: "transcript", label: "Transcript" }');
     expect(viewer).toContain('initialMode = "transcript"');
-    expect(viewer).toContain("TraceViewerChrome");
-    expect(toolbar).toContain('data-testid="trace-actions-overflow"');
+    expect(viewer).toContain("UnifiedTopBar");
+    expect(topbar).toContain('data-testid="trace-actions-overflow"');
     expect(canvas).toContain("VirtualTranscript");
     expect(viewer).not.toContain("<CrossLinkBar");
-    expect(toolbar).toContain('data-testid="trace-header-metrics"');
+    expect(topbar).toContain('data-testid="trace-header-metrics"');
 
     const hook = read("app/(portal)/traces/_components/use-traces-hub.ts");
     expect(hook).toContain('export const DETAIL_MODES = [');

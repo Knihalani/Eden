@@ -40,13 +40,13 @@ describe("W13 traces hub / TranscriptV2", () => {
   });
 
   it("TraceViewer uses overflow actions + progressive modes + VirtualTranscript", () => {
-    const toolbar = src("components/trace-viewer/TraceViewerToolbar.tsx");
+    const topbar = src("components/trace-viewer/UnifiedTopBar.tsx");
     const viewer = src("components/trace-viewer/TraceViewer.tsx");
     const canvas = src("components/trace-viewer/canvases/TranscriptCanvas.tsx");
-    expect(toolbar).toContain('data-testid="trace-actions-overflow"');
+    expect(topbar).toContain('data-testid="trace-actions-overflow"');
     expect(canvas).toContain("VirtualTranscript");
     expect(viewer).toContain('"transcript"');
-    expect(toolbar).toContain("Related issues");
+    expect(topbar).toContain("Related issues");
   });
 
   it("groups overlapping tool rows into parallel_tools blocks", () => {

@@ -9,8 +9,12 @@ import {
   VirtualTranscript,
   TRANSCRIPT_ROW_ESTIMATE,
 } from "@/components/transcript-v2/VirtualTranscript";
-import { TraceTimelineView } from "@/components/traces/trace-detail-views";
-import type { TimelineStep } from "@/lib/observability/timeline-sync";
+import {
+  barGeometry,
+  fullWindow,
+  isFailedOutcome,
+  type TimelineStep,
+} from "@/lib/observability/timeline-sync";
 import { cn } from "@/lib/utils";
 import { TranscriptStepRow } from "../TranscriptStepRow";
 
@@ -99,7 +103,6 @@ export function TranscriptCanvas({
       const walk = (rs: TranscriptRow[]) => {
         for (const r of rs) {
           if ((r.is_subagent || (r.children?.length ?? 0) > 0) && !next.has(r.span_id)) {
-            // Keep existing preference; only seed new subagents as collapsed.
             if (!prev.has(r.span_id) && prev.size === 0) next.add(r.span_id);
           }
           if (r.children) walk(r.children);
@@ -131,8 +134,7 @@ export function TranscriptCanvas({
   React.useEffect(() => {
     function onKey(e: KeyboardEvent) {
       const root = readerRef?.current;
-      if (!root || !root.contains(document.activeElement) && document.activeElement !== root) {
-        // Allow j/k when focus is inside reader or on a step row
+      if (!root || (!root.contains(document.activeElement) && document.activeElement !== root)) {
         if (!root?.contains(document.activeElement)) return;
       }
       if (e.key !== "j" && e.key !== "k" && e.key !== "Enter") return;
@@ -173,7 +175,7 @@ export function TranscriptCanvas({
 
   if (visible.length === 0) {
     return (
-      <p className="p-4 text-sm text-[var(--text-muted)]">
+      <p className="p-4 text-sm text-[var(--text-muted)]" data-testid="transcript-canvas">
         {liveWaiting ? "Waiting for live steps…" : "No transcript steps found."}
       </p>
     );
@@ -204,6 +206,8 @@ export function TranscriptCanvas({
       />
     ),
   }));
+
+  const window = fullWindow(Math.max(timelineTotalMs, 1));
 
   return (
     <div
@@ -251,20 +255,58 @@ export function TranscriptCanvas({
           <span className="ml-auto tabular-nums">{timelineSteps.length} spans</span>
         </button>
         {ganttStripOpen ? (
-          <TraceTimelineView
-            loading={timelineLoading && timelineSteps.length === 0}
-            error={timelineError}
-            steps={timelineSteps}
-            totalMs={timelineTotalMs}
-            markers={timelineMarkers}
-            selectedSpanId={selectedSpanId}
-            onSpanSelect={(spanId) => onSelectSpan(spanId)}
-            variant="strip"
-          />
+          <div className="space-y-1 px-2 pb-2" data-testid="trace-timeline-strip" data-variant="strip">
+            {timelineLoading && timelineSteps.length === 0 ? (
+              <p className="py-2 text-2xs text-[var(--text-muted)]">Loading…</p>
+            ) : timelineError && timelineSteps.length === 0 ? (
+              <p className="py-2 text-2xs text-[var(--warning)]">{timelineError}</p>
+            ) : timelineSteps.length === 0 ? (
+              <p className="py-2 text-2xs text-[var(--text-muted)]">No steps</p>
+            ) : (
+              <div className="relative h-7 cursor-default rounded bg-[var(--bg-tertiary)]/40">
+                {timelineMarkers.map((m) => (
+                  <div
+                    key={`${m.at_ms}-${m.label}`}
+                    className="pointer-events-none absolute top-0 bottom-0 w-px bg-[var(--warning)]/60"
+                    style={{
+                      left: `${Math.min(100, (m.at_ms / Math.max(timelineTotalMs, 1)) * 100)}%`,
+                    }}
+                    title={m.label}
+                  />
+                ))}
+                {timelineSteps.map((s, i) => {
+                  const { leftPct, widthPct } = barGeometry(s, window);
+                  const failed = isFailedOutcome(s.outcome);
+                  const selected =
+                    s.span_id != null &&
+                    selectedSpanId != null &&
+                    s.span_id === selectedSpanId;
+                  return (
+                    <button
+                      key={`${s.span_id ?? s.name}-${i}`}
+                      type="button"
+                      disabled={!s.span_id}
+                      data-span-id={s.span_id}
+                      onClick={() => {
+                        if (s.span_id) onSelectSpan(s.span_id);
+                      }}
+                      className={cn(
+                        "absolute top-1 bottom-1 rounded-sm",
+                        failed ? "bg-[var(--error)]/85" : "bg-[var(--accent)]/65",
+                        selected && "ring-1 ring-[var(--text-primary)] z-[1]",
+                      )}
+                      style={{ left: `${leftPct}%`, width: `${widthPct}%` }}
+                      title={`${s.name}: ${s.duration_ms.toFixed(0)}ms`}
+                    />
+                  );
+                })}
+              </div>
+            )}
+          </div>
         ) : null}
       </div>
 
-      <div className="min-h-0 flex-1">
+      <div className="min-h-0 flex-1 overflow-hidden rounded-md border border-[var(--border-subtle)]">
         <VirtualTranscript items={items} overscan={12} />
       </div>
     </div>

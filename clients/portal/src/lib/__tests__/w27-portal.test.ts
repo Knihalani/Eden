@@ -50,10 +50,10 @@ describe("W27 N11 live streaming", () => {
 
   it("portal Live badge + session SSE hook", () => {
     const data = src("components/trace-viewer/use-trace-viewer-data.ts");
-    const toolbar = src("components/trace-viewer/TraceViewerToolbar.tsx");
-    expect(toolbar).toContain("live-trace-badge");
+    const topbar = src("components/trace-viewer/UnifiedTopBar.tsx");
+    expect(topbar).toContain("live-trace-badge");
     expect(data).toContain("useLiveTraceStream");
-    expect(toolbar).toContain("Live");
+    expect(topbar).toContain("Live");
     expect(existsSync(resolve(ROOT, "src/hooks/use-live-trace-stream.ts"))).toBe(
       true,
     );
@@ -62,7 +62,7 @@ describe("W27 N11 live streaming", () => {
     expect(hook).toContain("/events");
     expect(hook).toContain("MAX_RECONNECT_ATTEMPTS");
     expect(hook).toContain("retry");
-    expect(toolbar).toContain("live-trace-retry");
+    expect(topbar).toContain("live-trace-retry");
     expect(data).toContain('searchParams.get("live") === "1"');
     expect(data).toContain("outcomeInFlight");
     expect(data).not.toContain("sessionId ?? traceId");

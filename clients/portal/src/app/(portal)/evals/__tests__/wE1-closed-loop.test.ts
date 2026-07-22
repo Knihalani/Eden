@@ -75,11 +75,11 @@ describe("Wave E1 closed loop", () => {
   });
 
   it("M8: Trace passes span_id; playground shows From production chip", () => {
-    const toolbar = read("components/trace-viewer/TraceViewerToolbar.tsx");
-    expect(toolbar).toContain("playgroundHref(traceId, spanForPlayground, linkPreserve)");
-    expect(toolbar).toContain('data-testid="trace-open-playground"');
-    expect(toolbar).toContain('data-testid="trace-add-to-dataset"');
-    expect(toolbar).toContain('data-wave-e1-trace-loop="primary"');
+    const topbar = read("components/trace-viewer/UnifiedTopBar.tsx");
+    expect(topbar).toContain("playgroundHref(traceId, spanForPlayground, linkPreserve)");
+    expect(topbar).toContain('data-testid="trace-open-playground"');
+    expect(topbar).toContain('data-testid="trace-add-to-dataset"');
+    expect(topbar).toContain('data-wave-e1-trace-loop="primary"');
 
     const href = playgroundHref("trace-9", "span-42", { pastHours: "6" });
     expect(href).toContain("tab=playgrounds");

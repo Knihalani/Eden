@@ -1,11 +1,22 @@
 "use client";
 
 import * as React from "react";
+import * as DialogPrimitive from "@radix-ui/react-dialog";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { ChevronRight, Radio, Search } from "lucide-react";
+import {
+  Check,
+  ChevronLeft,
+  ChevronRight,
+  Copy,
+  Radio,
+  X,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { TraceOutcomeBadge } from "@/components/ui/status-badge";
+import { FOCUS_RING_CLASS } from "@/components/ui/focus-ring";
+import { isFocusInTranscript } from "@/hooks/use-list-keyboard-nav";
 import {
   artifactHref,
   improveHref,
@@ -15,51 +26,90 @@ import {
   promoteTraceToDatasetHref,
   sessionHref,
 } from "@/lib/portal-cross-links";
-import { TRACE_VIEWER_MODES, type DetailMode } from "./types";
+import { cn } from "@/lib/utils";
+import {
+  TRACE_VIEWER_MODES,
+  toCanvasMode,
+  type DetailMode,
+} from "./types";
 import type { TraceViewerMeta } from "./use-trace-viewer-data";
 
-export interface TraceViewerToolbarProps {
+export interface UnifiedTopBarProps {
+  traceId: string;
+  title?: React.ReactNode;
+  outcome?: string | null;
+  onClose: () => void;
+  onPrev?: () => void;
+  onNext?: () => void;
   mode: DetailMode;
   onModeChange: (mode: DetailMode) => void;
   meta: TraceViewerMeta | null;
   totalTokens?: { input: number; output: number; total: number };
-  traceId: string;
   selectedSpanId?: string | null;
   liveSlot?: React.ReactNode;
-  spanSearch: string;
-  onSpanSearchChange: (q: string) => void;
   onAnnotate?: () => void;
   onShare?: () => void;
   ganttStripOpen?: boolean;
   onToggleGantt?: () => void;
-  searchInputRef?: React.RefObject<HTMLInputElement | null>;
 }
 
 const metricPill =
   "inline-flex items-center rounded border border-[var(--border-subtle)] bg-[var(--bg-secondary)] px-space-2 py-space-1 font-mono text-2xs tabular-nums text-[var(--text-secondary)]";
 
-/** Z1 toolbar (~36–40px): modes · metrics · search · Annotate/Share · More */
-export function TraceViewerToolbar({
+/** Single top bar: identity · modes · metrics · actions · close. */
+export function UnifiedTopBar({
+  traceId,
+  title,
+  outcome,
+  onClose,
+  onPrev,
+  onNext,
   mode,
   onModeChange,
   meta,
   totalTokens,
-  traceId,
   selectedSpanId,
   liveSlot,
-  spanSearch,
-  onSpanSearchChange,
   onAnnotate,
   onShare,
   ganttStripOpen,
   onToggleGantt,
-  searchInputRef,
-}: TraceViewerToolbarProps) {
+}: UnifiedTopBarProps) {
+  const [copied, setCopied] = React.useState(false);
   const searchParams = useSearchParams();
   const linkPreserve = React.useMemo(
     () => preserveFromSearchParams(searchParams),
     [searchParams],
   );
+
+  React.useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      const target = e.target as HTMLElement | null;
+      const isFormField =
+        target?.tagName === "INPUT" ||
+        target?.tagName === "TEXTAREA" ||
+        target?.isContentEditable;
+      if (isFormField) return;
+      if (isFocusInTranscript()) return;
+      if (e.key === "j" && onNext) {
+        e.preventDefault();
+        onNext();
+      }
+      if (e.key === "k" && onPrev) {
+        e.preventDefault();
+        onPrev();
+      }
+    }
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [onNext, onPrev]);
+
+  const copyId = React.useCallback(() => {
+    void navigator.clipboard.writeText(traceId).then(() => {
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1500);
+    });
+  }, [traceId]);
 
   const spanForPlayground = selectedSpanId ?? undefined;
   const addToDatasetHref = promoteTraceToDatasetHref(traceId, linkPreserve);
@@ -83,14 +133,75 @@ export function TraceViewerToolbar({
   const pillClass =
     "rounded border border-[var(--border-subtle)] px-space-1 py-space-1 font-mono text-[var(--text-muted)] tabular-nums";
 
+  const tabValue = toCanvasMode(mode);
+
   return (
-    <div
-      className="flex h-10 shrink-0 flex-wrap items-center gap-space-3 border-b border-[var(--border-default)] px-space-4 text-xs"
-      data-testid="trace-viewer-toolbar"
-      data-testid-legacy="trace-header"
+    <header
+      className="flex shrink-0 flex-col gap-space-2 border-b border-[var(--border-default)] bg-[var(--bg-primary)] px-space-4 py-space-2 sm:flex-row sm:items-center sm:gap-space-3 sm:py-0 sm:h-14"
+      data-testid="trace-viewer-topbar"
+      data-testid-legacy="trace-viewer-chrome"
     >
+      <div className="flex min-w-0 flex-1 items-center gap-space-2">
+        {onPrev || onNext ? (
+          <div className="flex shrink-0 items-center gap-0.5">
+            <button
+              type="button"
+              onClick={onPrev}
+              disabled={!onPrev}
+              aria-label="Previous trace"
+              className={cn(
+                "rounded p-space-1 text-[var(--text-muted)] hover:bg-[var(--bg-tertiary)] disabled:opacity-30",
+                FOCUS_RING_CLASS,
+              )}
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              onClick={onNext}
+              disabled={!onNext}
+              aria-label="Next trace"
+              className={cn(
+                "rounded p-space-1 text-[var(--text-muted)] hover:bg-[var(--bg-tertiary)] disabled:opacity-30",
+                FOCUS_RING_CLASS,
+              )}
+            >
+              <ChevronRight className="h-4 w-4" />
+            </button>
+          </div>
+        ) : null}
+        <TraceOutcomeBadge outcome={outcome ?? null} />
+        <DialogPrimitive.Title className="min-w-0 truncate text-sm font-semibold text-[var(--text-primary)]">
+          {title ?? <span className="font-mono">{traceId.slice(0, 20)}…</span>}
+        </DialogPrimitive.Title>
+        <DialogPrimitive.Description className="sr-only">
+          Fullscreen trace viewer for {traceId}
+        </DialogPrimitive.Description>
+        <div className="hidden min-w-0 items-center gap-1 sm:flex">
+          <span className="truncate font-mono text-2xs text-[var(--text-muted)]">
+            {traceId}
+          </span>
+          <button
+            type="button"
+            onClick={copyId}
+            aria-label="Copy trace id"
+            data-testid="trace-viewer-copy-id"
+            className={cn(
+              "inline-flex min-h-8 min-w-8 items-center justify-center rounded text-[var(--text-muted)] hover:text-[var(--text-primary)]",
+              FOCUS_RING_CLASS,
+            )}
+          >
+            {copied ? (
+              <Check className="h-3.5 w-3.5 text-[var(--terminal)]" />
+            ) : (
+              <Copy className="h-3.5 w-3.5" />
+            )}
+          </button>
+        </div>
+      </div>
+
       <Tabs
-        value={mode}
+        value={tabValue}
         onValueChange={(id) => onModeChange(id as DetailMode)}
         className="w-full sm:w-auto"
       >
@@ -104,7 +215,7 @@ export function TraceViewerToolbar({
               key={t.id}
               value={t.id}
               variant="underline"
-              className="min-h-8 px-2 text-xs"
+              className="min-h-8 px-2 text-xs font-medium"
             >
               {t.label}
             </TabsTrigger>
@@ -117,17 +228,17 @@ export function TraceViewerToolbar({
         data-testid="trace-header-metrics"
         data-metric-count={5}
       >
-        <span className={metricPill} data-metric="spans">
-          {meta?.span_count ?? 0} spans
-        </span>
         <span className={metricPill} data-metric="duration" data-pill="latency">
           {(meta?.duration_ms ?? 0).toFixed(0)}ms
         </span>
-        <span className={metricPill} data-metric="cost" data-pill="cost">
-          {meta?.cost_cents != null ? `$${(meta.cost_cents / 100).toFixed(2)}` : "—"}
+        <span className={metricPill} data-metric="spans">
+          {meta?.span_count ?? 0} spans
         </span>
         <span className={metricPill} data-metric="tokens" data-pill="tokens">
           {totalTokens ? `${totalTokens.total.toLocaleString()} tok` : "—"}
+        </span>
+        <span className={metricPill} data-metric="cost" data-pill="cost">
+          {meta?.cost_cents != null ? `$${(meta.cost_cents / 100).toFixed(2)}` : "—"}
         </span>
         <span className={metricPill} data-metric="model">
           {meta?.model ?? "—"}
@@ -137,23 +248,7 @@ export function TraceViewerToolbar({
       {liveSlot}
 
       <div
-        className="flex min-w-0 flex-1 items-center gap-1.5 rounded border border-[var(--border-subtle)] bg-[var(--bg-secondary)] px-2 py-0.5"
-        data-testid="trace-span-search"
-      >
-        <Search className="h-3.5 w-3.5 shrink-0 text-[var(--text-muted)]" aria-hidden />
-        <input
-          ref={searchInputRef}
-          type="search"
-          value={spanSearch}
-          onChange={(e) => onSpanSearchChange(e.target.value)}
-          placeholder="Search spans… (/ or ⌘F)"
-          aria-label="Search spans"
-          className="min-w-0 flex-1 bg-transparent text-xs text-[var(--text-primary)] outline-none placeholder:text-[var(--text-muted)]"
-        />
-      </div>
-
-      <div
-        className="flex flex-wrap items-center gap-space-1"
+        className="flex min-w-0 items-center gap-1.5"
         data-testid="trace-context-pills"
       >
         {sessionId ? (
@@ -259,8 +354,27 @@ export function TraceViewerToolbar({
             ))}
           </div>
         </details>
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Close trace viewer (Esc)"
+          data-testid="trace-viewer-close"
+          className={cn(
+            "inline-flex shrink-0 items-center gap-1.5 rounded px-2 py-1 text-xs text-[var(--text-muted)] hover:bg-[var(--bg-tertiary)] hover:text-[var(--text-primary)]",
+            FOCUS_RING_CLASS,
+          )}
+        >
+          <X className="h-3.5 w-3.5 sm:hidden" aria-hidden />
+          <span className="hidden sm:inline">Close</span>
+          <kbd
+            className="hidden sm:inline-block rounded border border-[var(--border-subtle)] px-1 py-0.5 font-mono text-2xs text-[var(--text-muted)]"
+            data-shortcut-chip="esc"
+          >
+            Esc
+          </kbd>
+        </button>
       </div>
-    </div>
+    </header>
   );
 }
 

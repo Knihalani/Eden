@@ -15,13 +15,14 @@ import {
   IoFormatToggle,
 } from "@/components/transcript-v2/transcript-panels";
 import { formatDuration } from "@/components/transcript-v2/transcript-format";
+import { classifySpanKind, spanKindColor, spanKindLabel } from "@/components/transcript-v2/span-kind";
 import { playgroundHref, promoteTraceToDatasetHref } from "@/lib/portal-cross-links";
 import { cn } from "@/lib/utils";
 import { FOCUS_RING_CLASS } from "@/components/ui/focus-ring";
 
 function KV({ k, v }: { k: string; v: React.ReactNode }) {
   return (
-    <div className="flex justify-between gap-3 border-b border-[var(--border-subtle)] py-1">
+    <div className="flex justify-between gap-3 border-b border-[var(--border-subtle)] py-1.5">
       <dt className="shrink-0 text-[var(--text-muted)]">{k}</dt>
       <dd className="min-w-0 break-all text-right font-mono text-[var(--text-secondary)]">{v}</dd>
     </div>
@@ -37,8 +38,7 @@ export interface SpanInspectorProps {
 }
 
 /**
- * Full-height Z3 rail: KV · format toggle · Input/Output planes · span actions.
- * Owns deep I/O — transcript rows stay one-line previews.
+ * Sticky full-height inspector — Input plane vs toned Output wash.
  */
 export function SpanInspector({
   row,
@@ -48,10 +48,12 @@ export function SpanInspector({
   className,
 }: SpanInspectorProps) {
   const [ioMode, setIoMode] = React.useState<"formatted" | "json">("formatted");
-  // IoFormatToggle uses value/onChange (Formatted ↔ JSON)
   const hasMessages = Boolean(row.request_body?.messages?.length);
   const hasResponse = row.response_body != null;
   const hasTools = Boolean(row.tool_calls?.length || row.tool_results?.length);
+  const hasIo = hasMessages || hasResponse || hasTools || Boolean(row.reasoning?.length);
+  const kind = classifySpanKind(row);
+  const rail = spanKindColor(kind);
 
   return (
     <aside
@@ -64,45 +66,52 @@ export function SpanInspector({
       data-testid-legacy="span-detail-sidebar"
       aria-label="Span I/O inspector"
     >
-      <div className="shrink-0 border-b border-[var(--border-default)] px-space-3 py-space-2">
-        <div className="flex items-start justify-between gap-space-2">
-          <div className="min-w-0">
-            <div className="text-2xs font-mono uppercase tracking-wider text-[var(--text-muted)]">
-              Span
+      <div className="shrink-0 border-b border-[var(--border-default)]">
+        <div className="flex items-stretch">
+          <span className="w-1 shrink-0" style={{ background: rail }} aria-hidden />
+          <div className="min-w-0 flex-1 px-space-3 py-space-2">
+            <div className="flex items-start justify-between gap-space-2">
+              <div className="min-w-0">
+                <div className="text-2xs font-mono uppercase tracking-wider text-[var(--text-muted)]">
+                  {spanKindLabel(kind)}
+                </div>
+                <div className="truncate text-sm font-semibold text-[var(--text-primary)]">
+                  {row.name}
+                </div>
+                <div className="mt-space-1 font-mono text-2xs text-[var(--text-muted)]">
+                  {row.span_id}
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={onClose}
+                aria-label="Close span inspector"
+                data-testid="span-inspector-close"
+                className={cn(
+                  "inline-flex min-h-8 min-w-8 shrink-0 items-center justify-center rounded text-[var(--text-muted)] hover:text-[var(--text-primary)]",
+                  FOCUS_RING_CLASS,
+                )}
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
             </div>
-            <div className="truncate font-mono text-sm">{row.name}</div>
-            <div className="mt-space-1 text-2xs text-[var(--text-muted)]">
-              {row.span_id} • {row.event_type ?? "span"}
+            <div className="mt-2 flex flex-wrap gap-2">
+              <Link
+                href={playgroundHref(traceId, row.span_id)}
+                className="text-2xs text-[var(--accent)] hover:underline"
+                data-testid="inspector-playground"
+              >
+                Playground
+              </Link>
+              <Link
+                href={promoteTraceToDatasetHref(traceId)}
+                className="text-2xs text-[var(--accent)] hover:underline"
+                data-testid="inspector-dataset"
+              >
+                Dataset
+              </Link>
             </div>
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Close span inspector"
-            data-testid="span-inspector-close"
-            className={cn(
-              "inline-flex min-h-8 min-w-8 shrink-0 items-center justify-center rounded text-[var(--text-muted)] hover:text-[var(--text-primary)]",
-              FOCUS_RING_CLASS,
-            )}
-          >
-            <X className="h-3.5 w-3.5" />
-          </button>
-        </div>
-        <div className="mt-2 flex flex-wrap gap-2">
-          <Link
-            href={playgroundHref(traceId, row.span_id)}
-            className="text-2xs text-[var(--accent)] hover:underline"
-            data-testid="inspector-playground"
-          >
-            Playground
-          </Link>
-          <Link
-            href={promoteTraceToDatasetHref(traceId)}
-            className="text-2xs text-[var(--accent)] hover:underline"
-            data-testid="inspector-dataset"
-          >
-            Dataset
-          </Link>
         </div>
       </div>
 
@@ -119,8 +128,18 @@ export function SpanInspector({
           <KV k="timestamp" v={row.timestamp} />
         </dl>
 
-        {(hasMessages || hasResponse || hasTools || row.reasoning?.length) && (
-          <div className="space-y-space-4 border-t border-[var(--border-default)] p-space-3">
+        {!hasIo ? (
+          <div
+            className="flex flex-1 flex-col items-center justify-center gap-1 border-t border-[var(--border-default)] p-6 text-center"
+            data-testid="span-inspector-empty"
+          >
+            <p className="text-sm text-[var(--text-secondary)]">No I/O on this span</p>
+            <p className="text-xs text-[var(--text-muted)]">
+              Select an LLM or tool span to inspect messages and responses.
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-space-3 border-t border-[var(--border-default)] p-space-3">
             <div className="flex items-center justify-between gap-2">
               <SectionHeader>I/O</SectionHeader>
               <IoFormatToggle value={ioMode} onChange={setIoMode} id="io-format-toggle-inspector" />
@@ -141,7 +160,10 @@ export function SpanInspector({
                   <ReasoningPanel blocks={row.reasoning} />
                 ) : null}
                 {hasMessages ? (
-                  <div data-plane="input">
+                  <div
+                    data-plane="input"
+                    className="rounded-md border border-[var(--border-subtle)] bg-[var(--bg-primary)] p-2.5"
+                  >
                     <MessagesPanel title="Input" messages={row.request_body!.messages!} />
                   </div>
                 ) : null}
@@ -158,7 +180,10 @@ export function SpanInspector({
                   <ToolResultsPanel results={row.tool_results} />
                 ) : null}
                 {hasResponse ? (
-                  <div data-plane="output">
+                  <div
+                    data-plane="output"
+                    className="rounded-md border border-[var(--border-subtle)] bg-[var(--bg-tertiary)]/50 p-2.5"
+                  >
                     <ResponsePanel response={row.response_body as never} />
                   </div>
                 ) : null}
