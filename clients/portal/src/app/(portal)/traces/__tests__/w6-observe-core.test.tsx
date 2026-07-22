@@ -46,7 +46,7 @@ describe("W6 observe-core — Traces declutter", () => {
     const hook = read("app/(portal)/traces/_components/use-traces-hub.ts");
     expect(src).toContain("ResourcePageShell");
     expect(toolbar).toContain('data-testid="traces-toolbar"');
-    expect(src).toContain("DetailPanelShell");
+    expect(src).toContain("TraceViewerModal");
     expect(src).toContain("hub.traceId ? (");
     expect(toolbar).toContain("FACET_VIEWS");
     // Legacy tools only in More overflow

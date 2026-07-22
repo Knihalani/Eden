@@ -256,8 +256,8 @@ describe("W3-2 traces hub list UI gate", () => {
     expect(toolbar).toContain('data-testid="traces-live-toggle"');
     expect(toolbar).toContain('data-testid="traces-refresh"');
     expect(toolbar).toContain('data-primary-control="display"');
-    // Master–detail stays on hub
-    expect(src).toContain("DetailPanelShell");
+    // Master–detail stays on hub via fullscreen modal
+    expect(src).toContain("TraceViewerModal");
     expect(src).toContain("traceId");
     // Display is first-class (columns / density / LIVE / range) — not buried only in More
     expect(toolbar).toContain("TRACES_OPTIONAL_COLUMNS");

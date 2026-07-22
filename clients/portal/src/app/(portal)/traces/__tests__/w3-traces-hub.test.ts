@@ -161,11 +161,12 @@ describe("W3 traces hub — Laminar-class chrome", () => {
     expect(nav).toContain("j:");
     expect(nav).toContain("k:");
 
-    // Failure → cause ≤2 clicks: row select opens transcript-first detail
+    // Failure → cause ≤2 clicks: row select opens transcript-first fullscreen modal
     const page = read("app/(portal)/traces/page.tsx");
-    expect(page).toContain("TraceSplitLayout");
+    expect(page).toContain("TraceViewerModal");
     expect(page).toContain("TraceDetailPanel");
     expect(page).toContain('initialMode={hub.detailMode}');
+    expect(page).toContain('layout="fullscreen"');
     expect(hook).toContain(': "transcript"');
 
     // Wave 2 transcript stack preserved

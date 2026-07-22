@@ -63,7 +63,7 @@ export interface TraceDetailPanelProps {
   traceId: string;
   onClose?: () => void;
   highlightSpanId?: string | null;
-  /** When true, hide Esc close (parent DetailPanelShell owns close). */
+  /** When true, hide Esc close (parent shell owns close). */
   hideCloseControl?: boolean;
   /** URL / parent-driven mode; defaults to transcript. */
   initialMode?: DetailMode;
@@ -71,6 +71,8 @@ export interface TraceDetailPanelProps {
   onModeChange?: (mode: DetailMode) => void;
   /** Write-back selected span id to hub URL (`?spanId=`). */
   onSpanSelect?: (spanId: string | null) => void;
+  /** Fullscreen modal viewer vs compact peek. */
+  layout?: "default" | "fullscreen";
 }
 
 export function TraceDetailPanel({
@@ -81,7 +83,9 @@ export function TraceDetailPanel({
   initialMode = "transcript",
   onModeChange,
   onSpanSelect,
+  layout = "default",
 }: TraceDetailPanelProps) {
+  const fullscreen = layout === "fullscreen";
   const { currentOrg } = useOrg();
   const searchParams = useSearchParams();
   const linkPreserve = useMemo(
@@ -101,8 +105,10 @@ export function TraceDetailPanel({
     cost_cents?: number | null;
     session_id?: string | null;
     agent_id?: string | null;
+    user_id?: string | null;
     input_tokens?: number | null;
     output_tokens?: number | null;
+    tags?: string[] | null;
   } | null>(null);
   const [rows, setRows] = useState<ReturnType<typeof buildTranscriptRows>>([]);
   const [treeRows, setTreeRows] = useState<ReturnType<typeof buildSpanTree>>([]);
@@ -184,10 +190,13 @@ export function TraceDetailPanel({
             (trace as { session_id?: string } | undefined)?.session_id ??
             null,
           agent_id: (trace as { agent_id?: string | null } | undefined)?.agent_id ?? null,
+          user_id:
+            (trace as { user_id?: string | null } | undefined)?.user_id ?? null,
           input_tokens:
             (trace as { input_tokens?: number | null } | undefined)?.input_tokens ?? null,
           output_tokens:
             (trace as { output_tokens?: number | null } | undefined)?.output_tokens ?? null,
+          tags: (trace as { tags?: string[] | null } | undefined)?.tags ?? null,
         });
         setPhase("ready");
       })
@@ -286,13 +295,22 @@ export function TraceDetailPanel({
 
   const showLiveBadge = liveStream.live && !liveStream.finalized;
 
-  /** Wave 4: ≤4 header metrics — outcome · spans · duration · cost. */
+  /** Compact peek: outcome + core four. Fullscreen: skip outcome (modal chrome owns it). */
+  const metricPill =
+    "inline-flex items-center rounded border border-[var(--border-subtle)] bg-[var(--bg-secondary)] px-space-2 py-space-1 font-mono text-2xs tabular-nums text-[var(--text-secondary)]";
   const headerMetrics = [
-    { key: "outcome", node: <TraceOutcomeBadge outcome={meta?.outcome ?? null} /> },
+    ...(!fullscreen
+      ? [
+          {
+            key: "outcome",
+            node: <TraceOutcomeBadge outcome={meta?.outcome ?? null} />,
+          },
+        ]
+      : []),
     {
       key: "spans",
       node: (
-        <span className="tabular-nums text-[var(--text-muted)]">
+        <span className={fullscreen ? metricPill : "tabular-nums text-[var(--text-muted)]"}>
           {meta?.span_count ?? 0} spans
         </span>
       ),
@@ -300,7 +318,7 @@ export function TraceDetailPanel({
     {
       key: "duration",
       node: (
-        <span className="tabular-nums text-[var(--text-muted)]">
+        <span className={fullscreen ? metricPill : "tabular-nums text-[var(--text-muted)]"}>
           {(meta?.duration_ms ?? 0).toFixed(0)}ms
         </span>
       ),
@@ -309,12 +327,34 @@ export function TraceDetailPanel({
       key: "cost",
       node:
         meta?.cost_cents != null ? (
-          <span className="font-mono tabular-nums">${(meta.cost_cents / 100).toFixed(2)}</span>
+          <span className={fullscreen ? metricPill : "font-mono tabular-nums"}>
+            ${(meta.cost_cents / 100).toFixed(2)}
+          </span>
         ) : (
           <span className="text-[var(--text-faint)]">—</span>
         ),
     },
-  ] as const;
+    ...(fullscreen
+      ? [
+          {
+            key: "tokens",
+            node: totalTokens ? (
+              <span className={metricPill}>{totalTokens.total.toLocaleString()} tok</span>
+            ) : (
+              <span className="text-[var(--text-faint)]">—</span>
+            ),
+          },
+          {
+            key: "model",
+            node: meta?.model ? (
+              <span className={metricPill}>{meta.model}</span>
+            ) : (
+              <span className="text-[var(--text-faint)]">—</span>
+            ),
+          },
+        ]
+      : []),
+  ];
 
   const liveSlot = (
     <>
@@ -436,20 +476,21 @@ export function TraceDetailPanel({
 
   const pillClass =
     "rounded border border-[var(--border-subtle)] px-space-1 py-space-1 font-mono text-[var(--text-muted)] tabular-nums";
+  /** Fullscreen metrics already cover model/latency/tokens/cost — only unique context here. */
   const contextPills = (
     <div className="flex flex-wrap items-center gap-space-1" data-testid="trace-context-pills">
-      {meta?.model ? <span className={pillClass}>{meta.model}</span> : null}
-      {meta?.duration_ms != null ? (
+      {!fullscreen && meta?.model ? <span className={pillClass}>{meta.model}</span> : null}
+      {!fullscreen && meta?.duration_ms != null ? (
         <span className={pillClass} data-pill="latency">
           {(meta.duration_ms).toFixed(0)}ms
         </span>
       ) : null}
-      {totalTokens ? (
+      {!fullscreen && totalTokens ? (
         <span className={pillClass} data-pill="tokens">
           {totalTokens.total.toLocaleString()} tok
         </span>
       ) : null}
-      {meta?.cost_cents != null ? (
+      {!fullscreen && meta?.cost_cents != null ? (
         <span className={pillClass} data-pill="cost">
           ${(meta.cost_cents / 100).toFixed(4)}
         </span>
@@ -457,6 +498,11 @@ export function TraceDetailPanel({
       {sessionId ? (
         <span className={pillClass} data-pill="session">
           session {sessionId.slice(0, 10)}…
+        </span>
+      ) : null}
+      {fullscreen && meta?.user_id ? (
+        <span className={pillClass} data-pill="user">
+          user {meta.user_id.slice(0, 12)}…
         </span>
       ) : null}
     </div>
@@ -479,9 +525,14 @@ export function TraceDetailPanel({
   })();
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
+    <div
+      className="flex h-full min-h-0 flex-col"
+      data-layout={layout}
+      data-testid="trace-detail-panel"
+    >
       <TraceHeader
-        metrics={[...headerMetrics]}
+        layout={layout}
+        metrics={headerMetrics}
         liveSlot={liveSlot}
         overflowActions={overflowActions}
         modeTabs={modeTabs}
@@ -498,7 +549,12 @@ export function TraceDetailPanel({
           ) : null
         }
       />
-      <div className="min-h-0 flex-1 overflow-y-auto p-2">
+      <div
+        className={cn(
+          "min-h-0 flex-1",
+          fullscreen ? "flex flex-col overflow-hidden p-space-3" : "overflow-y-auto p-2",
+        )}
+      >
         {mode === "scores" && currentOrg ? (
           <ScoresTab orgId={currentOrg.id} traceId={traceId} />
         ) : mode === "timeline" ? (
@@ -512,19 +568,35 @@ export function TraceDetailPanel({
             onSpanSelect={(spanId) => onSpanSelect?.(spanId)}
           />
         ) : mode === "meta" ? (
-          <div className="space-y-4 p-3">
-            <dl className="space-y-2 text-xs">
-              <div className="flex justify-between gap-4">
+          <div className={cn("space-y-space-4", fullscreen ? "p-space-4" : "p-3")}>
+            <dl
+              className={cn(
+                "text-xs",
+                fullscreen ? "max-w-2xl space-y-space-3" : "space-y-2",
+              )}
+              data-testid="trace-metadata-dl"
+            >
+              <div className="flex justify-between gap-4 border-b border-[var(--border-subtle)] pb-space-2">
                 <dt className="text-[var(--text-muted)]">Trace</dt>
-                <dd className="font-mono break-all">{traceId}</dd>
+                <dd className="font-mono break-all text-right">{traceId}</dd>
               </div>
               <div className="flex justify-between gap-4">
                 <dt className="text-[var(--text-muted)]">Agent</dt>
-                <dd>{meta?.agent_id ?? "—"}</dd>
+                <dd className="font-mono">{meta?.agent_id ?? "—"}</dd>
               </div>
               <div className="flex justify-between gap-4">
+                <dt className="text-[var(--text-muted)]">Session</dt>
+                <dd className="font-mono">{sessionId ?? "—"}</dd>
+              </div>
+              {meta?.user_id ? (
+                <div className="flex justify-between gap-4">
+                  <dt className="text-[var(--text-muted)]">User</dt>
+                  <dd className="font-mono">{meta.user_id}</dd>
+                </div>
+              ) : null}
+              <div className="flex justify-between gap-4">
                 <dt className="text-[var(--text-muted)]">Model</dt>
-                <dd>{meta?.model ?? "—"}</dd>
+                <dd className="font-mono">{meta?.model ?? "—"}</dd>
               </div>
               <div className="flex justify-between gap-4">
                 <dt className="text-[var(--text-muted)]">Tokens</dt>
@@ -541,8 +613,33 @@ export function TraceDetailPanel({
                 </dd>
               </div>
               <div className="flex justify-between gap-4">
+                <dt className="text-[var(--text-muted)]">Duration</dt>
+                <dd className="font-mono tabular-nums">
+                  {(meta?.duration_ms ?? 0).toFixed(0)}ms
+                </dd>
+              </div>
+              <div className="flex justify-between gap-4">
+                <dt className="text-[var(--text-muted)]">Spans</dt>
+                <dd className="font-mono tabular-nums">{meta?.span_count ?? 0}</dd>
+              </div>
+              <div className="flex justify-between gap-4">
                 <dt className="text-[var(--text-muted)]">Outcome</dt>
                 <dd>{meta?.outcome ?? "—"}</dd>
+              </div>
+              <div className="flex justify-between gap-4">
+                <dt className="text-[var(--text-muted)]">Tags</dt>
+                <dd className="max-w-[70%] text-right">
+                  {meta?.tags?.length
+                    ? meta.tags.map((t) => (
+                        <span
+                          key={t}
+                          className="mb-1 ml-1 inline-block rounded border border-[var(--border-subtle)] px-1.5 py-0.5 font-mono text-2xs text-[var(--text-muted)]"
+                        >
+                          {t}
+                        </span>
+                      ))
+                    : "—"}
+                </dd>
               </div>
             </dl>
             <LatencyHistogram
@@ -562,7 +659,11 @@ export function TraceDetailPanel({
             {liveStream.live ? "Waiting for live steps…" : "No transcript steps found."}
           </p>
         ) : (
-          <>
+          <div
+            className={cn(
+              fullscreen && "flex min-h-0 flex-1 flex-col gap-space-2",
+            )}
+          >
             {failureOutcome ? (
               <div
                 data-testid="trace-failure-callout"
@@ -584,7 +685,7 @@ export function TraceDetailPanel({
               </div>
             ) : null}
             <div
-              className="mb-2 rounded border border-[var(--border-subtle)]"
+              className="mb-2 shrink-0 rounded border border-[var(--border-subtle)]"
               data-testid="transcript-gantt-strip"
             >
               <button
@@ -618,29 +719,32 @@ export function TraceDetailPanel({
                 />
               ) : null}
             </div>
-            <VirtualizedTranscript
-              traceId={traceId}
-              rows={rows}
-              totalDurationMs={meta?.duration_ms ?? 0}
-              totalCost={meta?.cost_cents != null ? meta.cost_cents / 100 : undefined}
-              totalTokens={totalTokens}
-              model={meta?.model}
-              outcome={
-                (meta?.outcome as
-                  | "success"
-                  | "failure"
-                  | "partial"
-                  | "timeout"
-                  | "crash"
-                  | null) ?? null
-              }
-              spanCount={meta?.span_count ?? rows.length}
-              orgId={currentOrg?.id}
-              sessionId={sessionId}
-              highlightSpanId={highlightSpanId}
-              onSpanSelect={onSpanSelect}
-            />
-          </>
+            <div className={cn(fullscreen && "min-h-0 flex-1")}>
+              <VirtualizedTranscript
+                traceId={traceId}
+                rows={rows}
+                totalDurationMs={meta?.duration_ms ?? 0}
+                totalCost={meta?.cost_cents != null ? meta.cost_cents / 100 : undefined}
+                totalTokens={totalTokens}
+                model={meta?.model}
+                outcome={
+                  (meta?.outcome as
+                    | "success"
+                    | "failure"
+                    | "partial"
+                    | "timeout"
+                    | "crash"
+                    | null) ?? null
+                }
+                spanCount={meta?.span_count ?? rows.length}
+                orgId={currentOrg?.id}
+                sessionId={sessionId}
+                highlightSpanId={highlightSpanId}
+                onSpanSelect={onSpanSelect}
+                layout={layout}
+              />
+            </div>
+          </div>
         )}
       </div>
     </div>

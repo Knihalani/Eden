@@ -30,6 +30,8 @@ export interface TranscriptV2Props extends TranscriptViewProps {
   highlightSpanId?: string | null;
   /** Write-back selected span (e.g. `?spanId=`). Pass null/empty to clear. */
   onSpanSelect?: (spanId: string | null) => void;
+  /** Fullscreen viewer: full-height list + span rail. */
+  layout?: "default" | "fullscreen";
 }
 
 function flattenSpanIds(rows: TranscriptRow[]): string[] {
@@ -64,10 +66,12 @@ export function TranscriptV2({
   showRrwebThumb = true,
   highlightSpanId,
   onSpanSelect,
+  layout = "default",
   hideSummary: _hideSummary,
   virtualizeList: _virtualizeList,
   ...rest
 }: TranscriptV2Props) {
+  const fullscreen = layout === "fullscreen";
   const visibleRows = React.useMemo(() => filterInternal(rows), [rows]);
 
   const [selectedSpanId, setSelectedSpanId] = React.useState<string | null>(
@@ -153,20 +157,31 @@ export function TranscriptV2({
 
   return (
     <div
-      className="relative flex min-h-0 gap-0 outline-none"
+      className={
+        fullscreen
+          ? "relative flex h-full min-h-0 gap-0 outline-none"
+          : "relative flex min-h-0 gap-0 outline-none"
+      }
       data-testid="transcript-v2"
+      data-layout={layout}
       tabIndex={0}
       aria-label="Transcript — j/k to step spans"
     >
-      <div className="min-w-0 flex-1 space-y-space-2">
+      <div
+        className={
+          fullscreen
+            ? "flex min-h-0 min-w-0 flex-1 flex-col space-y-space-2"
+            : "min-w-0 flex-1 space-y-space-2"
+        }
+      >
         {showRrwebThumb && (
-          <div className="flex items-center justify-end px-space-1">
+          <div className="flex shrink-0 items-center justify-end px-space-1">
             <RrwebThumb traceId={rest.traceId} sessionId={sessionId} />
           </div>
         )}
 
         {parallelBlocks.length > 0 && (
-          <div className="space-y-space-2 px-space-1">
+          <div className="shrink-0 space-y-space-2 px-space-1">
             {parallelBlocks.map((b) =>
               b.type === "parallel_tools" ? (
                 <ParallelToolLane
@@ -183,7 +198,13 @@ export function TranscriptV2({
         )}
 
         {virtualize ? (
-          <div className="h-[min(70vh,720px)] min-h-[240px]">
+          <div
+            className={
+              fullscreen
+                ? "min-h-0 flex-1"
+                : "h-[min(70vh,720px)] min-h-[240px]"
+            }
+          >
             <VirtualTranscript items={virtualItems} className="p-space-2" />
           </div>
         ) : (
@@ -195,6 +216,7 @@ export function TranscriptV2({
           row={inspectorRow}
           orgId={rest.orgId}
           onClose={handleCloseInspector}
+          layout={layout}
         />
       ) : null}
     </div>
