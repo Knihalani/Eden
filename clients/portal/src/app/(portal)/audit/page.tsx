@@ -18,9 +18,7 @@ import { useOrg } from "@/hooks/use-org";
 import { ShieldCheck } from "lucide-react";
 import { EventsPanel } from "./_components/events-panel";
 import { PacksPanel } from "./_components/packs-panel";
-
-export const AUDIT_TABS = ["events", "packs"] as const;
-export type AuditTab = (typeof AUDIT_TABS)[number];
+import { AUDIT_TABS, type AuditTab } from "./_components/audit-tabs";
 
 function parseTab(raw: string | null): AuditTab {
   if (raw === "packs" || raw === "chain") return "packs";

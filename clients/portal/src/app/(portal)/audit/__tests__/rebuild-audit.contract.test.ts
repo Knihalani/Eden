@@ -6,7 +6,7 @@ import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { getCoreNavLeaves } from "@/lib/sidebar-config";
-import { AUDIT_TABS } from "@/app/(portal)/audit/page";
+import { AUDIT_TABS } from "@/app/(portal)/audit/_components/audit-tabs";
 
 const portalSrc = path.resolve(__dirname, "../../../..");
 const auditRoot = path.join(portalSrc, "app/(portal)/audit");
