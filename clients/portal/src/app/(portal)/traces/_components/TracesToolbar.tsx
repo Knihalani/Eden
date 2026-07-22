@@ -38,12 +38,12 @@ export type HubView = (typeof HUB_VIEWS)[number];
 
 export const FACET_VIEWS = ["mcp", "decisions", "memory", "retrieval"] as const;
 
+/** IA §3.4 legacy embed map — live destinations only (no dead view= tools). */
 export const LEGACY_TOOL_LINKS = [
-  { href: "/traces?view=inspect", label: "Inspector" },
-  { href: "/traces?view=replay", label: "Replay" },
-  { href: "/traces?view=debug", label: "Debugger" },
-  { href: "/traces?view=time-travel", label: "Time-Travel" },
-  { href: "/traces?view=query", label: "Query" },
+  { href: "/traces?mode=meta", label: "Inspector" },
+  { href: "/debugger?tab=replay", label: "Replay" },
+  { href: "/debugger?tab=compare", label: "Debugger" },
+  { href: "/debugger?tab=time-travel", label: "Time-Travel" },
 ] as const;
 
 export const FACET_LINKS = FACET_VIEWS.map((facet) => ({

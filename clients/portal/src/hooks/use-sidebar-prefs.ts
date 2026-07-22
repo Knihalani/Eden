@@ -41,6 +41,7 @@ const LEGACY_GROUP_IDS: Record<string, SidebarGroup["id"]> = {
 
 const KNOWN_GROUP_IDS = new Set<SidebarGroup["id"]>([
   "home",
+  "agents",
   "observe",
   "evaluate",
   "improve",
@@ -48,14 +49,19 @@ const KNOWN_GROUP_IDS = new Set<SidebarGroup["id"]>([
 ]);
 
 export function migrateGroupOrder(order: string[] | undefined): SidebarGroup["id"][] {
-  if (!Array.isArray(order) || order.length !== 5) {
+  if (!Array.isArray(order) || (order.length !== 5 && order.length !== 6)) {
     return DEFAULT_PREFS.groupOrder;
   }
   const mapped = order.map(
     (id) => LEGACY_GROUP_IDS[id] ?? (id as SidebarGroup["id"]),
   );
-  if (mapped.every((id) => KNOWN_GROUP_IDS.has(id))) {
-    return mapped;
+  // Phase 2+ added `agents` group — inject if migrating from 5-group prefs.
+  const withAgents =
+    mapped.includes("agents")
+      ? mapped
+      : ([mapped[0], "agents", ...mapped.slice(1)] as SidebarGroup["id"][]);
+  if (withAgents.every((id) => KNOWN_GROUP_IDS.has(id)) && withAgents.length === 6) {
+    return withAgents;
   }
   return DEFAULT_PREFS.groupOrder;
 }
@@ -63,8 +69,8 @@ export function migrateGroupOrder(order: string[] | undefined): SidebarGroup["id
 export const DEFAULT_PREFS: SidebarPrefs = {
   pinned: [],
   hidden: [],
-  // Home → Observe → Evaluate → Improve → Workspace (product path).
-  groupOrder: ["home", "observe", "evaluate", "improve", "workspace"],
+  // Home → Agents → Observe → Evaluate → Improve → Workspace (product path).
+  groupOrder: ["home", "agents", "observe", "evaluate", "improve", "workspace"],
   density: "comfortable",
 };
 

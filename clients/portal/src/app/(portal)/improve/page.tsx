@@ -1,140 +1,186 @@
 "use client";
 
-import { Suspense } from "react";
-import dynamic from "next/dynamic";
-import { Loader2, RefreshCw } from "lucide-react";
-
-import { PageHeader } from "@/components/layout/page-header";
-import { CoreResourcePage } from "@/components/portal-os";
-import { EmbeddedSurface } from "@/components/layout/embedded-surface";
+import { Suspense, useEffect, useState, type ReactNode } from "react";
+import { useTranslations } from "next-intl";
+import { usePermissions } from "@/hooks/use-permissions";
+import { IMPROVE_TABS, type ImproveTab } from "@/lib/improve-url";
+import { PageHeader } from "@/components/ui/page-header";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { NoOrgState } from "@/components/ui/no-org-state";
-import { cn } from "@/lib/utils";
-import {
-  IMPROVE_TABS,
-  ImproveRelatedStrip,
-  QueueBoard,
-  useImproveQueue,
-} from "./_components";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { RelatedStrip } from "@/components/improve";
+import { useImproveUrlState } from "./_hooks/use-improve-url-state";
+import { ImproveHubToolbar } from "./_components/improve-hub-toolbar";
+import { QueueTab } from "./_components/queue-tab";
+import { PlansTab } from "./_components/plans-tab";
+import { ArtifactsTab } from "./_components/artifacts-tab";
+import { PromotionsTab } from "./_components/promotions-tab";
+import { LedgerTab } from "./_components/ledger-tab";
+import { HistoryTab } from "./_components/history-tab";
+import { CreatePlanDialog } from "./_components/create-plan-dialog";
 
-/** V2 Wave 7 + V1 Wave 8 exit — Issue→Artifact→Promote ≤5 clicks; honor ?issue=. */
-const WAVE7_IMPROVE_COMPLETED = true as const;
-const WAVE8_IMPROVE_COMPLETED = true as const;
+function ImprovePageInner() {
+  const t = useTranslations("improve");
+  const { hasPermission, role } = usePermissions();
+  const canMutate =
+    hasPermission("jobs:write") || (role != null && role !== "viewer");
+  const { state, setState, clearSelection } = useImproveUrlState();
+  const tab = state.tab;
+  const q = state.q ?? "";
+  const [createOpen, setCreateOpen] = useState(false);
 
-const PlansView = dynamic(() => import("./plans/page"), {
-  ssr: false,
-  loading: () => <TabLoading />,
-});
-const HistoryView = dynamic(() => import("./runs/page"), {
-  ssr: false,
-  loading: () => <TabLoading />,
-});
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      const target = e.target as HTMLElement | null;
+      const isFormField =
+        target?.tagName === "INPUT" ||
+        target?.tagName === "TEXTAREA" ||
+        target?.tagName === "SELECT" ||
+        target?.isContentEditable;
+      if (isFormField) return;
 
-function TabLoading() {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        clearSelection();
+        return;
+      }
+
+      if (e.key === "n" && canMutate) {
+        e.preventDefault();
+        setCreateOpen(true);
+        return;
+      }
+
+      const idx = Number(e.key) - 1;
+      if (idx >= 0 && idx < IMPROVE_TABS.length) {
+        e.preventDefault();
+        setState({ tab: IMPROVE_TABS[idx] });
+      }
+    }
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [canMutate, clearSelection, setState]);
+
+  function setTab(next: ImproveTab) {
+    setState({ tab: next });
+  }
+
+  function setSearch(value: string) {
+    setState({ q: value || undefined });
+  }
+
+  const tabProps = { canMutate };
+
+  let panel: ReactNode = null;
+  switch (tab) {
+    case "queue":
+      panel = <QueueTab {...tabProps} />;
+      break;
+    case "plans":
+      panel = <PlansTab {...tabProps} />;
+      break;
+    case "artifacts":
+      panel = <ArtifactsTab {...tabProps} />;
+      break;
+    case "promotions":
+      panel = <PromotionsTab {...tabProps} />;
+      break;
+    case "ledger":
+      panel = <LedgerTab />;
+      break;
+    case "history":
+      panel = <HistoryTab {...tabProps} />;
+      break;
+    default:
+      panel = <QueueTab {...tabProps} />;
+  }
+
   return (
-    <div className="flex h-48 items-center justify-center">
-      <Loader2 className="h-4 w-4 animate-spin text-[var(--text-muted)]" />
+    <div className="mx-auto max-w-7xl space-y-4" data-testid="improve-hub">
+      <PageHeader title={t("title")} subtitle={t("subtitle")} />
+
+      {!canMutate ? (
+        <p className="text-sm text-[var(--text-muted)]" data-testid="improve-viewer-note">
+          {t("viewerReadonly")}
+        </p>
+      ) : null}
+
+      <div
+        className="flex flex-wrap items-center gap-2"
+        data-testid="improve-tabs-chrome"
+      >
+        <Tabs value={tab} onValueChange={(v) => setTab(v as ImproveTab)}>
+          <TabsList variant="underline" aria-label={t("tabsAria")}>
+            {IMPROVE_TABS.map((id) => (
+              <TabsTrigger
+                key={id}
+                variant="underline"
+                value={id}
+                className="min-h-11"
+                data-testid={`improve-tab-${id}`}
+              >
+                {t(`tabs.${id}`)}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+        </Tabs>
+      </div>
+
+      <ImproveHubToolbar
+        q={q}
+        onSearchChange={setSearch}
+        searchPlaceholder={t("searchPlaceholder")}
+        showQueueViews={tab === "queue"}
+        queueStatus={state.status ?? "needs_you"}
+        onQueueStatusChange={(status) => setState({ status })}
+        queueLabels={{
+          needsYou: t("queue.views.needsYou"),
+          inProgress: t("queue.views.inProgress"),
+          verify: t("queue.views.verify"),
+        }}
+        primaryAction={
+          canMutate ? (
+            <Button
+              type="button"
+              size="sm"
+              className="min-h-11"
+              onClick={() => setCreateOpen(true)}
+              data-testid="improve-new-plan"
+            >
+              {t("plans.new")}
+            </Button>
+          ) : null
+        }
+      />
+
+      <div data-testid={`improve-panel-${tab}`}>{panel}</div>
+
+      <RelatedStrip
+        links={[
+          { href: "/issues", label: t("related.issues") },
+          { href: "/traces", label: t("related.traces") },
+          { href: "/evals", label: t("related.evals") },
+          { href: "/cost?tab=advisor", label: t("related.cost") },
+        ]}
+      />
+
+      <CreatePlanDialog open={createOpen} onOpenChange={setCreateOpen} />
     </div>
   );
 }
 
 export default function ImprovePage() {
   return (
-    <Suspense fallback={<TabLoading />}>
+    <Suspense
+      fallback={
+        <div className="mx-auto max-w-7xl space-y-4 p-4">
+          <Skeleton className="h-8 w-48" />
+          <Skeleton className="h-10 w-full" />
+          <Skeleton className="h-64 w-full" />
+        </div>
+      }
+    >
       <ImprovePageInner />
     </Suspense>
-  );
-}
-
-function ImprovePageInner() {
-  const q = useImproveQueue();
-
-  if (!q.currentOrg && !q.authError) return <NoOrgState feature="Improve" />;
-  if (!q.currentOrg) return null;
-
-  return (
-    <Tabs
-      value={q.tab}
-      onValueChange={(v) => q.setTab(v as (typeof IMPROVE_TABS)[number])}
-    >
-      <CoreResourcePage
-        size="wide"
-        header={
-          <PageHeader
-            title="Improve"
-            subtitle="Action queue, improvement plans, and sweep history."
-            description="Needs traces and Agent Issues first. One queue for triage, patches, nudges, and promotions."
-            actions={
-              q.tab === "queue" ? (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="min-h-11"
-                  onClick={() => void q.load()}
-                  disabled={q.loading}
-                  aria-label="Refresh improvement queue"
-                >
-                  <RefreshCw className={cn("h-4 w-4", q.loading && "animate-spin")} />
-                  Refresh
-                </Button>
-              ) : undefined
-            }
-          />
-        }
-        toolbar={
-          <div
-            data-testid="improve-toolbar"
-            data-wave1-improve="completed"
-            data-wave2-improve-queue="completed"
-            data-wave7-improve="completed"
-            data-wave8-improve="completed"
-            data-wave9-improve-crossloop="completed"
-            data-wave10-improve-verify="completed"
-            className="flex flex-col gap-space-2 border-b border-[var(--border-subtle)] pb-space-1"
-          >
-            <TabsList
-              variant="underline"
-              aria-label="Improve sections"
-              className="h-auto min-w-0 w-full justify-start gap-space-1 overflow-x-auto bg-transparent"
-            >
-              {IMPROVE_TABS.map((t) => {
-                const label =
-                  t === "queue" ? "Queue" : t === "plans" ? "Plans" : "History";
-                return (
-                  <TabsTrigger
-                    key={t}
-                    variant="underline"
-                    value={t}
-                    title={label}
-                    className="min-h-11 shrink-0 capitalize"
-                  >
-                    {label}
-                  </TabsTrigger>
-                );
-              })}
-            </TabsList>
-            <ImproveRelatedStrip />
-          </div>
-        }
-        table={
-          <>
-            <TabsContent value="plans" className="mt-0">
-              <EmbeddedSurface>
-                <PlansView />
-              </EmbeddedSurface>
-            </TabsContent>
-            <TabsContent value="history" className="mt-0">
-              <EmbeddedSurface>
-                <HistoryView />
-              </EmbeddedSurface>
-            </TabsContent>
-            <TabsContent value="queue" className="mt-0">
-              <QueueBoard q={q} />
-            </TabsContent>
-          </>
-        }
-      />
-    </Tabs>
   );
 }

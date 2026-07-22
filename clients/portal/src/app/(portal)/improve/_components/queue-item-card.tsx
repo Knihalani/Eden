@@ -2,6 +2,7 @@
 
 import type { ImproveQueueItem } from "@/lib/api";
 import { PlanKindBadge } from "@/components/improve/plan-kind-badge";
+import { FOCUS_RING_CLASS } from "@/components/ui/focus-ring";
 import { cn } from "@/lib/utils";
 import {
   isLegacyProposedPatch,
@@ -28,7 +29,8 @@ export function QueueItemCard({
       data-selected={selected ? "true" : undefined}
       className={cn(
         "w-full rounded-md bg-[var(--bg-primary)]/60 p-space-3 text-left flex flex-col gap-space-2 transition-colors",
-        "hover:bg-[var(--bg-secondary)]/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--border-focus)]",
+        "hover:bg-[var(--bg-secondary)]/50",
+        FOCUS_RING_CLASS,
         selected && "ring-1 ring-[var(--border-default)] bg-[var(--bg-secondary)]/40",
       )}
     >

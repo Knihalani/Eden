@@ -1,17 +1,20 @@
 "use client";
 
-/**
- * /evals — Dataset → playground → experiment (Evaluate V3 / Wave E1).
- * Three primary tabs; Advanced tools live in overflow and embed their surfaces.
- */
-
-import { Suspense } from "react";
-import dynamic from "next/dynamic";
-import { ChevronDown, ExternalLink, Loader2 } from "lucide-react";
-import { PageHeader } from "@/components/layout/page-header";
-import { CoreResourcePage } from "@/components/portal-os";
-import { EmbeddedSurface } from "@/components/layout/embedded-surface";
+import { Suspense, useEffect, type ReactNode } from "react";
+import Link from "next/link";
+import { useTranslations } from "next-intl";
+import { ChevronDown } from "lucide-react";
+import { usePermissions } from "@/hooks/use-permissions";
+import {
+  EVALS_ADVANCED_TABS,
+  EVALS_PRIMARY_TABS,
+  isEvalsAdvancedTab,
+  type EvalsTab,
+} from "@/lib/evals-url";
+import { PageHeader } from "@/components/ui/page-header";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -19,296 +22,203 @@ import {
   DropdownMenuLabel,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useQueryTab } from "@/hooks/use-query-tab";
-import { usePagePerf } from "@/lib/perf";
-import { DOCS_QUICKSTART_URL } from "@/lib/constants";
-import { cn } from "@/lib/utils";
-import {
-  WAVE_E6_KEYBOARD_COMPLETED,
-  WAVE_E6_MOBILE_COMPLETED,
-  WAVE_E6_PERF_COMPLETED,
-  WAVE_E6_AXE_CONTRACT_COMPLETED,
-  WAVE_E6_E2E_CONTRACT_COMPLETED,
-  WAVE_E6_LOC_RATCHET_COMPLETED,
-} from "./_components/wave-e6-flags";
+import { useEvalsUrlState } from "./_hooks/use-evals-url-state";
+import { EvalsHubToolbar } from "./_components/evals-hub-toolbar";
+import { DatasetsTab } from "./_components/datasets-tab";
+import { PlaygroundsTab } from "./_components/playgrounds-tab";
+import { ExperimentsTab } from "./_components/experiments-tab";
+import { LabelingTab } from "./_components/labeling-tab";
+import { StudioTab } from "./_components/studio-tab";
+import { SyntheticTab } from "./_components/synthetic-tab";
+import { EvalScoresTab } from "./_components/eval-scores-tab";
 
-void WAVE_E6_KEYBOARD_COMPLETED;
-void WAVE_E6_MOBILE_COMPLETED;
-void WAVE_E6_PERF_COMPLETED;
-void WAVE_E6_AXE_CONTRACT_COMPLETED;
-void WAVE_E6_E2E_CONTRACT_COMPLETED;
-void WAVE_E6_LOC_RATCHET_COMPLETED;
+function EvalsPageInner() {
+  const t = useTranslations("evals");
+  const { hasPermission, role } = usePermissions();
+  const canMutate =
+    hasPermission("jobs:write") || (role != null && role !== "viewer");
+  const { state, setState, clearSelection } = useEvalsUrlState();
+  const tab = state.tab;
+  const q = state.q ?? "";
 
-/** Wave 8 exit marker — Evaluate hub: 3 tabs + Advanced leaves + Trace deep links. */
-const WAVE8_EVALS_COMPLETED = true as const;
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      const target = e.target as HTMLElement | null;
+      const isFormField =
+        target?.tagName === "INPUT" ||
+        target?.tagName === "TEXTAREA" ||
+        target?.tagName === "SELECT" ||
+        target?.isContentEditable;
+      if (isFormField) return;
 
-/** Wave E1 — IA truth + Observe→Eval closed loop. */
-const WAVE_E1_IA_COMPLETED = true as const;
-const WAVE_E1_CLOSED_LOOP_COMPLETED = true as const;
+      if (e.key === "Escape") {
+        e.preventDefault();
+        clearSelection();
+        return;
+      }
 
-/** Wave E5 — Advanced leaves (Scores / Labeling / Studio / Synthetic). */
-const WAVE_E5_ADVANCED_COMPLETED = true as const;
-const WAVE_E5_HUB_MENU_COMPLETED = true as const;
+      const idx = Number(e.key) - 1;
+      if (idx >= 0 && idx < EVALS_PRIMARY_TABS.length) {
+        e.preventDefault();
+        setState({ tab: EVALS_PRIMARY_TABS[idx] });
+      }
+    }
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [clearSelection, setState]);
 
-/** First-run path objects (E-01 / E-12). */
-const PRIMARY_TABS = ["datasets", "playgrounds", "experiments"] as const;
+  function setTab(next: EvalsTab) {
+    setState({ tab: next });
+  }
 
-/** Scores / labeling / studio / synthetic — disclosure overflow. */
-const ADVANCED_TABS = ["eval", "labeling", "studio", "synthetic"] as const;
+  function setSearch(value: string) {
+    setState({ q: value || undefined });
+  }
 
-const TABS = [...PRIMARY_TABS, ...ADVANCED_TABS] as const;
+  const advancedActive = isEvalsAdvancedTab(tab);
+  const primaryValue = advancedActive ? "" : tab;
 
-type EvalTab = (typeof TABS)[number];
+  const tabProps = { canMutate };
 
-const TAB_META: Record<
-  EvalTab,
-  { label: string; title: string; hint: string; job?: string }
-> = {
-  datasets: {
-    label: "Datasets",
-    title: "Golden sets and cases to score against",
-    hint: "Curate cases — add from Traces, then open Playground.",
-  },
-  playgrounds: {
-    label: "Playground",
-    title: "Side-by-side prompt runs before an experiment",
-    hint: "Mutable iterate — bind a dataset, then Promote → Experiment.",
-  },
-  experiments: {
-    label: "Experiments",
-    title: "Offline eval runs over a bound dataset",
-    hint: "Immutable compare — multi-select two runs for deltas.",
-  },
-  eval: {
-    label: "Scores",
-    title: "Judge versions and failure clusters from scored traces",
-    hint: "Tag judge versions and browse failure clusters. Production online scoring lives under Improve.",
-    job: "Versions + failure clusters",
-  },
-  labeling: {
-    label: "Labeling",
-    title: "Human labels that feed datasets",
-    hint: "Annotate items, then push done labels into a dataset.",
-    job: "Human labels → datasets",
-  },
-  studio: {
-    label: "Studio",
-    title: "Custom metric rubrics (advanced)",
-    hint: "Design rubrics from templates or examples.",
-    job: "Custom metric rubrics",
-  },
-  synthetic: {
-    label: "Synthetic",
-    title: "Synthetic QA cases for datasets (advanced)",
-    hint: "Generate extractive Q/A triples. Persisted run history is deferred.",
-    job: "Generate Q/A triples",
-  },
-};
-
-const EvalView = dynamic(() => import("@/app/(portal)/observability/eval/page"), {
-  ssr: false,
-  loading: () => <TabLoading />,
-});
-const DatasetsView = dynamic(() => import("@/app/(portal)/datasets/page"), {
-  ssr: false,
-  loading: () => <TabLoading />,
-});
-const PlaygroundsView = dynamic(() => import("@/app/(portal)/playgrounds/page"), {
-  ssr: false,
-  loading: () => <TabLoading />,
-});
-const ExperimentsView = dynamic(() => import("@/app/(portal)/experiments/page"), {
-  ssr: false,
-  loading: () => <TabLoading />,
-});
-const LabelingView = dynamic(() => import("@/app/(portal)/labeling/page"), {
-  ssr: false,
-  loading: () => <TabLoading />,
-});
-const StudioView = dynamic(() => import("@/app/(portal)/studio/page"), {
-  ssr: false,
-  loading: () => <TabLoading />,
-});
-const SyntheticView = dynamic(() => import("@/app/(portal)/synthetic/page"), {
-  ssr: false,
-  loading: () => <TabLoading />,
-});
-
-function TabLoading() {
-  return (
-    <div className="flex h-48 items-center justify-center">
-      <Loader2 className="h-5 w-5 animate-spin text-[var(--text-muted)]" />
-    </div>
-  );
-}
-
-function isAdvancedTab(tab: EvalTab): boolean {
-  return (ADVANCED_TABS as readonly string[]).includes(tab);
-}
-
-function EvalsInner() {
-  usePagePerf("/evals");
-  const [tab, setTab] = useQueryTab("tab", TABS, "datasets");
-  const advancedActive = isAdvancedTab(tab);
+  let panel: ReactNode = null;
+  switch (tab) {
+    case "datasets":
+      panel = <DatasetsTab {...tabProps} />;
+      break;
+    case "playgrounds":
+      panel = <PlaygroundsTab {...tabProps} />;
+      break;
+    case "experiments":
+      panel = <ExperimentsTab {...tabProps} />;
+      break;
+    case "labeling":
+      panel = <LabelingTab {...tabProps} />;
+      break;
+    case "studio":
+      panel = <StudioTab {...tabProps} />;
+      break;
+    case "synthetic":
+      panel = <SyntheticTab {...tabProps} />;
+      break;
+    case "eval":
+      panel = <EvalScoresTab {...tabProps} />;
+      break;
+    default:
+      panel = <DatasetsTab {...tabProps} />;
+  }
 
   return (
-    <Tabs
-      value={tab}
-      onValueChange={(v) => setTab(v as EvalTab)}
-      data-wave11-mobile="cards"
-      data-wave-e6-perf="evals"
-    >
-      <CoreResourcePage
-        size="wide"
-        header={
-          <PageHeader
-            title="Evals"
-            subtitle="Traces → dataset → playground → experiment. Studio/synthetic are live — not stubs."
-            actions={
-              <Button asChild variant="ghost" className="min-h-11">
-                <a href={DOCS_QUICKSTART_URL} target="_blank" rel="noopener noreferrer">
-                  Docs
-                  <ExternalLink className="h-3.5 w-3.5" aria-hidden />
-                </a>
-              </Button>
-            }
-          />
-        }
-        toolbar={
-          <div
-            data-testid="evals-toolbar"
-            data-wave8-evals="completed"
-            data-wave-e1-evals="ia"
-            data-wave-e1-closed-loop="path"
-            data-wave-e5-evals="advanced"
-            data-wave-e6-evals="harden"
-            className="flex flex-wrap items-center gap-2 border-b border-[var(--border-subtle)] pb-1"
-          >
-            <TabsList
-              variant="underline"
-              aria-label="Evals primary sections"
-              className="h-auto min-w-0 flex-1 justify-start gap-1 overflow-x-auto bg-transparent"
-            >
-              {PRIMARY_TABS.map((t) => (
-                <TabsTrigger
-                  key={t}
-                  variant="underline"
-                  value={t}
-                  title={TAB_META[t].title}
-                  className="min-h-11 shrink-0"
-                  data-wave-e1-tab={t}
-                >
-                  {TAB_META[t].label}
-                </TabsTrigger>
-              ))}
-            </TabsList>
+    <div className="mx-auto max-w-7xl space-y-4" data-testid="evals-page">
+      <PageHeader title={t("title")} subtitle={t("subtitle")} />
 
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  variant={advancedActive ? "outline" : "ghost"}
-                  className={cn(
-                    "min-h-11 shrink-0",
-                    advancedActive && "border-[var(--accent)] text-[var(--accent)]",
-                  )}
-                  aria-label="Advanced eval tools"
-                  aria-current={advancedActive ? "page" : undefined}
-                  data-testid="evals-advanced"
-                  data-wave-e1-advanced="overflow"
-                >
-                  <span className="hidden sm:inline">
-                    {advancedActive ? `Advanced · ${TAB_META[tab].label}` : "Advanced"}
-                  </span>
-                  <span className="sm:hidden">More</span>
-                  <ChevronDown className="h-4 w-4" aria-hidden />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent
-                align="end"
-                className="min-w-[14rem]"
-                data-wave-e5-advanced="menu"
-                data-testid="evals-advanced-menu"
+      <div
+        className="flex flex-wrap items-center gap-2"
+        data-testid="evals-tabs-chrome"
+      >
+        <Tabs
+          value={primaryValue}
+          onValueChange={(v) => setTab(v as EvalsTab)}
+        >
+          <TabsList variant="underline" aria-label={t("tabsAria")}>
+            {EVALS_PRIMARY_TABS.map((id) => (
+              <TabsTrigger
+                key={id}
+                variant="underline"
+                value={id}
+                className="min-h-11"
+                data-testid={`evals-tab-${id}`}
               >
-                <DropdownMenuLabel>Advanced</DropdownMenuLabel>
-                {ADVANCED_TABS.map((t) => (
-                  <DropdownMenuItem
-                    key={t}
-                    onSelect={() => setTab(t)}
-                    title={TAB_META[t].title}
-                    className={cn(
-                      "flex flex-col items-start gap-1 py-2",
-                      tab === t && "bg-[var(--accent-bg)] text-[var(--accent)]",
-                    )}
-                    data-wave-e5-advanced={t}
-                  >
-                    <span className="font-medium">{TAB_META[t].label}</span>
-                    {TAB_META[t].job ? (
-                      <span className="text-[length:var(--font-size-2xs)] font-normal text-[var(--text-muted)]">
-                        {TAB_META[t].job}
-                      </span>
-                    ) : null}
-                  </DropdownMenuItem>
-                ))}
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
-        }
-        table={
-          <>
-            <p
-              className="mb-space-4 text-sm text-[var(--text-muted)]"
-              data-wave-e1-path-hint={tab}
-            >
-              {TAB_META[tab].hint}
-            </p>
+                {t(`tabs.${id}`)}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+        </Tabs>
 
-            <TabsContent value="eval" className="mt-0">
-              <EmbeddedSurface>
-                <EvalView />
-              </EmbeddedSurface>
-            </TabsContent>
-            <TabsContent value="datasets" className="mt-0">
-              <EmbeddedSurface>
-                <DatasetsView />
-              </EmbeddedSurface>
-            </TabsContent>
-            <TabsContent value="playgrounds" className="mt-0">
-              <EmbeddedSurface>
-                <PlaygroundsView />
-              </EmbeddedSurface>
-            </TabsContent>
-            <TabsContent value="experiments" className="mt-0">
-              <EmbeddedSurface>
-                <ExperimentsView />
-              </EmbeddedSurface>
-            </TabsContent>
-            <TabsContent value="labeling" className="mt-0">
-              <EmbeddedSurface>
-                <LabelingView />
-              </EmbeddedSurface>
-            </TabsContent>
-            <TabsContent value="studio" className="mt-0">
-              <EmbeddedSurface>
-                <StudioView />
-              </EmbeddedSurface>
-            </TabsContent>
-            <TabsContent value="synthetic" className="mt-0">
-              <EmbeddedSurface>
-                <SyntheticView />
-              </EmbeddedSurface>
-            </TabsContent>
-          </>
-        }
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              type="button"
+              size="sm"
+              variant={advancedActive ? "secondary" : "ghost"}
+              className="min-h-11"
+              data-testid="evals-advanced-tabs"
+              aria-label={t("tabs.advanced")}
+            >
+              {advancedActive ? t(`tabs.${tab}`) : t("tabs.advanced")}
+              <ChevronDown className="ml-1 h-4 w-4" aria-hidden />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" className="min-w-[12rem]">
+            <DropdownMenuLabel>{t("tabs.advanced")}</DropdownMenuLabel>
+            {EVALS_ADVANCED_TABS.map((id) => (
+              <DropdownMenuItem
+                key={id}
+                onSelect={() => setTab(id)}
+                data-testid={`evals-advanced-${id}`}
+              >
+                {t(`tabs.${id}`)}
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+
+      <EvalsHubToolbar
+        q={q}
+        filter={state.filter}
+        agentId={state.agentId}
+        onSearchChange={setSearch}
       />
-    </Tabs>
+
+      <div data-testid={`evals-panel-${tab}`}>{panel}</div>
+
+      <nav
+        className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-[var(--border-subtle)] pt-3 text-sm"
+        aria-label={t("related.aria")}
+        data-testid="evals-related-strip"
+      >
+        <span className="text-[var(--text-muted)]">{t("related.label")}</span>
+        <Link
+          href="/issues"
+          className="text-[var(--accent)] hover:underline"
+        >
+          {t("related.issues")}
+        </Link>
+        <Link
+          href="/traces"
+          className="text-[var(--accent)] hover:underline"
+        >
+          {t("related.traces")}
+        </Link>
+        <Link
+          href="/improve"
+          className="text-[var(--accent)] hover:underline"
+        >
+          {t("related.improve")}
+        </Link>
+        <Link
+          href="/cost"
+          className="text-[var(--accent)] hover:underline"
+        >
+          {t("related.cost")}
+        </Link>
+      </nav>
+    </div>
   );
 }
 
 export default function EvalsPage() {
   return (
-    <Suspense fallback={<TabLoading />}>
-      <EvalsInner />
+    <Suspense
+      fallback={
+        <div className="mx-auto max-w-7xl space-y-4 p-4">
+          <Skeleton className="h-8 w-48" />
+          <Skeleton className="h-10 w-full" />
+          <Skeleton className="h-64 w-full" />
+        </div>
+      }
+    >
+      <EvalsPageInner />
     </Suspense>
   );
 }

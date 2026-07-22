@@ -1,6 +1,7 @@
 /**
  * Query-preserving hub consolidations for legacy list URLs.
- * Next.js static redirects drop source query when the destination already has `?`.
+ * Used by `proxy.ts` middleware (before page render).
+ * Keep in lockstep with `next.config.ts` redirects + IA kill-list.
  */
 
 export interface HubRedirectRule {
@@ -19,7 +20,9 @@ export const HUB_REDIRECT_RULES: Record<string, HubRedirectRule> = {
   "/studio": { destination: "/evals", tab: "studio" },
   "/synthetic": { destination: "/evals", tab: "synthetic" },
   "/signals": { destination: "/alerts", tab: "signals" },
-  "/promotions": { destination: "/ledger", tab: "promotions" },
+  "/promotions": { destination: "/improve", tab: "promotions" },
+  "/ledger": { destination: "/improve", tab: "ledger" },
+  "/artifacts": { destination: "/improve", tab: "artifacts" },
   "/fleet": { destination: "/agents", tab: "fleet" },
   "/incidents": { destination: "/issues", tab: "incidents" },
   "/users": { destination: "/analytics", tab: "users" },
@@ -28,15 +31,14 @@ export const HUB_REDIRECT_RULES: Record<string, HubRedirectRule> = {
   "/autonomous": { destination: "/improve" },
   "/closed-loop": { destination: "/improve" },
   "/apm": { destination: "/traces" },
-  "/replay": { destination: "/traces", defaultParams: { view: "replay" } },
-  "/debugger": { destination: "/traces", defaultParams: { view: "debug" } },
+  "/replay": { destination: "/debugger", defaultParams: { tab: "replay" } },
+  "/inspector": { destination: "/traces", defaultParams: { mode: "meta" } },
   "/observability": { destination: "/traces" },
-  "/optimization/predict": {
-    destination: "/optimization",
-    tab: "forecast",
+  // Query-preserving soft nests (next.config drops source query when dest has `?`).
+  "/observability/mcp": {
+    destination: "/traces",
+    defaultParams: { facet: "mcp" },
   },
-  // W3 UX-P0-13 GAP: query-preserving soft nests (next.config drops source query).
-  "/observability/mcp": { destination: "/traces", defaultParams: { facet: "mcp" } },
   "/observability/decisions": {
     destination: "/traces",
     defaultParams: { facet: "decisions" },
@@ -50,34 +52,28 @@ export const HUB_REDIRECT_RULES: Record<string, HubRedirectRule> = {
     defaultParams: { facet: "retrieval" },
   },
   "/observability/time-travel": {
-    destination: "/traces",
-    defaultParams: { view: "time-travel" },
+    destination: "/debugger",
+    defaultParams: { tab: "time-travel" },
   },
-  "/observability/cohorts": {
-    destination: "/traces",
-    defaultParams: { view: "cohorts" },
-  },
+  "/observability/cohorts": { destination: "/traces" },
+  "/observability/query": { destination: "/traces" },
   "/observability/eval": { destination: "/evals", tab: "eval" },
-  "/redteam": { destination: "/guardrails", tab: "redteam" },
+  "/redteam": { destination: "/guardrails", tab: "policies" },
   "/profile": { destination: "/settings", tab: "account" },
   "/billing": { destination: "/settings", tab: "billing" },
-  // W11: Model Advisor filesystem deep-link → Cost hub advisor tab.
-  "/optimization/model-advisor": {
-    destination: "/optimization",
-    tab: "advisor",
-  },
-  // Wave 7: Budget / Outcomes orphans → Cost hub tabs.
-  "/optimization/budget": {
-    destination: "/optimization",
-    tab: "budget",
-  },
-  "/optimization/outcomes": {
-    destination: "/optimization",
-    tab: "outcomes",
-  },
+  "/finops": { destination: "/settings", tab: "finops" },
+  "/audit-trail": { destination: "/audit" },
+  "/optimization": { destination: "/cost" },
+  "/optimization/predict": { destination: "/cost", tab: "forecast" },
+  "/optimization/model-advisor": { destination: "/cost", tab: "advisor" },
+  "/optimization/budget": { destination: "/cost", tab: "budget" },
+  "/optimization/outcomes": { destination: "/cost", tab: "outcomes" },
 };
 
-export function buildHubRedirectUrl(pathname: string, search: string): string | null {
+export function buildHubRedirectUrl(
+  pathname: string,
+  search: string,
+): string | null {
   const rule = HUB_REDIRECT_RULES[pathname];
   if (!rule) return null;
 

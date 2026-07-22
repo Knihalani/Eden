@@ -1,13 +1,10 @@
 /**
- * Portal route-group layout (RSC shell).
- *
- * P2-phase2: providers + chrome live here so marketing/auth do not
- * mount Auth/Org/Query/Toast/Notifications/Motion. Client interactivity
- * stays in ``portal-chrome.tsx`` (and A3 ``providers.tsx``).
+ * Portal route-group layout — AppShell + density (Phase 1–7 rebuild).
  */
 
 import { PortalProviders } from "./providers";
-import { PortalChrome } from "./portal-chrome";
+import { DensityProvider } from "@/components/shell/density-provider";
+import { AppShell } from "@/components/shell/app-shell";
 
 export default function PortalLayout({
   children,
@@ -16,7 +13,9 @@ export default function PortalLayout({
 }) {
   return (
     <PortalProviders>
-      <PortalChrome>{children}</PortalChrome>
+      <DensityProvider>
+        <AppShell>{children}</AppShell>
+      </DensityProvider>
     </PortalProviders>
   );
 }

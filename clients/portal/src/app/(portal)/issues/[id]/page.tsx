@@ -1,150 +1,172 @@
 "use client";
 
+import { Suspense, useMemo } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { ArrowLeft, Loader2, ShieldAlert } from "lucide-react";
+import { useTranslations } from "next-intl";
+import { agentIssuesApi, ApiError } from "@/lib/api";
+import { queryKeys } from "@/lib/query-keys";
+import { useOrg } from "@/hooks/use-org";
+import { useOrgMutation, useOrgQuery } from "@/hooks/use-api-query";
+import { usePermissions } from "@/hooks/use-permissions";
+import { useObserveUrlState } from "@/app/(portal)/_hooks/use-observe-url-state";
+import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
-import { ErrorState } from "@/components/ui/error-state";
-import { NoOrgState } from "@/components/ui/no-org-state";
-import { PageContent } from "@/components/layout/page-content";
-import { IssueDetailHeader } from "../_components/issue-detail-header";
-import { IssueStumblesList } from "../_components/issue-stumbles-list";
-import { IssueTriagePanel } from "../_components/issue-triage-panel";
-import { IssueHandoffPanel } from "../_components/issue-handoff";
-import { IssueExperimentPanel } from "../_components/issue-experiment-panel";
-import { IssueRegressionPanel } from "../_components/issue-regression-panel";
-import { IssueStat } from "../_components/issue-stat";
-import { useIssueDetail } from "../_components/use-issue-detail";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Panel } from "@/components/ui/panel";
+import { IssueDetailBody } from "../_components/issue-detail-panel";
+import {
+  mapIssue,
+  mapStumbleToFinding,
+  type FindingRow,
+  type IssueRow,
+} from "../_components/issue-map";
 
-export default function IssueDetailPage() {
+function IssueDetailPageInner() {
+  const t = useTranslations("issues");
   const params = useParams<{ id: string }>();
-  const issueId = params?.id;
-  const d = useIssueDetail(issueId);
+  const issueId = decodeURIComponent(params.id ?? "");
+  const { currentOrg } = useOrg();
+  const orgId = currentOrg?.id ?? null;
+  const { hasPermission, role } = usePermissions();
+  const canMutate =
+    hasPermission("jobs:write") || (role != null && role !== "viewer");
+  const { searchParams } = useObserveUrlState();
 
-  if (!d.currentOrg) {
-    return (
-      <NoOrgState feature="Agent Issues" icon={ShieldAlert} description="Select an organization" />
-    );
-  }
+  const detailQuery = useOrgQuery(
+    queryKeys.issues.detail(orgId, issueId),
+    orgId,
+    () => agentIssuesApi.get(orgId!, issueId),
+    { enabled: Boolean(issueId) },
+  );
+
+  const issue: IssueRow | null = detailQuery.data?.data?.issue
+    ? mapIssue(detailQuery.data.data.issue)
+    : null;
+
+  const fingerprint = issue?.fingerprint;
+
+  const stumblesQuery = useOrgQuery(
+    queryKeys.issues.stumbles(orgId, { fingerprint }),
+    orgId,
+    () =>
+      agentIssuesApi.stumbles(orgId!, {
+        fingerprint: fingerprint!,
+        limit: 50,
+      }),
+    { enabled: Boolean(fingerprint) },
+  );
+
+  const findings: FindingRow[] = useMemo(
+    () => (stumblesQuery.data?.data?.stumbles ?? []).map(mapStumbleToFinding),
+    [stumblesQuery.data],
+  );
+
+  const resolveMutation = useOrgMutation(
+    () => agentIssuesApi.resolve(orgId!, issueId, { status: "resolved" }),
+    {
+      invalidateKeys: [
+        queryKeys.issues.list(orgId, { limit: 100 }),
+        queryKeys.issues.detail(orgId, issueId),
+      ],
+    },
+  );
+
+  const triageMutation = useOrgMutation(
+    () => agentIssuesApi.triage(orgId!, issueId, { force: false }),
+    {
+      invalidateKeys: [
+        queryKeys.issues.list(orgId, { limit: 100 }),
+        queryKeys.issues.detail(orgId, issueId),
+      ],
+    },
+  );
+
+  const is404 =
+    detailQuery.error instanceof ApiError && detailQuery.error.status === 404;
 
   return (
-    <PageContent size="default">
-      <Link
-        href="/issues"
-        className="mb-4 inline-flex items-center gap-1 text-sm text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+    <div className="mx-auto max-w-3xl space-y-4" data-testid="issue-detail-page">
+      <nav
+        className="text-sm text-[var(--text-muted)]"
+        aria-label={t("detail.breadcrumbAria")}
       >
-        <ArrowLeft className="h-4 w-4" /> Back to issues
-      </Link>
+        <Link href="/issues" className="hover:text-[var(--text-primary)] hover:underline">
+          {t("title")}
+        </Link>
+        <span className="mx-1.5" aria-hidden>
+          /
+        </span>
+        <span className="text-[var(--text-secondary)]">
+          {issue?.title ?? issueId}
+        </span>
+      </nav>
 
-      {d.loading ? (
-        <div
-          role="status"
-          aria-busy="true"
-          className="flex items-center justify-center p-12 text-sm text-[var(--text-muted)]"
-        >
-          <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Loading…
-        </div>
-      ) : d.isNotFound || (!d.issue && !d.error) ? (
-        <Card padding="lg">
-          <p className="text-sm text-[var(--text-muted)]">Issue not found.</p>
-        </Card>
-      ) : d.error || !d.issue ? (
-        <ErrorState
-          title="Could not load issue"
-          message={d.error ?? "Could not load issue."}
-          action={
-            <Button variant="outline" size="sm" onClick={() => void d.issueQuery.refetch()}>
-              Try again
-            </Button>
-          }
-        />
+      <PageHeader
+        title={issue?.title ?? t("detail.panelTitle")}
+        subtitle={t("detail.fullSubtitle")}
+        actions={
+          <Button asChild size="sm" variant="secondary" className="min-h-11">
+            <Link href="/issues">{t("detail.backToList")}</Link>
+          </Button>
+        }
+      />
+
+      {is404 ? (
+        <Panel tone="flat" padding="md" role="alert" data-testid="issue-not-found">
+          <p className="m-0 text-sm text-[var(--text-secondary)]">
+            {t("detail.notFound")}
+          </p>
+          <Button asChild size="sm" className="mt-3 min-h-11">
+            <Link href="/issues">{t("detail.backToList")}</Link>
+          </Button>
+        </Panel>
       ) : (
-        <div className="space-y-4">
-          <IssueDetailHeader
-            issue={d.issue}
-            tab={d.tab}
-            onTabChange={d.setTab}
-            busy={d.busy}
-            onResolve={d.onResolve}
-            onTriage={d.onTriage}
-            onExportFixture={d.onExportFixture}
-            onSaveRegression={d.onSaveRegression}
-            onOpenHandoff={() => d.setTab("handoff")}
-          />
-
-          {d.tab === "overview" ? (
-            <>
-              <section aria-label="Evidence" data-testid="issue-detail-evidence-first">
-                <IssueStumblesList
-                  stumbles={d.stumbles}
-                  error={d.stumblesError}
-                  onRetry={() => void d.stumblesQuery.refetch()}
-                  preserve={d.preserve}
-                />
-              </section>
-              <div className="grid grid-cols-2 gap-3 text-sm md:grid-cols-4">
-                <IssueStat label="Stumbles" value={d.issue.stumble_count} />
-                <IssueStat label="Users" value={d.issue.user_count} />
-                <IssueStat label="Repeats" value={d.issue.repetition_count} />
-                <IssueStat label="Agent" value={d.issue.agent_id ?? "—"} />
-              </div>
-              <IssueRegressionPanel
-                cases={d.regressionCases}
-                caseId={d.issue.regression_case_id}
-                onSave={() => void d.onSaveRegression()}
-                busy={d.busy === "regression"}
-                error={d.regressionError}
-                onRetry={() => void d.regressionQuery.refetch()}
-              />
-              {d.issue.triage_result && Object.keys(d.issue.triage_result).length > 0 ? (
-                <details className="rounded-lg border border-[var(--border-default)] bg-[var(--bg-primary)] p-4">
-                  <summary className="cursor-pointer text-sm font-semibold">Triage result</summary>
-                  <pre className="mt-2 overflow-x-auto rounded bg-[var(--bg-tertiary)] p-2 font-mono text-xs">
-                    {JSON.stringify(d.issue.triage_result, null, 2)}
-                  </pre>
-                </details>
-              ) : null}
-            </>
-          ) : null}
-
-          {d.tab === "triage" ? (
-            <IssueTriagePanel
-              triageResult={d.issue.triage_result}
-              stumbles={d.stumbles}
-              stumblesError={d.stumblesError}
-              onStumblesRetry={() => void d.stumblesQuery.refetch()}
-              preserve={d.preserve}
-            />
-          ) : null}
-
-          {d.tab === "handoff" && d.orgId && issueId ? (
-            <IssueHandoffPanel
-              orgId={d.orgId}
-              issueId={issueId}
-              fingerprint={d.issue.fingerprint}
-              title={d.issue.title}
-              kind={d.issue.kind}
-              busy={d.busy !== null}
-              onExportFixture={() => void d.onExportFixture()}
-              onCopy={() => d.toast.success("Handoff prompt copied")}
-            />
-          ) : null}
-
-          {d.tab === "experiment" ? (
-            <IssueExperimentPanel
-              issueId={issueId}
-              experimentResult={d.issue.experiment_result as Record<string, unknown> | null}
-              experiments={d.experiments as Record<string, unknown>[]}
-              experimentsError={d.experimentsError}
-              busy={d.busy !== null}
-              onCreateExperiment={() => void d.onCreateExperiment()}
-              onExperimentReport={(id) => void d.onExperimentReport(id)}
-              onRetry={() => void d.experimentsQuery.refetch()}
-            />
-          ) : null}
-        </div>
+        <IssueDetailBody
+          issue={issue}
+          findings={findings}
+          loading={detailQuery.isLoading}
+          error={detailQuery.error}
+          onRetry={() => {
+            void detailQuery.refetch();
+            void stumblesQuery.refetch();
+          }}
+          searchParams={searchParams}
+          canMutate={canMutate}
+          onResolve={
+            canMutate
+              ? () => {
+                  void resolveMutation.mutateAsync();
+                }
+              : undefined
+          }
+          onTriage={
+            canMutate
+              ? () => {
+                  void triageMutation.mutateAsync();
+                }
+              : undefined
+          }
+          mutating={resolveMutation.isPending || triageMutation.isPending}
+          fullPage
+        />
       )}
-    </PageContent>
+    </div>
+  );
+}
+
+export default function IssueDetailPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="mx-auto max-w-3xl space-y-4 p-4">
+          <Skeleton className="h-4 w-40" />
+          <Skeleton className="h-8 w-64" />
+          <Skeleton className="h-40 w-full" />
+        </div>
+      }
+    >
+      <IssueDetailPageInner />
+    </Suspense>
   );
 }

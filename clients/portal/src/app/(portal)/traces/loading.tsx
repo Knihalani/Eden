@@ -1,5 +1,15 @@
-import { LoadingSkeleton } from "@/components/ui/skeleton";
+import { Skeleton } from "@/components/ui/skeleton";
 
 export default function TracesLoading() {
-  return <LoadingSkeleton variant="table" />;
+  return (
+    <div className="space-y-4 p-4" data-testid="traces-loading">
+      <Skeleton className="h-8 w-48" />
+      <Skeleton className="h-10 w-full" />
+      <div className="space-y-2">
+        {Array.from({ length: 5 }).map((_, i) => (
+          <Skeleton key={i} className="h-12 w-full" />
+        ))}
+      </div>
+    </div>
+  );
 }

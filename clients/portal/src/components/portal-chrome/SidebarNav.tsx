@@ -14,6 +14,7 @@ import {
   X,
 } from "lucide-react";
 import type { SidebarGroup } from "@/lib/sidebar-config";
+import { SIDEBAR_GROUP_LABELS, SIDEBAR_ITEM_LABELS } from "@/lib/sidebar-config";
 import { cn } from "@/lib/utils";
 import { Logo } from "@/components/brand/logo";
 import { Button } from "@/components/ui/button";
@@ -208,8 +209,8 @@ export function SidebarNav({
                   tourId={item.id}
                   href={item.href}
                   icon={item.icon}
-                  label={item.label}
-                  description={item.description}
+                  label={SIDEBAR_ITEM_LABELS[item.id] ?? item.id}
+                  description={item.descriptionKey}
                   collapsed={collapsed}
                   compact={densityCompact}
                   onClick={onCloseMobileDrawer}
@@ -221,7 +222,7 @@ export function SidebarNav({
           )}
 
           {groups.map((group) => (
-            <NavGroup key={group.id} label={group.label} collapsed={collapsed}>
+            <NavGroup key={group.id} label={SIDEBAR_GROUP_LABELS[group.id]} collapsed={collapsed}>
               {group.items.map((item) => {
                 const isPinned = prefsPinned.includes(item.id);
                 return (
@@ -230,9 +231,9 @@ export function SidebarNav({
                     tourId={item.id}
                     href={item.href}
                     icon={item.icon}
-                    label={item.label}
-                    description={item.description}
-                    badge={item.badge}
+                    label={SIDEBAR_ITEM_LABELS[item.id] ?? item.id}
+                    description={item.descriptionKey}
+                    badge={undefined}
                     collapsed={collapsed}
                     compact={densityCompact}
                     onClick={onCloseMobileDrawer}
@@ -244,8 +245,8 @@ export function SidebarNav({
                         key={child.id}
                         tourId={child.id}
                         href={child.href}
-                        label={child.label}
-                        description={child.description}
+                        label={SIDEBAR_ITEM_LABELS[child.id] ?? child.id}
+                        description={child.descriptionKey}
                         compact={densityCompact}
                         onClick={onCloseMobileDrawer}
                       />

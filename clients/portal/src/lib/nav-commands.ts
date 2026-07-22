@@ -31,15 +31,11 @@ import {
   Wallet,
   type LucideIcon,
 } from "lucide-react";
-import { DEFAULT_SIDEBAR, type SidebarGroup, type SidebarIcon, type SidebarItem } from "@/lib/sidebar-config";
+import { DEFAULT_SIDEBAR, SIDEBAR_GROUP_LABELS, SIDEBAR_ITEM_LABELS, type SidebarGroup, type SidebarIcon, type SidebarItem } from "@/lib/sidebar-config";
 
 /** Maps sidebar group IDs → product IA labels (ids match labels after Wave 3). */
 export const GROUP_LABEL: Record<SidebarGroup["id"], string> = {
-  home: "Home",
-  observe: "Observe",
-  evaluate: "Evaluate",
-  improve: "Improve",
-  workspace: "Workspace",
+  ...SIDEBAR_GROUP_LABELS,
 };
 
 export type NavCommand = {
@@ -62,8 +58,8 @@ function walkItems(
   for (const item of items) {
     out.push({
       href: item.href,
-      label: item.label,
-      description: item.description,
+      label: SIDEBAR_ITEM_LABELS[item.id] ?? item.id,
+      description: item.descriptionKey,
       group: GROUP_LABEL[group],
       icon: item.icon,
     });
@@ -115,7 +111,7 @@ export const PALETTE_ACTIONS: NavCommand[] = [
     kind: "action",
   },
   {
-    href: "/artifacts",
+    href: "/improve?tab=artifacts",
     label: "Review artifacts",
     description: "Shadow runtime fixes awaiting evidence-gated promotion.",
     group: "Actions",
@@ -131,7 +127,7 @@ export const PALETTE_ACTIONS: NavCommand[] = [
     kind: "action",
   },
   {
-    href: "/ledger",
+    href: "/improve?tab=ledger",
     label: "Open ledger",
     description: "Compounding institutional memory across agents.",
     group: "Actions",
@@ -141,7 +137,7 @@ export const PALETTE_ACTIONS: NavCommand[] = [
   {
     href: "/prompts",
     label: "Open prompts",
-    description: "Version and manage prompt templates — core Improve destination.",
+    description: "Version and manage prompt templates.",
     group: "Actions",
     icon: Code,
     kind: "action",
@@ -287,9 +283,9 @@ export const SETTINGS_TAB_COMMANDS: NavCommand[] = [
     icon: FileArchive,
   },
   {
-    href: "/audit-trail",
+    href: "/audit",
     label: "Audit trail",
-    description: "Unified compliance — privileged events and chain-verified packs.",
+    description: "Unified compliance — privileged events and AuditPacks.",
     group: "Settings",
     icon: FileText,
   },

@@ -14,7 +14,8 @@ import { ErrorState } from "@/components/ui/error-state";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/toast";
 import { errorFromCaught } from "@/lib/safe-error-message";
-import { DetailPanelShell, ResourcePageShell } from "@/components/portal-os";
+import { ResourcePageShell } from "@/components/shell/resource-page-shell";
+import { DetailPanelShell } from "@/components/shell/detail-panel-shell";
 import { FileText, Loader2, Plus } from "lucide-react";
 import { promptHref } from "@/lib/portal-cross-links";
 import { PromptsEditor } from "./_components/prompts-editor";
@@ -149,17 +150,15 @@ function PromptsPageInner() {
   return (
     <PageContent size="wide">
       <div
-        data-wave5-improve-prompts="completed"
-        data-wave9-prompts="completed"
-        data-wave10-prompts="split"
+        data-phase-later-prompts="live"
         data-testid="prompts-master-detail"
       >
         <ResourcePageShell
           header={
             <PageHeader
               title="Prompts"
-              subtitle="Version registry with draft → playground → publish → env pin."
-              description="Core Improve destination. Iterate in Evaluate playground; do not merge with Studio."
+              subtitle="Version registry — draft → playground → publish → env pin."
+              description="Iterate templates here; run in Evaluate playground. Not a core sidebar leaf."
               actions={
                 <div className="flex flex-wrap items-center gap-x-space-3 gap-y-2">
                   <nav
@@ -167,16 +166,16 @@ function PromptsPageInner() {
                     aria-label="Related"
                     className="flex flex-wrap items-center gap-x-space-3 gap-y-1 text-xs text-[var(--text-muted)]"
                   >
-                    <Link href="/issues" className="text-[var(--accent)] hover:underline">
-                      Issues
+                    <Link href="/evals?tab=playgrounds" className="text-[var(--accent)] hover:underline">
+                      Playgrounds
                     </Link>
                     <Link href="/improve" className="text-[var(--accent)] hover:underline">
                       Improve
                     </Link>
-                    <Link href="/artifacts" className="text-[var(--accent)] hover:underline">
+                    <Link href="/improve?tab=artifacts" className="text-[var(--accent)] hover:underline">
                       Artifacts
                     </Link>
-                    <Link href="/ledger" className="text-[var(--accent)] hover:underline">
+                    <Link href="/improve?tab=ledger" className="text-[var(--accent)] hover:underline">
                       Ledger
                     </Link>
                   </nav>

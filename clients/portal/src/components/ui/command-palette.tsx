@@ -1,353 +1,202 @@
 "use client";
 
+import * as React from "react";
+import { useRouter } from "next/navigation";
+import { useClerk } from "@clerk/nextjs";
+import { Command } from "cmdk";
+import { useTranslations } from "next-intl";
+import { LogOut, MessagesSquare, Search, MessageSquare, Bug, FileText, BarChart3 } from "lucide-react";
 import {
-  useState,
-  useEffect,
-  useLayoutEffect,
-  useMemo,
-  useCallback,
-  useRef,
-} from "react";
-import { Command as Cmnd } from "cmdk";
-import { useRouter, usePathname } from "next/navigation";
-import { Search, X, ChevronRight } from "lucide-react";
-import { cn, isExternalHref } from "@/lib/utils";
+  Dialog,
+  DialogContent,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { FOCUS_RING_CLASS } from "@/components/ui/focus-ring";
-import {
-  COMMAND_PALETTE_RECENT_KEY,
-  COMMAND_PALETTE_RECENT_LIMIT,
-} from "@/lib/constants";
-import {
-  OPEN_AI_CHAT_HREF,
-  buildNavCommands,
-  type NavCommand,
-} from "@/lib/nav-commands";
+import { getCoreNavLeaves } from "@/lib/sidebar-config";
+import { cn } from "@/lib/utils";
 
-/** Focusable controls inside the palette dialog (Tab trap). */
-const FOCUSABLE_SELECTOR =
-  'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
+/** Custom event — PortalHeader Search dispatches this to open the palette. */
+export const COMMAND_PALETTE_OPEN_EVENT = "eden:open-command-palette";
 
-interface CommandPaletteProps {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-}
+/** Sessions is a Traces lens, not a 13th IA leaf. */
+const SESSIONS_PALETTE_HREF = "/traces?view=sessions";
 
-type NavEntry = NavCommand & {
-  accent?: "accent" | "terminal" | "muted";
-};
-
-const COMMANDS: NavEntry[] = buildNavCommands().map((cmd) => ({
-  ...cmd,
-  ...(cmd.href === "/dashboard"
-    ? { accent: "terminal" as const }
-    : cmd.href === "/optimization"
-      ? { accent: "accent" as const }
-      : {}),
-}));
-
-const ACCENT_BG: Record<NonNullable<NavEntry["accent"]>, string> = {
-  accent: "bg-[var(--accent-faint)] text-[var(--accent)]",
-  terminal: "bg-[var(--terminal-faint)] text-[var(--terminal)]",
-  muted: "bg-[var(--bg-tertiary)] text-[var(--text-secondary)]" };
-
-const COMMANDS_BY_HREF = new Map(COMMANDS.map((c) => [c.href, c]));
-
-function readRecent(): string[] {
-  if (typeof window === "undefined") return [];
-  try {
-    const raw = window.localStorage.getItem(COMMAND_PALETTE_RECENT_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed.filter((x): x is string => typeof x === "string") : [];
-  } catch {
-    return [];
+export function openCommandPalette(): void {
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new Event(COMMAND_PALETTE_OPEN_EVENT));
   }
 }
 
-function writeRecent(items: string[]) {
-  if (typeof window === "undefined") return;
-  try {
-    window.localStorage.setItem(COMMAND_PALETTE_RECENT_KEY, JSON.stringify(items));
-  } catch {
-    // quota / disabled — fail silently, recent is a nice-to-have
-  }
-}
-
-/** Canonical CommandPalette — prefer `@/components/ui` or this file; portal-os re-exports for AppShell. */
-export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
+/**
+ * Single CommandPalette implementation (kill-list: one module max).
+ * ⌘K / Ctrl+K · 12 IA leaves + Sessions lens + Open AI + Debugger + sign-out.
+ */
+export function CommandPalette() {
+  const [open, setOpen] = React.useState(false);
   const router = useRouter();
-  const pathname = usePathname();
-  const [search, setSearch] = useState("");
-  const [recentHrefs, setRecentHrefs] = useState<string[]>([]);
-  const lastFocusRef = useRef<HTMLElement | null>(null);
-  const wasOpenRef = useRef(false);
-  const dialogRef = useRef<HTMLDivElement | null>(null);
-  const inputRef = useRef<HTMLInputElement | null>(null);
+  const { signOut } = useClerk();
+  const tLeaves = useTranslations("nav.leaves");
+  const t = useTranslations("commandPalette");
+  const leaves = React.useMemo(() => getCoreNavLeaves(), []);
 
-  // Track focus while closed so Esc/close restores the pre-open trigger.
-  // Capturing on open (useEffect after paint) stores the cmdk input —
-  // which unmounts on close — so focus would drop to <body> (F4).
-  useEffect(() => {
-    if (open) return;
-    const track = () => {
-      const el = document.activeElement;
-      if (!(el instanceof HTMLElement) || el === document.body) return;
-      if (el.closest('[aria-label="Command palette"]')) return;
-      lastFocusRef.current = el;
-    };
-    track();
-    document.addEventListener("focusin", track);
-    return () => document.removeEventListener("focusin", track);
-  }, [open]);
-
-  // On open: move focus into the search field. On close: restore prior focus.
-  useLayoutEffect(() => {
-    if (open) {
-      wasOpenRef.current = true;
-      setRecentHrefs(readRecent());
-      const input =
-        inputRef.current ??
-        dialogRef.current?.querySelector<HTMLInputElement>("[cmdk-input]");
-      input?.focus();
-      return;
-    }
-    if (!wasOpenRef.current) return;
-    wasOpenRef.current = false;
-    const el = lastFocusRef.current;
-    if (!el || typeof el.focus !== "function") return;
-    const t = window.setTimeout(() => {
-      try {
-        if (el.isConnected) el.focus();
-      } catch {
-        /* node unmounted */
+  // Lazy import to avoid circular dep — AiSessionProvider must be in tree
+  const openAiRef = React.useRef<(() => void) | null>(null);
+  React.useEffect(() => {
+    openAiRef.current = () => {
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent("eden:ask-ai", { detail: {} }));
       }
-    }, 0);
-    return () => window.clearTimeout(t);
-  }, [open]);
+    };
+  }, []);
 
-  // Esc close + Tab focus trap. Cmd/Ctrl+K stays owned by portal chrome
-  // (dedup — do not register K here).
-  useEffect(() => {
-    if (!open) return;
+  React.useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
         e.preventDefault();
-        onOpenChange(false);
-        return;
-      }
-      if (e.key !== "Tab" || !dialogRef.current) return;
-      const focusables =
-        dialogRef.current.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR);
-      if (focusables.length === 0) return;
-      const first = focusables[0];
-      const last = focusables[focusables.length - 1];
-      if (e.shiftKey && document.activeElement === first) {
-        e.preventDefault();
-        last.focus();
-      } else if (!e.shiftKey && document.activeElement === last) {
-        e.preventDefault();
-        first.focus();
+        setOpen((v) => !v);
       }
     };
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [open, onOpenChange]);
+    const onOpen = () => setOpen(true);
+    window.addEventListener("keydown", onKey);
+    window.addEventListener(COMMAND_PALETTE_OPEN_EVENT, onOpen);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener(COMMAND_PALETTE_OPEN_EVENT, onOpen);
+    };
+  }, []);
 
-  // Track the current route as recently visited (only for routes the
-  // command palette knows about — random 404s shouldn't pollute the list).
-  useEffect(() => {
-    if (!pathname) return;
-    const known = COMMANDS_BY_HREF.get(pathname);
-    if (!known) return;
-    const recent = readRecent().filter((h) => h !== pathname);
-    recent.unshift(pathname);
-    const trimmed = recent.slice(0, COMMAND_PALETTE_RECENT_LIMIT);
-    writeRecent(trimmed);
-    setRecentHrefs(trimmed);
-    // pathname is the only signal we care about; the localStorage reads
-    // are idempotent.
-     
-  }, [pathname]);
+  const go = (href: string) => {
+    setOpen(false);
+    router.push(href);
+  };
 
-  const runCommand = useCallback(
-    (path: string) => {
-      onOpenChange(false);
-      if (path === "eden:open-ai-chat") {
-        window.dispatchEvent(new CustomEvent("eden:ask-ai"));
-        return;
-      }
-      if (isExternalHref(path)) {
-        window.open(path, "_blank", "noopener,noreferrer");
-        return;
-      }
-      router.push(path);
-    },
-    [onOpenChange, router],
-  );
-
-  // Group commands by their `group` field, preserving the order
-  // they were declared in (which mirrors the sidebar).
-  const grouped = useMemo(
-    () =>
-      COMMANDS.reduce<Record<string, NavEntry[]>>((acc, c) => {
-        (acc[c.group] = acc[c.group] || []).push(c);
-        return acc;
-      }, {}),
-    [],
-  );
-
-  const recentEntries = useMemo(
-    () =>
-      recentHrefs
-        .map((href) => COMMANDS_BY_HREF.get(href))
-        .filter((entry): entry is NavEntry => Boolean(entry)),
-    [recentHrefs],
-  );
-
-  const askAiEntry = useMemo(
-    () => COMMANDS.find((c) => c.href === OPEN_AI_CHAT_HREF) ?? null,
-    [],
-  );
-
-  const hasResults = search.trim().length > 0;
-  const showFooter = !hasResults;
-  /** Empty palette: Recents + Ask AI first; full nav groups still listed below. */
-  const showRecent = recentEntries.length > 0 && !hasResults;
-  const showPinnedAskAi = Boolean(askAiEntry) && !hasResults;
-
-  function renderCommandItem(item: NavEntry, keyPrefix = "") {
-    const Icon = item.icon;
-    const accentClass = item.accent
-      ? ACCENT_BG[item.accent]
-      : "bg-[var(--bg-tertiary)] text-[var(--text-secondary)]";
-    return (
-      <Cmnd.Item
-        key={`${keyPrefix}${item.href}`}
-        value={`${item.label} ${item.href} ${item.group}`}
-        onSelect={() => runCommand(item.href)}
-        className="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-[var(--bg-secondary)] cursor-pointer transition-colors"
-      >
-        <div className={cn("w-8 h-8 rounded-lg flex items-center justify-center", accentClass)}>
-          <Icon className="w-4 h-4" />
-        </div>
-        <div className="flex-1 min-w-0">
-          <p className="text-sm font-medium text-[var(--text-primary)]">{item.label}</p>
-          {item.description && (
-            <p className="text-xs text-[var(--text-muted)]">{item.description}</p>
-          )}
-        </div>
-        <ChevronRight className="w-4 h-4 text-[var(--text-muted)]" />
-      </Cmnd.Item>
-    );
-  }
-
-  // Conditionally render the entire tree. The previous version
-  // always mounted a ``fixed inset-0 z-50`` wrapper even when
-  // ``open === false``; combined with the mobile sidebar overlay
-  // and the chat toggle (also ``z-40``/``z-50``), this added an
-  // empty full-viewport layer on every page that mounted
-  // <CommandPalette />. Returning ``null`` when closed keeps the
-  // DOM minimal and removes any chance of an invisible z-50
-  // overlay intercepting clicks on the page below.
-  if (!open) return null;
   return (
-    <div className="fixed inset-0 z-50" role="presentation">
-      <div
-        className="fixed inset-0 bg-[var(--bg-base)]/40 backdrop-blur-sm"
-        onClick={() => onOpenChange(false)}
-      />
-      <Cmnd
-        ref={dialogRef}
-        role="dialog"
-        aria-modal="true"
-        aria-label="Command palette"
-        className={cn(
-          // FIX-G: center vertically. The previous `top-[20%]`
-          // anchored the menu 20% from the top of the viewport,
-          // which on a 1080p screen put it visibly above center.
-          // `top-1/2 -translate-y-1/2` puts it dead-center.
-          "fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-[calc(100vw-2rem)] sm:max-w-lg",
-          "bg-[var(--bg-primary)] rounded-2xl shadow-2xl border border-[var(--border-default)] overflow-hidden",
-          "flex flex-col",
-          "animate-scale-in"
-        )}
-        // Smaller on phones (60vh leaves the keyboard covering most
-        // results), taller on desktop. June 2026 layout-pass fix.
-        style={{ maxHeight: "min(60vh, 480px)" }}
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogContent
+        className="overflow-hidden p-0 gap-0 max-w-lg"
+        aria-describedby={undefined}
       >
-        <div className="flex items-center gap-3 px-4 border-b border-[var(--border-subtle)]">
-          <Search className="w-5 h-5 text-[var(--text-muted)] flex-shrink-0" />
-          <Cmnd.Input
-            ref={inputRef}
-            value={search}
-            onValueChange={setSearch}
-            placeholder="Search pages, observability, settings…"
-            className="flex-1 py-4 text-sm outline-none bg-transparent placeholder:text-[var(--text-muted)]"
-          />
-          <button
-            type="button"
-            onClick={() => onOpenChange(false)}
-            aria-label="Close command palette"
-            className={cn(
-              "inline-flex items-center justify-center min-h-[44px] min-w-[44px] p-1 hover:bg-[var(--bg-tertiary)] rounded transition-colors",
-              FOCUS_RING_CLASS,
-            )}
-          >
-            <X className="w-4 h-4 text-[var(--text-muted)]" />
-          </button>
-        </div>
-
-        <Cmnd.List className="flex-1 overflow-y-auto p-2">
-          <Cmnd.Empty className="py-6 text-center text-sm text-[var(--text-muted)]">
-            No results found.
-          </Cmnd.Empty>
-
-          {showRecent && (
-            <Cmnd.Group heading="Recent" className="px-2 mt-2 first:mt-0">
-              {recentEntries.map((item) => renderCommandItem(item, "recent-"))}
-            </Cmnd.Group>
-          )}
-
-          {showPinnedAskAi && askAiEntry && (
-            <Cmnd.Group heading="Ask AI" className="px-2 mt-2 first:mt-0">
-              {renderCommandItem(askAiEntry, "pinned-")}
-            </Cmnd.Group>
-          )}
-
-          {Object.entries(grouped).map(([group, items]) => {
-            // Empty state already pins Ask AI above — skip duplicate in Actions.
-            const list =
-              showPinnedAskAi && group === "Actions"
-                ? items.filter((i) => i.href !== OPEN_AI_CHAT_HREF)
-                : items;
-            if (list.length === 0) return null;
-            return (
-              <Cmnd.Group key={group} heading={group} className="px-2 mt-2 first:mt-0">
-                {list.map((item) => renderCommandItem(item))}
-              </Cmnd.Group>
-            );
-          })}
-
-          {showFooter && (
-            <div className="px-4 py-3 border-t border-[var(--border-subtle)] mt-2">
-              <div className="flex items-center gap-4 text-xs text-[var(--text-muted)]">
-                <span className="flex items-center gap-1">
-                  <kbd className="px-1.5 py-0.5 bg-[var(--bg-tertiary)] rounded text-[var(--text-muted)] font-mono">↑↓</kbd>
-                  Navigate
-                </span>
-                <span className="flex items-center gap-1">
-                  <kbd className="px-1.5 py-0.5 bg-[var(--bg-tertiary)] rounded text-[var(--text-muted)] font-mono">↵</kbd>
-                  Select
-                </span>
-                <span className="flex items-center gap-1">
-                  <kbd className="px-1.5 py-0.5 bg-[var(--bg-tertiary)] rounded text-[var(--text-muted)] font-mono">Esc</kbd>
-                  Close
-                </span>
-              </div>
-            </div>
-          )}
-        </Cmnd.List>
-      </Cmnd>
-    </div>
+        <DialogTitle className="sr-only">{t("placeholder")}</DialogTitle>
+        <Command
+          className="flex flex-col"
+          label={t("placeholder")}
+          shouldFilter
+        >
+          <div className="flex items-center gap-2 border-b border-[var(--border-subtle)] px-3">
+            <Search
+              className="h-4 w-4 shrink-0 text-[var(--text-muted)]"
+              aria-hidden
+            />
+            <Command.Input
+              placeholder={t("placeholder")}
+              className={cn(
+                "h-11 w-full bg-transparent text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] outline-none",
+                FOCUS_RING_CLASS,
+              )}
+            />
+          </div>
+          <Command.List className="max-h-[min(60vh,360px)] overflow-y-auto p-2">
+            <Command.Empty className="px-3 py-6 text-center text-sm text-[var(--text-muted)]">
+              {t("empty")}
+            </Command.Empty>
+            <Command.Group
+              heading={t("navigation")}
+              className="[&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-xs [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:text-[var(--text-muted)]"
+            >
+              {leaves.map((item) => {
+                const leafKey = item.id as Parameters<typeof tLeaves>[0];
+                return (
+                  <Command.Item
+                    key={item.id}
+                    value={`${item.id} ${tLeaves(leafKey)}`}
+                    onSelect={() => go(item.href)}
+                    className={cn(
+                      "flex cursor-pointer items-center gap-2 rounded-md px-2 py-2 text-sm text-[var(--text-secondary)]",
+                      "data-[selected=true]:bg-[var(--accent-faint)] data-[selected=true]:text-[var(--accent)]",
+                    )}
+                  >
+                    <item.icon className="h-4 w-4 shrink-0 opacity-80" />
+                    <span>{tLeaves(leafKey)}</span>
+                  </Command.Item>
+                );
+              })}
+              <Command.Item
+                value={`sessions ${t("sessions")}`}
+                onSelect={() => go(SESSIONS_PALETTE_HREF)}
+                className={cn(
+                  "flex cursor-pointer items-center gap-2 rounded-md px-2 py-2 text-sm text-[var(--text-secondary)]",
+                  "data-[selected=true]:bg-[var(--accent-faint)] data-[selected=true]:text-[var(--accent)]",
+                )}
+              >
+                <MessagesSquare className="h-4 w-4 shrink-0 opacity-80" />
+                <span>{t("sessions")}</span>
+              </Command.Item>
+              <Command.Item
+                value={`open-ai ${t("openAi")}`}
+                onSelect={() => {
+                  setOpen(false);
+                  openAiRef.current?.();
+                }}
+                className={cn(
+                  "flex cursor-pointer items-center gap-2 rounded-md px-2 py-2 text-sm text-[var(--text-secondary)]",
+                  "data-[selected=true]:bg-[var(--accent-faint)] data-[selected=true]:text-[var(--accent)]",
+                )}
+              >
+                <MessageSquare className="h-4 w-4 shrink-0 opacity-80" />
+                <span>{t("openAi")}</span>
+              </Command.Item>
+              <Command.Item
+                value={`debugger ${t("debugger")}`}
+                onSelect={() => go("/debugger")}
+                className={cn(
+                  "flex cursor-pointer items-center gap-2 rounded-md px-2 py-2 text-sm text-[var(--text-secondary)]",
+                  "data-[selected=true]:bg-[var(--accent-faint)] data-[selected=true]:text-[var(--accent)]",
+                )}
+              >
+                <Bug className="h-4 w-4 shrink-0 opacity-80" />
+                <span>{t("debugger")}</span>
+              </Command.Item>
+              <Command.Item
+                value={`prompts ${t("prompts")}`}
+                onSelect={() => go("/prompts")}
+                className={cn(
+                  "flex cursor-pointer items-center gap-2 rounded-md px-2 py-2 text-sm text-[var(--text-secondary)]",
+                  "data-[selected=true]:bg-[var(--accent-faint)] data-[selected=true]:text-[var(--accent)]",
+                )}
+              >
+                <FileText className="h-4 w-4 shrink-0 opacity-80" />
+                <span>{t("prompts")}</span>
+              </Command.Item>
+              <Command.Item
+                value={`analytics ${t("analytics")}`}
+                onSelect={() => go("/analytics")}
+                className={cn(
+                  "flex cursor-pointer items-center gap-2 rounded-md px-2 py-2 text-sm text-[var(--text-secondary)]",
+                  "data-[selected=true]:bg-[var(--accent-faint)] data-[selected=true]:text-[var(--accent)]",
+                )}
+              >
+                <BarChart3 className="h-4 w-4 shrink-0 opacity-80" />
+                <span>{t("analytics")}</span>
+              </Command.Item>
+            </Command.Group>
+            <Command.Separator className="my-1 h-px bg-[var(--border-subtle)]" />
+            <Command.Item
+              value={`sign-out ${t("signOut")}`}
+              onSelect={async () => {
+                setOpen(false);
+                await signOut({ redirectUrl: "/sign-in" });
+              }}
+              className={cn(
+                "flex cursor-pointer items-center gap-2 rounded-md px-2 py-2 text-sm text-[var(--text-secondary)]",
+                "data-[selected=true]:bg-[var(--accent-faint)] data-[selected=true]:text-[var(--accent)]",
+              )}
+            >
+              <LogOut className="h-4 w-4 shrink-0 opacity-80" />
+              <span>{t("signOut")}</span>
+            </Command.Item>
+          </Command.List>
+        </Command>
+      </DialogContent>
+    </Dialog>
   );
 }

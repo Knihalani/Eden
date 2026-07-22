@@ -9,7 +9,6 @@ import { useDensity, useResourceUrlState } from "@/components/portal-os";
 import { usePagePerf } from "@/lib/perf";
 import { useListKeyboardNav } from "@/hooks/use-list-keyboard-nav";
 import { parsePromoteTraceIds } from "@/lib/portal-cross-links";
-import { useEmbeddedSurface } from "@/components/layout/embedded-surface";
 
 export function useDatasetsPage() {
   const { currentOrg } = useOrg();
@@ -17,7 +16,7 @@ export function useDatasetsPage() {
   const toast = useToast();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const embedded = useEmbeddedSurface();
+  const embedded = false;
   const density = useDensity();
   const { state: urlState, setState: setUrlState } = useResourceUrlState();
   const datasetId = urlState.datasetId;

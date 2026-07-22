@@ -1,11 +1,8 @@
-// Known portal path prefixes after July 2026 IA consolidation.
-// Ghost routes redirect via next.config.ts and are intentionally omitted.
-
 /**
- * Fully removed portal surfaces — must never appear as hrefs in sidebar,
- * command palette, quick links, or mobile nav. Bookmarks soft-land via
- * next.config.ts redirects (usually → /dashboard).
+ * Portal path prefixes during rebuild.
+ * Later surfaces (Analytics/Prompts) still soft-land → /dashboard.
  */
+
 export const REMOVED_PORTAL_PATH_PREFIXES: readonly string[] = [
   "/marketplace",
   "/multi-agent",
@@ -13,6 +10,24 @@ export const REMOVED_PORTAL_PATH_PREFIXES: readonly string[] = [
   "/jobs",
   "/eval-harnesses",
   "/sandbox",
+  "/redteam",
+  "/observability",
+  "/inspector",
+  "/analytics",
+  "/users",
+  "/tools",
+  "/insights",
+  "/fleet",
+  "/incidents",
+  "/signals",
+  "/prompts",
+  "/ledger",
+  "/promotions",
+  "/artifacts",
+  "/optimization",
+  "/onboarding",
+  "/docs-fill",
+  "/runs",
 ] as const;
 
 export function isRemovedPortalPath(pathname: string | null | undefined): boolean {
@@ -23,53 +38,37 @@ export function isRemovedPortalPath(pathname: string | null | undefined): boolea
   );
 }
 
+/** Authenticated product prefixes (auth.protect targets). */
 export const KNOWN_PORTAL_PREFIXES: readonly string[] = [
   "/dashboard",
+  "/_stub",
   "/agents",
   "/traces",
   "/sessions",
   "/issues",
   "/alerts",
-  "/artifacts",
-  "/ledger",
-  "/promotions",
-  "/analytics",
   "/evals",
   "/improve",
-  "/optimization",
   "/guardrails",
-  "/prompts",
+  "/cost",
+  "/agent",
+  "/audit",
   "/settings",
-  "/runs",
-  // Deep-link / tab-source survivors (list URLs redirect via next.config)
-  "/incidents",
-  "/datasets",
-  "/playgrounds",
-  "/experiments",
-  "/labeling",
-  "/studio",
-  "/synthetic",
-  "/observability",
-  "/inspector",
-  "/replay",
   "/debugger",
-  "/debugger-sessions",
-  "/fleet",
-  "/audit-trail",
-  "/insights",
-  "/tools",
-  "/users",
-  "/signals",
-  "/redteam",
   "/profile",
-  "/docs-fill",
-  "/onboarding",
+  "/billing",
+  "/finops",
+  "/audit-trail",
+  "/debugger-sessions",
+  "/replay",
+  // Soft-land ghosts (redirect → /dashboard)
+  ...REMOVED_PORTAL_PATH_PREFIXES,
 ] as const;
 
 export function isKnownPortalPath(pathname: string | null | undefined): boolean {
   if (!pathname) return false;
   const p = pathname.split("?")[0].split("#")[0];
   return KNOWN_PORTAL_PREFIXES.some(
-    (prefix) => p === prefix || p.startsWith(prefix + "/")
+    (prefix) => p === prefix || p.startsWith(prefix + "/"),
   );
 }

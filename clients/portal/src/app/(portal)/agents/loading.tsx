@@ -1,9 +1,15 @@
-import { LoadingSkeleton } from "@/components/ui/skeleton";
+import { Skeleton } from "@/components/ui/skeleton";
 
-/**
- * Auto-generated loading state for the agents route.
- * Renders a styled skeleton matching the loaded state's general shape.
- */
-export default function Loading() {
-  return <LoadingSkeleton variant="table" lines={5} />;
+export default function AgentsLoading() {
+  return (
+    <div className="mx-auto max-w-6xl space-y-4 p-4">
+      <Skeleton className="h-8 w-48" />
+      <Skeleton className="h-10 w-full max-w-md" />
+      <div className="space-y-2">
+        {Array.from({ length: 5 }).map((_, i) => (
+          <Skeleton key={i} className="h-12 w-full" />
+        ))}
+      </div>
+    </div>
+  );
 }

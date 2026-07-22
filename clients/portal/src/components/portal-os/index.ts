@@ -34,8 +34,8 @@ export {
 } from "./DetailPanelShell";
 export { InfiniteDataTable } from "./InfiniteDataTable";
 export { VirtualizedList } from "./VirtualizedList";
-/** CommandPalette: re-export only — canonical impl is `@/components/ui/command-palette` (portal-chrome may dynamic-import this path). */
-export { CommandPalette } from "./CommandPalette";
+/** CommandPalette: re-export only — canonical impl is `@/components/ui/command-palette`. */
+export { CommandPalette } from "@/components/ui/command-palette";
 export {
   MobileBottomNav,
   MOBILE_CORE_NAV,

@@ -12,7 +12,7 @@ import { Eye, EyeOff, Pin, PinOff, RotateCcw, Settings2, AlertTriangle, RefreshC
 import { PageHeader } from "@/components/layout/page-header";
 import { PageContent } from "@/components/layout/page-content";
 import { useSidebarPrefs, applySidebarPrefs, DEFAULT_PREFS } from "@/hooks/use-sidebar-prefs";
-import { ALL_ITEM_IDS, DEFAULT_SIDEBAR, type SidebarGroup } from "@/lib/sidebar-config";
+import { ALL_ITEM_IDS, DEFAULT_SIDEBAR, SIDEBAR_GROUP_LABELS, SIDEBAR_ITEM_LABELS, type SidebarGroup } from "@/lib/sidebar-config";
 import { cn } from "@/lib/utils";
 import { useOrg } from "@/hooks/use-org";
 import { NoOrgState } from "@/components/ui/no-org-state";
@@ -129,7 +129,7 @@ export function SidebarSettingsView({ embedded = false }: SidebarSettingsPagePro
               {pinnedItems.map(item => <li key={item.id} className="flex items-center justify-between p-2 rounded-md bg-[var(--bg-secondary)]">
                   <div className="flex items-center gap-2.5 min-w-0">
                     <item.icon className="w-4 h-4 text-[var(--text-muted)] shrink-0" />
-                    <span className="text-sm text-[var(--text-primary)] truncate">{item.label}</span>
+                    <span className="text-sm text-[var(--text-primary)] truncate">{SIDEBAR_ITEM_LABELS[item.id] ?? item.id}</span>
                   </div>
                   <button type="button" onClick={() => unpin(item.id)} className="inline-flex items-center gap-1 px-2 py-1 text-xs text-[var(--text-muted)] hover:text-[var(--text-secondary)] rounded transition-colors">
                     <PinOff className="w-3.5 h-3.5" />
@@ -155,13 +155,13 @@ export function SidebarSettingsView({ embedded = false }: SidebarSettingsPagePro
             return <li key={groupId} className="flex items-center justify-between p-2 rounded-md bg-[var(--bg-secondary)]">
                   <span className="text-sm text-[var(--text-primary)]">
                     <span className="text-[var(--text-muted)] mr-2">{idx + 1}.</span>
-                    {group.label}
+                    {SIDEBAR_GROUP_LABELS[group.id]}
                   </span>
                   <div className="flex items-center gap-1">
-                    <button type="button" onClick={() => moveGroup(idx, idx - 1)} disabled={idx === 0} aria-disabled={idx === 0} className="px-2 py-1 text-xs text-[var(--text-muted)] hover:text-[var(--text-primary)] disabled:opacity-30" aria-label={`Move ${group.label} up`}>
+                    <button type="button" onClick={() => moveGroup(idx, idx - 1)} disabled={idx === 0} aria-disabled={idx === 0} className="px-2 py-1 text-xs text-[var(--text-muted)] hover:text-[var(--text-primary)] disabled:opacity-30" aria-label={`Move ${SIDEBAR_GROUP_LABELS[group.id]} up`}>
                       ↑
                     </button>
-                    <button type="button" onClick={() => moveGroup(idx, idx + 1)} disabled={idx === draftOrder.length - 1} aria-disabled={idx === draftOrder.length - 1} className="px-2 py-1 text-xs text-[var(--text-muted)] hover:text-[var(--text-primary)] disabled:opacity-30" aria-label={`Move ${group.label} down`}>
+                    <button type="button" onClick={() => moveGroup(idx, idx + 1)} disabled={idx === draftOrder.length - 1} aria-disabled={idx === draftOrder.length - 1} className="px-2 py-1 text-xs text-[var(--text-muted)] hover:text-[var(--text-primary)] disabled:opacity-30" aria-label={`Move ${SIDEBAR_GROUP_LABELS[group.id]} down`}>
                       ↓
                     </button>
                   </div>
@@ -184,21 +184,21 @@ export function SidebarSettingsView({ embedded = false }: SidebarSettingsPagePro
                       <item.icon className="w-4 h-4 text-[var(--text-muted)] shrink-0" />
                       <div className="min-w-0">
                         <div className="text-sm text-[var(--text-primary)] truncate">
-                          {item.label}
+                          {SIDEBAR_ITEM_LABELS[item.id] ?? item.id}
                           {item.category === "advanced" && (
                             <span className="ml-1.5 text-2xs text-[var(--text-muted)]/70 font-normal">Advanced</span>
                           )}
                         </div>
                         <div className="text-[10px] uppercase tracking-wider text-[var(--text-muted)]">
-                          {group.label}
+                          {SIDEBAR_GROUP_LABELS[group.id]}
                         </div>
                       </div>
                     </div>
                     <div className="flex items-center gap-1">
-                      <button type="button" onClick={() => pinned ? unpin(item.id) : pin(item.id)} aria-pressed={pinned} className={cn("p-1.5 rounded transition-colors", pinned ? "text-[var(--text-secondary)] bg-[var(--bg-tertiary)]" : "text-[var(--text-muted)] hover:text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)]")} title={pinned ? "Unpin" : "Pin to top"} aria-label={pinned ? `Unpin ${item.label}` : `Pin ${item.label}`}>
+                      <button type="button" onClick={() => pinned ? unpin(item.id) : pin(item.id)} aria-pressed={pinned} className={cn("p-1.5 rounded transition-colors", pinned ? "text-[var(--text-secondary)] bg-[var(--bg-tertiary)]" : "text-[var(--text-muted)] hover:text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)]")} title={pinned ? "Unpin" : "Pin to top"} aria-label={pinned ? `Unpin ${SIDEBAR_ITEM_LABELS[item.id] ?? item.id}` : `Pin ${SIDEBAR_ITEM_LABELS[item.id] ?? item.id}`}>
                         <Pin className={cn("w-3.5 h-3.5", pinned && "fill-current")} />
                       </button>
-                      <button type="button" onClick={() => hidden ? show(item.id) : hide(item.id)} aria-pressed={hidden} className={cn("p-1.5 rounded transition-colors", hidden ? "text-[var(--error)] bg-[var(--error-dim)]" : "text-[var(--text-muted)] hover:text-[var(--error)] hover:bg-[var(--bg-tertiary)]")} title={hidden ? "Show in sidebar" : "Hide from sidebar"} aria-label={hidden ? `Show ${item.label}` : `Hide ${item.label}`}>
+                      <button type="button" onClick={() => hidden ? show(item.id) : hide(item.id)} aria-pressed={hidden} className={cn("p-1.5 rounded transition-colors", hidden ? "text-[var(--error)] bg-[var(--error-dim)]" : "text-[var(--text-muted)] hover:text-[var(--error)] hover:bg-[var(--bg-tertiary)]")} title={hidden ? "Show in sidebar" : "Hide from sidebar"} aria-label={hidden ? `Show ${SIDEBAR_ITEM_LABELS[item.id] ?? item.id}` : `Hide ${SIDEBAR_ITEM_LABELS[item.id] ?? item.id}`}>
                         {hidden ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
                       </button>
                     </div>
@@ -216,8 +216,28 @@ export function SidebarSettingsView({ embedded = false }: SidebarSettingsPagePro
             data-home-shell-sidebar-preview="tonal-rail"
             className="bg-[var(--bg-secondary)] border border-[var(--border-subtle)] rounded-md p-2.5 w-60 max-w-full"
           >
-            {pinnedItems.length > 0 && <SidebarPreviewGroup label="Pinned" items={pinnedItems} quiet />}
-            {groups.map(g => <SidebarPreviewGroup key={g.id} label={g.label} items={g.items} />)}
+            {pinnedItems.length > 0 && (
+              <SidebarPreviewGroup
+                label="Pinned"
+                items={pinnedItems.map((i) => ({
+                  id: i.id,
+                  label: SIDEBAR_ITEM_LABELS[i.id] ?? i.id,
+                  icon: i.icon,
+                }))}
+                quiet
+              />
+            )}
+            {groups.map((g) => (
+              <SidebarPreviewGroup
+                key={g.id}
+                label={SIDEBAR_GROUP_LABELS[g.id]}
+                items={g.items.map((i) => ({
+                  id: i.id,
+                  label: SIDEBAR_ITEM_LABELS[i.id] ?? i.id,
+                  icon: i.icon,
+                }))}
+              />
+            ))}
           </div>
           <Link href="/dashboard" className="inline-flex items-center gap-1.5 text-xs text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:underline">
             Open the dashboard to see your custom sidebar →

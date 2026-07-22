@@ -13,7 +13,6 @@ import {
   type Dataset,
 } from "@/lib/api";
 import { experimentHref } from "@/lib/portal-cross-links";
-import { useEmbeddedSurface } from "@/components/layout/embedded-surface";
 import { usePagePerf } from "@/lib/perf";
 import { useListKeyboardNav } from "@/hooks/use-list-keyboard-nav";
 import type { RunMatrix } from "./run-matrix-types";
@@ -65,7 +64,7 @@ export function usePlaygroundsPage() {
   const toast = useToast();
   const searchParams = useSearchParams();
   const router = useRouter();
-  const embedded = useEmbeddedSurface();
+  const embedded = false;
   const orgId = currentOrg?.id ?? null;
   const [active, setActive] = useState<PersistedPlayground | null>(null);
   const [userPrompt, setUserPrompt] = useState("");

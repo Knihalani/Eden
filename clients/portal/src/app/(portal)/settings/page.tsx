@@ -1,6 +1,9 @@
 "use client";
 
-/** Settings hub — pills + tabs; overview default; audit-log → /audit-trail. */
+/**
+ * Settings hub — ≤8 daily tabs + Advanced disclosure (surfaces/settings.md).
+ * Gateway + API keys are first-class (readable for all members; mutate gated in-tab).
+ */
 
 import { useState, useEffect, useRef, Suspense, useMemo } from "react";
 import dynamic from "next/dynamic";
@@ -11,7 +14,6 @@ import { useToast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils";
 import { isPersonalWorkspace, isTeamOnlyTab } from "@/lib/workspace-mode";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { FOCUS_RING_CLASS } from "@/components/ui/focus-ring";
 import SettingsLoading from "./loading";
 import { useSearchParams, useRouter } from "next/navigation";
@@ -21,22 +23,19 @@ import { PageContent } from "@/components/layout/page-content";
 import {
   TABS,
   GHOST_TABS,
-  CATEGORY_ORDER,
-  CATEGORY_LABELS,
   WAVE9_SETTINGS_COMPLETED,
   WAVE9_DAILY_TAB_CAP,
   WS1_SETTINGS_SHELL_COMPLETED,
   SETTINGS_AUDIT_LOG_REDIRECT_HREF,
+  SETTINGS_DAILY_TAB_IDS,
   isRailTab,
   tabMatchesQuery,
   type Tab,
-  type SettingsCategory,
   type TabDef,
 } from "./_components/settings-tab-registry";
 
 const FALLBACK_TAB: Tab = "overview";
 const tabLoading = () => <Skeleton className="h-64 w-full" />;
-/** Inline options — Next requires object literal for `dynamic()` opts. */
 const AnalyticsTab = dynamic(() => import("./_components/analytics-tab").then((m) => ({ default: m.AnalyticsTab })), { ssr: false, loading: tabLoading });
 const AutonomousTab = dynamic(() => import("./_components/autonomous-tab").then((m) => ({ default: m.default })), { ssr: false, loading: tabLoading });
 const BillingTab = dynamic(() => import("./_components/billing-tab").then((m) => ({ default: m.BillingTab })), { ssr: false, loading: tabLoading });
@@ -57,6 +56,8 @@ const OrgTab = dynamic(() => import("./_components/org-tab").then((m) => ({ defa
 const MembersTab = dynamic(() => import("./_components/members-tab").then((m) => ({ default: m.MembersTab })), { ssr: false, loading: tabLoading });
 const ReferencesTab = dynamic(() => import("./_components/references-tab").then((m) => ({ default: m.ReferencesTab })), { ssr: false, loading: tabLoading });
 const ApiKeysTab = dynamic(() => import("./_components/api-keys-tab").then((m) => ({ default: m.ApiKeysTab })), { ssr: false, loading: tabLoading });
+
+const DAILY_SET = new Set<string>(SETTINGS_DAILY_TAB_IDS);
 
 function resolveInitialTab(raw: string | null, canAccess: (id: Tab) => boolean): Tab {
   if (!raw || raw === "audit-log") return FALLBACK_TAB;
@@ -79,11 +80,12 @@ function SettingsPageInner() {
 
   const canAccessTab = (id: Tab) => {
     if (isTeamOnlyTab(id) && isPersonalOrg) return false;
-    // audit-log is redirect-only — never a Settings body / rail entry.
     if (id === "audit-log") return false;
+    // Gateway + API keys: always readable; mutate CTAs gated inside panels.
+    if (id === "gateway" || id === "api-keys") return true;
     if ((["billing", "finops", "mcp"] as Tab[]).includes(id)) return canSeeAdminTabs;
     if (
-      (["scim", "gateway", "pii", "retention", "exports", "api-keys", "autonomous", "webhooks-dlq"] as Tab[]).includes(
+      (["scim", "pii", "retention", "exports", "autonomous", "webhooks-dlq"] as Tab[]).includes(
         id,
       )
     ) {
@@ -96,11 +98,11 @@ function SettingsPageInner() {
   const [activeTab, setActiveTab] = useState<Tab>(() =>
     resolveInitialTab(urlTabParam, canAccessTab),
   );
-  const [activeCategory, setActiveCategory] = useState<SettingsCategory>(() => {
-    const tab = resolveInitialTab(urlTabParam, canAccessTab);
-    return TABS.find((t) => t.id === tab)?.category ?? "Org";
-  });
   const [searchQuery, setSearchQuery] = useState("");
+  const [advancedOpen, setAdvancedOpen] = useState(() => {
+    const initial = resolveInitialTab(urlTabParam, canAccessTab);
+    return !DAILY_SET.has(initial);
+  });
   const [ghostNotice, setGhostNotice] = useState<"roles" | "sso" | null>(null);
   const deniedTabNotified = useRef<string | null>(null);
   const toastRef = useRef(toast);
@@ -112,7 +114,6 @@ function SettingsPageInner() {
     if (urlTabParam === "audit-log") {
       const params = new URLSearchParams(window.location.search);
       params.delete("tab");
-      // Wave 6 — land on Events segment (org privileged); preserve agent scent.
       if (!params.get("segment")) params.set("segment", "events");
       const qs = params.toString();
       router.replace(
@@ -124,7 +125,6 @@ function SettingsPageInner() {
     if (GHOST_TABS.has(urlTabParam)) {
       setGhostNotice(urlTabParam as "roles" | "sso");
       setActiveTab(FALLBACK_TAB);
-      setActiveCategory("Org");
       const params = new URLSearchParams(window.location.search);
       if (params.get("tab") !== FALLBACK_TAB) {
         params.set("tab", FALLBACK_TAB);
@@ -137,7 +137,6 @@ function SettingsPageInner() {
     if (!role) return;
     if (!canAccessTab(urlTabParam as Tab)) {
       setActiveTab((prev) => (prev === FALLBACK_TAB ? prev : FALLBACK_TAB));
-      setActiveCategory("Org");
       if (deniedTabNotified.current !== urlTabParam) {
         deniedTabNotified.current = urlTabParam;
         if (isPersonalOrg && isTeamOnlyTab(urlTabParam)) {
@@ -162,29 +161,17 @@ function SettingsPageInner() {
     deniedTabNotified.current = null;
     setGhostNotice(null);
     setActiveTab((prev) => (prev === urlTabParam ? prev : (urlTabParam as Tab)));
-    const cat = TABS.find((t) => t.id === urlTabParam)?.category;
-    if (cat) setActiveCategory(cat);
+    if (!DAILY_SET.has(urlTabParam)) setAdvancedOpen(true);
   }, [urlTabParam, canSeeAdminTabs, canEditSettings, isPersonalOrg, role, router]);
 
   const handleTabChange = (tabId: string) => {
     if (!canAccessTab(tabId as Tab)) return;
     setGhostNotice(null);
     setActiveTab(tabId as Tab);
-    const cat = TABS.find((t) => t.id === tabId)?.category;
-    if (cat) setActiveCategory(cat);
+    if (!DAILY_SET.has(tabId)) setAdvancedOpen(true);
     const params = new URLSearchParams(window.location.search);
     params.set("tab", tabId);
     router.replace(`/settings?${params.toString()}`, { scroll: false });
-  };
-
-  const handleCategoryChange = (cat: string) => {
-    const next = cat as SettingsCategory;
-    setActiveCategory(next);
-    setSearchQuery("");
-    const first = TABS.find((t) => t.category === next && canAccessTab(t.id));
-    if (first && first.id !== activeTab) {
-      handleTabChange(first.id);
-    }
   };
 
   const normalisedQuery = searchQuery.trim().toLowerCase();
@@ -196,39 +183,27 @@ function SettingsPageInner() {
     [canEditSettings, canSeeAdminTabs, isPersonalOrg],
   );
 
+  const dailyTabs = useMemo(() => {
+    const byId = new Map(accessibleTabs.map((t) => [t.id, t]));
+    return SETTINGS_DAILY_TAB_IDS.map((id) => byId.get(id)).filter(
+      (t): t is TabDef => Boolean(t),
+    );
+  }, [accessibleTabs]);
+
+  const advancedTabs = useMemo(
+    () => accessibleTabs.filter((t) => !DAILY_SET.has(t.id)),
+    [accessibleTabs],
+  );
+
   const searchableTabCount = accessibleTabs.length;
 
   const visibleTabs = isSearching
     ? accessibleTabs.filter((t) => tabMatchesQuery(t, normalisedQuery))
-    : accessibleTabs.filter((t) => t.category === activeCategory);
+    : advancedOpen
+      ? [...dailyTabs, ...advancedTabs]
+      : dailyTabs;
 
-  const defaultVisibleCount = accessibleTabs.filter((t) => t.defaultVisible).length;
-
-  const categoriesWithTabs = CATEGORY_ORDER.filter((cat) =>
-    accessibleTabs.some((t) => t.category === cat),
-  );
-
-  useEffect(() => {
-    function onKey(e: KeyboardEvent) {
-      if (!(e.metaKey || e.ctrlKey)) return;
-      const target = e.target as HTMLElement | null;
-      if (
-        target?.tagName === "INPUT" ||
-        target?.tagName === "TEXTAREA" ||
-        target?.isContentEditable
-      ) {
-        return;
-      }
-      const idx = Number(e.key) - 1;
-      if (idx >= 0 && idx < categoriesWithTabs.length) {
-        e.preventDefault();
-        handleCategoryChange(categoriesWithTabs[idx]!);
-      }
-    }
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [categoriesWithTabs.length, activeTab]);
+  const defaultVisibleCount = dailyTabs.length;
 
   if (!user) return null;
 
@@ -242,6 +217,7 @@ function SettingsPageInner() {
       data-wave9-settings={WAVE9_SETTINGS_COMPLETED ? "completed" : undefined}
       data-default-visible-tabs={defaultVisibleCount}
       data-wave9-daily-tab-cap={WAVE9_DAILY_TAB_CAP}
+      data-settings-advanced={advancedOpen ? "open" : "closed"}
     >
       <PageContent>
         <div data-ws2-settings-header>
@@ -263,48 +239,18 @@ function SettingsPageInner() {
             className="max-w-md"
           />
 
-          {!isSearching ? (
-            <Tabs
-              value={activeCategory}
-              onValueChange={handleCategoryChange}
-              className="w-full"
-            >
-              <TabsList
-                variant="pills"
-                className="flex w-full max-w-full flex-wrap justify-start gap-1 overflow-x-auto bg-[var(--bg-secondary)] p-1 rounded-lg"
-                aria-label="Settings categories"
-              >
-                {categoriesWithTabs.map((cat) => (
-                  <TabsTrigger
-                    key={cat}
-                    value={cat}
-                    variant="pills"
-                    className={cn(
-                      "rounded-md data-[state=active]:rounded-md",
-                      cat === "Advanced" &&
-                        "ml-space-2 border border-dashed border-[var(--border-default)] text-[var(--text-muted)] data-[state=active]:border-solid data-[state=active]:border-[var(--accent)] data-[state=active]:text-[var(--accent)]",
-                    )}
-                    data-category={cat}
-                    data-settings-group={cat === "Advanced" ? "advanced" : "daily"}
-                  >
-                    {CATEGORY_LABELS[cat]}
-                  </TabsTrigger>
-                ))}
-              </TabsList>
-            </Tabs>
-          ) : null}
-
           <nav
             className="flex flex-row gap-1 overflow-x-auto border-b border-[var(--border-default)] pb-px -mx-space-1 px-space-1"
             role="tablist"
             aria-label="Settings sections"
+            data-settings-daily-tabs
           >
             {isSearching && visibleTabs.length === 0 ? (
               <p className="px-space-2 py-space-3 text-sm text-[var(--text-muted)]" role="status">
                 No settings match “{searchQuery.trim()}”. Try “api”, “billing”, or “pii”.
               </p>
             ) : null}
-            {visibleTabs.map((tab: TabDef) => (
+            {(isSearching ? visibleTabs : dailyTabs).map((tab: TabDef) => (
               <button
                 key={tab.id}
                 type="button"
@@ -329,7 +275,90 @@ function SettingsPageInner() {
                 <span className="truncate">{tab.label}</span>
               </button>
             ))}
+
+            {!isSearching ? (
+              <button
+                type="button"
+                id="settings-advanced"
+                data-settings-group="advanced"
+                aria-expanded={advancedOpen}
+                aria-controls="settings-advanced-tabs"
+                onClick={() => setAdvancedOpen((v) => !v)}
+                className={cn(
+                  FOCUS_RING_CLASS,
+                  "flex-shrink-0 min-h-11 px-space-3 py-space-2 -mb-px border-b-2 text-sm font-medium transition-colors",
+                  advancedOpen
+                    ? "border-[var(--accent)] text-[var(--accent)]"
+                    : "border-transparent border-dashed text-[var(--text-muted)] hover:text-[var(--text-primary)]",
+                )}
+              >
+                Advanced{advancedOpen ? " ▴" : " ▾"}
+              </button>
+            ) : null}
           </nav>
+
+          {!isSearching && advancedOpen ? (
+            <nav
+              id="settings-advanced-tabs"
+              className="flex flex-row gap-1 overflow-x-auto -mx-space-1 px-space-1"
+              role="tablist"
+              aria-label="Advanced settings"
+              data-settings-advanced-tabs
+            >
+              {advancedTabs.map((tab: TabDef) => (
+                <button
+                  key={tab.id}
+                  type="button"
+                  role="tab"
+                  data-tab-id={tab.id}
+                  data-testid={tab.id}
+                  aria-selected={activeTab === tab.id}
+                  id={`settings-tab-${tab.id}`}
+                  onClick={() => handleTabChange(tab.id)}
+                  className={cn(
+                    FOCUS_RING_CLASS,
+                    "flex-shrink-0 min-h-11 max-w-[12rem] px-space-3 py-space-2 rounded-md text-sm font-medium flex items-center gap-space-2 transition-colors",
+                    activeTab === tab.id
+                      ? "bg-[var(--accent-faint)] text-[var(--accent)]"
+                      : "text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-secondary)]",
+                  )}
+                  title={tab.label}
+                  aria-label={`${tab.label} settings`}
+                >
+                  <tab.icon className="w-4 h-4 flex-shrink-0" aria-hidden />
+                  <span className="truncate">{tab.label}</span>
+                </button>
+              ))}
+            </nav>
+          ) : null}
+
+          {isSearching ? (
+            <nav
+              className="flex flex-row flex-wrap gap-1"
+              role="tablist"
+              aria-label="Search results"
+            >
+              {visibleTabs.map((tab: TabDef) => (
+                <button
+                  key={`search-${tab.id}`}
+                  type="button"
+                  role="tab"
+                  data-tab-id={tab.id}
+                  aria-selected={activeTab === tab.id}
+                  onClick={() => handleTabChange(tab.id)}
+                  className={cn(
+                    FOCUS_RING_CLASS,
+                    "min-h-11 px-space-3 py-space-2 rounded-md text-sm",
+                    activeTab === tab.id
+                      ? "bg-[var(--accent-faint)] text-[var(--accent)]"
+                      : "text-[var(--text-muted)] hover:bg-[var(--bg-secondary)]",
+                  )}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </nav>
+          ) : null}
 
           {ghostNotice ? (
             <div
@@ -357,11 +386,11 @@ function SettingsPageInner() {
             {panelTab === "account" && <AccountPanel />}
             {panelTab === "members" && <MembersTab org={currentOrg} />}
             {panelTab === "references" && <ReferencesTab org={currentOrg} />}
-            {panelTab === "api-keys" && canEditSettings && <ApiKeysTab org={currentOrg} />}
+            {panelTab === "api-keys" && <ApiKeysTab org={currentOrg} />}
             {panelTab === "mcp" && canSeeAdminTabs && <McpTab org={currentOrg} />}
             {panelTab === "security" && <SecurityTab />}
             {panelTab === "scim" && canEditSettings && <ScimTab org={currentOrg} />}
-            {panelTab === "gateway" && canEditSettings && <GatewayTab org={currentOrg} />}
+            {panelTab === "gateway" && <GatewayTab org={currentOrg} />}
             {panelTab === "pii" && canEditSettings && <PiiPolicyTab />}
             {panelTab === "retention" && canEditSettings && <RetentionPolicyTab />}
             {panelTab === "analytics" && <AnalyticsTab />}

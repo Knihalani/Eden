@@ -4,7 +4,6 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useOrg } from "@/hooks/use-org";
 import { useToast } from "@/components/ui/toast";
-import { useEmbeddedSurface } from "@/components/layout/embedded-surface";
 import { labelingQueuesApi, labelingApi, datasetsApi } from "@/lib/api";
 import { errorFromCaught } from "@/lib/safe-error-message";
 import { bindQueueHotkeys } from "./queue-hotkeys";
@@ -20,7 +19,7 @@ export type BoardItem = {
 export function useLabelingQueue() {
   const { id: queueId } = useParams<{ id: string }>();
   const { currentOrg } = useOrg();
-  const embedded = useEmbeddedSurface();
+  const embedded = false;
   const router = useRouter();
   const toast = useToast();
   const [board, setBoard] = useState<Record<string, BoardItem[]>>({});

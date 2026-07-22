@@ -40,22 +40,35 @@ describe("portal hub redirect merge", () => {
     );
   });
 
-  it("soft-nests time-travel and cohorts under traces views", () => {
+  it("routes time-travel to debugger; cohorts stays on traces", () => {
     expect(
       buildHubRedirectUrl("/observability/time-travel", "?filter=x"),
-    ).toBe("/traces?filter=x&view=time-travel");
-    expect(buildHubRedirectUrl("/observability/cohorts", "")).toBe(
-      "/traces?view=cohorts",
-    );
+    ).toBe("/debugger?filter=x&tab=time-travel");
+    expect(buildHubRedirectUrl("/observability/cohorts", "")).toBe("/traces");
   });
 
-  it("does not overwrite an explicit facet or view on observability nests", () => {
+  it("does not overwrite an explicit facet on observability nests", () => {
     expect(
       buildHubRedirectUrl("/observability/mcp", "?facet=decisions"),
     ).toBe("/traces?facet=decisions");
-    expect(
-      buildHubRedirectUrl("/observability/cohorts", "?view=query"),
-    ).toBe("/traces?view=query");
+  });
+
+  it("does not hijack live /debugger (must-ship Phase 6)", () => {
+    expect(buildHubRedirectUrl("/debugger", "")).toBeNull();
+    expect(buildHubRedirectUrl("/debugger", "?tab=replay")).toBeNull();
+  });
+
+  it("maps replay + redteam + cost farms to live hubs", () => {
+    expect(buildHubRedirectUrl("/replay", "")).toBe("/debugger?tab=replay");
+    expect(buildHubRedirectUrl("/redteam", "")).toBe(
+      "/guardrails?tab=policies",
+    );
+    expect(buildHubRedirectUrl("/optimization/budget", "")).toBe(
+      "/cost?tab=budget",
+    );
+    expect(buildHubRedirectUrl("/promotions", "")).toBe(
+      "/improve?tab=promotions",
+    );
   });
 });
 

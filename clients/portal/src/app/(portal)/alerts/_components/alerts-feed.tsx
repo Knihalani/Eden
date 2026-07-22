@@ -1,6 +1,6 @@
 "use client";
 
-import dynamic from "next/dynamic";
+import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { formatRelativeTime } from "@/lib/format";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -9,10 +9,9 @@ import { Button } from "@/components/ui/button";
 import { QueryState } from "@/components/ui/query-state";
 import { LoadingSkeleton } from "@/components/ui/skeleton";
 import { TabsContent } from "@/components/ui/tabs";
-import { EmbeddedSurface } from "@/components/layout/embedded-surface";
 import { VirtualizedList } from "@/components/portal-os";
 import { U20_EMPTY_COPY, U20_FILTER_EMPTY_COPY } from "@/lib/portal-polish";
-import { Bell, Check, CheckCircle2, Clock, Loader2 } from "lucide-react";
+import { Bell, Check, CheckCircle2, Clock } from "lucide-react";
 import {
   getSeverityConfig,
   VERDICT_CONFIG,
@@ -20,15 +19,6 @@ import {
   type SeverityFilter,
   type VerdictFilter,
 } from "./alert-config";
-
-const SignalsView = dynamic(() => import("@/app/(portal)/signals/page"), {
-  ssr: false,
-  loading: () => (
-    <div className="flex h-48 items-center justify-center">
-      <Loader2 className="h-4 w-4 animate-spin text-[var(--text-muted)]" />
-    </div>
-  ),
-});
 
 export interface AlertsFeedProps {
   alerts: AlertItem[];
@@ -101,9 +91,15 @@ export function AlertsFeed(props: AlertsFeedProps) {
   return (
     <>
       <TabsContent value="signals" className="mt-0">
-        <EmbeddedSurface>
-          <SignalsView />
-        </EmbeddedSurface>
+        <EmptyState
+          title="Signals"
+          description="Signals live on the Alerts hub."
+          action={
+            <Button asChild variant="secondary">
+              <Link href="/alerts?tab=signals">Open Signals</Link>
+            </Button>
+          }
+        />
       </TabsContent>
       <TabsContent value="feed" className="mt-0 space-y-space-4">
       {/* Triage events (F81) — collapsed by default so they don't compete with the feed */}

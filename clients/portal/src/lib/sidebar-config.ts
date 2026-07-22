@@ -1,298 +1,308 @@
-"use client";
-
 /**
- * Sidebar IA — places, not verbs. Core ≤12; Advanced collapsed by default.
- *
- * Product path: Home → Observe → Evaluate → Improve → Workspace.
- * Improve core: Queue · Artifacts · Ledger · Prompts.
- * Advanced (agents, analytics, scorecard, guardrails, cost, …) behind Show Advanced.
- *
- * Group `id` values match product labels. Legacy prefs migrate in use-sidebar-prefs.
+ * Rebuild IA sidebar — 12 core leaves.
+ * Phase 7: all must-ship leaves live (agent, audit, settings); Later surfaces stay redirected.
+ * Labels resolve via next-intl (labelKey).
  */
 
 import type { ComponentType } from "react";
 import {
   LayoutDashboard,
-  Settings,
-  FileText,
+  Bot,
+  GitBranch,
   ShieldAlert,
-  ShieldCheck,
-  KeyRound,
-  Package,
-  BookOpen,
-  Bug,
-  Inbox,
-  FileCode,
-  Trophy,
+  Bell,
+  FlaskConical,
   Sparkles,
-  GitCompareArrows,
+  ShieldCheck,
+  CircleDollarSign,
+  MessageSquare,
+  ScrollText,
+  Settings,
   type LucideIcon,
 } from "lucide-react";
-import {
-  TraceIcon,
-  EvalIcon,
-  CostIcon,
-  AgentIcon,
-  PatchIcon,
-  GuardrailIcon,
-  AlertNavIcon,
-  InsightsIcon,
-} from "@/components/icons/eden-nav-icons";
-import { DOCS_QUICKSTART_URL } from "@/lib/constants";
 
 export type SidebarIcon = LucideIcon | ComponentType<{ className?: string }>;
 
 export interface SidebarItem {
   id: string;
   href: string;
-  label: string;
+  /** next-intl key under `nav.leaves.*` */
+  labelKey: string;
   icon: SidebarIcon;
-  description?: string;
-  badge?: string;
-  children?: SidebarItem[];
+  descriptionKey?: string;
   category?: "core" | "advanced";
+  children?: SidebarItem[];
 }
 
 export interface SidebarGroup {
-  /** Stable key — matches product IA label. */
-  id: "home" | "observe" | "evaluate" | "improve" | "workspace";
-  label: string;
+  id: "home" | "agents" | "observe" | "evaluate" | "improve" | "workspace";
+  /** next-intl key under `nav.groups.*` */
+  labelKey: string;
   items: SidebarItem[];
 }
 
-/** Core leaf count: ≤12. Advanced items excluded from default count. */
+/** Exactly the 12 core leaf ids (IA §1.1). */
+export const CORE_NAV_LEAF_IDS = [
+  "dashboard",
+  "agents",
+  "traces",
+  "issues",
+  "alerts",
+  "evals",
+  "improve",
+  "guardrails",
+  "cost",
+  "agent",
+  "audit",
+  "settings",
+] as const;
+
+export type CoreNavLeafId = (typeof CORE_NAV_LEAF_IDS)[number];
+
+/** @deprecated Prefer CORE_NAV_LEAF_IDS — kept for stub-era smoke tests. */
+export const STUB_CORE_SURFACE_IDS = CORE_NAV_LEAF_IDS;
+
+export type StubCoreSurfaceId = CoreNavLeafId;
+
+export const CORE_NAV_ITEM_COUNT = CORE_NAV_LEAF_IDS.length;
+
+/** No core leaves remain stubbed after Phase 7. Later surfaces use redirects, not /_stub. */
+export const STUB_SURFACE_IDS = [] as readonly CoreNavLeafId[];
+
+/** Mobile bottom nav — exactly 5 hubs (PHASES §1.5). */
+export const MOBILE_BOTTOM_NAV = [
+  {
+    id: "dashboard" as const,
+    href: "/dashboard",
+    labelKey: "nav.leaves.dashboard",
+  },
+  {
+    id: "traces" as const,
+    href: "/traces",
+    labelKey: "nav.leaves.traces",
+  },
+  {
+    id: "issues" as const,
+    href: "/issues",
+    labelKey: "nav.leaves.issues",
+  },
+  {
+    id: "evals" as const,
+    href: "/evals",
+    labelKey: "nav.leaves.evals",
+  },
+  {
+    id: "improve" as const,
+    href: "/improve",
+    labelKey: "nav.leaves.improve",
+  },
+] as const;
+
+/** More sheet — core leaves not on bottom nav + secondary (debugger, prompts, analytics). */
+export const MOBILE_MORE_NAV = [
+  { id: "agents" as const, href: "/agents", labelKey: "nav.leaves.agents" },
+  { id: "alerts" as const, href: "/alerts", labelKey: "nav.leaves.alerts" },
+  { id: "cost" as const, href: "/cost", labelKey: "nav.leaves.cost" },
+  {
+    id: "guardrails" as const,
+    href: "/guardrails",
+    labelKey: "nav.leaves.guardrails",
+  },
+  { id: "agent" as const, href: "/agent", labelKey: "nav.leaves.agent" },
+  {
+    id: "debugger" as const,
+    href: "/debugger",
+    labelKey: "nav.leaves.debugger",
+  },
+  { id: "prompts" as const, href: "/prompts", labelKey: "nav.leaves.prompts" },
+  {
+    id: "analytics" as const,
+    href: "/analytics",
+    labelKey: "nav.leaves.analytics",
+  },
+  { id: "audit" as const, href: "/audit", labelKey: "nav.leaves.audit" },
+  {
+    id: "settings" as const,
+    href: "/settings",
+    labelKey: "nav.leaves.settings",
+  },
+] as const;
+
+/** Surface contract filenames under docs/portal-rebuild/surfaces/. */
+export const SURFACE_DOC_HINT: Record<string, string> = {
+  agents: "agents.md",
+  traces: "traces.md",
+  issues: "issues.md",
+  alerts: "alerts.md",
+  evals: "evals.md",
+  improve: "improve.md",
+  guardrails: "guardrails.md",
+  cost: "cost.md",
+  agent: "ai-agent.md",
+  audit: "audit.md",
+  settings: "settings.md",
+  prompts: "prompts.md",
+  analytics: "analytics.md",
+};
+
 export const DEFAULT_SIDEBAR: SidebarGroup[] = [
   {
     id: "home",
-    label: "Home",
+    labelKey: "nav.groups.home",
     items: [
       {
         id: "dashboard",
         href: "/dashboard",
-        label: "Home",
+        labelKey: "nav.leaves.dashboard",
         icon: LayoutDashboard,
-        description: "Status, diagnosis, and the next action.",
+        category: "core",
+      },
+    ],
+  },
+  {
+    id: "agents",
+    labelKey: "nav.groups.agents",
+    items: [
+      {
+        id: "agents",
+        href: "/agents",
+        labelKey: "nav.leaves.agents",
+        icon: Bot,
+        category: "core",
       },
     ],
   },
   {
     id: "observe",
-    label: "Observe",
+    labelKey: "nav.groups.observe",
     items: [
       {
         id: "traces",
         href: "/traces",
-        label: "Traces",
-        icon: TraceIcon,
-        description: "Traces, spans, and sessions.",
+        labelKey: "nav.leaves.traces",
+        icon: GitBranch,
+        category: "core",
       },
       {
         id: "issues",
         href: "/issues",
-        label: "Issues",
+        labelKey: "nav.leaves.issues",
         icon: ShieldAlert,
-        description: "Grouped failures and incident clusters.",
+        category: "core",
       },
       {
         id: "alerts",
         href: "/alerts",
-        label: "Alerts",
-        icon: AlertNavIcon,
-        description: "Threshold notifications; Signals via overflow.",
-      },
-      {
-        id: "agents",
-        href: "/agents",
-        label: "Agents",
-        icon: AgentIcon,
-        category: "advanced",
-        description: "Manage AI agents and fleet health.",
-      },
-      {
-        id: "analytics",
-        href: "/analytics",
-        label: "Analytics",
-        icon: InsightsIcon,
-        category: "advanced",
-        description: "Usage, tools, users, and trend insights.",
-      },
-      {
-        id: "debugger-sessions",
-        href: "/debugger-sessions",
-        label: "Debug sessions",
-        icon: Bug,
-        category: "advanced",
-        description: "Multi-run debugger timeline and compare.",
+        labelKey: "nav.leaves.alerts",
+        icon: Bell,
+        category: "core",
       },
     ],
   },
   {
     id: "evaluate",
-    label: "Evaluate",
+    labelKey: "nav.groups.evaluate",
     items: [
       {
         id: "evals",
         href: "/evals",
-        label: "Evals",
-        icon: EvalIcon,
-        description: "Playgrounds, experiments, datasets, labeling, and studio.",
+        labelKey: "nav.leaves.evals",
+        icon: FlaskConical,
+        category: "core",
       },
     ],
   },
   {
     id: "improve",
-    label: "Improve",
+    labelKey: "nav.groups.improve",
     items: [
       {
         id: "improve",
         href: "/improve",
-        label: "Improve",
-        icon: PatchIcon,
-        description: "Action queue, improvement plans, and sweep history.",
-      },
-      {
-        id: "artifacts",
-        href: "/artifacts",
-        label: "Artifacts",
-        icon: Package,
-        description: "Versioned runtime fixes with evidence-gated promotion.",
-      },
-      {
-        id: "ledger",
-        href: "/ledger",
-        label: "Ledger",
-        icon: BookOpen,
-        description: "Institutional memory — promotions nest as a Ledger mode.",
-      },
-      {
-        id: "prompts",
-        href: "/prompts",
-        label: "Prompts",
-        icon: FileCode,
-        description: "Version and manage prompt templates.",
-      },
-      {
-        id: "scorecard",
-        href: "/improve/scorecard",
-        label: "Scorecard",
-        icon: Trophy,
-        category: "advanced",
-        description: "Synthetic process-gate microbench — not org KPIs.",
-      },
-      {
-        id: "online-scoring",
-        href: "/improve/online-scoring",
-        label: "Online scoring",
+        labelKey: "nav.leaves.improve",
         icon: Sparkles,
-        category: "advanced",
-        description: "Production scorers on sampled traces.",
-      },
-      {
-        id: "change-impact",
-        href: "/improve/change-impact",
-        label: "Change impact",
-        icon: GitCompareArrows,
-        category: "advanced",
-        description: "Replay traffic before shipping prompt or model changes.",
+        category: "core",
       },
       {
         id: "guardrails",
         href: "/guardrails",
-        label: "Guardrails",
-        icon: GuardrailIcon,
-        category: "advanced",
-        description: "Safety policies and red-team tests.",
+        labelKey: "nav.leaves.guardrails",
+        icon: ShieldCheck,
+        category: "core",
       },
       {
-        id: "optimization",
-        href: "/optimization",
-        label: "Cost",
-        icon: CostIcon,
-        category: "advanced",
-        description: "Spend, budgets, outcomes, forecasts, and model advice.",
+        id: "cost",
+        href: "/cost",
+        labelKey: "nav.leaves.cost",
+        icon: CircleDollarSign,
+        category: "core",
       },
     ],
   },
   {
     id: "workspace",
-    label: "Workspace",
+    labelKey: "nav.groups.workspace",
     items: [
       {
-        id: "audit-trail",
-        href: "/audit-trail",
-        label: "Audit trail",
-        icon: ShieldCheck,
-        description: "Chain-verified compliance packs and agent audit events.",
+        id: "agent",
+        href: "/agent",
+        labelKey: "nav.leaves.agent",
+        icon: MessageSquare,
+        category: "core",
+      },
+      {
+        id: "audit",
+        href: "/audit",
+        labelKey: "nav.leaves.audit",
+        icon: ScrollText,
+        category: "core",
       },
       {
         id: "settings",
         href: "/settings",
-        label: "Settings",
+        labelKey: "nav.leaves.settings",
         icon: Settings,
-        description:
-          "Workspace overview, members, billing, account, gateway, retention, PII, exports.",
-        children: [
-          {
-            id: "settings-overview",
-            href: "/settings?tab=overview",
-            label: "Overview",
-            icon: LayoutDashboard,
-            description: "Identity, plan pulse, and workspace recovery paths.",
-          },
-          {
-            id: "api-keys",
-            href: "/settings?tab=api-keys",
-            label: "API keys",
-            icon: KeyRound,
-            description: "Org API key and org id for the SDK and gateway.",
-          },
-          {
-            id: "settings-webhooks-dlq",
-            href: "/settings?tab=webhooks-dlq",
-            label: "Webhook DLQ",
-            icon: Inbox,
-            category: "advanced",
-            description: "Replay terminal-state webhook deliveries.",
-          },
-        ],
-      },
-      {
-        id: "docs",
-        href: DOCS_QUICKSTART_URL,
-        label: "Quickstart",
-        icon: FileText,
-        description: "Docs quickstart — gateway or SDK, then send a first trace.",
+        category: "core",
       },
     ],
   },
 ];
 
-/** Workspace sidebar group + overview entry complete. */
-export const WS1_SIDEBAR_COMPLETED = true;
+export function getCoreNavLeaves(): SidebarItem[] {
+  return DEFAULT_SIDEBAR.flatMap((g) => g.items).filter(
+    (i) => i.category !== "advanced",
+  );
+}
 
-export const ALL_ITEM_IDS: string[] = (() => {
-  const out: string[] = [];
-  for (const group of DEFAULT_SIDEBAR) {
-    for (const item of group.items) {
-      out.push(item.id);
-      if (item.children) {
-        for (const child of item.children) out.push(child.id);
-      }
-    }
-  }
-  return out;
-})();
+/** Flat list of all sidebar item ids (settings prefs / pin-hide editor). */
+export const ALL_ITEM_IDS: readonly string[] = DEFAULT_SIDEBAR.flatMap((g) =>
+  g.items.flatMap((item) => [
+    item.id,
+    ...(item.children?.map((c) => c.id) ?? []),
+  ]),
+);
 
-/** Core visible items (excludes advanced category). Cap ≤12. */
-export const CORE_NAV_ITEM_COUNT = DEFAULT_SIDEBAR.flatMap((g) => g.items).filter(
-  (i) => i.category !== "advanced",
-).length;
+/** English fallback labels for settings sidebar editor (i18n on chrome elsewhere). */
+export const SIDEBAR_ITEM_LABELS: Record<string, string> = {
+  dashboard: "Dashboard",
+  agents: "Agents",
+  traces: "Traces",
+  issues: "Issues",
+  alerts: "Alerts",
+  evals: "Evals",
+  improve: "Improve",
+  guardrails: "Guardrails",
+  cost: "Cost",
+  agent: "AI Agent",
+  audit: "Audit",
+  settings: "Settings",
+};
 
-/** Desktop + mobile primary five. */
-export const CORE_MOBILE_HREFS = [
-  "/dashboard",
-  "/traces",
-  "/issues",
-  "/evals",
-  "/improve",
-] as const;
+export const SIDEBAR_GROUP_LABELS: Record<SidebarGroup["id"], string> = {
+  home: "Home",
+  agents: "Agents",
+  observe: "Observe",
+  evaluate: "Evaluate",
+  improve: "Improve",
+  workspace: "Workspace",
+};

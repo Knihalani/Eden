@@ -83,7 +83,7 @@ export function HomeFirstRun({
             data-home-shell-next-step="doctor"
           >
             <div className="flex flex-col gap-space-1">
-              <p className="text-xs font-medium uppercase tracking-wide text-[var(--text-muted)] m-0">
+              <p className="text-xs font-medium text-[var(--text-muted)] m-0">
                 One next step
               </p>
               <p className="text-sm text-[var(--text-primary)] m-0">
@@ -92,7 +92,7 @@ export function HomeFirstRun({
                   : "Ask an admin for an API key, then run doctor to verify ingest."}
               </p>
             </div>
-            <p className="text-2xs font-mono uppercase tracking-widest text-[var(--text-faint)] m-0">
+            <p className="text-xs font-mono text-[var(--text-faint)] m-0">
               {FIRST_EVENT_WAIT.doctorHint}
             </p>
             <div className="flex flex-col sm:flex-row flex-wrap gap-space-2">
@@ -104,7 +104,7 @@ export function HomeFirstRun({
 
         <div className="flex flex-wrap items-center gap-space-2">
           <Button
-            className="min-h-11 focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-primary)]"
+            className="min-h-11"
             loading={checking}
             onClick={onCheck}
             aria-label={FIRST_EVENT_WAIT.checkCta}

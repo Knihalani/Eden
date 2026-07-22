@@ -55,8 +55,8 @@ describe("U19 cross-link matrix", () => {
   });
 
   it("builds artifact deep links with optional selection", () => {
-    expect(artifactHref()).toBe("/artifacts");
-    expect(artifactHref("nudge-1")).toBe("/artifacts?artifactId=nudge-1");
+    expect(artifactHref()).toBe("/improve?tab=artifacts");
+    expect(artifactHref("nudge-1")).toBe("/improve?tab=artifacts&artifactId=nudge-1");
   });
 
   it("builds playground links with trace context", () => {
