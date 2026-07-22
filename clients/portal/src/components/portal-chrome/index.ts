@@ -15,5 +15,4 @@ export {
   type ChromeBannersProps,
   type ChromeAttentionBanner,
 } from "./ChromeBanners";
-export { AiRailHost } from "./AiRailHost";
 export { NotificationsDropdown } from "./NotificationsDropdown";

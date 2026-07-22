@@ -16,6 +16,7 @@ import {
 
 import { PageHeader } from "@/components/layout/page-header";
 import { PageContent } from "@/components/layout/page-content";
+import { ResourcePageShell } from "@/components/shell/resource-page-shell";
 import { useQueryTab } from "@/hooks/use-query-tab";
 import { cn } from "@/lib/utils";
 import { NoOrgState } from "@/components/ui/no-org-state";
@@ -40,7 +41,7 @@ import { TopicsPanel } from "./_components/topics-panel";
 import { ToolsPanel } from "./_components/tools-panel";
 import { UsersPanel } from "./_components/users-panel";
 
-const ANALYTICS_TABS = ["overview", "insights", "topics", "tools", "users"] as const;
+import { ANALYTICS_TABS, type AnalyticsTab } from "@/lib/analytics-url";
 
 function TabLoading() {
   return (
@@ -214,73 +215,81 @@ function AnalyticsPageInner() {
   return (
     <PageContent size="wide">
       <div
-        data-wave10-analytics="overview-tabs"
-        data-wave6-analytics="thin-panels"
-        data-wave7-analytics="density"
+        data-phase-later-analytics="live"
         className="contents"
       >
-        <PageHeader
-          title="Analytics"
-          subtitle="Usage, cost, latency, and quality over time."
-          actions={
-            tab === "overview" ? (
-              <div className="flex flex-wrap items-center gap-2">
-                <div
-                  role="group"
-                  aria-label="Date range"
-                  className="inline-flex rounded-lg border border-[var(--border-default)] bg-[var(--bg-secondary)] p-1"
-                >
-                  {DAY_OPTIONS.map((opt) => (
-                    <Button
-                      key={opt.value}
-                      type="button"
-                      variant={days === opt.value ? "default" : "ghost"}
-                      size="sm"
-                      onClick={() => setDays(opt.value)}
-                      aria-pressed={days === opt.value}
-                      aria-label={`Last ${opt.label}`}
+        <ResourcePageShell
+          header={
+            <PageHeader
+              title="Analytics"
+              subtitle="Usage, cost, latency, and quality over time."
+              actions={
+                tab === "overview" ? (
+                  <div className="flex flex-wrap items-center gap-2">
+                    <div
+                      role="group"
+                      aria-label="Date range"
+                      className="inline-flex rounded-lg border border-[var(--border-default)] bg-[var(--bg-secondary)] p-1"
                     >
-                      {opt.label}
+                      {DAY_OPTIONS.map((opt) => (
+                        <Button
+                          key={opt.value}
+                          type="button"
+                          variant={days === opt.value ? "default" : "ghost"}
+                          size="sm"
+                          onClick={() => setDays(opt.value)}
+                          aria-pressed={days === opt.value}
+                          aria-label={`Last ${opt.label}`}
+                        >
+                          {opt.label}
+                        </Button>
+                      ))}
+                    </div>
+                    <Button
+                      onClick={refresh}
+                      variant="ghost"
+                      size="sm"
+                      disabled={loading}
+                      aria-label="Refresh analytics"
+                    >
+                      <RefreshCw
+                        className={cn("h-3.5 w-3.5", loading && "animate-spin")}
+                      />
+                      Refresh
                     </Button>
-                  ))}
-                </div>
-                <Button
-                  onClick={refresh}
-                  variant="ghost"
-                  size="sm"
-                  disabled={loading}
-                  aria-label="Refresh analytics"
-                >
-                  <RefreshCw
-                    className={cn("h-3.5 w-3.5", loading && "animate-spin")}
-                  />
-                  Refresh
-                </Button>
-              </div>
-            ) : undefined
+                  </div>
+                ) : undefined
+              }
+            />
           }
-        />
-
-        <Tabs
-          value={tab}
-          onValueChange={(v) => setTab(v as (typeof ANALYTICS_TABS)[number])}
-        >
-          <TabsList
-            variant="underline"
-            aria-label="Analytics sections"
-            className="h-auto w-full justify-start gap-1 bg-transparent"
-          >
-            {ANALYTICS_TABS.map((t) => (
-              <TabsTrigger
-                key={t}
+          toolbar={
+            <Tabs
+              value={tab}
+              onValueChange={(v) => setTab(v as AnalyticsTab)}
+            >
+              <TabsList
                 variant="underline"
-                value={t}
-                className="capitalize"
+                aria-label="Analytics sections"
+                className="h-auto w-full justify-start gap-1 bg-transparent"
               >
-                {t}
-              </TabsTrigger>
-            ))}
-          </TabsList>
+                {ANALYTICS_TABS.map((t) => (
+                  <TabsTrigger
+                    key={t}
+                    variant="underline"
+                    value={t}
+                    className="capitalize"
+                  >
+                    {t}
+                  </TabsTrigger>
+                ))}
+              </TabsList>
+            </Tabs>
+          }
+          table={
+            <Tabs
+              value={tab}
+              onValueChange={(v) => setTab(v as AnalyticsTab)}
+            >
 
           {/* Progressive thin panels — not full-app embeds */}
           <TabsContent value="insights" className="mt-2">
@@ -382,7 +391,9 @@ function AnalyticsPageInner() {
               </>
             )}
           </TabsContent>
-        </Tabs>
+            </Tabs>
+          }
+        />
       </div>
     </PageContent>
   );

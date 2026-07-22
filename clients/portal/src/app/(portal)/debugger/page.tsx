@@ -1,299 +1,198 @@
 "use client";
 
-import Link from "next/link";
-import { Suspense, useState, useCallback, useEffect } from "react";
-import { useSearchParams } from "next/navigation";
-import { useOrg } from "@/hooks/use-org";
+/**
+ * /debugger — DebuggerSession list + create.
+ * Not a core sidebar leaf; reached via Traces action / Cmd+K / More.
+ */
+
+import { Suspense, useState } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { Plus, Search } from "lucide-react";
+import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
-import { DataTable, DataTableSearch } from "@/components/ui/data-table";
-import { ErrorState } from "@/components/ui/error-state";
-import { NoOrgState } from "@/components/ui/no-org-state";
-import { CoreResourcePage } from "@/components/portal-os";
-import { LoadingSkeleton } from "@/components/ui/skeleton";
-import { useToast } from "@/components/ui/toast";
-import { RefreshCw, Rewind } from "lucide-react";
-import { debuggerApi, type Checkpoint, type RerunResult } from "@/lib/api";
-import { U20_EMPTY_COPY } from "@/lib/portal-polish";
-import {
-  ObserveBackToTraces,
-  ObserveLeafHeader,
-  WAVE10_POWER_ATTR,
-} from "@/app/(portal)/observability/_components/observe-leaf-shell";
+import { Input } from "@/components/ui/input";
+import { QueryState } from "@/components/ui/query-state";
+import { EmptyState } from "@/components/ui/empty-state";
+import { useOrg } from "@/hooks/use-org";
+import { usePermissions } from "@/hooks/use-permissions";
+import { debugSessionsApi } from "@/lib/api";
+import { formatRelativeTime } from "@/lib/format";
+import { debuggerDetailHref } from "@/lib/debugger-url";
 
-function DebuggerInner() {
-  const { currentOrg } = useOrg();
+const SESSIONS_QK = "debugger-sessions";
+
+function DebuggerPageInner() {
+  const t = useTranslations("debugger");
+  const router = useRouter();
   const searchParams = useSearchParams();
-  const toast = useToast();
-  const initialTrace = searchParams.get("trace_id") ?? "";
-  const initialSession = searchParams.get("session_id") ?? "";
-  const [checkpoints, setCheckpoints] = useState<Checkpoint[]>([]);
-  const [loading, setLoading] = useState(Boolean(initialTrace.trim()));
-  const [error, setError] = useState<string | null>(null);
-  const [filter, setFilter] = useState("");
-  const [traceId, setTraceId] = useState(initialTrace);
-  const [sessionId, setSessionId] = useState(initialSession);
-  const [promptOverride, setPromptOverride] = useState("");
-  const [livePrefix, setLivePrefix] = useState(true);
-  const [lastDiff, setLastDiff] = useState<RerunResult["diff"]>([]);
+  const { currentOrg } = useOrg();
+  const orgId = currentOrg?.id;
+  const { role } = usePermissions();
+  const canCreate = role !== "viewer";
+  const queryClient = useQueryClient();
 
-  const load = useCallback(async () => {
-    if (!currentOrg?.id) return;
-    const tid = traceId.trim();
-    if (!tid) {
-      setCheckpoints([]);
-      setError(null);
-      setLoading(false);
-      return;
-    }
-    setLoading(true);
-    setError(null);
-    try {
-      const res = await debuggerApi.listCheckpoints(currentOrg.id, tid);
-      setCheckpoints(res.checkpoints || []);
-      setLastDiff([]);
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : "Failed to load checkpoints";
-      setError(msg);
-      setCheckpoints([]);
-    } finally {
-      setLoading(false);
-    }
-  }, [currentOrg?.id, traceId]);
+  const seedTraceId = searchParams.get("traceId") ?? undefined;
+  const [q, setQ] = useState(searchParams.get("q") ?? "");
 
-  // Auto-load checkpoints when trace_id is provided via ?trace_id= deep-link.
-  useEffect(() => {
-    if (traceId.trim() && currentOrg?.id) {
-      void load();
-    }
-    // Only run on mount / when org first becomes available.
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional deep-link once
-  }, [currentOrg?.id]);
-
-  if (!currentOrg) return <NoOrgState feature="Debugger" />;
-
-  const filtered = checkpoints.filter((c) => {
-    if (!filter) return true;
-    const q = filter.toLowerCase();
-    return (
-      c.source.toLowerCase().includes(q) ||
-      c.trace_id.toLowerCase().includes(q) ||
-      String(c.step_number).includes(q)
-    );
+  const sessionsQuery = useQuery({
+    queryKey: [SESSIONS_QK, orgId],
+    queryFn: () => debugSessionsApi.list(orgId!),
+    enabled: Boolean(orgId),
+    staleTime: 30_000,
   });
 
+  const createMutation = useMutation({
+    mutationFn: (body: { title?: string; source_trace_id?: string }) =>
+      debugSessionsApi.create(orgId!, body),
+    onSuccess: (res) => {
+      void queryClient.invalidateQueries({ queryKey: [SESSIONS_QK, orgId] });
+      if (res.session?.id) {
+        router.push(debuggerDetailHref(res.session.id));
+      }
+    },
+  });
+
+  const handleNew = () => {
+    createMutation.mutate({
+      title: seedTraceId ? `Debug ${seedTraceId.slice(0, 8)}` : undefined,
+      source_trace_id: seedTraceId,
+    });
+  };
+
+  const sessions = sessionsQuery.data?.sessions ?? [];
+  const filtered = q
+    ? sessions.filter((s) =>
+        (s.title ?? "").toLowerCase().includes(q.toLowerCase()),
+      )
+    : sessions;
+
   return (
-    <div {...WAVE10_POWER_ATTR}>
-    <CoreResourcePage
-      size="wide"
-      header={
-        <>
-          <ObserveBackToTraces />
-          <ObserveLeafHeader
-            title="Debugger"
-            subtitle="Checkpoints + prefix rerun — open from Traces More"
-            actions={
-              <Button asChild variant="outline" size="sm" className="min-h-11">
-                <Link href="/debugger-sessions">Debug sessions</Link>
+    <div className="flex flex-col gap-4" data-phase6-debugger="live">
+      <PageHeader
+        title={t("title")}
+        subtitle={t("subtitle")}
+        actions={
+          canCreate ? (
+            <Button
+              size="sm"
+              onClick={handleNew}
+              disabled={createMutation.isPending}
+              aria-label={t("newSession")}
+            >
+              <Plus className="mr-1.5 h-3.5 w-3.5" aria-hidden />
+              {createMutation.isPending ? t("creating") : t("newSession")}
+            </Button>
+          ) : null
+        }
+      />
+
+      <div className="flex items-center gap-2">
+        <div className="relative max-w-sm flex-1">
+          <Search
+            className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[var(--text-muted)]"
+            aria-hidden
+          />
+          <Input
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder={t("search")}
+            className="pl-8 text-sm"
+            aria-label={t("search")}
+          />
+        </div>
+      </div>
+
+      {seedTraceId ? (
+        <p className="text-xs text-[var(--text-muted)]">
+          {t("seedHint", { traceId: seedTraceId })}
+        </p>
+      ) : null}
+
+      <QueryState
+        loading={sessionsQuery.isLoading}
+        error={sessionsQuery.error}
+        data={sessionsQuery.data}
+        onRetry={() => void sessionsQuery.refetch()}
+        isEmpty={() => filtered.length === 0}
+        filtersActive={Boolean(q)}
+        emptySlot={
+          <EmptyState
+            title={t("empty.title")}
+            description={t("empty.body")}
+            action={
+              canCreate ? (
+                <Button size="sm" onClick={handleNew}>
+                  {t("newSession")}
+                </Button>
+              ) : undefined
+            }
+          />
+        }
+        filterEmptySlot={
+          <EmptyState
+            title={t("filterEmpty.title")}
+            description={t("filterEmpty.body")}
+            action={
+              <Button size="sm" variant="secondary" onClick={() => setQ("")}>
+                {t("filterEmpty.clear")}
               </Button>
             }
           />
-        </>
-      }
-      toolbar={
-        <div
-          className="flex flex-col gap-space-2 lg:flex-row lg:flex-wrap lg:items-center"
-          data-testid="debugger-toolbar"
-        >
-          <input
-            value={traceId}
-            onChange={(e) => setTraceId(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") void load();
-            }}
-            placeholder="Trace id"
-            className="h-11 w-full lg:w-56 rounded-md border border-[var(--border-subtle)] bg-[var(--bg-elev-1)] px-space-2 text-xs font-mono"
-            aria-label="Trace id"
-          />
-          <input
-            value={sessionId}
-            onChange={(e) => setSessionId(e.target.value)}
-            placeholder="Optional session id (F74)"
-            className="h-11 w-full lg:w-56 rounded-md border border-[var(--border-subtle)] bg-[var(--bg-elev-1)] px-space-2 text-xs font-mono"
-            aria-label="Debug session id"
-          />
-          <input
-            value={promptOverride}
-            onChange={(e) => setPromptOverride(e.target.value)}
-            placeholder="Optional prompt override"
-            className="h-11 w-full lg:w-56 rounded-md border border-[var(--border-subtle)] bg-[var(--bg-elev-1)] px-space-2 text-xs"
-            aria-label="Prompt override"
-          />
-          <label className="flex min-h-11 items-center gap-1.5 text-xs text-[var(--text-muted)]">
-            <input
-              type="checkbox"
-              checked={livePrefix}
-              onChange={(e) => setLivePrefix(e.target.checked)}
-            />
-            Cached-prefix live (F01)
-          </label>
-          <DataTableSearch value={filter} onChange={setFilter} placeholder="Filter steps" />
-          <Button
-            onClick={load}
-            variant="outline"
-            size="sm"
-            className="min-h-11"
-            disabled={loading || !traceId.trim()}
-          >
-            <RefreshCw className="h-3.5 w-3.5" /> Load
-          </Button>
-        </div>
-      }
-      table={
-        <>
-          {error ? (
-            <ErrorState
-              title="Could not load checkpoints"
-              message={error}
-              action={
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="min-h-11"
-                  onClick={() => void load()}
-                  disabled={loading}
-                >
-                  <RefreshCw className="h-3.5 w-3.5" /> Try again
-                </Button>
-              }
-            />
-          ) : (
-            <div className="rounded-lg border border-[var(--border-subtle)] p-space-2">
-              <DataTable
-                loading={loading}
-                rows={filtered}
-                rowKey={(r) => r.id}
-                emptyTitle={traceId.trim() ? "No checkpoints for this trace" : "Enter a trace id"}
-                emptyDescription={
-                  traceId.trim()
-                    ? "Checkpoints are written on each LLM span during ingest (F03). If this trace predates checkpoint ingest, re-run the agent or pick a newer trace."
-                    : U20_EMPTY_COPY.debugger
-                }
-                emptyAction={
-                  <Button asChild size="sm" variant={traceId.trim() ? "outline" : "default"}>
-                    <Link href="/traces">
-                      {traceId.trim() ? "Browse traces" : "Open traces"}
-                    </Link>
-                  </Button>
-                }
-                columns={[
-                  {
-                    key: "source",
-                    header: "Source",
-                    sortable: true,
-                    cell: (r) => <span className="text-xs">{r.source || "—"}</span>,
-                  },
-                  {
-                    key: "trace_id",
-                    header: "Trace",
-                    cell: (r) => <span className="font-mono text-xs">{r.trace_id}</span>,
-                  },
-                  { key: "step_number", header: "Step", align: "right", sortable: true },
-                  {
-                    key: "duration_ms",
-                    header: "Duration",
-                    align: "right",
-                    cell: (r) => (
-                      <span className="text-xs text-[var(--text-muted)]">
-                        {typeof r.duration_ms === "number" ? `${Math.round(r.duration_ms)}ms` : "—"}
-                      </span>
-                    ),
-                  },
-                  {
-                    key: "started_at",
-                    header: "Started",
-                    sortable: true,
-                    cell: (r) => (r.started_at ? new Date(r.started_at).toLocaleString() : "—"),
-                  },
-                  {
-                    key: "actions",
-                    header: "",
-                    align: "right",
-                    cell: (r) => (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="min-h-11"
-                        onClick={async () => {
-                          try {
-                            const result = await debuggerApi.rerun(currentOrg.id, {
-                              trace_id: r.trace_id,
-                              from_step: r.step_number,
-                              live_prefix: livePrefix,
-                              ...(promptOverride.trim()
-                                ? { prompt_override: promptOverride.trim() }
-                                : {}),
-                              ...(sessionId.trim() ? { session_id: sessionId.trim() } : {}),
-                            });
-                            setLastDiff(result.diff || []);
-                            toast.success(
-                              `Re-run complete: steps ${result.from_step}→${result.to_step}` +
-                                (result.diff?.length ? ` (${result.diff.length} diffs)` : "") +
-                                (result.session_id ? " · attached to session" : ""),
-                            );
-                          } catch (e) {
-                            toast.error(e instanceof Error ? e.message : "Re-run failed");
-                          }
-                        }}
-                      >
-                        <Rewind className="h-3 w-3" /> Re-run
-                      </Button>
-                    ),
-                  },
-                ]}
-              />
-            </div>
-          )}
-
-          {lastDiff.length > 0 && (
-            <div className="mt-space-4 space-y-space-3 rounded-lg border border-[var(--border-subtle)] p-space-4">
-              <h3 className="text-sm font-medium">Rerun diff</h3>
-              {lastDiff.map((d) => (
-                <div
-                  key={d.step_number}
-                  className="grid gap-2 rounded-md border border-[var(--border-subtle)] p-3 text-xs font-mono md:grid-cols-2"
-                >
-                  <div>
-                    <div className="mb-1 text-[var(--text-muted)]">
-                      Step {d.step_number} · original
-                    </div>
-                    <pre className="whitespace-pre-wrap break-all">
-                      {JSON.stringify(d.original_response, null, 2)}
-                    </pre>
-                  </div>
-                  <div>
-                    <div className="mb-1 text-[var(--text-muted)]">
-                      Step {d.step_number} · replayed
-                      {d.input_messages_changed ? " · inputs changed" : ""}
-                    </div>
-                    <pre className="whitespace-pre-wrap break-all">
-                      {JSON.stringify(d.replayed_response, null, 2)}
-                    </pre>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </>
-      }
-    />
+        }
+      >
+        {() => (
+          <div className="overflow-hidden rounded-md border border-[var(--border-default)]">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-[var(--border-subtle)] bg-[var(--bg-tertiary)]">
+                  <th className="px-4 py-2 text-left text-xs font-medium text-[var(--text-muted)]">
+                    {t("col.title")}
+                  </th>
+                  <th className="hidden px-4 py-2 text-left text-xs font-medium text-[var(--text-muted)] sm:table-cell">
+                    {t("col.source")}
+                  </th>
+                  <th className="hidden px-4 py-2 text-left text-xs font-medium text-[var(--text-muted)] md:table-cell">
+                    {t("col.updated")}
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map((session) => (
+                  <tr
+                    key={session.id}
+                    className="cursor-pointer border-b border-[var(--border-subtle)] hover:bg-[var(--bg-tertiary)]"
+                    onClick={() => router.push(debuggerDetailHref(session.id))}
+                  >
+                    <td className="px-4 py-3 font-medium text-[var(--text-primary)]">
+                      {session.title || t("untitled")}
+                    </td>
+                    <td className="hidden px-4 py-3 font-mono text-xs text-[var(--text-muted)] sm:table-cell">
+                      {session.source_trace_id
+                        ? `${session.source_trace_id.slice(0, 12)}…`
+                        : "—"}
+                    </td>
+                    <td className="hidden px-4 py-3 text-xs text-[var(--text-muted)] md:table-cell">
+                      {session.updated_at
+                        ? formatRelativeTime(session.updated_at)
+                        : "—"}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </QueryState>
     </div>
   );
 }
 
 export default function DebuggerPage() {
   return (
-    <Suspense fallback={<LoadingSkeleton variant="default" />}>
-      <DebuggerInner />
+    <Suspense>
+      <DebuggerPageInner />
     </Suspense>
   );
 }

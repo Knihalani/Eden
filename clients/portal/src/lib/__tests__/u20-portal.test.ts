@@ -88,8 +88,11 @@ describe("U20 toast mutation registry", () => {
     expect(artifacts).toContain('toast.success("Artifact promoted")');
     expect(artifacts).toContain('toast.success("Shadow artifact drafted")');
 
-    const promotions = readFileSync(resolve(ROOT, "src/app/(portal)/promotions/page.tsx"), "utf8");
-    expect(promotions).toContain("Promotion approved");
+    const promotions = readFileSync(
+      resolve(ROOT, "src/app/(portal)/improve/_components/use-improve-queue.ts"),
+      "utf8",
+    );
+    expect(promotions).toContain("Promotion queued");
     expect(promotions).toContain("toast.success");
   });
 });

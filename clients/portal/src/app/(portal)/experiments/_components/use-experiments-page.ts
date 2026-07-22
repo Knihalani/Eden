@@ -4,7 +4,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useOrg } from "@/hooks/use-org";
 import { useToast } from "@/components/ui/toast";
-import { useEmbeddedSurface } from "@/components/layout/embedded-surface";
 import { useResourceUrlState } from "@/components/portal-os";
 import { usePagePerf } from "@/lib/perf";
 import { useListKeyboardNav } from "@/hooks/use-list-keyboard-nav";
@@ -97,7 +96,7 @@ export function useExperimentsPage() {
   const { currentOrg } = useOrg();
   usePagePerf("/experiments");
   const toast = useToast();
-  const embedded = useEmbeddedSurface();
+  const embedded = false;
   const router = useRouter();
   const searchParams = useSearchParams();
   const { state: urlState, setState: setUrlState } = useResourceUrlState();

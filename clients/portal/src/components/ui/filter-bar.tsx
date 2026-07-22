@@ -156,7 +156,7 @@ export function FilterBar({
             />
             {search.shortcutHint ? (
               <kbd
-                className="pointer-events-none absolute right-2 hidden sm:inline-block rounded border border-[var(--border-subtle)] px-1 py-0.5 font-mono text-2xs text-[var(--text-muted)]"
+                className="pointer-events-none absolute right-2 hidden sm:inline-block rounded border border-[var(--border-subtle)] px-1 py-0.5 font-mono text-xs text-[var(--text-muted)]"
                 data-shortcut-chip="filter-focus"
                 aria-hidden
               >

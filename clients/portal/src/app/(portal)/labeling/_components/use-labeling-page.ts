@@ -4,7 +4,6 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useOrg } from "@/hooks/use-org";
 import { useToast } from "@/components/ui/toast";
-import { useEmbeddedSurface } from "@/components/layout/embedded-surface";
 import { useOrgQuery } from "@/hooks/use-api-query";
 import { queryKeys } from "@/lib/query-keys";
 import {
@@ -26,7 +25,7 @@ export type QueueRow = {
 
 export function useLabelingPage() {
   const { currentOrg } = useOrg();
-  const embedded = useEmbeddedSurface();
+  const embedded = false;
   const orgId = currentOrg?.id ?? null;
   const router = useRouter();
   const toast = useToast();

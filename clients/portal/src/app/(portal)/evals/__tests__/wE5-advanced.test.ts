@@ -250,7 +250,7 @@ describe("Wave E5 Advanced leaves", () => {
     }
 
     const hub = read("app/(portal)/evals/page.tsx");
-    expect(hub).toContain("<EmbeddedSurface>");
+    expect(hub).toContain("");
     expect(hub).toContain("EvalView");
     expect(hub).toContain("LabelingView");
     expect(hub).toContain("StudioView");

@@ -10,7 +10,6 @@ import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { PageHeader, type PageHeaderProps } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
-import { useEmbeddedSurface } from "@/components/layout/embedded-surface";
 
 export const OBSERVE_LEAF_DESCRIPTION =
   "Advanced under Traces — use Traces More / facets when nested; not a separate Observe hub.";
@@ -52,7 +51,7 @@ export function ObserveBackToTraces({
 }: {
   label?: string;
 }) {
-  const embedded = useEmbeddedSurface();
+  const embedded = false;
   if (embedded) return null;
   return (
     <Button

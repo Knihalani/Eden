@@ -317,6 +317,43 @@ export const queryKeys = {
   playgrounds: {
     all: ["playgrounds"] as const,
     list: (orgId: string | null | undefined) => ["playgrounds", "list", orgId] as const,
+    detail: (orgId: string | null | undefined, id: string) =>
+      ["playgrounds", "detail", orgId, id] as const,
+  },
+  datasets: {
+    all: ["datasets"] as const,
+    list: (orgId: string | null | undefined) => ["datasets", "list", orgId] as const,
+    detail: (orgId: string | null | undefined, id: string) =>
+      ["datasets", "detail", orgId, id] as const,
+  },
+  offlineExperiments: {
+    all: ["offlineExperiments"] as const,
+    list: (orgId: string | null | undefined) =>
+      ["offlineExperiments", "list", orgId] as const,
+    compare: (
+      orgId: string | null | undefined,
+      compareId: string,
+      baselineId: string,
+    ) => ["offlineExperiments", "compare", orgId, compareId, baselineId] as const,
+  },
+  labelingQueues: {
+    all: ["labelingQueues"] as const,
+    list: (orgId: string | null | undefined) =>
+      ["labelingQueues", "list", orgId] as const,
+    board: (orgId: string | null | undefined, queueId: string | null | undefined) =>
+      ["labelingQueues", "board", orgId, queueId] as const,
+  },
+  evalVersions: {
+    all: ["evalVersions"] as const,
+    list: (orgId: string | null | undefined) =>
+      ["evalVersions", "list", orgId] as const,
+  },
+  metricStudio: {
+    all: ["metricStudio"] as const,
+    templates: (orgId: string | null | undefined) =>
+      ["metricStudio", "templates", orgId] as const,
+    metrics: (orgId: string | null | undefined) =>
+      ["metricStudio", "metrics", orgId] as const,
   },
   dslAlerts: {
     all: ["dslAlerts"] as const,
@@ -325,6 +362,15 @@ export const queryKeys = {
   memory: {
     all: ["memory"] as const,
     reaver: (orgId: string | null | undefined) => ["memory", "reaver", orgId] as const,
+  },
+  guardrails: {
+    all: ["guardrails"] as const,
+    policies: (orgId: string | null | undefined) =>
+      ["guardrails", "policies", orgId] as const,
+    violations: (
+      orgId: string | null | undefined,
+      filters?: Record<string, unknown>,
+    ) => ["guardrails", "violations", orgId, filters ?? {}] as const,
   },
 } as const;
 

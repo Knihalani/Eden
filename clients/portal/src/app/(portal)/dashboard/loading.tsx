@@ -1,9 +1,9 @@
-import { HomeDashboardSkeleton } from "./_components/home-dashboard-skeleton";
-
-/**
- * Dashboard route loading — mirrors Home Status→Diagnosis→Action:
- * header, restraint KPI strip (≤4 / ≤3 mobile), diagnosis, recent failures.
- */
 export default function Loading() {
-  return <HomeDashboardSkeleton />;
+  return (
+    <div className="mx-auto max-w-2xl animate-pulse space-y-4 py-8">
+      <div className="h-4 w-32 rounded bg-[var(--bg-tertiary)]" />
+      <div className="h-8 w-64 rounded bg-[var(--bg-tertiary)]" />
+      <div className="h-24 rounded-lg bg-[var(--bg-secondary)]" />
+    </div>
+  );
 }

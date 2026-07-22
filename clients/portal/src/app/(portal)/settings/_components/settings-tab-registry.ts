@@ -114,12 +114,12 @@ export type TabDef = {
 export const GHOST_TABS = new Set(["roles", "sso"]);
 
 /** Canonical compliance URL — Settings ?tab=audit-log redirects here. */
-export const SETTINGS_AUDIT_LOG_REDIRECT_HREF = "/audit-trail" as const;
+export const SETTINGS_AUDIT_LOG_REDIRECT_HREF = "/audit" as const;
 
 /**
  * Soft-launch ghosts (roles / SSO) stay out of IA.
- * Daily ≤6: overview, account, api-keys, members, security, billing.
- * `org` remains deep-linkable but not default-visible (identity lives on overview).
+ * Daily ≤8: overview, account, org, members, api-keys, gateway, billing, security.
+ * Advanced tabs are progressive disclosure only (surfaces/settings.md §3).
  */
 export const TABS: ReadonlyArray<TabDef> = [
   {
@@ -131,28 +131,20 @@ export const TABS: ReadonlyArray<TabDef> = [
     keywords: ["workspace", "home", "summary", "plan", "keys", "members"],
   },
   {
-    id: "org",
-    label: "Workspace",
-    icon: Building2,
-    category: "Org",
-    defaultVisible: false,
-    keywords: ["workspace", "team", "slug", "archive", "delete", "transfer"],
-  },
-  {
     id: "account",
     label: "Account",
     icon: User,
     category: "Org",
     defaultVisible: true,
-    keywords: ["profile", "user", "me", "password", "avatar", "2fa"],
+    keywords: ["profile", "user", "me", "password", "avatar", "2fa", "density", "locale"],
   },
   {
-    id: "api-keys",
-    label: "API Keys",
-    icon: Key,
+    id: "org",
+    label: "Org",
+    icon: Building2,
     category: "Org",
     defaultVisible: true,
-    keywords: ["token", "credentials", "sdk", "secret", "revoke", "ingest"],
+    keywords: ["workspace", "team", "slug", "archive", "delete", "transfer"],
   },
   {
     id: "members",
@@ -163,21 +155,20 @@ export const TABS: ReadonlyArray<TabDef> = [
     keywords: ["invite", "people", "team", "remove", "role"],
   },
   {
-    id: "security",
-    label: "Security",
-    icon: Shield,
-    category: "Security",
+    id: "api-keys",
+    label: "API Keys",
+    icon: Key,
+    category: "Org",
     defaultVisible: true,
-    keywords: ["2fa", "mfa", "totp", "password", "enforcement"],
+    keywords: ["token", "credentials", "sdk", "secret", "revoke", "ingest"],
   },
   {
-    id: "audit-log",
-    label: "Audit Log",
-    icon: FileText,
-    // Kept for deep-link recognition only — Compliance lives on /audit-trail.
+    id: "gateway",
+    label: "Gateway",
+    icon: Server,
     category: "Org",
-    redirectOnly: true,
-    keywords: ["audit", "trail", "compliance", "events", "log", "soc2", "activity"],
+    defaultVisible: true,
+    keywords: ["models", "llm", "proxy", "routing", "base_url", "connect"],
   },
   {
     id: "billing",
@@ -186,6 +177,23 @@ export const TABS: ReadonlyArray<TabDef> = [
     category: "Billing",
     defaultVisible: true,
     keywords: ["plan", "stripe", "invoice", "subscription", "payment", "limits", "spend"],
+  },
+  {
+    id: "security",
+    label: "Security",
+    icon: Shield,
+    category: "Security",
+    defaultVisible: true,
+    keywords: ["2fa", "mfa", "totp", "password", "enforcement", "alerts", "channels"],
+  },
+  {
+    id: "audit-log",
+    label: "Audit Log",
+    icon: FileText,
+    // Kept for deep-link recognition only — Compliance lives on /audit.
+    category: "Org",
+    redirectOnly: true,
+    keywords: ["audit", "trail", "compliance", "events", "log", "soc2", "activity"],
   },
   {
     id: "references",
@@ -207,13 +215,6 @@ export const TABS: ReadonlyArray<TabDef> = [
     icon: KeyRound,
     category: "Advanced",
     keywords: ["provisioning", "directory", "okta", "entra", "users", "scim"],
-  },
-  {
-    id: "gateway",
-    label: "AI Gateway",
-    icon: Server,
-    category: "Advanced",
-    keywords: ["models", "llm", "proxy", "routing"],
   },
   {
     id: "pii",
@@ -293,14 +294,26 @@ export function isRailTab(tab: TabDef): boolean {
   return !tab.redirectOnly;
 }
 
-/** Exit criterion: default Settings paint shows ≤6 daily tabs. */
+/** Exit criterion: default Settings paint shows ≤8 daily tabs. */
 export const DEFAULT_VISIBLE_TAB_IDS = TABS.filter((t) => t.defaultVisible).map((t) => t.id);
 
-/** Wave 9 exit marker — settings usable without second 240px rail + 19 tabs. */
+/** Phase 7 exit marker — settings usable without second 240px rail. */
 export const WAVE9_SETTINGS_COMPLETED = true as const;
 
-/** Daily tabs = Overview/Account/Keys/Members/Security/Billing (≤6). */
-export const WAVE9_DAILY_TAB_CAP = 6 as const;
+/** Daily tabs ≤8 (surfaces/settings.md §3.1). */
+export const WAVE9_DAILY_TAB_CAP = 8 as const;
+
+/** Phase 7 rebuild — daily strip ids (order matters). */
+export const SETTINGS_DAILY_TAB_IDS = [
+  "overview",
+  "account",
+  "org",
+  "members",
+  "api-keys",
+  "gateway",
+  "billing",
+  "security",
+] as const;
 
 /** Wave 9 — shell LOC ≤400, dual-route stubs redirect-only, ⌘K parity. */
 export const WS9_SHELL_HYGIENE_COMPLETED = true as const;

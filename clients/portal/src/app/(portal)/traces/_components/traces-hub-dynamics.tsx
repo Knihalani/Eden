@@ -1,8 +1,8 @@
 "use client";
 
 /**
- * Code-split hub tabs, detail, legacy tools, and facet embeds.
- * Keeps first paint light — Wave 3 shell stays under 400 LOC.
+ * Code-split helpers for legacy traces hub list (not used by Phase 3 page).
+ * Facet/inspector embeds removed — kill-list zombies deleted; use redirects.
  */
 
 import dynamic from "next/dynamic";
@@ -38,50 +38,19 @@ export const TraceViewer = dynamic(
   { ssr: false, loading: () => <ViewLoading /> },
 );
 
-export const InspectView = dynamic(() => import("@/app/(portal)/inspector/page"), {
-  ssr: false,
-  loading: () => <ViewLoading />,
-});
-
-export const ReplayView = dynamic(() => import("@/app/(portal)/replay/page"), {
-  ssr: false,
-  loading: () => <ViewLoading />,
-});
+/** Legacy tools → Debugger (IA §3.4). */
+export const ReplayView = dynamic(
+  () =>
+    import("@/app/(portal)/debugger/page").then((m) => ({
+      default: m.default,
+    })),
+  { ssr: false, loading: () => <ViewLoading /> },
+);
 
 export const DebugView = dynamic(() => import("@/app/(portal)/debugger/page"), {
   ssr: false,
   loading: () => <ViewLoading />,
 });
-
-export const QueryView = dynamic(
-  () => import("@/app/(portal)/observability/query/page"),
-  { ssr: false, loading: () => <ViewLoading /> },
-);
-
-export const TimeTravelView = dynamic(
-  () => import("@/app/(portal)/observability/time-travel/page"),
-  { ssr: false, loading: () => <ViewLoading /> },
-);
-
-export const McpFacetView = dynamic(
-  () => import("@/app/(portal)/observability/mcp/page"),
-  { ssr: false, loading: () => <ViewLoading /> },
-);
-
-export const DecisionsFacetView = dynamic(
-  () => import("@/app/(portal)/observability/decisions/page"),
-  { ssr: false, loading: () => <ViewLoading /> },
-);
-
-export const MemoryFacetView = dynamic(
-  () => import("@/app/(portal)/observability/memory/page"),
-  { ssr: false, loading: () => <ViewLoading /> },
-);
-
-export const RetrievalFacetView = dynamic(
-  () => import("@/app/(portal)/observability/retrieval/page"),
-  { ssr: false, loading: () => <ViewLoading /> },
-);
 
 export const LiveTailPanel = dynamic(
   () =>

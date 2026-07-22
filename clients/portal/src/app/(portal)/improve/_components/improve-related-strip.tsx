@@ -11,7 +11,7 @@ export function ImproveRelatedStrip() {
       aria-label="Related"
       className="flex flex-wrap items-center gap-x-space-3 gap-y-1 text-xs text-[var(--text-muted)]"
     >
-      <span className="font-medium uppercase tracking-wide text-[var(--text-faint)]">
+      <span className="font-medium text-[var(--text-faint)]">
         Related
       </span>
       {RELATED_LINKS.map((l) => (

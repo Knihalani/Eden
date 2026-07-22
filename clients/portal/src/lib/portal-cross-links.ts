@@ -160,8 +160,10 @@ export function improveHref(issueId?: string): string {
 }
 
 export function artifactHref(artifactId?: string): string {
-  if (artifactId) return `/artifacts?artifactId=${encodeURIComponent(artifactId)}`;
-  return "/artifacts";
+  if (artifactId) {
+    return `/improve?tab=artifacts&artifactId=${encodeURIComponent(artifactId)}`;
+  }
+  return "/improve?tab=artifacts";
 }
 
 export function playgroundHref(
@@ -264,7 +266,7 @@ export function experimentHref(experimentId?: string, issueId?: string): string 
 
 export function ledgerHref(agentId?: string): string {
   if (agentId) return `/agents/${encodeURIComponent(agentId)}/ledger`;
-  return "/ledger";
+  return "/improve?tab=ledger";
 }
 
 export function driftHref(agentId: string, dimension?: string): string {
