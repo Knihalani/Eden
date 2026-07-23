@@ -401,12 +401,12 @@ const nextConfig: NextConfig = {
       // First-run: soft-landed routes stay unavailable; onboarding opens home tour.
       {
         source: "/onboarding",
-        destination: "/home?tour=1",
+        destination: "/home?onboarding=1",
         permanent: false,
       },
       {
         source: "/onboarding/:path*",
-        destination: "/home?tour=1",
+        destination: "/home?onboarding=1",
         permanent: false,
       },
       ...softLand([

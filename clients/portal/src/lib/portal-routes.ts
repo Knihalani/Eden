@@ -77,7 +77,7 @@ export const LIVE_PORTAL_PREFIXES: readonly string[] = [
   "/guardrails",
   "/shell",
   "/unavailable",
-  "/onboarding", // redirects to /home?tour=1
+  "/onboarding", // redirects to /home?onboarding=1
 ] as const;
 
 /** Authenticated product prefixes (auth.protect targets). */

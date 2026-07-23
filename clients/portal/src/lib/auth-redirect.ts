@@ -15,9 +15,9 @@
 export const AUTH_SIGN_IN_FALLBACK = "/home";
 
 /**
- * Default after sign-up — product home.
+ * Default after sign-up — product home with soft-open tour.
  */
-export const AUTH_SIGN_UP_FALLBACK = "/home";
+export const AUTH_SIGN_UP_FALLBACK = "/home?onboarding=1";
 
 const AUTH_ROUTE_PREFIXES = [
   "/sign-in",

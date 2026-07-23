@@ -80,7 +80,13 @@ const WORKSPACE_PATCH_KEY_MAP: Record<string, string> = {
 
 function LabSettingsInner() {
   const searchParams = useSearchParams();
-  const paramMode = searchParams.get("mode");
+  const paramMode =
+    searchParams.get("mode") ??
+    (searchParams.get("tab") === "api-keys" || searchParams.get("tab") === "keys"
+      ? "keys"
+      : searchParams.get("tab") === "org"
+        ? "workspace"
+        : null);
   const paramTab = searchParams.get("tab");
   const paramId = searchParams.get("id");
   const paramAgent = searchParams.get("agent");

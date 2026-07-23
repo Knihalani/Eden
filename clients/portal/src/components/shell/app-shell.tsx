@@ -11,6 +11,8 @@ import {
   PortalStatusBanners,
 } from "@/components/shell/portal-auth-chrome";
 import { PortalCatalogSync } from "@/components/providers/portal-catalog-sync";
+import { OnboardingBanner } from "@/components/onboarding/OnboardingBanner";
+import { OnboardingOverlay } from "@/components/onboarding/OnboardingOverlay";
 
 /** Alerts modal pulls heavy graphs — load after first paint. */
 const AlertsModal = dynamic(
@@ -30,12 +32,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               <SidebarNav />
               <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-[var(--bg)]">
                 <PortalStatusBanners />
+                <OnboardingBanner />
                 <main className="min-h-0 flex-1 overflow-auto outline-none">
                   <PortalBootGate>{children}</PortalBootGate>
                 </main>
               </div>
             </div>
             <AlertsModal />
+            <OnboardingOverlay />
           </SignalJobsProvider>
         </AlertsProvider>
       </LabToastProvider>

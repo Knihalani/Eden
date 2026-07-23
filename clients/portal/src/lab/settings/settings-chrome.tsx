@@ -16,6 +16,7 @@ export type SettingsMode = "workspace" | "keys" | "members" | "audit";
 export type AuditTab = "events" | "packs";
 
 export function parseSettingsMode(mode: string | null): SettingsMode {
+  if (mode === "api-keys") return "keys";
   if (mode === "keys" || mode === "members" || mode === "audit") return mode;
   return "workspace";
 }
@@ -48,6 +49,7 @@ export function SettingsModeNav({
           role="tab"
           aria-selected={value === id}
           className="ds-tab"
+          data-tour-id={id === "keys" ? "api-keys" : undefined}
           onClick={() => onChange(id)}
         >
           {label}

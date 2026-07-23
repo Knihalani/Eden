@@ -768,8 +768,8 @@
   "comingSoon": {
     "eyebrow": "Demnächst",
     "body": "{surface} ist Teil der Rebuild-IA und noch nicht verfügbar.",
-    "docHint": "Surface-Vertrag: docs/portal-rebuild/surfaces/{doc}",
-    "docHintFallback": "Siehe docs/portal-rebuild/surfaces/ ({id})",
+    "docHint": "Docs: https://docs.edenobservability.com/quickstart",
+    "docHintFallback": "Siehe Produktdokumentation für {id}",
     "back": "Zurück zum Dashboard"
   },
   "commandPalette": {

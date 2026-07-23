@@ -36,9 +36,9 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false, nocache: true },
   icons: {
     icon: [
-      { url: "/favicon.ico", sizes: "16x16 32x32 48x48 64x64 128x128", type: "image/x-icon" },
-      { url: "/favicon.png", sizes: "32x32", type: "image/png" },
       { url: "/favicon.webp", sizes: "32x32", type: "image/webp" },
+      { url: "/favicon.png", sizes: "32x32", type: "image/png" },
+      { url: "/favicon.ico", sizes: "16x16 32x32", type: "image/x-icon" },
       { url: "/icon-192x192.png", sizes: "192x192", type: "image/png" },
       { url: "/icon-192x192.webp", sizes: "192x192", type: "image/webp" },
       { url: "/icon-512x512.png", sizes: "512x512", type: "image/png" },

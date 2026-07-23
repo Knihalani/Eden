@@ -5,7 +5,7 @@ import {
   labToProductPath,
   STUB_LAND,
 } from "@/lib/portal-hub-redirect";
-import { AUTH_SIGN_IN_FALLBACK } from "@/lib/auth-redirect";
+import { AUTH_SIGN_IN_FALLBACK, AUTH_SIGN_UP_FALLBACK } from "@/lib/auth-redirect";
 import { NAV_SECTIONS, PRIMARY_NAV } from "@/lab/nav";
 
 describe("product portal routes", () => {
@@ -39,11 +39,14 @@ describe("product portal routes", () => {
     expect(buildHubRedirectUrl("/dashboard", "")).toBe("/home");
     expect(buildHubRedirectUrl("/analytics", "")).toBe("/unavailable");
     expect(buildHubRedirectUrl("/marketplace", "")).toBe("/unavailable");
-    expect(buildHubRedirectUrl("/onboarding", "")).toBe("/home?tour=1");
+    expect(buildHubRedirectUrl("/onboarding", "")).toBe(
+      "/home?onboarding=1",
+    );
   });
 
-  it("sends auth fallback to home", () => {
+  it("sends auth fallback to home; sign-up opens tour", () => {
     expect(AUTH_SIGN_IN_FALLBACK).toBe("/home");
+    expect(AUTH_SIGN_UP_FALLBACK).toBe("/home?onboarding=1");
   });
 });
 
