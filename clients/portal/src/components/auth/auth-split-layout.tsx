@@ -1,19 +1,21 @@
-import { EdenLogo } from "@/components/ds/eden-logo";
+import { AuthBrandPanel } from "@/components/auth/auth-brand-panel";
 
 interface AuthSplitLayoutProps {
-  brandPanel?: React.ReactNode;
   children: React.ReactNode;
 }
 
+/**
+ * Desktop: ~50/50 brand panel + form column.
+ * Mobile: compact brand strip stacked above the form.
+ * Card chrome is owned by ClerkAuthFallback / AuthFormCard — not here
+ * (avoids double .auth-card nesting on sign-in/up).
+ */
 export function AuthSplitLayout({ children }: AuthSplitLayoutProps) {
   return (
-    <div className="auth-shell flex min-h-dvh items-center justify-center px-4 py-12">
-      <div className="w-full max-w-[400px]">
-        <div className="mb-7 flex flex-col items-center gap-3">
-          <EdenLogo size={40} priority />
-          <p className="type-title !text-[1rem] tracking-[-0.02em]">eden</p>
-        </div>
-        {children}
+    <div className="auth-shell grid min-h-dvh bg-[var(--bg)] lg:grid-cols-2">
+      <AuthBrandPanel />
+      <div className="flex min-h-0 flex-1 flex-col items-center justify-center px-4 py-8 sm:px-8 lg:py-16">
+        <div className="w-full max-w-[400px]">{children}</div>
       </div>
     </div>
   );

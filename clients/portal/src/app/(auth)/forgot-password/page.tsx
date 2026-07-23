@@ -1,18 +1,14 @@
-import Link from "next/link";
-import { AuthSplitLayout } from "@/components/auth";
+import { AuthMessageCard } from "@/components/auth";
+
+export const metadata = { title: "Forgot password · Eden" };
 
 export default function ForgotPasswordPage() {
   return (
-    <AuthSplitLayout>
-      <div className="auth-card text-center">
-        <h1 className="type-title !text-[1.0625rem]">Reset password</h1>
-        <p className="type-body mt-2">
-          Use the sign-in form to reset your password.
-        </p>
-        <Link href="/sign-in" className="ds-btn ds-btn-primary mt-6 inline-flex px-4">
-          Back to sign in
-        </Link>
-      </div>
-    </AuthSplitLayout>
+    <AuthMessageCard
+      title="Reset your password"
+      body="Use Sign in → Forgot password. Clerk sends the reset email and walks you through setting a new password there — this page does not collect credentials."
+      ctaHref="/sign-in"
+      ctaLabel="Go to sign in"
+    />
   );
 }

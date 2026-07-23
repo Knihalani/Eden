@@ -821,9 +821,38 @@
     "signin": "Sign in"
   },
   "hero": {
-    "title": "Eden — Observability + improvement for AI agents and LLM apps.",
-    "subtitle": "Observability + improvement for AI agents and LLM apps.",
-    "cta": "Get started"
+    "title": "See every agent run. Fix what fails.",
+    "subtitle": "Drop-in observability for AI agents — traces, evals, and reviewable improvements in one loop.",
+    "cta": "Get started",
+    "signIn": "Sign in",
+    "docs": "Docs"
+  },
+  "marketing": {
+    "observeKicker": "Observe",
+    "observeTitle": "Traces that survive production",
+    "observeBody": "Sessions, spans, detectors, and issues — grouped so you can triage failures without grepping logs.",
+    "evaluateKicker": "Evaluate",
+    "evaluateTitle": "Prompts, datasets, live A/B",
+    "evaluateBody": "Version prompts, pin environments, and compare arms on the metrics that matter before you ship.",
+    "improveKicker": "Improve",
+    "improveTitle": "Close the loop from real failures",
+    "improveBody": "Plans from traces you already have. Approve, reject, or snooze — then watch the next deploy with the same instruments.",
+    "installKicker": "Install",
+    "installTitle": "Instrument in a few lines",
+    "closingTitle": "Instrument today. Improve tomorrow."
+  },
+  "pricing": {
+    "kicker": "Pricing",
+    "title": "Start free. Upgrade when the fleet grows.",
+    "lead": "Free during public beta. Move to Team for orgs, evals, and alerts — or talk to us for Enterprise."
+  },
+  "about": {
+    "kicker": "About",
+    "title": "Built for teams who run agents in production."
+  },
+  "contact": {
+    "kicker": "Contact",
+    "title": "Talk to us"
   },
   "common": {
     "loading": "Loading…",
