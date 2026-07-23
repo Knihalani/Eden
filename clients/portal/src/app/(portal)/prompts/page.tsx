@@ -1,290 +1,453 @@
 "use client";
 
-import { Suspense, useCallback, useMemo, useState } from "react";
-import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
+import {
+  defaultPromptId,
+  liveVersion,
+  promptById,
+  promptDetailToFixture,
+  promptListRowToFixture,
+  promptVersionId,
+  promptsForAgent,
+  versionNumberFromId,
+  type PromptDetailTab,
+  type PromptEnv,
+  type PromptFixture,
+  type PromptStatus,
+} from "@/lab/fixtures/prompts";
+import { catalogAgents } from "@/lib/portal-catalog";
+import { AGENT_LIST } from "@/lab/fixtures/agents";
+import { PageHeader } from "@/components/ds/primitives";
+import { useAgentScope, useQueryPatch } from "@/lab/agent-scope";
+import {
+  parsePromptStatusFilter,
+  parsePromptTab,
+} from "@/lab/prompts/prompts-chrome";
+import dynamic from "next/dynamic";
 import { useOrg } from "@/hooks/use-org";
-import { api } from "@/lib/api";
-import { useOrgQuery, useOrgMutation } from "@/hooks/use-api-query";
+import { useOrgQuery } from "@/hooks/use-api-query";
 import { queryKeys } from "@/lib/query-keys";
-import { PageHeader } from "@/components/layout/page-header";
-import { PageContent } from "@/components/layout/page-content";
-import { NoOrgState } from "@/components/ui/no-org-state";
-import { ErrorState } from "@/components/ui/error-state";
-import { Button } from "@/components/ui/button";
-import { useToast } from "@/components/ui/toast";
-import { errorFromCaught } from "@/lib/safe-error-message";
-import { ResourcePageShell } from "@/components/shell/resource-page-shell";
-import { DetailPanelShell } from "@/components/shell/detail-panel-shell";
-import { FileText, Loader2, Plus } from "lucide-react";
-import { promptHref } from "@/lib/portal-cross-links";
-import { PromptsEditor } from "./_components/prompts-editor";
-import { PromptsCreateForm } from "./_components/prompts-create-form";
-import { PromptsListTable } from "./_components/prompts-list-table";
-import { usePromptsVersions } from "./_components/use-prompts-versions";
+import { promptsV2Api } from "@/lib/api/portal";
+import {
+  QueryErrorPanel,
+  QueryLoadingPanel,
+} from "@/components/shell/query-error-panel";
+import { useLabToast } from "@/lab/lab-toast";
 
-/** Mirror of prompts list empty gate — keep in sync with page render. */
-function showPromptsEmpty(opts: {
-  isLoading: boolean;
-  isError: boolean;
-  promptCount: number;
-}): boolean {
-  return !opts.isLoading && !opts.isError && opts.promptCount === 0;
-}
+const promptsFallback = (
+  <div className="flex min-h-[12rem] flex-1 items-center justify-center px-5">
+    <p className="type-meta">Loading…</p>
+  </div>
+);
 
-interface PromptEntry {
-  id: string;
-  name: string;
-  description: string | null;
-  tags: string[];
-  auto_eval_on_save: boolean;
-  created_at: string;
-}
+const PromptsListView = dynamic(
+  () =>
+    import("@/lab/prompts/prompts-list-view").then((m) => ({
+      default: m.PromptsListView,
+    })),
+  { loading: () => promptsFallback },
+);
+const PromptsDetailView = dynamic(
+  () =>
+    import("@/lab/prompts/prompts-detail-view").then((m) => ({
+      default: m.PromptsDetailView,
+    })),
+  { loading: () => promptsFallback },
+);
 
-function PromptsPageInner() {
-  const { currentOrg } = useOrg();
-  const orgId = currentOrg?.id;
-  const toast = useToast();
-  const router = useRouter();
+function PromptsInner() {
   const searchParams = useSearchParams();
-  const selectedName = searchParams.get("prompt");
+  const paramId = searchParams.get("id");
+  const paramAgent = searchParams.get("agent");
+  const paramStatus = searchParams.get("status");
+  const paramTab = searchParams.get("tab");
+  const paramVersion = searchParams.get("version");
 
-  const [showNewPrompt, setShowNewPrompt] = useState(false);
-  const [newPromptName, setNewPromptName] = useState("");
-  const [newPromptDesc, setNewPromptDesc] = useState("");
-  const [newPromptAutoEval, setNewPromptAutoEval] = useState(false);
+  const { agentId, setAgentId } = useAgentScope();
+  const patchQuery = useQueryPatch();
+  const { currentOrg } = useOrg();
+  const orgId = currentOrg?.id ?? null;
+  const queryClient = useQueryClient();
+  const { pushToast } = useLabToast();
 
-  const {
-    prepareSelect,
-    versions,
-    versionsLoading,
-    versionsError,
-    draftTemplate,
-    draftModel,
-    draftNote,
-    versionDirty,
-    savingVersion,
-    envPinCount,
-    rollbackBusy,
-    expandedDiff,
-    setDraftTemplate,
-    setDraftModel,
-    setDraftNote,
-    setVersionDirty,
-    setEnvPinCount,
-    setExpandedDiff,
-    fetchVersions,
-    saveVersion,
-    rollbackPin,
-  } = usePromptsVersions(orgId, selectedName);
-
-  const promptsQuery = useOrgQuery(
-    queryKeys.prompts.list(orgId),
+  const listQuery = useOrgQuery(
+    queryKeys.promptsV2.list(orgId),
     orgId,
-    () => api.get<{ data: { prompts: PromptEntry[] } }>(`/orgs/${orgId}/prompts?limit=100`),
-  );
-  const prompts = promptsQuery.data?.data?.prompts ?? [];
-
-  const createMutation = useOrgMutation(
-    (payload: {
-      name: string;
-      description: string | null;
-      tags: string[];
-      auto_eval_on_save: boolean;
-    }) => api.post(`/orgs/${orgId}/prompts`, payload),
-    { invalidateKeys: [queryKeys.prompts.list(orgId)] },
+    () => promptsV2Api.list(orgId!),
   );
 
-  const selectedPrompt = useMemo(
-    () => (selectedName ? prompts.find((p) => p.name === selectedName) ?? null : null),
-    [prompts, selectedName],
+  const [promptId, setPromptId] = useState(() => paramId ?? "");
+  const [statusFilter, setStatusFilter] = useState<PromptStatus | "all">(() =>
+    parsePromptStatusFilter(paramStatus),
+  );
+  const [tab, setTab] = useState<PromptDetailTab>(() =>
+    parsePromptTab(paramTab),
+  );
+  const [versionId, setVersionId] = useState<string | null>(
+    () => paramVersion,
+  );
+  const [draftBody, setDraftBody] = useState("");
+  const [notice, setNotice] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
+
+  const detailQuery = useOrgQuery(
+    queryKeys.promptsV2.detail(orgId, promptId),
+    orgId,
+    () => promptsV2Api.get(orgId!, promptId),
+    { enabled: Boolean(orgId && promptId) },
+  );
+  const pinsQuery = useOrgQuery(
+    queryKeys.promptsV2.pins(orgId, promptId),
+    orgId,
+    () => promptsV2Api.getPins(orgId!, promptId),
+    { enabled: Boolean(orgId && promptId) },
   );
 
-  const selectPrompt = useCallback(
-    (name: string | null) => {
-      if (name === selectedName) return;
-      if (!prepareSelect(name)) return;
-      router.replace(name ? promptHref(name) : "/prompts", { scroll: false });
-    },
-    [selectedName, prepareSelect, router],
+  const listCatalog = useMemo(
+    () => (listQuery.data ?? []).map(promptListRowToFixture),
+    [listQuery.data],
   );
 
-  const handleCreate = useCallback(async () => {
-    if (!orgId || !newPromptName.trim()) {
-      toast.error("Name required", "Prompt name cannot be empty.");
+  const hydrated = useMemo(() => {
+    if (!detailQuery.data) return null;
+    return promptDetailToFixture(
+      detailQuery.data,
+      pinsQuery.data?.pins ?? {},
+    );
+  }, [detailQuery.data, pinsQuery.data?.pins]);
+
+  const catalog = useMemo((): PromptFixture[] => {
+    if (!hydrated) return listCatalog;
+    const idx = listCatalog.findIndex((p) => p.id === hydrated.id);
+    if (idx < 0) return [hydrated, ...listCatalog];
+    const next = listCatalog.slice();
+    next[idx] = hydrated;
+    return next;
+  }, [listCatalog, hydrated]);
+
+  useEffect(() => {
+    if (paramAgent && paramAgent !== agentId) setAgentId(paramAgent);
+  }, [paramAgent, agentId, setAgentId]);
+
+  useEffect(() => {
+    if (paramId) setPromptId(paramId);
+    setStatusFilter(parsePromptStatusFilter(paramStatus));
+    setTab(parsePromptTab(paramTab));
+    if (paramVersion) setVersionId(paramVersion);
+  }, [paramId, paramStatus, paramTab, paramVersion]);
+
+  const scoped = useMemo(
+    () => promptsForAgent(agentId, catalog),
+    [agentId, catalog],
+  );
+
+  useEffect(() => {
+    if (listQuery.isLoading) return;
+    if (scoped.length === 0) {
+      if (promptId) setPromptId("");
       return;
     }
-    try {
-      await createMutation.mutateAsync({
-        name: newPromptName.trim(),
-        description: newPromptDesc || null,
-        tags: [],
-        auto_eval_on_save: newPromptAutoEval,
-      });
-      toast.success("Prompt created");
-      setShowNewPrompt(false);
-      const created = newPromptName.trim();
-      setNewPromptName("");
-      setNewPromptDesc("");
-      setNewPromptAutoEval(false);
-      router.replace(promptHref(created), { scroll: false });
-    } catch (err) {
-      toast.error("Create failed", errorFromCaught(err, "Please try again."));
-    }
+    if (scoped.some((p) => p.id === promptId)) return;
+    const next = defaultPromptId(agentId, catalog);
+    setPromptId(next);
+    patchQuery({ id: next || null });
   }, [
-    orgId,
-    newPromptName,
-    newPromptDesc,
-    newPromptAutoEval,
-    toast,
-    createMutation,
-    router,
+    agentId,
+    promptId,
+    scoped,
+    catalog,
+    patchQuery,
+    listQuery.isLoading,
   ]);
 
-  if (!currentOrg) return <NoOrgState icon={FileText} feature="Prompt Versions" />;
+  const prompt = useMemo(() => {
+    return hydrated ?? promptById(promptId, catalog) ?? scoped[0] ?? null;
+  }, [hydrated, promptId, catalog, scoped]);
 
-  const selectedIndex = selectedPrompt
-    ? prompts.findIndex((p) => p.id === selectedPrompt.id)
-    : -1;
+  const scopeCounts = useMemo(() => {
+    const map: Record<string, number> = { all: catalog.length };
+    const agents = catalogAgents().length > 0 ? catalogAgents() : AGENT_LIST;
+    for (const a of agents) {
+      map[a.id] = promptsForAgent(a.id, catalog).length;
+    }
+    return map;
+  }, [catalog]);
 
-  return (
-    <PageContent size="wide">
-      <div
-        data-phase-later-prompts="live"
-        data-testid="prompts-master-detail"
-      >
-        <ResourcePageShell
-          header={
-            <PageHeader
-              title="Prompts"
-              subtitle="Version registry — draft → playground → publish → env pin."
-              description="Iterate templates here; run in Evaluate playground. Not a core sidebar leaf."
-              actions={
-                <div className="flex flex-wrap items-center gap-x-space-3 gap-y-2">
-                  <nav
-                    data-testid="prompts-related-strip"
-                    aria-label="Related"
-                    className="flex flex-wrap items-center gap-x-space-3 gap-y-1 text-xs text-[var(--text-muted)]"
-                  >
-                    <Link href="/evals?tab=playgrounds" className="text-[var(--accent)] hover:underline">
-                      Playgrounds
-                    </Link>
-                    <Link href="/improve" className="text-[var(--accent)] hover:underline">
-                      Improve
-                    </Link>
-                    <Link href="/improve?tab=artifacts" className="text-[var(--accent)] hover:underline">
-                      Artifacts
-                    </Link>
-                    <Link href="/improve?tab=ledger" className="text-[var(--accent)] hover:underline">
-                      Ledger
-                    </Link>
-                  </nav>
-                  <Button
-                    type="button"
-                    size="sm"
-                    onClick={() => setShowNewPrompt(!showNewPrompt)}
-                  >
-                    <Plus className="h-4 w-4" />
-                    New prompt
-                  </Button>
-                </div>
-              }
-            />
+  const invalidateList = useCallback(() => {
+    if (!orgId) return Promise.resolve();
+    return queryClient.invalidateQueries({
+      queryKey: queryKeys.promptsV2.list(orgId),
+    });
+  }, [orgId, queryClient]);
+
+  const invalidateDetail = useCallback(() => {
+    if (!orgId || !promptId) return Promise.resolve();
+    return Promise.all([
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.promptsV2.detail(orgId, promptId),
+      }),
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.promptsV2.pins(orgId, promptId),
+      }),
+    ]);
+  }, [orgId, promptId, queryClient]);
+
+  const selectPrompt = useCallback(
+    (id: string) => {
+      setPromptId(id);
+      setNotice(null);
+      setVersionId(null);
+      patchQuery({ id, version: null });
+    },
+    [patchQuery],
+  );
+
+  const changeStatus = useCallback(
+    (next: PromptStatus | "all") => {
+      setStatusFilter(next);
+      patchQuery({ status: next === "all" ? null : next });
+    },
+    [patchQuery],
+  );
+
+  const changeTab = useCallback(
+    (next: PromptDetailTab) => {
+      setTab(next);
+      patchQuery({ tab: next === "editor" ? null : next });
+    },
+    [patchQuery],
+  );
+
+  const changeVersion = useCallback(
+    (id: string) => {
+      setVersionId(id);
+      const p = hydrated ?? promptById(promptId, catalog);
+      const v = p?.versions.find((x) => x.id === id);
+      if (v) setDraftBody(v.body);
+      patchQuery({ version: id });
+    },
+    [promptId, catalog, hydrated, patchQuery],
+  );
+
+  // Load editor body when prompt or version changes (not on every keystroke).
+  useEffect(() => {
+    if (!prompt) {
+      setDraftBody("");
+      return;
+    }
+    const v =
+      (versionId
+        ? prompt.versions.find((x) => x.id === versionId)
+        : undefined) ??
+      liveVersion(prompt) ??
+      prompt.versions[0];
+    if (!v) return;
+    if (versionId !== v.id) setVersionId(v.id);
+    setDraftBody(v.body);
+     
+  }, [prompt?.id, versionId, prompt?.versions[0]?.id]);
+
+  const handleSaveDraft = useCallback(async () => {
+    if (!prompt || !orgId) return;
+    const apiVersions = detailQuery.data?.versions ?? [];
+    const selectedNum = versionId
+      ? (() => {
+          try {
+            return versionNumberFromId(versionId);
+          } catch {
+            return null;
           }
-          toolbar={
-            showNewPrompt ? (
-              <PromptsCreateForm
-                name={newPromptName}
-                description={newPromptDesc}
-                autoEval={newPromptAutoEval}
-                pending={createMutation.isPending}
-                onName={setNewPromptName}
-                onDescription={setNewPromptDesc}
-                onAutoEval={setNewPromptAutoEval}
-                onCancel={() => setShowNewPrompt(false)}
-                onCreate={() => void handleCreate()}
-              />
-            ) : null
-          }
-          table={
-            promptsQuery.isLoading ? (
-              <div className="flex items-center justify-center py-12">
-                <Loader2 className="h-5 w-5 animate-spin text-[var(--text-muted)]" />
-              </div>
-            ) : promptsQuery.isError ? (
-              <ErrorState
-                message={promptsQuery.error?.message}
-                action={
-                  <Button size="sm" variant="outline" onClick={() => promptsQuery.refetch()}>
-                    Try again
-                  </Button>
-                }
-              />
-            ) : (
-              <PromptsListTable
-                prompts={
-                  showPromptsEmpty({
-                    isLoading: promptsQuery.isLoading,
-                    isError: promptsQuery.isError,
-                    promptCount: prompts.length,
-                  })
-                    ? []
-                    : prompts
-                }
-                selectedName={selectedName}
-                onSelect={(name) => selectPrompt(name)}
-                onCreate={() => setShowNewPrompt(true)}
-              />
-            )
-          }
-          detail={
-            selectedName ? (
-              <DetailPanelShell
-                open
-                onClose={() => selectPrompt(null)}
-                title={selectedPrompt?.name ?? selectedName}
-                onPrev={
-                  selectedIndex > 0
-                    ? () => selectPrompt(prompts[selectedIndex - 1]!.name)
-                    : undefined
-                }
-                onNext={
-                  selectedIndex >= 0 && selectedIndex < prompts.length - 1
-                    ? () => selectPrompt(prompts[selectedIndex + 1]!.name)
-                    : undefined
-                }
-              >
-                <PromptsEditor
-                  orgId={orgId}
-                  prompt={selectedPrompt}
-                  versions={versions[selectedName] || []}
-                  versionsLoading={versionsLoading === selectedName}
-                  versionsError={versionsError}
-                  expandedDiff={expandedDiff}
-                  onExpandedDiff={setExpandedDiff}
-                  draftTemplate={draftTemplate}
-                  draftModel={draftModel}
-                  draftNote={draftNote}
-                  versionDirty={versionDirty}
-                  savingVersion={savingVersion}
-                  envPinCount={envPinCount}
-                  onEnvPinsChange={setEnvPinCount}
-                  onDraftTemplate={setDraftTemplate}
-                  onDraftModel={setDraftModel}
-                  onDraftNote={setDraftNote}
-                  onMarkDirty={() => setVersionDirty(true)}
-                  onClose={() => selectPrompt(null)}
-                  onRetryVersions={() => void fetchVersions(selectedName)}
-                  onSaveVersion={() => void saveVersion(toast)}
-                  onRollbackPin={(ver) => void rollbackPin(ver, toast)}
-                  rollbackBusy={rollbackBusy}
-                />
-              </DetailPanelShell>
-            ) : null
-          }
+        })()
+      : null;
+    const selectedApi =
+      (selectedNum != null
+        ? apiVersions.find((v) => v.version === selectedNum)
+        : undefined) ??
+      [...apiVersions].sort((a, b) => b.version - a.version)[0];
+    const model = selectedApi?.model || "gpt-4o-mini";
+
+    try {
+      await promptsV2Api.createVersion(orgId, prompt.name, {
+        template: draftBody,
+        model,
+        change_note: "Saved from portal",
+      });
+      await Promise.all([invalidateDetail(), invalidateList()]);
+      const refreshed = await detailQuery.refetch();
+      const newest = [...(refreshed.data?.versions ?? [])].sort(
+        (a, b) => b.version - a.version,
+      )[0];
+      if (newest) {
+        const newId = promptVersionId(prompt.name, newest.version);
+        setVersionId(newId);
+        setNotice("Saved new draft version");
+        setTab("versions");
+        patchQuery({ tab: "versions", version: newId });
+      } else {
+        setNotice("Saved new draft version");
+        setTab("versions");
+        patchQuery({ tab: "versions" });
+      }
+    } catch (err) {
+      pushToast({
+        title: "Save failed",
+        body: err instanceof Error ? err.message : "Try again.",
+        tone: "fail",
+      });
+    }
+  }, [
+    prompt,
+    orgId,
+    detailQuery,
+    versionId,
+    draftBody,
+    invalidateDetail,
+    invalidateList,
+    patchQuery,
+    pushToast,
+  ]);
+
+  const handlePin = useCallback(
+    async (vid: string, env: PromptEnv) => {
+      if (!prompt || !orgId) return;
+      try {
+        const version = versionNumberFromId(vid);
+        await promptsV2Api.putPin(orgId, prompt.name, env, version);
+        await invalidateDetail();
+        setNotice(`Pinned to ${env}`);
+      } catch (err) {
+        pushToast({
+          title: "Pin failed",
+          body: err instanceof Error ? err.message : "Try again.",
+          tone: "fail",
+        });
+      }
+    },
+    [prompt, orgId, invalidateDetail, pushToast],
+  );
+
+  const handleRollback = useCallback(async () => {
+    if (!prompt || !orgId) return;
+    try {
+      await promptsV2Api.rollback(orgId, prompt.name, "prod");
+      await Promise.all([invalidateDetail(), invalidateList()]);
+      setNotice("Prod rolled back to previous version");
+      setTab("deploy");
+      patchQuery({ tab: "deploy" });
+    } catch (err) {
+      pushToast({
+        title: "Rollback failed",
+        body: err instanceof Error ? err.message : "Try again.",
+        tone: "fail",
+      });
+    }
+  }, [prompt, orgId, invalidateDetail, invalidateList, patchQuery, pushToast]);
+
+  const handleNew = useCallback(async () => {
+    if (!orgId) return;
+    const name = `new-prompt-${Date.now().toString(36)}`;
+    try {
+      const res = await promptsV2Api.create(orgId, { name });
+      await invalidateList();
+      const createdName = res.data?.name ?? name;
+      setPromptId(createdName);
+      setVersionId(null);
+      setDraftBody("");
+      setTab("editor");
+      setNotice("Draft created — edit and save");
+      patchQuery({ id: createdName, tab: null, version: null });
+    } catch (err) {
+      pushToast({
+        title: "Create failed",
+        body: err instanceof Error ? err.message : "Try again.",
+        tone: "fail",
+      });
+    }
+  }, [orgId, invalidateList, patchQuery, pushToast]);
+
+  const liveCount = scoped.filter((p) => p.status === "live").length;
+  const detailLoading =
+    Boolean(promptId) &&
+    (detailQuery.isLoading || (detailQuery.isFetching && !detailQuery.data));
+
+  if (listQuery.isLoading) {
+    return (
+      <div className="ds-page flex min-h-0 flex-1 flex-col">
+        <PageHeader title="Prompts" />
+        <QueryLoadingPanel label="Loading prompts…" />
+      </div>
+    );
+  }
+
+  if (listQuery.isError) {
+    return (
+      <div className="ds-page flex min-h-0 flex-1 flex-col">
+        <PageHeader title="Prompts" />
+        <QueryErrorPanel
+          error={listQuery.error}
+          onRetry={() => void listQuery.refetch()}
         />
       </div>
-    </PageContent>
+    );
+  }
+
+  return (
+    <div className="ds-page flex min-h-0 flex-1 flex-col">
+      <PageHeader
+        title="Prompts"
+        meta={
+          <span className="type-meta">
+            Registry · versions · env pins · {scoped.length} · {liveCount} live
+          </span>
+        }
+      />
+      <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
+        <div className="flex min-h-0 w-full flex-col border-b border-[var(--line)] lg:w-[22rem] lg:shrink-0 lg:border-b-0 lg:border-r">
+          <PromptsListView
+            prompts={scoped}
+            activeId={prompt?.id ?? null}
+            query={query}
+            onQueryChange={setQuery}
+            agentId={agentId}
+            onAgentChange={setAgentId}
+            statusFilter={statusFilter}
+            onStatusFilter={changeStatus}
+            onSelect={selectPrompt}
+            onNew={handleNew}
+            counts={scopeCounts}
+          />
+        </div>
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+          {detailLoading ? (
+            <QueryLoadingPanel label="Loading prompt…" />
+          ) : detailQuery.isError && promptId ? (
+            <QueryErrorPanel
+              error={detailQuery.error}
+              onRetry={() => {
+                void detailQuery.refetch();
+                void pinsQuery.refetch();
+              }}
+            />
+          ) : (
+            <PromptsDetailView
+              prompt={prompt}
+              tab={tab}
+              versionId={versionId}
+              draftBody={draftBody}
+              notice={notice}
+              onTab={changeTab}
+              onVersion={changeVersion}
+              onDraftChange={setDraftBody}
+              onSaveDraft={handleSaveDraft}
+              onPin={handlePin}
+              onRollback={handleRollback}
+            />
+          )}
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -292,12 +455,12 @@ export default function PromptsPage() {
   return (
     <Suspense
       fallback={
-        <div className="flex h-48 items-center justify-center">
-          <Loader2 className="h-4 w-4 animate-spin text-[var(--text-muted)]" />
+        <div className="ds-page flex min-h-0 flex-1 items-center justify-center">
+          <p className="type-meta">Loading prompts…</p>
         </div>
       }
     >
-      <PromptsPageInner />
+      <PromptsInner />
     </Suspense>
   );
 }

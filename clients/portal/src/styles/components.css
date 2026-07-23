@@ -1,0 +1,653 @@
+/* ================================================================
+   Eden Design System — shared component classes
+   ================================================================ */
+
+.ds-page {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+.ds-page-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  height: var(--header-h);
+  flex-shrink: 0;
+  padding: 0 var(--space-4);
+  border-bottom: 1px solid var(--line);
+  background: var(--bg-elevated);
+  min-width: 0;
+}
+
+.ds-page-header h1 {
+  font-family: var(--font-sans);
+  font-size: 1.0625rem;
+  line-height: var(--lh-tight);
+  letter-spacing: var(--ls-snug);
+  font-weight: var(--fw-semibold);
+  color: var(--text);
+  margin: 0;
+  flex-shrink: 0;
+}
+
+.ds-page-header .type-meta {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ds-page-header > div:last-child {
+  flex-shrink: 0;
+}
+
+.ds-btn:focus-visible,
+.ds-tab:focus-visible,
+.ds-nav-item:focus-visible,
+.lab-run-row:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 1px var(--accent);
+}
+
+.ds-panel {
+  border: none;
+  border-radius: var(--radius-lg);
+  background: var(--bg-elevated);
+  box-shadow: 0 0 0 1px var(--line);
+}
+
+.ds-panel-muted {
+  border: none;
+  border-radius: var(--radius-lg);
+  background: var(--bg-hover);
+  box-shadow: 0 0 0 1px var(--line);
+}
+
+.ds-input {
+  height: 2.25rem;
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
+  background: var(--bg-inset);
+  color: var(--text);
+  padding: 0 var(--space-3);
+  font-family: var(--font-sans);
+  font-size: var(--fs-ui);
+  font-weight: var(--fw-regular);
+  letter-spacing: var(--ls-normal);
+  transition: border-color var(--duration-fast) var(--ease-out);
+}
+
+.ds-input::placeholder {
+  color: var(--text-faint);
+}
+
+.ds-input:hover {
+  border-color: var(--line-strong);
+}
+
+.ds-input:focus,
+.ds-input:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: none;
+}
+
+select.ds-input {
+  appearance: none;
+  background-image: linear-gradient(45deg, transparent 50%, var(--text-faint) 50%),
+    linear-gradient(135deg, var(--text-faint) 50%, transparent 50%);
+  background-position:
+    calc(100% - 1rem) calc(50% - 0.15rem),
+    calc(100% - 0.7rem) calc(50% - 0.15rem);
+  background-size:
+    0.3rem 0.3rem,
+    0.3rem 0.3rem;
+  background-repeat: no-repeat;
+  padding-right: var(--space-8);
+  cursor: pointer;
+}
+
+.ds-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  height: 2.25rem;
+  padding: 0 var(--space-3);
+  border-radius: var(--radius);
+  border: 1px solid transparent;
+  font-family: var(--font-sans);
+  font-size: var(--fs-ui);
+  font-weight: var(--fw-medium);
+  letter-spacing: var(--ls-normal);
+  cursor: pointer;
+  transition:
+    background-color var(--duration-fast) var(--ease-out),
+    border-color var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out);
+}
+
+.ds-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.ds-btn-primary {
+  background: var(--accent);
+  color: var(--accent-fg);
+  font-weight: var(--fw-semibold);
+}
+
+.ds-btn-primary:hover:not(:disabled) {
+  background: var(--accent-hover);
+  color: var(--accent-fg);
+}
+
+.ds-btn-sm {
+  height: 1.75rem;
+  padding: 0 var(--space-2);
+  font-size: var(--fs-meta);
+}
+
+.ds-btn-icon {
+  width: 1.75rem;
+  height: 1.75rem;
+  padding: 0;
+}
+
+/* Run list / inspector shared density */
+.lab-run-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-width: 0;
+  width: 100%;
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  transition: background-color var(--duration-fast) var(--ease-out);
+}
+
+.lab-run-row:hover {
+  background: var(--accent-muted);
+}
+
+.lab-run-row[data-active="true"] {
+  background: var(--accent-muted);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+.lab-run-row[data-active="true"][data-severity="error"] {
+  box-shadow: inset 2px 0 0 var(--error);
+}
+
+.lab-run-row[data-active="true"][data-severity="warn"] {
+  box-shadow: inset 2px 0 0 var(--error);
+}
+
+.lab-run-row[data-severity="error"] {
+  box-shadow: inset 2px 0 0 var(--error);
+}
+
+.lab-run-row[data-severity="warn"] {
+  box-shadow: inset 2px 0 0 var(--error);
+}
+
+.lab-metric-strip {
+  display: flex;
+  overflow-x: auto;
+  border-bottom: 1px solid var(--line);
+}
+
+.lab-metric-strip > * {
+  flex: 1 0 8.5rem;
+  min-width: 8.5rem;
+  border-right: 1px solid var(--line);
+  padding: var(--space-4) var(--space-5);
+}
+
+.lab-metric-strip > *:last-child {
+  border-right: none;
+}
+
+/* Shared master-list filter chrome (issues / traces / agents) */
+.lab-list-chrome {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  flex-shrink: 0;
+  padding: var(--space-4);
+  border-bottom: 1px solid var(--line);
+}
+
+.lab-filter-scroll {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: var(--space-1);
+  overflow-x: auto;
+  padding-bottom: 1px;
+  scrollbar-width: thin;
+}
+
+.lab-filter-scroll > .ds-tab {
+  flex-shrink: 0;
+}
+
+
+.ds-btn-outline {
+  background: transparent;
+  border-color: var(--line);
+  color: var(--text-secondary);
+}
+
+.ds-btn-outline:hover:not(:disabled) {
+  border-color: var(--line-strong);
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.ds-btn-ghost {
+  background: transparent;
+  border-color: transparent;
+  color: var(--text-secondary);
+}
+
+.ds-btn-ghost:hover:not(:disabled) {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.ds-btn-live {
+  border-color: var(--line);
+  color: var(--text-faint);
+  font-family: var(--font-mono);
+  font-size: var(--fs-micro);
+  letter-spacing: var(--ls-wider);
+  text-transform: uppercase;
+  font-weight: var(--fw-bold);
+}
+
+.ds-btn-live[data-active="true"] {
+  border-color: var(--terminal);
+  background: var(--bg-inset);
+  color: var(--terminal);
+}
+
+.ds-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 1.25rem;
+  padding: 0 0.35rem;
+  border-radius: var(--radius-xs);
+  font-family: var(--font-mono);
+  font-size: var(--fs-micro);
+  line-height: 1;
+  letter-spacing: var(--ls-wider);
+  font-weight: var(--fw-bold);
+  text-transform: uppercase;
+}
+
+.ds-tab {
+  border-radius: var(--radius);
+  padding: var(--space-2) var(--space-3);
+  font-family: var(--font-sans);
+  font-size: var(--fs-meta);
+  font-weight: var(--fw-medium);
+  color: var(--text-muted);
+  cursor: pointer;
+  background: transparent;
+  border: none;
+  transition:
+    background-color var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out);
+}
+
+.ds-tab:hover {
+  background: var(--bg-hover);
+  color: var(--text-secondary);
+}
+
+.ds-tab[aria-selected="true"],
+.ds-tab[aria-pressed="true"] {
+  background: var(--bg-active);
+  color: var(--text);
+  box-shadow: inset 0 0 0 1px var(--line-strong);
+}
+
+.ds-table-head {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-4);
+  border-bottom: 1px solid var(--line);
+  background: var(--bg-elevated);
+}
+
+.ds-link {
+  color: var(--accent);
+  transition: color var(--duration-fast) var(--ease-out);
+}
+
+.ds-link:hover {
+  color: var(--accent-hover);
+  text-decoration: underline;
+}
+
+.ds-empty {
+  padding: var(--space-8) var(--space-4);
+  text-align: center;
+  color: var(--text-muted);
+  font-size: var(--fs-body);
+  line-height: var(--lh-normal);
+}
+
+/* ---------- Auth card (owns chrome; Clerk is transparent inside) ---------- */
+
+.auth-shell {
+  background: var(--bg);
+}
+
+.auth-card {
+  width: 100%;
+  min-height: 4.5rem;
+  padding: 1.5rem;
+  border-radius: 14px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--line-strong);
+  /* overflow visible — overflow:hidden + box-shadow left 1px gaps at corner tips */
+}
+
+@media (min-width: 480px) {
+  .auth-card {
+    padding: 1.75rem;
+  }
+}
+
+/* Neutralize Clerk default card chrome so our radius is the only one */
+.auth-card .cl-rootBox,
+.auth-card .cl-cardBox,
+.auth-card .cl-card {
+  width: 100% !important;
+  max-width: none !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  background: transparent !important;
+  border: none !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  overflow: visible !important;
+}
+
+.auth-card .cl-footer {
+  background: transparent !important;
+  background-image: none !important;
+}
+
+.auth-card .cl-footerItem {
+  background: transparent !important;
+  background-image: none !important;
+}
+
+/* Fallback: kill Clerk dev-mode graphic if layout flag is ignored */
+.auth-card .cl-footer [class*="cl-internal"][style*="background"],
+.auth-card .cl-footer > div > div > div:last-child:empty {
+  display: none !important;
+}
+
+/* Nav item active — left rail, not neon fill */
+.ds-nav-item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  border-radius: var(--radius);
+  padding: 0.4rem 0.625rem 0.4rem 0.75rem;
+  color: var(--text-muted);
+  transition:
+    background-color var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out);
+}
+
+.ds-nav-item:hover {
+  background: var(--bg-hover);
+  color: var(--text-secondary);
+}
+
+.ds-nav-item[data-active="true"] {
+  background: var(--accent-muted);
+  color: var(--text);
+}
+
+.ds-nav-item[data-active="true"]::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0.3rem;
+  bottom: 0.3rem;
+  width: 2px;
+  border-radius: 0 1px 1px 0;
+  background: var(--accent);
+}
+
+.ds-nav-item[data-attention="true"] {
+  box-shadow: inset 0 0 0 1px var(--accent);
+  background: var(--accent-muted);
+  color: var(--text);
+}
+
+.ds-nav-item[data-attention="true"]::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0.3rem;
+  bottom: 0.3rem;
+  width: 2px;
+  border-radius: 0 1px 1px 0;
+  background: var(--accent);
+}
+
+.ds-nav-item[data-collapsed="true"][data-active="true"]::before,
+.ds-nav-item[data-collapsed="true"][data-attention="true"]::before {
+  display: none;
+}
+
+.ds-nav-item[data-collapsed="true"] {
+  padding-left: 0;
+  padding-right: 0;
+}
+
+/* ---------- Alerts fullscreen modal ---------- */
+.lab-alerts-modal {
+  opacity: 0;
+  transform: translateY(10px) scale(0.985);
+  transition:
+    opacity 180ms ease-out,
+    transform 220ms cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: opacity, transform;
+}
+
+.lab-alerts-modal[data-state="open"] {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+}
+
+.lab-alerts-modal[data-state="closed"] {
+  opacity: 0;
+  transform: translateY(8px) scale(0.99);
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lab-alerts-modal {
+    transition: opacity 120ms ease;
+    transform: none;
+  }
+
+  .lab-alerts-modal[data-state="open"],
+  .lab-alerts-modal[data-state="closed"] {
+    transform: none;
+  }
+}
+
+@keyframes lab-agent-msg-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.lab-agent-msg {
+  animation: lab-agent-msg-in 180ms ease-out;
+}
+
+.lab-agent-chart .recharts-wrapper,
+.lab-agent-chart .recharts-surface {
+  overflow: visible;
+}
+
+.lab-agent-chart .recharts-default-legend {
+  padding-top: 4px !important;
+}
+
+.lab-agent-chart .recharts-legend-item-text {
+  color: var(--chart-label) !important;
+}
+
+/* ------------------------------------------------------------------ */
+/* AI Agent composer — ChatGPT dark pill                              */
+/* Page #000 · shell #212121 · radius 28 · circular white send        */
+/* ------------------------------------------------------------------ */
+
+.agent-composer {
+  flex-shrink: 0;
+  width: 100%;
+  padding: 0.5rem 1rem calc(0.75rem + env(safe-area-inset-bottom, 0px));
+  background: var(--bg);
+}
+
+@media (min-width: 640px) {
+  .agent-composer {
+    padding: 0.5rem 1.5rem calc(1rem + env(safe-area-inset-bottom, 0px));
+  }
+}
+
+.agent-composer__shell {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.5rem;
+  width: 100%;
+  max-width: 48rem;
+  margin-inline: auto;
+  padding: 0.5rem;
+  border-radius: 1.75rem; /* 28px — ChatGPT pill */
+  background: #212121;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12);
+  transition: box-shadow var(--duration-fast) var(--ease-out);
+}
+
+.agent-composer__shell:focus-within {
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.22);
+}
+
+.agent-composer__input {
+  display: block;
+  flex: 1 1 auto;
+  width: 100%;
+  min-width: 0;
+  min-height: 2.25rem; /* 36px — matches send */
+  max-height: 12.5rem;
+  margin: 0;
+  padding: 0.5rem 0.5rem 0.5rem 0.75rem;
+  border: 0;
+  resize: none;
+  overflow-y: auto;
+  background: transparent;
+  color: #ececec;
+  caret-color: #ececec;
+  font-family: var(--font-sans);
+  font-size: 1rem; /* 16px — ChatGPT body */
+  font-weight: 400;
+  line-height: 1.5;
+  letter-spacing: 0;
+  outline: none;
+  box-shadow: none;
+  field-sizing: content;
+}
+
+.agent-composer__input:focus,
+.agent-composer__input:focus-visible {
+  outline: none;
+  outline-offset: 0;
+  box-shadow: none;
+}
+
+.agent-composer__input::placeholder {
+  color: #8e8e8e;
+}
+
+.agent-composer__action {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 2.25rem; /* 36px */
+  height: 2.25rem;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 9999px;
+  cursor: pointer;
+  transition:
+    background var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out),
+    opacity var(--duration-fast) var(--ease-out);
+}
+
+.agent-composer__action:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.agent-composer__action--send {
+  background: #3a3a3a;
+  color: #8e8e8e;
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.agent-composer__action--send.is-armed {
+  background: var(--accent);
+  color: var(--accent-fg);
+  cursor: pointer;
+  opacity: 1;
+}
+
+.agent-composer__action--send.is-armed:hover {
+  background: var(--accent-hover);
+}
+
+.agent-composer__action--stop {
+  background: var(--accent);
+  color: var(--accent-fg);
+}
+
+.agent-composer__action--stop:hover {
+  background: var(--accent-hover);
+}
+
+.agent-composer[data-state="streaming"] .agent-composer__shell {
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.16);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lab-agent-msg {
+    animation: none;
+  }
+}
+

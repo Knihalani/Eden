@@ -1,55 +1,16 @@
-import { SignUp } from "@clerk/nextjs";
-import {
-  AuthSplitLayout,
-  AuthBrandPanel,
-  AuthPageIntro,
-  ClerkAuthFallback,
-} from "@/components/auth";
-import { clerkAppearance } from "@/components/auth/clerk-theme";
-import { buildAuthClerkRedirectProps } from "@/lib/auth-redirect";
+import { redirect } from "next/navigation";
 
-// Legacy /signup alias. next.config.ts 307s /signup → /sign-up, so
-// this page is a belt-and-suspenders mirror of the canonical route
-// (same chrome, copy, and redirects) if the redirect is ever bypassed.
-// Cross-links use canonical /sign-in so we never bounce
-// /signup → /login → /sign-in in a multi-hop loop.
-//
-// ClerkAuthFallback wraps the <SignUp /> component. If the Clerk
-// SDK fails to mount, the fallback shows a designed empty state
-// instead of a blank right column.
-export default async function SignupPage({
+export default async function SignupAlias({
   searchParams,
 }: {
-  searchParams: Promise<{ redirect_url?: string | string[] }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const params = await searchParams;
-  const raw = Array.isArray(params.redirect_url)
-    ? params.redirect_url[0]
-    : params.redirect_url;
-  const redirects = buildAuthClerkRedirectProps(raw, "sign-up");
-
-  return (
-    <AuthSplitLayout brandPanel={<AuthBrandPanel />}>
-      <div className="w-full max-w-md space-y-space-5" data-wave11-auth="sign-up">
-        <AuthPageIntro
-          eyebrow="Get started"
-          title="Create your account"
-          description="Create or join an organization first, then take the product tour, create an API key, and send your first trace."
-        />
-        <ClerkAuthFallback formLabel="sign-up">
-          <SignUp
-            path="/signup"
-            routing="path"
-            signInUrl={redirects.crossLinkUrl}
-            {...(redirects.forceRedirectUrl
-              ? { forceRedirectUrl: redirects.forceRedirectUrl }
-              : {})}
-            fallbackRedirectUrl={redirects.fallbackRedirectUrl}
-            signInFallbackRedirectUrl={redirects.crossLinkFallbackRedirectUrl}
-            appearance={clerkAppearance}
-          />
-        </ClerkAuthFallback>
-      </div>
-    </AuthSplitLayout>
-  );
+  const qs = new URLSearchParams();
+  for (const [k, v] of Object.entries(params)) {
+    if (typeof v === "string") qs.set(k, v);
+    else if (Array.isArray(v) && v[0]) qs.set(k, v[0]);
+  }
+  const q = qs.toString();
+  redirect(q ? `/sign-up?${q}` : "/sign-up");
 }

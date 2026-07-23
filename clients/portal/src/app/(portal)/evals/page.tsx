@@ -1,224 +1,1070 @@
 "use client";
 
-import { Suspense, useEffect, type ReactNode } from "react";
-import Link from "next/link";
-import { useTranslations } from "next-intl";
-import { ChevronDown } from "lucide-react";
-import { usePermissions } from "@/hooks/use-permissions";
 import {
-  EVALS_ADVANCED_TABS,
-  EVALS_PRIMARY_TABS,
-  isEvalsAdvancedTab,
-  type EvalsTab,
-} from "@/lib/evals-url";
-import { PageHeader } from "@/components/ui/page-header";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Button } from "@/components/ui/button";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import { useSearchParams } from "next/navigation";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { useEvalsUrlState } from "./_hooks/use-evals-url-state";
-import { EvalsHubToolbar } from "./_components/evals-hub-toolbar";
-import { DatasetsTab } from "./_components/datasets-tab";
-import { PlaygroundsTab } from "./_components/playgrounds-tab";
-import { ExperimentsTab } from "./_components/experiments-tab";
-import { LabelingTab } from "./_components/labeling-tab";
-import { StudioTab } from "./_components/studio-tab";
-import { SyntheticTab } from "./_components/synthetic-tab";
-import { EvalScoresTab } from "./_components/eval-scores-tab";
+  DATASET_CASES,
+  caseForIssue,
+  caseForTrace,
+  casesForDataset,
+  comparePairForDataset,
+  comparePairForExperiment,
+  datasetById,
+  datasetForIssue,
+  datasetForTrace,
+  defaultComparePair,
+  defaultDatasetId,
+  defaultPlaygroundId,
+  draftCaseFromSource,
+  experimentsForDataset,
+  matrixForPlayground,
+  playgroundById,
+  type CompareGrade,
+  type DatasetCaseFixture,
+  type DatasetFixture,
+  type ExperimentCaseResult,
+  type ExperimentFixture,
+  type PlaygroundFixture,
+} from "@/lab/fixtures/evals";
+import { issueById } from "@/lab/fixtures/issues";
+import { traceById } from "@/lab/fixtures/traces";
+import { catalogTraces } from "@/lib/portal-catalog";
+import { PageHeader } from "@/components/ds/primitives";
+import { useAgentScope, useQueryPatch } from "@/lab/agent-scope";
+import {
+  EvalsModeNav,
+  parseEvalsMode,
+  type EvalsMode,
+} from "@/lab/evals/evals-chrome";
+import dynamic from "next/dynamic";
+import type { CompareLayout } from "@/lab/evals/evals-compare-view";
+import { catalogAgents } from "@/lib/portal-catalog";
+import { useOrg } from "@/hooks/use-org";
+import { useOrgQuery } from "@/hooks/use-api-query";
+import { queryKeys } from "@/lib/query-keys";
+import { portalApi } from "@/lib/api/portal";
+import { QueryErrorPanel, QueryLoadingPanel } from "@/components/shell/query-error-panel";
 
-function EvalsPageInner() {
-  const t = useTranslations("evals");
-  const { hasPermission, role } = usePermissions();
-  const canMutate =
-    hasPermission("jobs:write") || (role != null && role !== "viewer");
-  const { state, setState, clearSelection } = useEvalsUrlState();
-  const tab = state.tab;
-  const q = state.q ?? "";
+const viewFallback = (
+  <div className="flex min-h-[12rem] flex-1 items-center justify-center px-5">
+    <p className="type-meta">Loading…</p>
+  </div>
+);
+
+const EvalsCompareView = dynamic(
+  () =>
+    import("@/lab/evals/evals-compare-view").then((m) => ({
+      default: m.EvalsCompareView,
+    })),
+  { loading: () => viewFallback },
+);
+const EvalsDatasetsView = dynamic(
+  () =>
+    import("@/lab/evals/evals-datasets-view").then((m) => ({
+      default: m.EvalsDatasetsView,
+    })),
+  { loading: () => viewFallback },
+);
+const EvalsPlaygroundView = dynamic(
+  () =>
+    import("@/lab/evals/evals-playground-view").then((m) => ({
+      default: m.EvalsPlaygroundView,
+    })),
+  { loading: () => viewFallback },
+);
+
+function parseLayout(v: string | null): CompareLayout {
+  if (v === "summary" || v === "list" || v === "grid") return v;
+  return "summary";
+}
+
+function parseGrade(v: string | null): CompareGrade | "all" {
+  if (
+    v === "improve" ||
+    v === "regress" ||
+    v === "tradeoff" ||
+    v === "tie"
+  ) {
+    return v;
+  }
+  return "all";
+}
+
+function cloneDatasetIntoExtras(
+  dsId: string,
+  prev: DatasetFixture[],
+  liveDatasets: DatasetFixture[],
+): DatasetFixture[] {
+  if (prev.some((d) => d.id === dsId)) return prev;
+  const base =
+    liveDatasets.find((d) => d.id === dsId) ?? datasetById(dsId);
+  if (!base) return prev;
+  return [{ ...base }, ...prev];
+}
+
+function LabEvalsInner() {
+  const searchParams = useSearchParams();
+  const paramMode = searchParams.get("mode");
+  const paramTab = searchParams.get("tab");
+  const paramId = searchParams.get("id");
+  const paramFrom = searchParams.get("from");
+  const paramAgent = searchParams.get("agent");
+  const paramBaseline = searchParams.get("baselineId");
+  const paramCompare = searchParams.get("compareId");
+  const paramLayout = searchParams.get("layout");
+  const paramGrade = searchParams.get("grade");
+  const paramDiff = searchParams.get("diff");
+  const paramCase = searchParams.get("case");
+
+  const { currentOrg } = useOrg();
+  const orgId = currentOrg?.id ?? null;
+  const datasetsQuery = useOrgQuery(
+    queryKeys.portal.evalDatasets(orgId),
+    orgId,
+    () => portalApi.evalDatasets(orgId!),
+  );
+  const playgroundsQuery = useOrgQuery(
+    queryKeys.portal.evalPlaygrounds(orgId),
+    orgId,
+    () => portalApi.evalPlaygrounds(orgId!),
+  );
+  const experimentsQuery = useOrgQuery(
+    queryKeys.portal.evalExperiments(orgId),
+    orgId,
+    () => portalApi.evalExperiments(orgId!),
+  );
+  const liveDatasets = datasetsQuery.data ?? [];
+  const livePlaygrounds = playgroundsQuery.data ?? [];
+  const liveExperiments = experimentsQuery.data ?? [];
+
+  const { agentId, agent: scopeAgent, setAgentId } = useAgentScope();
+  const patchQuery = useQueryPatch();
+
+  const defaults = useMemo(
+    () => defaultComparePair(liveExperiments),
+    [liveExperiments],
+  );
+
+  const [mode, setMode] = useState<EvalsMode>(() =>
+    parseEvalsMode(paramTab, paramMode),
+  );
+  const [datasetId, setDatasetId] = useState("");
+  const [playgroundId, setPlaygroundId] = useState("");
+  const [baselineId, setBaselineId] = useState(
+    () => paramBaseline ?? "",
+  );
+  const [compareId, setCompareId] = useState(
+    () => paramCompare ?? "",
+  );
+  const [layout, setLayout] = useState<CompareLayout>(() =>
+    parseLayout(paramLayout),
+  );
+  const [gradeFilter, setGradeFilter] = useState<CompareGrade | "all">(() =>
+    parseGrade(paramGrade),
+  );
+  const [diff, setDiff] = useState(() => paramDiff === "1");
+  const [focusCaseId, setFocusCaseId] = useState<string | null>(paramCase);
+  const [dockCaseId, setDockCaseId] = useState<string | null>(null);
+  const [fromHint, setFromHint] = useState<string | null>(null);
+  const [extraDatasets, setExtraDatasets] = useState<DatasetFixture[]>([]);
+  const [hiddenDatasetIds, setHiddenDatasetIds] = useState<string[]>([]);
+  const [extraCases, setExtraCases] = useState<DatasetCaseFixture[]>([]);
+  const [extraExperiments, setExtraExperiments] = useState<
+    ExperimentFixture[]
+  >([]);
+  const [extraResults, setExtraResults] = useState<ExperimentCaseResult[]>(
+    [],
+  );
+  const [extraPlaygrounds, setExtraPlaygrounds] = useState<
+    PlaygroundFixture[]
+  >([]);
+  const [renamingDatasetId, setRenamingDatasetId] = useState<string | null>(
+    null,
+  );
+  const handledFrom = useRef<string | null>(null);
+
+  const allDatasets = useMemo(() => {
+    const hidden = new Set(hiddenDatasetIds);
+    const extraIds = new Set(extraDatasets.map((d) => d.id));
+    return [
+      ...extraDatasets.filter((d) => !hidden.has(d.id)),
+      ...liveDatasets.filter((d) => !extraIds.has(d.id) && !hidden.has(d.id)),
+    ];
+  }, [extraDatasets, hiddenDatasetIds, liveDatasets]);
+
+  const allPlaygrounds = useMemo(() => {
+    const extraIds = new Set(extraPlaygrounds.map((p) => p.id));
+    return [
+      ...extraPlaygrounds,
+      ...livePlaygrounds.filter((p) => !extraIds.has(p.id)),
+    ];
+  }, [extraPlaygrounds, livePlaygrounds]);
+
+  const allExperiments = useMemo(() => {
+    const extraIds = new Set(extraExperiments.map((e) => e.id));
+    return [
+      ...extraExperiments,
+      ...liveExperiments.filter((e) => !extraIds.has(e.id)),
+    ];
+  }, [extraExperiments, liveExperiments]);
+
+  const casesFor = useCallback(
+    (dsId: string) => {
+      const local = extraCases.filter((c) => c.datasetId === dsId);
+      const fixture = casesForDataset(dsId).filter(
+        (c) => !local.some((l) => l.id === c.id),
+      );
+      const ds = allDatasets.find((d) => d.id === dsId);
+      const known = [...local, ...fixture];
+      const missing = (ds?.caseIds ?? []).filter(
+        (id) => !known.some((c) => c.id === id),
+      );
+      return [
+        ...known,
+        ...missing.map((id, i) => ({
+          id,
+          datasetId: dsId,
+          input: `Case ${known.length + i + 1}`,
+          tags: ["manual"] as string[],
+        })),
+      ];
+    },
+    [extraCases, allDatasets],
+  );
+
+  const createDataset = useCallback(() => {
+    const id = `ds_local_${Date.now().toString(36)}`;
+    const draft: DatasetFixture = {
+      id,
+      name: "Untitled dataset",
+      description: "",
+      agentId: agentId === "all" ? null : agentId,
+      source: "manual",
+      version: "v1",
+      updatedAt: "just now",
+      caseIds: [],
+    };
+    setExtraDatasets((prev) => [draft, ...prev]);
+    setDatasetId(id);
+    setRenamingDatasetId(id);
+    setMode("datasets");
+    patchQuery({ mode: "datasets", id, from: null });
+  }, [agentId, patchQuery]);
+
+  const renameDataset = useCallback(
+    (id: string, name: string) => {
+      setExtraDatasets((prev) => {
+        const next = cloneDatasetIntoExtras(id, prev, liveDatasets);
+        return next.map((d) =>
+          d.id === id ? { ...d, name, updatedAt: "just now" } : d,
+        );
+      });
+      setRenamingDatasetId(null);
+    },
+    [liveDatasets],
+  );
+
+  const deleteDataset = useCallback(
+    (id: string) => {
+      setExtraDatasets((prev) => prev.filter((d) => d.id !== id));
+      setHiddenDatasetIds((prev) =>
+        prev.includes(id) ? prev : [...prev, id],
+      );
+      setExtraCases((prev) => prev.filter((c) => c.datasetId !== id));
+      const remaining = allDatasets.filter((d) => d.id !== id);
+      const nextId = remaining[0]?.id ?? "";
+      setDatasetId(nextId);
+      if (nextId) patchQuery({ mode: "datasets", id: nextId, from: null });
+      else patchQuery({ mode: "datasets", id: null, from: null });
+    },
+    [allDatasets, patchQuery],
+  );
+
+  const addCase = useCallback(
+    (dsId: string) => {
+      const caseId = `case_local_${Date.now().toString(36)}`;
+      const draft: DatasetCaseFixture = {
+        id: caseId,
+        datasetId: dsId,
+        input: "",
+        tags: ["manual"],
+      };
+      setExtraCases((prev) => [draft, ...prev]);
+      setExtraDatasets((prev) => {
+        const next = cloneDatasetIntoExtras(dsId, prev, liveDatasets);
+        return next.map((d) =>
+          d.id === dsId
+            ? {
+                ...d,
+                caseIds: [...d.caseIds, caseId],
+                updatedAt: "just now",
+              }
+            : d,
+        );
+      });
+      setDockCaseId(caseId);
+    },
+    [liveDatasets],
+  );
+
+  const updateCase = useCallback(
+    (caseId: string, patch: { input?: string; expected?: string }) => {
+      setExtraCases((prev) => {
+        const hit = prev.find((c) => c.id === caseId);
+        if (hit) {
+          return prev.map((c) => (c.id === caseId ? { ...c, ...patch } : c));
+        }
+        const fixture =
+          DATASET_CASES.find((c) => c.id === caseId) ??
+          casesFor(
+            allDatasets.find((d) => d.caseIds.includes(caseId))?.id ?? "",
+          ).find((c) => c.id === caseId);
+        if (!fixture) return prev;
+        return [{ ...fixture, ...patch }, ...prev];
+      });
+    },
+    [allDatasets, casesFor],
+  );
+
+  const deleteCase = useCallback(
+    (dsId: string, caseId: string) => {
+      setExtraCases((prev) => prev.filter((c) => c.id !== caseId));
+      setExtraDatasets((prev) => {
+        const next = cloneDatasetIntoExtras(dsId, prev, liveDatasets);
+        return next.map((d) =>
+          d.id === dsId
+            ? {
+                ...d,
+                caseIds: d.caseIds.filter((id) => id !== caseId),
+                updatedAt: "just now",
+              }
+            : d,
+        );
+      });
+      setDockCaseId((cur) => (cur === caseId ? null : cur));
+    },
+    [liveDatasets],
+  );
+
+  const createPlayground = useCallback(
+    (linkedDatasetId?: string) => {
+      const ds =
+        allDatasets.find((d) => d.id === linkedDatasetId) ??
+        allDatasets.find((d) =>
+          agentId === "all" ? true : d.agentId === agentId,
+        ) ??
+        allDatasets[0];
+      const id = `pg_local_${Date.now().toString(36)}`;
+      const draft: PlaygroundFixture = {
+        id,
+        name: ds ? `${ds.name} · draft` : "Untitled draft",
+        agentId:
+          ds?.agentId ?? (agentId === "all" ? undefined : agentId) ?? undefined,
+        datasetId: ds?.id,
+        prompt: "You are a careful agent. Follow the task exactly.",
+        model: "eden-router / grok-4.5",
+        dirty: true,
+        variants: [
+          { id: "var_base", label: "Baseline", provider: "baseline" },
+          { id: "var_cand", label: "Candidate", provider: "candidate" },
+        ],
+      };
+      setExtraPlaygrounds((prev) => [draft, ...prev]);
+      setPlaygroundId(id);
+      setMode("playground");
+      patchQuery({ mode: "playground", id, from: null });
+    },
+    [allDatasets, agentId, patchQuery],
+  );
+
+  const renamePlayground = useCallback(
+    (id: string, name: string) => {
+      setExtraPlaygrounds((prev) => {
+        if (prev.some((p) => p.id === id)) {
+          return prev.map((p) =>
+            p.id === id ? { ...p, name, dirty: true } : p,
+          );
+        }
+        const base =
+          livePlaygrounds.find((p) => p.id === id) ?? playgroundById(id);
+        if (!base) return prev;
+        return [{ ...base, name, dirty: true }, ...prev];
+      });
+    },
+    [livePlaygrounds],
+  );
+
+  const linkPlaygroundDataset = useCallback(
+    (pgId: string, dsId: string) => {
+      const ds = allDatasets.find((d) => d.id === dsId);
+      setExtraPlaygrounds((prev) => {
+        if (prev.some((p) => p.id === pgId)) {
+          return prev.map((p) =>
+            p.id === pgId
+              ? {
+                  ...p,
+                  datasetId: dsId,
+                  agentId: ds?.agentId ?? p.agentId,
+                  dirty: true,
+                }
+              : p,
+          );
+        }
+        const base =
+          livePlaygrounds.find((p) => p.id === pgId) ?? playgroundById(pgId);
+        if (!base) return prev;
+        return [
+          {
+            ...base,
+            datasetId: dsId,
+            agentId: ds?.agentId ?? base.agentId,
+            dirty: true,
+          },
+          ...prev,
+        ];
+      });
+    },
+    [allDatasets, livePlaygrounds],
+  );
 
   useEffect(() => {
-    function onKey(e: KeyboardEvent) {
-      const target = e.target as HTMLElement | null;
-      const isFormField =
-        target?.tagName === "INPUT" ||
-        target?.tagName === "TEXTAREA" ||
-        target?.tagName === "SELECT" ||
-        target?.isContentEditable;
-      if (isFormField) return;
+    const nextMode = parseEvalsMode(paramTab, paramMode);
+    setMode(nextMode);
+    if (paramBaseline) setBaselineId(paramBaseline);
+    if (paramCompare) setCompareId(paramCompare);
+    setLayout(parseLayout(paramLayout));
+    setGradeFilter(parseGrade(paramGrade));
+    if (paramDiff != null) setDiff(paramDiff === "1");
+    setFocusCaseId(paramCase);
+  }, [
+    paramMode,
+    paramTab,
+    paramBaseline,
+    paramCompare,
+    paramLayout,
+    paramGrade,
+    paramDiff,
+    paramCase,
+  ]);
 
-      if (e.key === "Escape") {
-        e.preventDefault();
-        clearSelection();
-        return;
-      }
+  // Dataset / playground selection from URL + live lists.
+  useEffect(() => {
+    const nextMode = parseEvalsMode(paramTab, paramMode);
+    if (nextMode === "datasets") {
+      const next =
+        allDatasets.find((d) => d.id === paramId)?.id ??
+        allDatasets[0]?.id ??
+        "";
+      if (next && next !== datasetId) setDatasetId(next);
+      else if (!next && datasetId) setDatasetId("");
+    } else if (nextMode === "playground") {
+      const next =
+        allPlaygrounds.find((p) => p.id === paramId)?.id ??
+        allPlaygrounds[0]?.id ??
+        "";
+      if (next && next !== playgroundId) setPlaygroundId(next);
+      else if (!next && playgroundId) setPlaygroundId("");
+    }
+     
+  }, [paramId, paramTab, paramMode, allDatasets, allPlaygrounds]);
 
-      const idx = Number(e.key) - 1;
-      if (idx >= 0 && idx < EVALS_PRIMARY_TABS.length) {
-        e.preventDefault();
-        setState({ tab: EVALS_PRIMARY_TABS[idx] });
+  // Seed compare pair once live experiments arrive (if URL didn't set them).
+  useEffect(() => {
+    if (paramBaseline || paramCompare) return;
+    if (!defaults.baselineId && !defaults.compareId) return;
+    if (!baselineId && defaults.baselineId) setBaselineId(defaults.baselineId);
+    if (!compareId && defaults.compareId) setCompareId(defaults.compareId);
+     
+  }, [defaults.baselineId, defaults.compareId, paramBaseline, paramCompare]);
+
+  useEffect(() => {
+    if (paramAgent && paramAgent !== agentId) {
+      setAgentId(paramAgent);
+    }
+  }, [paramAgent, agentId, setAgentId]);
+
+  useEffect(() => {
+    if (!paramFrom || handledFrom.current === paramFrom) return;
+    handledFrom.current = paramFrom;
+
+    const liveTraces = catalogTraces();
+    const isTrace = Boolean(traceById(paramFrom) || liveTraces.some((t) => t.id === paramFrom));
+    const isIssue = Boolean(issueById(paramFrom));
+    if (!isTrace && !isIssue) return;
+
+    let ds =
+      (isTrace ? datasetForTrace(paramFrom) : undefined) ??
+      (isIssue ? datasetForIssue(paramFrom) : undefined);
+
+    const sourceAgent =
+      (isTrace
+        ? traceById(paramFrom)?.agentId ??
+          liveTraces.find((t) => t.id === paramFrom)?.agentId
+        : undefined) ?? issueById(paramFrom)?.agentId;
+
+    if (!ds && sourceAgent) {
+      const id = `ds_from_${sourceAgent}_${Date.now().toString(36)}`;
+      ds = {
+        id,
+        name: "Untitled dataset",
+        description: "",
+        agentId: sourceAgent,
+        source: isTrace ? "traces" : "issues",
+        version: "v1",
+        updatedAt: "just now",
+        caseIds: [],
+      };
+      setExtraDatasets((prev) => [ds!, ...prev]);
+      setRenamingDatasetId(id);
+    }
+    if (!ds) return;
+
+    if (sourceAgent) setAgentId(sourceAgent);
+
+    const fixtureCase =
+      (isTrace ? caseForTrace(paramFrom) : caseForIssue(paramFrom)) ??
+      (isIssue
+        ? issueById(paramFrom)?.occurrenceTraceIds
+            .map((tid) => caseForTrace(tid))
+            .find(Boolean)
+        : undefined) ??
+      null;
+
+    let caseId = fixtureCase?.id ?? null;
+
+    if (!fixtureCase) {
+      const draft = draftCaseFromSource(paramFrom, ds.id);
+      if (draft) {
+        caseId = draft.id;
+        setExtraCases((prev) =>
+          prev.some(
+            (c) =>
+              c.id === draft.id ||
+              c.sourceTraceId === paramFrom ||
+              c.sourceIssueId === paramFrom,
+          )
+            ? prev
+            : [draft, ...prev],
+        );
+        const draftId = draft.id;
+        const targetId = ds.id;
+        const nextSource = isTrace ? "traces" : "issues";
+        setExtraDatasets((prev) => {
+          const hit = prev.find((d) => d.id === targetId);
+          if (hit) {
+            if (hit.caseIds.includes(draftId)) return prev;
+            return prev.map((d) =>
+              d.id === targetId
+                ? {
+                    ...d,
+                    caseIds: [draftId, ...d.caseIds],
+                    updatedAt: "just now",
+                    source: nextSource,
+                  }
+                : d,
+            );
+          }
+          const base =
+            liveDatasets.find((d) => d.id === targetId) ??
+            datasetById(targetId);
+          if (!base) return prev;
+          if (base.caseIds.includes(draftId)) {
+            return [{ ...base, updatedAt: "just now" }, ...prev];
+          }
+          return [
+            {
+              ...base,
+              caseIds: [draftId, ...base.caseIds],
+              updatedAt: "just now",
+              source: nextSource,
+            },
+            ...prev,
+          ];
+        });
       }
     }
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [clearSelection, setState]);
 
-  function setTab(next: EvalsTab) {
-    setState({ tab: next });
+    setMode("datasets");
+    setDatasetId(ds.id);
+    setFromHint(paramFrom);
+    setDockCaseId(caseId);
+    patchQuery({
+      mode: "datasets",
+      tab: null,
+      id: ds.id,
+      from: paramFrom,
+      agent: sourceAgent ?? null,
+      baselineId: null,
+      compareId: null,
+      case: null,
+    });
+  }, [paramFrom, patchQuery, setAgentId, liveDatasets]);
+
+  const changeMode = useCallback(
+    (next: EvalsMode) => {
+      setMode(next);
+      setFromHint(null);
+      setFocusCaseId(null);
+      setDockCaseId(null);
+      if (next === "compare") {
+        patchQuery({
+          mode: null,
+          tab: null,
+          id: null,
+          from: null,
+          baselineId,
+          compareId,
+          case: null,
+          failures: null,
+        });
+      } else if (next === "datasets") {
+        patchQuery({
+          mode: "datasets",
+          tab: null,
+          id: datasetId || defaultDatasetId() || null,
+          from: null,
+          baselineId: null,
+          compareId: null,
+          layout: null,
+          grade: null,
+          diff: null,
+          failures: null,
+          case: null,
+        });
+      } else {
+        patchQuery({
+          mode: "playground",
+          tab: null,
+          id: playgroundId || defaultPlaygroundId() || null,
+          from: null,
+          baselineId: null,
+          compareId: null,
+          layout: null,
+          grade: null,
+          diff: null,
+          failures: null,
+          case: null,
+        });
+      }
+    },
+    [patchQuery, baselineId, compareId, datasetId, playgroundId],
+  );
+
+  const openComparePair = useCallback(
+    (pair: { baselineId: string; compareId: string }) => {
+      setMode("compare");
+      setBaselineId(pair.baselineId);
+      setCompareId(pair.compareId);
+      setFromHint(null);
+      setDockCaseId(null);
+      setLayout("summary");
+      setGradeFilter("all");
+      patchQuery({
+        mode: null,
+        tab: null,
+        id: null,
+        from: null,
+        baselineId: pair.baselineId,
+        compareId: pair.compareId,
+        layout: null,
+        grade: null,
+        case: null,
+        failures: null,
+      });
+    },
+    [patchQuery],
+  );
+
+  const compareLatest = useCallback(
+    (dsId: string) => {
+      const pair = comparePairForDataset(dsId, allExperiments);
+      if (!pair) return;
+      openComparePair(pair);
+    },
+    [allExperiments, openComparePair],
+  );
+
+  const runExperiment = useCallback(
+    (dsId: string) => {
+      const ds = allDatasets.find((d) => d.id === dsId);
+      const cases = casesFor(dsId);
+      if (!ds || cases.length === 0) return;
+
+      const prior = [
+        ...extraExperiments.filter((e) => e.datasetId === dsId),
+        ...experimentsForDataset(dsId),
+      ];
+      const completedPrior = prior.filter((e) => e.status === "completed");
+      const runN = completedPrior.length + 1;
+      const olderId =
+        comparePairForDataset(dsId, allExperiments)?.compareId ??
+        completedPrior[completedPrior.length - 1]?.id ??
+        "";
+
+      const expId = `exp_run_${Date.now().toString(36)}`;
+      const avg =
+        0.55 +
+        (cases.reduce((s, c) => s + c.input.length, 0) % 40) / 100;
+
+      const synthetic: ExperimentFixture = {
+        id: expId,
+        name: `${ds.name} · run ${runN}`,
+        datasetId: dsId,
+        status: "completed",
+        createdAt: "just now",
+        avgScores: { score: Number(avg.toFixed(2)) },
+        latencyMs: 2800 + cases.length * 120,
+        costUsd: 0.02 + cases.length * 0.008,
+        errorRate: 0.1,
+        suggestedBaselineId: olderId || undefined,
+      };
+
+      const results: ExperimentCaseResult[] = cases.map((c, i) => {
+        const score = Math.max(
+          0.1,
+          Math.min(0.98, avg + ((i % 3) - 1) * 0.08),
+        );
+        const pass = score >= 0.55;
+        return {
+          experimentId: expId,
+          caseId: c.id,
+          output: pass
+            ? `Pass · ${c.input.slice(0, 48)}`
+            : `Fail · ${c.input.slice(0, 48)}`,
+          scores: { score: Number(score.toFixed(2)) },
+          latencyMs: 800 + i * 100,
+          costUsd: 0.01,
+          error: pass ? undefined : "below threshold",
+        };
+      });
+
+      setExtraExperiments((prev) => [synthetic, ...prev]);
+      setExtraResults((prev) => [...results, ...prev]);
+      openComparePair({
+        baselineId: olderId || expId,
+        compareId: expId,
+      });
+    },
+    [allDatasets, casesFor, allExperiments, extraExperiments, openComparePair],
+  );
+
+  const openRun = useCallback(
+    (experimentId: string) => {
+      const pair = comparePairForExperiment(experimentId, allExperiments);
+      if (!pair) return;
+      openComparePair(pair);
+    },
+    [allExperiments, openComparePair],
+  );
+
+  const switchDatasetOnCompare = useCallback(
+    (dsId: string) => {
+      const pair = comparePairForDataset(dsId, allExperiments);
+      if (pair) {
+        openComparePair(pair);
+        return;
+      }
+      setBaselineId("");
+      setCompareId("");
+      patchQuery({
+        mode: null,
+        baselineId: null,
+        compareId: null,
+      });
+    },
+    [allExperiments, openComparePair, patchQuery],
+  );
+
+  const promotePlayground = useCallback(
+    (pg: PlaygroundFixture, _prompt: string) => {
+      if (!pg.datasetId) return;
+
+      const fixtureLinked = [
+        ...extraExperiments,
+        ...experimentsForDataset(pg.datasetId),
+      ].find((e) => e.playgroundId === pg.id && e.status === "completed");
+
+      const matrix = matrixForPlayground(pg);
+      const candidate =
+        pg.variants.find((v) => v.provider === "candidate") ??
+        pg.variants[pg.variants.length - 1];
+      const cells = matrix.filter((m) => m.variantId === candidate?.id);
+      const avg =
+        cells.length === 0
+          ? 0.5
+          : cells.reduce((s, c) => s + c.score, 0) / cells.length;
+      const expId = `exp_local_${pg.id}_${Date.now().toString(36)}`;
+      const baselinePair = comparePairForDataset(
+        pg.datasetId,
+        allExperiments,
+      );
+      const olderId =
+        baselinePair?.compareId ??
+        fixtureLinked?.id ??
+        baselinePair?.baselineId ??
+        "";
+
+      const synthetic: ExperimentFixture = {
+        id: expId,
+        name: `${pg.name} · saved`,
+        datasetId: pg.datasetId,
+        playgroundId: pg.id,
+        status: "completed",
+        createdAt: "just now",
+        avgScores: { score: avg },
+        latencyMs: 3200,
+        costUsd: 0.05,
+        errorRate:
+          cells.filter((c) => !c.pass).length / Math.max(cells.length, 1),
+        suggestedBaselineId: olderId || undefined,
+      };
+
+      const results: ExperimentCaseResult[] =
+        cells.length > 0
+          ? cells.map((c) => ({
+              experimentId: expId,
+              caseId: c.caseId,
+              output: c.output,
+              scores: { score: c.score },
+              latencyMs: 1000,
+              costUsd: 0.01,
+              error: c.pass ? undefined : "fail",
+            }))
+          : casesFor(pg.datasetId).map((c, i) => ({
+              experimentId: expId,
+              caseId: c.id,
+              output: c.input.slice(0, 60),
+              scores: { score: 0.5 + (i % 3) * 0.1 },
+              latencyMs: 900,
+              costUsd: 0.01,
+            }));
+
+      setExtraExperiments((prev) => [synthetic, ...prev]);
+      setExtraResults((prev) => [...results, ...prev]);
+      setExtraPlaygrounds((prev) => {
+        if (prev.some((p) => p.id === pg.id)) {
+          return prev.map((p) =>
+            p.id === pg.id ? { ...p, dirty: false, name: pg.name } : p,
+          );
+        }
+        return prev;
+      });
+      openComparePair({
+        baselineId: olderId || expId,
+        compareId: expId,
+      });
+    },
+    [extraExperiments, allExperiments, openComparePair, casesFor],
+  );
+
+  const scopeCounts = useMemo(() => {
+    const map: Record<string, number> = { all: allDatasets.length };
+    for (const d of allDatasets) {
+      if (!d.agentId) continue;
+      map[d.agentId] = (map[d.agentId] ?? 0) + 1;
+    }
+    return map;
+  }, [allDatasets]);
+
+  const isLoading =
+    datasetsQuery.isLoading ||
+    playgroundsQuery.isLoading ||
+    experimentsQuery.isLoading;
+  const isError =
+    datasetsQuery.isError ||
+    playgroundsQuery.isError ||
+    experimentsQuery.isError;
+
+  if (isLoading) {
+    return (
+      <div className="ds-page">
+        <PageHeader title="Evals" />
+        <QueryLoadingPanel label="Loading evals…" />
+      </div>
+    );
   }
 
-  function setSearch(value: string) {
-    setState({ q: value || undefined });
+  if (isError) {
+    return (
+      <div className="ds-page">
+        <PageHeader title="Evals" />
+        <QueryErrorPanel
+          error={
+            datasetsQuery.error ??
+            playgroundsQuery.error ??
+            experimentsQuery.error
+          }
+          onRetry={() => {
+            void datasetsQuery.refetch();
+            void playgroundsQuery.refetch();
+            void experimentsQuery.refetch();
+          }}
+        />
+      </div>
+    );
   }
 
-  const advancedActive = isEvalsAdvancedTab(tab);
-  const primaryValue = advancedActive ? "" : tab;
+  const metaCount =
+    mode === "datasets"
+      ? `${allDatasets.length} dataset${allDatasets.length === 1 ? "" : "s"}`
+      : mode === "playground"
+        ? `${allPlaygrounds.length} draft${allPlaygrounds.length === 1 ? "" : "s"}`
+        : "Results";
 
-  const tabProps = { canMutate };
-
-  let panel: ReactNode = null;
-  switch (tab) {
-    case "datasets":
-      panel = <DatasetsTab {...tabProps} />;
-      break;
-    case "playgrounds":
-      panel = <PlaygroundsTab {...tabProps} />;
-      break;
-    case "experiments":
-      panel = <ExperimentsTab {...tabProps} />;
-      break;
-    case "labeling":
-      panel = <LabelingTab {...tabProps} />;
-      break;
-    case "studio":
-      panel = <StudioTab {...tabProps} />;
-      break;
-    case "synthetic":
-      panel = <SyntheticTab {...tabProps} />;
-      break;
-    case "eval":
-      panel = <EvalScoresTab {...tabProps} />;
-      break;
-    default:
-      panel = <DatasetsTab {...tabProps} />;
-  }
+  const meta = (
+    <span className="type-meta">
+      {scopeAgent ? scopeAgent.name : "All agents"} · {metaCount}
+    </span>
+  );
 
   return (
-    <div className="mx-auto max-w-7xl space-y-4" data-testid="evals-page">
-      <PageHeader title={t("title")} subtitle={t("subtitle")} />
-
-      <div
-        className="flex flex-wrap items-center gap-2"
-        data-testid="evals-tabs-chrome"
-      >
-        <Tabs
-          value={primaryValue}
-          onValueChange={(v) => setTab(v as EvalsTab)}
-        >
-          <TabsList variant="underline" aria-label={t("tabsAria")}>
-            {EVALS_PRIMARY_TABS.map((id) => (
-              <TabsTrigger
-                key={id}
-                variant="underline"
-                value={id}
-                className="min-h-11"
-                data-testid={`evals-tab-${id}`}
-              >
-                {t(`tabs.${id}`)}
-              </TabsTrigger>
-            ))}
-          </TabsList>
-        </Tabs>
-
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              type="button"
-              size="sm"
-              variant={advancedActive ? "secondary" : "ghost"}
-              className="min-h-11"
-              data-testid="evals-advanced-tabs"
-              aria-label={t("tabs.advanced")}
-            >
-              {advancedActive ? t(`tabs.${tab}`) : t("tabs.advanced")}
-              <ChevronDown className="ml-1 h-4 w-4" aria-hidden />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" className="min-w-[12rem]">
-            <DropdownMenuLabel>{t("tabs.advanced")}</DropdownMenuLabel>
-            {EVALS_ADVANCED_TABS.map((id) => (
-              <DropdownMenuItem
-                key={id}
-                onSelect={() => setTab(id)}
-                data-testid={`evals-advanced-${id}`}
-              >
-                {t(`tabs.${id}`)}
-              </DropdownMenuItem>
-            ))}
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </div>
-
-      <EvalsHubToolbar
-        q={q}
-        filter={state.filter}
-        agentId={state.agentId}
-        onSearchChange={setSearch}
+    <div className="ds-page">
+      <PageHeader
+        title="Evals"
+        meta={meta}
+        actions={
+          <div className="flex flex-wrap items-center gap-2">
+            {mode !== "compare" ? (
+              <label className="flex items-center gap-1.5">
+                <span className="sr-only">Agent</span>
+                <select
+                  className="ds-input !h-8 !w-auto max-w-[10rem] !py-0 !text-[0.75rem]"
+                  value={agentId}
+                  onChange={(e) => setAgentId(e.target.value)}
+                  aria-label="Filter by agent"
+                >
+                  <option value="all">
+                    All agents
+                    {scopeCounts.all != null ? ` (${scopeCounts.all})` : ""}
+                  </option>
+                  {catalogAgents().map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {a.name}
+                      {scopeCounts[a.id] != null
+                        ? ` (${scopeCounts[a.id]})`
+                        : ""}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
+            <EvalsModeNav value={mode} onChange={changeMode} />
+          </div>
+        }
       />
 
-      <div data-testid={`evals-panel-${tab}`}>{panel}</div>
+      {mode === "compare" ? (
+        <EvalsCompareView
+          baselineId={baselineId}
+          compareId={compareId}
+          layout={layout}
+          gradeFilter={gradeFilter}
+          diff={diff}
+          focusCaseId={focusCaseId}
+          datasets={allDatasets}
+          extraExperiments={extraExperiments}
+          extraResults={extraResults}
+          extraCases={extraCases}
+          onBaseline={(id) => {
+            setBaselineId(id);
+            patchQuery({ baselineId: id });
+          }}
+          onCompare={(id) => {
+            setCompareId(id);
+            patchQuery({ compareId: id });
+          }}
+          onDatasetChange={switchDatasetOnCompare}
+          onGoDatasets={() => changeMode("datasets")}
+          onGoPlayground={() => changeMode("playground")}
+          onLayout={(l) => {
+            setLayout(l);
+            patchQuery({ layout: l === "summary" ? null : l });
+          }}
+          onGrade={(g) => {
+            setGradeFilter(g);
+            patchQuery({ grade: g === "all" ? null : g });
+          }}
+          onDiff={(v) => {
+            setDiff(v);
+            patchQuery({ diff: v ? "1" : null });
+          }}
+          onFocusCase={(id) => {
+            setFocusCaseId(id);
+            patchQuery({ case: id });
+          }}
+        />
+      ) : null}
 
-      <nav
-        className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-[var(--border-subtle)] pt-3 text-sm"
-        aria-label={t("related.aria")}
-        data-testid="evals-related-strip"
-      >
-        <span className="text-[var(--text-muted)]">{t("related.label")}</span>
-        <Link
-          href="/issues"
-          className="text-[var(--accent)] hover:underline"
-        >
-          {t("related.issues")}
-        </Link>
-        <Link
-          href="/traces"
-          className="text-[var(--accent)] hover:underline"
-        >
-          {t("related.traces")}
-        </Link>
-        <Link
-          href="/improve"
-          className="text-[var(--accent)] hover:underline"
-        >
-          {t("related.improve")}
-        </Link>
-        <Link
-          href="/cost"
-          className="text-[var(--accent)] hover:underline"
-        >
-          {t("related.cost")}
-        </Link>
-      </nav>
+      {mode === "datasets" ? (
+        <EvalsDatasetsView
+          agentId={agentId}
+          datasets={allDatasets}
+          selectedId={datasetId}
+          fromHint={fromHint}
+          focusCaseId={dockCaseId}
+          extraCases={extraCases}
+          extraExperiments={extraExperiments}
+          renamingId={renamingDatasetId}
+          onSelect={(id) => {
+            setDatasetId(id);
+            setDockCaseId(null);
+            setRenamingDatasetId(null);
+            patchQuery({ mode: "datasets", id, from: fromHint });
+          }}
+          onCompareLatest={compareLatest}
+          onRunExperiment={runExperiment}
+          onOpenRun={openRun}
+          onCreateDataset={createDataset}
+          onAddCase={addCase}
+          onRenameDataset={renameDataset}
+          onDeleteDataset={deleteDataset}
+          onUpdateCase={updateCase}
+          onDeleteCase={deleteCase}
+          onTryDataset={(id) => createPlayground(id)}
+        />
+      ) : null}
+
+      {mode === "playground" ? (
+        <EvalsPlaygroundView
+          agentId={agentId}
+          playgrounds={allPlaygrounds}
+          datasets={allDatasets}
+          selectedId={playgroundId}
+          extraCases={extraCases}
+          onSelect={(id) => {
+            setPlaygroundId(id);
+            patchQuery({ mode: "playground", id });
+          }}
+          onCreate={() => createPlayground()}
+          onLinkDataset={linkPlaygroundDataset}
+          onRename={renamePlayground}
+          onPromote={promotePlayground}
+        />
+      ) : null}
     </div>
   );
 }
 
-export default function EvalsPage() {
+export default function LabEvalsPage() {
   return (
     <Suspense
       fallback={
-        <div className="mx-auto max-w-7xl space-y-4 p-4">
-          <Skeleton className="h-8 w-48" />
-          <Skeleton className="h-10 w-full" />
-          <Skeleton className="h-64 w-full" />
+        <div className="ds-page">
+          <PageHeader
+            title="Evals"
+            meta={<span className="type-meta">Loading…</span>}
+          />
         </div>
       }
     >
-      <EvalsPageInner />
+      <LabEvalsInner />
     </Suspense>
   );
 }

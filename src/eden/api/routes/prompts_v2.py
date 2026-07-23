@@ -12,6 +12,9 @@ Routes:
   single version.
 * ``GET  /orgs/{org_id}/prompts/{name}/versions/{v}/eval-runs`` —
   list eval runs for the version.
+* ``GET  /orgs/{org_id}/prompts/{name}/pins`` — env pins (dev/staging/prod).
+* ``PUT  /orgs/{org_id}/prompts/{name}/pins/{env}`` — pin/deploy a version.
+* ``POST /orgs/{org_id}/prompts/{name}/rollback`` — rollback env pin.
 
 Note: there is an existing ``prompts`` router (the Cat 9 prompt
 detection surface) — this file uses the ``prompts_v2`` module
@@ -25,10 +28,15 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from fastapi import APIRouter, Body, Depends, Path, Query
+from fastapi import APIRouter, Body, Depends, HTTPException, Path, Query, status
 from pydantic import BaseModel, Field
 
 from eden.api.deps import get_current_user, require_path_org_access
+from eden.prompts.deploy import (
+    CANONICAL_ENVS,
+    PromptDeployService,
+    normalize_env,
+)
 from eden.services.prompt_versioning import PromptService
 
 logger = logging.getLogger(__name__)
@@ -53,6 +61,24 @@ class CreateVersionRequest(BaseModel):
     params: dict[str, Any] = Field(default_factory=dict)
     variables: list[str] = Field(default_factory=list)
     change_note: str | None = Field(default=None, max_length=2048)
+
+
+class PinEnvRequest(BaseModel):
+    version: int = Field(..., ge=1)
+
+
+class RollbackRequest(BaseModel):
+    env: str = Field(default="prod")
+
+
+def _serialize_env_row(row: dict[str, Any]) -> dict[str, Any]:
+    out = dict(row)
+    for key, value in list(out.items()):
+        if hasattr(value, "isoformat"):
+            out[key] = value.isoformat()
+        elif hasattr(value, "hex"):  # UUID
+            out[key] = str(value)
+    return out
 
 
 @router.get("")
@@ -188,4 +214,91 @@ async def list_eval_runs(
         "feature": "prompts_v2",
         "live": True,
         "data": {"eval_runs": runs, "count": len(runs)},
+    }
+
+
+@router.get("/{name}/pins")
+async def get_pins(
+    org_id: str = Depends(require_path_org_access),
+    name: str = Path(...),
+) -> dict[str, Any]:
+    """Return env pins for a prompt (canonical: dev / staging / prod)."""
+    environments = await PromptDeployService().list_environments(org_id, name)
+    pins: dict[str, int] = {}
+    for row in environments:
+        key = normalize_env(str(row.get("env") or ""))
+        if key in CANONICAL_ENVS and row.get("version") is not None:
+            pins[key] = int(row["version"])
+    return {
+        "pins": pins,
+        "environments": [_serialize_env_row(r) for r in environments],
+    }
+
+
+@router.put("/{name}/pins/{env}")
+async def put_pin(
+    org_id: str = Depends(require_path_org_access),
+    name: str = Path(...),
+    env: str = Path(...),
+    body: PinEnvRequest = Body(...),
+    user: dict = Depends(get_current_user),
+) -> dict[str, Any]:
+    """Pin (deploy) a prompt version to an environment."""
+    canonical = normalize_env(env)
+    if canonical not in CANONICAL_ENVS:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid env {env!r}. Canonical: {list(CANONICAL_ENVS)}",
+        )
+    result = await PromptDeployService().deploy(
+        org_id,
+        prompt_name=name,
+        env=canonical,
+        version=body.version,
+        deployed_by=str(user.get("user_id") or ""),
+    )
+    if result is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Failed to deploy prompt pin",
+        )
+    return {
+        "status": "ok",
+        "feature": "prompts_v2",
+        "live": True,
+        "data": result,
+    }
+
+
+@router.post("/{name}/rollback")
+async def rollback_pin(
+    org_id: str = Depends(require_path_org_access),
+    name: str = Path(...),
+    body: RollbackRequest | None = Body(default=None),
+    user: dict = Depends(get_current_user),
+) -> dict[str, Any]:
+    """Rollback an env pin to the previous discoverable version (default: prod)."""
+    env = normalize_env((body.env if body else None) or "prod")
+    if env not in CANONICAL_ENVS:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid env {env!r}. Canonical: {list(CANONICAL_ENVS)}",
+        )
+    try:
+        result = await PromptDeployService().rollback(
+            org_id,
+            prompt_name=name,
+            env=env,
+            deployed_by=str(user.get("user_id") or ""),
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
+    return {
+        "status": "ok",
+        "feature": "prompts_v2",
+        "live": True,
+        "data": result,
     }

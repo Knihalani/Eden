@@ -210,8 +210,8 @@ export const STATUS_COLORS: Record<string, string> = {
   // (CTA blue) so a "Running" pill no longer looks like a button.
   running: "bg-[var(--status-running-bg)] text-[var(--status-running)]",
   completed: "bg-[var(--terminal-faint)] text-[var(--terminal)]",
-  failed: "bg-[var(--error-dim)] text-[var(--error)]",
-  human_review: "bg-[var(--warning-bg)] text-[var(--warning)]",
+  failed: "bg-[var(--error-muted)] text-[var(--error)]",
+  human_review: "bg-[var(--error-muted)] text-[var(--error)]",
   cancelled: "bg-[var(--bg-tertiary)] text-[var(--text-muted)]",
 };
 
@@ -225,11 +225,11 @@ export const STATUS: Record<string, StatusDescriptor> = {
 };
 
 export const OUTCOME_COLORS: Record<string, string> = {
-  gold: "bg-[var(--warning-bg)] text-[var(--warning)] border-[var(--warning)]/30",
+  gold: "bg-[var(--success-muted)] text-[var(--success)] border-[color-mix(in_srgb,var(--success)_30%,var(--line))]",
   silver: "bg-[var(--bg-tertiary)] text-[var(--text-secondary)] border-[var(--border-default)]",
-  bronze: "bg-[var(--warning-bg)] text-[var(--warning)] border-[var(--warning)]/30",
-  partial: "bg-[var(--accent-faint)] text-[var(--accent)] border-[var(--accent)]/30",
-  failed: "bg-[var(--error-dim)] text-[var(--error)] border-[var(--error)]/30",
+  bronze: "bg-[var(--bg-tertiary)] text-[var(--text-muted)] border-[var(--border-default)]",
+  partial: "bg-[var(--bg-tertiary)] text-[var(--text-secondary)] border-[var(--border-default)]",
+  failed: "bg-[var(--error-muted)] text-[var(--error)] border-[color-mix(in_srgb,var(--error)_30%,var(--line))]",
 };
 
 export const OUTCOMES: Record<string, OutcomeDescriptor> = {
@@ -242,20 +242,20 @@ export const OUTCOMES: Record<string, OutcomeDescriptor> = {
 
 // PR Suggestion lifecycle — distinct from the generic STATUS map (no "running")
 export const PR_STATUSES: Record<string, StatusDescriptor> = {
-  pending:  { label: "Pending review", className: "bg-[var(--warning-bg)] text-[var(--warning)] border-[var(--warning)]/20",            icon: Clock },
-  opened:   { label: "PR opened",      className: "bg-[var(--accent-faint)] text-[var(--accent)] border-[var(--accent)]/20",            icon: GitPullRequest },
-  merged:   { label: "Merged",         className: "bg-[var(--terminal-faint)] text-[var(--terminal)] border-[var(--terminal)]/20",     icon: CheckCircle2 },
-  rejected: { label: "Rejected",       className: "bg-[var(--bg-tertiary)] text-[var(--text-muted)] border-[var(--border-default)]",   icon: XCircle },
+  pending:  { label: "Pending review", className: "bg-[var(--bg-tertiary)] text-[var(--text-secondary)] border-[var(--border-default)]", icon: Clock },
+  opened:   { label: "PR opened",      className: "bg-[var(--bg-tertiary)] text-[var(--text-secondary)] border-[var(--border-default)]", icon: GitPullRequest },
+  merged:   { label: "Merged",         className: "bg-[var(--success-muted)] text-[var(--success)] border-[color-mix(in_srgb,var(--success)_30%,var(--line))]", icon: CheckCircle2 },
+  rejected: { label: "Rejected",       className: "bg-[var(--error-muted)] text-[var(--error)] border-[color-mix(in_srgb,var(--error)_30%,var(--line))]", icon: XCircle },
 };
 
 // N23 improvement plan lifecycle
 export const IMPROVEMENT_PLAN_STATUSES: Record<string, StatusDescriptor> = {
   draft:           { label: "Draft",           className: "bg-[var(--bg-tertiary)] text-[var(--text-secondary)] border-[var(--border-default)]", icon: Clock },
-  pending_review:  { label: "Pending review",  className: "bg-[var(--warning-bg)] text-[var(--warning)] border-[var(--warning)]/20",            icon: Clock },
-  approved:        { label: "Approved",        className: "bg-[var(--accent-faint)] text-[var(--accent)] border-[var(--accent)]/20",            icon: CheckCircle2 },
-  pr_opened:       { label: "PR opened",       className: "bg-[var(--accent-faint)] text-[var(--accent)] border-[var(--accent)]/20",            icon: GitPullRequest },
-  merged:          { label: "Merged",          className: "bg-[var(--terminal-faint)] text-[var(--terminal)] border-[var(--terminal)]/20",     icon: CheckCircle2 },
-  rejected:        { label: "Rejected",        className: "bg-[var(--bg-tertiary)] text-[var(--text-muted)] border-[var(--border-default)]",   icon: XCircle },
+  pending_review:  { label: "Pending review",  className: "bg-[var(--bg-tertiary)] text-[var(--text-secondary)] border-[var(--border-default)]", icon: Clock },
+  approved:        { label: "Approved",        className: "bg-[var(--success-muted)] text-[var(--success)] border-[color-mix(in_srgb,var(--success)_30%,var(--line))]", icon: CheckCircle2 },
+  pr_opened:       { label: "PR opened",       className: "bg-[var(--bg-tertiary)] text-[var(--text-secondary)] border-[var(--border-default)]", icon: GitPullRequest },
+  merged:          { label: "Merged",          className: "bg-[var(--success-muted)] text-[var(--success)] border-[color-mix(in_srgb,var(--success)_30%,var(--line))]", icon: CheckCircle2 },
+  rejected:        { label: "Rejected",        className: "bg-[var(--error-muted)] text-[var(--error)] border-[color-mix(in_srgb,var(--error)_30%,var(--line))]", icon: XCircle },
   snoozed:         { label: "Snoozed",         className: "bg-[var(--bg-tertiary)] text-[var(--text-muted)] border-[var(--border-default)]",   icon: Ban },
   superseded:      { label: "Superseded",      className: "bg-[var(--bg-tertiary)] text-[var(--text-muted)] border-[var(--border-default)]",   icon: CircleSlash },
 };

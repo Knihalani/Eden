@@ -28,7 +28,9 @@ from eden.storage.redis import get_redis_client
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/orgs/{org_id}/api-keys", tags=["api-keys"], dependencies=[Depends(require_path_org_access)])
 
-# Valid scopes for API keys
+# Valid scopes for API keys.
+# Portal KeyScope aliases (ingest, traces:*, evals:run, datasets:read) are
+# accepted alongside the existing SDK/gateway scopes.
 VALID_SCOPES = [
     "references:read",
     "references:write",
@@ -37,6 +39,11 @@ VALID_SCOPES = [
     "ingest:read",
     "ingest:write",
     "ingest:*",
+    "ingest",  # portal KeyScope alias
+    "traces:write",  # portal KeyScope
+    "traces:read",  # portal KeyScope
+    "evals:run",  # portal KeyScope
+    "datasets:read",  # portal KeyScope
     "gateway:read",
     "gateway:write",
     "gateway:*",

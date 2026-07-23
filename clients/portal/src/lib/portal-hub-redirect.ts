@@ -1,94 +1,138 @@
 /**
- * Query-preserving hub consolidations for legacy list URLs.
- * Used by `proxy.ts` middleware (before page render).
- * Keep in lockstep with `next.config.ts` redirects + IA kill-list.
+ * Hub redirects after lab→product cutover.
+ *
+ * Live product paths pass through. Stale /lab/* URLs rewrite to canonical
+ * routes. Remaining legacy stubs soft-land on /unavailable (not /rebuild).
  */
 
 export interface HubRedirectRule {
   destination: string;
-  /** Applied only when the incoming request has no `tab` param. */
   tab?: string;
   defaultParams?: Record<string, string>;
 }
 
-/** Exact-path list consolidations — nested detail routes are excluded by exact match. */
-export const HUB_REDIRECT_RULES: Record<string, HubRedirectRule> = {
-  "/datasets": { destination: "/evals", tab: "datasets" },
-  "/playgrounds": { destination: "/evals", tab: "playgrounds" },
-  "/experiments": { destination: "/evals", tab: "experiments" },
-  "/labeling": { destination: "/evals", tab: "labeling" },
-  "/studio": { destination: "/evals", tab: "studio" },
-  "/synthetic": { destination: "/evals", tab: "synthetic" },
-  "/signals": { destination: "/alerts", tab: "signals" },
-  "/promotions": { destination: "/improve", tab: "promotions" },
-  "/ledger": { destination: "/improve", tab: "ledger" },
-  "/artifacts": { destination: "/improve", tab: "artifacts" },
-  "/fleet": { destination: "/agents", tab: "fleet" },
-  "/incidents": { destination: "/issues", tab: "incidents" },
-  "/users": { destination: "/analytics", tab: "users" },
-  "/insights": { destination: "/analytics", tab: "insights" },
-  "/tools": { destination: "/analytics", tab: "tools" },
-  "/autonomous": { destination: "/improve" },
-  "/closed-loop": { destination: "/improve" },
-  "/apm": { destination: "/traces" },
-  "/replay": { destination: "/debugger", defaultParams: { tab: "replay" } },
-  "/inspector": { destination: "/traces", defaultParams: { mode: "meta" } },
-  "/observability": { destination: "/traces" },
-  // Query-preserving soft nests (next.config drops source query when dest has `?`).
-  "/observability/mcp": {
-    destination: "/traces",
-    defaultParams: { facet: "mcp" },
-  },
-  "/observability/decisions": {
-    destination: "/traces",
-    defaultParams: { facet: "decisions" },
-  },
-  "/observability/memory": {
-    destination: "/traces",
-    defaultParams: { facet: "memory" },
-  },
-  "/observability/retrieval": {
-    destination: "/traces",
-    defaultParams: { facet: "retrieval" },
-  },
-  "/observability/time-travel": {
-    destination: "/debugger",
-    defaultParams: { tab: "time-travel" },
-  },
-  "/observability/cohorts": { destination: "/traces" },
-  "/observability/query": { destination: "/traces" },
-  "/observability/eval": { destination: "/evals", tab: "eval" },
-  "/redteam": { destination: "/guardrails", tab: "policies" },
-  "/profile": { destination: "/settings", tab: "account" },
-  "/billing": { destination: "/settings", tab: "billing" },
-  "/finops": { destination: "/settings", tab: "finops" },
-  "/audit-trail": { destination: "/audit" },
-  "/optimization": { destination: "/cost" },
-  "/optimization/predict": { destination: "/cost", tab: "forecast" },
-  "/optimization/model-advisor": { destination: "/cost", tab: "advisor" },
-  "/optimization/budget": { destination: "/cost", tab: "budget" },
-  "/optimization/outcomes": { destination: "/cost", tab: "outcomes" },
-};
+export const HUB_REDIRECT_RULES: Record<string, HubRedirectRule> = {};
+
+/** Soft-land for removed product URLs. */
+export const STUB_LAND = "/unavailable";
+
+/** Product leaves that are live (no hub bounce). */
+export const LIVE_PRODUCT_PREFIXES = [
+  "/home",
+  "/agents",
+  "/traces",
+  "/sessions",
+  "/issues",
+  "/alerts",
+  "/signals",
+  "/evals",
+  "/improve",
+  "/cost",
+  "/agent",
+  "/debugger",
+  "/compare",
+  "/settings",
+  "/prompts",
+  "/guardrails",
+  "/shell",
+  "/rebuild",
+  "/unavailable",
+] as const;
+
+/** Still-stub / removed surfaces → /unavailable. */
+const STUB_PREFIXES = [
+  "/marketplace",
+  "/multi-agent",
+  "/builder",
+  "/jobs",
+  "/eval-harnesses",
+  "/sandbox",
+  "/redteam",
+  "/observability",
+  "/inspector",
+  "/analytics",
+  "/users",
+  "/tools",
+  "/insights",
+  "/fleet",
+  "/incidents",
+  "/ledger",
+  "/promotions",
+  "/artifacts",
+  "/optimization",
+  "/runs",
+  "/datasets",
+  "/playgrounds",
+  "/experiments",
+  "/labeling",
+  "/studio",
+  "/synthetic",
+  "/docs-fill",
+  "/autonomous",
+  "/closed-loop",
+  "/apm",
+  "/profile",
+  "/billing",
+  "/finops",
+  "/audit-trail",
+  "/debugger-sessions",
+  "/replay",
+  "/_stub",
+  "/audit",
+] as const;
+
+function isLiveProductPath(pathname: string): boolean {
+  return LIVE_PRODUCT_PREFIXES.some(
+    (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
+  );
+}
+
+function withSearch(path: string, search: string): string {
+  if (!search) return path;
+  return `${path}${search.startsWith("?") ? search : `?${search}`}`;
+}
+
+/**
+ * Map /lab/foo → /foo (preserve query via caller).
+ * /lab and /lab/ → /home.
+ */
+export function labToProductPath(pathname: string): string | null {
+  if (pathname === "/lab" || pathname === "/lab/") return "/home";
+  if (!pathname.startsWith("/lab/")) return null;
+  const rest = pathname.slice("/lab".length);
+  if (rest === "/" || rest === "") return "/home";
+  return rest;
+}
 
 export function buildHubRedirectUrl(
   pathname: string,
   search: string,
 ): string | null {
-  const rule = HUB_REDIRECT_RULES[pathname];
-  if (!rule) return null;
+  const p = pathname.split("?")[0].split("#")[0];
 
-  const raw = search.startsWith("?") ? search.slice(1) : search;
-  const merged = new URLSearchParams(raw);
+  const fromLab = labToProductPath(p);
+  if (fromLab) return withSearch(fromLab, search);
 
-  if (rule.tab && !merged.has("tab")) {
-    merged.set("tab", rule.tab);
+  if (p === "/dashboard" || p.startsWith("/dashboard/")) {
+    return withSearch("/home", search);
   }
-  if (rule.defaultParams) {
-    for (const [key, value] of Object.entries(rule.defaultParams)) {
-      if (!merged.has(key)) merged.set(key, value);
+
+  // First-run entry — product home with tour flag (tour UI ships in G15d).
+  if (p === "/onboarding" || p.startsWith("/onboarding/")) {
+    return "/home?tour=1";
+  }
+
+  if (p === "/rebuild" || p.startsWith("/rebuild/")) return null;
+  if (p === "/unavailable" || p.startsWith("/unavailable/")) return null;
+  if (isLiveProductPath(p)) return null;
+
+  for (const prefix of STUB_PREFIXES) {
+    if (p === prefix || p.startsWith(`${prefix}/`)) {
+      return STUB_LAND;
     }
   }
 
-  const qs = merged.toString();
-  return `${rule.destination}${qs ? `?${qs}` : ""}`;
+  const exact = HUB_REDIRECT_RULES[p];
+  if (exact) return exact.destination;
+  return null;
 }

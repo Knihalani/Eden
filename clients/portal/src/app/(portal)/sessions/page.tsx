@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 
-/** Redirect-only — Sessions is a Traces hub lens (IA §7.1). */
-export default function SessionsRedirectPage() {
+/** Sessions are a Traces lens — not a separate Observe product leaf. */
+export default function LabSessionsPage() {
   redirect("/traces?view=sessions");
 }

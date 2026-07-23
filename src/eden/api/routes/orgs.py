@@ -1,9 +1,12 @@
 """Organization management routes for Eden."""
 
+import copy
 import hashlib
+import json
 import logging
 import re
 import secrets
+from typing import Any
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
@@ -40,6 +43,35 @@ logger = logging.getLogger(__name__)
 settings = get_settings()
 
 router = APIRouter(prefix="/orgs", tags=["organizations"])
+
+
+def _parse_settings_dict(value: Any) -> dict:
+    """Coerce org settings from DB (None / JSON str / dict) into a dict."""
+    if value is None:
+        return {}
+    if isinstance(value, dict):
+        return dict(value)
+    if isinstance(value, str):
+        try:
+            parsed = json.loads(value)
+        except (json.JSONDecodeError, TypeError):
+            return {}
+        return dict(parsed) if isinstance(parsed, dict) else {}
+    return {}
+
+
+def _deep_merge_settings(base: dict, patch: dict) -> dict:
+    """Deep-merge ``patch`` into ``base``.
+
+    Nested dicts merge recursively; scalars overwrite; lists replace.
+    """
+    result = copy.deepcopy(base) if base else {}
+    for key, value in (patch or {}).items():
+        if isinstance(value, dict) and isinstance(result.get(key), dict):
+            result[key] = _deep_merge_settings(result[key], value)
+        else:
+            result[key] = copy.deepcopy(value)
+    return result
 
 
 class InviteMemberRequest(BaseModel):
@@ -1010,6 +1042,8 @@ async def list_org_members(
             "email": r["email"],
             "name": r["name"],
             "role": r["role"],
+            # Portal MemberCard.status — members from org_members are active.
+            "status": "active",
             "joined_at": r["joined_at"].isoformat() if r.get("joined_at") else None,
             "last_active_at": r["last_active_at"].isoformat() if r.get("last_active_at") else None,
             # P11: surface 2FA status so org admins can see who's
@@ -1027,23 +1061,48 @@ async def update_org_settings(
     user: dict = Depends(get_current_user),
     org: dict = Depends(require_org_permission_dep("settings:edit")),
 ):
-    """Update organization settings (admin only)."""
+    """Update organization settings (admin only).
+
+    Deep-merges the request patch into existing settings so nested
+    siblings are preserved (scalars overwrite; lists replace).
+    """
     eden_org_id = org["org_id"]
     _ = org_id
 
     client = await get_postgres_client()
 
-    # Get old settings for audit
-    old_settings = await client.fetchval(
+    # Get old settings for audit / merge base
+    raw_old = await client.fetchval(
         "SELECT settings FROM organizations WHERE id = $1",
         eden_org_id,
     )
+    old_settings = _parse_settings_dict(raw_old)
+    patch = dict(settings or {})
+    # Identity rename is a column on organizations — not settings JSON.
+    # Portal Settings "Rename workspace" sends ``{ "name": "..." }``.
+    rename: str | None = None
+    if "name" in patch:
+        raw_name = patch.pop("name")
+        if isinstance(raw_name, str):
+            cleaned = raw_name.strip()
+            if cleaned:
+                rename = cleaned[:256]
 
-    await client.execute(
-        "UPDATE organizations SET settings = $1 WHERE id = $2",
-        settings,
-        eden_org_id,
-    )
+    merged = _deep_merge_settings(old_settings, patch)
+
+    if rename is not None:
+        await client.execute(
+            "UPDATE organizations SET name = $1, settings = $2 WHERE id = $3",
+            rename,
+            merged,
+            eden_org_id,
+        )
+    else:
+        await client.execute(
+            "UPDATE organizations SET settings = $1 WHERE id = $2",
+            merged,
+            eden_org_id,
+        )
 
     # Audit log
     await log_audit_event(
@@ -1053,10 +1112,17 @@ async def update_org_settings(
         action="settings.updated",
         target_type="settings",
         target_id=eden_org_id,
-        metadata={"old_settings": old_settings or {}, "new_settings": settings},
+        metadata={
+            "old_settings": old_settings,
+            "new_settings": merged,
+            **({"renamed_to": rename} if rename is not None else {}),
+        },
     )
 
-    return {"message": "Settings updated", "settings": settings}
+    out: dict = {"message": "Settings updated", "settings": merged}
+    if rename is not None:
+        out["name"] = rename
+    return out
 
 
 @router.post("/{org_id}/archive", response_model=dict)

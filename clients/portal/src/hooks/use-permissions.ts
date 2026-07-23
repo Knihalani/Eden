@@ -122,13 +122,10 @@ export const ROLE_LABELS: Record<string, string> = {
   viewer: "Viewer",
 };
 
-// Role badge colors — token-based so a palette swap propagates. The
-// mapping is intentional: owner is the highest-privilege role (warm
-// amber/warning token), admin is the primary accent (blue), member is
-// the success/terminal green, viewer is the muted neutral.
+// Role badge colors — roles are identity, not good/bad outcomes.
 export const ROLE_COLORS: Record<string, string> = {
-  owner: "border-[var(--warning)]/30 bg-[var(--warning)]/10 text-[var(--warning)]",
-  admin: "border-[var(--accent)]/30 bg-[var(--accent)]/10 text-[var(--accent)]",
-  member: "border-[var(--success)]/30 bg-[var(--success)]/10 text-[var(--success)]",
-  viewer: "border-[var(--border-default)] bg-[var(--bg-tertiary)] text-[var(--text-muted)]",
+  owner: "border-[var(--line)] bg-[var(--bg-inset)] text-[var(--text-secondary)]",
+  admin: "border-[var(--line)] bg-[var(--bg-inset)] text-[var(--text-secondary)]",
+  member: "border-[var(--line)] bg-[var(--bg-inset)] text-[var(--text-muted)]",
+  viewer: "border-[var(--line)] bg-[var(--bg-inset)] text-[var(--text-muted)]",
 };

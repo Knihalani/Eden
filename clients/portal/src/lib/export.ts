@@ -213,31 +213,142 @@ export function downloadXlsx<T extends Record<string, unknown>>(
 }
 
 /**
- * Export a DOM element to PNG using html-to-image. Lazy-loads
- * the library to keep the bundle slim; callers must install it
- * via `npm install html-to-image`.
+ * Export a DOM element to PNG using html-to-image when available,
+ * otherwise rasterize an inner SVG with inlined computed styles
+ * (required for Recharts — naive clones produce blank/shifted PNGs).
  */
 export async function downloadPng(
   filename: string,
   element: HTMLElement,
+  opts?: { backgroundColor?: string },
 ): Promise<void> {
-  // html-to-image is a soft dependency — silently no-op if not
-  // installed. We use a string-based dynamic import so TypeScript
-  // doesn't require the module's types.
+  const bg = opts?.backgroundColor ?? "#0a0a0a";
+  const fn = filename.endsWith(".png") ? filename : `${filename}.png`;
+
   try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const mod: any = await (Function("m", "return import(m)") as any)("html-to-image");
+    const mod = await import("html-to-image");
     const dataUrl = await mod.toPng(element, {
-      backgroundColor: "#03060A",  // var(--bg-base — hardcoded: html-to-image can't read CSS vars
+      backgroundColor: bg,
       pixelRatio: 2,
+      cacheBust: true,
+      skipFonts: true,
     });
     const a = document.createElement("a");
     a.href = dataUrl;
+    a.download = fn;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    return;
+  } catch {
+    // Soft dependency / capture failure — SVG fallback.
+  }
+
+  await downloadSvgAsPng(fn, element, bg);
+}
+
+const SVG_STYLE_PROPS = [
+  "fill",
+  "stroke",
+  "stroke-width",
+  "stroke-dasharray",
+  "stroke-linecap",
+  "stroke-linejoin",
+  "opacity",
+  "fill-opacity",
+  "stroke-opacity",
+  "font-size",
+  "font-family",
+  "font-weight",
+  "text-anchor",
+  "dominant-baseline",
+] as const;
+
+function inlineSvgStyles(source: Element, target: Element) {
+  if (source instanceof SVGElement && target instanceof SVGElement) {
+    const cs = getComputedStyle(source);
+    for (const prop of SVG_STYLE_PROPS) {
+      const val = cs.getPropertyValue(prop);
+      if (!val || val === "none" || val.includes("var(")) continue;
+      target.setAttribute(prop, val);
+    }
+  }
+  const sKids = Array.from(source.children);
+  const tKids = Array.from(target.children);
+  for (let i = 0; i < Math.min(sKids.length, tKids.length); i++) {
+    inlineSvgStyles(sKids[i]!, tKids[i]!);
+  }
+}
+
+function loadImageEl(src: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error("Failed to load SVG for PNG export"));
+    img.src = src;
+  });
+}
+
+/** Rasterize the primary SVG under `element` to a PNG download. */
+export async function downloadSvgAsPng(
+  filename: string,
+  element: HTMLElement,
+  backgroundColor = "#0a0a0a",
+): Promise<void> {
+  if (typeof window === "undefined") return;
+  const svg =
+    (element.querySelector("svg.recharts-surface") as SVGSVGElement | null) ??
+    (element.querySelector(".recharts-wrapper svg") as SVGSVGElement | null) ??
+    (element.querySelector("svg") as SVGSVGElement | null);
+  if (!svg) {
+    console.warn("PNG export failed: no SVG found in element");
+    return;
+  }
+
+  const rect = svg.getBoundingClientRect();
+  const width = Math.max(
+    1,
+    Math.ceil(rect.width || Number(svg.getAttribute("width")) || 640),
+  );
+  const height = Math.max(
+    1,
+    Math.ceil(rect.height || Number(svg.getAttribute("height")) || 280),
+  );
+
+  const clone = svg.cloneNode(true) as SVGSVGElement;
+  inlineSvgStyles(svg, clone);
+  clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+  clone.setAttribute("xmlns:xlink", "http://www.w3.org/1999/xlink");
+  clone.setAttribute("width", String(width));
+  clone.setAttribute("height", String(height));
+  clone.setAttribute("viewBox", `0 0 ${width} ${height}`);
+  clone.style.width = `${width}px`;
+  clone.style.height = `${height}px`;
+
+  const xml = new XMLSerializer().serializeToString(clone);
+  const blob = new Blob([xml], { type: "image/svg+xml;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+
+  try {
+    const img = await loadImageEl(url);
+    const scale = 2;
+    const canvas = document.createElement("canvas");
+    canvas.width = width * scale;
+    canvas.height = height * scale;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) throw new Error("canvas unsupported");
+    ctx.fillStyle = backgroundColor;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.setTransform(scale, 0, 0, scale, 0, 0);
+    ctx.drawImage(img, 0, 0, width, height);
+    const pngUrl = canvas.toDataURL("image/png");
+    const a = document.createElement("a");
+    a.href = pngUrl;
     a.download = filename.endsWith(".png") ? filename : `${filename}.png`;
     document.body.appendChild(a);
     a.click();
     a.remove();
-  } catch (err) {
-    console.warn("PNG export failed (html-to-image not installed?)", err);
+  } finally {
+    URL.revokeObjectURL(url);
   }
 }

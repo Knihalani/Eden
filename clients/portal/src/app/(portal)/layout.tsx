@@ -1,10 +1,5 @@
-/**
- * Portal route-group layout — AppShell + density (Phase 1–7 rebuild).
- */
-
-import { PortalProviders } from "./providers";
-import { DensityProvider } from "@/components/shell/density-provider";
 import { AppShell } from "@/components/shell/app-shell";
+import { PortalProviders } from "@/components/providers/portal-providers";
 
 export default function PortalLayout({
   children,
@@ -13,9 +8,7 @@ export default function PortalLayout({
 }) {
   return (
     <PortalProviders>
-      <DensityProvider>
-        <AppShell>{children}</AppShell>
-      </DensityProvider>
+      <AppShell>{children}</AppShell>
     </PortalProviders>
   );
 }

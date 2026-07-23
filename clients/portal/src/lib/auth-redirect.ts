@@ -12,13 +12,12 @@
  */
 
 /** Default after sign-in when no safe ``redirect_url`` is present. */
-export const AUTH_SIGN_IN_FALLBACK = "/dashboard";
+export const AUTH_SIGN_IN_FALLBACK = "/home";
 
 /**
- * Default after sign-up — dashboard first-run checklist only.
- * Product tour opens via Tour / Resume (``?onboarding=1``), not auto.
+ * Default after sign-up — product home.
  */
-export const AUTH_SIGN_UP_FALLBACK = "/dashboard";
+export const AUTH_SIGN_UP_FALLBACK = "/home";
 
 const AUTH_ROUTE_PREFIXES = [
   "/sign-in",
