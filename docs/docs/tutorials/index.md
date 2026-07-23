@@ -52,4 +52,4 @@ You'll need:
 - A provider key (e.g. `OPENAI_API_KEY`) for LLM calls
 
 If anything doesn't work, run `python -m eden_sdk.doctor` /
-`npx @eden-ai/sdk doctor`, or re-check [Authenticate](/how-to/auth).
+`npx eden-doctor`, or re-check [Authenticate](/how-to/auth).

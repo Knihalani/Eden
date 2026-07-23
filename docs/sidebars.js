@@ -1,10 +1,9 @@
 // @ts-check
 /** @type {import('@docusaurus/plugin-content-docs').SidebarsConfig} */
 
-// Four Diátaxis-aligned sidebars. Each surfaces in the navbar with
-// its own dropdown so users can navigate to the kind of content that
-// matches their need (learning a thing / doing a thing / looking
-// something up / understanding a thing).
+// Four Diátaxis-aligned sidebars. Each surfaces in the navbar so
+// users can navigate to the kind of content that matches their need
+// (learning / doing / looking up / understanding).
 //
 // Doc IDs are the file path under `docs/docs/` with the `.md`/`.mdx`
 // extension stripped.
@@ -30,24 +29,38 @@ const howtoSidebar = {
   howto: [
     {
       type: 'category',
-      label: 'How-to guides',
+      label: 'Auth & access',
       collapsed: false,
       items: [
         'how-to/index',
         'how-to/auth',
         'how-to/api-keys',
-        'how-to/deploy',
-        'how-to/github',
-        'how-to/pii',
-        'how-to/cost-budgets',
+        'how-to/sso',
+      ],
+    },
+    {
+      type: 'category',
+      label: 'Integrate',
+      collapsed: false,
+      items: [
         'how-to/auto-instrument',
-        'how-to/judges',
         'how-to/connect-llm-provider',
         'how-to/connect-any-agent',
         'how-to/mcp-cursor',
         'how-to/agent-sessions',
+        'how-to/github',
+        'how-to/deploy',
+      ],
+    },
+    {
+      type: 'category',
+      label: 'Govern',
+      collapsed: false,
+      items: [
+        'how-to/pii',
+        'how-to/cost-budgets',
+        'how-to/judges',
         'how-to/failure-fixtures',
-        'how-to/sso',
         'how-to/webhooks',
       ],
     },
@@ -92,10 +105,16 @@ const referenceSidebar = {
         'reference/webhooks',
       ],
     },
+    'intro/changelog',
+  ],
+};
+
+const explanationSidebar = {
+  explanation: [
     {
       type: 'category',
       label: 'Explanation',
-      collapsed: true,
+      collapsed: false,
       items: [
         'explanation/architecture',
         'explanation/data-model',
@@ -105,7 +124,6 @@ const referenceSidebar = {
         'explanation/sampling-and-retention',
       ],
     },
-    'intro/changelog',
   ],
 };
 
@@ -113,4 +131,5 @@ module.exports = {
   ...tutorialsSidebar,
   ...howtoSidebar,
   ...referenceSidebar,
+  ...explanationSidebar,
 };

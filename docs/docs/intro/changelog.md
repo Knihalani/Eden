@@ -6,15 +6,16 @@ sidebar_position: 99
 
 # What's new
 
-## SDK 0.3.0 — July 2026
+## SDK 0.3.2 — July 2026
 
 ### SDKs
 
-- **Python `eden-sdk` 0.3.0** — Pydantic AI instrumentation, HTTP capture,
-  OTel bridge, logging forwarder, session-first API, `eden doctor` CLI.
-- **TypeScript `@eden-ai/sdk` 0.3.0** — Mastra `wrapMastra`, HTTP capture,
+- **Python `eden-sdk` 0.3.2** — Pydantic AI instrumentation, Bedrock + Gemini
+  auto-instrumentation, HTTP capture, OTel bridge, logging forwarder,
+  session-first API, `python -m eden_sdk.doctor` / `eden-doctor` CLI.
+- **TypeScript `@eden-ai/sdk` 0.3.2** — Mastra `wrapMastra`, HTTP capture,
   `detectInstalledFrameworks` + `wrap*` pattern (replaces broken
-  `instrument()` global patch docs), session API, `npx @eden-ai/sdk doctor`.
+  `instrument()` global patch docs), session API, `npx eden-doctor`.
 
 ### Docs
 
@@ -25,7 +26,7 @@ sidebar_position: 99
 - [Security model](/explanation/security-model) — tenancy, encryption, audit
 - [Quickstart](/quickstart) — **Fill in** creates an API key into a runnable snippet (when signed in)
 - SDKs default to `https://api.edenobservability.com` (no `EDEN_BASE_URL` required)
-- Auto-instrumentation matrix: Pydantic AI, Mastra, HTTP capture tiers
+- Auto-instrumentation matrix: Pydantic AI, Bedrock, Gemini, Mastra, HTTP capture tiers
 - [API endpoint](/how-to/deploy) — connect your app; DNS for `api.edenobservability.com`
 ### Portal
 

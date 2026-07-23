@@ -68,7 +68,7 @@ Validate with:
 ```bash
 python -m eden_sdk.doctor
 # or
-npx @eden-ai/sdk doctor
+npx eden-doctor
 ```
 
 ## Troubleshooting

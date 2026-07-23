@@ -31,7 +31,7 @@ Validate with:
 
 ```bash
 python -m eden_sdk.doctor
-npx @eden-ai/sdk doctor
+npx eden-doctor
 ```
 
 ## Platform configuration (Eden-operated)

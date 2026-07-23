@@ -23,7 +23,7 @@ export EDEN_ORG_ID="org_…"
 # EDEN_BASE_URL is optional — SDKs already default to the production API
 ```
 
-Validate with `python -m eden_sdk.doctor` or `npx @eden-ai/sdk doctor`.
+Validate with `python -m eden_sdk.doctor` or `npx eden-doctor`.
 
 ## Portal (Vercel)
 
