@@ -2,5 +2,8 @@ export { AuthSplitLayout } from "./auth-split-layout";
 export { AuthBrandPanel } from "./auth-brand-panel";
 export { AuthFormCard } from "./auth-form-card";
 export { AuthPageIntro } from "./auth-page-intro";
+export { AuthLoadingShell } from "./auth-loading-shell";
+export { AuthMessageCard } from "./auth-message-card";
+export { InviteAcceptPanel } from "./invite-accept-panel";
 export { ClerkAuthFallback } from "./clerk-auth-fallback";
 export { clerkAppearance } from "./clerk-theme";

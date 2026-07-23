@@ -13,7 +13,7 @@ export const PRODUCT_VERSION = "v3.0";
 export const PRODUCT_COPYRIGHT_YEAR = 2026;
 
 /** Support / contact — marketing, auth, error, and billing surfaces. */
-export const SUPPORT_EMAIL = "hello@edenobservability.com";
+export const SUPPORT_EMAIL = "kaiav@edenobservability.com";
 
 /** Canonical OpenAI-compatible gateway base URL (production). */
 export const GATEWAY_URL = "https://api.edenobservability.com/gateway/v1";
@@ -28,8 +28,11 @@ export const FREE_TIER_CAP_SHORT = `$${FREE_TIER_PERSONAL_CAP_USD} personal / $$
 /** Full free-tier marketing sentence — landing, pricing, CTA. */
 export const FREE_TIER_TAGLINE = `Free during public beta · ${FREE_TIER_CAP_SHORT} monthly spend cap · No credit card.`;
 
-/** Sales contact — used by billing plan cards. */
-export const SALES_EMAIL = "sales@edenobservability.com";
+/** Sales contact — used by billing plan cards + Enterprise pricing CTA. */
+export const SALES_EMAIL = "kaiav@edenobservability.com";
+
+/** Canonical public site. */
+export const SITE_URL = "https://edenobservability.com";
 
 /** Public Docusaurus docs site (hosted separately from the portal). */
 export const DOCS_URL = "https://docs.edenobservability.com";

@@ -13,9 +13,11 @@ function makeQueryClient() {
   return new QueryClient({
     defaultOptions: {
       queries: {
-        staleTime: 20_000,
-        gcTime: 5 * 60_000,
-        refetchOnWindowFocus: true,
+        // Prefer cache hits across portal navigations; leaf pages can
+        // override with a tighter staleTime when freshness matters.
+        staleTime: 45_000,
+        gcTime: 10 * 60_000,
+        refetchOnWindowFocus: false,
         retry: (failureCount, error) => {
           if (error instanceof ApiError && error.status >= 400 && error.status < 500) {
             return false;

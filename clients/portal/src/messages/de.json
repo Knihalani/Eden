@@ -821,9 +821,38 @@
     "signin": "Anmelden"
   },
   "hero": {
-    "title": "Eden — Observability und Verbesserung für KI-Agenten",
-    "subtitle": "Tracing, Evaluation und überprüfbare PR-Vorschläge für LLM-Apps und Agenten.",
-    "cta": "Loslegen"
+    "title": "Jeden Agentenlauf sehen. Fehler beheben.",
+    "subtitle": "Drop-in-Observability für KI-Agenten — Traces, Evals und überprüfbare Verbesserungen in einer Schleife.",
+    "cta": "Loslegen",
+    "signIn": "Anmelden",
+    "docs": "Docs"
+  },
+  "marketing": {
+    "observeKicker": "Observe",
+    "observeTitle": "Traces, die Produktion überleben",
+    "observeBody": "Sessions, Spans, Detektoren und Issues — gruppiert, damit du Fehler triagieren kannst, ohne Logs zu durchsuchen.",
+    "evaluateKicker": "Evaluate",
+    "evaluateTitle": "Prompts, Datasets, Live-A/B",
+    "evaluateBody": "Prompts versionieren, Umgebungen pinnen und Arme an den Metriken vergleichen, die zählen — bevor du shippst.",
+    "improveKicker": "Improve",
+    "improveTitle": "Die Schleife aus echten Fehlern schließen",
+    "improveBody": "Pläne aus Traces, die du schon hast. Freigeben, ablehnen oder snoozen — und den nächsten Deploy mit denselben Instrumenten beobachten.",
+    "installKicker": "Install",
+    "installTitle": "In wenigen Zeilen instrumentieren",
+    "closingTitle": "Heute instrumentieren. Morgen verbessern."
+  },
+  "pricing": {
+    "kicker": "Preise",
+    "title": "Kostenlos starten. Upgraden, wenn die Flotte wächst.",
+    "lead": "Kostenlos in der Public Beta. Zu Team wechseln für Orgs, Evals und Alerts — oder uns für Enterprise kontaktieren."
+  },
+  "about": {
+    "kicker": "Über uns",
+    "title": "Für Teams, die Agenten in Produktion betreiben."
+  },
+  "contact": {
+    "kicker": "Kontakt",
+    "title": "Schreib uns"
   },
   "common": {
     "loading": "Wird geladen…",

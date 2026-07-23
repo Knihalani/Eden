@@ -365,6 +365,17 @@ select.ds-input {
   }
 }
 
+.auth-card .cl-socialButtonsBlockButton {
+  background-color: #000000 !important;
+  border: 1px solid rgba(255, 255, 255, 0.14) !important;
+  color: #ffffff !important;
+  box-shadow: none !important;
+}
+
+.auth-card .cl-socialButtonsBlockButtonText {
+  color: #ffffff !important;
+}
+
 /* Neutralize Clerk default card chrome so our radius is the only one */
 .auth-card .cl-rootBox,
 .auth-card .cl-cardBox,

@@ -1,4 +1,5 @@
 import { AppShell } from "@/components/shell/app-shell";
+import { AppClerkProvider } from "@/components/providers/app-clerk-provider";
 import { PortalProviders } from "@/components/providers/portal-providers";
 
 export default function PortalLayout({
@@ -7,8 +8,10 @@ export default function PortalLayout({
   children: React.ReactNode;
 }) {
   return (
-    <PortalProviders>
-      <AppShell>{children}</AppShell>
-    </PortalProviders>
+    <AppClerkProvider>
+      <PortalProviders>
+        <AppShell>{children}</AppShell>
+      </PortalProviders>
+    </AppClerkProvider>
   );
 }

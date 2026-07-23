@@ -1,6 +1,6 @@
 /**
  * Clerk — Signal Black (gold action on near-black).
- * Card chrome owned by `.auth-card`.
+ * Card chrome owned by `.auth-card`. Densely tuned for split layout.
  */
 
 const clerkAppearance = {
@@ -12,14 +12,14 @@ const clerkAppearance = {
     colorText: "#FFFFFF",
     colorTextSecondary: "#A1A1AA",
     colorTextOnPrimaryBackground: "#000000",
-    colorDanger: "#E07A7A",
+    colorDanger: "#EF4444",
     colorSuccess: "#4ECF96",
-    colorWarning: "#E0B45C",
+    colorWarning: "#E8B84A",
     colorNeutral: "#A1A1AA",
     borderRadius: "0.5rem",
     fontFamily: "inherit",
     fontSize: "0.875rem",
-    spacingUnit: "1rem",
+    spacingUnit: "0.875rem",
   },
   elements: {
     rootBox: { width: "100%" },
@@ -43,7 +43,7 @@ const clerkAppearance = {
     headerTitle: {
       color: "#FFFFFF",
       textAlign: "center",
-      fontWeight: "560",
+      fontWeight: "600",
       letterSpacing: "-0.02em",
       fontSize: "1.0625rem",
     },
@@ -52,8 +52,8 @@ const clerkAppearance = {
       textAlign: "center",
       fontSize: "0.8125rem",
     },
-    header: { marginBottom: "1rem" },
-    main: { gap: "0.75rem" },
+    header: { marginBottom: "0.875rem" },
+    main: { gap: "0.625rem" },
     formFieldLabel: {
       color: "#D4D4D8",
       fontSize: "0.75rem",
@@ -62,25 +62,25 @@ const clerkAppearance = {
     },
     formFieldInput: {
       backgroundColor: "#000000",
-      borderColor: "rgba(255,255,255,0.12)",
+      borderColor: "rgba(255,255,255,0.14)",
       color: "#FFFFFF",
       borderRadius: "0.5rem",
-      height: "2.5rem",
+      height: "2.375rem",
     },
     formButtonPrimary: {
       backgroundColor: "#E8B84A",
       color: "#000000",
       fontWeight: "600",
       borderRadius: "0.5rem",
-      height: "2.5rem",
+      height: "2.375rem",
       boxShadow: "none",
     },
     socialButtonsBlockButton: {
       backgroundColor: "#000000",
-      borderColor: "rgba(255,255,255,0.12)",
+      borderColor: "rgba(255,255,255,0.14)",
       color: "#FFFFFF",
       borderRadius: "0.5rem",
-      height: "2.5rem",
+      height: "2.375rem",
       boxShadow: "none",
     },
     socialButtonsBlockButtonText: {
@@ -96,18 +96,18 @@ const clerkAppearance = {
       marginTop: "0.5rem",
       paddingTop: "0",
     },
-    footerAction: { marginTop: "0.75rem" },
+    footerAction: { marginTop: "0.625rem" },
     footerActionLink: { color: "#E8B84A", fontWeight: "500" },
     footerActionText: { color: "#A1A1AA" },
     identityPreviewText: { color: "#FFFFFF" },
     identityPreviewEditButton: { color: "#E8B84A" },
     formFieldInputShowPasswordButton: { color: "#8B8B96" },
-    formFieldErrorText: { color: "#E07A7A" },
+    formFieldErrorText: { color: "#EF4444" },
     alertText: { color: "#FFFFFF" },
     formResendCodeLink: { color: "#E8B84A" },
     otpCodeFieldInput: {
       backgroundColor: "#000000",
-      borderColor: "rgba(255,255,255,0.12)",
+      borderColor: "rgba(255,255,255,0.14)",
       color: "#FFFFFF",
       borderRadius: "0.5rem",
     },

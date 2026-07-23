@@ -49,6 +49,15 @@ const isPublicRoute = createRouteMatcher([
   // served as static. Must be public or crawlers get 404.
   "/robots.txt",
   "/sitemap.xml",
+  // App Router OG / Twitter image special files (crawlers + link previews).
+  "/opengraph-image",
+  "/opengraph-image/(.*)",
+  "/twitter-image",
+  "/twitter-image/(.*)",
+  "/og.png",
+  "/og-pricing.png",
+  "/icon(.*)",
+  "/apple-icon(.*)",
   "/api/proxy/(.*)",  // explicit / after proxy so the matcher sees
                         // segments, not just a trailing string
   "/api/health",

@@ -11,9 +11,14 @@ import {
   patchPortalCatalog,
 } from "@/lib/portal-catalog";
 
-const OBSERVE_STALE = 20_000;
+const OBSERVE_STALE = 45_000;
 const SETTINGS_STALE = 60_000;
 const ASSIST_STALE = 10_000;
+
+const SHELL_QUERY = {
+  staleTime: OBSERVE_STALE,
+  refetchOnWindowFocus: false as const,
+};
 
 function pathIn(pathname: string, prefixes: string[]): boolean {
   return prefixes.some((p) => pathname === p || pathname.startsWith(`${p}/`));
@@ -23,9 +28,9 @@ function pathIn(pathname: string, prefixes: string[]): boolean {
  * Prefetch portal read models for the active org and mirror into
  * ``portal-catalog`` so fixture helpers resolve live rows.
  *
- * Always warms Observe + alerts (Home / shell). Secondary domains
- * fetch only when the user is on a matching route — avoids 20 GETs
- * on every page mount while still sharing RQ cache with leaf pages.
+ * Shell-light always: agents / issues / signals / alerts.
+ * Heavy lists (traces, sessions) only on Observe-ish routes — cuts
+ * parallel GETs on Settings / Evals / Assist mounts.
  */
 export function PortalCatalogSync() {
   const { currentOrg } = useOrg();
@@ -40,6 +45,16 @@ export function PortalCatalogSync() {
   const onDebugger = pathIn(pathname, ["/debugger"]);
   const onAgent = pathIn(pathname, ["/agent"]);
   const onCost = pathIn(pathname, ["/cost", "/home"]);
+  const onObserveHeavy = pathIn(pathname, [
+    "/home",
+    "/traces",
+    "/sessions",
+    "/issues",
+    "/signals",
+    "/alerts",
+    "/agents",
+    "/debugger",
+  ]);
 
   useEffect(() => {
     if (!orgId) {
@@ -49,54 +64,54 @@ export function PortalCatalogSync() {
     patchPortalCatalog({ orgId });
   }, [orgId]);
 
-  // ── Always: Observe + alerts (Home / sidebar / cross-links) ──
+  // ── Always (shell-light) ──
   const agents = useOrgQuery(
     queryKeys.portal.agents(orgId),
     orgId,
     () => portalApi.agents(orgId!),
-    { staleTime: OBSERVE_STALE },
+    SHELL_QUERY,
   );
   const traces = useOrgQuery(
     queryKeys.portal.traces(orgId),
     orgId,
     () => portalApi.traces(orgId!),
-    { staleTime: OBSERVE_STALE },
+    { ...SHELL_QUERY, enabled: onObserveHeavy },
   );
   const sessions = useOrgQuery(
     queryKeys.portal.sessions(orgId),
     orgId,
     () => portalApi.sessions(orgId!),
-    { staleTime: OBSERVE_STALE },
+    { ...SHELL_QUERY, enabled: onObserveHeavy },
   );
   const issues = useOrgQuery(
     queryKeys.portal.issues(orgId),
     orgId,
     () => portalApi.issues(orgId!),
-    { staleTime: OBSERVE_STALE },
+    SHELL_QUERY,
   );
   const signals = useOrgQuery(
     queryKeys.portal.signals(orgId),
     orgId,
     () => portalApi.signals(orgId!),
-    { staleTime: OBSERVE_STALE },
+    SHELL_QUERY,
   );
   const alertRules = useOrgQuery(
     queryKeys.portal.alertRules(orgId),
     orgId,
     () => portalApi.alertRules(orgId!),
-    { staleTime: OBSERVE_STALE },
+    SHELL_QUERY,
   );
   const alertEvents = useOrgQuery(
     queryKeys.portal.alertEvents(orgId),
     orgId,
     () => portalApi.alertEvents(orgId!),
-    { staleTime: OBSERVE_STALE },
+    SHELL_QUERY,
   );
   const costDrivers = useOrgQuery(
     queryKeys.portal.costDrivers(orgId),
     orgId,
     () => portalApi.costDrivers(orgId!),
-    { staleTime: OBSERVE_STALE, enabled: onCost },
+    { ...SHELL_QUERY, enabled: onCost },
   );
 
   // ── Route-scoped ──
