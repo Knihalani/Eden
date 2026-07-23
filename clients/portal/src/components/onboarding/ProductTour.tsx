@@ -45,11 +45,6 @@ interface Rect {
   height: number;
 }
 
-function prefersReducedMotion(): boolean {
-  if (typeof window === "undefined") return false;
-  return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-}
-
 function measureTarget(targetId: string | undefined): Rect | null {
   if (!targetId || typeof document === "undefined") return null;
   const el = document.querySelector(
@@ -167,6 +162,9 @@ export function ProductTour({
   useEffect(() => {
     if (!open) return;
     window.dispatchEvent(new Event("eden:product-tour"));
+    // Warm settings view chunks before the tour navigates there.
+    void import("@/lab/settings/settings-keys-view");
+    void import("@/lab/settings/settings-workspace-view");
     return () => {
       window.dispatchEvent(new Event("eden:product-tour-end"));
     };
@@ -228,27 +226,43 @@ export function ProductTour({
   useLayoutEffect(() => {
     if (!open) return;
     let cancelled = false;
-    let attempts = 0;
+    let settleTimer: number | undefined;
+    const started = performance.now();
+    // Wall-clock budget (not frame count) — slow route/chunk loads
+    // used to exceed ~40 frames and lose the spotlight silently.
+    const BUDGET_MS = 2500;
+
+    const settleHole = (targetId: string) => {
+      if (cancelled) return;
+      const r = measureTarget(targetId);
+      setHole(r);
+      setReady(true);
+      navigating.current = false;
+    };
+
+    const afterScroll = (targetId: string) => {
+      // Double rAF: wait for layout after scrollIntoView(auto).
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => settleHole(targetId));
+      });
+    };
 
     const tick = () => {
       if (cancelled) return;
       if (step.kind === "nav" && step.targetId) {
-        const r = measureTarget(step.targetId);
+        const targetId = step.targetId;
+        const r = measureTarget(targetId);
         if (r) {
-          setHole(r);
-          setReady(true);
-          navigating.current = false;
           const el = document.querySelector(
-            `[data-tour-id="${step.targetId.replace(/"/g, "")}"]`,
-          );
-          el?.scrollIntoView({
-            block: "nearest",
-            behavior: prefersReducedMotion() ? "auto" : "smooth",
-          });
+            `[data-tour-id="${targetId.replace(/"/g, "")}"]`,
+          ) as HTMLElement | null;
+          // Instant scroll during the tour — smooth scroll fought the
+          // spotlight remeasure and felt like the hole was sliding off.
+          el?.scrollIntoView({ block: "nearest", behavior: "auto" });
+          afterScroll(targetId);
           return;
         }
-        attempts += 1;
-        if (attempts < 40) {
+        if (performance.now() - started < BUDGET_MS) {
           requestAnimationFrame(tick);
           return;
         }
@@ -260,12 +274,12 @@ export function ProductTour({
       setReady(true);
     };
 
-    const t = window.setTimeout(tick, 40);
+    settleTimer = window.setTimeout(tick, 40);
     return () => {
       cancelled = true;
-      window.clearTimeout(t);
+      if (settleTimer !== undefined) window.clearTimeout(settleTimer);
     };
-  }, [open, step, pathname, stepIndex]);
+  }, [open, step, pathname, stepIndex, searchKey]);
 
   useEffect(() => {
     if (!open) return;
@@ -278,19 +292,29 @@ export function ProductTour({
     };
   }, [open, refreshHole]);
 
+  function hrefFor(index: number): string | undefined {
+    return PRODUCT_TOUR_STEPS[index]?.href;
+  }
+
   function goNext() {
     if (busy) return;
     if (stepIndex >= PRODUCT_TOUR_TOTAL - 1) {
       onFinish();
       return;
     }
-    setReady(false);
+    // Only hide the card when the next step navigates — same-route
+    // steps used to flash the whole overlay off for a frame.
+    if (hrefFor(stepIndex + 1) !== hrefFor(stepIndex)) {
+      setReady(false);
+    }
     onStepChange(stepIndex + 1);
   }
 
   function goBack() {
     if (busy || stepIndex <= 0) return;
-    setReady(false);
+    if (hrefFor(stepIndex - 1) !== hrefFor(stepIndex)) {
+      setReady(false);
+    }
     onStepChange(stepIndex - 1);
   }
 
@@ -341,12 +365,22 @@ export function ProductTour({
           onFinish();
           return;
         }
-        setReady(false);
+        if (
+          PRODUCT_TOUR_STEPS[stepIndex + 1]?.href !==
+          PRODUCT_TOUR_STEPS[stepIndex]?.href
+        ) {
+          setReady(false);
+        }
         onStepChange(stepIndex + 1);
       } else if (e.key === "ArrowLeft") {
         e.preventDefault();
         if (busy || stepIndex <= 0) return;
-        setReady(false);
+        if (
+          PRODUCT_TOUR_STEPS[stepIndex - 1]?.href !==
+          PRODUCT_TOUR_STEPS[stepIndex]?.href
+        ) {
+          setReady(false);
+        }
         onStepChange(stepIndex - 1);
       }
     };
@@ -384,18 +418,17 @@ export function ProductTour({
     <AnimatePresence>
       {open && (
         <div
-          className="fixed inset-0 z-[80]"
+          className="fixed inset-0 z-[90]"
           role="dialog"
           aria-modal="true"
           aria-labelledby="eden-tour-title"
           aria-describedby="eden-tour-body"
         >
           <motion.div
-            key={`mask-${step.id}`}
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            transition={{ duration: 0.22 }}
+            transition={{ duration: 0.18 }}
             className="absolute inset-0"
             onClick={dismissUnlessHole}
           >

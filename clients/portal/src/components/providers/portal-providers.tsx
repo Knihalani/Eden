@@ -18,6 +18,9 @@ function makeQueryClient() {
         staleTime: 45_000,
         gcTime: 10 * 60_000,
         refetchOnWindowFocus: false,
+        // Hydrated / already-fetched shards should not remount-fetch
+        // on every soft navigation (tour steps, sidebar).
+        refetchOnMount: false,
         retry: (failureCount, error) => {
           if (error instanceof ApiError && error.status >= 400 && error.status < 500) {
             return false;

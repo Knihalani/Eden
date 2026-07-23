@@ -9,18 +9,37 @@ import {
   type ReactNode,
 } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   useAuth as useClerkAuth,
   useClerk,
   useOrganizationList,
   useUser,
 } from "@clerk/nextjs";
+import { useQueryClient } from "@tanstack/react-query";
 import { ChevronDown, LogOut } from "lucide-react";
 import { useOrg } from "@/hooks/use-org";
 import { useAuth } from "@/hooks/use-auth";
 import { api } from "@/lib/api/resources";
+import { CHROME_BANNER_ATTR } from "@/lib/overlay-defer";
 import { cn } from "@/lib/utils";
 import type { Organization } from "@/lib/types";
+
+/** Marks ``<html>`` so the product tour defers while chrome banners show. */
+function ChromeBannerMark({ active }: { active: boolean }) {
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    const root = document.documentElement;
+    if (active) {
+      root.setAttribute(CHROME_BANNER_ATTR, "1");
+      return () => {
+        root.removeAttribute(CHROME_BANNER_ATTR);
+      };
+    }
+    root.removeAttribute(CHROME_BANNER_ATTR);
+  }, [active]);
+  return null;
+}
 
 function useDismissibleOpen(initial = false) {
   const [open, setOpen] = useState(initial);
@@ -50,6 +69,8 @@ function WorkspaceSwitcher({ collapsed }: { collapsed: boolean }) {
   const { currentOrg, organizations } = useOrg();
   const { setActive, isLoaded } = useOrganizationList();
   const { open, setOpen, rootRef } = useDismissibleOpen();
+  const router = useRouter();
+  const queryClient = useQueryClient();
   const listId = useId();
   const [busy, setBusy] = useState(false);
 
@@ -69,14 +90,20 @@ function WorkspaceSwitcher({ collapsed }: { collapsed: boolean }) {
       try {
         await setActive({ organization: clerkId });
         setOpen(false);
-        if (typeof window !== "undefined") {
-          window.location.assign("/home");
-        }
+        // Soft navigate — hard assign used to flash a full reload.
+        // Drop cached org shards so the new workspace cannot paint
+        // stale agents/traces under the previous org id.
+        await queryClient.cancelQueries();
+        queryClient.clear();
+        router.push("/home");
+        router.refresh();
       } catch {
+        /* keep picker open */
+      } finally {
         setBusy(false);
       }
     },
-    [busy, currentOrg?.id, setActive, setOpen],
+    [busy, currentOrg?.id, queryClient, router, setActive, setOpen],
   );
 
   if (collapsed) {
@@ -342,19 +369,34 @@ export function PortalStatusBanners() {
     }
   }, [refreshOrgs, refreshUserWithRetry]);
 
-  if (loading && !currentOrg && organizations.length === 0 && !authError) {
-    return (
+  const loadingBanner =
+    loading && !currentOrg && organizations.length === 0 && !authError;
+  const sessionBanner = Boolean(authError && authErrorKind === "session");
+  const serverBanner = Boolean(authError && authErrorKind === "server");
+  const syncBanner = Boolean(orgSyncing);
+  const emptyBanner =
+    !loading && !currentOrg && organizations.length === 0 && !authError;
+  const showChromeBanner =
+    loadingBanner ||
+    sessionBanner ||
+    serverBanner ||
+    syncBanner ||
+    emptyBanner;
+
+  let banner: ReactNode = null;
+  if (loadingBanner) {
+    banner = (
       <div
         className="border-b border-[var(--line)] bg-[var(--bg-elevated)] px-4 py-2"
         role="status"
       >
-        <p className="type-meta text-[var(--text-faint)]">Loading workspace…</p>
+        <p className="type-meta text-[var(--text-faint)]">
+          Loading workspace…
+        </p>
       </div>
     );
-  }
-
-  if (authError && authErrorKind === "session") {
-    return (
+  } else if (sessionBanner) {
+    banner = (
       <div
         className="flex items-center justify-between gap-3 border-b border-[var(--line)] bg-[var(--bg-elevated)] px-4 py-2"
         role="alert"
@@ -370,10 +412,8 @@ export function PortalStatusBanners() {
         </Link>
       </div>
     );
-  }
-
-  if (authError && authErrorKind === "server") {
-    return (
+  } else if (serverBanner) {
+    banner = (
       <div
         className="flex items-center justify-between gap-3 border-b border-[var(--line)] bg-[var(--bg-elevated)] px-4 py-2"
         role="alert"
@@ -391,10 +431,8 @@ export function PortalStatusBanners() {
         </button>
       </div>
     );
-  }
-
-  if (orgSyncing) {
-    return (
+  } else if (syncBanner) {
+    banner = (
       <div
         className="border-b border-[var(--line)] bg-[var(--bg-elevated)] px-4 py-2"
         role="status"
@@ -405,10 +443,8 @@ export function PortalStatusBanners() {
         </p>
       </div>
     );
-  }
-
-  if (!loading && !currentOrg && organizations.length === 0 && !authError) {
-    return (
+  } else if (emptyBanner) {
+    banner = (
       <div
         className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--line)] bg-[var(--bg-elevated)] px-4 py-2.5"
         role="status"
@@ -434,7 +470,13 @@ export function PortalStatusBanners() {
     );
   }
 
-  return null;
+  return (
+    <>
+      {/* Stable mark — remounting per branch cleared the attr for a tick. */}
+      <ChromeBannerMark active={showChromeBanner} />
+      {banner}
+    </>
+  );
 }
 
 /** Full-page gate while Clerk + org bootstrap. */

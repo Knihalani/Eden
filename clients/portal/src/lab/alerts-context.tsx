@@ -9,6 +9,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { usePathname } from "next/navigation";
 import { useOrg } from "@/hooks/use-org";
 import { useOrgQuery } from "@/hooks/use-api-query";
 import { queryKeys } from "@/lib/query-keys";
@@ -33,11 +34,31 @@ const AlertsContext = createContext<AlertsContextValue | null>(null);
 export function AlertsProvider({ children }: { children: ReactNode }) {
   const { currentOrg } = useOrg();
   const orgId = currentOrg?.id ?? null;
+  const pathname = usePathname();
+  const onHome = (pathname || "").split("?")[0] === "/home";
+
+  // Match PortalCatalogSync: on Home, wait until agents settle so we
+  // do not defeat the catalog deferral via a second enabled observer.
+  const agentsWarm = useOrgQuery(
+    queryKeys.portal.agents(orgId),
+    orgId,
+    () => portalApi.agents(orgId!),
+    {
+      staleTime: 60_000,
+      enabled: Boolean(orgId) && onHome,
+    },
+  );
 
   const alertEventsQuery = useOrgQuery(
     queryKeys.portal.alertEvents(orgId),
     orgId,
     () => portalApi.alertEvents(orgId!),
+    {
+      staleTime: 60_000,
+      // Settle (success or error) — not only isSuccess — so a failed
+      // agents GET does not strand the alerts bell forever.
+      enabled: !onHome || !agentsWarm.isPending,
+    },
   );
   const events = alertEventsQuery.data ?? [];
 
@@ -84,6 +105,13 @@ export function AlertsProvider({ children }: { children: ReactNode }) {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [open]);
+
+  // Close alerts when the product tour opens so Escape/z-order stay clear.
+  useEffect(() => {
+    const onTour = () => setOpen(false);
+    window.addEventListener("eden:product-tour", onTour);
+    return () => window.removeEventListener("eden:product-tour", onTour);
+  }, []);
 
   const value = useMemo(
     () => ({

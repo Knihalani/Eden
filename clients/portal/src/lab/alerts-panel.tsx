@@ -363,7 +363,7 @@ export function AlertsModal() {
 
   return (
     <div
-      className="lab-alerts-modal fixed inset-0 z-[80] flex flex-col bg-[var(--bg)] text-[var(--text)]"
+      className="lab-alerts-modal fixed inset-0 z-[70] flex flex-col bg-[var(--bg)] text-[var(--text)]"
       data-state={visible ? "open" : "closed"}
       role="dialog"
       aria-modal="true"

@@ -1,8 +1,14 @@
 "use client";
 
+import { useEffect } from "react";
+import { ERROR_STATE_ATTR } from "@/lib/overlay-defer";
+
 /**
  * Distinguishes HTTP failures from empty success lists.
  * Never use this for ``data === []`` — that is EmptyState territory.
+ *
+ * Marks ``<html data-eden-error-state>`` so the product tour defers
+ * while a blocking error panel is on screen (observer watches html attrs).
  */
 export function QueryErrorPanel({
   title = "Couldn’t load data",
@@ -16,6 +22,15 @@ export function QueryErrorPanel({
   const message =
     error?.message?.trim() ||
     "Something went wrong talking to the API. Try again.";
+
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    const root = document.documentElement;
+    root.setAttribute(ERROR_STATE_ATTR, "1");
+    return () => {
+      root.removeAttribute(ERROR_STATE_ATTR);
+    };
+  }, []);
 
   return (
     <div

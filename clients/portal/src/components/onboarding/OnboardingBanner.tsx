@@ -4,11 +4,14 @@
  * OnboardingBanner — resume chip when the personal product tour is incomplete.
  *
  * Driven by Clerk ``unsafeMetadata.edenTour`` (same source as the overlay).
+ * Hidden while org is still resolving, while the live tour is open, and
+ * when there is no workspace yet (avoids stacking with status banners).
  */
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { ChevronRight, X } from "lucide-react";
+import { useOrg } from "@/hooks/use-org";
 import { useTourProgress } from "@/hooks/use-tour-progress";
 import { formatOnboardingProgress } from "@/lib/onboarding-progress";
 import { shouldShowTourBanner } from "@/lib/tour-progress";
@@ -22,12 +25,27 @@ export function OnboardingBanner({
 }: {
   collapsed?: boolean;
 }) {
+  const { currentOrg, loading: orgLoading, orgSyncing } = useOrg();
   const { isLoaded, progress } = useTourProgress();
   const [dismissed, setDismissed] = useState(() => {
     if (typeof window === "undefined") return false;
     return window.sessionStorage.getItem(SESSION_KEY) === "1";
   });
+  const [tourOpen, setTourOpen] = useState(false);
 
+  useEffect(() => {
+    const on = () => setTourOpen(true);
+    const off = () => setTourOpen(false);
+    window.addEventListener("eden:product-tour", on);
+    window.addEventListener("eden:product-tour-end", off);
+    return () => {
+      window.removeEventListener("eden:product-tour", on);
+      window.removeEventListener("eden:product-tour-end", off);
+    };
+  }, []);
+
+  if (orgLoading || orgSyncing || !currentOrg) return null;
+  if (tourOpen) return null;
   if (!isLoaded) return null;
   if (!shouldShowTourBanner(progress)) return null;
   if (dismissed) return null;
