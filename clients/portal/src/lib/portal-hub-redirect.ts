@@ -116,9 +116,9 @@ export function buildHubRedirectUrl(
     return withSearch("/home", search);
   }
 
-  // First-run entry — product home with tour flag (tour UI ships in G15d).
+  // First-run entry — product home with soft-open tour.
   if (p === "/onboarding" || p.startsWith("/onboarding/")) {
-    return "/home?tour=1";
+    return "/home?onboarding=1";
   }
 
   if (p === "/rebuild" || p.startsWith("/rebuild/")) return null;

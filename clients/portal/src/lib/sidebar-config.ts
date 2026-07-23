@@ -127,23 +127,6 @@ export const MOBILE_MORE_NAV = [
   },
 ] as const;
 
-/** Surface contract filenames under docs/portal-rebuild/surfaces/. */
-export const SURFACE_DOC_HINT: Record<string, string> = {
-  agents: "agents.md",
-  traces: "traces.md",
-  issues: "issues.md",
-  alerts: "alerts.md",
-  evals: "evals.md",
-  improve: "improve.md",
-  guardrails: "guardrails.md",
-  cost: "cost.md",
-  agent: "ai-agent.md",
-  audit: "audit.md",
-  settings: "settings.md",
-  prompts: "prompts.md",
-  analytics: "analytics.md",
-};
-
 export const DEFAULT_SIDEBAR: SidebarGroup[] = [
   {
     id: "home",

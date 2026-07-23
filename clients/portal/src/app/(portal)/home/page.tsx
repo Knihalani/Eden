@@ -12,7 +12,7 @@ import {
   budgetIsPressure,
   budgetStatusFromSpend,
   budgetStatusLabel,
-} from "@/lab/fixtures/cost";
+} from "@/lab/home-budget";
 import { issueForTrace } from "@/lab/fixtures/issues";
 import {
   formatDuration,
@@ -29,7 +29,7 @@ import {
   EmptyState,
   RunMeta,
   SeverityBadge,
-} from "@/lab/lab-ui";
+} from "@/lab/lab-ui-home";
 import { cn } from "@/lib/utils";
 import { useOrg } from "@/hooks/use-org";
 import { useOrgQuery } from "@/hooks/use-api-query";

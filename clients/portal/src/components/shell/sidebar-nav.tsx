@@ -68,7 +68,7 @@ function NavLink({
   return (
     <Link
       href={item.href}
-      data-tour-id={`nav-${item.id}`}
+      data-tour-id={item.id}
       data-active={active ? "true" : "false"}
       data-attention={attention ? "true" : "false"}
       data-collapsed={collapsed ? "true" : "false"}

@@ -44,9 +44,10 @@ export function PortalCatalogSync() {
   const onGuardrails = pathIn(pathname, ["/guardrails"]);
   const onDebugger = pathIn(pathname, ["/debugger"]);
   const onAgent = pathIn(pathname, ["/agent"]);
-  const onCost = pathIn(pathname, ["/cost", "/home"]);
+  const onCost = pathIn(pathname, ["/cost"]);
+  /** Traces only on /home — skip sessions/cost/improve prefetch. */
+  const onHomeTraces = pathIn(pathname, ["/home"]);
   const onObserveHeavy = pathIn(pathname, [
-    "/home",
     "/traces",
     "/sessions",
     "/issues",
@@ -55,6 +56,7 @@ export function PortalCatalogSync() {
     "/agents",
     "/debugger",
   ]);
+  const onTraces = onObserveHeavy || onHomeTraces;
 
   useEffect(() => {
     if (!orgId) {
@@ -75,7 +77,7 @@ export function PortalCatalogSync() {
     queryKeys.portal.traces(orgId),
     orgId,
     () => portalApi.traces(orgId!),
-    { ...SHELL_QUERY, enabled: onObserveHeavy },
+    { ...SHELL_QUERY, enabled: onTraces },
   );
   const sessions = useOrgQuery(
     queryKeys.portal.sessions(orgId),
@@ -119,7 +121,7 @@ export function PortalCatalogSync() {
     queryKeys.portal.improvePlans(orgId),
     orgId,
     () => portalApi.improvePlans(orgId!),
-    { staleTime: OBSERVE_STALE, enabled: onImprove || pathIn(pathname, ["/home"]) },
+    { staleTime: OBSERVE_STALE, enabled: onImprove },
   );
   const compareExperiments = useOrgQuery(
     queryKeys.portal.compareExperiments(orgId),

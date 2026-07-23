@@ -1,14 +1,278 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import Link from "next/link";
-import { OrganizationSwitcher, UserButton, useAuth as useClerkAuth } from "@clerk/nextjs";
+import {
+  useAuth as useClerkAuth,
+  useClerk,
+  useOrganizationList,
+  useUser,
+} from "@clerk/nextjs";
+import { ChevronDown, LogOut } from "lucide-react";
 import { useOrg } from "@/hooks/use-org";
 import { useAuth } from "@/hooks/use-auth";
 import { api } from "@/lib/api/resources";
 import { cn } from "@/lib/utils";
+import type { Organization } from "@/lib/types";
 
-/** Compact Clerk user + org controls for the sidebar footer. */
+function useDismissibleOpen(initial = false) {
+  const [open, setOpen] = useState(initial);
+  const rootRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onPointer = (e: MouseEvent) => {
+      if (!rootRef.current?.contains(e.target as Node)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("mousedown", onPointer);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onPointer);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  return { open, setOpen, rootRef };
+}
+
+/** Eden workspace picker — no Clerk OrganizationSwitcher (avoids clerk.ui). */
+function WorkspaceSwitcher({ collapsed }: { collapsed: boolean }) {
+  const { currentOrg, organizations } = useOrg();
+  const { setActive, isLoaded } = useOrganizationList();
+  const { open, setOpen, rootRef } = useDismissibleOpen();
+  const listId = useId();
+  const [busy, setBusy] = useState(false);
+
+  const label = currentOrg?.name ?? "Select workspace";
+  const ariaLabel = `Switch workspace: ${label}`;
+
+  const onSelect = useCallback(
+    async (org: Organization) => {
+      if (!setActive || busy) return;
+      const clerkId = org.clerk_org_id || org.id;
+      if (!clerkId) return;
+      if (currentOrg?.id === org.id) {
+        setOpen(false);
+        return;
+      }
+      setBusy(true);
+      try {
+        await setActive({ organization: clerkId });
+        setOpen(false);
+        if (typeof window !== "undefined") {
+          window.location.assign("/home");
+        }
+      } catch {
+        setBusy(false);
+      }
+    },
+    [busy, currentOrg?.id, setActive, setOpen],
+  );
+
+  if (collapsed) {
+    const initial = (currentOrg?.name ?? "?").slice(0, 1).toUpperCase();
+    return (
+      <div ref={rootRef} className="relative">
+        <button
+          type="button"
+          className="ds-btn ds-btn-ghost flex h-8 w-8 items-center justify-center !px-0"
+          aria-label={ariaLabel}
+          aria-expanded={open}
+          aria-haspopup="listbox"
+          aria-controls={listId}
+          disabled={!isLoaded || busy}
+          onClick={() => setOpen((v) => !v)}
+          title={label}
+        >
+          <span className="type-ui text-[var(--accent)]">{initial}</span>
+        </button>
+        {open ? (
+          <WorkspaceMenu
+            id={listId}
+            organizations={organizations}
+            currentId={currentOrg?.id}
+            onSelect={onSelect}
+            className="absolute bottom-full left-0 z-50 mb-1 w-56"
+          />
+        ) : null}
+      </div>
+    );
+  }
+
+  return (
+    <div ref={rootRef} className="relative w-full">
+      <button
+        type="button"
+        className={cn(
+          "flex w-full items-center justify-between gap-2 rounded-[var(--radius)] border border-[var(--line)] bg-[var(--bg)] px-2 py-1.5 text-left text-[0.8125rem] text-[var(--text)]",
+          "hover:border-[var(--line-accent)]",
+        )}
+        aria-label={ariaLabel}
+        aria-expanded={open}
+        aria-haspopup="listbox"
+        aria-controls={listId}
+        disabled={!isLoaded || busy || organizations.length === 0}
+        onClick={() => setOpen((v) => !v)}
+      >
+        <span className="min-w-0 truncate">{label}</span>
+        <ChevronDown
+          className="h-3.5 w-3.5 shrink-0 text-[var(--text-faint)]"
+          aria-hidden
+        />
+      </button>
+      {open ? (
+        <WorkspaceMenu
+          id={listId}
+          organizations={organizations}
+          currentId={currentOrg?.id}
+          onSelect={onSelect}
+          className="absolute bottom-full left-0 z-50 mb-1 w-full min-w-[12rem]"
+        />
+      ) : null}
+    </div>
+  );
+}
+
+function WorkspaceMenu({
+  id,
+  organizations,
+  currentId,
+  onSelect,
+  className,
+}: {
+  id: string;
+  organizations: Organization[];
+  currentId?: string;
+  onSelect: (org: Organization) => void;
+  className?: string;
+}) {
+  return (
+    <ul
+      id={id}
+      role="listbox"
+      aria-label="Workspaces"
+      className={cn(
+        "max-h-60 overflow-auto rounded-[var(--radius)] border border-[var(--line)] bg-[var(--bg)] py-1 shadow-[0_8px_24px_rgba(0,0,0,0.35)]",
+        className,
+      )}
+    >
+      {organizations.length === 0 ? (
+        <li className="px-2.5 py-2 type-meta text-[var(--text-faint)]">
+          No workspaces
+        </li>
+      ) : (
+        organizations.map((org) => {
+          const selected = org.id === currentId;
+          return (
+            <li key={org.id} role="option" aria-selected={selected}>
+              <button
+                type="button"
+                className={cn(
+                  "flex w-full px-2.5 py-1.5 text-left text-[0.8125rem]",
+                  selected
+                    ? "bg-[var(--accent-muted)] text-[var(--accent)]"
+                    : "text-[var(--text)] hover:bg-[var(--bg-elevated)]",
+                )}
+                onClick={() => onSelect(org)}
+              >
+                <span className="truncate">{org.name}</span>
+              </button>
+            </li>
+          );
+        })
+      )}
+    </ul>
+  );
+}
+
+/** Lightweight account menu — no Clerk UserButton (avoids clerk.ui). */
+function AccountMenu({ collapsed }: { collapsed: boolean }) {
+  const { user } = useUser();
+  const { signOut } = useClerk();
+  const { open, setOpen, rootRef } = useDismissibleOpen();
+  const menuId = useId();
+
+  const name =
+    user?.fullName ||
+    user?.primaryEmailAddress?.emailAddress ||
+    user?.username ||
+    "Account";
+  const imageUrl = user?.imageUrl;
+  const initial = name.slice(0, 1).toUpperCase();
+  const ariaLabel = `Account menu: ${name}`;
+
+  return (
+    <div
+      ref={rootRef}
+      className={cn(
+        "relative flex items-center",
+        collapsed ? "justify-center" : "gap-2",
+      )}
+    >
+      <button
+        type="button"
+        className="flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-full border border-[var(--line)] bg-[var(--bg-elevated)]"
+        aria-label={ariaLabel}
+        aria-expanded={open}
+        aria-haspopup="menu"
+        aria-controls={menuId}
+        onClick={() => setOpen((v) => !v)}
+      >
+        {imageUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={imageUrl} alt="" className="h-full w-full object-cover" />
+        ) : (
+          <span className="type-meta text-[var(--text)]">{initial}</span>
+        )}
+      </button>
+      {!collapsed ? (
+        <span className="type-meta truncate text-[var(--text-faint)]">
+          Account
+        </span>
+      ) : null}
+      {open ? (
+        <div
+          id={menuId}
+          role="menu"
+          className="absolute bottom-full left-0 z-50 mb-1 min-w-[11rem] overflow-hidden rounded-[var(--radius)] border border-[var(--line)] bg-[var(--bg)] py-1 shadow-[0_8px_24px_rgba(0,0,0,0.35)]"
+        >
+          <p className="truncate border-b border-[var(--line)] px-2.5 py-1.5 type-meta text-[var(--text-faint)]">
+            {name}
+          </p>
+          <Link
+            href="/settings"
+            role="menuitem"
+            className="block px-2.5 py-1.5 text-[0.8125rem] text-[var(--text)] hover:bg-[var(--bg-elevated)]"
+            onClick={() => setOpen(false)}
+          >
+            Settings
+          </Link>
+          <button
+            type="button"
+            role="menuitem"
+            className="flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-[0.8125rem] text-[var(--text)] hover:bg-[var(--bg-elevated)]"
+            onClick={() => void signOut({ redirectUrl: "/" })}
+          >
+            <LogOut className="h-3.5 w-3.5" aria-hidden />
+            Sign out
+          </button>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+/** Compact user + org controls for the sidebar footer. */
 export function SidebarAuthFooter({ collapsed }: { collapsed: boolean }) {
   const { isSignedIn } = useClerkAuth();
   if (!isSignedIn) {
@@ -39,32 +303,8 @@ export function SidebarAuthFooter({ collapsed }: { collapsed: boolean }) {
         collapsed ? "items-center px-1 py-2" : "px-2.5 py-2.5",
       )}
     >
-      {!collapsed ? (
-        <OrganizationSwitcher
-          hidePersonal={false}
-          afterSelectOrganizationUrl="/home"
-          afterCreateOrganizationUrl="/home"
-          appearance={{
-            elements: {
-              rootBox: "w-full",
-              organizationSwitcherTrigger:
-                "w-full justify-between rounded-[var(--radius)] border border-[var(--line)] bg-[var(--bg)] px-2 py-1.5 text-left text-[0.8125rem] text-[var(--text)]",
-            },
-          }}
-        />
-      ) : null}
-      <div className={cn("flex items-center", collapsed ? "justify-center" : "gap-2")}>
-        <UserButton
-          appearance={{
-            elements: {
-              avatarBox: "h-7 w-7",
-            },
-          }}
-        />
-        {!collapsed ? (
-          <span className="type-meta truncate text-[var(--text-faint)]">Account</span>
-        ) : null}
-      </div>
+      <WorkspaceSwitcher collapsed={collapsed} />
+      <AccountMenu collapsed={collapsed} />
     </div>
   );
 }
@@ -94,7 +334,9 @@ export function PortalStatusBanners() {
       await refreshOrgs();
       await refreshUserWithRetry();
     } catch (e) {
-      setCreateError(e instanceof Error ? e.message : "Could not create workspace");
+      setCreateError(
+        e instanceof Error ? e.message : "Could not create workspace",
+      );
     } finally {
       setCreating(false);
     }
@@ -120,7 +362,10 @@ export function PortalStatusBanners() {
         <p className="type-meta text-[var(--text)]">
           Session expired. Sign in again to continue.
         </p>
-        <Link href="/sign-in" className="ds-btn ds-btn-primary ds-btn-sm shrink-0">
+        <Link
+          href="/sign-in"
+          className="ds-btn ds-btn-primary ds-btn-sm shrink-0"
+        >
           Sign in
         </Link>
       </div>
@@ -193,12 +438,20 @@ export function PortalStatusBanners() {
 }
 
 /** Full-page gate while Clerk + org bootstrap. */
-export function PortalBootGate({ children }: { children: React.ReactNode }) {
+export function PortalBootGate({ children }: { children: ReactNode }) {
   const { loading: authLoading } = useAuth();
-  const { loading: orgLoading, currentOrg, organizations, authError } = useOrg();
+  const { loading: orgLoading, currentOrg, organizations, authError } =
+    useOrg();
   const { isLoaded: clerkLoaded, isSignedIn } = useClerkAuth();
 
-  if (!clerkLoaded || (isSignedIn && (authLoading || orgLoading) && !currentOrg && !authError && organizations.length === 0)) {
+  if (
+    !clerkLoaded ||
+    (isSignedIn &&
+      (authLoading || orgLoading) &&
+      !currentOrg &&
+      !authError &&
+      organizations.length === 0)
+  ) {
     return (
       <div className="flex min-h-0 flex-1 items-center justify-center bg-[var(--bg)]">
         <p className="type-meta text-[var(--text-faint)]">Loading…</p>

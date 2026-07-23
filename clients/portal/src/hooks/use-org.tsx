@@ -123,10 +123,10 @@ function mapOrgLoadError(
  * Bridges Clerk's active organization to Eden's portal org context.
  *
  * Identity of truth for which org is active: Clerk (via
- * ``useOrganization()`` + ``OrganizationSwitcher``). The Eden-side
- * enrichment is fetched from FastAPI via shared ``useMeQuery``
- * (``["auth","me"]``) so AuthProvider and OrgProvider share one
- * ``/auth/me`` network call.
+ * ``useOrganization()`` + Eden workspace switcher ``setActive``).
+ * The Eden-side enrichment is fetched from FastAPI via shared
+ * ``useMeQuery`` (``["auth","me"]``) so AuthProvider and OrgProvider
+ * share one ``/auth/me`` network call.
  */
 export function OrgProvider({ children }: { children: ReactNode }) {
   const { organization: clerkOrg, isLoaded: clerkOrgLoaded } = useOrganization();

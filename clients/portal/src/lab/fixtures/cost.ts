@@ -9,8 +9,21 @@ import {
   catalogCostDrivers,
   catalogTraces,
 } from "@/lib/portal-catalog";
+import {
+  BUDGET_PRESSURE_RATIO,
+  budgetIsPressure,
+  budgetRatio,
+  budgetStatusFromSpend,
+  type BudgetStatus,
+} from "@/lab/home-budget";
 
-export type BudgetStatus = "ok" | "warn" | "breach";
+export type { BudgetStatus };
+export {
+  BUDGET_PRESSURE_RATIO,
+  budgetIsPressure,
+  budgetRatio,
+  budgetStatusFromSpend,
+};
 
 export type CostBudgetFixture = {
   id: string;
@@ -67,29 +80,6 @@ export function avgCostPerRun(): number {
   const runs = fleetRuns24h();
   if (!runs) return 0;
   return fleetSpend24h() / runs;
-}
-
-/** Fraction of budget used. ≥ this → pressure (red). */
-export const BUDGET_PRESSURE_RATIO = 0.8;
-
-export function budgetRatio(spentUsd: number, limitUsd: number): number {
-  if (limitUsd <= 0) return 0;
-  return spentUsd / limitUsd;
-}
-
-export function budgetStatusFromSpend(
-  spentUsd: number,
-  limitUsd: number,
-): BudgetStatus {
-  const ratio = budgetRatio(spentUsd, limitUsd);
-  if (ratio >= 1) return "breach";
-  if (ratio >= BUDGET_PRESSURE_RATIO) return "warn";
-  return "ok";
-}
-
-/** Near limit or over — both read as bad for color. */
-export function budgetIsPressure(status: BudgetStatus): boolean {
-  return status === "warn" || status === "breach";
 }
 
 const ORG_BUDGET_LIMIT = 0;
