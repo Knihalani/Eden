@@ -31,8 +31,60 @@
   }
 }
 
+@keyframes eden-span-grow {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+@keyframes eden-playhead {
+  0% {
+    left: 0%;
+    opacity: 0;
+  }
+  8% {
+    opacity: 1;
+  }
+  92% {
+    opacity: 1;
+  }
+  100% {
+    left: 100%;
+    opacity: 0;
+  }
+}
+
+@keyframes eden-live-dot {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.45;
+    transform: scale(0.85);
+  }
+}
+
+@keyframes eden-scan-row {
+  0%,
+  100% {
+    background-position: 0% 0%;
+  }
+  50% {
+    background-position: 100% 0%;
+  }
+}
+
 .eden-hero-rise {
   animation: eden-hero-rise 0.55s cubic-bezier(0.33, 1, 0.68, 1) both;
+}
+
+.eden-hero-rise-delay {
+  animation: eden-hero-rise 0.65s cubic-bezier(0.33, 1, 0.68, 1) 0.12s both;
 }
 
 .eden-auth-ambient {
@@ -44,15 +96,20 @@
   animation: eden-skeleton-pulse 1.4s ease-in-out infinite;
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .eden-hero-rise,
-  .eden-auth-ambient,
-  .eden-skeleton-pulse {
-    animation: none !important;
-  }
+.eden-span-grow {
+  transform-origin: left center;
+  animation: eden-span-grow 0.9s cubic-bezier(0.33, 1, 0.68, 1) both;
 }
 
-/* Subtle instrument-panel grid for product planes (not decorative glow). */
+.eden-playhead {
+  animation: eden-playhead 5.5s cubic-bezier(0.33, 1, 0.68, 1) infinite;
+}
+
+.eden-live-dot {
+  animation: eden-live-dot 1.8s ease-in-out infinite;
+}
+
+/* Instrument-panel grid for product planes (not decorative glow). */
 .eden-product-plane {
   background-image:
     linear-gradient(
@@ -67,4 +124,25 @@
     );
   background-size: 48px 48px;
   background-position: -1px -1px;
+}
+
+/* Finer grid for auth brand density */
+.eden-product-plane--dense {
+  background-size: 32px 32px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .eden-hero-rise,
+  .eden-hero-rise-delay,
+  .eden-auth-ambient,
+  .eden-skeleton-pulse,
+  .eden-span-grow,
+  .eden-playhead,
+  .eden-live-dot {
+    animation: none !important;
+  }
+
+  .eden-span-grow {
+    transform: none;
+  }
 }
