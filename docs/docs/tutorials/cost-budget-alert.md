@@ -140,4 +140,5 @@ yellow banner.
 
 - [How-to — Set per-agent budgets](/how-to/cost-budgets)
 - [Reference — Cost intelligence API](/reference/api-cost)
-- [Explanation — How the forecast is computed](/explanation/sampling-and-retention)
+- [Cost API reference](/reference/api-cost)
+- [How-to — Set a budget](/how-to/cost-budgets)

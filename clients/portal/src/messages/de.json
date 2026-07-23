@@ -27,6 +27,7 @@
       "agent": "KI-Assistent",
       "debugger": "Debugger",
       "prompts": "Prompts",
+      "sessions": "Sessions",
       "analytics": "Analytics",
       "audit": "Audit",
       "settings": "Einstellungen"
@@ -36,7 +37,7 @@
     "ariaLabel": "Mobile Navigation",
     "more": "Mehr",
     "moreTitle": "Mehr",
-    "moreDescription": "Agenten, Alerts, Kosten, Guardrails, KI-Agent, Prompts, Analytics, Audit und Einstellungen."
+    "moreDescription": "Agenten, Alerts, Kosten, Guardrails, KI-Agent, Prompts, Sessions und Einstellungen."
   },
   "dashboard": {
     "title": "Dashboard",

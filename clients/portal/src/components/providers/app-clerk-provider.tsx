@@ -11,7 +11,9 @@ const ALLOWED_REDIRECT_ORIGINS = [
   "http://localhost:3000",
   "http://127.0.0.1:3000",
   "https://edenobservability.com",
+  "https://www.edenobservability.com",
   process.env.NEXT_PUBLIC_SITE_URL,
+  process.env.NEXT_PUBLIC_PORTAL_URL,
 ].filter((origin): origin is string => Boolean(origin));
 
 if (process.env.NODE_ENV !== "production") {

@@ -34,6 +34,7 @@ export default function NotFound() {
             <ul>
               <li><Link to="/quickstart">Quickstart</Link></li>
               <li><Link to="/tutorials/auto-instrument-openai">Auto-instrument tutorial</Link></li>
+              <li><Link to="/explanation">Explanation</Link></li>
               <li><Link to="/reference/api">REST API reference</Link></li>
               <li><Link to="/reference/sdk-python">Python SDK</Link></li>
               <li><Link to="/how-to/deploy">API endpoint</Link></li>

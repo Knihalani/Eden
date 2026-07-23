@@ -89,11 +89,15 @@ export function InviteAcceptPanel({ token }: { token: string }) {
     setError(null);
     try {
       const result = await api.acceptInviteByToken(token);
-      if (result.clerk_org_id && setActive && orgListLoaded) {
-        try {
-          await setActive({ organization: result.clerk_org_id });
-        } catch {
-          /* continue — membership exists; portal will sync */
+      if (result.clerk_org_id && setActive) {
+        // Retry briefly if org list was still hydrating at click time.
+        for (let i = 0; i < 8; i++) {
+          try {
+            await setActive({ organization: result.clerk_org_id });
+            break;
+          } catch {
+            await new Promise((r) => window.setTimeout(r, 150));
+          }
         }
       }
       setPhase("accepted");
@@ -110,9 +114,9 @@ export function InviteAcceptPanel({ token }: { token: string }) {
         err instanceof Error ? err.message : "Could not accept invitation.",
       );
     }
-  }, [token, setActive, orgListLoaded, router]);
+  }, [token, setActive, router]);
 
-  if (phase === "loading" || !authLoaded) {
+  if (phase === "loading" || !authLoaded || (isSignedIn && !orgListLoaded)) {
     return (
       <div className="text-center" aria-busy>
         <p className="font-mono text-[0.625rem] uppercase tracking-[0.18em] text-[var(--text-faint)]">
@@ -212,7 +216,7 @@ export function InviteAcceptPanel({ token }: { token: string }) {
           <button
             type="button"
             onClick={() => void onAccept()}
-            disabled={phase === "accepting"}
+            disabled={phase === "accepting" || !orgListLoaded}
             className="ds-btn ds-btn-primary inline-flex w-full justify-center px-5"
           >
             {phase === "accepting" ? "Joining…" : "Accept invitation"}

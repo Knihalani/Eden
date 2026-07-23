@@ -30,6 +30,8 @@ describe("product portal routes", () => {
     expect(buildHubRedirectUrl("/home", "")).toBeNull();
     expect(buildHubRedirectUrl("/unavailable", "")).toBeNull();
     expect(buildHubRedirectUrl("/rebuild", "")).toBeNull();
+    // Docs Fill-in is a real auth bridge — must not soft-land as a stub.
+    expect(buildHubRedirectUrl("/docs-fill", "?op=session")).toBeNull();
   });
 
   it("soft-lands stubs and dashboard; onboarding starts tour", () => {

@@ -411,7 +411,6 @@ const nextConfig: NextConfig = {
       },
       ...softLand([
         "/runs",
-        "/docs-fill",
         "/jobs",
         "/eval-harnesses",
         "/builder",
