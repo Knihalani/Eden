@@ -11,7 +11,7 @@ import { cn } from "@/lib/utils";
 export const metadata: Metadata = {
   title: "Pricing · Eden",
   description:
-    "Free during public beta. Team for orgs and evals. Enterprise for SSO and audit.",
+    "Free during public beta. Team and Enterprise plans coming soon.",
   robots: { index: true, follow: true },
   openGraph: {
     title: "Pricing · Eden",
@@ -42,7 +42,8 @@ const TIERS = [
       "Community docs",
     ],
     cta: { href: "/sign-up", label: "Start free", primary: true },
-    highlight: false,
+    comingSoon: false,
+    highlight: true,
   },
   {
     id: "team",
@@ -56,8 +57,9 @@ const TIERS = [
       "Evals, prompts, live A/B",
       "Alerts and API keys",
     ],
-    cta: { href: "/sign-up", label: "Start free → upgrade", primary: true },
-    highlight: true,
+    cta: { href: "#", label: "Coming soon", primary: false },
+    comingSoon: true,
+    highlight: false,
   },
   {
     id: "enterprise",
@@ -71,11 +73,8 @@ const TIERS = [
       "Audit & retention controls",
       "Priority support",
     ],
-    cta: {
-      href: `mailto:${SALES_EMAIL}?subject=${encodeURIComponent("Eden Enterprise")}`,
-      label: "Contact sales",
-      primary: false,
-    },
+    cta: { href: "#", label: "Coming soon", primary: false },
+    comingSoon: true,
     highlight: false,
   },
 ] as const;
@@ -85,8 +84,8 @@ export default function PricingPage() {
     <main>
       <MarketingShell
         kicker="Pricing"
-        title="Start free. Upgrade when the fleet grows."
-        lead={`${FREE_TIER_TAGLINE} Move to Team for orgs, evals, and alerts — or talk to us for Enterprise.`}
+        title="Start free. Paid plans coming soon."
+        lead={`${FREE_TIER_TAGLINE} Team and Enterprise are listed for roadmap — not available to purchase yet.`}
       >
         <div className="grid gap-px overflow-hidden border border-[var(--line)] bg-[var(--line)] lg:grid-cols-3">
           {TIERS.map((tier) => (
@@ -94,12 +93,18 @@ export default function PricingPage() {
               key={tier.id}
               className={cn(
                 "relative flex flex-col bg-[var(--bg)] p-6 sm:p-8",
-                tier.highlight && "bg-[color-mix(in_srgb,var(--accent)_4%,var(--bg))]",
+                tier.highlight &&
+                  "bg-[color-mix(in_srgb,var(--accent)_4%,var(--bg))]",
+                tier.comingSoon && "opacity-90",
               )}
             >
-              {tier.highlight ? (
+              {tier.comingSoon ? (
+                <span className="absolute right-5 top-5 font-mono text-[0.5625rem] uppercase tracking-[0.16em] text-[var(--text-faint)]">
+                  Coming soon
+                </span>
+              ) : tier.highlight ? (
                 <span className="absolute right-5 top-5 font-mono text-[0.5625rem] uppercase tracking-[0.16em] text-[var(--accent)]">
-                  Recommended
+                  Available
                 </span>
               ) : null}
               <p className="font-mono text-[0.625rem] uppercase tracking-[0.18em] text-[var(--text-faint)]">
@@ -120,21 +125,22 @@ export default function PricingPage() {
                     key={f}
                     className="flex gap-2.5 text-[0.875rem] text-[var(--text-muted)]"
                   >
-                    <span className="mt-2 size-1 shrink-0 rounded-full bg-[var(--accent)]" aria-hidden />
+                    <span
+                      className="mt-2 size-1 shrink-0 rounded-full bg-[var(--accent)]"
+                      aria-hidden
+                    />
                     {f}
                   </li>
                 ))}
               </ul>
-              {tier.cta.href.startsWith("mailto:") ? (
-                <a
-                  href={tier.cta.href}
-                  className={cn(
-                    "ds-btn mt-8 w-full justify-center",
-                    tier.cta.primary ? "ds-btn-primary" : "ds-btn-outline",
-                  )}
+              {tier.comingSoon ? (
+                <button
+                  type="button"
+                  disabled
+                  className="ds-btn ds-btn-outline mt-8 w-full justify-center cursor-not-allowed opacity-55"
                 >
-                  {tier.cta.label}
-                </a>
+                  Coming soon
+                </button>
               ) : (
                 <Link
                   href={tier.cta.href}
@@ -150,8 +156,7 @@ export default function PricingPage() {
           ))}
         </div>
         <p className="mt-8 type-meta text-[var(--text-faint)]">
-          Path: start on Free → upgrade in-product when you need Team. Enterprise
-          questions →{" "}
+          Free is open during public beta. Questions about Team or Enterprise →{" "}
           <a
             href={`mailto:${SALES_EMAIL}`}
             className="text-[var(--accent)] hover:text-[var(--accent-hover)]"
