@@ -214,13 +214,6 @@ export const queryKeys = {
     all: ["closedLoop"] as const,
     board: (orgId: string | null | undefined) => ["closedLoop", "board", orgId] as const,
   },
-  prSuggestions: {
-    all: ["prSuggestions"] as const,
-    list: (orgId: string | null | undefined, filters?: Record<string, unknown>) =>
-      ["prSuggestions", "list", orgId, filters ?? {}] as const,
-    detail: (orgId: string | null | undefined, suggestionId: string | null | undefined) =>
-      ["prSuggestions", "detail", orgId, suggestionId] as const,
-  },
   auditTrail: {
     all: ["auditTrail"] as const,
     ledger: (orgId: string | null | undefined, filters?: Record<string, unknown>) =>
@@ -379,6 +372,10 @@ export const queryKeys = {
       ["portal", "agents", orgId] as const,
     traces: (orgId: string | null | undefined) =>
       ["portal", "traces", orgId] as const,
+    traceDetail: (
+      orgId: string | null | undefined,
+      traceId: string | null | undefined,
+    ) => ["portal", "traceDetail", orgId, traceId] as const,
     sessions: (orgId: string | null | undefined) =>
       ["portal", "sessions", orgId] as const,
     issues: (orgId: string | null | undefined) =>

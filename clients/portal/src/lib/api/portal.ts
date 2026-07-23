@@ -41,6 +41,17 @@ export const portalApi = {
   traces: (orgId: string) =>
     fetchApi<TraceFixture[]>(portalPath(orgId, "traces")),
 
+  /**
+   * Single-trace detail — same shape as ``traces()`` rows but with
+   * ``steps`` populated. The list endpoint always returns
+   * ``steps: []`` to avoid an N+1 of per-trace span hydration; call
+   * this once a trace is selected to load its real transcript.
+   */
+  traceDetail: (orgId: string, traceId: string) =>
+    fetchApi<TraceFixture>(
+      portalPath(orgId, `traces/${encodeURIComponent(traceId)}`),
+    ),
+
   sessions: (orgId: string) =>
     fetchApi<SessionFixture[]>(portalPath(orgId, "sessions")),
 

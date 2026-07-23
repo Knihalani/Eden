@@ -17,7 +17,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import { ArrowLeft, ArrowRight, X } from "lucide-react";
 import {
@@ -142,6 +142,8 @@ export function ProductTour({
 }: ProductTourProps) {
   const router = useRouter();
   const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const searchKey = searchParams.toString();
   const step: TourStep =
     PRODUCT_TOUR_STEPS[Math.min(stepIndex, PRODUCT_TOUR_TOTAL - 1)] ??
     PRODUCT_TOUR_STEPS[0];
@@ -207,19 +209,21 @@ export function ProductTour({
     const pathMatches =
       herePath === targetPath || herePath.startsWith(targetPath + "/");
     const wantMode = settingsModeFromSearch(targetUrl.search);
-    const hereMode =
-      typeof window !== "undefined"
-        ? settingsModeFromSearch(window.location.search)
-        : null;
+    const hereMode = settingsModeFromSearch(
+      searchKey ? `?${searchKey}` : "",
+    );
     const modeMatches = !wantMode || wantMode === hereMode;
     if (pathMatches && modeMatches) {
       navigating.current = false;
+      // Search-only navigations (e.g. /settings → /settings?mode=keys) do
+      // not change pathname; mark ready so the card is not stuck hidden.
+      setReady(true);
       return;
     }
     navigating.current = true;
     setReady(false);
     router.push(step.href);
-  }, [open, step?.href, step?.id, pathname, router]);
+  }, [open, step?.href, step?.id, pathname, searchKey, router]);
 
   useLayoutEffect(() => {
     if (!open) return;

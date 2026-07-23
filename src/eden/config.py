@@ -103,9 +103,11 @@ def _build_settings_class():
         # False because seeding org_resource_limits across every fixture is
         # impractical; production keeps it True.
         quota_enabled: bool = True
-        # Defaults are deliberately conservative (20/5 = ~80 conns across
-        # the API + 2 jobs + worker). The Northflank manifest overrides
-        # down to 10/2 per container; PostgresClient honours these.
+        # Max-size default is deliberately conservative (20 = ~80 conns
+        # across the API + 2 jobs + worker, one pool each). The Northflank
+        # manifest overrides down to 10 per container; PostgresClient
+        # honours ``POSTGRES_POOL_SIZE``. See ``postgres_min_pool_size``
+        # below for the min-size default (0, not 5 — updated 2026-07-02).
         postgres_pool_size: int = 20
         # Audit 2026-07-02 — default to 0 so the pool starts empty and
         # Neon's auto-suspend can fire during idle periods. Operators who
@@ -462,10 +464,12 @@ def _build_settings_class():
         stripe_secret_key: str = ""
         stripe_webhook_secret: str = ""
 
-        # Email (SendGrid)
-        sendgrid_api_key: str = ""
-        sendgrid_from_email: str = "noreply@eden.ai"
-        sendgrid_from_name: str = "Eden"
+        # Email (SendKit) — API key via SENDKIT_API_KEY / sendkit_api_key.
+        # Alerts from alerts@; invites/exports from info@.
+        sendkit_api_key: str = ""
+        email_from_alerts: str = "alerts@edenobservability.com"
+        email_from_info: str = "info@edenobservability.com"
+        email_from_name: str = "Eden"
 
         # Postgres (Neon) — SSL config for the cutover
         # When ``postgres_sslmode`` is empty (the dev default), the
@@ -878,24 +882,17 @@ def _build_settings_class():
         issue_experiments_v1: bool = True
 
         # ── Issue alerting (F47 Wave 7) ─────────────────────────────────
-        # Slack Block Kit alerts for P0/P1 issue creation, verify
-        # failures, and human escalations. Global fallback webhook (a
-        # per-org ``org_integrations`` row overrides it when present).
-        # Storm caps stop an incident flood from paging on-call 200x: an
-        # identical fingerprint alert is deduped for
-        # ``issue_alert_dedup_minutes`` and an org is capped at
-        # ``issue_alert_max_per_hour`` alerts/hour.
-        slack_webhook_url: str = ""
+        # SendKit email alert storm control (Slack removed 2026-07-23).
+        # Each fingerprint is deduped for ``issue_alert_dedup_minutes``
+        # and an org is capped at ``issue_alert_max_per_hour`` alerts/hour.
         issue_alerts_enabled: bool = True
         issue_alert_dedup_minutes: int = 15
         issue_alert_max_per_hour: int = 30
 
-        # ── Phase 7 Wave 8 (F06/F65/F71/N10) ───────────────────────────
+        # ── Phase 7 Wave 8 (F06/F65/N10) ───────────────────────────────
         signal_clusters_v1: bool = True
         signal_backfill_v1: bool = True
         deep_search_to_signal_v1: bool = True
-        slack_signing_secret: str = ""
-        slack_interactive_v1: bool = True
         f65_topics_v1: bool = True
 
         # ── Kill-switch defaults (v2.7 hot-path) ────────────────────────

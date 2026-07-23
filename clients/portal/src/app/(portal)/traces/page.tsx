@@ -412,6 +412,15 @@ function LabTracesInner() {
   const [selectedId, setSelectedId] = useState(
     () => traces.find((t) => t.id === paramId)?.id ?? traces[0]?.id ?? "",
   );
+  // Phase 2a — the list payload always has `steps: []` (avoids an
+  // N+1 of per-trace span hydration); fetch the real transcript for
+  // just the selected trace and merge it in below.
+  const traceDetailQuery = useOrgQuery(
+    queryKeys.portal.traceDetail(orgId, selectedId || null),
+    orgId,
+    () => portalApi.traceDetail(orgId!, selectedId),
+    { enabled: Boolean(orgId) && Boolean(selectedId) },
+  );
   const [selectedSessionId, setSelectedSessionId] = useState(
     () =>
       sessions.find((s) => s.id === paramSession)?.id ??
@@ -439,14 +448,26 @@ function LabTracesInner() {
 
   useEffect(() => {
     setSignalsDismissed(false);
-    const trace = traces.find((t) => t.id === selectedId);
-    const defaults = trace ? errorStepIds(trace.steps) : [];
+    setOpenIds(new Set());
+    if (!paramSpan) {
+      setFocusStepId(null);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedId, paramSpan]);
+
+  // Real steps arrive async (separate detail fetch) — once they land
+  // for the currently-selected trace, default-open/focus the first
+  // failing span (mirrors the old synchronous-fixture behavior).
+  useEffect(() => {
+    const detail = traceDetailQuery.data;
+    if (!detail || detail.id !== selectedId) return;
+    const defaults = errorStepIds(detail.steps);
     setOpenIds(new Set(defaults));
     if (!paramSpan) {
       setFocusStepId(defaults[0] ?? null);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedId, paramSpan]);
+  }, [traceDetailQuery.data, selectedId, paramSpan]);
 
   // Default selections once live rows arrive (initial state above can't
   // reach into query data that hasn't resolved yet).
@@ -632,11 +653,24 @@ function LabTracesInner() {
 
   const groups = useMemo(() => groupByAgent(filtered), [filtered]);
 
-  const selected =
+  const selectedListItem =
     filtered.find((t) => t.id === selectedId) ??
     scopedTraces.find((t) => t.id === selectedId) ??
     filtered[0] ??
     scopedTraces[0];
+
+  // Merge in the real transcript once the detail fetch for this
+  // trace resolves; falls back to the list row's `steps: []` while
+  // loading (or if the detail fetch fails) so the rest of the page
+  // never has to special-case a missing trace.
+  const selected = useMemo(() => {
+    if (!selectedListItem) return selectedListItem;
+    const detail = traceDetailQuery.data;
+    if (detail && detail.id === selectedListItem.id) {
+      return { ...selectedListItem, steps: detail.steps };
+    }
+    return selectedListItem;
+  }, [selectedListItem, traceDetailQuery.data]);
 
   const selectedSession: SessionFixture | undefined =
     filteredSessions.find((s) => s.id === selectedSessionId) ??

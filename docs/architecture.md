@@ -35,7 +35,7 @@ flowchart LR
     end
     subgraph External["3rd-party"]
         OR[OpenRouter<br/>Anthropic / OpenAI / Google]
-        Resend[Resend<br/>email]
+        SendKit[SendKit<br/>email]
         Sentry[Sentry<br/>errors]
         PostHog[PostHog<br/>opt-in analytics]
     end
@@ -75,7 +75,7 @@ flowchart LR
 
     %% ── Async / exports ──────────────────────────────────
     API -- "DSAR / data export" --> S3
-    API -- "DSAR / verification" --> Resend
+    API -- "invites / sparse alerts" --> SendKit
     API -- "errors" --> Sentry
     Portal -- "page view / sign up" --> PostHog
 ```
@@ -91,7 +91,7 @@ flowchart LR
 | Object store| Impossible Cloud (S3)       | Tenant uploads, KB docs, trace payloads        |
 | Vector      | Qdrant Cloud                | KB embeddings, retrieval                       |
 | LLM         | OpenRouter (MiniMax M3)     | T1/T2/T3 tier routing                          |
-| Email       | Resend                      | DSAR + exports + verification                  |
+| Email       | SendKit                     | Invites + sparse alerts. From `alerts@edenobservability.com` (alerts) / `info@edenobservability.com` (transactional) |
 | Error track | Sentry                      | Backend + portal error tracking                |
 | Analytics   | PostHog (opt-in)            | Product analytics, opt-in only                 |
 
@@ -141,7 +141,7 @@ LLM call → BudgetService.record_usage
   → if over budget: hook.emit(on_budget_exceeded)
       → HookBus.sweep() (cascading dedup)
       → if high-severity: PromotionHook fires
-          ├→ drift_alert → Slack / PagerDuty
+          ├→ drift_alert → PagerDuty / email (Slack alerting removed)
           ├→ policy_change → guardrail update
           └→ truncate_context → next prompt
 ```

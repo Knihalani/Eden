@@ -15,6 +15,7 @@ import uuid
 from typing import Any
 
 from eden_sdk._instrumentation_ids import _trace_id_or_random
+from eden_sdk._tokens import extract_usage, normalize_model_name
 from eden_sdk.client import TraceEvent, get_default_client
 from eden_sdk.config import get_config
 
@@ -128,6 +129,73 @@ def _safe_dict(obj: Any) -> dict[str, Any] | None:
     return {"raw": str(obj)[:500]}
 
 
+def _extract_bedrock_usage(response: dict[str, Any] | None) -> dict[str, int | None]:
+    """Normalize token usage out of a Bedrock response.
+
+    Covers two shapes:
+      - Converse / ConverseStream: ``{"usage": {"inputTokens": ..., ...}}``
+        directly on the response.
+      - InvokeModel: usage lives inside the JSON-decoded ``body``
+        (already decoded by :func:`_safe_dict`), and its field names
+        vary per model family — Anthropic-on-Bedrock mirrors the
+        native Anthropic ``usage`` shape; Titan and Llama use their
+        own bespoke top-level fields.
+    """
+    empty: dict[str, int | None] = {
+        "input_tokens": None,
+        "output_tokens": None,
+        "cache_read_tokens": None,
+        "cache_creation_tokens": None,
+    }
+    if not isinstance(response, dict):
+        return empty
+
+    usage = response.get("usage")
+    if isinstance(usage, dict):
+        u = extract_usage(usage)
+        if u["input_tokens"] is not None or u["output_tokens"] is not None:
+            return u
+
+    body = response.get("body")
+    if isinstance(body, dict):
+        inner_usage = body.get("usage")
+        if isinstance(inner_usage, dict):
+            u = extract_usage(inner_usage)
+            if u["input_tokens"] is not None or u["output_tokens"] is not None:
+                return u
+        # Titan / Llama expose token counts as bespoke top-level
+        # fields rather than a nested ``usage`` object — fold them
+        # into the shared ``extract_usage``-compatible key names.
+        synthetic: dict[str, Any] = {}
+        if isinstance(body.get("inputTextTokenCount"), (int, float)):
+            synthetic["input_tokens"] = body["inputTextTokenCount"]
+        if isinstance(body.get("prompt_token_count"), (int, float)):
+            synthetic["input_tokens"] = body["prompt_token_count"]
+        if isinstance(body.get("generation_token_count"), (int, float)):
+            synthetic["output_tokens"] = body["generation_token_count"]
+        results = body.get("results")
+        if isinstance(results, list) and results and isinstance(results[0], dict):
+            tc = results[0].get("tokenCount")
+            if isinstance(tc, (int, float)):
+                synthetic["output_tokens"] = tc
+        if synthetic:
+            return extract_usage(synthetic)
+
+    return empty
+
+
+def _extract_bedrock_total_tokens(response: dict[str, Any] | None) -> int | None:
+    """Bedrock's Converse API also reports a provider-computed ``totalTokens``."""
+    if not isinstance(response, dict):
+        return None
+    usage = response.get("usage")
+    if isinstance(usage, dict):
+        t = usage.get("totalTokens")
+        if isinstance(t, (int, float)):
+            return int(t)
+    return None
+
+
 def _enqueue(
     *,
     operation: str,
@@ -137,18 +205,27 @@ def _enqueue(
     duration_ms: float,
     error: str | None,
 ) -> None:
+    usage = _extract_bedrock_usage(response)
+    total_tokens = _extract_bedrock_total_tokens(response)
     payload: dict[str, Any] = {
         "event_id": f"eden_bedrock_{uuid.uuid4().hex[:16]}",
         "trace_id": _trace_id_or_random(),
         "event_type": "llm_completion",
         "name": f"bedrock.{operation}",
         "model": model,
+        "model_normalized": normalize_model_name(model) if model else None,
         "duration_ms": duration_ms,
         "request_payload": {"operation": operation, **{k: request.get(k) for k in ("modelId", "messages") if k in request}},
         "response_payload": response,
         "source_format": "bedrock",
         "attributes": {"provider": "bedrock", "operation": operation},
+        "input_tokens": usage["input_tokens"],
+        "output_tokens": usage["output_tokens"],
+        "cache_read_input_tokens": usage["cache_read_tokens"],
+        "cache_creation_input_tokens": usage["cache_creation_tokens"],
     }
+    if total_tokens is not None:
+        payload["total_tokens"] = total_tokens
     if error:
         payload["error"] = error
         payload["outcome"] = "error"

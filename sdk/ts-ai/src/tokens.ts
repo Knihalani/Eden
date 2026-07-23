@@ -11,11 +11,26 @@
  * zero) so billing math doesn't accidentally bill free input.
  */
 
-const USAGE_KEYS_INPUT = ["input_tokens", "prompt_tokens", "promptTokens"];
+const USAGE_KEYS_INPUT = [
+  "input_tokens",
+  "prompt_tokens",
+  "promptTokens",
+  // Bedrock Converse API top-level `usage` shape.
+  "inputTokens",
+  // Gemini `usageMetadata` shape (and the legacy Python SDK's
+  // snake_case attribute name, included here too for parity).
+  "promptTokenCount",
+  "prompt_token_count",
+];
 const USAGE_KEYS_OUTPUT = [
   "output_tokens",
   "completion_tokens",
   "completionTokens",
+  // Bedrock Converse API top-level `usage` shape.
+  "outputTokens",
+  // Gemini `usageMetadata` shape (and its snake_case alias).
+  "candidatesTokenCount",
+  "candidates_token_count",
 ];
 const USAGE_KEYS_CACHE_READ = [
   "cache_read_input_tokens",
@@ -24,10 +39,15 @@ const USAGE_KEYS_CACHE_READ = [
   "cachedTokens",
   "prompt_tokens_details.cached_tokens",
   "promptTokensDetails.cached_tokens",
+  // Gemini `usageMetadata` shape (and its snake_case alias).
+  "cachedContentTokenCount",
+  "cached_content_token_count",
 ];
 const USAGE_KEYS_CACHE_WRITE = [
   "cache_creation_input_tokens",
   "cacheCreationInputTokens",
+  // Bedrock Converse API top-level `usage` shape.
+  "cacheWriteInputTokens",
 ];
 
 function getPath(obj: unknown, ...path: string[]): unknown {

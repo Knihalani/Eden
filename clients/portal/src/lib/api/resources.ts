@@ -1139,15 +1139,32 @@ export const api = {
   // These power the live "Scores" tab in /observability.
 
   /**
-   * Run the registered judges on a specific trace. The request is
-   * fire-and-forget — the async tailer picks up the job and writes
-   * scores to ``judge_scores``; the caller refreshes the list to see
-   * the new rows.
+   * Run the registered judges on a specific trace. There is no async
+   * judge tailer — the backend always runs inline and returns the
+   * resulting scores in the response (even if `sync` is omitted or
+   * false, the backend coerces to sync rather than 501ing).
    */
   runJudges: (
     orgId: string,
-    body: { trace_id: string; judge_names?: string[] | null },
-  ): Promise<{ enqueued: number }> =>
+    body: { trace_id: string; judge_names?: string[] | null; sync?: boolean },
+  ): Promise<{
+    judge_runs: Array<{
+      judge_run_id?: string | null;
+      judge_name: string;
+      judge_version: string;
+      trace_id: string;
+      span_id?: string | null;
+      score: number;
+      rationale?: string | null;
+      model: string;
+      scored_at: string;
+      latency_ms: number;
+      metadata: Record<string, unknown>;
+    }>;
+    count: number;
+    queued: boolean;
+    job_id?: string | null;
+  }> =>
     fetchApi(`/orgs/${orgId}/observability/judges/run`, {
       method: "POST",
       body: JSON.stringify(body),
@@ -2639,90 +2656,6 @@ export const agentsApi = {
       `/orgs/${orgId}/agents/register`,
       { method: "POST", body: JSON.stringify(body) }
     ),
-};
-
-// ── Agent PR-suggestion API (v1.7) ───────────────────────────────
-
-import type {
-  PRSuggestionCreateResponse,
-  PRSuggestionDetailResponse,
-  PRSuggestionListResponse,
-  PRSuggestionOpenPRResponse,
-} from "@/lib/types";
-
-export const prSuggestionApi = {
-  list: (orgId: string, query: string) =>
-    fetchApi<PRSuggestionListResponse>(
-      `/orgs/${orgId}/pr-suggestions?${query}`
-    ),
-  get: (orgId: string, suggestionId: string) =>
-    fetchApi<PRSuggestionDetailResponse>(
-      `/orgs/${orgId}/pr-suggestions/${suggestionId}`
-    ),
-  create: (
-    orgId: string,
-    payload: {
-      trigger: string;
-      trigger_id: string;
-      trigger_payload: Record<string, unknown>;
-    }
-  ) =>
-    fetchApi<PRSuggestionCreateResponse>(
-      `/orgs/${orgId}/pr-suggestions`,
-      { method: "POST", body: JSON.stringify(payload) }
-    ),
-  openPR: (
-    orgId: string,
-    suggestionId: string,
-    payload: {
-      pr_title?: string;
-      pr_body?: string;
-      branch?: string;
-      base?: string;
-      labels?: string[];
-      reviewers?: string[];
-      draft?: boolean;
-    }
-  ) =>
-    fetchApi<PRSuggestionOpenPRResponse>(
-      `/orgs/${orgId}/pr-suggestions/${suggestionId}/open-pr`,
-      { method: "POST", body: JSON.stringify(payload) }
-    ),
-  getFile: (orgId: string, suggestionId: string, filePath: string) =>
-    fetchApi<{
-      status: string;
-      data: { path: string; content: string; size: number };
-    }>(
-      `/orgs/${orgId}/pr-suggestions/${encodeURIComponent(
-        suggestionId
-      )}/files/${encodeURIComponent(filePath)}`
-    ),
-  updateStatus: (
-    orgId: string,
-    suggestionId: string,
-    status: "merged" | "rejected" | "opened"
-  ) =>
-    fetchApi<PRSuggestionDetailResponse>(
-      `/orgs/${orgId}/pr-suggestions/${suggestionId}/status`,
-      { method: "POST", body: JSON.stringify({ status }) }
-    ),
-  regenerate: (orgId: string, suggestionId: string) =>
-    fetchApi<PRSuggestionDetailResponse>(
-      `/orgs/${orgId}/pr-suggestions/${suggestionId}/regenerate`,
-      { method: "POST" }
-    ),
-  bulkRegenerate: (orgId: string, suggestionIds: string[]) =>
-    fetchApi<{
-      status: string;
-      data: {
-        regenerated: string[];
-        skipped: string[];
-        requested: number;
-      };
-    }>(`/orgs/${orgId}/pr-suggestions/bulk/regenerate`, {
-      method: "POST",
-      body: JSON.stringify({ suggestion_ids: suggestionIds }),
-    }),
 };
 
 // ── Intelligence: RCA & Incidents (Cat 2) ───────────────────────────
@@ -5554,16 +5487,6 @@ export const integrationsApi = {
       integration_version: string;
       integrations: IntegrationStatusItem[];
     }>(`/orgs/${orgId}/integrations/status`, {
-      headers: { "X-Org-Id": orgId },
-    }),
-  getSlackSettings: (orgId: string) =>
-    fetchApi<{
-      provider: string;
-      configured: boolean;
-      enabled: boolean;
-      webhook_url_masked: string | null;
-      min_severity: string;
-    }>(`/orgs/${orgId}/integrations/slack`, {
       headers: { "X-Org-Id": orgId },
     }),
 };

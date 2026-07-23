@@ -9,7 +9,6 @@ destinations).
 from __future__ import annotations
 
 import logging
-from typing import Any
 
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
@@ -141,7 +140,6 @@ _LABELS: dict[str, str] = {
     "langsmith": "LangSmith",
     "runloop": "Runloop",
     "github_action": "GitHub",
-    "discord": "Discord",
     "support_webhook": "Support webhook",
 }
 
@@ -208,161 +206,6 @@ async def org_integrations_status(
         integration_version=INTEGRATION_API_VERSION,
         integrations=items,
     )
-
-
-# ── Slack integration settings + test webhook (F47) ──────────────────
-
-
-class SlackSettingsIn(BaseModel):
-    webhook_url: str | None = None
-    min_severity: str | None = None  # p0 | p1 | p2 | p3
-    enabled: bool | None = None
-
-
-def _mask_webhook(url: str | None) -> str | None:
-    if not url:
-        return None
-    return url[:32] + "…" if len(url) > 32 else url
-
-
-async def _load_slack_config(org_id: str) -> dict[str, Any]:
-    client = await get_postgres_client()
-    if client is None:
-        return {}
-    try:
-        row = await client.fetchrow(
-            "SELECT config, enabled FROM org_integrations "
-            "WHERE org_id = $1 AND provider = 'slack' LIMIT 1",
-            org_id,
-        )
-    except Exception as exc:
-        logger.debug("slack settings: load failed: %s", redact_all(str(exc)))
-        return {}
-    if not row:
-        return {}
-    cfg = row.get("config") or {}
-    if isinstance(cfg, str):
-        import json
-
-        try:
-            cfg = json.loads(cfg)
-        except (TypeError, ValueError):
-            cfg = {}
-    cfg = dict(cfg)
-    cfg["enabled"] = bool(row.get("enabled"))
-    return cfg
-
-
-@router.get("/slack")
-async def get_slack_settings(
-    org_id: str = Depends(require_path_org_access),
-) -> dict[str, Any]:
-    cfg = await _load_slack_config(org_id)
-    return {
-        "provider": "slack",
-        "configured": bool(cfg.get("webhook_url")),
-        "enabled": bool(cfg.get("enabled")),
-        "webhook_url_masked": _mask_webhook(cfg.get("webhook_url")),
-        "min_severity": cfg.get("min_severity", "p1"),
-    }
-
-
-@router.patch("/slack")
-async def patch_slack_settings(
-    org_id: str = Depends(require_path_org_access),
-    body: SlackSettingsIn = ...,
-) -> dict[str, Any]:
-    import json
-
-    client = await get_postgres_client()
-    if client is None:
-        from fastapi import HTTPException
-
-        raise HTTPException(status_code=503, detail="Database unavailable")
-    current = await _load_slack_config(org_id)
-    if body.webhook_url is not None:
-        current["webhook_url"] = body.webhook_url
-    if body.min_severity is not None:
-        current["min_severity"] = body.min_severity
-    enabled = body.enabled if body.enabled is not None else current.get("enabled", True)
-    persist = {k: v for k, v in current.items() if k != "enabled"}
-    try:
-        await client.execute(
-            """
-            INSERT INTO org_integrations (org_id, provider, config, enabled)
-            VALUES ($1, 'slack', $2::jsonb, $3)
-            ON CONFLICT (org_id, provider)
-            DO UPDATE SET config = EXCLUDED.config, enabled = EXCLUDED.enabled
-            """,
-            org_id,
-            json.dumps(persist, default=str),
-            bool(enabled),
-        )
-    except Exception as exc:
-        from fastapi import HTTPException
-
-        msg = str(exc).lower()
-        if "unique" in msg or "duplicate" in msg:
-            raise HTTPException(
-                status_code=409,
-                detail="Slack integration already configured",
-            ) from exc
-        if "invalid input syntax for type uuid" in msg:
-            raise HTTPException(
-                status_code=400,
-                detail="Invalid organization id",
-            ) from exc
-        if "foreign key" in msg:
-            raise HTTPException(
-                status_code=404,
-                detail="Organization not found",
-            ) from exc
-        logger.warning("slack settings: save failed: %s", redact_all(str(exc)))
-        raise HTTPException(
-            status_code=503,
-            detail="Failed to save Slack settings",
-        ) from exc
-    return await get_slack_settings(org_id)
-
-
-@router.post("/slack/test")
-async def test_slack_webhook(
-    org_id: str = Depends(require_path_org_access),
-) -> dict[str, Any]:
-    """Send a Block Kit test message to the org's configured webhook."""
-    from eden.integrations.slack.alerts import (
-        _post,
-        _resolve_webhook,
-        validate_blocks,
-    )
-
-    from eden.config import get_settings
-
-    webhook = await _resolve_webhook(org_id, get_settings())
-    if not webhook:
-        return {"status": "no_webhook", "delivered": False}
-    blocks = [
-        {
-            "type": "header",
-            "text": {
-                "type": "plain_text",
-                "text": ":white_check_mark: Eden Slack test",
-                "emoji": True,
-            },
-        },
-        {
-            "type": "section",
-            "text": {
-                "type": "mrkdwn",
-                "text": f"Webhook is live for org `{org_id}`.",
-            },
-        },
-    ]
-    errors = validate_blocks(blocks)
-    if errors:
-        return {"status": "invalid_blocks", "delivered": False, "errors": errors}
-    delivered = await _post(webhook, blocks, "test", "p3")
-    return {"status": "ok" if delivered else "failed", "delivered": delivered}
 
 
 __all__ = ["router"]

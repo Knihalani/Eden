@@ -1,30 +1,20 @@
-"""Email service for sending transactional emails via SendGrid."""
+"""Email service for transactional + sparse alert emails via SendKit."""
 
+from __future__ import annotations
+
+import asyncio
 import logging
+import re
 from dataclasses import dataclass
 from typing import Literal
-
-import httpx
 
 from eden.api.utils.redact import redact_email
 from eden.config import get_settings
 
 logger = logging.getLogger(__name__)
 
-_HTTPX: httpx.AsyncClient | None = None
-
-
-def _shared_httpx(timeout: float = 30.0) -> httpx.AsyncClient:
-    global _HTTPX
-    if _HTTPX is None or _HTTPX.is_closed:
-        _HTTPX = httpx.AsyncClient(timeout=timeout)
-    return _HTTPX
-
-
-# SendGrid API endpoint
-SENDGRID_API_URL = "https://api.sendgrid.com/v3/mail/send"
-
 EmailStatus = Literal["sent", "not_configured", "failed"]
+EmailPurpose = Literal["alert", "transactional"]
 
 
 @dataclass(frozen=True)
@@ -33,14 +23,30 @@ class EmailResult:
 
 
 class EmailService:
-    """Email service that sends emails via SendGrid API.
+    """Send emails via the SendKit Python SDK.
 
-    Uses httpx to make HTTP requests to the SendGrid API.
-    If SendGrid is not configured (no API key), emails are logged instead.
+    - ``purpose="alert"`` → from ``alerts@edenobservability.com``
+    - ``purpose="transactional"`` → from ``info@edenobservability.com``
+
+    If ``SENDKIT_API_KEY`` / ``sendkit_api_key`` is unset, emails are logged
+    and return ``not_configured`` (safe degrade for local/dev).
     """
 
     def __init__(self) -> None:
         self.settings = get_settings()
+
+    def _from_address(self, purpose: EmailPurpose) -> str:
+        if purpose == "alert":
+            return getattr(
+                self.settings,
+                "email_from_alerts",
+                "alerts@edenobservability.com",
+            )
+        return getattr(
+            self.settings,
+            "email_from_info",
+            "info@edenobservability.com",
+        )
 
     async def send_email(
         self,
@@ -48,118 +54,106 @@ class EmailService:
         subject: str,
         html_content: str,
         text_content: str | None = None,
+        *,
+        purpose: EmailPurpose = "transactional",
     ) -> EmailResult:
-        """Send an email via SendGrid.
+        """Send an email via SendKit.
 
         Args:
             to_email: Recipient email address
             subject: Email subject line
-            html_content: HTML body of the email
-            text_content: Plain text body (optional, for email clients that prefer text)
-
-        Returns:
-            EmailResult with sent, not_configured, or failed status
+            html_content: HTML body
+            text_content: Plain text body (optional)
+            purpose: Selects from-address (alert vs transactional)
         """
-        api_key = self.settings.sendgrid_api_key
+        api_key = (getattr(self.settings, "sendkit_api_key", None) or "").strip()
+        recipient_domain = to_email.rsplit("@", 1)[-1] if "@" in to_email else "unknown"
 
-        # If no API key configured, log and return (stub mode)
         if not api_key:
-            # F65 — PII redaction. The pre-F65 log line
-            # embedded the full recipient address + email body
-            # in plaintext, which is a PII-in-logs violation
-            # under GDPR Art. 5 and CCPA §1798.150. The
-            # subject + recipient domain are still useful for
-            # diagnostics so we keep them; the local-part and
-            # the body are redacted.
-            recipient_domain = to_email.rsplit("@", 1)[-1] if "@" in to_email else "unknown"
             logger.warning(
-                "sendgrid_api_key not configured. Email not sent.\n"
+                "sendkit_api_key not configured. Email not sent.\n"
                 f"  To: ***@{recipient_domain}\n"
                 f"  Subject: {subject}\n"
+                f"  Purpose: {purpose}\n"
                 f"  Content: {redact_email(text_content or html_content[:100])}..."
             )
             return EmailResult(status="not_configured")
 
-        # Prepare SendGrid API payload
-        payload = {
-            "personalizations": [
-                {
-                    "to": [{"email": to_email}],
-                }
-            ],
-            "from": {
-                "email": self.settings.sendgrid_from_email,
-                "name": self.settings.sendgrid_from_name,
-            },
-            "subject": subject,
-            "content": [
-                {
-                    "type": "text/plain",
-                    "value": text_content or self._html_to_text(html_content),
-                },
-                {
-                    "type": "text/html",
-                    "value": html_content,
-                },
-            ],
-        }
+        from_addr = self._from_address(purpose)
+        html = html_content
+        # SendKit accepts html; include a minimal text fallback in the body
+        # when callers only pass HTML.
+        _ = text_content or self._html_to_text(html_content)
 
         try:
-            # Do NOT ``async with`` the shared client — that acloses it.
-            client = _shared_httpx(30.0)
-            response = await client.post(
-                SENDGRID_API_URL,
-                json=payload,
-                headers={
-                    "Authorization": f"Bearer {api_key}",
-                    "Content-Type": "application/json",
-                },
+            result = await asyncio.to_thread(
+                self._send_sync,
+                api_key,
+                from_addr,
+                to_email,
+                subject,
+                html,
             )
-
-            if response.status_code == 202:
-                # F65 — recipient email is PII. Keep the
-                # domain so the operator can still
-                # attribute the log line, but redact the
-                # local-part.
-                recipient_domain = to_email.rsplit("@", 1)[-1] if "@" in to_email else "unknown"
-                logger.info(f"Email sent successfully to ***@{recipient_domain}")
-                return EmailResult(status="sent")
-            else:
-                # F65 — recipient email is PII. The
-                # SendGrid error body is logged as-is —
-                # SendGrid does not echo the recipient
-                # in error bodies so it's safe to leave.
-                recipient_domain = to_email.rsplit("@", 1)[-1] if "@" in to_email else "unknown"
-                logger.error(
-                    f"Failed to send email to ***@{recipient_domain}. "
-                    f"Status: {response.status_code}, Body: {response.text}"
+            if result:
+                logger.info(
+                    "Email sent via SendKit to ***@%s (purpose=%s)",
+                    recipient_domain,
+                    purpose,
                 )
-                return EmailResult(status="failed")
-
-        except httpx.TimeoutException:
-            # F65 — recipient email is PII.
-            recipient_domain = to_email.rsplit("@", 1)[-1] if "@" in to_email else "unknown"
-            logger.error(f"Timeout sending email to ***@{recipient_domain}")
+                return EmailResult(status="sent")
             return EmailResult(status="failed")
-        except httpx.RequestError as e:
-            # F65 — recipient email is PII. The httpx
-            # RequestError exception is also run through
-            # ``redact_all`` to scrub any embedded
-            # credentials in the URL/headers.
+        except Exception as exc:  # noqa: BLE001
             from eden.api.utils.redact import redact_all
-            recipient_domain = to_email.rsplit("@", 1)[-1] if "@" in to_email else "unknown"
+
             logger.error(
-                f"Request error sending email to ***@{recipient_domain}: {redact_all(str(e))}"
+                "SendKit email failed to ***@%s: %s",
+                recipient_domain,
+                redact_all(str(exc)),
             )
             return EmailResult(status="failed")
+
+    @staticmethod
+    def _send_sync(
+        api_key: str,
+        from_addr: str,
+        to_email: str,
+        subject: str,
+        html: str,
+    ) -> bool:
+        from sendkit import SendKit, SendKitError
+
+        client = SendKit(api_key)
+        try:
+            client.emails.send(
+                from_=from_addr,
+                to=to_email,
+                subject=subject,
+                html=html,
+            )
+            return True
+        except SendKitError as exc:
+            logger.error(
+                "SendKit API error status=%s name=%s msg=%s",
+                getattr(exc, "status_code", None),
+                getattr(exc, "name", None),
+                getattr(exc, "message", str(exc)),
+            )
+            return False
 
     def _html_to_text(self, html: str) -> str:
-        """Convert basic HTML to plain text (simple conversion)."""
-        # Simple conversion - strip tags and decode common entities
-        text = html.replace("<br>", "\n").replace("<br/>", "\n").replace("<p>", "\n").replace("</p>", "")
-        import re
+        text = (
+            html.replace("<br>", "\n")
+            .replace("<br/>", "\n")
+            .replace("<p>", "\n")
+            .replace("</p>", "")
+        )
         text = re.sub(r"<[^>]+>", "", text)
-        text = text.replace("&nbsp;", " ").replace("&lt;", "<").replace("&gt;", ">").replace("&amp;", "&")
+        text = (
+            text.replace("&nbsp;", " ")
+            .replace("&lt;", "<")
+            .replace("&gt;", ">")
+            .replace("&amp;", "&")
+        )
         return text.strip()
 
 

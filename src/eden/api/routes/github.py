@@ -43,7 +43,7 @@ from __future__ import annotations
 import json
 import logging
 import uuid
-from datetime import UTC, datetime
+from datetime import datetime
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -54,9 +54,9 @@ from eden.api.deps import (
     get_current_user,
     require_org_member,
     require_org_permission_dep,
+    require_path_org_access,
     resolve_eden_org_id,
     resolve_eden_user_id,
-    require_path_org_access,
 )
 from eden.api.utils.redact import redact_all
 from eden.config import get_settings
@@ -557,6 +557,56 @@ async def _pr_prompt_override(
     return None
 
 
+async def _sync_improvement_plan_on_pr_close(
+    *, repo_full: str, pr_number: int, merged: bool,
+) -> None:
+    """N23/N20 (Phase 2b): sync improvement_plans status on PR close.
+
+    ``approve.approve_plan`` opens the PR and leaves the plan at
+    ``pr_opened`` — this webhook is the only signal that a human
+    actually merged/closed it on GitHub, so the Improve inbox isn't
+    stuck showing a stale "PR opened" card forever. On merge, reuses
+    the approve flow's existing N01 regression-verify scheduling
+    (:func:`eden.improvement.approve.queue_verify_for_plan`) instead of
+    inventing a second verify subsystem.
+
+    Best-effort: any failure here must not break the webhook response
+    (GitHub retries on non-2xx, and this is a secondary side-effect of
+    the primary ``onboarding_pr_runs`` update above).
+    """
+    try:
+        from eden.improvement import plans_repo
+        from eden.improvement.approve import queue_verify_for_plan
+
+        plan = await plans_repo.find_by_pr(
+            repo_full_name=repo_full, pr_number=pr_number,
+        )
+        if plan is None:
+            return
+        plan_org_id = str(plan["org_id"])
+        plan_id = str(plan["id"])
+        if merged:
+            updated = await plans_repo.mark_merged(plan_org_id, plan_id)
+            await queue_verify_for_plan(
+                plan_org_id,
+                updated or plan,
+                branch=plan.get("github_branch"),
+            )
+        else:
+            await plans_repo.mark_closed(
+                plan_org_id, plan_id, reason="pr_closed_without_merge",
+            )
+    except Exception as exc:
+        logger.warning(
+            "github webhook: improvement_plans PR-close sync failed "
+            "repo=%s pr=%s merged=%s: %s",
+            repo_full,
+            pr_number,
+            merged,
+            redact_all(str(exc)),
+        )
+
+
 # ── Public integration routes ───────────────────────────────────────
 
 
@@ -732,6 +782,9 @@ async def github_webhook(request: Request) -> dict[str, str]:
                 WHERE repo_full_name = $2 AND pr_number = $3
                 """,
                 new_status, repo_full, int(pr_number),
+            )
+            await _sync_improvement_plan_on_pr_close(
+                repo_full=repo_full, pr_number=int(pr_number), merged=merged,
             )
     elif event == "installation":
         action = payload.get("action", "")

@@ -42,6 +42,12 @@ function OnboardingOverlayInner() {
   const userClosedRef = useRef(false);
   /** Bootstrap Clerk metadata at most once per forced open. */
   const bootstrappedRef = useRef(false);
+  /**
+   * Once ?onboarding=1 / ?tour=1 opens the tour, keep it open across
+   * in-tour router.push(step.href) navigations that strip the query.
+   * Cleared only on Skip/Finish (or when org disappears).
+   */
+  const sessionOpenRef = useRef(false);
   const [deferTick, setDeferTick] = useState(0);
 
   const forceOpen =
@@ -51,13 +57,13 @@ function OnboardingOverlayInner() {
   const progressStep = progress?.stepIndex ?? 0;
 
   const clearTourQuery = useCallback(() => {
-    if (!forceOpen) return;
     const params = new URLSearchParams(searchParams.toString());
+    if (!params.has("onboarding") && !params.has("tour")) return;
     params.delete("onboarding");
     params.delete("tour");
     const q = params.toString();
     router.replace(q ? `${pathname}?${q}` : pathname || "/home");
-  }, [forceOpen, searchParams, router, pathname]);
+  }, [searchParams, router, pathname]);
 
   useEffect(() => {
     if (typeof document === "undefined") return;
@@ -80,14 +86,16 @@ function OnboardingOverlayInner() {
   useEffect(() => {
     if (!isLoaded) return;
     if (!currentOrg) {
+      sessionOpenRef.current = false;
       setOpen(false);
       if (forceOpen) {
-        router.replace("/settings?tab=org");
+        router.replace("/settings?mode=workspace");
       }
       return;
     }
     if (forceOpen) {
       userClosedRef.current = false;
+      sessionOpenRef.current = true;
     }
     if (userClosedRef.current) {
       if (isComplete && !forceOpen) {
@@ -96,7 +104,9 @@ function OnboardingOverlayInner() {
       if (userClosedRef.current) return;
     }
 
-    if (!forceOpen) {
+    // Stay open for the whole walkthrough once force-opened — ProductTour
+    // navigates with bare step hrefs that omit ?onboarding=1.
+    if (!forceOpen && !sessionOpenRef.current) {
       setOpen(false);
       return;
     }
@@ -132,6 +142,7 @@ function OnboardingOverlayInner() {
 
   async function handleSkip() {
     userClosedRef.current = true;
+    sessionOpenRef.current = false;
     setOpen(false);
     clearTourQuery();
     setBusy(true);
@@ -153,6 +164,7 @@ function OnboardingOverlayInner() {
 
   async function handleFinish() {
     userClosedRef.current = true;
+    sessionOpenRef.current = false;
     setOpen(false);
     clearTourQuery();
     setBusy(true);

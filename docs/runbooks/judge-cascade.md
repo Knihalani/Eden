@@ -135,12 +135,13 @@ leaked into the system.
 
 8. **Notify affected customers** (only if their guardrails fired):
    ```bash
-   # Same template engine as the budget-exceeded runbook.
+   # Same SendKit-backed template engine as the budget-exceeded runbook
+   # (eden.services.email_service, purpose="alert", from alerts@edenobservability.com).
    psql "$DATABASE_URL" -t -c "
      SELECT DISTINCT org_id FROM guardrail_policies
       WHERE last_fired_at >= NOW() - INTERVAL '1 hour';
    " | while read org; do
-     resend send --template judge-cascade-notice \
+     send-eden-email --template judge-cascade-notice \
        --org "$org" --data "$(cat /tmp/cascade-context.json)"
    done
    ```

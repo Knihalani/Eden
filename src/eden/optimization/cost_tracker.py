@@ -58,51 +58,67 @@ class CostTracker:
         self._total_tracked_cents = 0.0
 
     async def track(self, event: CostEvent) -> None:
-        """Record a cost event and update real-time aggregations in Redis."""
+        """Record a cost event, mirror it to Postgres, and cache in Redis.
+
+        Postgres (``budget_service``) is the canonical ledger for budget
+        enforcement; Redis is only a best-effort read-through cache for
+        real-time dashboards. The PG mirror below must run unconditionally
+        — it previously lived *after* an early ``return`` when Redis was
+        unavailable, so a Redis outage silently dropped spend from the
+        enforcement source of truth (F83 unify).
+        """
         self._events.append(event)
         self._total_tracked_cents += event.total_cost_cents
 
-        # Update real-time counters in Redis (best-effort, non-blocking)
+        # Update real-time counters in Redis (best-effort, non-blocking cache).
         client = await get_redis_client()
-        if client is None:
-            return
+        if client is not None:
+            try:
+                now = datetime.now(UTC)
+                day_key = now.strftime("%Y-%m-%d")
+                hour_key = now.strftime("%Y-%m-%d-%H")
+                month_key = now.strftime("%Y-%m")
 
-        try:
-            now = datetime.now(UTC)
-            day_key = now.strftime("%Y-%m-%d")
-            hour_key = now.strftime("%Y-%m-%d-%H")
-            month_key = now.strftime("%Y-%m")
+                day_hash = f"eden:cost:{event.tenant_id}:day:{day_key}"
+                month_hash = f"eden:cost:{event.tenant_id}:month:{month_key}"
+                model_hash = f"eden:cost:model:{event.model}:hour:{hour_key}"
+                node_hash = f"eden:cost:node:{event.pipeline_node}:day:{day_key}"
+                ttl = 7 * 24 * 3600
 
-            day_hash = f"eden:cost:{event.tenant_id}:day:{day_key}"
-            month_hash = f"eden:cost:{event.tenant_id}:month:{month_key}"
-            model_hash = f"eden:cost:model:{event.model}:hour:{hour_key}"
-            node_hash = f"eden:cost:node:{event.pipeline_node}:day:{day_key}"
-            ttl = 7 * 24 * 3600
+                # One pipeline = one RTT (was ~10 serial round-trips).
+                pipe = client.pipeline(transaction=False)
+                pipe.hincrbyfloat(day_hash, "total_cents", float(event.total_cost_cents))
+                pipe.hincrby(day_hash, "tokens", event.total_tokens)
+                pipe.hincrbyfloat(month_hash, "total_cents", float(event.total_cost_cents))
+                pipe.hincrby(month_hash, "tokens", event.total_tokens)
+                pipe.hincrbyfloat(model_hash, "total_cents", float(event.total_cost_cents))
+                pipe.hincrbyfloat(node_hash, "total_cents", float(event.total_cost_cents))
+                for key in (day_hash, month_hash, model_hash, node_hash):
+                    pipe.expire(key, ttl)
+                await pipe.execute()
 
-            # One pipeline = one RTT (was ~10 serial round-trips).
-            pipe = client.pipeline(transaction=False)
-            pipe.hincrbyfloat(day_hash, "total_cents", float(event.total_cost_cents))
-            pipe.hincrby(day_hash, "tokens", event.total_tokens)
-            pipe.hincrbyfloat(month_hash, "total_cents", float(event.total_cost_cents))
-            pipe.hincrby(month_hash, "tokens", event.total_tokens)
-            pipe.hincrbyfloat(model_hash, "total_cents", float(event.total_cost_cents))
-            pipe.hincrbyfloat(node_hash, "total_cents", float(event.total_cost_cents))
-            for key in (day_hash, month_hash, model_hash, node_hash):
-                pipe.expire(key, ttl)
-            await pipe.execute()
+            except Exception as e:
+                logger.warning(f"Cost tracking Redis update failed: {e}")
 
-        except Exception as e:
-            logger.warning(f"Cost tracking Redis update failed: {e}")
-
-        # Mirror spend into budget_service PG ledger (best-effort, F83 unify step 1).
+        # Mirror spend into budget_service PG ledger — canonical source of
+        # truth for enforcement (F83 unify). Runs regardless of Redis
+        # availability (see docstring).
         if event.total_cost_cents > 0:
             try:
-                from eden.services.budget_service import record_usage
+                from eden.services.budget_service import (
+                    evaluate_budget_alerts,
+                    record_usage,
+                )
 
                 cost_usd = event.total_cost_cents / 100.0
                 await record_usage(event.tenant_id, cost_usd)
+                # Same threshold-alert path as the cost_ledger hot path:
+                # idempotent per (org, window, threshold) via the
+                # budget_actions audit log, so calling it from both
+                # mirrors never double-fires the hard-limit email.
+                await evaluate_budget_alerts(event.tenant_id)
             except Exception as exc:
-                logger.debug("CostTracker: budget_service record_usage failed: %s", exc)
+                logger.debug("CostTracker: budget_service mirror failed: %s", exc)
 
     async def check_budget(
         self,

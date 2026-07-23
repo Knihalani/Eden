@@ -8,7 +8,6 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import type { AlertChannel } from "@/lab/alert-destination";
 import type { CompiledSignalDraft } from "@/lab/signal-compile";
 import { useLabToast } from "@/lab/lab-toast";
 
@@ -16,9 +15,6 @@ export type SignalCompileJob = {
   id: string;
   prompt: string;
   agentId: string | null;
-  notify: boolean;
-  channel: AlertChannel;
-  destination: string;
   severity: "auto" | "critical" | "error" | "warn";
   status: "compiling" | "ready" | "failed";
   draft?: CompiledSignalDraft;
@@ -35,9 +31,6 @@ type SignalJobsContextValue = {
   startCompile: (input: {
     prompt: string;
     agentId: string | null;
-    notify: boolean;
-    channel: AlertChannel;
-    destination: string;
     severity: "auto" | "critical" | "error" | "warn";
   }) => string;
   updatePendingDraft: (patch: Partial<CompiledSignalDraft>) => void;
@@ -65,9 +58,6 @@ export function SignalJobsProvider({ children }: { children: ReactNode }) {
     (input: {
       prompt: string;
       agentId: string | null;
-      notify: boolean;
-      channel: AlertChannel;
-      destination: string;
       severity: "auto" | "critical" | "error" | "warn";
     }) => {
       const id = `job_${Date.now().toString(36)}`;
@@ -75,9 +65,6 @@ export function SignalJobsProvider({ children }: { children: ReactNode }) {
         id,
         prompt: input.prompt,
         agentId: input.agentId,
-        notify: input.notify,
-        channel: input.channel,
-        destination: input.destination,
         severity: input.severity,
         status: "compiling",
         createdAt: Date.now(),

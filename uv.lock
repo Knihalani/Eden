@@ -758,6 +758,7 @@ dependencies = [
     { name = "qdrant-client", version = "1.18.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.13'" },
     { name = "qrcode" },
     { name = "redis" },
+    { name = "sendkit" },
     { name = "sentry-sdk", extra = ["fastapi"] },
     { name = "sqlalchemy" },
     { name = "sse-starlette" },
@@ -811,6 +812,7 @@ requires-dist = [
     { name = "qrcode", specifier = ">=7.4.0,<8.0.0" },
     { name = "redis", specifier = ">=5.0.0,<6.0.0" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.6.0,<1.0.0" },
+    { name = "sendkit", specifier = ">=1.0.7,<2.0.0" },
     { name = "sentry-sdk", extras = ["fastapi"], specifier = ">=2.0.0,<3.0.0" },
     { name = "sqlalchemy", specifier = ">=2.0.0,<3.0.0" },
     { name = "sse-starlette", specifier = ">=3.4.5,<4.0.0" },
@@ -2422,6 +2424,15 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/f6/94/dcdaeb1713cab9c84def276cfac7388b17c7d9855bbcfe88d77e4dbafd44/s3transfer-0.19.0.tar.gz", hash = "sha256:ce436931687addc4c1712d52d40b32f53e88315723f107ffa20ba82b05a0f685", size = 165171, upload-time = "2026-06-16T19:44:51.599Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/46/5f/4c174edad94f82de888ac00a5ddd8d07b35609b6c94f0bdf4d74af57703e/s3transfer-0.19.0-py3-none-any.whl", hash = "sha256:777cc2415536f1debadb5c2ef7779275d0fc0fe0e042411cdd6caebeb2685262", size = 90101, upload-time = "2026-06-16T19:44:50.439Z" },
+]
+
+[[package]]
+name = "sendkit"
+version = "1.0.7"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/87/39/35d7b1e9e6bab4fb392d928697bbf031f6f2c9a93f245e61b9b37c1cb9ae/sendkit-1.0.7.tar.gz", hash = "sha256:c90d855e5db0eef810c2b66f1727a0afb6d0f086b5d9f07262b6b37035f338a5", size = 6238, upload-time = "2026-03-16T01:46:34.019Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/9f/12/f1a8b1dde9ed194531ca784f8520be5ffa71ed1db4b54d26969e5e28f509/sendkit-1.0.7-py3-none-any.whl", hash = "sha256:78456722473825f0fa3da3b9ecc8168c24dce75ab7028064486504f3085f41b1", size = 3934, upload-time = "2026-03-16T01:46:32.454Z" },
 ]
 
 [[package]]

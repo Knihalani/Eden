@@ -378,6 +378,19 @@ async def _n22_blocked(org_id: str, plan: dict[str, Any]) -> str | None:
     return None
 
 
+async def queue_verify_for_plan(
+    org_id: str, plan: dict[str, Any], *, branch: str | None = None
+) -> str | None:
+    """Public entry point so other callers reuse the approve flow's N01
+    verify scheduling instead of standing up a parallel subsystem.
+
+    Used by :func:`approve_plan` itself (PR-open time) and by the
+    GitHub webhook (Phase 2b, PR-merge time) when a linked improvement
+    plan's PR lands.
+    """
+    return await _queue_verify(org_id, plan, branch=branch)
+
+
 async def _queue_verify(
     org_id: str, plan: dict[str, Any], *, branch: str | None = None
 ) -> str | None:

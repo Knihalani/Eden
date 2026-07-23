@@ -398,12 +398,20 @@ class AlertStreamProcessor:
             logger.debug(f"WebSocket alert dispatch failed: {exc}")
 
     async def _dispatch_email(self, alert: GeneratedAlert) -> None:
-        """Send alert via email — gated when SendGrid is not configured."""
-        logger.info(
-            "Email alert skipped:not_configured: %s (tenant=%s)",
-            alert.title,
-            alert.tenant_id,
-        )
+        """Sparse email via SendKit (alerts@) — best-effort, rate-limited upstream."""
+        try:
+            from eden.services.alert_email import send_issue_alert_email
+
+            await send_issue_alert_email(
+                org_id=str(alert.tenant_id),
+                event_kind="realtime_alert",
+                issue_id=getattr(alert, "entity_id", None),
+                severity=str(getattr(alert, "severity", "P1") or "P1"),
+                title=str(alert.title),
+                detail=str(getattr(alert, "message", "") or ""),
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("Email alert dispatch failed: %s", exc)
 
     async def _dispatch_webhook(self, alert: GeneratedAlert) -> None:
         """Send alert to configured webhook URL."""
@@ -423,8 +431,8 @@ class AlertStreamProcessor:
             logger.warning(f"Webhook alert dispatch failed: {exc}")
 
     async def _dispatch_slack(self, alert: GeneratedAlert) -> None:
-        """Send alert to Slack — gated when Slack is not configured."""
-        logger.info("Slack alert skipped:not_configured: %s", alert.title)
+        """Slack removed (2026-07-23) — no-op kept for channel enum compat."""
+        return
 
     async def _dispatch_pagerduty(self, alert: GeneratedAlert) -> None:
         """Send alert to PagerDuty — gated when PagerDuty is not configured."""

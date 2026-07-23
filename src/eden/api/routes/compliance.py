@@ -279,7 +279,7 @@ _SUBPROCESSORS: list[dict[str, str]] = [
         "location": "US / global edge",
     },
     {
-        "name": "Resend / SendGrid",
+        "name": "SendKit",
         "purpose": "Transactional email (DSAR, exports)",
         "location": "US",
     },

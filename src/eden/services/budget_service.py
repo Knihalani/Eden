@@ -471,7 +471,7 @@ async def evaluate_budget_alerts(org_id: str) -> list[int]:
 async def _notify_budget_alert(
     org_id: str, threshold_pct: int, used: float, hard: float
 ) -> None:
-    """Best-effort in-app + Slack notification for budget ladder alerts."""
+    """Best-effort in-app notification + sparse email on hard (100%) breach."""
     try:
         from eden.storage.postgres import get_postgres_client
 
@@ -497,24 +497,14 @@ async def _notify_budget_alert(
     except Exception as exc:
         logger.debug("budget_service: in-app notify skipped: %s", exc)
 
-    try:
-        from eden.config import get_settings
+    # Sparse email: only hard-limit (100%). Soft 80% stays in-app only.
+    if int(threshold_pct) >= 100:
+        try:
+            from eden.services.alert_email import send_budget_hard_limit_email
 
-        webhook = getattr(get_settings(), "slack_webhook_url", "") or ""
-        if not webhook:
-            return
-        http = _shared_httpx(5.0)
-        await http.post(
-            webhook,
-            json={
-                "text": (
-                    f"[Eden] Budget alert {threshold_pct}% for org "
-                    f"{org_id}: ${used:.4f} / ${hard:.4f}"
-                )
-            },
-        )
-    except Exception as exc:
-        logger.debug("budget_service: slack notify skipped: %s", exc)
+            await send_budget_hard_limit_email(org_id=org_id, used=used, hard=hard)
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("budget_service: alert email skipped: %s", exc)
 
 
 async def upsert_budget(

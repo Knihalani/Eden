@@ -8,8 +8,8 @@ sidebar_position: 7
 # How-to — Set cost budgets + alerts
 
 Per-org budgets on tokens, storage, and sandbox seconds. Soft limits
-warn; hard limits block ingest. Alerts route to email, Slack, or
-your own webhook.
+warn; hard limits block ingest. Alerts route to email (via SendKit,
+sparse) or your own webhook. Slack alerting has been removed.
 
 ## Default behaviour
 
@@ -81,7 +81,7 @@ curl -X POST https://api.edenobservability.com/orgs/org_abc/budget/alerts \
   -H "Authorization: Bearer sk_eden_admin_..." \
   -H "Content-Type: application/json" \
   -d '{
-    "channels": ["email", "slack", "webhook"],
+    "channels": ["email", "webhook"],
     "thresholds": [
       { "resource": "tokens", "percent": 50,  "severity": "info" },
       { "resource": "tokens", "percent": 80,  "severity": "warning" },
@@ -109,8 +109,7 @@ The webhook payload:
 ```
 
 `severity` is one of `info`, `warning`, `critical`. The org owner
-gets all severities by email; Slack and webhook channels are
-opt-in per channel.
+gets all severities by email; the webhook channel is opt-in.
 
 ## Anomaly detection
 

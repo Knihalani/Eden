@@ -72,6 +72,8 @@ spec:
         - name: GITHUB_APP_PRIVATE_KEY
         - name: GITHUB_APP_WEBHOOK_SECRET
         - name: GITHUB_APP_CALLBACK_URL
+        # SendKit transactional + sparse alert email (never commit the key).
+        - name: SENDKIT_API_KEY
         - name: REDIS_URL
         - name: UPSTASH_REDIS_REST_URL
         - name: UPSTASH_REDIS_REST_TOKEN
@@ -386,6 +388,11 @@ spec:
         secretKeyRef:
           group: eden-required
           key: GITHUB_APP_CALLBACK_URL
+    - name: SENDKIT_API_KEY
+      valueFrom:
+        secretKeyRef:
+          group: eden-required
+          key: SENDKIT_API_KEY
     # Public URL slug (github.com/apps/<slug>) — NOT the OAuth client id.
     # Plain value so missing secret groups don't break the deploy; code
     # also defaults to eden-observability when unset.

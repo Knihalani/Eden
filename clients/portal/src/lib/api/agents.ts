@@ -47,7 +47,6 @@ export {
   offlineExperimentsApi,
   outcomesApi,
   playgroundApi,
-  prSuggestionApi,
   predictiveApi,
   rcaApi,
   retrievalApi,

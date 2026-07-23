@@ -104,8 +104,34 @@ def extract_usage(usage: Any) -> dict[str, int | None]:
             "cache_creation_tokens": None,
         }
 
-    input_tokens = _coerce_int(_get(usage, "input_tokens", "prompt_tokens", "promptTokens"))
-    output_tokens = _coerce_int(_get(usage, "output_tokens", "completion_tokens", "completionTokens"))
+    input_tokens = _coerce_int(
+        # ``inputTokens`` is the Bedrock Converse API's top-level
+        # ``usage`` shape. ``promptTokenCount`` is Gemini's REST /
+        # ``usageMetadata`` shape; ``prompt_token_count`` is the
+        # same field as a snake_case Python SDK attribute (the
+        # legacy ``google-generativeai`` package's ``UsageMetadata``
+        # model).
+        _get(
+            usage,
+            "input_tokens",
+            "prompt_tokens",
+            "promptTokens",
+            "inputTokens",
+            "promptTokenCount",
+            "prompt_token_count",
+        )
+    )
+    output_tokens = _coerce_int(
+        _get(
+            usage,
+            "output_tokens",
+            "completion_tokens",
+            "completionTokens",
+            "outputTokens",
+            "candidatesTokenCount",
+            "candidates_token_count",
+        )
+    )
 
     cache_read_tokens: int | None = None
     # Match the TypeScript SDK's key list exactly so the two
@@ -114,8 +140,11 @@ def extract_usage(usage: Any) -> dict[str, int | None]:
     for name in (
         "cache_read_tokens",
         "cache_read_input_tokens",
+        "cacheReadInputTokens",  # Bedrock Converse API top-level `usage` shape.
         "cached_tokens",
         "cachedTokens",
+        "cachedContentTokenCount",  # Gemini `usageMetadata` shape.
+        "cached_content_token_count",  # Gemini snake_case SDK attribute.
     ):
         v = _coerce_int(_get(usage, name))
         if v is not None:
@@ -135,7 +164,11 @@ def extract_usage(usage: Any) -> dict[str, int | None]:
                     break
 
     cache_creation_tokens: int | None = None
-    for name in ("cache_creation_tokens", "cache_creation_input_tokens"):
+    for name in (
+        "cache_creation_tokens",
+        "cache_creation_input_tokens",
+        "cacheWriteInputTokens",  # Bedrock Converse API top-level `usage` shape.
+    ):
         v = _coerce_int(_get(usage, name))
         if v is not None:
             cache_creation_tokens = v

@@ -169,10 +169,12 @@ def test_callback_rejects_state_for_wrong_provider() -> None:
 
 
 def test_callback_consumes_state_and_succeeds() -> None:
-    """State CSRF gate runs before the 501 token-exchange stub.
+    """State CSRF gate runs before the "SSO not enabled" response.
 
-    Until IdP exchange ships, a valid state still yields 501, but the
-    nonce must be consumed so replay is rejected with 400.
+    IdP token exchange is not wired up in this deployment, so a valid
+    state still yields a structured 503 (not a raw 501 that looks like
+    a bug), but the nonce must be consumed so replay is rejected with
+    400.
     """
     fake = _FakeRedis()
     fake.store["eden:sso:state:valid-state"] = "prov-1|org-1"
@@ -185,10 +187,10 @@ def test_callback_consumes_state_and_succeeds() -> None:
             resp = client.post(
                 "/sso/callback/prov-1?org_id=org-1&code=abc&state=valid-state"
             )
-    assert resp.status_code == 501, resp.text
+    assert resp.status_code == 503, resp.text
     body = resp.json()
     detail = body.get("detail") or {}
-    assert detail.get("status") == "not_implemented"
+    assert detail.get("status") == "sso_not_enabled"
     # Nonce is gone — replay must fail
     assert "eden:sso:state:valid-state" not in fake.store
     # Second attempt with the same state → 400

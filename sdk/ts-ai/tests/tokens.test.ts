@@ -125,6 +125,30 @@ describe("extractUsage", () => {
     expect(out.inputTokens).toBeNull();
     expect(out.outputTokens).toBeNull();
   });
+
+  test("Bedrock Converse API camelCase shape", () => {
+    const out = extractUsage({
+      inputTokens: 10,
+      outputTokens: 5,
+      cacheReadInputTokens: 200,
+      cacheWriteInputTokens: 50,
+    });
+    expect(out.inputTokens).toBe(10);
+    expect(out.outputTokens).toBe(5);
+    expect(out.cacheReadTokens).toBe(200);
+    expect(out.cacheCreationTokens).toBe(50);
+  });
+
+  test("Gemini usageMetadata shape", () => {
+    const out = extractUsage({
+      promptTokenCount: 60,
+      candidatesTokenCount: 25,
+      cachedContentTokenCount: 40,
+    });
+    expect(out.inputTokens).toBe(60);
+    expect(out.outputTokens).toBe(25);
+    expect(out.cacheReadTokens).toBe(40);
+  });
 });
 
 describe("normalizeModelName", () => {

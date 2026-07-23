@@ -82,7 +82,7 @@ application 503 from FastAPI itself. The Vercel `/api/proxy` route forwards it.
 
 ## After — communicate
 
-8. **Customer comms**: if the outage was >5 min, email affected orgs via the audit log table — `SELECT email FROM users WHERE org_id IN (... affected orgs ...)`. (Resend → `ops@eden`).
+8. **Customer comms**: if the outage was >5 min, email affected orgs via the audit log table — `SELECT email FROM users WHERE org_id IN (... affected orgs ...)`. (SendKit → `alerts@edenobservability.com`).
 
 ## Post-mortem
 

@@ -1,7 +1,10 @@
 """Worker-4 backend bugfix regression tests.
 
-Covers: MCP write-auth gate, alert override org scoping, Slack org embedding,
+Covers: MCP write-auth gate, alert override org scoping,
 GitHub webhook empty-secret rejection, vector client SearchResults unwrap.
+
+Phase 0 (2026-07-23) — the Slack interactive-bot tests that used to live
+here were removed along with ``eden.integrations.slack``.
 """
 
 from __future__ import annotations
@@ -110,32 +113,6 @@ def test_verify_webhook_signature_rejects_empty_secret() -> None:
         )
         is False
     )
-
-
-def test_slack_action_value_embeds_org() -> None:
-    from eden.integrations.slack import interactive as slack
-
-    encoded = slack.encode_action_value("org-eden", "iss-9")
-    org, rid = slack.decode_action_value(encoded)
-    assert org == "org-eden"
-    assert rid == "iss-9"
-    blocks = slack.interactive_action_blocks("org-eden", "iss-9", "trc-1")
-    values = [el["value"] for el in blocks[0]["elements"]]
-    assert all(v.startswith("org-eden|") for v in values)
-
-
-@pytest.mark.asyncio
-async def test_slash_command_requires_team_org_mapping() -> None:
-    from eden.integrations.slack import interactive as slack
-
-    with patch(
-        "eden.integrations.slack.interactive.resolve_eden_org_for_slack_team",
-        new=AsyncMock(return_value=None),
-    ):
-        out = await slack.handle_slash_command(
-            {"text": "issue abc", "team_id": "T123"}
-        )
-    assert "not linked" in out["text"].lower()
 
 
 @pytest.mark.asyncio

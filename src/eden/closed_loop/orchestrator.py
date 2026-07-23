@@ -414,18 +414,36 @@ class ClosedLoopOrchestrator:
         *,
         human: bool = False,
     ) -> None:
+        # Sparse SendKit email alerts (P0/P1 / verify-failed / human).
         try:
-            from eden.integrations.slack.alerts import alert_issue_event
+            from eden.services.alert_email import send_issue_alert_email
 
-            await alert_issue_event(
-                event.org_id,
-                issue_id=event.issue_id,
-                payload=event.payload,
-                triage_result=triage_result,
-                human_escalation=human,
+            triage = triage_result or {}
+            severity = str(
+                triage.get("severity")
+                or triage.get("priority")
+                or getattr(event, "severity", None)
+                or ""
             )
-        except Exception as exc:
-            logger.debug("orchestrator: alert unavailable: %s", exc)
+            if human:
+                kind = "human_escalation"
+            elif getattr(event, "type", None) and "verify" in str(
+                getattr(event.type, "value", event.type)
+            ).lower():
+                kind = "verify_failed"
+            else:
+                kind = "issue_created"
+            await send_issue_alert_email(
+                org_id=event.org_id,
+                event_kind=kind,
+                issue_id=getattr(event, "issue_id", None),
+                severity=severity,
+                title=str(triage.get("title") or triage.get("summary") or kind),
+                detail=str(triage.get("reason") or triage.get("summary") or ""),
+                extra={"ref": getattr(event, "ref", None)},
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("orchestrator._maybe_alert email failed: %s", exc)
 
     async def _reload_triage(self, event: LoopEvent) -> dict[str, Any]:
         try:
