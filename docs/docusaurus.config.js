@@ -209,6 +209,7 @@ const config = {
           { type: 'docSidebar', sidebarId: 'tutorials', position: 'left', label: 'Tutorials' },
           { type: 'docSidebar', sidebarId: 'howto', position: 'left', label: 'How-to' },
           { type: 'docSidebar', sidebarId: 'reference', position: 'left', label: 'Reference' },
+          { type: 'docSidebar', sidebarId: 'explanation', position: 'left', label: 'Explanation' },
           {
             href: 'https://edenobservability.com/sign-up',
             label: 'Start free',
@@ -221,7 +222,7 @@ const config = {
             position: 'right',
             className: 'navbar-portal',
           },
-          { href: 'https://github.com/eden/eden', label: 'GitHub', position: 'right' },
+          { href: 'https://github.com/KaiavN/Eden', label: 'GitHub', position: 'right' },
         ],
       },
       footer: {
@@ -242,6 +243,10 @@ const config = {
               { label: 'Pricing', href: 'https://edenobservability.com/pricing' },
               { label: 'Security', href: 'https://edenobservability.com/security' },
               { label: 'Contact', href: 'https://edenobservability.com/contact' },
+              {
+                label: 'Support',
+                href: 'mailto:kaiav@edenobservability.com',
+              },
             ],
           },
           {
@@ -259,11 +264,31 @@ const config = {
               { label: 'Python SDK', to: '/reference/sdk-python' },
               { label: 'TypeScript SDK', to: '/reference/sdk-typescript' },
               { label: 'REST API', to: '/reference/api' },
-              { label: 'CLI', to: '/reference/cli' },
+              { label: 'Doctor / CLI', to: '/reference/cli' },
+              { label: 'Architecture', to: '/explanation/architecture' },
             ],
           },
         ],
         copyright: `Copyright © ${new Date().getFullYear()} Eden. Observability + improvement for AI agents.`,
+      },
+      mermaid: {
+        theme: { light: 'dark', dark: 'dark' },
+        options: {
+          themeVariables: {
+            primaryColor: '#1a1508',
+            primaryTextColor: '#ffffff',
+            primaryBorderColor: '#e8b84a',
+            lineColor: '#a1a1aa',
+            secondaryColor: '#000000',
+            tertiaryColor: '#000000',
+            background: '#000000',
+            mainBkg: '#000000',
+            nodeBorder: '#e8b84a',
+            clusterBkg: '#000000',
+            titleColor: '#ffffff',
+            edgeLabelBackground: '#000000',
+          },
+        },
       },
       prism: {
         theme: require('prism-react-renderer').themes.vsDark,

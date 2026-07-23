@@ -73,7 +73,7 @@ Environment variables are read first; `eden.configure(...)` overrides them.
 | `EDEN_API_KEY` | (required) | Programmatic key (`X-Org-Api-Key`). `EDEN_ORG_API_KEY` accepted as alias. |
 | `EDEN_BASE_URL` | `https://api.edenobservability.com` | Ingestion / API base URL |
 | `EDEN_PROJECT_ID` | `default` | Multi-tenant project label (`X-Project-Id`) |
-| `EDEN_BATCH_SIZE` | `32` | Max events per HTTP POST |
+| `EDEN_BATCH_SIZE` | `50` | Max events per HTTP POST |
 | `EDEN_FLUSH_INTERVAL_MS` | `250` | Max time to buffer a batch |
 | `EDEN_DISABLED` | `0` | `1` turns the SDK into a complete no-op |
 | `EDEN_DRY_RUN` | `0` | Log events at DEBUG instead of POSTing (`EDEN_DEBUG` is a back-compat alias) |
@@ -94,7 +94,7 @@ eden.configure(
     org_id="org_123",
     api_key="sk_eden_...",
     project_id="checkout",
-    batch_size=32,
+    batch_size=50,
     flush_interval_ms=250,
     max_queue=4096,
     redact_on_client=True,
@@ -120,6 +120,8 @@ eden.uninstrument()                      # tear down everything
 | `crewai` | Default `step_callback` + `task_callback` on `Crew` | `framework` |
 | `autogen` | Global reply hook on `ConversableAgent` | `framework` |
 | `pydantic_ai` | Patch `Agent.run` / `run_sync` | `pydantic-ai` |
+| `bedrock` | boto3 `bedrock-runtime` API call wrap | `framework` |
+| `gemini` | `google.generativeai` `generate_content` wrap | `framework` |
 | `mastra` | No-op (use the TypeScript SDK) | — |
 
 See the full matrix in [Auto-instrumentation](/reference/auto-instrumentation).

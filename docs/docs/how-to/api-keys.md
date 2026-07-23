@@ -68,7 +68,7 @@ Response includes `raw_key` once.
 
 1. Create a new key.
 2. Deploy it to all services.
-3. Confirm with `python -m eden_sdk.doctor` / `npx @eden-ai/sdk doctor`.
+3. Confirm with `python -m eden_sdk.doctor` / `npx eden-doctor`.
 4. Revoke the old key in **Settings → API Keys**.
 
 ## Revoke

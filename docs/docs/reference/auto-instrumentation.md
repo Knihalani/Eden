@@ -35,6 +35,8 @@ See [Connect any agent](/how-to/connect-any-agent) for the full decision tree.
 | `crewai` | Default `step_callback` + `task_callback` on `Crew` | step thought/tool/result, task name/outcome |
 | `autogen` | Global reply hook on `ConversableAgent` | speaker, recipient, message contents |
 | `pydantic_ai` | Patch `Agent.run` / `run_sync` | agent name, input/output, duration, `source_format: pydantic-ai` |
+| `bedrock` | boto3 `bedrock-runtime` API call wrap | model, request/response, tokens, latency |
+| `gemini` | `google.generativeai` `generate_content` wrap | model, prompt, response, tokens, latency |
 | `mastra` | No-op (use TypeScript SDK) | — |
 
 ### Tier 2 — Python universal fallback

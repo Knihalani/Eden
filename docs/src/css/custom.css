@@ -1,68 +1,70 @@
-/* Eden Docs — dark-terminal theme.
-   Matches portal tokens (.impeccable.md) so docs feel native —
-   not Infima-default blue or AI-slop purple gradients. */
+/* Eden Docs — Signal Black (flat).
+   Mirrors portal tokens.css + .impeccable.md so docs match marketing. */
 
 :root {
   color-scheme: dark;
 
-  /* Eden portal primitives (mirrored for Docusaurus/Infima) */
-  --eden-bg-base: #03060A;
-  --eden-bg-primary: #0A0E14;
-  --eden-bg-secondary: #0F1419;
-  --eden-bg-tertiary: #151B23;
-  --eden-bg-inset: #060A10;
-  --eden-border-subtle: #526384;
-  --eden-border-default: #3D4F66;
-  --eden-text-primary: #E4ECF7;
-  --eden-text-secondary: #94A3B8;
-  --eden-text-muted: #7A8A9A;
-  --eden-accent: #5B9EFF;
-  --eden-accent-hover: #7AB1FF;
-  --eden-accent-faint: #0F1F33;
-  --eden-terminal: #5FE5A8;
-  --eden-warning: #FFB547;
-  --eden-error: #F87171;
+  /* Portal primitives (Signal Black + gold) */
+  --eden-bg-base: #000000;
+  --eden-bg-primary: #000000;
+  --eden-bg-secondary: #000000;
+  --eden-bg-tertiary: #000000;
+  --eden-bg-inset: #000000;
+  --eden-border-subtle: rgba(255, 255, 255, 0.12);
+  --eden-border-default: rgba(255, 255, 255, 0.2);
+  --eden-text-primary: #ffffff;
+  --eden-text-secondary: #d4d4d8;
+  --eden-text-muted: #a1a1aa;
+  --eden-text-faint: #8b8b96;
+  --eden-text-disabled: #52525b;
+  --eden-accent: #e8b84a;
+  --eden-accent-hover: #f0c65c;
+  --eden-accent-faint: color-mix(in srgb, #e8b84a 12%, transparent);
+  --eden-accent-fg: #000000;
+  --eden-terminal: #4ecf96;
+  --eden-warning: #ef4444;
+  --eden-error: #ef4444;
   --eden-ease-out: cubic-bezier(0.33, 1, 0.68, 1);
 
-  /* Infima primary ladder — terminal blue */
-  --ifm-color-primary: #5B9EFF;
-  --ifm-color-primary-dark: #5B9EFF;
-  --ifm-color-primary-darker: #3D7AD4;
-  --ifm-color-primary-darkest: #2A5FA8;
-  --ifm-color-primary-light: #7AB1FF;
-  --ifm-color-primary-lighter: #A8C8FF;
-  --ifm-color-primary-lightest: #C5DBFF;
+  /* Infima primary ladder — signal gold */
+  --ifm-color-primary: #e8b84a;
+  --ifm-color-primary-dark: #e8b84a;
+  --ifm-color-primary-darker: #c99a32;
+  --ifm-color-primary-darkest: #a67d28;
+  --ifm-color-primary-light: #f0c65c;
+  --ifm-color-primary-lighter: #f5d588;
+  --ifm-color-primary-lightest: #fae4b0;
 
-  --ifm-color-secondary: #7AB1FF;
-  --ifm-color-success: #5FE5A8;
-  --ifm-color-warning: #FFB547;
-  --ifm-color-danger: #F87171;
-  --ifm-color-info: #5B9EFF;
+  --ifm-color-secondary: #f0c65c;
+  --ifm-color-success: #4ecf96;
+  --ifm-color-warning: #ef4444;
+  --ifm-color-danger: #ef4444;
+  --ifm-color-info: #e8b84a;
 
-  --ifm-background-color: #0A0E14;
-  --ifm-background-surface-color: #0F1419;
+  --ifm-background-color: #000000;
+  --ifm-background-surface-color: #000000;
 
-  --ifm-code-background: #060A10;
-  --ifm-code-color: #E4ECF7;
+  --ifm-code-background: #000000;
+  --ifm-code-color: #ffffff;
   --ifm-code-font-size: 92%;
 
   --ifm-font-family-base: "Geist", "Geist Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
   --ifm-font-family-monospace: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 
-  --ifm-heading-color: #E4ECF7;
-  --ifm-font-color-base: #94A3B8;
-  --ifm-link-color: #7AB1FF;
-  --ifm-link-hover-color: #A8C8FF;
-  --ifm-table-head-background: #0F1419;
-  --ifm-table-stripe-background: #060A10;
-  --ifm-hr-border-color: #526384;
-  --ifm-blockquote-border-left-color: #5B9EFF;
+  --ifm-heading-color: #ffffff;
+  --ifm-font-color-base: #d4d4d8;
+  --ifm-link-color: #e8b84a;
+  --ifm-link-hover-color: #f0c65c;
+  --ifm-table-head-background: #000000;
+  --ifm-table-stripe-background: color-mix(in srgb, #e8b84a 6%, transparent);
+  --ifm-hr-border-color: rgba(255, 255, 255, 0.12);
+  --ifm-blockquote-border-left-color: #e8b84a;
 
   --ifm-navbar-height: 3.5rem;
   --ifm-menu-link-padding-vertical: 0.35rem;
   --ifm-menu-link-padding-horizontal: 0.75rem;
 
-  --docusaurus-highlighted-code-line-bg: rgba(91, 158, 255, 0.12);
+  --docusaurus-highlighted-code-line-bg: color-mix(in srgb, #e8b84a 14%, transparent);
 }
 
 /* Geist with display:swap — avoids FOIT / layout jump on docs home */
@@ -97,17 +99,17 @@ body {
 }
 
 *:focus-visible {
-  outline: 2px solid var(--eden-accent-hover);
+  outline: 2px solid var(--eden-accent);
   outline-offset: 2px;
   border-radius: 4px;
 }
 
 ::selection {
-  background: rgba(91, 158, 255, 0.35);
+  background: color-mix(in srgb, #e8b84a 35%, transparent);
   color: #ffffff;
 }
 
-/* Navbar — flat terminal bar, no shadow theatre */
+/* Navbar — flat black bar, hairline only */
 .navbar {
   background-color: var(--eden-bg-primary);
   border-bottom: 1px solid var(--eden-border-subtle);
@@ -149,13 +151,13 @@ body {
   color: var(--eden-text-primary);
 }
 
-/* Primary CTA in navbar — action blue, not decorative green */
+/* Primary CTA — gold fill, black label */
 .navbar-cta.navbar__item .navbar__link,
 .navbar-cta.navbar__link {
   font-family: var(--ifm-font-family-base);
   font-size: 0.85rem;
   font-weight: 600;
-  color: var(--eden-bg-base) !important;
+  color: var(--eden-accent-fg) !important;
   background: var(--eden-accent);
   border: 1px solid transparent;
   border-radius: 6px;
@@ -167,20 +169,20 @@ body {
 .navbar-cta.navbar__link:hover,
 .navbar-cta:hover .navbar__link {
   background: var(--eden-accent-hover);
-  color: var(--eden-bg-base) !important;
+  color: var(--eden-accent-fg) !important;
 }
 
 .navbar-portal.navbar__link {
   font-family: var(--ifm-font-family-monospace);
   font-size: 0.8rem;
-  color: var(--eden-accent-hover) !important;
+  color: var(--eden-accent) !important;
 }
 
 .navbar-portal.navbar__link:hover {
-  color: var(--ifm-color-primary-lighter) !important;
+  color: var(--eden-accent-hover) !important;
 }
 
-/* Sidebar — denser, calmer */
+/* Sidebar — flat black + gold wash on hover/active */
 .theme-doc-sidebar-container {
   background-color: var(--eden-bg-primary);
   border-right: 1px solid var(--eden-border-subtle);
@@ -200,13 +202,13 @@ body {
 }
 
 .menu__link:hover {
-  background-color: var(--eden-bg-secondary);
+  background-color: var(--eden-accent-faint);
   color: var(--eden-text-primary);
 }
 
 .menu__link--active:not(.menu__link--sublist) {
-  background-color: rgba(91, 158, 255, 0.12);
-  color: var(--ifm-color-primary-lighter);
+  background-color: var(--eden-accent-faint);
+  color: var(--eden-accent-hover);
 }
 
 .menu__list-item-collapsible .menu__link {
@@ -215,7 +217,7 @@ body {
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.12em;
-  color: var(--eden-text-primary);
+  color: var(--eden-text-faint);
 }
 
 .menu__caret:before,
@@ -256,15 +258,15 @@ article header h1,
 
 .markdown a {
   text-decoration: none;
-  border-bottom: 1px solid rgba(91, 158, 255, 0.4);
+  border-bottom: 1px solid color-mix(in srgb, #e8b84a 45%, transparent);
 }
 
 .markdown a:hover {
-  border-bottom-color: var(--ifm-color-primary-lighter);
+  border-bottom-color: var(--eden-accent-hover);
 }
 
 .markdown blockquote {
-  background-color: rgba(91, 158, 255, 0.05);
+  background-color: var(--eden-accent-faint);
   border-left: 3px solid var(--eden-accent);
   color: var(--eden-text-secondary);
   border-radius: 0 4px 4px 0;
@@ -272,9 +274,9 @@ article header h1,
   padding: 0.75rem 1rem;
 }
 
-/* Code blocks — inset terminal surface, no drop shadow */
+/* Code blocks — hairline on black, no drop shadow */
 code {
-  background-color: var(--eden-bg-secondary);
+  background-color: var(--eden-accent-faint);
   border: 1px solid var(--eden-border-subtle);
   color: var(--eden-text-primary);
   border-radius: 3px;
@@ -343,7 +345,7 @@ td {
 
 .footer__title {
   font-family: var(--ifm-font-family-monospace);
-  color: var(--eden-text-primary);
+  color: var(--eden-text-faint);
   font-size: 0.72rem;
   text-transform: uppercase;
   letter-spacing: 0.14em;
@@ -359,7 +361,7 @@ td {
 }
 
 .footer__copyright {
-  color: #5A6B85;
+  color: var(--eden-text-disabled);
   font-size: 0.8rem;
 }
 
@@ -371,7 +373,7 @@ td {
 }
 
 .table-of-contents__link--active {
-  color: var(--ifm-color-primary-lighter);
+  color: var(--eden-accent-hover);
 }
 
 /* Pagination */
@@ -379,11 +381,12 @@ td {
   background-color: var(--eden-bg-inset);
   border: 1px solid var(--eden-border-subtle);
   border-radius: 6px;
-  transition: border-color 150ms var(--eden-ease-out);
+  transition: border-color 150ms var(--eden-ease-out), background-color 150ms var(--eden-ease-out);
 }
 
 .pagination-nav__link:hover {
   border-color: var(--eden-accent);
+  background-color: var(--eden-accent-faint);
 }
 
 .pagination-nav__sublabel {
@@ -441,19 +444,19 @@ td {
 }
 
 .pill--shipped {
-  background: rgba(95, 229, 168, 0.1);
+  background: color-mix(in srgb, #4ecf96 12%, transparent);
   color: var(--eden-terminal);
-  border-color: rgba(95, 229, 168, 0.28);
+  border-color: color-mix(in srgb, #4ecf96 28%, transparent);
 }
 .pill--stub {
-  background: rgba(255, 181, 71, 0.1);
-  color: var(--eden-warning);
-  border-color: rgba(255, 181, 71, 0.28);
+  background: color-mix(in srgb, #ef4444 12%, transparent);
+  color: var(--eden-error);
+  border-color: color-mix(in srgb, #ef4444 28%, transparent);
 }
 .pill--planned {
-  background: rgba(91, 158, 255, 0.1);
+  background: var(--eden-accent-faint);
   color: var(--eden-accent-hover);
-  border-color: rgba(91, 158, 255, 0.28);
+  border-color: color-mix(in srgb, #e8b84a 28%, transparent);
 }
 
 /* ============================================================
@@ -541,23 +544,25 @@ td {
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--eden-text-muted);
-  background: var(--eden-bg-secondary);
+  background: transparent;
   border: 1px solid var(--eden-border-subtle);
   border-radius: 4px;
   padding: 0.4rem 0.65rem;
   min-height: 2.5rem;
   cursor: pointer;
-  transition: color 150ms var(--eden-ease-out), border-color 150ms var(--eden-ease-out);
+  transition: color 150ms var(--eden-ease-out), border-color 150ms var(--eden-ease-out),
+    background-color 150ms var(--eden-ease-out);
 }
 
 .eden-hero__install-copy:hover {
   color: var(--eden-text-primary);
   border-color: var(--eden-accent);
+  background: var(--eden-accent-faint);
 }
 
 .eden-hero__install-copy.copied {
   color: var(--eden-terminal);
-  border-color: rgba(95, 229, 168, 0.4);
+  border-color: color-mix(in srgb, #4ecf96 40%, transparent);
 }
 
 .eden-btn {
@@ -580,12 +585,12 @@ td {
 
 .eden-btn--primary {
   background: var(--eden-accent);
-  color: var(--eden-bg-base) !important;
+  color: var(--eden-accent-fg) !important;
 }
 
 .eden-btn--primary:hover {
   background: var(--eden-accent-hover);
-  color: var(--eden-bg-base) !important;
+  color: var(--eden-accent-fg) !important;
 }
 
 .eden-btn--ghost {
@@ -596,7 +601,7 @@ td {
 
 .eden-btn--ghost:hover {
   border-color: var(--eden-accent);
-  color: var(--ifm-color-primary-lighter) !important;
+  color: var(--eden-accent-hover) !important;
   background: var(--eden-accent-faint);
 }
 
@@ -617,12 +622,13 @@ td {
   border: 1px solid var(--eden-border-subtle);
   border-radius: 6px;
   padding: 1.15rem 1.2rem;
-  transition: border-color 150ms var(--eden-ease-out);
+  transition: border-color 150ms var(--eden-ease-out), background-color 150ms var(--eden-ease-out);
   position: relative;
 }
 
 .eden-card:hover {
   border-color: var(--eden-accent);
+  background-color: var(--eden-accent-faint);
 }
 
 .eden-card--small {
@@ -634,8 +640,8 @@ td {
   font-size: 0.68rem;
   font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.14em;
-  color: var(--eden-text-muted);
+  letter-spacing: 0.18em;
+  color: var(--eden-text-faint);
   margin: 0 0 0.65rem;
 }
 
@@ -660,14 +666,14 @@ td {
 .eden-card a {
   font-family: var(--ifm-font-family-base);
   font-size: 0.85rem;
-  color: var(--eden-accent-hover);
+  color: var(--eden-accent);
   text-decoration: none;
   border-bottom: 1px solid transparent;
 }
 
 .eden-card a:hover {
   border-bottom-color: var(--eden-accent-hover);
-  color: var(--ifm-color-primary-lighter);
+  color: var(--eden-accent-hover);
 }
 
 .eden-card ul {
@@ -697,7 +703,7 @@ td {
 }
 
 .eden-card ul li a:hover {
-  color: var(--ifm-color-primary-lighter);
+  color: var(--eden-accent-hover);
 }
 
 /* Search affordance (local / Algolia plugin not wired — browser find hint) */
@@ -707,7 +713,7 @@ td {
   font-size: 0.68rem;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: var(--eden-text-muted);
+  color: var(--eden-text-faint);
   margin-right: 0.75rem;
   align-self: center;
   white-space: nowrap;
@@ -783,7 +789,7 @@ td {
   font-size: 0.7rem;
   text-transform: uppercase;
   letter-spacing: 0.12em;
-  color: #5A6B85;
+  color: var(--eden-text-faint);
   margin-bottom: 0.75rem;
 }
 
@@ -811,7 +817,7 @@ td {
 }
 
 .eden-404__hints ul li a:hover {
-  color: var(--ifm-color-primary-lighter);
+  color: var(--eden-accent-hover);
   border-bottom-color: var(--eden-accent);
 }
 
@@ -832,7 +838,7 @@ td {
   gap: 0.75rem;
   padding: 0.75rem 1rem;
   border-bottom: 1px solid var(--eden-border-subtle);
-  background: var(--eden-bg-tertiary);
+  background: var(--eden-bg-primary);
 }
 
 .eden-fillin__langs {
@@ -840,7 +846,8 @@ td {
   gap: 0.25rem;
   padding: 0.15rem;
   border-radius: 6px;
-  background: var(--eden-bg-secondary);
+  background: transparent;
+  border: 1px solid var(--eden-border-subtle);
 }
 
 .eden-fillin__langs button {
@@ -857,7 +864,7 @@ td {
 
 .eden-fillin__langs button.is-active {
   background: var(--eden-accent);
-  color: var(--eden-bg-base);
+  color: var(--eden-accent-fg);
 }
 
 .eden-fillin__actions {
@@ -878,7 +885,7 @@ td {
 
 .eden-fillin__primary {
   background: var(--eden-accent);
-  color: var(--eden-bg-base);
+  color: var(--eden-accent-fg);
 }
 
 .eden-fillin__secondary {

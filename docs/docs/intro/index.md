@@ -45,14 +45,15 @@ The platform ships:
 
 - **Two production SDKs** — Python (`eden-sdk`) and TypeScript
   (`@eden-ai/sdk`). Fire-and-forget; producer p99 overhead budgeted ≤ 5 ms.
-- **Open ingestion** — OpenAI, Anthropic, LangChain, Vercel AI, and raw
-  `custom` events. Wire it from your own code even without an SDK.
+- **Open ingestion** — OpenAI, Anthropic, Bedrock, Gemini, LangChain,
+  LlamaIndex, CrewAI, AutoGen, Vercel AI, and raw `custom` events.
+  Wire it from your own code even without an SDK.
 - **One portal** — Next.js workspace at `edenobservability.com`.
-  Traces, evaluators, cost intelligence, incidents, and Improve.
+  Traces, evaluators, cost intelligence, and Improve.
 
 ---
 
-## Capture. Analyse. Improve.
+## Observe. Evaluate. Improve.
 
 <div class="eden-grid">
 
@@ -71,9 +72,9 @@ The platform ships:
   </div>
 
   <div class="eden-card">
-    <p class="eden-card__eyebrow">Control</p>
-    <h3>Budget and govern</h3>
-    <p>Per-org token budgets, PII redaction, audit log, RBAC, and compliance evidence.</p>
+    <p class="eden-card__eyebrow">Improve</p>
+    <h3>Close the loop</h3>
+    <p>Portal turns failing traces into reviewable patches — with budgets, PII redaction, and RBAC underneath.</p>
     <a href="/how-to/cost-budgets">Set a budget →</a>
   </div>
 
