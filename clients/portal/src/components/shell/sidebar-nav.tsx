@@ -2,155 +2,213 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { UserButton } from "@clerk/nextjs";
-import { useTranslations } from "next-intl";
-import { ChevronsLeft, ChevronsRight } from "lucide-react";
-import { DEFAULT_SIDEBAR } from "@/lib/sidebar-config";
+import {
+  Home,
+  Bot,
+  GitBranch,
+  AlertTriangle,
+  Activity,
+  FlaskConical,
+  Sparkles,
+  DollarSign,
+  MessageSquare,
+  Bug,
+  GitCompare,
+  FileText,
+  Shield,
+  Settings,
+  PanelLeftClose,
+  type LucideIcon,
+} from "lucide-react";
+import {
+  NAV_SECTIONS,
+  isNavActive,
+  type NavIcon,
+  type NavItem,
+} from "@/lab/nav";
+import { EdenLogo } from "@/components/ds/eden-logo";
+import { useSidebar } from "@/components/shell/sidebar-context";
+import { SidebarAuthFooter } from "@/components/shell/portal-auth-chrome";
+import { AlertsBell } from "@/lab/alerts-bell";
+import { useSignalJobs } from "@/lab/signal-jobs-context";
 import { cn } from "@/lib/utils";
-import { Button } from "@/components/ui/button";
-import { FOCUS_RING_CLASS } from "@/components/ui/focus-ring";
 
-interface SidebarNavProps {
+const ICONS: Record<NavIcon, LucideIcon> = {
+  home: Home,
+  agents: Bot,
+  traces: GitBranch,
+  issues: AlertTriangle,
+  signals: Activity,
+  evals: FlaskConical,
+  improve: Sparkles,
+  cost: DollarSign,
+  agent: MessageSquare,
+  debugger: Bug,
+  compare: GitCompare,
+  prompts: FileText,
+  guardrails: Shield,
+  settings: Settings,
+};
+
+function NavLink({
+  item,
+  pathname,
+  collapsed,
+  attention,
+  onActivate,
+}: {
+  item: NavItem;
+  pathname: string;
   collapsed: boolean;
-  onToggleCollapse: () => void;
+  attention: boolean;
+  onActivate?: () => void;
+}) {
+  const Icon = ICONS[item.icon];
+  const active = isNavActive(pathname, item.href);
+  return (
+    <Link
+      href={item.href}
+      data-tour-id={`nav-${item.id}`}
+      data-active={active ? "true" : "false"}
+      data-attention={attention ? "true" : "false"}
+      data-collapsed={collapsed ? "true" : "false"}
+      title={item.label}
+      className={cn(
+        "type-ui ds-nav-item",
+        collapsed && "justify-center !px-0",
+      )}
+      onClick={onActivate}
+    >
+      <Icon
+        className={cn(
+          "h-[15px] w-[15px] shrink-0",
+          active || attention
+            ? "text-[var(--accent)]"
+            : "text-[var(--text-faint)]",
+        )}
+        strokeWidth={1.6}
+        aria-hidden
+      />
+      <span className={cn(collapsed && "sr-only")}>{item.label}</span>
+    </Link>
+  );
 }
 
-export function SidebarNav({ collapsed, onToggleCollapse }: SidebarNavProps) {
-  const pathname = usePathname();
-  const tGroups = useTranslations("nav.groups");
-  const tLeaves = useTranslations("nav.leaves");
-  const tShell = useTranslations("shell");
+export function SidebarNav() {
+  const pathname = usePathname() ?? "";
+  const { collapsed, toggle, animate } = useSidebar();
+  const { signalsNavAttention, clearSignalsNavAttention } = useSignalJobs();
 
   return (
     <aside
+      data-collapsed={collapsed ? "true" : "false"}
       className={cn(
-        "hidden lg:flex shrink-0 flex-col border-r border-[var(--border-subtle)] bg-[var(--bg-secondary)] transition-[width] duration-200",
-        collapsed ? "w-16" : "w-[240px]",
+        "group/sidebar flex h-dvh shrink-0 flex-col overflow-hidden border-r border-[var(--line)] bg-[var(--bg-sidebar)]",
+        animate && "transition-[width] duration-200 ease-out",
+        collapsed ? "w-[var(--sidebar-w-collapsed)]" : "w-[var(--sidebar-w)]",
       )}
-      data-collapsed={collapsed || undefined}
     >
       <div
         className={cn(
-          "flex h-11 items-center border-b border-[var(--border-subtle)]",
-          collapsed ? "justify-center px-2" : "justify-between px-3",
+          "flex shrink-0 items-center gap-1 border-b border-[var(--line)]",
+          collapsed
+            ? "h-auto min-h-[var(--header-h)] flex-col justify-center gap-1.5 px-1 py-2"
+            : "h-[var(--header-h)] px-2",
         )}
       >
-        {!collapsed ? (
-          <Link
-            href="/dashboard"
-            className={cn(
-              "text-sm font-semibold tracking-tight text-[var(--text-primary)]",
-              FOCUS_RING_CLASS,
-            )}
-          >
-            {tShell("brand")}
-          </Link>
+        {collapsed ? (
+          <div className="flex flex-col items-center gap-1">
+            <Link
+              href="/home"
+              className="flex h-8 w-8 items-center justify-center rounded-[var(--radius)] transition-colors hover:bg-[var(--bg-hover)]"
+              title="Home"
+              aria-label="Home"
+            >
+              <EdenLogo size={20} />
+            </Link>
+            <button
+              type="button"
+              onClick={toggle}
+              className="ds-btn ds-btn-ghost ds-btn-icon !h-7 !w-7"
+              title="Expand"
+              aria-label="Expand navigation"
+            >
+              <PanelLeftClose className="h-3.5 w-3.5 rotate-180" />
+            </button>
+            <AlertsBell collapsed />
+          </div>
         ) : (
-          <Link
-            href="/dashboard"
-            className={cn(
-              "flex h-8 w-8 items-center justify-center rounded-md text-sm font-semibold text-[var(--accent)]",
-              FOCUS_RING_CLASS,
-            )}
-            aria-label={tShell("brand")}
-          >
-            E
-          </Link>
+          <>
+            <Link
+              href="/home"
+              className="flex min-w-0 flex-1 items-center gap-2 rounded-[var(--radius)] px-2 py-1.5 transition-colors hover:bg-[var(--bg-hover)]"
+            >
+              <EdenLogo size={22} />
+              <span className="type-title truncate !text-[0.875rem]">eden</span>
+            </Link>
+            <AlertsBell />
+            <button
+              type="button"
+              onClick={toggle}
+              className="ds-btn ds-btn-ghost ds-btn-icon shrink-0"
+              title="Collapse"
+              aria-label="Collapse navigation"
+              aria-pressed={collapsed}
+            >
+              <PanelLeftClose className="h-4 w-4" />
+            </button>
+          </>
         )}
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          onClick={onToggleCollapse}
-          aria-label={collapsed ? tShell("expand") : tShell("collapse")}
-          className={cn(collapsed && "hidden")}
-        >
-          <ChevronsLeft className="h-4 w-4" />
-        </Button>
       </div>
-
-      {collapsed ? (
-        <div className="flex justify-center border-b border-[var(--border-subtle)] py-1">
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            onClick={onToggleCollapse}
-            aria-label={tShell("expand")}
-          >
-            <ChevronsRight className="h-4 w-4" />
-          </Button>
-        </div>
-      ) : null}
 
       <nav
-        className="flex-1 overflow-y-auto px-2 py-3"
-        aria-label={tShell("navAria")}
+        className={cn(
+          "min-h-0 flex-1 overflow-y-auto py-3",
+          collapsed ? "px-1.5" : "px-2.5",
+        )}
+        aria-label="Primary"
       >
-        {DEFAULT_SIDEBAR.map((group) => {
-          const groupKey = group.id as Parameters<typeof tGroups>[0];
-          return (
-            <div key={group.id} className="mb-4">
-              {!collapsed ? (
-                <p className="mb-1 px-2 text-xs font-medium text-[var(--text-muted)]">
-                  {tGroups(groupKey)}
+        <ul className="flex flex-col gap-3">
+          {NAV_SECTIONS.map((section) => (
+            <li key={section.id}>
+              {section.label && !collapsed ? (
+                <p className="type-label mb-1 px-2.5 text-[var(--text-faint)]">
+                  {section.label}
                 </p>
               ) : null}
-              <ul className="space-y-0.5">
-                {group.items.map((item) => {
-                  const Icon = item.icon;
-                  const leafKey = item.id as Parameters<typeof tLeaves>[0];
-                  const active =
-                    pathname === item.href ||
-                    (item.href !== "/dashboard" &&
-                      pathname.startsWith(item.href));
-                  const label = tLeaves(leafKey);
-                  return (
-                    <li key={item.id}>
-                      <Link
-                        href={item.href}
-                        title={collapsed ? label : undefined}
-                        className={cn(
-                          "nav-item flex items-center gap-2 rounded-md text-sm transition-colors",
-                          collapsed
-                            ? "justify-center px-0 py-2"
-                            : "px-2 py-1.5",
-                          FOCUS_RING_CLASS,
-                          active
-                            ? "bg-[var(--accent-faint)] text-[var(--accent)]"
-                            : "text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)] hover:text-[var(--text-primary)]",
-                        )}
-                        aria-current={active ? "page" : undefined}
-                      >
-                        <Icon className="nav-icon h-4 w-4 shrink-0 opacity-80" />
-                        {!collapsed ? <span>{label}</span> : null}
-                        {collapsed ? (
-                          <span className="sr-only">{label}</span>
-                        ) : null}
-                      </Link>
-                    </li>
-                  );
-                })}
+              {section.label && collapsed ? (
+                <div
+                  className="mx-auto mb-1 h-px w-4 bg-[var(--line)]"
+                  aria-hidden
+                />
+              ) : null}
+              <ul className="flex flex-col gap-0.5">
+                {section.items.map((item) => (
+                  <li key={item.id}>
+                    <NavLink
+                      item={item}
+                      pathname={pathname}
+                      collapsed={collapsed}
+                      attention={
+                        item.id === "signals" &&
+                        signalsNavAttention &&
+                        !isNavActive(pathname, item.href)
+                      }
+                      onActivate={
+                        item.id === "signals"
+                          ? clearSignalsNavAttention
+                          : undefined
+                      }
+                    />
+                  </li>
+                ))}
               </ul>
-            </div>
-          );
-        })}
+            </li>
+          ))}
+        </ul>
       </nav>
 
-      <div
-        className={cn(
-          "border-t border-[var(--border-subtle)] py-3",
-          collapsed ? "flex justify-center px-2" : "px-3",
-        )}
-      >
-        <UserButton
-          appearance={{
-            elements: {
-              avatarBox: "h-8 w-8",
-            },
-          }}
-        />
-      </div>
+      <SidebarAuthFooter collapsed={collapsed} />
     </aside>
   );
 }

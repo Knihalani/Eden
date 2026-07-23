@@ -48,25 +48,23 @@ export const STORAGE_COLORS = [
   "var(--chart-pie-5)",
 ] as const;
 
-/** SSR fallback hex values — MUST match the values in globals.css for
- * `--chart-pie-1` through `--chart-pie-5`. Update both together.
+/** SSR fallback hex — MUST match `--chart-pie-1` … `--chart-pie-5` in tokens.css.
  *
- * Order matters: index 0 = pie-1 (#5B9EFF accent blue), index 1 = pie-2
- * (#5FE5A8 terminal green), index 2 = pie-3 (#FFB547 warning gold),
- * index 3 = pie-4 (#C084FC purple), index 4 = pie-5 (#E879F9 magenta). */
+ * Order: gold action, live green, warn gold, zinc, error rose.
+ * No purple/magenta (AI-slop palette). */
 export const STORAGE_COLORS_SSR_FALLBACK = [
-  "#5B9EFF",
-  "#5FE5A8",
-  "#FFB547",
-  "#C084FC",
-  "#E879F9",
+  "#E8B84A",
+  "#4ECF96",
+  "#A1A1AA",
+  "#D4D4D8",
+  "#EF4444",
 ] as const;
 
 /** Concrete-string pie palette for recharts. Reads from CSSOM at module
  * init when `window` is defined; otherwise uses the SSR fallback above.
  *
  * If you suspect a token mismatch, the right place to look is the
- * `--chart-pie-N` definitions in `globals.css` + the fallback array
+ * `--chart-pie-N` definitions in `styles/tokens.css` + the fallback array
  * above — they should be the same hex. */
 export function getStorageColorsResolved(): readonly string[] {
   if (typeof window === "undefined") return STORAGE_COLORS_SSR_FALLBACK;

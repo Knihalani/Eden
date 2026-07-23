@@ -1,240 +1,281 @@
 "use client";
 
-import { Suspense, useEffect, useState, type ReactNode } from "react";
-import Link from "next/link";
-import { useTranslations } from "next-intl";
-import { COST_TABS, type CostTab } from "@/lib/cost-url";
-import { usePermissions } from "@/hooks/use-permissions";
-import { PageHeader } from "@/components/ui/page-header";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Button } from "@/components/ui/button";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useCostUrlState } from "./_hooks/use-cost-url-state";
-import { CostHubToolbar } from "./_components/cost-hub-toolbar";
-import { OverviewTab } from "./_components/overview-tab";
-import { BudgetTab } from "./_components/budget-tab";
-import { OutcomesTab } from "./_components/outcomes-tab";
-import { ForecastTab } from "./_components/forecast-tab";
-import { AdvisorTab } from "./_components/advisor-tab";
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import {
+  budgetStatusFromSpend,
+  defaultDriverId,
+  fleetSpend24h,
+  formatSpend,
+  totalDriverSaveUsd,
+  type CostBudgetFixture,
+} from "@/lab/fixtures/cost";
+import { PageHeader } from "@/components/ds/primitives";
+import { useAgentScope, useQueryPatch } from "@/lab/agent-scope";
+import {
+  BudgetChip,
+  CostModeNav,
+  parseCostMode,
+  type CostMode,
+} from "@/lab/cost/cost-chrome";
+import dynamic from "next/dynamic";
+import { catalogAgents } from "@/lib/portal-catalog";
+import { useOrg } from "@/hooks/use-org";
+import { useOrgQuery } from "@/hooks/use-api-query";
+import { queryKey, queryKeys } from "@/lib/query-keys";
+import { portalApi } from "@/lib/api/portal";
+import { api } from "@/lib/api/resources";
+import { QueryErrorPanel, QueryLoadingPanel } from "@/components/shell/query-error-panel";
 
-function CostPageInner() {
-  const t = useTranslations("cost");
-  const { role } = usePermissions();
-  const canAdmin = role === "admin" || role === "owner";
-  const canActAdvisor = role != null && role !== "viewer";
-  const { state, setState, clearSelection } = useCostUrlState();
-  const tab = state.tab;
-  const q = state.q ?? "";
-  const [budgetEditorOpen, setBudgetEditorOpen] = useState(false);
+const costFallback = (
+  <div className="flex min-h-[12rem] flex-1 items-center justify-center px-5">
+    <p className="type-meta">Loading…</p>
+  </div>
+);
+
+const CostSpendView = dynamic(
+  () =>
+    import("@/lab/cost/cost-spend-view").then((m) => ({
+      default: m.CostSpendView,
+    })),
+  { loading: () => costFallback },
+);
+const CostDriversView = dynamic(
+  () =>
+    import("@/lab/cost/cost-drivers-view").then((m) => ({
+      default: m.CostDriversView,
+    })),
+  { loading: () => costFallback },
+);
+
+const BUDGET_QUERY_KEY = (orgId: string | null) =>
+  queryKey("cost", orgId, "budget");
+
+function LabCostInner() {
+  const searchParams = useSearchParams();
+  const paramMode = searchParams.get("mode");
+  const paramId = searchParams.get("id");
+  const paramAgent = searchParams.get("agent");
+
+  const { currentOrg } = useOrg();
+  const orgId = currentOrg?.id ?? null;
+  const driversQuery = useOrgQuery(
+    queryKeys.portal.costDrivers(orgId),
+    orgId,
+    () => portalApi.costDrivers(orgId!),
+  );
+  const budgetQuery = useOrgQuery(
+    BUDGET_QUERY_KEY(orgId),
+    orgId,
+    () => api.getBudget(orgId!),
+  );
+
+  const { agentId, agent: scopeAgent, setAgentId } = useAgentScope();
+  const patchQuery = useQueryPatch();
+
+  const [mode, setMode] = useState<CostMode>(() => parseCostMode(paramMode));
+  const [driverId, setDriverId] = useState("");
+
+  const drivers = driversQuery.data ?? [];
+
+  const budget: CostBudgetFixture = useMemo(() => {
+    const rollup = budgetQuery.data?.data?.rollup;
+    const spentUsd = rollup?.cost_used_usd ?? 0;
+    const limitUsd = rollup?.cost_hard_limit_usd ?? 0;
+    return {
+      id: "bud_org_24h",
+      name: "Org · 24h",
+      scope: "org",
+      limitUsd,
+      spentUsd,
+      period: "24h",
+      status: budgetStatusFromSpend(spentUsd, limitUsd),
+    };
+  }, [budgetQuery.data]);
 
   useEffect(() => {
-    function onKey(e: KeyboardEvent) {
-      const target = e.target as HTMLElement | null;
-      const isFormField =
-        target?.tagName === "INPUT" ||
-        target?.tagName === "TEXTAREA" ||
-        target?.tagName === "SELECT" ||
-        target?.isContentEditable;
-      if (isFormField) return;
-
-      if (e.key === "Escape") {
-        e.preventDefault();
-        setBudgetEditorOpen(false);
-        clearSelection();
-        return;
-      }
-
-      if (e.key === "b" || e.key === "B") {
-        e.preventDefault();
-        setState({ tab: "budget" });
-        return;
-      }
-
-      const idx = Number(e.key) - 1;
-      if (idx >= 0 && idx < COST_TABS.length) {
-        e.preventDefault();
-        setState({ tab: COST_TABS[idx] });
-      }
+    if (paramAgent && paramAgent !== agentId) {
+      setAgentId(paramAgent);
     }
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [clearSelection, setState]);
+  }, [paramAgent, agentId, setAgentId]);
 
-  function setTab(next: CostTab) {
-    setState({ tab: next });
+  useEffect(() => {
+    setMode(parseCostMode(paramMode));
+  }, [paramMode]);
+
+  // Keep Drivers selection inside the current agent scope.
+  useEffect(() => {
+    if (mode !== "drivers") return;
+    const rows =
+      agentId === "all"
+        ? drivers
+        : drivers.filter((d) => d.agentId === agentId);
+    const next =
+      rows.find((d) => d.id === paramId)?.id ??
+      rows.find((d) => d.estSaveUsd > 0)?.id ??
+      rows[0]?.id ??
+      "";
+    if (next && next !== driverId) setDriverId(next);
+    else if (!next && driverId) setDriverId("");
+     
+  }, [agentId, mode, drivers, paramId]);
+
+  const changeMode = useCallback(
+    (next: CostMode) => {
+      setMode(next);
+      if (next === "spend") {
+        patchQuery({ mode: null, id: null });
+      } else {
+        const id = defaultDriverId(agentId);
+        setDriverId(id);
+        patchQuery({ mode: "drivers", id: id || null });
+      }
+    },
+    [patchQuery, agentId],
+  );
+
+  const filterAgent = useCallback(
+    (id: string) => {
+      setAgentId(id);
+    },
+    [setAgentId],
+  );
+
+  const selectDriver = useCallback(
+    (id: string) => {
+      setDriverId(id);
+      setMode("drivers");
+      patchQuery({ mode: "drivers", id });
+    },
+    [patchQuery],
+  );
+
+  const scopeCounts = useMemo(() => {
+    const map: Record<string, number> = {
+      all: drivers.length,
+    };
+    for (const a of catalogAgents()) {
+      map[a.id] = drivers.filter((d) => d.agentId === a.id).length;
+    }
+    return map;
+  }, [drivers]);
+
+  const isLoading = driversQuery.isLoading || budgetQuery.isLoading;
+  const isError = driversQuery.isError || budgetQuery.isError;
+
+  if (isLoading) {
+    return (
+      <div className="ds-page">
+        <PageHeader title="Cost" />
+        <QueryLoadingPanel label="Loading cost…" />
+      </div>
+    );
   }
 
-  let panel: ReactNode = null;
-  switch (tab) {
-    case "overview":
-      panel = (
-        <OverviewTab
-          pastHours={state.pastHours}
-          agentId={state.agentId}
-          groupBy={state.groupBy}
-          q={q}
-          onGroupByChange={(groupBy) => setState({ groupBy })}
-          onAgentIdChange={(agentId) => setState({ agentId })}
+  if (isError) {
+    return (
+      <div className="ds-page">
+        <PageHeader title="Cost" />
+        <QueryErrorPanel
+          error={driversQuery.error ?? budgetQuery.error}
+          onRetry={() => {
+            void driversQuery.refetch();
+            void budgetQuery.refetch();
+          }}
         />
-      );
-      break;
-    case "budget":
-      panel = (
-        <BudgetTab
-          canAdmin={canAdmin}
-          agentId={state.agentId}
-          budgetId={state.budgetId}
-          onBudgetIdChange={(budgetId) => setState({ budgetId })}
-          editorOpen={budgetEditorOpen}
-          onEditorOpenChange={setBudgetEditorOpen}
-        />
-      );
-      break;
-    case "outcomes":
-      panel = <OutcomesTab agentId={state.agentId} />;
-      break;
-    case "forecast":
-      panel = (
-        <ForecastTab pastHours={state.pastHours} agentId={state.agentId} />
-      );
-      break;
-    case "advisor":
-      panel = (
-        <AdvisorTab
-          pastHours={state.pastHours}
-          agentId={state.agentId}
-          model={state.model}
-          canAct={canActAdvisor}
-        />
-      );
-      break;
-    default:
-      panel = (
-        <OverviewTab
-          pastHours={state.pastHours}
-          agentId={state.agentId}
-          groupBy={state.groupBy}
-          q={q}
-          onGroupByChange={(groupBy) => setState({ groupBy })}
-          onAgentIdChange={(agentId) => setState({ agentId })}
-        />
-      );
+      </div>
+    );
   }
 
-  const createBudgetCta =
-    canAdmin && (tab === "overview" || tab === "budget") ? (
-      <Button
-        type="button"
-        size="sm"
-        onClick={() => {
-          setTab("budget");
-          setBudgetEditorOpen(true);
-        }}
-        data-testid="cost-create-budget"
-      >
-        {t("budget.create")}
-      </Button>
-    ) : undefined;
+  const spend =
+    agentId === "all"
+      ? fleetSpend24h()
+      : (scopeAgent?.costUsd24h ?? 0);
+  const saveHint = totalDriverSaveUsd(agentId);
+  const meta = (
+    <span className="type-meta inline-flex flex-wrap items-center gap-2">
+      <span>
+        {scopeAgent ? scopeAgent.name : "All agents"} · {formatSpend(spend)} /
+        24h
+        {saveHint > 0 ? (
+          <>
+            {" "}
+            ·{" "}
+            <span className="text-[var(--success)]">
+              −{formatSpend(saveHint)} drivers
+            </span>
+          </>
+        ) : null}
+      </span>
+      {agentId === "all" ? <BudgetChip status={budget.status} /> : null}
+    </span>
+  );
 
   return (
-    <div className="mx-auto max-w-7xl space-y-4 p-4" data-testid="cost-hub">
-      <nav
-        className="flex items-center gap-1.5 text-xs text-[var(--text-muted)]"
-        aria-label={t("breadcrumb.aria")}
-        data-testid="cost-breadcrumb"
-      >
-        <span>{t("breadcrumb.improve")}</span>
-        <span aria-hidden>/</span>
-        <span className="text-[var(--text-secondary)]">
-          {t("breadcrumb.cost")}
-        </span>
-      </nav>
-
+    <div className="ds-page">
       <PageHeader
-        title={t("title")}
-        subtitle={t("subtitle")}
-        actions={createBudgetCta}
-      />
-
-      <div
-        className="flex flex-wrap items-center gap-2"
-        data-testid="cost-tabs-chrome"
-      >
-        <Tabs value={tab} onValueChange={(v) => setTab(v as CostTab)}>
-          <TabsList variant="underline" aria-label={t("tabsAria")}>
-            {COST_TABS.map((id) => (
-              <TabsTrigger
-                key={id}
-                variant="underline"
-                value={id}
-                className="min-h-11"
-                data-testid={`cost-tab-${id}`}
+        title="Cost"
+        meta={meta}
+        actions={
+          <div className="flex flex-wrap items-center gap-2">
+            <label className="flex items-center gap-1.5">
+              <span className="sr-only">Agent</span>
+              <select
+                className="ds-input !h-8 !w-auto max-w-[10rem] !py-0 !text-[0.75rem]"
+                value={agentId}
+                onChange={(e) => setAgentId(e.target.value)}
+                aria-label="Filter by agent"
               >
-                {t(`tabs.${id}`)}
-              </TabsTrigger>
-            ))}
-          </TabsList>
-        </Tabs>
-      </div>
-
-      <CostHubToolbar
-        pastHours={state.pastHours}
-        agentId={state.agentId}
-        q={q}
-        onPastHoursChange={(hours) => setState({ pastHours: hours })}
-        onAgentIdChange={(agentId) => setState({ agentId })}
-        onSearchChange={(value) => setState({ q: value || undefined })}
+                <option value="all">
+                  All agents
+                  {scopeCounts.all != null ? ` (${scopeCounts.all})` : ""}
+                </option>
+                {catalogAgents().map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.name}
+                    {scopeCounts[a.id] != null
+                      ? ` (${scopeCounts[a.id]})`
+                      : ""}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <CostModeNav value={mode} onChange={changeMode} />
+          </div>
+        }
       />
 
-      <div data-testid={`cost-panel-${tab}`}>{panel}</div>
-
-      <nav
-        className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-[var(--border-subtle)] pt-3 text-sm"
-        aria-label={t("related.aria")}
-        data-testid="cost-related-strip"
-      >
-        <span className="text-[var(--text-muted)]">{t("related.label")}</span>
-        <Link
-          href="/traces"
-          className="text-[var(--accent)] hover:underline"
-        >
-          {t("related.traces")}
-        </Link>
-        <Link
-          href="/agents"
-          className="text-[var(--accent)] hover:underline"
-        >
-          {t("related.agents")}
-        </Link>
-        <Link
-          href="/improve"
-          className="text-[var(--accent)] hover:underline"
-        >
-          {t("related.improve")}
-        </Link>
-        <Link
-          href="/evals"
-          className="text-[var(--accent)] hover:underline"
-        >
-          {t("related.evals")}
-        </Link>
-      </nav>
+      {mode === "spend" ? (
+        <CostSpendView
+          agentId={agentId}
+          budget={budget}
+          onFilterAgent={filterAgent}
+          onGoDrivers={() => changeMode("drivers")}
+        />
+      ) : (
+        <CostDriversView
+          agentId={agentId}
+          selectedId={driverId}
+          onSelect={selectDriver}
+        />
+      )}
     </div>
   );
 }
 
-export default function CostPage() {
+export default function LabCostPage() {
   return (
     <Suspense
       fallback={
-        <div className="mx-auto max-w-7xl space-y-4 p-4">
-          <Skeleton className="h-8 w-48" />
-          <Skeleton className="h-10 w-full" />
-          <Skeleton className="h-64 w-full" />
+        <div className="ds-page">
+          <PageHeader
+            title="Cost"
+            meta={<span className="type-meta">Loading…</span>}
+          />
         </div>
       }
     >
-      <CostPageInner />
+      <LabCostInner />
     </Suspense>
   );
 }

@@ -153,6 +153,29 @@ export function OrgProvider({ children }: { children: ReactNode }) {
     authErrorKindRef.current = authErrorKind;
   }, [authError, authErrorKind]);
 
+  // Global 401s from fetchApi (after Clerk refresh retry) surface here.
+  useEffect(() => {
+    function onSessionExpired(ev: Event) {
+      const detail = (ev as CustomEvent<{ message?: string }>).detail;
+      setAuthError(
+        detail?.message?.trim() ||
+          "Session expired. Sign in again to continue.",
+      );
+      setAuthErrorKind("session");
+    }
+    if (typeof window === "undefined") return;
+    window.addEventListener(
+      "eden:auth:session-expired",
+      onSessionExpired as EventListener,
+    );
+    return () => {
+      window.removeEventListener(
+        "eden:auth:session-expired",
+        onSessionExpired as EventListener,
+      );
+    };
+  }, []);
+
   const meEnabled = userLoaded && clerkOrgLoaded && Boolean(user);
   const meQuery = useMeQuery(meEnabled);
 

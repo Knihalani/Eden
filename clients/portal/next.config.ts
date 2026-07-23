@@ -3,8 +3,8 @@ import createNextIntlPlugin from "next-intl/plugin";
 
 const withNextIntl = createNextIntlPlugin("./src/i18n/request.ts");
 
-/** Soft-land every former authenticated product prefix on the rebuild stub. */
-const STUB_LAND = "/dashboard";
+/** Soft-land leftover stubs on product unavailable page. */
+const STUB_LAND = "/unavailable";
 
 function softLand(prefixes: string[]) {
   return prefixes.flatMap((source) => [
@@ -80,6 +80,27 @@ const nextConfig: NextConfig = {
   },
   async redirects() {
     return [
+      // Lab → product cutover (preserve bookmarks)
+      { source: "/lab", destination: "/home", permanent: false },
+      { source: "/lab/home", destination: "/home", permanent: false },
+      { source: "/lab/shell", destination: "/shell", permanent: false },
+      { source: "/lab/agents", destination: "/agents", permanent: false },
+      { source: "/lab/traces", destination: "/traces", permanent: false },
+      { source: "/lab/sessions", destination: "/traces?view=sessions", permanent: false },
+      { source: "/lab/issues", destination: "/issues", permanent: false },
+      { source: "/lab/signals", destination: "/signals", permanent: false },
+      { source: "/lab/alerts", destination: "/alerts", permanent: false },
+      { source: "/lab/evals", destination: "/evals", permanent: false },
+      { source: "/lab/improve", destination: "/improve", permanent: false },
+      { source: "/lab/cost", destination: "/cost", permanent: false },
+      { source: "/lab/agent", destination: "/agent", permanent: false },
+      { source: "/lab/debugger", destination: "/debugger", permanent: false },
+      { source: "/lab/debugger/:id", destination: "/debugger/:id", permanent: false },
+      { source: "/lab/compare", destination: "/compare", permanent: false },
+      { source: "/lab/settings", destination: "/settings", permanent: false },
+      { source: "/dashboard", destination: "/home", permanent: false },
+      { source: "/dashboard/:path*", destination: "/home", permanent: false },
+
       // Auth cutover to Clerk — keep
       { source: "/login", destination: "/sign-in", permanent: false },
       { source: "/login/:path*", destination: "/sign-in/:path*", permanent: false },
@@ -139,7 +160,7 @@ const nextConfig: NextConfig = {
         destination: "/issues?tab=incidents&issueId=:cluster_id",
         permanent: false,
       },
-      { source: "/signals", destination: "/alerts?tab=signals", permanent: false },
+      // Signals is the product leaf; /alerts opens the shell modal then home
       { source: "/inspector", destination: "/traces?mode=meta", permanent: false },
       { source: "/observability/mcp", destination: "/traces?facet=mcp", permanent: false },
       {
@@ -355,8 +376,10 @@ const nextConfig: NextConfig = {
       },
 
       // Phase 7 — Settings + Audit aliases (before soft-land catch-alls)
-      { source: "/audit-trail", destination: "/audit", permanent: false },
-      { source: "/audit-trail/:path*", destination: "/audit", permanent: false },
+      { source: "/audit", destination: "/settings?mode=audit", permanent: false },
+      { source: "/audit/:path*", destination: "/settings?mode=audit", permanent: false },
+      { source: "/audit-trail", destination: "/settings?mode=audit", permanent: false },
+      { source: "/audit-trail/:path*", destination: "/settings?mode=audit", permanent: false },
       { source: "/profile", destination: "/settings?tab=account", permanent: false },
       { source: "/profile/:path*", destination: "/settings?tab=account", permanent: false },
       { source: "/billing", destination: "/settings?tab=billing", permanent: false },
@@ -375,10 +398,20 @@ const nextConfig: NextConfig = {
 
       // Teardown Mode A: remaining former product trees → stub dashboard
       // Observe + Evaluate + Improve + Workspace live; Prompts + Analytics live above.
+      // First-run: soft-landed routes stay unavailable; onboarding opens home tour.
+      {
+        source: "/onboarding",
+        destination: "/home?tour=1",
+        permanent: false,
+      },
+      {
+        source: "/onboarding/:path*",
+        destination: "/home?tour=1",
+        permanent: false,
+      },
       ...softLand([
         "/runs",
         "/docs-fill",
-        "/onboarding",
         "/jobs",
         "/eval-harnesses",
         "/builder",

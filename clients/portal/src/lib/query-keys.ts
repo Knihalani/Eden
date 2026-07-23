@@ -372,6 +372,61 @@ export const queryKeys = {
       filters?: Record<string, unknown>,
     ) => ["guardrails", "violations", orgId, filters ?? {}] as const,
   },
+  /** Portal read-model projections (`GET /orgs/{id}/portal/*`). */
+  portal: {
+    all: ["portal"] as const,
+    agents: (orgId: string | null | undefined) =>
+      ["portal", "agents", orgId] as const,
+    traces: (orgId: string | null | undefined) =>
+      ["portal", "traces", orgId] as const,
+    sessions: (orgId: string | null | undefined) =>
+      ["portal", "sessions", orgId] as const,
+    issues: (orgId: string | null | undefined) =>
+      ["portal", "issues", orgId] as const,
+    signals: (orgId: string | null | undefined) =>
+      ["portal", "signals", orgId] as const,
+    alertRules: (orgId: string | null | undefined) =>
+      ["portal", "alertRules", orgId] as const,
+    alertEvents: (orgId: string | null | undefined) =>
+      ["portal", "alertEvents", orgId] as const,
+    costDrivers: (orgId: string | null | undefined) =>
+      ["portal", "costDrivers", orgId] as const,
+    workspace: (orgId: string | null | undefined) =>
+      ["portal", "workspace", orgId] as const,
+    keys: (orgId: string | null | undefined) =>
+      ["portal", "keys", orgId] as const,
+    members: (orgId: string | null | undefined) =>
+      ["portal", "members", orgId] as const,
+    auditEvents: (orgId: string | null | undefined) =>
+      ["portal", "auditEvents", orgId] as const,
+    auditPacks: (orgId: string | null | undefined) =>
+      ["portal", "auditPacks", orgId] as const,
+    evalDatasets: (orgId: string | null | undefined) =>
+      ["portal", "evalDatasets", orgId] as const,
+    evalPlaygrounds: (orgId: string | null | undefined) =>
+      ["portal", "evalPlaygrounds", orgId] as const,
+    evalExperiments: (orgId: string | null | undefined) =>
+      ["portal", "evalExperiments", orgId] as const,
+    improvePlans: (orgId: string | null | undefined) =>
+      ["portal", "improvePlans", orgId] as const,
+    compareExperiments: (orgId: string | null | undefined) =>
+      ["portal", "compareExperiments", orgId] as const,
+    guardrailPolicies: (orgId: string | null | undefined) =>
+      ["portal", "guardrailPolicies", orgId] as const,
+    debuggerSessions: (orgId: string | null | undefined) =>
+      ["portal", "debuggerSessions", orgId] as const,
+    assistantThreads: (orgId: string | null | undefined) =>
+      ["portal", "assistantThreads", orgId] as const,
+  },
+  promptsV2: {
+    all: ["promptsV2"] as const,
+    list: (orgId: string | null | undefined) =>
+      ["promptsV2", "list", orgId] as const,
+    detail: (orgId: string | null | undefined, name: string | null | undefined) =>
+      ["promptsV2", "detail", orgId, name] as const,
+    pins: (orgId: string | null | undefined, name: string | null | undefined) =>
+      ["promptsV2", "pins", orgId, name] as const,
+  },
 } as const;
 
 /**

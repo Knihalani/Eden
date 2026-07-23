@@ -340,6 +340,20 @@ export async function fetchApi<T>(
         detailStr || `HTTP ${response.status}`,
       );
       // Keep raw detail/code for machine matching; message is sanitized.
+      // After the one-shot Clerk refresh retry above, a lingering 401
+      // means the session is gone — notify chrome (banners / re-auth).
+      if (response.status === 401 && typeof window !== "undefined") {
+        try {
+          window.sessionStorage.setItem("eden:auth:error", "session");
+          window.dispatchEvent(
+            new CustomEvent("eden:auth:session-expired", {
+              detail: { message },
+            }),
+          );
+        } catch {
+          /* ignore storage / event failures */
+        }
+      }
       throw new ApiError(response.status, message, detailStr, code);
     }
 

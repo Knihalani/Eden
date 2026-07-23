@@ -1,428 +1,256 @@
 "use client";
 
-import { Suspense, useEffect, useMemo, useState } from "react";
-import Link from "next/link";
-import { useTranslations } from "next-intl";
-import { usePermissions } from "@/hooks/use-permissions";
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import {
+  type GuardrailKind,
+  type GuardrailStatus,
+  type GuardrailTab,
+} from "@/lab/fixtures/guardrails";
+import { PageHeader } from "@/components/ds/primitives";
+import { useAgentScope, useQueryPatch } from "@/lab/agent-scope";
+import {
+  GuardrailsTabNav,
+  parseGuardrailKindFilter,
+  parseGuardrailStatusFilter,
+  parseGuardrailTab,
+} from "@/lab/guardrails/guardrails-chrome";
+import dynamic from "next/dynamic";
+import { catalogAgents } from "@/lib/portal-catalog";
 import { useOrg } from "@/hooks/use-org";
-import { useOrgMutation, useOrgQuery } from "@/hooks/use-api-query";
-import { agentsApi, guardrailsApi } from "@/lib/api/agents";
-import type { GuardrailPolicyRow } from "@/lib/api/resources";
+import { useOrgQuery } from "@/hooks/use-api-query";
 import { queryKeys } from "@/lib/query-keys";
-import {
-  GUARDRAILS_TABS,
-  type GuardrailsTab,
-} from "@/lib/guardrails-url";
-import { PageHeader } from "@/components/ui/page-header";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Button } from "@/components/ui/button";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ResourcePageShell } from "@/components/shell/resource-page-shell";
-import { useGuardrailsUrlState } from "./_hooks/use-guardrails-url-state";
-import { GuardrailsHubToolbar } from "./_components/guardrails-hub-toolbar";
-import { PoliciesTab } from "./_components/policies-tab";
-import { PolicyDetailPanel } from "./_components/policy-detail-panel";
-import { PolicyCreateDialog } from "./_components/policy-create-dialog";
-import { ViolationsTab } from "./_components/violations-tab";
-import { ViolationDetailPanel } from "./_components/violation-detail-panel";
-import {
-  filterViolations,
-  mapScanToViolation,
-  policyConfigFromDraft,
-  type PolicyDraft,
-  type ScanHistoryRow,
-  type ViolationRow,
-} from "./_components/map-violations";
+import { portalApi } from "@/lib/api/portal";
+import { QueryErrorPanel, QueryLoadingPanel } from "@/components/shell/query-error-panel";
 
-function GuardrailsPageInner() {
-  const t = useTranslations("guardrails");
+const guardrailsFallback = (
+  <div className="flex min-h-[12rem] flex-1 items-center justify-center px-5">
+    <p className="type-meta">Loading…</p>
+  </div>
+);
+
+const GuardrailsListView = dynamic(
+  () =>
+    import("@/lab/guardrails/guardrails-list-view").then((m) => ({
+      default: m.GuardrailsListView,
+    })),
+  { loading: () => guardrailsFallback },
+);
+const GuardrailsDetailView = dynamic(
+  () =>
+    import("@/lab/guardrails/guardrails-detail-view").then((m) => ({
+      default: m.GuardrailsDetailView,
+    })),
+  { loading: () => guardrailsFallback },
+);
+const GuardrailsTestView = dynamic(
+  () =>
+    import("@/lab/guardrails/guardrails-detail-view").then((m) => ({
+      default: m.GuardrailsTestView,
+    })),
+  { loading: () => guardrailsFallback },
+);
+
+function LabGuardrailsInner() {
+  const searchParams = useSearchParams();
+  const paramId = searchParams.get("id");
+  const paramAgent = searchParams.get("agent");
+  const paramTab = searchParams.get("tab");
+  const paramKind = searchParams.get("kind");
+  const paramStatus = searchParams.get("status");
+
   const { currentOrg } = useOrg();
   const orgId = currentOrg?.id ?? null;
-  const { hasPermission, role } = usePermissions();
-  const canMutate =
-    hasPermission("jobs:write") || (role != null && role !== "viewer");
-
-  const { state, setState, clearSelection } = useGuardrailsUrlState();
-  const tab = state.tab;
-  const q = state.q ?? "";
-
-  const [createOpen, setCreateOpen] = useState(false);
-  const [isNarrow, setIsNarrow] = useState(false);
-
-  useEffect(() => {
-    const mq = window.matchMedia("(max-width: 1279px)");
-    const update = () => setIsNarrow(mq.matches);
-    update();
-    mq.addEventListener("change", update);
-    return () => mq.removeEventListener("change", update);
-  }, []);
-
-  useEffect(() => {
-    function onKey(e: KeyboardEvent) {
-      const target = e.target as HTMLElement | null;
-      const isFormField =
-        target?.tagName === "INPUT" ||
-        target?.tagName === "TEXTAREA" ||
-        target?.tagName === "SELECT" ||
-        target?.isContentEditable;
-      if (isFormField) return;
-
-      if (e.key === "Escape") {
-        e.preventDefault();
-        clearSelection();
-        return;
-      }
-
-      const idx = Number(e.key) - 1;
-      if (idx >= 0 && idx < GUARDRAILS_TABS.length) {
-        e.preventDefault();
-        setState({
-          tab: GUARDRAILS_TABS[idx],
-          policyId: undefined,
-          violationId: undefined,
-        });
-        return;
-      }
-
-      if (e.key === "n" && canMutate && tab === "policies") {
-        e.preventDefault();
-        setCreateOpen(true);
-      }
-    }
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [canMutate, clearSelection, setState, tab]);
-
   const policiesQuery = useOrgQuery(
-    queryKeys.guardrails.policies(orgId),
+    queryKeys.portal.guardrailPolicies(orgId),
     orgId,
-    () => guardrailsApi.listPolicies(orgId!),
+    () => portalApi.guardrailPolicies(orgId!),
   );
+  const livePolicies = policiesQuery.data ?? [];
 
-  const violationsQuery = useOrgQuery(
-    queryKeys.guardrails.violations(orgId, {
-      pastHours: state.pastHours,
-    }),
-    orgId,
-    async () => {
-      const res = await guardrailsApi.scanHistory(orgId!, { limit: 200 });
-      const scans = (res.scans ?? []) as ScanHistoryRow[];
-      return scans.map(mapScanToViolation);
+  const { agentId, setAgentId } = useAgentScope();
+  const patchQuery = useQueryPatch();
+
+  const [tab, setTab] = useState<GuardrailTab>(() =>
+    parseGuardrailTab(paramTab),
+  );
+  const [policyId, setPolicyId] = useState("");
+  const [kindFilter, setKindFilter] = useState<GuardrailKind | "all">(() =>
+    parseGuardrailKindFilter(paramKind),
+  );
+  const [statusFilter, setStatusFilter] = useState<
+    GuardrailStatus | "all"
+  >(() => parseGuardrailStatusFilter(paramStatus));
+  const [query, setQuery] = useState("");
+
+  const policies = livePolicies;
+
+  useEffect(() => {
+    if (paramAgent && paramAgent !== agentId) {
+      setAgentId(paramAgent);
+    }
+  }, [paramAgent, agentId, setAgentId]);
+
+  useEffect(() => {
+    setTab(parseGuardrailTab(paramTab));
+    setKindFilter(parseGuardrailKindFilter(paramKind));
+    setStatusFilter(parseGuardrailStatusFilter(paramStatus));
+  }, [paramTab, paramKind, paramStatus]);
+
+  const scoped = useMemo(() => {
+    if (agentId === "all") return policies;
+    return policies.filter((p) => !p.agentId || p.agentId === agentId);
+  }, [policies, agentId]);
+
+  // Keep selection inside agent scope.
+  useEffect(() => {
+    if (tab !== "policies") return;
+    const next =
+      scoped.find((p) => p.id === paramId)?.id ??
+      scoped.find((p) => p.status === "active")?.id ??
+      scoped[0]?.id ??
+      "";
+    if (next && next !== policyId) setPolicyId(next);
+    else if (!next && policyId) setPolicyId("");
+     
+  }, [agentId, scoped, tab, paramId]);
+
+  const policy = scoped.find((p) => p.id === policyId) ?? scoped[0] ?? null;
+
+  const scopeCounts = useMemo(() => {
+    const map: Record<string, number> = {
+      all: policies.length,
+    };
+    for (const a of catalogAgents()) {
+      map[a.id] = policies.filter(
+        (p) => !p.agentId || p.agentId === a.id,
+      ).length;
+    }
+    return map;
+  }, [policies]);
+
+  const changeTab = useCallback(
+    (next: GuardrailTab) => {
+      setTab(next);
+      if (next === "policies") {
+        patchQuery({
+          tab: null,
+          id: policyId || null,
+        });
+      } else {
+        patchQuery({ tab: "test", id: null });
+      }
     },
-    { enabled: tab === "violations" },
+    [patchQuery, policyId],
   );
 
-  const agentsQuery = useOrgQuery(
-    queryKeys.agents.list(orgId),
-    orgId,
-    () => agentsApi.list(orgId!, { limit: 100 }),
-  );
-
-  const createMutation = useOrgMutation(
-    (draft: PolicyDraft) =>
-      guardrailsApi.createPolicy(orgId!, {
-        name: draft.name.trim(),
-        kind: draft.kind,
-        action: draft.action,
-        config: policyConfigFromDraft(draft),
-      }),
-    {
-      invalidateKeys: [queryKeys.guardrails.policies(orgId)],
+  const selectPolicy = useCallback(
+    (id: string) => {
+      setPolicyId(id);
+      setTab("policies");
+      patchQuery({ tab: null, id });
     },
+    [patchQuery],
   );
 
-  const policies: GuardrailPolicyRow[] = policiesQuery.data?.policies ?? [];
-  const agents = agentsQuery.data?.agents ?? [];
+  const changeKind = useCallback(
+    (next: GuardrailKind | "all") => {
+      setKindFilter(next);
+      patchQuery({ kind: next === "all" ? null : next });
+    },
+    [patchQuery],
+  );
 
-  const violations: ViolationRow[] = useMemo(() => {
-    const rows = violationsQuery.data ?? [];
-    return filterViolations(rows, {
-      q: state.q,
-      agentId: state.agentId,
-      severity: state.severity,
-      pastHours: state.pastHours ?? "24",
-      from: state.from,
-      to: state.to,
-    });
-  }, [
-    violationsQuery.data,
-    state.q,
-    state.agentId,
-    state.severity,
-    state.pastHours,
-    state.from,
-    state.to,
-  ]);
+  const changeStatus = useCallback(
+    (next: GuardrailStatus | "all") => {
+      setStatusFilter(next);
+      patchQuery({ status: next === "all" ? null : next });
+    },
+    [patchQuery],
+  );
 
-  const selectedPolicy =
-    policies.find((p) => p.policy_id === state.policyId) ?? null;
-  const selectedViolation =
-    violations.find((v) => v.violationId === state.violationId) ?? null;
-
-  const policyDetailOpen = tab === "policies" && Boolean(state.policyId);
-  const violationDetailOpen =
-    tab === "violations" && Boolean(state.violationId);
-
-  const desktopPolicyDetail = policyDetailOpen && !isNarrow;
-  const sheetPolicyDetail = policyDetailOpen && isNarrow;
-  const desktopViolationDetail = violationDetailOpen && !isNarrow;
-  const sheetViolationDetail = violationDetailOpen && isNarrow;
-
-  function setTab(next: GuardrailsTab) {
-    setState({
-      tab: next,
-      policyId: undefined,
-      violationId: undefined,
-    });
+  if (policiesQuery.isLoading) {
+    return (
+      <div className="ds-page flex min-h-0 flex-1 flex-col">
+        <PageHeader title="Guardrails" />
+        <QueryLoadingPanel label="Loading guardrails…" />
+      </div>
+    );
   }
 
-  async function persistPolicy(draft: PolicyDraft) {
-    const created = await createMutation.mutateAsync(draft);
-    setState({ policyId: created.policy_id });
+  if (policiesQuery.isError) {
+    return (
+      <div className="ds-page flex min-h-0 flex-1 flex-col">
+        <PageHeader title="Guardrails" />
+        <QueryErrorPanel
+          error={policiesQuery.error}
+          onRetry={() => void policiesQuery.refetch()}
+        />
+      </div>
+    );
   }
 
-  const headerActions =
-    canMutate && tab === "policies" ? (
-      <Button
-        type="button"
-        size="sm"
-        className="min-h-11"
-        onClick={() => setCreateOpen(true)}
-        data-testid="guardrails-new-policy"
-      >
-        {t("policies.new")}
-      </Button>
-    ) : undefined;
+  const activeCount = scoped.filter((p) => p.status === "active").length;
+  const hits24h = scoped.reduce((s, p) => s + p.matchCount24h, 0);
+  const meta = (
+    <span className="type-meta">
+      {scoped.length} polic{scoped.length === 1 ? "y" : "ies"}
+      {activeCount > 0 ? ` · ${activeCount} active` : ""}
+      {hits24h > 0 ? ` · ${hits24h} hits / 24h` : ""}
+    </span>
+  );
 
   return (
-    <div
-      className="mx-auto max-w-7xl space-y-4 p-4"
-      data-testid="guardrails-hub"
-    >
-      <ResourcePageShell
-        header={
-          <PageHeader
-            title={t("title")}
-            subtitle={t("subtitle")}
-            actions={headerActions}
-          />
-        }
-        toolbar={
-          <div className="space-y-3">
-            <div
-              className="flex flex-wrap items-center gap-2"
-              data-testid="guardrails-tabs-chrome"
-            >
-              <Tabs
-                value={tab}
-                onValueChange={(v) => setTab(v as GuardrailsTab)}
-              >
-                <TabsList variant="underline" aria-label={t("tabsAria")}>
-                  {GUARDRAILS_TABS.map((id) => (
-                    <TabsTrigger
-                      key={id}
-                      variant="underline"
-                      value={id}
-                      className="min-h-11"
-                      data-testid={`guardrails-tab-${id}`}
-                    >
-                      {t(`tabs.${id}`)}
-                    </TabsTrigger>
-                  ))}
-                </TabsList>
-              </Tabs>
-            </div>
-
-            <GuardrailsHubToolbar
-              tab={tab}
-              q={q}
-              severity={state.severity}
-              pastHours={state.pastHours}
-              onSearchChange={(value) =>
-                setState({ q: value || undefined })
-              }
-              onSeverityChange={(value) =>
-                setState({ severity: value as typeof state.severity })
-              }
-              onPastHoursChange={(value) =>
-                setState({ pastHours: value })
-              }
-            />
-
-            {role === "viewer" ? (
-              <p
-                className="text-sm text-[var(--text-muted)]"
-                data-testid="guardrails-viewer-readonly"
-              >
-                {t("viewerReadonly")}
-              </p>
-            ) : null}
-          </div>
-        }
-        table={
-          <div data-testid={`guardrails-panel-${tab}`}>
-            {tab === "policies" ? (
-              <PoliciesTab
-                policies={policies}
-                loading={policiesQuery.isLoading}
-                error={policiesQuery.error}
-                onRetry={() => void policiesQuery.refetch()}
-                q={state.q}
-                severity={state.severity}
-                agentId={state.agentId}
-                selectedId={state.policyId}
-                canMutate={canMutate}
-                onSelect={(policyId) => setState({ policyId })}
-                onNewPolicy={() => setCreateOpen(true)}
-                onClearFilters={() =>
-                  setState({
-                    q: undefined,
-                    severity: undefined,
-                    agentId: undefined,
-                  })
-                }
-              />
-            ) : (
-              <ViolationsTab
-                violations={violations}
-                loading={violationsQuery.isLoading}
-                error={violationsQuery.error}
-                onRetry={() => void violationsQuery.refetch()}
-                filtersActive={Boolean(
-                  state.q?.trim() ||
-                    state.severity ||
-                    state.agentId ||
-                    state.pastHours,
-                )}
-                selectedId={state.violationId}
-                onSelect={(violationId) => setState({ violationId })}
-                onClearFilters={() =>
-                  setState({
-                    q: undefined,
-                    severity: undefined,
-                    agentId: undefined,
-                    pastHours: undefined,
-                    from: undefined,
-                    to: undefined,
-                  })
-                }
-                onOpenPolicies={() => setTab("policies")}
-              />
-            )}
-          </div>
-        }
-        detail={
-          desktopPolicyDetail ? (
-            <PolicyDetailPanel
-              open
-              policy={selectedPolicy}
-              agents={agents}
-              canMutate={canMutate}
-              pending={createMutation.isPending}
-              mobileDrawer={false}
-              onClose={clearSelection}
-              onSave={persistPolicy}
-              onViewViolations={(policyId) =>
-                setState({
-                  tab: "violations",
-                  policyId: undefined,
-                  violationId: undefined,
-                  q: policyId,
-                })
-              }
-            />
-          ) : desktopViolationDetail ? (
-            <ViolationDetailPanel
-              open
-              violation={selectedViolation}
-              mobileDrawer={false}
-              onClose={clearSelection}
-            />
-          ) : undefined
-        }
+    <div className="ds-page flex min-h-0 flex-1 flex-col">
+      <PageHeader
+        title="Guardrails"
+        meta={meta}
+        actions={<GuardrailsTabNav value={tab} onChange={changeTab} />}
       />
 
-      {sheetPolicyDetail ? (
-        <PolicyDetailPanel
-          open
-          policy={selectedPolicy}
-          agents={agents}
-          canMutate={canMutate}
-          pending={createMutation.isPending}
-          mobileDrawer
-          onClose={clearSelection}
-          onSave={persistPolicy}
-          onViewViolations={(policyId) =>
-            setState({
-              tab: "violations",
-              policyId: undefined,
-              violationId: undefined,
-              q: policyId,
-            })
-          }
+      {tab === "policies" ? (
+        <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
+          <div className="flex min-h-0 w-full flex-col border-b border-[var(--line)] lg:w-[22rem] lg:shrink-0 lg:border-b-0 lg:border-r">
+            <GuardrailsListView
+              policies={scoped}
+              activeId={policy?.id ?? null}
+              query={query}
+              onQueryChange={setQuery}
+              agentId={agentId}
+              onAgentChange={setAgentId}
+              kindFilter={kindFilter}
+              onKindFilter={changeKind}
+              statusFilter={statusFilter}
+              onStatusFilter={changeStatus}
+              onSelect={selectPolicy}
+              counts={scopeCounts}
+            />
+          </div>
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+            <GuardrailsDetailView policy={policy} />
+          </div>
+        </div>
+      ) : (
+        <GuardrailsTestView
+          agentId={agentId}
+          onAgentChange={setAgentId}
+          counts={scopeCounts}
         />
-      ) : null}
-
-      {sheetViolationDetail ? (
-        <ViolationDetailPanel
-          open
-          violation={selectedViolation}
-          mobileDrawer
-          onClose={clearSelection}
-        />
-      ) : null}
-
-      <PolicyCreateDialog
-        open={createOpen}
-        onOpenChange={setCreateOpen}
-        pending={createMutation.isPending}
-        onSubmit={persistPolicy}
-      />
-
-      <nav
-        className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-[var(--border-subtle)] pt-3 text-sm"
-        aria-label={t("related.aria")}
-        data-testid="guardrails-related-strip"
-      >
-        <span className="text-[var(--text-muted)]">{t("related.label")}</span>
-        <Link
-          href="/alerts?tab=rules"
-          className="text-[var(--accent)] hover:underline"
-        >
-          {t("related.alerts")}
-        </Link>
-        <Link href="/traces" className="text-[var(--accent)] hover:underline">
-          {t("related.traces")}
-        </Link>
-        <Link
-          href="/improve?tab=queue"
-          className="text-[var(--accent)] hover:underline"
-        >
-          {t("related.improve")}
-        </Link>
-        <Link
-          href="/settings?tab=gateway"
-          className="text-[var(--accent)] hover:underline"
-        >
-          {t("related.settings")}
-        </Link>
-      </nav>
+      )}
     </div>
   );
 }
 
-export default function GuardrailsPage() {
+export default function LabGuardrailsPage() {
   return (
     <Suspense
       fallback={
-        <div className="mx-auto max-w-7xl space-y-4 p-4">
-          <Skeleton className="h-8 w-48" />
-          <Skeleton className="h-10 w-full" />
-          <Skeleton className="h-64 w-full" />
+        <div className="ds-page flex min-h-0 flex-1 items-center justify-center">
+          <p className="type-meta">Loading guardrails…</p>
         </div>
       }
     >
-      <GuardrailsPageInner />
+      <LabGuardrailsInner />
     </Suspense>
   );
 }

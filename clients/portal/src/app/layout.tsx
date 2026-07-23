@@ -120,8 +120,8 @@ export default async function RootLayout({
   }
   const messages = skipIntlMessages ? null : await getMessages();
 
-  // P2-phase2: portal Auth/Org/Query providers mount under
-  // (portal)/layout — marketing/auth skip that tree.
+  // Auth/Org/Query providers mount under (portal)/layout via PortalProviders.
+  // Marketing and auth route groups skip that tree.
   const tree = (
     <>
       {children}
@@ -147,7 +147,7 @@ export default async function RootLayout({
     // ``body { min-height: 100dvh }`` needs.
     <html lang={locale} className={`${geistSans.variable} ${geistMono.variable} min-h-full antialiased`}>
       {/* P23: grain-overlay is marketing-only (see (marketing)/layout). */}
-      <body className="flex min-h-full flex-col bg-[var(--bg-primary)]">
+      <body className="flex min-h-full flex-col bg-[var(--bg)] text-[var(--text)]">
         <ClerkProvider allowedRedirectOrigins={ALLOWED_REDIRECT_ORIGINS}>
           {messages ? (
             <NextIntlClientProvider locale={locale} messages={messages}>

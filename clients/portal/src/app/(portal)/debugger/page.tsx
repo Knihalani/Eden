@@ -1,198 +1,207 @@
 "use client";
 
-/**
- * /debugger — DebuggerSession list + create.
- * Not a core sidebar leaf; reached via Traces action / Cmd+K / More.
- */
-
-import { Suspense, useState } from "react";
-import { useSearchParams, useRouter } from "next/navigation";
-import { useTranslations } from "next-intl";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Plus, Search } from "lucide-react";
-import { PageHeader } from "@/components/ui/page-header";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { QueryState } from "@/components/ui/query-state";
-import { EmptyState } from "@/components/ui/empty-state";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { PageHeader } from "@/components/ds/primitives";
+import { useAgentScope, useQueryPatch } from "@/lab/agent-scope";
+import {
+  labDebuggerDetailHref,
+  sessionFromTrace,
+  type DebuggerSessionFixture,
+} from "@/lab/fixtures/debugger";
+import { DebuggerListView } from "@/lab/debugger/debugger-list-view";
 import { useOrg } from "@/hooks/use-org";
-import { usePermissions } from "@/hooks/use-permissions";
-import { debugSessionsApi } from "@/lib/api";
-import { formatRelativeTime } from "@/lib/format";
-import { debuggerDetailHref } from "@/lib/debugger-url";
+import { useOrgQuery } from "@/hooks/use-api-query";
+import { queryKeys } from "@/lib/query-keys";
+import { portalApi } from "@/lib/api/portal";
+import { QueryErrorPanel, QueryLoadingPanel } from "@/components/shell/query-error-panel";
+import { catalogTraces } from "@/lib/portal-catalog";
+import { useLabToast } from "@/lab/lab-toast";
 
-const SESSIONS_QK = "debugger-sessions";
-
-function DebuggerPageInner() {
-  const t = useTranslations("debugger");
+function LabDebuggerListInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const paramTrace = searchParams.get("traceId");
+  const paramSpan = searchParams.get("spanId");
+  const paramAgent = searchParams.get("agent");
+  const paramQ = searchParams.get("q");
+
+  const { agentId, setAgentId } = useAgentScope();
+  const patchQuery = useQueryPatch();
+  const { pushToast } = useLabToast();
   const { currentOrg } = useOrg();
-  const orgId = currentOrg?.id;
-  const { role } = usePermissions();
-  const canCreate = role !== "viewer";
-  const queryClient = useQueryClient();
+  const orgId = currentOrg?.id ?? null;
+  const sessionsQuery = useOrgQuery(
+    queryKeys.portal.debuggerSessions(orgId),
+    orgId,
+    () => portalApi.debuggerSessions(orgId!),
+  );
+  const sessions = sessionsQuery.data ?? [];
 
-  const seedTraceId = searchParams.get("traceId") ?? undefined;
-  const [q, setQ] = useState(searchParams.get("q") ?? "");
+  const [localSessions, setLocalSessions] = useState<DebuggerSessionFixture[]>(
+    [],
+  );
+  const [query, setQuery] = useState(paramQ ?? "");
+  const seeded = useRef(false);
 
-  const sessionsQuery = useQuery({
-    queryKey: [SESSIONS_QK, orgId],
-    queryFn: () => debugSessionsApi.list(orgId!),
-    enabled: Boolean(orgId),
-    staleTime: 30_000,
-  });
+  const allSessions = useMemo(() => {
+    const localIds = new Set(localSessions.map((s) => s.id));
+    return [
+      ...localSessions,
+      ...sessions.filter((s) => !localIds.has(s.id)),
+    ];
+  }, [localSessions, sessions]);
 
-  const createMutation = useMutation({
-    mutationFn: (body: { title?: string; source_trace_id?: string }) =>
-      debugSessionsApi.create(orgId!, body),
-    onSuccess: (res) => {
-      void queryClient.invalidateQueries({ queryKey: [SESSIONS_QK, orgId] });
-      if (res.session?.id) {
-        router.push(debuggerDetailHref(res.session.id));
-      }
-    },
-  });
+  useEffect(() => {
+    if (paramAgent && paramAgent !== agentId) setAgentId(paramAgent);
+  }, [paramAgent, agentId, setAgentId]);
 
-  const handleNew = () => {
-    createMutation.mutate({
-      title: seedTraceId ? `Debug ${seedTraceId.slice(0, 8)}` : undefined,
-      source_trace_id: seedTraceId,
+  useEffect(() => {
+    if (paramQ != null) setQuery(paramQ);
+  }, [paramQ]);
+
+  /** Seed from ?traceId= → create session and open detail. */
+  useEffect(() => {
+    if (!paramTrace || seeded.current) return;
+    if (sessionsQuery.isLoading) return;
+    seeded.current = true;
+    const existing = allSessions.find((s) => s.sourceTraceId === paramTrace);
+    if (existing) {
+      router.replace(
+        labDebuggerDetailHref(existing.id, {
+          mode: "replay",
+          spanId: paramSpan,
+          agent: existing.agentId,
+        }),
+      );
+      return;
+    }
+    const created = sessionFromTrace(paramTrace, {
+      spanId: paramSpan ?? undefined,
+      agentId: paramAgent ?? undefined,
     });
-  };
+    setLocalSessions((prev) => [created, ...prev]);
+    router.replace(
+      labDebuggerDetailHref(created.id, {
+        mode: "replay",
+        spanId: paramSpan,
+        agent: created.agentId,
+      }),
+    );
+  }, [
+    paramTrace,
+    paramSpan,
+    paramAgent,
+    router,
+    sessionsQuery.isLoading,
+    allSessions,
+  ]);
 
-  const sessions = sessionsQuery.data?.sessions ?? [];
-  const filtered = q
-    ? sessions.filter((s) =>
-        (s.title ?? "").toLowerCase().includes(q.toLowerCase()),
-      )
-    : sessions;
+  const onQueryChange = useCallback(
+    (v: string) => {
+      setQuery(v);
+      patchQuery({ q: v.trim() ? v : null });
+    },
+    [patchQuery],
+  );
+
+  const onSelect = useCallback(
+    (id: string) => {
+      const s = allSessions.find((x) => x.id === id);
+      router.push(
+        labDebuggerDetailHref(id, {
+          mode: s?.modeHint ?? "replay",
+          agent: s?.agentId,
+        }),
+      );
+    },
+    [router, allSessions],
+  );
+
+  const onNew = useCallback(() => {
+    const traces = catalogTraces();
+    const seed =
+      (agentId !== "all"
+        ? traces.find((t) => t.agentId === agentId)
+        : traces.find((t) => t.severity === "error")) ?? traces[0];
+    if (!seed) {
+      pushToast({
+        title: "No traces yet",
+        body: "Ingest a run before opening the debugger.",
+        tone: "fail",
+      });
+      return;
+    }
+    const created = sessionFromTrace(seed.id, { agentId: seed.agentId });
+    setLocalSessions((prev) => [created, ...prev]);
+    router.push(
+      labDebuggerDetailHref(created.id, {
+        mode: "replay",
+        agent: created.agentId,
+      }),
+    );
+  }, [agentId, router, pushToast]);
+
+  const scopedCount = useMemo(
+    () =>
+      agentId === "all"
+        ? allSessions.length
+        : allSessions.filter((s) => s.agentId === agentId).length,
+    [allSessions, agentId],
+  );
+
+  if (sessionsQuery.isLoading) {
+    return (
+      <div className="ds-page">
+        <PageHeader title="Debugger" />
+        <QueryLoadingPanel label="Loading debugger sessions…" />
+      </div>
+    );
+  }
+
+  if (sessionsQuery.isError) {
+    return (
+      <div className="ds-page">
+        <PageHeader title="Debugger" />
+        <QueryErrorPanel
+          error={sessionsQuery.error}
+          onRetry={() => void sessionsQuery.refetch()}
+        />
+      </div>
+    );
+  }
 
   return (
-    <div className="flex flex-col gap-4" data-phase6-debugger="live">
+    <div className="ds-page">
       <PageHeader
-        title={t("title")}
-        subtitle={t("subtitle")}
-        actions={
-          canCreate ? (
-            <Button
-              size="sm"
-              onClick={handleNew}
-              disabled={createMutation.isPending}
-              aria-label={t("newSession")}
-            >
-              <Plus className="mr-1.5 h-3.5 w-3.5" aria-hidden />
-              {createMutation.isPending ? t("creating") : t("newSession")}
-            </Button>
-          ) : null
+        title="Debugger"
+        meta={
+          <span className="type-meta">{scopedCount} sessions</span>
         }
       />
-
-      <div className="flex items-center gap-2">
-        <div className="relative max-w-sm flex-1">
-          <Search
-            className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[var(--text-muted)]"
-            aria-hidden
-          />
-          <Input
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder={t("search")}
-            className="pl-8 text-sm"
-            aria-label={t("search")}
-          />
-        </div>
-      </div>
-
-      {seedTraceId ? (
-        <p className="text-xs text-[var(--text-muted)]">
-          {t("seedHint", { traceId: seedTraceId })}
-        </p>
-      ) : null}
-
-      <QueryState
-        loading={sessionsQuery.isLoading}
-        error={sessionsQuery.error}
-        data={sessionsQuery.data}
-        onRetry={() => void sessionsQuery.refetch()}
-        isEmpty={() => filtered.length === 0}
-        filtersActive={Boolean(q)}
-        emptySlot={
-          <EmptyState
-            title={t("empty.title")}
-            description={t("empty.body")}
-            action={
-              canCreate ? (
-                <Button size="sm" onClick={handleNew}>
-                  {t("newSession")}
-                </Button>
-              ) : undefined
-            }
-          />
-        }
-        filterEmptySlot={
-          <EmptyState
-            title={t("filterEmpty.title")}
-            description={t("filterEmpty.body")}
-            action={
-              <Button size="sm" variant="secondary" onClick={() => setQ("")}>
-                {t("filterEmpty.clear")}
-              </Button>
-            }
-          />
-        }
-      >
-        {() => (
-          <div className="overflow-hidden rounded-md border border-[var(--border-default)]">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-[var(--border-subtle)] bg-[var(--bg-tertiary)]">
-                  <th className="px-4 py-2 text-left text-xs font-medium text-[var(--text-muted)]">
-                    {t("col.title")}
-                  </th>
-                  <th className="hidden px-4 py-2 text-left text-xs font-medium text-[var(--text-muted)] sm:table-cell">
-                    {t("col.source")}
-                  </th>
-                  <th className="hidden px-4 py-2 text-left text-xs font-medium text-[var(--text-muted)] md:table-cell">
-                    {t("col.updated")}
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map((session) => (
-                  <tr
-                    key={session.id}
-                    className="cursor-pointer border-b border-[var(--border-subtle)] hover:bg-[var(--bg-tertiary)]"
-                    onClick={() => router.push(debuggerDetailHref(session.id))}
-                  >
-                    <td className="px-4 py-3 font-medium text-[var(--text-primary)]">
-                      {session.title || t("untitled")}
-                    </td>
-                    <td className="hidden px-4 py-3 font-mono text-xs text-[var(--text-muted)] sm:table-cell">
-                      {session.source_trace_id
-                        ? `${session.source_trace_id.slice(0, 12)}…`
-                        : "—"}
-                    </td>
-                    <td className="hidden px-4 py-3 text-xs text-[var(--text-muted)] md:table-cell">
-                      {session.updated_at
-                        ? formatRelativeTime(session.updated_at)
-                        : "—"}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </QueryState>
+      <DebuggerListView
+        sessions={allSessions}
+        query={query}
+        onQueryChange={onQueryChange}
+        agentId={agentId}
+        onAgentChange={setAgentId}
+        onSelect={onSelect}
+        onNew={onNew}
+      />
     </div>
   );
 }
 
-export default function DebuggerPage() {
+export default function LabDebuggerPage() {
   return (
-    <Suspense>
-      <DebuggerPageInner />
+    <Suspense
+      fallback={
+        <div className="ds-page">
+          <PageHeader title="Debugger" />
+        </div>
+      }
+    >
+      <LabDebuggerListInner />
     </Suspense>
   );
 }

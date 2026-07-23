@@ -165,6 +165,7 @@ from eden.api.routes import (
     orgs,
     patterns,
     pii_policy,
+    portal,
     presigned_feedback,
     prompt_canary,
     playgrounds,
@@ -175,7 +176,6 @@ from eden.api.routes import (
     rbac,
     redteam,
     references,
-    region,
     replay,
     scim,
     sessions,
@@ -873,6 +873,7 @@ app.include_router(ingest_agent_sessions.router)  # /orgs/{org_id}/ingest/agent-
 app.include_router(observability.ingest_router)  # /orgs/{org_id}/observability/telemetry/ingest* (API key)
 app.include_router(observability.router)  # /orgs/{org_id}/observability/{traces,summary,spans/search,...}
 app.include_router(agents.router)  # /orgs/{org_id}/agents (Phase 2 surface — list + register + get)
+app.include_router(portal.router)  # /orgs/{org_id}/portal/* (greenfield FE read-model contracts)
 app.include_router(llmops.router)  # /orgs/{org_id}/llmops/{artifacts,prompts,ab-tests,experiments,gateway,monitoring,cache}
 app.include_router(trace_quality.router)  # /v1/traces/{trace_id}/{loops,quality,intervention,...} (Cat 22 trace quality)
 app.include_router(observability_mcp.router)  # /v1/traces/{id}/mcp + /v1/mcp/{org}/auth_failures (D.12.1)
@@ -920,7 +921,6 @@ app.include_router(prompts_v2.router)  # /orgs/{org_id}/prompts (D.9 list/create
 app.include_router(prompts.router)  # /orgs/{org_id}/prompts (Phase I playground/rollback; shadowed list/create/get)
 app.include_router(pii_policy.router)  # /orgs/{org_id}/pii-policy
 app.include_router(cost_overrides.router)  # /orgs/{org_id}/cost-overrides (per-tenant contract rates)  # /orgs/{org_id}/retention-policy
-app.include_router(region.router)  # /orgs/{org_id}/region
 app.include_router(notifications.router)  # /notifications (user-scoped feed; June 2026 Cat 5 mount fix)
 app.include_router(model_compare.router)  # /orgs/{org_id}/models/{compare,recommend,project} (Phase 7.6)
 # Intelligence gap surface — Cat 4/5/6/8/9/10/11/12/13/14/18/19/20/22

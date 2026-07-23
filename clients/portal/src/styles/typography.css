@@ -1,0 +1,104 @@
+/* ================================================================
+   Eden Design System — typography recipes
+   ================================================================ */
+
+.type-display-lg {
+  font-family: var(--font-sans);
+  font-size: var(--fs-display-lg);
+  line-height: var(--lh-tight);
+  letter-spacing: var(--ls-tight);
+  font-weight: var(--fw-semibold);
+  color: var(--text);
+}
+
+.type-display {
+  font-family: var(--font-sans);
+  font-size: var(--fs-display);
+  line-height: var(--lh-tight);
+  letter-spacing: var(--ls-tight);
+  font-weight: var(--fw-semibold);
+  color: var(--text);
+}
+
+.type-title {
+  font-family: var(--font-sans);
+  font-size: var(--fs-title);
+  line-height: var(--lh-snug);
+  letter-spacing: var(--ls-snug);
+  font-weight: var(--fw-semibold);
+  color: var(--text);
+}
+
+.type-body {
+  font-family: var(--font-sans);
+  font-size: var(--fs-body);
+  line-height: var(--lh-normal);
+  letter-spacing: var(--ls-normal);
+  font-weight: var(--fw-regular);
+  color: var(--text-secondary);
+}
+
+.type-ui {
+  font-family: var(--font-sans);
+  font-size: var(--fs-ui);
+  line-height: var(--lh-snug);
+  letter-spacing: var(--ls-normal);
+  font-weight: var(--fw-medium);
+  color: var(--text);
+}
+
+.type-label {
+  font-family: var(--font-sans);
+  font-size: var(--fs-label);
+  line-height: 1.25;
+  letter-spacing: var(--ls-wide);
+  font-weight: var(--fw-medium);
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+.type-meta {
+  font-family: var(--font-sans);
+  font-size: var(--fs-meta);
+  line-height: var(--lh-snug);
+  letter-spacing: 0.01em;
+  font-weight: var(--fw-medium);
+  color: var(--text-muted);
+}
+
+.type-mono {
+  font-family: var(--font-mono);
+  font-size: var(--fs-mono);
+  line-height: 1.4;
+  letter-spacing: 0;
+  font-weight: var(--fw-medium);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+}
+
+/** Primary scannable numbers / codes — use instead of type-mono + color override. */
+.type-value {
+  font-family: var(--font-mono);
+  font-size: var(--fs-mono);
+  line-height: 1.4;
+  letter-spacing: 0;
+  font-weight: var(--fw-medium);
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+
+.type-micro {
+  font-family: var(--font-mono);
+  font-size: var(--fs-micro);
+  line-height: 1;
+  letter-spacing: var(--ls-wider);
+  font-weight: var(--fw-bold);
+  text-transform: uppercase;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-faint);
+}
+
+/** Separators / chrome punctuation between meta fragments. */
+.type-sep {
+  color: var(--text-faint);
+}

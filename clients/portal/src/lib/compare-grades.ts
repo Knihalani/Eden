@@ -133,7 +133,7 @@ export function gradeChipClass(grade: ComparisonGrade): string {
     case "regress":
       return "border-[var(--error)]/40 bg-[var(--error-bg)] text-[var(--error)]";
     case "tradeoff":
-      return "border-[var(--warning)]/40 bg-[var(--warning-bg)] text-[var(--warning)]";
+      return "border-[var(--line)] bg-[var(--bg-inset)] text-[var(--text-muted)]";
     default:
       return "border-[var(--border-default)] bg-[var(--surface-raised)] text-[var(--text-muted)]";
   }

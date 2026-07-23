@@ -74,12 +74,12 @@ export const AGENT_HEALTH_STATUSES: Record<AgentHealthStatus, StatusDescriptor> 
   },
   degraded: {
     label: "Degraded",
-    className: "bg-[var(--warning-bg)] text-[var(--warning)]",
+    className: "bg-[var(--error-muted)] text-[var(--error)]",
     icon: AlertTriangle as LucideIcon,
   },
   failing: {
     label: "Failing",
-    className: "bg-[var(--error-bg)] text-[var(--error)]",
+    className: "bg-[var(--error-muted)] text-[var(--error)]",
     icon: AlertCircle as LucideIcon,
   },
   idle: {

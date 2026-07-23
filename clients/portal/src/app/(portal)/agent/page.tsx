@@ -1,306 +1,668 @@
 "use client";
 
-/**
- * /agent — Eden AI Agent workspace.
- * Desktop ≥1280: thread list (~260) | message stream | context panel (~300).
- * Tablet/mobile: sheets for threads + context.
- * Copy: "AI Agent" / "KI-Assistent" — not "Agents".
- */
-
-import { Suspense, useCallback, useEffect, useState } from "react";
-import { useSearchParams, useRouter } from "next/navigation";
-import { useTranslations } from "next-intl";
-import { Plus, Search, Columns3 } from "lucide-react";
-import { PageHeader } from "@/components/ui/page-header";
-import { Button } from "@/components/ui/button";
-import { QueryState } from "@/components/ui/query-state";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { PageHeader } from "@/components/ds/primitives";
+import { useQueryPatch } from "@/lab/agent-scope";
 import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet";
-import { ThreadList } from "@/components/ai-agent/thread-list";
-import { MessageStream } from "@/components/ai-agent/message-stream";
-import { Composer } from "@/components/ai-agent/composer";
-import { ContextPanel } from "@/components/ai-agent/context-panel";
-import { SuggestedPrompts } from "@/components/ai-agent/suggested-prompts";
+  newEmptyThread,
+  pinFromParams,
+  type AgentArtifact,
+  type AgentChartType,
+  type AgentCitation,
+  type AgentCitationKind,
+  type AgentContextPin,
+  type AgentMessage,
+  type AgentMessagePart,
+  type AgentThread,
+} from "@/lab/fixtures/agent-chat";
 import {
-  useAiSessionList,
-  useAiSessionMessages,
-  useAiChat,
-  useAiSessionActions,
-} from "@/components/ai-agent/use-ai-session";
-import { useAiSessionContext } from "@/components/ai-agent/ai-session-provider";
-import type { AiMessage, ActionCard } from "@/components/ai-agent/types";
-import { buildContextFromParams, type ContextParamKey } from "@/lib/context-model";
-import { cn } from "@/lib/utils";
+  AgentModeNav,
+  parseAgentView,
+  type AgentViewMode,
+} from "@/lab/agent/agent-chrome";
+import {
+  AgentChatStream,
+  AgentHistoryRail,
+} from "@/lab/agent/agent-chat-view";
+import { useOrg } from "@/hooks/use-org";
+import { useOrgQuery } from "@/hooks/use-api-query";
+import { queryKeys } from "@/lib/query-keys";
+import { portalApi } from "@/lib/api/portal";
+import { API_BASE } from "@/lib/api/core";
+import { useLabToast } from "@/lab/lab-toast";
+import { QueryErrorPanel, QueryLoadingPanel } from "@/components/shell/query-error-panel";
 
-const CONTEXT_PARAMS: ContextParamKey[] = [
-  "traceId", "spanId", "issueId", "findingId", "agentId",
-  "planId", "artifactId", "debuggerSessionId", "sessionId", "alertId",
-];
+function titleFromPrompt(prompt: string): string {
+  const t = prompt.trim();
+  if (t.length <= 42) return t || "New chat";
+  return `${t.slice(0, 40)}…`;
+}
 
-function AgentPageInner() {
-  const t = useTranslations("ai.agent");
-  const router = useRouter();
-  const searchParams = useSearchParams();
-  const { sessionId: globalSessionId, setSessionId: setGlobalSessionId, context: globalContext, setContext } = useAiSessionContext();
+/** Raw shape of one SSE `AgentChunk` (see src/eden/autonomous/agent.py). */
+type ChatChunk = {
+  type: string;
+  text?: string;
+  chart?: {
+    type: string;
+    title: string;
+    data: Record<string, unknown>[];
+    x_key?: string;
+    y_key?: string;
+    y2_key?: string;
+    label_key?: string;
+    value_key?: string;
+    unit?: string;
+  };
+  citation?: {
+    kind: string;
+    id: string;
+    label: string;
+    excerpt?: string;
+    trace_id?: string;
+  };
+  error?: string;
+  message?: string;
+  conversation_id?: string;
+};
 
-  // Derive active session from URL > provider
-  const urlSessionId = searchParams.get("ai_session");
-  const activeSessionId = urlSessionId ?? globalSessionId;
+function mapCitation(c: NonNullable<ChatChunk["citation"]>): AgentCitation {
+  const kindMap: Record<string, AgentCitationKind> = {
+    trace: "trace",
+    span: "trace",
+    incident: "issue",
+    agent: "agent",
+  };
+  return {
+    kind: kindMap[c.kind] ?? "trace",
+    id: c.kind === "span" ? c.trace_id || c.id : c.id,
+    label: c.label,
+  };
+}
 
-  const [draft, setDraft] = useState(searchParams.get("ai_prompt") ?? "");
-  const [localMessages, setLocalMessages] = useState<AiMessage[]>([]);
-  const [streamMessages, setStreamMessages] = useState<AiMessage[]>([]);
-  const [threadSheetOpen, setThreadSheetOpen] = useState(false);
-  const [contextSheetOpen, setContextSheetOpen] = useState(false);
+const CHART_TYPE_MAP: Partial<Record<string, AgentChartType>> = {
+  line: "line",
+  bar: "bar",
+  pie: "pie",
+  scatter: "line",
+};
 
-  // Load context from URL params
-  useEffect(() => {
-    const paramMap: Partial<Record<ContextParamKey, string>> = {};
-    for (const key of CONTEXT_PARAMS) {
-      const val = searchParams.get(key);
-      if (val) paramMap[key] = val;
-    }
-    const items = buildContextFromParams(paramMap);
-    if (items.length > 0) setContext(items);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const context = globalContext;
-
-  const { data: sessionsData, isLoading: sessionsLoading, error: sessionsError } = useAiSessionList();
-  const { data: historyData } = useAiSessionMessages(activeSessionId);
-  const { archiveSession } = useAiSessionActions();
-
-  const sessions = sessionsData?.sessions ?? [];
-
-  // Merge history with local messages
-  const historyMessages: AiMessage[] = (historyData?.messages ?? []).map((m) => ({
-    message_id: m.message_id,
-    role: m.role as AiMessage["role"],
-    content: typeof m.content === "string" ? m.content : JSON.stringify(m.content),
-    created_at: m.created_at,
+function mapChart(chart: NonNullable<ChatChunk["chart"]>): AgentArtifact | null {
+  const chartType = CHART_TYPE_MAP[chart.type];
+  if (!chartType) return null; // table / heatmap / sankey have no renderer yet
+  const labelKey = chart.label_key || chart.x_key || "label";
+  const valueKey = chart.value_key || chart.y_key || "value";
+  const points = chart.data.map((row) => ({
+    label: String(row[labelKey] ?? ""),
+    value: Number(row[valueKey] ?? 0),
+    value2: chart.y2_key ? Number(row[chart.y2_key] ?? 0) : undefined,
   }));
-  const allMessages = [...historyMessages, ...localMessages, ...streamMessages];
+  return {
+    id: `chart_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`,
+    kind: "chart",
+    title: chart.title,
+    chartType,
+    unit: chart.unit || undefined,
+    points,
+    filename: chart.title.toLowerCase().replace(/[^a-z0-9]+/g, "-").slice(0, 40) || "chart",
+  };
+}
 
-  const onMessage = useCallback(
-    (msg: AiMessage) => {
-      setStreamMessages((prev) => {
-        const idx = prev.findIndex((m) => m.message_id === msg.message_id);
-        if (idx >= 0) {
-          const next = [...prev];
-          next[idx] = msg;
-          return next;
-        }
-        return [...prev, msg];
-      });
-    },
-    [],
+/** Parse one SSE frame's `data:` line(s) back into a chunk object. */
+function parseSseFrame(frame: string): ChatChunk | null {
+  const dataLines = frame
+    .split("\n")
+    .filter((l) => l.startsWith("data:"))
+    .map((l) => l.slice(5).replace(/^ /, ""));
+  if (dataLines.length === 0) return null;
+  try {
+    return JSON.parse(dataLines.join("\n")) as ChatChunk;
+  } catch {
+    return null;
+  }
+}
+
+function LabAgentInner() {
+  const searchParams = useSearchParams();
+  const paramThread = searchParams.get("thread");
+  const paramView = searchParams.get("view");
+  const paramPrompt = searchParams.get("ai_prompt");
+  const paramTrace = searchParams.get("traceId");
+  const paramIssue = searchParams.get("issueId");
+  const paramPlan = searchParams.get("planId");
+  const paramAgent = searchParams.get("agent");
+
+  const patchQuery = useQueryPatch();
+  const composerRef = useRef<HTMLTextAreaElement | null>(null);
+  const syncedThreadUrl = useRef(false);
+  const bootedRef = useRef(false);
+  const abortRef = useRef<AbortController | null>(null);
+  const conversationIdsRef = useRef<Record<string, string>>({});
+  const { pushToast } = useLabToast();
+
+  const { currentOrg } = useOrg();
+  const orgId = currentOrg?.id ?? null;
+  const threadsQuery = useOrgQuery(
+    queryKeys.portal.assistantThreads(orgId),
+    orgId,
+    () => portalApi.assistantThreads(orgId!),
   );
 
-  const onDone = useCallback(() => {
-    setLocalMessages((prev) => [...prev, ...streamMessages]);
-    setStreamMessages([]);
-  }, [streamMessages]);
+  const [view, setView] = useState<AgentViewMode>(() =>
+    parseAgentView(paramView),
+  );
+  const [threads, setThreads] = useState<AgentThread[]>([]);
+  const [activeId, setActiveId] = useState("");
+  const [draft, setDraft] = useState("");
+  const [thinking, setThinking] = useState(false);
+  const [historyQuery, setHistoryQuery] = useState("");
+  const [seededPrompt, setSeededPrompt] = useState<string | null>(null);
 
-  const { sendMessage, streaming } = useAiChat({
-    sessionId: activeSessionId,
-    context,
-    onSessionId: (id) => {
-      setGlobalSessionId(id);
-      router.replace(`/agent?ai_session=${encodeURIComponent(id)}`, { scroll: false });
-    },
-    onMessage,
-    onDone,
-  });
-
-  const handleSend = () => {
-    if (!draft.trim()) return;
-    const userMsg: AiMessage = {
-      message_id: `user-${Date.now()}`,
-      role: "user",
-      content: draft,
-    };
-    setLocalMessages((prev) => [...prev, userMsg]);
-    sendMessage(draft);
-    setDraft("");
-  };
-
-  const handleNewThread = () => {
-    setGlobalSessionId(null);
-    setLocalMessages([]);
-    setStreamMessages([]);
-    setDraft("");
-    router.push("/agent");
-  };
-
-  const handleSelectThread = (sid: string) => {
-    setGlobalSessionId(sid);
-    setLocalMessages([]);
-    setStreamMessages([]);
-    router.push(`/agent?ai_session=${encodeURIComponent(sid)}`);
-    setThreadSheetOpen(false);
-  };
-
-  // ⌘N → new thread
+  // Boot once live threads have resolved (or failed) — mirrors the
+  // previous synchronous fixture-driven boot, just deferred one tick.
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      const target = e.target as HTMLElement;
-      const inForm = target.tagName === "TEXTAREA" || target.tagName === "INPUT";
-      if ((e.metaKey || e.ctrlKey) && e.key === "n" && !inForm) {
-        e.preventDefault();
-        handleNewThread();
+    if (bootedRef.current) return;
+    if (threadsQuery.isLoading) return;
+    bootedRef.current = true;
+
+    const pins = pinFromParams({
+      traceId: paramTrace,
+      issueId: paramIssue,
+      planId: paramPlan,
+      agentId: paramAgent,
+    });
+    const base = (threadsQuery.data ?? []).filter((x) => x.id !== "thr_empty");
+    const wantsHandoff =
+      pins.length > 0 ||
+      Boolean(paramPrompt) ||
+      paramThread === "thr_empty";
+    if (wantsHandoff && (!paramThread || paramThread === "thr_empty")) {
+      const t = newEmptyThread();
+      t.pins = [...pins];
+      if (pins.length > 0) {
+        const labels = pins.map((p) => p.label).join(" · ");
+        t.title = labels.length > 42 ? `${labels.slice(0, 40)}…` : labels;
       }
+      setThreads([t, ...base]);
+      setActiveId(t.id);
+      return;
+    }
+    if (
+      paramThread &&
+      paramThread !== "thr_empty" &&
+      base.some((t) => t.id === paramThread)
+    ) {
+      setThreads(base);
+      setActiveId(paramThread);
+      return;
+    }
+    if (base.length > 0) {
+      setThreads(base);
+      setActiveId(base[0]!.id);
+      return;
+    }
+    const t = newEmptyThread();
+    setThreads([t]);
+    setActiveId(t.id);
+  }, [
+    threadsQuery.isLoading,
+    threadsQuery.data,
+    paramThread,
+    paramPrompt,
+    paramTrace,
+    paramIssue,
+    paramPlan,
+    paramAgent,
+  ]);
+
+  const urlPins = useMemo(
+    () =>
+      pinFromParams({
+        traceId: paramTrace,
+        issueId: paramIssue,
+        planId: paramPlan,
+        agentId: paramAgent,
+      }),
+    [paramTrace, paramIssue, paramPlan, paramAgent],
+  );
+
+  // Persist handoff thread id into the URL once.
+  useEffect(() => {
+    if (syncedThreadUrl.current) return;
+    if (!activeId || (paramThread && paramThread === activeId)) {
+      syncedThreadUrl.current = true;
+      return;
+    }
+    if (!paramThread || paramThread === "thr_empty") {
+      syncedThreadUrl.current = true;
+      patchQuery({ thread: activeId, view: null });
+    }
+  }, [activeId, paramThread, patchQuery]);
+
+  useEffect(() => {
+    setView(parseAgentView(paramView));
+  }, [paramView]);
+
+  useEffect(() => {
+    if (
+      paramThread &&
+      paramThread !== "thr_empty" &&
+      threads.some((t) => t.id === paramThread)
+    ) {
+      setActiveId(paramThread);
+    }
+  }, [paramThread, threads]);
+
+  // Merge late-arriving URL pins into the active handoff thread.
+  useEffect(() => {
+    if (urlPins.length === 0 || !activeId) return;
+    setThreads((prev) =>
+      prev.map((t) => {
+        if (t.id !== activeId) return t;
+        const next = [...t.pins];
+        let changed = false;
+        for (const pin of urlPins) {
+          if (!next.some((p) => p.kind === pin.kind && p.id === pin.id)) {
+            next.push(pin);
+            changed = true;
+          }
+        }
+        return changed ? { ...t, pins: next } : t;
+      }),
+    );
+  }, [urlPins, activeId]);
+
+  useEffect(() => {
+    return () => {
+      abortRef.current?.abort();
     };
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const threadListEl = (
-    <ThreadList
-      sessions={sessions}
-      activeSessionId={activeSessionId}
-      onSelect={handleSelectThread}
-      onNew={handleNewThread}
-      onArchive={archiveSession}
-      className="flex-1"
-    />
+  const active =
+    (activeId ? threads.find((t) => t.id === activeId) : undefined) ??
+    threads[0];
+
+  const selectThread = useCallback(
+    (id: string) => {
+      abortRef.current?.abort();
+      setThinking(false);
+      setActiveId(id);
+      setView("chat");
+      setDraft("");
+      patchQuery({ thread: id, view: null });
+    },
+    [patchQuery],
   );
 
-  const contextPanelEl = (
-    <ContextPanel
-      items={context}
-      onRemove={(i) => setContext(context.filter((_, idx) => idx !== i))}
-      className="w-[300px] shrink-0"
-    />
+  const startNew = useCallback(() => {
+    abortRef.current?.abort();
+    setThinking(false);
+    const t = newEmptyThread();
+    if (urlPins.length > 0) t.pins = [...urlPins];
+    setThreads((prev) => [t, ...prev]);
+    setActiveId(t.id);
+    setDraft("");
+    setView("chat");
+    patchQuery({ thread: t.id, view: null });
+  }, [patchQuery, urlPins]);
+
+  const changeView = useCallback(
+    (next: AgentViewMode) => {
+      setView(next);
+      patchQuery({ view: next === "chat" ? null : next });
+    },
+    [patchQuery],
   );
 
-  const isEmpty = allMessages.length === 0 && !streaming;
+  const removePin = useCallback(
+    (pin: AgentContextPin) => {
+      setThreads((prev) =>
+        prev.map((t) =>
+          t.id === activeId
+            ? {
+                ...t,
+                pins: t.pins.filter(
+                  (p) => !(p.kind === pin.kind && p.id === pin.id),
+                ),
+              }
+            : t,
+        ),
+      );
+      const clear: Record<string, null> = {};
+      if (pin.kind === "trace") clear.traceId = null;
+      if (pin.kind === "issue") clear.issueId = null;
+      if (pin.kind === "plan") clear.planId = null;
+      if (pin.kind === "agent") clear.agent = null;
+      patchQuery(clear);
+    },
+    [activeId, patchQuery],
+  );
+
+  const streamAssistantReply = useCallback(
+    async (threadId: string, userText: string, pins: AgentContextPin[]) => {
+      if (!orgId) {
+        setThinking(false);
+        return;
+      }
+      const assistantId = `a_${Date.now().toString(36)}`;
+      let textSoFar = "";
+      const citations: AgentCitation[] = [];
+      const artifacts: AgentArtifact[] = [];
+      let gotContent = false;
+
+      const upsert = () => {
+        const parts: AgentMessagePart[] = [
+          { type: "text", text: textSoFar || "…" },
+        ];
+        if (citations.length > 0) parts.push({ type: "citations", items: [...citations] });
+        if (artifacts.length > 0) parts.push({ type: "artifacts", items: [...artifacts] });
+        setThreads((prev) =>
+          prev.map((t) => {
+            if (t.id !== threadId) return t;
+            const exists = t.messages.some((m) => m.id === assistantId);
+            const msg: AgentMessage = { id: assistantId, role: "assistant", at: "just now", parts };
+            return {
+              ...t,
+              updatedAt: "just now",
+              messages: exists
+                ? t.messages.map((m) => (m.id === assistantId ? msg : m))
+                : [...t.messages, msg],
+            };
+          }),
+        );
+      };
+
+      const controller = new AbortController();
+      abortRef.current = controller;
+
+      try {
+        const res = await fetch(`${API_BASE}/orgs/${encodeURIComponent(orgId)}/ai/chat`, {
+          method: "POST",
+          credentials: "include",
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "text/event-stream",
+          },
+          body: JSON.stringify({
+            conversation_id: conversationIdsRef.current[threadId] ?? null,
+            message: userText,
+            page_context:
+              pins.length > 0
+                ? { pins: pins.map((p) => ({ kind: p.kind, id: p.id, label: p.label })) }
+                : {},
+          }),
+          signal: controller.signal,
+        });
+
+        if (!res.ok || !res.body) {
+          throw new Error(`Assistant request failed (HTTP ${res.status}).`);
+        }
+
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          let boundary: number;
+          while ((boundary = buffer.indexOf("\n\n")) >= 0) {
+            const frame = buffer.slice(0, boundary);
+            buffer = buffer.slice(boundary + 2);
+            const chunk = parseSseFrame(frame);
+            if (!chunk) continue;
+            if (chunk.type === "text_delta" && chunk.text) {
+              textSoFar += chunk.text;
+              gotContent = true;
+              upsert();
+            } else if (chunk.type === "citation" && chunk.citation) {
+              citations.push(mapCitation(chunk.citation));
+              gotContent = true;
+              upsert();
+            } else if (chunk.type === "chart" && chunk.chart) {
+              const artifact = mapChart(chunk.chart);
+              if (artifact) {
+                artifacts.push(artifact);
+                gotContent = true;
+                upsert();
+              }
+            } else if (chunk.type === "summary" || chunk.type === "connected") {
+              if (chunk.conversation_id && chunk.conversation_id !== "new") {
+                conversationIdsRef.current[threadId] = chunk.conversation_id;
+              }
+            } else if (chunk.type === "error") {
+              throw new Error(chunk.error || chunk.message || "Assistant error.");
+            }
+          }
+        }
+
+        if (!gotContent) {
+          textSoFar = "No response from the assistant.";
+          upsert();
+        }
+      } catch (err) {
+        if (controller.signal.aborted) {
+          setThreads((prev) =>
+            prev.map((t) =>
+              t.id === threadId
+                ? {
+                    ...t,
+                    updatedAt: "just now",
+                    messages: t.messages.some((m) => m.id === assistantId)
+                      ? t.messages
+                      : [
+                          ...t.messages,
+                          {
+                            id: `${assistantId}_stop`,
+                            role: "assistant",
+                            at: "just now",
+                            parts: [{ type: "text", text: "Stopped. Send again when you’re ready." }],
+                          },
+                        ],
+                  }
+                : t,
+            ),
+          );
+        } else {
+          const message = err instanceof Error ? err.message : "Assistant request failed.";
+          pushToast({ title: "Assistant error", body: message, tone: "fail" });
+          setThreads((prev) =>
+            prev.map((t) =>
+              t.id === threadId
+                ? {
+                    ...t,
+                    updatedAt: "just now",
+                    messages: [
+                      ...t.messages.filter((m) => m.id !== assistantId),
+                      {
+                        id: `${assistantId}_err`,
+                        role: "assistant",
+                        at: "just now",
+                        parts: [{ type: "text", text: `Couldn’t reach the assistant: ${message}` }],
+                      },
+                    ],
+                  }
+                : t,
+            ),
+          );
+        }
+      } finally {
+        if (abortRef.current === controller) abortRef.current = null;
+        setThinking(false);
+      }
+    },
+    [orgId, pushToast],
+  );
+
+  const appendExchange = useCallback(
+    (userText: string) => {
+      if (!activeId || thinking) return;
+      const text = userText.trim();
+      if (!text) return;
+
+      const userMsg: AgentMessage = {
+        id: `u_${Date.now().toString(36)}`,
+        role: "user",
+        at: "just now",
+        parts: [{ type: "text", text }],
+      };
+
+      const threadId = activeId;
+      let pins: AgentContextPin[] = [];
+      setThreads((prev) =>
+        prev.map((t) => {
+          if (t.id !== threadId) return t;
+          pins = t.pins;
+          const title =
+            t.messages.length === 0 ? titleFromPrompt(text) : t.title;
+          return {
+            ...t,
+            title,
+            updatedAt: "just now",
+            messages: [...t.messages, userMsg],
+          };
+        }),
+      );
+      setDraft("");
+      setView("chat");
+      setThinking(true);
+      void streamAssistantReply(threadId, text, pins);
+    },
+    [activeId, thinking, streamAssistantReply],
+  );
+
+  const appendRef = useRef(appendExchange);
+  appendRef.current = appendExchange;
+
+  const send = useCallback(() => {
+    appendExchange(draft);
+  }, [draft, appendExchange]);
+
+  const suggest = useCallback(
+    (prompt: string) => {
+      appendExchange(prompt);
+    },
+    [appendExchange],
+  );
+
+  const stopThinking = useCallback(() => {
+    abortRef.current?.abort();
+    setThinking(false);
+  }, []);
+
+  // Seed from ?ai_prompt= then auto-send once ready.
+  useEffect(() => {
+    if (!paramPrompt || seededPrompt === paramPrompt || !activeId) return;
+    setSeededPrompt(paramPrompt);
+    patchQuery({ ai_prompt: null });
+    const id = window.setTimeout(() => {
+      appendRef.current(paramPrompt);
+    }, 120);
+    return () => window.clearTimeout(id);
+  }, [paramPrompt, seededPrompt, activeId, patchQuery]);
+
+  if (threadsQuery.isError) {
+    return (
+      <div className="ds-page">
+        <PageHeader title="Assistant" />
+        <QueryErrorPanel
+          error={threadsQuery.error}
+          onRetry={() => void threadsQuery.refetch()}
+        />
+      </div>
+    );
+  }
+
+  if (!active) {
+    return (
+      <div className="ds-page">
+        <PageHeader title="Assistant" />
+        {threadsQuery.isLoading ? (
+          <QueryLoadingPanel label="Opening chat…" />
+        ) : (
+          <p className="type-body px-5 py-8 text-[var(--text-secondary)]">
+            Opening chat…
+          </p>
+        )}
+      </div>
+    );
+  }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <div className="ds-page">
       <PageHeader
-        title={t("title")}
-        subtitle={t("subtitle")}
+        title="Assistant"
+        meta={
+          <span className="type-meta">
+            Product assistant · t3 · not the agent fleet
+          </span>
+        }
         actions={
-          <div className="flex items-center gap-2">
-            {/* Threads (tablet/mobile only) */}
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={() => setThreadSheetOpen(true)}
-              className="lg:hidden"
-              aria-label={t("threadsAria")}
+          <div className="flex flex-wrap items-center gap-2">
+            <AgentModeNav value={view} onChange={changeView} />
+            <button
+              type="button"
+              className="ds-btn ds-btn-primary ds-btn-sm"
+              onClick={startNew}
             >
-              <Search className="h-4 w-4" />
-            </Button>
-            <Button
-              size="sm"
-              variant="secondary"
-              onClick={handleNewThread}
-              aria-label={t("newThread")}
-              aria-keyshortcuts="Meta+N Ctrl+N"
-            >
-              <Plus className="mr-1.5 h-3.5 w-3.5" aria-hidden />
-              {t("newThread")}
-            </Button>
-            {/* Context (tablet/mobile) */}
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={() => setContextSheetOpen(true)}
-              className="lg:hidden"
-              aria-label={t("contextAria")}
-            >
-              <Columns3 className="h-4 w-4" />
-            </Button>
+              New chat
+            </button>
           </div>
         }
       />
 
-      {/* Desktop three-column layout */}
-      <div className="flex min-h-0 flex-1">
-        {/* Thread list — desktop */}
-        <div className="hidden w-[260px] shrink-0 lg:flex lg:flex-col">
-          {sessionsLoading ? (
-            <div className="p-3 text-xs text-[var(--text-muted)]">{t("loadingThreads")}</div>
-          ) : sessionsError ? (
-            <div className="p-3 text-xs text-[var(--error)]">{t("errorThreads")}</div>
-          ) : (
-            threadListEl
-          )}
-        </div>
-
-        {/* Message stream + composer */}
-        <div className="flex min-w-0 flex-1 flex-col">
-          {isEmpty ? (
-            <div className="flex flex-1 flex-col items-center justify-center gap-3 px-4">
-              <p className="text-center text-sm text-[var(--text-muted)]">{t("emptyTitle")}</p>
-              <p className="text-center text-xs text-[var(--text-faint)]">{t("emptyHint")}</p>
-            </div>
-          ) : (
-            <MessageStream
-              messages={allMessages}
-              streaming={streaming}
-              className="flex-1"
-            />
-          )}
-          {isEmpty && (
-            <SuggestedPrompts
-              context={context}
-              onSelect={(p) => setDraft(p)}
-              className="justify-center"
-            />
-          )}
-          <Composer
-            value={draft}
-            onChange={setDraft}
-            onSend={handleSend}
-            streaming={streaming}
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col md:flex-row">
+        <div
+          className={
+            view === "history"
+              ? "flex min-h-0 flex-1 md:contents"
+              : "hidden md:contents"
+          }
+        >
+          <AgentHistoryRail
+            threads={threads}
+            activeId={active.id}
+            query={historyQuery}
+            onQueryChange={setHistoryQuery}
+            onSelect={selectThread}
+            onNew={startNew}
           />
         </div>
 
-        {/* Context panel — desktop */}
-        <div className="hidden lg:flex">
-          {contextPanelEl}
+        <div
+          className={
+            view === "history"
+              ? "hidden min-h-0 min-w-0 flex-1 md:flex"
+              : "flex min-h-0 min-w-0 flex-1"
+          }
+        >
+          <AgentChatStream
+            thread={active}
+            draft={draft}
+            onDraftChange={setDraft}
+            onSend={send}
+            onSuggest={suggest}
+            onRemovePin={removePin}
+            thinking={thinking}
+            onStop={stopThinking}
+            composerRef={composerRef}
+          />
         </div>
       </div>
-
-      {/* Thread sheet — mobile/tablet */}
-      <Sheet open={threadSheetOpen} onOpenChange={setThreadSheetOpen}>
-        <SheetContent side="left" className="w-[280px] p-0 flex flex-col">
-          <SheetHeader className="border-b border-[var(--border-subtle)] p-3">
-            <SheetTitle className="text-sm">{t("threadsTitle")}</SheetTitle>
-          </SheetHeader>
-          {threadListEl}
-        </SheetContent>
-      </Sheet>
-
-      {/* Context sheet — mobile/tablet */}
-      <Sheet open={contextSheetOpen} onOpenChange={setContextSheetOpen}>
-        <SheetContent side="right" className="p-0">
-          <SheetHeader className="border-b border-[var(--border-subtle)] p-3">
-            <SheetTitle className="text-sm">{t("contextTitle")}</SheetTitle>
-          </SheetHeader>
-          <ContextPanel
-            items={context}
-            onRemove={(i) => setContext(context.filter((_, idx) => idx !== i))}
-            className="border-none"
-          />
-        </SheetContent>
-      </Sheet>
     </div>
   );
 }
 
-export default function AgentPage() {
+export default function LabAgentPage() {
   return (
-    <Suspense>
-      <AgentPageInner />
+    <Suspense
+      fallback={
+        <div className="ds-page">
+          <PageHeader title="Assistant" />
+        </div>
+      }
+    >
+      <LabAgentInner />
     </Suspense>
   );
 }
