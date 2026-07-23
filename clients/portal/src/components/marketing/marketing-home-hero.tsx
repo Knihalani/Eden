@@ -2,51 +2,54 @@ import Link from "next/link";
 import { EdenLogo } from "@/components/ds/eden-logo";
 import { DOCS_URL } from "@/lib/constants";
 import { MarketingRail } from "@/components/marketing/marketing-primitives";
-import { TraceTimelineMock } from "@/components/marketing/trace-timeline-mock";
+import { ProductSurfaceMock } from "@/components/marketing/product-surface-mock";
 
 /**
- * First viewport as one composition: brand + headline + CTA sitting on a
- * full-bleed product plane (live trace), not empty black then a strip below.
+ * First viewport as one composition: brand copy + dense product chrome.
+ * Desktop: split. Mobile: stacked. No empty black slab.
  */
 export function MarketingHomeHero() {
   return (
     <section className="relative isolate overflow-hidden border-b border-[var(--line)]">
-      {/* Full-bleed instrument field behind copy + product */}
       <div
-        className="pointer-events-none absolute inset-0 eden-product-plane opacity-[0.28]"
+        className="pointer-events-none absolute inset-0 eden-product-plane opacity-[0.22]"
         aria-hidden
       />
+      <div className="pointer-events-none absolute inset-0 eden-grain" aria-hidden />
       <div
-        className="pointer-events-none absolute -left-1/4 top-[-10%] h-[28rem] w-[28rem] rounded-full opacity-50"
+        className="eden-auth-ambient pointer-events-none absolute -left-[20%] top-[-15%] h-[36rem] w-[36rem] rounded-full opacity-60"
         style={{
           background:
-            "radial-gradient(circle, color-mix(in srgb, var(--accent) 16%, transparent), transparent 70%)",
+            "radial-gradient(circle, color-mix(in srgb, var(--accent) 18%, transparent), transparent 68%)",
         }}
         aria-hidden
       />
       <div
-        className="pointer-events-none absolute bottom-0 right-[-10%] h-[22rem] w-[22rem] rounded-full opacity-40"
+        className="pointer-events-none absolute bottom-[-10%] right-[-8%] h-[28rem] w-[28rem] rounded-full opacity-45"
         style={{
           background:
-            "radial-gradient(circle, color-mix(in srgb, var(--accent) 10%, transparent), transparent 68%)",
+            "radial-gradient(circle, color-mix(in srgb, var(--accent) 12%, transparent), transparent 70%)",
         }}
         aria-hidden
       />
 
-      <MarketingRail className="relative flex min-h-[min(52dvh,28rem)] flex-col justify-end pb-10 pt-16 sm:min-h-[min(48dvh,26rem)] sm:pb-12 sm:pt-20">
-        <div className="eden-hero-rise max-w-3xl">
+      <MarketingRail className="relative grid items-stretch gap-10 py-14 sm:py-16 lg:grid-cols-12 lg:gap-12 lg:py-20">
+        <div className="eden-hero-rise flex flex-col justify-center lg:col-span-5">
           <div className="flex items-center gap-3.5">
             <EdenLogo size={44} priority />
-            <span className="font-[family-name:var(--font-geist-sans)] text-[clamp(1.75rem,4vw,2.25rem)] font-semibold tracking-[-0.045em] text-[var(--text)]">
+            <span className="text-[clamp(1.75rem,4vw,2.25rem)] font-semibold tracking-[-0.045em] text-[var(--text)]">
               eden
             </span>
           </div>
-          <h1 className="mt-8 max-w-[16ch] text-[clamp(2.375rem,6vw,3.75rem)] font-semibold leading-[1.02] tracking-[-0.04em] text-[var(--text)]">
+          <p className="mt-6 font-mono text-[0.625rem] uppercase tracking-[0.2em] text-[var(--text-faint)]">
+            Observe · Evaluate · Improve
+          </p>
+          <h1 className="mt-5 max-w-[14ch] text-[clamp(2.5rem,5.8vw,3.85rem)] font-semibold leading-[1.02] tracking-[-0.042em] text-[var(--text)]">
             See every agent run.
             <br />
             Fix what fails.
           </h1>
-          <p className="mt-5 max-w-lg text-[1.0625rem] leading-relaxed text-[var(--text-secondary)]">
+          <p className="mt-5 max-w-md text-[1.0625rem] leading-relaxed text-[var(--text-secondary)]">
             Drop-in observability for AI agents — traces, evals, and reviewable
             improvements in one loop.
           </p>
@@ -65,12 +68,32 @@ export function MarketingHomeHero() {
               Docs →
             </a>
           </div>
+          <dl className="mt-10 grid max-w-sm grid-cols-3 gap-4 border-t border-[var(--line)] pt-6">
+            {[
+              { k: "Overhead", v: "≤5ms" },
+              { k: "Ingest", v: "OTel" },
+              { k: "Loop", v: "Closed" },
+            ].map((row) => (
+              <div key={row.k}>
+                <dt className="font-mono text-[0.5625rem] uppercase tracking-[0.16em] text-[var(--text-faint)]">
+                  {row.k}
+                </dt>
+                <dd className="mt-1.5 font-mono text-[0.8125rem] text-[var(--text-secondary)]">
+                  {row.v}
+                </dd>
+              </div>
+            ))}
+          </dl>
+        </div>
+
+        <div className="eden-hero-rise-delay relative lg:col-span-7">
+          <div className="absolute -inset-px bg-[color-mix(in_srgb,var(--accent)_14%,transparent)] blur-2xl" aria-hidden />
+          <ProductSurfaceMock
+            variant="hero"
+            className="relative min-h-[22rem] sm:min-h-[26rem] lg:min-h-[32rem]"
+          />
         </div>
       </MarketingRail>
-
-      <div className="eden-hero-rise-delay relative">
-        <TraceTimelineMock hero />
-      </div>
     </section>
   );
 }

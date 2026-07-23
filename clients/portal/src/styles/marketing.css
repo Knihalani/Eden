@@ -3,7 +3,7 @@
 @keyframes eden-hero-rise {
   from {
     opacity: 0;
-    transform: translateY(14px);
+    transform: translateY(18px);
   }
   to {
     opacity: 1;
@@ -14,46 +14,21 @@
 @keyframes eden-auth-drift {
   0%,
   100% {
-    transform: translate(0, 0);
+    transform: translate(0, 0) scale(1);
   }
   50% {
-    transform: translate(18px, 12px);
-  }
-}
-
-@keyframes eden-skeleton-pulse {
-  0%,
-  100% {
-    opacity: 0.35;
-  }
-  50% {
-    opacity: 0.7;
+    transform: translate(22px, 14px) scale(1.04);
   }
 }
 
 @keyframes eden-span-grow {
   from {
     transform: scaleX(0);
+    opacity: 0.4;
   }
   to {
     transform: scaleX(1);
-  }
-}
-
-@keyframes eden-playhead {
-  0% {
-    left: 0%;
-    opacity: 0;
-  }
-  8% {
     opacity: 1;
-  }
-  92% {
-    opacity: 1;
-  }
-  100% {
-    left: 100%;
-    opacity: 0;
   }
 }
 
@@ -64,85 +39,118 @@
     transform: scale(1);
   }
   50% {
-    opacity: 0.45;
-    transform: scale(0.85);
+    opacity: 0.4;
+    transform: scale(0.8);
   }
 }
 
-@keyframes eden-scan-row {
-  0%,
-  100% {
-    background-position: 0% 0%;
+@keyframes eden-bar-shimmer {
+  0% {
+    background-position: 0% 50%;
   }
-  50% {
-    background-position: 100% 0%;
+  100% {
+    background-position: 200% 50%;
+  }
+}
+
+@keyframes eden-ticker {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+@keyframes eden-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
   }
 }
 
 .eden-hero-rise {
-  animation: eden-hero-rise 0.55s cubic-bezier(0.33, 1, 0.68, 1) both;
+  animation: eden-hero-rise 0.6s cubic-bezier(0.33, 1, 0.68, 1) both;
 }
 
 .eden-hero-rise-delay {
-  animation: eden-hero-rise 0.65s cubic-bezier(0.33, 1, 0.68, 1) 0.12s both;
+  animation: eden-hero-rise 0.7s cubic-bezier(0.33, 1, 0.68, 1) 0.14s both;
 }
 
 .eden-auth-ambient {
-  animation: eden-auth-drift 24s linear infinite;
+  animation: eden-auth-drift 22s linear infinite;
   will-change: transform;
-}
-
-.eden-skeleton-pulse {
-  animation: eden-skeleton-pulse 1.4s ease-in-out infinite;
 }
 
 .eden-span-grow {
   transform-origin: left center;
-  animation: eden-span-grow 0.9s cubic-bezier(0.33, 1, 0.68, 1) both;
-}
-
-.eden-playhead {
-  animation: eden-playhead 5.5s cubic-bezier(0.33, 1, 0.68, 1) infinite;
+  animation: eden-span-grow 0.85s cubic-bezier(0.33, 1, 0.68, 1) both;
 }
 
 .eden-live-dot {
   animation: eden-live-dot 1.8s ease-in-out infinite;
 }
 
-/* Instrument-panel grid for product planes (not decorative glow). */
+.eden-bar-shimmer {
+  background-size: 200% 100%;
+  animation: eden-bar-shimmer 3.2s linear infinite;
+}
+
+.eden-ticker {
+  animation: eden-ticker 28s linear infinite;
+}
+
+.eden-fade-up {
+  animation: eden-fade-up 0.55s cubic-bezier(0.33, 1, 0.68, 1) both;
+}
+
+/* Instrument-panel grid */
 .eden-product-plane {
   background-image:
     linear-gradient(
       to right,
-      color-mix(in srgb, var(--line) 55%, transparent) 1px,
+      color-mix(in srgb, var(--line) 50%, transparent) 1px,
       transparent 1px
     ),
     linear-gradient(
       to bottom,
-      color-mix(in srgb, var(--line) 55%, transparent) 1px,
+      color-mix(in srgb, var(--line) 50%, transparent) 1px,
       transparent 1px
     );
-  background-size: 48px 48px;
+  background-size: 40px 40px;
   background-position: -1px -1px;
 }
 
-/* Finer grid for auth brand density */
 .eden-product-plane--dense {
-  background-size: 32px 32px;
+  background-size: 28px 28px;
+}
+
+/* Soft noise grain — depth without glow theatre */
+.eden-grain {
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.55'/%3E%3C/svg%3E");
+  background-size: 180px 180px;
+  opacity: 0.035;
+  mix-blend-mode: overlay;
 }
 
 @media (prefers-reduced-motion: reduce) {
   .eden-hero-rise,
   .eden-hero-rise-delay,
   .eden-auth-ambient,
-  .eden-skeleton-pulse,
   .eden-span-grow,
-  .eden-playhead,
-  .eden-live-dot {
+  .eden-live-dot,
+  .eden-bar-shimmer,
+  .eden-ticker,
+  .eden-fade-up {
     animation: none !important;
   }
 
   .eden-span-grow {
     transform: none;
+    opacity: 1;
   }
 }
