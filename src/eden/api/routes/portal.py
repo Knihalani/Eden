@@ -123,10 +123,20 @@ def _map_trace_outcome(outcome: str | None) -> tuple[str, str]:
     return "ok", "none"
 
 
+def _normalize_notify_channel(raw: object | None) -> str:
+    """Map legacy ``slack`` (removed 2026-07-23) onto email for portal cards."""
+    ch = str(raw or "").strip().lower()
+    if ch == "slack":
+        return "email"
+    if ch in ("email", "webhook"):
+        return ch
+    return "email"
+
+
 def _pick_channel(channels: dict[str, Any] | None) -> tuple[str, str]:
-    """Pick slack|email|webhook + destination from NL alert channels blob."""
+    """Pick email|webhook + destination from NL alert channels blob."""
     ch = channels if isinstance(channels, dict) else {}
-    for key in ("slack", "email", "webhook"):
+    for key in ("email", "webhook"):
         val = ch.get(key)
         if val is True:
             return key, str(ch.get("destination") or ch.get(f"{key}_destination") or "")
@@ -136,6 +146,20 @@ def _pick_channel(channels: dict[str, Any] | None) -> tuple[str, str]:
             dest = val.get("destination") or val.get("url") or val.get("webhook") or ""
             if dest or val.get("enabled"):
                 return key, str(dest or "")
+    # Legacy slack blobs still in DB — treat as email destination if present.
+    slack_val = ch.get("slack")
+    if slack_val is True or isinstance(slack_val, (str, dict)):
+        dest = ""
+        if isinstance(slack_val, str):
+            dest = slack_val.strip()
+        elif isinstance(slack_val, dict):
+            dest = str(
+                slack_val.get("destination")
+                or slack_val.get("url")
+                or slack_val.get("webhook")
+                or ""
+            )
+        return "email", dest or str(ch.get("destination") or "")
     if ch.get("in_app"):
         return "email", ""
     return "email", str(ch.get("destination") or "")
@@ -811,9 +835,12 @@ async def list_portal_signals(
         if rule.get("metric"):
             condition = f"{rule.get('metric')} {rule.get('op', '')} {rule.get('threshold', '')}".strip()
         notify = bool(rule.get("notify", False))
-        channel = rule.get("channel") or rule.get("notify_channel")
-        if channel not in ("slack", "email", "webhook"):
-            channel = None
+        raw_channel = rule.get("channel") or rule.get("notify_channel")
+        channel = (
+            _normalize_notify_channel(raw_channel)
+            if raw_channel not in (None, "")
+            else None
+        )
         out.append(
             SignalCard(
                 id=str(r["id"]),
@@ -1036,9 +1063,7 @@ async def get_portal_workspace(
             else defaults.pii_redaction
         ),
         default_notify_channel=(
-            notify_ch  # type: ignore[arg-type]
-            if notify_ch in ("slack", "email", "webhook")
-            else defaults.default_notify_channel
+            _normalize_notify_channel(notify_ch)  # type: ignore[arg-type]
         ),
         default_notify_destination=str(
             settings.get("default_notify_destination")

@@ -24,9 +24,9 @@ IssueStatus = Literal["open", "acknowledged", "resolved"]
 IssueSeverity = Literal["error", "warn"]
 SignalSeverity = Literal["critical", "error", "warn"]
 SignalKind = Literal["error", "latency", "cost", "policy", "custom"]
-NotifyChannel = Literal["slack", "email", "webhook"]
+NotifyChannel = Literal["email", "webhook"]
 AlertSeverity = Literal["critical", "error", "warn"]
-AlertChannel = Literal["slack", "email", "webhook"]
+AlertChannel = Literal["email", "webhook"]
 AlertEventStatus = Literal["firing", "muted", "resolved"]
 CostDriverKind = Literal[
     "tool_fanout",
@@ -259,7 +259,8 @@ class WorkspacePrefs(BaseModel):
     * ``density`` — ``comfortable`` | ``compact``
     * ``retention_days`` — ``7`` | ``30`` | ``90`` | ``365``
     * ``pii_redaction`` — bool
-    * ``default_notify_channel`` / ``notify_channel`` — slack|email|webhook
+    * ``default_notify_channel`` / ``notify_channel`` — email|webhook
+      (legacy ``slack`` is coerced to email on read)
     * ``default_notify_destination`` / ``notify_destination`` — address/URL
     """
 

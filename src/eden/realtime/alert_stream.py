@@ -45,7 +45,6 @@ class AlertChannel(StrEnum):
     WEBSOCKET = "websocket"
     EMAIL = "email"
     WEBHOOK = "webhook"
-    SLACK = "slack"
     PAGERDUTY = "pagerduty"
 
 
@@ -320,8 +319,6 @@ class AlertStreamProcessor:
                     await self._dispatch_email(alert)
                 elif channel == AlertChannel.WEBHOOK:
                     await self._dispatch_webhook(alert)
-                elif channel == AlertChannel.SLACK:
-                    await self._dispatch_slack(alert)
                 elif channel == AlertChannel.PAGERDUTY:
                     await self._dispatch_pagerduty(alert)
             except Exception as exc:
@@ -429,10 +426,6 @@ class AlertStreamProcessor:
                 )
         except Exception as exc:
             logger.warning(f"Webhook alert dispatch failed: {exc}")
-
-    async def _dispatch_slack(self, alert: GeneratedAlert) -> None:
-        """Slack removed (2026-07-23) — no-op kept for channel enum compat."""
-        return
 
     async def _dispatch_pagerduty(self, alert: GeneratedAlert) -> None:
         """Send alert to PagerDuty — gated when PagerDuty is not configured."""

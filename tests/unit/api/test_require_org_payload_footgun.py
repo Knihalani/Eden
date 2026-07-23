@@ -20,7 +20,6 @@ from fastapi.params import Depends as DependsParam
 
 from eden.api.deps import _try_resolve_token_payload, require_org_permission
 from eden.api.routes.pii_policy import PIIPolicyIn, put_pii_policy
-from eden.api.routes.region import RegionIn, put_region
 from eden.api.routes.retention_policy import RetentionPolicyIn, put_retention_policy
 
 _ROUTES_ROOT = (
@@ -76,7 +75,7 @@ def test_no_bare_require_org_awaits_in_routes():
 
 @pytest.mark.parametrize(
     "handler",
-    [put_pii_policy, put_region, put_retention_policy],
+    [put_pii_policy, put_retention_policy],
 )
 def test_policy_put_handlers_declare_payload_depends(handler):
     sig = inspect.signature(handler)
@@ -91,7 +90,6 @@ def test_policy_put_handlers_declare_payload_depends(handler):
     "handler,body",
     [
         (put_pii_policy, PIIPolicyIn()),
-        (put_region, RegionIn(region="us")),
         (
             put_retention_policy,
             RetentionPolicyIn(

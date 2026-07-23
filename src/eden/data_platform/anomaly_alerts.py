@@ -430,7 +430,8 @@ class AnomalyDetector:
     ) -> dict[str, int]:
         """Dispatch alerts to configured channels.
 
-        Channels: in_app, websocket, email, webhook, slack
+        Channels: in_app, websocket, email, webhook
+        (legacy ``slack`` is ignored; email uses SendKit).
         """
         channels = channels or ["in_app"]
         dispatched = dict.fromkeys(channels, 0)
@@ -450,7 +451,10 @@ class AnomalyDetector:
                             dispatched[channel] += 1
                         else:
                             logger.debug("Webhook alert skipped:not_configured")
-                    elif channel in ("email", "slack", "pagerduty"):
+                    elif channel == "email":
+                        await self._dispatch_email(alert)
+                        dispatched[channel] += 1
+                    elif channel in ("slack", "pagerduty"):
                         logger.info("%s alert skipped:not_configured", channel)
                 except Exception as exc:
                     logger.warning(f"Failed to dispatch alert to {channel}: {exc}")
@@ -556,6 +560,23 @@ class AnomalyDetector:
                         connections.discard(ws)
         except ImportError:
             pass
+
+    async def _dispatch_email(self, alert: AnomalyAlert) -> None:
+        """Sparse email via SendKit (alerts@) — best-effort."""
+        try:
+            from eden.services.alert_email import send_issue_alert_email
+
+            org_id = str(alert.context.get("org_id") or "")
+            await send_issue_alert_email(
+                org_id=org_id,
+                event_kind="anomaly_alert",
+                issue_id=getattr(alert, "alert_id", None),
+                severity=str(getattr(alert, "severity", "P1") or "P1"),
+                title=f"Anomaly: {alert.metric}",
+                detail=str(getattr(alert, "message", "") or ""),
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("Email anomaly alert dispatch failed: %s", exc)
 
     async def _dispatch_webhook(self, alert: AnomalyAlert) -> None:
         """Send alert to configured webhook URL."""
