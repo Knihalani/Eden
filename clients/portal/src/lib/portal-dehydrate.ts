@@ -24,6 +24,7 @@ import {
 } from "@tanstack/react-query";
 import { queryKeys } from "@/lib/query-keys";
 import type { AgentFixture } from "@/lab/fixtures/agents";
+import type { IssueFixture } from "@/lab/fixtures/issues";
 import type { TraceFixture } from "@/lab/fixtures/traces";
 
 /** Must match ``ME_QUERY_KEY`` in ``hooks/use-me-query.ts`` (client module). */
@@ -89,13 +90,12 @@ function seedMeQuery(qc: QueryClient, me: MePrefetchPayload): Promise<void> {
 }
 
 /**
- * Prefetch Home's real shards — ``portal/agents`` + ``portal/traces`` —
- * plus ``/auth/me``, for hydration.
+ * Prefetch Home's real shards — agents + traces + issues — plus
+ * ``/auth/me``, for hydration.
  *
- * Query keys match ``queryKeys.portal.agents`` / ``queryKeys.portal.traces``
- * exactly (same factory, same ``orgId``) so both ``PortalCatalogSync``
- * and the Home page's own ``useOrgQuery`` calls hydrate from this warm
- * cache on first client render instead of firing a cold GET.
+ * Query keys match ``queryKeys.portal.*`` exactly so
+ * ``PortalCatalogSync`` and Home's ``useOrgQuery`` calls hydrate from
+ * this warm cache on first client render.
  */
 export async function dehydrateHome(
   auth: PortalPrefetchAuth,
@@ -103,6 +103,7 @@ export async function dehydrateHome(
   const qc = new QueryClient();
   const agentsKey = queryKeys.portal.agents(auth.orgId);
   const tracesKey = queryKeys.portal.traces(auth.orgId);
+  const issuesKey = queryKeys.portal.issues(auth.orgId);
   await Promise.all([
     seedMeQuery(qc, auth.me),
     qc.prefetchQuery({
@@ -114,6 +115,11 @@ export async function dehydrateHome(
       queryKey: [...tracesKey],
       queryFn: () =>
         serverGet<TraceFixture[]>(auth, `/orgs/${auth.orgId}/portal/traces`),
+    }),
+    qc.prefetchQuery({
+      queryKey: [...issuesKey],
+      queryFn: () =>
+        serverGet<IssueFixture[]>(auth, `/orgs/${auth.orgId}/portal/issues`),
     }),
   ]);
   return dehydrate(qc);

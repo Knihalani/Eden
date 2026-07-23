@@ -91,12 +91,19 @@ export function PortalCatalogSync() {
     () => portalApi.sessions(orgId!),
     { ...SHELL_QUERY, enabled: onObserveHeavy },
   );
-  /** Home + Observe-heavy — Issue/Run badges on Home need this too. */
+  /** Home + Observe-heavy — Issue/Run badges on Home need this too.
+   * Defer on Home until agents settle so cold-start bandwidth goes to
+   * agents/traces first (issues still hydrate from SSR when present). */
   const issues = useOrgQuery(
     queryKeys.portal.issues(orgId),
     orgId,
     () => portalApi.issues(orgId!),
-    { ...SHELL_QUERY, enabled: onObserveHeavy || onHomeTraces },
+    {
+      ...SHELL_QUERY,
+      enabled:
+        onObserveHeavy ||
+        (onHomeTraces && !agents.isPending),
+    },
   );
   const signals = useOrgQuery(
     queryKeys.portal.signals(orgId),
@@ -124,7 +131,7 @@ export function PortalCatalogSync() {
     {
       ...SHELL_QUERY,
       staleTime: 60_000,
-      enabled: Boolean(orgId) && (agents.isSuccess || !onHomeTraces),
+      enabled: !onHomeTraces || !agents.isPending,
     },
   );
   const costDrivers = useOrgQuery(

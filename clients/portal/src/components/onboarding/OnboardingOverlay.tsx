@@ -6,6 +6,13 @@
  * Progress lives on the Clerk user (``unsafeMetadata.edenTour``).
  * Opens on ``?onboarding=1`` or ``?tour=1``. Session banners and
  * ErrorState defer forced opens until the blocking surface clears.
+ *
+ * 2026-07-23 polish:
+ * - Wait for org load before treating missing org as "create workspace".
+ * - Narrow MutationObserver to banner/error attrs only (not body subtree)
+ *   so ProductTour portal remounts do not snap the step index backward.
+ * - Local step index is authoritative while the tour is open; Clerk
+ *   metadata is write-behind, not a force-sync source each tick.
  */
 
 import { Suspense, useCallback, useEffect, useRef, useState } from "react";
@@ -26,12 +33,13 @@ const ProductTour = dynamic(
     import("@/components/onboarding/ProductTour").then((m) => m.ProductTour),
   { ssr: false },
 );
+
 function OnboardingOverlayInner() {
   const { pushToast } = useLabToast();
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const { currentOrg } = useOrg();
+  const { currentOrg, loading: orgLoading, orgSyncing } = useOrg();
   const { isLoaded, progress, isComplete, setStatus, setStepIndex } =
     useTourProgress();
 
@@ -45,9 +53,11 @@ function OnboardingOverlayInner() {
   /**
    * Once ?onboarding=1 / ?tour=1 opens the tour, keep it open across
    * in-tour router.push(step.href) navigations that strip the query.
-   * Cleared only on Skip/Finish (or when org disappears).
+   * Cleared only on Skip/Finish (or when org disappears after load).
    */
   const sessionOpenRef = useRef(false);
+  /** True after we seeded local step from Clerk once for this session. */
+  const seededStepRef = useRef(false);
   const [deferTick, setDeferTick] = useState(0);
 
   const forceOpen =
@@ -55,6 +65,11 @@ function OnboardingOverlayInner() {
     searchParams.get("tour") === "1";
   const progressStatus = progress?.status;
   const progressStep = progress?.stepIndex ?? 0;
+  const orgReady = Boolean(currentOrg) && !orgSyncing;
+  const orgStillResolving =
+    !currentOrg && (orgLoading || orgSyncing || !isLoaded);
+  /** Rising edge of forceOpen — avoid reopening while Skip clears the URL. */
+  const prevForceOpenRef = useRef(false);
 
   const clearTourQuery = useCallback(() => {
     const params = new URLSearchParams(searchParams.toString());
@@ -65,6 +80,8 @@ function OnboardingOverlayInner() {
     router.replace(q ? `${pathname}?${q}` : pathname || "/home");
   }, [searchParams, router, pathname]);
 
+  // Only watch banner/error attributes — never document.body childList
+  // (ProductTour portals remount on every step and used to re-fire this).
   useEffect(() => {
     if (typeof document === "undefined") return;
     const root = document.documentElement;
@@ -72,30 +89,40 @@ function OnboardingOverlayInner() {
     const observer = new MutationObserver(bump);
     observer.observe(root, {
       attributes: true,
-      attributeFilter: [CHROME_BANNER_ATTR],
-    });
-    observer.observe(document.body, {
-      childList: true,
-      subtree: true,
-      attributes: true,
-      attributeFilter: [ERROR_STATE_ATTR],
+      attributeFilter: [CHROME_BANNER_ATTR, ERROR_STATE_ATTR],
     });
     return () => observer.disconnect();
   }, []);
 
   useEffect(() => {
     if (!isLoaded) return;
+
+    // Org still loading — do not redirect away or close a forced open.
+    if (orgStillResolving) {
+      return;
+    }
+
     if (!currentOrg) {
       sessionOpenRef.current = false;
+      seededStepRef.current = false;
       setOpen(false);
+      // True no-workspace after load completed — send to workspace setup.
       if (forceOpen) {
         router.replace("/settings?mode=workspace");
       }
       return;
     }
-    if (forceOpen) {
+
+    const forceRising = forceOpen && !prevForceOpenRef.current;
+    prevForceOpenRef.current = forceOpen;
+
+    if (forceRising) {
       userClosedRef.current = false;
       sessionOpenRef.current = true;
+    } else if (forceOpen) {
+      // Still on ?onboarding=1 after Skip/Finish started clearing — do not
+      // reset userClosed or the tour snaps back open for a frame.
+      sessionOpenRef.current = sessionOpenRef.current || !userClosedRef.current;
     }
     if (userClosedRef.current) {
       if (isComplete && !forceOpen) {
@@ -116,11 +143,17 @@ function OnboardingOverlayInner() {
       return;
     }
 
-    setStepIndexLocal(
-      progressStatus === "active" || progressStatus === "skipped"
-        ? progressStep
-        : 0,
-    );
+    // Seed local step from Clerk once when opening — never force-sync on
+    // every deferTick / progress write (that caused snap-back on Next/Back).
+    if (!seededStepRef.current) {
+      seededStepRef.current = true;
+      setStepIndexLocal(
+        progressStatus === "active" || progressStatus === "skipped"
+          ? progressStep
+          : 0,
+      );
+    }
+
     setOpen(true);
     if (!progressStatus && !bootstrappedRef.current) {
       bootstrappedRef.current = true;
@@ -131,6 +164,7 @@ function OnboardingOverlayInner() {
   }, [
     isLoaded,
     currentOrg,
+    orgStillResolving,
     forceOpen,
     isComplete,
     progressStatus,
@@ -140,9 +174,17 @@ function OnboardingOverlayInner() {
     deferTick,
   ]);
 
+  // Reset seed when tour fully closes so a later Resume starts clean.
+  useEffect(() => {
+    if (!open && !sessionOpenRef.current) {
+      seededStepRef.current = false;
+    }
+  }, [open]);
+
   async function handleSkip() {
     userClosedRef.current = true;
     sessionOpenRef.current = false;
+    seededStepRef.current = false;
     setOpen(false);
     clearTourQuery();
     setBusy(true);
@@ -165,6 +207,7 @@ function OnboardingOverlayInner() {
   async function handleFinish() {
     userClosedRef.current = true;
     sessionOpenRef.current = false;
+    seededStepRef.current = false;
     setOpen(false);
     clearTourQuery();
     setBusy(true);
@@ -187,11 +230,13 @@ function OnboardingOverlayInner() {
   function handleStepChange(index: number) {
     setStepIndexLocal(index);
     void setStepIndex(index).catch(() => {
-      /* best-effort */
+      /* best-effort write-behind */
     });
   }
 
   if (!isLoaded && !forceOpen) return null;
+  // While org resolves, keep null (no flash of tour-over-boot-gate).
+  if (!orgReady && !currentOrg) return null;
   if (!currentOrg) return null;
   if (!open) return null;
 
