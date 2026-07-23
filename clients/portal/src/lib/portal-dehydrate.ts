@@ -1,10 +1,20 @@
 /**
- * P18 — minimal RSC prefetch + dehydrate helpers for dashboard/traces.
+ * Home SSR prefetch + dehydrate helpers.
  *
- * Server pages can call these to seed React Query cache and wrap
- * client trees in ``HydrationBoundary``. Client query keys must match
- * ``queryKeys.observability.traces`` / ``queryKeys.dashboard.*`` /
- * ``ME_QUERY_KEY`` (``["auth","me"]``).
+ * 2026-07-23 rewrite — the previous version prefetched
+ * ``/orgs/{id}/observability/traces`` and ``/orgs/{id}/observability/summary``,
+ * neither of which Home actually reads. Home's real data comes from
+ * ``PortalCatalogSync`` / the page's own ``useOrgQuery`` calls against
+ * ``GET /orgs/{id}/portal/agents`` and ``GET /orgs/{id}/portal/traces``
+ * (see ``lib/api/portal.ts`` + ``queryKeys.portal.*``). This module now
+ * seeds exactly those two shards plus ``/auth/me``, keyed identically
+ * to the client queries, so ``HydrationBoundary`` on ``/home`` actually
+ * warms the cache the client reads from instead of silently prefetching
+ * data nothing subscribes to.
+ *
+ * Consumed by ``app/(portal)/home/page.tsx`` (server component) via
+ * ``dehydrateHome`` — see that file for the Clerk org-resolution +
+ * fail-open wiring.
  */
 
 import {
@@ -13,9 +23,8 @@ import {
   type DehydratedState,
 } from "@tanstack/react-query";
 import { queryKeys } from "@/lib/query-keys";
-
-const DEFAULT_DAYS = 7;
-const DEFAULT_TRACE_LIMIT = 50;
+import type { AgentFixture } from "@/lab/fixtures/agents";
+import type { TraceFixture } from "@/lab/fixtures/traces";
 
 /** Must match ``ME_QUERY_KEY`` in ``hooks/use-me-query.ts`` (client module). */
 export const ME_QUERY_KEY = ["auth", "me"] as const;
@@ -43,7 +52,7 @@ export type PortalPrefetchAuth = {
   headers: Record<string, string>;
   orgId: string;
   /**
-   * Full ``/auth/me`` body already fetched by the layout.
+   * Full ``/auth/me`` body already fetched by the caller.
    * Seeded under ``ME_QUERY_KEY`` so the client does not immediately
    * re-hit ``/auth/me`` on hydrate (staleTime 60s on useMeQuery).
    */
@@ -52,7 +61,7 @@ export type PortalPrefetchAuth = {
 
 /**
  * Prefetch must NOT resolve `null` on !res.ok / network failure.
- * A successful dehydrate of null + client staleTime (60s) painted
+ * A successful dehydrate of null + client staleTime painted a
  * soft-null as settled empty and exited the install path into KPI
  * theatre during outages. Let the queryFn throw so failed shards
  * are omitted from dehydrate and the client refetches honestly.
@@ -79,71 +88,32 @@ function seedMeQuery(qc: QueryClient, me: MePrefetchPayload): Promise<void> {
   });
 }
 
-/** Prefetch dashboard home shards (me + traces + summary) for hydration. */
-export async function dehydrateDashboardHome(
+/**
+ * Prefetch Home's real shards — ``portal/agents`` + ``portal/traces`` —
+ * plus ``/auth/me``, for hydration.
+ *
+ * Query keys match ``queryKeys.portal.agents`` / ``queryKeys.portal.traces``
+ * exactly (same factory, same ``orgId``) so both ``PortalCatalogSync``
+ * and the Home page's own ``useOrgQuery`` calls hydrate from this warm
+ * cache on first client render instead of firing a cold GET.
+ */
+export async function dehydrateHome(
   auth: PortalPrefetchAuth,
 ): Promise<DehydratedState> {
   const qc = new QueryClient();
-  const tracesKey = queryKeys.observability.traces(auth.orgId, {
-    limit: DEFAULT_TRACE_LIMIT,
-    days: DEFAULT_DAYS,
-  });
-  const summaryKey = queryKeys.observability.summary(auth.orgId, {
-    window_hours: 24,
-    compare_previous: true,
-  });
+  const agentsKey = queryKeys.portal.agents(auth.orgId);
+  const tracesKey = queryKeys.portal.traces(auth.orgId);
   await Promise.all([
     seedMeQuery(qc, auth.me),
+    qc.prefetchQuery({
+      queryKey: [...agentsKey],
+      queryFn: () =>
+        serverGet<AgentFixture[]>(auth, `/orgs/${auth.orgId}/portal/agents`),
+    }),
     qc.prefetchQuery({
       queryKey: [...tracesKey],
       queryFn: () =>
-        serverGet(
-          auth,
-          `/orgs/${auth.orgId}/observability/traces?limit=${DEFAULT_TRACE_LIMIT}&days=${DEFAULT_DAYS}`,
-        ),
-    }),
-    qc.prefetchQuery({
-      queryKey: [...summaryKey],
-      queryFn: () =>
-        serverGet(
-          auth,
-          `/orgs/${auth.orgId}/observability/summary?window_hours=24&compare_previous=true`,
-        ),
-    }),
-  ]);
-  return dehydrate(qc);
-}
-
-/** Prefetch traces hub list + me for hydration (shared days with dashboard). */
-export async function dehydrateTracesHub(
-  auth: PortalPrefetchAuth,
-  filters?: { realm?: string; outcome?: string; agent_id?: string; limit?: number },
-): Promise<DehydratedState> {
-  const qc = new QueryClient();
-  const limit = filters?.limit ?? DEFAULT_TRACE_LIMIT;
-  // Must include ``offset: 0`` so the dehydrate key matches the
-  // client traces hub query (``traceFilterParams`` with pageOffset).
-  const params: Record<string, unknown> = {
-    days: DEFAULT_DAYS,
-    limit,
-    offset: 0,
-  };
-  if (filters?.realm) params.realm = filters.realm;
-  if (filters?.outcome) params.outcome = filters.outcome;
-  if (filters?.agent_id) params.agent_id = filters.agent_id;
-  const key = queryKeys.observability.traces(auth.orgId, params);
-  const q = new URLSearchParams();
-  q.set("days", String(DEFAULT_DAYS));
-  q.set("limit", String(limit));
-  if (filters?.realm) q.set("realm", filters.realm);
-  if (filters?.outcome) q.set("outcome", filters.outcome);
-  if (filters?.agent_id) q.set("agent_id", filters.agent_id);
-  await Promise.all([
-    seedMeQuery(qc, auth.me),
-    qc.prefetchQuery({
-      queryKey: [...key],
-      queryFn: () =>
-        serverGet(auth, `/orgs/${auth.orgId}/observability/traces?${q.toString()}`),
+        serverGet<TraceFixture[]>(auth, `/orgs/${auth.orgId}/portal/traces`),
     }),
   ]);
   return dehydrate(qc);

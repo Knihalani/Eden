@@ -8,6 +8,7 @@ when sources are missing or fail. Contracts live in
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from datetime import UTC, datetime, timedelta
@@ -332,94 +333,110 @@ async def list_portal_agents(
     _user: dict = Depends(get_current_user),
 ) -> list[AgentCard]:
     """Enriched agent cards (registry + fleet metrics when available)."""
+    import asyncio
+
     delta = _parse_window(window)
     client = await _pg()
     if client is None:
         return []
 
-    rows: list[Any] = []
-    try:
-        rows = await client.fetch(
-            """
-            SELECT agent_id, name, framework, repo_url, last_seen_at,
-                   created_at, updated_at
-            FROM agent_registrations
-            WHERE org_id = $1
-            ORDER BY last_seen_at DESC NULLS LAST
-            LIMIT 200
-            """,
-            org_id,
-        )
-    except Exception as exc:  # noqa: BLE001
-        logger.debug("portal agents: registry query failed: %s", exc)
+    async def _load_registry() -> list[Any]:
         try:
-            rows = await client.fetch(
+            return list(
+                await client.fetch(
+                    """
+                    SELECT agent_id, name, framework, repo_url, last_seen_at,
+                           created_at, updated_at
+                    FROM agent_registrations
+                    WHERE org_id = $1
+                    ORDER BY last_seen_at DESC NULLS LAST
+                    LIMIT 200
+                    """,
+                    org_id,
+                )
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("portal agents: registry query failed: %s", exc)
+            try:
+                return list(
+                    await client.fetch(
+                        """
+                        SELECT agent_id, display_name AS name, tier AS framework,
+                               NULL AS repo_url, last_seen AS last_seen_at,
+                               created_at, updated_at
+                        FROM agent_registry
+                        WHERE org_id = $1
+                        ORDER BY last_seen DESC NULLS LAST
+                        LIMIT 200
+                        """,
+                        org_id,
+                    )
+                )
+            except Exception as exc2:  # noqa: BLE001
+                logger.debug("portal agents: registry fallback failed: %s", exc2)
+                return []
+
+    async def _load_fleet() -> dict[str, dict[str, Any]]:
+        fleet_by_id: dict[str, dict[str, Any]] = {}
+        try:
+            from eden.fleet.service import FleetHealthService
+
+            summary = await FleetHealthService().summary(org_id)
+            for card in summary.get("agents") or []:
+                aid = str(card.get("agent_id") or "")
+                if aid:
+                    fleet_by_id[aid] = card
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("portal agents: fleet join skipped: %s", exc)
+        return fleet_by_id
+
+    async def _load_metrics() -> dict[str, dict[str, Any]]:
+        metrics_by_id: dict[str, dict[str, Any]] = {}
+        try:
+            mrows = await client.fetch(
                 """
-                SELECT agent_id, display_name AS name, tier AS framework,
-                       NULL AS repo_url, last_seen AS last_seen_at,
-                       created_at, updated_at
-                FROM agent_registry
-                WHERE org_id = $1
-                ORDER BY last_seen DESC NULLS LAST
-                LIMIT 200
+                SELECT agent_id,
+                       COUNT(DISTINCT trace_id)::int AS runs,
+                       COALESCE(SUM(
+                           COALESCE((metrics->>'cost_usd')::float, 0)
+                       ), 0)::float AS cost_usd,
+                       COALESCE(SUM(
+                           COALESCE((metrics->>'input_tokens')::int, 0)
+                           + COALESCE((metrics->>'output_tokens')::int, 0)
+                       ), 0)::int AS tokens,
+                       AVG(
+                           CASE
+                               WHEN lower(coalesce(outcome, '')) IN
+                                    ('error','failed','failure','fail')
+                               THEN 0.0 ELSE 1.0
+                           END
+                       )::float AS success_rate,
+                       percentile_cont(0.5) WITHIN GROUP (
+                           ORDER BY COALESCE(duration_ms, 0)
+                       )::float AS p50,
+                       percentile_cont(0.95) WITHIN GROUP (
+                           ORDER BY COALESCE(duration_ms, 0)
+                       )::float AS p95
+                FROM telemetry_events
+                WHERE tenant_id = $1
+                  AND agent_id IS NOT NULL
+                  AND timestamp > NOW() - ($2::text || ' seconds')::interval
+                GROUP BY agent_id
                 """,
                 org_id,
+                str(int(delta.total_seconds())),
             )
-        except Exception as exc2:  # noqa: BLE001
-            logger.debug("portal agents: registry fallback failed: %s", exc2)
-            return []
+            for r in mrows:
+                metrics_by_id[str(r["agent_id"])] = dict(r)
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("portal agents: telemetry metrics skipped: %s", exc)
+        return metrics_by_id
 
-    fleet_by_id: dict[str, dict[str, Any]] = {}
-    try:
-        from eden.fleet.service import FleetHealthService
-
-        summary = await FleetHealthService().summary(org_id)
-        for card in summary.get("agents") or []:
-            aid = str(card.get("agent_id") or "")
-            if aid:
-                fleet_by_id[aid] = card
-    except Exception as exc:  # noqa: BLE001
-        logger.debug("portal agents: fleet join skipped: %s", exc)
-
-    metrics_by_id: dict[str, dict[str, Any]] = {}
-    try:
-        mrows = await client.fetch(
-            """
-            SELECT agent_id,
-                   COUNT(DISTINCT trace_id)::int AS runs,
-                   COALESCE(SUM(
-                       COALESCE((metrics->>'cost_usd')::float, 0)
-                   ), 0)::float AS cost_usd,
-                   COALESCE(SUM(
-                       COALESCE((metrics->>'input_tokens')::int, 0)
-                       + COALESCE((metrics->>'output_tokens')::int, 0)
-                   ), 0)::int AS tokens,
-                   AVG(
-                       CASE
-                           WHEN lower(coalesce(outcome, '')) IN
-                                ('error','failed','failure','fail')
-                           THEN 0.0 ELSE 1.0
-                       END
-                   )::float AS success_rate,
-                   percentile_cont(0.5) WITHIN GROUP (
-                       ORDER BY COALESCE(duration_ms, 0)
-                   )::float AS p50,
-                   percentile_cont(0.95) WITHIN GROUP (
-                       ORDER BY COALESCE(duration_ms, 0)
-                   )::float AS p95
-            FROM telemetry_events
-            WHERE tenant_id = $1
-              AND agent_id IS NOT NULL
-              AND timestamp > NOW() - ($2::text || ' seconds')::interval
-            GROUP BY agent_id
-            """,
-            org_id,
-            str(int(delta.total_seconds())),
-        )
-        for r in mrows:
-            metrics_by_id[str(r["agent_id"])] = dict(r)
-    except Exception as exc:  # noqa: BLE001
-        logger.debug("portal agents: telemetry metrics skipped: %s", exc)
+    rows, fleet_by_id, metrics_by_id = await asyncio.gather(
+        _load_registry(),
+        _load_fleet(),
+        _load_metrics(),
+    )
 
     now = datetime.now(UTC)
     out: list[AgentCard] = []
@@ -1240,53 +1257,61 @@ async def list_portal_members(
     if client is None:
         return []
 
+    async def _fetch_members() -> list[dict]:
+        try:
+            return await client.fetch(
+                """
+                SELECT om.user_id, om.role, om.last_active_at,
+                       u.email, u.name
+                FROM org_members om
+                JOIN users u ON u.id = om.user_id
+                WHERE om.org_id = $1
+                ORDER BY om.joined_at ASC
+                LIMIT $2
+                """,
+                org_id,
+                limit,
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("portal members: query failed: %s", exc)
+            return []
+
+    async def _fetch_invites() -> list[dict]:
+        try:
+            from eden.services.invitation_service import get_pending_invitations
+
+            return await get_pending_invitations(org_id) or []
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("portal members: invites skipped: %s", exc)
+            return []
+
+    rows, invites = await asyncio.gather(_fetch_members(), _fetch_invites())
+
     out: list[MemberCard] = []
-    try:
-        rows = await client.fetch(
-            """
-            SELECT om.user_id, om.role, om.last_active_at,
-                   u.email, u.name
-            FROM org_members om
-            JOIN users u ON u.id = om.user_id
-            WHERE om.org_id = $1
-            ORDER BY om.joined_at ASC
-            LIMIT $2
-            """,
-            org_id,
-            limit,
+    for r in rows:
+        out.append(
+            MemberCard(
+                id=str(r["user_id"]),
+                name=str(r.get("name") or ""),
+                email=str(r.get("email") or ""),
+                role=_map_member_role(r.get("role")),  # type: ignore[arg-type]
+                status="active",
+                lastActive=_iso(r.get("last_active_at")),
+            )
         )
-        for r in rows:
-            out.append(
-                MemberCard(
-                    id=str(r["user_id"]),
-                    name=str(r.get("name") or ""),
-                    email=str(r.get("email") or ""),
-                    role=_map_member_role(r.get("role")),  # type: ignore[arg-type]
-                    status="active",
-                    lastActive=_iso(r.get("last_active_at")),
-                )
-            )
-    except Exception as exc:  # noqa: BLE001
-        logger.debug("portal members: query failed: %s", exc)
 
-    try:
-        from eden.services.invitation_service import get_pending_invitations
-
-        invites = await get_pending_invitations(org_id)
-        remaining = max(0, limit - len(out))
-        for inv in (invites or [])[:remaining]:
-            out.append(
-                MemberCard(
-                    id=str(inv.get("id") or inv.get("email") or ""),
-                    name=str(inv.get("email") or ""),
-                    email=str(inv.get("email") or ""),
-                    role=_map_member_role(inv.get("role")),  # type: ignore[arg-type]
-                    status="invited",
-                    lastActive=_iso(inv.get("created_at")),
-                )
+    remaining = max(0, limit - len(out))
+    for inv in invites[:remaining]:
+        out.append(
+            MemberCard(
+                id=str(inv.get("id") or inv.get("email") or ""),
+                name=str(inv.get("email") or ""),
+                email=str(inv.get("email") or ""),
+                role=_map_member_role(inv.get("role")),  # type: ignore[arg-type]
+                status="invited",
+                lastActive=_iso(inv.get("created_at")),
             )
-    except Exception as exc:  # noqa: BLE001
-        logger.debug("portal members: invites skipped: %s", exc)
+        )
 
     return out
 
@@ -1659,64 +1684,79 @@ async def list_portal_guardrail_policies(
     _user: dict = Depends(get_current_user),
 ) -> list[GuardrailPolicyCard]:
     """Guardrail policy cards (all statuses when queryable)."""
-    rows: list[dict[str, Any]] = []
     client = await _pg()
-    if client is not None:
-        try:
-            raw = await client.fetch(
-                """
-                SELECT id, org_id, name, type, spec_json, action,
-                       status, created_at
-                FROM guardrail_policies
-                WHERE org_id = $1
-                ORDER BY created_at DESC
-                LIMIT 200
-                """,
-                org_id,
-            )
-            for r in raw:
-                d = dict(r)
-                spec = d.get("spec_json")
-                if isinstance(spec, str):
-                    try:
-                        spec = json.loads(spec)
-                    except Exception:
-                        spec = {}
-                d["spec"] = spec if isinstance(spec, dict) else {}
-                rows.append(d)
-        except Exception as exc:  # noqa: BLE001
-            logger.debug("portal guardrails: direct query failed: %s", exc)
 
-    if not rows:
+    async def _fetch_policy_rows() -> list[dict[str, Any]] | None:
+        """Returns policy rows, or ``None`` if no source was available."""
+        rows: list[dict[str, Any]] = []
+        if client is not None:
+            try:
+                raw = await client.fetch(
+                    """
+                    SELECT id, org_id, name, type, spec_json, action,
+                           status, created_at
+                    FROM guardrail_policies
+                    WHERE org_id = $1
+                    ORDER BY created_at DESC
+                    LIMIT 200
+                    """,
+                    org_id,
+                )
+                for r in raw:
+                    d = dict(r)
+                    spec = d.get("spec_json")
+                    if isinstance(spec, str):
+                        try:
+                            spec = json.loads(spec)
+                        except Exception:
+                            spec = {}
+                    d["spec"] = spec if isinstance(spec, dict) else {}
+                    rows.append(d)
+            except Exception as exc:  # noqa: BLE001
+                logger.debug("portal guardrails: direct query failed: %s", exc)
+
+        if rows:
+            return rows
+
         try:
             from eden.guardrails.policy import GuardrailPolicy
 
             envelope = await GuardrailPolicy().list(org_id)
             data = envelope.get("data") if isinstance(envelope, dict) else None
             policies = (data or {}).get("policies") if isinstance(data, dict) else []
-            rows = [p for p in (policies or []) if isinstance(p, dict)]
+            return [p for p in (policies or []) if isinstance(p, dict)]
         except Exception as exc:  # noqa: BLE001
             logger.debug("portal guardrails: service unavailable: %s", exc)
-            return []
+            return None
 
-    match_counts: dict[str, int] = {}
-    if client is not None:
-        try:
-            mrows = await client.fetch(
-                """
-                SELECT policy_id::text AS policy_id, COUNT(*)::int AS hits
-                FROM intervention_log
-                WHERE org_id = $1
-                  AND created_at > NOW() - INTERVAL '24 hours'
-                GROUP BY policy_id
-                """,
-                org_id,
-            )
-            for m in mrows:
-                if m.get("policy_id"):
-                    match_counts[str(m["policy_id"])] = int(m["hits"] or 0)
-        except Exception as exc:  # noqa: BLE001
-            logger.debug("portal guardrails: match counts skipped: %s", exc)
+    async def _fetch_match_counts() -> dict[str, int]:
+        match_counts: dict[str, int] = {}
+        if client is not None:
+            try:
+                mrows = await client.fetch(
+                    """
+                    SELECT policy_id::text AS policy_id, COUNT(*)::int AS hits
+                    FROM intervention_log
+                    WHERE org_id = $1
+                      AND created_at > NOW() - INTERVAL '24 hours'
+                    GROUP BY policy_id
+                    """,
+                    org_id,
+                )
+                for m in mrows:
+                    if m.get("policy_id"):
+                        match_counts[str(m["policy_id"])] = int(m["hits"] or 0)
+            except Exception as exc:  # noqa: BLE001
+                logger.debug("portal guardrails: match counts skipped: %s", exc)
+        return match_counts
+
+    # These two queries are independent of each other (match counts only
+    # need ``org_id``, not the fetched policy rows), so run them concurrently.
+    rows, match_counts = await asyncio.gather(
+        _fetch_policy_rows(), _fetch_match_counts()
+    )
+    if rows is None:
+        return []
 
     out: list[GuardrailPolicyCard] = []
     for r in rows:
@@ -1841,42 +1881,45 @@ async def list_portal_assistant_threads(
         logger.debug("portal assistant threads: query failed: %s", exc)
         return []
 
+    ids = [str(r["id"]) for r in rows]
+    counts: dict[str, int] = {}
+    if ids:
+        try:
+            crows = await client.fetch(
+                """
+                SELECT conversation_id::text AS cid, COUNT(*)::int AS cnt
+                FROM ai_conversation_messages
+                WHERE conversation_id = ANY($1::text[])
+                GROUP BY conversation_id
+                """,
+                ids,
+            )
+            counts = {str(c["cid"]): int(c["cnt"] or 0) for c in crows}
+        except Exception:
+            try:
+                crows = await client.fetch(
+                    """
+                    SELECT session_id::text AS cid, COUNT(*)::int AS cnt
+                    FROM ai_messages
+                    WHERE session_id = ANY($1::text[])
+                    GROUP BY session_id
+                    """,
+                    ids,
+                )
+                counts = {str(c["cid"]): int(c["cnt"] or 0) for c in crows}
+            except Exception as exc:  # noqa: BLE001
+                logger.debug("portal assistant threads: message counts failed: %s", exc)
+
     out: list[AssistantThreadCard] = []
     for r in rows:
         sid = str(r["id"])
-        msg_count = 0
-        try:
-            msg_count = int(
-                await client.fetchval(
-                    """
-                    SELECT COUNT(*)::int FROM ai_conversation_messages
-                    WHERE conversation_id = $1
-                    """,
-                    sid,
-                )
-                or 0
-            )
-        except Exception:
-            try:
-                msg_count = int(
-                    await client.fetchval(
-                        """
-                        SELECT COUNT(*)::int FROM ai_messages
-                        WHERE session_id = $1
-                        """,
-                        sid,
-                    )
-                    or 0
-                )
-            except Exception:
-                msg_count = 0
         out.append(
             AssistantThreadCard(
                 id=sid,
                 title=str(r.get("title") or ""),
                 updatedAt=_iso(r.get("updated_at") or r.get("created_at")),
                 pins=[],
-                messageCount=msg_count,
+                messageCount=counts.get(sid, 0),
             )
         )
     return out

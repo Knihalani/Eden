@@ -132,6 +132,19 @@ class QuotaEnforcementMiddleware:
     # enforce safely (DL-14 Fail-closed).
     _BUDGET_STALENESS_LIMIT_S: float = 60.0
 
+    # Phase 2 — headers-only GET/HEAD cache TTL. Mirrors the
+    # ``_tier_cache`` pattern in ``TenantRateLimitMiddleware``
+    # (``org_id -> (..., expires_at)``). This is a *separate*,
+    # shorter-lived cache from ``_last_known_hard_limits``: that one
+    # exists purely to make hard-limit enforcement fail-closed-but-
+    # not-stuck; this one exists to stop every GET/HEAD (portal
+    # sidebar polling, dashboard refetches, …) from hitting
+    # ``UsageService.get_budget_status`` — and therefore Postgres —
+    # on every single request. 15-30s is short enough that a plan
+    # upgrade or quota reset is visible almost immediately, long
+    # enough to collapse bursts of parallel GETs into one DB call.
+    _HEADERS_CACHE_TTL_S: float = 20.0
+
     def __init__(self, app: ASGIApp):
         self.app = app
         self._usage_service: UsageService | None = None
@@ -147,6 +160,12 @@ class QuotaEnforcementMiddleware:
         # uses ``view.budget[resource]`` to get the full resource
         # dict (including ``used`` for the threshold check).
         self._last_known_hard_limits: dict[str, tuple[float, _BudgetView]] = {}
+        # Phase 2 — org_id -> (budget dict, headers dict, expires_at
+        # monotonic seconds). Populated by ``_build_quota_headers`` on
+        # the GET/HEAD headers-only path so a burst of reads for the
+        # same org within the TTL reuses one ``get_budget_status``
+        # call instead of one per request.
+        self._headers_cache: dict[str, tuple[dict[str, Any], dict[str, str], float]] = {}
 
     async def _get_usage_service(self) -> UsageService:
         if self._usage_service is None:
@@ -351,7 +370,24 @@ class QuotaEnforcementMiddleware:
         mutating request has a fresh snapshot (LP-10) — without
         this, GETs (e.g. ``/auth/me``) built headers but left the
         cache empty and mutations 429'd on "No recent quota snapshot".
+
+        Phase 2 — headers cache: ``get_budget_status`` is called at
+        most once per org every ``_HEADERS_CACHE_TTL_S`` seconds
+        (15-30s window). The dominant caller of this path is the
+        GET/HEAD headers-only branch (every portal page mounts
+        several parallel GETs that all want the ``X-Quota-*``
+        headers), so without this a single page load could fire a
+        dozen identical Postgres reads for the same org. Mutating
+        requests share the cache too — harmless, since hard-limit
+        *enforcement* goes through ``_check_hard_limits`` /
+        ``_cached_block_check`` against ``_last_known_hard_limits``
+        (60s staleness budget), not through this header cache.
         """
+        now = time.monotonic()
+        cached = self._headers_cache.get(org_id)
+        if cached is not None and cached[2] > now:
+            return dict(cached[1])
+
         service = await self._get_usage_service()
         budget = await service.get_budget_status(org_id)
         # Warm the enforcement cache from every successful read.
@@ -387,6 +423,12 @@ class QuotaEnforcementMiddleware:
             headers["X-Quota-Cost-Status"] = cost["status"]
 
         headers["X-Quota-Plan"] = budget.get("plan_name", "unknown")
+
+        self._headers_cache[org_id] = (
+            budget,
+            dict(headers),
+            now + self._HEADERS_CACHE_TTL_S,
+        )
         return headers
 
     async def _check_hard_limits(
