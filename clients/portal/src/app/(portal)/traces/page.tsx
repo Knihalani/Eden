@@ -33,6 +33,7 @@ import {
   type SessionFixture,
 } from "@/lab/fixtures/sessions";
 import { PageHeader } from "@/components/ds/primitives";
+import { useQueryClient } from "@tanstack/react-query";
 import { useOrg } from "@/hooks/use-org";
 import { useOrgQuery } from "@/hooks/use-api-query";
 import { queryKeys } from "@/lib/query-keys";
@@ -389,6 +390,7 @@ function LabTracesInner() {
   const patchQuery = useQueryPatch();
   const { currentOrg } = useOrg();
   const orgId = currentOrg?.id ?? null;
+  const queryClient = useQueryClient();
   const tracesQuery = useOrgQuery(
     queryKeys.portal.traces(orgId),
     orgId,
@@ -698,6 +700,23 @@ function LabTracesInner() {
       selectTrace(filtered[0].id, "trace");
     }
   }, [hubView, filtered, selected, selectTrace]);
+
+  // Warm the detail cache for the runs immediately before/after the
+  // selection so `Newer`/`Older` navigation (and arrow keys) resolve
+  // instantly instead of waiting on a fresh trace-detail fetch.
+  useEffect(() => {
+    if (hubView !== "runs" || !orgId || selectedIndex < 0) return;
+    const neighborIds = [
+      filtered[selectedIndex - 1]?.id,
+      filtered[selectedIndex + 1]?.id,
+    ].filter((id): id is string => Boolean(id));
+    for (const id of neighborIds) {
+      void queryClient.prefetchQuery({
+        queryKey: queryKeys.portal.traceDetail(orgId, id),
+        queryFn: () => portalApi.traceDetail(orgId, id),
+      });
+    }
+  }, [hubView, filtered, selectedIndex, orgId, queryClient]);
 
   useEffect(() => {
     if (hubView !== "sessions") return;

@@ -4,12 +4,18 @@ import { useEffect } from "react";
 import { usePathname } from "next/navigation";
 import { useOrg } from "@/hooks/use-org";
 import { useOrgQuery } from "@/hooks/use-api-query";
-import { queryKeys } from "@/lib/query-keys";
+import { queryKey, queryKeys } from "@/lib/query-keys";
 import { portalApi } from "@/lib/api/portal";
+import { api } from "@/lib/api/resources";
 import {
   clearPortalCatalog,
   patchPortalCatalog,
 } from "@/lib/portal-catalog";
+
+// Must match the ``cost/page.tsx`` budget query exactly so this
+// prefetch lands in the same React Query cache entry.
+const BUDGET_QUERY_KEY = (orgId: string | null) =>
+  queryKey("cost", orgId, "budget");
 
 const OBSERVE_STALE = 45_000;
 const SETTINGS_STALE = 60_000;
@@ -85,34 +91,54 @@ export function PortalCatalogSync() {
     () => portalApi.sessions(orgId!),
     { ...SHELL_QUERY, enabled: onObserveHeavy },
   );
+  /** Home + Observe-heavy — Issue/Run badges on Home need this too. */
   const issues = useOrgQuery(
     queryKeys.portal.issues(orgId),
     orgId,
     () => portalApi.issues(orgId!),
-    SHELL_QUERY,
+    { ...SHELL_QUERY, enabled: onObserveHeavy || onHomeTraces },
   );
   const signals = useOrgQuery(
     queryKeys.portal.signals(orgId),
     orgId,
     () => portalApi.signals(orgId!),
-    SHELL_QUERY,
+    { ...SHELL_QUERY, enabled: onObserveHeavy },
   );
   const alertRules = useOrgQuery(
     queryKeys.portal.alertRules(orgId),
     orgId,
     () => portalApi.alertRules(orgId!),
-    SHELL_QUERY,
+    { ...SHELL_QUERY, enabled: onObserveHeavy },
   );
+  /**
+   * Alerts bell needs this everywhere, but on Home it competes with
+   * agents/traces for the same cold-start bandwidth. Defer until
+   * agents settles (or we're not on Home at all) so Home's own
+   * shards win the race. High staleTime is fine — the bell is not
+   * time-critical to the second.
+   */
   const alertEvents = useOrgQuery(
     queryKeys.portal.alertEvents(orgId),
     orgId,
     () => portalApi.alertEvents(orgId!),
-    SHELL_QUERY,
+    {
+      ...SHELL_QUERY,
+      staleTime: 60_000,
+      enabled: Boolean(orgId) && (agents.isSuccess || !onHomeTraces),
+    },
   );
   const costDrivers = useOrgQuery(
     queryKeys.portal.costDrivers(orgId),
     orgId,
     () => portalApi.costDrivers(orgId!),
+    { ...SHELL_QUERY, enabled: onCost },
+  );
+  // Prefetches into the same cache entry the Cost page reads via
+  // ``api.getBudget`` — by the time it mounts, budget is already warm.
+  useOrgQuery(
+    BUDGET_QUERY_KEY(orgId),
+    orgId,
+    () => api.getBudget(orgId!),
     { ...SHELL_QUERY, enabled: onCost },
   );
 

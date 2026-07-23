@@ -95,24 +95,14 @@ async def list_notifications(
 
     where_clause = " AND ".join(conditions)
 
-    # Get total count
-    total_row = await client.fetchrow(
-        f"SELECT COUNT(*) as count FROM notifications WHERE {where_clause}",
-        *params
-    )
-    total = total_row["count"]
-
-    # Get unread count
-    unread_row = await client.fetchrow(
-        "SELECT COUNT(*) as count FROM notifications WHERE user_id = $1 AND read_at IS NULL",
-        user_id
-    )
-    unread_count = unread_row["count"]
-
-    # Get notifications
+    # Single windowed query replaces the old 3 sequential round-trips
+    # (total count, unread count, page fetch): window functions attach
+    # the matching-set totals to every returned row.
     rows = await client.fetch(
         f"""
-        SELECT id, user_id, org_id, type, title, body, data, read_at, created_at
+        SELECT id, user_id, org_id, type, title, body, data, read_at, created_at,
+               COUNT(*) OVER()::int AS total_count,
+               COUNT(*) FILTER (WHERE read_at IS NULL) OVER()::int AS unread_count
         FROM notifications
         WHERE {where_clause}
         ORDER BY created_at DESC
@@ -120,6 +110,24 @@ async def list_notifications(
         """,
         *params, limit, offset
     )
+
+    if rows:
+        total = rows[0]["total_count"]
+        unread_count = rows[0]["unread_count"]
+    else:
+        # Empty page — either no matches at all, or offset landed past the
+        # last page. Window functions can't report a total with zero rows,
+        # so fall back to explicit counts to keep pagination totals correct.
+        total_row = await client.fetchrow(
+            f"SELECT COUNT(*) as count FROM notifications WHERE {where_clause}",
+            *params
+        )
+        total = total_row["count"]
+        unread_row = await client.fetchrow(
+            "SELECT COUNT(*) as count FROM notifications WHERE user_id = $1 AND read_at IS NULL",
+            user_id
+        )
+        unread_count = unread_row["count"]
 
     notifications = [
         Notification(
