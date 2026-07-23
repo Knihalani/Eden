@@ -73,7 +73,7 @@ export const STUB_SURFACE_IDS = [] as readonly CoreNavLeafId[];
 export const MOBILE_BOTTOM_NAV = [
   {
     id: "dashboard" as const,
-    href: "/dashboard",
+    href: "/home",
     labelKey: "nav.leaves.dashboard",
   },
   {
@@ -116,11 +116,10 @@ export const MOBILE_MORE_NAV = [
   },
   { id: "prompts" as const, href: "/prompts", labelKey: "nav.leaves.prompts" },
   {
-    id: "analytics" as const,
-    href: "/analytics",
-    labelKey: "nav.leaves.analytics",
+    id: "sessions" as const,
+    href: "/sessions",
+    labelKey: "nav.leaves.sessions",
   },
-  { id: "audit" as const, href: "/audit", labelKey: "nav.leaves.audit" },
   {
     id: "settings" as const,
     href: "/settings",
@@ -152,7 +151,7 @@ export const DEFAULT_SIDEBAR: SidebarGroup[] = [
     items: [
       {
         id: "dashboard",
-        href: "/dashboard",
+        href: "/home",
         labelKey: "nav.leaves.dashboard",
         icon: LayoutDashboard,
         category: "core",

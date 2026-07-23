@@ -2,24 +2,69 @@
 // portal/api routes (login required, no SEO value).
 
 import type { MetadataRoute } from "next";
+import { SITE_URL } from "@/lib/constants";
 
-const PORTAL = process.env.NEXT_PUBLIC_PORTAL_URL
-    || "https://portal.eden.example";
+const PORTAL =
+  process.env.NEXT_PUBLIC_PORTAL_URL ||
+  process.env.NEXT_PUBLIC_SITE_URL ||
+  SITE_URL;
 
 export default function robots(): MetadataRoute.Robots {
-    return {
-        rules: [
-            {
-                userAgent: "*",
-                allow: ["/", "/pricing", "/about", "/contact", "/blog",
-                        "/changelog", "/customers", "/careers",
-                        "/privacy", "/terms", "/dpa", "/security",
-                        "/subprocessors"],
-                disallow: ["/portal/", "/api/", "/sign-in", "/sign-up",
-                           "/forgot-password", "/reset-password",
-                           "/invite/", "/onboarding/"],
-            },
+  return {
+    rules: [
+      {
+        userAgent: "*",
+        allow: [
+          "/",
+          "/pricing",
+          "/about",
+          "/contact",
+          "/changelog",
+          "/privacy",
+          "/terms",
+          "/dpa",
+          "/security",
+          "/subprocessors",
+          "/do-not-sell",
+          "/status",
+          "/health",
+          "/og.png",
+          "/og-pricing.png",
         ],
-        sitemap: `${PORTAL}/sitemap.xml`,
-    };
+        disallow: [
+          "/portal/",
+          "/api/",
+          "/sign-in",
+          "/sign-up",
+          "/forgot-password",
+          "/reset-password",
+          "/invite/",
+          "/onboarding/",
+          "/docs-fill",
+          "/home",
+          "/dashboard",
+          "/agents",
+          "/traces",
+          "/sessions",
+          "/issues",
+          "/alerts",
+          "/signals",
+          "/evals",
+          "/improve",
+          "/cost",
+          "/agent",
+          "/debugger",
+          "/compare",
+          "/settings",
+          "/prompts",
+          "/guardrails",
+          "/shell",
+          "/unavailable",
+          "/rebuild",
+          "/lab",
+        ],
+      },
+    ],
+    sitemap: `${PORTAL}/sitemap.xml`,
+  };
 }

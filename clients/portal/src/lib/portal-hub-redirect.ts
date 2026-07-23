@@ -67,7 +67,6 @@ const STUB_PREFIXES = [
   "/labeling",
   "/studio",
   "/synthetic",
-  "/docs-fill",
   "/autonomous",
   "/closed-loop",
   "/apm",

@@ -44,29 +44,20 @@ or walk you through a task (see [Tutorials](/tutorials) or
 
   <div class="eden-card eden-card--small">
     <h4>Configuration</h4>
-    <p>Settings, environment variables, RBAC, webhooks.</p>
+    <p>Settings, environment variables, RBAC, webhooks, doctor CLI.</p>
     <ul>
       <li><a href="/reference/configuration">Settings</a></li>
       <li><a href="/reference/environment-variables">Env vars</a></li>
       <li><a href="/reference/rbac">RBAC</a></li>
       <li><a href="/reference/webhooks">Webhooks</a></li>
-      <li><a href="/reference/cli">CLI</a></li>
-    </ul>
-  </div>
-
-  <div class="eden-card eden-card--small">
-    <h4>Explanation</h4>
-    <p>Why Eden is built the way it is. Architecture, data model, security model.</p>
-    <ul>
-      <li><a href="/explanation/architecture">Architecture</a></li>
-      <li><a href="/explanation/data-model">Data model</a></li>
-      <li><a href="/explanation/security-model">Security model</a></li>
-      <li><a href="/explanation/multi-tenancy">Multi-tenancy</a></li>
-      <li><a href="/explanation/intelligence-categories">Intelligence categories</a></li>
+      <li><a href="/reference/cli">Doctor CLI</a></li>
     </ul>
   </div>
 
 </div>
+
+Looking for *why* Eden is shaped this way? See
+[Explanation](/explanation) — architecture, data model, security, and more.
 
 ## Versioning
 

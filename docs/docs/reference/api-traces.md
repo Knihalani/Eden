@@ -223,7 +223,7 @@ baseline by more than the configured threshold.
 
 `POST /v1/traces/{trace_id}/replay` re-runs the trace against the
 current prompt registry (dry-run by default, unless you pass
-`commit: true`). See [Time-Travel Debug](/explanation/sampling-and-retention)
+`commit: true`). See [Time-Travel Debug](/explanation/intelligence-categories#cat-20--time-travel-debug)
 for the full replay semantics.
 
 ## Errors

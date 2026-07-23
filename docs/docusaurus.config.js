@@ -41,8 +41,8 @@ const config = {
   url: 'https://docs.edenobservability.com',
   baseUrl: '/',
 
-  organizationName: 'eden',
-  projectName: 'eden',
+  organizationName: 'KaiavN',
+  projectName: 'Eden',
 
   // Inline client script that wires up the home-page install-snippet
   // copy button. Vanilla JS, no framework. Runs once on DOMContentLoaded
@@ -265,7 +265,7 @@ const config = {
               { label: 'TypeScript SDK', to: '/reference/sdk-typescript' },
               { label: 'REST API', to: '/reference/api' },
               { label: 'Doctor / CLI', to: '/reference/cli' },
-              { label: 'Architecture', to: '/explanation/architecture' },
+              { label: 'Explanation', to: '/explanation' },
             ],
           },
         ],

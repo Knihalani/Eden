@@ -23,7 +23,6 @@ export const STUB_PORTAL_PATH_PREFIXES: readonly string[] = [
   "/promotions",
   "/artifacts",
   "/optimization",
-  "/docs-fill",
   "/runs",
   "/datasets",
   "/playgrounds",

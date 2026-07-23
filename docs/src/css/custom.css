@@ -894,6 +894,12 @@ td {
   border: 1px solid var(--eden-border-subtle);
 }
 
+.eden-fillin__secondary:hover:not(:disabled) {
+  border-color: var(--eden-accent);
+  color: var(--eden-accent-hover);
+  background: var(--eden-accent-faint);
+}
+
 .eden-fillin__secondary:disabled {
   opacity: 0.45;
   cursor: not-allowed;

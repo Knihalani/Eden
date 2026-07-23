@@ -8,7 +8,8 @@ sidebar_position: 1
 # Architecture
 
 Eden is a single FastAPI service backed by Postgres, Redis, Qdrant,
-and ClickHouse, fronted by a Next.js portal and four client SDKs.
+and ClickHouse, fronted by a Next.js portal and two production client
+SDKs (Python + TypeScript).
 This page explains why it's shaped that way.
 
 ## Top-level view

@@ -116,6 +116,7 @@ const explanationSidebar = {
       label: 'Explanation',
       collapsed: false,
       items: [
+        'explanation/index',
         'explanation/architecture',
         'explanation/data-model',
         'explanation/intelligence-categories',

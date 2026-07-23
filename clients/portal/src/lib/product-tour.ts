@@ -40,7 +40,7 @@ export const PRODUCT_TOUR_STEPS: TourStep[] = [
   {
     id: "welcome",
     kind: "welcome",
-    href: "/dashboard",
+    href: "/home",
     title: "Welcome to Eden",
     body: "Capture LLM calls, analyse failures, and ship reviewable fixes. This walkthrough is optional — Skip anytime and resume from the banner. It does not create a workspace; create or join a workspace under Settings → Workspace first if you need one.",
   },
@@ -57,7 +57,7 @@ export const PRODUCT_TOUR_STEPS: TourStep[] = [
   {
     id: "install",
     kind: "nav",
-    href: "/dashboard",
+    href: "/home",
     title: "Install the SDK",
     body: "Use the docs quickstart: gateway (base_url + X-Org-Id / X-Org-Api-Key) or eden-sdk / @eden-ai/sdk, then run eden-doctor (or python -m eden_sdk.doctor) to verify. Fill-in works when you are signed in.",
     ctaLabel: "Open docs quickstart",
@@ -75,7 +75,7 @@ export const PRODUCT_TOUR_STEPS: TourStep[] = [
   {
     id: "finish",
     kind: "finish",
-    href: "/dashboard",
+    href: "/home",
     title: "You're ready",
     body: "Next: docs quickstart → send a test trace → open Traces. Day to day: Home for health, Issues for clustered failures, Improve for reviewable patches. Connecting a repo under Agents is optional when you want Eden to see your code.",
     ctaLabel: "Open docs quickstart",

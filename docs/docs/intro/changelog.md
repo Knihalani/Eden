@@ -61,10 +61,10 @@ sidebar_position: 99
   (route handlers, pydantic models, DB tables, quota tracking,
   RBAC permissions, SDK exports) has been retired. The
   corresponding code, billing quotas, permissions, and docs
-  references have been deleted. The five SDKs that remain
-  (Python `eden-sdk`, TypeScript `@eden-ai/sdk`, Go `eden-go`,
-  Rust `eden-sdk`) all focus on the observability + ingestion
-  surface.
+  references have been deleted. The two production SDKs that remain
+  (Python `eden-sdk`, TypeScript `@eden-ai/sdk`) focus on the
+  observability + ingestion surface. Experimental language SDKs
+  (Go / Rust) are not GA.
 - **Env-gen SDK packages deleted.** The `src/eden/sdk/` Python
   module and `sdk/ts/` TypeScript package (both job-centric
   clients) are gone. The remaining SDKs all live under their

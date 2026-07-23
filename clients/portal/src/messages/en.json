@@ -27,6 +27,7 @@
       "agent": "AI Agent",
       "debugger": "Debugger",
       "prompts": "Prompts",
+      "sessions": "Sessions",
       "analytics": "Analytics",
       "audit": "Audit",
       "settings": "Settings"
@@ -36,7 +37,7 @@
     "ariaLabel": "Mobile navigation",
     "more": "More",
     "moreTitle": "More",
-    "moreDescription": "Agents, Alerts, Cost, Guardrails, AI Agent, Prompts, Analytics, Audit, and Settings."
+    "moreDescription": "Agents, Alerts, Cost, Guardrails, AI Agent, Prompts, Sessions, and Settings."
   },
   "dashboard": {
     "title": "Dashboard",

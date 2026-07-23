@@ -20,7 +20,7 @@ export const ONBOARDING_PROGRESS_STEPS: OnboardingProgressStep[] =
     id: s.id,
     label: s.title,
     blurb: s.body.slice(0, 80) + (s.body.length > 80 ? "…" : ""),
-    href: "/dashboard?onboarding=1",
+    href: "/home?onboarding=1",
   }));
 
 export const ONBOARDING_PROGRESS_TOTAL = PRODUCT_TOUR_TOTAL;
@@ -33,7 +33,7 @@ export function onboardingProgressIndex(
 
 /** Legacy path helper — onboarding routes redirect to tour overlay. */
 export function onboardingProgressIndexFromPath(pathname: string): number {
-  const path = (pathname || "").replace(/\/$/, "") || "/dashboard";
+  const path = (pathname || "").replace(/\/$/, "") || "/home";
   if (path.includes("/settings")) return tourIndexFromOnboardingStep("api-keys");
   if (path.includes("/traces")) return tourIndexFromOnboardingStep("traces");
   if (path.includes("/issues")) return tourIndexFromOnboardingStep("issues");
@@ -42,7 +42,9 @@ export function onboardingProgressIndexFromPath(pathname: string): number {
   if (path.includes("wait") || path.includes("connect") || path.includes("done")) {
     return PRODUCT_TOUR_TOTAL - 1;
   }
-  if (path.includes("/dashboard")) return tourIndexFromOnboardingStep("dashboard");
+  if (path.includes("/home") || path.includes("/dashboard")) {
+    return tourIndexFromOnboardingStep("dashboard");
+  }
   return 0;
 }
 
@@ -61,7 +63,7 @@ export function formatOnboardingProgress(
   opts?: { fromPath?: boolean },
 ): OnboardingProgressView {
   const index = opts?.fromPath
-    ? onboardingProgressIndexFromPath(stepOrPath || "/dashboard")
+    ? onboardingProgressIndexFromPath(stepOrPath || "/home")
     : onboardingProgressIndex(stepOrPath);
   const step =
     PRODUCT_TOUR_STEPS[Math.min(index, PRODUCT_TOUR_TOTAL - 1)] ??
@@ -74,7 +76,7 @@ export function formatOnboardingProgress(
     total: PRODUCT_TOUR_TOTAL,
     label: step.title,
     blurb: step.body.slice(0, 72) + (step.body.length > 72 ? "…" : ""),
-    href: "/dashboard?onboarding=1",
+    href: "/home?onboarding=1",
     isComplete: done,
   };
 }
