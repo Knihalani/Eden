@@ -53,7 +53,6 @@ SUPPORTED_INTEGRATIONS: tuple[str, ...] = (
     "langsmith",
     "runloop",
     "github_action",
-    "discord",
     "support_webhook",
 )
 

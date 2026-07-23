@@ -222,6 +222,7 @@ async def run_user_export_job(job_id: str, user_id: str) -> None:
                         f"<p>This link may expire. Job id: {job_id}</p>"
                     ),
                     text_content=f"Your Eden data export is ready: {url}\nJob: {job_id}",
+                    purpose="transactional",
                 )
         except Exception as exc:  # noqa: BLE001
             logger.warning("compliance.export email failed job_id=%s: %s", job_id, exc)

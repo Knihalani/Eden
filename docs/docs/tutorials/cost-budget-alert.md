@@ -8,14 +8,14 @@ sidebar_position: 5
 # Tutorial — Set a cost budget + alert
 
 Time: **10 minutes**. By the end you'll have a per-org monthly token
-budget with soft and hard limits, a Slack alert at 80%, and a
+budget with soft and hard limits, an email alert at 80%, and a
 webhook alert that fires at 95%.
 
 ## What you'll build
 
 - A monthly budget of 2 billion tokens (soft) / 3 billion tokens
   (hard).
-- A Slack alert when you cross 80%.
+- An email alert when you cross 80% (via SendKit, sparse).
 - A webhook to your on-call channel at 95%.
 - An automatic hard-limit block at 100%.
 
@@ -48,22 +48,13 @@ bubble).
 
 Save. The budget is now active for the org.
 
-## Step 3 — Configure Slack
-
-If you haven't already:
-
-1. Portal → **Settings** → **Integrations** → **Slack** → **Add**.
-2. Authorise Eden in your Slack workspace.
-3. Pick the channel for cost alerts (`#cost-alerts` is a sensible
-   default).
-
-## Step 4 — Configure the alert rules
+## Step 3 — Configure the alert rules
 
 Portal → **Cost** → **Alerts** → **New alert**.
 
 ```json
 {
-  "channels": ["email", "slack"],
+  "channels": ["email"],
   "thresholds": [
     { "resource": "tokens", "percent": 50,  "severity": "info" },
     { "resource": "tokens", "percent": 80,  "severity": "warning" },
@@ -75,7 +66,7 @@ Portal → **Cost** → **Alerts** → **New alert**.
 Save. The alert fires when **either** the monthly cumulative crosses
 the threshold **or** the daily run-rate projects a month-end breach.
 
-## Step 5 — Add a webhook for high severity
+## Step 4 — Add a webhook for high severity
 
 ```bash
 curl -X POST https://api.edenobservability.com/v1/budgets/org_abc/alerts \
@@ -108,13 +99,13 @@ The webhook payload:
 }
 ```
 
-## Step 6 — Verify the alert
+## Step 5 — Verify the alert
 
 The portal shows a **Test alert** button on each rule. Click it
-to send a sample payload to Slack / the webhook URL without waiting
-for a real threshold breach.
+to send a sample payload to the alert email / the webhook URL
+without waiting for a real threshold breach.
 
-## Step 7 — Watch the dashboard
+## Step 6 — Watch the dashboard
 
 Portal → **Cost** → **Dashboard**.
 
@@ -132,7 +123,7 @@ yellow banner.
 - Budgets are per-resource (tokens, storage, sandbox seconds) and
   per-period (month by default).
 - Soft limits warn; hard limits block ingest with HTTP 429.
-- Alerts can route to email, Slack, webhooks, or all three.
+- Alerts can route to email (SendKit, sparse) or webhooks, or both.
 - The cost dashboard shows a 30-day forecast based on OLS
   regression.
 

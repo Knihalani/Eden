@@ -440,6 +440,14 @@ plus `sdk.gatewayHeaders({ filters })` and `sdk.resolvedGatewayUrl()`.
 
 Apache 2.0
 
+## What's new in 0.3.2
+
+- **Bedrock + Gemini usage extraction.** The `bedrock` and `gemini` instrumentations now extract input/output/cache/total token counts (Converse API, InvokeModel body shapes for Anthropic/Titan/Llama, and Gemini `usage_metadata`) so both providers report cost data like `openai`/`anthropic`.
+- **`redact_on_client` now defaults to `False`.** The gateway remains the authoritative PII layer; restore with `EdenConfig(redact_on_client=True)` or `EDEN_REDACT_ON_CLIENT=1`.
+- Default `batch_size` is now `50` (was `32`); streaming instrumentations omit `delta_text` unless `capture_chunk_text=True`.
+- Offline queue keeps a persistent SQLite (WAL) connection; ingest POSTs use gzip; OTel exporter and native `instrument()` are mutually exclusive unless `allow_dual=True`.
+- See `sdk/python/CHANGELOG.md` for the full 0.3.x notes.
+
 ## What's new in 0.2.0
 
 - **Span API.** `trace()` now yields a `Span` with first-class

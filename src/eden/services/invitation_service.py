@@ -404,7 +404,8 @@ async def send_invite_email(
 ) -> EmailResult:
     """Send invitation email to the invitee.
 
-    Sends via SendGrid if configured, otherwise logs a warning.
+    Sends via SendKit if configured, otherwise logs a warning.
+    From: info@edenobservability.com (transactional).
     """
     settings = get_settings()
     invite_url = f"{settings.portal_base_url}/invite/{token}"
@@ -458,4 +459,5 @@ async def send_invite_email(
         subject=subject,
         html_content=html_content,
         text_content=text_content,
+        purpose="transactional",
     )

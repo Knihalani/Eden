@@ -164,6 +164,15 @@ class BackgroundWorkers:
         except Exception as exc:
             logger.warning("background: learn_wiring skipped: %s", exc)
 
+        # NOTE: the quality_pipeline sidecar worker and the trace_finalized
+        # consumer are deliberately started as two independent tasks, each
+        # with its own try/except. They read different queues/streams (the
+        # quality sidecar scores traces async off its own work queue; the
+        # trace_finalized consumer reacts to the trace_finalized bus event)
+        # and must stay decoupled — merging them (or making one depend on
+        # the other's success) would mean a quality-pipeline outage takes
+        # down trace_finalized handling too, or vice versa. Keep them as
+        # separate try/except blocks below.
         try:
             from eden.observability.quality_pipeline.worker import start_worker
 

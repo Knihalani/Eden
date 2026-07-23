@@ -26,7 +26,7 @@ def test_client_user_agent_version_matches_package() -> None:
     import eden_sdk
 
     assert client_version == eden_sdk.__version__
-    assert client_version == "0.3.2"
+    assert client_version == "0.3.3"
     from eden_sdk.client import _USER_AGENT
 
     assert _USER_AGENT == f"eden-sdk/{client_version} (python)"

@@ -256,3 +256,40 @@ def test_extract_usage_accepts_camel_prompt_tokens_details() -> None:
     from eden_sdk._tokens import extract_usage
     out = extract_usage({"promptTokensDetails": {"cached_tokens": 31}})
     assert out["cache_read_tokens"] == 31
+
+
+# ── Bedrock Converse / Gemini usageMetadata aliases ──────────────────
+#
+# Both providers' native camelCase field names route through the same
+# shared extractor so the openai/anthropic/bedrock/gemini instrumentations
+# all agree on the wire's billing field names.
+
+
+def test_extract_usage_accepts_bedrock_converse_camelcase() -> None:
+    from eden_sdk._tokens import extract_usage
+    out = extract_usage(
+        {
+            "inputTokens": 10,
+            "outputTokens": 5,
+            "cacheReadInputTokens": 200,
+            "cacheWriteInputTokens": 50,
+        }
+    )
+    assert out["input_tokens"] == 10
+    assert out["output_tokens"] == 5
+    assert out["cache_read_tokens"] == 200
+    assert out["cache_creation_tokens"] == 50
+
+
+def test_extract_usage_accepts_gemini_usage_metadata_shape() -> None:
+    from eden_sdk._tokens import extract_usage
+    out = extract_usage(
+        {
+            "promptTokenCount": 60,
+            "candidatesTokenCount": 25,
+            "cachedContentTokenCount": 40,
+        }
+    )
+    assert out["input_tokens"] == 60
+    assert out["output_tokens"] == 25
+    assert out["cache_read_tokens"] == 40

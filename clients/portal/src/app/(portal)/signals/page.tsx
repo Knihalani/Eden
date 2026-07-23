@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { Bell, BellOff, Plus, X } from "lucide-react";
+import { Plus, X } from "lucide-react";
 import {
   agentForSignal,
   issuesForSignal,
@@ -21,12 +21,6 @@ import {
   EmptyState,
   FilterChips,
 } from "@/lab/lab-ui";
-import {
-  AlertDestinationEditor,
-  defaultDestinationFor,
-  formatDestination,
-  type AlertChannel,
-} from "@/lab/alert-destination";
 import { useSignalJobs } from "@/lab/signal-jobs-context";
 import { useLabToast } from "@/lab/lab-toast";
 import { compileNaturalLanguageFallback } from "@/lab/signal-compile";
@@ -83,9 +77,6 @@ function SignalCard({
         {agent?.name ?? "All agents"}
         {" · "}
         {signal.hits24h} hits / 24h
-        {signal.notify && signal.channel && signal.destination
-          ? ` · ${formatDestination(signal.channel, signal.destination)}`
-          : ""}
       </p>
     </button>
   );
@@ -95,22 +86,14 @@ function SignalDetail({
   signal,
   onClose,
   onToggleEnabled,
-  onPatchNotify,
 }: {
   signal: SignalFixture;
   onClose: () => void;
   onToggleEnabled: (enabled: boolean) => void;
-  onPatchNotify: (patch: {
-    notify: boolean;
-    channel?: AlertChannel;
-    destination?: string;
-  }) => void;
 }) {
   const agent = agentForSignal(signal);
   const issues = issuesForSignal(signal);
   const traces = tracesForSignal(signal);
-  const channel = signal.channel ?? "slack";
-  const destination = signal.destination ?? defaultDestinationFor(channel);
   const watching =
     compileNaturalLanguageFallback(signal.description).watching ||
     signal.description;
@@ -170,48 +153,6 @@ function SignalDetail({
           <h3 className="type-label">Watching</h3>
           <p className="type-ui text-[var(--text)]">{watching}</p>
         </section>
-        <section className="space-y-3 rounded-[var(--radius-lg)] p-4 shadow-[0_0_0_1px_var(--line)]">
-          <div className="flex flex-wrap items-start justify-between gap-2">
-            <h3 className="type-ui text-[var(--text)]">Notify</h3>
-            <button
-              type="button"
-              className={cn(
-                "ds-btn ds-btn-sm",
-                signal.notify ? "ds-btn-ghost" : "ds-btn-primary",
-              )}
-              onClick={() => {
-                if (signal.notify) onPatchNotify({ notify: false });
-                else onPatchNotify({ notify: true, channel, destination });
-              }}
-            >
-              {signal.notify ? (
-                <>
-                  <BellOff className="h-3.5 w-3.5" />
-                  Off
-                </>
-              ) : (
-                <>
-                  <Bell className="h-3.5 w-3.5" />
-                  On
-                </>
-              )}
-            </button>
-          </div>
-          {signal.notify ? (
-            <AlertDestinationEditor
-              idPrefix={`signal-${signal.id}`}
-              channel={channel}
-              destination={destination}
-              onChange={({ channel: nextChannel, destination: nextDest }) =>
-                onPatchNotify({
-                  notify: true,
-                  channel: nextChannel,
-                  destination: nextDest,
-                })
-              }
-            />
-          ) : null}
-        </section>
         {(issues[0] || traces[0]) ? (
           <section className="space-y-3">
             <h3 className="type-label">Related</h3>
@@ -266,9 +207,6 @@ function CreateSignalDialog({
   const [prompt, setPrompt] = useState(initialPrompt);
   const [severity, setSeverity] = useState<SignalSeverity | "auto">("auto");
   const [scope, setScope] = useState<string>(defaultAgentId ?? "all");
-  const [notify, setNotify] = useState(false);
-  const [channel, setChannel] = useState<AlertChannel>("slack");
-  const [destination, setDestination] = useState(defaultDestinationFor("slack"));
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -276,9 +214,6 @@ function CreateSignalDialog({
     setPrompt(initialPrompt);
     setSeverity("auto");
     setScope(defaultAgentId ?? "all");
-    setNotify(false);
-    setChannel("slack");
-    setDestination(defaultDestinationFor("slack"));
     setError(null);
   }, [open, defaultAgentId, initialPrompt]);
 
@@ -305,9 +240,6 @@ function CreateSignalDialog({
     startCompile({
       prompt: prompt.trim(),
       agentId: scope === "all" ? null : scope,
-      notify,
-      channel,
-      destination: destination.trim() || defaultDestinationFor(channel),
       severity,
     });
     onClose();
@@ -393,30 +325,6 @@ function CreateSignalDialog({
             </label>
           </div>
 
-          <div className="space-y-3 rounded-[var(--radius-lg)] p-4 shadow-[0_0_0_1px_var(--line)]">
-            <label className="flex cursor-pointer items-center gap-2.5">
-              <input
-                type="checkbox"
-                checked={notify}
-                onChange={(e) => setNotify(e.target.checked)}
-                className="h-3.5 w-3.5 accent-[var(--accent)]"
-              />
-              <span className="type-ui text-[var(--text)]">Notify</span>
-            </label>
-            {notify ? (
-              <AlertDestinationEditor
-                idPrefix="create-signal"
-                compact
-                channel={channel}
-                destination={destination}
-                onChange={({ channel: nextChannel, destination: nextDest }) => {
-                  setChannel(nextChannel);
-                  setDestination(nextDest);
-                }}
-              />
-            ) : null}
-          </div>
-
           {error ? (
             <p className="type-meta text-[var(--error)]" role="alert">
               {error}
@@ -466,9 +374,6 @@ function ReviewDraftPanel({
       condition: draft.condition,
       agentId: job.agentId,
       enabled: true,
-      notify: job.notify,
-      channel: job.notify ? job.channel : undefined,
-      destination: job.notify ? job.destination : undefined,
       hits24h: 0,
       relatedIssueIds: [],
       exampleTraceIds: [],
@@ -588,7 +493,7 @@ function LabSignalsInner() {
   } = useSignalJobs();
 
   // Approved-in-session drafts (no create/patch endpoint matching this
-  // fixture shape yet) plus local overrides for enable/notify toggles.
+  // fixture shape yet) plus local overrides for the enable toggle.
   const [localSignals, setLocalSignals] = useState<SignalFixture[]>([]);
   const [overrides, setOverrides] = useState<Record<string, Partial<SignalFixture>>>({});
   const catalog = useMemo(() => {
@@ -804,7 +709,6 @@ function LabSignalsInner() {
             signal={selected}
             onClose={clearSelection}
             onToggleEnabled={(enabled) => patchSignal(selected.id, { enabled })}
-            onPatchNotify={(patch) => patchSignal(selected.id, patch)}
           />
         ) : null}
       </div>

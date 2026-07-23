@@ -27,10 +27,6 @@ export type SignalFixture = {
   /** null = all agents */
   agentId: string | null;
   enabled: boolean;
-  /** Notify when this signal fires (optional routing) */
-  notify: boolean;
-  channel?: "slack" | "email" | "webhook";
-  destination?: string;
   hits24h: number;
   lastHit?: string;
   relatedIssueIds: string[];
@@ -83,12 +79,10 @@ export function signalsForTrace(traceId: string): SignalFixture[] {
 export function signalsSnapshot() {
   const all = liveSignals();
   const enabled = all.filter((s) => s.enabled);
-  const notifying = all.filter((s) => s.enabled && s.notify);
   const hits = all.reduce((sum, s) => sum + s.hits24h, 0);
   return {
     all,
     enabled,
-    notifying,
     enabledCount: enabled.length,
     totalCount: all.length,
     hits24h: hits,

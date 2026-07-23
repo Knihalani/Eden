@@ -10,7 +10,6 @@ import {
   memberCounts,
   packsForAgent,
   type ApiKeyFixture,
-  type AuditEventFixture,
   type AuditPackFixture,
   type KeyScope,
   type MemberFixture,
@@ -599,7 +598,12 @@ function LabSettingsInner() {
   if (isLoading) {
     return (
       <div className="ds-page">
-        <PageHeader title="Settings" />
+        <PageHeader
+          title="Settings"
+          actions={
+            <SettingsModeNav value={mode} onChange={(m) => changeMode(m)} />
+          }
+        />
         <QueryLoadingPanel label="Loading settings…" />
       </div>
     );
@@ -608,7 +612,12 @@ function LabSettingsInner() {
   if (isError) {
     return (
       <div className="ds-page">
-        <PageHeader title="Settings" />
+        <PageHeader
+          title="Settings"
+          actions={
+            <SettingsModeNav value={mode} onChange={(m) => changeMode(m)} />
+          }
+        />
         <QueryErrorPanel
           error={firstError}
           onRetry={() => {

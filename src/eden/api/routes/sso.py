@@ -489,15 +489,25 @@ async def sso_callback(
     state: str | None = None,
     org_id: str = Query(..., alias="org_id"),
 ):
-    """SSO callback — not implemented until IdP token exchange ships."""
+    """SSO callback.
+
+    IdP token exchange (SAML assertion validation / OIDC code
+    exchange) is not wired up in this deployment — doing so needs
+    per-tenant IdP secrets we don't have a safe place to broker yet.
+    Rather than ship a half-implemented exchange that silently
+    mismints sessions, this deployment declines the callback with a
+    structured, unambiguous 503 so callers (and the portal) can
+    detect "SSO not enabled" instead of treating it as a bug.
+    """
     await _consume_sso_state(state or "", provider_id, org_id)
     raise HTTPException(
-        status_code=501,
+        status_code=503,
         detail={
-            "status": "not_implemented",
+            "status": "sso_not_enabled",
             "message": (
-                "SSO callback token exchange is not implemented. "
-                "See docs/how-to/sso-setup.md for the roadmap."
+                "SSO login is not enabled in this deployment. "
+                "IdP token exchange has not been configured — contact "
+                "your Eden administrator or see docs/how-to/sso-setup.md."
             ),
             "docs": "docs/how-to/sso-setup.md",
         },

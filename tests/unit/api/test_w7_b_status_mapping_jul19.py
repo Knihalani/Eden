@@ -2,6 +2,10 @@
 
 Continues W5-C/W6-C pattern: unique → 409, missing FK → 404, bad UUID → 400,
 other DB failures → 503.
+
+Phase 0 (2026-07-23) — the Slack settings status-mapping tests that used
+to live here were removed along with the ``/orgs/{org_id}/integrations/slack``
+endpoints.
 """
 
 from __future__ import annotations
@@ -217,44 +221,6 @@ async def test_create_canary_other_db_error_is_503():
                 body=body,
                 user={"user_id": USER},
             )
-        assert ei.value.status_code == 503
-
-
-@pytest.mark.asyncio
-async def test_patch_slack_settings_fk_is_404():
-    from eden.api.routes import integrations_status as mod
-
-    client = MagicMock()
-    client.execute = AsyncMock(
-        side_effect=Exception(
-            'insert or update on table "org_integrations" violates foreign key constraint'
-        )
-    )
-
-    with (
-        patch.object(mod, "get_postgres_client", AsyncMock(return_value=client)),
-        patch.object(mod, "_load_slack_config", AsyncMock(return_value={})),
-    ):
-        body = mod.SlackSettingsIn(webhook_url="https://hooks.slack.com/services/x", enabled=True)
-        with pytest.raises(HTTPException) as ei:
-            await mod.patch_slack_settings(org_id=ORG, body=body)
-        assert ei.value.status_code == 404
-
-
-@pytest.mark.asyncio
-async def test_patch_slack_settings_other_db_error_is_503():
-    from eden.api.routes import integrations_status as mod
-
-    client = MagicMock()
-    client.execute = AsyncMock(side_effect=Exception("disk I/O error"))
-
-    with (
-        patch.object(mod, "get_postgres_client", AsyncMock(return_value=client)),
-        patch.object(mod, "_load_slack_config", AsyncMock(return_value={})),
-    ):
-        body = mod.SlackSettingsIn(enabled=False)
-        with pytest.raises(HTTPException) as ei:
-            await mod.patch_slack_settings(org_id=ORG, body=body)
         assert ei.value.status_code == 503
 
 

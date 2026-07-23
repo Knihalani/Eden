@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import {
   RETENTION_OPTIONS,
   TIMEZONE_OPTIONS,
@@ -13,7 +13,6 @@ import {
   type AuditEventFixture,
   type AuditPackFixture,
   type MemberFixture,
-  type NotifyChannel,
   type RetentionDays,
   type WorkspaceFixture,
 } from "@/lab/fixtures/settings";
@@ -259,78 +258,7 @@ export function SettingsWorkspaceView({
           </div>
         </div>
       </section>
-
-      <section className="px-4 py-5 sm:px-6">
-        <p className="type-label mb-4">Default notify routing</p>
-        <p className="type-meta mb-3 max-w-xl">
-          Used when new signals turn notify on. Override per signal in Signals.
-        </p>
-        <div className="grid gap-4 sm:grid-cols-2">
-          <PrefSelect
-            label="Channel"
-            value={workspace.defaultNotifyChannel}
-            options={[
-              { value: "slack", label: "Slack" },
-              { value: "email", label: "Email" },
-              { value: "webhook", label: "Webhook" },
-            ]}
-            onChange={(channel) => {
-              const defaultNotifyChannel = channel as NotifyChannel;
-              const defaultNotifyDestination = "";
-              onPatch(
-                { defaultNotifyChannel, defaultNotifyDestination },
-                `notify → ${defaultNotifyChannel}`,
-              );
-              pushToast({
-                title: "Notify channel updated",
-                body: defaultNotifyChannel,
-                tone: "ok",
-              });
-            }}
-          />
-          <DestinationField
-            value={workspace.defaultNotifyDestination}
-            onSave={(defaultNotifyDestination) => {
-              if (defaultNotifyDestination === workspace.defaultNotifyDestination)
-                return;
-              onPatch(
-                { defaultNotifyDestination },
-                `destination → ${defaultNotifyDestination}`,
-              );
-              pushToast({
-                title: "Destination saved",
-                body: defaultNotifyDestination,
-                tone: "ok",
-              });
-            }}
-          />
-        </div>
-      </section>
     </div>
-  );
-}
-
-function DestinationField({
-  value,
-  onSave,
-}: {
-  value: string;
-  onSave: (value: string) => void;
-}) {
-  const [draft, setDraft] = useState(value);
-  useEffect(() => setDraft(value), [value]);
-  return (
-    <label className="block">
-      <span className="type-label">Destination</span>
-      <input
-        className="ds-input mt-1.5 w-full"
-        value={draft}
-        onChange={(e) => setDraft(e.target.value)}
-        onBlur={() => onSave(draft.trim())}
-        onFocus={() => setDraft(value)}
-        aria-label="Default notify destination"
-      />
-    </label>
   );
 }
 

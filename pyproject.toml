@@ -98,6 +98,9 @@ dependencies = [
     # and the [socks] extra (Eden does not route through SOCKS).
     "httpx>=0.27.0,<1.0.0",
 
+    # Transactional + sparse alert email (SendKit).
+    "sendkit>=1.0.7,<2.0.0",
+
     # Fast JSON for hot paths (Postgres JSONB, Redis cache, SSE).
     # Consumed via ``eden.util.jsonx``; stdlib json remains the fallback.
     "orjson>=3.10.0,<4.0.0",

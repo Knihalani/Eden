@@ -15,16 +15,17 @@ Endpoints:
   GET /orgs/{org_id}/observability/judges/{judge_run_id}
       Action: fetch one judge_score by id.
 
-The sync path is the primary one for the v1 — most customers want
-the score back in the same request. The async path is a thin
-forwarder that enqueues to the Redis tailer and returns a job id.
+There is no async judge tailer yet. Every run executes inline and
+returns the scores directly, regardless of the requested ``sync``
+value — a ``sync=false`` request is coerced to sync (see
+``X-Judges-Sync-Coerced`` response header) rather than 501ing.
 """
 
 from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException, Path, Query
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, Response
 
 from eden.api.deps import (
     _try_resolve_token_payload,
@@ -122,16 +123,30 @@ async def _fetch_events_for_trace(tenant_id: str, trace_id: str) -> list:
 @router.post("/run", response_model=JudgeRunResponse)
 async def run_judges(
     body: JudgeRunRequest,
+    response: Response,
     org_id: str = Depends(_require_path_org),
     user: dict = Depends(get_current_user),
     payload: dict | None = Depends(_try_resolve_token_payload),
 ) -> JudgeRunResponse:
     """Run the registered judges on a trace.
 
-    Sync path: returns the resulting scores inline.
-    Async path: queues the work and returns a job id.
+    There is no async judge tailer yet, so every run executes inline
+    and returns the resulting scores in the response — regardless of
+    the requested mode. If the caller asked for ``sync=false`` (i.e.
+    "queue this and give me a job id"), we coerce to sync rather than
+    501ing: the ``X-Judges-Sync-Coerced`` response header is set to
+    ``true`` so callers can detect the coercion, and ``queued``/
+    ``job_id`` in the body stay at their "ran inline" defaults
+    (``False``/``None``).
     """
     await require_judges_run(org_id, payload)
+
+    if not body.sync:
+        logger.info(
+            "judges_run_async_coerced_to_sync",
+            extra={"org_id": org_id, "trace_id": body.trace_id},
+        )
+        response.headers["X-Judges-Sync-Coerced"] = "true"
 
     registry = get_judge_registry()
 
@@ -150,18 +165,6 @@ async def run_judges(
             )
     else:
         judges = registry.all()
-
-    if not body.sync:
-        raise HTTPException(
-            status_code=501,
-            detail={
-                "status": "not_implemented",
-                "message": (
-                    "Async judge runs are not implemented. "
-                    "Retry with sync=true until the judge tailer ships."
-                ),
-            },
-        )
 
     events = await _fetch_events_for_trace(org_id, body.trace_id)
     if not events:

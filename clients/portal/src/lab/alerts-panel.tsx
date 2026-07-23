@@ -12,14 +12,8 @@ import {
   type AlertRule,
   type AlertSeverity,
 } from "@/lab/fixtures/alerts";
-import { agentById } from "@/lab/fixtures/agents";
 import { StatusChip } from "@/components/ds/primitives";
 import { useAlerts } from "@/lab/alerts-context";
-import {
-  AlertDestinationEditor,
-  formatDestination,
-  type AlertChannel,
-} from "@/lab/alert-destination";
 import { AgentLink, EmptyState, FilterChips, SeverityBadge } from "@/lab/lab-ui";
 import { cn } from "@/lib/utils";
 import { useOrg } from "@/hooks/use-org";
@@ -29,7 +23,6 @@ import { portalApi } from "@/lib/api/portal";
 import { QueryErrorPanel, QueryLoadingPanel } from "@/components/shell/query-error-panel";
 
 type InboxFilter = "actionable" | "firing" | "muted" | "resolved" | "all";
-type ModalTab = "inbox" | "destinations";
 
 const CLOSE_MS = 220;
 
@@ -88,86 +81,16 @@ function EventRow({
   );
 }
 
-function RuleCard({
-  rule,
-  enabled,
-  onToggle,
-  onDestinationChange,
-}: {
-  rule: AlertRule;
-  enabled: boolean;
-  onToggle: (next: boolean) => void;
-  onDestinationChange: (next: {
-    channel: AlertChannel;
-    destination: string;
-  }) => void;
-}) {
-  const agentName = rule.agentId
-    ? (agentById(rule.agentId)?.name ?? "unknown")
-    : "All agents";
-
-  return (
-    <article
-      className={cn(
-        "rounded-[var(--radius-lg)] p-5 shadow-[0_0_0_1px_var(--line)]",
-        !enabled && "opacity-60",
-      )}
-    >
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0 flex-1 space-y-2">
-          <div className="flex flex-wrap items-center gap-2">
-            <StatusChip tone={severityTone(rule.severity)}>{rule.severity}</StatusChip>
-            <StatusChip tone={enabled ? "live" : "neutral"}>
-              {enabled ? "on" : "off"}
-            </StatusChip>
-          </div>
-          <h3 className="type-ui text-[var(--text)]">{rule.name}</h3>
-          <p className="type-body text-[var(--text-secondary)]">{rule.description}</p>
-          <p className="type-mono !text-[0.6875rem] !text-[var(--text-faint)]">
-            {rule.condition}
-          </p>
-          <p className="type-meta">
-            {agentName} · {rule.fireCount24h} fires / 24h
-          </p>
-        </div>
-        <button
-          type="button"
-          className={cn(
-            "ds-btn ds-btn-sm",
-            enabled ? "ds-btn-ghost" : "ds-btn-primary",
-          )}
-          onClick={() => onToggle(!enabled)}
-        >
-          {enabled ? "Disable" : "Enable"}
-        </button>
-      </div>
-
-      <div className="mt-5 border-t border-[var(--line)] pt-4">
-        <AlertDestinationEditor
-          idPrefix={`rule-${rule.id}`}
-          compact
-          disabled={!enabled}
-          channel={rule.channel}
-          destination={rule.destination}
-          onChange={onDestinationChange}
-        />
-      </div>
-    </article>
-  );
-}
-
 function EventDetail({
   event,
   rule,
   onStatus,
   onCloseModal,
-  onEditDestination,
 }: {
   event: AlertEvent;
   rule?: AlertRule;
   onStatus: (status: AlertEventStatus) => void;
   onCloseModal: () => void;
-  onEditDestination?: () => void;
 }) {
   const agent = agentForAlert(event);
   const issue = issueForAlert(event);
@@ -309,31 +232,12 @@ function EventDetail({
         {rule ? (
           <section className="space-y-3">
             <h3 className="type-ui text-[var(--text)]">Rule</h3>
-            <dl className="grid gap-4 sm:grid-cols-2">
-              <div>
-                <p className="type-label">Condition</p>
-                <p className="type-mono mt-1.5 !text-[0.75rem] !text-[var(--text)]">
-                  {rule.condition}
-                </p>
-              </div>
-              <div>
-                <p className="type-label">Destination</p>
-                <p className="type-mono mt-1.5 !text-[0.75rem] !text-[var(--text)]">
-                  {formatDestination(rule.channel, rule.destination)}
-                </p>
-              </div>
-            </dl>
-            <p className="type-meta">
-              {onEditDestination ? (
-                <button
-                  type="button"
-                  className="text-[var(--accent)] underline-offset-2 hover:underline"
-                  onClick={onEditDestination}
-                >
-                  Change destination
-                </button>
-              ) : null}
-            </p>
+            <div>
+              <p className="type-label">Condition</p>
+              <p className="type-mono mt-1.5 !text-[0.75rem] !text-[var(--text)]">
+                {rule.condition}
+              </p>
+            </div>
           </section>
         ) : null}
       </div>
@@ -371,16 +275,9 @@ export function AlertsModal() {
 
   const [mounted, setMounted] = useState(false);
   const [visible, setVisible] = useState(false);
-  const [tab, setTab] = useState<ModalTab>("inbox");
   const [inboxFilter, setInboxFilter] = useState<InboxFilter>("actionable");
   const [statusOverride, setStatusOverride] = useState<
     Record<string, AlertEventStatus>
-  >({});
-  const [enabledOverride, setEnabledOverride] = useState<Record<string, boolean>>(
-    {},
-  );
-  const [routeOverride, setRouteOverride] = useState<
-    Record<string, { channel: AlertChannel; destination: string }>
   >({});
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
@@ -415,16 +312,7 @@ export function AlertsModal() {
     [liveEvents, statusOverride],
   );
 
-  const rules = useMemo(
-    () =>
-      liveRules.map((r) => ({
-        ...r,
-        enabled: enabledOverride[r.id] ?? r.enabled,
-        channel: routeOverride[r.id]?.channel ?? r.channel,
-        destination: routeOverride[r.id]?.destination ?? r.destination,
-      })),
-    [liveRules, enabledOverride, routeOverride],
-  );
+  const rules = liveRules;
 
   const counts = useMemo(() => {
     const firing = events.filter((e) => e.status === "firing").length;
@@ -499,33 +387,6 @@ export function AlertsModal() {
           </div>
         </div>
 
-        <div
-          className="flex items-center gap-1 rounded-[var(--radius)] p-1 shadow-[0_0_0_1px_var(--line)]"
-          role="tablist"
-          aria-label="Alerts views"
-        >
-          {(
-            [
-              ["inbox", "Inbox"],
-              ["destinations", "Destinations"],
-            ] as const
-          ).map(([id, label]) => (
-            <button
-              key={id}
-              type="button"
-              role="tab"
-              aria-selected={tab === id}
-              className={cn(
-                "ds-btn ds-btn-sm !shadow-none",
-                tab === id ? "ds-btn-primary" : "ds-btn-ghost",
-              )}
-              onClick={() => setTab(id)}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-
         {unreadCount > 0 ? (
           <button
             type="button"
@@ -550,107 +411,59 @@ export function AlertsModal() {
         </button>
       </header>
 
-      {tab === "inbox" ? (
-        <div className="flex min-h-0 flex-1">
-          <aside className="flex w-full max-w-md shrink-0 flex-col border-r border-[var(--line)] bg-[var(--bg-inset)] sm:max-w-sm lg:max-w-md">
-            <div className="shrink-0 space-y-3 border-b border-[var(--line)] px-4 py-4">
-              <FilterChips
-                value={inboxFilter}
-                onChange={setInboxFilter}
-                scroll
-                options={[
-                  { id: "actionable", label: "Open", count: counts.actionable },
-                  { id: "firing", label: "Firing", count: counts.firing },
-                  { id: "muted", label: "Muted", count: counts.muted },
-                  { id: "resolved", label: "Resolved", count: counts.resolved },
-                  { id: "all", label: "All", count: counts.all },
-                ]}
-              />
-            </div>
-            <div className="min-h-0 flex-1 overflow-y-auto">
-              {eventsQuery.isLoading ? (
-                <QueryLoadingPanel label="Loading alerts…" />
-              ) : eventsQuery.isError ? (
-                <QueryErrorPanel
-                  error={eventsQuery.error}
-                  onRetry={() => void eventsQuery.refetch()}
-                />
-              ) : filtered.length === 0 ? (
-                <EmptyState title="Inbox clear" />
-              ) : (
-                filtered.map((event) => (
-                  <EventRow
-                    key={event.id}
-                    event={event}
-                    unread={isUnread(event.id)}
-                    active={event.id === selected?.id}
-                    onSelect={() => selectEvent(event.id)}
-                  />
-                ))
-              )}
-            </div>
-          </aside>
-
-          <div className="min-h-0 min-w-0 flex-1 bg-[var(--bg)]">
-            {selected ? (
-              <EventDetail
-                event={selected}
-                rule={selectedRule}
-                onCloseModal={closeAlerts}
-                onStatus={(status) => setEventStatus(selected.id, status)}
-                onEditDestination={() => setTab("destinations")}
-              />
-            ) : (
-              <EmptyState title="Select an alert" />
-            )}
+      <div className="flex min-h-0 flex-1">
+        <aside className="flex w-full max-w-md shrink-0 flex-col border-r border-[var(--line)] bg-[var(--bg-inset)] sm:max-w-sm lg:max-w-md">
+          <div className="shrink-0 space-y-3 border-b border-[var(--line)] px-4 py-4">
+            <FilterChips
+              value={inboxFilter}
+              onChange={setInboxFilter}
+              scroll
+              options={[
+                { id: "actionable", label: "Open", count: counts.actionable },
+                { id: "firing", label: "Firing", count: counts.firing },
+                { id: "muted", label: "Muted", count: counts.muted },
+                { id: "resolved", label: "Resolved", count: counts.resolved },
+                { id: "all", label: "All", count: counts.all },
+              ]}
+            />
           </div>
-        </div>
-      ) : (
-        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-6 sm:px-7">
-          <div className="mx-auto max-w-3xl space-y-4">
-            {rulesQuery.isLoading ? (
-              <QueryLoadingPanel label="Loading rules…" />
-            ) : rulesQuery.isError ? (
+          <div className="min-h-0 flex-1 overflow-y-auto">
+            {eventsQuery.isLoading ? (
+              <QueryLoadingPanel label="Loading alerts…" />
+            ) : eventsQuery.isError ? (
               <QueryErrorPanel
-                error={rulesQuery.error}
-                onRetry={() => void rulesQuery.refetch()}
+                error={eventsQuery.error}
+                onRetry={() => void eventsQuery.refetch()}
               />
-            ) : rules.length === 0 ? (
-              <EmptyState title="No alert rules yet" />
+            ) : filtered.length === 0 ? (
+              <EmptyState title="Inbox clear" />
             ) : (
-              rules.map((rule) => (
-                <RuleCard
-                  key={rule.id}
-                  rule={rule}
-                  enabled={rule.enabled}
-                  onToggle={(enabled) =>
-                    setEnabledOverride((prev) => ({ ...prev, [rule.id]: enabled }))
-                  }
-                  onDestinationChange={(next) =>
-                    setRouteOverride((prev) => ({
-                      ...prev,
-                      [rule.id]: {
-                        channel: next.channel,
-                        destination: next.destination,
-                      },
-                    }))
-                  }
+              filtered.map((event) => (
+                <EventRow
+                  key={event.id}
+                  event={event}
+                  unread={isUnread(event.id)}
+                  active={event.id === selected?.id}
+                  onSelect={() => selectEvent(event.id)}
                 />
               ))
             )}
-            <p className="type-meta pt-2">
-              Prefer tuning detectors?{" "}
-              <Link
-                href="/signals"
-                onClick={closeAlerts}
-                className="text-[var(--accent)] underline-offset-2 hover:underline"
-              >
-                Open Signals
-              </Link>
-            </p>
           </div>
+        </aside>
+
+        <div className="min-h-0 min-w-0 flex-1 bg-[var(--bg)]">
+          {selected ? (
+            <EventDetail
+              event={selected}
+              rule={selectedRule}
+              onCloseModal={closeAlerts}
+              onStatus={(status) => setEventStatus(selected.id, status)}
+            />
+          ) : (
+            <EmptyState title="Select an alert" />
+          )}
         </div>
-      )}
+      </div>
     </div>
   );
 }

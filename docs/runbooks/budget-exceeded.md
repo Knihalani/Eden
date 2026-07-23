@@ -92,9 +92,11 @@ misconfigured budget that's blocking a paying customer.
 5. **Notify the customer** (always do this BEFORE disabling anything):
    ```bash
    # Email template: ``docs/templates/budget-exceeded-notice.md``
+   # Sent via SendKit — eden.services.email_service.get_email_service(),
+   # purpose="alert", from alerts@edenobservability.com.
    psql "$DATABASE_URL" -t -c "
      SELECT billing_email FROM organizations WHERE id = '$ORG_ID';
-   " | xargs -I {} resend send --to {} --template budget-exceeded \
+   " | xargs -I {} send-eden-email --to {} --template budget-exceeded \
      --data "$(cat /tmp/budget-context.json)"
    ```
    The email includes:

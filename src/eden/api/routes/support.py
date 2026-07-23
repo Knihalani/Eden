@@ -1,8 +1,10 @@
-"""Support + Discord webhook routes.
+"""Support ticket routes.
 
   - POST /support/tickets — submit a ticket (closes §11.6).
-  - POST /integrations/discord/test — verify a Discord webhook
-    URL is reachable.
+
+Phase 0 (2026-07-23) — the Discord webhook test route
+(``POST /integrations/discord/test``) was removed along with the
+Discord integration.
 """
 from __future__ import annotations
 
@@ -13,7 +15,6 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from eden.api.deps import get_current_user
-from eden.integrations.discord import post_to_discord
 from eden.integrations.support_webhook import (
     SupportTicketError,
     forward_to_support_webhook,
@@ -52,27 +53,3 @@ async def submit_ticket(
         "status": "submitted" if ok else "queued",
         "note": "" if ok else "Support webhook not configured; ticket logged but not forwarded.",
     }
-
-
-class DiscordTestRequest(BaseModel):
-    webhook_url: str = Field(min_length=20)
-    message: str = "Eden Discord webhook test"
-
-
-@router.post("/integrations/discord/test")
-async def discord_test(
-    req: DiscordTestRequest,
-    _user: dict[str, Any] = Depends(get_current_user),
-) -> dict[str, Any]:
-    # Reuse delivery-time SSRF guard (https-only, public IPs).
-    from eden.services.webhook_delivery import _assert_public_ip
-
-    try:
-        _assert_public_ip(req.webhook_url)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-
-    ok = await post_to_discord(req.webhook_url, title="Test", body=req.message, severity="info")
-    if not ok:
-        raise HTTPException(status_code=502, detail="Discord webhook did not accept the message")
-    return {"status": "ok"}

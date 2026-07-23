@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import uuid
-from datetime import UTC, datetime
+from datetime import datetime
 from typing import Any
 
 from eden.storage.postgres import get_postgres_client
@@ -327,6 +327,91 @@ async def mark_pr_opened(
         pr_number,
         github_branch,
         approved_by,
+    )
+    return await get_plan(org_id, plan_id)
+
+
+async def find_by_pr(
+    *, repo_full_name: str, pr_number: int
+) -> dict[str, Any] | None:
+    """Locate the ``improvement_plans`` row a GitHub PR belongs to.
+
+    Used by the GitHub webhook (Phase 2b) to sync plan status on merge/
+    close. No ``org_id`` is known at webhook-receipt time, so this scans
+    by the PR's canonical ``html_url`` (globally unique) — safe because
+    ``pr_number`` alone can collide across repos/orgs but the full URL
+    can't.
+    """
+    if not repo_full_name or not pr_number:
+        return None
+    client = await get_postgres_client()
+    if client is None:
+        return None
+    expected_url = f"https://github.com/{repo_full_name}/pull/{pr_number}"
+    row = await client.fetchrow(
+        """
+        SELECT * FROM improvement_plans
+        WHERE pr_number = $1 AND pr_url = $2
+        ORDER BY updated_at DESC
+        LIMIT 1
+        """,
+        int(pr_number),
+        expected_url,
+    )
+    return _row(row) if row else None
+
+
+async def mark_merged(
+    org_id: str,
+    plan_id: str,
+) -> dict[str, Any] | None:
+    """PR linked to this plan merged on GitHub (Phase 2b webhook sync).
+
+    Only transitions plans still in an "open" state — a plan already
+    ``rejected``/``superseded``/``merged``/``closed`` is left alone so a
+    duplicate or out-of-order webhook delivery can't clobber it.
+    """
+    client = await get_postgres_client()
+    if client is None:
+        return None
+    await client.execute(
+        """
+        UPDATE improvement_plans SET
+            status = 'merged',
+            updated_at = NOW()
+        WHERE org_id = $1 AND id = $2::uuid
+          AND status = ANY($3::text[])
+        """,
+        org_id,
+        plan_id,
+        list(_OPEN_STATUSES),
+    )
+    return await get_plan(org_id, plan_id)
+
+
+async def mark_closed(
+    org_id: str,
+    plan_id: str,
+    *,
+    reason: str | None = None,
+) -> dict[str, Any] | None:
+    """PR linked to this plan closed on GitHub without merging (2b)."""
+    client = await get_postgres_client()
+    if client is None:
+        return None
+    await client.execute(
+        """
+        UPDATE improvement_plans SET
+            status = 'closed',
+            rejection_reason = COALESCE($3, rejection_reason),
+            updated_at = NOW()
+        WHERE org_id = $1 AND id = $2::uuid
+          AND status = ANY($4::text[])
+        """,
+        org_id,
+        plan_id,
+        reason,
+        list(_OPEN_STATUSES),
     )
     return await get_plan(org_id, plan_id)
 

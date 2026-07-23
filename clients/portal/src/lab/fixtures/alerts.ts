@@ -9,7 +9,7 @@ import {
 } from "@/lib/portal-catalog";
 
 export type AlertSeverity = "critical" | "error" | "warn";
-export type AlertChannel = "slack" | "email" | "webhook";
+export type AlertChannel = "email" | "webhook";
 export type AlertEventStatus = "firing" | "muted" | "resolved";
 
 export type AlertRule = {

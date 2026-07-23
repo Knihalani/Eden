@@ -5,7 +5,7 @@ export type MemberStatus = "active" | "invited" | "disabled";
 export type KeyStatus = "active" | "revoked";
 export type AuditPackKind = "ledger" | "export" | "verify";
 export type DensityPref = "comfortable" | "compact";
-export type NotifyChannel = "slack" | "email" | "webhook";
+export type NotifyChannel = "email" | "webhook";
 export type RetentionDays = 7 | 30 | 90 | 365;
 
 export type KeyScope =

@@ -153,13 +153,16 @@ class AlertTriageJudge:
             confidence = float(verdict.get("confidence") or 0)
             if confidence < 0.7:
                 return verdict
-            from eden.integrations.slack.alerts import alert_nl_event
+            try:
+                from eden.services.alert_email import send_nl_incident_email
 
-            await alert_nl_event(
-                org_id,
-                alert_event_id=alert_event_id,
-                rule_name=rule_name,
-                verdict=verdict,
-                payload=payload or {},
-            )
+                await send_nl_incident_email(
+                    org_id=org_id,
+                    alert_event_id=alert_event_id,
+                    rule_name=rule_name,
+                    reason=str(verdict.get("reason") or ""),
+                    confidence=confidence,
+                )
+            except Exception:  # noqa: BLE001
+                pass
         return verdict

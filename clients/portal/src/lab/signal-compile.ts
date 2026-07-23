@@ -18,9 +18,6 @@ export type CompiledSignalDraft = {
 export type CompileSignalRequest = {
   prompt: string;
   agentId?: string | null;
-  notify?: boolean;
-  channel?: "slack" | "email" | "webhook";
-  destination?: string;
   severity?: "auto" | "critical" | "error" | "warn";
 };
 

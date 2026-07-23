@@ -875,6 +875,9 @@ export class EdenSDK {
       const timeoutMs = Math.max(1, Math.round(this.config.timeoutS * 1000));
       const timeout = setTimeout(() => controller.abort(), timeoutMs);
       try {
+        // Node's global `fetch` (undici) keeps HTTP/1.1 connections alive
+        // and pools them per-origin automatically — there's no httpx-style
+        // `Client(limits=...)` connection-pool knob to configure here.
         const res = await fetch(url, {
           method: "POST",
           headers,

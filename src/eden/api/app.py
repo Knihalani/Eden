@@ -185,7 +185,6 @@ from eden.api.routes import (
     search_signals,
     signal_investigator,
     signal_classifiers,
-    slack_interactive,
     topics,
     tool_call_labels,
     observability_live,
@@ -939,7 +938,6 @@ app.include_router(search_signals.router)  # /orgs/{org_id}/search/to-signal (N1
 app.include_router(signal_investigator.router)  # F06 clusters + backfill
 app.include_router(signal_classifiers.router)  # F34 classifiers
 app.include_router(topics.router)  # F65 topics
-app.include_router(slack_interactive.router)  # F71 Slack bot
 app.include_router(tool_call_labels.router)  # /orgs/{org_id}/tool-calls/{span_id}/label (F21)
 app.include_router(observability_live.router)  # /orgs/{org_id}/stream/traces/* (N11 live)
 app.include_router(mcp_keys.router)  # /orgs/{org_id}/mcp/keys (W28)
@@ -979,7 +977,7 @@ app.include_router(analytics_v2.router)
 app.include_router(prompt_canary.router)
 # Patterns (Phase 7.2 C5) — /orgs/{org_id}/observability/patterns/...
 app.include_router(patterns.router)
-# Support tickets + Discord webhook test — /support/tickets, /integrations/discord/test
+# Support tickets — /support/tickets (Discord webhook test removed, Phase 0)
 app.include_router(support.router)
 # 3rd-party observability integrations
 app.include_router(integrations_langfuse.router)  # /integrations/langfuse

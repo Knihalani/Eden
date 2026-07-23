@@ -13,7 +13,7 @@ import logging
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Path, Query
 
 from eden.api.deps import get_current_user, require_path_org_access
 from eden.api.portal_contracts import (
@@ -38,6 +38,7 @@ from eden.api.portal_contracts import (
     SignalCard,
     TraceListItem,
     TraceSignalSummary,
+    TranscriptStep,
     WorkspaceCard,
     WorkspacePrefs,
 )
@@ -197,6 +198,128 @@ async def _pg() -> Any | None:
     except Exception as exc:  # noqa: BLE001
         logger.debug("portal: postgres unavailable: %s", exc)
         return None
+
+
+# ── Phase 2a — trace transcript steps ──────────────────────────────
+# Populates ``TraceListItem.steps`` for a single selected trace by
+# reusing ``TelemetryCollector.get_trace_tree`` — the exact helper
+# backing ``GET /observability/traces/{id}/tree`` — instead of a
+# second, drift-prone SQL implementation. Only wired into the
+# single-trace detail route below; ``list_portal_traces`` deliberately
+# keeps ``steps=[]`` to avoid an N+1 of per-trace decompression work.
+
+_ERROR_OUTCOMES = {"error", "failed", "failure", "fail", "errored", "crash", "timeout"}
+_OK_OUTCOMES = {"success", "ok", "completed", "complete"}
+
+
+def _step_kind(event_type: str | None, name: str | None) -> str:
+    et = (event_type or "").lower()
+    nm = (name or "").lower()
+    if "llm" in et or "completion" in et or "chat" in et or "llm" in nm:
+        return "llm"
+    if "tool" in et or "tool" in nm:
+        return "tool"
+    if "bash" in et or "shell" in et or "command" in nm or "bash" in nm:
+        return "bash"
+    if et in ("task", "run", "agent_run", "session"):
+        return "task"
+    return "span"
+
+
+def _step_status(outcome: str | None) -> str | None:
+    o = (outcome or "").lower()
+    if o in _ERROR_OUTCOMES:
+        return "error"
+    if o in _OK_OUTCOMES:
+        return "ok"
+    return None
+
+
+def _preview(value: Any, limit: int = 400) -> str | None:
+    if value is None:
+        return None
+    if isinstance(value, (dict, list)):
+        if not value:
+            return None
+        try:
+            text = json.dumps(value, default=str)
+        except Exception:  # noqa: BLE001
+            text = str(value)
+    else:
+        text = str(value)
+    text = text.strip()
+    if not text:
+        return None
+    return text[:limit]
+
+
+def _tree_node_to_step(node: dict[str, Any]) -> TranscriptStep:
+    """Map one ``TraceTree`` span node to a portal ``TranscriptStep``."""
+    attrs = node.get("attributes") if isinstance(node.get("attributes"), dict) else {}
+    metrics = node.get("metrics") if isinstance(node.get("metrics"), dict) else {}
+    payload = node.get("payload") if isinstance(node.get("payload"), dict) else {}
+    span_id = str(node.get("span_id") or "")
+    name = str(node.get("name") or node.get("event_type") or "span")
+    outcome = node.get("outcome")
+
+    error_message: str | None = None
+    if outcome and str(outcome).lower() in _ERROR_OUTCOMES:
+        error_message = str(
+            attrs.get("error")
+            or payload.get("error")
+            or node.get("finish_reason")
+            or outcome
+        )
+
+    tokens_in = metrics.get("input_tokens") if metrics.get("input_tokens") is not None else payload.get("input_tokens")
+    tokens_out = metrics.get("output_tokens") if metrics.get("output_tokens") is not None else payload.get("output_tokens")
+    cost = (
+        metrics.get("cost_usd")
+        if metrics.get("cost_usd") is not None
+        else (payload.get("cost_usd") if payload.get("cost_usd") is not None else attrs.get("cost_usd"))
+    )
+    model = attrs.get("model") or attrs.get("openai.model") or attrs.get("anthropic.model") or node.get("model_version")
+    provider = attrs.get("provider")
+
+    safe_attrs = {
+        k: v for k, v in attrs.items() if isinstance(v, (str, int, float, bool))
+    } or None
+
+    return TranscriptStep(
+        id=span_id or str(node.get("timestamp") or name),
+        kind=_step_kind(node.get("event_type"), name),  # type: ignore[arg-type]
+        title=name,
+        durationMs=int(round(float(node.get("duration_ms") or 0))),
+        status=_step_status(outcome),  # type: ignore[arg-type]
+        startedAt=_iso(node.get("timestamp")) or None,
+        spanId=span_id or None,
+        parentId=str(node["parent_span_id"]) if node.get("parent_span_id") else None,
+        model=str(model) if model else None,
+        provider=str(provider) if provider else None,
+        tokensIn=int(tokens_in) if tokens_in is not None else None,
+        tokensOut=int(tokens_out) if tokens_out is not None else None,
+        costUsd=float(cost) if cost is not None else None,
+        attributes=safe_attrs,
+        inputPreview=_preview(node.get("request_body")),
+        outputPreview=_preview(node.get("response_body")),
+        errorMessage=error_message,
+        metadata=None,
+    )
+
+
+def _flatten_tree(root_spans: list[dict[str, Any]]) -> list[TranscriptStep]:
+    """Depth-first flatten of ``TraceTree.root_spans`` into transcript steps."""
+    steps: list[TranscriptStep] = []
+
+    def _walk(nodes: list[dict[str, Any]]) -> None:
+        for node in nodes:
+            steps.append(_tree_node_to_step(node))
+            children = node.get("children") or []
+            if children:
+                _walk(children)
+
+    _walk(root_spans)
+    return steps
 
 
 # ── GET /agents ───────────────────────────────────────────────────
@@ -437,6 +560,83 @@ async def list_portal_traces(
             )
         )
     return items
+
+
+# ── GET /traces/{trace_id} ────────────────────────────────────────
+
+
+@router.get("/traces/{trace_id}", response_model=TraceListItem)
+async def get_portal_trace(
+    org_id: str = Depends(require_path_org_access),
+    trace_id: str = Path(..., description="Trace ID"),
+    _user: dict = Depends(get_current_user),
+) -> TraceListItem:
+    """Single-trace detail — same shape as ``list_portal_traces`` rows,
+    but with ``steps`` populated so ``RunTranscript`` has real spans.
+
+    Steps come from ``TelemetryCollector.get_trace_tree`` — the same
+    helper backing ``GET /observability/traces/{id}/tree`` — so this
+    route can't drift from the observability transcript. Scoped by
+    ``tenant_id = org_id`` on every query, matching RLS.
+    """
+    client = await _pg()
+    if client is None:
+        raise HTTPException(status_code=503, detail="Trace temporarily unavailable")
+
+    try:
+        row = await client.fetchrow(
+            """
+            SELECT trace_id,
+                   MAX(agent_id) AS agent_id,
+                   MAX(name) AS name,
+                   MIN(timestamp) AS started_at,
+                   MAX(outcome) AS outcome,
+                   MAX(duration_ms) AS duration_ms,
+                   COALESCE(SUM(COALESCE((metrics->>'input_tokens')::int, 0)
+                       + COALESCE((metrics->>'output_tokens')::int, 0)), 0)::int AS tokens,
+                   COALESCE(SUM(COALESCE((metrics->>'cost_usd')::float, 0)), 0)::float AS cost_usd,
+                   MAX(attributes->>'session_id') AS session_id
+            FROM telemetry_events
+            WHERE tenant_id = $1 AND trace_id = $2
+            GROUP BY trace_id
+            """,
+            org_id,
+            trace_id,
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("portal trace detail: summary query failed: %s", exc)
+        raise HTTPException(status_code=503, detail="Trace temporarily unavailable") from exc
+
+    if row is None:
+        raise HTTPException(status_code=404, detail="Trace not found")
+
+    steps: list[TranscriptStep] = []
+    try:
+        from eden.observability.telemetry_collector import get_telemetry_collector
+
+        collector = await get_telemetry_collector()
+        tree = await collector.get_trace_tree(org_id, trace_id)
+        if tree is not None:
+            steps = _flatten_tree(tree.root_spans)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("portal trace detail: get_trace_tree failed for %s: %s", trace_id, exc)
+
+    status, severity = _map_trace_outcome(row.get("outcome"))
+    cost_usd = float(row["cost_usd"] or 0)
+    return TraceListItem(
+        id=str(row["trace_id"]),
+        agentId=str(row["agent_id"] or ""),
+        name=str(row["name"] or row["trace_id"]),
+        status=status,  # type: ignore[arg-type]
+        startedAt=_iso(row.get("started_at")),
+        durationMs=int(round(float(row["duration_ms"] or 0))),
+        tokens=int(row["tokens"] or 0),
+        costUsd=round(cost_usd, 6),
+        severity=severity,  # type: ignore[arg-type]
+        sessionId=str(row["session_id"]) if row.get("session_id") else None,
+        signals=TraceSignalSummary(),
+        steps=steps,
+    )
 
 
 # ── GET /sessions ─────────────────────────────────────────────────

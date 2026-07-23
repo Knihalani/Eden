@@ -388,6 +388,14 @@ Verify a row was written to `telemetry_events` with `framework="openai"` and the
 
 MIT
 
+## What's new in 0.3.2
+
+- **Bedrock + Gemini usage extraction.** `wrapBedrock` / `wrapGemini` now extract input/output/cache/total token counts (Converse API, InvokeModel body shapes for Anthropic/Titan/Llama, and Gemini `usageMetadata`) so both providers report cost data like OpenAI/Anthropic.
+- **`redactOnClient` now defaults to `false`.** The gateway remains the authoritative PII layer; restore the old behaviour with `redactOnClient: true` or `EDEN_REDACT_ON_CLIENT=1`.
+- **`instrument()` no longer enables HTTP capture by default** (avoids double-emit with `wrap*`); pass `httpCapture: true` to opt in.
+- Streaming chunks omit `deltaText` unless `captureChunkText: true` (or `EDEN_CAPTURE_CHUNK_TEXT=1`); ingest POSTs use gzip; multi-format flush is concurrent.
+- See `sdk/ts-ai/CHANGELOG.md` for the full 0.3.x notes.
+
 ## What's new in 0.2.0
 
 - **Context-manager `trace()`.** `import { TraceController } from "@eden-ai/sdk"` and build the span imperatively with `setInput / setOutput / setTag / setStatus / recordError / end`. The legacy `await trace("name", async (ctx) => ...)` form is preserved.

@@ -138,6 +138,8 @@ def test_portal_router_mounted() -> None:
     paths = {r.path for r in portal.router.routes if isinstance(r, APIRoute)}
     assert "/orgs/{org_id}/portal/agents" in paths
     assert "/orgs/{org_id}/portal/traces" in paths
+    # Phase 2a — single-trace detail route that populates ``steps``.
+    assert "/orgs/{org_id}/portal/traces/{trace_id}" in paths
     assert "/orgs/{org_id}/portal/sessions" in paths
     assert "/orgs/{org_id}/portal/issues" in paths
     assert "/orgs/{org_id}/portal/signals" in paths
@@ -158,3 +160,96 @@ def test_portal_router_included_in_app() -> None:
     paths = {getattr(r, "path", "") for r in app.routes}
     assert any(p == "/orgs/{org_id}/portal/agents" for p in paths)
     assert any("/portal/workspace" in (p or "") for p in paths)
+
+
+# ── Phase 2a — trace transcript step mapping ───────────────────────
+
+
+def test_tree_node_to_step_maps_llm_span() -> None:
+    from datetime import UTC, datetime
+
+    from eden.api.routes.portal import _tree_node_to_step
+
+    node = {
+        "span_id": "span_1",
+        "parent_span_id": None,
+        "name": "llm_call",
+        "event_type": "llm_call",
+        "timestamp": datetime(2026, 7, 23, 12, 0, 0, tzinfo=UTC),
+        "duration_ms": 812.4,
+        "metrics": {"input_tokens": 120, "output_tokens": 45, "cost_usd": 0.0032},
+        "attributes": {"model": "gpt-4.1-mini", "provider": "openai"},
+        "payload": {},
+        "outcome": "success",
+        "request_body": {"messages": [{"role": "user", "content": "hi"}]},
+        "response_body": {"content": "hello there"},
+    }
+    step = _tree_node_to_step(node)
+
+    assert step.id == "span_1"
+    assert step.kind == "llm"
+    assert step.status == "ok"
+    assert step.spanId == "span_1"
+    assert step.parentId is None
+    assert step.model == "gpt-4.1-mini"
+    assert step.provider == "openai"
+    assert step.tokensIn == 120
+    assert step.tokensOut == 45
+    assert step.costUsd == 0.0032
+    assert step.errorMessage is None
+    assert step.inputPreview is not None
+    assert step.outputPreview is not None
+
+
+def test_tree_node_to_step_maps_tool_error() -> None:
+    from eden.api.routes.portal import _tree_node_to_step
+
+    node = {
+        "span_id": "span_2",
+        "parent_span_id": "span_1",
+        "name": "tool.search",
+        "event_type": "tool_call",
+        "timestamp": None,
+        "duration_ms": 50,
+        "metrics": {},
+        "attributes": {"error": "timeout after 30s"},
+        "payload": {},
+        "outcome": "failure",
+        "request_body": None,
+        "response_body": None,
+    }
+    step = _tree_node_to_step(node)
+
+    assert step.kind == "tool"
+    assert step.status == "error"
+    assert step.parentId == "span_1"
+    assert step.errorMessage == "timeout after 30s"
+
+
+def test_flatten_tree_preserves_depth_first_order() -> None:
+    from eden.api.routes.portal import _flatten_tree
+
+    tree = [
+        {
+            "span_id": "root",
+            "name": "task",
+            "event_type": "task",
+            "duration_ms": 100,
+            "outcome": "success",
+            "children": [
+                {
+                    "span_id": "child",
+                    "parent_span_id": "root",
+                    "name": "llm_call",
+                    "event_type": "llm_call",
+                    "duration_ms": 40,
+                    "outcome": "success",
+                    "children": [],
+                },
+            ],
+        },
+    ]
+    steps = _flatten_tree(tree)
+
+    assert [s.id for s in steps] == ["root", "child"]
+    assert steps[1].parentId == "root"
