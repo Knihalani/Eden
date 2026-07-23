@@ -1217,7 +1217,7 @@ async def create_alert_rule(
         nl_text=nl_text,
         compiled_eql=eql,
         triage_enabled=triage_enabled,
-        channels={"in_app": True, "slack": True},
+        channels={"in_app": True, "email": True},
         enabled=True,
     )
     dsl = await AlertAsCode().compile(
