@@ -272,9 +272,14 @@ def _openai_to_raw(item: dict[str, Any]) -> dict[str, Any]:
     # portal can fall back to a synthetic reconstruction.
     request_body: dict[str, Any] | None = item.get("request_payload") or item.get("request")
 
+    # Prefer SDK-supplied correlation ids (eden.trace / instrumentations).
+    # Falling back to OpenAI ``user`` or response ``id`` used to orphan LLM
+    # spans onto separate traces from the enclosing agent.run.
+    sdk_trace_id = item.get("trace_id") or item.get("user") or ""
     return {
         "event_id": response_id or f"openai_{model}_{usage.get('total_tokens', '')}",
-        "trace_id": str(item.get("user") or response_id or ""),
+        "trace_id": str(sdk_trace_id or response_id or ""),
+        "agent_id": item.get("agent_id"),
         "name": model or None,
         "model": model or None,
         "model_name": model or None,
@@ -540,9 +545,11 @@ def _anthropic_to_raw(item: dict[str, Any]) -> dict[str, Any]:
                 "source": "anthropic_input",
             })
 
+    sdk_trace_id = item.get("trace_id") or ""
     return {
         "event_id": response_id or f"anthropic_{model}",
-        "trace_id": response_id or "",
+        "trace_id": str(sdk_trace_id or response_id or ""),
+        "agent_id": item.get("agent_id"),
         "name": model or None,
         "model": model or None,
         "model_name": model or None,

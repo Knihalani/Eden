@@ -82,11 +82,21 @@ export function startedAtMinutesAgo(label: string): number {
   return n;
 }
 
-/** Newest first. */
+/** Newest first. Supports relative fixture labels and ISO timestamps. */
 export function sortTracesNewestFirst(traces: TraceFixture[]): TraceFixture[] {
-  return [...traces].sort(
-    (a, b) => startedAtMinutesAgo(a.startedAt) - startedAtMinutesAgo(b.startedAt),
-  );
+  return [...traces].sort((a, b) => {
+    const aRel = startedAtMinutesAgo(a.startedAt);
+    const bRel = startedAtMinutesAgo(b.startedAt);
+    const aIsRel = aRel !== Number.MAX_SAFE_INTEGER;
+    const bIsRel = bRel !== Number.MAX_SAFE_INTEGER;
+    if (aIsRel && bIsRel) return aRel - bRel;
+    const aMs = Date.parse(a.startedAt);
+    const bMs = Date.parse(b.startedAt);
+    if (!Number.isNaN(aMs) && !Number.isNaN(bMs)) return bMs - aMs;
+    if (aIsRel) return -1;
+    if (bIsRel) return 1;
+    return 0;
+  });
 }
 
 export function traceById(id: string): TraceFixture | undefined {
