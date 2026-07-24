@@ -157,6 +157,9 @@ class ConnectRepoRequest(BaseModel):
     installation_id: int
     repo_full_name: str
     default_branch: str = "main"
+    # Per-agent link: one active repo per agent. Required for new connects
+    # from the Agents UI; omit only for legacy org-wide links.
+    agent_id: str | None = None
 
     @field_validator("installation_id", mode="before")
     @classmethod
@@ -193,6 +196,14 @@ class ConnectRepoRequest(BaseModel):
             raise ValueError("default_branch is too long")
         return branch
 
+    @field_validator("agent_id", mode="before")
+    @classmethod
+    def _normalize_agent_id(cls, v: object) -> str | None:
+        if v is None:
+            return None
+        s = str(v).strip()
+        return s or None
+
 
 class RepoConnectionOut(BaseModel):
     id: str
@@ -202,6 +213,7 @@ class RepoConnectionOut(BaseModel):
     repo_full_name: str
     default_branch: str
     status: str
+    agent_id: str | None = None
 
 
 class PRRunOut(BaseModel):
@@ -942,6 +954,39 @@ async def list_org_installations(
     ]
 
 
+@org_router.get("/github/connection", response_model=RepoConnectionOut | None)
+async def get_org_github_connection(
+    org_id: str = Depends(require_path_org_access),
+    agent_id: str | None = Query(
+        None,
+        description="Agent id — returns that agent's linked repo (preferred).",
+    ),
+    _user: dict = Depends(get_current_user),
+) -> RepoConnectionOut | None:
+    """Return the active ``repo_connections`` row for this org/agent, or null.
+
+    Members can read this so the Agents UI can show "PRs open on X"
+    without requiring ``integrations:write``. Pass ``agent_id`` for
+    per-agent linking (one repo per agent).
+    """
+    from eden.providers.factory import active_repo_connection
+
+    aid = (agent_id or "").strip() or None
+    conn = await active_repo_connection(org_id, agent_id=aid)
+    if not conn:
+        return None
+    return RepoConnectionOut(
+        id=str(conn.get("id") or ""),
+        org_id=str(conn.get("org_id") or org_id),
+        provider=str(conn.get("provider") or "github"),
+        installation_id=str(conn.get("installation_id") or ""),
+        repo_full_name=str(conn.get("repo_full_name") or ""),
+        default_branch=str(conn.get("default_branch") or "main"),
+        status=str(conn.get("status") or "active"),
+        agent_id=(str(conn["agent_id"]) if conn.get("agent_id") else None),
+    )
+
+
 @org_router.get("/github/repos", response_model=list[RepoOut])
 async def list_org_repos(
     org_id: str = Depends(require_path_org_access),
@@ -1026,13 +1071,15 @@ async def connect_org_repo(
     """Upsert an active ``repo_connections`` row for the linked GitHub repo.
 
     Called from the portal Connect flow after the user picks a repo.
-    Approve / Improve PR paths resolve providers from this row.
+    Linking is per-agent when ``agent_id`` is set — other agents keep
+    their own active repos. Approve / Improve resolve via agent_id.
     """
     eden_org_id = str(org["org_id"])
     pg = await get_postgres_client()
     installation_id = int(req.installation_id)
     repo_full_name = req.repo_full_name
     default_branch = req.default_branch
+    agent_id = (req.agent_id or "").strip() or None
 
     owned = await pg.fetchrow(
         """
@@ -1055,27 +1102,60 @@ async def connect_org_repo(
     if not connected_by:
         connected_by = str(user.get("user_id") or "unknown")
 
-    existing = await pg.fetchrow(
-        """
-        SELECT id FROM repo_connections
-        WHERE org_id = $1 AND repo_full_name = $2
-        LIMIT 1
-        """,
-        eden_org_id,
-        repo_full_name,
-    )
-
-    await pg.execute(
-        """
-        UPDATE repo_connections
-        SET status = 'inactive'
-        WHERE org_id = $1
-          AND status = 'active'
-          AND repo_full_name <> $2
-        """,
-        eden_org_id,
-        repo_full_name,
-    )
+    # Deactivate only this agent's other active links (or legacy org-wide
+    # rows when agent_id is omitted) — never wipe other agents' repos.
+    if agent_id:
+        await pg.execute(
+            """
+            UPDATE repo_connections
+            SET status = 'inactive'
+            WHERE org_id = $1
+              AND status = 'active'
+              AND agent_id = $2
+              AND repo_full_name <> $3
+            """,
+            eden_org_id,
+            agent_id,
+            repo_full_name,
+        )
+        existing = await pg.fetchrow(
+            """
+            SELECT id FROM repo_connections
+            WHERE org_id = $1
+              AND agent_id = $2
+            ORDER BY
+              CASE WHEN repo_full_name = $3 THEN 0 ELSE 1 END,
+              created_at DESC
+            LIMIT 1
+            """,
+            eden_org_id,
+            agent_id,
+            repo_full_name,
+        )
+    else:
+        await pg.execute(
+            """
+            UPDATE repo_connections
+            SET status = 'inactive'
+            WHERE org_id = $1
+              AND status = 'active'
+              AND (agent_id IS NULL OR agent_id = '')
+              AND repo_full_name <> $2
+            """,
+            eden_org_id,
+            repo_full_name,
+        )
+        existing = await pg.fetchrow(
+            """
+            SELECT id FROM repo_connections
+            WHERE org_id = $1
+              AND repo_full_name = $2
+              AND (agent_id IS NULL OR agent_id = '')
+            LIMIT 1
+            """,
+            eden_org_id,
+            repo_full_name,
+        )
 
     if existing:
         row = await pg.fetchrow(
@@ -1087,16 +1167,20 @@ async def connect_org_repo(
                 provider = 'github',
                 connected_by_user_id = $5,
                 connected_at = NOW(),
-                last_synced_at = NOW()
+                last_synced_at = NOW(),
+                agent_id = $6,
+                repo_full_name = $7
             WHERE org_id = $1 AND id = $2
             RETURNING id, org_id, provider, installation_id,
-                      repo_full_name, default_branch, status
+                      repo_full_name, default_branch, status, agent_id
             """,
             eden_org_id,
             str(existing["id"]),
             str(installation_id),
             default_branch,
             connected_by,
+            agent_id,
+            repo_full_name,
         )
     else:
         conn_id = f"rc_{uuid.uuid4().hex[:12]}"
@@ -1105,13 +1189,13 @@ async def connect_org_repo(
             INSERT INTO repo_connections (
                 id, org_id, provider, installation_id, repo_full_name,
                 default_branch, status, connected_by_user_id,
-                connected_at, last_synced_at
+                connected_at, last_synced_at, agent_id
             )
             VALUES (
-                $1, $2, 'github', $3, $4, $5, 'active', $6, NOW(), NOW()
+                $1, $2, 'github', $3, $4, $5, 'active', $6, NOW(), NOW(), $7
             )
             RETURNING id, org_id, provider, installation_id,
-                      repo_full_name, default_branch, status
+                      repo_full_name, default_branch, status, agent_id
             """,
             conn_id,
             eden_org_id,
@@ -1119,6 +1203,7 @@ async def connect_org_repo(
             repo_full_name,
             default_branch,
             connected_by,
+            agent_id,
         )
 
     if not row:
@@ -1132,6 +1217,7 @@ async def connect_org_repo(
         repo_full_name=str(row["repo_full_name"]),
         default_branch=str(row["default_branch"]),
         status=str(row["status"]),
+        agent_id=(str(row["agent_id"]) if row.get("agent_id") else None),
     )
 
 

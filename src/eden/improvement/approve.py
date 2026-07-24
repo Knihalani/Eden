@@ -21,18 +21,27 @@ class ApproveBlocked(Exception):
         super().__init__(reason)
 
 
-async def _resolve_repo_id(org_id: str) -> str | None:
-    """Return the org's active repo_connections id (or full name), else None.
+async def _resolve_repo_id(
+    org_id: str,
+    *,
+    agent_id: str | None = None,
+) -> str | None:
+    """Return the active repo_connections id for this org/agent, else None.
 
-    Intentionally does **not** fall back to ``plan.agent_id`` — that field is
-    an Eden agent identifier, not a GitHub/repo connection id.
+    Uses ``agent_id`` to pick that agent's linked repo (one repo per agent).
+    Does not treat ``agent_id`` itself as a connection id.
     """
     from eden.providers.factory import resolve_active_repo_id
 
-    return await resolve_active_repo_id(org_id)
+    return await resolve_active_repo_id(org_id, agent_id=agent_id)
 
 
-async def _resolve_base_branch(org_id: str, repo_provider: Any) -> str:
+async def _resolve_base_branch(
+    org_id: str,
+    repo_provider: Any,
+    *,
+    agent_id: str | None = None,
+) -> str:
     """Resolve the PR base branch — never hardcode ``main``.
 
     Preference order:
@@ -42,7 +51,7 @@ async def _resolve_base_branch(org_id: str, repo_provider: Any) -> str:
     try:
         from eden.providers.factory import active_repo_connection
 
-        conn = await active_repo_connection(org_id)
+        conn = await active_repo_connection(org_id, agent_id=agent_id)
     except Exception as exc:
         logger.debug("approve: active_repo_connection failed: %s", exc)
         conn = None
@@ -101,14 +110,15 @@ async def approve_plan(
     if not diff.strip():
         return {"status": "error", "plan_id": plan_id, "error": "empty_diff"}
 
-    # Resolve real repo_connections row — never treat plan.agent_id as repo_id.
-    repo_id = await _resolve_repo_id(org_id)
+    # Resolve this agent's linked repo (one repo per agent).
+    plan_agent_id = (plan.get("agent_id") or "").strip() or None
+    repo_id = await _resolve_repo_id(org_id, agent_id=plan_agent_id)
     if not repo_id:
         return {
             "status": "error",
             "plan_id": plan_id,
             "error": "repo_not_connected",
-            "message": "Connect GitHub App in Settings",
+            "message": "Connect a GitHub repo for this agent so Eden can open fix PRs",
         }
 
     from eden.providers.factory import (
@@ -116,7 +126,7 @@ async def approve_plan(
         get_repo_provider_for_org,
     )
 
-    repo_provider = await get_repo_provider_for_org(org_id)
+    repo_provider = await get_repo_provider_for_org(org_id, agent_id=plan_agent_id)
     try:
         files = await materialize_unified_diff(
             diff,
@@ -134,7 +144,9 @@ async def approve_plan(
         return {"status": "error", "plan_id": plan_id, "error": "unparseable_diff"}
 
     try:
-        base = await _resolve_base_branch(org_id, repo_provider)
+        base = await _resolve_base_branch(
+            org_id, repo_provider, agent_id=plan_agent_id
+        )
     except RuntimeError as exc:
         return {
             "status": "error",
@@ -146,7 +158,9 @@ async def approve_plan(
     if provider is not None:
         pr_provider = provider
     else:
-        pr_provider = await get_pr_provider_for_org(org_id)
+        pr_provider = await get_pr_provider_for_org(
+            org_id, agent_id=plan_agent_id
+        )
 
     branch = f"eden/improve-{plan_id[:12]}"
     title = f"[Eden] {plan.get('title', 'Improvement plan')[:120]}"

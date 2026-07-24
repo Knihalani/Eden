@@ -49,8 +49,16 @@ class RepoConnectionError(RuntimeError):
         super().__init__(reason)
 
 
-async def active_repo_connection(org_id: str) -> dict[str, Any] | None:
-    """Return the org's newest active ``repo_connections`` row, or ``None``.
+async def active_repo_connection(
+    org_id: str,
+    *,
+    agent_id: str | None = None,
+) -> dict[str, Any] | None:
+    """Return the active ``repo_connections`` row for this org (and agent).
+
+    Prefer an agent-scoped link when ``agent_id`` is set. Fall back to the
+    newest org-level active row (``agent_id IS NULL``) for legacy connects
+    that predate per-agent linking.
 
     Best-effort: a missing Postgres client or query error returns
     ``None`` so callers can fall back to the env/local defaults
@@ -70,15 +78,51 @@ async def active_repo_connection(org_id: str) -> dict[str, Any] | None:
         return None
     if client is None:
         return None
+    aid = (agent_id or "").strip() or None
     try:
         async with client.acquire() as conn:
+            if aid:
+                row = await conn.fetchrow(
+                    """
+                    SELECT installation_id, repo_full_name, default_branch,
+                           provider, id, org_id, status, agent_id
+                    FROM repo_connections
+                    WHERE org_id = $1
+                      AND status = 'active'
+                      AND agent_id = $2
+                    ORDER BY created_at DESC
+                    LIMIT 1
+                    """,
+                    org_id,
+                    aid,
+                )
+                if row:
+                    return dict(row)
+                # Legacy: org-wide active row (no agent_id) as fallback.
+                row = await conn.fetchrow(
+                    """
+                    SELECT installation_id, repo_full_name, default_branch,
+                           provider, id, org_id, status, agent_id
+                    FROM repo_connections
+                    WHERE org_id = $1
+                      AND status = 'active'
+                      AND (agent_id IS NULL OR agent_id = '')
+                    ORDER BY created_at DESC
+                    LIMIT 1
+                    """,
+                    org_id,
+                )
+                return dict(row) if row else None
+
             row = await conn.fetchrow(
                 """
                 SELECT installation_id, repo_full_name, default_branch,
-                       provider, id
+                       provider, id, org_id, status, agent_id
                 FROM repo_connections
                 WHERE org_id = $1 AND status = 'active'
-                ORDER BY created_at DESC
+                ORDER BY
+                    CASE WHEN agent_id IS NULL OR agent_id = '' THEN 0 ELSE 1 END,
+                    created_at DESC
                 LIMIT 1
                 """,
                 org_id,
@@ -86,20 +130,24 @@ async def active_repo_connection(org_id: str) -> dict[str, Any] | None:
         return dict(row) if row else None
     except Exception as exc:
         logger.debug(
-            "factory: active repo_connections lookup for org=%s failed: %s",
-            org_id, exc,
+            "factory: active repo_connections lookup for org=%s agent=%s failed: %s",
+            org_id, aid, exc,
         )
         return None
 
 
-async def resolve_active_repo_id(org_id: str) -> str | None:
-    """Return the org's active ``repo_connections`` id (or full name), else None.
+async def resolve_active_repo_id(
+    org_id: str,
+    *,
+    agent_id: str | None = None,
+) -> str | None:
+    """Return the active ``repo_connections`` id (or full name), else None.
 
-    Intentionally does **not** fall back to an Eden ``agent_id`` — that field
-    is an agent identifier, not a GitHub/repo connection id.
+    When ``agent_id`` is set, resolves that agent's linked repo. Does **not**
+    treat ``agent_id`` itself as a repo connection id.
     """
     try:
-        conn = await active_repo_connection(org_id)
+        conn = await active_repo_connection(org_id, agent_id=agent_id)
     except Exception as exc:
         logger.debug("resolve_active_repo_id: lookup failed: %s", exc)
         return None
@@ -150,7 +198,11 @@ def _github_connection_fields(conn: dict[str, Any]) -> tuple[Any, str] | None:
     return None
 
 
-async def get_pr_provider_for_org(org_id: str) -> PRProvider:
+async def get_pr_provider_for_org(
+    org_id: str,
+    *,
+    agent_id: str | None = None,
+) -> PRProvider:
     """Return a :class:`PRProvider` scoped to ``org_id``'s active repo.
 
     Resolution order:
@@ -168,7 +220,7 @@ async def get_pr_provider_for_org(org_id: str) -> PRProvider:
             repo_path=os.environ.get("EDEN_LOCAL_REPO_PATH") or None,
         )
 
-    conn = await active_repo_connection(org_id)
+    conn = await active_repo_connection(org_id, agent_id=agent_id)
     if conn is not None:
         fields = _github_connection_fields(conn)
         if fields is not None:
@@ -190,7 +242,11 @@ async def get_pr_provider_for_org(org_id: str) -> PRProvider:
     return get_default_pr_provider()
 
 
-async def get_repo_provider_for_org(org_id: str) -> RepoProvider:
+async def get_repo_provider_for_org(
+    org_id: str,
+    *,
+    agent_id: str | None = None,
+) -> RepoProvider:
     """Return a :class:`RepoProvider` scoped to ``org_id``'s active repo.
 
     Same resolution order as :func:`get_pr_provider_for_org`, but
@@ -203,7 +259,7 @@ async def get_repo_provider_for_org(org_id: str) -> RepoProvider:
             repo_path=os.environ.get("EDEN_LOCAL_REPO_PATH") or None,
         )
 
-    conn = await active_repo_connection(org_id)
+    conn = await active_repo_connection(org_id, agent_id=agent_id)
     if conn is not None:
         provider_name = (conn.get("provider") or "").strip().lower()
         repo_full_name = (conn.get("repo_full_name") or "").strip()

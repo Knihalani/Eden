@@ -260,8 +260,10 @@ export const queryKeys = {
   },
   github: {
     all: ["github"] as const,
-    connection: (orgId: string | null | undefined) =>
-      ["github", "connection", orgId] as const,
+    connection: (
+      orgId: string | null | undefined,
+      agentId?: string | null,
+    ) => ["github", "connection", orgId, agentId ?? null] as const,
     repos: (orgId: string | null | undefined) =>
       ["github", "repos", orgId] as const,
     configured: ["github", "configured"] as const,

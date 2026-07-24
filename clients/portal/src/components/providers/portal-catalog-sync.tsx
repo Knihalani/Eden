@@ -261,13 +261,15 @@ export function PortalCatalogSync() {
 
   useEffect(() => {
     patchPortalCatalog({
-      agents: agents.data ?? [],
-      traces: traces.data ?? [],
-      sessions: sessions.data ?? [],
-      issues: issues.data ?? [],
-      signals: signals.data ?? [],
-      alertRules: alertRules.data ?? [],
-      alertEvents: alertEvents.data ?? [],
+      ...(agents.data !== undefined ? { agents: agents.data } : {}),
+      ...(traces.data !== undefined ? { traces: traces.data } : {}),
+      ...(sessions.data !== undefined ? { sessions: sessions.data } : {}),
+      ...(issues.data !== undefined ? { issues: issues.data } : {}),
+      ...(signals.data !== undefined ? { signals: signals.data } : {}),
+      ...(alertRules.data !== undefined ? { alertRules: alertRules.data } : {}),
+      ...(alertEvents.data !== undefined
+        ? { alertEvents: alertEvents.data }
+        : {}),
       ...(costDrivers.data !== undefined
         ? { costDrivers: costDrivers.data }
         : {}),
