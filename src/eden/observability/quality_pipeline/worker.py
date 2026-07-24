@@ -1039,6 +1039,10 @@ class SidecarWorker:
         """Run the worker loop until ``stop_event`` is set."""
         _STATE.running = True
         _STATE.started_at = datetime.now(UTC)
+        # Empty-poll backoff: start at configured interval, grow to 30s
+        # so an idle fleet doesn't ping Neon every second forever.
+        empty_backoff_s = float(self.poll_interval_s)
+        empty_backoff_max_s = 30.0
         try:
             watermark = await load_watermark()
             last_event_id = watermark[1] if watermark else None
@@ -1048,9 +1052,14 @@ class SidecarWorker:
                     with contextlib.suppress(TimeoutError):
                         await asyncio.wait_for(
                             stop_event.wait(),
-                            timeout=self.poll_interval_s,
+                            timeout=empty_backoff_s,
                         )
+                    empty_backoff_s = min(
+                        empty_backoff_max_s,
+                        max(self.poll_interval_s, empty_backoff_s * 1.5),
+                    )
                     continue
+                empty_backoff_s = float(self.poll_interval_s)
                 # Group by (tenant_id, trace_id); a trace is ready
                 # when its span.end event has been observed.
                 groups: dict[tuple[str, str], list[dict[str, Any]]] = {}

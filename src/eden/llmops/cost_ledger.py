@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import asyncio
 import contextvars
+import json
 import logging
 import uuid
 from contextlib import contextmanager
@@ -382,12 +383,40 @@ async def sum_by_dimension(
         return []
 
 
-async def explorer_summary(
+def _empty_explorer_summary() -> dict[str, Any]:
+    return {
+        "total_cost_usd": 0.0,
+        "previous_cost_usd": 0.0,
+        "delta_usd": 0.0,
+        "delta_pct": None,
+        "by_feature": [],
+        "by_model": [],
+        "by_agent": [],
+        "by_session": [],
+        "by_day": [],
+        "untagged_events": 0,
+        "classifier_savings_usd": 0.0,
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "total_tokens": 0,
+        "events": 0,
+    }
+
+
+async def gateway_ledger_overview(
     org_id: str,
     *,
     window_hours: int = 24,
+    include_sessions: bool = False,
+    include_classifier: bool = False,
 ) -> dict[str, Any]:
-    """FinOps explorer payload: totals + breakdowns + compare_previous."""
+    """Single-scan FinOps payload for the Gateway page.
+
+    One CTE over ``customer_cost_events`` drives totals, prior-window
+    compare, and model/feature/agent/day rollups — avoids the prior
+    7+ sequential Neon round-trips on the hot portal path.
+    """
+    empty = _empty_explorer_summary()
     try:
         from eden.storage.postgres import get_postgres_client
 
@@ -395,93 +424,206 @@ async def explorer_summary(
     except Exception:
         client = None
     if client is None:
-        return {
-            "total_cost_usd": 0.0,
-            "previous_cost_usd": 0.0,
-            "delta_usd": 0.0,
-            "delta_pct": None,
-            "by_feature": [],
-            "by_model": [],
-            "by_agent": [],
-            "by_session": [],
-            "by_day": [],
-            "untagged_events": 0,
-            "classifier_savings_usd": 0.0,
-        }
+        return empty
 
     try:
-        cur = await client.fetchrow(
+        row = await client.fetchrow(
             """
-            SELECT COALESCE(SUM(cost_usd), 0) AS cost,
-                   COUNT(*) FILTER (WHERE feature = 'unknown')::int AS untagged
-            FROM customer_cost_events
-            WHERE org_id = $1
-              AND recorded_at > NOW() - ($2 || ' hours')::interval
-            """,
-            org_id,
-            str(window_hours),
-        )
-        prev = await client.fetchrow(
-            """
-            SELECT COALESCE(SUM(cost_usd), 0) AS cost
-            FROM customer_cost_events
-            WHERE org_id = $1
-              AND recorded_at <= NOW() - ($2 || ' hours')::interval
-              AND recorded_at > NOW() - ($2 || ' hours')::interval * 2
+            WITH bounds AS (
+              SELECT
+                NOW() - ($2 || ' hours')::interval AS start_at,
+                NOW() - ($2 || ' hours')::interval * 2 AS prev_start
+            ),
+            windowed AS (
+              SELECT *
+              FROM customer_cost_events
+              WHERE org_id = $1
+                AND recorded_at > (SELECT start_at FROM bounds)
+            ),
+            totals AS (
+              SELECT
+                COALESCE(SUM(cost_usd), 0)::float AS cost,
+                COUNT(*)::int AS events,
+                COUNT(*) FILTER (WHERE feature = 'unknown')::int AS untagged,
+                COALESCE(SUM(input_tokens), 0)::bigint AS input_tokens,
+                COALESCE(SUM(output_tokens), 0)::bigint AS output_tokens,
+                COALESCE(SUM(total_tokens), 0)::bigint AS total_tokens
+              FROM windowed
+            ),
+            prev AS (
+              SELECT COALESCE(SUM(cost_usd), 0)::float AS cost
+              FROM customer_cost_events
+              WHERE org_id = $1
+                AND recorded_at <= (SELECT start_at FROM bounds)
+                AND recorded_at > (SELECT prev_start FROM bounds)
+            ),
+            by_model AS (
+              SELECT COALESCE(json_agg(t ORDER BY t.cost_usd DESC), '[]'::json) AS data
+              FROM (
+                SELECT COALESCE(model::text, '(none)') AS key,
+                       COALESCE(SUM(cost_usd), 0)::float AS cost_usd,
+                       COUNT(*)::int AS events,
+                       COALESCE(SUM(total_tokens), 0)::bigint AS tokens
+                FROM windowed
+                GROUP BY 1
+                ORDER BY cost_usd DESC
+                LIMIT 25
+              ) t
+            ),
+            by_feature AS (
+              SELECT COALESCE(json_agg(t ORDER BY t.cost_usd DESC), '[]'::json) AS data
+              FROM (
+                SELECT COALESCE(feature::text, '(none)') AS key,
+                       COALESCE(SUM(cost_usd), 0)::float AS cost_usd,
+                       COUNT(*)::int AS events,
+                       COALESCE(SUM(total_tokens), 0)::bigint AS tokens
+                FROM windowed
+                GROUP BY 1
+                ORDER BY cost_usd DESC
+                LIMIT 25
+              ) t
+            ),
+            by_agent AS (
+              SELECT COALESCE(json_agg(t ORDER BY t.cost_usd DESC), '[]'::json) AS data
+              FROM (
+                SELECT COALESCE(agent_id::text, '(none)') AS key,
+                       COALESCE(SUM(cost_usd), 0)::float AS cost_usd,
+                       COUNT(*)::int AS events,
+                       COALESCE(SUM(total_tokens), 0)::bigint AS tokens
+                FROM windowed
+                GROUP BY 1
+                ORDER BY cost_usd DESC
+                LIMIT 25
+              ) t
+            ),
+            by_day AS (
+              SELECT COALESCE(json_agg(t ORDER BY t.day ASC), '[]'::json) AS data
+              FROM (
+                SELECT date_trunc('day', recorded_at) AS day,
+                       COALESCE(SUM(cost_usd), 0)::float AS cost_usd,
+                       COUNT(*)::int AS events,
+                       COALESCE(SUM(total_tokens), 0)::bigint AS tokens,
+                       COALESCE(SUM(input_tokens), 0)::bigint AS input_tokens,
+                       COALESCE(SUM(output_tokens), 0)::bigint AS output_tokens
+                FROM windowed
+                GROUP BY 1
+                ORDER BY 1 ASC
+                LIMIT 90
+              ) t
+            )
+            SELECT
+              totals.cost,
+              totals.events,
+              totals.untagged,
+              totals.input_tokens,
+              totals.output_tokens,
+              totals.total_tokens,
+              prev.cost AS previous_cost,
+              by_model.data AS by_model,
+              by_feature.data AS by_feature,
+              by_agent.data AS by_agent,
+              by_day.data AS by_day
+            FROM totals, prev, by_model, by_feature, by_agent, by_day
             """,
             org_id,
             str(window_hours),
         )
     except Exception as exc:
-        logger.debug("cost_ledger: explorer_summary failed: %s", exc)
-        return {
-            "total_cost_usd": 0.0,
-            "previous_cost_usd": 0.0,
-            "delta_usd": 0.0,
-            "delta_pct": None,
-            "by_feature": [],
-            "by_model": [],
-            "by_agent": [],
-            "by_session": [],
-            "by_day": [],
-            "untagged_events": 0,
-            "classifier_savings_usd": 0.0,
-        }
+        logger.debug("cost_ledger: gateway_ledger_overview failed: %s", exc)
+        return empty
 
-    cost = float(cur["cost"] or 0) if cur else 0.0
-    prev_cost = float(prev["cost"] or 0) if prev else 0.0
+    if row is None:
+        return empty
+
+    cost = float(row["cost"] or 0)
+    prev_cost = float(row["previous_cost"] or 0)
     delta = cost - prev_cost
     delta_pct = round((delta / prev_cost) * 100, 2) if prev_cost else None
 
-    (
-        by_feature,
-        by_model,
-        by_agent,
-        by_session,
-        by_day,
-        classifier_savings,
-    ) = await asyncio.gather(
-        sum_by_dimension(org_id, dimension="feature", window_hours=window_hours),
-        sum_by_dimension(org_id, dimension="model", window_hours=window_hours),
-        sum_by_dimension(org_id, dimension="agent", window_hours=window_hours),
-        sum_by_dimension(org_id, dimension="session", window_hours=window_hours),
-        sum_by_dimension(org_id, dimension="day", window_hours=window_hours),
-        classifier_savings_usd(org_id, window_hours=window_hours),
-    )
+    def _parse_rows(raw: Any) -> list[dict[str, Any]]:
+        if raw is None:
+            return []
+        if isinstance(raw, str):
+            raw = json.loads(raw)
+        out: list[dict[str, Any]] = []
+        for item in raw or []:
+            if not isinstance(item, dict):
+                continue
+            day = item.get("day")
+            if day is not None and hasattr(day, "isoformat"):
+                day = day.isoformat()
+            key = item.get("key")
+            out.append(
+                {
+                    **({"key": str(key)} if key is not None else {}),
+                    **({"day": day} if day is not None else {}),
+                    "cost_usd": float(item.get("cost_usd") or 0),
+                    "events": int(item.get("events") or 0),
+                    "tokens": int(item.get("tokens") or 0),
+                    **(
+                        {
+                            "input_tokens": int(item.get("input_tokens") or 0),
+                            "output_tokens": int(item.get("output_tokens") or 0),
+                        }
+                        if "input_tokens" in item or "output_tokens" in item
+                        else {}
+                    ),
+                }
+            )
+        return out
+
+    by_session: list[dict[str, Any]] = []
+    classifier_savings = 0.0
+    if include_sessions or include_classifier:
+        tasks: list[Any] = []
+        if include_sessions:
+            tasks.append(
+                sum_by_dimension(
+                    org_id, dimension="session", window_hours=window_hours
+                )
+            )
+        if include_classifier:
+            tasks.append(classifier_savings_usd(org_id, window_hours=window_hours))
+        results = await asyncio.gather(*tasks)
+        idx = 0
+        if include_sessions:
+            by_session = results[idx]
+            idx += 1
+        if include_classifier:
+            classifier_savings = float(results[idx] or 0)
 
     return {
         "total_cost_usd": cost,
         "previous_cost_usd": prev_cost,
         "delta_usd": delta,
         "delta_pct": delta_pct,
-        "by_feature": by_feature,
-        "by_model": by_model,
-        "by_agent": by_agent,
+        "by_feature": _parse_rows(row["by_feature"]),
+        "by_model": _parse_rows(row["by_model"]),
+        "by_agent": _parse_rows(row["by_agent"]),
         "by_session": by_session,
-        "by_day": by_day,
-        "untagged_events": int(cur["untagged"] or 0) if cur else 0,
+        "by_day": _parse_rows(row["by_day"]),
+        "untagged_events": int(row["untagged"] or 0),
         "classifier_savings_usd": classifier_savings,
+        "input_tokens": int(row["input_tokens"] or 0),
+        "output_tokens": int(row["output_tokens"] or 0),
+        "total_tokens": int(row["total_tokens"] or 0),
+        "events": int(row["events"] or 0),
     }
+
+
+async def explorer_summary(
+    org_id: str,
+    *,
+    window_hours: int = 24,
+) -> dict[str, Any]:
+    """FinOps explorer payload: totals + breakdowns + compare_previous."""
+    # Prefer the single-scan path; keep sessions + classifier for Settings.
+    return await gateway_ledger_overview(
+        org_id,
+        window_hours=window_hours,
+        include_sessions=True,
+        include_classifier=True,
+    )
 
 
 async def classifier_savings_usd(org_id: str, *, window_hours: int = 24) -> float:

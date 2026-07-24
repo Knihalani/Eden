@@ -69,6 +69,7 @@ export const LIVE_PORTAL_PREFIXES: readonly string[] = [
   "/evals",
   "/improve",
   "/cost",
+  "/gateway",
   "/agent",
   "/debugger",
   "/compare",

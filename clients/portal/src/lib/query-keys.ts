@@ -243,7 +243,28 @@ export const queryKeys = {
   },
   gateway: {
     all: ["gateway"] as const,
-    models: (orgId: string | null | undefined) => ["gateway", "models", orgId] as const,
+    models: (orgId: string | null | undefined) =>
+      ["gateway", "models", orgId] as const,
+    explorer: (orgId: string | null | undefined, hours: number) =>
+      ["gateway", "explorer", orgId, hours] as const,
+    overview: (orgId: string | null | undefined, hours: number) =>
+      ["gateway", "overview", orgId, hours] as const,
+    tokens: (orgId: string | null | undefined, days: number) =>
+      ["gateway", "tokens", orgId, days] as const,
+    cache: (orgId: string | null | undefined) =>
+      ["gateway", "cache", orgId] as const,
+    health: (orgId: string | null | undefined) =>
+      ["gateway", "health", orgId] as const,
+    topModels: (orgId: string | null | undefined, days: number) =>
+      ["gateway", "topModels", orgId, days] as const,
+  },
+  github: {
+    all: ["github"] as const,
+    connection: (orgId: string | null | undefined) =>
+      ["github", "connection", orgId] as const,
+    repos: (orgId: string | null | undefined) =>
+      ["github", "repos", orgId] as const,
+    configured: ["github", "configured"] as const,
   },
   exports: {
     all: ["exports"] as const,

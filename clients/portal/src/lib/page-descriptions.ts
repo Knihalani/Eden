@@ -8,7 +8,9 @@ export const PAGE_DESCRIPTIONS: Record<string, string> = {
   "/agents":
     "Every AI agent connected to this org. Connect a repo, edit prompts, view fleet health.",
   "/agents/connect":
-    "Install the Eden GitHub App and link a repository. SDK install is manual.",
+    "Link the GitHub repo that holds your agent code. Eden opens Improve fix PRs on that repo.",
+  "/gateway":
+    "Gateway spend, tokens, models, providers, and cache hit rates for this workspace.",
   "/traces":
     "Every AI call — explore, inspect, replay, and debug from one place.",
   "/issues":
