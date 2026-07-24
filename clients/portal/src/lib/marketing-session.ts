@@ -5,9 +5,10 @@
 
 import { auth } from "@clerk/nextjs/server";
 
-/** Product entry for signed-in visitors on marketing surfaces. */
-export const MARKETING_APP_HREF = "/home";
-export const MARKETING_APP_LABEL = "Go to Eden";
+export {
+  MARKETING_APP_HREF,
+  MARKETING_APP_LABEL,
+} from "@/lib/marketing-cta";
 
 export async function isMarketingSignedIn(): Promise<boolean> {
   try {

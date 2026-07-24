@@ -2,7 +2,7 @@ import Link from "next/link";
 import {
   MARKETING_APP_HREF,
   MARKETING_APP_LABEL,
-} from "@/lib/marketing-session";
+} from "@/lib/marketing-cta";
 import { cn } from "@/lib/utils";
 
 /**
