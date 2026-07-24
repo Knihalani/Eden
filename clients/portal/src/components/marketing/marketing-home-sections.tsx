@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { MarketingKicker, MarketingRail } from "@/components/marketing/marketing-primitives";
 import { MarketingPrimaryCta } from "@/components/marketing/marketing-auth-ctas";
 import { InstallSnippetCopy } from "@/components/marketing/install-snippet-copy";
