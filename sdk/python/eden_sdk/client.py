@@ -52,7 +52,7 @@ _JSON_SEPARATORS = (",", ":")
 # import time; if the package is re-installed the new value
 # takes effect. The gateway logs the SDK version on every POST
 # so version drift across the fleet is visible in one place.
-__version__ = "0.3.3"
+__version__ = "0.3.4"
 _USER_AGENT = f"eden-sdk/{__version__} (python)"
 
 # Match BE ``settings.ingestion_chunks_max_per_request`` (default 1000).

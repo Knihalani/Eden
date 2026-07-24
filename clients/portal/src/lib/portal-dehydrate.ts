@@ -25,6 +25,7 @@ import {
 import { queryKeys } from "@/lib/query-keys";
 import type { AgentFixture } from "@/lab/fixtures/agents";
 import type { IssueFixture } from "@/lab/fixtures/issues";
+import type { SessionFixture } from "@/lab/fixtures/sessions";
 import type { TraceFixture } from "@/lab/fixtures/traces";
 
 /** Must match ``ME_QUERY_KEY`` in ``hooks/use-me-query.ts`` (client module). */
@@ -104,7 +105,8 @@ export async function dehydrateHome(
   const agentsKey = queryKeys.portal.agents(auth.orgId);
   const tracesKey = queryKeys.portal.traces(auth.orgId);
   const issuesKey = queryKeys.portal.issues(auth.orgId);
-  await Promise.all([
+  // Per-shard settle: one failing endpoint must not wipe warm shards.
+  await Promise.allSettled([
     seedMeQuery(qc, auth.me),
     qc.prefetchQuery({
       queryKey: [...agentsKey],
@@ -120,6 +122,42 @@ export async function dehydrateHome(
       queryKey: [...issuesKey],
       queryFn: () =>
         serverGet<IssueFixture[]>(auth, `/orgs/${auth.orgId}/portal/issues`),
+    }),
+  ]);
+  return dehydrate(qc);
+}
+
+/**
+ * Prefetch Traces hub shards — agents + traces + sessions — plus
+ * ``/auth/me``, for hydration. Matches ``PortalCatalogSync`` and the
+ * traces page ``useOrgQuery`` keys exactly.
+ */
+export async function dehydrateTraces(
+  auth: PortalPrefetchAuth,
+): Promise<DehydratedState> {
+  const qc = new QueryClient();
+  const agentsKey = queryKeys.portal.agents(auth.orgId);
+  const tracesKey = queryKeys.portal.traces(auth.orgId);
+  const sessionsKey = queryKeys.portal.sessions(auth.orgId);
+  await Promise.allSettled([
+    seedMeQuery(qc, auth.me),
+    qc.prefetchQuery({
+      queryKey: [...agentsKey],
+      queryFn: () =>
+        serverGet<AgentFixture[]>(auth, `/orgs/${auth.orgId}/portal/agents`),
+    }),
+    qc.prefetchQuery({
+      queryKey: [...tracesKey],
+      queryFn: () =>
+        serverGet<TraceFixture[]>(auth, `/orgs/${auth.orgId}/portal/traces`),
+    }),
+    qc.prefetchQuery({
+      queryKey: [...sessionsKey],
+      queryFn: () =>
+        serverGet<SessionFixture[]>(
+          auth,
+          `/orgs/${auth.orgId}/portal/sessions`,
+        ),
     }),
   ]);
   return dehydrate(qc);

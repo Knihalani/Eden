@@ -60,6 +60,18 @@ def _emit(
 
 
 def _agent_name(agent: Any) -> str:
+    # Prefer the enclosing eden.trace(...) name so dual-instrumented
+    # runs (eden.trace + pydantic_ai) share one user-facing agent_id.
+    try:
+        from eden_sdk.trace import current_trace
+
+        ctx = current_trace()
+        if ctx is not None:
+            name = (ctx.name or "").strip()
+            if name and name != "trace":
+                return name
+    except Exception:  # noqa: BLE001
+        pass
     for attr in ("name", "_name"):
         val = getattr(agent, attr, None)
         if val:

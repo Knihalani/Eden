@@ -232,3 +232,42 @@ async def test_maybe_emit_trace_finalized_only_on_terminal() -> None:
     )
     redis.set.assert_not_awaited()
     redis.xadd.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_emit_trace_finalized_releases_claim_on_xadd_failure() -> None:
+    """Failed XADD must delete the SETNX claim so a later emit can retry."""
+    from eden.observability import trace_finalized as tf
+
+    tf._emitted_local.clear()
+    redis = MagicMock()
+    redis.set = AsyncMock(return_value=True)
+    redis.xadd = AsyncMock(side_effect=RuntimeError("redis down"))
+    redis.delete = AsyncMock(return_value=1)
+
+    ok = await tf.emit_trace_finalized(
+        org_id="org_test",
+        trace_id="trace-fail",
+        agent_id="agent-a",
+        redis=redis,
+    )
+    assert ok is False
+    redis.delete.assert_awaited_once_with(
+        "trace.finalized:emitted:org_test:trace-fail"
+    )
+    assert "org_test:trace-fail" not in tf._emitted_local
+
+    # Retry after recovery should claim + emit successfully.
+    redis.set.reset_mock()
+    redis.xadd = AsyncMock()
+    redis.delete.reset_mock()
+    ok2 = await tf.emit_trace_finalized(
+        org_id="org_test",
+        trace_id="trace-fail",
+        agent_id="agent-a",
+        redis=redis,
+    )
+    assert ok2 is True
+    redis.set.assert_awaited_once()
+    redis.xadd.assert_awaited_once()
+    redis.delete.assert_not_awaited()

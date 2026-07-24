@@ -33,6 +33,7 @@ import {
 import { cn } from "@/lib/utils";
 import { useOrg } from "@/hooks/use-org";
 import { useOrgQuery } from "@/hooks/use-api-query";
+import { SHELL_QUERY } from "@/lib/portal-query";
 import { queryKeys } from "@/lib/query-keys";
 import { portalApi } from "@/lib/api/portal";
 import { QueryErrorPanel, QueryLoadingPanel } from "@/components/shell/query-error-panel";
@@ -172,11 +173,13 @@ export default function HomeClient() {
     queryKeys.portal.agents(orgId),
     orgId,
     () => portalApi.agents(orgId!),
+    SHELL_QUERY,
   );
   const tracesQuery = useOrgQuery(
     queryKeys.portal.traces(orgId),
     orgId,
     () => portalApi.traces(orgId!),
+    SHELL_QUERY,
   );
   /**
    * Subscribed here (not just read from the ``portal-catalog``
@@ -189,6 +192,11 @@ export default function HomeClient() {
     queryKeys.portal.issues(orgId),
     orgId,
     () => portalApi.issues(orgId!),
+    {
+      ...SHELL_QUERY,
+      // Match catalog deferral — don't race agents/traces on cold Home.
+      enabled: Boolean(orgId) && !agentsQuery.isPending,
+    },
   );
 
   const agents = agentsQuery.data ?? [];

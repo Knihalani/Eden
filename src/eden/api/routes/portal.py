@@ -325,8 +325,17 @@ def _tree_node_to_step(node: dict[str, Any]) -> TranscriptStep:
         tokensOut=int(tokens_out) if tokens_out is not None else None,
         costUsd=float(cost) if cost is not None else None,
         attributes=safe_attrs,
-        inputPreview=_preview(node.get("request_body")),
-        outputPreview=_preview(node.get("response_body")),
+        # Prefer dedicated bodies; fall back to payload fields when the
+        # portal path skips message_store / body-zstd hydrate.
+        inputPreview=_preview(node.get("request_body"))
+        or _preview(payload.get("messages") or payload.get("input") or payload.get("prompt")),
+        outputPreview=_preview(node.get("response_body"))
+        or _preview(
+            payload.get("output")
+            or payload.get("content")
+            or payload.get("completion")
+            or payload.get("response")
+        ),
         errorMessage=error_message,
         metadata=None,
     )

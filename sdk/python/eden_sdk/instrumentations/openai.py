@@ -232,6 +232,9 @@ def _enqueue_openai_event(
     trace_ctx: TraceContext | None = current_trace()
     if trace_ctx is not None:
         payload.setdefault("trace_id", trace_ctx.trace_id)
+        name = (trace_ctx.name or "").strip()
+        if name and name != "trace":
+            payload.setdefault("agent_id", name)
 
     get_default_client().enqueue(TraceEvent(payload=payload, source_format="openai"))
 

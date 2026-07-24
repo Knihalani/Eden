@@ -16,7 +16,7 @@ export const IMPROVE_FEATURE_DISABLED_DESCRIPTION =
   "The improvement agent (improvement_agent_v1) is off for this organization — usually an explicit kill-switch. GA defaults are on; Settings → Autonomous only controls schedule cadence when the agent is enabled. Ask an organization owner or Eden support to re-enable it.";
 
 export const REPO_NOT_CONNECTED_MESSAGE =
-  "No GitHub repo connected. Connect the GitHub App in Settings, then try again.";
+  "No GitHub repo connected. Open Agents → Connect repo, install the GitHub App, pick the repository that holds your agent code, then try again.";
 
 function blobFromUnknown(err: unknown): string {
   if (err == null) return "";

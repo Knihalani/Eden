@@ -30,6 +30,7 @@ import { useOrgQuery } from "@/hooks/use-api-query";
 import { queryKeys } from "@/lib/query-keys";
 import { portalApi } from "@/lib/api/portal";
 import { API_BASE } from "@/lib/api/core";
+import { ASSIST_STALE } from "@/lib/portal-query";
 import { useLabToast } from "@/lab/lab-toast";
 import { QueryErrorPanel, QueryLoadingPanel } from "@/components/shell/query-error-panel";
 
@@ -146,6 +147,7 @@ function LabAgentInner() {
     queryKeys.portal.assistantThreads(orgId),
     orgId,
     () => portalApi.assistantThreads(orgId!),
+    { staleTime: ASSIST_STALE, refetchOnWindowFocus: false },
   );
 
   const [view, setView] = useState<AgentViewMode>(() =>
@@ -531,9 +533,6 @@ function LabAgentInner() {
     [activeId, thinking, streamAssistantReply],
   );
 
-  const appendRef = useRef(appendExchange);
-  appendRef.current = appendExchange;
-
   const send = useCallback(() => {
     appendExchange(draft);
   }, [draft, appendExchange]);
@@ -550,16 +549,14 @@ function LabAgentInner() {
     setThinking(false);
   }, []);
 
-  // Seed from ?ai_prompt= then auto-send once ready.
+  // Seed composer from ?ai_prompt= — do not auto-send (avoids surprise
+  // ReAct token burn from Traces "Open Assistant").
   useEffect(() => {
-    if (!paramPrompt || seededPrompt === paramPrompt || !activeId) return;
+    if (!paramPrompt || seededPrompt === paramPrompt) return;
     setSeededPrompt(paramPrompt);
+    setDraft(paramPrompt);
     patchQuery({ ai_prompt: null });
-    const id = window.setTimeout(() => {
-      appendRef.current(paramPrompt);
-    }, 120);
-    return () => window.clearTimeout(id);
-  }, [paramPrompt, seededPrompt, activeId, patchQuery]);
+  }, [paramPrompt, seededPrompt, patchQuery]);
 
   if (threadsQuery.isError) {
     return (

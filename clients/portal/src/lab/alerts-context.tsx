@@ -44,20 +44,20 @@ export function AlertsProvider({ children }: { children: ReactNode }) {
     orgId,
     () => portalApi.agents(orgId!),
     {
-      staleTime: 60_000,
+      staleTime: 45_000,
       enabled: Boolean(orgId) && onHome,
     },
   );
-
   const alertEventsQuery = useOrgQuery(
     queryKeys.portal.alertEvents(orgId),
     orgId,
     () => portalApi.alertEvents(orgId!),
     {
-      staleTime: 60_000,
+      staleTime: 120_000,
+      refetchOnWindowFocus: false,
       // Settle (success or error) — not only isSuccess — so a failed
       // agents GET does not strand the alerts bell forever.
-      enabled: !onHome || !agentsWarm.isPending,
+      enabled: Boolean(orgId) && (!onHome || !agentsWarm.isPending),
     },
   );
   const events = alertEventsQuery.data ?? [];
