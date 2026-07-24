@@ -163,7 +163,7 @@ class AnomalyDetector:
             ORDER BY timestamp ASC
             """,
             table_name,
-            since.isoformat(),
+            since,
         )
 
         if len(rows) < 3:
@@ -202,7 +202,7 @@ class AnomalyDetector:
             ORDER BY timestamp ASC
             """,
             table_name,
-            since.isoformat(),
+            since,
         )
         if len(error_rows) >= 3:
             error_counts = [r["error_count"] for r in error_rows]
@@ -244,7 +244,7 @@ class AnomalyDetector:
             GROUP BY hour
             ORDER BY hour ASC
             """,
-            since.isoformat(),
+            since,
         )
 
         if len(rows) < 3:
@@ -290,7 +290,7 @@ class AnomalyDetector:
             GROUP BY day
             ORDER BY day ASC
             """,
-            since.isoformat(),
+            since,
         )
 
         if len(rows) < 3:
@@ -331,7 +331,7 @@ class AnomalyDetector:
             FROM usage_events
             WHERE created_at >= $1
             """,
-            since.isoformat(),
+            since,
         )
 
         if not row or row["total"] == 0:
@@ -621,7 +621,7 @@ class AnomalyDetector:
             param_idx += 1
         if since:
             conditions.append(f"created_at >= ${param_idx}")
-            params.append(since.isoformat())
+            params.append(since)
             param_idx += 1
 
         where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
