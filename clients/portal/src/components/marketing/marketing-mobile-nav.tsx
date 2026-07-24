@@ -6,7 +6,7 @@ import { DOCS_URL } from "@/lib/constants";
 import {
   MARKETING_APP_HREF,
   MARKETING_APP_LABEL,
-} from "@/lib/marketing-session";
+} from "@/lib/marketing-cta";
 
 type NavLink =
   | { href: string; label: string; external?: boolean; primary?: boolean };
