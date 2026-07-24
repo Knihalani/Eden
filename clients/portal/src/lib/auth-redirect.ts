@@ -8,7 +8,7 @@
  * force) cross-links so org-aware return URLs survive the flip.
  *
  * Orgless users still land on ``/home`` (or a deep link); portal
- * chrome then sends them to ``/settings?tab=org`` when appropriate.
+ * chrome then sends them to ``/settings?mode=workspace`` when appropriate.
  */
 
 /** Default after sign-in when no safe ``redirect_url`` is present. */

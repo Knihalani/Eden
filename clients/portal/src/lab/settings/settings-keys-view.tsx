@@ -25,7 +25,7 @@ export function SettingsKeysView({
   selectedId: string | null;
   onSelect: (id: string) => void;
   onCreate: (name: string, scopes: KeyScope[]) => Promise<ApiKeyFixture>;
-  onRevoke: (id: string) => void;
+  onRevoke: (id: string) => Promise<void>;
   onDismissSecret: (id: string) => void;
 }) {
   const { pushToast } = useLabToast();
@@ -274,13 +274,20 @@ export function SettingsKeysView({
                       type="button"
                       className="ds-btn ds-btn-primary ds-btn-sm !bg-[var(--error)] !text-[var(--text-inverse)]"
                       onClick={() => {
-                        onRevoke(selected.id);
+                        const id = selected.id;
+                        const name = selected.name;
                         setConfirmRevoke(false);
-                        pushToast({
-                          title: "API key revoked",
-                          body: selected.name,
-                          tone: "fail",
-                        });
+                        void onRevoke(id)
+                          .then(() => {
+                            pushToast({
+                              title: "API key revoked",
+                              body: name,
+                              tone: "fail",
+                            });
+                          })
+                          .catch(() => {
+                            /* parent already toasted failure */
+                          });
                       }}
                     >
                       Confirm revoke

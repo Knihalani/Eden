@@ -10,6 +10,7 @@
 import {
   useCallback,
   useEffect,
+  useId,
   useLayoutEffect,
   useRef,
   useState,
@@ -150,6 +151,7 @@ export function ProductTour({
   skipRef.current = onSkip;
   const cardRef = useRef<HTMLDivElement>(null);
   const previouslyFocused = useRef<HTMLElement | null>(null);
+  const maskId = useId().replace(/:/g, "");
 
   const refreshHole = useCallback(() => {
     if (!step || step.kind !== "nav" || !step.targetId) {
@@ -183,8 +185,19 @@ export function ProductTour({
       (document.activeElement as HTMLElement | null) ?? null;
     const prevOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
+    const shell = document.querySelector(
+      "[data-eden-portal-shell]",
+    ) as HTMLElement | null;
+    if (shell) {
+      shell.setAttribute("inert", "");
+      shell.setAttribute("aria-hidden", "true");
+    }
     return () => {
       document.body.style.overflow = prevOverflow;
+      if (shell) {
+        shell.removeAttribute("inert");
+        shell.removeAttribute("aria-hidden");
+      }
       previouslyFocused.current?.focus?.({ preventScroll: true });
     };
   }, [open]);
@@ -388,6 +401,14 @@ export function ProductTour({
         }
         onStepChange(stepIndex + 1);
       } else if (e.key === "ArrowLeft") {
+        const target = e.target as HTMLElement | null;
+        if (
+          target?.closest?.(
+            "a, button, [role='button'], textarea, input, select",
+          )
+        ) {
+          return;
+        }
         e.preventDefault();
         if (busy || stepIndex <= 0) return;
         if (
@@ -432,6 +453,8 @@ export function ProductTour({
         return;
       }
     }
+    // Nav steps without a measured spotlight should not skip the whole tour.
+    if (step.kind === "nav") return;
     skipRef.current();
   }
 
@@ -456,7 +479,7 @@ export function ProductTour({
             {hole && !narrow ? (
               <svg className="absolute inset-0 h-full w-full" aria-hidden>
                 <defs>
-                  <mask id="eden-tour-mask">
+                  <mask id={maskId}>
                     <rect width="100%" height="100%" fill="white" />
                     <rect
                       x={hole.left}
@@ -472,7 +495,7 @@ export function ProductTour({
                   width="100%"
                   height="100%"
                   fill="rgba(4, 6, 10, 0.78)"
-                  mask="url(#eden-tour-mask)"
+                  mask={`url(#${maskId})`}
                 />
                 <rect
                   x={hole.left}

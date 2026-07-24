@@ -9,6 +9,7 @@ import {
   type QuickstartLang,
 } from "@/lib/quickstart-snippets";
 import { InstallSnippetCopy } from "@/components/marketing/install-snippet-copy";
+import { useOrg } from "@/hooks/use-org";
 import { cn } from "@/lib/utils";
 
 type FillState =
@@ -16,21 +17,114 @@ type FillState =
   | { status: "ready"; apiKey: string; orgId: string }
   | { status: "error"; message: string; orgId?: string };
 
+type MintResult = { apiKey: string; orgId: string };
+
+/** Dedupes Strict Mode remounts + Back→Next remounts in one tab session. */
+const mintInflight = new Map<string, Promise<MintResult>>();
+
+function cacheKey(orgId: string): string {
+  return `eden.tour.quickstart.${orgId}`;
+}
+
+function readCachedMint(orgId: string): MintResult | null {
+  if (typeof sessionStorage === "undefined") return null;
+  try {
+    const raw = sessionStorage.getItem(cacheKey(orgId));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<MintResult>;
+    if (
+      typeof parsed.apiKey === "string" &&
+      parsed.apiKey.length > 0 &&
+      typeof parsed.orgId === "string"
+    ) {
+      return { apiKey: parsed.apiKey, orgId: parsed.orgId };
+    }
+  } catch {
+    /* ignore */
+  }
+  return null;
+}
+
+function writeCachedMint(result: MintResult): void {
+  if (typeof sessionStorage === "undefined") return;
+  try {
+    sessionStorage.setItem(cacheKey(result.orgId), JSON.stringify(result));
+  } catch {
+    /* ignore quota */
+  }
+}
+
+async function mintQuickstartKey(orgId: string): Promise<MintResult> {
+  const cached = readCachedMint(orgId);
+  if (cached) return cached;
+
+  const existing = mintInflight.get(orgId);
+  if (existing) return existing;
+
+  const promise = (async (): Promise<MintResult> => {
+    const res = await fetch("/api/docs", {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ orgId }),
+    });
+    if (!res.ok) {
+      const err = (await res.json().catch(() => null)) as {
+        error?: string;
+      } | null;
+      throw new Error(err?.error || `Key create failed (${res.status})`);
+    }
+    const data = (await res.json()) as { apiKey: string; orgId: string };
+    if (!data.apiKey || !data.orgId) {
+      throw new Error("Invalid key create response");
+    }
+    const result = { apiKey: data.apiKey, orgId: data.orgId };
+    writeCachedMint(result);
+    return result;
+  })();
+
+  mintInflight.set(orgId, promise);
+  try {
+    return await promise;
+  } catch (err) {
+    mintInflight.delete(orgId);
+    throw err;
+  }
+}
+
 /**
  * Finish-step panel: mint Quickstart key via POST /api/docs and show
  * filled Python / TypeScript / Bash snippets.
  */
 export function TourGetStartedPanel() {
+  const { currentOrg } = useOrg();
   const [lang, setLang] = useState<QuickstartLang>("python");
   const [fill, setFill] = useState<FillState>({ status: "loading" });
 
   useEffect(() => {
     let cancelled = false;
+    const orgId = currentOrg?.id;
+    if (!orgId) {
+      setFill({
+        status: "error",
+        message: "Select a workspace to mint a Quickstart key.",
+      });
+      return;
+    }
+
+    const cached = readCachedMint(orgId);
+    if (cached) {
+      setFill({ status: "ready", apiKey: cached.apiKey, orgId: cached.orgId });
+      return;
+    }
+
+    setFill({ status: "loading" });
     (async () => {
       try {
         const session = await fetch("/api/docs", {
           method: "GET",
           credentials: "include",
+          headers: { "X-Org-Id": orgId },
         });
         if (!session.ok) {
           throw new Error("Could not read session");
@@ -54,25 +148,13 @@ export function TourGetStartedPanel() {
             setFill({
               status: "error",
               message:
-                "You need owner or admin on an org to mint a key. Create one under Settings → API keys.",
-              orgId: info.orgId,
+                "You need owner or admin on this org to mint a key. Create one under Settings → API keys.",
+              orgId,
             });
           }
           return;
         }
-        const res = await fetch("/api/docs", {
-          method: "POST",
-          credentials: "include",
-          headers: { "Content-Type": "application/json" },
-          body: "{}",
-        });
-        if (!res.ok) {
-          const err = (await res.json().catch(() => null)) as {
-            error?: string;
-          } | null;
-          throw new Error(err?.error || `Key create failed (${res.status})`);
-        }
-        const data = (await res.json()) as { apiKey: string; orgId: string };
+        const data = await mintQuickstartKey(orgId);
         if (!cancelled) {
           setFill({
             status: "ready",
@@ -88,6 +170,7 @@ export function TourGetStartedPanel() {
               err instanceof Error
                 ? err.message
                 : "Could not create a Quickstart key.",
+            orgId,
           });
         }
       }
@@ -95,7 +178,7 @@ export function TourGetStartedPanel() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [currentOrg?.id]);
 
   const snippet = buildQuickstartSnippet(lang, {
     apiKey: fill.status === "ready" ? fill.apiKey : null,
@@ -104,7 +187,7 @@ export function TourGetStartedPanel() {
         ? fill.orgId
         : fill.status === "error"
           ? fill.orgId
-          : null,
+          : currentOrg?.id ?? null,
   });
 
   const onLang = useCallback((next: QuickstartLang) => {

@@ -172,29 +172,6 @@ async def _run_auto_curator() -> dict[str, object]:
     return result
 
 
-async def _tick(*, dry_run: bool) -> dict[str, object]:
-    """A single cron tick (legacy entrypoint / manual escape hatch)."""
-    now = datetime.now(UTC)
-    out: dict[str, object] = {"tick_at": now.isoformat(), "dry_run": dry_run}
-
-    out["eql_alert_watchdog"] = await _safe_step(
-        "eql_alert_watchdog", _run_eql_alert_watchdog(dry_run=dry_run)
-    )
-    # Prefer the long-running worker for EQL when both are up; cron
-    # remains a legacy fallback. Improvement sweeps are disabled here —
-    # drafts are issue-driven (closed-loop / issue_patch_trigger) only.
-
-    maint = await run_maintenance_due(now=now, dry_run=dry_run)
-    out.update(maint)
-
-    if not dry_run:
-        out["artifact_demotion"] = await _safe_step(
-            "artifact_demotion", _run_artifact_demotion()
-        )
-
-    return out
-
-
 async def _once_per_window(key: str, *, ttl_seconds: int) -> bool:
     """Return True if this process won the window (Redis SET NX).
 
@@ -215,10 +192,45 @@ async def _once_per_window(key: str, *, ttl_seconds: int) -> bool:
         return True
 
 
+async def _release_window(key: str) -> None:
+    """Drop a window claim so a failed job can retry on the next tick."""
+    try:
+        from eden.storage.redis import get_redis_client
+
+        r = await get_redis_client()
+        if r is None:
+            return
+        await r.delete(f"eden:maint:{key}")
+    except Exception as exc:
+        logger.warning("[cron_tick] release_window %s failed: %s", key, exc)
+
+
 def _slot_key(prefix: str, now: datetime, *, minutes: int) -> str:
     """Stable key for a wall-clock slot (e.g. 15-minute buckets)."""
     slot = (now.hour * 60 + now.minute) // minutes
     return f"{prefix}:{now.date().isoformat()}:{slot}"
+
+
+def _result_failed(result: object) -> bool:
+    """True when a step returned a structured error payload."""
+    if isinstance(result, BaseException):
+        return True
+    if isinstance(result, dict) and result.get("errors"):
+        return True
+    return False
+
+
+async def _tick(*, dry_run: bool) -> dict[str, object]:
+    """Legacy cron entrypoint — maintenance only (no EQL / demotion).
+
+    EQL watchdog and artifact demotion live on ``eden-worker``; running
+    them here doubles work if cron is ever re-enabled.
+    """
+    now = datetime.now(UTC)
+    out: dict[str, object] = {"tick_at": now.isoformat(), "dry_run": dry_run}
+    maint = await run_maintenance_due(now=now, dry_run=dry_run)
+    out.update(maint)
+    return out
 
 
 async def run_maintenance_due(
@@ -234,15 +246,19 @@ async def run_maintenance_due(
     Optimizations vs the old every-5m cold start:
     * Redis once-per-window so each slot runs at most once (not twice
       when minute is still inside ``< 5`` / ``< 10``).
+    * Failed windows are released so the next tick can retry.
     * Independent due steps run concurrently via ``asyncio.gather``.
     * Shadow join is 15-minute, not every tick.
     """
     now = now or datetime.now(UTC)
     out: dict[str, object] = {"maintenance_at": now.isoformat(), "dry_run": dry_run}
     pending: dict[str, Any] = {}
+    claim_keys: dict[str, str] = {}
 
-    def _queue(name: str, coro: Any) -> None:
+    def _queue(name: str, coro: Any, *, claim: str | None = None) -> None:
         pending[name] = coro
+        if claim is not None:
+            claim_keys[name] = claim
 
     if now.minute < 10:
         hour_key = f"compact:{now.date().isoformat()}:{now.hour:02d}"
@@ -252,6 +268,7 @@ async def run_maintenance_due(
                 _safe_step(
                     "columnar_compaction", _run_columnar_compaction(dry_run=dry_run)
                 ),
+                claim=hour_key,
             )
         else:
             out["columnar_compaction"] = {
@@ -262,23 +279,29 @@ async def run_maintenance_due(
     if now.hour == 2 and now.minute < 10 and not dry_run:
         day_key = f"auto_curator:{now.date().isoformat()}"
         if await _once_per_window(day_key, ttl_seconds=20 * 3600):
-            _queue("auto_curator", _safe_step("auto_curator", _run_auto_curator()))
+            _queue(
+                "auto_curator",
+                _safe_step("auto_curator", _run_auto_curator()),
+                claim=day_key,
+            )
         else:
             out["auto_curator"] = {"skipped": True, "reason": "already_ran_today"}
 
     if now.hour == 3 and now.minute < 10:
         day_key = f"daily:{now.date().isoformat()}"
         if await _once_per_window(day_key, ttl_seconds=20 * 3600):
-            _queue("daily", _run_daily(now, dry_run=dry_run))
+            _queue("daily", _run_daily(now, dry_run=dry_run), claim=day_key)
         else:
             out["daily"] = {"skipped": True, "reason": "already_ran_today"}
 
     if now.weekday() == 0 and now.hour == 4 and now.minute < 10 and not dry_run:
-        week_key = f"drift:{now.isocalendar().week}:{now.year}"
+        iso = now.isocalendar()
+        week_key = f"drift:{iso.year}-W{iso.week:02d}"
         if await _once_per_window(week_key, ttl_seconds=6 * 24 * 3600):
             _queue(
                 "drift_baselines",
                 _safe_step("drift_baselines", _run_drift_baselines()),
+                claim=week_key,
             )
         else:
             out["drift_baselines"] = {
@@ -289,11 +312,20 @@ async def run_maintenance_due(
     if now.minute % 15 < 5:
         mcp_key = _slot_key("mcp", now, minutes=15)
         if await _once_per_window(mcp_key, ttl_seconds=14 * 60):
-            _queue("mcp_rollup", _run_mcp_rollup(dry_run=dry_run))
+            _queue("mcp_rollup", _run_mcp_rollup(dry_run=dry_run), claim=mcp_key)
             if not dry_run:
-                _queue("classifier_retrain", _run_classifier_retrain())
+                # Classifier shares the mcp slot claim; release on either failure.
+                _queue(
+                    "classifier_retrain",
+                    _run_classifier_retrain(),
+                    claim=mcp_key,
+                )
         else:
             out["mcp_rollup"] = {"skipped": True, "reason": "already_ran_this_slot"}
+            out["classifier_retrain"] = {
+                "skipped": True,
+                "reason": "already_ran_this_slot",
+            }
 
     # improvement_sweeps intentionally omitted — issue-driven drafts only.
     out["improvement_sweeps"] = {
@@ -307,6 +339,7 @@ async def run_maintenance_due(
             _queue(
                 "shadow_outcome_join",
                 _safe_step("shadow_outcome_join", _run_shadow_outcome_join()),
+                claim=shadow_key,
             )
         else:
             out["shadow_outcome_join"] = {
@@ -320,13 +353,19 @@ async def run_maintenance_due(
             _queue(
                 "signal_backfill",
                 _safe_step("signal_backfill", _run_signal_backfill()),
+                claim=sig_key,
             )
             _queue(
                 "signal_cluster_quiet",
                 _safe_step("signal_cluster_quiet", _run_signal_cluster_quiet()),
+                claim=sig_key,
             )
         else:
             out["signal_backfill"] = {
+                "skipped": True,
+                "reason": "already_ran_this_slot",
+            }
+            out["signal_cluster_quiet"] = {
                 "skipped": True,
                 "reason": "already_ran_this_slot",
             }
@@ -336,14 +375,21 @@ async def run_maintenance_due(
         results = await asyncio.gather(
             *(pending[n] for n in names), return_exceptions=True
         )
+        failed_claims: set[str] = set()
         for name, result in zip(names, results, strict=True):
             if isinstance(result, BaseException):
                 logger.exception(
                     "[cron_tick] %s failed after gather: %s", name, result
                 )
                 out[name] = _err(result)
+                if name in claim_keys:
+                    failed_claims.add(claim_keys[name])
             else:
                 out[name] = result  # type: ignore[assignment]
+                if _result_failed(result) and name in claim_keys:
+                    failed_claims.add(claim_keys[name])
+        for claim in failed_claims:
+            await _release_window(claim)
 
     return out
 

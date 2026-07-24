@@ -82,9 +82,13 @@ type OrgRow = {
   archived_at?: string | null;
 };
 
-function pickOrg(orgs: OrgRow[]): OrgRow | null {
+function pickOrg(orgs: OrgRow[], preferredId?: string | null): OrgRow | null {
   const active = orgs.filter((o) => !o.archived_at);
   const pool = active.length ? active : orgs;
+  if (preferredId) {
+    const preferred = pool.find((o) => o.id === preferredId);
+    if (preferred) return preferred;
+  }
   return (
     pool.find((o) => o.role === "owner" || o.role === "admin") ??
     pool[0] ??
@@ -156,7 +160,12 @@ export async function GET(request: NextRequest) {
     });
   }
 
-  const org = pickOrg(loaded.orgs);
+  const preferredOrgId =
+    request.headers.get("x-org-id") ||
+    request.nextUrl.searchParams.get("orgId") ||
+    null;
+
+  const org = pickOrg(loaded.orgs, preferredOrgId);
   if (!org) {
     return json(request, {
       loggedIn: true,
@@ -167,30 +176,6 @@ export async function GET(request: NextRequest) {
   }
 
   const canCreateKeys = roleCanCreateKeys(org.role);
-  // #region agent log
-  fetch("http://127.0.0.1:7819/ingest/be99124d-5675-4c32-b51e-365b8208f1ed", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "X-Debug-Session-Id": "323321",
-    },
-    body: JSON.stringify({
-      sessionId: "323321",
-      runId: "post-fix",
-      hypothesisId: "B",
-      location: "docs/route.ts:GET",
-      message: "docs session role gate",
-      data: {
-        orgIdSuffix: String(org.id).slice(-8),
-        role: org.role,
-        canCreateKeys,
-        orgCount: loaded.orgs.length,
-        roles: loaded.orgs.map((o) => o.role),
-      },
-      timestamp: Date.now(),
-    }),
-  }).catch(() => {});
-  // #endregion
 
   return json(request, {
     loggedIn: true,
@@ -212,32 +197,33 @@ export async function POST(request: NextRequest) {
   }
 
   const cookie = request.headers.get("cookie");
-  let orgId: string | undefined;
+  let requestedOrgId: string | undefined;
   try {
     const body = (await request.json().catch(() => ({}))) as { orgId?: string };
-    orgId = typeof body.orgId === "string" ? body.orgId : undefined;
+    requestedOrgId = typeof body.orgId === "string" ? body.orgId : undefined;
   } catch {
-    orgId = undefined;
+    requestedOrgId = undefined;
   }
 
-  if (!orgId) {
-    const loaded = await loadOrgs(authorization, cookie);
-    if (!loaded.ok) {
-      return json(request, { error: "Could not resolve organization" }, 502);
-    }
-    const org = pickOrg(loaded.orgs);
-    if (!org) {
-      return json(request, { error: "No organization found" }, 400);
-    }
-    if (org.role !== "owner" && org.role !== "admin" && org.role !== "org:admin") {
-      return json(
-        request,
-        { error: "Only org owners and admins can create API keys." },
-        403,
-      );
-    }
-    orgId = org.id;
+  const loaded = await loadOrgs(authorization, cookie);
+  if (!loaded.ok) {
+    return json(request, { error: "Could not resolve organization" }, 502);
   }
+  const org = pickOrg(loaded.orgs, requestedOrgId);
+  if (!org) {
+    return json(request, { error: "No organization found" }, 400);
+  }
+  if (!roleCanCreateKeys(org.role)) {
+    return json(
+      request,
+      { error: "Only org owners and admins can create API keys." },
+      403,
+    );
+  }
+  if (requestedOrgId && org.id !== requestedOrgId) {
+    return json(request, { error: "Organization not found for this user." }, 403);
+  }
+  const orgId = org.id;
 
   const createRes = await forwardToBackend(`/orgs/${orgId}/api-keys`, {
     method: "POST",
