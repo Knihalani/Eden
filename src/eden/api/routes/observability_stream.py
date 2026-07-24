@@ -52,12 +52,14 @@ router = APIRouter(
     dependencies=[Depends(require_path_org_access)],
 )
 
-# Process-local NUMSUB cache. Idle orgs pay 1 NUMSUB every
-# ``_NUMSUB_CACHE_TTL_S`` instead of 1 per ingested event — the
-# dominant Upstash Free burn on the ingest path when no SSE client
-# is listening. A short TTL keeps new subscribers from waiting long.
-_NUMSUB_CACHE_TTL_S = 2.0
+# Process-local NUMSUB cache. Idle orgs pay 1 NUMSUB every idle TTL
+# instead of 1 per ingested event. Active subscribers use a short TTL
+# so a new live-tail client starts receiving quickly.
 _numsub_cache: dict[str, tuple[int, float]] = {}
+# Sparse EXPIRE / ZREMRANGEBYRANK — once per hour per org, not per event.
+_SSE_EXPIRE_TTL_S = 24 * 3600
+_SSE_MAINT_REFRESH_S = 3600.0
+_sse_maint_at: dict[str, float] = {}
 
 
 def _dump_payload(payload: dict[str, Any]) -> str:
@@ -68,6 +70,21 @@ def _dump_payload(payload: dict[str, Any]) -> str:
         return _jsonx_dumps(payload)
     except Exception:
         return json.dumps(payload, default=str)
+
+
+def _sse_settings() -> tuple[bool, float, float]:
+    """Return (write_when_idle, idle_ttl_s, active_ttl_s)."""
+    try:
+        from eden.config import get_settings
+
+        s = get_settings()
+        return (
+            bool(getattr(s, "redis_sse_write_when_idle", False)),
+            float(getattr(s, "redis_sse_numsub_idle_ttl_s", 30.0) or 30.0),
+            float(getattr(s, "redis_sse_numsub_active_ttl_s", 2.0) or 2.0),
+        )
+    except Exception:
+        return False, 30.0, 2.0
 
 
 @router.get("/stream")
@@ -364,12 +381,11 @@ async def publish_trace_event(org_id: str, payload: dict[str, Any]) -> None:
     (``trace_id, realm, agent_id, started_at, outcome, span_count,
     duration_ms, streaming_metrics``).
 
-    When PUBSUB NUMSUB is 0, live ``PUBLISH`` is skipped
-    (``eden_sse_publish_skipped``) but the replay ZSET is still
-    updated so Last-Event-ID resume works after a quiet reconnect.
-    NUMSUB results are cached briefly in-process so idle orgs don't
-    burn 1 Redis cmd per ingest event. With subscribers, cmds are
-    pipelined to cut Redis round-trips.
+    When PUBSUB NUMSUB is 0 and ``redis_sse_write_when_idle`` is
+    false (default), this is a no-op — no INCR/ZADD/EXPIRE burn on
+    Upstash for orgs that are not live-tailing. Portal REST remains
+    the source of truth. With subscribers, one pipeline writes
+    publish + replay ZSET; EXPIRE/ZREMRANGEBYRANK run sparsely.
     """
     redis = await get_redis_client()
     if not redis:
@@ -377,13 +393,13 @@ async def publish_trace_event(org_id: str, payload: dict[str, Any]) -> None:
     channel = f"observability:stream:{org_id}"
     set_key = f"observability:replay:{org_id}"
     seq_key = f"observability:seq:{org_id}"
+    write_when_idle, idle_ttl, active_ttl = _sse_settings()
     try:
         now = time.monotonic()
         cached = _numsub_cache.get(channel)
         if cached is not None and cached[1] > now:
             sub_count = cached[0]
         else:
-            # NUMSUB — one cheap cmd; skip live PUBLISH when nobody listens.
             numsub = await redis.pubsub_numsub(channel)
             record_ingest_redis_commands(1)
             sub_count = 0
@@ -393,32 +409,41 @@ async def publish_trace_event(org_id: str, payload: dict[str, Any]) -> None:
                     sub_count = int(entry[1])
                 else:
                     sub_count = int(entry)
-            _numsub_cache[channel] = (sub_count, now + _NUMSUB_CACHE_TTL_S)
-            # Bound cache size — rare org churn.
+            ttl = active_ttl if sub_count > 0 else idle_ttl
+            _numsub_cache[channel] = (sub_count, now + ttl)
             if len(_numsub_cache) > 4096:
                 expired = [k for k, (_, exp) in _numsub_cache.items() if exp <= now]
                 for k in expired:
                     _numsub_cache.pop(k, None)
 
+        if sub_count <= 0 and not write_when_idle:
+            record_sse_publish_skipped()
+            return
+
         body = _dump_payload(payload)[:16 * 1024]
         # INCR must resolve before ZADD member; then pipeline the rest.
-        # Member format is ``{seq}|{payload}`` so ``_replay_since`` can
-        # split and rehydrate JSON (score alone is not enough). Publish
-        # the same member string on the channel so live SSE ``id``s
-        # match Redis seq (Last-Event-ID resume).
         seq = int(await redis.incr(seq_key))
         member = f"{seq}|{body}"
+        need_maint = (
+            org_id not in _sse_maint_at or now >= _sse_maint_at[org_id]
+        )
         pipe = redis.pipeline(transaction=False)
+        cmds = 1  # incr
         if sub_count > 0:
             pipe.publish(channel, member)
+            cmds += 1
         else:
             record_sse_publish_skipped()
         pipe.zadd(set_key, {member: float(seq)})
-        pipe.expire(set_key, 24 * 3600)
-        pipe.expire(seq_key, 24 * 3600)
-        pipe.zremrangebyrank(set_key, 0, -1001)
+        cmds += 1
+        if need_maint:
+            pipe.expire(set_key, _SSE_EXPIRE_TTL_S)
+            pipe.expire(seq_key, _SSE_EXPIRE_TTL_S)
+            pipe.zremrangebyrank(set_key, 0, -1001)
+            cmds += 3
         await pipe.execute()
-        # incr + (optional publish) + zadd + 2 expire + zremrangebyrank
-        record_ingest_redis_commands(5 if sub_count <= 0 else 6)
+        record_ingest_redis_commands(cmds)
+        if need_maint:
+            _sse_maint_at[org_id] = now + _SSE_MAINT_REFRESH_S
     except Exception as exc:
         logger.debug(f"publish_trace_event failed: {exc}")

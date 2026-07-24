@@ -3,10 +3,10 @@
 import hashlib
 import logging
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Annotated
 
-from fastapi import Cookie, Depends, Header, HTTPException, Path, status
+from fastapi import Cookie, Depends, Header, HTTPException, Path, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from eden.api.utils.auth import decode_access_token
@@ -15,7 +15,7 @@ from eden.api.utils.clerk_auth import (
     extract_org_id,
     extract_org_role,
     extract_user_id,
-    verify_clerk_token,
+    verify_clerk_token_for_request,
 )
 from eden.api.utils.clerk_auth import (
     is_clerk_payload as _is_clerk_payload_public,  # canonical impl in clerk_auth.py
@@ -25,7 +25,6 @@ from eden.storage.postgres import get_postgres_client
 
 logger = logging.getLogger(__name__)
 security = HTTPBearer(auto_error=False)
-
 # B1 — debounce last_seen_at UPDATEs (≥60s) so auth does not write on every request.
 _LAST_SEEN_DEBOUNCE_S = 60.0
 _last_seen_bumped_at: dict[str, float] = {}
@@ -147,21 +146,38 @@ async def _assert_org_header_matches_session(
 # callers use). Returns the decoded payload dict in either case, or
 # raises 401 if neither path yielded a valid token.
 async def _resolve_token_payload(
+    request: Request,
     authorization_cookie: Annotated[str | None, Cookie(alias="authorization")] = None,
     bearer: Annotated[HTTPAuthorizationCredentials | None, Depends(security)] = None,
 ) -> dict:
+    # One verify per request — get_current_user and require_path_org_access
+    # previously used different Depends keys and double-verified JWTs.
+    cached = getattr(request.state, "eden_jwt_payload", None)
+    if isinstance(cached, dict):
+        return cached
+
+    # Middleware may already have verified the Bearer once this request.
+    cached_clerk = getattr(request.state, "clerk_jwt_payload", None)
+    if isinstance(cached_clerk, dict):
+        request.state.eden_jwt_payload = cached_clerk
+        return cached_clerk
+
     # Clerk path: portal forwards the Clerk session JWT as a Bearer.
     # B-6 (Session 23): verify_clerk_token is now async — the JWKS
     # path performs a non-blocking httpx round-trip inside.
     if bearer and bearer.scheme.lower() == "bearer":
-        clerk_payload = await verify_clerk_token(bearer.credentials)
+        clerk_payload = await verify_clerk_token_for_request(
+            request, bearer.credentials
+        )
         if clerk_payload:
+            request.state.eden_jwt_payload = clerk_payload
             return clerk_payload
 
     # Legacy Eden-issued cookie JWT (CLI, SDK, internal services).
     if authorization_cookie:
         payload = decode_access_token(authorization_cookie)
         if payload:
+            request.state.eden_jwt_payload = payload
             return payload
 
     raise HTTPException(
@@ -589,12 +605,15 @@ async def get_current_user(
 
 
 async def _try_resolve_token_payload(
+    request: Request,
     authorization_cookie: Annotated[str | None, Cookie(alias="authorization")] = None,
     bearer: Annotated[HTTPAuthorizationCredentials | None, Depends(security)] = None,
 ) -> dict | None:
     """Same as ``_resolve_token_payload`` but returns None instead of raising."""
     try:
-        return await _resolve_token_payload(authorization_cookie, bearer)
+        return await _resolve_token_payload(
+            request, authorization_cookie, bearer
+        )
     except HTTPException:
         return None
 
@@ -849,17 +868,25 @@ async def resolve_path_org_access(
 
 
 async def require_path_org_access(
+    request: Request,
     org_id: str = Path(..., description="Organization ID"),
     user: dict = Depends(get_current_user),
-    payload: dict | None = Depends(_try_resolve_token_payload),
 ) -> str:
     """FastAPI dep: path-org membership → Eden org UUID.
 
     Use as a router ``dependencies=[Depends(...)]`` gate and/or as
     ``org_id: str = Depends(require_path_org_access)`` so SQL uses the
     resolved Eden id rather than a raw Clerk path id.
+
+    Reuses the JWT already verified by ``get_current_user`` (see
+    ``request.state.eden_jwt_payload``) so we do not double-verify.
     """
-    _, eden_org = await resolve_path_org_access(org_id, user, payload)
+    payload = getattr(request.state, "eden_jwt_payload", None)
+    _, eden_org = await resolve_path_org_access(
+        org_id,
+        user,
+        payload if isinstance(payload, dict) else None,
+    )
     return eden_org
 
 
@@ -1662,7 +1689,7 @@ async def get_current_org_api_key(
     # ``invalid input syntax for type uuid`` → unhandled 500.
     query = """
         SELECT o.name, o.slug, o.owner_id, o.id as org_id, oak.scopes, oak.id as key_id,
-               oak.active, oak.revoked_at, oak.expires_at
+               oak.active, oak.revoked_at, oak.expires_at, oak.last_used_at
         FROM org_api_keys oak
         JOIN organizations o ON o.id = oak.org_id
         WHERE oak.key_hash = $1 AND oak.org_id::text = $2
@@ -1741,17 +1768,31 @@ async def get_current_org_api_key(
                 detail="API key expired",
             )
 
-    # Update last_used_at. Non-fatal: the auth above has already
-    # succeeded, so a DB blip on the audit write must not 500 the
-    # whole request. The UPDATE will be retried on the next call
-    # that hits this same key. (S24 hardening per memory.)
-    try:
-        await client.execute(
-            "UPDATE org_api_keys SET last_used_at = NOW() WHERE id = $1",
-            row["key_id"],
-        )
-    except Exception as exc:
-        logger.debug("last_used_at UPDATE failed (non-fatal): %s", exc)
+    # B-10 — debounce last_used_at to ≤1 write / 60s / key. Hot SDK
+    # ingest otherwise writes Postgres on every authenticated request.
+    last_used = row.get("last_used_at")
+    if last_used is None:
+        should_stamp = True
+    else:
+        cmp = last_used if last_used.tzinfo else last_used.replace(tzinfo=UTC)
+        should_stamp = (datetime.now(UTC) - cmp) >= timedelta(seconds=60)
+
+    if should_stamp:
+        try:
+            await client.execute(
+                """
+                UPDATE org_api_keys
+                SET last_used_at = NOW()
+                WHERE id = $1
+                  AND (
+                    last_used_at IS NULL
+                    OR last_used_at < NOW() - INTERVAL '60 seconds'
+                  )
+                """,
+                row["key_id"],
+            )
+        except Exception as exc:
+            logger.debug("last_used_at UPDATE failed (non-fatal): %s", exc)
 
     key_id = str(row["key_id"])
     return {
@@ -1893,9 +1934,7 @@ async def _ingestion_auth_impl(
             detail="X-Org-Api-Key header or session cookie required",
         )
 
-    from eden.api.deps import _try_resolve_token_payload
-
-    payload = await _try_resolve_token_payload(authorization_cookie=authorization)
+    payload = decode_access_token(authorization)
     if not payload:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

@@ -201,13 +201,27 @@ class InsightsDetectorLoop:
 
         rows = await client.fetch(
             """
+            SELECT w.tenant_id
+            FROM judge_scores_processed w
+            WHERE EXISTS (
+                SELECT 1
+                FROM judge_scores j
+                WHERE j.tenant_id = w.tenant_id
+                  AND (
+                    w.last_processed_judge_score_id IS NULL
+                    OR j.judge_run_id > w.last_processed_judge_score_id
+                  )
+                LIMIT 1
+            )
+            UNION
             SELECT DISTINCT j.tenant_id
             FROM judge_scores j
-            LEFT JOIN judge_scores_processed w
-              ON w.tenant_id = j.tenant_id
-            WHERE w.last_processed_judge_score_id IS NULL
-               OR j.judge_run_id > w.last_processed_judge_score_id
-            ORDER BY j.tenant_id
+            WHERE NOT EXISTS (
+                SELECT 1
+                FROM judge_scores_processed w
+                WHERE w.tenant_id = j.tenant_id
+            )
+            ORDER BY 1
             """
         )
         return [str(r["tenant_id"]) for r in rows]

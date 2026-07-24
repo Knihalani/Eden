@@ -679,43 +679,57 @@ class TelemetryCollector:
         redis = await self._get_redis()
         if not redis:
             return
-        stream_key = f"telemetry:{event.tenant_id}:{event.trace_id}:events"
         event_dict = event.to_dict()
-        payload_json = _json_dumps(event_dict)
-        try:
-            from eden.observability.ingest_hot_path_metrics import (
-                record_ingest_redis_commands,
-            )
 
-            now = time.time()
-            need_expire = (
-                stream_key not in self._stream_expire_at
-                or now >= self._stream_expire_at[stream_key]
+        # Per-span telemetry streams are only consumed by the async
+        # judge RedisTailer (off by default). Skipping XADD saves 1–2
+        # Redis cmds per ingest event on Upstash Free.
+        write_stream = False
+        try:
+            from eden.config import get_settings
+
+            settings = get_settings()
+            write_stream = bool(
+                getattr(settings, "redis_telemetry_stream_enabled", False)
+                or getattr(settings, "judges_async_tailer_enabled", False)
             )
-            pipe = redis.pipeline(transaction=False)
-            pipe.xadd(
-                stream_key,
-                fields={"data": payload_json},
-                maxlen=self.STREAM_MAXLEN,
-            )
-            cmds = 1
-            if need_expire:
-                pipe.expire(stream_key, self.STREAM_TTL_S)
-                cmds += 1
-            await pipe.execute()
-            record_ingest_redis_commands(cmds)
-            if need_expire:
-                self._stream_expire_at[stream_key] = (
-                    now + self.STREAM_EXPIRE_REFRESH_S
+        except Exception:
+            write_stream = False
+
+        if write_stream:
+            stream_key = f"telemetry:{event.tenant_id}:{event.trace_id}:events"
+            payload_json = _json_dumps(event_dict)
+            try:
+                from eden.observability.ingest_hot_path_metrics import (
+                    record_ingest_redis_commands,
                 )
-        except Exception as exc:
-            logger.warning(f"Redis telemetry xadd failed: {exc}")
-            return
-        # DL-1: after a successful xadd, publish to the SSE fanout
-        # channel so live-tail consumers see the event in ~10ms vs
-        # the 1s poll the previous design used. The publish is
-        # best-effort — if it fails, the event is already in the
-        # stream so the consumer's next poll picks it up.
+
+                now = time.time()
+                need_expire = (
+                    stream_key not in self._stream_expire_at
+                    or now >= self._stream_expire_at[stream_key]
+                )
+                pipe = redis.pipeline(transaction=False)
+                pipe.xadd(
+                    stream_key,
+                    fields={"data": payload_json},
+                    maxlen=self.STREAM_MAXLEN,
+                )
+                cmds = 1
+                if need_expire:
+                    pipe.expire(stream_key, self.STREAM_TTL_S)
+                    cmds += 1
+                await pipe.execute()
+                record_ingest_redis_commands(cmds)
+                if need_expire:
+                    self._stream_expire_at[stream_key] = (
+                        now + self.STREAM_EXPIRE_REFRESH_S
+                    )
+            except Exception as exc:
+                logger.warning(f"Redis telemetry xadd failed: {exc}")
+                return
+
+        # SSE fanout — no-ops when nobody is listening (default).
         try:
             from eden.api.routes.observability_stream import publish_trace_event
 
@@ -726,9 +740,7 @@ class TelemetryCollector:
         except Exception as exc:
             logger.debug(f"telemetry: publish_trace_event failed: {exc}")
 
-        # F20 — signal the auto-issue scanner when a trace finalizes. The
-        # helper cheaply no-ops for non-terminal events, so this stays off
-        # the critical path for the common per-span event.
+        # F20 — signal the auto-issue scanner when a trace finalizes.
         try:
             from eden.observability.trace_finalized import (
                 maybe_emit_trace_finalized,
@@ -1123,13 +1135,24 @@ class TelemetryCollector:
             logger.warning(f"_load_from_archive: rehydrate failed for {trace_id}: {exc}")
             return []
 
-    async def get_trace_tree(self, tenant_id: str, trace_id: str) -> TraceTree | None:
+    async def get_trace_tree(
+        self,
+        tenant_id: str,
+        trace_id: str,
+        *,
+        hydrate_bodies: bool = True,
+        max_spans: int = 500,
+    ) -> TraceTree | None:
         """Build a hierarchical trace tree from stored telemetry events.
 
         Phase B3 (2026-06-19): falls back to the Impossible Cloud
         cold archive (via :class:`ArchiveService.rehydrate`) when
         the trace isn't in Postgres — happens for any trace older
         than the configured cold-archive age (default 90 days).
+
+        ``hydrate_bodies=False`` skips message_store reconstruct and
+        zstd body decode — used by portal list-detail for span
+        structure without N message round-trips.
         """
         client = await self._get_postgres()
         if not client:
@@ -1141,8 +1164,11 @@ class TelemetryCollector:
                 SELECT * FROM telemetry_events
                 WHERE tenant_id = $1 AND trace_id = $2
                 ORDER BY timestamp ASC
+                LIMIT $3
                 """,
-                tenant_id, trace_id,
+                tenant_id,
+                trace_id,
+                max(1, min(int(max_spans), 2000)),
             )
         except Exception as exc:
             logger.warning(f"Failed to fetch trace tree: {exc}")
@@ -1157,7 +1183,8 @@ class TelemetryCollector:
             rows = await self._load_from_archive(tenant_id, trace_id)
             if not rows:
                 return None
-
+            if len(rows) > max_spans:
+                rows = rows[:max_spans]
         # Phase 3: read the zstd-compressed BYTEA columns first, fall
         # back to the original JSONB columns for any pre-backfill row
         # (the columns are kept in sync during the 30-day burn-in;
@@ -1188,28 +1215,11 @@ class TelemetryCollector:
         # reconstruction returns nothing (hashes missing or DB
         # transient failure) we fall through to the zstd/JSONB path
         # so the trace view never goes blank.
-        from eden.observability.message_store import get_message_store
-        message_store = get_message_store()
+        message_store = None
+        if hydrate_bodies:
+            from eden.observability.message_store import get_message_store
 
-        async def _resolve_request(row) -> Any:
-            hashes = row.get("request_message_hashes")
-            if hashes:
-                reconstructed = await message_store.reconstruct_request_body(
-                    trace_id, list(hashes),
-                )
-                if reconstructed is not None:
-                    return reconstructed
-            return _read_payload(row, "request_body_zstd", "request_body")
-
-        async def _resolve_response(row) -> Any:
-            hashes = row.get("response_message_hashes")
-            if hashes:
-                reconstructed = await message_store.reconstruct_response_body(
-                    trace_id, list(hashes),
-                )
-                if reconstructed is not None:
-                    return reconstructed
-            return _read_payload(row, "response_body_zstd", "response_body")
+            message_store = get_message_store()
 
         span_map: dict[str, dict[str, Any]] = {}
         root_spans: list[dict[str, Any]] = []
@@ -1226,11 +1236,15 @@ class TelemetryCollector:
         # Measured: ~3-5x faster on traces with 50+ spans.
         from eden.storage.compression import decompress_many
 
-        _zstd_cols = (
-            "request_body_zstd", "response_body_zstd", "reasoning_zstd",
-            "tool_calls_full_zstd", "tool_results_zstd",
-            "payload_zstd", "metrics_zstd", "attributes_zstd",
-        )
+        if hydrate_bodies:
+            _zstd_cols = (
+                "request_body_zstd", "response_body_zstd", "reasoning_zstd",
+                "tool_calls_full_zstd", "tool_results_zstd",
+                "payload_zstd", "metrics_zstd", "attributes_zstd",
+            )
+        else:
+            # Portal structure path — skip body columns.
+            _zstd_cols = ("payload_zstd", "metrics_zstd", "attributes_zstd")
         # Collect every (row, col) value to feed the batch API.
         flat: list[bytes | None] = []
         for row in rows:
@@ -1248,13 +1262,14 @@ class TelemetryCollector:
             })
 
         async def _resolve_request_for(row: dict, decoded_cols: dict) -> Any:
-            hashes = row.get("request_message_hashes")
-            if hashes:
-                reconstructed = await message_store.reconstruct_request_body(
-                    trace_id, list(hashes),
-                )
-                if reconstructed is not None:
-                    return reconstructed
+            if message_store is not None:
+                hashes = row.get("request_message_hashes")
+                if hashes:
+                    reconstructed = await message_store.reconstruct_request_body(
+                        trace_id, list(hashes),
+                    )
+                    if reconstructed is not None:
+                        return reconstructed
             zstd_val = decoded_cols.get("request_body_zstd")
             if zstd_val:
                 try:
@@ -1268,13 +1283,14 @@ class TelemetryCollector:
             return row.get("request_body")
 
         async def _resolve_response_for(row: dict, decoded_cols: dict) -> Any:
-            hashes = row.get("response_message_hashes")
-            if hashes:
-                reconstructed = await message_store.reconstruct_response_body(
-                    trace_id, list(hashes),
-                )
-                if reconstructed is not None:
-                    return reconstructed
+            if message_store is not None:
+                hashes = row.get("response_message_hashes")
+                if hashes:
+                    reconstructed = await message_store.reconstruct_response_body(
+                        trace_id, list(hashes),
+                    )
+                    if reconstructed is not None:
+                        return reconstructed
             zstd_val = decoded_cols.get("response_body_zstd")
             if zstd_val:
                 try:
@@ -1297,13 +1313,13 @@ class TelemetryCollector:
                 outcome = row.get("outcome")
 
             decoded_cols = per_row[idx] if idx < len(per_row) else {}
-            # Audit 2026-07-02 P-3: resolve_request/resolve_response
-            # in parallel — two independent cold-archive reads
-            # collapse into a single round-trip.
-            request_body, response_body = await asyncio.gather(
-                _resolve_request_for(row, decoded_cols),
-                _resolve_response_for(row, decoded_cols),
-            )
+            if hydrate_bodies:
+                request_body, response_body = await asyncio.gather(
+                    _resolve_request_for(row, decoded_cols),
+                    _resolve_response_for(row, decoded_cols),
+                )
+            else:
+                request_body, response_body = None, None
             node = {
                 "span_id": span_id,
                 "parent_span_id": parent,

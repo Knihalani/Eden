@@ -63,13 +63,8 @@ class TestDl1PublishTraceEvent:
         )
 
         collector = TelemetryCollector()
-        # Stub Redis to return a fake pipelined client.
-        pipe = MagicMock()
-        pipe.xadd = MagicMock(return_value=pipe)
-        pipe.expire = MagicMock(return_value=pipe)
-        pipe.execute = AsyncMock(return_value=[b"1-0", True])
         fake_redis = MagicMock()
-        fake_redis.pipeline = MagicMock(return_value=pipe)
+        fake_redis.pipeline = MagicMock()
         collector._redis = fake_redis  # short-circuit _get_redis
 
         event = TelemetryEvent(
@@ -83,28 +78,81 @@ class TestDl1PublishTraceEvent:
             agent_id="agent-1",
         )
 
-        with patch(
-            "eden.api.routes.observability_stream.publish_trace_event",
-            new=AsyncMock(),
-        ) as mock_publish:
+        with (
+            patch(
+                "eden.api.routes.observability_stream.publish_trace_event",
+                new=AsyncMock(),
+            ) as mock_publish,
+            patch(
+                "eden.config.get_settings",
+                return_value=MagicMock(
+                    redis_telemetry_stream_enabled=False,
+                    judges_async_tailer_enabled=False,
+                ),
+            ),
+        ):
             await collector._route_redis(event)
 
-        # xadd was queued on the pipeline and executed.
-        pipe.xadd.assert_called_once()
-        pipe.execute.assert_awaited_once()
-        # AND publish_trace_event fired with the event payload.
+        # Default: no per-span XADD (Postgres is durable store).
+        fake_redis.pipeline.assert_not_called()
+        # SSE fanout still attempted (no-ops when NUMSUB=0).
         mock_publish.assert_awaited_once()
         kwargs = mock_publish.await_args.kwargs
         assert kwargs["org_id"] == "org-1"
         assert kwargs["payload"]["trace_id"] == "trace-1"
 
     @pytest.mark.asyncio
+    async def test_route_redis_xadds_when_stream_enabled(self) -> None:
+        from eden.observability.telemetry_collector import (
+            TelemetryCollector,
+            TelemetryEvent,
+        )
+
+        collector = TelemetryCollector()
+        pipe = MagicMock()
+        pipe.xadd = MagicMock(return_value=pipe)
+        pipe.expire = MagicMock(return_value=pipe)
+        pipe.execute = AsyncMock(return_value=[b"1-0", True])
+        fake_redis = MagicMock()
+        fake_redis.pipeline = MagicMock(return_value=pipe)
+        collector._redis = fake_redis
+
+        event = TelemetryEvent(
+            event_id="evt-1b",
+            tenant_id="org-1",
+            project_id="proj-1",
+            trace_id="trace-1",
+            realm="eden",
+            event_type="llm.call",
+            timestamp="2026-06-27T00:00:00Z",
+            agent_id="agent-1",
+        )
+
+        with (
+            patch(
+                "eden.api.routes.observability_stream.publish_trace_event",
+                new=AsyncMock(),
+            ) as mock_publish,
+            patch(
+                "eden.config.get_settings",
+                return_value=MagicMock(
+                    redis_telemetry_stream_enabled=True,
+                    judges_async_tailer_enabled=False,
+                ),
+            ),
+        ):
+            await collector._route_redis(event)
+
+        pipe.xadd.assert_called_once()
+        pipe.execute.assert_awaited_once()
+        mock_publish.assert_awaited_once()
+
+    @pytest.mark.asyncio
     async def test_route_redis_does_not_publish_on_xadd_failure(
         self,
     ) -> None:
-        """If Redis xadd fails, we MUST NOT publish — the event
-        wasn't durably stored, so the SSE channel shouldn't
-        advertise it."""
+        """If Redis xadd fails (when streams enabled), we MUST NOT
+        publish — the event wasn't durably stored in the stream."""
         from eden.observability.telemetry_collector import (
             TelemetryCollector,
             TelemetryEvent,
@@ -132,10 +180,19 @@ class TestDl1PublishTraceEvent:
             agent_id="agent-2",
         )
 
-        with patch(
-            "eden.api.routes.observability_stream.publish_trace_event",
-            new=AsyncMock(),
-        ) as mock_publish:
+        with (
+            patch(
+                "eden.api.routes.observability_stream.publish_trace_event",
+                new=AsyncMock(),
+            ) as mock_publish,
+            patch(
+                "eden.config.get_settings",
+                return_value=MagicMock(
+                    redis_telemetry_stream_enabled=True,
+                    judges_async_tailer_enabled=False,
+                ),
+            ),
+        ):
             await collector._route_redis(event)
 
         pipe.execute.assert_awaited_once()
@@ -171,10 +228,19 @@ class TestDl1PublishTraceEvent:
             agent_id="agent-3",
         )
 
-        with patch(
-            "eden.api.routes.observability_stream.publish_trace_event",
-            new=AsyncMock(
-                side_effect=RuntimeError("pubsub broken"),
+        with (
+            patch(
+                "eden.api.routes.observability_stream.publish_trace_event",
+                new=AsyncMock(
+                    side_effect=RuntimeError("pubsub broken"),
+                ),
+            ),
+            patch(
+                "eden.config.get_settings",
+                return_value=MagicMock(
+                    redis_telemetry_stream_enabled=True,
+                    judges_async_tailer_enabled=False,
+                ),
             ),
         ):
             # MUST NOT raise — the publish is best-effort.

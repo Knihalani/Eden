@@ -149,6 +149,12 @@ def extract_llm_payload(payload: dict[str, Any] | None) -> dict[str, Any]:
     }
 
 
+# Sparse EXPIRE on step counters — INCR every miss, EXPIRE ~once/hour.
+_STEP_EXPIRE_TTL_S = 86400
+_STEP_EXPIRE_REFRESH_S = 3600.0
+_step_expire_at: dict[str, float] = {}
+
+
 async def _resolve_step_number(
     trace_id: str,
     payload_step: int | None,
@@ -162,6 +168,9 @@ async def _resolve_step_number(
     2. Redis INCR ``trace:{trace_id}:llm_step`` (TTL 24h) for
        auto-incrementing ordinals when the SDK omits the step.
     3. Fallback to ``sequence`` attribute or 0.
+
+    EXPIRE is refreshed sparsely (not every INCR) to cut Upstash cmds
+    on high-volume LLM traces that omit ``step_number``.
     """
     if payload_step is not None:
         return payload_step
@@ -169,11 +178,18 @@ async def _resolve_step_number(
     if redis is not None:
         try:
             key = f"trace:{trace_id}:llm_step"
-            # INCR + EXPIRE in one RTT (was INCR + TTL + optional EXPIRE).
-            pipe = redis.pipeline(transaction=False)
-            pipe.incr(key)
-            pipe.expire(key, 86400)
-            step, _ = await pipe.execute()
+            now = time.monotonic()
+            need_expire = (
+                key not in _step_expire_at or now >= _step_expire_at[key]
+            )
+            if need_expire:
+                pipe = redis.pipeline(transaction=False)
+                pipe.incr(key)
+                pipe.expire(key, _STEP_EXPIRE_TTL_S)
+                step, _ = await pipe.execute()
+                _step_expire_at[key] = now + _STEP_EXPIRE_REFRESH_S
+            else:
+                step = await redis.incr(key)
             return int(step) - 1  # zero-based to match SDK convention
         except Exception as exc:  # noqa: BLE001
             logger.debug("checkpoint_hook: redis INCR failed: %s", exc)
