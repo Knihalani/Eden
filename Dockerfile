@@ -88,12 +88,19 @@ COPY --chown=eden:eden src ./src
 COPY --chown=eden:eden migrations ./migrations
 COPY --chown=eden:eden alembic.ini ./alembic.ini
 
+# StatGate (EvidenceGate.evaluate / promote decisions). Minimal
+# subset only — research packages stay out of the image.
+COPY --chown=eden:eden supplementaries/__init__.py ./supplementaries/__init__.py
+COPY --chown=eden:eden supplementaries/phase_6_stat_gate/__init__.py ./supplementaries/phase_6_stat_gate/__init__.py
+COPY --chown=eden:eden supplementaries/phase_6_stat_gate/gate.py ./supplementaries/phase_6_stat_gate/gate.py
+
 # Make the `eden` package importable when uvicorn runs from the
 # system Python (which is what `python -m uvicorn` uses). The package
 # lives at /app/src/eden/ but is not on sys.path by default — the
 # builder's venv at /opt/venv has it via `uv sync`, but we exec
 # /usr/local/bin/python3 (not the venv's interpreter) so we need this.
-ENV PYTHONPATH=/app/src
+# Include /app so ``supplementaries.phase_6_stat_gate`` resolves.
+ENV PYTHONPATH=/app/src:/app
 
 # Copy the pre-trained zstd dictionary (Phase 3 of the Postgres +
 # Compression plan). ``eden.storage.compression`` looks for the file at

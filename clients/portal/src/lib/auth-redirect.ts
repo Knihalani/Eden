@@ -7,7 +7,7 @@
  * the param (same-origin relative paths only) and wire *fallback* (never
  * force) cross-links so org-aware return URLs survive the flip.
  *
- * Orgless users still land on ``/dashboard`` (or a deep link); portal
+ * Orgless users still land on ``/home`` (or a deep link); portal
  * chrome then sends them to ``/settings?tab=org`` when appropriate.
  */
 

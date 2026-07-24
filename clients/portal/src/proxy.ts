@@ -161,24 +161,19 @@ export default clerkMiddleware(async (auth, request: NextRequest) => {
 
   // Auth gate — only known portal prefixes require a session.
   //
-  // The previous implementation called ``auth.protect()`` for any
-  // non-public URL, which meant an unauthenticated visitor hitting
-  // a typo URL like ``/this-route-does-not-exist`` was redirected
-  // to /sign-in — the same flow as an actual protected page. That's
-  // a real UX bug: a typo shouldn't look like an account problem.
-  //
-  // Now we only fire ``auth.protect()`` for the known portal
-  // prefixes. An unknown URL still hits Clerk (because the matcher
-  // runs on every request), but it doesn't trigger ``protect()``,
-  // so the request flows through to the next handler. The
-  // ``[...notFound]`` catch-all under both (portal) and the root
-  // ``app/[...notFound]`` segment then renders the appropriate
-  // 404 page with sidebar context preserved.
+  // Explicit redirect (not bare auth.protect()): with Next 16 + empty
+  // NEXT_PUBLIC_CLERK_SIGN_IN_URL at edge, protect() can rewrite to
+  // [...notFound] (404) instead of /sign-in. Manual redirect is reliable.
   const isKnownProtected = KNOWN_PORTAL_PREFIXES.some(
     (p) => path === p || path.startsWith(p + "/"),
   );
   if (isKnownProtected && !isPublicRoute(request)) {
-    await auth.protect();
+    const { userId } = await auth();
+    if (!userId) {
+      const dest = new URL("/sign-in", url.origin);
+      dest.searchParams.set("redirect_url", `${path}${url.search}`);
+      return NextResponse.redirect(dest);
+    }
   }
 
   // Forward pathname so root layout can skip next-intl message
@@ -195,6 +190,10 @@ export default clerkMiddleware(async (auth, request: NextRequest) => {
     }
   }
   return response;
+},
+{
+  signInUrl: "/sign-in",
+  signUpUrl: "/sign-up",
 });
 
 export const config = {

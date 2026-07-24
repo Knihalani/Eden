@@ -393,16 +393,17 @@ async def post_stat_gate_evaluate(
     (``APPLY`` iff all 5 checks pass). Used by the A/B decision
     paths in Cat 17 closed-loop and Cat 12 experiment hooks.
     """
-    from supplementaries.phase_6_stat_gate.gate import evaluate_gate
+    from supplementaries.phase_6_stat_gate.gate import evaluate
 
-    result = evaluate_gate(
-        control=req.control,
-        treatment=req.treatment,
-        alpha=req.alpha,
-        min_n=req.min_n,
+    evidence = evaluate(control=req.control, treatment=req.treatment)
+    return StatGateEvaluateResponse(
+        verdict=evidence.verdict,
+        ece=float(evidence.c1_ece),
+        p_value=float(evidence.c2_p_bh),
+        cohens_d=float(evidence.c3_d),
+        n=min(int(evidence.n_control), int(evidence.n_treat)),
+        explanation=evidence.explanation,
     )
-    return StatGateEvaluateResponse(**result.to_dict())
-
 
 # ── Operator inbox routes ──────────────────────────────────────────
 
