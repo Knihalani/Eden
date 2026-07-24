@@ -58,9 +58,7 @@ export const PRODUCT_TOUR_STEPS: TourStep[] = [
     targetId: "api-keys",
     href: "/settings?mode=keys",
     title: "API keys",
-    body: "Org API keys live under Settings. The next step can mint a Quickstart key and fill install snippets for you.",
-    ctaLabel: "Open API keys",
-    ctaHref: "/settings?mode=keys",
+    body: "Org API keys live under Settings → API keys. Continue to mint a Quickstart key and fill install snippets.",
   },
   {
     id: "get-started",

@@ -139,8 +139,16 @@ function OnboardingOverlayInner() {
     }
 
     if (shouldDeferBlockingOverlays()) {
-      setOpen(false);
-      return;
+      // Org soft-switch briefly sets the chrome banner; closing the tour
+      // mid-walkthrough caused reopen glitches. Keep the session open and
+      // only defer for real error panels (or banners when not mid-tour).
+      const errorOnly =
+        typeof document !== "undefined" &&
+        document.documentElement.getAttribute(ERROR_STATE_ATTR) === "1";
+      if (errorOnly || !sessionOpenRef.current) {
+        setOpen(false);
+        return;
+      }
     }
 
     // Seed local step from Clerk once when opening — never force-sync on
