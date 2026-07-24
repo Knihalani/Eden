@@ -268,7 +268,8 @@ class AlertAsCode:
         Selects ``eql_alert_rules`` where ``enabled`` and
         ``next_fire_at <= now()`` and ``lifecycle_status`` is
         not ``auto_disabled``. Persists firings and advances
-        schedules. Called from :mod:`eden.workers.cron_tick`.
+        schedules. Hosted on ``eden-worker`` (leader-gated);
+        ``cron_tick`` remains a legacy fallback when cron is enabled.
         """
         from eden.storage.postgres import get_postgres_client
 

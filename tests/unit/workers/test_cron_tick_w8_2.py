@@ -26,11 +26,6 @@ async def test_eql_alert_failure_recorded_not_raised():
             "_run_eql_alert_watchdog",
             AsyncMock(side_effect=RuntimeError("alert boom")),
         ),
-        patch.object(
-            cron_tick,
-            "_run_improvement_sweeps",
-            AsyncMock(return_value={"orgs": []}),
-        ),
         patch.object(cron_tick, "datetime") as mock_dt,
     ):
         mock_dt.now.return_value = _fixed_now(hour=1, minute=30)
@@ -38,7 +33,7 @@ async def test_eql_alert_failure_recorded_not_raised():
 
     assert "errors" in out["eql_alert_watchdog"]
     assert "alert boom" in out["eql_alert_watchdog"]["errors"][0]
-    assert out["improvement_sweeps"] == {"orgs": []}
+    assert out["improvement_sweeps"]["skipped"] is True
 
 
 @pytest.mark.asyncio
@@ -53,11 +48,6 @@ async def test_compaction_failure_recorded_in_hourly_window():
             cron_tick,
             "_run_columnar_compaction",
             AsyncMock(side_effect=RuntimeError("compact boom")),
-        ),
-        patch.object(
-            cron_tick,
-            "_run_improvement_sweeps",
-            AsyncMock(return_value={"orgs": []}),
         ),
         patch.object(
             cron_tick,
@@ -108,24 +98,21 @@ async def test_retention_daily_isolates_failures():
 
 
 @pytest.mark.asyncio
-async def test_improvement_sweeps_failure_recorded():
+async def test_improvement_sweeps_skipped_issue_driven_only():
+    """Sweeps stay off — drafts come from identified issues only."""
     with (
         patch.object(
             cron_tick,
             "_run_eql_alert_watchdog",
             AsyncMock(return_value={"skipped": True}),
         ),
-        patch.object(
-            cron_tick,
-            "_run_improvement_sweeps",
-            AsyncMock(side_effect=RuntimeError("sweep boom")),
-        ),
         patch.object(cron_tick, "datetime") as mock_dt,
     ):
         mock_dt.now.return_value = _fixed_now(hour=1, minute=30)
         out = await cron_tick._tick(dry_run=True)
 
-    assert "sweep boom" in out["improvement_sweeps"]["errors"][0]
+    assert out["improvement_sweeps"]["skipped"] is True
+    assert "issue_driven" in out["improvement_sweeps"]["reason"]
 
 
 @pytest.mark.asyncio
@@ -136,11 +123,6 @@ async def test_artifact_and_shadow_failures_isolated():
             cron_tick,
             "_run_eql_alert_watchdog",
             AsyncMock(return_value={"fired": 0}),
-        ),
-        patch.object(
-            cron_tick,
-            "_run_improvement_sweeps",
-            AsyncMock(return_value={"orgs": []}),
         ),
         patch.object(
             cron_tick,
@@ -168,11 +150,6 @@ async def test_signal_worker_failures_recorded_separately():
             cron_tick,
             "_run_eql_alert_watchdog",
             AsyncMock(return_value={"fired": 0}),
-        ),
-        patch.object(
-            cron_tick,
-            "_run_improvement_sweeps",
-            AsyncMock(return_value={"orgs": []}),
         ),
         patch.object(
             cron_tick,

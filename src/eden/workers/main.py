@@ -17,10 +17,15 @@ Currently hosted loops:
       — opt-in evolution loop when ``evolution_loop_enabled``
     * anomaly detector loop, closed-loop consumer + verify,
       trace_finalized consumer, promotion hooks
+    * EQL alert-as-code watchdog (leader-gated) — replaces
+      the former ``eden-cron`` ``eql_alert_watchdog`` tick
 
 NF manifest runs this as ``python -m eden.workers.main`` on the
 ``eden-worker`` job. ``SKIP_MIGRATIONS=1`` is set — the API
 service owns the alembic migration at boot.
+
+Issue → draft plan → approve → PR does **not** need cron.
+Scheduled improvement sweeps stay off this process on purpose.
 
 Lifecycle
 ---------
@@ -225,7 +230,8 @@ async def _run_forever() -> None:
 
     1. Insights detector — leader-gated poll of ``judge_scores``.
     2. Webhook drain — leader-gated 30s delivery cadence.
-    3. Quality pipeline sidecar + optional evolution loop (process-local).
+    3. EQL alert-as-code watchdog — leader-gated ~5 min (was cron).
+    4. Quality / closed-loop / anomaly sidecars (process-local).
     """
     loops: list[tuple[str, asyncio.Task]] = []
     stop = asyncio.Event()
@@ -244,8 +250,15 @@ async def _run_forever() -> None:
     )
     loops.append(("webhook_drain", webhook_task))
 
-    # 3. Quality + evolution — hosted here because the API disables
-    # in-process background workers (see northflank.yml eden-api).
+    # 3. EQL alert-as-code — was eden-cron every 5m; live on worker now
+    # so scheduled NL/EQL rules still fire without a cold-start job.
+    eql_task = asyncio.create_task(
+        _supervise("eql_alert_watchdog", _leader_eql_alert_watchdog, stop),
+        name="eql-alert-watchdog",
+    )
+    loops.append(("eql_alert_watchdog", eql_task))
+
+    # 4. Quality + closed-loop + anomaly — API disables in-process workers.
     await _start_sidecar_workers()
 
     if not loops:
@@ -329,6 +342,42 @@ async def _leader_insights_loop(stop: asyncio.Event) -> None:
         "insights_loop",
         _tick,
         interval=60.0,
+        stop=stop,
+    )
+
+
+async def _leader_eql_alert_watchdog(stop: asyncio.Event) -> None:
+    """Leader-gated EQL / alert-as-code due-rule firing.
+
+    Migrated off ``eden-cron`` so the product does not need a 5-minute
+    cold-start job for scheduled detectors. Improvement sweeps are
+    intentionally **not** hosted here — drafts come from identified
+    issues via closed-loop / issue_patch_trigger only.
+    """
+    from eden.workers.leader import run_if_leader
+
+    async def _tick() -> None:
+        try:
+            from eden.dsl import AlertAsCode
+
+            result = await AlertAsCode().fire_due()
+            data = (result or {}).get("data") if isinstance(result, dict) else None
+            if isinstance(data, dict) and (
+                data.get("n_fired") or data.get("n_errors") or data.get("n_due")
+            ):
+                logger.info("worker: eql_alert_watchdog result=%s", data)
+        except Exception as exc:
+            logger.error(
+                "worker: eql_alert_watchdog tick failed: %s",
+                exc,
+                exc_info=True,
+            )
+            raise
+
+    await run_if_leader(
+        "eql_alert_watchdog",
+        _tick,
+        interval=300.0,
         stop=stop,
     )
 
