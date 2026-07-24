@@ -8,8 +8,6 @@ from dataclasses import dataclass, field
 from typing import Any, Literal
 from uuid import UUID, uuid4
 
-from supplementaries.phase_6_stat_gate.gate import evaluate as stat_gate_evaluate
-
 logger = logging.getLogger(__name__)
 
 PromotionKind = Literal[
@@ -172,6 +170,23 @@ class EvidenceGate:
                 metrics={"n_control": len(control), "n_treatment": len(treatment)},
                 recommendation="hold",
                 explanation=f"insufficient samples (need {min_n})",
+            )
+
+        try:
+            from supplementaries.phase_6_stat_gate.gate import (
+                evaluate as stat_gate_evaluate,
+            )
+        except ImportError as exc:
+            # Docker ships PYTHONPATH=/app/src only; supplementaries is
+            # research code not in the wheel. Demote/list still work.
+            logger.warning("EvidenceGate.evaluate: StatGate unavailable: %s", exc)
+            return EvidenceReport(
+                candidate_id=UUID(str(candidate["id"])),
+                passed=False,
+                min_sample_size=min_n,
+                metrics={"n_control": len(control), "n_treatment": len(treatment)},
+                recommendation="hold",
+                explanation="stat_gate unavailable (supplementaries not packaged)",
             )
 
         gate = stat_gate_evaluate(control, treatment)
