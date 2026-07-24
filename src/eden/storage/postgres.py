@@ -123,9 +123,11 @@ class PostgresClient:
             password=password or s.postgres_password,
             # Honour ``settings.postgres_*_pool_size`` when the caller
             # didn't pass an explicit override — the Northflank manifest
-            # sets ``POSTGRES_POOL_SIZE=10`` / ``POSTGRES_MIN_POOL_SIZE=2``
+            # sets ``POSTGRES_POOL_SIZE=10`` / ``POSTGRES_MIN_POOL_SIZE=0``
             # for the API container; the previous defaults ignored those
             # env vars and silently kept the hardcoded 5/20 baseline.
+            # ``min_size`` MUST stay 0 in Neon deploys so scale-to-zero
+            # can fire — warm sockets alone keep compute active.
             min_size=min_pool_size
             if min_pool_size is not None
             else s.postgres_min_pool_size,
@@ -191,6 +193,15 @@ class PostgresClient:
             if sslmode and sslmode.lower() not in {"disable", "allow", "prefer", ""}:
                 ssl = True
 
+        _idle_lifetime = float(
+            getattr(
+                _settings_init,
+                "postgres_max_inactive_connection_lifetime",
+                60.0,
+            )
+            or 60.0
+        )
+
         self._pool = await asyncpg.create_pool(
             host=self.config.host,
             port=self.config.port,
@@ -204,16 +215,14 @@ class PostgresClient:
             # connection can't keep a backend slot indefinitely.
             # ``timeout=10`` caps ``pool.acquire()``; asyncpg's
             # default is 30 s, which is longer than our upstream
-            # API gateway tolerance. ``max_inactive_connection_lifetime=300``
-            # closes connections idle > 5 min so the server-side
-            # backend can recycle them on its own clock (we hit the
-            # common 5-min Postgres idle-in-transaction / ``idle_session_timeout``
-            # ceiling exactly).
+            # API gateway tolerance. Idle lifetime defaults to 60s
+            # (``POSTGRES_MAX_INACTIVE_CONNECTION_LIFETIME``) so Neon
+            # autosuspend (~5 min) can observe a quiet TCP plane.
             timeout=10,
             command_timeout=60,
             init=_init_connection,
             ssl=ssl,
-            max_inactive_connection_lifetime=300,
+            max_inactive_connection_lifetime=_idle_lifetime,
         )
         logger.info(f"PostgreSQL pool initialized: {self.config.host}:{self.config.port}/{self.config.database}")
 

@@ -13,7 +13,8 @@ Seven audit items, mix of small targeted fixes:
   ``QuotaEnforcementMiddleware`` (DL-14).
 * **B-3** — asyncpg ``create_pool`` had ``command_timeout=60``
   but no pool-acquire timeout or inactive-connection
-  recycling. Now ``timeout=10`` + ``max_inactive_connection_lifetime=300``.
+  recycling. Now ``timeout=10`` + configurable
+  ``max_inactive_connection_lifetime`` (default 60s for Neon idle).
 * **B-4** — ``except Exception: pass`` at
   ``telemetry_collector.py:413`` (event timestamp parse)
   silently swallowed SDK-supplied bad timestamps. Now
@@ -237,7 +238,7 @@ class TestB2OrgLimitsLog:
 
 class TestB3PoolTimeouts:
     """``asyncpg.create_pool`` is called with
-    ``timeout=10`` + ``max_inactive_connection_lifetime=300``.
+    ``timeout=10`` + configurable idle lifetime.
     """
 
     def test_pool_creation_has_short_timeout(self) -> None:
@@ -252,10 +253,13 @@ class TestB3PoolTimeouts:
             "B-3 regression: pool acquire timeout is not 10s"
         )
         assert (
-            "max_inactive_connection_lifetime=300" in source
+            "max_inactive_connection_lifetime=" in source
         ), (
             "B-3 regression: max_inactive_connection_lifetime "
-            "not set to 300s"
+            "not configured"
+        )
+        assert "postgres_max_inactive_connection_lifetime" in source, (
+            "B-3 regression: idle lifetime must read from Settings"
         )
 
 

@@ -1010,10 +1010,11 @@ app.include_router(agent_pr_suggestions.router)  # /orgs/{org_id}/agent/pr-sugge
 # look up the upstream provider, model id, and (decrypted) API
 # key for a given logical model name. The router is always
 # mounted; the routes themselves enforce org membership + admin.
-from eden.api.routes import gateway, gateway_models
+from eden.api.routes import gateway, gateway_analytics, gateway_models
 
 app.include_router(gateway.router)  # /gateway/v1 (OpenAI-compatible surface)
 app.include_router(gateway_models.router)
+app.include_router(gateway_analytics.router)  # /orgs/{org_id}/gateway/overview
 
 
 # ============================================================================

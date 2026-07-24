@@ -10,8 +10,9 @@
 #
 # Stack fit (matches live Northflank project eden-staging-us-central):
 #   • eden-api       → service   (FastAPI — runs Alembic on boot, /live + /ready)
-#   • eden-worker    → job       (background loops when EDEN_RUN_BACKGROUND_WORKERS=1)
-#   • eden-cron      → job       (scheduled cron tick every 5 min)
+#   • eden-worker    → job       (background loops + multi-tenant maintenance)
+#   • eden-cron      → job       (DISABLED no-op — kept only to fill free-tier slot;
+#                                all scheduled work runs on eden-worker)
 # No eden-migrate job — keeps the 2-job quota; API lifespan runs Alembic before /ready.
 #
 # External / out-of-sandbox (free tiers elsewhere):
@@ -193,7 +194,9 @@ spec:
     - name: POSTGRES_POOL_SIZE
       value: "10"            # 512 MB container — cap pool aggressively
     - name: POSTGRES_MIN_POOL_SIZE
-      value: "2"
+      value: "0"            # empty pool → Neon can scale to zero
+    - name: POSTGRES_MAX_INACTIVE_CONNECTION_LIFETIME
+      value: "60"
     - name: POSTGRES_STATEMENT_TIMEOUT_MS
       value: "30000"
     # ── Qdrant (external — Qdrant Cloud free tier) ──────────────
@@ -471,7 +474,9 @@ spec:
     - name: POSTGRES_POOL_SIZE
       value: "5"
     - name: POSTGRES_MIN_POOL_SIZE
-      value: "1"
+      value: "0"
+    - name: POSTGRES_MAX_INACTIVE_CONNECTION_LIFETIME
+      value: "60"
     - name: QDRANT_HOST
       value: 58384b79-0261-480e-b61f-d86bbf1c0dad.us-east4-0.gcp.cloud.qdrant.io
     - name: QDRANT_HTTPS
@@ -527,10 +532,10 @@ spec:
       valueFrom: { secretKeyRef: { group: eden-required, key: CLERK_WEBHOOK_SIGNING_SECRET } }
 
 # ─────────────────────────────────────────────────────────────────────
-# Job 2/2: eden-cron (OPTIONAL no-op — maintenance lives on eden-worker)
-# Core product + EQL + demotion + multi-tenant maintenance run on
-# eden-api + eden-worker. Keep this job's command a no-op (or manual
-# escape hatch). Improvement sweeps stay off (issue-driven drafts only).
+# Job 2/2: eden-cron (DISABLED — maintenance lives on eden-worker)
+# Kept as a free-tier job slot placeholder. Command is a no-op so a
+# stray schedule fire cannot duplicate run_maintenance_due / wake Neon.
+# Improvement sweeps stay off (issue-driven drafts only).
 # ─────────────────────────────────────────────────────────────────────
 ---
 apiVersion: workloads/v1
@@ -538,30 +543,24 @@ kind: Job
 metadata:
   name: eden-cron
 spec:
-  # Phase 2 audit (2026-06-23) — bumped from nf-compute-10 (0.1 vCPU
-  # / 256 MB) to nf-compute-50 (0.5 vCPU / 1 GB) for parity with the
-  # worker. The cron runs the full event-scheduler loop (drift
-  # detection, retention sweeps, KPI rollups) every 5 minutes and
-  # the smallest compute tier is no longer sufficient.
+  # Smallest compute — this job never does real work.
   compute:
-    name: nf-compute-50
+    name: nf-compute-10
   build:
     type: dockerfile
     dockerfilePath: ./Dockerfile
     dockerBuildContext: .
-  # Northflank cron jobs use the schedule spec. Times are in UTC.
-  # Eden's actual cron schedule lives in code — this entry just
-  # invokes the cron runner every 5 minutes.
+  # Rare schedule + no-op command. Prefer suspending the schedule
+  # in the Northflank dashboard after apply.
   schedule:
-    cronExpression: "*/5 * * * *"
+    cronExpression: "0 0 1 1 *"
     timezone: UTC
   command:
     - bash
     - -lc
     - |
-      cd /app
-      export SKIP_MIGRATIONS=1
-      exec python -m eden.workers.cron_tick --no-dry-run
+      echo "eden-cron disabled: maintenance + EQL + demotion run on eden-worker"
+      exit 0
   env:
     - name: APP_NAME
       value: Eden
@@ -590,9 +589,11 @@ spec:
     - name: POSTGRES_ENDPOINT_ID
       valueFrom: { secretKeyRef: { group: eden-required, key: POSTGRES_ENDPOINT_ID } }
     - name: POSTGRES_POOL_SIZE
-      value: "3"
-    - name: POSTGRES_MIN_POOL_SIZE
       value: "1"
+    - name: POSTGRES_MIN_POOL_SIZE
+      value: "0"
+    - name: POSTGRES_MAX_INACTIVE_CONNECTION_LIFETIME
+      value: "60"
     - name: REDIS_URL
       valueFrom: { secretKeyRef: { group: eden-required, key: REDIS_URL } }
     - name: RATE_LIMIT_DISTRIBUTED
@@ -607,27 +608,19 @@ spec:
       valueFrom: { secretKeyRef: { group: eden-required, key: SESSION_SECRET } }
     - name: OPENROUTER_API_KEY
       valueFrom: { secretKeyRef: { group: eden-required, key: OPENROUTER_API_KEY } }
-    # ── Clerk (Phase 2 audit — cron needs it for periodic user/org
-    # sync + autonomous scheduler notifications). Same trio as the
-    # worker; the cron doesn't accept webhooks so CLERK_WEBHOOK_*
-    # is purely for cross-tenant Clerk API calls in scheduled jobs.
-    # CLERK_PUBLISHABLE_KEY is a plain value here (see api block
-    # comment — it's a public-by-design key, no rotation needed).
     - name: CLERK_SECRET_KEY
       valueFrom: { secretKeyRef: { group: eden-required, key: CLERK_SECRET_KEY } }
     - name: CLERK_PUBLISHABLE_KEY
       valueFrom: { secretKeyRef: { group: eden-required, key: CLERK_PUBLISHABLE_KEY } }
     - name: CLERK_WEBHOOK_SIGNING_SECRET
       valueFrom: { secretKeyRef: { group: eden-required, key: CLERK_WEBHOOK_SIGNING_SECRET } }
-    # OPENROUTER_* — cron calls evaluate_pending_clusters → drift
-    # hooks → may invoke OpenRouter via the promotion hook chain.
-    # Without these the cron logs ImportError on every tick.
     - name: OPENROUTER_BASE_URL
       value: https://openrouter.ai/api/v1
     - name: IMPROVEMENT_AGENT_V1
       value: "true"
     - name: IMPROVEMENT_SCHEDULE_ENABLED
-      value: "true"
+      value: "false"
+
 
 # ─────────────────────────────────────────────────────────────────────
 # No Postgres addon — the database lives on Neon Scale

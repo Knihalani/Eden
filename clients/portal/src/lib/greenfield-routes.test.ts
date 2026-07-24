@@ -13,6 +13,8 @@ describe("product portal routes", () => {
     expect(isKnownPortalPath("/rebuild")).toBe(true);
     expect(isKnownPortalPath("/home")).toBe(true);
     expect(isKnownPortalPath("/traces")).toBe(true);
+    expect(isKnownPortalPath("/gateway")).toBe(true);
+    expect(isKnownPortalPath("/agents/connect")).toBe(true);
     expect(isKnownPortalPath("/unavailable")).toBe(true);
     expect(isKnownPortalPath("/prompts")).toBe(true);
   });

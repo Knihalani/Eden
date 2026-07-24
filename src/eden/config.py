@@ -133,6 +133,12 @@ def _build_settings_class():
         # legitimately hold a tx open — those run on a dedicated
         # connection with a custom ``statement_timeout``.
         postgres_idle_in_transaction_timeout_ms: int = 60_000
+        # asyncpg recycles pooled connections that have been idle longer
+        # than this (seconds). Keep short so Neon can scale to zero after
+        # ``suspend_timeout_seconds``; the previous hard-coded 300s held
+        # sockets open past a 5-minute autosuspend window when combined
+        # with ``min_size > 0``.
+        postgres_max_inactive_connection_lifetime: float = 60.0
 
         # Qdrant
         qdrant_host: str = "localhost"

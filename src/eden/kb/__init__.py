@@ -26,6 +26,12 @@ def _get_qdrant_client():
 
 logger = logging.getLogger(__name__)
 
+# Cache /health Postgres+Qdrant probes so LB/monitor chatter doesn't
+# keep Neon warm with SELECT 1 every few seconds. /ready has its own
+# cache path; this mirrors that for the detailed health surface.
+_HEALTH_CACHE: dict[str, object] = {"at": 0.0, "value": None}
+_HEALTH_CACHE_TTL_S = 30.0
+
 
 async def initialize_kb() -> None:
     """Initialize the Knowledge Base storage layer.
@@ -132,6 +138,14 @@ async def health_check() -> dict:
     Returns:
         Dict with health status of each KB layer
     """
+    import time
+
+    now = time.monotonic()
+    cached_at = float(_HEALTH_CACHE.get("at") or 0.0)
+    cached_val = _HEALTH_CACHE.get("value")
+    if cached_val is not None and (now - cached_at) < _HEALTH_CACHE_TTL_S:
+        return dict(cached_val)  # type: ignore[arg-type]
+
     health = {
         "postgres": "unknown",
         "qdrant": "unknown",
@@ -158,4 +172,6 @@ async def health_check() -> dict:
     except Exception as e:
         health["qdrant"] = f"error: {str(e)[:100]}"
 
+    _HEALTH_CACHE["at"] = now
+    _HEALTH_CACHE["value"] = dict(health)
     return health
