@@ -695,18 +695,29 @@ function LabSettingsInner() {
   );
 }
 
+function SettingsSuspenseFallback() {
+  const searchParams = useSearchParams();
+  const mode = parseSettingsMode(searchParams.get("mode"));
+  return (
+    <div className="ds-page">
+      <PageHeader
+        title="Settings"
+        meta={<span className="type-meta">Loading…</span>}
+        actions={
+          <SettingsModeNav value={mode} onChange={() => undefined} />
+        }
+      />
+      {/* Keep tour spotlight target mounted while the chunk loads. */}
+      <span className="sr-only" data-tour-id="api-keys">
+        API keys
+      </span>
+    </div>
+  );
+}
+
 export default function LabSettingsPage() {
   return (
-    <Suspense
-      fallback={
-        <div className="ds-page">
-          <PageHeader
-            title="Settings"
-            meta={<span className="type-meta">Loading…</span>}
-          />
-        </div>
-      }
-    >
+    <Suspense fallback={<SettingsSuspenseFallback />}>
       <LabSettingsInner />
     </Suspense>
   );

@@ -296,24 +296,39 @@ export function ProductTour({
     return PRODUCT_TOUR_STEPS[index]?.href;
   }
 
+  function hrefPathname(href: string | undefined): string | undefined {
+    if (!href) return undefined;
+    try {
+      return new URL(href, "http://eden.local").pathname;
+    } catch {
+      return href.split("?")[0];
+    }
+  }
+
   function goNext() {
     if (busy) return;
     if (stepIndex >= PRODUCT_TOUR_TOTAL - 1) {
       onFinish();
       return;
     }
-    // Only hide the card when the next step navigates — same-route
-    // steps used to flash the whole overlay off for a frame.
-    if (hrefFor(stepIndex + 1) !== hrefFor(stepIndex)) {
+    // Only hide the card when the next step changes the page shell —
+    // search-only moves (e.g. settings tabs) used to flash the overlay.
+    const nextPath = hrefPathname(hrefFor(stepIndex + 1));
+    const herePath = hrefPathname(hrefFor(stepIndex));
+    if (nextPath !== herePath) {
       setReady(false);
+      setHole(null);
     }
     onStepChange(stepIndex + 1);
   }
 
   function goBack() {
     if (busy || stepIndex <= 0) return;
-    if (hrefFor(stepIndex - 1) !== hrefFor(stepIndex)) {
+    const prevPath = hrefPathname(hrefFor(stepIndex - 1));
+    const herePath = hrefPathname(hrefFor(stepIndex));
+    if (prevPath !== herePath) {
       setReady(false);
+      setHole(null);
     }
     onStepChange(stepIndex - 1);
   }
@@ -408,6 +423,12 @@ export function ProductTour({
         y >= hole.top &&
         y <= hole.top + hole.height
       ) {
+        // Punch through: SVG masks do not create real click holes.
+        const layer = e.currentTarget as HTMLElement;
+        layer.style.pointerEvents = "none";
+        const under = document.elementFromPoint(x, y) as HTMLElement | null;
+        layer.style.pointerEvents = "";
+        under?.click();
         return;
       }
     }
@@ -418,7 +439,7 @@ export function ProductTour({
     <AnimatePresence>
       {open && (
         <div
-          className="fixed inset-0 z-[90]"
+          className="fixed inset-0 z-[100]"
           role="dialog"
           aria-modal="true"
           aria-labelledby="eden-tour-title"
@@ -470,26 +491,17 @@ export function ProductTour({
             )}
           </motion.div>
 
-          {ready && (
+          {ready ? (
             <motion.div
               ref={cardRef}
-              key={`card-${step.id}`}
-              initial={
-                isSheet
-                  ? { opacity: 0, y: 48 }
-                  : { opacity: 0, y: 12, scale: 0.97 }
-              }
+              layout
+              initial={false}
               animate={
                 isSheet
                   ? { opacity: 1, y: 0 }
                   : { opacity: 1, y: 0, scale: 1 }
               }
-              exit={
-                isSheet
-                  ? { opacity: 0, y: 32 }
-                  : { opacity: 0, y: 8, scale: 0.98 }
-              }
-              transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
+              transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
               style={
                 isSheet
                   ? undefined
@@ -637,7 +649,7 @@ export function ProductTour({
                 </div>
               </div>
             </motion.div>
-          )}
+          ) : null}
         </div>
       )}
     </AnimatePresence>,

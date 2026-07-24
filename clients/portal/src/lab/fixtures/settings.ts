@@ -93,7 +93,7 @@ export type AuditPackFixture = {
 };
 
 export const WORKSPACE: WorkspaceFixture = {
-  id: "ws_default",
+  id: "",
   name: "",
   slug: "",
   planLabel: "",
