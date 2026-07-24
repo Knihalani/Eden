@@ -13,7 +13,7 @@ from typing import Any
 from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from pydantic import BaseModel
 
-from eden.api.deps import require_feature_flag, require_org_member, require_path_org_access
+from eden.api.deps import require_feature_flag, require_path_org_access
 from eden.api.utils.redact import redact_all
 from eden.api.utils.safe_error import safe_detail
 from eden.guardrails import (
@@ -36,7 +36,9 @@ router = APIRouter(
     tags=["intelligence-guardrails"],
     dependencies=[
         Depends(require_feature_flag("intelligence_gap_v0")),
-        Depends(require_org_member),
+        # Path org membership only — same gate as portal guardrails.
+        # require_org_member keyed off X-Org-Id/cookie preferred org and
+        # 403'd evaluate when that disagreed with path {org_id}.
         Depends(require_path_org_access),
     ],
 )

@@ -19,6 +19,8 @@ Currently hosted loops:
       trace_finalized consumer, promotion hooks
     * EQL alert-as-code watchdog (leader-gated) — replaces
       the former ``eden-cron`` ``eql_alert_watchdog`` tick
+    * Artifact / nudge demotion (leader-gated) — 7d regression
+      flywheel; no longer depends on eden-cron
 
 NF manifest runs this as ``python -m eden.workers.main`` on the
 ``eden-worker`` job. ``SKIP_MIGRATIONS=1`` is set — the API
@@ -231,7 +233,8 @@ async def _run_forever() -> None:
     1. Insights detector — leader-gated poll of ``judge_scores``.
     2. Webhook drain — leader-gated 30s delivery cadence.
     3. EQL alert-as-code watchdog — leader-gated ~5 min (was cron).
-    4. Quality / closed-loop / anomaly sidecars (process-local).
+    4. Artifact/nudge demotion — leader-gated hourly (was cron).
+    5. Quality / closed-loop / anomaly sidecars (process-local).
     """
     loops: list[tuple[str, asyncio.Task]] = []
     stop = asyncio.Event()
@@ -258,7 +261,14 @@ async def _run_forever() -> None:
     )
     loops.append(("eql_alert_watchdog", eql_task))
 
-    # 4. Quality + closed-loop + anomaly — API disables in-process workers.
+    # 4. Nudge/artifact demotion — 7d regression flywheel (was cron-only).
+    demotion_task = asyncio.create_task(
+        _supervise("artifact_demotion", _leader_artifact_demotion, stop),
+        name="artifact-demotion",
+    )
+    loops.append(("artifact_demotion", demotion_task))
+
+    # 5. Quality + closed-loop + anomaly — API disables in-process workers.
     await _start_sidecar_workers()
 
     if not loops:
@@ -379,6 +389,34 @@ async def _leader_eql_alert_watchdog(stop: asyncio.Event) -> None:
         "eql_alert_watchdog",
         _tick,
         interval=300.0,
+        stop=stop,
+    )
+
+
+async def _leader_artifact_demotion(stop: asyncio.Event) -> None:
+    """Leader-gated 7d nudge/artifact demotion (was eden-cron only)."""
+    from eden.workers.leader import run_if_leader
+
+    async def _tick() -> None:
+        try:
+            from eden.nudges.demotion_worker import ArtifactDemotionWorker
+
+            result = await ArtifactDemotionWorker().run_once()
+            if result.get("scanned") or result.get("demoted"):
+                logger.info("worker: artifact_demotion result=%s", result)
+        except Exception as exc:
+            logger.error(
+                "worker: artifact_demotion tick failed: %s",
+                exc,
+                exc_info=True,
+            )
+            raise
+
+    logger.info("worker: artifact_demotion loop registered (interval=3600s)")
+    await run_if_leader(
+        "artifact_demotion",
+        _tick,
+        interval=3600.0,
         stop=stop,
     )
 

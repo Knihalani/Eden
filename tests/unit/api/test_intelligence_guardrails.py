@@ -67,18 +67,13 @@ def app(stub_pg, monkeypatch):
     async def _get_user():
         return {"user_id": "u-test", "email": "t@test.io", "org_id": "org-test"}
 
-    async def _get_member():
-        return {"sub": "u-test", "org_id": "org-test"}
-
     async def _path_org(org_id: str = "org-test"):
         return org_id
 
     app = FastAPI()
     app.include_router(intelligence_guardrails.router)
     app.dependency_overrides[eden_deps.get_current_user] = _get_user
-    app.dependency_overrides[eden_deps.require_org_member] = _get_member
     app.dependency_overrides[eden_deps.require_path_org_access] = _path_org
-    app.dependency_overrides[intelligence_guardrails.require_org_member] = _get_member
     app.dependency_overrides[intelligence_guardrails.require_path_org_access] = _path_org
     return app
 
