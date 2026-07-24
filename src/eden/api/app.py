@@ -107,6 +107,7 @@ from eden.api.routes import (
     agent_sessions,
     agent_pr_suggestions,
     agents,
+    ai_agent,
     ai_insights,
     analytics,
     analytics_v2,
@@ -892,8 +893,10 @@ app.include_router(scim.router)  # /orgs/{org_id}/scim/v2
 app.include_router(sso.router)  # /sso
 app.include_router(ai_insights.router)  # /orgs/{org_id}/ai-insights
 app.include_router(sidebar_prefs.router)  # /orgs/{org_id}/sidebar-prefs (per-user UI prefs)
-# W20: Phase-C dual ``/ai`` surface unmounted — ChatSidebar + ai-insights only.
-# ai_agent module kept for ``_sse_format`` / unit helpers; do not remount.
+# W20: Phase-C ``/ai`` chat restored for the portal assistant panel
+# (``clients/portal/.../agent/page.tsx``). Sidebar insights stay on
+# ``/ai-insights``; both surfaces share conversation storage helpers.
+app.include_router(ai_agent.router)  # /orgs/{org_id}/ai/{chat,conversations,tools}
 app.include_router(sharing.sharing_router)  # /orgs/{org_id}/traces/{trace_id}/share + saved-searches (Phase N)
 app.include_router(sharing.public_router)  # /public/traces/{token} (no auth, token-gated)
 # Phase A1: session lifecycle + presigned feedback tokens

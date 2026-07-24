@@ -36,6 +36,7 @@ import { useOrgQuery } from "@/hooks/use-api-query";
 import { queryKeys } from "@/lib/query-keys";
 import { portalApi } from "@/lib/api/portal";
 import { QueryErrorPanel, QueryLoadingPanel } from "@/components/shell/query-error-panel";
+import { ConnectRepoPanel } from "@/components/agents/ConnectRepoPanel";
 
 type RunFilter = "all" | "error" | "warn" | "ok";
 
@@ -173,10 +174,24 @@ function RunInspector({
 function AgentDetail({ agent }: { agent: AgentFixture | null }) {
   if (!agent) {
     return (
-      <EmptyState
-        title="No agents yet"
-        body="Connect an agent or ingest traffic to populate the fleet."
-      />
+      <div className="space-y-4 p-5">
+        <EmptyState
+          title="No agents yet"
+          body="Ingest traffic with the SDK or gateway, then connect a GitHub repo so Eden can open fix PRs."
+        />
+        <div className="flex flex-wrap gap-2">
+          <Link href="/agents/connect" className="ds-btn ds-btn-primary ds-btn-sm">
+            Connect repo
+          </Link>
+          <Link href="/gateway" className="ds-btn ds-btn-outline ds-btn-sm">
+            Gateway usage
+          </Link>
+          <Link href="/settings?mode=keys" className="ds-btn ds-btn-ghost ds-btn-sm">
+            API keys
+          </Link>
+        </div>
+        <ConnectRepoPanel compact />
+      </div>
     );
   }
 
@@ -184,10 +199,24 @@ function AgentDetail({ agent }: { agent: AgentFixture | null }) {
 }
 
 function AgentDetailBody({ agent }: { agent: AgentFixture }) {
-  const runs = useMemo(
-    () => sortTracesNewestFirst(tracesForAgent(agent.id)),
-    [agent.id],
+  const { currentOrg } = useOrg();
+  const orgId = currentOrg?.id ?? null;
+  // Prefer React Query traces for this page — catalog alone was empty
+  // when /agents did not prefetch traces (runs24h showed N, list showed 0).
+  const tracesQuery = useOrgQuery(
+    queryKeys.portal.traces(orgId),
+    orgId,
+    () => portalApi.traces(orgId!),
+    { staleTime: 30_000 },
   );
+  const runs = useMemo(() => {
+    const fromApi = (tracesQuery.data ?? []).filter(
+      (t) => t.agentId === agent.id,
+    );
+    const source =
+      fromApi.length > 0 ? fromApi : tracesForAgent(agent.id);
+    return sortTracesNewestFirst(source);
+  }, [agent.id, tracesQuery.data]);
   const failures = useMemo(
     () => runs.filter((t) => t.severity === "error"),
     [runs],
@@ -328,6 +357,12 @@ function AgentDetailBody({ agent }: { agent: AgentFixture }) {
               {agent.openIssues > 0 ? ` · ${agent.openIssues}` : ""}
             </Link>
             <Link
+              href={`/agents/connect?agent=${encodeURIComponent(agent.id)}`}
+              className="ds-btn ds-btn-outline ds-btn-sm"
+            >
+              Connect repo
+            </Link>
+            <Link
               href={`/traces?agent=${agent.id}`}
               className="ds-btn ds-btn-primary ds-btn-sm"
             >
@@ -336,6 +371,10 @@ function AgentDetailBody({ agent }: { agent: AgentFixture }) {
           </div>
         </div>
       </header>
+
+      <div className="border-b border-[var(--line)] px-4 py-4 sm:px-5">
+        <ConnectRepoPanel agentId={agent.id} compact />
+      </div>
 
       <div className="lab-metric-strip shrink-0">
         <MetricCell label="Runs (24h)" value={String(agent.runs24h)} />
