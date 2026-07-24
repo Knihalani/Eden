@@ -15,6 +15,44 @@ import {
 export type SettingsMode = "workspace" | "keys" | "members" | "audit";
 export type AuditTab = "events" | "packs";
 
+/** Map legacy ``?tab=`` bookmarks / command palette hrefs to modes. */
+const LEGACY_TAB_TO_MODE: Record<string, SettingsMode> = {
+  "api-keys": "keys",
+  keys: "keys",
+  org: "workspace",
+  account: "workspace",
+  members: "members",
+  references: "workspace",
+  mcp: "workspace",
+  security: "workspace",
+  scim: "workspace",
+  gateway: "workspace",
+  pii: "workspace",
+  retention: "workspace",
+  exports: "workspace",
+  status: "workspace",
+  analytics: "workspace",
+  billing: "workspace",
+  finops: "workspace",
+  autonomous: "workspace",
+  sidebar: "workspace",
+  "audit-log": "audit",
+  audit: "audit",
+};
+
+/**
+ * Resolve settings mode from ``?mode=`` or legacy ``?tab=``.
+ * Prefer ``mode`` when both are present.
+ */
+export function resolveSettingsModeParam(
+  mode: string | null,
+  tab: string | null = null,
+): string | null {
+  if (mode) return mode;
+  if (!tab) return null;
+  return LEGACY_TAB_TO_MODE[tab] ?? null;
+}
+
 export function parseSettingsMode(mode: string | null): SettingsMode {
   if (mode === "api-keys") return "keys";
   if (mode === "keys" || mode === "members" || mode === "audit") return mode;

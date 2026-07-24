@@ -243,7 +243,20 @@ function OnboardingOverlayInner() {
   }
 
   if (!isLoaded && !forceOpen) return null;
-  // While org resolves, keep null (no flash of tour-over-boot-gate).
+  // Soft-switch nulls currentOrg briefly; keep tour mounted so we do not
+  // emit tour-end / remount / fight the soft-switch home push.
+  if (sessionOpenRef.current && (orgStillResolving || orgSyncing)) {
+    return (
+      <ProductTour
+        open={open}
+        stepIndex={stepIndex}
+        onStepChange={handleStepChange}
+        onSkip={() => void handleSkip()}
+        onFinish={() => void handleFinish()}
+        busy
+      />
+    );
+  }
   if (!orgReady && !currentOrg) return null;
   if (!currentOrg) return null;
   if (!open) return null;

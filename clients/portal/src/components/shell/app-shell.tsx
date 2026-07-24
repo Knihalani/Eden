@@ -28,7 +28,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <AlertsProvider>
           <SignalJobsProvider>
             <PortalCatalogSync />
-            <div className="flex h-dvh overflow-hidden bg-[var(--bg)] text-[var(--text)]">
+            <div className="flex h-dvh overflow-hidden bg-[var(--bg)] text-[var(--text)]" data-eden-portal-shell>
               <SidebarNav />
               <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-[var(--bg)]">
                 <PortalStatusBanners />

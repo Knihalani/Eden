@@ -18,14 +18,9 @@ def _fixed_now(*, hour: int = 0, minute: int = 0, weekday: int = 1) -> datetime:
 
 
 @pytest.mark.asyncio
-async def test_eql_alert_failure_recorded_not_raised():
-    """Alert watchdog exceptions become ``errors`` in the tick result."""
+async def test_tick_skips_eql_and_demotion():
+    """Legacy cron entrypoint must not double-fire worker-owned loops."""
     with (
-        patch.object(
-            cron_tick,
-            "_run_eql_alert_watchdog",
-            AsyncMock(side_effect=RuntimeError("alert boom")),
-        ),
         patch.object(
             cron_tick, "_once_per_window", AsyncMock(return_value=True)
         ),
@@ -34,8 +29,8 @@ async def test_eql_alert_failure_recorded_not_raised():
         mock_dt.now.return_value = _fixed_now(hour=1, minute=30)
         out = await cron_tick._tick(dry_run=False)
 
-    assert "errors" in out["eql_alert_watchdog"]
-    assert "alert boom" in out["eql_alert_watchdog"]["errors"][0]
+    assert "eql_alert_watchdog" not in out
+    assert "artifact_demotion" not in out
     assert out["improvement_sweeps"]["skipped"] is True
 
 
@@ -44,18 +39,8 @@ async def test_compaction_failure_recorded_in_hourly_window():
     with (
         patch.object(
             cron_tick,
-            "_run_eql_alert_watchdog",
-            AsyncMock(return_value={"fired": 0}),
-        ),
-        patch.object(
-            cron_tick,
             "_run_columnar_compaction",
             AsyncMock(side_effect=RuntimeError("compact boom")),
-        ),
-        patch.object(
-            cron_tick,
-            "_run_artifact_demotion",
-            AsyncMock(return_value={"ok": True}),
         ),
         patch.object(
             cron_tick,
@@ -65,6 +50,9 @@ async def test_compaction_failure_recorded_in_hourly_window():
         patch.object(
             cron_tick, "_once_per_window", AsyncMock(return_value=True)
         ),
+        patch.object(
+            cron_tick, "_release_window", AsyncMock()
+        ) as release,
         patch.object(cron_tick, "datetime") as mock_dt,
     ):
         mock_dt.now.return_value = _fixed_now(hour=5, minute=5)
@@ -72,6 +60,7 @@ async def test_compaction_failure_recorded_in_hourly_window():
 
     assert "errors" in out["columnar_compaction"]
     assert "compact boom" in out["columnar_compaction"]["errors"][0]
+    release.assert_awaited()
 
 
 @pytest.mark.asyncio
@@ -108,11 +97,6 @@ async def test_improvement_sweeps_skipped_issue_driven_only():
     """Sweeps stay off — drafts come from identified issues only."""
     with (
         patch.object(
-            cron_tick,
-            "_run_eql_alert_watchdog",
-            AsyncMock(return_value={"skipped": True}),
-        ),
-        patch.object(
             cron_tick, "_once_per_window", AsyncMock(return_value=True)
         ),
         patch.object(cron_tick, "datetime") as mock_dt,
@@ -125,23 +109,13 @@ async def test_improvement_sweeps_skipped_issue_driven_only():
 
 
 @pytest.mark.asyncio
-async def test_artifact_and_shadow_failures_isolated():
-    """One evolution worker failure must not silence the other."""
+async def test_shadow_failure_recorded_without_demotion():
+    """Demotion is worker-owned; maintenance still records shadow errors."""
     with (
         patch.object(
             cron_tick,
-            "_run_eql_alert_watchdog",
-            AsyncMock(return_value={"fired": 0}),
-        ),
-        patch.object(
-            cron_tick,
-            "_run_artifact_demotion",
-            AsyncMock(side_effect=RuntimeError("demote boom")),
-        ),
-        patch.object(
-            cron_tick,
             "_run_shadow_outcome_join",
-            AsyncMock(return_value={"joined": 3}),
+            AsyncMock(side_effect=RuntimeError("shadow boom")),
         ),
         patch.object(
             cron_tick, "_run_mcp_rollup", AsyncMock(return_value={})
@@ -158,28 +132,19 @@ async def test_artifact_and_shadow_failures_isolated():
         patch.object(
             cron_tick, "_once_per_window", AsyncMock(return_value=True)
         ),
+        patch.object(cron_tick, "_release_window", AsyncMock()),
         patch.object(cron_tick, "datetime") as mock_dt,
     ):
         mock_dt.now.return_value = _fixed_now(hour=1, minute=30)
         out = await cron_tick._tick(dry_run=False)
 
-    assert "demote boom" in out["artifact_demotion"]["errors"][0]
-    assert out["shadow_outcome_join"] == {"joined": 3}
+    assert "artifact_demotion" not in out
+    assert "shadow boom" in out["shadow_outcome_join"]["errors"][0]
 
 
 @pytest.mark.asyncio
 async def test_signal_worker_failures_recorded_separately():
     with (
-        patch.object(
-            cron_tick,
-            "_run_eql_alert_watchdog",
-            AsyncMock(return_value={"fired": 0}),
-        ),
-        patch.object(
-            cron_tick,
-            "_run_artifact_demotion",
-            AsyncMock(return_value={}),
-        ),
         patch.object(
             cron_tick,
             "_run_shadow_outcome_join",
@@ -198,6 +163,7 @@ async def test_signal_worker_failures_recorded_separately():
         patch.object(
             cron_tick, "_once_per_window", AsyncMock(return_value=True)
         ),
+        patch.object(cron_tick, "_release_window", AsyncMock()),
         patch.object(cron_tick, "datetime") as mock_dt,
     ):
         # minute % 10 < 5 → signal window
@@ -209,8 +175,8 @@ async def test_signal_worker_failures_recorded_separately():
 
 
 @pytest.mark.asyncio
-async def test_maintenance_skips_slot_when_already_ran():
-    """Second tick in the same wall-clock slot must not re-run work."""
+async def test_maintenance_skips_sibling_keys_when_slot_claimed():
+    """Classifier + signal siblings share skip metadata with their slot."""
     with (
         patch.object(
             cron_tick, "_once_per_window", AsyncMock(return_value=False)
@@ -225,15 +191,36 @@ async def test_maintenance_skips_slot_when_already_ran():
             "_run_shadow_outcome_join",
             AsyncMock(return_value={"joined": 1}),
         ) as shadow,
+        patch.object(
+            cron_tick, "_run_mcp_rollup", AsyncMock(return_value={})
+        ) as mcp,
+        patch.object(
+            cron_tick, "_run_classifier_retrain", AsyncMock(return_value={})
+        ) as clf,
+        patch.object(
+            cron_tick, "_run_signal_backfill", AsyncMock(return_value={})
+        ) as backfill,
+        patch.object(
+            cron_tick, "_run_signal_cluster_quiet", AsyncMock(return_value={})
+        ) as quiet,
     ):
+        # minute=0 hits compact + mcp(15) + shadow + signal(10) windows.
         out = await cron_tick.run_maintenance_due(
-            now=_fixed_now(hour=5, minute=5), dry_run=False
+            now=_fixed_now(hour=5, minute=0), dry_run=False
         )
 
     assert out["columnar_compaction"]["skipped"] is True
     assert out["shadow_outcome_join"]["skipped"] is True
+    assert out["mcp_rollup"]["skipped"] is True
+    assert out["classifier_retrain"]["skipped"] is True
+    assert out["signal_backfill"]["skipped"] is True
+    assert out["signal_cluster_quiet"]["skipped"] is True
     compact.assert_not_awaited()
     shadow.assert_not_awaited()
+    mcp.assert_not_awaited()
+    clf.assert_not_awaited()
+    backfill.assert_not_awaited()
+    quiet.assert_not_awaited()
 
 
 @pytest.mark.asyncio

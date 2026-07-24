@@ -380,12 +380,12 @@ const nextConfig: NextConfig = {
       { source: "/audit/:path*", destination: "/settings?mode=audit", permanent: false },
       { source: "/audit-trail", destination: "/settings?mode=audit", permanent: false },
       { source: "/audit-trail/:path*", destination: "/settings?mode=audit", permanent: false },
-      { source: "/profile", destination: "/settings?tab=account", permanent: false },
-      { source: "/profile/:path*", destination: "/settings?tab=account", permanent: false },
-      { source: "/billing", destination: "/settings?tab=billing", permanent: false },
-      { source: "/billing/:path*", destination: "/settings?tab=billing", permanent: false },
-      { source: "/finops", destination: "/settings?tab=finops", permanent: false },
-      { source: "/finops/:path*", destination: "/settings?tab=finops", permanent: false },
+      { source: "/profile", destination: "/settings?mode=workspace", permanent: false },
+      { source: "/profile/:path*", destination: "/settings?mode=workspace", permanent: false },
+      { source: "/billing", destination: "/settings?mode=workspace", permanent: false },
+      { source: "/billing/:path*", destination: "/settings?mode=workspace", permanent: false },
+      { source: "/finops", destination: "/settings?mode=workspace", permanent: false },
+      { source: "/finops/:path*", destination: "/settings?mode=workspace", permanent: false },
 
       // Later (post-P7) — Prompts + Analytics product hubs (not core leaves)
       { source: "/users", destination: "/analytics?tab=users", permanent: false },

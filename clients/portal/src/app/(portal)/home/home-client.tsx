@@ -370,14 +370,27 @@ export default function HomeClient() {
 
             {visibleAlerts.length === 0 ? (
               <EmptyState
-                title="All clear"
+                title={
+                  traces.length === 0 && agents.length === 0
+                    ? "No runs yet"
+                    : "All clear"
+                }
                 body={
-                  dismissedCount > 0
-                    ? `${dismissedCount} dismissed`
-                    : undefined
+                  traces.length === 0 && agents.length === 0
+                    ? "Install the SDK or mint an API key to see attention items here."
+                    : dismissedCount > 0
+                      ? `${dismissedCount} dismissed`
+                      : undefined
                 }
                 action={
-                  dismissedCount > 0 ? (
+                  traces.length === 0 && agents.length === 0 ? (
+                    <Link
+                      href="/settings?mode=keys"
+                      className="ds-btn ds-btn-primary ds-btn-sm"
+                    >
+                      Create API key
+                    </Link>
+                  ) : dismissedCount > 0 ? (
                     <button
                       type="button"
                       className="ds-btn ds-btn-ghost ds-btn-sm"
@@ -412,33 +425,45 @@ export default function HomeClient() {
                 Traces
               </Link>
             </header>
-            <ul>
-              {recent.map((trace) => {
-                const agent = agentForTrace(trace);
-                return (
-                  <li key={trace.id}>
-                    <Link
-                      href={`/traces?id=${trace.id}${agent ? `&agent=${agent.id}` : ""}${trace.severity !== "none" ? "&tab=signals" : ""}`}
-                      className="lab-run-row"
-                      data-severity={trace.severity}
-                    >
-                      <SeverityBadge severity={trace.severity} />
-                      <div className="min-w-0 flex-1">
-                        <p className="type-ui truncate text-[var(--text)]">
-                          {trace.name}
-                        </p>
-                        <p className="type-meta mt-1 truncate">
-                          {agent?.name ?? "—"} · {trace.startedAt}
-                        </p>
-                      </div>
-                      <span className="type-value shrink-0 tabular-nums !text-[0.6875rem]">
-                        {formatDuration(trace.durationMs)}
-                      </span>
-                    </Link>
-                  </li>
-                );
-              })}
-            </ul>
+            {recent.length === 0 ? (
+              <EmptyState
+                title="No recent runs"
+                body="Events show up here after your first ingest."
+                action={
+                  <Link href="/traces" className="ds-btn ds-btn-ghost ds-btn-sm">
+                    Open traces
+                  </Link>
+                }
+              />
+            ) : (
+              <ul>
+                {recent.map((trace) => {
+                  const agent = agentForTrace(trace);
+                  return (
+                    <li key={trace.id}>
+                      <Link
+                        href={`/traces?id=${trace.id}${agent ? `&agent=${agent.id}` : ""}${trace.severity !== "none" ? "&tab=signals" : ""}`}
+                        className="lab-run-row"
+                        data-severity={trace.severity}
+                      >
+                        <SeverityBadge severity={trace.severity} />
+                        <div className="min-w-0 flex-1">
+                          <p className="type-ui truncate text-[var(--text)]">
+                            {trace.name}
+                          </p>
+                          <p className="type-meta mt-1 truncate">
+                            {agent?.name ?? "—"} · {trace.startedAt}
+                          </p>
+                        </div>
+                        <span className="type-value shrink-0 tabular-nums !text-[0.6875rem]">
+                          {formatDuration(trace.durationMs)}
+                        </span>
+                      </Link>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
           </section>
         </div>
 
@@ -449,43 +474,55 @@ export default function HomeClient() {
               Agents
             </Link>
           </header>
-          <ul>
-            {fleet.map((agent) => (
-              <li key={agent.id} className="border-b border-[var(--line)]">
-                <Link
-                  href={`/agents?id=${agent.id}`}
-                  className="block px-5 py-4 transition-colors hover:bg-[var(--accent-muted)] sm:px-6"
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="type-mono !text-[var(--text)]">{agent.name}</p>
-                    <AgentStatusBadge status={agent.status} />
-                  </div>
-                  <p className="type-meta mt-1.5">
-                    {agent.runs24h} runs ·{" "}
-                    <span
-                      className={
-                        agent.successRate >= 0.95
-                          ? "text-[var(--success)]"
-                          : agent.successRate < 0.8
-                            ? "text-[var(--error)]"
-                            : undefined
-                      }
-                    >
-                      {(agent.successRate * 100).toFixed(0)}% ok
-                    </span>
-                    {agent.openIssues > 0 ? (
-                      <span className="text-[var(--error)]">
-                        {" "}
-                        · {agent.openIssues} issues
-                      </span>
-                    ) : null}
-                    {" · "}
-                    {formatUsd(agent.costUsd24h)}
-                  </p>
+          {fleet.length === 0 ? (
+            <EmptyState
+              title="No agents yet"
+              body="Agents appear after your first traced runs."
+              action={
+                <Link href="/agents" className="ds-btn ds-btn-ghost ds-btn-sm">
+                  Open agents
                 </Link>
-              </li>
-            ))}
-          </ul>
+              }
+            />
+          ) : (
+            <ul>
+              {fleet.map((agent) => (
+                <li key={agent.id} className="border-b border-[var(--line)]">
+                  <Link
+                    href={`/agents?id=${agent.id}`}
+                    className="block px-5 py-4 transition-colors hover:bg-[var(--accent-muted)] sm:px-6"
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="type-mono !text-[var(--text)]">{agent.name}</p>
+                      <AgentStatusBadge status={agent.status} />
+                    </div>
+                    <p className="type-meta mt-1.5">
+                      {agent.runs24h} runs ·{" "}
+                      <span
+                        className={
+                          agent.successRate >= 0.95
+                            ? "text-[var(--success)]"
+                            : agent.successRate < 0.8
+                              ? "text-[var(--error)]"
+                              : undefined
+                        }
+                      >
+                        {(agent.successRate * 100).toFixed(0)}% ok
+                      </span>
+                      {agent.openIssues > 0 ? (
+                        <span className="text-[var(--error)]">
+                          {" "}
+                          · {agent.openIssues} issues
+                        </span>
+                      ) : null}
+                      {" · "}
+                      {formatUsd(agent.costUsd24h)}
+                    </p>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
 
           <div className="space-y-2 px-5 py-4 sm:px-6">
             {orderedFleet.length > 3 ? (

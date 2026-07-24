@@ -19,6 +19,7 @@ import {
 import {
   parseAuditTab,
   parseSettingsMode,
+  resolveSettingsModeParam,
   SettingsModeNav,
   type AuditTab,
   type SettingsMode,
@@ -79,19 +80,16 @@ const WORKSPACE_PATCH_KEY_MAP: Record<string, string> = {
 
 function LabSettingsInner() {
   const searchParams = useSearchParams();
-  const paramMode =
-    searchParams.get("mode") ??
-    (searchParams.get("tab") === "api-keys" || searchParams.get("tab") === "keys"
-      ? "keys"
-      : searchParams.get("tab") === "org"
-        ? "workspace"
-        : null);
   const paramTab = searchParams.get("tab");
+  const paramMode = resolveSettingsModeParam(
+    searchParams.get("mode"),
+    paramTab,
+  );
   const paramId = searchParams.get("id");
   const paramAgent = searchParams.get("agent");
 
   const patchQuery = useQueryPatch();
-  const { currentOrg } = useOrg();
+  const { currentOrg, orgSyncing } = useOrg();
   const orgId = currentOrg?.id ?? null;
   const queryClient = useQueryClient();
   const { pushToast } = useLabToast();
@@ -128,24 +126,41 @@ function LabSettingsInner() {
   const events = auditEventsQuery.data ?? [];
   const packsData = auditPacksQuery.data ?? [];
 
+  const loadMode = parseSettingsMode(paramMode);
+  // Wait for soft-switch remaps, but never spin forever when the user
+  // has no org (queries stay disabled and would never resolve).
   const isLoading =
-    workspaceQuery.isLoading ||
-    keysQuery.isLoading ||
-    membersQuery.isLoading ||
-    auditEventsQuery.isLoading ||
-    auditPacksQuery.isLoading;
+    orgSyncing ||
+    (Boolean(orgId) &&
+      (loadMode === "keys"
+        ? workspaceQuery.isLoading || keysQuery.isLoading
+        : loadMode === "members"
+          ? workspaceQuery.isLoading || membersQuery.isLoading
+          : loadMode === "audit"
+            ? workspaceQuery.isLoading ||
+              auditEventsQuery.isLoading ||
+              auditPacksQuery.isLoading
+            : workspaceQuery.isLoading));
   const isError =
-    workspaceQuery.isError ||
-    keysQuery.isError ||
-    membersQuery.isError ||
-    auditEventsQuery.isError ||
-    auditPacksQuery.isError;
+    loadMode === "keys"
+      ? workspaceQuery.isError || keysQuery.isError
+      : loadMode === "members"
+        ? workspaceQuery.isError || membersQuery.isError
+        : loadMode === "audit"
+          ? workspaceQuery.isError ||
+            auditEventsQuery.isError ||
+            auditPacksQuery.isError
+          : workspaceQuery.isError;
   const firstError =
-    workspaceQuery.error ??
-    keysQuery.error ??
-    membersQuery.error ??
-    auditEventsQuery.error ??
-    auditPacksQuery.error;
+    loadMode === "keys"
+      ? (workspaceQuery.error ?? keysQuery.error)
+      : loadMode === "members"
+        ? (workspaceQuery.error ?? membersQuery.error)
+        : loadMode === "audit"
+          ? (workspaceQuery.error ??
+            auditEventsQuery.error ??
+            auditPacksQuery.error)
+          : workspaceQuery.error;
 
   const invalidateWorkspace = useCallback((): Promise<void> => {
     if (!orgId) return Promise.resolve();
@@ -451,26 +466,27 @@ function LabSettingsInner() {
   );
 
   const revokeKey = useCallback(
-    (id: string) => {
-      if (!orgId) return;
-      api
-        .revokeApiKey(orgId, id)
-        .then(() => {
-          setPendingSecrets((prev) => {
-            if (!(id in prev)) return prev;
-            const next = { ...prev };
-            delete next[id];
-            return next;
-          });
-          return invalidateKeys();
-        })
-        .catch((err) => {
-          pushToast({
-            title: "Revoke failed",
-            body: err instanceof Error ? err.message : "Try again.",
-            tone: "fail",
-          });
+    async (id: string) => {
+      if (!orgId) {
+        throw new Error("No workspace selected");
+      }
+      try {
+        await api.revokeApiKey(orgId, id);
+        setPendingSecrets((prev) => {
+          if (!(id in prev)) return prev;
+          const next = { ...prev };
+          delete next[id];
+          return next;
         });
+        await invalidateKeys();
+      } catch (err) {
+        pushToast({
+          title: "Revoke failed",
+          body: err instanceof Error ? err.message : "Try again.",
+          tone: "fail",
+        });
+        throw err;
+      }
     },
     [orgId, invalidateKeys, pushToast],
   );
@@ -697,7 +713,12 @@ function LabSettingsInner() {
 
 function SettingsSuspenseFallback() {
   const searchParams = useSearchParams();
-  const mode = parseSettingsMode(searchParams.get("mode"));
+  const mode = parseSettingsMode(
+    resolveSettingsModeParam(
+      searchParams.get("mode"),
+      searchParams.get("tab"),
+    ),
+  );
   return (
     <div className="ds-page">
       <PageHeader
@@ -707,10 +728,6 @@ function SettingsSuspenseFallback() {
           <SettingsModeNav value={mode} onChange={() => undefined} />
         }
       />
-      {/* Keep tour spotlight target mounted while the chunk loads. */}
-      <span className="sr-only" data-tour-id="api-keys">
-        API keys
-      </span>
     </div>
   );
 }
