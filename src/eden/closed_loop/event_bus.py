@@ -24,13 +24,16 @@ _GROUP = "eden-closed-loop"
 _CONSUMER = f"loop-{socket.gethostname()}"
 _STREAM_MAXLEN = 100_000
 _BATCH = 32
-# Upstash Free counts every blocked XREADGROUP as 1 cmd. 2s → ~1.3M/mo
-# idle; 30s → ~86k/mo. Latency only matters when events are enqueued.
-_BLOCK_MS = 30_000
 _IDEMPOTENCY_TTL_S = 3_600
 
 _TASK: asyncio.Task | None = None
 _STOP: asyncio.Event | None = None
+
+
+def _block_ms() -> int:
+    from eden.storage.redis import redis_stream_block_ms
+
+    return redis_stream_block_ms()
 
 
 async def publish(event: LoopEvent, redis: Any | None = None) -> bool:
@@ -81,14 +84,19 @@ class ClosedLoopConsumer:
                 logger.debug("event_bus: xgroup_create: %s", exc)
 
     async def run(self, stop: asyncio.Event) -> None:
-        from eden.storage.redis import get_redis_client
+        from eden.storage.redis import get_redis_stream_client
 
-        redis = await get_redis_client()
+        redis = await get_redis_stream_client()
         if redis is None:
             logger.info("closed-loop consumer: no Redis; disabled")
             return
         await self._ensure_group(redis)
-        logger.info("closed-loop consumer: started (group=%s)", _GROUP)
+        block_ms = _block_ms()
+        logger.info(
+            "closed-loop consumer: started (group=%s, block_ms=%s)",
+            _GROUP,
+            block_ms,
+        )
         while not stop.is_set():
             try:
                 resp = await redis.xreadgroup(
@@ -96,7 +104,7 @@ class ClosedLoopConsumer:
                     _CONSUMER,
                     {LOOP_STREAM: ">"},
                     count=_BATCH,
-                    block=_BLOCK_MS,
+                    block=block_ms,
                 )
             except Exception as exc:
                 logger.debug("event_bus: xreadgroup failed: %s", exc)

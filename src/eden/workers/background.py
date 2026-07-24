@@ -78,6 +78,18 @@ class BackgroundWorkers:
     async def _supervise(self, settings: Settings) -> None:
         """Acquire the global leader lock and host background loops."""
         interval = 30.0
+        try:
+            from eden.config import get_settings
+
+            interval = max(
+                30.0,
+                float(
+                    getattr(get_settings(), "redis_leader_tick_seconds", 120)
+                    or 120
+                ),
+            )
+        except Exception:
+            interval = 120.0
         lock = Lock("api-background", ttl=int(interval * 3), prefix="eden:leader")
 
         while not self._stop.is_set():
