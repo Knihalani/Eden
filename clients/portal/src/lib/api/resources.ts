@@ -5249,9 +5249,12 @@ export const githubApi = {
       `/orgs/${orgId}/github/installations`,
       { headers: { "X-Org-Id": orgId } },
     ),
-  /** Active org repo Eden opens Improve fix-PRs against (or null). */
-  getConnection: (orgId: string) =>
-    fetchApi<{
+  /** Active repo Eden opens Improve fix-PRs against for this agent (or null). */
+  getConnection: (orgId: string, agentId?: string | null) => {
+    const q = new URLSearchParams();
+    if (agentId) q.set("agent_id", agentId);
+    const suffix = q.toString() ? `?${q}` : "";
+    return fetchApi<{
       id: string;
       org_id: string;
       provider: string;
@@ -5259,9 +5262,11 @@ export const githubApi = {
       repo_full_name: string;
       default_branch: string;
       status: string;
-    } | null>(`/orgs/${orgId}/github/connection`, {
+      agent_id?: string | null;
+    } | null>(`/orgs/${orgId}/github/connection${suffix}`, {
       headers: { "X-Org-Id": orgId },
-    }),
+    });
+  },
   listRepos: (orgId: string) =>
     fetchApi<GitHubRepo[]>(
       `/orgs/${orgId}/github/repos`,
@@ -5273,6 +5278,7 @@ export const githubApi = {
       installation_id: number;
       repo_full_name: string;
       default_branch?: string;
+      agent_id?: string | null;
     },
   ) =>
     fetchApi<{
@@ -5283,6 +5289,7 @@ export const githubApi = {
       repo_full_name: string;
       default_branch: string;
       status: string;
+      agent_id?: string | null;
     }>(`/orgs/${orgId}/github/repos/connect`, {
       method: "POST",
       headers: { "X-Org-Id": orgId },

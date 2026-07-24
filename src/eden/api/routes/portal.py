@@ -347,6 +347,26 @@ def _flatten_tree(root_spans: list[dict[str, Any]]) -> list[TranscriptStep]:
     return steps
 
 
+# Prefer user/session agent_id over synthetic framework instrument names
+# (pydantic-ai:OpenAIChatModel(), langchain:…, etc.) when collapsing spans.
+_PREFERRED_AGENT_ID_SQL = """
+COALESCE(
+  (ARRAY_AGG(agent_id ORDER BY timestamp ASC)
+    FILTER (
+      WHERE agent_id IS NOT NULL
+        AND agent_id NOT LIKE 'pydantic-ai:%%'
+        AND agent_id NOT LIKE 'langchain:%%'
+        AND agent_id NOT LIKE 'langgraph:%%'
+        AND agent_id NOT LIKE 'openai:%%'
+        AND agent_id NOT LIKE 'anthropic:%%'
+        AND agent_id NOT LIKE 'crewai:%%'
+    ))[1],
+  (ARRAY_AGG(agent_id ORDER BY timestamp ASC)
+    FILTER (WHERE agent_id IS NOT NULL))[1]
+)
+"""
+
+
 # ── GET /agents ───────────────────────────────────────────────────
 
 
@@ -356,10 +376,16 @@ async def list_portal_agents(
     window: str = Query("24h", description="Lookback window, e.g. 24h / 7d"),
     _user: dict = Depends(get_current_user),
 ) -> list[AgentCard]:
-    """Enriched agent cards (registry + fleet metrics when available)."""
+    """Enriched agent cards (registry + bounded telemetry + open issues).
+
+    Skips FleetHealthService.summary() on this hot path — that path
+    re-queried registry, ran four GROUP BYs, and wrote agent_registry.
+    Open issues come from a single cheap aggregate instead.
+    """
     import asyncio
 
     delta = _parse_window(window)
+    window_secs = int(delta.total_seconds())
     client = await _pg()
     if client is None:
         return []
@@ -400,25 +426,21 @@ async def list_portal_agents(
                 logger.debug("portal agents: registry fallback failed: %s", exc2)
                 return []
 
-    async def _load_fleet() -> dict[str, dict[str, Any]]:
-        fleet_by_id: dict[str, dict[str, Any]] = {}
-        try:
-            from eden.fleet.service import FleetHealthService
-
-            summary = await FleetHealthService().summary(org_id)
-            for card in summary.get("agents") or []:
-                aid = str(card.get("agent_id") or "")
-                if aid:
-                    fleet_by_id[aid] = card
-        except Exception as exc:  # noqa: BLE001
-            logger.debug("portal agents: fleet join skipped: %s", exc)
-        return fleet_by_id
-
     async def _load_metrics() -> dict[str, dict[str, Any]]:
+        """Bounded window scan — recent events only, no percentiles."""
         metrics_by_id: dict[str, dict[str, Any]] = {}
         try:
             mrows = await client.fetch(
                 """
+                WITH recent AS (
+                    SELECT agent_id, trace_id, outcome, duration_ms, metrics
+                    FROM telemetry_events
+                    WHERE tenant_id = $1
+                      AND agent_id IS NOT NULL
+                      AND timestamp > NOW() - ($2::int * INTERVAL '1 second')
+                    ORDER BY timestamp DESC
+                    LIMIT 15000
+                )
                 SELECT agent_id,
                        COUNT(DISTINCT trace_id)::int AS runs,
                        COALESCE(SUM(
@@ -435,20 +457,15 @@ async def list_portal_agents(
                                THEN 0.0 ELSE 1.0
                            END
                        )::float AS success_rate,
-                       percentile_cont(0.5) WITHIN GROUP (
-                           ORDER BY COALESCE(duration_ms, 0)
-                       )::float AS p50,
-                       percentile_cont(0.95) WITHIN GROUP (
-                           ORDER BY COALESCE(duration_ms, 0)
-                       )::float AS p95
-                FROM telemetry_events
-                WHERE tenant_id = $1
-                  AND agent_id IS NOT NULL
-                  AND timestamp > NOW() - ($2::text || ' seconds')::interval
+                       AVG(COALESCE(duration_ms, 0))::float AS p50,
+                       AVG(COALESCE(duration_ms, 0))::float AS p95
+                FROM recent
                 GROUP BY agent_id
+                ORDER BY runs DESC
+                LIMIT 200
                 """,
                 org_id,
-                str(int(delta.total_seconds())),
+                window_secs,
             )
             for r in mrows:
                 metrics_by_id[str(r["agent_id"])] = dict(r)
@@ -456,10 +473,38 @@ async def list_portal_agents(
             logger.debug("portal agents: telemetry metrics skipped: %s", exc)
         return metrics_by_id
 
-    rows, fleet_by_id, metrics_by_id = await asyncio.gather(
+    async def _load_open_issues() -> dict[str, dict[str, int]]:
+        out: dict[str, dict[str, int]] = {}
+        try:
+            rows = await client.fetch(
+                """
+                SELECT agent_id,
+                       COUNT(*)::int AS open_issues,
+                       COUNT(*) FILTER (
+                           WHERE lower(coalesce(severity, '')) IN
+                                 ('critical', 'p0', 'fatal')
+                       )::int AS open_p0
+                FROM agent_issues
+                WHERE org_id = $1
+                  AND agent_id IS NOT NULL
+                  AND status NOT IN ('resolved', 'ignored')
+                GROUP BY agent_id
+                """,
+                org_id,
+            )
+            for r in rows:
+                out[str(r["agent_id"])] = {
+                    "open_issues": int(r["open_issues"] or 0),
+                    "open_p0": int(r["open_p0"] or 0),
+                }
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("portal agents: open issues skipped: %s", exc)
+        return out
+
+    rows, metrics_by_id, issues_by_id = await asyncio.gather(
         _load_registry(),
-        _load_fleet(),
         _load_metrics(),
+        _load_open_issues(),
     )
 
     now = datetime.now(UTC)
@@ -467,19 +512,20 @@ async def list_portal_agents(
     seen: set[str] = set()
 
     def _build(agent_id: str, name: str, purpose: str, last_seen: Any) -> AgentCard:
-        fleet = fleet_by_id.get(agent_id) or {}
         metrics = metrics_by_id.get(agent_id) or {}
+        issues = issues_by_id.get(agent_id) or {}
         runs = int(metrics.get("runs") or 0)
         success = float(
             metrics.get("success_rate")
             if metrics.get("success_rate") is not None
-            else (fleet.get("eval_pass_rate_24h") if fleet.get("eval_pass_rate_24h") is not None else 1.0)
+            else 1.0
         )
         success = max(0.0, min(1.0, success))
-        open_issues = int(fleet.get("open_issues") or 0)
-        last = _iso(last_seen or fleet.get("last_seen"))
+        open_issues = int(issues.get("open_issues") or 0)
+        open_p0 = int(issues.get("open_p0") or 0)
+        last = _iso(last_seen)
         status: str = "idle"
-        if fleet.get("slo_breach") or int(fleet.get("open_p0_issues") or 0) > 0:
+        if open_p0 > 0:
             status = "error"
         elif last:
             try:
@@ -516,23 +562,16 @@ async def list_portal_agents(
         agent_id = str(row["agent_id"])
         seen.add(agent_id)
         purpose = str(row.get("framework") or row.get("repo_url") or "")
-        out.append(_build(agent_id, str(row.get("name") or agent_id), purpose, row.get("last_seen_at")))
-
-    # Agents present in fleet but not yet registered.
-    for agent_id, fleet in fleet_by_id.items():
-        if agent_id in seen:
-            continue
-        seen.add(agent_id)
         out.append(
             _build(
                 agent_id,
-                str(fleet.get("display_name") or agent_id),
-                str(fleet.get("tier") or ""),
-                fleet.get("last_seen"),
+                str(row.get("name") or agent_id),
+                purpose,
+                row.get("last_seen_at"),
             )
         )
 
-    # SDK-only agents: telemetry has agent_id but no registry/fleet row yet.
+    # SDK-only agents: telemetry has agent_id but no registry row yet.
     for agent_id, metrics in metrics_by_id.items():
         if not agent_id or agent_id in seen:
             continue
@@ -554,32 +593,49 @@ async def list_portal_traces(
 ) -> list[TraceListItem]:
     """Trace list mapped to portal ``TraceListItem`` (empty OK)."""
     delta = _parse_window(window)
+    window_secs = int(delta.total_seconds())
     client = await _pg()
     if client is None:
         return []
 
     try:
         rows = await client.fetch(
-            """
-            SELECT trace_id,
-                   MAX(agent_id) AS agent_id,
-                   MAX(name) AS name,
-                   MIN(timestamp) AS started_at,
-                   MAX(outcome) AS outcome,
-                   MAX(duration_ms) AS duration_ms,
-                   COALESCE(SUM(COALESCE((metrics->>'input_tokens')::int, 0)
-                       + COALESCE((metrics->>'output_tokens')::int, 0)), 0)::int AS tokens,
-                   COALESCE(SUM(COALESCE((metrics->>'cost_usd')::float, 0)), 0)::float AS cost_usd,
-                   MAX(attributes->>'session_id') AS session_id
-            FROM telemetry_events
-            WHERE tenant_id = $1
-              AND timestamp > NOW() - ($2::text || ' seconds')::interval
-            GROUP BY trace_id
-            ORDER BY MIN(timestamp) DESC
-            LIMIT $3
+            f"""
+            WITH recent_events AS (
+                SELECT trace_id, agent_id, name, timestamp, outcome,
+                       duration_ms, metrics, attributes
+                FROM telemetry_events
+                WHERE tenant_id = $1
+                  AND timestamp > NOW() - ($2::int * INTERVAL '1 second')
+                ORDER BY timestamp DESC
+                LIMIT 8000
+            ),
+            ids AS (
+                SELECT trace_id
+                FROM recent_events
+                GROUP BY trace_id
+                ORDER BY MAX(timestamp) DESC
+                LIMIT $3
+            )
+            SELECT e.trace_id,
+                   {_PREFERRED_AGENT_ID_SQL} AS agent_id,
+                   (ARRAY_AGG(e.name ORDER BY e.timestamp ASC)
+                      FILTER (WHERE e.name IS NOT NULL))[1] AS name,
+                   MIN(e.timestamp) AS started_at,
+                   (ARRAY_AGG(e.outcome ORDER BY e.timestamp DESC)
+                      FILTER (WHERE e.outcome IS NOT NULL))[1] AS outcome,
+                   MAX(e.duration_ms) AS duration_ms,
+                   COALESCE(SUM(COALESCE((e.metrics->>'input_tokens')::int, 0)
+                       + COALESCE((e.metrics->>'output_tokens')::int, 0)), 0)::int AS tokens,
+                   COALESCE(SUM(COALESCE((e.metrics->>'cost_usd')::float, 0)), 0)::float AS cost_usd,
+                   MAX(e.attributes->>'session_id') AS session_id
+            FROM recent_events e
+            INNER JOIN ids ON ids.trace_id = e.trace_id
+            GROUP BY e.trace_id
+            ORDER BY MIN(e.timestamp) DESC
             """,
             org_id,
-            str(int(delta.total_seconds())),
+            window_secs,
             limit,
         )
     except Exception as exc:  # noqa: BLE001
@@ -590,8 +646,6 @@ async def list_portal_traces(
     for r in rows:
         status, severity = _map_trace_outcome(r.get("outcome"))
         cost_usd = float(r["cost_usd"] or 0)
-        # Some pipelines store cents; if value looks like whole cents >> usd, leave as-is
-        # when already float dollars from metrics.cost_usd.
         items.append(
             TraceListItem(
                 id=str(r["trace_id"]),
@@ -632,14 +686,16 @@ async def get_portal_trace(
     if client is None:
         raise HTTPException(status_code=503, detail="Trace temporarily unavailable")
 
-    try:
-        row = await client.fetchrow(
-            """
+    async def _summary_row() -> Any:
+        return await client.fetchrow(
+            f"""
             SELECT trace_id,
-                   MAX(agent_id) AS agent_id,
-                   MAX(name) AS name,
+                   {_PREFERRED_AGENT_ID_SQL} AS agent_id,
+                   (ARRAY_AGG(name ORDER BY timestamp ASC)
+                      FILTER (WHERE name IS NOT NULL))[1] AS name,
                    MIN(timestamp) AS started_at,
-                   MAX(outcome) AS outcome,
+                   (ARRAY_AGG(outcome ORDER BY timestamp DESC)
+                      FILTER (WHERE outcome IS NOT NULL))[1] AS outcome,
                    MAX(duration_ms) AS duration_ms,
                    COALESCE(SUM(COALESCE((metrics->>'input_tokens')::int, 0)
                        + COALESCE((metrics->>'output_tokens')::int, 0)), 0)::int AS tokens,
@@ -652,23 +708,51 @@ async def get_portal_trace(
             org_id,
             trace_id,
         )
+
+    async def _trace_tree() -> Any:
+        from eden.observability.telemetry_collector import get_telemetry_collector
+
+        collector = await get_telemetry_collector()
+        # Portal transcript needs span structure + timing; skip expensive
+        # per-span message_store reconstruct (full bodies stay on
+        # observability tree routes).
+        return await collector.get_trace_tree(
+            org_id, trace_id, hydrate_bodies=False
+        )
+
+    try:
+        row, tree = await asyncio.gather(
+            _summary_row(),
+            _trace_tree(),
+            return_exceptions=True,
+        )
     except Exception as exc:  # noqa: BLE001
-        logger.warning("portal trace detail: summary query failed: %s", exc)
+        logger.warning("portal trace detail: parallel fetch failed: %s", exc)
         raise HTTPException(status_code=503, detail="Trace temporarily unavailable") from exc
+
+    if isinstance(row, BaseException):
+        logger.warning("portal trace detail: summary query failed: %s", row)
+        raise HTTPException(status_code=503, detail="Trace temporarily unavailable") from row
 
     if row is None:
         raise HTTPException(status_code=404, detail="Trace not found")
 
     steps: list[TranscriptStep] = []
-    try:
-        from eden.observability.telemetry_collector import get_telemetry_collector
-
-        collector = await get_telemetry_collector()
-        tree = await collector.get_trace_tree(org_id, trace_id)
-        if tree is not None:
+    if isinstance(tree, BaseException):
+        logger.warning(
+            "portal trace detail: get_trace_tree failed for %s: %s",
+            trace_id,
+            tree,
+        )
+    elif tree is not None:
+        try:
             steps = _flatten_tree(tree.root_spans)
-    except Exception as exc:  # noqa: BLE001
-        logger.warning("portal trace detail: get_trace_tree failed for %s: %s", trace_id, exc)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "portal trace detail: flatten tree failed for %s: %s",
+                trace_id,
+                exc,
+            )
 
     status, severity = _map_trace_outcome(row.get("outcome"))
     cost_usd = float(row["cost_usd"] or 0)
@@ -1237,7 +1321,7 @@ async def list_portal_keys(
             SELECT id, name, key_prefix, scopes, created_by,
                    last_used_at, created_at, revoked_at, active
             FROM org_api_keys
-            WHERE org_id::text = $1
+            WHERE org_id = $1::uuid
             ORDER BY created_at DESC
             LIMIT $2
             """,

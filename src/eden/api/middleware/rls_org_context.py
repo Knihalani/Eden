@@ -91,14 +91,35 @@ class RLSOrgContextMiddleware:
         org_id = await self._resolve_org_id(request)
         conn_ctx = None
         tx = None
+        bind_token = None
         if org_id:
             try:
                 # Lazy import to avoid a cycle: storage.postgres
                 # imports eden.config, which transitively loads
                 # app.py during settings validation.
-                from eden.storage.postgres import get_postgres_client
+                from eden.storage.postgres import (
+                    bind_request_pg_conn,
+                    get_postgres_client,
+                )
+
+                # Path / Clerk / header may carry a Clerk org id
+                # (``org_…``). Telemetry tenant_id is the Eden UUID —
+                # resolve so FORCE RLS matches stored rows.
+                try:
+                    from eden.api.deps import resolve_eden_org_id
+
+                    resolved = await resolve_eden_org_id(str(org_id))
+                    if resolved:
+                        org_id = resolved
+                except Exception as resolve_exc:  # noqa: BLE001
+                    logger.debug(
+                        "RLSOrgContextMiddleware: org resolve skipped: %s",
+                        resolve_exc,
+                    )
 
                 client = await get_postgres_client()
+                if client._pool is None:
+                    await client.initialize()
                 if client._pool is not None:
                     # Pin ONE pooled connection for this request so
                     # the GUC set in the SET LOCAL transaction is
@@ -122,6 +143,11 @@ class RLSOrgContextMiddleware:
                     request.state.pg_conn = conn
                     request.state._pg_tx = tx
                     request.state._pg_conn_ctx = conn_ctx
+                    # Also bind via contextvar so PostgresClient.fetch
+                    # / execute / acquire reuse this connection without
+                    # every route switching to get_request_pg_conn.
+                    bind_token = bind_request_pg_conn(conn)
+                    request.state._pg_bind_token = bind_token
                     # Mark these as live so the finally knows whether
                     # to clean up.
                     conn_ctx = None
@@ -151,6 +177,14 @@ class RLSOrgContextMiddleware:
             # and the connection is returned to the pool clean.
             # Without this the pinned connection would hold row
             # locks + a stale GUC for the next request.
+            token = getattr(request.state, "_pg_bind_token", None)
+            if token is not None:
+                try:
+                    from eden.storage.postgres import reset_request_pg_conn
+
+                    reset_request_pg_conn(token)
+                except Exception as exc:
+                    logger.debug("RLS bind reset failed (non-fatal): %s", exc)
             tx = getattr(request.state, "_pg_tx", None)
             ctx = getattr(request.state, "_pg_conn_ctx", None)
             if tx is not None:

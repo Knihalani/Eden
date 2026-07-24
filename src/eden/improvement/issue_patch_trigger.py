@@ -342,14 +342,15 @@ async def propose_plan_for_issue(
     except Exception as exc:
         logger.debug("issue_patch_trigger: efficiency check failed: %s", exc)
 
-    # Resolve real repo_connections row — never treat issue.agent_id as repo_id.
-    repo_id = await _resolve_repo_id(org_id)
+    # Resolve this agent's linked repo (one repo per agent).
+    issue_agent_id = (ctx.get("agent_id") or "").strip() or None
+    repo_id = await _resolve_repo_id(org_id, agent_id=issue_agent_id)
     if not repo_id:
         return {
             "status": "error",
             "reason": "repo_not_connected",
             "issue_id": issue_id,
-            "message": "Connect GitHub App in Settings",
+            "message": "Connect a GitHub repo for this agent so Eden can open fix PRs",
         }
 
     linked_files = await _linked_files(org_id, rca_id, ctx, repo_id=repo_id)
@@ -447,15 +448,18 @@ async def propose_plan_for_issue(
     }
 
 
-async def _resolve_repo_id(org_id: str) -> str | None:
-    """Return the org's active repo_connections id (or full name), else None.
+async def _resolve_repo_id(
+    org_id: str,
+    *,
+    agent_id: str | None = None,
+) -> str | None:
+    """Return the active repo_connections id for this org/agent, else None.
 
-    Intentionally does **not** fall back to ``issue.agent_id`` — that field is
-    an Eden agent identifier, not a GitHub/repo connection id.
+    Uses ``agent_id`` to pick that agent's linked repo (one repo per agent).
     """
     from eden.providers.factory import resolve_active_repo_id
 
-    return await resolve_active_repo_id(org_id)
+    return await resolve_active_repo_id(org_id, agent_id=agent_id)
 
 
 async def _linked_files(

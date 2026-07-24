@@ -74,5 +74,15 @@ def test_connect_org_repo_upserts_repo_connections():
     assert "default_branch" in src
     assert "installation_id" in src
     assert "repo_full_name" in src
+    assert "agent_id" in src
     assert "'active'" in src
     assert "'inactive'" in src
+
+
+def test_connect_repo_request_accepts_agent_id():
+    req = ConnectRepoRequest(
+        installation_id=1,
+        repo_full_name="acme/widgets",
+        agent_id="  minimax-pydantic-agent  ",
+    )
+    assert req.agent_id == "minimax-pydantic-agent"

@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import contextvars
 import json
 import logging
 from collections.abc import AsyncIterator, Iterable, Sequence
@@ -23,6 +24,32 @@ from eden.config import get_settings
 from eden.util.jsonx import dumps as _jsonx_dumps
 
 logger = logging.getLogger(__name__)
+
+# Request-scoped asyncpg connection pinned by RLSOrgContextMiddleware.
+# When set, PostgresClient.acquire/fetch/execute reuse this connection so
+# FORCE RLS policies see ``app.current_org_id`` (SET LOCAL on that conn).
+# Without this, pool round-trips hit a different connection with a NULL GUC
+# and every telemetry_* / FORCE-RLS table returns empty — portal shows
+# 0 agents / 0 traces even when rows exist.
+_request_pg_conn: contextvars.ContextVar[Connection | None] = contextvars.ContextVar(
+    "eden_request_pg_conn",
+    default=None,
+)
+
+
+def bind_request_pg_conn(conn: Connection | None) -> contextvars.Token[Connection | None]:
+    """Pin ``conn`` for the current asyncio task (middleware entry)."""
+    return _request_pg_conn.set(conn)
+
+
+def reset_request_pg_conn(token: contextvars.Token[Connection | None]) -> None:
+    """Restore the previous request-conn binding (middleware exit)."""
+    _request_pg_conn.reset(token)
+
+
+def get_bound_request_pg_conn() -> Connection | None:
+    """Return the middleware-pinned connection, if any."""
+    return _request_pg_conn.get()
 
 
 def _dump_jsonb(value):
@@ -235,7 +262,14 @@ class PostgresClient:
 
     @asynccontextmanager
     async def acquire(self) -> AsyncIterator[Connection]:
-        """Acquire a connection from the pool."""
+        """Acquire a connection from the pool (or the RLS-pinned request conn)."""
+        bound = _request_pg_conn.get()
+        if bound is not None:
+            # Same connection that holds SET LOCAL app.current_org_id.
+            # Do not release — middleware owns the lifetime.
+            yield bound
+            return
+
         if not self._pool:
             await self.initialize()
 

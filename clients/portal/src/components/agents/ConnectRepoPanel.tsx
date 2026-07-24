@@ -13,16 +13,16 @@ import { SHELL_QUERY } from "@/lib/portal-query";
 import { cn } from "@/lib/utils";
 
 /**
- * Connect the org's GitHub repo that Eden opens Improve / fix PRs against.
+ * Connect the GitHub repo Eden opens Improve / fix PRs against for one agent.
  *
- * Honest model: one active repo per workspace (not per agent). Agents
- * in this org share that PR target until multi-repo linking ships.
+ * One linked repo per agent — the same workspace can have many agents with
+ * different repos.
  */
 export function ConnectRepoPanel({
   agentId,
   compact = false,
 }: {
-  /** Optional agent context for copy / deep links. */
+  /** Agent this repo link belongs to (required for per-agent linking). */
   agentId?: string | null;
   compact?: boolean;
 }) {
@@ -41,11 +41,11 @@ export function ConnectRepoPanel({
     { ...SHELL_QUERY, staleTime: 120_000, enabled: Boolean(orgId) },
   );
   const connection = useOrgQuery(
-    queryKeys.github.connection(orgId),
+    queryKeys.github.connection(orgId, agentId),
     orgId,
     async () => {
       try {
-        return await githubApi.getConnection(orgId!);
+        return await githubApi.getConnection(orgId!, agentId);
       } catch (err) {
         // No row / route gap → treat as disconnected, not a hard error.
         if (err instanceof ApiError && err.status === 404) {
@@ -77,12 +77,12 @@ export function ConnectRepoPanel({
 
   const invalidate = useCallback(async () => {
     await queryClient.invalidateQueries({
-      queryKey: queryKeys.github.connection(orgId),
+      queryKey: queryKeys.github.connection(orgId, agentId),
     });
     await queryClient.invalidateQueries({
       queryKey: queryKeys.github.repos(orgId),
     });
-  }, [orgId, queryClient]);
+  }, [agentId, orgId, queryClient]);
 
   const startInstall = useCallback(async () => {
     if (!orgId) return;
@@ -103,16 +103,25 @@ export function ConnectRepoPanel({
   const connect = useCallback(
     async (repo: GitHubRepo) => {
       if (!orgId) return;
+      if (!agentId) {
+        pushToast({
+          title: "Select an agent first",
+          body: "Repo linking is per agent — open an agent, then connect its repo.",
+          tone: "fail",
+        });
+        return;
+      }
       setBusy(true);
       try {
         await githubApi.connectRepo(orgId, {
           installation_id: repo.installation_id,
           repo_full_name: repo.full_name,
           default_branch: repo.default_branch || "main",
+          agent_id: agentId,
         });
         pushToast({
           title: "Repo connected",
-          body: `Improve PRs will open on ${repo.full_name}`,
+          body: `Improve PRs for ${agentId} will open on ${repo.full_name}`,
           tone: "ok",
         });
         setPickerOpen(false);
@@ -127,7 +136,7 @@ export function ConnectRepoPanel({
         setBusy(false);
       }
     },
-    [invalidate, orgId, pushToast],
+    [agentId, invalidate, orgId, pushToast],
   );
 
   if (!orgId) {
@@ -137,8 +146,8 @@ export function ConnectRepoPanel({
   }
 
   const agentHint = agentId
-    ? `Issues and Improve plans for ${agentId} open PRs on this repo.`
-    : "When Eden proposes a fix, it opens a PR on this repository.";
+    ? `Issues and Improve plans for ${agentId} open PRs on this repo. Other agents can link different repos.`
+    : "Select an agent to link a repo — each agent has its own PR target.";
 
   return (
     <div
@@ -151,12 +160,16 @@ export function ConnectRepoPanel({
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0 space-y-1">
           <h3 className="type-ui">
-            {active ? "Repository for fix PRs" : "Connect a repository"}
+            {active
+              ? agentId
+                ? `Repository for ${agentId}`
+                : "Repository for fix PRs"
+              : "Connect a repository"}
           </h3>
           <p className="type-meta max-w-xl">
             {active
               ? agentHint
-              : "Link the GitHub repo that contains your agent code. Eden uses it to open pull requests that fix issues and Improve plans."}
+              : "Link the GitHub repo that contains this agent's code. Eden uses it to open pull requests that fix issues and Improve plans."}
           </p>
         </div>
         {active ? (
