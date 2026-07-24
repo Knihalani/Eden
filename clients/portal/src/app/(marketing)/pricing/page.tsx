@@ -6,6 +6,11 @@ import {
   FREE_TIER_TAGLINE,
   SALES_EMAIL,
 } from "@/lib/constants";
+import {
+  MARKETING_APP_HREF,
+  MARKETING_APP_LABEL,
+  isMarketingSignedIn,
+} from "@/lib/marketing-session";
 import { cn } from "@/lib/utils";
 
 export const metadata: Metadata = {
@@ -28,58 +33,69 @@ export const metadata: Metadata = {
   },
 };
 
-const TIERS = [
-  {
-    id: "free",
-    name: "Free",
-    price: "$0",
-    period: "public beta",
-    blurb: `Instrument agents and inspect traces. ${FREE_TIER_CAP_SHORT} LLM spend cap.`,
-    features: [
-      "Trace ingest & sessions",
-      "Issues and detectors",
-      "Personal workspace",
-      "Community docs",
-    ],
-    cta: { href: "/sign-up", label: "Start free", primary: true },
-    comingSoon: false,
-    highlight: true,
-  },
-  {
-    id: "team",
-    name: "Team",
-    price: "Usage",
-    period: "billed monthly",
-    blurb: "Shared orgs, evals, alerts, and prompt pins when the fleet grows.",
-    features: [
-      "Everything in Free",
-      "Organizations & members",
-      "Evals, prompts, live A/B",
-      "Alerts and API keys",
-    ],
-    cta: { href: "#", label: "Coming soon", primary: false },
-    comingSoon: true,
-    highlight: false,
-  },
-  {
-    id: "enterprise",
-    name: "Enterprise",
-    price: "Custom",
-    period: "annual contracts",
-    blurb: "SSO, audit packs, retention controls, and dedicated support.",
-    features: [
-      "Everything in Team",
-      "SSO / SCIM",
-      "Audit & retention controls",
-      "Priority support",
-    ],
-    cta: { href: "#", label: "Coming soon", primary: false },
-    comingSoon: true,
-    highlight: false,
-  },
-] as const;
+function tiers(signedIn: boolean) {
+  return [
+    {
+      id: "free",
+      name: "Free",
+      price: "$0",
+      period: "public beta",
+      blurb: `Instrument agents and inspect traces. ${FREE_TIER_CAP_SHORT} LLM spend cap.`,
+      features: [
+        "Trace ingest & sessions",
+        "Issues and detectors",
+        "Personal workspace",
+        "Community docs",
+      ],
+      cta: signedIn
+        ? {
+            href: MARKETING_APP_HREF,
+            label: MARKETING_APP_LABEL,
+            primary: true,
+          }
+        : { href: "/sign-up", label: "Start free", primary: true },
+      comingSoon: false,
+      highlight: true,
+    },
+    {
+      id: "team",
+      name: "Team",
+      price: "Usage",
+      period: "billed monthly",
+      blurb: "Shared orgs, evals, alerts, and prompt pins when the fleet grows.",
+      features: [
+        "Everything in Free",
+        "Organizations & members",
+        "Evals, prompts, live A/B",
+        "Alerts and API keys",
+      ],
+      cta: { href: "#", label: "Coming soon", primary: false },
+      comingSoon: true,
+      highlight: false,
+    },
+    {
+      id: "enterprise",
+      name: "Enterprise",
+      price: "Custom",
+      period: "annual contracts",
+      blurb: "SSO, audit packs, retention controls, and dedicated support.",
+      features: [
+        "Everything in Team",
+        "SSO / SCIM",
+        "Audit & retention controls",
+        "Priority support",
+      ],
+      cta: { href: "#", label: "Coming soon", primary: false },
+      comingSoon: true,
+      highlight: false,
+    },
+  ] as const;
+}
 
-export default function PricingPage() {
+export default async function PricingPage() {
+  const signedIn = await isMarketingSignedIn();
+  const TIERS = tiers(signedIn);
+
   return (
     <main>
       <MarketingShell

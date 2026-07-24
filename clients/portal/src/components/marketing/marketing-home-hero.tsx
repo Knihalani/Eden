@@ -1,14 +1,17 @@
-import Link from "next/link";
 import { EdenLogo } from "@/components/ds/eden-logo";
 import { DOCS_URL } from "@/lib/constants";
+import { MarketingAuthCtas } from "@/components/marketing/marketing-auth-ctas";
 import { MarketingRail } from "@/components/marketing/marketing-primitives";
 import { ProductSurfaceMock } from "@/components/marketing/product-surface-mock";
+import { isMarketingSignedIn } from "@/lib/marketing-session";
 
 /**
  * First viewport as one composition: brand copy + dense product chrome.
  * Desktop: split. Mobile: stacked. No empty black slab.
  */
-export function MarketingHomeHero() {
+export async function MarketingHomeHero() {
+  const signedIn = await isMarketingSignedIn();
+
   return (
     <section className="relative isolate overflow-hidden border-b border-[var(--line)]">
       <div
@@ -54,12 +57,7 @@ export function MarketingHomeHero() {
             improvements in one loop.
           </p>
           <div className="mt-9 flex flex-wrap items-center gap-3">
-            <Link href="/sign-up" className="ds-btn ds-btn-primary px-5">
-              Get started
-            </Link>
-            <Link href="/sign-in" className="ds-btn ds-btn-outline px-5">
-              Sign in
-            </Link>
+            <MarketingAuthCtas signedIn={signedIn} size="md" />
             <a
               href={DOCS_URL}
               className="type-ui px-1 text-[var(--text-muted)] transition-colors duration-150 hover:text-[var(--accent)]"

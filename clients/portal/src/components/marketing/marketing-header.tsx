@@ -1,8 +1,10 @@
 import Link from "next/link";
 import { EdenLogo } from "@/components/ds/eden-logo";
 import { DOCS_URL } from "@/lib/constants";
+import { MarketingAuthCtas } from "@/components/marketing/marketing-auth-ctas";
 import { MarketingMobileNav } from "@/components/marketing/marketing-mobile-nav";
 import { MarketingRail } from "@/components/marketing/marketing-primitives";
+import { isMarketingSignedIn } from "@/lib/marketing-session";
 import { cn } from "@/lib/utils";
 
 const NAV = [
@@ -12,11 +14,13 @@ const NAV = [
   { href: "/contact", label: "Contact" },
 ] as const;
 
-export function MarketingHeader({
+export async function MarketingHeader({
   transparent = false,
 }: {
   transparent?: boolean;
 }) {
+  const signedIn = await isMarketingSignedIn();
+
   return (
     <header
       className={cn(
@@ -63,19 +67,12 @@ export function MarketingHeader({
           })}
         </nav>
         <div className="flex items-center gap-2">
-          <Link
-            href="/sign-in"
-            className="ds-btn ds-btn-ghost ds-btn-sm hidden sm:inline-flex"
-          >
-            Sign in
-          </Link>
-          <Link
-            href="/sign-up"
-            className="ds-btn ds-btn-primary ds-btn-sm hidden sm:inline-flex"
-          >
-            Get started
-          </Link>
-          <MarketingMobileNav />
+          <MarketingAuthCtas
+            signedIn={signedIn}
+            size="sm"
+            className="hidden sm:flex"
+          />
+          <MarketingMobileNav signedIn={signedIn} />
         </div>
       </MarketingRail>
     </header>
