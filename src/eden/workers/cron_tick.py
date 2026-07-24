@@ -173,7 +173,7 @@ async def _run_auto_curator() -> dict[str, object]:
 
 
 async def _tick(*, dry_run: bool) -> dict[str, object]:
-    """A single cron tick."""
+    """A single cron tick (legacy entrypoint / manual escape hatch)."""
     now = datetime.now(UTC)
     out: dict[str, object] = {"tick_at": now.isoformat(), "dry_run": dry_run}
 
@@ -184,24 +184,83 @@ async def _tick(*, dry_run: bool) -> dict[str, object]:
     # remains a legacy fallback. Improvement sweeps are disabled here —
     # drafts are issue-driven (closed-loop / issue_patch_trigger) only.
 
+    maint = await run_maintenance_due(now=now, dry_run=dry_run)
+    out.update(maint)
+
+    if not dry_run:
+        out["artifact_demotion"] = await _safe_step(
+            "artifact_demotion", _run_artifact_demotion()
+        )
+
+    return out
+
+
+async def _once_per_window(key: str, *, ttl_seconds: int) -> bool:
+    """Return True if this process won the window (Redis SET NX).
+
+    Prevents daily/weekly jobs from re-firing when the worker restarts
+    inside the same UTC hour window. If Redis is down, allow the run
+    (same best-effort behavior as the old cron cold-start).
+    """
+    try:
+        from eden.storage.redis import get_redis_client
+
+        r = await get_redis_client()
+        if r is None:
+            return True
+        ok = await r.set(f"eden:maint:{key}", "1", nx=True, ex=ttl_seconds)
+        return bool(ok)
+    except Exception as exc:
+        logger.warning("[cron_tick] once_per_window %s failed: %s", key, exc)
+        return True
+
+
+async def run_maintenance_due(
+    *,
+    now: datetime | None = None,
+    dry_run: bool = False,
+) -> dict[str, object]:
+    """Due maintenance jobs for the long-running worker (no cold-start cron).
+
+    Skips EQL watchdog, artifact demotion, and improvement sweeps — those
+    are hosted separately on ``eden-worker`` or intentionally off.
+    """
+    now = now or datetime.now(UTC)
+    out: dict[str, object] = {"maintenance_at": now.isoformat(), "dry_run": dry_run}
+
     if now.minute < 10:
         out["columnar_compaction"] = await _safe_step(
             "columnar_compaction", _run_columnar_compaction(dry_run=dry_run)
         )
 
     if now.hour == 2 and now.minute < 10 and not dry_run:
-        out["auto_curator"] = await _safe_step(
-            "auto_curator", _run_auto_curator()
-        )
+        day_key = f"auto_curator:{now.date().isoformat()}"
+        if await _once_per_window(day_key, ttl_seconds=20 * 3600):
+            out["auto_curator"] = await _safe_step(
+                "auto_curator", _run_auto_curator()
+            )
+        else:
+            out["auto_curator"] = {"skipped": True, "reason": "already_ran_today"}
 
     if now.hour == 3 and now.minute < 10:
-        out["daily"] = await _run_daily(now, dry_run=dry_run)
+        day_key = f"daily:{now.date().isoformat()}"
+        if await _once_per_window(day_key, ttl_seconds=20 * 3600):
+            out["daily"] = await _run_daily(now, dry_run=dry_run)
+        else:
+            out["daily"] = {"skipped": True, "reason": "already_ran_today"}
 
     if now.weekday() == 0 and now.hour == 4 and now.minute < 10 and not dry_run:
-        out["drift_baselines"] = await _safe_step(
-            "drift_baselines",
-            _run_drift_baselines(),
-        )
+        week_key = f"drift:{now.isocalendar().week}:{now.year}"
+        if await _once_per_window(week_key, ttl_seconds=6 * 24 * 3600):
+            out["drift_baselines"] = await _safe_step(
+                "drift_baselines",
+                _run_drift_baselines(),
+            )
+        else:
+            out["drift_baselines"] = {
+                "skipped": True,
+                "reason": "already_ran_this_week",
+            }
 
     if now.minute % 15 < 5:
         out["mcp_rollup"] = await _run_mcp_rollup(dry_run=dry_run)
@@ -215,10 +274,6 @@ async def _tick(*, dry_run: bool) -> dict[str, object]:
     }
 
     if not dry_run:
-        # Isolate each worker so one failure still records the other.
-        out["artifact_demotion"] = await _safe_step(
-            "artifact_demotion", _run_artifact_demotion()
-        )
         out["shadow_outcome_join"] = await _safe_step(
             "shadow_outcome_join", _run_shadow_outcome_join()
         )

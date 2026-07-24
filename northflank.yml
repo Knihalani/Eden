@@ -527,12 +527,10 @@ spec:
       valueFrom: { secretKeyRef: { group: eden-required, key: CLERK_WEBHOOK_SIGNING_SECRET } }
 
 # ─────────────────────────────────────────────────────────────────────
-# Job 2/2: eden-cron (OPTIONAL — suspend for issue-driven Improve)
-# Core product (ingest, quality, closed-loop, EQL alerts, approve→PR)
-# runs on eden-api + eden-worker. Cron is only for nightly maintenance
-# (compaction, curator, drift, MCP rollup, signal backfill). Keep
-# suspended unless those schedules are needed; improvement sweeps are
-# disabled in cron_tick (issue-driven drafts only).
+# Job 2/2: eden-cron (OPTIONAL no-op — maintenance lives on eden-worker)
+# Core product + EQL + demotion + multi-tenant maintenance run on
+# eden-api + eden-worker. Keep this job's command a no-op (or manual
+# escape hatch). Improvement sweeps stay off (issue-driven drafts only).
 # ─────────────────────────────────────────────────────────────────────
 ---
 apiVersion: workloads/v1

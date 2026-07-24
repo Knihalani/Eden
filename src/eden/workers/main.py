@@ -21,6 +21,9 @@ Currently hosted loops:
       the former ``eden-cron`` ``eql_alert_watchdog`` tick
     * Artifact / nudge demotion (leader-gated) — 7d regression
       flywheel; no longer depends on eden-cron
+    * Multi-tenant maintenance scheduler (leader-gated) —
+      compaction, retention, Typesense TTL, curator, drift,
+      MCP rollup, classifier retrain, shadow join, signals
 
 NF manifest runs this as ``python -m eden.workers.main`` on the
 ``eden-worker`` job. ``SKIP_MIGRATIONS=1`` is set — the API
@@ -234,7 +237,8 @@ async def _run_forever() -> None:
     2. Webhook drain — leader-gated 30s delivery cadence.
     3. EQL alert-as-code watchdog — leader-gated ~5 min (was cron).
     4. Artifact/nudge demotion — leader-gated hourly (was cron).
-    5. Quality / closed-loop / anomaly sidecars (process-local).
+    5. Maintenance scheduler — leader-gated ~5 min (was cron).
+    6. Quality / closed-loop / anomaly sidecars (process-local).
     """
     loops: list[tuple[str, asyncio.Task]] = []
     stop = asyncio.Event()
@@ -268,7 +272,15 @@ async def _run_forever() -> None:
     )
     loops.append(("artifact_demotion", demotion_task))
 
-    # 5. Quality + closed-loop + anomaly — API disables in-process workers.
+    # 5. Multi-tenant maintenance — compaction/retention/signals/etc.
+    # Reuses cron_tick.run_maintenance_due; improvement sweeps stay off.
+    maint_task = asyncio.create_task(
+        _supervise("maintenance", _leader_maintenance, stop),
+        name="maintenance",
+    )
+    loops.append(("maintenance", maint_task))
+
+    # 6. Quality + closed-loop + anomaly — API disables in-process workers.
     await _start_sidecar_workers()
 
     if not loops:
@@ -417,6 +429,53 @@ async def _leader_artifact_demotion(stop: asyncio.Event) -> None:
         "artifact_demotion",
         _tick,
         interval=3600.0,
+        stop=stop,
+    )
+
+
+async def _leader_maintenance(stop: asyncio.Event) -> None:
+    """Leader-gated multi-tenant maintenance (was eden-cron).
+
+    One warm process drains due work for all orgs — no cold-start job
+    and no per-user cron. Improvement sweeps stay off.
+    """
+    from eden.workers.leader import run_if_leader
+
+    async def _tick() -> None:
+        try:
+            from eden.workers.cron_tick import run_maintenance_due
+
+            result = await run_maintenance_due(dry_run=False)
+            # Log only steps that actually ran (skip noise).
+            ran = {
+                k: v
+                for k, v in result.items()
+                if k not in ("maintenance_at", "dry_run", "improvement_sweeps")
+                and not (
+                    isinstance(v, dict)
+                    and v.get("skipped")
+                    and v.get("reason") in (
+                        "already_ran_today",
+                        "already_ran_this_week",
+                        "dry_run",
+                    )
+                )
+            }
+            if ran:
+                logger.info("worker: maintenance tick keys=%s", sorted(ran.keys()))
+        except Exception as exc:
+            logger.error(
+                "worker: maintenance tick failed: %s",
+                exc,
+                exc_info=True,
+            )
+            raise
+
+    logger.info("worker: maintenance loop registered (interval=300s)")
+    await run_if_leader(
+        "maintenance",
+        _tick,
+        interval=300.0,
         stop=stop,
     )
 
