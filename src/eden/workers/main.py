@@ -15,6 +15,8 @@ Currently hosted loops:
       — async trace-quality sidecar (API keeps workers off)
     * :func:`eden.agents.evolution.loop.start_evolution_loop`
       — opt-in evolution loop when ``evolution_loop_enabled``
+    * anomaly detector loop, closed-loop consumer + verify,
+      trace_finalized consumer, promotion hooks
 
 NF manifest runs this as ``python -m eden.workers.main`` on the
 ``eden-worker`` job. ``SKIP_MIGRATIONS=1`` is set — the API
@@ -92,12 +94,11 @@ async def _supervise(
 
 
 async def _start_sidecar_workers() -> None:
-    """Start quality (+ optional evolution) owned by this process.
+    """Start quality (+ optional evolution) and closed-loop sidecars.
 
     The API sets ``EDEN_RUN_BACKGROUND_WORKERS=0`` so these never start
     in-process there. ``eden-worker`` is the dedicated host; without this
-    call ``/health`` on the API correctly reports the flags false and the
-    quality pipeline never runs in production.
+    call quality / closed-loop / anomaly never run in production.
     """
     try:
         from eden.observability.quality_pipeline.worker import start_worker
@@ -115,9 +116,93 @@ async def _start_sidecar_workers() -> None:
     except Exception as exc:
         logger.warning("worker: evolution_loop skipped: %s", exc)
 
+    # Anomaly detector + closed-loop used to live only in
+    # ``workers.background`` (API in-process). With background workers
+    # disabled on eden-api, they must run here or they never start.
+    try:
+        from eden.config import get_settings
+
+        settings = get_settings()
+    except Exception as exc:
+        logger.warning("worker: settings load failed: %s", exc)
+        settings = None
+
+    if settings is None or getattr(settings, "anomaly_loop_enabled", True):
+        try:
+            from eden.data_platform.anomaly_detector_loop import (
+                start_anomaly_detector_loop,
+            )
+
+            await start_anomaly_detector_loop()
+            logger.info("worker: anomaly_loop started")
+        except Exception as exc:
+            logger.warning("worker: anomaly_loop skipped: %s", exc)
+
+    try:
+        from eden.closed_loop.event_bus import start_consumer as start_loop
+
+        await start_loop()
+        logger.info("worker: closed_loop consumer started")
+    except Exception as exc:
+        logger.warning("worker: closed_loop consumer skipped: %s", exc)
+
+    try:
+        from eden.closed_loop.verify import start_verify_worker
+
+        await start_verify_worker()
+        logger.info("worker: closed_loop verify started")
+    except Exception as exc:
+        logger.warning("worker: closed_loop verify skipped: %s", exc)
+
+    try:
+        from eden.workers.trace_finalized_consumer import start_consumer
+
+        await start_consumer()
+        logger.info("worker: trace_finalized consumer started")
+    except Exception as exc:
+        logger.warning("worker: trace_finalized consumer skipped: %s", exc)
+
+    try:
+        from eden.llmops.promotion_hooks import register_all_hooks
+
+        register_all_hooks()
+        logger.info("worker: promotion hooks registered")
+    except Exception as exc:
+        logger.warning("worker: promotion hooks skipped: %s", exc)
+
 
 async def _stop_sidecar_workers() -> None:
-    """Drain quality + evolution sidecars started by this process."""
+    """Drain sidecars started by this process."""
+    try:
+        from eden.closed_loop.verify import stop_verify_worker
+
+        await stop_verify_worker()
+    except Exception as exc:
+        logger.warning("worker: closed_loop verify stop failed: %s", exc)
+
+    try:
+        from eden.closed_loop.event_bus import stop_consumer
+
+        await stop_consumer()
+    except Exception as exc:
+        logger.warning("worker: closed_loop consumer stop failed: %s", exc)
+
+    try:
+        from eden.data_platform.anomaly_detector_loop import (
+            stop_anomaly_detector_loop,
+        )
+
+        await stop_anomaly_detector_loop()
+    except Exception as exc:
+        logger.warning("worker: anomaly_loop stop failed: %s", exc)
+
+    try:
+        from eden.workers.trace_finalized_consumer import stop_consumer
+
+        await stop_consumer()
+    except Exception as exc:
+        logger.warning("worker: trace_finalized stop failed: %s", exc)
+
     try:
         from eden.agents.evolution.loop import stop_evolution_loop
 
