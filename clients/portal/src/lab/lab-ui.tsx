@@ -11,6 +11,7 @@ import {
   type TranscriptStep,
 } from "@/lab/fixtures/traces";
 import { AGENT_LIST, agentForTrace } from "@/lab/fixtures/agents";
+import { catalogAgents } from "@/lib/portal-catalog";
 import { StatusChip } from "@/components/ds/primitives";
 import { useSidebar } from "@/components/shell/sidebar-context";
 import { cn } from "@/lib/utils";
@@ -573,12 +574,14 @@ export function AgentScopeFilter({
         <option value="all">
           All agents{counts?.all != null ? ` (${counts.all})` : ""}
         </option>
-        {AGENT_LIST.map((agent) => (
-          <option key={agent.id} value={agent.id}>
-            {agent.name}
-            {counts?.[agent.id] != null ? ` (${counts[agent.id]})` : ""}
-          </option>
-        ))}
+        {(catalogAgents().length > 0 ? catalogAgents() : AGENT_LIST).map(
+          (agent) => (
+            <option key={agent.id} value={agent.id}>
+              {agent.name}
+              {counts?.[agent.id] != null ? ` (${counts[agent.id]})` : ""}
+            </option>
+          ),
+        )}
       </select>
     </label>
   );

@@ -3,12 +3,37 @@
 import { useCallback } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
-  AGENT_LIST,
   agentById,
   type AgentFixture,
 } from "@/lab/fixtures/agents";
+import { catalogAgents } from "@/lib/portal-catalog";
 
 export type AgentScopeId = "all" | (string & {});
+
+function liveAgentList(): AgentFixture[] {
+  return catalogAgents();
+}
+
+function stubAgent(id: string): AgentFixture {
+  const label = id.trim() || "unknown";
+  return {
+    id: label,
+    name: label,
+    purpose: "",
+    status: "idle",
+    env: "prod",
+    model: "",
+    runs24h: 0,
+    successRate: 1,
+    errorRate: 0,
+    p50Ms: 0,
+    p95Ms: 0,
+    costUsd24h: 0,
+    tokens24h: 0,
+    openIssues: 0,
+    lastSeen: "",
+  };
+}
 
 /** Patch query params without losing unrelated keys (id, agent, tab, board). */
 export function useQueryPatch() {
@@ -33,11 +58,17 @@ export function useQueryPatch() {
 export function useAgentScope() {
   const searchParams = useSearchParams();
   const patchQuery = useQueryPatch();
+  // Read catalog each render — PortalCatalogSync + sibling RQ updates
+  // drive re-renders; grouping also synthesizes from live items.
+  const agents = liveAgentList();
 
   const raw = searchParams.get("agent");
   const agentId: AgentScopeId =
-    raw && AGENT_LIST.some((a) => a.id === raw) ? raw : "all";
-  const agent = agentId === "all" ? undefined : agentById(agentId);
+    raw && raw.length > 0 ? raw : "all";
+  const agent =
+    agentId === "all"
+      ? undefined
+      : agentById(agentId) ?? stubAgent(agentId);
 
   const setAgentId = useCallback(
     (id: AgentScopeId) => {
@@ -67,25 +98,49 @@ export function useAgentScope() {
     agent,
     setAgentId,
     hrefFor,
-    agents: AGENT_LIST,
+    agents,
   };
 }
 
+/**
+ * Group runs by agent. Uses live catalog agents and synthesizes stubs for
+ * SDK agent_ids that are not registered yet (empty AGENT_LIST seed).
+ */
 export function groupByAgent<T extends { agentId: string }>(
   items: T[],
 ): { agent: AgentFixture; items: T[] }[] {
-  return AGENT_LIST.map((agent) => ({
-    agent,
-    items: items.filter((item) => item.agentId === agent.id),
-  })).filter((group) => group.items.length > 0);
+  const known = new Map(liveAgentList().map((a) => [a.id, a]));
+  const groups = new Map<string, { agent: AgentFixture; items: T[] }>();
+
+  for (const item of items) {
+    const id = (item.agentId || "").trim() || "unknown";
+    let group = groups.get(id);
+    if (!group) {
+      group = {
+        agent: known.get(id) ?? stubAgent(id),
+        items: [],
+      };
+      groups.set(id, group);
+    }
+    group.items.push(item);
+  }
+
+  return [...groups.values()];
 }
 
 export function agentScopeCounts<T extends { agentId: string }>(
   items: T[],
 ): Record<string, number> {
   const counts: Record<string, number> = { all: items.length };
-  for (const agent of AGENT_LIST) {
+  for (const agent of liveAgentList()) {
     counts[agent.id] = items.filter((item) => item.agentId === agent.id).length;
+  }
+  for (const item of items) {
+    const id = (item.agentId || "").trim();
+    if (!id) continue;
+    if (counts[id] == null) {
+      counts[id] = items.filter((i) => i.agentId === id).length;
+    }
   }
   return counts;
 }
