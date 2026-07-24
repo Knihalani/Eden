@@ -236,10 +236,12 @@ class RLSOrgContextMiddleware:
             try:
                 from eden.api.utils.clerk_auth import (
                     extract_org_id,
-                    verify_clerk_token,
+                    verify_clerk_token_for_request,
                 )
 
-                clerk_payload = await verify_clerk_token(auth_header[7:].strip())
+                clerk_payload = await verify_clerk_token_for_request(
+                    request, auth_header[7:].strip()
+                )
                 if clerk_payload:
                     return extract_org_id(clerk_payload)
             except Exception:

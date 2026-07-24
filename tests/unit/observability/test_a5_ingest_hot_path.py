@@ -74,7 +74,7 @@ class TestChFlushPolicy:
         assert len(collector._ch_telemetry_buffer) == 2
 
 
-# ─── K24: NUMSUB==0 skips publish; pipeline with subscribers ───
+# ─── K24: NUMSUB==0 skips all Redis writes; pipeline with subscribers ───
 
 
 class TestPublishNumsub:
@@ -83,9 +83,10 @@ class TestPublishNumsub:
         from eden.api.routes import observability_stream as stream
 
         stream._numsub_cache.clear()
+        stream._sse_maint_at.clear()
 
     @pytest.mark.asyncio
-    async def test_numsub_zero_skips_publish_but_buffers_replay(self) -> None:
+    async def test_numsub_zero_skips_all_writes(self) -> None:
         from eden.api.routes import observability_stream as stream
         from eden.observability.ingest_hot_path_metrics import (
             get_ingest_hot_path_metrics,
@@ -101,7 +102,7 @@ class TestPublishNumsub:
         pipe.zadd = MagicMock(return_value=pipe)
         pipe.expire = MagicMock(return_value=pipe)
         pipe.zremrangebyrank = MagicMock(return_value=pipe)
-        pipe.execute = AsyncMock(return_value=[1, True, True, 0])
+        pipe.execute = AsyncMock(return_value=[])
         redis.pipeline = MagicMock(return_value=pipe)
 
         with patch(
@@ -110,11 +111,9 @@ class TestPublishNumsub:
         ):
             await stream.publish_trace_event("org-1", {"trace_id": "t1"})
 
-        redis.incr.assert_awaited_once()
+        redis.incr.assert_not_awaited()
         pipe.publish.assert_not_called()
-        pipe.zadd.assert_called_once()
-        zadd_member = next(iter(pipe.zadd.call_args.args[1].keys()))
-        assert zadd_member.startswith("3|")
+        pipe.zadd.assert_not_called()
         assert get_ingest_hot_path_metrics()["eden_sse_publish_skipped"] == 1.0
 
     @pytest.mark.asyncio
@@ -148,7 +147,10 @@ class TestPublishNumsub:
     @pytest.mark.asyncio
     async def test_numsub_cache_avoids_repeat_redis(self) -> None:
         from eden.api.routes import observability_stream as stream
-        from eden.observability.ingest_hot_path_metrics import reset_for_tests
+        from eden.observability.ingest_hot_path_metrics import (
+            get_ingest_hot_path_metrics,
+            reset_for_tests,
+        )
 
         reset_for_tests()
         redis = MagicMock()
@@ -170,9 +172,46 @@ class TestPublishNumsub:
             await stream.publish_trace_event("org-cache", {"trace_id": "t2"})
 
         assert redis.pubsub_numsub.await_count == 1
-        assert redis.incr.await_count == 2
-        assert pipe.publish.call_count == 0
-        assert pipe.zadd.call_count == 2
+        redis.incr.assert_not_awaited()
+        assert pipe.zadd.call_count == 0
+        assert get_ingest_hot_path_metrics()["eden_sse_publish_skipped"] == 2.0
+
+    @pytest.mark.asyncio
+    async def test_write_when_idle_buffers_replay(self) -> None:
+        from eden.api.routes import observability_stream as stream
+        from eden.observability.ingest_hot_path_metrics import (
+            get_ingest_hot_path_metrics,
+            reset_for_tests,
+        )
+
+        reset_for_tests()
+        redis = MagicMock()
+        redis.pubsub_numsub = AsyncMock(return_value=[("ch", 0)])
+        redis.incr = AsyncMock(return_value=3)
+        pipe = MagicMock()
+        pipe.publish = MagicMock(return_value=pipe)
+        pipe.zadd = MagicMock(return_value=pipe)
+        pipe.expire = MagicMock(return_value=pipe)
+        pipe.zremrangebyrank = MagicMock(return_value=pipe)
+        pipe.execute = AsyncMock(return_value=[1, True, True, 0])
+        redis.pipeline = MagicMock(return_value=pipe)
+
+        with (
+            patch(
+                "eden.api.routes.observability_stream.get_redis_client",
+                new=AsyncMock(return_value=redis),
+            ),
+            patch(
+                "eden.api.routes.observability_stream._sse_settings",
+                return_value=(True, 30.0, 2.0),
+            ),
+        ):
+            await stream.publish_trace_event("org-1", {"trace_id": "t1"})
+
+        redis.incr.assert_awaited_once()
+        pipe.publish.assert_not_called()
+        pipe.zadd.assert_called_once()
+        assert get_ingest_hot_path_metrics()["eden_sse_publish_skipped"] == 1.0
 
 
 # ─── S1/S2/S17: dual-emit batch, content off, settings cached ───
@@ -285,9 +324,18 @@ class TestEnrichAndSingleToDict:
 
         event.to_dict = counted  # type: ignore[method-assign]
 
-        with patch(
-            "eden.api.routes.observability_stream.publish_trace_event",
-            new=AsyncMock(),
+        with (
+            patch(
+                "eden.api.routes.observability_stream.publish_trace_event",
+                new=AsyncMock(),
+            ),
+            patch(
+                "eden.config.get_settings",
+                return_value=MagicMock(
+                    redis_telemetry_stream_enabled=True,
+                    judges_async_tailer_enabled=False,
+                ),
+            ),
         ):
             await collector._route_redis(event)
 

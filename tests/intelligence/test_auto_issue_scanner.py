@@ -189,19 +189,22 @@ async def test_consumer_handle_scans_and_acks() -> None:
 
 @pytest.mark.asyncio
 async def test_maybe_emit_trace_finalized_only_on_terminal() -> None:
-    from eden.observability.trace_finalized import maybe_emit_trace_finalized
+    from eden.observability import trace_finalized as tf
 
+    tf._emitted_local.clear()
     redis = MagicMock()
+    redis.set = AsyncMock(return_value=True)
     redis.xadd = AsyncMock()
 
     # non-terminal → no emit
-    await maybe_emit_trace_finalized(
+    await tf.maybe_emit_trace_finalized(
         {"event_type": "llm.completion", "parent_span_id": "p"}, redis
     )
+    redis.set.assert_not_awaited()
     redis.xadd.assert_not_awaited()
 
-    # terminal → emit
-    await maybe_emit_trace_finalized(
+    # terminal → claim + emit
+    await tf.maybe_emit_trace_finalized(
         {
             "event_type": "trace.end",
             "tenant_id": "org_test",
@@ -211,4 +214,21 @@ async def test_maybe_emit_trace_finalized_only_on_terminal() -> None:
         },
         redis,
     )
+    redis.set.assert_awaited_once()
     redis.xadd.assert_awaited_once()
+
+    # duplicate terminal → process-local coalesce, no second XADD
+    redis.set.reset_mock()
+    redis.xadd.reset_mock()
+    await tf.maybe_emit_trace_finalized(
+        {
+            "event_type": "session.end",
+            "tenant_id": "org_test",
+            "trace_id": "trace-1",
+            "agent_id": "agent-a",
+            "attributes": {},
+        },
+        redis,
+    )
+    redis.set.assert_not_awaited()
+    redis.xadd.assert_not_awaited()

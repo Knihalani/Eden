@@ -5,6 +5,7 @@ Provides real-time budget enforcement with soft/hard limits.
 """
 
 import logging
+import time
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
@@ -12,6 +13,16 @@ from eden.config import get_settings
 from eden.storage.redis import get_redis_client
 
 logger = logging.getLogger(__name__)
+
+# Sparse EXPIRE — refresh TTL ~once/hour per key, not every cost event.
+_COST_EXPIRE_TTL_S = 7 * 24 * 3600
+_COST_EXPIRE_REFRESH_S = 3600.0
+_cost_expire_at: dict[str, float] = {}
+
+# Sparse EXPIRE — refresh TTL ~once/hour per key, not every cost event.
+_COST_EXPIRE_TTL_S = 7 * 24 * 3600
+_COST_EXPIRE_REFRESH_S = 3600.0
+_cost_expire_at: dict[str, float] = {}
 
 
 @dataclass
@@ -83,7 +94,7 @@ class CostTracker:
                 month_hash = f"eden:cost:{event.tenant_id}:month:{month_key}"
                 model_hash = f"eden:cost:model:{event.model}:hour:{hour_key}"
                 node_hash = f"eden:cost:node:{event.pipeline_node}:day:{day_key}"
-                ttl = 7 * 24 * 3600
+                now_mono = time.monotonic()
 
                 # One pipeline = one RTT (was ~10 serial round-trips).
                 pipe = client.pipeline(transaction=False)
@@ -94,8 +105,20 @@ class CostTracker:
                 pipe.hincrbyfloat(model_hash, "total_cents", float(event.total_cost_cents))
                 pipe.hincrbyfloat(node_hash, "total_cents", float(event.total_cost_cents))
                 for key in (day_hash, month_hash, model_hash, node_hash):
-                    pipe.expire(key, ttl)
+                    if (
+                        key not in _cost_expire_at
+                        or now_mono >= _cost_expire_at[key]
+                    ):
+                        pipe.expire(key, _COST_EXPIRE_TTL_S)
+                        _cost_expire_at[key] = now_mono + _COST_EXPIRE_REFRESH_S
                 await pipe.execute()
+                if len(_cost_expire_at) > 8192:
+                    stale = [
+                        k for k, exp in _cost_expire_at.items()
+                        if exp <= now_mono
+                    ]
+                    for k in stale:
+                        _cost_expire_at.pop(k, None)
 
             except Exception as e:
                 logger.warning(f"Cost tracking Redis update failed: {e}")

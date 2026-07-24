@@ -27,9 +27,40 @@ logger = logging.getLogger(__name__)
 # Process-local fallback when Redis is down (SDK HTTP still accepted).
 _LOCAL_BUFFERS: dict[str, SessionBuffer] = {}
 
+# NUMSUB cache + sparse EXPIRE — cut Upstash cmds when nobody is
+# live-tailing a session (common for SDK publish without an open UI).
+# Process-local: sessions already in the org set skip SISMEMBER/SCARD.
+_known_sessions: set[str] = set()
+_numsub_cache: dict[str, tuple[int, float]] = {}
+_maint_at: dict[str, float] = {}
+_MAINT_REFRESH_S = 3600.0
+_rate_local: dict[str, tuple[int, float]] = {}
+
 
 def _local_key(org_id: str, session_id: str) -> str:
     return f"{org_id}:{session_id}"
+
+
+def _live_write_when_idle() -> bool:
+    try:
+        from eden.config import get_settings
+
+        return bool(getattr(get_settings(), "redis_live_write_when_idle", False))
+    except Exception:
+        return False
+
+
+def _numsub_ttls() -> tuple[float, float]:
+    try:
+        from eden.config import get_settings
+
+        s = get_settings()
+        return (
+            float(getattr(s, "redis_sse_numsub_idle_ttl_s", 30.0) or 30.0),
+            float(getattr(s, "redis_sse_numsub_active_ttl_s", 2.0) or 2.0),
+        )
+    except Exception:
+        return 30.0, 2.0
 
 
 class LiveTracePublisher:
@@ -58,6 +89,19 @@ class LiveTracePublisher:
             return self._publish_local(org_id, session_id, payload)
 
         try:
+            ch = channel_name(org_id, session_id)
+            write_when_idle = _live_write_when_idle()
+            sub_count = await self._subscriber_count(redis, ch)
+            if sub_count <= 0 and not write_when_idle and not force:
+                # No live UI → skip Redis entirely (rate/cap/buffer).
+                return {
+                    "status": "ok",
+                    "event_id": 0,
+                    "channel": ch,
+                    "dropped": 0,
+                    "skipped": "no_subscribers",
+                }
+
             cap = await self._enforce_session_cap(redis, org_id, session_id)
             if cap is not None:
                 return cap
@@ -69,19 +113,21 @@ class LiveTracePublisher:
             payload["event_id"] = event_id
             body = json.dumps(payload, default=str)[:16 * 1024]
 
-            ch = channel_name(org_id, session_id)
             bkey = buffer_key(org_id, session_id)
             mkey = meta_key(org_id, session_id)
             skey = seq_key(org_id, session_id)
             okey = org_sessions_key(org_id)
+            now = time.monotonic()
+            maint_key = f"{org_id}:{session_id}"
+            need_maint = (
+                maint_key not in _maint_at or now >= _maint_at[maint_key]
+            )
 
-            # Collapse ~10 serial writes into one pipeline RTT.
             pipe = redis.pipeline(transaction=False)
-            pipe.publish(ch, body)
+            if sub_count > 0 or force:
+                pipe.publish(ch, body)
             pipe.rpush(bkey, body)
             pipe.ltrim(bkey, -LIVE_BUFFER_MAX, -1)
-            pipe.expire(bkey, LIVE_META_TTL_S)
-            pipe.expire(skey, LIVE_META_TTL_S)
             pipe.hset(
                 mkey,
                 mapping={
@@ -91,10 +137,18 @@ class LiveTracePublisher:
                     "updated_at": str(time.time()),
                 },
             )
-            pipe.expire(mkey, LIVE_META_TTL_S)
             pipe.sadd(okey, session_id)
-            pipe.expire(okey, LIVE_META_TTL_S)
+            if need_maint:
+                pipe.expire(bkey, LIVE_META_TTL_S)
+                pipe.expire(skey, LIVE_META_TTL_S)
+                pipe.expire(mkey, LIVE_META_TTL_S)
+                pipe.expire(okey, LIVE_META_TTL_S)
             await pipe.execute()
+            _known_sessions.add(f"{org_id}:{session_id}")
+            if len(_known_sessions) > 16_384:
+                _known_sessions.clear()
+            if need_maint:
+                _maint_at[maint_key] = now + _MAINT_REFRESH_S
 
             return {
                 "status": "ok",
@@ -134,7 +188,8 @@ class LiveTracePublisher:
         if redis is not None:
             try:
                 mkey = meta_key(org_id, session_id)
-                await redis.hset(
+                pipe = redis.pipeline(transaction=False)
+                pipe.hset(
                     mkey,
                     mapping={
                         "finalized": "1",
@@ -143,13 +198,9 @@ class LiveTracePublisher:
                         "finalized_at": str(time.time()),
                     },
                 )
-                await redis.expire(mkey, LIVE_FINALIZE_GRACE_S)
-                await redis.expire(
-                    buffer_key(org_id, session_id), LIVE_FINALIZE_GRACE_S
-                )
-                await redis.expire(
-                    channel_name(org_id, session_id), LIVE_FINALIZE_GRACE_S
-                )
+                pipe.expire(mkey, LIVE_FINALIZE_GRACE_S)
+                pipe.expire(buffer_key(org_id, session_id), LIVE_FINALIZE_GRACE_S)
+                await pipe.execute()
             except Exception as exc:
                 logger.debug("live finalize meta failed: %s", exc)
 
@@ -205,9 +256,38 @@ class LiveTracePublisher:
             "dropped": buf.dropped - before,
         }
 
+    async def _subscriber_count(self, redis: Any, channel: str) -> int:
+        now = time.monotonic()
+        cached = _numsub_cache.get(channel)
+        if cached is not None and cached[1] > now:
+            return cached[0]
+        idle_ttl, active_ttl = _numsub_ttls()
+        try:
+            numsub = await redis.pubsub_numsub(channel)
+            sub_count = 0
+            if numsub:
+                entry = numsub[0]
+                if isinstance(entry, (list, tuple)) and len(entry) >= 2:
+                    sub_count = int(entry[1])
+                else:
+                    sub_count = int(entry)
+        except Exception:
+            # Fail open: assume a listener so we still buffer.
+            return 1
+        ttl = active_ttl if sub_count > 0 else idle_ttl
+        _numsub_cache[channel] = (sub_count, now + ttl)
+        if len(_numsub_cache) > 4096:
+            expired = [k for k, (_, exp) in _numsub_cache.items() if exp <= now]
+            for k in expired:
+                _numsub_cache.pop(k, None)
+        return sub_count
+
     async def _enforce_session_cap(
         self, redis: Any, org_id: str, session_id: str
     ) -> dict[str, Any] | None:
+        sk = f"{org_id}:{session_id}"
+        if sk in _known_sessions:
+            return None
         try:
             # SISMEMBER + SCARD (2 cmds, 1 RTT) instead of SMEMBERS
             # which ships every session id back on every publish.
@@ -216,7 +296,10 @@ class LiveTracePublisher:
             pipe.sismember(okey, session_id)
             pipe.scard(okey)
             is_member, count = await pipe.execute()
-            if not bool(is_member) and int(count or 0) >= max_sessions_per_org():
+            if bool(is_member):
+                _known_sessions.add(sk)
+                return None
+            if int(count or 0) >= max_sessions_per_org():
                 return {
                     "status": "error",
                     "code": "session_cap",
@@ -229,11 +312,38 @@ class LiveTracePublisher:
     async def _enforce_rate(
         self, redis: Any, org_id: str, session_id: str
     ) -> dict[str, Any] | None:
+        # Prefer process-local counter on single-replica API (Upstash Free).
+        # Fall back to Redis when distributed rate limiting is on.
         try:
-            key = f"trace:live:rate:{org_id}:{session_id}"
+            from eden.config import get_settings
+
+            distributed = bool(
+                getattr(get_settings(), "rate_limit_distributed", False)
+            )
+        except Exception:
+            distributed = False
+
+        key = f"{org_id}:{session_id}"
+        if not distributed:
+            now = time.monotonic()
+            n, window_start = _rate_local.get(key, (0, now))
+            if now - window_start >= 60.0:
+                n, window_start = 0, now
+            n += 1
+            _rate_local[key] = (n, window_start)
+            if n > LIVE_RATE_LIMIT_PER_MIN:
+                return {
+                    "status": "error",
+                    "code": "rate_limited",
+                    "message": "1000 events/min/session exceeded",
+                }
+            return None
+
+        try:
+            rkey = f"trace:live:rate:{org_id}:{session_id}"
             pipe = redis.pipeline(transaction=False)
-            pipe.incr(key)
-            pipe.expire(key, 60)
+            pipe.incr(rkey)
+            pipe.expire(rkey, 60)
             n, _ = await pipe.execute()
             if int(n) > LIVE_RATE_LIMIT_PER_MIN:
                 return {

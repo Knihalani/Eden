@@ -40,7 +40,11 @@ POLL_INTERVAL_S: float = 1.0
 
 #: Idle backoff ceiling — never poll PG more often than this when
 #: the stream is quiet (and Redis wake is unavailable).
-POLL_INTERVAL_MAX_S: float = 5.0
+POLL_INTERVAL_MAX_S: float = 30.0
+
+#: When Redis pub/sub wake is available, wait this long between
+#: opportunistic PG polls (wakes still interrupt immediately).
+POLL_INTERVAL_PUBSUB_MAX_S: float = 60.0
 
 #: Heartbeat interval — proxies / load balancers tend to
 #: kill idle connections after 30-60s, so we send a comment
@@ -178,9 +182,12 @@ class LiveTailService:
                 if new_events:
                     idle_interval = POLL_INTERVAL_S
                 else:
-                    idle_interval = min(
-                        idle_interval * 2.0, POLL_INTERVAL_MAX_S
+                    ceiling = (
+                        POLL_INTERVAL_PUBSUB_MAX_S
+                        if pubsub is not None
+                        else POLL_INTERVAL_MAX_S
                     )
+                    idle_interval = min(idle_interval * 2.0, ceiling)
 
                 # Wait: Redis wake (preferred) or idle backoff sleep.
                 try:

@@ -229,6 +229,13 @@ spec:
       value: "300"
     - name: REDIS_LEADER_TICK_SECONDS
       value: "120"
+    # Traffic-path Redis: skip per-span streams + idle SSE/live writes.
+    - name: REDIS_TELEMETRY_STREAM_ENABLED
+      value: "false"
+    - name: REDIS_SSE_WRITE_WHEN_IDLE
+      value: "false"
+    - name: REDIS_LIVE_WRITE_WHEN_IDLE
+      value: "false"
     # ── Tinybird (Cat 18 columnar) — already external ───────────
     - name: CLICKHOUSE_URL
       value: https://api.us-east.tinybird.co
@@ -511,6 +518,12 @@ spec:
       value: "300"
     - name: REDIS_LEADER_TICK_SECONDS
       value: "120"
+    - name: REDIS_TELEMETRY_STREAM_ENABLED
+      value: "false"
+    - name: REDIS_SSE_WRITE_WHEN_IDLE
+      value: "false"
+    - name: REDIS_LIVE_WRITE_WHEN_IDLE
+      value: "false"
     - name: CLICKHOUSE_URL
       value: https://api.us-east.tinybird.co
     - name: CLICKHOUSE_DATABASE
@@ -621,6 +634,12 @@ spec:
       value: "300"
     - name: REDIS_LEADER_TICK_SECONDS
       value: "120"
+    - name: REDIS_TELEMETRY_STREAM_ENABLED
+      value: "false"
+    - name: REDIS_SSE_WRITE_WHEN_IDLE
+      value: "false"
+    - name: REDIS_LIVE_WRITE_WHEN_IDLE
+      value: "false"
     - name: JWT_SECRET
       valueFrom: { secretKeyRef: { group: eden-required, key: JWT_SECRET } }
     - name: ENCRYPTION_KEY

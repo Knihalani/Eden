@@ -31,6 +31,12 @@ from eden.storage.postgres import get_postgres_client
 logger = logging.getLogger(__name__)
 settings = None
 
+# Process-local API-key auth cache — middleware + deps both look up
+# the same key_hash; 60s TTL cuts a PG round-trip on hot ingest.
+_API_KEY_CACHE_TTL_S = 60.0
+_api_key_resolve_cache: dict[str, tuple[str, str, float]] = {}
+
+
 def _get_settings():
     global settings
     if settings is None:
@@ -231,6 +237,11 @@ class TenantRateLimitMiddleware:
         if api_key and org_id_header:
             try:
                 key_hash = hashlib.sha256(api_key.encode()).hexdigest()
+                cache_key = f"{key_hash}:{org_id_header}"
+                now = time.monotonic()
+                cached = _api_key_resolve_cache.get(cache_key)
+                if cached is not None and cached[2] > now:
+                    return cached[0], cached[1]
                 client = await get_postgres_client()
                 row = await client.fetchrow(
                     "SELECT id, org_id FROM org_api_keys "
@@ -239,7 +250,21 @@ class TenantRateLimitMiddleware:
                     org_id_header,
                 )
                 if row:
-                    return str(row["org_id"]), str(row["id"])
+                    org_id = str(row["org_id"])
+                    key_id = str(row["id"])
+                    _api_key_resolve_cache[cache_key] = (
+                        org_id,
+                        key_id,
+                        now + _API_KEY_CACHE_TTL_S,
+                    )
+                    if len(_api_key_resolve_cache) > 8192:
+                        stale = [
+                            k for k, (_, _, exp) in _api_key_resolve_cache.items()
+                            if exp <= now
+                        ]
+                        for k in stale:
+                            _api_key_resolve_cache.pop(k, None)
+                    return org_id, key_id
             except Exception:
                 logger.warning(
                     "tenant_rate_limit: API-key lookup failed; falling back",
@@ -260,10 +285,12 @@ class TenantRateLimitMiddleware:
             try:
                 from eden.api.utils.clerk_auth import (
                     extract_org_id,
-                    verify_clerk_token,
+                    verify_clerk_token_for_request,
                 )
 
-                clerk_payload = await verify_clerk_token(auth_header[7:].strip())
+                clerk_payload = await verify_clerk_token_for_request(
+                    request, auth_header[7:].strip()
+                )
                 if clerk_payload:
                     clerk_org = extract_org_id(clerk_payload)
                     if clerk_org:

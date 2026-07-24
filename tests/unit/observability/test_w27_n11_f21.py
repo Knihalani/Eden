@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -45,6 +45,40 @@ def test_calibrator_trains_and_predicts() -> None:
     blob = cal.dumps()
     restored = ToolCallCalibrator.loads(blob)
     assert restored.sample_count == 10
+
+
+@pytest.mark.asyncio
+async def test_publisher_skips_redis_when_no_subscribers() -> None:
+    from eden.observability.live import publisher as pub_mod
+
+    pub_mod._numsub_cache.clear()
+    pub = LiveTracePublisher()
+    redis = MagicMock()
+    redis.pubsub_numsub = AsyncMock(return_value=[("ch", 0)])
+    redis.incr = AsyncMock(return_value=1)
+    redis.pipeline = MagicMock()
+
+    with (
+        patch.object(pub, "_redis", AsyncMock(return_value=redis)),
+        patch(
+            "eden.observability.live.publisher.live_enabled",
+            return_value=True,
+        ),
+        patch(
+            "eden.observability.live.publisher._live_write_when_idle",
+            return_value=False,
+        ),
+    ):
+        out = await pub.publish(
+            "org_idle",
+            "sess_idle",
+            {"type": "span_start", "span_id": "s1"},
+        )
+
+    assert out["status"] == "ok"
+    assert out.get("skipped") == "no_subscribers"
+    redis.incr.assert_not_awaited()
+    redis.pipeline.assert_not_called()
 
 
 @pytest.mark.asyncio

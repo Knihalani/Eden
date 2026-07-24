@@ -31,6 +31,7 @@ See ``docs/spec/upgradespec-original-2026-06.md`` §D.10 /
 from __future__ import annotations
 
 import logging
+import time
 import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -38,6 +39,11 @@ from typing import Any
 import httpx
 
 logger = logging.getLogger(__name__)
+
+# At most one full alert eval / org / window — cost events otherwise
+# re-run get_budget + get_consumption + list_actions on every LLM $.
+_ALERT_EVAL_DEBOUNCE_S = 45.0
+_alert_eval_at: dict[str, float] = {}
 
 _HTTPX: httpx.AsyncClient | None = None
 
@@ -410,7 +416,24 @@ async def evaluate_budget_alerts(org_id: str) -> list[int]:
 
     Returns the list of threshold percents that fired this call.
     Idempotent per (org, window_start, threshold) via action log scan.
+
+    Debounced per org (~45s) so the LLM/gateway cost hot path does not
+    re-query budgets + actions on every dollar of spend. Threshold
+    crossings still fire within one debounce window of first crossing.
     """
+    now = time.monotonic()
+    last = _alert_eval_at.get(org_id)
+    if last is not None and (now - last) < _ALERT_EVAL_DEBOUNCE_S:
+        return []
+    _alert_eval_at[org_id] = now
+    if len(_alert_eval_at) > 8192:
+        stale = [
+            k for k, t in _alert_eval_at.items()
+            if (now - t) > _ALERT_EVAL_DEBOUNCE_S * 4
+        ]
+        for k in stale:
+            _alert_eval_at.pop(k, None)
+
     budget = await get_budget(org_id)
     hard = float(budget.get("cost_hard_limit_usd") or 0.0)
     if hard <= 0:

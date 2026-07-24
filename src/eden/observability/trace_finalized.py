@@ -23,6 +23,10 @@ logger = logging.getLogger(__name__)
 TRACE_FINALIZED_STREAM = "trace.finalized"
 TRACE_FINALIZED_DLQ_STREAM = "trace.finalized.dlq"
 _STREAM_MAXLEN = 100_000
+# One XADD per (org, trace) — terminal events often fire twice
+# (span.end + session.end). Process-local + Redis SETNX coalesce.
+_EMIT_DEDUP_TTL_S = 3600
+_emitted_local: dict[str, float] = {}
 
 # Event types that unambiguously mark the end of a trace/session/run.
 _TERMINAL_TYPES = {
@@ -67,19 +71,45 @@ async def emit_trace_finalized(
     user_id: str | None = None,
     redis: Any | None = None,
 ) -> bool:
-    """XADD a ``trace.finalized`` entry. Best-effort; never raises."""
+    """XADD a ``trace.finalized`` entry. Best-effort; never raises.
+
+    Coalesces to one emit per ``(org_id, trace_id)`` within an hour so
+    multi-terminal traces (root span.end + session.end) do not double
+    bill Upstash XADD / double-wake the consumer.
+    """
     try:
+        oid = org_id or ""
+        tid = trace_id or ""
+        if not oid or not tid:
+            return False
+        dedup_key = f"{oid}:{tid}"
+        now_mono = time.monotonic()
+        exp = _emitted_local.get(dedup_key)
+        if exp is not None and exp > now_mono:
+            return False
+
         if redis is None:
             from eden.storage.redis import get_redis_client
 
             redis = await get_redis_client()
         if redis is None:
             return False
+
+        claimed = await redis.set(
+            f"trace.finalized:emitted:{dedup_key}",
+            "1",
+            nx=True,
+            ex=_EMIT_DEDUP_TTL_S,
+        )
+        if not claimed:
+            _emitted_local[dedup_key] = now_mono + float(_EMIT_DEDUP_TTL_S)
+            return False
+
         await redis.xadd(
             TRACE_FINALIZED_STREAM,
             {
-                "org_id": org_id or "",
-                "trace_id": trace_id or "",
+                "org_id": oid,
+                "trace_id": tid,
                 "agent_id": agent_id or "",
                 "session_id": session_id or "",
                 "user_id": user_id or "",
@@ -88,6 +118,11 @@ async def emit_trace_finalized(
             maxlen=_STREAM_MAXLEN,
             approximate=True,
         )
+        _emitted_local[dedup_key] = now_mono + float(_EMIT_DEDUP_TTL_S)
+        if len(_emitted_local) > 8192:
+            stale = [k for k, e in _emitted_local.items() if e <= now_mono]
+            for k in stale:
+                _emitted_local.pop(k, None)
         return True
     except Exception as exc:  # pragma: no cover - redis optional
         logger.debug("trace_finalized: emit failed: %s", exc)

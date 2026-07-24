@@ -238,6 +238,7 @@ async def test_budget_alert_ladder_fires_50_80_100() -> None:
         patch.object(bs, "record_action", new=AsyncMock(return_value=True)) as rec,
         patch.object(bs, "_notify_budget_alert", new=AsyncMock()),
     ):
+        bs._alert_eval_at.pop("org_z", None)
         fired = await bs.evaluate_budget_alerts("org_z")
 
     assert fired == [50, 80, 100]

@@ -276,6 +276,31 @@ async def verify_clerk_token(token: str) -> dict[str, Any] | None:
     return None
 
 
+async def verify_clerk_token_for_request(
+    request: Any, token: str
+) -> dict[str, Any] | None:
+    """Verify once per request — stash payload on ``request.state``.
+
+    Quota / rate-limit / RLS middleware + ``deps`` can otherwise
+    re-decode the same Bearer JWT several times per portal call.
+    """
+    try:
+        state = getattr(request, "state", None)
+    except Exception:
+        state = None
+    if state is not None and getattr(state, "_clerk_jwt_checked", False):
+        return getattr(state, "clerk_jwt_payload", None)
+
+    payload = await verify_clerk_token(token)
+    if state is not None:
+        try:
+            state._clerk_jwt_checked = True
+            state.clerk_jwt_payload = payload
+        except Exception:
+            pass
+    return payload
+
+
 def extract_user_id(payload: dict[str, Any]) -> str | None:
     """Return the stable user id from a Clerk payload.
 

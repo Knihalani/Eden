@@ -62,6 +62,7 @@ async def test_replay_since_parses_seq_payload_members() -> None:
 @pytest.mark.asyncio
 async def test_publish_zadd_member_matches_replay_format() -> None:
     stream._numsub_cache.clear()
+    stream._sse_maint_at.clear()
     redis = MagicMock()
     redis.pubsub_numsub = AsyncMock(return_value=[("ch", 1)])
     redis.incr = AsyncMock(return_value=42)

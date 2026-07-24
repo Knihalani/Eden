@@ -708,6 +708,21 @@ def _build_settings_class():
         # Leader-lock extend / retry cadence for worker loops (seconds).
         # Lower = more Redis SET/EXPIRE traffic on Upstash Free.
         redis_leader_tick_seconds: int = 120
+        # Per-span ``telemetry:{org}:{trace}:events`` XADD — only needed
+        # when the async judge RedisTailer is on. Default off with the
+        # tailer; Postgres remains the durable ingest store.
+        redis_telemetry_stream_enabled: bool = False
+        # Write SSE replay ZSET even when NUMSUB=0 (Last-Event-ID buffer).
+        # Default false: no live listeners → 0 Redis cmds on ingest;
+        # portal falls back to REST. Set true to keep quiet-window resume.
+        redis_sse_write_when_idle: bool = False
+        # NUMSUB cache TTL when nobody is listening (seconds).
+        redis_sse_numsub_idle_ttl_s: float = 30.0
+        # NUMSUB cache TTL while at least one subscriber is connected.
+        redis_sse_numsub_active_ttl_s: float = 2.0
+        # Live-trace publisher: buffer/publish when NUMSUB=0. Default
+        # false — SDK publish with no open live UI costs ~0 Redis cmds.
+        redis_live_write_when_idle: bool = False
 
         # ── GitHub App (onboarding wizard) ────────────────────────────────
         # The onboarding wizard uses a GitHub App (not an OAuth App) so we
