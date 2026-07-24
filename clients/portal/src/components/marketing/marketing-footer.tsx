@@ -7,41 +7,60 @@ import {
   SUPPORT_EMAIL,
 } from "@/lib/constants";
 import { MarketingRail } from "@/components/marketing/marketing-primitives";
+import {
+  MARKETING_APP_HREF,
+  MARKETING_APP_LABEL,
+  isMarketingSignedIn,
+} from "@/lib/marketing-session";
 
-const COLUMNS = [
-  {
-    title: "Product",
-    links: [
+type FooterLink = {
+  href: string;
+  label: string;
+  external?: boolean;
+};
+
+function productLinks(signedIn: boolean): FooterLink[] {
+  if (signedIn) {
+    return [
       { href: "/pricing", label: "Pricing" },
-      { href: "/sign-up", label: "Sign up" },
-      { href: "/sign-in", label: "Sign in" },
+      { href: MARKETING_APP_HREF, label: MARKETING_APP_LABEL },
       { href: "/about", label: "About" },
       { href: "/contact", label: "Contact" },
-    ],
-  },
-  {
-    title: "Resources",
-    links: [
-      { href: DOCS_URL, label: "Documentation", external: true },
-      { href: DOCS_QUICKSTART_URL, label: "Quickstart", external: true },
-      { href: "/changelog", label: "Changelog" },
-      { href: "/status", label: "Status" },
-      { href: "/security", label: "Security" },
-    ],
-  },
-  {
-    title: "Legal",
-    links: [
-      { href: "/privacy", label: "Privacy" },
-      { href: "/terms", label: "Terms" },
-      { href: "/dpa", label: "DPA" },
-      { href: "/subprocessors", label: "Subprocessors" },
-      { href: "/do-not-sell", label: "Do Not Sell" },
-    ],
-  },
-] as const;
+    ];
+  }
+  return [
+    { href: "/pricing", label: "Pricing" },
+    { href: "/sign-up", label: "Sign up" },
+    { href: "/sign-in", label: "Sign in" },
+    { href: "/about", label: "About" },
+    { href: "/contact", label: "Contact" },
+  ];
+}
 
-export function MarketingFooter() {
+const RESOURCE_LINKS: FooterLink[] = [
+  { href: DOCS_URL, label: "Documentation", external: true },
+  { href: DOCS_QUICKSTART_URL, label: "Quickstart", external: true },
+  { href: "/changelog", label: "Changelog" },
+  { href: "/status", label: "Status" },
+  { href: "/security", label: "Security" },
+];
+
+const LEGAL_LINKS: FooterLink[] = [
+  { href: "/privacy", label: "Privacy" },
+  { href: "/terms", label: "Terms" },
+  { href: "/dpa", label: "DPA" },
+  { href: "/subprocessors", label: "Subprocessors" },
+  { href: "/do-not-sell", label: "Do Not Sell" },
+];
+
+export async function MarketingFooter() {
+  const signedIn = await isMarketingSignedIn();
+  const columns = [
+    { title: "Product", links: productLinks(signedIn) },
+    { title: "Resources", links: RESOURCE_LINKS },
+    { title: "Legal", links: LEGAL_LINKS },
+  ];
+
   return (
     <footer className="mt-auto border-t border-[var(--line)] bg-[var(--bg)]">
       <MarketingRail className="py-12 sm:py-16">
@@ -58,15 +77,15 @@ export function MarketingFooter() {
               {SUPPORT_EMAIL}
             </a>
           </div>
-          {COLUMNS.map((col) => (
+          {columns.map((col) => (
             <div key={col.title}>
               <p className="font-mono text-[0.625rem] uppercase tracking-[0.18em] text-[var(--text-faint)]">
                 {col.title}
               </p>
               <ul className="mt-4 flex flex-col gap-2.5">
                 {col.links.map((link) => (
-                  <li key={link.href}>
-                    {"external" in link && link.external ? (
+                  <li key={`${col.title}:${link.href}`}>
+                    {link.external ? (
                       <a
                         href={link.href}
                         className="type-ui text-[var(--text-muted)] transition-colors hover:text-[var(--text)]"

@@ -3,20 +3,39 @@
 import { useCallback, useEffect, useId, useState } from "react";
 import Link from "next/link";
 import { DOCS_URL } from "@/lib/constants";
+import {
+  MARKETING_APP_HREF,
+  MARKETING_APP_LABEL,
+} from "@/lib/marketing-session";
 
-const LINKS = [
-  { href: "/pricing", label: "Pricing" },
-  { href: DOCS_URL, label: "Docs", external: true },
-  { href: "/about", label: "About" },
-  { href: "/contact", label: "Contact" },
-  { href: "/sign-in", label: "Sign in" },
-  { href: "/sign-up", label: "Get started", primary: true },
-] as const;
+type NavLink =
+  | { href: string; label: string; external?: boolean; primary?: boolean };
+
+function navLinks(signedIn: boolean): NavLink[] {
+  const base: NavLink[] = [
+    { href: "/pricing", label: "Pricing" },
+    { href: DOCS_URL, label: "Docs", external: true },
+    { href: "/about", label: "About" },
+    { href: "/contact", label: "Contact" },
+  ];
+  if (signedIn) {
+    return [
+      ...base,
+      { href: MARKETING_APP_HREF, label: MARKETING_APP_LABEL, primary: true },
+    ];
+  }
+  return [
+    ...base,
+    { href: "/sign-in", label: "Sign in" },
+    { href: "/sign-up", label: "Get started", primary: true },
+  ];
+}
 
 /** Mobile menu — md+ uses the desktop nav; this is md:hidden only. */
-export function MarketingMobileNav() {
+export function MarketingMobileNav({ signedIn = false }: { signedIn?: boolean }) {
   const [open, setOpen] = useState(false);
   const panelId = useId();
+  const links = navLinks(signedIn);
 
   const close = useCallback(() => setOpen(false), []);
 
@@ -87,12 +106,11 @@ export function MarketingMobileNav() {
               </button>
             </div>
             <ul className="flex flex-col gap-1">
-              {LINKS.map((item) => {
-                const className =
-                  "primary" in item && item.primary
-                    ? "ds-btn ds-btn-primary mt-3 w-full justify-center"
-                    : "block rounded-md px-3 py-3 text-[0.9375rem] text-[var(--text-secondary)] transition-colors hover:bg-[var(--accent-muted)] hover:text-[var(--text)]";
-                if ("external" in item && item.external) {
+              {links.map((item) => {
+                const className = item.primary
+                  ? "ds-btn ds-btn-primary mt-3 w-full justify-center"
+                  : "block rounded-md px-3 py-3 text-[0.9375rem] text-[var(--text-secondary)] transition-colors hover:bg-[var(--accent-muted)] hover:text-[var(--text)]";
+                if (item.external) {
                   return (
                     <li key={item.href}>
                       <a
