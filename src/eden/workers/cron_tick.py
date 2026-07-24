@@ -180,6 +180,9 @@ async def _tick(*, dry_run: bool) -> dict[str, object]:
     out["eql_alert_watchdog"] = await _safe_step(
         "eql_alert_watchdog", _run_eql_alert_watchdog(dry_run=dry_run)
     )
+    # Prefer the long-running worker for EQL when both are up; cron
+    # remains a legacy fallback. Improvement sweeps are disabled here —
+    # drafts are issue-driven (closed-loop / issue_patch_trigger) only.
 
     if now.minute < 10:
         out["columnar_compaction"] = await _safe_step(
@@ -205,10 +208,11 @@ async def _tick(*, dry_run: bool) -> dict[str, object]:
         if not dry_run:
             out["classifier_retrain"] = await _run_classifier_retrain()
 
-    out["improvement_sweeps"] = await _safe_step(
-        "improvement_sweeps",
-        _run_improvement_sweeps(dry_run=dry_run),
-    )
+    # improvement_sweeps intentionally omitted — issue-driven drafts only.
+    out["improvement_sweeps"] = {
+        "skipped": True,
+        "reason": "issue_driven_only_use_closed_loop",
+    }
 
     if not dry_run:
         # Isolate each worker so one failure still records the other.
