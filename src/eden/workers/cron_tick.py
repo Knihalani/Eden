@@ -198,9 +198,9 @@ async def _tick(*, dry_run: bool) -> dict[str, object]:
 async def _once_per_window(key: str, *, ttl_seconds: int) -> bool:
     """Return True if this process won the window (Redis SET NX).
 
-    Prevents daily/weekly jobs from re-firing when the worker restarts
-    inside the same UTC hour window. If Redis is down, allow the run
-    (same best-effort behavior as the old cron cold-start).
+    Prevents the 5-minute worker loop from re-firing the same hourly /
+    15-minute / daily slot. If Redis is down, allow the run (same
+    best-effort behavior as the old cron cold-start).
     """
     try:
         from eden.storage.redis import get_redis_client
@@ -215,6 +215,12 @@ async def _once_per_window(key: str, *, ttl_seconds: int) -> bool:
         return True
 
 
+def _slot_key(prefix: str, now: datetime, *, minutes: int) -> str:
+    """Stable key for a wall-clock slot (e.g. 15-minute buckets)."""
+    slot = (now.hour * 60 + now.minute) // minutes
+    return f"{prefix}:{now.date().isoformat()}:{slot}"
+
+
 async def run_maintenance_due(
     *,
     now: datetime | None = None,
@@ -224,37 +230,55 @@ async def run_maintenance_due(
 
     Skips EQL watchdog, artifact demotion, and improvement sweeps — those
     are hosted separately on ``eden-worker`` or intentionally off.
+
+    Optimizations vs the old every-5m cold start:
+    * Redis once-per-window so each slot runs at most once (not twice
+      when minute is still inside ``< 5`` / ``< 10``).
+    * Independent due steps run concurrently via ``asyncio.gather``.
+    * Shadow join is 15-minute, not every tick.
     """
     now = now or datetime.now(UTC)
     out: dict[str, object] = {"maintenance_at": now.isoformat(), "dry_run": dry_run}
+    pending: dict[str, Any] = {}
+
+    def _queue(name: str, coro: Any) -> None:
+        pending[name] = coro
 
     if now.minute < 10:
-        out["columnar_compaction"] = await _safe_step(
-            "columnar_compaction", _run_columnar_compaction(dry_run=dry_run)
-        )
+        hour_key = f"compact:{now.date().isoformat()}:{now.hour:02d}"
+        if await _once_per_window(hour_key, ttl_seconds=55 * 60):
+            _queue(
+                "columnar_compaction",
+                _safe_step(
+                    "columnar_compaction", _run_columnar_compaction(dry_run=dry_run)
+                ),
+            )
+        else:
+            out["columnar_compaction"] = {
+                "skipped": True,
+                "reason": "already_ran_this_hour",
+            }
 
     if now.hour == 2 and now.minute < 10 and not dry_run:
         day_key = f"auto_curator:{now.date().isoformat()}"
         if await _once_per_window(day_key, ttl_seconds=20 * 3600):
-            out["auto_curator"] = await _safe_step(
-                "auto_curator", _run_auto_curator()
-            )
+            _queue("auto_curator", _safe_step("auto_curator", _run_auto_curator()))
         else:
             out["auto_curator"] = {"skipped": True, "reason": "already_ran_today"}
 
     if now.hour == 3 and now.minute < 10:
         day_key = f"daily:{now.date().isoformat()}"
         if await _once_per_window(day_key, ttl_seconds=20 * 3600):
-            out["daily"] = await _run_daily(now, dry_run=dry_run)
+            _queue("daily", _run_daily(now, dry_run=dry_run))
         else:
             out["daily"] = {"skipped": True, "reason": "already_ran_today"}
 
     if now.weekday() == 0 and now.hour == 4 and now.minute < 10 and not dry_run:
         week_key = f"drift:{now.isocalendar().week}:{now.year}"
         if await _once_per_window(week_key, ttl_seconds=6 * 24 * 3600):
-            out["drift_baselines"] = await _safe_step(
+            _queue(
                 "drift_baselines",
-                _run_drift_baselines(),
+                _safe_step("drift_baselines", _run_drift_baselines()),
             )
         else:
             out["drift_baselines"] = {
@@ -263,9 +287,13 @@ async def run_maintenance_due(
             }
 
     if now.minute % 15 < 5:
-        out["mcp_rollup"] = await _run_mcp_rollup(dry_run=dry_run)
-        if not dry_run:
-            out["classifier_retrain"] = await _run_classifier_retrain()
+        mcp_key = _slot_key("mcp", now, minutes=15)
+        if await _once_per_window(mcp_key, ttl_seconds=14 * 60):
+            _queue("mcp_rollup", _run_mcp_rollup(dry_run=dry_run))
+            if not dry_run:
+                _queue("classifier_retrain", _run_classifier_retrain())
+        else:
+            out["mcp_rollup"] = {"skipped": True, "reason": "already_ran_this_slot"}
 
     # improvement_sweeps intentionally omitted — issue-driven drafts only.
     out["improvement_sweeps"] = {
@@ -274,17 +302,48 @@ async def run_maintenance_due(
     }
 
     if not dry_run:
-        out["shadow_outcome_join"] = await _safe_step(
-            "shadow_outcome_join", _run_shadow_outcome_join()
-        )
+        shadow_key = _slot_key("shadow", now, minutes=15)
+        if await _once_per_window(shadow_key, ttl_seconds=14 * 60):
+            _queue(
+                "shadow_outcome_join",
+                _safe_step("shadow_outcome_join", _run_shadow_outcome_join()),
+            )
+        else:
+            out["shadow_outcome_join"] = {
+                "skipped": True,
+                "reason": "already_ran_this_slot",
+            }
 
     if not dry_run and now.minute % 10 < 5:
-        out["signal_backfill"] = await _safe_step(
-            "signal_backfill", _run_signal_backfill()
+        sig_key = _slot_key("signal", now, minutes=10)
+        if await _once_per_window(sig_key, ttl_seconds=9 * 60):
+            _queue(
+                "signal_backfill",
+                _safe_step("signal_backfill", _run_signal_backfill()),
+            )
+            _queue(
+                "signal_cluster_quiet",
+                _safe_step("signal_cluster_quiet", _run_signal_cluster_quiet()),
+            )
+        else:
+            out["signal_backfill"] = {
+                "skipped": True,
+                "reason": "already_ran_this_slot",
+            }
+
+    if pending:
+        names = list(pending.keys())
+        results = await asyncio.gather(
+            *(pending[n] for n in names), return_exceptions=True
         )
-        out["signal_cluster_quiet"] = await _safe_step(
-            "signal_cluster_quiet", _run_signal_cluster_quiet()
-        )
+        for name, result in zip(names, results, strict=True):
+            if isinstance(result, BaseException):
+                logger.exception(
+                    "[cron_tick] %s failed after gather: %s", name, result
+                )
+                out[name] = _err(result)
+            else:
+                out[name] = result  # type: ignore[assignment]
 
     return out
 

@@ -454,15 +454,19 @@ async def _leader_maintenance(stop: asyncio.Event) -> None:
                 and not (
                     isinstance(v, dict)
                     and v.get("skipped")
-                    and v.get("reason") in (
-                        "already_ran_today",
-                        "already_ran_this_week",
-                        "dry_run",
-                    )
                 )
             }
+            errors = [
+                k
+                for k, v in ran.items()
+                if isinstance(v, dict) and v.get("errors")
+            ]
+            if errors:
+                logger.warning("worker: maintenance errors in %s", errors)
             if ran:
                 logger.info("worker: maintenance tick keys=%s", sorted(ran.keys()))
+            else:
+                logger.debug("worker: maintenance tick idle")
         except Exception as exc:
             logger.error(
                 "worker: maintenance tick failed: %s",
