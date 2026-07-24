@@ -41,6 +41,7 @@ T = TypeVar("T")
 # ============================================================================
 
 _redis_client: Redis | None = None
+_redis_stream_client: Redis | None = None
 _redis_init_lock: asyncio.Lock | None = None
 
 
@@ -52,8 +53,23 @@ def _redis_lock() -> asyncio.Lock:
     return _redis_init_lock
 
 
+def _resolve_redis_url() -> str | None:
+    """Return the configured Redis URL, or build one from Upstash REST env."""
+    redis_url = _get_settings().redis_url
+    if redis_url:
+        return redis_url
+    import os
+
+    rest_url = (os.environ.get("UPSTASH_REDIS_REST_URL") or "").rstrip("/")
+    rest_token = os.environ.get("UPSTASH_REDIS_REST_TOKEN") or ""
+    if rest_url.startswith("https://") and rest_token:
+        host = rest_url.removeprefix("https://")
+        return f"rediss://default:{rest_token}@{host}:6379"
+    return None
+
+
 async def get_redis_client() -> Redis | None:
-    """Get the singleton Redis client.
+    """Get the singleton Redis client (short socket timeout — API path).
 
     Returns None if REDIS_URL is not configured.
     """
@@ -63,26 +79,13 @@ async def get_redis_client() -> Redis | None:
         return _redis_client
 
     async with _redis_lock():
-        # Double-check after acquiring — concurrent first callers
-        # previously each ran ``from_url`` and leaked sockets.
         if _redis_client is not None:
             return _redis_client
 
-        redis_url = _get_settings().redis_url
+        redis_url = _resolve_redis_url()
         if not redis_url:
-            # Allow UPSTASH_REDIS_REST_* alone: build the TLS Redis URL the
-            # redis-py client needs. Same host/token Upstash shows in the
-            # REST console.
-            import os
-
-            rest_url = (os.environ.get("UPSTASH_REDIS_REST_URL") or "").rstrip("/")
-            rest_token = os.environ.get("UPSTASH_REDIS_REST_TOKEN") or ""
-            if rest_url.startswith("https://") and rest_token:
-                host = rest_url.removeprefix("https://")
-                redis_url = f"rediss://default:{rest_token}@{host}:6379"
-            else:
-                logger.debug("Redis not configured (REDIS_URL is empty).")
-                return None
+            logger.debug("Redis not configured (REDIS_URL is empty).")
+            return None
 
         try:
             # health_check_interval=0 disables redis-py's periodic PING.
@@ -121,14 +124,106 @@ async def get_redis_client() -> Redis | None:
             return None
 
 
+async def get_redis_stream_client() -> Redis | None:
+    """Redis client for long-blocking XREADGROUP / stream consumers.
+
+    The API client's ``redis_socket_timeout`` (default 2s) is shorter than
+    stream ``block`` times. Using that client for XREADGROUP aborts every
+    ~2s — Upstash still bills each attempt — and recreates the pre-fix
+    ~1M+/mo idle burn. This client uses a socket timeout slightly above
+    ``redis_stream_block_ms`` so a blocked read can actually idle.
+    """
+    global _redis_stream_client
+
+    if _redis_stream_client is not None:
+        return _redis_stream_client
+
+    async with _redis_lock():
+        if _redis_stream_client is not None:
+            return _redis_stream_client
+
+        redis_url = _resolve_redis_url()
+        if not redis_url:
+            return None
+
+        try:
+            settings = _get_settings()
+            health_interval = int(
+                getattr(settings, "redis_health_check_interval", 0) or 0
+            )
+            block_ms = int(
+                getattr(settings, "redis_stream_block_ms", 300_000) or 300_000
+            )
+            # Must exceed block; +30s headroom for network RTT.
+            socket_timeout = max(35.0, (block_ms / 1000.0) + 30.0)
+            max_connections = min(
+                8,
+                int(getattr(settings, "redis_max_connections", 32) or 32),
+            )
+            _redis_stream_client = await redis.from_url(
+                redis_url,
+                encoding="utf-8",
+                decode_responses=True,
+                socket_connect_timeout=5,
+                socket_timeout=socket_timeout,
+                socket_keepalive=True,
+                health_check_interval=health_interval,
+                max_connections=max_connections,
+            )
+            logger.info(
+                "Redis stream client connected "
+                "(socket_timeout=%ss, block_ms=%s).",
+                socket_timeout,
+                block_ms,
+            )
+            return _redis_stream_client
+        except Exception as e:
+            logger.warning("Redis stream client connection failed: %s", e)
+            return None
+
+
+def redis_stream_block_ms() -> int:
+    """Configured XREADGROUP block duration (ms)."""
+    try:
+        return max(
+            1_000,
+            int(
+                getattr(_get_settings(), "redis_stream_block_ms", 300_000)
+                or 300_000
+            ),
+        )
+    except Exception:
+        return 300_000
+
+
+def redis_stream_autoclaim_interval_s() -> int:
+    """Minimum seconds between XAUTOCLAIM attempts (idle reclaim)."""
+    try:
+        return max(
+            30,
+            int(
+                getattr(
+                    _get_settings(), "redis_stream_autoclaim_interval_s", 300
+                )
+                or 300
+            ),
+        )
+    except Exception:
+        return 300
+
+
 async def close_redis_client() -> None:
-    """Close the singleton Redis client."""
-    global _redis_client
+    """Close the singleton Redis clients."""
+    global _redis_client, _redis_stream_client
     async with _redis_lock():
         if _redis_client is not None:
             await _redis_client.close()
             _redis_client = None
             logger.info("Redis client closed.")
+        if _redis_stream_client is not None:
+            await _redis_stream_client.close()
+            _redis_stream_client = None
+            logger.info("Redis stream client closed.")
 
 
 # ============================================================================

@@ -37,9 +37,6 @@ _GROUP = "eden-auto-scan"
 _CONSUMER = f"auto-scan-{socket.gethostname()}"
 _MAX_CONCURRENT_SCANS = 5
 _BATCH = 32
-# Upstash Free counts every blocked XREADGROUP as 1 cmd. 2s → ~1.3M/mo
-# idle; 30s → ~86k/mo.
-_BLOCK_MS = 30_000
 # In-process retries before poison/DLQ. Keeps the PEL clean (no bare
 # XACK-skip that would permanently drop a transient blip, and no
 # unacked stuck entries that ``>`` alone would never reclaim).
@@ -62,6 +59,18 @@ _STATS: dict[str, int] = {
 }
 
 
+def _block_ms() -> int:
+    from eden.storage.redis import redis_stream_block_ms
+
+    return redis_stream_block_ms()
+
+
+def _autoclaim_interval_s() -> float:
+    from eden.storage.redis import redis_stream_autoclaim_interval_s
+
+    return float(redis_stream_autoclaim_interval_s())
+
+
 class PoisonMessageError(ValueError):
     """Malformed or permanently unprocessable ``trace.finalized`` payload."""
 
@@ -72,6 +81,7 @@ class TraceFinalizedConsumer:
 
         self._scanner = AutoIssueScanner()
         self._sem = asyncio.Semaphore(_MAX_CONCURRENT_SCANS)
+        self._last_autoclaim_mono: float = 0.0
 
     async def _ensure_group(self, redis: Any) -> None:
         try:
@@ -84,14 +94,19 @@ class TraceFinalizedConsumer:
                 logger.debug("trace_finalized: xgroup_create: %s", exc)
 
     async def run(self, stop: asyncio.Event) -> None:
-        from eden.storage.redis import get_redis_client
+        from eden.storage.redis import get_redis_stream_client
 
-        redis = await get_redis_client()
+        redis = await get_redis_stream_client()
         if redis is None:
             logger.info("trace_finalized consumer: no Redis; disabled")
             return
         await self._ensure_group(redis)
-        logger.info("trace_finalized consumer: started (group=%s)", _GROUP)
+        block_ms = _block_ms()
+        logger.info(
+            "trace_finalized consumer: started (group=%s, block_ms=%s)",
+            _GROUP,
+            block_ms,
+        )
         while not stop.is_set():
             entries = await self._read_batch(redis)
             if not entries:
@@ -103,41 +118,48 @@ class TraceFinalizedConsumer:
         logger.info("trace_finalized consumer: stopped")
 
     async def _read_batch(self, redis: Any) -> list[tuple[Any, Any]]:
-        """Claim idle pending first, then read new messages.
+        """Claim idle pending periodically, then read new messages.
 
         Crash mid-handle leaves entries in the PEL. Reading only ``>``
-        would never finish them; XAUTOCLAIM reclaims idle ones.
+        would never finish them; XAUTOCLAIM reclaims idle ones — but
+        running it every idle cycle doubles Upstash command volume.
         """
+        import time as _time
+
         out: list[tuple[Any, Any]] = []
-        try:
-            claimed = await redis.xautoclaim(
-                TRACE_FINALIZED_STREAM,
-                _GROUP,
-                _CONSUMER,
-                min_idle_time=_PENDING_IDLE_MS,
-                start_id="0-0",
-                count=_BATCH,
-            )
-            # redis-py: (next_id, [(id, fields), ...], deleted_ids?)
-            if isinstance(claimed, (list, tuple)) and len(claimed) >= 2:
-                messages = claimed[1] or []
-                for item in messages:
-                    if isinstance(item, (list, tuple)) and len(item) >= 2:
-                        out.append((item[0], item[1]))
-        except Exception as exc:
-            # Older Redis / Upstash without XAUTOCLAIM — fall through.
-            logger.debug("trace_finalized: xautoclaim: %s", exc)
+        now = _time.monotonic()
+        if now - self._last_autoclaim_mono >= _autoclaim_interval_s():
+            self._last_autoclaim_mono = now
+            try:
+                claimed = await redis.xautoclaim(
+                    TRACE_FINALIZED_STREAM,
+                    _GROUP,
+                    _CONSUMER,
+                    min_idle_time=_PENDING_IDLE_MS,
+                    start_id="0-0",
+                    count=_BATCH,
+                )
+                # redis-py: (next_id, [(id, fields), ...], deleted_ids?)
+                if isinstance(claimed, (list, tuple)) and len(claimed) >= 2:
+                    messages = claimed[1] or []
+                    for item in messages:
+                        if isinstance(item, (list, tuple)) and len(item) >= 2:
+                            out.append((item[0], item[1]))
+            except Exception as exc:
+                # Older Redis / Upstash without XAUTOCLAIM — fall through.
+                logger.debug("trace_finalized: xautoclaim: %s", exc)
 
         remaining = max(0, _BATCH - len(out))
         if remaining == 0:
             return out
+        block_ms = _block_ms() if not out else 1
         try:
             resp = await redis.xreadgroup(
                 _GROUP,
                 _CONSUMER,
                 {TRACE_FINALIZED_STREAM: ">"},
                 count=remaining,
-                block=_BLOCK_MS if not out else 1,
+                block=block_ms,
             )
         except Exception as exc:
             logger.debug("trace_finalized: xreadgroup failed: %s", exc)

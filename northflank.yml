@@ -222,6 +222,13 @@ spec:
       value: "false"
     - name: REDIS_HEALTH_CHECK_INTERVAL
       value: "0"
+    # Long XREADGROUP block + rare XAUTOCLAIM — Upstash Free is 500k cmds/mo.
+    - name: REDIS_STREAM_BLOCK_MS
+      value: "300000"
+    - name: REDIS_STREAM_AUTOCLAIM_INTERVAL_S
+      value: "300"
+    - name: REDIS_LEADER_TICK_SECONDS
+      value: "120"
     # ── Tinybird (Cat 18 columnar) — already external ───────────
     - name: CLICKHOUSE_URL
       value: https://api.us-east.tinybird.co
@@ -497,6 +504,13 @@ spec:
       value: "false"
     - name: REDIS_HEALTH_CHECK_INTERVAL
       value: "0"
+    # Long XREADGROUP block + rare XAUTOCLAIM — Upstash Free is 500k cmds/mo.
+    - name: REDIS_STREAM_BLOCK_MS
+      value: "300000"
+    - name: REDIS_STREAM_AUTOCLAIM_INTERVAL_S
+      value: "300"
+    - name: REDIS_LEADER_TICK_SECONDS
+      value: "120"
     - name: CLICKHOUSE_URL
       value: https://api.us-east.tinybird.co
     - name: CLICKHOUSE_DATABASE
@@ -600,6 +614,13 @@ spec:
       value: "false"
     - name: REDIS_HEALTH_CHECK_INTERVAL
       value: "0"
+    # Long XREADGROUP block + rare XAUTOCLAIM — Upstash Free is 500k cmds/mo.
+    - name: REDIS_STREAM_BLOCK_MS
+      value: "300000"
+    - name: REDIS_STREAM_AUTOCLAIM_INTERVAL_S
+      value: "300"
+    - name: REDIS_LEADER_TICK_SECONDS
+      value: "120"
     - name: JWT_SECRET
       valueFrom: { secretKeyRef: { group: eden-required, key: JWT_SECRET } }
     - name: ENCRYPTION_KEY

@@ -692,10 +692,22 @@ def _build_settings_class():
         redis_health_check_interval: int = 0
         # Cap per-command Redis wait so a hung Upstash socket cannot
         # stall an ASGI worker (rate-limit / idempotency / locks).
+        # Stream consumers use a separate client with a longer timeout
+        # (see redis_stream_block_ms) — do not raise this for the API.
         redis_socket_timeout: float = 2.0
         # Bound the asyncio connection pool — redis-py's default is
         # effectively unbounded and can open sockets under load.
         redis_max_connections: int = 32
+        # XREADGROUP block for closed-loop + trace.finalized consumers.
+        # Upstash bills each blocked read. 300s → ~9k cmds/mo per
+        # consumer idle; 30s was ~86k; 2s was ~1.3M. Must stay below
+        # the stream client's socket timeout (auto-derived).
+        redis_stream_block_ms: int = 300_000
+        # How often to XAUTOCLAIM idle PEL entries (not every read cycle).
+        redis_stream_autoclaim_interval_s: int = 300
+        # Leader-lock extend / retry cadence for worker loops (seconds).
+        # Lower = more Redis SET/EXPIRE traffic on Upstash Free.
+        redis_leader_tick_seconds: int = 120
 
         # ── GitHub App (onboarding wizard) ────────────────────────────────
         # The onboarding wizard uses a GitHub App (not an OAuth App) so we

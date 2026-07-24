@@ -66,6 +66,19 @@ logger = logging.getLogger("eden.workers.main")
 _RESTART_BACKOFF_SECONDS = 5.0
 
 
+def _leader_tick_seconds(floor: float = 30.0) -> float:
+    """Redis-conserving leader lock cadence (Upstash Free)."""
+    try:
+        from eden.config import get_settings
+
+        configured = float(
+            getattr(get_settings(), "redis_leader_tick_seconds", 120) or 120
+        )
+    except Exception:
+        configured = 120.0
+    return max(float(floor), configured)
+
+
 async def _supervise(
     name: str,
     factory: Callable[[asyncio.Event], Awaitable[None]],
@@ -363,7 +376,7 @@ async def _leader_insights_loop(stop: asyncio.Event) -> None:
     await run_if_leader(
         "insights_loop",
         _tick,
-        interval=60.0,
+        interval=_leader_tick_seconds(60.0),
         stop=stop,
     )
 
@@ -506,7 +519,7 @@ async def _leader_webhook_drain_loop(stop: asyncio.Event) -> None:
             )
             raise
 
-    await run_if_leader("webhook_drain", _tick, interval=30.0, stop=stop)
+    await run_if_leader("webhook_drain", _tick, interval=_leader_tick_seconds(30.0), stop=stop)
 
 
 async def _webhook_drain_loop() -> None:
