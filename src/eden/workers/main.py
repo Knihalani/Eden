@@ -374,6 +374,7 @@ async def _leader_eql_alert_watchdog(stop: asyncio.Event) -> None:
             )
             raise
 
+    logger.info("worker: eql_alert_watchdog loop registered (interval=300s)")
     await run_if_leader(
         "eql_alert_watchdog",
         _tick,
