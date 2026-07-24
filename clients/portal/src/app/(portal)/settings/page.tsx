@@ -31,6 +31,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/lib/query-keys";
 import { portalApi } from "@/lib/api/portal";
 import { api } from "@/lib/api/resources";
+import { SETTINGS_QUERY } from "@/lib/portal-query";
 import { QueryErrorPanel, QueryLoadingPanel } from "@/components/shell/query-error-panel";
 import { useLabToast } from "@/lab/lab-toast";
 
@@ -98,26 +99,44 @@ function LabSettingsInner() {
     queryKeys.portal.workspace(orgId),
     orgId,
     () => portalApi.workspace(orgId!),
+    SETTINGS_QUERY,
   );
+  const loadMode = parseSettingsMode(paramMode);
   const keysQuery = useOrgQuery(
     queryKeys.portal.keys(orgId),
     orgId,
     () => portalApi.keys(orgId!),
+    {
+      ...SETTINGS_QUERY,
+      enabled: loadMode === "keys",
+    },
   );
   const membersQuery = useOrgQuery(
     queryKeys.portal.members(orgId),
     orgId,
     () => portalApi.members(orgId!),
+    {
+      ...SETTINGS_QUERY,
+      enabled: loadMode === "members",
+    },
   );
   const auditEventsQuery = useOrgQuery(
     queryKeys.portal.auditEvents(orgId),
     orgId,
     () => portalApi.auditEvents(orgId!),
+    {
+      ...SETTINGS_QUERY,
+      enabled: loadMode === "audit",
+    },
   );
   const auditPacksQuery = useOrgQuery(
     queryKeys.portal.auditPacks(orgId),
     orgId,
     () => portalApi.auditPacks(orgId!),
+    {
+      ...SETTINGS_QUERY,
+      enabled: loadMode === "audit",
+    },
   );
 
   const workspaceData = workspaceQuery.data ?? WORKSPACE;
@@ -126,7 +145,6 @@ function LabSettingsInner() {
   const events = auditEventsQuery.data ?? [];
   const packsData = auditPacksQuery.data ?? [];
 
-  const loadMode = parseSettingsMode(paramMode);
   // Wait for soft-switch remaps, but never spin forever when the user
   // has no org (queries stay disabled and would never resolve).
   const isLoading =

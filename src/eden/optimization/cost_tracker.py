@@ -19,11 +19,6 @@ _COST_EXPIRE_TTL_S = 7 * 24 * 3600
 _COST_EXPIRE_REFRESH_S = 3600.0
 _cost_expire_at: dict[str, float] = {}
 
-# Sparse EXPIRE — refresh TTL ~once/hour per key, not every cost event.
-_COST_EXPIRE_TTL_S = 7 * 24 * 3600
-_COST_EXPIRE_REFRESH_S = 3600.0
-_cost_expire_at: dict[str, float] = {}
-
 
 @dataclass
 class CostEvent:

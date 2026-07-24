@@ -1319,7 +1319,10 @@ class TelemetryCollector:
                     _resolve_response_for(row, decoded_cols),
                 )
             else:
-                request_body, response_body = None, None
+                # Cheap path for portal structure: keep inline JSONB
+                # previews, skip message_store reconstruct + body zstd.
+                request_body = row.get("request_body")
+                response_body = row.get("response_body")
             node = {
                 "span_id": span_id,
                 "parent_span_id": parent,

@@ -4,6 +4,13 @@ All notable changes to the Eden Python SDK are documented here. The
 format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## 0.3.4 — 2026-07-24
+
+### Fixed
+- OpenAI + PydanticAI instrumentations prefer `eden.trace(...).name` as
+  `agent_id` so dual-instrumented runs share one user-facing agent identity
+  (instead of framework names like `pydantic-ai:OpenAIChatModel()`).
+
 ## 0.3.3 — 2026-07-23
 
 ### Added

@@ -7,11 +7,18 @@ SELECTs. See tests/unit/fleet/test_fleet_summary_query_budget.py.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
+import time
 from typing import Any
 
 logger = logging.getLogger(__name__)
+
+# Debounce registry upserts on the agents hot path — FleetHealthService is
+# constructed per request in portal/fleet routes, so TTL must be process-wide.
+_ENSURE_REGISTRY_TTL_SEC = 60.0
+_ensure_registry_at: dict[str, float] = {}
 
 
 def _delegation_trust_score(error_rate: float, call_count: int) -> float:
@@ -167,8 +174,10 @@ class FleetHealthService:
             if not agent_ids:
                 return {"agents": [], "count": 0, "sla_breach_count": 0, "critical_count": 0}
 
-            metrics = await self._batch_agent_metrics(org_id, agent_ids)
-            autonomy = await self._batch_autonomy(org_id, agent_ids)
+            metrics, autonomy = await asyncio.gather(
+                self._batch_agent_metrics(org_id, agent_ids),
+                self._batch_autonomy(org_id, agent_ids),
+            )
 
             for registry in registries:
                 agent_id = str(registry["agent_id"])
@@ -454,7 +463,15 @@ class FleetHealthService:
         )
 
     async def _ensure_registry_from_traces(self, org_id: str) -> None:
-        """Batch upsert agents seen in stumbles — one statement, not N UPSERTs."""
+        """Batch upsert agents seen in stumbles — one statement, not N UPSERTs.
+
+        Debounced per org (process-local TTL) so ``GET /portal/agents`` does
+        not rewrite ``agent_registry`` on every list poll.
+        """
+        now = time.monotonic()
+        last = _ensure_registry_at.get(org_id, 0.0)
+        if now - last < _ENSURE_REGISTRY_TTL_SEC:
+            return
         client = await self._client()
         if client is None:
             return
@@ -485,6 +502,7 @@ class FleetHealthService:
                 """,
                 org_id,
             )
+            _ensure_registry_at[org_id] = now
         except Exception:
             try:
                 rows = await client.fetch(
@@ -497,6 +515,7 @@ class FleetHealthService:
                 )
                 ids = [str(r["agent_id"]) for r in rows if r.get("agent_id")]
                 if not ids:
+                    _ensure_registry_at[org_id] = now
                     return
                 await client.execute(
                     """
@@ -510,6 +529,7 @@ class FleetHealthService:
                     org_id,
                     ids,
                 )
+                _ensure_registry_at[org_id] = now
             except Exception:
                 pass
 

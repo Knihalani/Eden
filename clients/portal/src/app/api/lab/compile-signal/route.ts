@@ -12,6 +12,18 @@ type Body = {
   prompt?: string;
 };
 
+/** In-flight / short TTL dedupe so double-clicks don't double-bill OpenRouter. */
+const _compileInflight = new Map<string, Promise<Response>>();
+const _compileCache = new Map<
+  string,
+  { at: number; body: Record<string, unknown> }
+>();
+const COMPILE_CACHE_TTL_MS = 60_000;
+
+function cacheKey(prompt: string): string {
+  return prompt.trim().toLowerCase().slice(0, 500);
+}
+
 function parseDraft(raw: string, prompt: string): CompiledSignalDraft | null {
   try {
     const cleaned = raw
@@ -42,23 +54,7 @@ function parseDraft(raw: string, prompt: string): CompiledSignalDraft | null {
   }
 }
 
-/**
- * Compile a natural-language signal via Eden model router T3
- * (OpenRouter primary: x-ai/grok-4.5). Falls back locally if unset/unreachable.
- */
-export async function POST(request: Request) {
-  let body: Body;
-  try {
-    body = (await request.json()) as Body;
-  } catch {
-    return NextResponse.json({ detail: "Invalid JSON" }, { status: 400 });
-  }
-
-  const prompt = body.prompt?.trim() ?? "";
-  if (!prompt) {
-    return NextResponse.json({ detail: "prompt is required" }, { status: 400 });
-  }
-
+async function compileSignalOnce(prompt: string): Promise<NextResponse> {
   const apiKey = process.env.OPENROUTER_API_KEY;
   const baseUrl =
     process.env.OPENROUTER_BASE_URL || "https://openrouter.ai/api/v1";
@@ -123,7 +119,65 @@ export async function POST(request: Request) {
     return NextResponse.json({
       draft,
       source: "fallback",
-      reason: err instanceof Error ? err.message : "T3 request failed",
+      reason: err instanceof Error ? err.message : "compile failed",
     });
   }
+}
+
+/**
+ * Compile a natural-language signal via Eden model router T3
+ * (OpenRouter primary: x-ai/grok-4.5). Falls back locally if unset/unreachable.
+ */
+export async function POST(request: Request) {
+  let body: Body;
+  try {
+    body = (await request.json()) as Body;
+  } catch {
+    return NextResponse.json({ detail: "Invalid JSON" }, { status: 400 });
+  }
+
+  const prompt = body.prompt?.trim() ?? "";
+  if (!prompt) {
+    return NextResponse.json({ detail: "prompt is required" }, { status: 400 });
+  }
+
+  const key = cacheKey(prompt);
+  const cached = _compileCache.get(key);
+  if (cached && Date.now() - cached.at < COMPILE_CACHE_TTL_MS) {
+    return NextResponse.json(cached.body);
+  }
+
+  const existing = _compileInflight.get(key);
+  if (existing) {
+    return existing.then((r) => r.clone());
+  }
+
+  const run = (async (): Promise<Response> => {
+    try {
+      return await compileSignalOnce(prompt);
+    } finally {
+      _compileInflight.delete(key);
+    }
+  })();
+  _compileInflight.set(key, run);
+  const res = await run;
+  if (res.ok) {
+    try {
+      const cloned = res.clone();
+      const json = (await cloned.json()) as Record<string, unknown>;
+      // Never cache fallback drafts — they mask recovered OpenRouter.
+      if (json.draft && json.source === "t3") {
+        _compileCache.set(key, { at: Date.now(), body: json });
+        if (_compileCache.size > 200) {
+          const cutoff = Date.now() - COMPILE_CACHE_TTL_MS;
+          for (const [k, v] of _compileCache) {
+            if (v.at < cutoff) _compileCache.delete(k);
+          }
+        }
+      }
+    } catch {
+      /* ignore cache fill errors */
+    }
+  }
+  return res;
 }

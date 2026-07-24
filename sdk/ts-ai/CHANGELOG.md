@@ -4,6 +4,11 @@ All notable changes to the Eden TypeScript SDK are documented here. The
 format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## 0.3.4 — 2026-07-24
+
+### Changed
+- Lockstep release with Python SDK 0.3.4 (no TypeScript runtime changes).
+
 ## 0.3.3 — 2026-07-23
 
 ### Added

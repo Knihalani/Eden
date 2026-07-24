@@ -101,6 +101,7 @@ def build_agent():
 
     agent = Agent(
         model,
+        name=AGENT_ID,
         system_prompt=(
             "You are Eden MiniMax Smoke Agent — a careful tool-using assistant. "
             "Use tools when they help answer accurately (time, math, city lookup). "

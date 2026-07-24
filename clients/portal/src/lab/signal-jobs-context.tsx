@@ -5,6 +5,7 @@ import {
   useCallback,
   useContext,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -45,6 +46,8 @@ const SignalJobsContext = createContext<SignalJobsContextValue | null>(null);
 export function SignalJobsProvider({ children }: { children: ReactNode }) {
   const { pushToast } = useLabToast();
   const [jobs, setJobs] = useState<SignalCompileJob[]>([]);
+  const jobsRef = useRef(jobs);
+  jobsRef.current = jobs;
   const [signalsNavAttention, setSignalsNavAttention] = useState(false);
 
   const pendingReview = useMemo(
@@ -60,6 +63,18 @@ export function SignalJobsProvider({ children }: { children: ReactNode }) {
       agentId: string | null;
       severity: "auto" | "critical" | "error" | "warn";
     }) => {
+      const normalized = input.prompt.trim().toLowerCase();
+      const existing = jobsRef.current.find(
+        (j) =>
+          j.status === "compiling" &&
+          j.prompt.trim().toLowerCase() === normalized &&
+          j.agentId === input.agentId &&
+          j.severity === input.severity,
+      );
+      if (existing) {
+        return existing.id;
+      }
+
       const id = `job_${Date.now().toString(36)}`;
       const job: SignalCompileJob = {
         id,

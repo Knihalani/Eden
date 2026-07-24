@@ -105,19 +105,29 @@ async def emit_trace_finalized(
             _emitted_local[dedup_key] = now_mono + float(_EMIT_DEDUP_TTL_S)
             return False
 
-        await redis.xadd(
-            TRACE_FINALIZED_STREAM,
-            {
-                "org_id": oid,
-                "trace_id": tid,
-                "agent_id": agent_id or "",
-                "session_id": session_id or "",
-                "user_id": user_id or "",
-                "finalized_at": str(time.time()),
-            },
-            maxlen=_STREAM_MAXLEN,
-            approximate=True,
-        )
+        try:
+            await redis.xadd(
+                TRACE_FINALIZED_STREAM,
+                {
+                    "org_id": oid,
+                    "trace_id": tid,
+                    "agent_id": agent_id or "",
+                    "session_id": session_id or "",
+                    "user_id": user_id or "",
+                    "finalized_at": str(time.time()),
+                },
+                maxlen=_STREAM_MAXLEN,
+                approximate=True,
+            )
+        except Exception:
+            # Drop the claim so a later emit can retry; otherwise the
+            # 1h dedupe key permanently suppresses finalize for this
+            # org/trace after a failed XADD.
+            try:
+                await redis.delete(f"trace.finalized:emitted:{dedup_key}")
+            except Exception:  # pragma: no cover
+                pass
+            raise
         _emitted_local[dedup_key] = now_mono + float(_EMIT_DEDUP_TTL_S)
         if len(_emitted_local) > 8192:
             stale = [k for k, e in _emitted_local.items() if e <= now_mono]

@@ -1,6 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import { Suspense } from "react";
 import { SidebarNav } from "./sidebar-nav";
 import { SidebarProvider } from "./sidebar-context";
 import { AlertsProvider } from "@/lab/alerts-context";
@@ -27,7 +28,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <LabToastProvider>
         <AlertsProvider>
           <SignalJobsProvider>
-            <PortalCatalogSync />
+            <Suspense fallback={null}>
+              <PortalCatalogSync />
+            </Suspense>
             <div className="flex h-dvh overflow-hidden bg-[var(--bg)] text-[var(--text)]" data-eden-portal-shell>
               <SidebarNav />
               <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-[var(--bg)]">
