@@ -396,6 +396,13 @@ function LabTracesInner() {
     orgId,
     () => portalApi.traces(orgId!),
   );
+  // Keep agent filter options live — catalog singleton alone does not
+  // re-render this page when PortalCatalogSync patches agents.
+  const agentsQuery = useOrgQuery(
+    queryKeys.portal.agents(orgId),
+    orgId,
+    () => portalApi.agents(orgId!),
+  );
   const sessionsQuery = useOrgQuery(
     queryKeys.portal.sessions(orgId),
     orgId,
@@ -403,6 +410,7 @@ function LabTracesInner() {
   );
   const traces = tracesQuery.data ?? [];
   const sessions = sessionsQuery.data ?? [];
+  void agentsQuery.data;
 
   const [listOpen, setListOpen, , listAnimate] = usePersistentBool(
     "eden.traces.listOpen",
@@ -979,6 +987,7 @@ function LabTracesInner() {
                 />
               </li>
             ) : agentId === "all" ? (
+              groups.length > 0 ? (
               groups.map((group) => (
                 <li key={group.agent.id}>
                   <AgentGroupHeader
@@ -1000,6 +1009,18 @@ function LabTracesInner() {
                   </ul>
                 </li>
               ))
+              ) : (
+                filtered.map((t) => (
+                  <li key={t.id}>
+                    <RunListButton
+                      trace={t}
+                      active={t.id === selected?.id}
+                      showAgent
+                      onSelect={() => selectTrace(t.id)}
+                    />
+                  </li>
+                ))
+              )
             ) : (
               filtered.map((t) => (
                 <li key={t.id}>

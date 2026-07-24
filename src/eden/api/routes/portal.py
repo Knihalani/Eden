@@ -522,6 +522,7 @@ async def list_portal_agents(
     for agent_id, fleet in fleet_by_id.items():
         if agent_id in seen:
             continue
+        seen.add(agent_id)
         out.append(
             _build(
                 agent_id,
@@ -530,6 +531,13 @@ async def list_portal_agents(
                 fleet.get("last_seen"),
             )
         )
+
+    # SDK-only agents: telemetry has agent_id but no registry/fleet row yet.
+    for agent_id, metrics in metrics_by_id.items():
+        if not agent_id or agent_id in seen:
+            continue
+        seen.add(agent_id)
+        out.append(_build(agent_id, agent_id, "from telemetry", None))
 
     return out
 

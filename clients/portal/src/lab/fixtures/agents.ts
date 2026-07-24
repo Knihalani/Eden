@@ -73,7 +73,11 @@ export function homeSnapshot(
   const cost = traces.reduce((sum, t) => sum + t.costUsd, 0);
   const tokens = traces.reduce((sum, t) => sum + t.tokens, 0);
   const fleetCost = agents.reduce((sum, a) => sum + a.costUsd24h, 0);
-  const fleetRuns = agents.reduce((sum, a) => sum + a.runs24h, 0);
+  // Prefer registry fleet counts; fall back to live traces so SDK-only
+  // orgs still show non-zero Runs before agents are registered.
+  const fleetRunsFromAgents = agents.reduce((sum, a) => sum + a.runs24h, 0);
+  const fleetRuns =
+    fleetRunsFromAgents > 0 ? fleetRunsFromAgents : traces.length;
   const fleetTokens = agents.reduce((sum, a) => sum + a.tokens24h, 0);
   const openIssues = agents.reduce((sum, a) => sum + a.openIssues, 0);
   const live = agents.filter((a) => a.status === "live").length;

@@ -72,12 +72,16 @@ export function PortalCatalogSync() {
     patchPortalCatalog({ orgId });
   }, [orgId]);
 
-  // ── Always (shell-light) ──
+  // Agents — shell + observe/home. Skip on settings-only routes to cut
+  // cold-load fan-out (settings views do not need the fleet list).
   const agents = useOrgQuery(
     queryKeys.portal.agents(orgId),
     orgId,
     () => portalApi.agents(orgId!),
-    SHELL_QUERY,
+    {
+      ...SHELL_QUERY,
+      enabled: !onSettings || onObserveHeavy || onHomeTraces,
+    },
   );
   const traces = useOrgQuery(
     queryKeys.portal.traces(orgId),
