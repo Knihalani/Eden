@@ -14,6 +14,7 @@ from collections.abc import Awaitable, Callable
 from contextlib import asynccontextmanager
 from typing import AsyncIterator
 
+from eden.storage.empty_cooldown import next_grid_delay
 from eden.storage.redis import Lock
 
 logger = logging.getLogger(__name__)
@@ -98,6 +99,7 @@ async def run_if_leader(
     interval: float = 30.0,
     ttl: int | None = None,
     stop: asyncio.Event | None = None,
+    align: bool = False,
 ) -> None:
     """Run ``work`` on each interval while holding the leader lock.
 
@@ -209,6 +211,12 @@ async def run_if_leader(
             )
 
         try:
-            await asyncio.wait_for(stop_event.wait(), timeout=interval)
+            # ``align`` is for loops that hit Postgres unconditionally on
+            # every tick. Left to its own phase, such a loop lands wherever
+            # the process happened to start and can split the fleet's
+            # DB-quiet window in half -- enough to hold Neon above its
+            # suspend timeout even though the interval itself clears it.
+            timeout = next_grid_delay(interval) if align else interval
+            await asyncio.wait_for(stop_event.wait(), timeout=timeout)
         except TimeoutError:
             continue

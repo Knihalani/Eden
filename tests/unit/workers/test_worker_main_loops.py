@@ -311,10 +311,12 @@ async def test_leader_self_obs_probes_registered_via_run_if_leader() -> None:
     from eden.workers import main as worker_main
 
     stop = asyncio.Event()
-    calls: list[tuple[str, float]] = []
+    calls: list[tuple[str, float, bool]] = []
 
-    async def _fake_run_if_leader(lock_name, work, *, interval, stop=None, ttl=None):
-        calls.append((lock_name, interval))
+    async def _fake_run_if_leader(
+        lock_name, work, *, interval, stop=None, ttl=None, align=False
+    ):
+        calls.append((lock_name, interval, align))
         await work()
 
     with patch(
@@ -325,7 +327,11 @@ async def test_leader_self_obs_probes_registered_via_run_if_leader() -> None:
     ) as fake_probes:
         await worker_main._leader_self_obs_probes(stop)
 
-    assert calls == [("self_obs_probes", 600.0)]
+    # align=True is load-bearing, not cosmetic: these probes query
+    # organizations and write heartbeats on every tick with no empty-poll
+    # cooldown, so an unaligned phase splits the fleet's DB-quiet window
+    # and stops Neon from ever reaching its suspend timeout.
+    assert calls == [("self_obs_probes", 600.0, True)]
     fake_probes.assert_awaited_once()
 
 

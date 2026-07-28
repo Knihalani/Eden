@@ -520,13 +520,30 @@ async def _leader_maintenance(stop: asyncio.Event) -> None:
             )
             raise
 
-    logger.info("worker: maintenance loop registered (interval=300s)")
+    logger.info(
+        "worker: maintenance loop registered (interval=%.0fs)", _idle_poll_period()
+    )
     await run_if_leader(
         "maintenance",
         _tick,
-        interval=300.0,
+        # Was a hard-coded 300s -- exactly Neon's suspend timeout, so the
+        # window could never actually elapse. Share the fleet idle period.
+        interval=_idle_poll_period(),
         stop=stop,
+        align=True,
     )
+
+
+def _idle_poll_period() -> float:
+    """Fleet-wide idle cadence; see ``eden.storage.empty_cooldown``."""
+    try:
+        from eden.config import get_settings
+
+        return float(
+            getattr(get_settings(), "idle_poll_period_seconds", 600.0) or 600.0
+        )
+    except Exception:
+        return 600.0
 
 
 async def _leader_self_obs_probes(stop: asyncio.Event) -> None:
@@ -571,6 +588,10 @@ async def _leader_self_obs_probes(stop: asyncio.Event) -> None:
         _tick,
         interval=_self_obs_interval(),
         stop=stop,
+        # Probes read organizations and write heartbeats on every tick with
+        # no empty-poll cooldown to hide behind, so this loop must share the
+        # fleet's idle grid or it splits the DB-quiet window.
+        align=True,
     )
 
 

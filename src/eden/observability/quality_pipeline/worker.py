@@ -47,6 +47,8 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
 
+from eden.storage.empty_cooldown import aligned_deadline
+
 logger = logging.getLogger(__name__)
 
 # Install the cache-first HuggingFace download patch so the
@@ -1063,10 +1065,23 @@ class SidecarWorker:
             while not stop_event.is_set():
                 events = await self._poll_events(last_event_id)
                 if not events:
+                    # Once the backoff saturates, snap the wake-up onto the
+                    # fleet-wide idle grid. Sleeping a fixed ceiling from
+                    # wherever this sidecar happened to land leaves it out of
+                    # phase with the other idle pollers, and staggered polls
+                    # fragment the DB-quiet window below Neon's suspend
+                    # timeout even when every individual interval clears it.
+                    if empty_backoff_s >= empty_backoff_max_s:
+                        sleep_s = max(
+                            0.0,
+                            aligned_deadline(empty_backoff_max_s) - time.monotonic(),
+                        )
+                    else:
+                        sleep_s = empty_backoff_s
                     with contextlib.suppress(TimeoutError):
                         await asyncio.wait_for(
                             stop_event.wait(),
-                            timeout=empty_backoff_s,
+                            timeout=sleep_s,
                         )
                     empty_backoff_s = min(
                         empty_backoff_max_s,

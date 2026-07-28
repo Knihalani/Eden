@@ -836,21 +836,35 @@ def _build_settings_class():
         quality_pipeline_workers: int = 8
         quality_pipeline_watermark_poll_ms: int = 1000
         quality_pipeline_batch_size: int = 100
+        # ── Idle-poll cadences (Neon scale-to-zero) ────────────────────
+        # These MUST share one value. ``eden.storage.empty_cooldown``
+        # quantises every deadline onto a wall-clock grid of the
+        # configured period, so loops on a common period wake on the same
+        # boundaries and leave one long shared quiet window. Loops given
+        # different periods land on different grids and re-fragment the
+        # window -- which is what kept Neon awake even after each
+        # individual cooldown was raised. Change them together.
+        #
+        # 600s: comfortably above Neon's ~300s suspend_timeout, leaving
+        # roughly 10 idle minutes per cycle minus the work itself.
+        idle_poll_period_seconds: float = 600.0
         # Empty-poll backoff ceiling for the quality sidecar. Must exceed
         # Neon's suspend_timeout (~300s) so an idle fleet can actually
         # autosuspend; the previous hard-coded 30s kept compute warm
         # forever. Override via ``QUALITY_PIPELINE_EMPTY_BACKOFF_MAX_S``.
-        quality_pipeline_empty_backoff_max_s: float = 360.0
+        quality_pipeline_empty_backoff_max_s: float = 600.0
         # Self-obs probe cadence (worker leader loop). Default 10 min so
         # heartbeats/synthetics do not pin Neon above autosuspend.
         self_obs_probe_interval_seconds: float = 600.0
         # Webhook outbox drain floor. Empty polls skip PG for this many
-        # seconds after a zero-row claim (see webhook_delivery).
-        webhook_drain_empty_cooldown_seconds: float = 180.0
+        # seconds after a zero-row claim (see webhook_delivery). Real work
+        # is not delayed by this: enqueue paths publish a Redis signal that
+        # short-circuits the cooldown on the draining process.
+        webhook_drain_empty_cooldown_seconds: float = 600.0
         # Closed-loop verify + insights + EQL empty-poll cooldowns.
-        verify_empty_cooldown_seconds: float = 300.0
-        insights_empty_cooldown_seconds: float = 300.0
-        eql_empty_cooldown_seconds: float = 300.0
+        verify_empty_cooldown_seconds: float = 600.0
+        insights_empty_cooldown_seconds: float = 600.0
+        eql_empty_cooldown_seconds: float = 600.0
 
         # Per-action kill-switch defaults mirrored into
         # ``tenant_guardrail_action_config`` (read-only True, mutating

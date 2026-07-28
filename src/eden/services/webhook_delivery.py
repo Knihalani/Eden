@@ -33,6 +33,7 @@ from urllib.parse import urlparse
 
 from pydantic import BaseModel
 
+from eden.storage.empty_cooldown import make_empty_cooldown
 from eden.storage.postgres import (
     copy_context_without_request_pg_conn,
     get_postgres_client,
@@ -49,38 +50,72 @@ _RETRY_DELAYS = [0, 1, 5, 25, 120, 600, 3600]  # seconds
 _MAX_REPLAY_COUNT = 3
 _MIN_REPLAY_GAP_SECONDS = 60
 
-# After an empty outbox poll, skip Postgres for this many seconds so the
-# leader drain loop (≤2 min tick) cannot pin Neon above autosuspend.
-# Cleared when ``deliver_event`` / schedule paths enqueue work on this
-# process; cross-replica lag is bounded by the cooldown itself.
-_empty_outbox_until_monotonic: float = 0.0
+# After an empty outbox poll, skip Postgres until the next shared idle
+# boundary so the leader drain loop cannot pin Neon above autosuspend.
+# Uses the fleet-wide aligned cooldown (see eden.storage.empty_cooldown):
+# a per-loop timer would drift out of phase with the other idle pollers
+# and re-fragment the quiet window.
+(
+    _outbox_in_empty_cooldown,
+    _mark_outbox_empty,
+    _clear_outbox_empty_cooldown,
+) = make_empty_cooldown(
+    default_seconds=600.0,
+    settings_attr="webhook_drain_empty_cooldown_seconds",
+)
+
+# Cross-process wake signal. The API process enqueues deliveries; the
+# worker process drains them. A purely in-process cooldown is therefore
+# invisible to the enqueuer, so raising it would delay real deliveries by
+# up to a full cooldown. Enqueue paths set this Redis key instead, and the
+# drain loop honours it ahead of its own cooldown -- Redis reads do not
+# touch Postgres, so this costs nothing against autosuspend.
+_OUTBOX_SIGNAL_KEY = "eden:webhook:outbox:pending"
+# Comfortably longer than one idle period so the signal cannot expire
+# between boundaries and strand a delivery.
+_OUTBOX_SIGNAL_TTL_S = 1800
 
 
-def _mark_outbox_empty() -> None:
-    global _empty_outbox_until_monotonic
-    import time
-
+async def _signal_outbox_pending() -> None:
+    """Announce enqueued webhook work to whichever process drains it."""
     try:
-        from eden.config import get_settings
+        from eden.storage.redis import get_redis_client
 
-        cooldown = float(
-            getattr(get_settings(), "webhook_drain_empty_cooldown_seconds", 180.0)
-            or 180.0
-        )
+        client = await get_redis_client()
+        if client is not None:
+            await client.set(_OUTBOX_SIGNAL_KEY, "1", ex=_OUTBOX_SIGNAL_TTL_S)
     except Exception:
-        cooldown = 180.0
-    _empty_outbox_until_monotonic = time.monotonic() + max(30.0, cooldown)
+        # Best-effort: losing the signal costs latency (the next boundary
+        # poll still finds the row), never correctness.
+        logger.debug("webhook outbox signal failed", exc_info=True)
 
 
-def _clear_outbox_empty_cooldown() -> None:
-    global _empty_outbox_until_monotonic
-    _empty_outbox_until_monotonic = 0.0
+async def _outbox_has_pending_signal() -> bool:
+    """True when some process reported enqueued work since the last drain."""
+    try:
+        from eden.storage.redis import get_redis_client
+
+        client = await get_redis_client()
+        if client is None:
+            return False
+        return bool(await client.get(_OUTBOX_SIGNAL_KEY))
+    except Exception:
+        # Fail closed: without Redis we fall back to the cooldown, which
+        # keeps Neon idle. Deliveries still drain on the next boundary.
+        logger.debug("webhook outbox signal read failed", exc_info=True)
+        return False
 
 
-def _outbox_in_empty_cooldown() -> bool:
-    import time
+async def _consume_outbox_signal() -> None:
+    """Clear the signal once the outbox has actually been drained empty."""
+    try:
+        from eden.storage.redis import get_redis_client
 
-    return time.monotonic() < _empty_outbox_until_monotonic
+        client = await get_redis_client()
+        if client is not None:
+            await client.delete(_OUTBOX_SIGNAL_KEY)
+    except Exception:
+        logger.debug("webhook outbox signal clear failed", exc_info=True)
 
 # HTTP module reference, lazy-loaded to avoid startup overhead.
 _httpx_mod = None
@@ -270,6 +305,7 @@ class WebhookDeliveryService:
         task so the request handler can return immediately.
         """
         _clear_outbox_empty_cooldown()
+        await _signal_outbox_pending()
         try:
             pg = await get_postgres_client()
             row = await pg.fetchrow(
@@ -465,6 +501,29 @@ class WebhookDeliveryService:
             "max_replay_count": _MAX_REPLAY_COUNT,
         }
 
+    @staticmethod
+    async def _seconds_until_next_attempt(pg) -> float | None:
+        """Seconds until the earliest scheduled retry, or ``None``.
+
+        ``None`` means the outbox holds no future work, so the caller is
+        free to back off all the way to the shared idle boundary.
+        """
+        try:
+            due = await pg.fetchval(
+                "SELECT MIN(next_attempt_at) FROM webhook_deliveries "
+                "WHERE status IN ('pending', 'retrying') "
+                "  AND next_attempt_at IS NOT NULL",
+            )
+        except Exception:
+            # A failed lookup must not shorten the backoff — that would
+            # reintroduce the tight poll this whole mechanism removes.
+            logger.debug("webhook outbox next-attempt lookup failed", exc_info=True)
+            return None
+        if due is None:
+            return None
+        delta = (due - datetime.now(UTC)).total_seconds()
+        return max(0.0, delta)
+
     async def process_pending_deliveries(
         self, *, limit: int = 50,
     ) -> int:
@@ -497,7 +556,10 @@ class WebhookDeliveryService:
         ``limit`` is bounded to ``[1, 500]`` so a tick cannot
         be wedged open by a flood of rows.
         """
-        if _outbox_in_empty_cooldown():
+        # The Redis signal overrides the cooldown so a delivery enqueued by
+        # another process is picked up on the next tick rather than waiting
+        # for the shared idle boundary.
+        if _outbox_in_empty_cooldown() and not await _outbox_has_pending_signal():
             return 0
         bounded_limit = max(1, min(int(limit), 500))
         try:
@@ -533,7 +595,17 @@ class WebhookDeliveryService:
             return 0
 
         if not rows:
-            _mark_outbox_empty()
+            # Nothing is *due*, which is not the same as nothing pending:
+            # a retry may be scheduled minutes out. Ask for the earliest
+            # future attempt in the same tick (no extra Neon wake-up) and
+            # cap the backoff at it, so retries stay punctual while a truly
+            # empty outbox still reaches the aligned idle boundary.
+            _mark_outbox_empty(cap_seconds=await self._seconds_until_next_attempt(pg))
+            # Postgres has confirmed nothing is due, so any pending signal
+            # has been serviced. Clearing it here (rather than on dispatch)
+            # means a signal set while this query was in flight survives to
+            # trigger one more poll.
+            await _consume_outbox_signal()
             return 0
         _clear_outbox_empty_cooldown()
 
