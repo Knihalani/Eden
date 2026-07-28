@@ -3,7 +3,7 @@ import { EdenLogo } from "@/components/ds/eden-logo";
 /** Branded loading shell for Clerk auth routes — skeleton, not bare text. */
 export function AuthLoadingShell() {
   return (
-    <div className="auth-shell grid min-h-dvh bg-[var(--bg)] lg:grid-cols-2">
+    <div className="auth-shell grid min-h-dvh grid-cols-1 bg-[var(--bg)] lg:grid-cols-2">
       <div className="hidden border-r border-[var(--line)] bg-[var(--bg)] lg:block">
         <div className="flex items-center gap-2.5 px-12 pt-12">
           <EdenLogo size={28} />

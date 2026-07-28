@@ -23,8 +23,21 @@ logger = logging.getLogger(__name__)
 _ISSUE_LIST_COLUMNS = (
     "id, org_id, fingerprint, kind, title, status, severity, "
     "stumble_count, user_count, repetition_count, agent_id, "
-    "affected_user_ids, example_stumble_ids, triage_result, "
-    "experiment_id, experiment_result, regression_case_id, "
+    # Cap occurrence ids at the SQL layer (portal already clips to 20).
+    "(example_stumble_ids)[1:20] AS example_stumble_ids, "
+    # Project only list-card triage keys — full playbook JSON stays on get_issue.
+    "jsonb_strip_nulls(jsonb_build_object("
+    "  'summary', triage_result->>'summary',"
+    "  'body', left(coalesce(triage_result->>'body', triage_result->>'detail'), 800),"
+    "  'detail', left(coalesce(triage_result->>'detail', ''), 800),"
+    "  'error_sample', left(coalesce(triage_result->>'error_sample', triage_result->>'error'), 400),"
+    "  'error', left(coalesce(triage_result->>'error', ''), 400),"
+    "  'impact', left(coalesce(triage_result->>'impact', ''), 400),"
+    "  'suggested_fix', left(coalesce("
+    "      triage_result->>'suggested_fix', triage_result->>'fix'), 400),"
+    "  'fix', left(coalesce(triage_result->>'fix', ''), 400),"
+    "  'environment', triage_result->>'environment'"
+    ")) AS triage_result, "
     "first_seen, last_seen"
 )
 

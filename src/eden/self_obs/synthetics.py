@@ -140,21 +140,29 @@ async def probe_gateway_health(org_id: str) -> dict[str, Any]:
         return {"status": "fail", "error": str(exc)}
 
 
-async def probe_detect_to_issue(org_id: str) -> dict[str, Any]:
-    """Detect → issue path: confirm issues table + recent detector heartbeats."""
-    try:
-        from eden.storage.postgres import get_postgres_client
+async def probe_detect_to_issue(
+    org_id: str, *, issue_count: int | None = None
+) -> dict[str, Any]:
+    """Detect → issue path: confirm issues table + recent detector heartbeats.
 
-        client = await get_postgres_client()
-        if client is None:
-            return {"status": "degraded", "error": "no postgres"}
-        issues = await client.fetchval(
-            "SELECT count(*)::int FROM agent_issues WHERE org_id = $1",
-            org_id,
-        )
+    When ``issue_count`` is supplied (same-tick ``issues_list`` result),
+    skip the duplicate ``agent_issues`` COUNT.
+    """
+    try:
+        if issue_count is None:
+            from eden.storage.postgres import get_postgres_client
+
+            client = await get_postgres_client()
+            if client is None:
+                return {"status": "degraded", "error": "no postgres"}
+            issues = await client.fetchval(
+                "SELECT count(*)::int FROM agent_issues WHERE org_id = $1",
+                org_id,
+            )
+            issue_count = int(issues or 0)
         return {
             "status": "ok",
-            "issue_count": int(issues or 0),
+            "issue_count": int(issue_count),
             "note": "detect→issue path reachable via agent_issues",
         }
     except Exception as exc:
@@ -169,21 +177,102 @@ _PROBE_FNS = {
     "detect_to_issue": probe_detect_to_issue,
 }
 
+# ``sign_in_home`` hits a fixed portal URL and ``gateway_health`` hits
+# a fixed API ``/ready`` URL (or a settings flag) — neither result
+# depends on ``org_id`` at all. Everything else in ``_PROBE_FNS``
+# queries Postgres scoped by ``org_id`` and genuinely differs per org.
+_ORG_INDEPENDENT_PROBES: tuple[str, ...] = ("sign_in_home", "gateway_health")
+
+
+async def run_org_independent_probes(
+    probes: Sequence[str] = _ORG_INDEPENDENT_PROBES,
+) -> dict[str, Any]:
+    """Run the org-independent probes exactly once.
+
+    The scheduler used to call ``run_golden_probes`` once per org (up
+    to 500x every ~300s), which re-ran ``sign_in_home`` /
+    ``gateway_health`` — same fixed URL, same result — once per org: a
+    continuous HTTP load pattern that scaled with org count for zero
+    new information. Call this once per tick and pass the result into
+    ``run_golden_probes`` via ``shared_results`` for every org so those
+    two probes are *invoked* exactly once regardless of how many orgs
+    exist.
+
+    This function itself does not persist anything — it has no
+    ``org_id`` to persist against. ``GET /synthetics/last`` is a
+    per-org endpoint (``eden_synthetic_runs`` rows are scoped by
+    ``org_id``), so a single shared row would only ever surface for
+    one org's dashboard. Instead, ``run_golden_probes`` persists this
+    cached result once per org (cheap — it's just a write of an
+    already-computed value, not a probe re-invocation) so every org's
+    ``eden_synthetic_runs`` history keeps showing fresh
+    ``sign_in_home`` / ``gateway_health`` rows via the scheduled path.
+    """
+    results: dict[str, Any] = {}
+    for name in probes:
+        fn = _PROBE_FNS.get(name)
+        if fn is None:
+            continue
+        # org_id is unused by these probes' bodies; the value passed
+        # here is never read.
+        detail = await fn("_scheduler_shared")
+        results[name] = detail
+    return results
+
 
 async def run_golden_probes(
     org_id: str,
     probes: Sequence[str] | None = None,
+    *,
+    shared_results: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    """Run the golden-path probe set for ``org_id``.
+
+    ``shared_results`` (from :func:`run_org_independent_probes`, run
+    once per scheduler tick) supplies cached results for org-independent
+    probe names — those are not re-invoked here, so per-org *probe
+    invocation* cost stays limited to the genuinely org-specific
+    probes. The cached result is still persisted once per org (a plain
+    write of an already-computed value, not a probe re-run) so that
+    ``GET /synthetics/last`` — a per-org read of ``eden_synthetic_runs``
+    — keeps showing fresh ``sign_in_home`` / ``gateway_health`` history
+    for every org via the scheduled path. Callers outside the scheduler
+    (admin dashboard route, MCP tool) that don't pass ``shared_results``
+    get the prior full per-org behaviour unchanged.
+
+    Within one org tick, ``issues_list`` and ``detect_to_issue`` share a
+    single ``agent_issues`` COUNT when both run.
+    """
     names = list(probes or _PROBE_FNS.keys())
     results: dict[str, Any] = {}
     t0 = time.perf_counter()
     failed = 0
+    issue_count_cache: int | None = None
     for name in names:
-        fn = _PROBE_FNS.get(name)
-        if fn is None:
-            results[name] = {"status": "skip", "error": "unknown probe"}
+        if shared_results is not None and name in shared_results:
+            detail = shared_results[name]
+            status = detail.get("status", "fail")
+            if status not in ("ok", "healthy"):
+                failed += 1
+            results[name] = detail
+            await _persist_run(org_id, name, status, detail)
             continue
-        detail = await fn(org_id)
+        if name == "detect_to_issue":
+            detail = await probe_detect_to_issue(
+                org_id, issue_count=issue_count_cache
+            )
+        elif name == "issues_list":
+            detail = await probe_issues_list(org_id)
+            if detail.get("status") in ("ok", "healthy"):
+                raw = detail.get("issue_count")
+                if isinstance(raw, int):
+                    issue_count_cache = raw
+        else:
+            fn = _PROBE_FNS.get(name)
+            if fn is None:
+                results[name] = {"status": "skip", "error": "unknown probe"}
+                continue
+            detail = await fn(org_id)
         status = detail.get("status", "fail")
         if status not in ("ok", "healthy"):
             failed += 1

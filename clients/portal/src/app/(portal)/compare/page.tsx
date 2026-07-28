@@ -20,11 +20,12 @@ import {
   parseAbStatusFilter,
 } from "@/lab/compare/compare-chrome";
 import dynamic from "next/dynamic";
-import { catalogAgents } from "@/lib/portal-catalog";
+import { catalogAgents, patchPortalCatalog } from "@/lib/portal-catalog";
 import { useOrg } from "@/hooks/use-org";
 import { useOrgQuery } from "@/hooks/use-api-query";
 import { queryKeys } from "@/lib/query-keys";
 import { portalApi } from "@/lib/api/portal";
+import { SHELL_QUERY } from "@/lib/portal-query";
 import { QueryErrorPanel, QueryLoadingPanel } from "@/components/shell/query-error-panel";
 
 const compareFallback = (
@@ -65,10 +66,21 @@ function LabCompareInner() {
 
   const { currentOrg } = useOrg();
   const orgId = currentOrg?.id ?? null;
+  const agentsQuery = useOrgQuery(
+    queryKeys.portal.agents(orgId),
+    orgId,
+    () => portalApi.agents(orgId!),
+    SHELL_QUERY,
+  );
+  useEffect(() => {
+    if (agentsQuery.data === undefined) return;
+    patchPortalCatalog({ agents: agentsQuery.data });
+  }, [agentsQuery.data]);
   const experimentsQuery = useOrgQuery(
     queryKeys.portal.compareExperiments(orgId),
     orgId,
     () => portalApi.compareExperiments(orgId!),
+    SHELL_QUERY,
   );
   const experiments = experimentsQuery.data ?? [];
 

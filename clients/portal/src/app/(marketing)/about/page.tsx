@@ -29,7 +29,7 @@ export default function AboutPage() {
               should feel like an instrument panel: dense, legible, never loud.
             </p>
           </div>
-          <dl className="grid gap-px overflow-hidden border border-[var(--line)] bg-[var(--line)] sm:grid-cols-3">
+          <dl className="grid grid-cols-1 gap-px overflow-hidden border border-[var(--line)] bg-[var(--line)] sm:grid-cols-3">
             {[
               { t: "Observe", d: "Traces, sessions, detectors, issues" },
               { t: "Evaluate", d: "Prompts, datasets, live A/B" },

@@ -221,6 +221,39 @@ class TenantRateLimitMiddleware:
         """
         self._buckets.clear()
 
+    @staticmethod
+    async def _to_eden_org_id(org_id: str | None) -> str | None:
+        """Translate a Clerk org id (or an already-canonical Eden
+        UUID) to the canonical ``organizations.id`` — MEDIUM fix
+        (2026-07-27 deep-audit finding #4): keeps rate-limit bucket
+        keys (``org:{org_id}``) filed under the same tenant
+        identifier RLS (``rls_org_context._resolve_org_id`` /
+        ``eden.api.deps.resolve_eden_org_id``) and
+        ``QuotaEnforcementMiddleware`` use, so a single tenant can't
+        end up with three different per-org identities across the
+        three middlewares.
+
+        Best-effort / fail-open on the identifier only: returns the
+        raw ``org_id`` unchanged if resolution misses or the lookup
+        fails (``resolve_eden_org_id`` already swallows its own
+        exceptions and returns ``None`` on error) — a transient DB
+        blip here must not turn into a spurious rate-limit failure,
+        it just risks (temporarily) bucketing this request under the
+        pre-translation id, exactly the pre-fix behaviour.
+        """
+        if not org_id:
+            return org_id
+        try:
+            from eden.api.deps import resolve_eden_org_id
+
+            resolved = await resolve_eden_org_id(org_id)
+            return resolved or org_id
+        except Exception as exc:
+            logger.debug(
+                "tenant_rate_limit: org id resolve skipped: %s", exc
+            )
+            return org_id
+
     async def _resolve_org_and_api_key(
         self, request: Request
     ) -> tuple[str | None, str | None]:
@@ -231,6 +264,14 @@ class TenantRateLimitMiddleware:
         for the same ``key_hash``. A single ``SELECT id, org_id``
         preserves the same admission rules while cutting the
         middleware's DB cost in half on the API-key hot path.
+
+        MEDIUM fix (2026-07-27 deep-audit finding #4): every branch's
+        resolved id is passed through ``_to_eden_org_id`` (Clerk org
+        id → Eden UUID) before being returned/cached, so quota
+        enforcement, rate limiting, and RLS all agree on the tenant
+        id for a Clerk-authenticated request. This does not change
+        *whether* a caller is trusted — that's still decided solely
+        by the hash lookup / JWT verification above.
         """
         api_key = request.headers.get("x-org-api-key")
         org_id_header = request.headers.get("x-org-id")
@@ -250,7 +291,7 @@ class TenantRateLimitMiddleware:
                     org_id_header,
                 )
                 if row:
-                    org_id = str(row["org_id"])
+                    org_id = await self._to_eden_org_id(str(row["org_id"]))
                     key_id = str(row["id"])
                     _api_key_resolve_cache[cache_key] = (
                         org_id,
@@ -275,7 +316,7 @@ class TenantRateLimitMiddleware:
         if token:
             payload = decode_access_token(token)
             if payload:
-                return payload.get("current_org_id"), None
+                return await self._to_eden_org_id(payload.get("current_org_id")), None
 
         # Clerk Bearer (portal) — session JWT carries ``o.id``.
         # Only trust ``X-Org-Id`` after the Bearer verifies, so an
@@ -294,9 +335,9 @@ class TenantRateLimitMiddleware:
                 if clerk_payload:
                     clerk_org = extract_org_id(clerk_payload)
                     if clerk_org:
-                        return clerk_org, None
+                        return await self._to_eden_org_id(clerk_org), None
                     if org_id_header:
-                        return org_id_header, None
+                        return await self._to_eden_org_id(org_id_header), None
             except Exception:
                 logger.debug(
                     "tenant_rate_limit: Clerk Bearer resolve failed; falling back",

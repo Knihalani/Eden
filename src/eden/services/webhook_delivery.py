@@ -33,7 +33,10 @@ from urllib.parse import urlparse
 
 from pydantic import BaseModel
 
-from eden.storage.postgres import get_postgres_client
+from eden.storage.postgres import (
+    copy_context_without_request_pg_conn,
+    get_postgres_client,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -45,6 +48,39 @@ _RETRY_DELAYS = [0, 1, 5, 25, 120, 600, 3600]  # seconds
 # Replay controls (DL-8).
 _MAX_REPLAY_COUNT = 3
 _MIN_REPLAY_GAP_SECONDS = 60
+
+# After an empty outbox poll, skip Postgres for this many seconds so the
+# leader drain loop (≤2 min tick) cannot pin Neon above autosuspend.
+# Cleared when ``deliver_event`` / schedule paths enqueue work on this
+# process; cross-replica lag is bounded by the cooldown itself.
+_empty_outbox_until_monotonic: float = 0.0
+
+
+def _mark_outbox_empty() -> None:
+    global _empty_outbox_until_monotonic
+    import time
+
+    try:
+        from eden.config import get_settings
+
+        cooldown = float(
+            getattr(get_settings(), "webhook_drain_empty_cooldown_seconds", 180.0)
+            or 180.0
+        )
+    except Exception:
+        cooldown = 180.0
+    _empty_outbox_until_monotonic = time.monotonic() + max(30.0, cooldown)
+
+
+def _clear_outbox_empty_cooldown() -> None:
+    global _empty_outbox_until_monotonic
+    _empty_outbox_until_monotonic = 0.0
+
+
+def _outbox_in_empty_cooldown() -> bool:
+    import time
+
+    return time.monotonic() < _empty_outbox_until_monotonic
 
 # HTTP module reference, lazy-loaded to avoid startup overhead.
 _httpx_mod = None
@@ -233,6 +269,7 @@ class WebhookDeliveryService:
         The actual delivery work runs in a tracked background
         task so the request handler can return immediately.
         """
+        _clear_outbox_empty_cooldown()
         try:
             pg = await get_postgres_client()
             row = await pg.fetchrow(
@@ -460,6 +497,8 @@ class WebhookDeliveryService:
         ``limit`` is bounded to ``[1, 500]`` so a tick cannot
         be wedged open by a flood of rows.
         """
+        if _outbox_in_empty_cooldown():
+            return 0
         bounded_limit = max(1, min(int(limit), 500))
         try:
             pg = await get_postgres_client()
@@ -492,6 +531,11 @@ class WebhookDeliveryService:
                 exc,
             )
             return 0
+
+        if not rows:
+            _mark_outbox_empty()
+            return 0
+        _clear_outbox_empty_cooldown()
 
         scheduled = 0
         for row in rows:
@@ -611,7 +655,38 @@ class WebhookDeliveryService:
         so callers (tests + production) can ``await`` it without
         the function itself being a coroutine. The task body
         ``_attempt_delivery`` does the actual async work.
+
+        CRITICAL (cross-tenant connection reuse): this task may
+        outlive the caller — some call sites ``await`` the returned
+        task (blocking until the first attempt completes), others
+        are intentionally fire-and-forget (e.g. DLQ replay, which
+        must return its HTTP response immediately, and the pending-
+        deliveries outbox drain, which schedules many rows per
+        tick). Either way, ``loop.create_task`` copies the calling
+        ``contextvars.Context`` at creation time, and callers can be
+        HTTP route handlers running under
+        ``RLSOrgContextMiddleware``, which pins one pooled Postgres
+        connection to the request via the ``_request_pg_conn``
+        contextvar and releases it back to the pool as soon as the
+        request finishes. A fire-and-forget task that inherited that
+        binding could still be waiting on ``loop.call_later`` for a
+        retry (up to 1h — see ``_RETRY_DELAYS``) long after the
+        connection has been recycled to a different, concurrently-
+        tenanted request — and ``PostgresClient.acquire`` checks
+        that contextvar FIRST, so it would silently hand the stale
+        connection straight back to this task instead of doing a
+        normal pool checkout. Scheduling the task via a context with
+        that one var stripped (see
+        ``copy_context_without_request_pg_conn``) ensures every
+        delivery attempt — including retries fired later by
+        ``call_later`` — acquires its own connection from the pool
+        instead of ever touching a request-pinned one. ``webhooks``
+        / ``webhook_deliveries`` / ``webhook_dlq`` are not FORCE-RLS
+        tables and every query here filters explicitly by id/org, so
+        this has no effect on query correctness — it only removes
+        the leaked binding.
         """
+        _clear_outbox_empty_cooldown()
         loop = asyncio.get_event_loop()
         task = loop.create_task(
             self._attempt_delivery(
@@ -619,7 +694,8 @@ class WebhookDeliveryService:
                 url=url,
                 secret=secret,
                 payload=payload,
-            )
+            ),
+            context=copy_context_without_request_pg_conn(),
         )
         self._in_flight.add(task)
         task.add_done_callback(self._in_flight.discard)

@@ -28,11 +28,17 @@ import uuid
 from typing import Any
 
 from eden.closed_loop.events import EventType, LoopEvent
+from eden.storage.empty_cooldown import make_empty_cooldown
 
 logger = logging.getLogger(__name__)
 
 _TASK: asyncio.Task | None = None
 _STOP: asyncio.Event | None = None
+
+_verify_in_cooldown, _verify_mark_empty, _verify_clear_cooldown = make_empty_cooldown(
+    default_seconds=300.0,
+    settings_attr="verify_empty_cooldown_seconds",
+)
 
 
 # ── Scheduling ──────────────────────────────────────────────────────
@@ -64,6 +70,7 @@ async def schedule_verify(
             fingerprint = ""
     verify_id = str(uuid.uuid4())
     try:
+        _verify_clear_cooldown()
         row = await client.fetchrow(
             """
             INSERT INTO issue_verifications
@@ -155,6 +162,8 @@ async def run_due_verifications(limit: int = 50) -> dict[str, int]:
 
     Public + side-effect-contained so tests can drive a single pass.
     """
+    if _verify_in_cooldown():
+        return {"checked": 0, "passed": 0, "failed": 0, "retried": 0}
     client = await _pg()
     summary = {"checked": 0, "passed": 0, "failed": 0, "retried": 0}
     if client is None:
@@ -162,7 +171,7 @@ async def run_due_verifications(limit: int = 50) -> dict[str, int]:
 
     # Claim due rows atomically so concurrent workers cannot double-process.
     # Lease via scheduled_at bump (status CHECK has no 'running' value).
-    poll = _cfg("verify_poll_interval_seconds", 60)
+    poll = _cfg("verify_poll_interval_seconds", 180)
     lease_secs = max(int(poll) * 3, 180)
     try:
         rows = await client.fetch(
@@ -187,6 +196,11 @@ async def run_due_verifications(limit: int = 50) -> dict[str, int]:
     except Exception as exc:
         logger.debug("verify: due claim failed: %s", exc)
         return summary
+
+    if not rows:
+        _verify_mark_empty()
+        return summary
+    _verify_clear_cooldown()
 
     max_attempts = _cfg("verify_max_attempts", 3)
 
@@ -279,7 +293,7 @@ async def _reschedule(client: Any, row_id: Any, attempts: int) -> None:
 
 
 async def _run(stop: asyncio.Event) -> None:
-    poll = _cfg("verify_poll_interval_seconds", 60)
+    poll = _cfg("verify_poll_interval_seconds", 180)
     logger.info("verify worker: started (poll=%ss)", poll)
     while not stop.is_set():
         try:

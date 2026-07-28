@@ -129,6 +129,84 @@ def test_idle_in_transaction_setting_reads_env():
     assert s.postgres_idle_in_transaction_timeout_ms == 15_000
 
 
+def test_statement_cache_size_setting_default():
+    """Default ``postgres_statement_cache_size`` is 0 (disabled).
+
+    HIGH fix: asyncpg's default client-side prepared-statement cache
+    (size 100, keyed per physical ``Connection``) is incompatible with
+    PgBouncer transaction-mode pooling — a statement prepared on one
+    backend connection can be replayed against a different backend
+    after PgBouncer multiplexes the logical connection, producing
+    intermittent "prepared statement does not exist" / "prepared
+    statement already exists" errors under load. ``PostgresClient``'s
+    docstring explicitly targets PgBouncer transaction mode, so the
+    cache must default off.
+    """
+    s = _settings()
+    assert s.postgres_statement_cache_size == 0
+
+
+def test_statement_cache_size_setting_reads_env():
+    """``POSTGRES_STATEMENT_CACHE_SIZE`` env var is honoured."""
+    s = _settings(postgres_statement_cache_size=100)
+    assert s.postgres_statement_cache_size == 100
+
+
+def test_create_pool_disables_statement_cache_by_default():
+    """``initialize()`` passes ``statement_cache_size=0`` to
+    ``asyncpg.create_pool`` by default, so PgBouncer transaction-mode
+    pooling can't hit cross-connection "prepared statement does not
+    exist" errors.
+    """
+    import asyncio
+
+    from eden.storage.postgres import PostgresClient
+
+    settings = _settings()
+    captured_kwargs: dict = {}
+
+    async def _fake_create_pool(**kwargs):
+        captured_kwargs.update(kwargs)
+        return object()
+
+    import eden.storage.postgres as pg_mod
+
+    with pytest.MonkeyPatch.context() as mp:
+        _patch_settings(mp, settings)
+        mp.setattr(pg_mod.asyncpg, "create_pool", _fake_create_pool)
+        client = PostgresClient()
+        asyncio.run(client.initialize())
+
+    assert captured_kwargs.get("statement_cache_size") == 0
+
+
+def test_create_pool_honours_configured_statement_cache_size():
+    """A non-default ``postgres_statement_cache_size`` setting is
+    forwarded to ``asyncpg.create_pool`` (escape hatch for session-mode
+    pooling or no pooler at all).
+    """
+    import asyncio
+
+    from eden.storage.postgres import PostgresClient
+
+    settings = _settings(postgres_statement_cache_size=100)
+    captured_kwargs: dict = {}
+
+    async def _fake_create_pool(**kwargs):
+        captured_kwargs.update(kwargs)
+        return object()
+
+    import eden.storage.postgres as pg_mod
+
+    with pytest.MonkeyPatch.context() as mp:
+        _patch_settings(mp, settings)
+        mp.setattr(pg_mod.asyncpg, "create_pool", _fake_create_pool)
+        client = PostgresClient()
+        asyncio.run(client.initialize())
+
+    assert captured_kwargs.get("statement_cache_size") == 100
+
+
 def test_down_revision_chain_continues():
     """Migration 043 chains correctly off 042."""
     import importlib

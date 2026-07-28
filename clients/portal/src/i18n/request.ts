@@ -3,13 +3,13 @@ import { hasLocale } from "next-intl";
 import { routing } from "./routing";
 
 /**
- * next-intl request config — loads the message bundle for the active
- * locale on every server render. Wired into `next.config.ts` via the
- * `next-intl/plugin` createNextIntlPlugin call so the build pipeline
- * picks it up.
+ * next-intl request config.
  *
- * The locale itself is resolved by next-intl's middleware (cookie →
- * accept-language → default). We just look up the JSON bundle here.
+ * Message JSON (~60KB) is intentionally NOT loaded — nothing in the
+ * product UI calls ``useTranslations`` / ``getTranslations`` yet, and
+ * shipping the bundle on every marketing SSR was pure TTFB waste.
+ * Locale negotiation (cookie / accept-language) still runs via
+ * middleware; only the message import is skipped.
  */
 export default getRequestConfig(async ({ requestLocale }) => {
   const requested = await requestLocale;
@@ -19,6 +19,6 @@ export default getRequestConfig(async ({ requestLocale }) => {
 
   return {
     locale,
-    messages: (await import(`../messages/${locale}.json`)).default,
+    messages: {},
   };
 });

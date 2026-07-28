@@ -17,6 +17,7 @@
  */
 
 import { randomUUID } from "node:crypto";
+import { AsyncLocalStorage } from "node:async_hooks";
 import { getDefaultClient } from "./client.js";
 import { SOURCE_FORMATS, type TraceOptions } from "./types.js";
 
@@ -91,7 +92,7 @@ export function trace<T>(
     return _traceCallback(name, fn, opts);
   }
   // Context-manager form.
-  return _traceController(name, fnOrOpts ?? {});
+  return _traceControllerManual(name, fnOrOpts ?? {});
 }
 
 // ── Implementation ──────────────────────────────────────────────────
@@ -111,6 +112,12 @@ export class TraceController implements TraceContext {
   public error: string | null = null;
   private readonly options: TraceOptions;
   private ended = false;
+  // Set only by the imperative (context-manager) form -- see
+  // ``_traceControllerManual``. Marks that this controller was
+  // pushed onto ``_manualStack`` and must be popped on ``.end()``.
+  // Not ``private`` -- ``_traceControllerManual`` (a module-level
+  // function, not a class method) needs to set it.
+  _onManualStack = false;
 
   constructor(name: string, options: TraceOptions, parent?: TraceContext) {
     this.name = name;
@@ -186,22 +193,50 @@ export class TraceController implements TraceContext {
     if (opts.error !== undefined) this.error = opts.error;
     this.endMs = Date.now();
     finishTrace(this, this.options);
-    // Pop from the active-context stack. ``findIndex`` lets nested
-    // contexts be popped in the right order even if a parent is
-    // ended before its child (defensive — under normal flow the
-    // child ends first). Without this pop the stack grows
-    // unboundedly and ``_activeContext`` keeps returning the
-    // deepest dead span as the new parent.
-    const idx = _activeContextStack.indexOf(this);
-    if (idx >= 0) _activeContextStack.splice(idx, 1);
+    // Pop from the manual stack. Only the imperative
+    // (context-manager) form pushes onto it (see
+    // ``_traceControllerManual``) -- the callback form /
+    // ``@traceAgent`` decorator scope their span via
+    // ``_activeTraceStorage.run()`` instead, which already restores
+    // the previous ALS context synchronously on return.
+    // ``findIndex``-then-splice lets nested contexts be popped in
+    // the right order even if a parent is ended before its child
+    // (defensive -- under normal flow the child ends first).
+    if (this._onManualStack) {
+      const idx = _manualStack.indexOf(this);
+      if (idx >= 0) _manualStack.splice(idx, 1);
+    }
   }
 }
 
-function _traceController(name: string, opts: TraceOptions): TraceContext {
-  const parent = _activeContext();
-  const controller = new TraceController(name, opts, parent);
-  _activeContextStack.push(controller);
+/**
+ * Imperative (context-manager) form: ``trace(name)`` with no
+ * callback. There is no bounded scope to wrap in
+ * ``AsyncLocalStorage.run()``, so this keeps the pre-existing
+ * push-now/pop-on-``end()`` array stack (``_manualStack``) rather
+ * than `AsyncLocalStorage.enterWith()`. `enterWith()` looks like
+ * the natural imperative primitive here, but it mutates the
+ * ambient store for the CURRENTLY EXECUTING async resource going
+ * forward -- in a long-running host process (notably the test
+ * runner's own process) that can leak the entered context into
+ * completely unrelated code that later reuses the same async
+ * resource, corrupting state that has nothing to do with tracing.
+ * ``_manualStack`` doesn't get AsyncLocalStorage's per-chain
+ * isolation, but that matches this form's pre-existing behaviour
+ * exactly -- the isolation fix for concurrent/interleaved traces
+ * targets `trace(name, fn)` / `@traceAgent`, both of which use the
+ * properly `.run()`-scoped path below.
+ */
+function _traceControllerManual(name: string, opts: TraceOptions): TraceContext {
+  const controller = _newController(name, opts);
+  controller._onManualStack = true;
+  _manualStack.push(controller);
   return controller;
+}
+
+function _newController(name: string, opts: TraceOptions): TraceController {
+  const parent = currentTrace();
+  return new TraceController(name, opts, parent);
 }
 
 async function _traceCallback<T>(
@@ -209,18 +244,30 @@ async function _traceCallback<T>(
   fn: (ctx: TraceContext) => Promise<T>,
   opts: TraceOptions,
 ): Promise<T> {
-  const controller = _traceController(name, opts) as TraceController;
-  let result: T;
-  try {
-    result = await fn(controller);
-    if (controller.status === null) controller.status = "ok";
-  } catch (err) {
-    controller.recordError(err);
-    throw err;
-  } finally {
-    controller.end();
-  }
-  return result;
+  const controller = _newController(name, opts);
+  // Scope the callback's execution (and everything it awaits,
+  // however deeply) in its own AsyncLocalStorage frame. This is
+  // what makes two concurrently-running, interleaved
+  // ``trace(name, fn)`` calls resolve their OWN correct parent
+  // instead of racing to mutate one shared "current" pointer:
+  // ``run()`` snapshots + restores the ambient context around
+  // this call, and any code that awaits inside ``fn`` correctly
+  // sees ``controller`` as `currentTrace()` regardless of what a
+  // sibling call (invoked concurrently via `Promise.all`, say)
+  // does to the ambient context afterward.
+  return _activeTraceStorage.run(controller, async () => {
+    let result: T;
+    try {
+      result = await fn(controller);
+      if (controller.status === null) controller.status = "ok";
+    } catch (err) {
+      controller.recordError(err);
+      throw err;
+    } finally {
+      controller.end();
+    }
+    return result;
+  });
 }
 
 function finishTrace(
@@ -291,14 +338,47 @@ function finishTrace(
   }
 }
 
-// ── Active-trace contextvar so nested traces correlate ───────────────
+// ── Active-trace context so nested traces (and LLM-call spans) correlate ──
 
-// Simple module-level stack for nested-trace correlation. Not safe
-// across worker threads, but matches the Python SDK's behaviour
-// (ContextVars in Python don't cross threads either).
-const _activeContextStack: TraceContext[] = [];
-function _activeContext(): TraceContext | undefined {
-  return _activeContextStack[_activeContextStack.length - 1];
+// AsyncLocalStorage-backed active-trace context for the callback form
+// (`trace(name, fn)`) and the `@traceAgent` decorator -- both scope
+// their span with `_activeTraceStorage.run()` (never `enterWith()`,
+// see `_traceControllerManual`'s docstring for why). Replaces a
+// previous module-level array (`_activeContextStack`) that was
+// shared by every concurrently-running execution with NO isolation
+// whatsoever: two interleaved `trace()` calls (e.g. two overlapping
+// requests handled on the same event loop) could push onto the SAME
+// array, and whichever pushed last "won" as the parent for BOTH
+// chains, silently mis-attributing spans across unrelated traces.
+// `AsyncLocalStorage.run()` tracks the store per async-causality
+// chain (the same mechanism `contextvars` uses in the Python SDK),
+// so concurrent `.run()`-scoped chains each resolve their own
+// correct parent.
+const _activeTraceStorage = new AsyncLocalStorage<TraceContext | undefined>();
+
+// Plain stack used ONLY by the imperative (context-manager) form --
+// see `_traceControllerManual`. Same "shared array, no async-chain
+// isolation" limitation the old `_activeContextStack` had; that
+// limitation is accepted here (matches this form's pre-existing
+// behaviour) because `AsyncLocalStorage.enterWith()` is not safe to
+// use imperatively in this environment.
+const _manualStack: TraceContext[] = [];
+
+/**
+ * The currently-active `trace()` / `traceAgent()` span, if any, for
+ * the calling async-context chain. Every instrumentation's
+ * `traceIdOrRandom()` (see `ids.ts`) reads this so an LLM call made
+ * inside an outer span joins it on the wire instead of always
+ * minting a brand-new, unrelated `traceId`. Checks the
+ * `.run()`-scoped ALS store first (properly isolated per
+ * async-causality chain); falls back to the manual stack's top
+ * (shared, unisolated -- see `_manualStack`) so a `trace(name)`
+ * context-manager span still counts as "active" for nested manual
+ * spans and instrumentation calls made outside of any `.run()`
+ * scope.
+ */
+export function currentTrace(): TraceContext | undefined {
+  return _activeTraceStorage.getStore() ?? _manualStack[_manualStack.length - 1];
 }
 
 // ── traceAgent decorator ─────────────────────────────────────────────
@@ -318,10 +398,10 @@ function makeWrappedMethod(
   options: TraceOptions,
 ): (...a: unknown[]) => unknown {
   return function (this: unknown, ...args: unknown[]): unknown {
-    const controller = _traceController(
+    const controller = _newController(
       `${(this as { constructor?: { name?: string } })?.constructor?.name ?? "Anon"}.${propertyKey}`,
       options,
-    ) as TraceController;
+    );
     // Track ``status`` separately because ``recordError`` sets
     // it to ``"error"`` and we want to mirror that on the way
     // out (without going through ``controller.setStatus`` which
@@ -346,25 +426,34 @@ function makeWrappedMethod(
       controller.end();
     };
 
-    try {
-      const result = original.apply(this, args);
-      if (result instanceof Promise) {
-        return result
-          .catch((err: unknown) => {
-            status = "error";
-            controller.recordError(err);
-            throw err;
-          })
-          .finally(finish);
+    // Scope the wrapped method's execution in its own
+    // AsyncLocalStorage frame -- same rationale as
+    // `_traceCallback`: two concurrently-running invocations of a
+    // `@traceAgent`-decorated method (e.g. handling two requests
+    // interleaved on the event loop) must each resolve their OWN
+    // controller as `currentTrace()`, not race to overwrite a
+    // single shared "current" pointer.
+    return _activeTraceStorage.run(controller, () => {
+      try {
+        const result = original.apply(this, args);
+        if (result instanceof Promise) {
+          return result
+            .catch((err: unknown) => {
+              status = "error";
+              controller.recordError(err);
+              throw err;
+            })
+            .finally(finish);
+        }
+        finish();
+        return result;
+      } catch (err) {
+        status = "error";
+        controller.recordError(err);
+        finish();
+        throw err;
       }
-      finish();
-      return result;
-    } catch (err) {
-      status = "error";
-      controller.recordError(err);
-      finish();
-      throw err;
-    }
+    });
   };
 }
 

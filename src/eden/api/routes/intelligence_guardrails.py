@@ -60,11 +60,24 @@ class PolicyCreateRequest(BaseModel):
     type: str
     spec: dict[str, Any]
     action: str = "allow"
+    # "input" (inbound prompt) / "output" (outbound completion) / "both"
+    # (the default — applies regardless of call direction, matching the
+    # pre-``direction`` enforcement behaviour). See
+    # ``eden.guardrails.policy.VALID_DIRECTIONS`` / ``GuardrailPolicy.create``.
+    direction: str = "both"
 
 
 class EvaluateRequest(BaseModel):
     text: str
     context: str | None = None
+    # "input" (guarding an inbound prompt) / "output" (guarding an
+    # outbound completion) / "both" (bypass direction filtering).
+    # Left unset by most callers today — inferred below from whether
+    # ``context`` was supplied (a grounding ``context`` only makes
+    # sense for an output check; plain input checks typically omit
+    # it), so an org's direction-scoped policies apply sensibly
+    # without every existing caller having to be updated first.
+    direction: str | None = None
 
 
 class InjectScanRequest(BaseModel):
@@ -104,6 +117,7 @@ async def create_policy(
         type=body.type,
         spec=body.spec,
         action=body.action,
+        direction=body.direction,
     )
 
 
@@ -120,14 +134,20 @@ async def evaluate(
     body: EvaluateRequest = Body(...),
     trace_id: str | None = Query(None),
 ) -> dict[str, Any]:
-    """Evaluate all active policies for ``text`` and return a verdict.
+    """Evaluate all active, direction-matching policies for ``text``.
 
     Incomplete policy sets fail closed (``block``, ``live: false``).
     Enforced detector policies flip the envelope to ``live: true``.
     """
+    direction = body.direction
+    if direction not in ("input", "output", "both"):
+        # Not declared explicitly — infer from what's available at
+        # this call site: a grounding ``context`` implies an output
+        # (hallucination) check; its absence implies an input check.
+        direction = "output" if body.context else "input"
     return await _engine.evaluate_and_act(
         org_id, text=body.text, context=body.context,
-        trace_id=trace_id,
+        trace_id=trace_id, direction=direction,
     )
 
 

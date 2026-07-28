@@ -125,19 +125,6 @@ async def _run_columnar_compaction(*, dry_run: bool) -> dict[str, object]:
         return _err(exc)
 
 
-async def _run_eql_alert_watchdog(*, dry_run: bool) -> dict[str, object]:
-    """Cat 19 alert-as-code watchdog — evaluate due rules."""
-    if dry_run:
-        return {"skipped": True, "reason": "dry_run"}
-    try:
-        from eden.dsl import AlertAsCode
-
-        return await AlertAsCode().fire_due()
-    except Exception as exc:
-        logger.exception("[cron_tick] eql_alert_watchdog failed: %s", exc)
-        return _err(exc)
-
-
 async def _run_auto_curator() -> dict[str, object]:
     """Per-org auto-curator; one org failure must not abort the rest."""
     from eden.evaluation.auto_curator import AutoCurator
@@ -398,18 +385,6 @@ async def _run_drift_baselines() -> dict[str, object]:
     from eden.insights.drift_baseline_worker import DriftBaselineWorker
 
     return await DriftBaselineWorker().run_once()
-
-
-async def _run_improvement_sweeps(*, dry_run: bool) -> dict[str, object]:
-    from eden.improvement.schedule import run_due_sweeps
-
-    return await run_due_sweeps(dry_run=dry_run)
-
-
-async def _run_artifact_demotion() -> dict[str, object]:
-    from eden.nudges.demotion_worker import ArtifactDemotionWorker
-
-    return await ArtifactDemotionWorker().run_once()
 
 
 async def _run_shadow_outcome_join() -> dict[str, object]:

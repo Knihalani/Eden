@@ -33,6 +33,7 @@ import { portalApi } from "@/lib/api/portal";
 import { api } from "@/lib/api/resources";
 import { SETTINGS_QUERY } from "@/lib/portal-query";
 import { QueryErrorPanel, QueryLoadingPanel } from "@/components/shell/query-error-panel";
+import { NoWorkspaceGuard } from "@/components/shell/workspace-guard";
 import { useLabToast } from "@/lab/lab-toast";
 
 const settingsFallback = (
@@ -628,6 +629,25 @@ function LabSettingsInner() {
     ),
     [workspace.planLabel, liveKeys.length, counts.active],
   );
+
+  // Render-only guard: distinguishes "no workspace selected" from "this
+  // workspace has zero data". Queries above stay disabled while orgId is
+  // null (see isLoading's comment), so without this we'd otherwise fall
+  // through to the fixture-backed default render below. This does not
+  // touch the `!orgId` early-returns inside the mutation callbacks
+  // further up (renameWorkspace, createKey, inviteMember, etc.) — those
+  // guard against a workspace switch racing the request, not this.
+  if (!orgId && !orgSyncing) {
+    return (
+      <NoWorkspaceGuard
+        title="Settings"
+        message="Select a workspace to view settings."
+        actions={
+          <SettingsModeNav value={mode} onChange={(m) => changeMode(m)} />
+        }
+      />
+    );
+  }
 
   if (isLoading) {
     return (

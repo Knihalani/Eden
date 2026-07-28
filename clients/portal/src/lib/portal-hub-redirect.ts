@@ -3,7 +3,17 @@
  *
  * Live product paths pass through. Stale /lab/* URLs rewrite to canonical
  * routes. Remaining legacy stubs soft-land on /unavailable (not /rebuild).
+ *
+ * The live/stub prefix lists are the single source of truth in
+ * portal-routes.ts (the auth-gate file) — imported here rather than
+ * hand-duplicated, so this module's redirect logic and the auth gate
+ * can never silently drift apart again.
  */
+
+import {
+  LIVE_PORTAL_PREFIXES,
+  STUB_PORTAL_PATH_PREFIXES,
+} from "@/lib/portal-routes";
 
 export interface HubRedirectRule {
   destination: string;
@@ -16,72 +26,14 @@ export const HUB_REDIRECT_RULES: Record<string, HubRedirectRule> = {};
 /** Soft-land for removed product URLs. */
 export const STUB_LAND = "/unavailable";
 
-/** Product leaves that are live (no hub bounce). */
-export const LIVE_PRODUCT_PREFIXES = [
-  "/home",
-  "/agents",
-  "/traces",
-  "/sessions",
-  "/issues",
-  "/alerts",
-  "/signals",
-  "/evals",
-  "/improve",
-  "/cost",
-  "/agent",
-  "/debugger",
-  "/compare",
-  "/settings",
-  "/prompts",
-  "/guardrails",
-  "/shell",
-  "/rebuild",
-  "/unavailable",
-] as const;
+/** Product leaves that are live (no hub bounce). Re-exported for older imports. */
+export const LIVE_PRODUCT_PREFIXES = LIVE_PORTAL_PREFIXES;
 
-/** Still-stub / removed surfaces → /unavailable. */
-const STUB_PREFIXES = [
-  "/marketplace",
-  "/multi-agent",
-  "/builder",
-  "/jobs",
-  "/eval-harnesses",
-  "/sandbox",
-  "/redteam",
-  "/observability",
-  "/inspector",
-  "/analytics",
-  "/users",
-  "/tools",
-  "/insights",
-  "/fleet",
-  "/incidents",
-  "/ledger",
-  "/promotions",
-  "/artifacts",
-  "/optimization",
-  "/runs",
-  "/datasets",
-  "/playgrounds",
-  "/experiments",
-  "/labeling",
-  "/studio",
-  "/synthetic",
-  "/autonomous",
-  "/closed-loop",
-  "/apm",
-  "/profile",
-  "/billing",
-  "/finops",
-  "/audit-trail",
-  "/debugger-sessions",
-  "/replay",
-  "/_stub",
-  "/audit",
-] as const;
+/** Still-stub / removed surfaces → /unavailable. Re-exported for older imports. */
+export const STUB_PREFIXES = STUB_PORTAL_PATH_PREFIXES;
 
 function isLiveProductPath(pathname: string): boolean {
-  return LIVE_PRODUCT_PREFIXES.some(
+  return LIVE_PORTAL_PREFIXES.some(
     (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
   );
 }
@@ -116,9 +68,14 @@ export function buildHubRedirectUrl(
     return withSearch("/home", search);
   }
 
-  // First-run entry — product home with soft-open tour.
+  // First-run entry — product home with soft-open tour. Merge the
+  // incoming query with the hardcoded onboarding=1 param rather than
+  // naively concatenating (the base path already has a `?`, so a plain
+  // withSearch() call here would produce a second `?` and corrupt the
+  // URL — see portal-hub-redirect.test history for the bug this fixes).
   if (p === "/onboarding" || p.startsWith("/onboarding/")) {
-    return "/home?onboarding=1";
+    const extra = search.replace(/^\?/, "");
+    return extra ? `/home?onboarding=1&${extra}` : "/home?onboarding=1";
   }
 
   if (p === "/rebuild" || p.startsWith("/rebuild/")) return null;

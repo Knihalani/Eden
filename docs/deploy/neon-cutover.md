@@ -56,7 +56,7 @@ The project is already live in Neon — the steps below document what was done a
 - **Region:** `aws-us-east-2` (Ohio)
 - **Postgres version:** 17.10
 - **Compute:** autoscaling 0.25–8 CU; **`suspend_timeout_seconds=300`** (scale to zero after 5 minutes idle). Previously this was `0` (never suspend), which is why the main endpoint stayed `active` continuously.
-- **App-side keep-warm blockers (fixed 2026-07-24):** `POSTGRES_MIN_POOL_SIZE` must be `0` (not 2/1); pool idle lifetime 60s; `/health` Postgres probe cached 30s; quality worker empty-poll backoff up to 30s.
+- **App-side keep-warm blockers (fixed 2026-07-24, tightened 2026-07-27):** `POSTGRES_MIN_POOL_SIZE` must be `0` (not 2/1); pool idle lifetime **30s**; `/health` Postgres probe cached **90s**; quality worker empty-poll backoff up to **360s**; self-obs probe interval **600s**; webhook empty-outbox cooldown **180s**.
 - **Org:** `org-plain-lab-44145952` (Kaiav)
 - **Branches (CoW):**
   - `main`  — `br-odd-pond-ajnjw5bp`   (default, system of record)

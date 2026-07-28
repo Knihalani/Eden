@@ -18,9 +18,9 @@ Northflank is the **only** supported API host. Fly.io has been removed from this
 |---|---|---|---|
 | Service 1 | `eden-api` | FastAPI + uvicorn on port 8000 | Public ingress; serves the API + SSE |
 | Service 2 | _(unused on day 1 — keeps headroom for a debug sidecar)_ | — | Hold for the GPU service when the SLM judge ships |
-| Job 1 | `eden-worker` | Long-running background worker (judges, sim, drift, RCA, GH webhook handler) | Per-second billing, easy to scale up to nf-compute-100-2 |
-| Job 2 | `eden-cron` | `*/5 * * * *` tick that fires Eden's internal scheduler | Avoids needing a 3rd service slot for cron |
-| Addon 1 | `eden-postgres` | Managed Postgres 16 (1 GB) | The only addon; Northflank auto-links the password into the service env as `eden-postgres.eden.PGPASSWORD` |
+| Job 1 | `eden-worker` | Long-running background worker (judges, sim, drift, RCA, GH webhook handler, leader-gated maintenance loops) | Per-second billing, easy to scale up to nf-compute-100-2 |
+| Job 2 | `eden-cron` | DISABLED no-op (`cronExpression: "0 0 1 1 *"`, command just echoes and exits) — kept only to fill the free-tier job slot; all scheduled work now runs on `eden-worker` | Avoids needing a 3rd job slot; nothing re-enables this without an explicit manifest change |
+| Addon | _(none)_ | No Postgres addon — the database lives on Neon Scale (see `docs/deploy/neon-cutover.md`); all `POSTGRES_*` env vars resolve from the `eden-required` secret group | Frees the one free-tier addon slot entirely |
 
 **Out of sandbox (use external free tiers):**
 
@@ -83,18 +83,7 @@ The manifest (`northflank.yml`) lists every non-secret env var. Below is the *ch
 | `QDRANT_API_KEY` | Secret group `eden-required` | The cluster API key (key name must be exactly `QDRANT_API_KEY`) |
 | `REDIS_URL` | Upstash dashboard | `rediss://default:<token>@<host>.upstash.io:6379` |
 
-For Postgres, the addon name `eden-postgres` is referenced in the env vars of `eden-api`, `eden-worker`, and `eden-cron`. The password is auto-injected by Northflank as `eden-postgres.eden.PGPASSWORD` into the linked service — but Eden's code reads `POSTGRES_PASSWORD`, not `PGPASSWORD`. **Add this override under `eden-api` env (and the others) before applying:**
-
-```yaml
-- name: POSTGRES_PASSWORD
-  valueFrom:
-    addonRef:
-      name: eden-postgres
-      user: eden
-      property: password
-```
-
-(I omitted this from the manifest file because Northflank's exact addon-ref property names vary by version; the safe move is to set `POSTGRES_PASSWORD` as a separate secret and update it manually, or set it as a service-link env var via the dashboard after the addon is created.)
+**There is no Postgres addon.** An earlier revision of this manifest provisioned Postgres as a Northflank addon (`eden-postgres`), but that addon is gone — the Northflank API doesn't expose the internal hostname for sandbox addons, and `externalAccessEnabled: true` patches silently no-op, which blocked external access entirely. The database now lives on **Neon Scale** (see `docs/deploy/neon-cutover.md`). All eight `POSTGRES_*` env vars (`POSTGRES_HOST`, `POSTGRES_PORT`, `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_SSLMODE`, `POSTGRES_CHANNEL_BINDING`, `POSTGRES_ENDPOINT_ID`) are ordinary secrets in the `eden-required` secret group, populated with the Neon connection details during the cutover runbook — there's no addon-ref indirection to work around.
 
 ### 3b. Vercel — `clients/portal`
 
@@ -132,7 +121,7 @@ northflank logs --project eden-staging --service eden-api --follow
 
 When `eden-api` first boots, `bin/serve.sh` will:
 1. Validate all required secrets are set (otherwise exit 1 — see `src/eden/config.py:validate_settings_or_exit`)
-2. Run `alembic upgrade head` against the new `eden-postgres` addon
+2. Run `alembic upgrade head` against Neon Scale (via the `POSTGRES_*` secrets)
 3. Start uvicorn on port 8000
 
 The first deploy usually takes 3-5 minutes (image build + migration run + uvicorn start).
@@ -197,11 +186,11 @@ In the browser, open the Vercel portal URL and:
 | `eden-api` restarts on every deploy, drops the in-memory rate limiter | Brief 429s | Acceptable; the Redis-backed limiter takes over as soon as the worker is up |
 | Qdrant Cloud free cluster is 1 GB | Out of disk if `QDRANT_COLLECTION_PREFIX` is wide | The collection prefix is `eden_`; if you outgrow 1 GB, swap to Qdrant Cloud Pay-as-you-go (~$0.014/hr) |
 | Upstash free = 10k commands/day | Rate-limit 503s after 10k Redis calls | Either upgrade Upstash to fixed $1/mo for 100k/day, or set a per-day cap in the app and fail open |
-| Postgres addon is 1 GB | Migration fails on large inserts (Cat 18 columnar) | Bump to 5 GB plan; the addon is the one free slot so this is the first thing to upgrade |
+| Postgres lives on Neon Scale, not a Northflank addon | Storage/connection limits are governed by the Neon plan, not this manifest | See `docs/deploy/neon-cutover.md` for Neon's own scale-to-zero and connection-limit behavior |
 | 512 MB container cap on the free sandbox | OOM kills during alembic on a heavy migration | Run the migration once via `northflank exec` with a bigger container, then scale back |
-| Northflank `*.northflank.app` URLs are not stable across project recreate | Docs/cron references break | Add a custom domain `api.edenobservability.com` once you're off the free tier |
+| Northflank `*.northflank.app` URLs are not stable across project recreate | Docs/env references break | Add a custom domain `api.edenobservability.com` once you're off the free tier |
 | Vercel Hobby plan bans commercial use | T&Cs violation once Eden has paying customers | Upgrade Vercel → Pro ($20/seat) before charging |
-| No automatic Postgres backups on free tier | Data loss if the addon dies | Manually snapshot weekly: `northflank exec --service eden-api -- pg_dump -U eden eden > backup.sql` |
+| No automatic Postgres backups managed here | Data loss if Neon's own backup/retention doesn't cover the loss window | Confirm Neon's point-in-time-restore window for the plan in use; snapshot manually if it's not enough: `northflank exec --service eden-api -- pg_dump ... > backup.sql` |
 
 ---
 
@@ -209,6 +198,6 @@ In the browser, open the Vercel portal URL and:
 
 The first three things that will break the free tier as Eden grows, in order:
 
-1. **Postgres storage** — at ~3 GB of telemetry data, bump the addon to 5 GB ($7/mo).
-2. **Upstash Redis** — at >10k cmds/day, upgrade to Upstash fixed ($1/mo for 100k) OR move Redis onto Northflank as an addon (replace Postgres temporarily, run Redis on the service slot).
+1. **Postgres storage/compute** — as Neon usage grows, upgrade the Neon Scale plan (see `docs/deploy/neon-cutover.md`); this is no longer gated by a Northflank addon slot.
+2. **Upstash Redis** — at >10k cmds/day, upgrade to Upstash fixed ($1/mo for 100k) or a higher tier.
 3. **API instance size** — at >50 concurrent users, bump `eden-api` to `nf-compute-100-2` (1 vCPU / 2 GB, $24/mo). At >200 concurrent, the second service slot is now free for a second API replica.

@@ -6,14 +6,14 @@ SCHEMA >
     cost_usd Float32 `json:$.cost_usd`,
     duration_ms Int32 `json:$.duration_ms`,
     event_type String `json:$.event_type`,
-    input_tokens Int16 `json:$.input_tokens`,
+    input_tokens Int32 `json:$.input_tokens`,
     job_id String `json:$.job_id`,
     model String `json:$.model`,
-    output_tokens Int16 `json:$.output_tokens`,
+    output_tokens Int32 `json:$.output_tokens`,
     pipeline_stage String `json:$.pipeline_stage`,
     tenant_id String `json:$.tenant_id`,
     timestamp DateTime `json:$.timestamp`,
-    total_tokens Int16 `json:$.total_tokens`
+    total_tokens Int32 `json:$.total_tokens`
 
 ENGINE "MergeTree"
 ENGINE_PARTITION_KEY "toYYYYMM(timestamp)"

@@ -45,6 +45,9 @@ crewai = ["crewai>=0.50"]
 autogen = ["pyautogen>=0.2"]
 bedrock = ["boto3>=1.34"]
 gemini = ["google-generativeai>=0.7"]
+groq = ["groq>=0.9"]
+cohere = ["cohere>=5.0"]
+mistral = ["mistralai>=2.0"]
 mastra = []
 pydantic_ai = ["pydantic-ai>=0.1"]
 otel = [
@@ -62,6 +65,9 @@ all = [
     "pydantic-ai>=0.1",
     "boto3>=1.34",
     "google-generativeai>=0.7",
+    "groq>=0.9",
+    "cohere>=5.0",
+    "mistralai>=2.0",
 ]
 dev = [
     "pytest>=8.0",

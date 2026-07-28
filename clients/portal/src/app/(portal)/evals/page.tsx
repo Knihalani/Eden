@@ -45,12 +45,14 @@ import {
 } from "@/lab/evals/evals-chrome";
 import dynamic from "next/dynamic";
 import type { CompareLayout } from "@/lab/evals/evals-compare-view";
-import { catalogAgents } from "@/lib/portal-catalog";
+import { catalogAgents, patchPortalCatalog } from "@/lib/portal-catalog";
 import { useOrg } from "@/hooks/use-org";
 import { useOrgQuery } from "@/hooks/use-api-query";
 import { queryKeys } from "@/lib/query-keys";
 import { portalApi } from "@/lib/api/portal";
+import { SHELL_QUERY } from "@/lib/portal-query";
 import { QueryErrorPanel, QueryLoadingPanel } from "@/components/shell/query-error-panel";
+import { NoWorkspaceGuard } from "@/components/shell/workspace-guard";
 
 const viewFallback = (
   <div className="flex min-h-[12rem] flex-1 items-center justify-center px-5">
@@ -125,20 +127,33 @@ function LabEvalsInner() {
 
   const { currentOrg } = useOrg();
   const orgId = currentOrg?.id ?? null;
+  const agentsQuery = useOrgQuery(
+    queryKeys.portal.agents(orgId),
+    orgId,
+    () => portalApi.agents(orgId!),
+    SHELL_QUERY,
+  );
+  useEffect(() => {
+    if (agentsQuery.data === undefined) return;
+    patchPortalCatalog({ agents: agentsQuery.data });
+  }, [agentsQuery.data]);
   const datasetsQuery = useOrgQuery(
     queryKeys.portal.evalDatasets(orgId),
     orgId,
     () => portalApi.evalDatasets(orgId!),
+    SHELL_QUERY,
   );
   const playgroundsQuery = useOrgQuery(
     queryKeys.portal.evalPlaygrounds(orgId),
     orgId,
     () => portalApi.evalPlaygrounds(orgId!),
+    SHELL_QUERY,
   );
   const experimentsQuery = useOrgQuery(
     queryKeys.portal.evalExperiments(orgId),
     orgId,
     () => portalApi.evalExperiments(orgId!),
+    SHELL_QUERY,
   );
   const liveDatasets = datasetsQuery.data ?? [];
   const livePlaygrounds = playgroundsQuery.data ?? [];
@@ -173,6 +188,15 @@ function LabEvalsInner() {
   const [focusCaseId, setFocusCaseId] = useState<string | null>(paramCase);
   const [dockCaseId, setDockCaseId] = useState<string | null>(null);
   const [fromHint, setFromHint] = useState<string | null>(null);
+  // No backend endpoints yet for dataset/case CRUD, experiment runs, or
+  // playground create/rename/link/promote — every mutation below
+  // (createDataset, renameDataset, deleteDataset, addCase, updateCase,
+  // deleteCase, createPlayground, renamePlayground, linkPlaygroundDataset,
+  // runExperiment, promotePlayground) only ever touches this local React
+  // state. None of it is sent to the API, so it is silently lost on
+  // refresh/navigation. `hasUnsavedEvalsWork` below drives a visible
+  // banner warning the user about this; do not remove that banner
+  // without wiring real persistence for these actions first.
   const [extraDatasets, setExtraDatasets] = useState<DatasetFixture[]>([]);
   const [hiddenDatasetIds, setHiddenDatasetIds] = useState<string[]>([]);
   const [extraCases, setExtraCases] = useState<DatasetCaseFixture[]>([]);
@@ -882,6 +906,15 @@ function LabEvalsInner() {
     playgroundsQuery.isError ||
     experimentsQuery.isError;
 
+  if (!orgId) {
+    return (
+      <NoWorkspaceGuard
+        title="Evals"
+        message="Select a workspace to view evals."
+      />
+    );
+  }
+
   if (isLoading) {
     return (
       <div className="ds-page">
@@ -924,6 +957,16 @@ function LabEvalsInner() {
     </span>
   );
 
+  // See the local-state comment above `extraDatasets` — none of these
+  // surfaces persist to the backend, so surface a standing warning
+  // whenever the session holds any local-only draft work.
+  const hasUnsavedEvalsWork =
+    extraDatasets.length > 0 ||
+    hiddenDatasetIds.length > 0 ||
+    extraCases.length > 0 ||
+    extraExperiments.length > 0 ||
+    extraPlaygrounds.length > 0;
+
   return (
     <div className="ds-page">
       <PageHeader
@@ -959,6 +1002,20 @@ function LabEvalsInner() {
           </div>
         }
       />
+
+      {hasUnsavedEvalsWork ? (
+        <div
+          role="status"
+          className="shrink-0 border-b border-[var(--warning)] bg-[var(--warning-muted)] px-5 py-2.5 sm:px-7"
+        >
+          <p className="type-meta text-[var(--text)]">
+            <strong className="font-medium">Local draft only —</strong>{" "}
+            dataset/case edits, experiment runs, and playground promotions
+            made in this session aren&apos;t saved to the backend yet. They
+            will be lost on refresh or navigation.
+          </p>
+        </div>
+      ) : null}
 
       {mode === "compare" ? (
         <EvalsCompareView

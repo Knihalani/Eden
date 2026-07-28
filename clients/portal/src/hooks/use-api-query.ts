@@ -9,6 +9,24 @@ import {
 } from "@tanstack/react-query";
 
 /**
+ * The subset of React Query's ``QueryFunctionContext`` our wrapped
+ * ``queryFn``s can rely on. Narrower than the real context (which
+ * also carries ``queryKey`` / ``meta``) so a plain zero-arg closure
+ * — ``() => api.getX(id)`` — remains a valid ``ApiQueryFn`` (TS
+ * allows passing a function with fewer parameters than the target
+ * type expects). Callers that want cancellation opt in by adding the
+ * ``{ signal }`` parameter and threading it into the underlying
+ * ``api.*``/``portalApi.*`` call (which accepts ``signal`` via
+ * ``FetchOptions`` once it reaches ``fetchApi``); everyone else keeps
+ * the exact previous behavior.
+ */
+export interface ApiQueryContext {
+  signal: AbortSignal;
+}
+
+export type ApiQueryFn<T> = (context: ApiQueryContext) => Promise<T>;
+
+/**
  * Thin React Query wrapper around the typed ``api`` client.
  *
  * Use this anywhere you'd otherwise write:
@@ -20,17 +38,19 @@ import {
  * The query key is an array — the convention is
  *   [resourceName, ...identifiers, ...filterArgs]
  * so the in-flight cache correctly dedupes GETs with identical
- * parameters. The query function receives no arguments; close over
- * anything you need from the React scope.
+ * parameters. The query function receives React Query's
+ * ``{ signal }`` (unmount / query-key-change / refetch cancellation)
+ * — ignore it (as most call sites do today) or thread it through to
+ * the underlying ``api.*`` call to get real request cancellation.
  */
 export function useApiQuery<T>(
   key: readonly unknown[],
-  queryFn: () => Promise<T>,
+  queryFn: ApiQueryFn<T>,
   options?: Omit<UseQueryOptions<T, Error>, "queryKey" | "queryFn">
 ) {
   return useQuery<T, Error>({
     queryKey: key as unknown[],
-    queryFn,
+    queryFn: ({ signal }) => queryFn({ signal }),
     ...options });
 }
 
@@ -49,11 +69,14 @@ export function useApiQuery<T>(
  * Callers can still pass their own ``enabled`` to layer on additional
  * conditions (e.g. "and a trace is selected") — both gates must be
  * true for the query to run.
+ *
+ * Like ``useApiQuery``, ``queryFn`` receives React Query's
+ * ``{ signal }`` for opt-in cancellation.
  */
 export function useOrgQuery<T>(
   key: readonly unknown[],
   orgId: string | null | undefined,
-  queryFn: () => Promise<T>,
+  queryFn: ApiQueryFn<T>,
   options?: Omit<UseQueryOptions<T, Error>, "queryKey" | "queryFn" | "enabled"> & {
     enabled?: boolean;
   }
@@ -61,7 +84,7 @@ export function useOrgQuery<T>(
   const { enabled, ...rest } = options ?? {};
   return useQuery<T, Error>({
     queryKey: key as unknown[],
-    queryFn,
+    queryFn: ({ signal }) => queryFn({ signal }),
     enabled: Boolean(orgId) && (enabled ?? true),
     ...rest,
   });

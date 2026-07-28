@@ -124,7 +124,17 @@ class EQLParser:
 
         t0 = time.monotonic()
         # 1. Expand the relational fields.
-        clickhouse_sql, expansion_warnings = _expand_query(query, org_id)
+        try:
+            clickhouse_sql, expansion_warnings = _expand_query(query, org_id)
+        except ValueError as exc:
+            # _inject_org_id rejects a query whose WHERE body has an
+            # unbalanced (odd) quote count outside comments -- a real
+            # SQL engine's own quote-toggle parsing over the injected
+            # org_id literal could otherwise re-interpret the appended
+            # filter unpredictably. Same convention as every other
+            # malformed-input case in this method: a clear
+            # not_implemented envelope, not an uncaught 500.
+            return _not_implemented_envelope("EQLParser", str(exc))
 
         # 2. Run the linter on the ORIGINAL query. The linter
         #    is meant to surface the customer's mistakes

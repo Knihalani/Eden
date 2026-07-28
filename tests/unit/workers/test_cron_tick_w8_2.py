@@ -352,3 +352,21 @@ def test_main_once_returns_zero_on_success(monkeypatch):
     monkeypatch.setattr(cron_tick, "_tick", _ok)
     monkeypatch.setattr(sys, "argv", ["cron_tick", "--once", "--dry-run"])
     assert cron_tick.main() == 0
+
+
+def test_orphaned_watchdog_and_sweep_helpers_removed():
+    """EQL watchdog / improvement sweeps / artifact demotion are hosted on
+    ``eden-worker`` now (see module docstring) and were never called from
+    ``_tick`` / ``run_maintenance_due``. They were dead code and were
+    removed; this guards against them silently creeping back in without
+    also being wired up and tested.
+    """
+    for name in (
+        "_run_eql_alert_watchdog",
+        "_run_improvement_sweeps",
+        "_run_artifact_demotion",
+    ):
+        assert not hasattr(cron_tick, name), (
+            f"{name} reappeared in cron_tick but is not called by _tick() "
+            "or run_maintenance_due() — wire it up or keep it deleted."
+        )

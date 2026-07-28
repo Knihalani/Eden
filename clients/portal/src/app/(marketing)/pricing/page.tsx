@@ -103,7 +103,7 @@ export default async function PricingPage() {
         title="Start free. Paid plans coming soon."
         lead={`${FREE_TIER_TAGLINE} Team and Enterprise are listed for roadmap — not available to purchase yet.`}
       >
-        <div className="grid gap-px overflow-hidden border border-[var(--line)] bg-[var(--line)] lg:grid-cols-3">
+        <div className="grid grid-cols-1 gap-px overflow-hidden border border-[var(--line)] bg-[var(--line)] lg:grid-cols-3">
           {TIERS.map((tier) => (
             <div
               key={tier.id}

@@ -13,7 +13,7 @@
  */
 
 import { getDefaultClient } from "../client.js";
-import { errorClass, errorMessage, randomId } from "../ids.js";
+import { errorClass, errorMessage, randomId, traceIdOrRandom } from "../ids.js";
 import { extractUsage, normalizeModelName } from "../tokens.js";
 import { SOURCE_FORMATS, type StreamChunk, type TraceOptions } from "../types.js";
 
@@ -109,7 +109,12 @@ function _instrumentedCreate(
   }
 
   const start = Date.now();
-  const traceId = randomId();
+  // ``traceId`` joins an active outer ``trace()``/``traceAgent()``
+  // span when one is running (falling back to a fresh random id
+  // otherwise); ``eventId`` is a separate fresh random id so it
+  // never collides with another call sharing the same trace.
+  const traceId = traceIdOrRandom();
+  const eventId = randomId();
   let status: "success" | "error" = "success";
   let errorType: string | undefined;
   // Captured from the upstream result so we can normalize usage
@@ -145,6 +150,7 @@ function _instrumentedCreate(
     } finally {
       const durationMs = Date.now() - start;
       _emitAnthropicCompletion({
+        eventId,
         traceId,
         model: modelFromArgs,
         durationMs,
@@ -159,6 +165,7 @@ function _instrumentedCreate(
 }
 
 function _emitAnthropicCompletion(args: {
+  eventId: string;
   traceId: string;
   model: string | undefined;
   durationMs: number;
@@ -182,7 +189,7 @@ function _emitAnthropicCompletion(args: {
     if (u.cacheCreationTokens !== null) usageFields.cache_creation_input_tokens = u.cacheCreationTokens;
   }
   client.emit({
-    eventId: args.traceId,
+    eventId: args.eventId,
     tenantId: config.orgId ?? "default",
     projectId: config.projectId,
     traceId: args.traceId,
@@ -228,7 +235,9 @@ async function* _wrapAnthropicStream(
   opts: TraceOptions,
 ): AsyncIterable<any> {
   const start = Date.now();
-  const traceId = randomId();
+  // See the non-streaming path above: ``traceId`` joins an active
+  // outer trace when one is running.
+  const traceId = traceIdOrRandom();
   let tFirst: number | null = null;
   let tPrev: number | null = null;
   let tLast = start;
@@ -255,7 +264,10 @@ async function* _wrapAnthropicStream(
   // meant Anthropic streams had no per-chunk TPOT / ITL
   // metrics on the wire — parity bug with the Python SDK.
   const chunkBuffer: StreamChunk[] = [];
-  const eventId = `stream_anthropic_${traceId}`;
+  // Fresh random id, independent of ``traceId`` -- once ``traceId``
+  // can be shared across multiple concurrent streams in the same
+  // outer trace, deriving ``eventId`` from it would collide.
+  const eventId = `stream_anthropic_${randomId()}`;
   // Snapshot once per stream — avoid getDefaultClient()+getConfig()
   // on every chunk tick (hot path for token-level streaming).
   const captureChunkText = getDefaultClient().getConfig().captureChunkText;
@@ -359,7 +371,7 @@ async function* _wrapAnthropicStream(
     const client = getDefaultClient();
     const config = client.getConfig();
     client.emit({
-      eventId: traceId,
+      eventId,
       tenantId: config.orgId ?? "default",
       projectId: config.projectId,
       traceId,

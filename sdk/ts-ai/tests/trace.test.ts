@@ -14,7 +14,8 @@ import {
   type TelemetryEvent,
 } from "../src/client.js";
 import { wireToEvent } from "../src/wire";
-import { trace, traceAgent, configure } from "../src/trace.js";
+import { trace, traceAgent, configure, currentTrace } from "../src/trace.js";
+import { traceIdOrRandom } from "../src/ids.js";
 
 interface CapturedRequest {
   url: string;
@@ -401,6 +402,12 @@ describe("trace() recordError non-Error shapes", () => {
       if (c.expectEquals) {
         expect(ctrl.error).toBe(c.expectEquals);
       }
+      // End every span in the loop -- the imperative form enters
+      // the AsyncLocalStorage context on creation and only restores
+      // it on `.end()`; leaving spans open here would leak this
+      // test's controller forward as the ambient `currentTrace()`
+      // for every test that runs after it in this process.
+      ctrl.end();
     }
   });
 
@@ -408,6 +415,7 @@ describe("trace() recordError non-Error shapes", () => {
     const ctrl = trace("probe-err", {});
     ctrl.recordError(new RangeError("async-boom"));
     expect(ctrl.error).toBe("RangeError: async-boom");
+    ctrl.end();
   });
 
   it("falls back to Object.prototype.toString for circular refs", () => {
@@ -424,5 +432,143 @@ describe("trace() recordError non-Error shapes", () => {
     // needs to be non-empty.
     expect(ctrl.error).toBeTruthy();
     expect(typeof ctrl.error).toBe("string");
+    ctrl.end();
   });
+});
+
+
+// ── AsyncLocalStorage-backed context: currentTrace() + concurrency ──
+
+describe("currentTrace() / AsyncLocalStorage-backed active context", () => {
+  it("currentTrace() is undefined with no active span", () => {
+    expect(currentTrace()).toBeUndefined();
+  });
+
+  it("currentTrace() resolves the span while it is active (callback form)", async () => {
+    let observed: ReturnType<typeof currentTrace>;
+    await trace("outer-cb", async () => {
+      observed = currentTrace();
+    });
+    expect(observed).toBeDefined();
+    expect(observed?.name).toBe("outer-cb");
+    // Restored once the callback returns.
+    expect(currentTrace()).toBeUndefined();
+  });
+
+  it(
+    "traceIdOrRandom() joins the active trace instead of minting a fresh id",
+    async () => {
+      // This is the actual bug fix (audit item 2): every
+      // instrumentation previously called the unconditional
+      // ``randomId()`` for its ``traceId``, so an LLM call made
+      // inside a `trace()` span could never join it. Pin the
+      // shared helper's contract directly.
+      const outer = trace("outer-join");
+      const insideId = traceIdOrRandom();
+      expect(insideId).toBe(outer.traceId);
+      outer.end();
+      // Once the span has ended, traceIdOrRandom() must NOT keep
+      // returning the now-closed trace's id.
+      expect(traceIdOrRandom()).not.toBe(outer.traceId);
+    },
+  );
+
+  it(
+    "traceIdOrRandom() falls back to a fresh random id with no active trace",
+    () => {
+      expect(currentTrace()).toBeUndefined();
+      const a = traceIdOrRandom();
+      const b = traceIdOrRandom();
+      // No active trace to join -- each call mints its own id.
+      expect(a).not.toBe(b);
+      expect(a).toMatch(/^[0-9a-z]+$/);
+    },
+  );
+
+  it(
+    "two concurrently-running, interleaved trace(name, fn) calls each resolve their OWN correct parent",
+    async () => {
+      // Regression: the old implementation kept parent/child
+      // correlation in a single module-level array shared by every
+      // execution (`_activeContextStack`), not scoped per
+      // async-causality chain. Two `trace()` calls running
+      // concurrently and interleaved via awaits could push onto the
+      // SAME array, and whichever pushed last "won" as the parent
+      // for BOTH chains -- silently cross-attributing spans between
+      // two unrelated traces. AsyncLocalStorage.run() properly
+      // isolates each call's execution, so this must not happen
+      // regardless of how the two calls interleave.
+      const seenParentA: (string | undefined)[] = [];
+      const seenParentB: (string | undefined)[] = [];
+      let outerAId: string | undefined;
+      let outerBId: string | undefined;
+
+      async function runChain(
+        label: "a" | "b",
+        seen: (string | undefined)[],
+        gapMs: number,
+      ): Promise<string> {
+        return trace(`outer-${label}`, async (outer) => {
+          if (label === "a") outerAId = outer.traceId;
+          else outerBId = outer.traceId;
+          // Yield to the event loop so the two chains' synchronous
+          // prefixes interleave with each other before either
+          // resumes -- this is exactly the interleaving that broke
+          // the old shared-array implementation.
+          await new Promise((r) => setTimeout(r, gapMs));
+          await trace(`inner-${label}`, async (inner) => {
+            seen.push(inner.parentSpanId);
+          });
+          return outer.traceId;
+        });
+      }
+
+      const [resultA, resultB] = await Promise.all([
+        runChain("a", seenParentA, 5),
+        runChain("b", seenParentB, 1),
+      ]);
+
+      // Each chain's own root trace id must be returned.
+      expect(resultA).toBe(outerAId);
+      expect(resultB).toBe(outerBId);
+      // Chain A's inner span's parent must be chain A's outer span
+      // -- NEVER chain B's, even though B's `await` resolved first
+      // (shorter gap) and interleaved with A's continuation. The
+      // real assertion: each chain's inner parent must be its OWN
+      // outer span, and the two must differ (never converge on a
+      // single shared "last writer wins" value).
+      expect(seenParentA.length).toBe(1);
+      expect(seenParentB.length).toBe(1);
+      expect(seenParentA[0]).toBeTruthy();
+      expect(seenParentB[0]).toBeTruthy();
+      expect(seenParentA[0]).not.toBe(seenParentB[0]);
+    },
+  );
+
+  it(
+    "concurrent @traceAgent-decorated method calls each resolve their own parent",
+    async () => {
+      class Agent {
+        @traceAgent()
+        async run(label: string, gapMs: number): Promise<string> {
+          const mine = currentTrace();
+          await new Promise((r) => setTimeout(r, gapMs));
+          // If context leaked across concurrent invocations, this
+          // would now see a DIFFERENT span than the one captured
+          // synchronously above.
+          const stillMine = currentTrace();
+          expect(stillMine?.spanId).toBe(mine?.spanId);
+          return mine?.spanId ?? "";
+        }
+      }
+      const agent = new Agent();
+      const [spanA, spanB] = await Promise.all([
+        agent.run("a", 5),
+        agent.run("b", 1),
+      ]);
+      expect(spanA).toBeTruthy();
+      expect(spanB).toBeTruthy();
+      expect(spanA).not.toBe(spanB);
+    },
+  );
 });

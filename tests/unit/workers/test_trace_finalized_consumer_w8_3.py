@@ -162,6 +162,85 @@ async def test_non_transient_error_dead_letters_without_retry() -> None:
 
 
 @pytest.mark.asyncio
+async def test_dlq_write_failure_leaves_message_unacked() -> None:
+    """If the DLQ xadd itself fails, the original message must NOT be acked
+    (it must stay in the PEL for a later XAUTOCLAIM retry) instead of being
+    silently dropped with zero record anywhere."""
+    import eden.workers.trace_finalized_consumer as mod
+
+    consumer = mod.TraceFinalizedConsumer()
+    consumer._scanner = MagicMock()
+    consumer._scanner.scan = AsyncMock(return_value=[])
+    redis = MagicMock()
+    redis.xack = AsyncMock()
+    redis.xadd = AsyncMock(side_effect=ConnectionError("redis blip"))
+
+    await consumer._handle(redis, "1-0", {b"org_id": b"", b"trace_id": b""})
+
+    redis.xadd.assert_awaited_once()
+    redis.xack.assert_not_awaited()
+    stats = mod.get_consumer_stats()
+    assert stats["dlq_total"] == 0
+    assert stats["dlq_write_failed_total"] == 1
+    assert stats["dlq_write_dropped_total"] == 0
+    assert consumer._dlq_write_failures["1-0"] == 1
+
+
+@pytest.mark.asyncio
+async def test_dlq_write_success_acks_message() -> None:
+    """Sanity check: a successful DLQ write still acks the original message."""
+    import eden.workers.trace_finalized_consumer as mod
+
+    consumer = mod.TraceFinalizedConsumer()
+    consumer._scanner = MagicMock()
+    consumer._scanner.scan = AsyncMock(return_value=[])
+    redis = MagicMock()
+    redis.xack = AsyncMock()
+    redis.xadd = AsyncMock()
+
+    await consumer._handle(redis, "1-0", {b"org_id": b"", b"trace_id": b""})
+
+    redis.xadd.assert_awaited_once()
+    redis.xack.assert_awaited_once()
+    stats = mod.get_consumer_stats()
+    assert stats["dlq_total"] == 1
+    assert stats["dlq_write_failed_total"] == 0
+    assert "1-0" not in consumer._dlq_write_failures
+
+
+@pytest.mark.asyncio
+async def test_dlq_write_failure_eventually_drops_after_max_attempts() -> None:
+    """A sustained DLQ-write outage must not loop forever: after
+    ``_MAX_DLQ_WRITE_ATTEMPTS`` consecutive failed DLQ writes for the same
+    message id, the consumer gives up and ACKs anyway (logged as dropped)
+    instead of retrying that message indefinitely."""
+    import eden.workers.trace_finalized_consumer as mod
+
+    consumer = mod.TraceFinalizedConsumer()
+    consumer._scanner = MagicMock()
+    consumer._scanner.scan = AsyncMock(return_value=[])
+    redis = MagicMock()
+    redis.xack = AsyncMock()
+    redis.xadd = AsyncMock(side_effect=ConnectionError("redis blip"))
+
+    with patch.object(mod, "_MAX_DLQ_WRITE_ATTEMPTS", 2):
+        # First attempt: unacked, left for reclaim.
+        await consumer._handle(redis, "1-0", {b"org_id": b"", b"trace_id": b""})
+        redis.xack.assert_not_awaited()
+        assert consumer._dlq_write_failures["1-0"] == 1
+
+        # Second attempt (simulating XAUTOCLAIM redelivery): still failing,
+        # attempts now hits the cap -> gives up and ACKs.
+        await consumer._handle(redis, "1-0", {b"org_id": b"", b"trace_id": b""})
+
+    redis.xack.assert_awaited_once()
+    stats = mod.get_consumer_stats()
+    assert stats["dlq_write_failed_total"] == 2
+    assert stats["dlq_write_dropped_total"] == 1
+    assert "1-0" not in consumer._dlq_write_failures
+
+
+@pytest.mark.asyncio
 async def test_decode_list_of_pairs() -> None:
     import eden.workers.trace_finalized_consumer as mod
 

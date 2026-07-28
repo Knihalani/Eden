@@ -28,6 +28,9 @@ def _make_client() -> AsyncMock:
     client.exists = AsyncMock(return_value=1)
     client.incrby = AsyncMock(return_value=1)
     client.expire = AsyncMock(return_value=True)
+    # -1 == "no TTL set" (redis-py PTTL semantics). Individual tests
+    # override this to simulate a key with a short remaining TTL.
+    client.pttl = AsyncMock(return_value=-1)
     return client
 
 
@@ -152,6 +155,87 @@ class TestStats:
         assert s["redis_hits"] == 1
         assert s["redis_misses"] == 1
         assert s["l0_hit_rate"] == 0.5
+
+
+# ── L0 re-population honors the key's actual TTL (regression) ─────────
+#
+# Prior bug: Cache.get() always repopulated L0 using self.default_ttl
+# (e.g. 300s) regardless of the key's real remaining TTL in Redis. A
+# value set with a short custom TTL (ttl=5) that a different request's
+# L0-miss re-read near its natural Redis expiry would then be served
+# STALE from L0 for up to default_ttl afterwards — a staleness window
+# effectively unbounded relative to the intended short TTL.
+
+
+class TestL0TtlFidelity:
+    @pytest.mark.asyncio
+    async def test_l0_repopulate_uses_actual_redis_ttl_not_default(self, mock_redis):
+        """A key close to its short custom TTL boundary must not be
+        cached in L0 for anywhere near the (much larger) default_ttl.
+        """
+        c = Cache(prefix="t", default_ttl=300)
+        # Simulate: value was `set(..., ttl=5)` and this GET lands
+        # near the boundary — only 400ms actually remain in Redis.
+        mock_redis.return_value.get.return_value = json_dumps({"k": "v"})
+        mock_redis.return_value.pttl.return_value = 400  # ms remaining
+
+        before = time.monotonic()
+        v = await c.get("a")
+        assert v == {"k": "v"}
+
+        _, expiry = c._l0[c._key("a")]
+        remaining = expiry - before
+
+        # Must be bounded by the real remaining TTL (rounded up to 1s)
+        # plus a small margin — NOT anywhere near default_ttl (300s).
+        assert remaining <= 2.0
+        assert remaining < c.default_ttl / 10
+
+    @pytest.mark.asyncio
+    async def test_l0_entry_does_not_outlive_original_ttl_after_expiry(self, mock_redis):
+        """Simulate an L0 miss + Redis re-read right at the custom TTL
+        boundary, then fast-forward past it: the L0 entry must have
+        expired on its own instead of surviving on default_ttl.
+        """
+        c = Cache(prefix="t", default_ttl=300)
+        mock_redis.return_value.get.return_value = json_dumps({"k": "v"})
+        # Key set with ttl=5; re-read happens with ~1s left.
+        mock_redis.return_value.pttl.return_value = 1_000  # 1s remaining
+
+        await c.get("a")
+
+        # Fast-forward 3s (past the original short TTL, nowhere near
+        # default_ttl) by rewriting the monotonic expiry directly, then
+        # confirm the entry is treated as expired.
+        value, expiry = c._l0[c._key("a")]
+        c._l0[c._key("a")] = (value, expiry - 3.0 - 1.0)
+        assert c._l0_get(c._key("a")) is None
+
+    @pytest.mark.asyncio
+    async def test_l0_falls_back_to_default_ttl_for_persistent_key(self, mock_redis):
+        """A key with no TTL (PTTL == -1) keeps the old default_ttl
+        fallback behavior."""
+        c = Cache(prefix="t", default_ttl=60)
+        mock_redis.return_value.get.return_value = json_dumps({"k": "v"})
+        mock_redis.return_value.pttl.return_value = -1
+
+        before = time.monotonic()
+        await c.get("a")
+        _, expiry = c._l0[c._key("a")]
+        assert abs((expiry - before) - 60) < 1.0
+
+    @pytest.mark.asyncio
+    async def test_l0_skips_repopulate_on_pttl_race_miss(self, mock_redis):
+        """If PTTL reports -2 (key expired/deleted between GET and
+        PTTL), the value is still returned to the caller but must NOT
+        be repopulated into L0 as if it were still live."""
+        c = Cache(prefix="t", default_ttl=60)
+        mock_redis.return_value.get.return_value = json_dumps({"k": "v"})
+        mock_redis.return_value.pttl.return_value = -2
+
+        v = await c.get("a")
+        assert v == {"k": "v"}
+        assert c._l0_get(c._key("a")) is None
 
 
 def json_dumps(obj):

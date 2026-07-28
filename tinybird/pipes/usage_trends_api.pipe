@@ -13,7 +13,7 @@ SQL >
     FROM usage_trends
     WHERE
         1
-        {% if defined(tenant_id) %} AND tenant_id = toUUIDOrZero({{ String(tenant_id) }}) {% end %}
+        {% if defined(tenant_id) %} AND tenant_id = {{ String(tenant_id) }} {% end %}
         {% if defined(start_time) %} AND hour >= parseDateTimeBestEffort({{ String(start_time) }}) {% end %}
         {% if defined(end_time) %} AND hour <= parseDateTimeBestEffort({{ String(end_time) }}) {% end %}
     GROUP BY time_bucket, event_type, resource

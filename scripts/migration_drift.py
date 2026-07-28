@@ -28,6 +28,7 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -36,8 +37,14 @@ MIGRATIONS_DIR = REPO_ROOT / "migrations"
 ALEMBIC_VERSIONS_DIR = REPO_ROOT / "src" / "eden" / "db_migrations" / "versions"
 ALEMBIC_INI = REPO_ROOT / "alembic.ini"
 
+# The commit that added docs/ops/migration-matrix.md and adopted the
+# "no new files in migrations/" policy (see that doc's "SQL / alembic
+# split (legacy)" section). Any migrations/*.sql file first added to
+# git on or after this date is a policy violation worth flagging.
+MIGRATIONS_FREEZE_DATE = "2026-06-24"
+
 RAW_SQL_PATTERN = re.compile(r"^(\d{3})_[a-z0-9_]+\.sql$")
-ALEMBIC_REVISION_PATTERN = re.compile.compile = re.compile(
+ALEMBIC_REVISION_PATTERN = re.compile(
     r"^revision\s*[:=]\s*['\"]([0-9a-f]+)['\"]", re.MULTILINE
 )
 ALEMBIC_DOWN_REVISION_PATTERN = re.compile(
@@ -75,6 +82,44 @@ def collect_alembic() -> dict[str, str]:
     return revs
 
 
+def find_post_freeze_sql_files() -> list[str]:
+    """Return raw SQL filenames under ``migrations/`` whose git
+    "first added" date is on/after ``MIGRATIONS_FREEZE_DATE``.
+
+    Best-effort: this shells out to ``git log``, so it silently
+    returns ``[]`` if git isn't available or this isn't a git
+    checkout (e.g. a source tarball) rather than raising — the
+    count-based drift check above still works either way.
+    """
+    if not MIGRATIONS_DIR.is_dir():
+        return []
+    violations: list[str] = []
+    for path in sorted(MIGRATIONS_DIR.glob("*.sql")):
+        try:
+            out = subprocess.run(
+                [
+                    "git", "log", "--diff-filter=A", "--format=%ad",
+                    "--date=short", "--follow", "--",
+                    str(path.relative_to(REPO_ROOT)),
+                ],
+                cwd=REPO_ROOT,
+                capture_output=True,
+                text=True,
+                timeout=5,
+                check=False,
+            )
+        except (OSError, subprocess.SubprocessError):
+            return []
+        if out.returncode != 0 or not out.stdout.strip():
+            continue
+        # `git log` prints newest-first; the *earliest* add date is
+        # the last line (oldest commit that introduced the file).
+        added_date = out.stdout.strip().splitlines()[-1].strip()
+        if added_date >= MIGRATIONS_FREEZE_DATE:
+            violations.append(path.name)
+    return violations
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--json", action="store_true", help="emit JSON instead of text")
@@ -87,6 +132,7 @@ def main() -> int:
 
     raw_sql = collect_raw_sql()
     alembic_revs = collect_alembic()
+    post_freeze_files = find_post_freeze_sql_files()
 
     # We can't directly map alembic hex revisions to numeric SQL
     # prefixes — the audit flagged this as "49 alembic vs 39 raw SQL"
@@ -101,6 +147,8 @@ def main() -> int:
         "raw_sql_prefixes_all": sorted(raw_sql),
         "alembic_revisions_all": sorted(alembic_revs.keys()),
         "drift_count": abs(len(raw_sql) - len(alembic_revs)),
+        "post_freeze_sql_files": post_freeze_files,
+        "migrations_freeze_date": MIGRATIONS_FREEZE_DATE,
         "alembic_ini": str(ALEMBIC_INI),
         "migrations_dir": str(MIGRATIONS_DIR),
         "alembic_versions_dir": str(ALEMBIC_VERSIONS_DIR),
@@ -120,9 +168,28 @@ def main() -> int:
         print("zero-padded numeric prefixes — they cannot be directly diffed.")
         print("To find drift, pick a raw SQL file (e.g. 027_*.sql) and confirm")
         print("a corresponding alembic revision exists with the same scope.")
+        print()
+        if post_freeze_files:
+            print(
+                f"POLICY VIOLATION: {len(post_freeze_files)} file(s) added to "
+                f"migrations/ on/after the {MIGRATIONS_FREEZE_DATE} freeze "
+                f"(see docs/ops/migration-matrix.md):"
+            )
+            for name in post_freeze_files:
+                print(f"  - {name}")
+        else:
+            print(
+                f"No migrations/*.sql files added on/after the "
+                f"{MIGRATIONS_FREEZE_DATE} freeze date."
+            )
 
-    if args.strict and report["drift_count"] > 0:
-        print(f"\n[strict] drift detected ({report['drift_count']} count diff) — exiting 1", file=sys.stderr)
+    if args.strict and (report["drift_count"] > 0 or post_freeze_files):
+        reasons = []
+        if report["drift_count"] > 0:
+            reasons.append(f"{report['drift_count']} count diff")
+        if post_freeze_files:
+            reasons.append(f"{len(post_freeze_files)} post-freeze file(s)")
+        print(f"\n[strict] drift detected ({'; '.join(reasons)}) — exiting 1", file=sys.stderr)
         return 1
 
     return 0

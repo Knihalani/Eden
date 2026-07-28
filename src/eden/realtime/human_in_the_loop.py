@@ -119,6 +119,9 @@ class HILTController:
         # Async events for step/resume signaling
         self._resume_events: dict[str, asyncio.Event] = {}
         self._step_events: dict[str, asyncio.Event] = {}
+        # decision_ids written via approve/reject per job, so cleanup() can
+        # delete the actual per-decision Redis keys (see _cmd_approve).
+        self._decision_ids: dict[str, set[str]] = {}
         self._lock = asyncio.Lock()
 
     async def get_state(self, job_id: str) -> HILTStateRecord:
@@ -304,6 +307,7 @@ class HILTController:
                 }),
                 ex=3600,
             )
+            self._decision_ids.setdefault(job_id, set()).add(decision_id)
 
         state.state = HILTState.RUNNING
         state.waiting_for = None
@@ -337,6 +341,7 @@ class HILTController:
                 }),
                 ex=3600,
             )
+            self._decision_ids.setdefault(job_id, set()).add(decision_id)
 
         state.state = HILTState.RUNNING
         state.waiting_for = None
@@ -476,13 +481,17 @@ class HILTController:
         return messages
 
     async def get_approval(self, job_id: str, decision_id: str = "default") -> dict[str, Any] | None:
-        """Get approval status for a decision (called by pipeline)."""
+        """Get approval status for a decision (called by pipeline).
+
+        Reads the same per-decision string key that _cmd_approve/_cmd_reject
+        write via `redis.set(f"hilt:{job_id}:decision:{decision_id}", ...)`.
+        """
         redis = await self._get_redis()
         if not redis:
             return None
 
-        key = f"hilt:{job_id}:approvals"
-        raw = await redis.hget(key, decision_id)
+        key = f"hilt:{job_id}:decision:{decision_id}"
+        raw = await redis.get(key)
         if raw:
             try:
                 return json.loads(raw)
@@ -496,12 +505,14 @@ class HILTController:
             self._states.pop(job_id, None)
         self._resume_events.pop(job_id, None)
         self._step_events.pop(job_id, None)
+        decision_ids = self._decision_ids.pop(job_id, None) or set()
 
         redis = await self._get_redis()
         if redis:
             await redis.delete(f"hilt:{job_id}:injected_messages")
-            await redis.delete(f"hilt:{job_id}:approvals")
             await redis.delete(f"hilt:{job_id}:rewind")
+            for decision_id in decision_ids:
+                await redis.delete(f"hilt:{job_id}:decision:{decision_id}")
 
 
 # ── Singleton accessor ──────────────────────────────────────────────────

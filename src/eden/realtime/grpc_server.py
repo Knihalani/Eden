@@ -115,11 +115,20 @@ def _build_servicer():
                 # In production, subscribe to a Redis pub/sub channel
                 # backed by the Kafka consumer. For now, sleep and
                 # surface new events from the store periodically.
+                #
+                # NOTE: this is a fixed-interval poll (not the
+                # Redis-wake-or-timeout pattern mobile_sse.py's shared
+                # poller uses). If this module is ever wired into
+                # production, consider adopting that pattern here too
+                # to avoid tight-poll burn against the store — left as
+                # a follow-up since it's a larger refactor than the
+                # cursor-advance bug fixed below.
+                nonlocal last_event_id
                 while True:
                     await asyncio.sleep(1.0)
                     for ev in await store.get_events_after(topic, last_event_id, limit=10):
-                        ev.get("event_id", last_event_id)
                         await queue.put(ev)
+                        last_event_id = ev.get("event_id", last_event_id)
 
             task = asyncio.create_task(publish_loop())
             try:

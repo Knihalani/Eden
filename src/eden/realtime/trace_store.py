@@ -139,11 +139,38 @@ class TraceEventStore:
         if redis:
             stream_key = f"trace:{entity_id}:events"
             try:
-                await redis.xadd(
+                real_stream_id = await redis.xadd(
                     stream_key,
                     fields={"data": json.dumps(event.to_dict())},
                     maxlen=self.STREAM_MAXLEN,
                 )
+                if isinstance(real_stream_id, bytes):
+                    real_stream_id = real_stream_id.decode()
+
+                # Redis Stream IDs are ``<ms>-<seq>``, assigned by Redis
+                # itself. They have no numeric relationship to either our
+                # application-level ``event_id`` (a UUID) or ``sequence``
+                # (a small monotonic int from ``INCR``). Callers resume
+                # using those application-level values (SSE Last-Event-ID,
+                # gRPC resume tokens, ``from_sequence``/``to_sequence``),
+                # so we keep a small side index mapping each of them to
+                # the real stream id XADD returned, and use *that* as the
+                # XRANGE bound at read time instead of the raw
+                # application value. See get_events_after()/get_trace().
+                idx_key = f"trace:{entity_id}:idx"
+                try:
+                    await redis.hset(
+                        idx_key,
+                        mapping={
+                            f"e:{event.event_id}": real_stream_id,
+                            f"s:{event.sequence}": real_stream_id,
+                        },
+                    )
+                    await redis.expire(idx_key, self.HOT_WINDOW_HOURS * 3600)
+                except Exception as exc:
+                    logger.debug(
+                        f"Failed to update trace id index for {entity_id}: {exc}"
+                    )
             except Exception as exc:
                 logger.warning(f"Redis xadd failed for {entity_id}: {exc}")
 
@@ -206,6 +233,33 @@ class TraceEventStore:
         except Exception as exc:
             logger.debug(f"WebSocket publish failed for {entity_id}: {exc}")
 
+    async def _lookup_stream_id(
+        self,
+        redis: Any,
+        entity_id: str,
+        *,
+        event_id: str | None = None,
+        sequence: int | None = None,
+    ) -> str | None:
+        """Resolve an application-level cursor to the real Redis stream ID.
+
+        ``event_id`` (a UUID) and ``sequence`` (a small monotonic int from
+        ``INCR``) are never valid Redis Stream IDs (``<ms>-<seq>``) on
+        their own. ``append()`` records the real stream id XADD assigned
+        for each of them in a small side index (``trace:{entity_id}:idx``)
+        so reads can translate back to a real, comparable stream id.
+        """
+        idx_key = f"trace:{entity_id}:idx"
+        field = f"e:{event_id}" if event_id is not None else f"s:{sequence}"
+        try:
+            value = await redis.hget(idx_key, field)
+        except Exception as exc:
+            logger.debug(f"Trace id index lookup failed for {entity_id}: {exc}")
+            return None
+        if isinstance(value, bytes):
+            value = value.decode()
+        return value
+
     async def get_events_after(
         self,
         entity_id: str,
@@ -227,11 +281,27 @@ class TraceEventStore:
 
         stream_key = f"trace:{entity_id}:events"
         try:
+            # ``after_event_id`` is an application-level UUID (or an
+            # arbitrary client-supplied Last-Event-ID) -- never a real
+            # Redis Stream ID. Translate it via the side index written in
+            # append() before using it as an XRANGE bound.
+            real_stream_id = await self._lookup_stream_id(
+                redis, entity_id, event_id=after_event_id
+            )
+            if real_stream_id is None:
+                # Not (or no longer) in the hot-path index: either this
+                # cursor predates the trace, or it has aged out of the
+                # index's TTL window. PostgreSQL still knows the
+                # event_id -> sequence ordering directly.
+                return await self._get_events_after_from_postgres(
+                    entity_id, after_event_id, limit
+                )
+
             # Redis stream IDs are ``ms-seq`` (e.g. "1717250000123-0").
             # ``(after`` is exclusive lower bound, equivalent to id > after.
             rows = await redis.xrange(
                 stream_key,
-                min=f"({after_event_id}",
+                min=f"({real_stream_id}",
                 count=limit,
             )
         except Exception as exc:
@@ -254,22 +324,66 @@ class TraceEventStore:
         after_event_id: str,
         limit: int,
     ) -> list[dict]:
-        """Cold-path resume: replay from archived trace_events."""
+        """Cold-path resume: replay from archived trace_events.
+
+        ``after_event_id`` is an application-level UUID with no
+        relationship to insertion/sequence order -- comparing it
+        directly (``event_id > $2``, the old behaviour) is a silent
+        correctness bug, since UUIDs don't sort lexicographically in
+        any way related to actual event ordering. ``trace_events`` has
+        a real monotonic ``sequence`` column (assigned by Redis
+        ``INCR``, or a timestamp-based fallback when Redis was down at
+        append time -- see ``append()``), so look up the cursor
+        event's ``sequence`` first and bound the range query by *that*,
+        mirroring what ``get_trace()``'s Postgres fallback already does
+        below.
+        """
         client = await self._get_postgres()
         if not client:
             return []
+
+        try:
+            cursor_row = await client.fetchrow(
+                """
+                SELECT sequence FROM trace_events
+                WHERE entity_id = $1 AND event_id = $2
+                """,
+                entity_id,
+                after_event_id,
+            )
+        except Exception as exc:
+            logger.debug(f"PG fallback cursor lookup failed for {entity_id}: {exc}")
+            return []
+
+        if cursor_row is None:
+            # The cursor event isn't archived either (never persisted,
+            # a garbage/foreign Last-Event-ID, or purged). We have no
+            # monotonic bound to anchor the resume on, so -- unlike the
+            # old code, which would silently compare UUIDs and return
+            # some arbitrary wrong subset -- fail safe: log and return
+            # no events rather than guess.
+            logger.warning(
+                f"PG fallback resume for {entity_id}: cursor event "
+                f"{after_event_id!r} has no archived row, so its sequence "
+                "can't be resolved; returning no events instead of risking "
+                "wrong ordering/subset"
+            )
+            return []
+
+        after_sequence = cursor_row["sequence"]
+
         try:
             rows = await client.fetch(
                 """
                 SELECT event_id, event_type, timestamp, sequence, payload
                 FROM trace_events
                 WHERE entity_id = $1
-                  AND event_id > $2
+                  AND sequence > $2
                 ORDER BY sequence ASC
                 LIMIT $3
                 """,
                 entity_id,
-                after_event_id,
+                after_sequence,
                 limit,
             )
         except Exception as exc:
@@ -312,16 +426,61 @@ class TraceEventStore:
         if redis:
             stream_key = f"trace:{entity_id}:events"
             try:
+                # ``from_sequence``/``to_sequence`` are small monotonic
+                # ints from our own INCR-based sequence counter, not real
+                # Redis Stream IDs. A bare int like "2" is parsed by
+                # Redis as the stream id "2-0" -- an almost-epoch
+                # millisecond timestamp -- so using it directly as a
+                # bound made every from_sequence > 0 behave like "from
+                # the beginning of time" instead of actually skipping
+                # already-seen events. Translate through the side index
+                # written in append() to get the real stream id bound.
+                min_bound = "-"
+                if from_sequence and from_sequence > 0:
+                    start_id = await self._lookup_stream_id(
+                        redis, entity_id, sequence=from_sequence
+                    )
+                    # If unmapped (e.g. aged out of the index TTL window),
+                    # everything left in a maxlen-trimmed stream is
+                    # already newer than from_sequence, so reading from
+                    # the start of what remains is correct.
+                    min_bound = start_id if start_id is not None else "-"
+
+                max_bound = "+"
+                if to_sequence is not None:
+                    end_id = await self._lookup_stream_id(
+                        redis, entity_id, sequence=to_sequence
+                    )
+                    # If unmapped, we can't tell *why*: to_sequence may
+                    # simply not have been written yet (safe to read
+                    # through to the end), or its idx entry may have
+                    # aged out of the TTL window while the event itself
+                    # is still in the stream (unsafe to assume "+" --
+                    # that would silently include events past
+                    # to_sequence). Rather than guess, read through to
+                    # "+" either way and enforce the exact upper bound
+                    # below by filtering on each event's deserialized
+                    # ``sequence``, which is authoritative regardless of
+                    # which case we're actually in.
+                    max_bound = end_id if end_id is not None else "+"
+
                 # Redis xrange returns items in sequence order
                 redis_events = await redis.xrange(
                     stream_key,
-                    min=f"{from_sequence}",
-                    max=f"{to_sequence}" if to_sequence else "+",
+                    min=min_bound,
+                    max=max_bound,
                     count=limit,
                 )
                 for _entry_id, fields in redis_events:
                     data = json.loads(fields.get("data", "{}"))
-                    events.append(TraceEvent.from_dict(data))
+                    parsed_event = TraceEvent.from_dict(data)
+                    if to_sequence is not None and parsed_event.sequence > to_sequence:
+                        # Belt-and-suspenders for the aged-out-idx case
+                        # above: never surface an event past the
+                        # caller's requested upper bound, even if the
+                        # XRANGE bound itself was too permissive.
+                        continue
+                    events.append(parsed_event)
 
                 if len(events) >= limit:
                     return events[:limit]
@@ -417,6 +576,7 @@ class TraceEventStore:
             try:
                 await redis.delete(f"trace:{entity_id}:events")
                 await redis.delete(f"trace:{entity_id}:seq")
+                await redis.delete(f"trace:{entity_id}:idx")
             except Exception as exc:
                 logger.warning(f"Failed to delete Redis trace {entity_id}: {exc}")
 

@@ -3,7 +3,7 @@
 Lightweight, fire-and-forget observability for LLM applications.
 
 - `@trace_agent` decorator and `with eden.trace(...)` context manager
-- One-call auto-instrumentation for **OpenAI, Anthropic, LangChain, LlamaIndex, CrewAI, AutoGen, Mastra** (no-op for TS-only frameworks)
+- One-call auto-instrumentation for **OpenAI, Anthropic, Groq, Cohere, Mistral, LangChain, LlamaIndex, CrewAI, AutoGen, Mastra** (no-op for TS-only frameworks)
 - Async, batched HTTP sender with a **5 ms p99 overhead budget** on the producer hot path
 - Zero required dependencies beyond `httpx` (zero required deps beyond)
 
@@ -89,6 +89,10 @@ eden.uninstrument("openai")           # tear down a patch
 | pydantic_ai   | Agent run hooks                             | Supported |
 | bedrock       | boto3 `bedrock-runtime` API call wrap       | Supported |
 | gemini        | `google.generativeai` generate_content      | Supported |
+| xai (Grok)    | Aliases to the `openai` instrumentor (`eden.instrument("xai")`) — xAI has no distinct Python client, just the `openai` package pointed at `base_url="https://api.x.ai/v1"` | Supported |
+| groq          | Monkey-patch `chat.completions.create` (native — Groq's `groq` SDK mirrors OpenAI's schema, incl. streaming deltas + tool calls) | Supported |
+| cohere        | Monkey-patch `cohere.ClientV2`/`AsyncClientV2` `.chat`/`.chat_stream` (Chat API v2 only — the legacy v1 surface still falls back to generic HTTP-capture) | Supported |
+| mistral       | Monkey-patch `mistralai` `chat.complete`/`.stream` (incl. streaming deltas + tool calls) | Supported |
 | mastra        | **No-op stub** (TypeScript-only framework)  | Unsupported on Python — use `@eden-ai/sdk` |
 | Vercel AI     | N/A (TS)                                    | Use TypeScript SDK |
 

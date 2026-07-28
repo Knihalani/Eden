@@ -38,11 +38,14 @@ export { eventToWire, chunkToWire, wireToEvent, wireToChunk } from "./wire.js";
 export { extractUsage, normalizeModelName, type NormalizedUsage } from "./tokens.js";
 
 // Back-compat re-exports (tree-shakeable with sideEffects:false).
-export { wrapOpenAI } from "./instrumentations/openai.js";
+export { wrapOpenAI, wrapXai } from "./instrumentations/openai.js";
 export { wrapAnthropic } from "./instrumentations/anthropic.js";
 export { wrapVercelAI } from "./instrumentations/vercel-ai.js";
 export { wrapLangChain } from "./instrumentations/langchain.js";
 export { wrapMastra } from "./instrumentations/mastra.js";
+export { wrapGroq } from "./instrumentations/groq.js";
+export { wrapCohere, extractCohereUsage } from "./instrumentations/cohere.js";
+export { wrapMistral } from "./instrumentations/mistral.js";
 export { instrument, type InstrumentOptions, type InstrumentResult } from "./instrument.js";
 export {
   installHttpCapture,
@@ -67,6 +70,7 @@ export {
   wrapBedrock,
   wrapGemini,
 } from "./instrumentations/providers.js";
+export { wrapLlamaIndex } from "./instrumentations/llamaindex.js";
 
 // ModelAdvisor moved to `@eden-ai/sdk/model-advisor` — re-export for BC.
 export {

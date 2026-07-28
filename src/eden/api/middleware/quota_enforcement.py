@@ -174,16 +174,71 @@ class QuotaEnforcementMiddleware:
 
     @staticmethod
     async def _resolve_org_id(request: Request) -> str | None:
-        """Extract org_id from headers, cookies, or Clerk Bearer."""
-        # 1. Header (used by API keys and some cookie flows)
-        org_id = request.headers.get("x-org-id")
-        if org_id:
-            return org_id
+        """Extract org_id from a verified identity: X-Org-Api-Key
+        (hash-verified), Clerk Bearer JWT, or the legacy Eden cookie JWT.
 
-        # 2. API key path (x-org-api-key implies org_id is in the path or header)
-        #    Already tried header above; fall through.
+        CRITICAL fix (2026-07-27 audit finding): this method used to
+        return the raw ``X-Org-Id`` header verbatim as its first
+        branch — an unauthenticated (or forged-Bearer) caller could
+        set it to any org and have quota enforced (or bypassed) for
+        that victim org. This is the exact same "RLS/quota tenant
+        boundary" bug class fixed in ``RLSOrgContextMiddleware``
+        (see ``rls_org_context._has_verified_identity``) and already
+        hardened in ``TenantRateLimitMiddleware`` (comment: "Only
+        trust X-Org-Id after the Bearer verifies") — this method now
+        matches that same precedence so quota, rate-limit, and RLS
+        all agree on how a tenant is proven, not just asserted:
+          1. ``X-Org-Api-Key`` + ``X-Org-Id`` — SHA-256 hash lookup
+             against ``org_api_keys.key_hash`` scoped to that exact
+             org_id (same helper the FastAPI auth dependencies use —
+             ``get_current_org_api_key`` in ``eden.api.deps`` —
+             including its active/revoked/expires checks).
+          2. Clerk Bearer JWT (JWKS-verified) — carries the org id.
+          3. Legacy Eden cookie JWT (signature-verified) — carries
+             ``current_org_id``.
+        The raw header is never returned on its own; each branch
+        below independently verifies the caller before trusting the
+        org_id it supplies (the API-key branch trusts the header only
+        because the hash lookup / org_id binding *is* the header's
+        proof — not because the header is present).
 
-        # 3. Clerk Bearer — portal path; JWT carries ``o.id``.
+        MEDIUM fix (2026-07-27 deep-audit finding #4): every branch's
+        resolved id is passed through ``resolve_eden_org_id`` before
+        being returned. ``RLSOrgContextMiddleware`` translates a Clerk
+        org id (``org_…``) to the Eden ``organizations.id`` UUID
+        before using it as the RLS GUC / cache key; this method
+        previously did not, so a Clerk-authenticated request (Clerk
+        Bearer branch below, which returns the raw Clerk id straight
+        from the JWT) could have quota state cached under a different
+        identifier than the one RLS/rate-limit key their state under
+        for the exact same tenant. This is purely a "which key do we
+        file the cache/enforcement snapshot under" translation — it
+        does not change *whether* a caller is trusted, which is still
+        decided solely by the verification branches below.
+        """
+        # 1. ``X-Org-Api-Key`` + ``X-Org-Id`` — hash-verified against
+        # org_api_keys.key_hash (mirrors
+        # RLSOrgContextMiddleware._has_verified_identity's API-key
+        # branch and TenantRateLimitMiddleware._resolve_org_and_api_key).
+        api_key = request.headers.get("x-org-api-key")
+        org_id_header = request.headers.get("x-org-id")
+        if api_key and org_id_header:
+            try:
+                from eden.api.deps import get_current_org_api_key
+
+                org_row = await get_current_org_api_key(org_id_header, api_key)
+                if org_row:
+                    return await QuotaEnforcementMiddleware._to_eden_org_id(
+                        org_id_header
+                    )
+            except Exception:
+                logger.debug(
+                    "quota_enforcement: X-Org-Api-Key verification "
+                    "failed; falling through to cookie/Clerk Bearer",
+                    exc_info=True,
+                )
+
+        # 2. Clerk Bearer — portal path; JWT carries ``o.id``.
         auth_header = request.headers.get("authorization")
         if auth_header and auth_header.lower().startswith("bearer "):
             try:
@@ -198,21 +253,56 @@ class QuotaEnforcementMiddleware:
                 if clerk_payload:
                     clerk_org = extract_org_id(clerk_payload)
                     if clerk_org:
-                        return clerk_org
+                        return await QuotaEnforcementMiddleware._to_eden_org_id(
+                            clerk_org
+                        )
             except Exception:
                 pass
 
-        # 4. Legacy Eden JWT cookie
+        # 3. Legacy Eden JWT cookie
         token = request.cookies.get("authorization")
         if token:
             payload = decode_access_token(token)
             if payload:
-                return payload.get("current_org_id")
+                return await QuotaEnforcementMiddleware._to_eden_org_id(
+                    payload.get("current_org_id")
+                )
 
         # Note: request.path_params is not populated in ASGI middleware (routing
         # happens later), so header/cookie/API-key resolution is the only path.
 
         return None
+
+    @staticmethod
+    async def _to_eden_org_id(org_id: str | None) -> str | None:
+        """Translate a Clerk org id (or an already-canonical Eden
+        UUID) to the canonical ``organizations.id`` — MEDIUM fix
+        (2026-07-27 deep-audit finding #4): keeps quota enforcement
+        keyed by the same tenant identifier RLS
+        (``rls_org_context._resolve_org_id`` /
+        ``eden.api.deps.resolve_eden_org_id``) uses, so quota, rate
+        limiting, and RLS all agree on the tenant.
+
+        Best-effort / fail-open on the identifier only: returns the
+        raw ``org_id`` unchanged if resolution misses or the lookup
+        fails (``resolve_eden_org_id`` already swallows its own
+        exceptions and returns ``None`` on error) — a transient DB
+        blip here must not turn into a spurious quota/auth failure,
+        it just risks (temporarily) keying this request's quota cache
+        under the pre-translation id, exactly the pre-fix behaviour.
+        """
+        if not org_id:
+            return org_id
+        try:
+            from eden.api.deps import resolve_eden_org_id
+
+            resolved = await resolve_eden_org_id(org_id)
+            return resolved or org_id
+        except Exception as exc:
+            logger.debug(
+                "quota_enforcement: org id resolve skipped: %s", exc
+            )
+            return org_id
 
     @staticmethod
     def _resources_for_path(path: str) -> list[str]:

@@ -77,15 +77,66 @@ export function __resetFetchApiInflightForTests(): void {
   inflight.clear();
 }
 
-function dedupKey(method: string, endpoint: string, body: unknown): string {
+function dedupKey(
+  method: string,
+  endpoint: string,
+  body: unknown,
+  // F41: a JSON-mode and a blob/stream-mode (or raw-response-mode)
+  // request to the identical GET URL+body must NOT collapse into one
+  // shared in-flight promise — they hand back incompatible runtime
+  // shapes (parsed JSON vs Blob vs a live, unread Response) to
+  // whichever caller didn't originate the fetch. Fold both flags into
+  // the key so they get independent dedup slots.
+  stream?: boolean,
+  raw?: boolean,
+): string {
+  const modeSuffix = `${stream ? "|stream" : ""}${raw ? "|raw" : ""}`;
   // P17: skip stringify when body is absent (common GET path).
   if (body == null || body === "") {
-    return `${method} ${endpoint}`;
+    return `${method} ${endpoint}${modeSuffix}`;
   }
   if (typeof body === "string") {
-    return `${method} ${endpoint} ${body}`;
+    return `${method} ${endpoint} ${body}${modeSuffix}`;
   }
-  return `${method} ${endpoint} ${JSON.stringify(body)}`;
+  return `${method} ${endpoint} ${JSON.stringify(body)}${modeSuffix}`;
+}
+
+/**
+ * Combine an internal (timeout) abort signal with a caller-supplied
+ * one so aborting *either* aborts the outgoing fetch. Prefers the
+ * native ``AbortSignal.any`` where available; falls back to a manual
+ * listener pair otherwise (older Safari/Firefox in our browserslist
+ * range predate ``AbortSignal.any``).
+ */
+function combineSignals(
+  internal: AbortSignal,
+  caller: AbortSignal | null | undefined,
+): AbortSignal {
+  if (!caller) return internal;
+  const anyFn = (
+    AbortSignal as unknown as {
+      any?: (signals: AbortSignal[]) => AbortSignal;
+    }
+  ).any;
+  if (typeof anyFn === "function") {
+    return anyFn([internal, caller]);
+  }
+  const combined = new AbortController();
+  if (internal.aborted) {
+    combined.abort((internal as { reason?: unknown }).reason);
+  } else if (caller.aborted) {
+    combined.abort((caller as { reason?: unknown }).reason);
+  } else {
+    const onInternalAbort = () => {
+      combined.abort((internal as { reason?: unknown }).reason);
+    };
+    const onCallerAbort = () => {
+      combined.abort((caller as { reason?: unknown }).reason);
+    };
+    internal.addEventListener("abort", onInternalAbort, { once: true });
+    caller.addEventListener("abort", onCallerAbort, { once: true });
+  }
+  return combined.signal;
 }
 
 interface FetchOptions extends RequestInit {
@@ -94,19 +145,39 @@ interface FetchOptions extends RequestInit {
   stream?: boolean;
   /** Skip the in-flight de-duplication. Used for non-idempotent POSTs. */
   noDedup?: boolean;
+  /**
+   * Return the live, unparsed ``Response`` instead of running the
+   * JSON/blob/text body-consumption path. Still runs the shared
+   * auth-header-attach + timeout + retry pipeline (honoring
+   * ``stream`` to also skip the 30s timeout for long-lived reads).
+   * The caller owns body consumption (``res.body.getReader()``,
+   * ``res.ok`` checks, etc.) — used for hand-rolled SSE readers and
+   * status-code probes that previously bypassed ``fetchApi``
+   * entirely via a raw ``fetch()`` call.
+   */
+  raw?: boolean;
 }
 
 export async function fetchApi<T>(
   endpoint: string,
   options: FetchOptions = {}
 ): Promise<T> {
-  const { credentials = "include", headers, body, stream, noDedup, ...rest } = options;
+  const {
+    credentials = "include",
+    headers,
+    body,
+    stream,
+    noDedup,
+    raw,
+    signal: callerSignal,
+    ...rest
+  } = options;
   const method = (rest.method as string | undefined) ?? "GET";
 
   // In-flight dedup. Only safe for idempotent methods (GET / HEAD /
   // OPTIONS). POSTs and friends always go through.
   if (!noDedup && (method === "GET" || method === "HEAD" || method === "OPTIONS")) {
-    const key = dedupKey(method, endpoint, body);
+    const key = dedupKey(method, endpoint, body, stream, raw);
     const existing = inflight.get(key);
     if (existing) return existing as Promise<T>;
   }
@@ -197,13 +268,21 @@ export async function fetchApi<T>(
       if (!stream) {
         timer = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT_MS);
       }
+      // F41: `signal` must win over anything `...rest` might carry
+      // (it can't anymore — we destructured it out above — but the
+      // combined signal must also still be the LAST key so a future
+      // spread never silently reintroduces the bug). A caller-
+      // supplied signal (e.g. a Cancel button's AbortController) is
+      // combined with the internal timeout controller so aborting
+      // either one actually aborts the outgoing fetch.
+      const signal = combineSignals(controller.signal, callerSignal);
       try {
         return await fetch(`${API_BASE}${endpoint}`, {
           credentials,
           headers: requestHeaders,
           body,
-          signal: controller.signal,
           ...rest,
+          signal,
         });
       } finally {
         if (timer) clearTimeout(timer);
@@ -309,6 +388,13 @@ export async function fetchApi<T>(
       response = await doFetch();
     }
 
+    // Raw-response mode: hand back the live Response before any
+    // body-consumption, once auth/timeout/retry has run. Callers own
+    // status checks + body reads (SSE readers, probe status codes).
+    if (raw) {
+      return response as unknown as T;
+    }
+
     if (!response.ok) {
       const error = await response.json().catch(
         () => ({ detail: `Request failed (${response.status})` }),
@@ -371,7 +457,7 @@ export async function fetchApi<T>(
   })();
 
   if (!noDedup && (method === "GET" || method === "HEAD" || method === "OPTIONS")) {
-    const key = dedupKey(method, endpoint, body);
+    const key = dedupKey(method, endpoint, body, stream, raw);
     inflight.set(key, promise);
     promise.finally(() => {
       // Only delete if we're still the latest in-flight request.

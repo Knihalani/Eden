@@ -52,6 +52,44 @@ def get_bound_request_pg_conn() -> Connection | None:
     return _request_pg_conn.get()
 
 
+def copy_context_without_request_pg_conn() -> contextvars.Context:
+    """Snapshot the current context with the request-pinned pg
+    connection var forced back to its default (``None``).
+
+    CRITICAL (cross-tenant connection reuse): ``asyncio.Task``/
+    ``loop.create_task`` copy the *calling* ``contextvars.Context``
+    at task-creation time. A detached background task created from
+    inside an HTTP request (e.g. a fire-and-forget webhook delivery
+    scheduled from a route handler) therefore inherits whatever
+    connection ``RLSOrgContextMiddleware`` pinned via
+    :func:`bind_request_pg_conn` for that request — even though the
+    task may still be running long after the middleware's
+    ``finally`` block has committed and released that connection
+    back to the pool. ``PostgresClient.acquire`` checks
+    ``_request_pg_conn`` FIRST (see below) and, if bound, hands back
+    that exact connection object without going through the pool's
+    checkout — which means the detached task can silently start
+    running queries on a connection object that the pool has, by
+    then, handed to a *different*, concurrently-tenanted request.
+
+    Callers that spawn a task meant to outlive the request that
+    created it should build the task's coroutine inside (or create
+    the task via) the context returned here so the copied context
+    carries no stale connection binding at all — the task will fall
+    through to a normal pool checkout instead. Other context state
+    (correlation IDs, etc.) is preserved unchanged.
+    """
+    ctx = contextvars.copy_context()
+    # ``Context.run`` executes with ``ctx`` as the ambient context,
+    # so the ``.set(None)`` call below mutates ``ctx`` itself (not a
+    # further copy) — see the contextvars docs: "Any changes to any
+    # context variables that callable makes will be contained in the
+    # context object". Resetting to ``None`` is equivalent to
+    # "unset" here because ``None`` is this var's declared default.
+    ctx.run(_request_pg_conn.set, None)
+    return ctx
+
+
 def _dump_jsonb(value):
     """Compact JSON serialiser used by every JSONB column in this module.
 
@@ -229,6 +267,21 @@ class PostgresClient:
             or 60.0
         )
 
+        # HIGH fix (PgBouncer transaction-mode compat): asyncpg's default
+        # client-side prepared-statement cache is keyed per physical
+        # ``Connection``, but PgBouncer transaction-mode multiplexing can
+        # replay a statement prepared on one backend connection against a
+        # different one — producing intermittent "prepared statement does
+        # not exist" / "prepared statement already exists" errors under
+        # load. This module (see class docstring) explicitly targets
+        # PgBouncer transaction mode, so default the cache off (0) via
+        # ``settings.postgres_statement_cache_size``; only override via
+        # ``POSTGRES_STATEMENT_CACHE_SIZE`` for a deployment known to run
+        # session-mode pooling or no pooler at all.
+        _statement_cache_size = int(
+            getattr(_settings_init, "postgres_statement_cache_size", 0)
+        )
+
         self._pool = await asyncpg.create_pool(
             host=self.config.host,
             port=self.config.port,
@@ -242,7 +295,7 @@ class PostgresClient:
             # connection can't keep a backend slot indefinitely.
             # ``timeout=10`` caps ``pool.acquire()``; asyncpg's
             # default is 30 s, which is longer than our upstream
-            # API gateway tolerance. Idle lifetime defaults to 60s
+            # API gateway tolerance. Idle lifetime defaults to 30s
             # (``POSTGRES_MAX_INACTIVE_CONNECTION_LIFETIME``) so Neon
             # autosuspend (~5 min) can observe a quiet TCP plane.
             timeout=10,
@@ -250,6 +303,7 @@ class PostgresClient:
             init=_init_connection,
             ssl=ssl,
             max_inactive_connection_lifetime=_idle_lifetime,
+            statement_cache_size=_statement_cache_size,
         )
         logger.info(f"PostgreSQL pool initialized: {self.config.host}:{self.config.port}/{self.config.database}")
 

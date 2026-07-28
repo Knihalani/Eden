@@ -36,6 +36,7 @@ _LLM_HOST_SUFFIXES = (
     "api.mistral.ai",
     "api.together.xyz",
     "api.perplexity.ai",
+    "api.x.ai",
     "bedrock-runtime.us-east-1.amazonaws.com",
     "bedrock-runtime.us-west-2.amazonaws.com",
     "bedrock-runtime.amazonaws.com",

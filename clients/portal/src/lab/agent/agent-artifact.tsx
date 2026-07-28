@@ -36,7 +36,8 @@ import {
   Download,
   FileSpreadsheet,
 } from "lucide-react";
-import { downloadCsv, downloadPng, downloadXlsx } from "@/lib/export";
+import { downloadCsv, downloadPng } from "@/lib/export";
+import { downloadXlsx } from "@/lib/export-xlsx";
 import {
   getStorageColorsResolved,
   STORAGE_COLORS_SSR_FALLBACK,

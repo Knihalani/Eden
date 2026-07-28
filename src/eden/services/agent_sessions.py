@@ -26,6 +26,8 @@ class AgentSession:
         default_factory=lambda: datetime.now(UTC).isoformat()
     )
     ended_at: str | None = None
+    #: When set (slim list), true turn count may exceed ``len(trace_ids)``.
+    turn_count: int | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -39,6 +41,11 @@ class AgentSession:
             "trace_ids": list(self.trace_ids),
             "started_at": self.started_at,
             "ended_at": self.ended_at,
+            "turn_count": (
+                self.turn_count
+                if self.turn_count is not None
+                else len(self.trace_ids)
+            ),
         }
 
 
@@ -101,27 +108,82 @@ class AgentSessionService:
         *,
         agent_id: str | None = None,
         limit: int = 50,
+        preview_trace_limit: int | None = None,
     ) -> list[AgentSession]:
         client = await self._client()
         if client is None:
             rows = [s for s in self._memory.values() if s.org_id == org_id]
             if agent_id:
                 rows = [s for s in rows if s.agent_id == agent_id]
-            return sorted(rows, key=lambda s: s.started_at, reverse=True)[:limit]
-        sql_rows = await client.fetch(
-            """
-            SELECT id, org_id, agent_id, user_id, metadata, success,
-                   failure_reason, trace_ids, started_at, ended_at
-            FROM agent_sessions
-            WHERE org_id = $1
-              AND ($2::text IS NULL OR agent_id = $2)
-            ORDER BY started_at DESC
-            LIMIT $3
-            """,
-            org_id,
-            agent_id,
-            limit,
-        )
+            rows = sorted(rows, key=lambda s: s.started_at, reverse=True)[:limit]
+            if preview_trace_limit is not None and preview_trace_limit >= 0:
+                slim: list[AgentSession] = []
+                for s in rows:
+                    slim.append(
+                        AgentSession(
+                            id=s.id,
+                            org_id=s.org_id,
+                            agent_id=s.agent_id,
+                            user_id=s.user_id,
+                            metadata={},
+                            success=s.success,
+                            failure_reason=s.failure_reason,
+                            trace_ids=list(s.trace_ids)[:preview_trace_limit],
+                            started_at=s.started_at,
+                            ended_at=s.ended_at,
+                            turn_count=len(s.trace_ids),
+                        )
+                    )
+                return slim
+            return rows
+        if preview_trace_limit is not None and preview_trace_limit >= 0:
+            # Portal list: skip metadata JSONB; cap trace id array bandwidth
+            # while preserving true turn_count via jsonb_array_length.
+            # ``trace_ids`` is JSONB (mig 092), not a Postgres array.
+            sql_rows = await client.fetch(
+                """
+                SELECT id, org_id, agent_id, user_id, success,
+                       failure_reason, started_at, ended_at,
+                       COALESCE(
+                           jsonb_array_length(COALESCE(trace_ids, '[]'::jsonb)),
+                           0
+                       )::int AS turn_count,
+                       (
+                           SELECT COALESCE(jsonb_agg(to_jsonb(elem)), '[]'::jsonb)
+                           FROM (
+                               SELECT elem
+                               FROM jsonb_array_elements_text(
+                                        COALESCE(trace_ids, '[]'::jsonb)
+                                    ) WITH ORDINALITY AS t(elem, ord)
+                               WHERE ord <= $4
+                           ) clipped
+                       ) AS trace_ids
+                FROM agent_sessions
+                WHERE org_id = $1
+                  AND ($2::text IS NULL OR agent_id = $2)
+                ORDER BY started_at DESC
+                LIMIT $3
+                """,
+                org_id,
+                agent_id,
+                limit,
+                int(preview_trace_limit),
+            )
+        else:
+            sql_rows = await client.fetch(
+                """
+                SELECT id, org_id, agent_id, user_id, metadata, success,
+                       failure_reason, trace_ids, started_at, ended_at
+                FROM agent_sessions
+                WHERE org_id = $1
+                  AND ($2::text IS NULL OR agent_id = $2)
+                ORDER BY started_at DESC
+                LIMIT $3
+                """,
+                org_id,
+                agent_id,
+                limit,
+            )
         return [_row_to_session(dict(r)) for r in sql_rows]
 
     async def attach_trace(
@@ -281,6 +343,8 @@ def _row_to_session(row: dict[str, Any]) -> AgentSession:
         traces = json.loads(traces)
     started = row.get("started_at")
     ended = row.get("ended_at")
+    turn_count_raw = row.get("turn_count")
+    turn_count = int(turn_count_raw) if turn_count_raw is not None else None
     return AgentSession(
         id=str(row["id"]),
         org_id=row["org_id"],
@@ -294,6 +358,7 @@ def _row_to_session(row: dict[str, Any]) -> AgentSession:
         ended_at=ended.isoformat() if hasattr(ended, "isoformat") else (
             str(ended) if ended else None
         ),
+        turn_count=turn_count,
     )
 
 

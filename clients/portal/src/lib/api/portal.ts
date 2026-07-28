@@ -148,9 +148,9 @@ export const promptsV2Api = {
     }>(`/orgs/${orgId}/prompts`).then((r) => r.data?.prompts ?? []),
 
   get: (orgId: string, name: string) =>
-    fetchApi<{ status: string; data: PromptDetail }>(
+    fetchApi<{ status: string; data: PromptDetail | null }>(
       `/orgs/${orgId}/prompts/${encodeURIComponent(name)}`,
-    ).then((r) => r.data),
+    ).then((r) => r.data ?? null),
 
   create: (
     orgId: string,

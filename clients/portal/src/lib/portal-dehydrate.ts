@@ -26,6 +26,7 @@ import { queryKeys } from "@/lib/query-keys";
 import type { AgentFixture } from "@/lab/fixtures/agents";
 import type { IssueFixture } from "@/lab/fixtures/issues";
 import type { SessionFixture } from "@/lab/fixtures/sessions";
+import type { SignalFixture } from "@/lab/fixtures/signals";
 import type { TraceFixture } from "@/lab/fixtures/traces";
 
 /** Must match ``ME_QUERY_KEY`` in ``hooks/use-me-query.ts`` (client module). */
@@ -158,6 +159,87 @@ export async function dehydrateTraces(
           auth,
           `/orgs/${auth.orgId}/portal/sessions`,
         ),
+    }),
+  ]);
+  return dehydrate(qc);
+}
+
+/** Layout-level ``/auth/me`` only — seeds Auth/Org before PortalBootGate. */
+export async function dehydrateMe(
+  auth: Pick<PortalPrefetchAuth, "me">,
+): Promise<DehydratedState> {
+  const qc = new QueryClient();
+  await seedMeQuery(qc, auth.me);
+  return dehydrate(qc);
+}
+
+/** Agents hub — agents + traces (inspector runs; no sessions list). */
+export async function dehydrateAgents(
+  auth: PortalPrefetchAuth,
+): Promise<DehydratedState> {
+  if (!auth.orgId) return dehydrateMe(auth);
+  const qc = new QueryClient();
+  const agentsKey = queryKeys.portal.agents(auth.orgId);
+  const tracesKey = queryKeys.portal.traces(auth.orgId);
+  await Promise.allSettled([
+    seedMeQuery(qc, auth.me),
+    qc.prefetchQuery({
+      queryKey: [...agentsKey],
+      queryFn: () =>
+        serverGet<AgentFixture[]>(auth, `/orgs/${auth.orgId}/portal/agents`),
+    }),
+    qc.prefetchQuery({
+      queryKey: [...tracesKey],
+      queryFn: () =>
+        serverGet<TraceFixture[]>(auth, `/orgs/${auth.orgId}/portal/traces`),
+    }),
+  ]);
+  return dehydrate(qc);
+}
+
+/** Issues board — agents + issues. */
+export async function dehydrateIssues(
+  auth: PortalPrefetchAuth,
+): Promise<DehydratedState> {
+  if (!auth.orgId) return dehydrateMe(auth);
+  const qc = new QueryClient();
+  const agentsKey = queryKeys.portal.agents(auth.orgId);
+  const issuesKey = queryKeys.portal.issues(auth.orgId);
+  await Promise.allSettled([
+    seedMeQuery(qc, auth.me),
+    qc.prefetchQuery({
+      queryKey: [...agentsKey],
+      queryFn: () =>
+        serverGet<AgentFixture[]>(auth, `/orgs/${auth.orgId}/portal/agents`),
+    }),
+    qc.prefetchQuery({
+      queryKey: [...issuesKey],
+      queryFn: () =>
+        serverGet<IssueFixture[]>(auth, `/orgs/${auth.orgId}/portal/issues`),
+    }),
+  ]);
+  return dehydrate(qc);
+}
+
+/** Signals hub — agents + signals (no alert-rules; page does not read them). */
+export async function dehydrateSignals(
+  auth: PortalPrefetchAuth,
+): Promise<DehydratedState> {
+  if (!auth.orgId) return dehydrateMe(auth);
+  const qc = new QueryClient();
+  const agentsKey = queryKeys.portal.agents(auth.orgId);
+  const signalsKey = queryKeys.portal.signals(auth.orgId);
+  await Promise.allSettled([
+    seedMeQuery(qc, auth.me),
+    qc.prefetchQuery({
+      queryKey: [...agentsKey],
+      queryFn: () =>
+        serverGet<AgentFixture[]>(auth, `/orgs/${auth.orgId}/portal/agents`),
+    }),
+    qc.prefetchQuery({
+      queryKey: [...signalsKey],
+      queryFn: () =>
+        serverGet<SignalFixture[]>(auth, `/orgs/${auth.orgId}/portal/signals`),
     }),
   ]);
   return dehydrate(qc);

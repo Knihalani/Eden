@@ -29,8 +29,8 @@ import { useOrg } from "@/hooks/use-org";
 import { useOrgQuery } from "@/hooks/use-api-query";
 import { queryKeys } from "@/lib/query-keys";
 import { portalApi } from "@/lib/api/portal";
-import { API_BASE } from "@/lib/api/core";
-import { ASSIST_STALE } from "@/lib/portal-query";
+import { fetchApi } from "@/lib/api/core";
+import { ASSIST_STALE, SHELL_QUERY } from "@/lib/portal-query";
 import { useLabToast } from "@/lab/lab-toast";
 import { QueryErrorPanel, QueryLoadingPanel } from "@/components/shell/query-error-panel";
 
@@ -147,7 +147,7 @@ function LabAgentInner() {
     queryKeys.portal.assistantThreads(orgId),
     orgId,
     () => portalApi.assistantThreads(orgId!),
-    { staleTime: ASSIST_STALE, refetchOnWindowFocus: false },
+    { ...SHELL_QUERY, staleTime: ASSIST_STALE },
   );
 
   const [view, setView] = useState<AgentViewMode>(() =>
@@ -378,23 +378,33 @@ function LabAgentInner() {
       abortRef.current = controller;
 
       try {
-        const res = await fetch(`${API_BASE}/orgs/${encodeURIComponent(orgId)}/ai/chat`, {
-          method: "POST",
-          credentials: "include",
-          headers: {
-            "Content-Type": "application/json",
-            Accept: "text/event-stream",
+        // F41-4: routed through fetchApi's `raw` mode (still gets the
+        // shared auth-bearer-attach + retry pipeline) instead of a
+        // hand-rolled fetch() — `stream: true` skips the 30s default
+        // timeout so a long AI response isn't cut off mid-stream, and
+        // `raw: true` hands back the live, unread Response so we can
+        // still attach our own SSE reader below.
+        const res = await fetchApi<Response>(
+          `/orgs/${encodeURIComponent(orgId)}/ai/chat`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Accept: "text/event-stream",
+            },
+            body: JSON.stringify({
+              conversation_id: conversationIdsRef.current[threadId] ?? null,
+              message: userText,
+              page_context:
+                pins.length > 0
+                  ? { pins: pins.map((p) => ({ kind: p.kind, id: p.id, label: p.label })) }
+                  : {},
+            }),
+            signal: controller.signal,
+            stream: true,
+            raw: true,
           },
-          body: JSON.stringify({
-            conversation_id: conversationIdsRef.current[threadId] ?? null,
-            message: userText,
-            page_context:
-              pins.length > 0
-                ? { pins: pins.map((p) => ({ kind: p.kind, id: p.id, label: p.label })) }
-                : {},
-          }),
-          signal: controller.signal,
-        });
+        );
 
         if (!res.ok || !res.body) {
           throw new Error(`Assistant request failed (HTTP ${res.status}).`);

@@ -33,7 +33,7 @@ export function ContactForm() {
       className="flex max-w-lg flex-col gap-5"
       noValidate
     >
-      <div className="grid gap-5 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
         <label className="flex flex-col gap-1.5">
           <span className="type-label">Name</span>
           <input

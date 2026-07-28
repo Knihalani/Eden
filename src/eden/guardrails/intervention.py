@@ -50,6 +50,7 @@ from .policy import (
     VALID_ACTIONS,
     _fetch_policies,
     _ok_envelope,
+    policy_matches_direction,
 )
 
 logger = logging.getLogger(__name__)
@@ -347,6 +348,32 @@ async def _disable_eval_guardrail_link(
     return out
 
 
+def _hallucination_action_for(
+    p_action: str | None,
+    *,
+    overlap_ratio: float,
+    is_refusal: bool,
+) -> str | None:
+    """This policy's resulting action, or ``None`` if not triggered.
+
+    Mirrors :meth:`HallucinationBlocker.check`'s own banding (a
+    refusal is never flagged; below ``0.2`` overlap is "ungrounded"
+    and uses the policy's own ``action``; the ``0.2``-``0.4`` "weak"
+    band is always capped at ``warn`` regardless of the policy's
+    configured action, same as the detector). Extracted here so
+    :meth:`InterventionEngine.evaluate_and_act` can apply it once
+    per matching policy instead of only the org's first
+    ``hallucination`` policy.
+    """
+    if is_refusal:
+        return None
+    if overlap_ratio < 0.2:
+        return p_action if p_action in VALID_ACTIONS else "block"
+    if overlap_ratio < 0.4:
+        return "warn"
+    return None
+
+
 def _row_to_dict(row: Any) -> dict[str, Any]:
     """Normalise an asyncpg Record into a JSON-friendly dict."""
     if row is None:
@@ -381,6 +408,25 @@ class InterventionEngine:
     has the PII / injection match replaced with a
     placeholder.
 
+    **Direction filtering:** a policy's ``direction`` field
+    (``"input"`` / ``"output"`` / ``"both"``, see
+    :data:`eden.guardrails.policy.VALID_DIRECTIONS`) scopes it to
+    the ``direction`` the caller passes to :func:`evaluate_and_act`
+    (mirrors the filter already used by the pure-Python
+    :func:`eden.guardrails.evaluator.evaluate` sibling). A
+    ``hallucination`` policy scoped ``direction="output"``, for
+    example, is skipped entirely on an ``direction="input"`` call —
+    so it can no longer false-positive-block plain user input just
+    because ``context`` happens to be absent there. Existing rows
+    (migrated to ``direction="both"``) keep matching every call, so
+    this is opt-in for orgs that scope a new policy.
+
+    **Most-restrictive-per-type aggregation:** every active,
+    direction-matching policy of a given type is evaluated (not just
+    the first, ``created_at``-ordered one) and the most restrictive
+    resulting action among them is what's applied for that type —
+    the same reduction the docstring already promises across types.
+
     **Fail-closed behaviour:** when the org has zero active
     policies, policy fetch fails, or only unevaluated types
     (e.g. ``judge_link``) exist, the engine returns
@@ -398,8 +444,29 @@ class InterventionEngine:
         text: str,
         context: str | None = None,
         trace_id: str | None = None,
+        direction: str = "input",
     ) -> dict[str, Any]:
-        """Evaluate every active policy and return the verdict.
+        """Evaluate every active, direction-matching policy and return the verdict.
+
+        Args:
+            org_id: The org whose policies to consult.
+            text: The text to evaluate (the inbound prompt or the
+                outbound completion, depending on ``direction``).
+            context: Grounding context for ``hallucination`` policies.
+                Only meaningful for ``direction="output"`` calls —
+                typically absent on ``direction="input"`` calls.
+            trace_id: Optional trace to correlate the logged
+                intervention with.
+            direction: ``"input"`` (guarding an inbound prompt,
+                the default — matches the common case of a
+                caller with no ``context``), ``"output"``
+                (guarding an outbound completion), or ``"both"``
+                (bypass direction filtering entirely — every
+                policy of an enforced type is considered
+                regardless of its own ``direction``). A policy
+                matches an ``"input"``/``"output"`` call if its own
+                ``direction`` equals the call's, or the policy is
+                scoped ``"both"``.
 
         Returns ``data: {"verdict": "...", "edited_text": "...",
         "matched_policies": [...], "action_breakdown": {...}}``.
@@ -486,33 +553,54 @@ class InterventionEngine:
         verdict_rank = 0
         verdict = "allow"
 
-        # Prompt injection
-        for p in policies:
-            if p.get("type") != "prompt_injection":
-                continue
+        def _direction_ok(p: dict[str, Any]) -> bool:
+            # direction="both" (the caller, not the policy) means
+            # "don't filter" — every policy of an enforced type is
+            # considered regardless of its own direction scope.
+            return direction == "both" or policy_matches_direction(p, direction)
+
+        # Prompt injection — every direction-matching policy of this
+        # type is evaluated (not just the org's first); the most
+        # restrictive resulting action across all of them wins.
+        pi_policies = [
+            p
+            for p in policies
+            if p.get("type") == "prompt_injection" and _direction_ok(p)
+        ]
+        if pi_policies:
             r = await PromptInjectionDetector().scan(org_id, text=text)
             d = (r.get("data") or {})
-            if d.get("verdict") != "allow":
-                matched.append(
-                    {
-                        "policy_id": p.get("id"),
-                        "policy_name": p.get("name"),
-                        "type": p.get("type"),
-                        "verdict": d.get("verdict"),
-                    }
-                )
-                breakdown["prompt_injection"] = (
-                    breakdown.get("prompt_injection", 0) + 1
-                )
-                if ACTION_RANK.get(d.get("verdict", "allow"), 0) > verdict_rank:
-                    verdict_rank = ACTION_RANK.get(d.get("verdict", "allow"), 0)
-                    verdict = d.get("verdict", "allow")
-            break  # one policy of this type is enough
+            if d.get("matches"):
+                for p in pi_policies:
+                    p_action = p.get("action")
+                    if p_action not in VALID_ACTIONS:
+                        p_action = d.get("verdict", "allow")
+                    if p_action == "allow":
+                        continue
+                    matched.append(
+                        {
+                            "policy_id": p.get("id"),
+                            "policy_name": p.get("name"),
+                            "type": p.get("type"),
+                            "verdict": p_action,
+                        }
+                    )
+                    breakdown["prompt_injection"] = (
+                        breakdown.get("prompt_injection", 0) + 1
+                    )
+                    if ACTION_RANK.get(p_action, 0) > verdict_rank:
+                        verdict_rank = ACTION_RANK.get(p_action, 0)
+                        verdict = p_action
 
-        # PII redaction
-        for p in policies:
-            if p.get("type") != "pii_redaction":
-                continue
+        # PII redaction — same aggregation: every direction-matching
+        # pii_redaction policy contributes its own action (default
+        # "redact" if unset/invalid); the most restrictive wins.
+        pii_policies = [
+            p
+            for p in policies
+            if p.get("type") == "pii_redaction" and _direction_ok(p)
+        ]
+        if pii_policies:
             r = await PIIFirewall().redact(org_id, text=edited)
             d = (r.get("data") or {})
             new_matches = d.get("matches", []) or []
@@ -530,74 +618,120 @@ class InterventionEngine:
                             + m.get("placeholder", "[REDACTED]")
                             + edited[e:]
                         )
-                matched.append(
-                    {
-                        "policy_id": p.get("id"),
-                        "policy_name": p.get("name"),
-                        "type": p.get("type"),
-                        "verdict": "redact",
-                        "match_count": len(new_matches),
-                    }
-                )
-                breakdown["pii_redaction"] = (
-                    breakdown.get("pii_redaction", 0) + len(new_matches)
-                )
-                if ACTION_RANK.get("redact", 0) > verdict_rank:
-                    verdict_rank = ACTION_RANK.get("redact", 0)
-                    verdict = "redact"
-            break
+                for p in pii_policies:
+                    p_action = p.get("action")
+                    if p_action not in VALID_ACTIONS:
+                        p_action = "redact"
+                    matched.append(
+                        {
+                            "policy_id": p.get("id"),
+                            "policy_name": p.get("name"),
+                            "type": p.get("type"),
+                            "verdict": p_action,
+                            "match_count": len(new_matches),
+                        }
+                    )
+                    breakdown["pii_redaction"] = (
+                        breakdown.get("pii_redaction", 0) + len(new_matches)
+                    )
+                    if ACTION_RANK.get(p_action, 0) > verdict_rank:
+                        verdict_rank = ACTION_RANK.get(p_action, 0)
+                        verdict = p_action
 
-        # Hallucination (output check) — uses context if provided
-        for p in policies:
-            if p.get("type") != "hallucination":
-                continue
+        # Hallucination (output check) — uses context if provided.
+        # Every direction-matching hallucination policy contributes
+        # its own action (subject to the same "weak overlap always
+        # caps at warn" banding the detector itself uses); the most
+        # restrictive wins.
+        hallu_policies = [
+            p
+            for p in policies
+            if p.get("type") == "hallucination" and _direction_ok(p)
+        ]
+        if hallu_policies:
             r = await HallucinationBlocker().check(
                 org_id, candidate=text, context=context or ""
             )
             d = (r.get("data") or {})
-            if d.get("verdict") != "allow":
+            overlap_ratio = d.get("overlap_ratio", 0.0) or 0.0
+            is_refusal = bool(d.get("is_refusal"))
+            for p in hallu_policies:
+                p_action = _hallucination_action_for(
+                    p.get("action"),
+                    overlap_ratio=overlap_ratio,
+                    is_refusal=is_refusal,
+                )
+                if p_action is None:
+                    continue
                 matched.append(
                     {
                         "policy_id": p.get("id"),
                         "policy_name": p.get("name"),
                         "type": p.get("type"),
-                        "verdict": d.get("verdict"),
+                        "verdict": p_action,
                     }
                 )
                 breakdown["hallucination"] = (
                     breakdown.get("hallucination", 0) + 1
                 )
-                if ACTION_RANK.get(d.get("verdict", "allow"), 0) > verdict_rank:
-                    verdict_rank = ACTION_RANK.get(d.get("verdict", "allow"), 0)
-                    verdict = d.get("verdict", "allow")
-            break
+                if ACTION_RANK.get(p_action, 0) > verdict_rank:
+                    verdict_rank = ACTION_RANK.get(p_action, 0)
+                    verdict = p_action
 
-        # Content policy (keywords / regex)
+        # Content policy (keywords / regex). ContentPolicyEnforcer.enforce
+        # already aggregates across every content_policy of the org
+        # (no first-match short-circuit) — we just need to (a) pass
+        # ``direction`` through so it applies the same direction
+        # filter, and (b) attribute each match back to its actual
+        # matched policy rather than the first content_policy row.
         from .policy import ContentPolicyEnforcer
 
-        for p in policies:
-            if p.get("type") != "content_policy":
-                continue
-            r = await ContentPolicyEnforcer().enforce(org_id, text=text)
+        content_policies = [
+            p
+            for p in policies
+            if p.get("type") == "content_policy" and _direction_ok(p)
+        ]
+        if content_policies:
+            r = await ContentPolicyEnforcer().enforce(
+                org_id, text=text, direction=direction
+            )
             d = (r.get("data") or {})
-            if d.get("verdict") != "allow":
-                matched.append(
-                    {
-                        "policy_id": p.get("id"),
-                        "policy_name": p.get("name"),
-                        "type": p.get("type"),
-                        "verdict": d.get("verdict"),
-                        "match_count": len(d.get("matches", []) or []),
-                    }
-                )
+            cp_matches = d.get("matches", []) or []
+            cp_verdict = d.get("verdict", "allow")
+            if cp_verdict != "allow" or cp_matches:
+                # Look up each matched policy's *own* configured action —
+                # ``cp_verdict`` above is the aggregate across every
+                # matched content_policy (used only for the overall
+                # verdict/rank below), not the per-policy action. Using
+                # it for a per-match entry would misattribute a stricter
+                # sibling policy's action to this one (e.g. a warn-action
+                # policy would be reported as having produced "block").
+                content_by_id = {p.get("id"): p for p in content_policies}
+                by_policy: dict[str | None, dict[str, Any]] = {}
+                for m in cp_matches:
+                    pid = m.get("policy_id")
+                    pol = content_by_id.get(pid)
+                    p_action = (pol or {}).get("action")
+                    if p_action not in VALID_ACTIONS:
+                        p_action = cp_verdict
+                    entry = by_policy.setdefault(
+                        pid,
+                        {
+                            "policy_id": pid,
+                            "policy_name": m.get("policy_name"),
+                            "type": "content_policy",
+                            "verdict": p_action,
+                            "match_count": 0,
+                        },
+                    )
+                    entry["match_count"] += 1
+                matched.extend(by_policy.values())
                 breakdown["content_policy"] = (
-                    breakdown.get("content_policy", 0)
-                    + len(d.get("matches", []) or [])
+                    breakdown.get("content_policy", 0) + len(cp_matches)
                 )
-                if ACTION_RANK.get(d.get("verdict", "allow"), 0) > verdict_rank:
-                    verdict_rank = ACTION_RANK.get(d.get("verdict", "allow"), 0)
-                    verdict = d.get("verdict", "allow")
-            break
+                if ACTION_RANK.get(cp_verdict, 0) > verdict_rank:
+                    verdict_rank = ACTION_RANK.get(cp_verdict, 0)
+                    verdict = cp_verdict
 
         # Judge-link policies are wired but not actively checked
         # here — the Cat 3 judge_runner has already scored the

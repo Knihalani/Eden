@@ -410,3 +410,45 @@ def test_eden_dry_run_wins_over_eden_debug(monkeypatch):
     config_mod.reset_config()
     cfg = config_mod._from_env()
     assert cfg.dry_run is False
+
+
+def test_get_config_is_fully_lock_guarded_under_concurrency(monkeypatch):
+    """``get_config()`` must build the singleton exactly once even
+    under concurrent first-callers.
+
+    Regression for the textbook double-checked-locking pattern that
+    read ``_config`` unlocked before ever taking ``_lock`` (unlike
+    ``configure()``, which always locks first). That was safe today
+    only incidentally, via the CPython GIL making the name-rebind
+    publication atomic -- not because the code was actually
+    synchronized. Forcing many threads through a slowed-down
+    ``_from_env`` pins the *intended* contract: a single construction,
+    one shared instance.
+    """
+    import threading
+    import time as _time
+
+    config_mod.reset_config()
+    calls = {"n": 0}
+    real_from_env = config_mod._from_env
+
+    def slow_from_env():
+        calls["n"] += 1
+        _time.sleep(0.05)
+        return real_from_env()
+
+    monkeypatch.setattr(config_mod, "_from_env", slow_from_env)
+
+    results: list[EdenConfig] = []
+
+    def worker():
+        results.append(config_mod.get_config())
+
+    threads = [threading.Thread(target=worker) for _ in range(16)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    assert calls["n"] == 1
+    assert len({id(r) for r in results}) == 1

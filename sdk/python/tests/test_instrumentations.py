@@ -296,6 +296,116 @@ def test_anthropic_patch_and_event(fake_anthropic):
     assert client.sent >= 1
 
 
+# ── Non-streaming trace_id correlation ─────────────────────────────────
+#
+# Regression coverage for the trace-correlation inconsistency between
+# the non-streaming ``_enqueue_openai_event`` / ``_enqueue_anthropic_event``
+# helpers and their streaming counterparts (``_wrap_sync_stream`` /
+# ``_wrap_async_stream`` in both files). The streaming paths have
+# always called the shared ``_trace_id_or_random()`` helper
+# unconditionally, so they stamp a ``trace_id`` on the wire (joining
+# an active trace, or a fresh uuid4 otherwise) no matter what. The
+# non-streaming helpers used to only set ``trace_id`` inside an
+# ``if trace_ctx is not None`` guard — so a non-streaming call made
+# with NO active trace shipped a payload with no ``trace_id`` key at
+# all, while the equivalent streaming call always had one. Fixed by
+# having both non-streaming helpers call ``_trace_id_or_random()``
+# unconditionally too, matching every other instrumentation
+# (bedrock, gemini, crewai, autogen, pydantic_ai, llama_index,
+# langchain) and the streaming paths in these same two files.
+
+
+def _capture_enqueued(client, monkeypatch):
+    """Patch ``client.enqueue`` to record every ``TraceEvent`` passed to it."""
+    captured: list[Any] = []
+    monkeypatch.setattr(client, "enqueue", lambda event, **kw: captured.append(event))
+    return captured
+
+
+def test_openai_non_streaming_no_active_trace_gets_fresh_trace_id(fake_openai, monkeypatch):
+    """(b) No active trace: trace_id must now be present (was absent)."""
+    eden.instrument("openai")
+    client = get_default_client()
+    captured = _capture_enqueued(client, monkeypatch)
+    from openai.resources.chat.completions import Completions
+
+    from eden_sdk.trace import current_trace
+    assert current_trace() is None  # sanity: no trace active
+
+    Completions().create(
+        model="gpt-test",
+        messages=[{"role": "user", "content": "hi"}],
+    )
+
+    assert len(captured) == 1
+    payload = captured[0].payload
+    assert "trace_id" in payload, "non-streaming openai event must always carry trace_id"
+    assert isinstance(payload["trace_id"], str) and len(payload["trace_id"]) > 0
+
+
+def test_openai_non_streaming_active_trace_joins_trace_id(fake_openai, monkeypatch):
+    """(a) Active trace: trace_id must match the active trace's id."""
+    eden.instrument("openai")
+    client = get_default_client()
+    captured = _capture_enqueued(client, monkeypatch)
+    from openai.resources.chat.completions import Completions
+
+    with eden.trace("my-openai-trace") as span:
+        Completions().create(
+            model="gpt-test",
+            messages=[{"role": "user", "content": "hi"}],
+        )
+
+    # ``eden.trace()`` itself also enqueues a framework-format event on
+    # exit — filter down to the openai-format event under test.
+    openai_events = [e for e in captured if e.source_format == "openai"]
+    assert len(openai_events) == 1
+    assert openai_events[0].payload["trace_id"] == span.trace_id
+
+
+def test_anthropic_non_streaming_no_active_trace_gets_fresh_trace_id(fake_anthropic, monkeypatch):
+    """(b) No active trace: trace_id must now be present (was absent)."""
+    eden.instrument("anthropic")
+    client = get_default_client()
+    captured = _capture_enqueued(client, monkeypatch)
+    from anthropic.resources.messages import Messages
+
+    from eden_sdk.trace import current_trace
+    assert current_trace() is None  # sanity: no trace active
+
+    Messages().create(
+        model="claude-test",
+        max_tokens=32,
+        messages=[{"role": "user", "content": "hi"}],
+    )
+
+    assert len(captured) == 1
+    payload = captured[0].payload
+    assert "trace_id" in payload, "non-streaming anthropic event must always carry trace_id"
+    assert isinstance(payload["trace_id"], str) and len(payload["trace_id"]) > 0
+
+
+def test_anthropic_non_streaming_active_trace_joins_trace_id(fake_anthropic, monkeypatch):
+    """(a) Active trace: trace_id must match the active trace's id."""
+    eden.instrument("anthropic")
+    client = get_default_client()
+    captured = _capture_enqueued(client, monkeypatch)
+    from anthropic.resources.messages import Messages
+
+    with eden.trace("my-anthropic-trace") as span:
+        Messages().create(
+            model="claude-test",
+            max_tokens=32,
+            messages=[{"role": "user", "content": "hi"}],
+        )
+
+    # ``eden.trace()`` itself also enqueues a framework-format event on
+    # exit — filter down to the anthropic-format event under test.
+    anthropic_events = [e for e in captured if e.source_format == "anthropic"]
+    assert len(anthropic_events) == 1
+    assert anthropic_events[0].payload["trace_id"] == span.trace_id
+
+
 # ── LangChain ─────────────────────────────────────────────────────────
 
 
@@ -687,6 +797,119 @@ def test_anthropic_streaming_async_emits_stream_event(fake_streaming_anthropic):
     assert len(events) == 4
     client.flush(timeout=2.0)
     assert client.sent >= 1
+
+
+# ── (c) Streaming vs non-streaming payload-shape consistency ───────────
+
+
+def test_openai_streaming_and_nonstreaming_agree_on_trace_id_no_active_trace(
+    fake_streaming_openai, monkeypatch
+):
+    """With no active trace, streaming and non-streaming openai calls
+    must both always carry a (freshly generated) trace_id — previously
+    only the streaming path did.
+    """
+    eden.instrument("openai")
+    client = get_default_client()
+    captured = _capture_enqueued(client, monkeypatch)
+    from openai.resources.chat.completions import Completions
+
+    from eden_sdk.trace import current_trace
+    assert current_trace() is None
+
+    gen = Completions().create(
+        model="gpt-stream-test",
+        messages=[{"role": "user", "content": "say hi"}],
+        stream=True,
+    )
+    list(gen)  # drain to trigger the stream-end event
+
+    assert len(captured) == 1
+    stream_payload = captured[0].payload
+    assert "trace_id" in stream_payload
+    assert isinstance(stream_payload["trace_id"], str) and stream_payload["trace_id"]
+
+
+def test_openai_streaming_and_nonstreaming_agree_on_trace_id_active_trace(
+    fake_streaming_openai, monkeypatch
+):
+    """With an active trace, both streaming and non-streaming openai
+    calls join the same trace_id.
+    """
+    eden.instrument("openai")
+    client = get_default_client()
+    captured = _capture_enqueued(client, monkeypatch)
+    from openai.resources.chat.completions import Completions
+
+    with eden.trace("shared-openai-trace") as span:
+        gen = Completions().create(
+            model="gpt-stream-test",
+            messages=[{"role": "user", "content": "say hi"}],
+            stream=True,
+        )
+        list(gen)
+
+    # ``eden.trace()`` itself also enqueues a framework-format event on
+    # exit — filter down to the openai-format stream event under test.
+    openai_events = [e for e in captured if e.source_format == "openai"]
+    assert len(openai_events) == 1
+    assert openai_events[0].payload["trace_id"] == span.trace_id
+
+
+def test_anthropic_streaming_and_nonstreaming_agree_on_trace_id_no_active_trace(
+    fake_streaming_anthropic, monkeypatch
+):
+    """With no active trace, streaming and non-streaming anthropic
+    calls must both always carry a (freshly generated) trace_id —
+    previously only the streaming path did.
+    """
+    eden.instrument("anthropic")
+    client = get_default_client()
+    captured = _capture_enqueued(client, monkeypatch)
+    from anthropic.resources.messages import Messages
+
+    from eden_sdk.trace import current_trace
+    assert current_trace() is None
+
+    gen = Messages().create(
+        model="claude-stream",
+        max_tokens=64,
+        messages=[{"role": "user", "content": "say hi"}],
+        stream=True,
+    )
+    list(gen)
+
+    assert len(captured) == 1
+    stream_payload = captured[0].payload
+    assert "trace_id" in stream_payload
+    assert isinstance(stream_payload["trace_id"], str) and stream_payload["trace_id"]
+
+
+def test_anthropic_streaming_and_nonstreaming_agree_on_trace_id_active_trace(
+    fake_streaming_anthropic, monkeypatch
+):
+    """With an active trace, both streaming and non-streaming anthropic
+    calls join the same trace_id.
+    """
+    eden.instrument("anthropic")
+    client = get_default_client()
+    captured = _capture_enqueued(client, monkeypatch)
+    from anthropic.resources.messages import Messages
+
+    with eden.trace("shared-anthropic-trace") as span:
+        gen = Messages().create(
+            model="claude-stream",
+            max_tokens=64,
+            messages=[{"role": "user", "content": "say hi"}],
+            stream=True,
+        )
+        list(gen)
+
+    # ``eden.trace()`` itself also enqueues a framework-format event on
+    # exit — filter down to the anthropic-format stream event under test.
+    anthropic_events = [e for e in captured if e.source_format == "anthropic"]
+    assert len(anthropic_events) == 1
+    assert anthropic_events[0].payload["trace_id"] == span.trace_id
 
 
 def test_openai_per_chunk_tpot_itl_semantics(fake_streaming_openai):

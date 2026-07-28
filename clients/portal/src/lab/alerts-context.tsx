@@ -9,11 +9,13 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { usePathname } from "next/navigation";
+import { useIsFetching, useQueryClient } from "@tanstack/react-query";
 import { useOrg } from "@/hooks/use-org";
 import { useOrgQuery } from "@/hooks/use-api-query";
 import { queryKeys } from "@/lib/query-keys";
 import { portalApi } from "@/lib/api/portal";
+import { patchPortalCatalog } from "@/lib/portal-catalog";
+import { ALERT_EVENTS_STALE } from "@/lib/portal-query";
 
 type AlertsContextValue = {
   open: boolean;
@@ -31,36 +33,48 @@ type AlertsContextValue = {
 
 const AlertsContext = createContext<AlertsContextValue | null>(null);
 
+/** Defer bell fetch so above-fold agents/traces win the first paint. */
+const ALERT_EVENTS_BOOT_DELAY_MS = 2_500;
+
 export function AlertsProvider({ children }: { children: ReactNode }) {
   const { currentOrg } = useOrg();
   const orgId = currentOrg?.id ?? null;
-  const pathname = usePathname();
-  const onHome = (pathname || "").split("?")[0] === "/home";
+  const [bootReady, setBootReady] = useState(false);
 
-  // Match PortalCatalogSync: on Home, wait until agents settle so we
-  // do not defeat the catalog deferral via a second enabled observer.
-  const agentsWarm = useOrgQuery(
-    queryKeys.portal.agents(orgId),
-    orgId,
-    () => portalApi.agents(orgId!),
-    {
-      staleTime: 45_000,
-      enabled: Boolean(orgId) && onHome,
-    },
-  );
+  useEffect(() => {
+    if (!orgId) {
+      setBootReady(false);
+      return;
+    }
+    setBootReady(false);
+    const t = window.setTimeout(() => setBootReady(true), ALERT_EVENTS_BOOT_DELAY_MS);
+    return () => window.clearTimeout(t);
+  }, [orgId]);
+
+  // Subscribe to in-flight agents fetches without issuing a second GET.
+  const agentsFetching = useIsFetching({
+    queryKey: orgId ? queryKeys.portal.agents(orgId) : ["portal", "agents", "__none__"],
+  });
+
   const alertEventsQuery = useOrgQuery(
     queryKeys.portal.alertEvents(orgId),
     orgId,
     () => portalApi.alertEvents(orgId!),
     {
-      staleTime: 120_000,
+      staleTime: ALERT_EVENTS_STALE,
       refetchOnWindowFocus: false,
-      // Settle (success or error) — not only isSuccess — so a failed
-      // agents GET does not strand the alerts bell forever.
-      enabled: Boolean(orgId) && (!onHome || !agentsWarm.isPending),
+      refetchOnMount: false,
+      // After boot delay; wait out any in-flight agents shard so we
+      // don't compete with above-the-fold home/traces paint.
+      enabled: Boolean(orgId) && bootReady && agentsFetching === 0,
     },
   );
   const events = alertEventsQuery.data ?? [];
+
+  useEffect(() => {
+    if (alertEventsQuery.data === undefined) return;
+    patchPortalCatalog({ alertEvents: alertEventsQuery.data });
+  }, [alertEventsQuery.data]);
 
   const [open, setOpen] = useState(false);
   const [readIds, setReadIds] = useState<Set<string>>(new Set());
@@ -106,7 +120,6 @@ export function AlertsProvider({ children }: { children: ReactNode }) {
     return () => window.removeEventListener("keydown", onKey);
   }, [open]);
 
-  // Close alerts when the product tour opens so Escape/z-order stay clear.
   useEffect(() => {
     const onTour = () => setOpen(false);
     window.addEventListener("eden:product-tour", onTour);
@@ -143,10 +156,10 @@ export function AlertsProvider({ children }: { children: ReactNode }) {
   );
 }
 
-export function useAlerts() {
-  const ctx = useContext(AlertsContext);
-  if (!ctx) {
+export function useAlerts(): AlertsContextValue {
+  const context = useContext(AlertsContext);
+  if (!context) {
     throw new Error("useAlerts must be used within AlertsProvider");
   }
-  return ctx;
+  return context;
 }

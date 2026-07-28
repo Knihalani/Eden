@@ -34,6 +34,13 @@ def test_detect_source_format_anthropic() -> None:
     assert _detect_source_format("https://api.anthropic.com/v1/messages") == "anthropic"
 
 
+def test_detect_source_format_xai() -> None:
+    """xAI's `api.x.ai` is OpenAI-chat-completions-shaped, so the
+    generic HTTP-capture fallback must recognize it (and route it
+    through the `openai` decoder) rather than missing it entirely."""
+    assert _detect_source_format("https://api.x.ai/v1/chat/completions") == "openai"
+
+
 def test_http_capture_patches_httpx_and_emits(respx_mock: respx.MockRouter) -> None:
     eden.configure(org_id="org_test", api_key="key_test", base_url="http://localhost:8000")
     install()

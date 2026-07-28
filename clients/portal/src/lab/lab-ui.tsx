@@ -16,6 +16,8 @@ import { StatusChip } from "@/components/ds/primitives";
 import { useSidebar } from "@/components/shell/sidebar-context";
 import { cn } from "@/lib/utils";
 
+export { MetricCell } from "@/lab/lab-metric-cell";
+
 export function NavToggle({ className }: { className?: string }) {
   const { collapsed, toggle } = useSidebar();
   return (
@@ -131,35 +133,6 @@ export function SectionHead({
         {actions}
       </div>
     </header>
-  );
-}
-
-export function MetricCell({
-  label,
-  value,
-  hint,
-  tone,
-}: {
-  label: string;
-  value: string;
-  hint?: string;
-  tone?: "error" | "ok" | "live" | "default";
-}) {
-  return (
-    <div>
-      <p className="type-label">{label}</p>
-      <p
-        className={cn(
-          "type-value mt-1.5 !text-[1rem]",
-          tone === "error" && "!text-[var(--error)]",
-          tone === "ok" && "!text-[var(--success)]",
-          tone === "live" && "!text-[var(--status-running)]",
-        )}
-      >
-        {value}
-      </p>
-      {hint ? <p className="type-meta mt-1 truncate">{hint}</p> : null}
-    </div>
   );
 }
 

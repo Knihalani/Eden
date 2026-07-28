@@ -421,14 +421,21 @@ class HallucinationBlocker:
 
         # Below 0.2 overlap is "ungrounded" — block (or the
         # policy's action). Between 0.2 and 0.4 is "weakly
-        # grounded" — warn. Above 0.4 is "grounded" — allow.
+        # grounded" — the signal is too noisy on its own to
+        # justify the org's full configured severity, so it's
+        # capped at ``warn``: an action *more* severe than warn
+        # (redact/escalate/block) is downgraded to warn, but an
+        # action *no more* severe than warn (allow/warn itself)
+        # is honored as-is, so an org that has deliberately
+        # configured leniency (``action='allow'``) for this
+        # policy isn't overridden into an unwanted warn. Above
+        # 0.4 is "grounded" — allow.
         if overlap < 0.2:
             verdict = action
         elif overlap < 0.4:
-            verdict = "warn" if ACTION_RANK.get("warn", 1) > ACTION_RANK.get("allow", 0) else "allow"
-            # Downgrade block to warn in the weak zone so we
-            # don't false-positive on legitimate paraphrases.
-            if verdict == "warn" and action == "block":
+            if ACTION_RANK.get(action, 0) <= ACTION_RANK.get("warn", 1):
+                verdict = action
+            else:
                 verdict = "warn"
         else:
             verdict = "allow"

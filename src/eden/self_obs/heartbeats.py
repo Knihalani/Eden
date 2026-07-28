@@ -81,8 +81,13 @@ async def latest_heartbeats(
         return []
 
 
-async def probe_and_record_workers(org_id: str | None = None) -> dict[str, Any]:
-    """Snapshot background worker flags and write heartbeats."""
+async def snapshot_worker_liveness() -> dict[str, Any]:
+    """Compute worker liveness without writing heartbeats.
+
+    Status is process-scoped (same for every org). The scheduled tick
+    snapshots once, then fans out per-org heartbeat writes + transition
+    notifies — avoiding O(orgs) re-probes of the same signal.
+    """
     meta: dict[str, Any] = {"ts": time.time()}
     status = "unknown"
     try:
@@ -90,15 +95,61 @@ async def probe_and_record_workers(org_id: str | None = None) -> dict[str, Any]:
             background_evolution_loop_running,
             background_workers_running,
         )
+        from eden.workers.main import worker_loops_running
 
-        running = background_workers_running()
+        running = worker_loops_running()
+        signal_source = "eden_worker_loops"
+        if running is None:
+            # Not the eden-worker process (or it hasn't reached
+            # _run_forever yet) — fall back to the API-lifespan flag.
+            running = background_workers_running()
+            signal_source = "api_background_workers_flag"
         meta["background_workers_running"] = running
+        meta["signal_source"] = signal_source
         meta["evolution_loop_running"] = background_evolution_loop_running()
         status = "healthy" if running else "degraded"
     except Exception as exc:
         meta["error"] = str(exc)
         status = "degraded"
-
-    await record_heartbeat("background_workers", org_id=org_id, status=status, meta=meta)
-    await record_heartbeat("api", org_id=org_id, status="healthy", meta={"ts": time.time()})
     return {"status": status, "meta": meta}
+
+
+async def record_worker_heartbeats(
+    org_id: str | None, workers_result: dict[str, Any]
+) -> None:
+    """Persist the once-per-tick worker snapshot for ``org_id``."""
+    status = workers_result.get("status", "unknown")
+    meta = workers_result.get("meta") or {}
+    await record_heartbeat(
+        "background_workers", org_id=org_id, status=status, meta=meta
+    )
+    await record_heartbeat(
+        "api", org_id=org_id, status="healthy", meta={"ts": time.time()}
+    )
+
+
+async def probe_and_record_workers(org_id: str | None = None) -> dict[str, Any]:
+    """Snapshot background worker liveness and write heartbeats.
+
+    ``eden.self_obs.scheduler``'s scheduled tick (the only caller in
+    production) runs inside ``eden.workers.main`` — the dedicated
+    ``eden-worker`` process — not the API. That process never calls
+    ``eden.workers.background.start_background_workers()`` (that's
+    called only from the API's lifespan, gated by
+    ``settings.run_background_workers``), so
+    ``background_workers_running()`` is structurally always ``False``
+    there: checking it here used to guarantee a false "degraded"
+    transition on the very first scheduled tick of every deploy, one
+    that could never resolve back to healthy.
+
+    ``eden.workers.main.worker_loops_running()`` reports the real
+    liveness of the loops that process actually hosts and returns
+    ``None`` when this process never hosted any of them (e.g. this ran
+    from the API's admin-status route instead of the scheduler) — only
+    then do we fall back to the API-only flag, preserving that route's
+    prior behaviour.
+    """
+    result = await snapshot_worker_liveness()
+    await record_worker_heartbeats(org_id, result)
+    return result
+

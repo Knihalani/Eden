@@ -420,7 +420,7 @@ async def list_traces(
         # metrics/payload JSON — not top-level ``cost_usd`` / TEXT[].
         # insights_tools.list_traces already follows that shape; keep
         # this route aligned so list never 503s on UndefinedColumn.
-        rows_coro = client.fetch(
+        rows = await client.fetch(
             f"""
             WITH page AS (
                 SELECT trace_id,
@@ -530,17 +530,22 @@ async def list_traces(
             """,
             *args, limit, offset,
         )
-        total_coro = client.fetchval(
-            f"""
-            SELECT count(*) FROM (
-                SELECT trace_id FROM telemetry_events
-                WHERE {where}
-                GROUP BY trace_id
-            ) AS _traces
-            """,
-            *args,
-        )
-        rows, total = await asyncio.gather(rows_coro, total_coro)
+        # Skip the expensive distinct-trace COUNT when this page is
+        # clearly the last (or only) page — common for small tenants
+        # and deep-link single-trace lookups.
+        if len(rows) < limit:
+            total = offset + len(rows)
+        else:
+            total = await client.fetchval(
+                f"""
+                SELECT count(*) FROM (
+                    SELECT trace_id FROM telemetry_events
+                    WHERE {where}
+                    GROUP BY trace_id
+                ) AS _traces
+                """,
+                *args,
+            )
     except Exception as exc:
         logger.warning("list_traces: query failed: %s", redact_all(str(exc)))
         raise HTTPException(

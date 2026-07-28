@@ -152,6 +152,7 @@
 | 115_api_keys_prefix | org_api_keys prefix + created_by | yes | forever | none | low | API key prefix display + `created_by` | Auth |
 | 116_saved_searches_phase_n | saved_searches schema fix | yes | forever | soft | medium | Fix saved_searches collision (portal ViewsMenu) | Portal UX |
 | 117_portal_schema_drift | portal hub schema drift | yes | forever | none | medium | Invites / domains / annotate / prefs drift close | Portal UX |
+| 120_guardrail_policies_direction | guardrail_policies.direction | yes | forever | none | low | Cat 15 guardrail direction-scoped enforcement | Cat 15 |
 
 ### Migration chain repair (2026-07-17, GA hardening)
 
@@ -193,6 +194,15 @@ Migration **027** ships 19 tables for the Cat 23 STUB surface (per `upgradespec-
 ## SQL / alembic split (legacy)
 
 The pre-alembic SQL migrations in `migrations/` (001-041) are **collapsed into alembic migration `001_initial_schema.py`**. Any new schema change goes into `src/eden/db_migrations/versions/` only — no new files in `migrations/`. The doc-test (`tests/docs/test_migration_matrix.py`) verifies that every alembic revision is listed in this matrix.
+
+The `migrations/` folder is **frozen/inert**: no runner (alembic or otherwise) executes it — `alembic.ini`'s `script_location = src/eden/db_migrations` and its own revision/down_revision DAG (not filename order) is the only thing ever applied. The numbering gap at `025`-`027` is intentional, not missing history: those three numbers were used exclusively by alembic-only migrations (`025_closed_loop_actions.py`, `026_apm_depth_rollups.py`, `027_autonomous_code_modification.py`) that were never mirrored into this legacy folder. Any remaining duplicate-numbered files under `migrations/` (e.g. two files sharing prefix `002`, `015`, or `022`) reflect historical authoring artifacts, not an active or ordered migration sequence — do not infer execution order from the numeric prefix.
+
+**Documented exceptions — files added to `migrations/` after the freeze (2026-06-24), left in place:**
+
+* `042_pr_discipline_layer.sql` (added 2026-07-06) — no alembic revision actually creates `pr_decision_audit`, `pr_dedupe_index`, `circuit_breaker_state`, or the `repo_connections.graph_*` columns. Alembic revision `080_pr_discipline_layer.py` is a deliberate no-op (`upgrade()` is `pass`) whose docstring explicitly defers to this raw SQL file as the schema definition. Deleting this file with no replacement would remove the only definition of that schema, so it stays as a documented exception rather than being pruned.
+* `044_users_text_fk.sql` (added 2026-07-09) — only partially overlaps an alembic revision (the `webhook_dlq` section duplicates `053_webhook_dlq.py`). The rest of the file (`org_github_installations`, `onboarding_pr_runs`, `org_scim_config`, `scim_users`, `role_definitions`, `role_permissions`, `role_assignments`, `ai_insights_chat_sessions`, `ai_insights_chat_messages`, all re-created here with `TEXT` FKs to match migration `040`'s widening of `users.id`) has no alembic equivalent at all — those tables were only ever defined in the legacy raw SQL (`014`, `015`, `020`, `029`) and were never ported to an alembic revision. Kept in place until a real alembic revision supersedes it; do not delete without first authoring that revision.
+
+(`043_users_token_version.sql`, added 2026-07-09, was removed as part of this cleanup: alembic revision `076_account_lockout.py`, dated 2026-07-01 — i.e. already merged before `043` was added — adds both `users.token_version` and `users.last_seen_at` with real `ADD COLUMN IF NOT EXISTS` DDL, so `043` was a pure post-freeze duplicate with an actual alembic source of truth.)
 
 ## Verification
 

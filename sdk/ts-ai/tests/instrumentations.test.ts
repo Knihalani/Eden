@@ -13,7 +13,7 @@ import { parseFetchBody } from "./_parseBody.js";
 import { wireToEvent } from "../src/wire.js";
 import { resetDefaultClient, getDefaultClient } from "../src/client.js";
 import { configure } from "../src/trace.js";
-import { wrapOpenAI } from "../src/instrumentations/openai.js";
+import { wrapOpenAI, wrapXai } from "../src/instrumentations/openai.js";
 import { wrapAnthropic } from "../src/instrumentations/anthropic.js";
 import { wrapVercelAI } from "../src/instrumentations/vercel-ai.js";
 import { wrapLangChain } from "../src/instrumentations/langchain.js";
@@ -206,6 +206,163 @@ describe("wrapOpenAI", () => {
       expect(typeof completion?.payload.error_type).toBe("string");
       expect((completion?.payload.error_type as string).length).toBeGreaterThan(0);
     }
+  });
+});
+
+// ── xAI (Grok) ────────────────────────────────────────────────────
+//
+// xAI's `api.x.ai` is OpenAI chat-completions compatible — the same
+// client class as OpenAI's SDK, just a different `baseURL`. `wrapXai`
+// reuses `wrapOpenAI`'s exact proxy/instrumentation logic; these
+// tests only check the one thing that's actually different: the
+// `provider` field stamped on emitted telemetry.
+
+describe("wrapXai", () => {
+  it("emits llm_completion for non-streaming calls tagged provider: xai", async () => {
+    const fakeClient = _fakeOpenAIClient({
+      completion: {
+        id: "cmpl-1",
+        model: "grok-2-latest",
+        choices: [
+          { index: 0, finish_reason: "stop", message: { role: "assistant", content: "hi" } },
+        ],
+        usage: { prompt_tokens: 5, completion_tokens: 1, total_tokens: 6 },
+      },
+    });
+    const wrapped = wrapXai(fakeClient);
+
+    const result = await wrapped.chat.completions.create({
+      model: "grok-2-latest",
+      messages: [{ role: "user", content: "hi" }],
+    });
+
+    expect(result.choices[0].message.content).toBe("hi");
+    await getDefaultClient().flush();
+
+    const events = _flattenEvents();
+    const completion = events.find((e) => e.eventType === "llm_completion");
+    expect(completion).toBeDefined();
+    // The wire shape (source_format) stays "openai" — same decoder,
+    // same request/response schema — only the provider label differs.
+    expect(completion?.sourceFormat).toBe("openai");
+    expect(completion?.payload.provider).toBe("xai");
+    expect(completion?.payload.model).toBe("grok-2-latest");
+    expect(completion?.payload.status).toBe("success");
+    const metrics = (completion?.metrics ?? {}) as Record<string, number>;
+    expect(metrics.input_tokens).toBe(5);
+    expect(metrics.output_tokens).toBe(1);
+  });
+
+  it("emits llm_completion_stream for streaming calls tagged provider: xai", async () => {
+    async function* chunkGen() {
+      yield { choices: [{ delta: { content: "Hello" } }], model: "grok-2-latest" };
+      yield {
+        choices: [{ finish_reason: "stop", delta: {} }],
+        model: "grok-2-latest",
+        usage: { prompt_tokens: 5, completion_tokens: 1, total_tokens: 6 },
+      };
+    }
+    const fakeClient = _fakeOpenAIClient({ stream: chunkGen() });
+    const wrapped = wrapXai(fakeClient);
+
+    const stream = await wrapped.chat.completions.create({
+      model: "grok-2-latest",
+      messages: [{ role: "user", content: "hi" }],
+      stream: true,
+    });
+    const collected: unknown[] = [];
+    for await (const chunk of stream) collected.push(chunk);
+    expect(collected.length).toBe(2);
+
+    await getDefaultClient().flush();
+    const events = _flattenEvents();
+    const completion = events.find((e) => e.eventType === "llm_completion_stream");
+    expect(completion).toBeDefined();
+    expect(completion?.sourceFormat).toBe("openai");
+    expect(completion?.payload.provider).toBe("xai");
+    expect(completion?.payload.chunk_count).toBe(2);
+  });
+
+  it("wrapXai and wrapOpenAI on the same underlying client don't share a cached proxy", () => {
+    // Regression guard: the proxy cache used to be a single
+    // module-level WeakMap keyed only by the client object, so
+    // wrapping the same client with both helpers would make the
+    // second call return the first's (mislabeled) proxy.
+    const fake = _fakeOpenAIClient({ completion: { id: "x" } });
+    const asOpenAI = wrapOpenAI(fake);
+    const asXai = wrapXai(fake);
+    expect(asOpenAI).not.toBe(asXai);
+  });
+
+  it("is idempotent: double-wrapping returns the same client shape", () => {
+    const fake = _fakeOpenAIClient({ completion: { id: "x" } });
+    const a = wrapXai(fake);
+    const b = wrapXai(a);
+    expect(a).toBe(b);
+  });
+
+  it("wrapXai(wrapOpenAI(client)) does not double-instrument: exactly one llm_completion event", async () => {
+    // Regression: `_wrapOpenAICompatible`'s idempotency guard used
+    // to only check the CALLER's own wrap marker, so layering
+    // `wrapXai` on top of an already-`wrapOpenAI`-wrapped client
+    // (which the `wrapXai` doc literally frames as "a thin alias...
+    // over wrapOpenAI", inviting exactly this composition instead
+    // of replacing the call) instrumented `create` twice and
+    // silently double-billed duration_ms/tokens telemetry: two
+    // `llm_completion` events (['openai', 'xai']) per real call.
+    const fakeClient = _fakeOpenAIClient({
+      completion: {
+        id: "cmpl-1",
+        model: "grok-2-latest",
+        choices: [
+          { index: 0, finish_reason: "stop", message: { role: "assistant", content: "hi" } },
+        ],
+        usage: { prompt_tokens: 5, completion_tokens: 1, total_tokens: 6 },
+      },
+    });
+    const wrapped = wrapXai(wrapOpenAI(fakeClient));
+
+    await wrapped.chat.completions.create({
+      model: "grok-2-latest",
+      messages: [{ role: "user", content: "hi" }],
+    });
+    await getDefaultClient().flush();
+
+    const events = _flattenEvents();
+    const completions = events.filter((e) => e.eventType === "llm_completion");
+    expect(completions.length).toBe(1);
+    // The already-wrapped client is returned as-is, so the
+    // provider label stays whatever the FIRST (inner) wrap
+    // stamped -- "openai" -- rather than being overwritten by
+    // the outer wrapXai call.
+    expect(completions[0]?.payload.provider).toBe("openai");
+  });
+
+  it("wrapOpenAI(wrapXai(client)) does not double-instrument: exactly one llm_completion event", async () => {
+    // Same bug, opposite composition order: nothing about the
+    // fix should be order-dependent.
+    const fakeClient = _fakeOpenAIClient({
+      completion: {
+        id: "cmpl-1",
+        model: "grok-2-latest",
+        choices: [
+          { index: 0, finish_reason: "stop", message: { role: "assistant", content: "hi" } },
+        ],
+        usage: { prompt_tokens: 5, completion_tokens: 1, total_tokens: 6 },
+      },
+    });
+    const wrapped = wrapOpenAI(wrapXai(fakeClient));
+
+    await wrapped.chat.completions.create({
+      model: "grok-2-latest",
+      messages: [{ role: "user", content: "hi" }],
+    });
+    await getDefaultClient().flush();
+
+    const events = _flattenEvents();
+    const completions = events.filter((e) => e.eventType === "llm_completion");
+    expect(completions.length).toBe(1);
+    expect(completions[0]?.payload.provider).toBe("xai");
   });
 });
 

@@ -13,9 +13,13 @@ pipeline sidecar so it plugs into the API lifespan.
 
 Concurrency: up to ``_MAX_CONCURRENT_SCANS`` scans in flight (a semaphore
 bounds fan-out). Messages are XACK'd only after success **or** after the
-message is dead-lettered (poison / retries exhausted). Transient failures
-retry in-process so the PEL is never left unacked forever (the reader
-only claims ``>`` new ids plus idle pending via XAUTOCLAIM).
+message is durably dead-lettered (poison / retries exhausted) — if the DLQ
+``xadd`` itself fails (e.g. a transient Redis blip), the original message is
+left unacked so it stays in the PEL and is retried via XAUTOCLAIM, bounded
+by ``_MAX_DLQ_WRITE_ATTEMPTS`` so a sustained Redis outage cannot loop
+forever. Transient scan failures retry in-process so the PEL is never left
+unacked forever for that reason (the reader only claims ``>`` new ids plus
+idle pending via XAUTOCLAIM).
 """
 
 from __future__ import annotations
@@ -46,6 +50,12 @@ _RETRY_BASE_DELAY_S = 0.25
 # PEL; reclaim after this idle so another consumer finishes them.
 _PENDING_IDLE_MS = 60_000
 _DLQ_MAXLEN = 10_000
+# Bounds how many times we'll leave a to-be-dead-lettered message unacked
+# after a failed DLQ xadd before giving up and ACKing anyway. Without this,
+# a sustained total-Redis-outage would let the DLQ write keep failing
+# forever, and the message would loop through XAUTOCLAIM indefinitely once
+# Redis recovers (each recovery attempt re-fails until this cap trips).
+_MAX_DLQ_WRITE_ATTEMPTS = 5
 
 _TASK: asyncio.Task | None = None
 _STOP: asyncio.Event | None = None
@@ -56,6 +66,8 @@ _STATS: dict[str, int] = {
     "poison_total": 0,
     "dlq_total": 0,
     "retry_total": 0,
+    "dlq_write_failed_total": 0,
+    "dlq_write_dropped_total": 0,
 }
 
 
@@ -82,6 +94,9 @@ class TraceFinalizedConsumer:
         self._scanner = AutoIssueScanner()
         self._sem = asyncio.Semaphore(_MAX_CONCURRENT_SCANS)
         self._last_autoclaim_mono: float = 0.0
+        # message_id -> consecutive failed DLQ-write attempts. Bounds the
+        # unacked-retry loop when the DLQ xadd itself keeps failing.
+        self._dlq_write_failures: dict[str, int] = {}
 
     async def _ensure_group(self, redis: Any) -> None:
         try:
@@ -227,7 +242,43 @@ class TraceFinalizedConsumer:
                 logger.warning("trace_finalized: scan failed: %s", exc)
 
             if dlq_reason is not None:
-                await _dead_letter(redis, message_id, fields, dlq_reason)
+                mid_key = (
+                    message_id.decode()
+                    if isinstance(message_id, bytes)
+                    else str(message_id)
+                )
+                dlq_ok = await _dead_letter(redis, message_id, fields, dlq_reason)
+                if dlq_ok:
+                    self._dlq_write_failures.pop(mid_key, None)
+                else:
+                    _STATS["dlq_write_failed_total"] += 1
+                    attempts = self._dlq_write_failures.get(mid_key, 0) + 1
+                    self._dlq_write_failures[mid_key] = attempts
+                    if attempts < _MAX_DLQ_WRITE_ATTEMPTS:
+                        logger.warning(
+                            "trace_finalized: dlq write failed (attempt %d/%d) "
+                            "for %s; leaving message unacked for XAUTOCLAIM "
+                            "retry: %s",
+                            attempts,
+                            _MAX_DLQ_WRITE_ATTEMPTS,
+                            mid_key,
+                            dlq_reason,
+                        )
+                        # Leave unacked: stays in the PEL so XAUTOCLAIM
+                        # reclaims it and we retry the DLQ write later,
+                        # instead of silently discarding a never-recorded
+                        # message.
+                        return
+                    logger.error(
+                        "trace_finalized: dlq write failed %d times for %s; "
+                        "giving up and ACKing to avoid an infinite reprocessing "
+                        "loop (message dropped, not recorded in DLQ): %s",
+                        attempts,
+                        mid_key,
+                        dlq_reason,
+                    )
+                    _STATS["dlq_write_dropped_total"] += 1
+                    self._dlq_write_failures.pop(mid_key, None)
             with contextlib.suppress(Exception):
                 await redis.xack(TRACE_FINALIZED_STREAM, _GROUP, message_id)
 
@@ -496,9 +547,16 @@ async def _dead_letter(
     message_id: Any,
     fields: Any,
     reason: str,
-) -> None:
-    """Park a poison / exhausted message on the DLQ stream, then caller ACKs."""
-    _STATS["dlq_total"] += 1
+) -> bool:
+    """Park a poison / exhausted message on the DLQ stream.
+
+    Returns ``True`` only once the ``xadd`` is confirmed to have gone
+    through, so the caller may safely XACK the original message. Returns
+    ``False`` on failure instead of swallowing it — the caller must keep
+    the message unacked (so it stays in the PEL for a later XAUTOCLAIM
+    retry) rather than ACKing a message that was never actually recorded
+    on the DLQ stream.
+    """
     mid = message_id.decode() if isinstance(message_id, bytes) else str(message_id)
     payload = _decode(fields)
     try:
@@ -517,7 +575,10 @@ async def _dead_letter(
             approximate=True,
         )
     except Exception as exc:
-        logger.warning("trace_finalized: dlq write failed: %s", exc)
+        logger.warning("trace_finalized: dlq write failed for %s: %s", mid, exc)
+        return False
+    _STATS["dlq_total"] += 1
+    return True
 
 
 async def _resolve_profile(org_id: str) -> str:

@@ -17,7 +17,7 @@ export async function MarketingHomeSections() {
           className="pointer-events-none absolute inset-0 eden-product-plane opacity-[0.12]"
           aria-hidden
         />
-        <MarketingRail className="relative grid gap-10 lg:grid-cols-12 lg:items-stretch lg:gap-12">
+        <MarketingRail className="relative grid grid-cols-1 gap-10 lg:grid-cols-12 lg:items-stretch lg:gap-12">
           <div className="lg:col-span-5">
             <MarketingKicker>Observe</MarketingKicker>
             <h2 className="mt-3 max-w-md text-[1.5rem] font-semibold tracking-[-0.025em] text-[var(--text)] sm:text-[1.85rem]">
@@ -69,7 +69,7 @@ export async function MarketingHomeSections() {
       </section>
 
       <section className="border-b border-[var(--line)] py-16 sm:py-24">
-        <MarketingRail className="grid gap-10 lg:grid-cols-12 lg:gap-12">
+        <MarketingRail className="grid grid-cols-1 gap-10 lg:grid-cols-12 lg:gap-12">
           <div className="order-2 lg:order-1 lg:col-span-6">
             <div className="relative overflow-hidden border border-[var(--line)] bg-[var(--bg)]">
               <div className="pointer-events-none absolute inset-0 eden-product-plane opacity-[0.2]" />
@@ -135,7 +135,7 @@ export async function MarketingHomeSections() {
             Plans from traces you already have. Approve, reject, or snooze —
             then watch the next deploy with the same instruments.
           </p>
-          <ol className="mt-10 grid gap-px overflow-hidden border border-[var(--line)] bg-[var(--line)] sm:grid-cols-3">
+          <ol className="mt-10 grid grid-cols-1 gap-px overflow-hidden border border-[var(--line)] bg-[var(--line)] sm:grid-cols-3">
             {[
               {
                 n: "01",
@@ -178,7 +178,7 @@ export async function MarketingHomeSections() {
       </section>
 
       <section className="border-b border-[var(--line)] py-16 sm:py-24">
-        <MarketingRail className="grid gap-10 lg:grid-cols-12 lg:items-end">
+        <MarketingRail className="grid grid-cols-1 gap-10 lg:grid-cols-12 lg:items-end">
           <div className="lg:col-span-5">
             <MarketingKicker>Install</MarketingKicker>
             <h2 className="mt-3 text-[1.5rem] font-semibold tracking-[-0.025em] text-[var(--text)] sm:text-[1.85rem]">
