@@ -23,6 +23,23 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 
+@pytest.fixture(autouse=True)
+def _reset_outbox_cooldown():
+    """Clear the shared empty-outbox cooldown around every test.
+
+    The cooldown is module-level state by design (one drain loop per
+    process). In tests that makes it leak between cases: any test whose
+    fake outbox comes back empty arms a multi-minute backoff, and every
+    later test then short-circuits before its mocked query is ever
+    reached, failing for reasons unrelated to what it asserts.
+    """
+    from eden.services.webhook_delivery import _clear_outbox_empty_cooldown
+
+    _clear_outbox_empty_cooldown()
+    yield
+    _clear_outbox_empty_cooldown()
+
+
 def _make_row(delivery_id: str, *, url: str = "https://x.test/hook",
               secret: str = "whsec_test",
               payload: object | None = None) -> dict[str, object]:
