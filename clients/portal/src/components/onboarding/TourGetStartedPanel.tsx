@@ -9,6 +9,7 @@ import {
   type QuickstartLang,
 } from "@/lib/quickstart-snippets";
 import { InstallSnippetCopy } from "@/components/marketing/install-snippet-copy";
+import { buildAgentIntegrationPrompt } from "@/lib/agent-integration-prompt";
 import { useOrg } from "@/hooks/use-org";
 import { cn } from "@/lib/utils";
 
@@ -180,7 +181,9 @@ export function TourGetStartedPanel() {
     };
   }, [currentOrg?.id]);
 
-  const snippet = buildQuickstartSnippet(lang, {
+  // Shared by the hello-world snippet and the coding-agent prompt so the
+  // two can never disagree about which key the user is being handed.
+  const creds = {
     apiKey: fill.status === "ready" ? fill.apiKey : null,
     orgId:
       fill.status === "ready"
@@ -188,7 +191,9 @@ export function TourGetStartedPanel() {
         : fill.status === "error"
           ? fill.orgId
           : currentOrg?.id ?? null,
-  });
+  };
+  const snippet = buildQuickstartSnippet(lang, creds);
+  const agentPrompt = buildAgentIntegrationPrompt(creds);
 
   const onLang = useCallback((next: QuickstartLang) => {
     setLang(next);
@@ -261,6 +266,28 @@ export function TourGetStartedPanel() {
         <pre className="max-h-48 overflow-auto p-3 font-mono text-[0.6875rem] leading-relaxed text-[var(--text-secondary)]">
           <code>{snippet}</code>
         </pre>
+      </div>
+
+      <div className="border border-[var(--line)]">
+        <div className="flex items-center justify-between gap-2 border-b border-[var(--line)] bg-[color-mix(in_srgb,var(--accent)_4%,transparent)] px-2 py-1.5">
+          <span className="font-mono text-[0.625rem] uppercase tracking-[0.12em] text-[var(--text-faint)]">
+            Or: integrate an existing codebase
+          </span>
+          <InstallSnippetCopy snippet={agentPrompt} />
+        </div>
+        <div className="space-y-2 px-3 py-2.5">
+          <p className="text-[0.75rem] leading-relaxed text-[var(--text-secondary)]">
+            The snippet above is a hello-world. To instrument a real project,
+            copy this prompt into your coding agent — Claude Code, Cursor,
+            Codex, or any other. It surveys your stack, installs the right
+            SDK, wires up tracing, and verifies a trace actually lands.
+          </p>
+          <p className="font-mono text-[0.625rem] text-[var(--text-faint)]">
+            {fill.status === "ready"
+              ? "Includes your key and org id — treat it as a secret."
+              : "Sign in and mint a key to have it filled in automatically."}
+          </p>
+        </div>
       </div>
 
       <ol className="space-y-1.5 font-mono text-[0.6875rem] text-[var(--text-muted)]">
