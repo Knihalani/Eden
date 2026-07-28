@@ -118,14 +118,9 @@ export const PALETTE_ACTIONS: NavCommand[] = [
     icon: Sparkles,
     kind: "action",
   },
-  {
-    href: "/analytics?tab=topics",
-    label: "Topic clusters",
-    description: "Explore semantic topic clusters from trace traffic.",
-    group: "Actions",
-    icon: Sparkles,
-    kind: "action",
-  },
+  // "Topic clusters" (/analytics?tab=topics) removed: the Analytics hub was
+  // never built, so this palette entry navigated straight into a 404.
+  // Re-add it alongside the page rather than ahead of it.
   {
     href: "/improve?tab=ledger",
     label: "Open ledger",
