@@ -7,7 +7,7 @@
  */
 
 import { getDefaultClient } from "../client.js";
-import { randomId } from "../ids.js";
+import { randomId, traceIdOrRandom } from "../ids.js";
 import { type TraceOptions } from "../types.js";
 
 const _wrapped = new WeakSet<object>();
@@ -155,7 +155,11 @@ function _emitMastraEvent(args: {
     eventId: `eden_mastra_${randomId()}`,
     tenantId: config.orgId ?? "default",
     projectId: config.projectId,
-    traceId: randomId(),
+    // Joins an active outer ``trace()``/``traceAgent()`` span when
+    // one is running, falling back to a fresh random id otherwise.
+    // ``eventId`` above stays independently random, so it can never
+    // collide even when ``traceId`` is shared.
+    traceId: traceIdOrRandom(),
     realm: config.realm,
     eventType: "agent.run",
     timestamp: new Date().toISOString(),

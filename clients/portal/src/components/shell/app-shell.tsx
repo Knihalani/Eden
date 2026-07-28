@@ -13,12 +13,20 @@ import {
 } from "@/components/shell/portal-auth-chrome";
 import { PortalCatalogSync } from "@/components/providers/portal-catalog-sync";
 import { OnboardingBanner } from "@/components/onboarding/OnboardingBanner";
-import { OnboardingOverlay } from "@/components/onboarding/OnboardingOverlay";
 
 /** Alerts modal pulls heavy graphs — load after first paint. */
 const AlertsModal = dynamic(
   () =>
     import("@/lab/alerts-panel").then((m) => ({ default: m.AlertsModal })),
+  { ssr: false },
+);
+
+/** Tour / overlay — defer until after shell paint. */
+const OnboardingOverlay = dynamic(
+  () =>
+    import("@/components/onboarding/OnboardingOverlay").then((m) => ({
+      default: m.OnboardingOverlay,
+    })),
   { ssr: false },
 );
 

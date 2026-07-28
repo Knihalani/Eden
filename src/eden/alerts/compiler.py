@@ -16,6 +16,64 @@ from eden.services.cat2_intel.signals import CompiledRule, compile_signal
 
 logger = logging.getLogger(__name__)
 
+# Bare column/attribute names interpolated into generated EQL (e.g. the
+# ``key`` in ``any.<key> = '<value>'``) must match this allowlist. Filter
+# keys come from client-supplied ``context.filters`` (see
+# ``CompileRequest`` in routes.py) gated only by org membership, so a key
+# that doesn't look like a plain identifier is treated as a malicious
+# payload and rejected outright rather than silently stripped.
+#
+# NOTE: this is matched with ``re.fullmatch`` (see ``_validate_filter_key``),
+# not ``.match()`` against a ``^...$`` pattern. Python's bare ``$`` matches
+# at end-of-string *or* immediately before a single trailing newline even
+# without ``re.MULTILINE`` (e.g. ``re.match(r"^[a-z]+$", "abc\n")``
+# succeeds), so a key like ``"agent_id\n"`` would previously slip through
+# validation unchanged and be interpolated verbatim into the generated EQL.
+# ``re.fullmatch`` has no such trailing-newline carve-out.
+_SAFE_IDENTIFIER_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
+
+
+class UnsafeFilterKeyError(ValueError):
+    """Raised when a filter/scope key is not a safe bare identifier."""
+
+
+def _validate_filter_key(key: str) -> str:
+    if not isinstance(key, str) or not _SAFE_IDENTIFIER_RE.fullmatch(key):
+        raise UnsafeFilterKeyError(
+            f"invalid filter key {key!r}: must match {_SAFE_IDENTIFIER_RE.pattern}"
+        )
+    return key
+
+
+def _escape_literal(value: Any) -> str:
+    """Escape a value for use inside a single-quoted EQL/SQL string literal.
+
+    ClickHouse string literals honor **both** SQL-standard ``'`` -> ``''``
+    quote doubling *and* C-style backslash escape sequences (``\\'``,
+    ``\\\\``, ``\\n``, ...). Escaping only the quote character (the
+    convention this codebase otherwise uses, see
+    ``eden.columnar.aggregations._escape_org_id`` and ``eden.dsl._common``,
+    and the misleading "SQL-standard string-literal escape (not backslash)"
+    comment in ``eden.data_platform.clickhouse_sink``) is unsafe: a value
+    ending in an odd number of backslashes (e.g. the two characters ``x``
+    and ``\\``) produces the fragment ``'x\\'``. Under ClickHouse's
+    backslash-escape parsing, that trailing ``\\'`` is read as an escaped
+    literal quote character rather than the closing delimiter, so the
+    string literal fails to terminate where the code intends and a later
+    quote elsewhere in the query can close it -- allowing injection of
+    everything in between.
+
+    The fix is to escape backslashes *first* (each ``\\`` -> ``\\\\``) so
+    every backslash is unambiguously paired, and only *then* double any
+    quote characters. Doing backslash-doubling first does not disturb the
+    existing ``'`` -> ``''`` behaviour for values that contain no
+    backslashes (i.e. it is backward compatible with every other literal
+    this codebase already escapes this way) while closing the
+    backslash-parity gap.
+    """
+    return str(value).replace("\\", "\\\\").replace("'", "''")
+
+
 _METRIC_COLUMN: dict[str, str] = {
     "error_rate": "countIf(any.error IS NOT NULL) / greatest(count(), 1)",
     "refusal_rate": "countIf(any.outcome = 'refusal') / greatest(count(), 1)",
@@ -34,11 +92,13 @@ def _scope_filters(rule: CompiledRule, context: dict[str, Any] | None) -> list[s
     if isinstance(ctx_filters, dict):
         for key, value in ctx_filters.items():
             if value:
-                clauses.append(f"any.{key} = '{value}'")
+                safe_key = _validate_filter_key(key)
+                clauses.append(f"any.{safe_key} = '{_escape_literal(value)}'")
     for key, value in rule.scope.items():
-        clauses.append(f"any.{key} = '{value}'")
+        safe_key = _validate_filter_key(key)
+        clauses.append(f"any.{safe_key} = '{_escape_literal(value)}'")
     if (context or {}).get("trace_id"):
-        clauses.append(f"trace_id = '{context['trace_id']}'")
+        clauses.append(f"trace_id = '{_escape_literal(context['trace_id'])}'")
     return clauses
 
 

@@ -64,7 +64,20 @@ def _build_settings_class():
         # dedicated ``eden-worker`` job is deployed). Default False so
         # API pods do not host loops unless explicitly enabled.
         eden_production: bool = False
-        run_background_workers: bool = False
+        # Northflank/Helm set ``EDEN_RUN_BACKGROUND_WORKERS`` (see
+        # northflank.yml + helm/eden/templates/*-deployment.yaml), not
+        # ``RUN_BACKGROUND_WORKERS`` — the field's default env-var form
+        # sans ``env_prefix``/an alias. Without ``AliasChoices`` here the
+        # deployed env var was silently ignored and this always fell
+        # back to the ``False`` default regardless of what infra set.
+        run_background_workers: bool = Field(
+            default=False,
+            validation_alias=AliasChoices(
+                "run_background_workers",
+                "RUN_BACKGROUND_WORKERS",
+                "EDEN_RUN_BACKGROUND_WORKERS",
+            ),
+        )
         # Cap for fire-and-forget ``bounded_create_task`` hot sites.
         background_task_concurrency: int = 64
         strict_startup_checks: bool = False
@@ -134,11 +147,24 @@ def _build_settings_class():
         # connection with a custom ``statement_timeout``.
         postgres_idle_in_transaction_timeout_ms: int = 60_000
         # asyncpg recycles pooled connections that have been idle longer
-        # than this (seconds). Keep short so Neon can scale to zero after
-        # ``suspend_timeout_seconds``; the previous hard-coded 300s held
-        # sockets open past a 5-minute autosuspend window when combined
-        # with ``min_size > 0``.
-        postgres_max_inactive_connection_lifetime: float = 60.0
+        # than this (seconds). Keep well under Neon's suspend window
+        # (``suspend_timeout_seconds`` ≈ 300) so idle sockets are gone
+        # long before autosuspend evaluates quiet TCP. Previous 60s was
+        # safe with min_size=0 but still held sockets through short gaps
+        # between worker ticks.
+        postgres_max_inactive_connection_lifetime: float = 30.0
+        # asyncpg's client-side prepared-statement cache (default size
+        # 100, keyed per physical ``Connection``) is incompatible with
+        # PgBouncer *transaction*-mode pooling, which this module targets
+        # (see ``PostgresClient`` docstring): PgBouncer can hand the next
+        # statement on the same logical session to a *different* backend
+        # connection than the one that prepared it, producing intermittent
+        # "prepared statement does not exist" / "prepared statement
+        # already exists" errors under load. Default to 0 (cache
+        # disabled) — the standard fix. Override via
+        # ``POSTGRES_STATEMENT_CACHE_SIZE`` only for a deployment that is
+        # known to run *session*-mode pooling (or no pooler at all).
+        postgres_statement_cache_size: int = 0
 
         # Qdrant
         qdrant_host: str = "localhost"
@@ -590,7 +616,7 @@ def _build_settings_class():
         # ``src/eden/insights/detector_loop.py`` does that, started
         # from the FastAPI lifespan.
         insights_loop_enabled: bool = True
-        insights_loop_interval_seconds: float = 60.0
+        insights_loop_interval_seconds: float = 180.0
         insights_loop_batch_size: int = 200
         insights_loop_max_runtime_seconds: float = 50.0
 
@@ -810,6 +836,21 @@ def _build_settings_class():
         quality_pipeline_workers: int = 8
         quality_pipeline_watermark_poll_ms: int = 1000
         quality_pipeline_batch_size: int = 100
+        # Empty-poll backoff ceiling for the quality sidecar. Must exceed
+        # Neon's suspend_timeout (~300s) so an idle fleet can actually
+        # autosuspend; the previous hard-coded 30s kept compute warm
+        # forever. Override via ``QUALITY_PIPELINE_EMPTY_BACKOFF_MAX_S``.
+        quality_pipeline_empty_backoff_max_s: float = 360.0
+        # Self-obs probe cadence (worker leader loop). Default 10 min so
+        # heartbeats/synthetics do not pin Neon above autosuspend.
+        self_obs_probe_interval_seconds: float = 600.0
+        # Webhook outbox drain floor. Empty polls skip PG for this many
+        # seconds after a zero-row claim (see webhook_delivery).
+        webhook_drain_empty_cooldown_seconds: float = 180.0
+        # Closed-loop verify + insights + EQL empty-poll cooldowns.
+        verify_empty_cooldown_seconds: float = 300.0
+        insights_empty_cooldown_seconds: float = 300.0
+        eql_empty_cooldown_seconds: float = 300.0
 
         # Per-action kill-switch defaults mirrored into
         # ``tenant_guardrail_action_config`` (read-only True, mutating
@@ -890,7 +931,7 @@ def _build_settings_class():
         # ``verify_poll_interval_seconds``.
         verify_delay_seconds: int = 1800
         verify_quiet_window_minutes: int = 30
-        verify_poll_interval_seconds: int = 60
+        verify_poll_interval_seconds: int = 180
         verify_max_attempts: int = 3
 
         # ── Artifacts + Ledger (GA — default on; org features can kill) ─

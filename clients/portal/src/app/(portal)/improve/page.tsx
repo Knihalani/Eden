@@ -17,12 +17,13 @@ import {
   type ImproveMode,
 } from "@/lab/improve/improve-chrome";
 import dynamic from "next/dynamic";
-import { catalogAgents } from "@/lib/portal-catalog";
+import { catalogAgents, patchPortalCatalog } from "@/lib/portal-catalog";
 import { useOrg } from "@/hooks/use-org";
 import { useOrgQuery } from "@/hooks/use-api-query";
 import { queryKeys } from "@/lib/query-keys";
 import { portalApi } from "@/lib/api/portal";
 import { improvePlansApi } from "@/lib/api/resources";
+import { SHELL_QUERY } from "@/lib/portal-query";
 import { QueryErrorPanel, QueryLoadingPanel } from "@/components/shell/query-error-panel";
 import { useLabToast } from "@/lab/lab-toast";
 
@@ -61,10 +62,21 @@ function LabImproveInner() {
   const orgId = currentOrg?.id ?? null;
   const queryClient = useQueryClient();
   const { pushToast } = useLabToast();
+  const agentsQuery = useOrgQuery(
+    queryKeys.portal.agents(orgId),
+    orgId,
+    () => portalApi.agents(orgId!),
+    SHELL_QUERY,
+  );
+  useEffect(() => {
+    if (agentsQuery.data === undefined) return;
+    patchPortalCatalog({ agents: agentsQuery.data });
+  }, [agentsQuery.data]);
   const plansQuery = useOrgQuery(
     queryKeys.portal.improvePlans(orgId),
     orgId,
     () => portalApi.improvePlans(orgId!),
+    SHELL_QUERY,
   );
   const livePlans = plansQuery.data ?? [];
 

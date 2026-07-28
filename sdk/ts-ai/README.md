@@ -132,18 +132,43 @@ const result = await chat.invoke([new HumanMessage("Hello!")]);
 
 `wrapLangChain` is a Proxy that instruments `invoke`, `call`, `stream`, and `batch` methods on any chat-model instance.
 
+## Auto-instrument LlamaIndex.TS
+
+```ts
+import { VectorStoreIndex } from "llamaindex";
+import { wrapLlamaIndex } from "@eden-ai/sdk";
+
+const index = await VectorStoreIndex.fromDocuments(documents);
+const queryEngine = wrapLlamaIndex(index.asQueryEngine(), { tags: ["docs-qa"] });
+
+const response = await queryEngine.query({ query: "What did the author do in college?" });
+
+// Streaming is supported the same way — the wrapper detects the
+// AsyncIterable response and buffers per-chunk timing to
+// /ingest/chunks, same as the OpenAI/Anthropic/LangChain streams.
+const stream = await queryEngine.query({ query: "Summarize it.", stream: true });
+for await (const chunk of stream) process.stdout.write(chunk.response);
+```
+
+`wrapLlamaIndex` also wraps `chat()` (chat engines from `index.asChatEngine()`) and `retrieve()` (retrievers from `index.asRetriever()`). Each call emits one `agent.run` event (`sourceFormat: "llamaindex"`) with duration, outcome, and `sourceNodes` count — LlamaIndex.TS has no public span-handler API to hook globally (unlike the Python `llama-index-core` package), so this instruments at the query/chat/retrieve call boundary instead, same as `wrapMastra` / `wrapLangChain`.
+
 ## Instrumentation parity matrix
 
 | Framework | Status | API |
 |---|---|---|
 | OpenAI | Supported | `wrapOpenAI` |
+| xAI (Grok) | Supported | `wrapXai` (thin alias over `wrapOpenAI` — xAI's `api.x.ai` is OpenAI chat-completions compatible; only the `provider` telemetry label differs) |
 | Anthropic | Supported | `wrapAnthropic` |
 | Vercel AI | Supported | `wrapVercelAI` |
 | LangChain | Supported | `wrapLangChain` |
 | Mastra | Supported | `wrapMastra` |
-| Bedrock | Supported | `wrapBedrock` |
-| Gemini / Vertex | Supported | `wrapGemini` |
-| CrewAI / AutoGen / LlamaIndex / Pydantic AI | Python SDK | use `eden-sdk` |
+| Bedrock | Supported (auto-detected) | `wrapBedrock` |
+| Gemini / Vertex | Supported (auto-detected) | `wrapGemini` |
+| LlamaIndex.TS | Supported (auto-detected) | `wrapLlamaIndex` |
+| Groq | Supported (auto-detected) — native wrapper (structured streaming-delta + tool-call parsing), not just generic HTTP-capture | `wrapGroq` |
+| Cohere | Supported (auto-detected) — native wrapper for the Chat API v2 (`client.v2.chat` / `client.v2.chatStream`); the legacy v1 surface still only gets generic HTTP-capture | `wrapCohere` |
+| Mistral | Supported (auto-detected) — native wrapper (structured streaming-delta + tool-call parsing), not just generic HTTP-capture | `wrapMistral` |
+| CrewAI / AutoGen / Pydantic AI | Python-only frameworks — no official TS/JS port exists upstream, so there is nothing for this SDK to wrap. Not a TS gap; use `eden-sdk` (Python) for these. | — |
 
 ### Agent sessions (F23)
 
@@ -278,10 +303,11 @@ if (detected.openai) {
 
 // Detection-only alias (does not wrap):
 const status = autoInstrument({ tags: ["prod"] });
-// { openai: true, anthropic: true, vercelAi: true, langchain: false, mastra: false }
+// { openai: true, anthropic: true, vercelAi: true, langchain: false,
+//   mastra: false, bedrock: false, gemini: false, llamaIndex: false }
 ```
 
-Missing modules return `false` (the SDK never hard-imports them).
+Missing modules return `false` (the SDK never hard-imports them). Detection checks for `@aws-sdk/client-bedrock-runtime` (Bedrock), `@google/generative-ai` or `@google/genai` (Gemini), and `llamaindex` (LlamaIndex.TS) — mirroring the Python SDK's `boto3`/`botocore` and `google.generativeai`/`google.genai` checks.
 
 ## Batching & flush
 
@@ -317,7 +343,7 @@ Every emitted event matches the gateway's expected `telemetry_events` row (see `
 }
 ```
 
-`sourceFormat` is one of `openai | anthropic | vercel-ai | langchain | eden-trace-agent-ts | eden-auto-instrument-ts` — the portal uses it to filter events by framework.
+`sourceFormat` is one of `openai | anthropic | vercel-ai | langchain | mastra | bedrock | gemini | llamaindex | groq | cohere | mistral | eden-trace-agent-ts | eden-auto-instrument-ts` — the portal uses it to filter events by framework.
 
 For LLM-completion events, the SDK also populates:
 
@@ -387,6 +413,12 @@ Verify a row was written to `telemetry_events` with `framework="openai"` and the
 ## License
 
 MIT
+
+## What's new in 0.3.5
+
+- **`wrapLlamaIndex` — native LlamaIndex.TS instrumentation.** Wraps `query()` / `chat()` / `retrieve()` on any query engine, chat engine, or retriever (`index.asQueryEngine()` / `asChatEngine()` / `asRetriever()`), emitting one `agent.run` event per call (duration, outcome, `sourceNodes` count), with streaming responses buffered to `/ingest/chunks` for per-chunk timing (parity with OpenAI/Anthropic/LangChain). Auto-detected when `llamaindex` is installed.
+- **Bedrock + Gemini are now auto-detected.** `wrapBedrock` / `wrapGemini` shipped full usage-extraction in 0.3.3 but were never wired into `instrument()` / `autoInstrument()` — callers had to already know to import them manually. `detectInstalledFrameworks()` now reports `bedrock` (`@aws-sdk/client-bedrock-runtime`) and `gemini` (`@google/generative-ai` or `@google/genai`), and `instrument()` returns `wrapBedrock` / `wrapGemini` / `wrapLlamaIndex` alongside the existing wrap helpers.
+- CrewAI / AutoGen / Pydantic AI remain Python-only frameworks with no official TS/JS port — clarified in the parity matrix that this is not a TS gap (there's no upstream package to wrap).
 
 ## What's new in 0.3.2
 

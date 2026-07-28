@@ -1039,10 +1039,24 @@ class SidecarWorker:
         """Run the worker loop until ``stop_event`` is set."""
         _STATE.running = True
         _STATE.started_at = datetime.now(UTC)
-        # Empty-poll backoff: start at configured interval, grow to 30s
-        # so an idle fleet doesn't ping Neon every second forever.
+        # Empty-poll backoff: start at configured interval, grow toward
+        # ``quality_pipeline_empty_backoff_max_s`` (default 360s) so an
+        # idle fleet can clear Neon's ~300s suspend window.
         empty_backoff_s = float(self.poll_interval_s)
-        empty_backoff_max_s = 30.0
+        try:
+            from eden.config import get_settings
+
+            empty_backoff_max_s = float(
+                getattr(
+                    get_settings(),
+                    "quality_pipeline_empty_backoff_max_s",
+                    360.0,
+                )
+                or 360.0
+            )
+        except Exception:
+            empty_backoff_max_s = 360.0
+        empty_backoff_max_s = max(empty_backoff_max_s, float(self.poll_interval_s))
         try:
             watermark = await load_watermark()
             last_event_id = watermark[1] if watermark else None

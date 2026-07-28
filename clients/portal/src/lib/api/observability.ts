@@ -19,7 +19,6 @@ export type {
   ProviderRoutingSpikeSummary,
 } from "./resources";
 export {
-  aiInsightsChat,
   apmApi,
   columnarApi,
   computerUseApi,

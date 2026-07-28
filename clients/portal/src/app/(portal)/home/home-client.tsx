@@ -37,6 +37,7 @@ import { SHELL_QUERY } from "@/lib/portal-query";
 import { queryKeys } from "@/lib/query-keys";
 import { portalApi } from "@/lib/api/portal";
 import { QueryErrorPanel, QueryLoadingPanel } from "@/components/shell/query-error-panel";
+import { NoWorkspaceGuard } from "@/components/shell/workspace-guard";
 
 function Kpi({
   label,
@@ -255,6 +256,15 @@ export default function HomeClient() {
 
   const isLoading = agentsQuery.isLoading || tracesQuery.isLoading;
   const isError = agentsQuery.isError || tracesQuery.isError;
+
+  if (!orgId) {
+    return (
+      <NoWorkspaceGuard
+        title="Home"
+        message="Select a workspace to view your home overview."
+      />
+    );
+  }
 
   if (isLoading) {
     return (

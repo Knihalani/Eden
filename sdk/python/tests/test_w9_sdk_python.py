@@ -80,6 +80,28 @@ def test_instrument_maps_ollama_provider_to_openai(
     assert "openai" in eden_sdk.INSTRUMENTED
 
 
+def test_instrument_maps_xai_provider_to_openai(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """xAI (Grok) has no distinct Python client — it's the `openai`
+    package pointed at `base_url="https://api.x.ai/v1"` — so
+    `eden.instrument("xai")` must reuse the openai instrumentor
+    verbatim, same as the ollama/minimax aliases."""
+    installed: list[str] = []
+    fake = types.ModuleType("eden_sdk.instrumentations.openai")
+    fake.install = lambda: installed.append("openai")  # type: ignore[attr-defined]
+    fake.uninstall = lambda: None  # type: ignore[attr-defined]
+    import sys
+
+    import eden_sdk.instrumentations as instr
+
+    monkeypatch.setattr(instr, "openai", fake, raising=False)
+    monkeypatch.setitem(sys.modules, "eden_sdk.instrumentations.openai", fake)
+    eden.instrument("xai")
+    assert installed == ["openai"]
+    assert "openai" in eden_sdk.INSTRUMENTED
+
+
 def test_instrument_warns_on_unknown_framework(caplog: pytest.LogCaptureFixture) -> None:
     with caplog.at_level(logging.WARNING, logger="eden_sdk"):
         eden.instrument("not-a-real-framework")

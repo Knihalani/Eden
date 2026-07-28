@@ -196,7 +196,7 @@ spec:
     - name: POSTGRES_MIN_POOL_SIZE
       value: "0"            # empty pool → Neon can scale to zero
     - name: POSTGRES_MAX_INACTIVE_CONNECTION_LIFETIME
-      value: "60"
+      value: "30"           # drop idle sockets well under Neon suspend (~300s)
     - name: POSTGRES_STATEMENT_TIMEOUT_MS
       value: "30000"
     # ── Qdrant (external — Qdrant Cloud free tier) ──────────────
@@ -215,14 +215,14 @@ spec:
     # ── Redis (external — Upstash free tier) ────────────────────
     # Conserve commands: rate limits stay in-process (single replica),
     # redis-py health PINGs disabled. Set RATE_LIMIT_DISTRIBUTED=true
-    # only after upgrading Upstash past Free (500k cmds/month).
+    # only after upgrading Upstash past Free (10k cmds/day).
     - name: REDIS_URL
       valueFrom: { secretKeyRef: { group: eden-required, key: REDIS_URL } }
     - name: RATE_LIMIT_DISTRIBUTED
       value: "false"
     - name: REDIS_HEALTH_CHECK_INTERVAL
       value: "0"
-    # Long XREADGROUP block + rare XAUTOCLAIM — Upstash Free is 500k cmds/mo.
+    # Long XREADGROUP block + rare XAUTOCLAIM — Upstash Free is 10k cmds/day.
     - name: REDIS_STREAM_BLOCK_MS
       value: "300000"
     - name: REDIS_STREAM_AUTOCLAIM_INTERVAL_S
@@ -430,12 +430,13 @@ kind: Job
 metadata:
   name: eden-worker
 spec:
-  # Phase 2 audit (2026-06-23) — bumped from nf-compute-20 (0.2 vCPU /
-  # 512 MB) to nf-compute-50 (0.5 vCPU / 1 GB) for Cat 14 autonomous
-  # jobs + Cat 9 user-intel batch processing. Sandbox plan caps at
-  # nf-compute-20; bump to nf-compute-100-2 for production.
+  # nf-compute-20 (0.2 vCPU / 512 MB) is the current sandbox-safe
+  # setting — the Developer Sandbox plan caps compute at nf-compute-20,
+  # so this matches eden-api. Bump to nf-compute-100-2 (or higher) for
+  # production once off the free tier; Cat 14 autonomous jobs + Cat 9
+  # user-intel batch processing will want the extra headroom then.
   compute:
-    name: nf-compute-50
+    name: nf-compute-20
   deployment:
     instances: 1
   build:
@@ -485,12 +486,21 @@ spec:
       valueFrom: { secretKeyRef: { group: eden-required, key: POSTGRES_CHANNEL_BINDING } }
     - name: POSTGRES_ENDPOINT_ID
       valueFrom: { secretKeyRef: { group: eden-required, key: POSTGRES_ENDPOINT_ID } }
+    # Pool must cover the largest sidecar's own concurrency plus
+    # headroom for the 5 leader-gated loops this process hosts, not
+    # just "a worker" — quality_pipeline runs up to 8 concurrent
+    # judges (concurrency=8, src/eden/observability/quality_pipeline/
+    # worker.py), trace_finalized_consumer runs up to 5 concurrent
+    # scans (_MAX_CONCURRENT_SCANS=5, src/eden/workers/
+    # trace_finalized_consumer.py) — either alone can saturate a pool
+    # of 5. 15 = 8 (larger sidecar) + 5 (one conn/leader-gated loop)
+    # + a couple spare, still modest for a nf-compute-20 container.
     - name: POSTGRES_POOL_SIZE
-      value: "5"
+      value: "15"
     - name: POSTGRES_MIN_POOL_SIZE
       value: "0"
     - name: POSTGRES_MAX_INACTIVE_CONNECTION_LIFETIME
-      value: "60"
+      value: "30"           # drop idle sockets well under Neon suspend (~300s)
     - name: QDRANT_HOST
       value: 58384b79-0261-480e-b61f-d86bbf1c0dad.us-east4-0.gcp.cloud.qdrant.io
     - name: QDRANT_HTTPS
@@ -511,7 +521,7 @@ spec:
       value: "false"
     - name: REDIS_HEALTH_CHECK_INTERVAL
       value: "0"
-    # Long XREADGROUP block + rare XAUTOCLAIM — Upstash Free is 500k cmds/mo.
+    # Long XREADGROUP block + rare XAUTOCLAIM — Upstash Free is 10k cmds/day.
     - name: REDIS_STREAM_BLOCK_MS
       value: "300000"
     - name: REDIS_STREAM_AUTOCLAIM_INTERVAL_S
@@ -588,6 +598,13 @@ spec:
     - |
       echo "eden-cron disabled: maintenance + EQL + demotion run on eden-worker"
       exit 0
+  # This job's command never imports eden code and never reads any env
+  # var — it's a static echo + exit 0. Trimmed to the handful of plain
+  # (non-secret) values useful for log/console context; the full
+  # production secret set (Postgres, Redis, JWT/Encryption/Session,
+  # OpenRouter, Clerk) previously wired here was dead weight that only
+  # widened the blast radius of a leaked/misconfigured secret for a
+  # job that should never run real code.
   env:
     - name: APP_NAME
       value: Eden
@@ -599,67 +616,6 @@ spec:
       value: "true"
     - name: SENTRY_ENVIRONMENT
       value: northflank-staging-cron
-    - name: POSTGRES_HOST
-      valueFrom: { secretKeyRef: { group: eden-required, key: POSTGRES_HOST } }
-    - name: POSTGRES_PORT
-      valueFrom: { secretKeyRef: { group: eden-required, key: POSTGRES_PORT } }
-    - name: POSTGRES_DB
-      valueFrom: { secretKeyRef: { group: eden-required, key: POSTGRES_DB } }
-    - name: POSTGRES_USER
-      valueFrom: { secretKeyRef: { group: eden-required, key: POSTGRES_USER } }
-    - name: POSTGRES_PASSWORD
-      valueFrom: { secretKeyRef: { group: eden-required, key: POSTGRES_PASSWORD } }
-    - name: POSTGRES_SSLMODE
-      valueFrom: { secretKeyRef: { group: eden-required, key: POSTGRES_SSLMODE } }
-    - name: POSTGRES_CHANNEL_BINDING
-      valueFrom: { secretKeyRef: { group: eden-required, key: POSTGRES_CHANNEL_BINDING } }
-    - name: POSTGRES_ENDPOINT_ID
-      valueFrom: { secretKeyRef: { group: eden-required, key: POSTGRES_ENDPOINT_ID } }
-    - name: POSTGRES_POOL_SIZE
-      value: "1"
-    - name: POSTGRES_MIN_POOL_SIZE
-      value: "0"
-    - name: POSTGRES_MAX_INACTIVE_CONNECTION_LIFETIME
-      value: "60"
-    - name: REDIS_URL
-      valueFrom: { secretKeyRef: { group: eden-required, key: REDIS_URL } }
-    - name: RATE_LIMIT_DISTRIBUTED
-      value: "false"
-    - name: REDIS_HEALTH_CHECK_INTERVAL
-      value: "0"
-    # Long XREADGROUP block + rare XAUTOCLAIM — Upstash Free is 500k cmds/mo.
-    - name: REDIS_STREAM_BLOCK_MS
-      value: "300000"
-    - name: REDIS_STREAM_AUTOCLAIM_INTERVAL_S
-      value: "300"
-    - name: REDIS_LEADER_TICK_SECONDS
-      value: "120"
-    - name: REDIS_TELEMETRY_STREAM_ENABLED
-      value: "false"
-    - name: REDIS_SSE_WRITE_WHEN_IDLE
-      value: "false"
-    - name: REDIS_LIVE_WRITE_WHEN_IDLE
-      value: "false"
-    - name: JWT_SECRET
-      valueFrom: { secretKeyRef: { group: eden-required, key: JWT_SECRET } }
-    - name: ENCRYPTION_KEY
-      valueFrom: { secretKeyRef: { group: eden-required, key: ENCRYPTION_KEY } }
-    - name: SESSION_SECRET
-      valueFrom: { secretKeyRef: { group: eden-required, key: SESSION_SECRET } }
-    - name: OPENROUTER_API_KEY
-      valueFrom: { secretKeyRef: { group: eden-required, key: OPENROUTER_API_KEY } }
-    - name: CLERK_SECRET_KEY
-      valueFrom: { secretKeyRef: { group: eden-required, key: CLERK_SECRET_KEY } }
-    - name: CLERK_PUBLISHABLE_KEY
-      valueFrom: { secretKeyRef: { group: eden-required, key: CLERK_PUBLISHABLE_KEY } }
-    - name: CLERK_WEBHOOK_SIGNING_SECRET
-      valueFrom: { secretKeyRef: { group: eden-required, key: CLERK_WEBHOOK_SIGNING_SECRET } }
-    - name: OPENROUTER_BASE_URL
-      value: https://openrouter.ai/api/v1
-    - name: IMPROVEMENT_AGENT_V1
-      value: "true"
-    - name: IMPROVEMENT_SCHEDULE_ENABLED
-      value: "false"
 
 
 # ─────────────────────────────────────────────────────────────────────

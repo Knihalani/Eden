@@ -4,6 +4,55 @@ All notable changes to the Eden TypeScript SDK are documented here. The
 format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## 0.3.5 — 2026-07-27
+
+### Added
+- `wrapLlamaIndex` — native auto-instrumentation for LlamaIndex.TS query
+  engines, chat engines, and retrievers (`query`/`chat`/`retrieve`).
+  Emits `agent.run` events (`source_format: "llamaindex"`) with
+  duration, outcome, and `sourceNodes` count; streaming responses are
+  buffered to `/ingest/chunks` for per-chunk timing (parity with the
+  OpenAI/Anthropic/LangChain streaming paths). Exported from the
+  package root and wired into `instrument()` / `detectInstalledFrameworks()`.
+- `wrapXai` — auto-instrumentation for xAI (Grok). xAI's `api.x.ai`
+  endpoint is OpenAI chat-completions compatible (same client class,
+  different `baseURL`), so `wrapXai` is a thin alias over `wrapOpenAI`'s
+  proxy/instrumentation logic that stamps `provider: "xai"` on emitted
+  telemetry instead of `"openai"`, so portal dashboards can distinguish
+  Grok calls from real OpenAI calls. Exported from the package root.
+  `api.x.ai` was also added to the HTTP-capture host-suffix list
+  (`installHttpCapture()` / `instrument({ httpCapture: true })`) for
+  raw-`fetch` callers who don't go through an SDK client wrapper.
+
+### Fixed
+- `wrapBedrock` / `wrapGemini` are now auto-detected. `providers.ts`
+  has shipped full implementations (including usage extraction, since
+  0.3.3) but `detectInstalledFrameworks()` never checked for
+  `@aws-sdk/client-bedrock-runtime` or `@google/generative-ai` /
+  `@google/genai`, and `instrument()` never returned the two helpers —
+  a caller had to already know to import `wrapBedrock`/`wrapGemini`
+  directly instead of destructuring them off `instrument()` like every
+  other provider.
+- `wrapXai` / `wrapOpenAI` double-instrumentation on composed calls.
+  `_wrapOpenAICompatible`'s idempotency guard only checked the
+  wrap marker for the provider currently being wrapped, so
+  `wrapXai(wrapOpenAI(client))` and `wrapOpenAI(wrapXai(client))`
+  each instrumented `chat.completions.create` TWICE, emitting 2
+  `llm_completion` events per real upstream call (`['openai', 'xai']`
+  or `['xai', 'openai']`) and silently doubling `duration_ms` /
+  token telemetry. This composition isn't a hypothetical: `wrapXai`
+  is documented (here and in the README) as "a thin alias... over
+  `wrapOpenAI`", which reads as safe to layer on top of an existing
+  `wrapOpenAI(xaiClient)` call rather than a drop-in replacement for
+  it. The guard now checks every known wrap marker (not just its
+  own) and returns an already-wrapped client as-is instead of
+  stacking a second proxy on top of it.
+
+### Docs
+- Clarified in the parity matrix that CrewAI / AutoGen / Pydantic AI
+  are Python-only frameworks with no official TS/JS port to wrap
+  (not a TS SDK gap).
+
 ## 0.3.4 — 2026-07-24
 
 ### Changed

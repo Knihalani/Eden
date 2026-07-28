@@ -16,7 +16,7 @@
  */
 
 import { getDefaultClient } from "../client.js";
-import { errorClass, errorMessage, randomId } from "../ids.js";
+import { errorClass, errorMessage, randomId, traceIdOrRandom } from "../ids.js";
 import { extractUsage, normalizeModelName } from "../tokens.js";
 import {
   SOURCE_FORMATS,
@@ -26,8 +26,31 @@ import {
 
 // original → proxy (and proxy → proxy) so re-wrapping the same
 // client returns the instrumented Proxy, not the bare original.
+// Kept per-provider so wrapping the same underlying client with
+// both `wrapOpenAI` and `wrapXai` (unusual, but possible) doesn't
+// have the second call silently return the first's cached proxy.
 const _proxies = new WeakMap<object, object>();
 const WRAP_MARKER = Symbol.for("@eden-ai/sdk.wrapOpenAI");
+const _xaiProxies = new WeakMap<object, object>();
+const XAI_WRAP_MARKER = Symbol.for("@eden-ai/sdk.wrapXai");
+
+// Every marker any OpenAI-compatible-alias helper (wrapOpenAI,
+// wrapXai, and any future sibling) stamps on the proxies it
+// produces. `_wrapOpenAICompatible`'s idempotency guard checks
+// ALL of these -- not just the marker for the provider currently
+// being wrapped -- so that composing two aliases over the same
+// underlying client (`wrapXai(wrapOpenAI(client))` or the
+// reverse) never re-instruments an already-instrumented client.
+//
+// Regression: this used to only check the caller's OWN marker.
+// `wrapXai` is documented as "a thin alias... over wrapOpenAI",
+// which reads as "safe/equivalent to call after wrapOpenAI" --
+// so a team with `wrapOpenAI(xaiClient)` already in production
+// that layers `wrapXai(...)` on top per the docs (instead of
+// replacing the call) got the `create` call instrumented TWICE:
+// two `llm_completion` events (['openai', 'xai']) per real
+// upstream call, silently doubling duration_ms/tokens telemetry.
+const ALL_WRAP_MARKERS: readonly symbol[] = [WRAP_MARKER, XAI_WRAP_MARKER];
 
 /**
  * Wrap an OpenAI client (or any object that exposes
@@ -41,22 +64,64 @@ export function wrapOpenAI<T extends object>(
   client: T,
   opts: TraceOptions = {},
 ): T {
+  return _wrapOpenAICompatible(client, opts, "openai", _proxies, WRAP_MARKER);
+}
+
+/**
+ * Wrap an xAI (Grok) client.
+ *
+ * xAI's `api.x.ai` endpoint is OpenAI chat-completions compatible —
+ * users create it via `new OpenAI({ apiKey, baseURL: "https://api.x.ai/v1" })`,
+ * the same client class as OpenAI itself, just pointed at a different
+ * `baseURL`. `wrapOpenAI` already instruments that client transparently
+ * (identical shape, identical `chat.completions.create`); `wrapXai` is a
+ * thin alias around the exact same proxy/instrumentation logic that
+ * additionally stamps `provider: "xai"` on emitted telemetry (instead of
+ * `"openai"`) so portal dashboards can distinguish Grok calls from real
+ * OpenAI calls.
+ *
+ * Safe to call on a client that's already wrapped by `wrapOpenAI` (or
+ * vice versa): the idempotency guard recognizes any known wrap marker,
+ * not just its own, and returns the already-instrumented client as-is
+ * instead of stacking a second layer of instrumentation on top of it.
+ */
+export function wrapXai<T extends object>(
+  client: T,
+  opts: TraceOptions = {},
+): T {
+  return _wrapOpenAICompatible(client, opts, "xai", _xaiProxies, XAI_WRAP_MARKER);
+}
+
+function _wrapOpenAICompatible<T extends object>(
+  client: T,
+  opts: TraceOptions,
+  provider: string,
+  proxyCache: WeakMap<object, object>,
+  wrapMarker: symbol,
+): T {
   if (!client || (client as { chat?: unknown }).chat === undefined) {
     return client;
   }
-  const existing = _proxies.get(client as object);
+  const existing = proxyCache.get(client as object);
   if (existing) return existing as T;
-  // If this is a Proxy we already produced, return it as-is.
-  // We tag proxies with a Symbol; if the input lacks the
-  // `chat` interface (or the user passes back a proxy), we
-  // still want stable identity. Best-effort: check the marker
-  // by reading the hidden property.
-  const marked = (client as unknown as { [k: symbol]: unknown })[WRAP_MARKER];
-  if (marked === true) return client;
+  // If this is a Proxy we (or a sibling OpenAI-compatible-alias
+  // helper) already produced, return it as-is rather than
+  // stacking a second layer of instrumentation on top. We tag
+  // proxies with a Symbol; if the input lacks the `chat`
+  // interface (or the user passes back a proxy), we still want
+  // stable identity. Best-effort: check every known wrap marker
+  // by reading the hidden property -- NOT just this call's own
+  // `wrapMarker` -- so `wrapXai(wrapOpenAI(client))` and
+  // `wrapOpenAI(wrapXai(client))` both recognize the client as
+  // already wrapped and refuse to double-instrument it.
+  for (const marker of ALL_WRAP_MARKERS) {
+    const marked = (client as unknown as { [k: symbol]: unknown })[marker];
+    if (marked === true) return client;
+  }
 
   const proxy = new Proxy(client, {
     get(target, prop, receiver) {
-      if (prop === WRAP_MARKER) return true;
+      if (prop === wrapMarker) return true;
       if (prop === "chat") {
         const chat = Reflect.get(target, prop, receiver);
         if (
@@ -100,6 +165,7 @@ export function wrapOpenAI<T extends object>(
                         compTarget,
                         args,
                         opts,
+                        provider,
                       );
                     };
                   }
@@ -120,12 +186,12 @@ export function wrapOpenAI<T extends object>(
   });
   // Tag the proxy so re-wrapping is a no-op.
   try {
-    (proxy as unknown as { [k: symbol]: unknown })[WRAP_MARKER] = true;
+    (proxy as unknown as { [k: symbol]: unknown })[wrapMarker] = true;
   } catch {
     // The proxy may be frozen; ignore.
   }
-  _proxies.set(client as object, proxy);
-  _proxies.set(proxy, proxy);
+  proxyCache.set(client as object, proxy);
+  proxyCache.set(proxy, proxy);
   return proxy;
 }
 
@@ -134,17 +200,26 @@ function _instrumentedCreate(
   self: unknown,
   args: any[],
   opts: TraceOptions,
+  provider: string,
 ): unknown {
   // OpenAI SDK supports both `create(messages, options)` and
   // `create({ messages, model, ... })` signatures. Normalise.
   const isStream = _isStreaming(args);
 
   if (isStream) {
-    return _wrapOpenAIStream(originalCreate, self, args, opts);
+    return _wrapOpenAIStream(originalCreate, self, args, opts, provider);
   }
 
   const start = Date.now();
-  const traceId = randomId();
+  // ``traceId`` joins an active outer ``trace()``/``traceAgent()``
+  // span when one is running (falling back to a fresh random id
+  // otherwise), so this LLM call correlates with its enclosing
+  // agent run instead of always minting an unrelated trace.
+  // ``eventId`` is a SEPARATE fresh random id: once ``traceId`` can
+  // be shared across multiple calls in the same trace, reusing it
+  // as the event's primary key would collide.
+  const traceId = traceIdOrRandom();
+  const eventId = randomId();
   let status: "success" | "error" = "success";
   let errorType: string | undefined;
   let errorMsg: string | undefined;
@@ -178,6 +253,7 @@ function _instrumentedCreate(
     } finally {
       const durationMs = Date.now() - start;
       _emitCompletion({
+        eventId,
         traceId,
         model: _extractModel(args),
         durationMs,
@@ -186,6 +262,7 @@ function _instrumentedCreate(
         errorMessage: errorMsg,
         opts,
         framework: SOURCE_FORMATS.OPENAI,
+        provider,
         usage: capturedUsage,
       });
     }
@@ -211,10 +288,15 @@ async function* _wrapOpenAIStream(
   self: unknown,
   args: any[],
   opts: TraceOptions,
+  provider: string,
 ): AsyncIterable<any> {
   const start = Date.now();
-  const traceId = randomId();
-  const eventId = `stream_openai_${traceId}`;
+  // See the non-streaming path above: ``traceId`` joins an active
+  // outer trace when one is running; ``eventId`` stays a fresh
+  // random id (independent of ``traceId``) so it can never collide
+  // with another concurrent stream sharing the same outer trace.
+  const traceId = traceIdOrRandom();
+  const eventId = `stream_openai_${randomId()}`;
   let tFirst: number | null = null;
   let tPrev: number | null = null;
   let tLast = start;
@@ -309,7 +391,7 @@ async function* _wrapOpenAIStream(
     const tpotMs = outputTokens > 1 ? (completionDurationMs - ttftMs) / (outputTokens - 1) : 0;
 
     client.emit({
-      eventId: traceId,
+      eventId,
       tenantId: config.orgId ?? "default",
       projectId: config.projectId,
       traceId,
@@ -318,7 +400,7 @@ async function* _wrapOpenAIStream(
       timestamp: new Date().toISOString(),
       sourceFormat: SOURCE_FORMATS.OPENAI,
       payload: {
-        provider: "openai",
+        provider,
         model,
         status,
         error_type: errorType,
@@ -352,6 +434,7 @@ async function* _wrapOpenAIStream(
 }
 
 function _emitCompletion(args: {
+  eventId: string;
   traceId: string;
   model: string | undefined;
   durationMs: number;
@@ -360,6 +443,7 @@ function _emitCompletion(args: {
   errorMessage?: string | undefined;
   opts: TraceOptions;
   framework: string;
+  provider: string;
   usage?: unknown;
 }): void {
   const client = getDefaultClient();
@@ -376,7 +460,7 @@ function _emitCompletion(args: {
     if (u.cacheCreationTokens !== null) usageFields.cache_creation_input_tokens = u.cacheCreationTokens;
   }
   client.emit({
-    eventId: args.traceId,
+    eventId: args.eventId,
     tenantId: config.orgId ?? "default",
     projectId: config.projectId,
     traceId: args.traceId,
@@ -385,7 +469,7 @@ function _emitCompletion(args: {
     timestamp: new Date().toISOString(),
     sourceFormat: args.framework,
     payload: {
-      provider: "openai",
+      provider: args.provider,
       model: args.model,
       duration_ms: args.durationMs,
       status: args.status,

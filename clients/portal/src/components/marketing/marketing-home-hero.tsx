@@ -36,7 +36,7 @@ export async function MarketingHomeHero() {
         aria-hidden
       />
 
-      <MarketingRail className="relative grid items-stretch gap-10 py-14 sm:py-16 lg:grid-cols-12 lg:gap-12 lg:py-20">
+      <MarketingRail className="relative grid grid-cols-1 items-stretch gap-10 py-14 sm:py-16 lg:grid-cols-12 lg:gap-12 lg:py-20">
         <div className="eden-hero-rise flex flex-col justify-center lg:col-span-5">
           <div className="flex items-center gap-3.5">
             <EdenLogo size={44} priority />

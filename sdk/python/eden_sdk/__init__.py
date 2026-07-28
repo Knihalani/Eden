@@ -156,6 +156,11 @@ _PROVIDER_INSTRUMENT_TARGETS: dict[str, str] = {
     "llamacpp": "openai",
     "openrouter": "openai",
     "minimax": "openai",
+    # xAI (Grok) has no distinct Python client — users point the
+    # official `openai` package's client at `base_url="https://api.x.ai/v1"`,
+    # so the same chat.completions.create patch applies verbatim.
+    "xai": "openai",
+    "grok": "openai",
 }
 
 
@@ -189,7 +194,8 @@ def instrument(*frameworks: str) -> None:
         Names of frameworks to instrument. Allowed values:
         ``"openai"``, ``"anthropic"``, ``"langchain"``, ``"llama_index"``,
         ``"crewai"``, ``"autogen"``, ``"mastra"``, ``"pydantic_ai"``,
-        ``"bedrock"``, ``"gemini"``. Hyphenated aliases
+        ``"bedrock"``, ``"gemini"``, ``"groq"``, ``"cohere"``,
+        ``"mistral"``. Hyphenated aliases
         (``"pydantic-ai"``, ``"llama-index"``) and OpenAI-compat
         provider ids (``"ollama"``, ``"vllm"``, …) are accepted.
         Pass ``"http_capture"`` to enable universal httpx patching.
@@ -331,6 +337,9 @@ _FRAMEWORK_DETECTORS: dict[str, tuple[str, ...]] = {
     "pydantic_ai": ("pydantic_ai", "pydantic_ai.agent"),
     "bedrock": ("boto3", "botocore"),
     "gemini": ("google.generativeai", "google.genai"),
+    "groq": ("groq",),
+    "cohere": ("cohere",),
+    "mistral": ("mistralai",),
 }
 
 def _detect_one(module_names: tuple[str, ...]) -> bool:

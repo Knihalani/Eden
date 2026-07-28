@@ -20,8 +20,9 @@ import { useQueryClient } from "@tanstack/react-query";
 import { ChevronDown, LogOut } from "lucide-react";
 import { useOrg } from "@/hooks/use-org";
 import { useAuth } from "@/hooks/use-auth";
-import { api } from "@/lib/api/resources";
+import { api } from "@/lib/api/auth-api";
 import { CHROME_BANNER_ATTR } from "@/lib/overlay-defer";
+import { dropOrgScopedQueries } from "@/lib/portal-query";
 import { cn } from "@/lib/utils";
 import type { Organization } from "@/lib/types";
 
@@ -94,7 +95,7 @@ function WorkspaceSwitcher({ collapsed }: { collapsed: boolean }) {
         // Drop cached org shards so the new workspace cannot paint
         // stale agents/traces under the previous org id.
         await queryClient.cancelQueries();
-        queryClient.clear();
+        dropOrgScopedQueries(queryClient);
         router.push("/home");
         router.refresh();
       } catch {
@@ -485,6 +486,10 @@ export function PortalBootGate({ children }: { children: ReactNode }) {
   const { loading: orgLoading, currentOrg, organizations, authError } =
     useOrg();
   const { isLoaded: clerkLoaded, isSignedIn } = useClerkAuth();
+  const queryClient = useQueryClient();
+  // Layout SSR dehydrates ``["auth","me"]`` above this gate. If that
+  // cache is warm, do not block page paint on local org state catch-up.
+  const hasCachedMe = Boolean(queryClient.getQueryData(["auth", "me"]));
 
   if (
     !clerkLoaded ||
@@ -492,7 +497,8 @@ export function PortalBootGate({ children }: { children: ReactNode }) {
       (authLoading || orgLoading) &&
       !currentOrg &&
       !authError &&
-      organizations.length === 0)
+      organizations.length === 0 &&
+      !hasCachedMe)
   ) {
     return (
       <div className="flex min-h-0 flex-1 items-center justify-center bg-[var(--bg)]">

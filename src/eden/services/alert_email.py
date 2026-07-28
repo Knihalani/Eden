@@ -178,6 +178,52 @@ async def send_nl_incident_email(
         )
 
 
+async def send_self_obs_degraded_email(
+    *,
+    org_id: str,
+    component: str,
+    status: str,
+    detail: dict[str, Any] | None = None,
+) -> None:
+    """Email when a self-observability probe transitions to degraded/fail.
+
+    Called by ``eden.self_obs.scheduler.run_scheduled_probes`` only on
+    a state *transition* (healthy → degraded/fail) — this function's
+    own dedupe window is a secondary safety net against duplicate
+    sends for the same transition, not the primary anti-spam control.
+    """
+    dedupe = f"self_obs:{component}:{status}"
+    if not await _allow_send(org_id, dedupe):
+        return
+    recipients = await _org_alert_recipients(org_id)
+    if not recipients:
+        logger.debug("alert_email: no recipients for self_obs alert org=%s", org_id)
+        return
+
+    html = (
+        "<html><body style='font-family:sans-serif;line-height:1.5'>"
+        "<p><strong>Eden self-observability probe degraded</strong></p>"
+        f"<p><strong>Component:</strong> {component}</p>"
+        f"<p><strong>Status:</strong> {status}</p>"
+        f"<p><strong>Org:</strong> {org_id}</p>"
+        f"<pre>{detail or {}}</pre>"
+        "<p style='color:#666;font-size:12px'>Rate-limited alert from Eden "
+        "self-monitoring.</p>"
+        "</body></html>"
+    )
+    svc = get_email_service()
+    for to in recipients:
+        try:
+            await svc.send_email(
+                to_email=to,
+                subject=f"[Eden ALERT] {component} degraded ({status})",
+                html_content=html,
+                purpose="alert",
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("alert_email: self_obs send failed: %s", exc)
+
+
 async def send_budget_hard_limit_email(
     *,
     org_id: str,

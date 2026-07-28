@@ -19,7 +19,7 @@
  */
 
 import { getDefaultClient } from "../client.js";
-import { errorClass, errorMessage, randomId } from "../ids.js";
+import { errorClass, errorMessage, randomId, traceIdOrRandom } from "../ids.js";
 import { extractUsage, normalizeModelName } from "../tokens.js";
 import {
   SOURCE_FORMATS,
@@ -82,8 +82,12 @@ function _wrapMethod(
   if (method === "stream") {
     return function (this: unknown, ...args: any[]) {
       const start = Date.now();
-      const traceId = randomId();
-      const eventId = `stream_langchain_${traceId}`;
+      // ``traceId`` joins an active outer ``trace()``/``traceAgent()``
+      // span when one is running; ``eventId`` is a fresh random id,
+      // independent of ``traceId``, so it stays unique even when
+      // multiple concurrent streams share the same outer trace.
+      const traceId = traceIdOrRandom();
+      const eventId = `stream_langchain_${randomId()}`;
       let tFirst: number | null = null;
       let tPrev: number | null = null;
       let tLast = start;
@@ -122,6 +126,7 @@ function _wrapMethod(
         errorType = errorClass(err);
       errorMsg = errorMessage(err);
         _emit({
+          eventId,
           traceId,
           method,
           durationMs: Date.now() - start,
@@ -175,6 +180,7 @@ function _wrapMethod(
                 ? (completionDurationMs - ttftMs) / (outputTokens - 1)
                 : 0;
             _emitStream({
+              eventId,
               traceId,
               method,
               chunkCount,
@@ -353,7 +359,11 @@ function _wrapMethod(
 
   return function (this: unknown, ...args: any[]) {
     const start = Date.now();
-    const traceId = randomId();
+    // ``traceId`` joins an active outer trace when one is running;
+    // ``eventId`` is a separate fresh random id so it never
+    // collides with another call sharing the same trace.
+    const traceId = traceIdOrRandom();
+    const eventId = randomId();
     let status: "success" | "error" = "success";
     let errorType: string | undefined;
     let errorMsg: string | undefined;
@@ -366,6 +376,7 @@ function _wrapMethod(
         return result.then(
           (value: unknown) => {
             _emit({
+              eventId,
               traceId,
               method,
               durationMs: Date.now() - start,
@@ -381,6 +392,7 @@ function _wrapMethod(
             errorType = errorClass(err);
             errorMsg = errorMessage(err);
             _emit({
+              eventId,
               traceId,
               method,
               durationMs: Date.now() - start,
@@ -394,6 +406,7 @@ function _wrapMethod(
         );
       }
       _emit({
+        eventId,
         traceId,
         method,
         durationMs: Date.now() - start,
@@ -408,6 +421,7 @@ function _wrapMethod(
       errorType = errorClass(err);
       errorMsg = errorMessage(err);
       _emit({
+        eventId,
         traceId,
         method,
         durationMs: Date.now() - start,
@@ -442,6 +456,7 @@ function _extractLangChainText(chunk: unknown): string | undefined {
 }
 
 function _emit(args: {
+  eventId: string;
   traceId: string;
   method: MethodName;
   durationMs: number;
@@ -453,7 +468,7 @@ function _emit(args: {
   const client = getDefaultClient();
   const config = client.getConfig();
   client.emit({
-    eventId: args.traceId,
+    eventId: args.eventId,
     tenantId: config.orgId ?? "default",
     projectId: config.projectId,
     traceId: args.traceId,
@@ -490,6 +505,7 @@ function _flushChunks(chunks: StreamChunk[]): void {
 }
 
 function _emitStream(args: {
+  eventId: string;
   traceId: string;
   method: MethodName;
   chunkCount: number;
@@ -510,7 +526,7 @@ function _emitStream(args: {
   const client = getDefaultClient();
   const config = client.getConfig();
   client.emit({
-    eventId: args.traceId,
+    eventId: args.eventId,
     tenantId: config.orgId ?? "default",
     projectId: config.projectId,
     traceId: args.traceId,

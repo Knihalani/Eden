@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
-import { randomId } from "../src/ids.js";
+import { randomId, traceIdOrRandom } from "../src/ids.js";
+import { trace } from "../src/trace.js";
 
 describe("randomId", () => {
   it("returns a 16-24 character id (compact base-36 timestamp + suffix)", () => {
@@ -27,4 +28,40 @@ describe("randomId", () => {
     // 16 random base-36 chars). In practice we expect 0.
     expect(seen.size).toBeGreaterThanOrEqual(999);
   });
+});
+
+describe("traceIdOrRandom", () => {
+  it("falls back to randomId() when no trace is active", () => {
+    const id = traceIdOrRandom();
+    expect(id).toMatch(/^[0-9a-z]+$/);
+  });
+
+  it("returns a fresh id per call with no active trace (never joins a stale one)", () => {
+    const a = traceIdOrRandom();
+    const b = traceIdOrRandom();
+    expect(a).not.toBe(b);
+  });
+
+  it(
+    "joins the active trace() span's traceId instead of minting a new one",
+    () => {
+      // This is the actual fix (audit item 2): every LLM-call
+      // instrumentation previously called the unconditional
+      // ``randomId()``, so it could never join an outer
+      // ``trace()``/``traceAgent()`` span. Pin the join contract
+      // directly against the shared helper.
+      const span = trace("outer");
+      const joined = traceIdOrRandom();
+      expect(joined).toBe(span.traceId);
+      // A nested trace also shares the same traceId (same tree).
+      const child = trace("inner");
+      expect(traceIdOrRandom()).toBe(span.traceId);
+      expect(child.traceId).toBe(span.traceId);
+      child.end();
+      span.end();
+      // Once the span ends, the ambient context is restored and
+      // traceIdOrRandom() must go back to minting fresh ids.
+      expect(traceIdOrRandom()).not.toBe(span.traceId);
+    },
+  );
 });

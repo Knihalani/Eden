@@ -10,7 +10,7 @@ import {
   useMemo,
   type ReactNode,
 } from "react";
-import { useOrganization, useOrganizationList, useUser } from "@clerk/nextjs";
+import { useOrganization, useUser } from "@clerk/nextjs";
 import { useQueryClient } from "@tanstack/react-query";
 import { ApiError } from "@/lib/api/core";
 import type { Organization } from "@/lib/types";
@@ -20,6 +20,7 @@ import {
   useMeQuery,
   type MeResponse,
 } from "@/hooks/use-me-query";
+import { dropOrgScopedQueries } from "@/lib/portal-query";
 import {
   classifyOrgLoadError,
   type AuthErrorKind,
@@ -107,6 +108,14 @@ function mapOrgLoadError(
     // Always surface on the first 401/403 — silencing left authError null while
     // currentOrg stayed empty, so chrome/pages rendered NoOrgState instead of
     // the session-expired banner. Key off status, not sanitized message regex.
+    //
+    // "First" here means first AFTER ``recoverFromAuthPropagationRace``
+    // (below) has already had one bounded chance to resolve a 401 —
+    // every call site that can observe an org-load failure routes
+    // through that helper before it ever reaches here (see its doc
+    // comment). So a no-delay surface is still correct: a plain 403,
+    // or a 401 that is still failing ~600ms later, is a real session
+    // problem, not the post-signup propagation race.
     window.sessionStorage.setItem("eden:auth:error", "session_expired");
   }
   setAuthError(message);
@@ -129,11 +138,8 @@ function mapOrgLoadError(
  * share one ``/auth/me`` network call.
  */
 export function OrgProvider({ children }: { children: ReactNode }) {
-  const { organization: clerkOrg, isLoaded: clerkOrgLoaded } = useOrganization();
-  const { userMemberships, isLoaded: _userMembershipsLoaded } =
-    useOrganizationList({
-      userMemberships: { infinite: true },
-    });
+  const { organization: clerkOrg, membership, isLoaded: clerkOrgLoaded } =
+    useOrganization();
   const { user, isLoaded: userLoaded } = useUser();
   const queryClient = useQueryClient();
   const [currentOrg, setCurrentOrgState] = useState<Organization | null>(null);
@@ -145,6 +151,9 @@ export function OrgProvider({ children }: { children: ReactNode }) {
   );
   const [orgSyncTimedOut, setOrgSyncTimedOut] = useState(false);
   const orgSyncStartedAtRef = useRef<number | null>(null);
+  // Tracks which me+clerk snapshot we've applied so hydrate can sync
+  // during render (avoids empty-workspace flash before useEffect).
+  const appliedMeKeyRef = useRef<string | null>(null);
 
   const authErrorRef = useRef<string | null>(null);
   const authErrorKindRef = useRef<AuthErrorKind | null>(null);
@@ -152,6 +161,98 @@ export function OrgProvider({ children }: { children: ReactNode }) {
     authErrorRef.current = authError;
     authErrorKindRef.current = authErrorKind;
   }, [authError, authErrorKind]);
+
+  // Dedup lock for the recovery attempt below — see its doc comment.
+  // Both ``refreshOrgs`` and the mount-time ``meQuery.error`` effect
+  // can observe the very same underlying 401 (they often share one
+  // physical request via ``fetchApi``'s in-flight GET dedup), so this
+  // ensures only ONE bounded wait-then-retry ever runs concurrently
+  // instead of each caller independently sleeping 600ms.
+  const authRecoveryRef = useRef<Promise<void> | null>(null);
+
+  /**
+   * Single owner of "wait for JWT propagation after signup".
+   *
+   * ce7f7a9f ("fix: GitHub App install slug, auth skeleton, post-signup
+   * session") found a real backend race: right after Clerk sign-up,
+   * the client can report a signed-in user before the session JWT is
+   * forwardable/verifiable server-side. That commit fixed it with a
+   * hand-rolled 3-attempt [0, 300, 800]ms *inter-attempt* retry loop
+   * inside ``refreshOrgs`` — attempts landed at cumulative t≈0ms,
+   * t≈300ms, and t≈1100ms (300+800), so the loop's real worst-case
+   * coverage was ~1100ms, not the 800ms last-gap value alone.
+   *
+   * F41-3 removed that loop because it stacked with ``fetchApi``'s own
+   * one-shot Clerk-token-refresh-then-retry (core.ts): each of the 3
+   * loop iterations could itself trigger a fresh refresh-retry, so one
+   * persistent 401 could burn up to 6 physical requests. But
+   * ``fetchApi``'s retry is essentially INSTANT (``session.touch()`` +
+   * ``getToken({skipCache:true})`` + immediate re-fetch) — it does not
+   * reproduce the real wall-clock delay the JWT-propagation race needs,
+   * so removing the loop entirely reopened that race: a 401 landing in
+   * that window now falls straight through to ``mapOrgLoadError`` and
+   * paints "Session expired" right after signup.
+   *
+   * This restores exactly ONE bounded wait + one retry for the 401
+   * case, gated on status alone (there is no reliable "just signed up"
+   * signal available here — no timestamp/flag is set anywhere in the
+   * signup flow — so this applies to any 401, matching the F41-3
+   * finding that ordinary token expiry already fails fast via
+   * ``fetchApi``'s instant retry and would just cost one extra bounded
+   * attempt here). Every call site that can see an org-load failure
+   * (``refreshOrgs``'s catch AND the ``meQuery.error`` effect) routes
+   * through THIS function instead of calling ``mapOrgLoadError``
+   * directly, and the ref lock above collapses concurrent callers into
+   * one attempt — so this can never regress into multiple overlapping
+   * delays. Do not add another wait anywhere else in the auth-error
+   * path.
+   */
+  const recoverFromAuthPropagationRace = useCallback(
+    async (e: unknown): Promise<void> => {
+      const status = e instanceof ApiError ? e.status : undefined;
+      if (status !== 401) {
+        mapOrgLoadError(
+          e,
+          setAuthError,
+          setAuthErrorKind,
+          setOrganizations,
+          setCurrentOrgState,
+        );
+        return;
+      }
+      if (!authRecoveryRef.current) {
+        authRecoveryRef.current = (async () => {
+          // The original loop's real worst-case coverage was ~1100ms
+          // (cumulative 0+300+800ms across 3 attempts), not the 800ms
+          // last-gap value alone — wait long enough to match that
+          // worst case (with a small buffer) in one bounded attempt,
+          // rather than paying for all 3 original attempts.
+          await new Promise((r) => setTimeout(r, 1200));
+          try {
+            const me = await fetchMeQuery(queryClient);
+            applyMeToOrgState(me, clerkOrg, setOrganizations, setCurrentOrgState);
+            setAuthError(null);
+            setAuthErrorKind(null);
+            if (typeof window !== "undefined") {
+              window.sessionStorage.removeItem("eden:auth:error");
+            }
+          } catch (retryErr) {
+            mapOrgLoadError(
+              retryErr,
+              setAuthError,
+              setAuthErrorKind,
+              setOrganizations,
+              setCurrentOrgState,
+            );
+          } finally {
+            authRecoveryRef.current = null;
+          }
+        })();
+      }
+      await authRecoveryRef.current;
+    },
+    [queryClient, clerkOrg],
+  );
 
   // Global 401s from fetchApi (after Clerk refresh retry) surface here.
   useEffect(() => {
@@ -179,6 +280,21 @@ export function OrgProvider({ children }: { children: ReactNode }) {
   const meEnabled = userLoaded && clerkOrgLoaded && Boolean(user);
   const meQuery = useMeQuery(meEnabled);
 
+  // Apply dehydrated / fetched ``/auth/me`` during render so BootGate and
+  // banners see orgs on the same frame HydrationBoundary seeds the cache.
+  if (meQuery.data) {
+    const meKey = `${meQuery.dataUpdatedAt}:${clerkOrg?.id ?? ""}:${meQuery.data.current_org_id ?? ""}:${meQuery.data.organizations?.length ?? 0}`;
+    if (appliedMeKeyRef.current !== meKey) {
+      appliedMeKeyRef.current = meKey;
+      applyMeToOrgState(
+        meQuery.data,
+        clerkOrg,
+        setOrganizations,
+        setCurrentOrgState,
+      );
+    }
+  }
+
   // Drop org-scoped RQ cache when Clerk's active org changes, then
   // force a fresh ``/auth/me`` so enrichment matches the new org.
   const prevClerkOrgIdRef = useRef<string | null | undefined>(undefined);
@@ -194,13 +310,14 @@ export function OrgProvider({ children }: { children: ReactNode }) {
     // Clear Eden selection immediately so chrome never shows the
     // previous org while /auth/me remaps (orgSyncing covers the gap).
     setCurrentOrgState(null);
-    queryClient.clear();
+    dropOrgScopedQueries(queryClient);
     void fetchMeQuery(queryClient).catch(() => {
       /* mapOrgLoadError via meQuery.error */
     });
   }, [clerkOrg?.id, clerkOrgLoaded, queryClient]);
 
-  // Mirror shared RQ cache into local org selection state.
+  // Mirror shared RQ cache into local org selection state when the
+  // render-time apply above has not yet run (error recovery paths).
   // Depend on clerkOrg?.id (not the Clerk object) — a fresh object
   // identity every render re-ran this effect, called setOrganizations
   // with a new array, and tripped "Maximum update depth exceeded".
@@ -222,13 +339,12 @@ export function OrgProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!meQuery.error) return;
-    mapOrgLoadError(
-      meQuery.error,
-      setAuthError,
-      setAuthErrorKind,
-      setOrganizations,
-      setCurrentOrgState,
-    );
+    // Routes through recoverFromAuthPropagationRace (not straight to
+    // mapOrgLoadError) so the mount-time /auth/me fetch gets the same
+    // one bounded retry chance a manual refreshOrgs() call does — see
+    // that function's doc comment for why this must stay the only
+    // place that owns the wait.
+    void recoverFromAuthPropagationRace(meQuery.error);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- only react to query error flips
   }, [meQuery.error]);
 
@@ -244,23 +360,18 @@ export function OrgProvider({ children }: { children: ReactNode }) {
     if (authErrorRef.current && authErrorKindRef.current === "session") return;
     setLoading(true);
     try {
-      const delays = [0, 300, 800];
-      let me: MeResponse | null = null;
-      let lastErr: unknown = null;
-      for (const ms of delays) {
-        if (ms > 0) await new Promise((r) => setTimeout(r, ms));
-        try {
-          me = await fetchMeQuery(queryClient);
-          lastErr = null;
-          break;
-        } catch (e) {
-          lastErr = e;
-          const status = e instanceof ApiError ? e.status : undefined;
-          // Retry only on 401 by status — sanitized messages lose auth signals.
-          if (status !== 401) break;
-        }
-      }
-      if (!me) throw lastErr ?? new Error("Failed to load orgs");
+      // F41-3: this used to hand-roll its own 3-attempt [0, 300, 800]ms
+      // retry loop around a 401. That stacked on top of ``fetchApi``'s
+      // own one-shot Clerk-token-refresh-then-retry (core.ts) — each
+      // loop iteration could itself trigger a fresh refresh-retry, so
+      // a persistent 401 could burn up to 6 physical requests instead
+      // of 2. ``fetchApi`` now owns 401 transport retry exclusively;
+      // a single call here is enough. Any lingering 401 falls through
+      // to ``recoverFromAuthPropagationRace`` below, which gives the
+      // post-signup JWT-propagation race (ce7f7a9f) exactly one bounded
+      // extra retry before surfacing the session banner — see that
+      // function's doc comment.
+      const me = await fetchMeQuery(queryClient);
       applyMeToOrgState(me, clerkOrg, setOrganizations, setCurrentOrgState);
       setAuthError(null);
       setAuthErrorKind(null);
@@ -268,17 +379,11 @@ export function OrgProvider({ children }: { children: ReactNode }) {
         window.sessionStorage.removeItem("eden:auth:error");
       }
     } catch (e) {
-      mapOrgLoadError(
-        e,
-        setAuthError,
-        setAuthErrorKind,
-        setOrganizations,
-        setCurrentOrgState,
-      );
+      await recoverFromAuthPropagationRace(e);
     } finally {
       setLoading(false);
     }
-  }, [user, clerkOrg, queryClient]);
+  }, [user, clerkOrg, queryClient, recoverFromAuthPropagationRace]);
 
   // Do not flash "syncing" while /auth/me is still in flight — empty
   // local orgs during the first fetch are not a sync gap yet. After a
@@ -311,7 +416,7 @@ export function OrgProvider({ children }: { children: ReactNode }) {
   // the same ``["auth","me"]`` key via ``fetchMeQuery``.
   usePolling({
     fetch: () => refreshOrgs(),
-    intervalMs: 5_000,
+    intervalMs: 20_000,
     deps: [
       userLoaded,
       clerkOrgLoaded,
@@ -335,7 +440,7 @@ export function OrgProvider({ children }: { children: ReactNode }) {
     (org: Organization | null) => {
       const nextId = org?.id ?? null;
       if (currentOrgIdRef.current !== nextId) {
-        queryClient.clear();
+        dropOrgScopedQueries(queryClient);
         void fetchMeQuery(queryClient).catch(() => {
           /* mapOrgLoadError via meQuery.error */
         });
@@ -365,11 +470,7 @@ export function OrgProvider({ children }: { children: ReactNode }) {
       authErrorKind,
       clearAuthError,
       clerkOrgId: clerkOrg?.id ?? null,
-      clerkOrgRole: clerkOrg
-        ? (userMemberships.data?.find(
-            (m) => m.organization?.id === clerkOrg.id,
-          )?.role ?? null)
-        : null,
+      clerkOrgRole: membership?.role ?? null,
       orgSyncing,
       orgSyncTimedOut,
     }),
@@ -383,7 +484,7 @@ export function OrgProvider({ children }: { children: ReactNode }) {
       authErrorKind,
       clearAuthError,
       clerkOrg?.id,
-      userMemberships.data,
+      membership?.role,
       refreshOrgs,
       orgSyncing,
       orgSyncTimedOut,

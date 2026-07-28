@@ -31,6 +31,7 @@ from typing import TYPE_CHECKING, Any
 from .policy import (
     ACTION_RANK,
     VALID_ACTIONS,
+    VALID_DIRECTIONS,
     VALID_POLICY_TYPES,
     ContentPolicyEnforcer,
     GuardrailPolicy,
@@ -50,6 +51,7 @@ __all__ = [
     "ACTION_RANK",
     "VALID_ACTIONS",
     "VALID_POLICY_TYPES",
+    "VALID_DIRECTIONS",
 ]
 
 

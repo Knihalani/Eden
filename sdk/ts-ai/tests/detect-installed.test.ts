@@ -2,12 +2,29 @@ import { describe, expect, test } from "bun:test";
 import { detectInstalledFrameworks, autoInstrument } from "../src/index";
 
 describe("detectInstalledFrameworks (ESM-safe)", () => {
-  test("returns object with all four keys", () => {
+  test("returns object with all keys", () => {
     const r = detectInstalledFrameworks();
     expect(typeof r.openai).toBe("boolean");
     expect(typeof r.anthropic).toBe("boolean");
     expect(typeof r.vercelAi).toBe("boolean");
     expect(typeof r.langchain).toBe("boolean");
+    expect(typeof r.mastra).toBe("boolean");
+    // Bedrock / Gemini / LlamaIndex.TS — added so `instrument()` no
+    // longer requires callers to know to call wrapBedrock/wrapGemini/
+    // wrapLlamaIndex manually (previously these two providers had
+    // full wrap* implementations in providers.ts but were entirely
+    // absent from auto-detection).
+    expect(typeof r.bedrock).toBe("boolean");
+    expect(typeof r.gemini).toBe("boolean");
+    expect(typeof r.llamaIndex).toBe("boolean");
+    // Groq / Cohere / Mistral — promoted from generic HTTP-capture
+    // fallback to native instrumentors; auto-detection must report
+    // whether their SDK packages (`groq-sdk`, `cohere-ai`,
+    // `@mistralai/mistralai`) are importable, same as every other
+    // native provider above.
+    expect(typeof r.groq).toBe("boolean");
+    expect(typeof r.cohere).toBe("boolean");
+    expect(typeof r.mistral).toBe("boolean");
   });
 
   test("detects openai when installed (bun runtime)", () => {

@@ -644,9 +644,12 @@ app.add_middleware(
 )
 
 # Per-org resource budget enforcement (§6.3 cost guardrails).
-# Registered BEFORE TenantRateLimitMiddleware so quota (per-org resource
-# budget) fires first, rate-limit (per-second burst) fires second. Disable
-# in dev with QUOTA_ENFORCEMENT_ENABLED=false.
+# NOTE: ``add_middleware`` reverses source order into execution
+# order (see the reversal note further down this file), so despite
+# this call appearing BEFORE ``add_middleware(TenantRateLimitMiddleware,
+# ...)`` in source, it actually EXECUTES AFTER it — rate-limit
+# (per-second burst) fires first, quota (per-org resource budget)
+# fires second. Disable in dev with QUOTA_ENFORCEMENT_ENABLED=false.
 if getattr(settings, "quota_enforcement_enabled", True):
     app.add_middleware(QuotaEnforcementMiddleware)
 
@@ -666,27 +669,36 @@ if getattr(settings, "idempotency_middleware_enabled", True):
 # behind Northflank + Vercel.
 app.add_middleware(InternalOnlyMiddleware)
 
-# Default-deny auth middleware (security 26). Every request must
-# carry an auth context (cookie, bearer, or org-specific header)
-# unless the path is on the explicit public-prefix allow-list.
-# Catches the case where a new route ships without
-# ``Depends(get_current_user)`` — the route would be open under
-# the old opt-in posture; here it fails CLOSED with 401.
-from eden.api.middleware.default_deny import DefaultDenyAuthMiddleware
-
-if getattr(settings, "default_deny_enabled", True):
-    app.add_middleware(DefaultDenyAuthMiddleware)
-
+# IMPORTANT — Starlette's ``app.add_middleware()`` does
+# ``self.user_middleware.insert(0, ...)``, so EXECUTION order
+# (request-in, first-to-run) is the REVERSE of the source order
+# these ``add_middleware`` calls appear in below. The middleware
+# registered LAST in source runs FIRST on the way in (and last on
+# the way out). Read bottom-to-top in this file to get true
+# request-in order. See the SecurityHeadersMiddleware comment
+# further down for the full worked-out chain.
+#
 # RLS GUC middleware (B-1 fix, now actually wired in). Sets the
 # ``app.current_org_id`` Postgres session var for every request that
 # resolves an org, so the migration-015 RLS policies actually filter
 # rows on the observability / retention / audit tables. Without this
 # the policies read NULL from ``current_setting`` and return empty
-# row sets — the "org not picked up" symptom. Registered AFTER
-# DefaultDeny (so the auth context is in place) and BEFORE
-# TenantRateLimit (so the per-org key is correct). Fail-soft: a DB
-# blip on the ``set_config`` logs a warning but does not block the
-# request (a missing GUC → empty RLS rows → safe default).
+# row sets — the "org not picked up" symptom.
+#
+# Security fix (2026-07-27) — this middleware trusts an
+# UNAUTHENTICATED ``X-Org-Id`` header / auth cookie to resolve the
+# org and then opens a Postgres transaction + issues
+# ``set_config('app.current_org_id', ...)`` against it. It MUST
+# execute AFTER DefaultDenyAuthMiddleware's 401 gate, not before.
+# Because ``add_middleware`` reverses source order into execution
+# order, "execute after DefaultDeny" means this call has to be
+# registered BEFORE (earlier in source than) the
+# ``add_middleware(DefaultDenyAuthMiddleware)`` call below — hence
+# this block now sits above it, not below it as it used to.
+# Registered so it executes BEFORE TenantRateLimit (so the per-org
+# rate-limit key is correct). Fail-soft: a DB blip on the
+# ``set_config`` logs a warning but does not block the request (a
+# missing GUC → empty RLS rows → safe default).
 try:
     from eden.api.middleware.rls_org_context import RLSOrgContextMiddleware
 
@@ -698,8 +710,25 @@ except ImportError:  # pragma: no cover — defensive
         "queries will return empty row sets until the import is fixed."
     )
 
-# Per-tenant sliding-window rate limiter. Registered AFTER CORS so
-# preflight OPTIONS requests are never rate-limited. Falls back to
+# Default-deny auth middleware (security 26). Every request must
+# carry an auth context (cookie, bearer, or org-specific header)
+# unless the path is on the explicit public-prefix allow-list.
+# Catches the case where a new route ships without
+# ``Depends(get_current_user)`` — the route would be open under
+# the old opt-in posture; here it fails CLOSED with 401.
+#
+# Registered AFTER RLSOrgContextMiddleware in source so it executes
+# BEFORE it (see the reversal note above) — the auth gate must run
+# first so an unauthenticated request never reaches RLS org-context
+# resolution / gets a Postgres transaction opened on its behalf.
+from eden.api.middleware.default_deny import DefaultDenyAuthMiddleware
+
+if getattr(settings, "default_deny_enabled", True):
+    app.add_middleware(DefaultDenyAuthMiddleware)
+
+# Per-tenant sliding-window rate limiter. Executes AFTER CORS (i.e.
+# registered before it in source — see reversal note) so preflight
+# OPTIONS requests are never rate-limited. Falls back to
 # in-memory TokenBucket when REDIS_URL is unset. Disable in dev with
 # RATE_LIMIT_ENABLED=false. Defaults: 60 req / 60s window.
 if getattr(settings, "rate_limit_enabled", True):
@@ -729,9 +758,12 @@ from eden.api.middleware.api_version import APIVersionMiddleware
 from eden.api.middleware.correlation_id import CorrelationIdMiddleware
 from eden.api.middleware.latency import LatencyMiddleware
 
-# Registered first so the histogram and correlation_id are
-# populated for the entire downstream chain (including the
-# 401 path of DefaultDenyAuthMiddleware below).
+# Registered here (late in source == early in execution, per the
+# reversal note above) so the histogram and correlation_id are
+# populated for the entire downstream chain — including the 401
+# path of DefaultDenyAuthMiddleware and the RLS org-context
+# resolution, both of which execute AFTER these two even though
+# their ``add_middleware`` calls appear earlier in this file.
 app.add_middleware(LatencyMiddleware)
 app.add_middleware(CorrelationIdMiddleware)
 
@@ -752,6 +784,17 @@ app.add_middleware(APIVersionMiddleware)
 # ``reversed()`` build loop → outermost). Every response —
 # CORS preflight, 401 from DefaultDenyAuth, 503 from
 # health-probe, 429 from rate-limit, and the route's own
+#
+# Full REAL execution order (request-in, first-to-run — the
+# reverse of the ``add_middleware`` call order in this file),
+# current as of the 2026-07-27 auth/RLS-ordering fix:
+#   SecurityHeaders -> APIVersion -> CorrelationId -> Latency ->
+#   GZip -> TenantRateLimit -> DefaultDenyAuth -> RLSOrgContext ->
+#   InternalOnly -> Idempotency -> Quota -> CORS -> router.
+# DefaultDenyAuth now genuinely runs BEFORE RLSOrgContext, so an
+# unauthenticated request is rejected with 401 before RLS ever
+# trusts its (unauthenticated) X-Org-Id header/cookie or opens a
+# Postgres transaction on its behalf.
 # 200/4xx — goes through this middleware on the way out.
 # The ``ServerErrorMiddleware`` outside us still handles
 # uncaught exceptions (500 envelope) so the global

@@ -66,6 +66,16 @@ def _iso(value: Any) -> str:
     return str(value)
 
 
+def _clip_text(value: Any, max_chars: int = 800) -> str:
+    """Bound list-card text fields so triage JSON can't bloat responses."""
+    text = str(value or "")
+    if len(text) <= max_chars:
+        return text
+    if max_chars <= 1:
+        return text[:max_chars]
+    return text[: max_chars - 1] + "…"
+
+
 def _parse_window(window: str) -> timedelta:
     raw = (window or "24h").strip().lower()
     try:
@@ -448,7 +458,10 @@ async def list_portal_agents(
                       AND agent_id IS NOT NULL
                       AND timestamp > NOW() - ($2::int * INTERVAL '1 second')
                     ORDER BY timestamp DESC
-                    LIMIT 15000
+                    -- Bound sample for card metrics (was 15000). Cards are
+                    -- approximate; full-window GROUP BY is too expensive
+                    -- for hot tenants on every agents page load.
+                    LIMIT 4000
                 )
                 SELECT agent_id,
                        COUNT(DISTINCT trace_id)::int AS runs,
@@ -608,20 +621,23 @@ async def list_portal_traces(
         return []
 
     try:
+        # Id discovery scans a bounded recent event sample, then
+        # aggregates *all* window events for those trace_ids so span
+        # totals are complete (the old LIMIT-8000 CTE truncated early
+        # spans and still scanned up to 8k rows every list call).
         rows = await client.fetch(
             f"""
-            WITH recent_events AS (
-                SELECT trace_id, agent_id, name, timestamp, outcome,
-                       duration_ms, metrics, attributes
+            WITH recent AS (
+                SELECT trace_id, timestamp
                 FROM telemetry_events
                 WHERE tenant_id = $1
                   AND timestamp > NOW() - ($2::int * INTERVAL '1 second')
                 ORDER BY timestamp DESC
-                LIMIT 8000
+                LIMIT 3000
             ),
             ids AS (
                 SELECT trace_id
-                FROM recent_events
+                FROM recent
                 GROUP BY trace_id
                 ORDER BY MAX(timestamp) DESC
                 LIMIT $3
@@ -638,8 +654,10 @@ async def list_portal_traces(
                        + COALESCE((e.metrics->>'output_tokens')::int, 0)), 0)::int AS tokens,
                    COALESCE(SUM(COALESCE((e.metrics->>'cost_usd')::float, 0)), 0)::float AS cost_usd,
                    MAX(e.attributes->>'session_id') AS session_id
-            FROM recent_events e
+            FROM telemetry_events e
             INNER JOIN ids ON ids.trace_id = e.trace_id
+            WHERE e.tenant_id = $1
+              AND e.timestamp > NOW() - ($2::int * INTERVAL '1 second')
             GROUP BY e.trace_id
             ORDER BY MIN(e.timestamp) DESC
             """,
@@ -794,7 +812,9 @@ async def list_portal_sessions(
     try:
         from eden.services.agent_sessions import AgentSessionService
 
-        sessions = await AgentSessionService().list_sessions(org_id, limit=limit)
+        sessions = await AgentSessionService().list_sessions(
+            org_id, limit=limit, preview_trace_limit=40
+        )
     except Exception as exc:  # noqa: BLE001
         logger.debug("portal sessions: service unavailable: %s", exc)
         return []
@@ -820,6 +840,7 @@ async def list_portal_sessions(
         except Exception:
             duration_ms = 0
         trace_ids = list(data.get("trace_ids") or [])
+        turn_count = int(data.get("turn_count") or len(trace_ids))
         out.append(
             SessionRollup(
                 id=str(data.get("id") or ""),
@@ -827,7 +848,7 @@ async def list_portal_sessions(
                 userId=str(data["user_id"]) if data.get("user_id") else None,
                 startedAt=_iso(data.get("started_at")),
                 endedAt=_iso(data.get("ended_at")) or None,
-                turnCount=len(trace_ids),
+                turnCount=turn_count,
                 outcome=outcome,  # type: ignore[arg-type]
                 durationMs=duration_ms,
                 totalTokens=int(data.get("total_tokens") or 0),
@@ -868,23 +889,27 @@ async def list_portal_issues(
         out.append(
             IssueCard(
                 id=str(i.id),
-                title=str(i.title or ""),
-                summary=str(triage.get("summary") or i.title or ""),
-                body=str(triage.get("body") or triage.get("detail") or ""),
+                title=_clip_text(i.title or "", 240),
+                summary=_clip_text(triage.get("summary") or i.title or "", 400),
+                body=_clip_text(triage.get("body") or triage.get("detail") or "", 800),
                 severity=_map_issue_severity(getattr(i, "severity", None)),  # type: ignore[arg-type]
                 status=_map_issue_status(getattr(i, "status", None)),  # type: ignore[arg-type]
                 agentId=str(getattr(i, "agent_id", None) or ""),
                 fingerprint=str(getattr(i, "fingerprint", None) or ""),
                 detector=str(getattr(i, "kind", None) or ""),
                 environment=str(triage.get("environment") or ""),
-                occurrenceTraceIds=[str(x) for x in occurrence],
+                occurrenceTraceIds=[str(x) for x in occurrence][:20],
                 firstSeen=_iso(getattr(i, "first_seen", None)),
                 lastSeen=_iso(getattr(i, "last_seen", None)),
                 signalCount=int(getattr(i, "stumble_count", 0) or 0),
                 relatedSignalId=None,
-                errorSample=str(triage.get("error_sample") or triage.get("error") or ""),
-                impact=str(triage.get("impact") or ""),
-                suggestedFix=str(triage.get("suggested_fix") or triage.get("fix") or ""),
+                errorSample=_clip_text(
+                    triage.get("error_sample") or triage.get("error") or "", 400
+                ),
+                impact=_clip_text(triage.get("impact") or "", 400),
+                suggestedFix=_clip_text(
+                    triage.get("suggested_fix") or triage.get("fix") or "", 400
+                ),
                 tags=[],
             )
         )

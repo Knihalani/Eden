@@ -166,6 +166,12 @@ def test_detect_installed_frameworks_returns_full_map() -> None:
         "pydantic_ai",
         "bedrock",
         "gemini",
+        # Groq / Cohere / Mistral — promoted from generic HTTP-capture
+        # fallback to native instrumentors (parity with the TS SDK's
+        # `detectInstalledFrameworks`).
+        "groq",
+        "cohere",
+        "mistral",
     }
     assert set(result.keys()) == expected
     # All values must be booleans.

@@ -13,8 +13,7 @@ SCHEMA >
     user_id String `json:$.user_id`
 
 ENGINE "MergeTree"
-# ENGINE_SORTING_KEY "user_id, timestamp"
-# ENGINE_TTL "timestamp + toIntervalDay(60)"
-# Learn more at https://www.tinybird.co/docs/forward/dev-reference/datafiles/datasource-filesENGINE_PARTITION_KEY "toYYYYMM(hour)"
+# Learn more at https://www.tinybird.co/docs/forward/dev-reference/datafiles/datasource-files
+ENGINE_PARTITION_KEY "toYYYYMM(hour)"
 ENGINE_SORTING_KEY "tenant_id, event_type, hour"
 ENGINE_TTL "toDateTime(hour) + toIntervalDay(2555)"

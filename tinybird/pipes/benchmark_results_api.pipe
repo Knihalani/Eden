@@ -14,8 +14,8 @@ SQL >
     FROM benchmark_results
     WHERE
         1
-        {% if defined(tenant_id) %} AND tenant_id = toUUIDOrZero({{ String(tenant_id) }}) {% end %}
-        {% if defined(benchmark_id) %} AND benchmark_id = toUUIDOrZero({{ String(benchmark_id) }}) {% end %}
+        {% if defined(tenant_id) %} AND tenant_id = {{ String(tenant_id) }} {% end %}
+        {% if defined(benchmark_id) %} AND benchmark_id = {{ String(benchmark_id) }} {% end %}
         {% if defined(start_time) %} AND timestamp >= parseDateTime64BestEffort({{ String(start_time) }}, 3) {% end %}
         {% if defined(end_time) %} AND timestamp <= parseDateTime64BestEffort({{ String(end_time) }}, 3) {% end %}
     GROUP BY benchmark_id

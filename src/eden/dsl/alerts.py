@@ -41,8 +41,14 @@ from ._common import (
     _upsert_alert_rule,
 )
 from .parser import EQLParser
+from eden.storage.empty_cooldown import make_empty_cooldown
 
 logger = logging.getLogger(__name__)
+
+_eql_in_cooldown, _eql_mark_empty, _eql_clear_cooldown = make_empty_cooldown(
+    default_seconds=300.0,
+    settings_attr="eql_empty_cooldown_seconds",
+)
 
 
 # The v1.3 ship supports the 3 severities the cron watchdog
@@ -157,6 +163,7 @@ class AlertAsCode:
             interval_seconds=interval_seconds,
             severity=severity,
         )
+        _eql_clear_cooldown()
 
         if warnings:
             await _fire_dsl_alert_lint_warning_hook(
@@ -271,6 +278,17 @@ class AlertAsCode:
         schedules. Hosted on ``eden-worker`` (leader-gated);
         ``cron_tick`` remains a legacy fallback when cron is enabled.
         """
+        if _eql_in_cooldown():
+            return _ok_envelope(
+                "AlertAsCode",
+                {
+                    "n_due": 0,
+                    "n_fired": 0,
+                    "n_missed": 0,
+                    "n_errors": 0,
+                    "results": [],
+                },
+            )
         from eden.storage.postgres import get_postgres_client
 
         client = await get_postgres_client()
@@ -290,6 +308,19 @@ class AlertAsCode:
             now,
             limit,
         )
+        if not rows:
+            _eql_mark_empty()
+            return _ok_envelope(
+                "AlertAsCode",
+                {
+                    "n_due": 0,
+                    "n_fired": 0,
+                    "n_missed": 0,
+                    "n_errors": 0,
+                    "results": [],
+                },
+            )
+        _eql_clear_cooldown()
         results: list[dict[str, Any]] = []
         n_fired = 0
         n_missed = 0
@@ -414,6 +445,17 @@ async def _evaluate_rule(
 
     if fired:
         await _mark_alert_fired(org_id, alert_id, now, interval)
+        await _trigger_triage(
+            org_id=org_id,
+            alert_id=alert_id,
+            name=rule.get("name") or alert_id,
+            eql_query=rule.get("eql_query") or sql,
+            severity=severity,
+            firing_id=firing_id,
+            n_rows=n_rows,
+            sample_rows=sample,
+            data_source=data_source,
+        )
     else:
         await _advance_next_fire(org_id, alert_id, interval)
         if error:
@@ -431,6 +473,70 @@ async def _evaluate_rule(
         "error": error,
         "sample_rows": sample,
     }
+
+
+async def _trigger_triage(
+    *,
+    org_id: str,
+    alert_id: str,
+    name: str,
+    eql_query: str,
+    severity: str,
+    firing_id: str,
+    n_rows: int,
+    sample_rows: list[dict[str, Any]],
+    data_source: str,
+) -> None:
+    """Wire a fresh ``eql_alert_firings`` row into the NL-alert pipeline.
+
+    ``eql_alert_rules``/``eql_alert_firings`` is the Cat 19 alert-as-
+    code table set; ``alert_events`` + :class:`AlertTriageJudge` is
+    the F81 NL-alert triage + paging pipeline. The two were never
+    connected, so a fired EQL alert recorded a firing row but nobody
+    was ever paged. This creates the corresponding ``alert_events``
+    row and runs it through triage so a ``real_incident`` verdict
+    reaches ``send_nl_incident_email``.
+
+    Additive only: the firing record above has already been
+    persisted and ``next_fire_at``/``n_fired`` already advanced by
+    the time this runs, so a failure here (bad Postgres row, judge
+    exception, etc.) is logged and swallowed rather than propagated
+    — it must never turn an already-recorded firing into a reported
+    ``fire_due`` error.
+    """
+    try:
+        from eden.alerts import repo
+        from eden.alerts.triage_judge import AlertTriageJudge
+
+        event = await repo.create_alert_event(
+            org_id=org_id,
+            # alert_events.rule_id is a FK into nl_alert_rules, a
+            # different table from eql_alert_rules (no shared id
+            # space today) — leave unset and carry the eql alert_id
+            # in the payload instead so the event stays traceable.
+            rule_id=None,
+            title=f"Alert '{name}' fired ({n_rows} row(s))",
+            severity=severity,
+            payload={
+                "alert_id": alert_id,
+                "firing_id": firing_id,
+                "eql_query": eql_query,
+                "n_rows": n_rows,
+                "data_source": data_source,
+                "sample_rows": sample_rows,
+            },
+        )
+        await AlertTriageJudge().run_for_event(
+            org_id,
+            event["id"],
+            rule_name=name,
+            nl_text=eql_query,
+            payload=event.get("payload"),
+        )
+    except Exception as exc:  # noqa: BLE001 - triage must never break firing
+        logger.warning(
+            "AlertAsCode triage wiring failed alert=%s: %s", alert_id, exc
+        )
 
 
 async def _run_alert_sql(

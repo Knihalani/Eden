@@ -63,9 +63,17 @@ from typing import Any
 from uuid import UUID
 
 from eden.config import Settings, get_settings
+from eden.storage.empty_cooldown import make_empty_cooldown
 from eden.storage.postgres import get_postgres_client
 
 logger = logging.getLogger(__name__)
+
+_insights_in_cooldown, _insights_mark_empty, _insights_clear_cooldown = (
+    make_empty_cooldown(
+        default_seconds=300.0,
+        settings_attr="insights_empty_cooldown_seconds",
+    )
+)
 
 
 class InsightsDetectorLoop:
@@ -153,6 +161,8 @@ class InsightsDetectorLoop:
         Exposed for tests so a single tick can be driven
         deterministically (no sleeping) against a fake Postgres.
         """
+        if _insights_in_cooldown():
+            return {}
         started = time.monotonic()
         per_tenant: dict[str, int] = {}
         try:
@@ -162,6 +172,11 @@ class InsightsDetectorLoop:
                 "insights loop tenant list failed: %s", exc, exc_info=True
             )
             tenants = []
+
+        if not tenants:
+            _insights_mark_empty()
+            return {}
+        _insights_clear_cooldown()
 
         for tenant_id in tenants:
             if self._stop.is_set():

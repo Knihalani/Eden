@@ -3,7 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import { hasLocale } from "next-intl";
 import { getLocale } from "next-intl/server";
 import { notFound } from "next/navigation";
-import { CookieConsent } from "@/components/cookie-consent";
+import { DeferredCookieConsent } from "@/components/deferred-cookie-consent";
 import { UnregisterServiceWorkers } from "@/components/unregister-service-workers";
 import { routing } from "@/i18n/routing";
 import "./globals.css";
@@ -78,7 +78,7 @@ export default async function RootLayout({
       <body className="flex min-h-full flex-col bg-[var(--bg)] text-[var(--text)]">
         {children}
         <UnregisterServiceWorkers />
-        <CookieConsent />
+        <DeferredCookieConsent />
       </body>
     </html>
   );

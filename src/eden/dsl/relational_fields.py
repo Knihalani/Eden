@@ -83,7 +83,16 @@ class RelationalFieldResolver:
             )
 
         t0 = time.monotonic()
-        expanded, expansion_warnings = _expand_query(query, org_id)
+        try:
+            expanded, expansion_warnings = _expand_query(query, org_id)
+        except ValueError as exc:
+            # _inject_org_id rejects a query whose WHERE body has an
+            # unbalanced (odd) quote count outside comments -- see the
+            # SECURITY/correctness note above _inject_org_id. Same
+            # convention as every other malformed-input case in this
+            # method: a clear not_implemented envelope, not an
+            # uncaught 500.
+            return _not_implemented_envelope("RelationalFieldResolver", str(exc))
         # Also lint the original query (the resolver should
         # surface NO_FILTERS, MISSING_ORG, etc. — these are
         # customer's mistakes, not artifacts of the

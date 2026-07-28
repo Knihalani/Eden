@@ -88,15 +88,28 @@ class TraceEvent:
     the sender can route to the right ingestion endpoint.
     """
 
-    __slots__ = ("source_format", "payload")
+    __slots__ = ("source_format", "payload", "offline_row_id")
 
     def __init__(
         self,
         payload: dict[str, Any],
         source_format: str = "openai",
+        *,
+        offline_row_id: int | None = None,
     ) -> None:
         self.source_format = source_format
         self.payload = payload
+        # Set only when this event originated from ``flush_offline``
+        # replaying a durable SQLite row (``OfflineQueue`` id). Lets
+        # ``_send_batch``/``_send_format`` record that specific row's
+        # resolution outcome (delivered / permanently rejected /
+        # left-unresolved-and-respilled) at the exact row granularity
+        # ``flush_offline`` needs for its ack decision — independent of
+        # every other row that happens to share this event's format
+        # group or land in the same or a different generation/batch.
+        # ``None`` for ordinary (non-replay) events, which never
+        # participate in the offline-ack bookkeeping.
+        self.offline_row_id = offline_row_id
 
     def to_json_bytes(self) -> bytes:
         return json.dumps(
@@ -224,6 +237,61 @@ class EdenClient:
         self._processed_generation = 0
         self._generation_idle = threading.Event()
         self._generation_idle.set()
+        # Per-row unresolved tracker. Contains the ``OfflineQueue`` row
+        # id of every durable-replay row (see ``TraceEvent.offline_row_id``)
+        # whose most recent send attempt did NOT complete with a 2xx
+        # response and was NOT a permanent (non-retryable) rejection --
+        # i.e. it exhausted retries, hit a transport error, and was
+        # re-spilled to the offline queue as a brand-new row. A row id
+        # absent from this set is resolved (delivered, or permanently
+        # and intentionally dropped) as of the most recent attempt for
+        # it.
+        #
+        # This has gone through two coarser generations before landing
+        # here:
+        #
+        # 1. A single process-wide scalar (``_last_failed_generation``)
+        #    collapsed every row's outcome into one flag for the whole
+        #    ``flush_offline()`` call -- one failing row anywhere
+        #    blocked acking every row the call drained.
+        # 2. A per-format-group dict (keyed by
+        #    ``resolve_ingest_path(source_format)``) fixed the
+        #    cross-format blocking, but a single ``flush_offline()``
+        #    call can drain more rows than one ``_send_batch`` handles
+        #    in one tick (the background loop caps a drain at
+        #    ``config.batch_size``, default 50, while ``flush_offline``'s
+        #    own default ``limit`` is 100) -- so two SAME-format rows
+        #    sent across two separate generations within one
+        #    ``flush_offline()`` call collapsed onto one dict entry,
+        #    and whichever row's ``_send_format`` call wrote last won,
+        #    silently clobbering the other row's actual outcome.
+        #
+        # Tracking the specific ``OfflineQueue`` row id removes both
+        # collapsing axes at once: two rows can never share a key
+        # (SQLite's ``INTEGER PRIMARY KEY AUTOINCREMENT`` never reuses
+        # an id, even after the row is deleted/acked), so it no longer
+        # matters how many format groups, generations, or sub-batches a
+        # single ``flush_offline()`` call's rows are scattered across --
+        # each row's own entry (or lack of one) is authoritative for
+        # that row alone. This also means no "since this call started"
+        # generation baseline is needed: a row id is only ever produced
+        # once, so finding it absent from the set is unambiguous
+        # evidence of resolution, not stale data from an unrelated
+        # earlier call.
+        #
+        # ``_processed_generation`` alone only tells us the HTTP
+        # *attempt* finished, not that it *succeeded* (``_send_batch``
+        # swallows all exceptions and re-spills failures to the offline
+        # queue as new rows).
+        #
+        # Mutated from the background async-loop thread (inside
+        # ``_send_format``) and read from ``flush_offline``, which runs
+        # on whatever thread the caller invokes it from -- so all
+        # access goes through ``_unresolved_lock``, mirroring the
+        # ``_lifecycle_lock`` convention used elsewhere in this class
+        # for state shared between the worker thread and callers.
+        self._unresolved_lock = threading.Lock()
+        self._unresolved_offline_rows: set[int] = set()
 
     # ── Lifecycle ────────────────────────────────────────────────────
 
@@ -331,16 +399,38 @@ class EdenClient:
         try:
             self._queue.put_nowait(event)
         except _queue.Full:
-            # Drop the oldest to make room.
+            # Drop the oldest to make room. If the evicted event is a
+            # durable-offline replay (``offline_row_id`` set by
+            # ``flush_offline``), it never reaches ``_send_format`` and
+            # so would otherwise never be added to
+            # ``_unresolved_offline_rows`` -- ``flush_offline``'s ack
+            # gate would then read "absent from the unresolved set" as
+            # proof of delivery and wrongly ack (permanently delete) a
+            # row that was actually dropped by back-pressure before any
+            # send was ever attempted. Mark it unresolved here instead,
+            # so it stays in the durable SQLite queue for a future
+            # ``flush_offline()`` retry. Ordinary live-traffic events
+            # (``offline_row_id is None``) are unaffected -- they keep
+            # vanishing silently exactly as before.
+            evicted: TraceEvent | None = None
             try:
-                self._queue.get_nowait()
+                evicted = self._queue.get_nowait()
             except _queue.Empty:
                 pass
+            if evicted is not None and evicted.offline_row_id is not None:
+                self._mark_rows_unresolved([evicted.offline_row_id])
             try:
                 self._queue.put_nowait(event)
             except _queue.Full:
                 self._dropped_total += 1
                 logger.warning("eden sdk: queue full, dropped event")
+                # Same rationale as above: the event being dropped here
+                # (not the one evicted above) may itself be an offline
+                # replay row if a concurrent producer refilled the
+                # queue between the ``get_nowait`` and this
+                # ``put_nowait``.
+                if event.offline_row_id is not None:
+                    self._mark_rows_unresolved([event.offline_row_id])
         self._wake.set()
         # Wake the worker when a streaming chunk lands so it flushes
         # without waiting for the full batch window. The producer
@@ -729,21 +819,84 @@ class EdenClient:
             return 0.0
         return min(delta, 30.0)
 
+    def _mark_rows_resolved(self, row_ids: list[int]) -> None:
+        """Record that each id in ``row_ids`` had its most recent send
+        attempt resolve (delivered, or permanently and intentionally
+        dropped).
+
+        ``row_ids`` are ``OfflineQueue`` row ids (``TraceEvent.offline_row_id``)
+        for the specific rows this ``_send_format`` call just attempted --
+        never a format-group-wide or batch-wide aggregate. No-op for
+        events that did not originate from a durable-offline replay
+        (``row_ids`` is already filtered to non-``None`` ids by the
+        caller).
+
+        Called from the background async-loop thread. Guarded by
+        ``_unresolved_lock`` so ``flush_offline`` (running on the
+        caller's thread) never observes a torn/partial update.
+        """
+        if not row_ids:
+            return
+        with self._unresolved_lock:
+            for rid in row_ids:
+                self._unresolved_offline_rows.discard(rid)
+
+    def _mark_rows_unresolved(self, row_ids: list[int]) -> None:
+        """Record that each id in ``row_ids`` was left *unresolved* --
+        re-spilled to the offline queue under new row ids rather than
+        delivered or permanently dropped. See ``_mark_rows_resolved``."""
+        if not row_ids:
+            return
+        with self._unresolved_lock:
+            self._unresolved_offline_rows.update(row_ids)
+
     async def _send_batch(self, batch: list[TraceEvent]) -> None:
         assert self._http is not None
-        # Group by source_format so each ingestion route gets its
-        # own request. Routes are 1:1 with decoder names.
-        groups: dict[str, list[dict[str, Any]]] = {}
+        # Group by source_format so each ingestion route gets its own
+        # request -- routes are 1:1 with decoder names. This grouping is
+        # purely about *how many HTTP requests* to make; it is no longer
+        # also doing double duty as the ack-resolution granularity (see
+        # ``_mark_rows_resolved``/``_mark_rows_unresolved``), so groups
+        # keep whole ``TraceEvent`` objects rather than bare payload
+        # dicts -- each event's ``offline_row_id`` needs to survive
+        # through to ``_send_format`` for that per-row bookkeeping.
+        groups: dict[str, list[TraceEvent]] = {}
         for ev in batch:
             path_fmt = resolve_ingest_path(ev.source_format)
-            groups.setdefault(path_fmt, []).append(ev.payload)
+            groups.setdefault(path_fmt, []).append(ev)
 
         # Build auth headers once per batch; each format copies.
         base_headers = self.config.auth_headers()
 
         async def _send_format(
-            source_format: str, payloads: list[dict[str, Any]]
-        ) -> None:
+            source_format: str, events: list[TraceEvent]
+        ) -> bool:
+            """Returns ``True`` when this send is *resolved* -- either
+            delivered (confirmed 2xx) or permanently undeliverable
+            (non-retryable 4xx) and therefore intentionally dropped, never
+            re-spilled. Returns ``False`` only when it is left
+            *unresolved*: re-spilled to the offline queue for a later
+            retry (exhausted retryable 5xx/408/429, or a transport
+            exception).
+
+            Also records the outcome at the granularity ``flush_offline``
+            actually needs: per individual ``OfflineQueue`` row id (via
+            ``_mark_rows_resolved``/``_mark_rows_unresolved``), for
+            whichever of ``events`` carry one (``TraceEvent.offline_row_id``
+            is ``None`` for ordinary, non-replay events and is simply
+            skipped). This is deliberately independent of both the format
+            group and how many other ``_send_format`` calls/generations
+            this ``flush_offline()`` call spans -- two rows of the same
+            format sent across two separate sub-batches must each keep
+            their own outcome, never collapse onto a shared key. A
+            permanent 4xx is resolved (in the sense that nothing further
+            will ever be attempted for it) even though it was never
+            delivered, so it must not block an ack either.
+            """
+            payloads = [ev.payload for ev in events]
+            row_ids = [
+                ev.offline_row_id for ev in events if ev.offline_row_id is not None
+            ]
             count = len(payloads) if self._BATCH_AS_ARRAY else 1
             try:
                 url = self.config.ingest_url(source_format)
@@ -790,13 +943,15 @@ class EdenClient:
                             source_format, attempt, exc,
                         )
                         # Network exhaustion is retryable later — spill.
-                        self._spill_offline(source_format, payloads)
-                        break
+                        self._spill_offline(source_format, events, payloads)
+                        self._mark_rows_unresolved(row_ids)
+                        return False
 
                     status = resp.status_code
                     if 200 <= status < 300:
                         self._sent_total += count
-                        break
+                        self._mark_rows_resolved(row_ids)
+                        return True
                     retryable = status == 408 or status == 429 or status >= 500
                     if not retryable or attempt >= max_attempts:
                         self._failed_total += count
@@ -808,8 +963,17 @@ class EdenClient:
                         # (auth/validation) would poison the offline
                         # queue with payloads that can never succeed.
                         if retryable:
-                            self._spill_offline(source_format, payloads)
-                        break
+                            self._spill_offline(source_format, events, payloads)
+                            self._mark_rows_unresolved(row_ids)
+                            return False
+                        # Permanent failure: nothing was (or ever will
+                        # be) spilled for it, so it's resolved -- must
+                        # not block ``flush_offline``'s ack gate, or
+                        # the offline row would sit forever and be
+                        # resent to the same doomed endpoint on every
+                        # replay.
+                        self._mark_rows_resolved(row_ids)
+                        return True
                     delay = min(base_delay_s * (2 ** (attempt - 1)), 5.0)
                     retry_after = resp.headers.get("retry-after")
                     if retry_after is not None:
@@ -822,38 +986,148 @@ class EdenClient:
             except Exception as exc:  # noqa: BLE001
                 self._failed_total += count
                 logger.warning("eden ingest %s failed: %s", source_format, exc)
-                self._spill_offline(source_format, payloads)
+                self._spill_offline(source_format, events, payloads)
+                self._mark_rows_unresolved(row_ids)
+                return False
 
+        # Each individual row's outcome is recorded independently (via
+        # ``_mark_rows_resolved``/``_mark_rows_unresolved`` inside
+        # ``_send_format``) as it resolves, rather than collapsed into
+        # one aggregate flag per format group or per whole batch -- so a
+        # failure for one row never taints the ack-eligibility of any
+        # other row, whether it shares this row's format group, a
+        # different one, or a different generation/sub-batch entirely.
         await asyncio.gather(
-            *(_send_format(fmt, payloads) for fmt, payloads in groups.items())
+            *(_send_format(fmt, events) for fmt, events in groups.items())
         )
 
-    def _spill_offline(self, source_format: str, payloads: list[dict[str, Any]]) -> None:
+    def _spill_offline(
+        self,
+        source_format: str,
+        events: list[TraceEvent],
+        payloads: list[dict[str, Any]],
+    ) -> None:
+        """Durably persist a batch of payloads whose send just failed.
+
+        ``events`` and ``payloads`` are parallel (same order, same
+        length) -- ``payloads`` may have been redacted since ``events``
+        was built (see the ``redact_on_client`` step in
+        ``_send_format``), so both are needed: ``events`` tells us
+        provenance (``TraceEvent.offline_row_id``), ``payloads`` is the
+        actual content to persist.
+
+        Two cases, handled differently to avoid unbounded row growth:
+
+        * Fresh live-traffic failures (``offline_row_id is None`` --
+          this payload has never been in the durable queue before):
+          insert a brand-new row, exactly as before.
+        * Re-spill of an already-durable row (``offline_row_id`` set --
+          this payload originated from ``flush_offline()`` draining an
+          existing ``OfflineQueue`` row and is now failing again):
+          update that EXISTING row in place (same id, refreshed
+          payload/timestamp) instead of inserting a second row.
+          ``OfflineQueue.drain()`` is read-only and deletion only ever
+          happens via explicit ``ack()`` -- so inserting a new row here
+          without removing the original would duplicate that logical
+          event on every failing ``flush_offline()`` cycle (1 -> 2 -> 4
+          -> 8 -> ... rows) until ``max_rows`` is hit and
+          ``_trim_locked()`` starts silently dropping the OLDEST rows
+          (which need not even be the duplicates). Keeping the same row
+          id also means ``_unresolved_offline_rows`` tracking (keyed by
+          that id) needs no further changes -- the id never changes.
+        """
         if self._offline is None:
             return
-        try:
-            self._offline.enqueue_many(
-                [(source_format, p) for p in payloads]
-            )
-        except Exception as exc:  # noqa: BLE001
-            # Fall back to per-row so a single bad payload does not
-            # drop the whole spill batch.
-            logger.debug("offline spill batch failed: %s", exc)
-            for p in payloads:
-                try:
-                    self._offline.enqueue(source_format, p)
-                except Exception as row_exc:  # noqa: BLE001
-                    logger.debug("offline spill failed: %s", row_exc)
+        fresh: list[tuple[str, dict[str, Any]]] = []
+        durable_updates: list[tuple[int, str, dict[str, Any]]] = []
+        for ev, payload in zip(events, payloads):
+            if ev.offline_row_id is not None:
+                durable_updates.append((ev.offline_row_id, source_format, payload))
+            else:
+                fresh.append((source_format, payload))
+        if durable_updates:
+            try:
+                self._offline.update_many(durable_updates)
+            except Exception as exc:  # noqa: BLE001
+                # Fall back to per-row so a single bad row does not
+                # drop the whole update batch.
+                logger.debug("offline spill update failed: %s", exc)
+                for rid, fmt, payload in durable_updates:
+                    try:
+                        self._offline.update_many([(rid, fmt, payload)])
+                    except Exception as row_exc:  # noqa: BLE001
+                        logger.debug(
+                            "offline spill update failed for row %s: %s",
+                            rid,
+                            row_exc,
+                        )
+        if fresh:
+            try:
+                self._offline.enqueue_many(fresh)
+            except Exception as exc:  # noqa: BLE001
+                # Fall back to per-row so a single bad payload does not
+                # drop the whole spill batch.
+                logger.debug("offline spill batch failed: %s", exc)
+                for fmt, payload in fresh:
+                    try:
+                        self._offline.enqueue(fmt, payload)
+                    except Exception as row_exc:  # noqa: BLE001
+                        logger.debug("offline spill failed: %s", row_exc)
 
     def flush_offline(self, limit: int = 100, *, timeout: float = 5.0) -> int:
         """Re-enqueue durable offline events after reconnect. Returns count acked.
 
-        Rows stay in SQLite until flush fully succeeds (queue drained and
-        in-flight send completed). On timeout or leftover in-memory events,
-        ids are left unacked so a later replay can retry. Sampling is
-        bypassed on this path so ClientSampler cannot drop durable rows
-        that would then be acked away. Failed sends are re-spilled by
-        ``_send_batch`` when the failure is transient.
+        Rows stay in SQLite until flush fully succeeds (queue drained,
+        in-flight send completed) AND that specific row actually
+        reported success or was permanently, non-retryably rejected. On
+        timeout, leftover in-memory events, or a *retryable* send
+        failure, a row's id is left unacked so a later replay can
+        retry. Sampling is bypassed on this path so ClientSampler
+        cannot drop durable rows that would then be acked away.
+
+        The ack decision is made **per row id**, not per format group
+        and not for the call as a whole: a single ``flush_offline()``
+        call can drain more rows than one ``_send_batch`` tick handles
+        (the background loop caps a drain at ``config.batch_size``,
+        default 50, while this method's own default ``limit`` is 100),
+        so two rows of the *same* format group can end up sent in two
+        separate generations/sub-batches within one call. Gating on
+        anything coarser than the row id itself -- a shared aggregate
+        flag for the whole call, or a shared key per format group --
+        risks one row's outcome silently overwriting another's: e.g. a
+        delivered ``openai`` row from generation 1 and a
+        retry-exhausted ``openai`` row from generation 2 of the same
+        call must each keep their own fate, independent of send order,
+        rather than collapsing onto one shared "openai" result where
+        whichever write happens last wins. Every row id drained here is
+        checked against ``_unresolved_offline_rows`` individually, so
+        exactly the rows that resolved (delivered or permanently
+        rejected) in *this* call are acked, regardless of how many
+        generations, sub-batches, or format groups this call's rows
+        were scattered across.
+
+        A retryable-failed send is NOT the same as a completed one:
+        ``_send_batch`` swallows all exceptions internally and re-spills
+        retryable failures (exhausted 5xx/408/429, transport errors) to
+        the offline queue as brand-new rows, but it still unconditionally
+        bumps ``_processed_generation`` in its ``finally`` block. Gating
+        the ack purely on "queue drained and generation caught up" would
+        therefore report a positive acked count even when the events were
+        merely re-spilled under new row ids, not delivered -- so we also
+        require, per row id, that it was not marked unresolved
+        (``_unresolved_offline_rows``). Because ``OfflineQueue`` row ids
+        are never reused (SQLite ``INTEGER PRIMARY KEY AUTOINCREMENT``),
+        a row id found absent from that set is unambiguous evidence this
+        specific row resolved -- no "since this call started" baseline
+        is needed the way the coarser format-group tracking required.
+
+        Permanent, non-retryable rejections (e.g. 400/401/422) are the
+        one exception: they are deliberately never re-spilled (see
+        ``_spill_offline`` callers in ``_send_batch``) since they can
+        never succeed, so the row is marked *resolved* (see
+        ``_mark_rows_resolved``) rather than unresolved -- it is acked
+        away after the single attempt just like a successful delivery,
+        instead of being resent to the same doomed endpoint forever.
         """
         if self._offline is None:
             return 0
@@ -863,19 +1137,27 @@ class EdenClient:
         ids: list[int] = []
         for rid, fmt, payload in drained:
             self.enqueue(
-                TraceEvent(payload=payload, source_format=fmt),
+                TraceEvent(payload=payload, source_format=fmt, offline_row_id=rid),
                 skip_sampling=True,
             )
             ids.append(rid)
         self.flush(timeout=timeout)
-        flushed = (
-            self._queue.empty()
-            and self._processed_generation >= self._generation
-        )
-        if not flushed:
+        if not (
+            self._queue.empty() and self._processed_generation >= self._generation
+        ):
+            # Timed out, or the in-flight send hasn't finished yet --
+            # nothing this call attempted is confirmed resolved.
             return 0
-        self._offline.ack(ids)
-        return len(ids)
+        # Snapshot under the lock so a concurrent background-thread
+        # mutation (another row resolving or failing in a later,
+        # unrelated batch) can't be observed mid-iteration.
+        with self._unresolved_lock:
+            unresolved_snapshot = set(self._unresolved_offline_rows)
+        ackable_ids = [rid for rid in ids if rid not in unresolved_snapshot]
+        if not ackable_ids:
+            return 0
+        self._offline.ack(ackable_ids)
+        return len(ackable_ids)
 
     # ── Stats / introspection ─────────────────────────────────────────
 
@@ -895,6 +1177,21 @@ class EdenClient:
     def failed(self) -> int:
         return self._failed_total
 
+    @property
+    def offline_dropped(self) -> int:
+        """Rows silently evicted from the durable offline queue on overflow.
+
+        ``0`` when no offline queue is configured. Distinct from
+        :attr:`dropped` (in-memory queue back-pressure drops) -- this
+        counts durable SQLite rows lost because the offline queue itself
+        hit ``max_rows`` while the network was down for a long stretch.
+        Surfaced here so operators can actually observe offline-queue
+        data loss instead of it being a write-only counter.
+        """
+        if self._offline is None:
+            return 0
+        return self._offline.dropped
+
     def p99_latency_ms(self) -> float:
         """99th percentile of recent send latencies in milliseconds."""
         if not self._latency_window:
@@ -909,6 +1206,16 @@ class EdenClient:
 _lock = threading.Lock()
 _default: EdenClient | None = None
 _atexit_registered = False
+# Serializes the *slow* work of building + starting a fresh singleton
+# (construction plus ``start()``'s up-to-1s blocking wait on
+# ``_loop_started``). ``_lock`` itself is only ever held for quick
+# reads/writes of the ``_default`` pointer -- so ``reset_default_client()``
+# and ``_atexit_shutdown()`` (which also take ``_lock``) are never stuck
+# behind another thread's in-flight sender startup. See the analogous
+# ``EdenClient._lifecycle_lock`` comment (~line 191) for why the
+# check-and-create step still needs *some* lock even though the wait
+# itself doesn't need to hold it.
+_init_lock = threading.Lock()
 
 
 def get_default_client() -> EdenClient:
@@ -916,27 +1223,62 @@ def get_default_client() -> EdenClient:
 
     The first call also starts the sender thread and registers an
     :mod:`atexit` hook for a best-effort final flush.
+
+    Concurrent first-callers serialize on ``_init_lock`` (not the
+    short-lived ``_lock``) while one of them constructs the client and
+    runs its blocking ``start()``. Callers never get a client back
+    before its ``start()`` has been attempted and resolved -- so a
+    caller can't observe a half-initialized sender, matching the
+    invariant ``EdenClient.start()`` documents for its own
+    ``_lifecycle_lock``.
     """
     global _default, _atexit_registered
     with _lock:
-        if _default is None:
-            _default = EdenClient()
-            _default.start()
+        if _default is not None:
+            return _default
+    with _init_lock:
+        with _lock:
+            if _default is not None:
+                return _default
+        client = EdenClient()
+        try:
+            client.start()
+        except Exception:
+            # start() failed (the sender thread died before flipping
+            # _loop_started). Do NOT publish this broken client --
+            # `_default` was never assigned in this branch, so it's
+            # already None, but we clear it explicitly (mirroring
+            # reset_default_client()'s pattern) so a future refactor
+            # that publishes earlier can't silently reintroduce a
+            # poisoned singleton that every subsequent call would
+            # return with no retry and 100% event loss.
+            with _lock:
+                _default = None
+            raise
+        with _lock:
+            _default = client
             if not _atexit_registered:
                 atexit.register(_atexit_shutdown)
                 _atexit_registered = True
-    return _default
+        return client
 
 
 def _atexit_shutdown() -> None:
     global _default
-    if _default is None:
-        return
-    try:
-        _default.flush(timeout=2.0)
-    finally:
-        _default.shutdown(timeout=2.0)
-        _default = None
+    # Guarded by ``_lock`` (mirroring ``reset_default_client()``) so a
+    # background thread calling ``get_default_client()`` concurrently
+    # with atexit teardown can't get a reference to a client whose
+    # worker thread is already gone mid-shutdown -- which would leave
+    # its enqueued events sitting in ``self._queue`` forever with
+    # nothing left to drain them.
+    with _lock:
+        if _default is None:
+            return
+        try:
+            _default.flush(timeout=2.0)
+        finally:
+            _default.shutdown(timeout=2.0)
+            _default = None
 
 
 def reset_default_client() -> None:

@@ -26,6 +26,7 @@ import { useOrg } from "@/hooks/use-org";
 import { useOrgQuery } from "@/hooks/use-api-query";
 import { queryKeys } from "@/lib/query-keys";
 import { portalApi } from "@/lib/api/portal";
+import { ASSIST_STALE, SHELL_QUERY } from "@/lib/portal-query";
 import { QueryErrorPanel, QueryLoadingPanel } from "@/components/shell/query-error-panel";
 import { EmptyState } from "@/lab/lab-ui";
 import { catalogTraces } from "@/lib/portal-catalog";
@@ -87,6 +88,7 @@ function LabDebuggerDetailInner() {
     queryKeys.portal.debuggerSessions(orgId),
     orgId,
     () => portalApi.debuggerSessions(orgId!),
+    { ...SHELL_QUERY, staleTime: ASSIST_STALE },
   );
   const sessions = sessionsQuery.data ?? [];
 

@@ -9,7 +9,7 @@ import {
   type ReactNode,
 } from "react";
 import { useUser } from "@clerk/nextjs";
-import { api } from "@/lib/api/auth-client";
+import { api } from "@/lib/api/resources";
 import { ApiError } from "@/lib/api/core";
 import { usePolling } from "@/hooks/use-polling";
 

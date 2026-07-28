@@ -229,9 +229,17 @@ def _enqueue_openai_event(
         if isinstance(m, str):
             payload["model_normalized"] = normalize_model_name(m)
 
+    # Always stamp a trace_id — joining the active trace when one
+    # exists, otherwise a fresh uuid4 — so the payload shape matches
+    # the streaming path (_wrap_sync_stream/_wrap_async_stream below),
+    # which has called _trace_id_or_random() unconditionally all
+    # along. Previously this only ran inside the `trace_ctx is not
+    # None` branch, so a non-streaming call with no active trace
+    # shipped no trace_id at all while the equivalent streaming call
+    # always did.
+    payload.setdefault("trace_id", _trace_id_or_random())
     trace_ctx: TraceContext | None = current_trace()
     if trace_ctx is not None:
-        payload.setdefault("trace_id", trace_ctx.trace_id)
         name = (trace_ctx.name or "").strip()
         if name and name != "trace":
             payload.setdefault("agent_id", name)

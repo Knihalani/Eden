@@ -1149,3 +1149,436 @@ describe("EdenSDK timer unref", () => {
     },
   );
 });
+
+
+// ── New: error-sampling safety net covers status/error_type shapes ──
+
+describe("EdenSDK error-sampling safety net (hasError broadening)", () => {
+  it(
+    "force-keeps `status: \"error\"` + `error_type` payloads (openai/anthropic/trace()/vercel-ai shape) under aggressive sampling",
+    async () => {
+      // Regression: `emit()`'s `hasError` check previously only
+      // looked at a literal `error` field or `outcome === "error"`.
+      // But `trace()`/`traceAgent()` (every `agent.run` event),
+      // openai.ts, anthropic.ts, and vercel-ai.ts all signal errors
+      // via `status: "error"` + `error_type` instead -- so under
+      // `balanced`/`aggressive` sampling profiles, real error
+      // traces from those paths were subject to the same random
+      // keep-rate as any other event instead of being force-kept,
+      // defeating `sampleKeepErrors: true` (the default).
+      const sdk = new EdenSDK({
+        orgId: "org_test",
+        apiKey: "key_test",
+        samplingProfile: "aggressive",
+        sampleKeepErrors: true,
+        flushIntervalMs: 60_000,
+        maxBatchSize: 1000,
+      });
+      const N = 40;
+      for (let i = 0; i < N; i++) {
+        sdk.emit({
+          eventId: `err${i}`,
+          tenantId: "org_test",
+          projectId: "default",
+          traceId: `t${i}`,
+          realm: "production",
+          eventType: "llm_completion",
+          timestamp: new Date().toISOString(),
+          sourceFormat: "openai",
+          payload: {
+            status: "error",
+            error_type: "Error",
+            error_message: "boom",
+          },
+        });
+      }
+      await sdk.flush();
+      // Aggressive sampling keeps ~5% by chance -- with 40 events,
+      // it is vanishingly unlikely (< 1e-30) that all 40 survive
+      // WITHOUT a force-keep. With the fix every one ships.
+      expect(sdk.sampledOut).toBe(0);
+      const body = captured[0]?.body as Record<string, unknown>[];
+      expect(Array.isArray(body)).toBe(true);
+      expect(body.length).toBe(N);
+    },
+  );
+
+  it(
+    "force-keeps an `outcome: \"error\"` payload (providers.ts/mastra.ts shape) under aggressive sampling",
+    async () => {
+      const sdk = new EdenSDK({
+        orgId: "org_test",
+        apiKey: "key_test",
+        samplingProfile: "aggressive",
+        sampleKeepErrors: true,
+        flushIntervalMs: 60_000,
+        maxBatchSize: 1000,
+      });
+      sdk.emit({
+        eventId: "outcome-err",
+        tenantId: "org_test",
+        projectId: "default",
+        traceId: "t1",
+        realm: "production",
+        eventType: "llm_completion",
+        timestamp: new Date().toISOString(),
+        sourceFormat: "bedrock",
+        payload: { outcome: "error" },
+      });
+      await sdk.flush();
+      expect(sdk.sampledOut).toBe(0);
+      expect(captured.length).toBe(1);
+    },
+  );
+
+  it(
+    "still samples non-error `status: \"success\"` payloads under aggressive sampling (no over-broadening)",
+    async () => {
+      const sdk = new EdenSDK({
+        orgId: "org_test",
+        apiKey: "key_test",
+        samplingProfile: "aggressive",
+        sampleKeepErrors: true,
+        flushIntervalMs: 60_000,
+        maxBatchSize: 1000,
+      });
+      const N = 300;
+      for (let i = 0; i < N; i++) {
+        sdk.emit({
+          eventId: `ok${i}`,
+          tenantId: "org_test",
+          projectId: "default",
+          traceId: `t${i}`,
+          realm: "production",
+          eventType: "llm_completion",
+          timestamp: new Date().toISOString(),
+          sourceFormat: "openai",
+          payload: { status: "success", error_type: undefined },
+        });
+      }
+      await sdk.flush();
+      // Sanity check the fix doesn't accidentally force-keep
+      // everything: aggressive sampling (5% keep rate) over 300
+      // successes should drop the vast majority.
+      expect(sdk.sampledOut).toBeGreaterThan(0);
+    },
+  );
+});
+
+
+// ── New: postChunkBatch spill-to-offline-queue path ─────────────────
+
+describe("EdenSDK postChunkBatch offline spill", () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = mkdtempSync(join(tmpdir(), "eden-chunk-spill-"));
+  });
+
+  it(
+    "spills a failed chunk batch to the offline queue on transient (5xx) failure",
+    async () => {
+      // Regression: `postChunkBatch` only ever inspected the
+      // `"too_large"` outcome from `postJson()` -- `"spill"` and
+      // `"drop"` were never checked, so a chunk batch that failed
+      // permanently (or after exhausting retries) was silently
+      // dropped from memory with no offline-queue fallback, unlike
+      // `postBatch()` which explicitly spills on `"spill"`.
+      globalThis.fetch = (async () =>
+        new Response("unavailable", { status: 503 })) as unknown as typeof fetch;
+
+      const qpath = join(tmpDir, "chunks-offline.jsonl");
+      const sdk = new EdenSDK({
+        orgId: "o",
+        apiKey: "k_chunkspill",
+        baseUrl: "http://localhost:8000",
+        flushIntervalMs: 60_000,
+        offlineQueuePath: qpath,
+        timeoutS: 1,
+      });
+      sdk.bufferChunk({
+        eventId: "e1",
+        traceId: "t1",
+        chunkIndex: 0,
+        deltaText: "x",
+        ttftMs: 1,
+        itlMs: null,
+        tpotMs: null,
+        receivedAtClientMs: 0,
+      });
+      await sdk.flushChunks();
+
+      const q = new OfflineQueue(qpath);
+      expect(q.size()).toBeGreaterThanOrEqual(1);
+      const rows = q.peek(10);
+      const chunkRow = rows.find((r) => r.sourceFormat === "chunks");
+      expect(chunkRow).toBeDefined();
+      const chunks = (chunkRow?.payload as { chunks?: unknown[] } | undefined)
+        ?.chunks;
+      expect(Array.isArray(chunks)).toBe(true);
+      expect((chunks?.[0] as Record<string, unknown>)?.event_id).toBe("e1");
+    },
+  );
+
+  it(
+    "does not spill a chunk batch to the offline queue on permanent (4xx) failure",
+    async () => {
+      globalThis.fetch = (async () =>
+        new Response("unauthorized", { status: 401 })) as unknown as typeof fetch;
+
+      const qpath = join(tmpDir, "chunks-offline-4xx.jsonl");
+      const sdk = new EdenSDK({
+        orgId: "o",
+        apiKey: "k_chunkspill4xx",
+        baseUrl: "http://localhost:8000",
+        flushIntervalMs: 60_000,
+        offlineQueuePath: qpath,
+        timeoutS: 1,
+      });
+      sdk.bufferChunk({
+        eventId: "e2",
+        traceId: "t2",
+        chunkIndex: 0,
+        deltaText: "x",
+        ttftMs: 1,
+        itlMs: null,
+        tpotMs: null,
+        receivedAtClientMs: 0,
+      });
+      await sdk.flushChunks();
+
+      const q = new OfflineQueue(qpath);
+      expect(q.size()).toBe(0);
+    },
+  );
+});
+
+
+// ── New: flushOffline() -- ack-after-flush / timeout / sampling-bypass ──
+
+describe("EdenSDK flushOffline()", () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = mkdtempSync(join(tmpdir(), "eden-flush-offline-"));
+  });
+
+  it("returns 0 immediately when no offline queue is configured", async () => {
+    const sdk = new EdenSDK({ orgId: "o", apiKey: "k" });
+    const n = await sdk.flushOffline();
+    expect(n).toBe(0);
+  });
+
+  it("returns 0 immediately when the offline queue is empty", async () => {
+    const qpath = join(tmpDir, "empty.jsonl");
+    const sdk = new EdenSDK({ orgId: "o", apiKey: "k", offlineQueuePath: qpath });
+    const n = await sdk.flushOffline();
+    expect(n).toBe(0);
+  });
+
+  it(
+    "acks (deletes) durable rows only after a confirmed successful send",
+    async () => {
+      // Mirrors Python's `test_flush_offline_acks_after_flush`.
+      const qpath = join(tmpDir, "flush-ack.jsonl");
+      const q = new OfflineQueue(qpath);
+      q.enqueue("openai", { event_id: "replay-1" });
+      expect(q.size()).toBe(1);
+
+      const posts: unknown[] = [];
+      globalThis.fetch = (async (_url: RequestInfo | URL, init?: RequestInit) => {
+        posts.push(parseFetchBody(init));
+        return new Response(JSON.stringify({ accepted: 1 }), { status: 200 });
+      }) as unknown as typeof fetch;
+
+      const sdk = new EdenSDK({
+        orgId: "o",
+        apiKey: "k",
+        baseUrl: "http://localhost:8000",
+        offlineQueuePath: qpath,
+        flushIntervalMs: 60_000,
+      });
+      const n = await sdk.flushOffline(10);
+      expect(n).toBe(1);
+      expect(posts.length).toBeGreaterThanOrEqual(1);
+      const freshQ = new OfflineQueue(qpath);
+      expect(freshQ.size()).toBe(0);
+    },
+  );
+
+  it(
+    "does NOT ack when the send has not settled within the timeout budget",
+    async () => {
+      // Mirrors Python's `test_flush_offline_skips_ack_on_timeout`:
+      // a slow (but eventually successful) send must not be acked
+      // if `flushOffline()`'s timeout elapses first -- the row
+      // stays durable so a later replay can retry it. Acking on
+      // mere "attempt completed" (rather than confirmed settle)
+      // is exactly the bug this guards against.
+      const qpath = join(tmpDir, "flush-timeout.jsonl");
+      const q = new OfflineQueue(qpath);
+      q.enqueue("openai", { event_id: "replay-slow" });
+      expect(q.size()).toBe(1);
+
+      globalThis.fetch = (async () => {
+        await new Promise((r) => setTimeout(r, 300));
+        return new Response(JSON.stringify({ accepted: 1 }), { status: 200 });
+      }) as unknown as typeof fetch;
+
+      const sdk = new EdenSDK({
+        orgId: "o",
+        apiKey: "k",
+        baseUrl: "http://localhost:8000",
+        offlineQueuePath: qpath,
+        flushIntervalMs: 60_000,
+        timeoutS: 5,
+      });
+      const n = await sdk.flushOffline(10, 50);
+      expect(n).toBe(0);
+      const freshQ = new OfflineQueue(qpath);
+      expect(freshQ.size()).toBe(1);
+    },
+  );
+
+  it(
+    "bypasses ClientSampler entirely -- no sampledOut increment even under aggressive sampling",
+    async () => {
+      // Mirrors Python's `test_flush_offline_bypasses_sampling`:
+      // durable offline replay must never be dropped by
+      // `ClientSampler` -- a row that already survived the
+      // offline-queue spill filter (only transient failures spill)
+      // must not then be silently sampled away before being acked.
+      const qpath = join(tmpDir, "flush-sampling.jsonl");
+      const q = new OfflineQueue(qpath);
+      q.enqueue("openai", { event_id: "replay-sampled" });
+
+      globalThis.fetch = (async () =>
+        new Response(JSON.stringify({ accepted: 1 }), {
+          status: 200,
+        })) as unknown as typeof fetch;
+
+      const sdk = new EdenSDK({
+        orgId: "o",
+        apiKey: "k",
+        baseUrl: "http://localhost:8000",
+        offlineQueuePath: qpath,
+        flushIntervalMs: 60_000,
+        samplingProfile: "aggressive",
+        sampleKeepErrors: true,
+      });
+      const n = await sdk.flushOffline(10);
+      expect(n).toBe(1);
+      expect(sdk.sampledOut).toBe(0);
+      const freshQ = new OfflineQueue(qpath);
+      expect(freshQ.size()).toBe(0);
+    },
+  );
+
+  it(
+    "leaves a permanently-failing (4xx) row un-acked on disk",
+    async () => {
+      const qpath = join(tmpDir, "flush-4xx.jsonl");
+      const q = new OfflineQueue(qpath);
+      q.enqueue("openai", { event_id: "replay-bad" });
+
+      globalThis.fetch = (async () =>
+        new Response("unauthorized", { status: 401 })) as unknown as typeof fetch;
+
+      const sdk = new EdenSDK({
+        orgId: "o",
+        apiKey: "k",
+        baseUrl: "http://localhost:8000",
+        offlineQueuePath: qpath,
+        flushIntervalMs: 60_000,
+        timeoutS: 1,
+      });
+      const n = await sdk.flushOffline(10);
+      expect(n).toBe(0);
+      const freshQ = new OfflineQueue(qpath);
+      expect(freshQ.size()).toBe(1);
+    },
+  );
+});
+
+
+// ── New: process-exit safety net (registered once, best-effort) ─────
+
+describe("EdenSDK process-exit safety net", () => {
+  it(
+    "registers beforeExit/SIGTERM/SIGINT hooks at most once no matter how many clients are constructed",
+    () => {
+      // Regression: `dispose()`'s doc comment claimed it was safe
+      // to call from process-exit hooks, but nothing in the
+      // package ever registered one -- spans/events sitting in the
+      // queue/chunkBuffer were silently lost on abrupt process exit
+      // unless the user manually called dispose()/flush(). The fix
+      // registers a best-effort `beforeExit` + `SIGTERM`/`SIGINT`
+      // safety net, guarded so it only registers once per process
+      // (mirrors the Python SDK's `_atexit_registered` flag).
+      const beforeExitBefore = process.listenerCount("beforeExit");
+      const sigtermBefore = process.listenerCount("SIGTERM");
+      const sigintBefore = process.listenerCount("SIGINT");
+
+      // Construct several clients -- if registration weren't
+      // guarded by a module-level flag, each constructor call
+      // would add its own listener and these counts would grow
+      // without bound.
+      const clients = [
+        new EdenSDK({ orgId: "hook-a" }),
+        new EdenSDK({ orgId: "hook-b" }),
+        new EdenSDK({ orgId: "hook-c" }),
+      ];
+
+      const beforeExitAfter = process.listenerCount("beforeExit");
+      const sigtermAfter = process.listenerCount("SIGTERM");
+      const sigintAfter = process.listenerCount("SIGINT");
+
+      // Either the hooks were already registered by an earlier
+      // test in this process (delta 0) or this is the first
+      // `EdenSDK` ever constructed (delta 1) -- never more than 1
+      // regardless of how many clients we just made.
+      expect(beforeExitAfter - beforeExitBefore).toBeLessThanOrEqual(1);
+      expect(beforeExitAfter - beforeExitBefore).toBeGreaterThanOrEqual(0);
+      expect(sigtermAfter - sigtermBefore).toBeLessThanOrEqual(1);
+      expect(sigintAfter - sigintBefore).toBeLessThanOrEqual(1);
+      // At least one registration must have happened by now (this
+      // test or an earlier one).
+      expect(beforeExitAfter).toBeGreaterThanOrEqual(1);
+
+      for (const c of clients) void c.dispose();
+    },
+  );
+
+  it(
+    "the registered beforeExit hook flushes/disposes every live client (best-effort, never throws)",
+    async () => {
+      const disposedMarkers = new Set<string>();
+      const originalDispose = EdenSDK.prototype.dispose;
+      EdenSDK.prototype.dispose = function (this: EdenSDK) {
+        const marker = this.getConfig().orgId;
+        if (marker) disposedMarkers.add(marker);
+        return originalDispose.call(this);
+      };
+      const marker = `exit-hook-probe-${Date.now()}`;
+      try {
+        // Constructing the client both registers the hooks (if not
+        // already registered by an earlier test) AND adds this
+        // instance to the live-client set the hook iterates.
+        const client = new EdenSDK({ orgId: marker, disabled: true });
+        expect(() => {
+          process.emit("beforeExit", 0 as unknown as number);
+        }).not.toThrow();
+        // The hook kicks off `dispose()` (async); function calls in
+        // JS run synchronously up to their first `await`, so the
+        // patched `dispose()` should already have been invoked by
+        // the time `process.emit` returns -- but yield a tick for
+        // extra safety across engines/versions.
+        await new Promise((r) => setTimeout(r, 10));
+        expect(disposedMarkers.has(marker)).toBe(true);
+        await client.dispose();
+      } finally {
+        EdenSDK.prototype.dispose = originalDispose;
+      }
+    },
+  );
+});

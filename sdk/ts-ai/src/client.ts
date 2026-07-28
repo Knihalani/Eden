@@ -23,8 +23,16 @@ import {
 import { type FilterConfig, redactPayload, redactString } from "./filters.js";
 import { optimizationOptOutHeaders } from "./gateway_optimizations.js";
 import { ClientSampler, type SamplingProfile } from "./sampling.js";
-import { OfflineQueue } from "./offline-queue.js";
+import { OfflineQueue, type OfflineRow } from "./offline-queue.js";
 import { resolveIngestPath } from "./ingest-format.js";
+// NOTE: intentionally not importing from `./ids.js` here -- `ids.ts`
+// now imports `currentTrace` from `./trace.js`, which itself imports
+// `getDefaultClient` from this module. Importing `ids.js` from
+// `client.ts` would complete a three-file circular import
+// (client → ids → trace → client). `randomUUID` gives us the same
+// "generate a fresh unique id" need for offline-replay envelope
+// synthesis (see `_offlineRowToEvent`) without the cycle.
+import { randomUUID } from "node:crypto";
 
 const DEFAULT_BASE_URL = "https://api.edenobservability.com";
 const DEFAULT_REALM = "production";
@@ -36,6 +44,14 @@ const DEFAULT_FLUSH_INTERVAL_MS = 250;
 const DEFAULT_MAX_CHUNK_BUFFER = 4096;
 /** Match BE ``settings.ingestion_chunks_max_per_request`` (default 1000). */
 const INGEST_CHUNKS_MAX_PER_REQUEST = 1000;
+/**
+ * Reserved ``sourceFormat`` tag used when a failed chunk batch
+ * spills to the offline queue (see `postChunkBatch`). Distinct from
+ * any real ``sourceFormat`` (openai/anthropic/...) so a replay path
+ * can tell a spilled chunk-batch record apart from an ordinary
+ * spilled telemetry-event payload.
+ */
+const OFFLINE_CHUNKS_FORMAT = "chunks";
 
 /**
  * Lazily-cached ``gzipSync`` so each ingest POST does not pay for
@@ -55,6 +71,26 @@ async function gzipJsonBody(body: unknown): Promise<Buffer> {
     _gzipSync = zlib.gzipSync;
   }
   return _gzipSync(Buffer.from(JSON.stringify(body), "utf8"), { level: 1 });
+}
+
+/**
+ * `setTimeout`-backed sleep that `.unref()`s its timer when the
+ * runtime supports it. Used by the retry-backoff delays in
+ * `postJson()` -- without this, a short-lived script/serverless
+ * invocation that hit a 429/503 (or a network error) would hang for
+ * the full backoff (up to 30s if a `Retry-After` header is honoured)
+ * even after all user work had already completed, exactly the
+ * problem `flushTimer`/`chunkTimer` guard against elsewhere in this
+ * file. Guarded for environments (e.g. browser `setTimeout`) whose
+ * return value has no `.unref`.
+ */
+function sleepUnref(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    const t = setTimeout(resolve, ms);
+    if (typeof (t as { unref?: () => void }).unref === "function") {
+      (t as { unref?: () => void }).unref!();
+    }
+  });
 }
 
 
@@ -275,6 +311,100 @@ export interface GatewayHeadersOptions {
   filters?: FilterConfig;
 }
 
+// ── Process-exit safety net ─────────────────────────────────────────
+
+// Guard so the exit hooks are registered at most once per process,
+// no matter how many `EdenSDK` instances get constructed. Mirrors
+// the Python SDK's `_atexit_registered` module-level flag in
+// `client.py`'s `get_default_client()` (its `atexit.register(...)`
+// call is guarded the exact same way).
+let _exitHooksRegistered = false;
+
+// Every constructed `EdenSDK` instance, so the exit hooks can flush
+// ALL live clients best-effort -- not just the default singleton
+// (broader than Python, which only auto-flushes its one process-wide
+// singleton, but strictly safer here: nothing keeping a direct
+// `new EdenSDK()` reference around should lose data on an abrupt
+// exit either). Entries are removed by `dispose()`.
+const _liveClients = new Set<EdenSDK>();
+
+/**
+ * Best-effort flush/dispose of every live client. Never throws --
+ * an exit hook that throws can abort the Node exit sequence with an
+ * unhandled-rejection warning, which is worse than losing telemetry.
+ */
+function _bestEffortFlushAll(): void {
+  for (const client of _liveClients) {
+    try {
+      void client.dispose();
+    } catch {
+      // Never let telemetry shutdown break process exit.
+    }
+  }
+}
+
+/**
+ * Register a `beforeExit` hook (Node keeps draining the event loop
+ * for any pending async work scheduled here, so the in-flight
+ * flush/dispose POST gets a real chance to land) plus best-effort
+ * `SIGTERM`/`SIGINT` handlers, so spans/events sitting in the queue
+ * or chunk buffer are not silently lost on abrupt process exit --
+ * previously nothing in this package ever called `process.on(...)`,
+ * so only an explicit `dispose()`/`flush()` call by the user saved
+ * unflushed telemetry. Mirrors the Python SDK's `atexit.register()`
+ * safety net.
+ *
+ * Registering a signal listener suppresses Node's default
+ * terminate-on-signal behaviour, so — unlike `beforeExit` — the
+ * SIGTERM/SIGINT handlers must explicitly `process.exit()` once the
+ * best-effort flush settles (or a bounded timeout elapses),
+ * otherwise a SIGTERM-based graceful shutdown (Docker, systemd,
+ * Kubernetes) would hang forever instead of terminating.
+ */
+function _registerProcessExitHooksOnce(): void {
+  if (_exitHooksRegistered) return;
+  if (typeof process === "undefined" || typeof process.once !== "function") {
+    return;
+  }
+  _exitHooksRegistered = true;
+  try {
+    process.once("beforeExit", () => {
+      _bestEffortFlushAll();
+    });
+  } catch {
+    // Some hosts (e.g. certain edge/worker runtimes) may not
+    // support `beforeExit`; best-effort only.
+  }
+  for (const sig of ["SIGTERM", "SIGINT"] as const) {
+    try {
+      process.once(sig, () => {
+        const settle = new Promise<void>((resolve) => {
+          const t = setTimeout(resolve, 2_000);
+          if (typeof (t as { unref?: () => void }).unref === "function") {
+            (t as { unref?: () => void }).unref!();
+          }
+        });
+        const flushed = (async () => {
+          for (const client of _liveClients) {
+            try {
+              await client.dispose();
+            } catch {
+              // best-effort
+            }
+          }
+        })();
+        Promise.race([flushed, settle]).then(
+          () => process.exit(sig === "SIGINT" ? 130 : 143),
+          () => process.exit(sig === "SIGINT" ? 130 : 143),
+        );
+      });
+    } catch {
+      // Some environments may not support process signal
+      // listeners (e.g. certain serverless runtimes); ignore.
+    }
+  }
+}
+
 // ── Client ────────────────────────────────────────────────────────
 
 /**
@@ -338,6 +468,8 @@ export class EdenSDK {
         { orgId: this.config.orgId, baseUrl: this.config.baseUrl },
       );
     }
+    _liveClients.add(this);
+    _registerProcessExitHooksOnce();
   }
 
   /** Update configuration after construction (e.g. once auth resolves). */
@@ -412,11 +544,33 @@ export class EdenSDK {
     const sampler = this.sampler;
     // Single payload read — avoid double cast / property walk on
     // the emit hot path (every instrumented LLM call).
+    //
+    // The flagship instrumentation paths do NOT all use the same
+    // error-signalling key: `trace()`/`traceAgent()` (trace.ts's
+    // `finishTrace`, backing every `agent.run` event), openai.ts,
+    // anthropic.ts, and vercel-ai.ts all emit `status: "error"` +
+    // `error_type` -- never a literal `error` or `outcome: "error"`
+    // key. Only providers.ts (Bedrock/Gemini) and mastra.ts use a
+    // literal `outcome` key. Checking only `error`/`outcome` meant
+    // the sampler's error-sampling safety net (`sampleKeepErrors`,
+    // default true) silently missed most real error traces under
+    // `balanced`/`aggressive` profiles -- they were subject to the
+    // same random keep-rate as any other event instead of being
+    // force-kept. Check every shape so this works regardless of
+    // which instrumentation produced the payload.
     const payload = event.payload as
-      | { error?: unknown; outcome?: string }
+      | {
+          error?: unknown;
+          outcome?: string;
+          status?: string;
+          error_type?: unknown;
+        }
       | undefined;
     const hasError = Boolean(
-      payload?.error || payload?.outcome === "error",
+      payload?.error ||
+        payload?.outcome === "error" ||
+        payload?.status === "error" ||
+        payload?.error_type,
     );
     const durationMs = event.durationMs ?? 0;
     if (!sampler.shouldKeep({ hasError, durationMs })) {
@@ -643,7 +797,11 @@ export class EdenSDK {
 
   /**
    * Flush all pending work and stop the timers. Safe to call from
-   * process-exit hooks (`beforeExit`, `SIGTERM`).
+   * process-exit hooks (`beforeExit`, `SIGTERM`) -- and, since the
+   * constructor registers a best-effort process-exit safety net
+   * (see `_registerProcessExitHooksOnce`), this now genuinely IS
+   * called automatically on abrupt process exit, not just when a
+   * caller remembers to invoke it manually.
    */
   async dispose(): Promise<void> {
     this.disposed = true;
@@ -679,6 +837,144 @@ export class EdenSDK {
     }
     this.chunkInflight = false;
     await Promise.allSettled([this.flush(), this.flushChunks()]);
+    _liveClients.delete(this);
+  }
+
+  /**
+   * Replay durable offline events (spilled to disk by `postBatch` /
+   * `postChunkBatch` during an outage) back to the ingest server.
+   * Mirrors the Python SDK's `flush_offline()`: there was previously
+   * no public API to do this at all in the TS SDK, even though
+   * `OfflineQueue.drain()` already existed -- outage recovery
+   * required a manual read of the JSONL file.
+   *
+   * Rows are only acked (deleted from the offline queue) on
+   * CONFIRMED delivery success, never merely "attempt completed" --
+   * a timed-out send, a permanent failure, or an unreachable orgId
+   * all leave the rows durably on disk for a later `flushOffline()`
+   * call to retry, exactly like Python's `ack` step (which only
+   * runs after `flush()` proves the queue and in-flight HTTP both
+   * settled).
+   *
+   * Sampling is bypassed entirely for this path (mirrors Python's
+   * `enqueue(..., skip_sampling=True)`): a row that already survived
+   * the offline-queue spill filter (only transient failures spill,
+   * see `postBatch`/`postChunkBatch`) must not then be silently
+   * dropped by `ClientSampler` before being acked away.
+   *
+   * @param limit Maximum number of durable rows to replay this call.
+   * @param timeoutMs Overall wall-clock budget for the replay to
+   *   settle. If it has not fully resolved within this window,
+   *   nothing is acked and the method returns 0 -- the rows remain
+   *   on disk (a slow send that eventually succeeds in the
+   *   background will simply be re-sent on the next replay; safe,
+   *   because acking early on a mere "sent" rather than a confirmed
+   *   settle is the exact bug this mirrors Python's fix for).
+   * @returns The number of rows acked (confirmed delivered and removed).
+   */
+  async flushOffline(limit = 100, timeoutMs = 5_000): Promise<number> {
+    const offline = this.offline;
+    if (!offline) return 0;
+    const rows = offline.peek(limit);
+    if (rows.length === 0) return 0;
+
+    const byFormat = new Map<string, OfflineRow[]>();
+    for (const row of rows) {
+      let list = byFormat.get(row.sourceFormat);
+      if (list === undefined) {
+        list = [];
+        byFormat.set(row.sourceFormat, list);
+      }
+      list.push(row);
+    }
+
+    const send = (async (): Promise<OfflineRow[]> => {
+      const acked: OfflineRow[] = [];
+      await Promise.all(
+        Array.from(byFormat.entries()).map(async ([format, formatRows]) => {
+          if (format === OFFLINE_CHUNKS_FORMAT) {
+            // Chunk-batch spills (see `postChunkBatch`) carry a
+            // `{ chunks: [...] }` payload bound for the dedicated
+            // chunks endpoint, not `/ingest/{format}`.
+            const url = this.buildChunkUrl();
+            if (!url) return;
+            for (const row of formatRows) {
+              const chunks = (row.payload as { chunks?: unknown } | undefined)
+                ?.chunks;
+              if (!Array.isArray(chunks)) continue;
+              const outcome = await this.postJson(url, { chunks });
+              if (outcome === "ok") acked.push(row);
+            }
+            return;
+          }
+          const pathFmt = resolveIngestPath(format);
+          const url = this.buildIngestUrl(pathFmt);
+          if (!url) return;
+          const wired = formatRows.map((row) =>
+            eventToWire(this._offlineRowToEvent(row)),
+          );
+          const outcome = await this.postJson(url, wired);
+          if (outcome === "ok") {
+            for (const row of formatRows) acked.push(row);
+          }
+          // Transient ("spill") and permanent ("drop") outcomes are
+          // both left on disk untouched -- `flushOffline` only ever
+          // acks rows it confirmed were delivered.
+        }),
+      );
+      return acked;
+    })();
+
+    const TIMED_OUT = Symbol("flushOffline-timeout");
+    const timeout = new Promise<typeof TIMED_OUT>((resolve) => {
+      const t = setTimeout(() => resolve(TIMED_OUT), timeoutMs);
+      if (typeof (t as { unref?: () => void }).unref === "function") {
+        (t as { unref?: () => void }).unref!();
+      }
+    });
+
+    const result = await Promise.race([send, timeout]);
+    if (result === TIMED_OUT) {
+      return 0;
+    }
+    const acked = result;
+    if (acked.length > 0) offline.ack(acked);
+    return acked.length;
+  }
+
+  /**
+   * Reconstruct a wire-ready `TelemetryEvent` envelope for an
+   * offline-queue row. The offline queue only durably stores
+   * `{ sourceFormat, payload }` (see `postBatch`'s spill path) --
+   * the original event's own `eventId`/`traceId`/`eventType` are
+   * not part of that stored shape, so a replay synthesizes fresh
+   * ones from the current config, preferring whatever the stored
+   * payload itself already carries (e.g. an `event_id`/`trace_id`/
+   * `event_type` field the original payload happened to include).
+   */
+  private _offlineRowToEvent(row: OfflineRow): TelemetryEvent {
+    const payload = (row.payload ?? {}) as Record<string, unknown>;
+    const eventId =
+      typeof payload.event_id === "string"
+        ? payload.event_id
+        : `offline_${randomUUID()}`;
+    const traceId =
+      typeof payload.trace_id === "string" ? payload.trace_id : randomUUID();
+    const eventType =
+      typeof payload.event_type === "string"
+        ? payload.event_type
+        : "offline_replay";
+    return {
+      eventId,
+      tenantId: this.config.orgId ?? "default",
+      projectId: this.config.projectId,
+      traceId,
+      realm: this.config.realm,
+      eventType,
+      timestamp: new Date().toISOString(),
+      sourceFormat: row.sourceFormat,
+      payload,
+    };
   }
 
   // ── HTTP ───────────────────────────────────────────────────────
@@ -838,6 +1134,24 @@ export class EdenSDK {
       }
       await this.postChunkBatch(url, batch.slice(0, mid));
       await this.postChunkBatch(url, batch.slice(mid));
+      return;
+    }
+    // Only transient failures (408/429/5xx/network) spill -- a
+    // permanent 4xx ("drop") would poison the offline queue with a
+    // batch that can never succeed, same rule `postBatch` follows.
+    // Previously this outcome was never inspected at all, so a
+    // chunk batch that failed permanently (or exhausted retries)
+    // was silently dropped from memory with no offline-queue
+    // fallback, unlike the regular event batch path. Chunks are
+    // tagged with the reserved ``"chunks"`` source format (distinct
+    // from any real ``sourceFormat``) so a future replay can tell
+    // chunk records apart from ordinary telemetry events.
+    if (outcome === "spill" && this.offline) {
+      try {
+        this.offline.enqueue(OFFLINE_CHUNKS_FORMAT, { chunks: batch });
+      } catch {
+        // ignore spill errors
+      }
     }
   }
 
@@ -901,7 +1215,7 @@ export class EdenSDK {
         const fallbackMs = Math.min(BASE_DELAY_MS * 2 ** (attempt - 1), 5_000);
         const delayMs = ra ? parseRetryAfterMs(ra, fallbackMs) : fallbackMs;
         if (delayMs > 0) {
-          await new Promise((r) => setTimeout(r, delayMs));
+          await sleepUnref(delayMs);
         }
       } catch (err) {
         if (attempt >= MAX_ATTEMPTS) {
@@ -912,7 +1226,7 @@ export class EdenSDK {
           return "spill";
         }
         const delayMs = Math.min(BASE_DELAY_MS * 2 ** (attempt - 1), 5_000);
-        await new Promise((r) => setTimeout(r, delayMs));
+        await sleepUnref(delayMs);
       } finally {
         clearTimeout(timeout);
       }

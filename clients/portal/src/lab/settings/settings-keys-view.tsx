@@ -34,6 +34,8 @@ export function SettingsKeysView({
   const [filter, setFilter] = useState<KeyFilter>("all");
   const [confirmRevoke, setConfirmRevoke] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [isCreating, setIsCreating] = useState(false);
+  const [revokingId, setRevokingId] = useState<string | null>(null);
 
   const filtered = useMemo(() => {
     if (filter === "all") return keys;
@@ -87,8 +89,10 @@ export function SettingsKeysView({
             <button
               type="button"
               className="ds-btn ds-btn-primary ds-btn-sm"
-              disabled={!draftName.trim() || scopes.length === 0}
+              disabled={isCreating || !draftName.trim() || scopes.length === 0}
               onClick={async () => {
+                if (isCreating) return;
+                setIsCreating(true);
                 try {
                   const created = await onCreate(draftName.trim(), scopes);
                   setDraftName("");
@@ -106,10 +110,12 @@ export function SettingsKeysView({
                     body: err instanceof Error ? err.message : "Try again.",
                     tone: "fail",
                   });
+                } finally {
+                  setIsCreating(false);
                 }
               }}
             >
-              Create
+              {isCreating ? "Creating…" : "Create"}
             </button>
           </div>
           <div className="flex flex-wrap gap-1.5">
@@ -273,10 +279,13 @@ export function SettingsKeysView({
                     <button
                       type="button"
                       className="ds-btn ds-btn-primary ds-btn-sm !bg-[var(--error)] !text-[var(--text-inverse)]"
+                      disabled={revokingId === selected.id}
                       onClick={() => {
+                        if (revokingId) return;
                         const id = selected.id;
                         const name = selected.name;
                         setConfirmRevoke(false);
+                        setRevokingId(id);
                         void onRevoke(id)
                           .then(() => {
                             pushToast({
@@ -287,14 +296,18 @@ export function SettingsKeysView({
                           })
                           .catch(() => {
                             /* parent already toasted failure */
+                          })
+                          .finally(() => {
+                            setRevokingId((cur) => (cur === id ? null : cur));
                           });
                       }}
                     >
-                      Confirm revoke
+                      {revokingId === selected.id ? "Revoking…" : "Confirm revoke"}
                     </button>
                     <button
                       type="button"
                       className="ds-btn ds-btn-ghost ds-btn-sm"
+                      disabled={revokingId === selected.id}
                       onClick={() => setConfirmRevoke(false)}
                     >
                       Cancel
@@ -304,9 +317,10 @@ export function SettingsKeysView({
                   <button
                     type="button"
                     className="ds-btn ds-btn-ghost ds-btn-sm !text-[var(--error)]"
+                    disabled={revokingId === selected.id}
                     onClick={() => setConfirmRevoke(true)}
                   >
-                    Revoke
+                    {revokingId === selected.id ? "Revoking…" : "Revoke"}
                   </button>
                 )
               ) : (

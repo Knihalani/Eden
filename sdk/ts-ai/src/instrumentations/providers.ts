@@ -4,7 +4,7 @@
  */
 
 import { getDefaultClient } from "../client.js";
-import { errorClass, errorMessage, randomId } from "../ids.js";
+import { errorClass, errorMessage, randomId, traceIdOrRandom } from "../ids.js";
 import { extractUsage, normalizeModelName, type NormalizedUsage } from "../tokens.js";
 import type { TraceOptions } from "../types.js";
 
@@ -36,7 +36,11 @@ function emitProviderEvent(args: {
     eventId: `eden_${args.provider}_${randomId()}`,
     tenantId: config.orgId ?? "default",
     projectId: config.projectId,
-    traceId: randomId(),
+    // Joins an active outer ``trace()``/``traceAgent()`` span when
+    // one is running, falling back to a fresh random id otherwise.
+    // ``eventId`` above stays independently random, so it can never
+    // collide even when ``traceId`` is shared.
+    traceId: traceIdOrRandom(),
     realm: config.realm,
     eventType: "llm_completion",
     timestamp: new Date().toISOString(),

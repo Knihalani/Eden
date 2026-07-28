@@ -1,30 +1,21 @@
 "use client";
 
 import { useEffect } from "react";
-import { usePathname, useSearchParams } from "next/navigation";
+import { usePathname } from "next/navigation";
 import { useOrg } from "@/hooks/use-org";
 import { useOrgQuery } from "@/hooks/use-api-query";
 import { queryKey, queryKeys } from "@/lib/query-keys";
 import { portalApi } from "@/lib/api/portal";
-import { api } from "@/lib/api/resources";
+import { budgetApi } from "@/lib/api/budget";
 import {
   clearPortalCatalog,
   patchPortalCatalog,
 } from "@/lib/portal-catalog";
 import {
-  ASSIST_STALE,
   OBSERVE_STALE,
-  SETTINGS_QUERY,
-  SETTINGS_STALE,
   SHELL_QUERY,
 } from "@/lib/portal-query";
-import {
-  parseSettingsMode,
-  resolveSettingsModeParam,
-} from "@/lab/settings/settings-chrome";
 
-// Must match the ``cost/page.tsx`` budget query exactly so this
-// prefetch lands in the same React Query cache entry.
 const BUDGET_QUERY_KEY = (orgId: string | null) =>
   queryKey("cost", orgId, "budget");
 
@@ -37,12 +28,14 @@ function pathIn(pathname: string, prefixes: string[]): boolean {
  * ``portal-catalog`` so fixture helpers resolve live rows.
  *
  * Route-scoped: only fetch shards the current page actually renders.
+ * Peripheral hubs (evals/cost/improve/…) load agents themselves when
+ * their scope filter needs them — do not warm agents/traces here.
+ * Settings / debugger / agent-chat fetch their own shards in-page.
  */
 export function PortalCatalogSync() {
   const { currentOrg } = useOrg();
   const orgId = currentOrg?.id ?? null;
   const pathname = usePathname() ?? "";
-  const searchParams = useSearchParams();
 
   const onHome = pathIn(pathname, ["/home"]);
   const onTraces = pathIn(pathname, ["/traces"]);
@@ -52,23 +45,15 @@ export function PortalCatalogSync() {
   const onAlerts = pathIn(pathname, ["/alerts"]);
   const onAgents = pathIn(pathname, ["/agents"]);
   const onDebugger = pathIn(pathname, ["/debugger"]);
-  const onSettings = pathIn(pathname, ["/settings"]);
   const onEvals = pathIn(pathname, ["/evals"]);
   const onCompare = pathIn(pathname, ["/compare"]);
   const onImprove = pathIn(pathname, ["/improve"]);
   const onGuardrails = pathIn(pathname, ["/guardrails"]);
-  const onAgent = pathIn(pathname, ["/agent"]);
   const onCost = pathIn(pathname, ["/cost"]);
 
-  const settingsMode = onSettings
-    ? parseSettingsMode(
-        resolveSettingsModeParam(
-          searchParams.get("mode"),
-          searchParams.get("tab"),
-        ),
-      )
-    : null;
-
+  // Agents: only observe hubs that render agent lists / scope chips
+  // from the catalog. Cost/evals/improve fetch agents in-page when needed.
+  // Settings / agent-chat / debugger fetch their own shards — do not warm here.
   const needAgents =
     onHome ||
     onTraces ||
@@ -77,22 +62,14 @@ export function PortalCatalogSync() {
     onSignals ||
     onAlerts ||
     onAgents ||
-    onDebugger ||
-    onEvals ||
-    onCompare ||
-    onImprove ||
-    onGuardrails ||
-    onCost;
-  const needTraces =
-    onHome || onTraces || onAgents || onDebugger || onSessions;
-  const needSessions = onTraces || onSessions || onAgents;
-  // Issues: home + issues page only (traces badges soft-miss until cached).
+    onDebugger;
+  const needTraces = onHome || onTraces || onAgents || onDebugger || onSessions;
+  // Sessions are traces-hub only (agents inspector uses traces, not sessions).
+  const needSessions = onTraces || onSessions;
   const needIssues = onHome || onIssues;
   const needSignals = onSignals;
-  const needAlertRules = onAlerts || onSignals;
-  // Bell badge — defer until agents settle when agents are loading;
-  // longer TTL so soft-nav does not re-hit events constantly.
-  const needAlertEvents = true;
+  // Alert rules: alerts modal / alerts route only (signals page does not read them).
+  const needAlertRules = onAlerts;
 
   useEffect(() => {
     if (!orgId) {
@@ -141,18 +118,6 @@ export function PortalCatalogSync() {
     () => portalApi.alertRules(orgId!),
     { ...SHELL_QUERY, enabled: needAlertRules },
   );
-  // Bell badge — always; on routes that load agents, wait until agents
-  // settle so cold start isn't competing with above-the-fold shards.
-  const alertEvents = useOrgQuery(
-    queryKeys.portal.alertEvents(orgId),
-    orgId,
-    () => portalApi.alertEvents(orgId!),
-    {
-      ...SHELL_QUERY,
-      staleTime: 120_000,
-      enabled: needAlertEvents && (needAgents ? !agents.isPending : true),
-    },
-  );
   const costDrivers = useOrgQuery(
     queryKeys.portal.costDrivers(orgId),
     orgId,
@@ -162,7 +127,7 @@ export function PortalCatalogSync() {
   useOrgQuery(
     BUDGET_QUERY_KEY(orgId),
     orgId,
-    () => api.getBudget(orgId!),
+    () => budgetApi.get(orgId!),
     { ...SHELL_QUERY, enabled: onCost },
   );
 
@@ -170,93 +135,37 @@ export function PortalCatalogSync() {
     queryKeys.portal.improvePlans(orgId),
     orgId,
     () => portalApi.improvePlans(orgId!),
-    { staleTime: OBSERVE_STALE, enabled: onImprove },
+    { ...SHELL_QUERY, staleTime: OBSERVE_STALE, enabled: onImprove },
   );
   const compareExperiments = useOrgQuery(
     queryKeys.portal.compareExperiments(orgId),
     orgId,
     () => portalApi.compareExperiments(orgId!),
-    { staleTime: OBSERVE_STALE, enabled: onCompare },
+    { ...SHELL_QUERY, staleTime: OBSERVE_STALE, enabled: onCompare },
   );
   const guardrailPolicies = useOrgQuery(
     queryKeys.portal.guardrailPolicies(orgId),
     orgId,
     () => portalApi.guardrailPolicies(orgId!),
-    { staleTime: OBSERVE_STALE, enabled: onGuardrails },
+    { ...SHELL_QUERY, staleTime: OBSERVE_STALE, enabled: onGuardrails },
   );
   const datasets = useOrgQuery(
     queryKeys.portal.evalDatasets(orgId),
     orgId,
     () => portalApi.evalDatasets(orgId!),
-    { staleTime: OBSERVE_STALE, enabled: onEvals },
+    { ...SHELL_QUERY, staleTime: OBSERVE_STALE, enabled: onEvals },
   );
   const playgrounds = useOrgQuery(
     queryKeys.portal.evalPlaygrounds(orgId),
     orgId,
     () => portalApi.evalPlaygrounds(orgId!),
-    { staleTime: OBSERVE_STALE, enabled: onEvals },
+    { ...SHELL_QUERY, staleTime: OBSERVE_STALE, enabled: onEvals },
   );
   const experiments = useOrgQuery(
     queryKeys.portal.evalExperiments(orgId),
     orgId,
     () => portalApi.evalExperiments(orgId!),
-    { staleTime: OBSERVE_STALE, enabled: onEvals },
-  );
-  const debuggerSessions = useOrgQuery(
-    queryKeys.portal.debuggerSessions(orgId),
-    orgId,
-    () => portalApi.debuggerSessions(orgId!),
-    { staleTime: ASSIST_STALE, enabled: onDebugger },
-  );
-  const assistantThreads = useOrgQuery(
-    queryKeys.portal.assistantThreads(orgId),
-    orgId,
-    () => portalApi.assistantThreads(orgId!),
-    { staleTime: ASSIST_STALE, enabled: onAgent },
-  );
-
-  // Settings — workspace always (header meta); other shards by mode.
-  const workspace = useOrgQuery(
-    queryKeys.portal.workspace(orgId),
-    orgId,
-    () => portalApi.workspace(orgId!),
-    { ...SETTINGS_QUERY, enabled: onSettings },
-  );
-  const keys = useOrgQuery(
-    queryKeys.portal.keys(orgId),
-    orgId,
-    () => portalApi.keys(orgId!),
-    {
-      ...SETTINGS_QUERY,
-      enabled: onSettings && settingsMode === "keys",
-    },
-  );
-  const members = useOrgQuery(
-    queryKeys.portal.members(orgId),
-    orgId,
-    () => portalApi.members(orgId!),
-    {
-      ...SETTINGS_QUERY,
-      enabled: onSettings && settingsMode === "members",
-    },
-  );
-  const auditEvents = useOrgQuery(
-    queryKeys.portal.auditEvents(orgId),
-    orgId,
-    () => portalApi.auditEvents(orgId!),
-    {
-      ...SETTINGS_QUERY,
-      enabled: onSettings && settingsMode === "audit",
-    },
-  );
-  const auditPacks = useOrgQuery(
-    queryKeys.portal.auditPacks(orgId),
-    orgId,
-    () => portalApi.auditPacks(orgId!),
-    {
-      ...SETTINGS_QUERY,
-      enabled: onSettings && settingsMode === "audit",
-    },
+    { ...SHELL_QUERY, staleTime: OBSERVE_STALE, enabled: onEvals },
   );
 
   useEffect(() => {
@@ -267,9 +176,6 @@ export function PortalCatalogSync() {
       ...(issues.data !== undefined ? { issues: issues.data } : {}),
       ...(signals.data !== undefined ? { signals: signals.data } : {}),
       ...(alertRules.data !== undefined ? { alertRules: alertRules.data } : {}),
-      ...(alertEvents.data !== undefined
-        ? { alertEvents: alertEvents.data }
-        : {}),
       ...(costDrivers.data !== undefined
         ? { costDrivers: costDrivers.data }
         : {}),
@@ -289,23 +195,6 @@ export function PortalCatalogSync() {
       ...(experiments.data !== undefined
         ? { experiments: experiments.data }
         : {}),
-      ...(debuggerSessions.data !== undefined
-        ? { debuggerSessions: debuggerSessions.data }
-        : {}),
-      ...(assistantThreads.data !== undefined
-        ? { assistantThreads: assistantThreads.data }
-        : {}),
-      ...(workspace.data !== undefined
-        ? { workspace: workspace.data }
-        : {}),
-      ...(keys.data !== undefined ? { keys: keys.data } : {}),
-      ...(members.data !== undefined ? { members: members.data } : {}),
-      ...(auditEvents.data !== undefined
-        ? { auditEvents: auditEvents.data }
-        : {}),
-      ...(auditPacks.data !== undefined
-        ? { auditPacks: auditPacks.data }
-        : {}),
     });
   }, [
     agents.data,
@@ -314,7 +203,6 @@ export function PortalCatalogSync() {
     issues.data,
     signals.data,
     alertRules.data,
-    alertEvents.data,
     costDrivers.data,
     improvePlans.data,
     compareExperiments.data,
@@ -322,22 +210,15 @@ export function PortalCatalogSync() {
     datasets.data,
     playgrounds.data,
     experiments.data,
-    debuggerSessions.data,
-    assistantThreads.data,
-    workspace.data,
-    keys.data,
-    members.data,
-    auditEvents.data,
-    auditPacks.data,
   ]);
 
   return null;
 }
 
 export {
-  OBSERVE_STALE,
-  SETTINGS_STALE,
   ASSIST_STALE,
-  SHELL_QUERY,
+  OBSERVE_STALE,
   SETTINGS_QUERY,
-};
+  SETTINGS_STALE,
+  SHELL_QUERY,
+} from "@/lib/portal-query";

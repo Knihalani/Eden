@@ -17,7 +17,7 @@
  */
 
 import { getDefaultClient } from "../client.js";
-import { errorClass, errorMessage, randomId } from "../ids.js";
+import { errorClass, errorMessage, randomId, traceIdOrRandom } from "../ids.js";
 import {
   SOURCE_FORMATS,
   type StreamChunk,
@@ -164,10 +164,16 @@ function _beginCall(
   args: any[],
   opts: TraceOptions,
 ): _CallCtx {
-  const traceId = randomId();
+  // ``traceId`` joins an active outer ``trace()``/``traceAgent()``
+  // span when one is running (falling back to a fresh random id
+  // otherwise). ``eventId`` is a SEPARATE fresh random id -- once
+  // ``traceId`` can be shared across multiple concurrent calls in
+  // the same outer trace, deriving ``eventId`` from it would
+  // collide.
+  const traceId = traceIdOrRandom();
   return {
     traceId,
-    eventId: `stream_vercel_ai_${traceId}`,
+    eventId: `stream_vercel_ai_${randomId()}`,
     helper,
     model: _extractModel(args),
     start: Date.now(),
@@ -318,7 +324,7 @@ function _finishCall(
       : 0;
 
   client.emit({
-    eventId: ctx.traceId,
+    eventId: ctx.eventId,
     tenantId: config.orgId ?? "default",
     projectId: config.projectId,
     traceId: ctx.traceId,

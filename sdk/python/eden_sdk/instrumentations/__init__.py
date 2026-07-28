@@ -31,6 +31,9 @@ __all__ = [
     "pydantic_ai",
     "bedrock",
     "gemini",
+    "groq",
+    "cohere",
+    "mistral",
 ]
 
 

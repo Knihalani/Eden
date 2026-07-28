@@ -30,6 +30,7 @@ import { useOrg } from "@/hooks/use-org";
 import { useOrgQuery } from "@/hooks/use-api-query";
 import { queryKeys } from "@/lib/query-keys";
 import { promptsV2Api } from "@/lib/api/portal";
+import { SHELL_QUERY } from "@/lib/portal-query";
 import {
   QueryErrorPanel,
   QueryLoadingPanel,
@@ -76,6 +77,7 @@ function PromptsInner() {
     queryKeys.promptsV2.list(orgId),
     orgId,
     () => promptsV2Api.list(orgId!),
+    SHELL_QUERY,
   );
 
   const [promptId, setPromptId] = useState(() => paramId ?? "");
@@ -96,13 +98,13 @@ function PromptsInner() {
     queryKeys.promptsV2.detail(orgId, promptId),
     orgId,
     () => promptsV2Api.get(orgId!, promptId),
-    { enabled: Boolean(orgId && promptId) },
+    { ...SHELL_QUERY, enabled: Boolean(orgId && promptId) },
   );
   const pinsQuery = useOrgQuery(
     queryKeys.promptsV2.pins(orgId, promptId),
     orgId,
     () => promptsV2Api.getPins(orgId!, promptId),
-    { enabled: Boolean(orgId && promptId) },
+    { ...SHELL_QUERY, enabled: Boolean(orgId && promptId) },
   );
 
   const listCatalog = useMemo(

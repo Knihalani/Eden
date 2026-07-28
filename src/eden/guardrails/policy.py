@@ -82,6 +82,15 @@ VALID_ACTIONS: frozenset[str] = frozenset(
     {"allow", "warn", "redact", "block", "escalate"}
 )
 
+#: Policy ``direction`` scopes a policy to the call sites it applies
+#: to — ``"input"`` (guarding an inbound prompt), ``"output"``
+#: (guarding an outbound completion), or ``"both"`` (applies
+#: regardless of call direction). Matches the convention already
+#: used by the in-memory ``eden.guardrails.evaluator.GuardrailPolicy``
+#: dataclass. Defaults to ``"both"`` to preserve pre-existing
+#: (direction-agnostic) enforcement behaviour.
+VALID_DIRECTIONS: frozenset[str] = frozenset({"input", "output", "both"})
+
 #: Action ordering — higher = more restrictive. The
 #: :class:`InterventionEngine` reduces a set of matches to the
 #: action at the top of the stack.
@@ -104,6 +113,7 @@ async def _insert_policy(
     type_: str,
     spec: dict[str, Any],
     action: str,
+    direction: str = "both",
 ) -> dict[str, Any] | None:
     """Insert a ``guardrail_policies`` row and return it.
 
@@ -132,10 +142,10 @@ async def _insert_policy(
         row = await client.fetchrow(
             """
             INSERT INTO guardrail_policies
-                (id, org_id, name, type, spec_json, action, status)
-            VALUES ($1::uuid, $2, $3, $4, $5, $6, 'active')
+                (id, org_id, name, type, spec_json, action, direction, status)
+            VALUES ($1::uuid, $2, $3, $4, $5, $6, $7, 'active')
             RETURNING id, org_id, name, type, spec_json, action,
-                      status, created_at
+                      direction, status, created_at
             """,
             policy_id,
             org_id,
@@ -143,6 +153,7 @@ async def _insert_policy(
             type_[:32],
             spec_json,
             action[:16],
+            (direction or "both")[:16],
         )
     except Exception as exc:
         logger.debug("guardrails: insert_policy failed: %s", exc)
@@ -174,7 +185,7 @@ async def _fetch_policies(
         rows = await client.fetch(
             """
             SELECT id, org_id, name, type, spec_json, action,
-                   status, created_at
+                   direction, status, created_at
             FROM guardrail_policies
             WHERE org_id = $1 AND status = $2
             ORDER BY created_at DESC
@@ -245,8 +256,14 @@ class GuardrailPolicy:
         type: str,
         spec: dict[str, Any],
         action: str = "allow",
+        direction: str = "both",
     ) -> dict[str, Any]:
         """Create a new active policy for the org.
+
+        ``direction`` scopes the policy to ``"input"`` (inbound
+        prompt), ``"output"`` (outbound completion), or ``"both"``
+        (the default — applies regardless of call direction, which
+        preserves the pre-``direction`` enforcement behaviour).
 
         Returns the policy row in the standard ``ok`` envelope.
         """
@@ -266,6 +283,14 @@ class GuardrailPolicy:
                     f"expected one of {sorted(VALID_ACTIONS)}"
                 ),
             )
+        if not _validate_direction(direction):
+            return not_implemented(
+                self.name,
+                message=(
+                    f"Unknown direction {direction!r}; "
+                    f"expected one of {sorted(VALID_DIRECTIONS)}"
+                ),
+            )
         if not isinstance(spec, dict):
             return not_implemented(
                 self.name,
@@ -274,7 +299,12 @@ class GuardrailPolicy:
 
         try:
             row = await _insert_policy(
-                org_id, name=name, type_=type, spec=spec, action=action
+                org_id,
+                name=name,
+                type_=type,
+                spec=spec,
+                action=action,
+                direction=direction,
             )
         except Exception as exc:  # pragma: no cover - defensive
             logger.debug("guardrails.create: %s", exc)
@@ -330,8 +360,16 @@ class ContentPolicyEnforcer:
         org_id: str,
         *,
         text: str,
+        direction: str = "both",
     ) -> dict[str, Any]:
         """Scan ``text`` against the org's content policies.
+
+        ``direction`` — ``"input"`` / ``"output"`` / ``"both"`` —
+        scopes which policies are consulted, same convention as
+        :data:`VALID_DIRECTIONS`. ``"both"`` (the default) only
+        excludes policies explicitly scoped to the *other*
+        direction; it does not disable filtering — pass the
+        caller's own concrete direction to restrict further.
 
         Returns ``data: {"matches": [...], "verdict": "allow|warn|...|block"}``.
         ``matches`` is the list of matched policy ids + the
@@ -350,7 +388,10 @@ class ContentPolicyEnforcer:
             logger.debug("content_enforcer: fetch failed: %s", exc)
             policies = []
         content_policies = [
-            p for p in policies if p.get("type") == "content_policy"
+            p
+            for p in policies
+            if p.get("type") == "content_policy"
+            and (direction == "both" or policy_matches_direction(p, direction))
         ]
         if not content_policies:
             return _ok_envelope(
@@ -419,6 +460,24 @@ def _validate_policy_type(t: str) -> bool:
 
 def _validate_action(a: str) -> bool:
     return isinstance(a, str) and a in VALID_ACTIONS
+
+
+def _validate_direction(d: str) -> bool:
+    return isinstance(d, str) and d in VALID_DIRECTIONS
+
+
+def policy_matches_direction(policy: dict[str, Any], direction: str) -> bool:
+    """True if ``policy`` applies to a call of the given ``direction``.
+
+    Mirrors :func:`eden.guardrails.evaluator.evaluate`'s filter: a
+    policy matches if its own ``direction`` equals the call's, or the
+    policy is scoped ``"both"`` (applies regardless of call
+    direction). Policies fetched before the ``direction`` column
+    existed (or any row missing the field) default to ``"both"`` so
+    old rows keep firing everywhere, unchanged.
+    """
+    p_direction = policy.get("direction") or "both"
+    return p_direction == direction or p_direction == "both"
 
 
 def _ok_envelope(feature: str, data: dict[str, Any]) -> dict[str, Any]:

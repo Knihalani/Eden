@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import threading
 import time
 
 import httpx
@@ -40,6 +41,208 @@ def test_singleton_lifecycle():
     assert c1 is c2
     # Don't shut down here — atexit handles it. The conftest reset
     # between tests ensures isolation.
+
+
+def test_get_default_client_resets_singleton_on_start_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A ``start()`` failure must not poison the singleton.
+
+    Regression: ``_default = EdenClient()`` used to be assigned BEFORE
+    ``start()`` was called. If ``start()`` raised, the exception
+    propagated but ``_default`` still referenced the broken instance --
+    every later ``get_default_client()`` call returned the same dead
+    client with no retry (100% event loss for the rest of the
+    process). The fix must reset the module-global back to ``None`` on
+    failure so the next call gets a fresh attempt.
+    """
+    from eden_sdk import client as cli_mod
+
+    cli_mod.reset_default_client()
+    real_start = EdenClient.start
+    calls = {"n": 0}
+
+    def flaky_start(self: EdenClient) -> None:
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise RuntimeError("simulated: sender thread failed to start")
+        real_start(self)
+
+    monkeypatch.setattr(EdenClient, "start", flaky_start)
+
+    with pytest.raises(RuntimeError):
+        get_default_client()
+    # The broken client must not have been published as the singleton.
+    assert cli_mod._default is None
+
+    # The next call must construct a brand-new client and succeed.
+    client = get_default_client()
+    assert calls["n"] == 2
+    assert client is not None
+    assert cli_mod._default is client
+    assert client._loop_started.is_set()
+    assert not client._loop_failed
+
+
+def test_get_default_client_constructs_once_under_concurrent_callers(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Concurrent first-callers must share one construction, and every
+    caller must get back a fully-started client -- never a
+    half-initialized one.
+
+    Regression for holding the process-wide lock for the entire
+    construct+start() duration (including start()'s up-to-1s blocking
+    wait): callers should serialize on the slow work without every
+    caller paying the full lock hold, and none should observe a client
+    whose start() hasn't resolved yet.
+    """
+    from eden_sdk import client as cli_mod
+
+    cli_mod.reset_default_client()
+    construct_count = {"n": 0}
+    real_init = EdenClient.__init__
+
+    def counting_init(self: EdenClient, *a, **kw) -> None:
+        construct_count["n"] += 1
+        time.sleep(0.05)  # widen the race window
+        real_init(self, *a, **kw)
+
+    monkeypatch.setattr(EdenClient, "__init__", counting_init)
+
+    results: list[EdenClient] = []
+    errors: list[BaseException] = []
+
+    def worker() -> None:
+        try:
+            results.append(get_default_client())
+        except BaseException as exc:  # noqa: BLE001
+            errors.append(exc)
+
+    threads = [threading.Thread(target=worker) for _ in range(8)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    assert not errors
+    assert construct_count["n"] == 1
+    assert len({id(c) for c in results}) == 1
+    for c in results:
+        assert c._loop_started.is_set()
+        assert not c._loop_failed
+
+
+def test_reset_default_client_does_not_block_behind_slow_construction(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """``reset_default_client()`` must not queue up behind an in-flight
+    first-time construction.
+
+    This is the test that actually discriminates the lock-granularity
+    fix: ``test_get_default_client_constructs_once_under_concurrent_callers``
+    (above) passes unchanged whether the slow construct+``start()`` work
+    is serialized on the same process-wide lock ``reset_default_client()``
+    uses, or on a separate ``_init_lock`` -- it only ever calls
+    ``get_default_client()``, so it can't tell the two designs apart.
+
+    Here we hold a *known-slow* ``start()`` open on one thread and time
+    how long a concurrent ``reset_default_client()`` call takes. If
+    ``get_default_client()`` held the *same* lock that
+    ``reset_default_client()`` needs for the whole slow duration (the
+    pre-fix design), this call would block for ~the full sleep. With the
+    fix (a dedicated ``_init_lock`` for the slow work, and only a
+    short-lived ``_lock`` for the ``_default`` pointer), it returns
+    almost immediately.
+    """
+    from eden_sdk import client as cli_mod
+
+    cli_mod.reset_default_client()
+    real_start = EdenClient.start
+    slow_seconds = 0.4
+
+    def slow_start(self: EdenClient) -> None:
+        time.sleep(slow_seconds)
+        real_start(self)
+
+    monkeypatch.setattr(EdenClient, "start", slow_start)
+
+    holder: list[EdenClient] = []
+    construction = threading.Thread(target=lambda: holder.append(get_default_client()))
+    construction.start()
+    # Give the construction thread time to acquire `_init_lock` and enter
+    # the slowed `start()` call before we race `reset_default_client()`
+    # against it.
+    time.sleep(0.1)
+
+    t0 = time.perf_counter()
+    cli_mod.reset_default_client()
+    dt = time.perf_counter() - t0
+
+    construction.join(timeout=slow_seconds + 2.0)
+    assert not construction.is_alive()
+
+    # A generous fraction of `slow_seconds` -- on the pre-fix design this
+    # call would take ~slow_seconds (minus the 0.1s head start); on the
+    # fix it should return in well under a millisecond of real work.
+    assert dt < slow_seconds / 2
+
+    if holder:
+        holder[0].shutdown(timeout=2.0)
+    cli_mod.reset_default_client()
+
+
+def test_atexit_shutdown_is_lock_guarded_against_concurrent_get_default_client(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """``_atexit_shutdown`` must hold the same lock as
+    ``get_default_client`` / ``reset_default_client``.
+
+    Regression: ``_atexit_shutdown`` used to read/clear the
+    module-global ``_default`` with no lock at all. A thread calling
+    ``get_default_client()`` concurrently with atexit teardown could
+    get a reference to a client whose worker thread was already gone,
+    and anything it then enqueued would sit in ``self._queue`` forever
+    with nothing left to drain it. With the lock, a racing caller must
+    block behind the in-progress shutdown and then receive a brand-new,
+    fully-started client -- never the one that's mid-teardown.
+    """
+    from eden_sdk import client as cli_mod
+
+    cli_mod.reset_default_client()
+    original = get_default_client()
+    assert original._loop_started.is_set()
+
+    real_flush = EdenClient.flush
+
+    def slow_flush(self: EdenClient, timeout: float = 2.0) -> None:
+        time.sleep(0.2)
+        real_flush(self, timeout=timeout)
+
+    monkeypatch.setattr(EdenClient, "flush", slow_flush)
+
+    results: list[EdenClient] = []
+
+    def racer() -> None:
+        # Give _atexit_shutdown a head start so it's already holding
+        # the lock (inside slow_flush) when this thread calls in.
+        time.sleep(0.02)
+        results.append(get_default_client())
+
+    t = threading.Thread(target=racer)
+    t.start()
+    cli_mod._atexit_shutdown()
+    t.join()
+
+    assert len(results) == 1
+    new_client = results[0]
+    # The racer must have been blocked until teardown finished, and
+    # then gotten a fresh client -- never the one being shut down.
+    assert new_client is not original
+    assert new_client._loop_started.is_set()
+    assert not new_client._loop_failed
+    assert cli_mod._default is new_client
+    new_client.shutdown()
 
 
 def test_dry_run_does_not_require_http():

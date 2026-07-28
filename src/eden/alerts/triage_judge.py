@@ -143,7 +143,18 @@ class AlertTriageJudge:
             nl_text=nl_text,
             payload=payload,
         )
-        await self.apply_verdict(alert_event_id, verdict)
+        # F5: persistence is best-effort here. Paging is the
+        # higher-priority side effect — a Postgres hiccup on the
+        # UPDATE must not prevent send_nl_incident_email from being
+        # attempted below. Log and continue rather than raise.
+        try:
+            await self.apply_verdict(alert_event_id, verdict)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "AlertTriageJudge apply_verdict failed event=%s: %s",
+                alert_event_id,
+                exc,
+            )
         if notify and verdict.get("verdict") == "real_incident":
             from eden.config import get_settings
 

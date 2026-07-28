@@ -7,9 +7,14 @@
 
 import { installHttpCapture } from "./http-capture.js";
 import { wrapAnthropic } from "./instrumentations/anthropic.js";
+import { wrapCohere } from "./instrumentations/cohere.js";
+import { wrapGroq } from "./instrumentations/groq.js";
 import { wrapLangChain } from "./instrumentations/langchain.js";
+import { wrapLlamaIndex } from "./instrumentations/llamaindex.js";
 import { wrapMastra } from "./instrumentations/mastra.js";
-import { wrapOpenAI } from "./instrumentations/openai.js";
+import { wrapMistral } from "./instrumentations/mistral.js";
+import { wrapOpenAI, wrapXai } from "./instrumentations/openai.js";
+import { wrapBedrock, wrapGemini } from "./instrumentations/providers.js";
 import { wrapVercelAI } from "./instrumentations/vercel-ai.js";
 import {
   detectInstalledFrameworks,
@@ -29,10 +34,17 @@ export interface InstrumentOptions extends TraceOptions {
 export interface InstrumentResult {
   detected: AutoInstrumentResult;
   wrapOpenAI: typeof wrapOpenAI;
+  wrapXai: typeof wrapXai;
   wrapAnthropic: typeof wrapAnthropic;
   wrapVercelAI: typeof wrapVercelAI;
   wrapLangChain: typeof wrapLangChain;
   wrapMastra: typeof wrapMastra;
+  wrapBedrock: typeof wrapBedrock;
+  wrapGemini: typeof wrapGemini;
+  wrapLlamaIndex: typeof wrapLlamaIndex;
+  wrapGroq: typeof wrapGroq;
+  wrapCohere: typeof wrapCohere;
+  wrapMistral: typeof wrapMistral;
 }
 
 export function instrument(opts: InstrumentOptions = {}): InstrumentResult {
@@ -42,9 +54,16 @@ export function instrument(opts: InstrumentOptions = {}): InstrumentResult {
   return {
     detected: detectInstalledFrameworks(opts),
     wrapOpenAI,
+    wrapXai,
     wrapAnthropic,
     wrapVercelAI,
     wrapLangChain,
     wrapMastra,
+    wrapBedrock,
+    wrapGemini,
+    wrapLlamaIndex,
+    wrapGroq,
+    wrapCohere,
+    wrapMistral,
   };
 }

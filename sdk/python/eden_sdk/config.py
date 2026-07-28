@@ -444,11 +444,10 @@ def get_config() -> EdenConfig:
     :func:`configure`) if you want startup-time validation.
     """
     global _config
-    if _config is None:
-        with _lock:
-            if _config is None:
-                _config = _from_env()
-    return _config
+    with _lock:
+        if _config is None:
+            _config = _from_env()
+        return _config
 
 
 def reset_config() -> None:

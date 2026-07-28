@@ -53,7 +53,6 @@ const nextConfig: NextConfig = {
       "recharts",
       "lucide-react",
       "framer-motion",
-      "cmdk",
       "@clerk/nextjs",
       "@radix-ui/react-avatar",
       "@radix-ui/react-dialog",

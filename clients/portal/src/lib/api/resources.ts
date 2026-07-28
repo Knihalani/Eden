@@ -2617,24 +2617,11 @@ export const api = {
 // and the v1 environments endpoint) were removed in June 2026 cleanup; the
 // replay page reads from the observability trace stream.
 
-/**
- * Start a streaming AI Insights chat turn. Returns the raw ``fetch``
- * Response so the caller can iterate the SSE body — the result is
- * text/event-stream, not JSON.
- */
-export async function aiInsightsChat(
-  orgId: string,
-  body: { message: string; session_id?: string | null },
-): Promise<Response> {
-  // Bypass fetchApi() — this endpoint streams SSE, and we need the
-  // raw Response so the caller can attach a reader.
-  return fetch(`${API_BASE}/orgs/${orgId}/ai-insights/chat`, {
-    method: "POST",
-    credentials: "include",
-    headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
-    body: JSON.stringify(body),
-  });
-}
+// F41-4: ``aiInsightsChat`` (streaming AI Insights chat turn,
+// bypassing fetchApi() via a hand-rolled fetch()) was dead code — zero
+// callers anywhere in src/app, src/components, or src/hooks. Deleted
+// rather than fixed; see the agent page's own chat stream (now routed
+// through fetchApi's ``raw`` mode) for the live equivalent.
 
 // ── Shared observability types ────────────────────────────────────
 // These types back the Trace list/tree/timeline/heatmap views in

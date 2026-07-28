@@ -146,7 +146,6 @@ export function ProductTour({
   const [hole, setHole] = useState<Rect | null>(null);
   const [ready, setReady] = useState(false);
   const [narrow, setNarrow] = useState(false);
-  const navigating = useRef(false);
   const skipRef = useRef(onSkip);
   skipRef.current = onSkip;
   const cardRef = useRef<HTMLDivElement>(null);
@@ -225,13 +224,11 @@ export function ProductTour({
     );
     const modeMatches = !wantMode || wantMode === hereMode;
     if (pathMatches && modeMatches) {
-      navigating.current = false;
       // Search-only navigations (e.g. /settings → /settings?mode=keys) do
       // not change pathname; mark ready so the card is not stuck hidden.
       setReady(true);
       return;
     }
-    navigating.current = true;
     setReady(false);
     router.push(step.href);
   }, [open, step?.href, step?.id, pathname, searchKey, router]);
@@ -250,7 +247,6 @@ export function ProductTour({
       const r = measureTarget(targetId);
       setHole(r);
       setReady(true);
-      navigating.current = false;
     };
 
     const afterScroll = (targetId: string) => {
@@ -318,31 +314,33 @@ export function ProductTour({
     }
   }
 
+  // Only hide the card (and clear any stale spotlight) when the target
+  // step changes the page shell — search-only moves (e.g. settings tabs)
+  // used to flash the overlay. Shared by every navigation call site
+  // (button Next/Back and keyboard ArrowRight/ArrowLeft) so `ready` and
+  // `hole` can never drift out of sync with each other.
+  function resetSpotlightIfPathChanges(fromIndex: number, toIndex: number) {
+    const nextPath = hrefPathname(hrefFor(toIndex));
+    const herePath = hrefPathname(hrefFor(fromIndex));
+    if (nextPath !== herePath) {
+      setReady(false);
+      setHole(null);
+    }
+  }
+
   function goNext() {
     if (busy) return;
     if (stepIndex >= PRODUCT_TOUR_TOTAL - 1) {
       onFinish();
       return;
     }
-    // Only hide the card when the next step changes the page shell —
-    // search-only moves (e.g. settings tabs) used to flash the overlay.
-    const nextPath = hrefPathname(hrefFor(stepIndex + 1));
-    const herePath = hrefPathname(hrefFor(stepIndex));
-    if (nextPath !== herePath) {
-      setReady(false);
-      setHole(null);
-    }
+    resetSpotlightIfPathChanges(stepIndex, stepIndex + 1);
     onStepChange(stepIndex + 1);
   }
 
   function goBack() {
     if (busy || stepIndex <= 0) return;
-    const prevPath = hrefPathname(hrefFor(stepIndex - 1));
-    const herePath = hrefPathname(hrefFor(stepIndex));
-    if (prevPath !== herePath) {
-      setReady(false);
-      setHole(null);
-    }
+    resetSpotlightIfPathChanges(stepIndex, stepIndex - 1);
     onStepChange(stepIndex - 1);
   }
 
@@ -393,12 +391,7 @@ export function ProductTour({
           onFinish();
           return;
         }
-        if (
-          PRODUCT_TOUR_STEPS[stepIndex + 1]?.href !==
-          PRODUCT_TOUR_STEPS[stepIndex]?.href
-        ) {
-          setReady(false);
-        }
+        resetSpotlightIfPathChanges(stepIndex, stepIndex + 1);
         onStepChange(stepIndex + 1);
       } else if (e.key === "ArrowLeft") {
         const target = e.target as HTMLElement | null;
@@ -411,12 +404,7 @@ export function ProductTour({
         }
         e.preventDefault();
         if (busy || stepIndex <= 0) return;
-        if (
-          PRODUCT_TOUR_STEPS[stepIndex - 1]?.href !==
-          PRODUCT_TOUR_STEPS[stepIndex]?.href
-        ) {
-          setReady(false);
-        }
+        resetSpotlightIfPathChanges(stepIndex, stepIndex - 1);
         onStepChange(stepIndex - 1);
       }
     };

@@ -6,6 +6,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import { useSearchParams } from "next/navigation";
@@ -39,6 +40,7 @@ import { SHELL_QUERY } from "@/lib/portal-query";
 import { queryKeys } from "@/lib/query-keys";
 import { portalApi } from "@/lib/api/portal";
 import { QueryErrorPanel, QueryLoadingPanel } from "@/components/shell/query-error-panel";
+import { NoWorkspaceGuard } from "@/components/shell/workspace-guard";
 import {
   agentScopeCounts,
   groupByAgent,
@@ -424,6 +426,19 @@ function LabTracesInner() {
   const [selectedId, setSelectedId] = useState(
     () => traces.find((t) => t.id === paramId)?.id ?? traces[0]?.id ?? "",
   );
+  // Set synchronously by `selectTrace` the instant a manual click picks
+  // a row, and cleared once the URL-sync effect below observes
+  // `paramId` has actually caught up to that click. `patchQuery`'s
+  // `router.replace` (agent-scope.ts) resolves asynchronously, so
+  // there's a gap where `selectedId` already points at the clicked row
+  // but `paramId` still reflects the previous one. If something
+  // unrelated to the click (e.g. PortalCatalogSync refetching the same
+  // query key) hands `traces` a new array reference during that gap,
+  // the effect re-fires with a `paramId` that's stale relative to the
+  // click — this ref is how it tells "a click is in flight, don't
+  // trust `paramId` yet" apart from "the URL and the data genuinely
+  // disagree and the selection should follow the URL".
+  const justSelectedTraceIdRef = useRef<string | null>(null);
   // Phase 2a — the list payload always has `steps: []` (avoids an
   // N+1 of per-trace span hydration); fetch the real transcript for
   // just the selected trace and merge it in below.
@@ -443,6 +458,9 @@ function LabTracesInner() {
       sessions[0]?.id ??
       "",
   );
+  // Same purpose as `justSelectedTraceIdRef` above, mirrored for
+  // `selectSession` / `?session=`.
+  const justSelectedSessionIdRef = useRef<string | null>(null);
   const [tab, setTab] = useState<DetailTab>(() => parseTab(paramTab));
   const [query, setQuery] = useState("");
   const [severityFilter, setSeverityFilter] = useState<SeverityFilter>("all");
@@ -486,20 +504,69 @@ function LabTracesInner() {
   }, [traceDetailQuery.data, selectedId, paramSpan]);
 
   // Default selections once live rows arrive (initial state above can't
-  // reach into query data that hasn't resolved yet).
+  // reach into query data that hasn't resolved yet) — and re-sync
+  // whenever `traces` catches up with `paramId`. Without `paramId` in
+  // the deps, this only fired on `traces` changing: if `?id=` pointed
+  // at a run that wasn't in `traces` yet (e.g. selection defaulted to
+  // `traces[0]` while the target was still loading), `selectedId`
+  // stayed truthy forever and the old guard (`if (selectedId || ...)
+  // return`) meant the effect never revisited it once the real row
+  // did arrive — the selection went stale relative to the URL.
+  // `selectedId` itself is read but deliberately left out of the deps
+  // — but that alone does NOT avoid the manual-click race: `traces`
+  // (this effect's other dep) can get a new array reference from a
+  // source completely unrelated to the click (e.g. PortalCatalogSync
+  // refetching the same query key), which re-fires this effect while
+  // `paramId` still lags a just-made `selectTrace` pick (its
+  // `patchQuery` → `router.replace` resolves asynchronously). That
+  // would otherwise see `matched !== selectedId` and stomp the fresh
+  // click back to the previous row. `justSelectedTraceIdRef` is the
+  // actual guard against that: while a click is in flight and `paramId`
+  // hasn't caught up to it yet, this effect defers instead of
+  // reconciling against the stale param; once `paramId` does match the
+  // click, the ref clears and normal reconciliation (the staleness fix
+  // above) resumes.
   useEffect(() => {
-    if (selectedId || traces.length === 0) return;
-    const next = traces.find((t) => t.id === paramId)?.id ?? traces[0]?.id;
-    if (next) setSelectedId(next);
+    if (traces.length === 0) return;
+    if (justSelectedTraceIdRef.current !== null) {
+      if (paramId === justSelectedTraceIdRef.current) {
+        justSelectedTraceIdRef.current = null;
+      } else {
+        return;
+      }
+    }
+    const matched = traces.find((t) => t.id === paramId)?.id;
+    if (matched) {
+      if (matched !== selectedId) setSelectedId(matched);
+      return;
+    }
+    if (!selectedId) {
+      const next = traces[0]?.id;
+      if (next) setSelectedId(next);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [traces]);
+  }, [traces, paramId]);
+  // Same fix, mirrored for sessions (`selectedSessionId` vs. `?session=`).
   useEffect(() => {
-    if (selectedSessionId || sessions.length === 0) return;
-    const next =
-      sessions.find((s) => s.id === paramSession)?.id ?? sessions[0]?.id;
-    if (next) setSelectedSessionId(next);
+    if (sessions.length === 0) return;
+    if (justSelectedSessionIdRef.current !== null) {
+      if (paramSession === justSelectedSessionIdRef.current) {
+        justSelectedSessionIdRef.current = null;
+      } else {
+        return;
+      }
+    }
+    const matched = sessions.find((s) => s.id === paramSession)?.id;
+    if (matched) {
+      if (matched !== selectedSessionId) setSelectedSessionId(matched);
+      return;
+    }
+    if (!selectedSessionId) {
+      const next = sessions[0]?.id;
+      if (next) setSelectedSessionId(next);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sessions]);
+  }, [sessions, paramSession]);
 
   const setHubView = useCallback(
     (next: HubView) => {
@@ -535,6 +602,7 @@ function LabTracesInner() {
 
   const selectTrace = useCallback(
     (id: string, nextTab?: DetailTab) => {
+      justSelectedTraceIdRef.current = id;
       setSelectedId(id);
       const resolvedTab = nextTab ?? tab;
       setTab(resolvedTab);
@@ -561,6 +629,7 @@ function LabTracesInner() {
 
   const selectSession = useCallback(
     (id: string) => {
+      justSelectedSessionIdRef.current = id;
       setSelectedSessionId(id);
       patchQuery({
         view: "sessions",
@@ -575,6 +644,7 @@ function LabTracesInner() {
 
   const openTurn = useCallback(
     (traceId: string) => {
+      justSelectedTraceIdRef.current = traceId;
       setSelectedId(traceId);
       setTab("trace");
       patchQuery({
@@ -837,6 +907,15 @@ function LabTracesInner() {
 
   const showRunInspector =
     hubView === "runs" ? Boolean(selected) : inspectingTurn && Boolean(selected);
+
+  if (!orgId) {
+    return (
+      <NoWorkspaceGuard
+        title="Traces"
+        message="Select a workspace to view traces."
+      />
+    );
+  }
 
   if (tracesQuery.isLoading || sessionsQuery.isLoading) {
     return (

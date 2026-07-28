@@ -16,9 +16,20 @@ from typing import Any
 
 from eden.config import Settings, get_settings
 from eden.storage.redis import Lock
-from eden.workers.leader import _extend_lock_periodically
+from eden.workers.leader import (
+    _DEFAULT_LOCK_RENEW_SECONDS,
+    _DEFAULT_LOCK_TTL_SECONDS,
+    _extend_lock_periodically,
+)
+from eden.workers.supervisor import supervise as _supervise_with_backoff
 
 logger = logging.getLogger(__name__)
+
+# Backoff before restarting a crashed leader-supervisor task — mirrors
+# eden.workers.main's _RESTART_BACKOFF_SECONDS (kept as its own name
+# here, not imported, so each module can be tuned independently and
+# so tests can patch this module's value without reaching into main).
+_RESTART_BACKOFF_SECONDS = 5.0
 
 
 @dataclass
@@ -56,7 +67,13 @@ class BackgroundWorkers:
             return
         self._stop.clear()
         self._task = asyncio.create_task(
-            self._supervise(cfg),
+            _supervise_with_backoff(
+                "background_leader_supervisor",
+                lambda stop_event, _cfg=cfg: self._supervise(_cfg),
+                self._stop,
+                backoff=_RESTART_BACKOFF_SECONDS,
+                logger_=logger,
+            ),
             name="background-leader-supervisor",
         )
         logger.info("background: leader supervisor started")
@@ -76,7 +93,22 @@ class BackgroundWorkers:
         await self._stop_all(self._state)
 
     async def _supervise(self, settings: Settings) -> None:
-        """Acquire the global leader lock and host background loops."""
+        """Acquire the global leader lock and host background loops.
+
+        Wrapped by ``eden.workers.supervisor.supervise`` from
+        ``start()`` — an unhandled exception here used to permanently
+        kill every leader-gated background loop for the process's
+        lifetime with no self-healing; now it gets the same
+        restart-with-backoff behaviour ``eden.workers.main`` already
+        gives its loops.
+
+        The lock TTL is fixed and decoupled from ``interval`` (the
+        cadence at which followers retry acquisition) for the same
+        reason ``eden.workers.leader.run_if_leader`` decouples its
+        TTL from its tick interval: a hard-crashed leader should not
+        block failover for however long ``interval`` happens to be
+        configured to.
+        """
         interval = 30.0
         try:
             from eden.config import get_settings
@@ -90,13 +122,17 @@ class BackgroundWorkers:
             )
         except Exception:
             interval = 120.0
-        lock = Lock("api-background", ttl=int(interval * 3), prefix="eden:leader")
+        lock = Lock(
+            "api-background", ttl=_DEFAULT_LOCK_TTL_SECONDS, prefix="eden:leader"
+        )
 
         while not self._stop.is_set():
             if await lock.acquire():
                 extender_stop = asyncio.Event()
                 extender = asyncio.create_task(
-                    _extend_lock_periodically(lock, interval, extender_stop),
+                    _extend_lock_periodically(
+                        lock, _DEFAULT_LOCK_RENEW_SECONDS, extender_stop
+                    ),
                     name="background-leader-extend",
                 )
                 try:
@@ -176,23 +212,6 @@ class BackgroundWorkers:
         except Exception as exc:
             logger.warning("background: learn_wiring skipped: %s", exc)
 
-        # NOTE: the quality_pipeline sidecar worker and the trace_finalized
-        # consumer are deliberately started as two independent tasks, each
-        # with its own try/except. They read different queues/streams (the
-        # quality sidecar scores traces async off its own work queue; the
-        # trace_finalized consumer reacts to the trace_finalized bus event)
-        # and must stay decoupled — merging them (or making one depend on
-        # the other's success) would mean a quality-pipeline outage takes
-        # down trace_finalized handling too, or vice versa. Keep them as
-        # separate try/except blocks below.
-        try:
-            from eden.observability.quality_pipeline.worker import start_worker
-
-            await start_worker()
-            logger.info("background: quality_pipeline worker started")
-        except Exception as exc:
-            logger.warning("background: quality_pipeline skipped: %s", exc)
-
         if getattr(settings, "judges_async_tailer_enabled", False):
             try:
                 from eden.llmops.judges.redis_tailer import start_judge_tailer
@@ -202,29 +221,19 @@ class BackgroundWorkers:
             except Exception as exc:
                 logger.warning("background: judge tailer skipped: %s", exc)
 
+        # quality_pipeline / trace_finalized / closed_loop (consumer +
+        # verify) are duplicated between here and eden.workers.main; the
+        # shared helper is guarded by a cross-process lock so at most
+        # one process hosts them regardless of EDEN_RUN_BACKGROUND_WORKERS
+        # state (that env var alone is not a cross-process guarantee).
         try:
-            from eden.workers.trace_finalized_consumer import start_consumer
+            from eden.workers.sidecars import start_quality_and_closed_loop_sidecars
 
-            await start_consumer()
-            logger.info("background: trace_finalized consumer started")
+            await start_quality_and_closed_loop_sidecars("background")
         except Exception as exc:
-            logger.warning("background: trace_finalized consumer skipped: %s", exc)
-
-        try:
-            from eden.closed_loop.event_bus import start_consumer as start_loop
-
-            await start_loop()
-            logger.info("background: closed_loop consumer started")
-        except Exception as exc:
-            logger.warning("background: closed_loop consumer skipped: %s", exc)
-
-        try:
-            from eden.closed_loop.verify import start_verify_worker
-
-            await start_verify_worker()
-            logger.info("background: closed_loop verify worker started")
-        except Exception as exc:
-            logger.warning("background: closed_loop verify skipped: %s", exc)
+            logger.warning(
+                "background: quality/closed-loop sidecar bundle skipped: %s", exc
+            )
 
     async def _stop_all(self, state: _BackgroundState) -> None:
         if not state.started:
@@ -268,19 +277,14 @@ class BackgroundWorkers:
                 logger.warning("background: judge tailer stop failed: %s", exc)
             state.judge_tailer = None
 
-        for label, mod_path, fn_name in (
-            ("quality_pipeline", "eden.observability.quality_pipeline.worker", "stop_worker"),
-            ("trace_finalized", "eden.workers.trace_finalized_consumer", "stop_consumer"),
-            ("closed_loop", "eden.closed_loop.event_bus", "stop_consumer"),
-            ("closed_loop_verify", "eden.closed_loop.verify", "stop_verify_worker"),
-        ):
-            try:
-                import importlib
+        try:
+            from eden.workers.sidecars import stop_quality_and_closed_loop_sidecars
 
-                mod = importlib.import_module(mod_path)
-                await getattr(mod, fn_name)()
-            except Exception as exc:
-                logger.warning("background: %s stop failed: %s", label, exc)
+            await stop_quality_and_closed_loop_sidecars("background")
+        except Exception as exc:
+            logger.warning(
+                "background: quality/closed-loop sidecar bundle stop failed: %s", exc
+            )
 
         state.started = False
 

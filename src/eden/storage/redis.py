@@ -247,6 +247,18 @@ class Cache:
     entries on read. No background thread; the cost is a single
     dict lookup per read.
 
+    L0 re-population on a Redis hit reads the key's *actual*
+    remaining TTL via ``PTTL`` (rounded up to whole seconds and
+    clamped to ``default_ttl`` as an upper bound) rather than
+    blindly reusing ``default_ttl``. A key written with a short
+    custom TTL (``set(key, value, ttl=5)``) can therefore only
+    live in L0 for ~5s (plus at most ~1s of rounding), not up to
+    the full ``default_ttl`` — bounding the staleness window to
+    the key's own TTL instead of leaving it effectively unbounded
+    for short-TTL keys. Persistent keys (no TTL set) and keys
+    where the ``PTTL`` read itself fails still fall back to
+    ``default_ttl`` as before.
+
     Invalidation: ``delete()`` and ``clear()`` purge both layers
     so cross-instance invalidations (e.g. a DB write triggers a
     cache delete) still work.
@@ -328,13 +340,39 @@ class Cache:
             value = _jsonx_loads(raw)
         except json.JSONDecodeError:
             value = raw
-        # Populate L0 with the Redis TTL (fall back to default_ttl).
-        # redis-py's ``ttl`` is a separate call; the cheapest accurate
-        # read is the response object's ``pttl`` / ``ttl`` on the
-        # client. We approximate with the default TTL — the L0 entry
-        # may outlive Redis by at most ``default_ttl``, and Redis
-        # remains the source of truth.
-        self._l0_set(self._key(key), value, self.default_ttl)
+
+        # Populate L0 with the key's *actual* remaining TTL, not a
+        # blanket ``default_ttl``. A value written with a short custom
+        # TTL (e.g. ``set(key, value, ttl=5)``) must not be re-cached
+        # in L0 for up to ``default_ttl`` just because a miss happened
+        # to land near the real expiry — that made the staleness
+        # window effectively unbounded relative to the intended TTL.
+        try:
+            pttl_ms = await client.pttl(self._key(key))
+        except Exception as e:
+            logger.warning("Cache pttl soft-failed for %s: %s", key, e)
+            pttl_ms = None
+
+        if pttl_ms is not None and pttl_ms == -2:
+            # Key vanished between GET and PTTL (expired/deleted just
+            # now). ``raw`` is still a valid snapshot to return to the
+            # caller, but caching it in L0 would resurrect a value
+            # Redis no longer considers live — skip repopulation.
+            return value
+
+        if pttl_ms is None or pttl_ms < 0:
+            # No TTL info available (persistent key, i.e. pttl == -1,
+            # or the PTTL call itself failed) — fall back to
+            # default_ttl as a sane upper bound, same as before.
+            l0_ttl = self.default_ttl
+        else:
+            # Round up to whole seconds so we never under-cache, then
+            # clamp to [1, default_ttl] — the L0 entry can now outlive
+            # the real key by at most ~1s of rounding, never by the
+            # full default_ttl.
+            l0_ttl = max(1, min(self.default_ttl, (pttl_ms + 999) // 1000))
+
+        self._l0_set(self._key(key), value, l0_ttl)
         return value
 
     async def set(

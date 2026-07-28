@@ -352,19 +352,24 @@ class KafkaEventConsumer:
                 bootstrap_servers=self.bootstrap_servers,
                 value_serializer=lambda v: json.dumps(v).encode("utf-8"),
             )
-            await producer.start()
+            try:
+                await producer.start()
 
-            dlq_message = {
-                "original_topic": msg.topic,
-                "partition": msg.partition,
-                "offset": msg.offset,
-                "error": error,
-                "timestamp": datetime.now(UTC).isoformat(),
-                "value": msg.value,
-            }
+                dlq_message = {
+                    "original_topic": msg.topic,
+                    "partition": msg.partition,
+                    "offset": msg.offset,
+                    "error": error,
+                    "timestamp": datetime.now(UTC).isoformat(),
+                    "value": msg.value,
+                }
 
-            await producer.send("eden-dlq", dlq_message)
-            await producer.stop()
+                await producer.send("eden-dlq", dlq_message)
+            finally:
+                # Always release the producer's TCP connection, even if
+                # start()/send() raised — otherwise a failed DLQ publish
+                # leaks a connection on every retry.
+                await producer.stop()
 
             self._metrics["dlq_messages"] += 1
             logger.info(f"Message sent to DLQ: {msg.topic}:{msg.partition}:{msg.offset}")

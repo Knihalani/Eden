@@ -16,7 +16,6 @@ from eden_sdk._tokens import extract_usage, normalize_model_name
 from eden_sdk.client import TraceEvent, get_default_client
 from eden_sdk.config import get_config
 from eden_sdk.instrumentations.openai import _to_dict
-from eden_sdk.trace import TraceContext, current_trace
 
 logger = logging.getLogger("eden_sdk.instrumentation.anthropic")
 
@@ -164,9 +163,15 @@ def _enqueue_anthropic_event(
         if isinstance(m, str):
             payload["model_normalized"] = normalize_model_name(m)
 
-    trace_ctx: TraceContext | None = current_trace()
-    if trace_ctx is not None:
-        payload.setdefault("trace_id", trace_ctx.trace_id)
+    # Always stamp a trace_id — joining the active trace when one
+    # exists, otherwise a fresh uuid4 — so the payload shape matches
+    # the streaming path (_wrap_sync_stream/_wrap_async_stream below),
+    # which has called _trace_id_or_random() unconditionally all
+    # along. Previously this only ran inside the `trace_ctx is not
+    # None` branch, so a non-streaming call with no active trace
+    # shipped no trace_id at all while the equivalent streaming call
+    # always did.
+    payload.setdefault("trace_id", _trace_id_or_random())
 
     get_default_client().enqueue(
         TraceEvent(payload=payload, source_format="anthropic")

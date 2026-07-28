@@ -17,6 +17,7 @@ const LLM_HOST_SUFFIXES = [
   "generativelanguage.googleapis.com",
   "api.cohere.com",
   "api.mistral.ai",
+  "api.x.ai",
   "bedrock-runtime.amazonaws.com",
   "aiplatform.googleapis.com",
 ];

@@ -24,6 +24,12 @@ Currently hosted loops:
     * Multi-tenant maintenance scheduler (leader-gated) —
       compaction, retention, Typesense TTL, curator, drift,
       MCP rollup, classifier retrain, shadow join, signals
+    * Self-observability probe scan (leader-gated) — periodic
+      :func:`eden.self_obs.heartbeats.probe_and_record_workers` /
+      :func:`eden.self_obs.synthetics.run_golden_probes` sweep across
+      every org, with an email on a new degraded/fail transition
+      (see :mod:`eden.self_obs.scheduler`) — previously only ran
+      on-demand from an admin route / MCP tool with no paging at all
 
 NF manifest runs this as ``python -m eden.workers.main`` on the
 ``eden-worker`` job. ``SKIP_MIGRATIONS=1`` is set — the API
@@ -36,9 +42,16 @@ Lifecycle
 ---------
 * Receive SIGTERM (NF graceful drain) → set the stop event →
   the loops drain their in-flight tasks and exit cleanly.
-* On any unhandled exception inside a loop the loop logs at ERROR
-  and restarts with a 5s backoff — a transient Postgres blip
-  doesn't kill the worker.
+* Each hosted loop's tick body runs inside ``run_if_leader``
+  (:mod:`eden.workers.leader`), which already catches + logs every
+  ``Exception`` a tick raises and retries on the next interval — a
+  transient Postgres blip inside a tick never reaches this module at
+  all. ``_supervise``'s 5s-backoff crash-restart guards one layer
+  further out: bugs in the leader-lock machinery itself (e.g.
+  ``Lock()`` construction failing, or some other exception escaping
+  ``run_if_leader``'s own control flow) that would otherwise
+  permanently kill the hosted loop's task while the worker process
+  stays alive and infra reports a healthy container doing no work.
 
 CLI
 ---
@@ -59,11 +72,55 @@ import signal
 import sys
 from collections.abc import Awaitable, Callable
 
+from eden.workers.supervisor import supervise as _shared_supervise
+
 logger = logging.getLogger("eden.workers.main")
 
 # Backoff before restarting a crashed supervised loop (matches
 # the module docstring promise).
 _RESTART_BACKOFF_SECONDS = 5.0
+
+# Populated by ``_run_forever`` (this process, the dedicated
+# ``eden-worker`` service) with the supervised ``asyncio.Task`` for
+# each hosted loop as it's created, and cleared once ``_run_forever``
+# fully drains on shutdown. Empty in any other process (e.g. the API,
+# which never calls ``_run_forever``) — see ``worker_loops_running``.
+_loop_tasks: dict[str, "asyncio.Task[None]"] = {}
+
+
+def worker_loops_running() -> bool | None:
+    """Liveness of *this process's* hosted supervised loop tasks.
+
+    Returns ``None`` when this process never hosted any of the loops
+    below (e.g. it's the API process, not the dedicated ``eden-worker``
+    service that actually runs ``eden.self_obs.scheduler``'s scheduled
+    probe tick) — callers should fall back to a different signal in
+    that case rather than read this as "not running".
+
+    Returns ``True``/``False`` reflecting whether every task this
+    process actually started is still alive. Each hosted loop is
+    wrapped in :func:`eden.workers.supervisor.supervise`, which
+    restarts a crashed tick with backoff forever, so a task only
+    completes/dies on a graceful stop request or a truly unhandled
+    failure escaping the supervisor itself — this is the same
+    "task exists and isn't done()" signal
+    :func:`eden.workers.background.background_workers_running` uses
+    for the API-hosted bundle, just scoped to the tasks this process
+    (not the API) actually created.
+
+    This intentionally does not require *leadership* of any given
+    loop's Redis lock: each hosted loop elects its own leader
+    independently (:func:`eden.workers.leader.run_if_leader`), so a
+    given worker replica may be leader for some loops and a follower
+    for others at any moment — checking "this replica currently holds
+    every lock" would itself produce false degraded reports on
+    perfectly healthy follower replicas. Task liveness has no such
+    per-replica false negative: every replica creates every task
+    regardless of which locks it wins.
+    """
+    if not _loop_tasks:
+        return None
+    return all(not task.done() for task in _loop_tasks.values())
 
 
 def _leader_tick_seconds(floor: float = 30.0) -> float:
@@ -88,32 +145,14 @@ async def _supervise(
 ) -> None:
     """Run ``factory(stop)`` until stop is set; restart on crash.
 
-    Without supervision a single unhandled exception in
-    ``run_if_leader`` (or its imports) permanently kills the
-    hosted loop while the worker process stays alive — NF sees
-    a healthy container with no work happening.
+    Thin wrapper over the shared :func:`eden.workers.supervisor.supervise`
+    (also used by ``eden.workers.background``) so both processes get the
+    same restart-with-backoff behaviour from one place. See that
+    module's docstring for exactly what this guards against — routine
+    tick failures inside ``run_if_leader`` never reach here; they are
+    already caught + logged one layer in.
     """
-    while not stop.is_set():
-        try:
-            await factory(stop)
-            # Normal exit (stop set or factory returned) — do not restart.
-            return
-        except asyncio.CancelledError:
-            raise
-        except Exception as exc:
-            if stop.is_set():
-                return
-            logger.error(
-                "worker: %s crashed: %s; restarting in %.0fs",
-                name,
-                exc,
-                backoff,
-                exc_info=True,
-            )
-            try:
-                await asyncio.wait_for(stop.wait(), timeout=backoff)
-            except TimeoutError:
-                continue
+    await _shared_supervise(name, factory, stop, backoff=backoff, logger_=logger)
 
 
 async def _start_sidecar_workers() -> None:
@@ -123,14 +162,6 @@ async def _start_sidecar_workers() -> None:
     in-process there. ``eden-worker`` is the dedicated host; without this
     call quality / closed-loop / anomaly never run in production.
     """
-    try:
-        from eden.observability.quality_pipeline.worker import start_worker
-
-        await start_worker()
-        logger.info("worker: quality_pipeline started")
-    except Exception as exc:
-        logger.warning("worker: quality_pipeline skipped: %s", exc)
-
     try:
         from eden.agents.evolution.loop import start_evolution_loop
 
@@ -161,29 +192,16 @@ async def _start_sidecar_workers() -> None:
         except Exception as exc:
             logger.warning("worker: anomaly_loop skipped: %s", exc)
 
+    # quality_pipeline / trace_finalized / closed_loop (consumer +
+    # verify) are duplicated between here and eden.workers.background;
+    # the shared helper below is guarded by a cross-process lock so at
+    # most one process hosts them regardless of env var state.
     try:
-        from eden.closed_loop.event_bus import start_consumer as start_loop
+        from eden.workers.sidecars import start_quality_and_closed_loop_sidecars
 
-        await start_loop()
-        logger.info("worker: closed_loop consumer started")
+        await start_quality_and_closed_loop_sidecars("worker")
     except Exception as exc:
-        logger.warning("worker: closed_loop consumer skipped: %s", exc)
-
-    try:
-        from eden.closed_loop.verify import start_verify_worker
-
-        await start_verify_worker()
-        logger.info("worker: closed_loop verify started")
-    except Exception as exc:
-        logger.warning("worker: closed_loop verify skipped: %s", exc)
-
-    try:
-        from eden.workers.trace_finalized_consumer import start_consumer
-
-        await start_consumer()
-        logger.info("worker: trace_finalized consumer started")
-    except Exception as exc:
-        logger.warning("worker: trace_finalized consumer skipped: %s", exc)
+        logger.warning("worker: quality/closed-loop sidecar bundle skipped: %s", exc)
 
     try:
         from eden.llmops.promotion_hooks import register_all_hooks
@@ -197,20 +215,6 @@ async def _start_sidecar_workers() -> None:
 async def _stop_sidecar_workers() -> None:
     """Drain sidecars started by this process."""
     try:
-        from eden.closed_loop.verify import stop_verify_worker
-
-        await stop_verify_worker()
-    except Exception as exc:
-        logger.warning("worker: closed_loop verify stop failed: %s", exc)
-
-    try:
-        from eden.closed_loop.event_bus import stop_consumer
-
-        await stop_consumer()
-    except Exception as exc:
-        logger.warning("worker: closed_loop consumer stop failed: %s", exc)
-
-    try:
         from eden.data_platform.anomaly_detector_loop import (
             stop_anomaly_detector_loop,
         )
@@ -220,13 +224,6 @@ async def _stop_sidecar_workers() -> None:
         logger.warning("worker: anomaly_loop stop failed: %s", exc)
 
     try:
-        from eden.workers.trace_finalized_consumer import stop_consumer
-
-        await stop_consumer()
-    except Exception as exc:
-        logger.warning("worker: trace_finalized stop failed: %s", exc)
-
-    try:
         from eden.agents.evolution.loop import stop_evolution_loop
 
         await stop_evolution_loop()
@@ -234,11 +231,11 @@ async def _stop_sidecar_workers() -> None:
         logger.warning("worker: evolution_loop stop failed: %s", exc)
 
     try:
-        from eden.observability.quality_pipeline.worker import stop_worker
+        from eden.workers.sidecars import stop_quality_and_closed_loop_sidecars
 
-        await stop_worker()
+        await stop_quality_and_closed_loop_sidecars("worker")
     except Exception as exc:
-        logger.warning("worker: quality_pipeline stop failed: %s", exc)
+        logger.warning("worker: quality/closed-loop sidecar bundle stop failed: %s", exc)
 
 
 async def _run_forever() -> None:
@@ -251,7 +248,9 @@ async def _run_forever() -> None:
     3. EQL alert-as-code watchdog — leader-gated ~5 min (was cron).
     4. Artifact/nudge demotion — leader-gated hourly (was cron).
     5. Maintenance scheduler — leader-gated ~5 min (was cron).
-    6. Quality / closed-loop / anomaly sidecars (process-local).
+    6. Self-observability probe scan — leader-gated ~5 min; pages on a
+       new degraded/fail transition (was never scheduled at all).
+    7. Quality / closed-loop / anomaly sidecars (process-local).
     """
     loops: list[tuple[str, asyncio.Task]] = []
     stop = asyncio.Event()
@@ -293,7 +292,21 @@ async def _run_forever() -> None:
     )
     loops.append(("maintenance", maint_task))
 
-    # 6. Quality + closed-loop + anomaly — API disables in-process workers.
+    # 6. Self-observability probe scan — leader-gated, pages on new
+    # degraded/fail transitions (see eden.self_obs.scheduler).
+    self_obs_task = asyncio.create_task(
+        _supervise("self_obs_probes", _leader_self_obs_probes, stop),
+        name="self-obs-probes",
+    )
+    loops.append(("self_obs_probes", self_obs_task))
+
+    # Expose these tasks to ``worker_loops_running()`` — the liveness
+    # signal ``eden.self_obs.heartbeats.probe_and_record_workers`` reads
+    # when it runs in *this* process (see that module for why the old
+    # API-only ``background_workers_running()`` flag was wrong here).
+    _loop_tasks.update(dict(loops))
+
+    # 7. Quality + closed-loop + anomaly — API disables in-process workers.
     await _start_sidecar_workers()
 
     if not loops:
@@ -349,6 +362,12 @@ async def _run_forever() -> None:
         except Exception as exc:
             logger.warning("worker: webhook shutdown failed: %s", exc)
 
+        # Process is shutting down — revert ``worker_loops_running()``
+        # to "never hosted here" (``None``) rather than leaving it
+        # reporting a stale ``False`` ("hosted then died") after a
+        # clean, intentional drain.
+        _loop_tasks.clear()
+
 
 async def _leader_insights_loop(stop: asyncio.Event) -> None:
     """Leader-gated insights detector loop."""
@@ -376,9 +395,22 @@ async def _leader_insights_loop(stop: asyncio.Event) -> None:
     await run_if_leader(
         "insights_loop",
         _tick,
-        interval=_leader_tick_seconds(60.0),
+        interval=_insights_leader_interval(),
         stop=stop,
     )
+
+
+def _insights_leader_interval() -> float:
+    try:
+        from eden.config import get_settings
+
+        configured = float(
+            getattr(get_settings(), "insights_loop_interval_seconds", 180.0)
+            or 180.0
+        )
+    except Exception:
+        configured = 180.0
+    return _leader_tick_seconds(max(180.0, configured))
 
 
 async def _leader_eql_alert_watchdog(stop: asyncio.Event) -> None:
@@ -495,6 +527,62 @@ async def _leader_maintenance(stop: asyncio.Event) -> None:
         interval=300.0,
         stop=stop,
     )
+
+
+async def _leader_self_obs_probes(stop: asyncio.Event) -> None:
+    """Leader-gated periodic self-observability probe scan.
+
+    ``probe_and_record_workers`` / ``run_golden_probes`` used to only
+    run on-demand (admin dashboard route, MCP tool call), and even
+    then a degraded/fail status only landed in a Postgres table + a
+    JSON response with no page anywhere. This tick runs both probe
+    sets for every org and emails org admins on a *new* degraded/fail
+    transition (never on every tick while already degraded) — see
+    ``eden.self_obs.scheduler.run_scheduled_probes``.
+    """
+    from eden.workers.leader import run_if_leader
+
+    async def _tick() -> None:
+        try:
+            from eden.self_obs.scheduler import run_scheduled_probes
+
+            result = await run_scheduled_probes()
+            if result.get("degraded_orgs"):
+                logger.warning(
+                    "worker: self_obs_probes degraded orgs=%s",
+                    result["degraded_orgs"],
+                )
+            else:
+                logger.debug(
+                    "worker: self_obs_probes tick clean (orgs=%d)",
+                    result.get("orgs_scanned", 0),
+                )
+        except Exception as exc:
+            logger.error(
+                "worker: self_obs_probes tick failed: %s",
+                exc,
+                exc_info=True,
+            )
+            raise
+
+    logger.info("worker: self_obs_probes loop registered (interval=%.0fs)", _self_obs_interval())
+    await run_if_leader(
+        "self_obs_probes",
+        _tick,
+        interval=_self_obs_interval(),
+        stop=stop,
+    )
+
+
+def _self_obs_interval() -> float:
+    try:
+        from eden.config import get_settings
+
+        return float(
+            getattr(get_settings(), "self_obs_probe_interval_seconds", 600.0) or 600.0
+        )
+    except Exception:
+        return 600.0
 
 
 async def _leader_webhook_drain_loop(stop: asyncio.Event) -> None:

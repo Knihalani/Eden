@@ -37,7 +37,7 @@ export default function NotFound() {
           That URL isn’t a product page. Jump back in from one of these, or
           check the sidebar after you land.
         </p>
-        <ul className="mt-8 grid gap-2 text-left sm:grid-cols-2">
+        <ul className="mt-8 grid grid-cols-1 gap-2 text-left sm:grid-cols-2">
           {SHORTCUTS.map((item) => (
             <li key={item.href}>
               <Link

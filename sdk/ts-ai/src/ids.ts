@@ -17,6 +17,8 @@
  * working without any contract change.
  */
 
+import { currentTrace } from "./trace.js";
+
 /**
  * Build a compact 24-character random id.
  *
@@ -36,6 +38,34 @@ export function randomId(): string {
   const ts = Date.now().toString(36);
   const rand = Math.random().toString(36).slice(2, 10);
   return `${ts}${rand}`.slice(0, 24);
+}
+
+/**
+ * Resolve a trace id for an LLM-call span, preferring an active
+ * outer `trace()` / `traceAgent()` span over a fresh random id.
+ *
+ * Every instrumentation (openai.ts, anthropic.ts, langchain.ts,
+ * vercel-ai.ts, mastra.ts, providers.ts) previously called
+ * ``randomId()`` unconditionally for its ``traceId``, so an LLM
+ * call made *inside* a ``trace()``/``traceAgent()`` span could
+ * never join it on the wire -- the portal's trace-detail view
+ * showed the outer ``agent.run`` event and the inner
+ * ``llm_completion`` event as two unrelated traces instead of one
+ * correlated tree. Mirrors the Python SDK's
+ * ``_instrumentation_ids.py`` `_trace_id_or_random()`, which
+ * consults the active ``contextvars``-backed trace before falling
+ * back to a random id.
+ *
+ * Callers must NOT reuse the returned value as an ``eventId`` --
+ * once a trace is active, multiple LLM calls inside it will all
+ * resolve the SAME trace id here (that's the point), so using it
+ * as the event's primary key would collide. Generate ``eventId``
+ * separately via {@link randomId}.
+ */
+export function traceIdOrRandom(): string {
+  const active = currentTrace();
+  if (active?.traceId) return active.traceId;
+  return randomId();
 }
 
 

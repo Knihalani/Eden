@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { api, ApiError, API_BASE, githubApi } from "@/lib/api";
+import { api, ApiError, githubApi } from "@/lib/api";
+import { fetchApi } from "@/lib/api/core";
 import { isPaidPlansDisabledError } from "@/lib/feature-flag-error";
 
 export type IntegrationId =
@@ -130,9 +131,13 @@ async function probeIntegration(
     }
     case "storage": {
       try {
-        const res = await fetch(`${API_BASE}/auth/users/me/avatar`, {
+        // F41-4: routed through fetchApi's `raw` mode instead of a
+        // hand-rolled fetch() so the probe gets the shared
+        // auth-bearer-attach/timeout/retry pipeline; we still want
+        // the live Response ourselves to branch on status below.
+        const res = await fetchApi<Response>("/auth/users/me/avatar", {
           method: "POST",
-          credentials: "include",
+          raw: true,
         });
         if (res.status === 503) {
           const body = (await res.json().catch(() => ({}))) as { detail?: string };

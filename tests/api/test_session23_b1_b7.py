@@ -103,8 +103,62 @@ class TestB1RLSMiddleware:
             f"B-1 regression: expected path-param org, got {org_id}"
         )
 
-    def test_middleware_resolves_org_id_from_header(self) -> None:
-        """When path param absent, fall back to ``X-Org-Id``."""
+    def test_middleware_resolves_org_id_from_header_when_authenticated(
+        self, test_settings
+    ) -> None:
+        """When path param absent, fall back to ``X-Org-Id`` — but
+        ONLY once the request carries an independently verified
+        identity (legacy Eden cookie here). This is the legitimate
+        flow the 2026-07-27 CRITICAL fix must not break."""
+        from starlette.requests import Request
+
+        from eden.api.middleware.rls_org_context import (
+            RLSOrgContextMiddleware,
+        )
+        from eden.api.utils.auth import create_access_token
+
+        async def _receive():
+            return {"type": "http.request", "body": b"", "more_body": False}
+
+        token = create_access_token(
+            data={"sub": "user-123", "email": "test@example.com"},
+            token_version=1,
+        )
+
+        scope = {
+            "type": "http",
+            "method": "GET",
+            "path": "/v1/anything",
+            "raw_path": b"/v1/anything",
+            "query_string": b"",
+            "headers": [
+                (b"x-org-id", b"hdr_org_42"),
+                (b"cookie", f"authorization={token}".encode()),
+            ],
+            "path_params": {},
+            "client": ("127.0.0.1", 50000),
+            "server": ("127.0.0.1", 8000),
+            "scheme": "http",
+            "http_version": "1.1",
+        }
+
+        req = Request(scope, _receive)
+        org_id = asyncio.run(RLSOrgContextMiddleware._resolve_org_id(req))
+        assert org_id == "hdr_org_42", (
+            f"B-1 regression: expected header org for an authenticated "
+            f"caller, got {org_id}"
+        )
+
+    def test_middleware_ignores_unauthenticated_header(self) -> None:
+        """CRITICAL fix (2026-07-27) — an ``X-Org-Id`` header with NO
+        accompanying verified credential (no valid cookie, no valid
+        Clerk Bearer) must NOT be trusted. Pre-fix, ``_resolve_org_id``
+        returned the raw header verbatim here, letting an
+        unauthenticated caller (or one with a forged/garbage Bearer
+        token that still slips past ``DefaultDenyAuthMiddleware``'s
+        presence-only check) pin the RLS tenant boundary to any org
+        it likes.
+        """
         from starlette.requests import Request
 
         from eden.api.middleware.rls_org_context import (
@@ -120,6 +174,8 @@ class TestB1RLSMiddleware:
             "path": "/v1/anything",
             "raw_path": b"/v1/anything",
             "query_string": b"",
+            # Spoofed org header, no cookie, no bearer — nothing to
+            # verify the caller's identity against.
             "headers": [(b"x-org-id", b"hdr_org_42")],
             "path_params": {},
             "client": ("127.0.0.1", 50000),
@@ -130,9 +186,124 @@ class TestB1RLSMiddleware:
 
         req = Request(scope, _receive)
         org_id = asyncio.run(RLSOrgContextMiddleware._resolve_org_id(req))
-        assert org_id == "hdr_org_42", (
-            f"B-1 regression: expected header org, got {org_id}"
+        assert org_id is None, (
+            f"CRITICAL regression: unauthenticated X-Org-Id header must "
+            f"not resolve an org, got {org_id!r}"
         )
+
+    def test_middleware_ignores_header_with_forged_bearer(self) -> None:
+        """A syntactically Bearer-shaped but cryptographically invalid
+        token must not unlock the ``X-Org-Id`` header either —
+        ``DefaultDenyAuthMiddleware`` only checks for the ``Bearer ``
+        prefix, not the signature, so this is the exact shape that
+        slips past the 401 gate and must be caught here."""
+        from starlette.requests import Request
+
+        from eden.api.middleware.rls_org_context import (
+            RLSOrgContextMiddleware,
+        )
+
+        async def _receive():
+            return {"type": "http.request", "body": b"", "more_body": False}
+
+        scope = {
+            "type": "http",
+            "method": "GET",
+            "path": "/v1/anything",
+            "raw_path": b"/v1/anything",
+            "query_string": b"",
+            "headers": [
+                (b"x-org-id", b"hdr_org_42"),
+                (b"authorization", b"Bearer not-a-real-jwt"),
+            ],
+            "path_params": {},
+            "client": ("127.0.0.1", 50000),
+            "server": ("127.0.0.1", 8000),
+            "scheme": "http",
+            "http_version": "1.1",
+        }
+
+        req = Request(scope, _receive)
+        org_id = asyncio.run(RLSOrgContextMiddleware._resolve_org_id(req))
+        assert org_id is None, (
+            f"CRITICAL regression: a forged Bearer token must not "
+            f"unlock the X-Org-Id header, got {org_id!r}"
+        )
+
+    def test_middleware_does_not_pin_connection_for_unauthenticated_header(
+        self,
+    ) -> None:
+        """End-to-end (``__call__``) regression: an unauthenticated
+        request carrying only a raw ``X-Org-Id`` header must not
+        acquire a pooled Postgres connection / open a transaction at
+        all — ``request.state.pg_conn`` must stay unset and the
+        connection pool must never be touched.
+        """
+        from eden.api.middleware.rls_org_context import (
+            RLSOrgContextMiddleware,
+        )
+
+        acquire_called = False
+
+        class _FakeClient:
+            _pool = object()  # truthy sentinel; acquire() must never fire
+
+            async def initialize(self):
+                return None
+
+        async def _fake_get_postgres_client():
+            return _FakeClient()
+
+        scope = {
+            "type": "http",
+            "asgi": {"version": "3.0", "spec_version": "2.0"},
+            "method": "GET",
+            "path": "/v1/anything",
+            "raw_path": b"/v1/anything",
+            "query_string": b"",
+            # Spoofed org header, no cookie, no bearer.
+            "headers": [(b"x-org-id", b"org_evil")],
+            "path_params": {},
+            "client": ("127.0.0.1", 50000),
+            "server": ("127.0.0.1", 8000),
+            "scheme": "http",
+            "http_version": "1.1",
+        }
+
+        captured_state: dict = {}
+
+        async def receive():
+            return {"type": "http.request", "body": b"", "more_body": False}
+
+        sent: list = []
+
+        async def send(msg):
+            sent.append(msg)
+
+        async def _stub_app(scope, receive, send):
+            # Starlette hands us a fresh Request wrapping the same
+            # scope; grab whatever request.state the middleware
+            # populated via the scope's ``state`` (pure-ASGI middleware
+            # mutates the Request object it built internally, so
+            # inspect via a second Request over the same scope).
+            from starlette.requests import Request as _Req
+
+            captured_state["pg_conn"] = getattr(
+                _Req(scope, receive).state, "pg_conn", "NOT-A-REAL-DEFAULT"
+            )
+            await send({"type": "http.response.start", "status": 200, "headers": []})
+            await send({"type": "http.response.body", "body": b"", "more_body": False})
+
+        with patch(
+            "eden.storage.postgres.get_postgres_client",
+            side_effect=_fake_get_postgres_client,
+        ):
+            asyncio.run(
+                RLSOrgContextMiddleware(_stub_app)(scope, receive, send)
+            )
+
+        starts = [m for m in sent if m["type"] == "http.response.start"]
+        assert starts and starts[0]["status"] == 200
 
     def test_middleware_swallows_db_errors(self) -> None:
         """A DB blip on ``set_config`` must not poison the

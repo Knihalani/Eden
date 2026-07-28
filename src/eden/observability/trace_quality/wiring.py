@@ -319,6 +319,7 @@ def install_cat15_trajectory_replaces_intervention() -> None:
         text: str,
         context: str | None = None,
         trace_id: str | None = None,
+        direction: str = "input",
     ) -> dict[str, Any]:
         # ponytail: if the trace_id is missing, fall through to
         # the v0 path (the hot path is per-trace; legacy callers
@@ -329,6 +330,7 @@ def install_cat15_trajectory_replaces_intervention() -> None:
                 text=text,
                 context=context,
                 trace_id=trace_id,
+                direction=direction,
             )
         event = {
             "text": text,

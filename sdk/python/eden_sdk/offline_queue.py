@@ -91,6 +91,49 @@ class OfflineQueue:
             self._trim_locked()
             self._conn.commit()
 
+    def update_many(
+        self, updates: list[tuple[int, str, dict[str, Any]]]
+    ) -> None:
+        """Update existing rows in place, by id -- never inserts.
+
+        Used by :meth:`EdenClient._spill_offline` when a payload being
+        re-spilled after a retryable send failure already originated
+        from a durable row here (i.e. it was drained by :meth:`drain`
+        and is now failing again). :meth:`drain` is read-only --
+        deletion only ever happens via explicit :meth:`ack` -- so
+        without this, re-spilling such a payload via
+        :meth:`enqueue`/:meth:`enqueue_many` would INSERT a second row
+        for the same logical event while the original stayed in place,
+        duplicating it on every failing retry cycle (1 -> 2 -> 4 -> 8
+        -> ... rows) until :attr:`max_rows` is hit and
+        :meth:`_trim_locked` starts silently dropping the OLDEST rows.
+
+        This overwrites ``source_format``/``payload`` and bumps
+        ``created_at`` to now, but preserves ``id`` -- callers that
+        track outcomes by row id (``EdenClient._unresolved_offline_rows``)
+        need no further changes since the id never changes.
+
+        Rows whose id no longer exists (e.g. concurrently acked) are
+        silently skipped by the ``WHERE id = ?`` clause matching zero
+        rows -- there is nothing left to update.
+        """
+        if not updates:
+            return
+        with self._lock:
+            self._conn.executemany(
+                "UPDATE events SET source_format = ?, payload = ?, "
+                "created_at = strftime('%s','now') WHERE id = ?",
+                [
+                    (
+                        fmt,
+                        json.dumps(payload, default=str, separators=_JSON_SEPARATORS),
+                        rid,
+                    )
+                    for rid, fmt, payload in updates
+                ],
+            )
+            self._conn.commit()
+
     def _trim_locked(self) -> None:
         """Drop oldest rows when over ``max_rows``. Caller holds lock."""
         if self._size <= self.max_rows:
@@ -103,6 +146,10 @@ class OfflineQueue:
         )
         self._size = self.max_rows
         self.dropped += overflow
+        logger.warning(
+            "eden sdk: offline queue full, dropped %d oldest row(s)",
+            overflow,
+        )
 
     def drain(self, limit: int = 100) -> list[tuple[int, str, dict[str, Any]]]:
         with self._lock:

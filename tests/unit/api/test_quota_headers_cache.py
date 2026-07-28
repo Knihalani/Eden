@@ -6,6 +6,16 @@ headers-only path — two GET dispatches for the same org within the
 TTL should collapse into a single ``UsageService.get_budget_status``
 call, mirroring the ``_tier_cache`` pattern in
 ``TenantRateLimitMiddleware``.
+
+2026-07-27 update: ``QuotaEnforcementMiddleware._resolve_org_id`` was
+hardened to stop trusting a raw ``X-Org-Id`` header with zero
+verification (matching the ``RLSOrgContextMiddleware`` /
+``TenantRateLimitMiddleware`` fix for the same bug class). These
+fixtures now carry a valid Eden cookie JWT with ``current_org_id``
+set so org resolution still succeeds for a legitimately authenticated
+caller — an unauthenticated raw header alone would now resolve to
+``None`` (see ``test_gateway_api_key_org_context_jul27.py`` for the
+regression coverage on the unauthenticated case).
 """
 
 from __future__ import annotations
@@ -15,11 +25,28 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from eden.api.utils.auth import create_access_token
+
 
 def _quota_enabled_settings():
     settings = MagicMock()
     settings.quota_enabled = True
     return settings
+
+
+def _org_cookie(org_id: str) -> bytes:
+    """Build a valid ``authorization`` cookie header value carrying
+    ``current_org_id`` — the verified-identity path
+    ``_resolve_org_id`` now requires instead of a bare X-Org-Id header."""
+    token = create_access_token(
+        data={
+            "sub": "user-quota-cache",
+            "email": "quota-cache@example.com",
+            "current_org_id": org_id,
+        },
+        token_version=1,
+    )
+    return f"authorization={token}".encode()
 
 
 def _budget() -> dict:
@@ -45,7 +72,10 @@ async def _dispatch_get(mw, path: str = "/orgs/org-cache/agents") -> list[dict]:
         "method": "GET",
         "path": path,
         "raw_path": path.encode(),
-        "headers": [(b"x-org-id", b"org-cache")],
+        "headers": [
+            (b"x-org-id", b"org-cache"),
+            (b"cookie", _org_cookie("org-cache")),
+        ],
         "query_string": b"",
     }
     sent: list = []
@@ -212,7 +242,10 @@ class TestQuotaHeadersCache:
                 "method": "POST",
                 "path": "/orgs/org-over-cache/sidebar-prefs",
                 "raw_path": b"/orgs/org-over-cache/sidebar-prefs",
-                "headers": [(b"x-org-id", b"org-over-cache")],
+                "headers": [
+                    (b"x-org-id", b"org-over-cache"),
+                    (b"cookie", _org_cookie("org-over-cache")),
+                ],
                 "query_string": b"",
             }
             sent: list = []

@@ -12,7 +12,7 @@ interface AuthSplitLayoutProps {
  */
 export function AuthSplitLayout({ children }: AuthSplitLayoutProps) {
   return (
-    <div className="auth-shell grid min-h-dvh bg-[var(--bg)] lg:grid-cols-2">
+    <div className="auth-shell grid min-h-dvh grid-cols-1 bg-[var(--bg)] lg:grid-cols-2">
       <AuthBrandPanel />
       <div className="flex min-h-0 flex-1 flex-col items-center justify-center px-4 py-8 sm:px-8 lg:py-16">
         <div className="w-full max-w-[400px]">{children}</div>

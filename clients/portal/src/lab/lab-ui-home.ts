@@ -9,3 +9,5 @@ export {
   RunMeta,
   SeverityBadge,
 } from "@/lab/lab-ui";
+
+export { MetricCell } from "@/lab/lab-metric-cell";

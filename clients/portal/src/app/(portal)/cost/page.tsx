@@ -19,12 +19,13 @@ import {
   type CostMode,
 } from "@/lab/cost/cost-chrome";
 import dynamic from "next/dynamic";
-import { catalogAgents } from "@/lib/portal-catalog";
+import { catalogAgents, patchPortalCatalog } from "@/lib/portal-catalog";
 import { useOrg } from "@/hooks/use-org";
 import { useOrgQuery } from "@/hooks/use-api-query";
 import { queryKey, queryKeys } from "@/lib/query-keys";
 import { portalApi } from "@/lib/api/portal";
-import { api } from "@/lib/api/resources";
+import { budgetApi } from "@/lib/api/budget";
+import { SHELL_QUERY } from "@/lib/portal-query";
 import { QueryErrorPanel, QueryLoadingPanel } from "@/components/shell/query-error-panel";
 
 const costFallback = (
@@ -59,15 +60,27 @@ function LabCostInner() {
 
   const { currentOrg } = useOrg();
   const orgId = currentOrg?.id ?? null;
+  const agentsQuery = useOrgQuery(
+    queryKeys.portal.agents(orgId),
+    orgId,
+    () => portalApi.agents(orgId!),
+    SHELL_QUERY,
+  );
+  useEffect(() => {
+    if (agentsQuery.data === undefined) return;
+    patchPortalCatalog({ agents: agentsQuery.data });
+  }, [agentsQuery.data]);
   const driversQuery = useOrgQuery(
     queryKeys.portal.costDrivers(orgId),
     orgId,
     () => portalApi.costDrivers(orgId!),
+    SHELL_QUERY,
   );
   const budgetQuery = useOrgQuery(
     BUDGET_QUERY_KEY(orgId),
     orgId,
-    () => api.getBudget(orgId!),
+    () => budgetApi.get(orgId!),
+    SHELL_QUERY,
   );
 
   const { agentId, agent: scopeAgent, setAgentId } = useAgentScope();

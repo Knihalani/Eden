@@ -16,11 +16,12 @@ import {
   parseGuardrailTab,
 } from "@/lab/guardrails/guardrails-chrome";
 import dynamic from "next/dynamic";
-import { catalogAgents } from "@/lib/portal-catalog";
+import { catalogAgents, patchPortalCatalog } from "@/lib/portal-catalog";
 import { useOrg } from "@/hooks/use-org";
 import { useOrgQuery } from "@/hooks/use-api-query";
 import { queryKeys } from "@/lib/query-keys";
 import { portalApi } from "@/lib/api/portal";
+import { SHELL_QUERY } from "@/lib/portal-query";
 import { QueryErrorPanel, QueryLoadingPanel } from "@/components/shell/query-error-panel";
 
 const guardrailsFallback = (
@@ -61,10 +62,21 @@ function LabGuardrailsInner() {
 
   const { currentOrg } = useOrg();
   const orgId = currentOrg?.id ?? null;
+  const agentsQuery = useOrgQuery(
+    queryKeys.portal.agents(orgId),
+    orgId,
+    () => portalApi.agents(orgId!),
+    SHELL_QUERY,
+  );
+  useEffect(() => {
+    if (agentsQuery.data === undefined) return;
+    patchPortalCatalog({ agents: agentsQuery.data });
+  }, [agentsQuery.data]);
   const policiesQuery = useOrgQuery(
     queryKeys.portal.guardrailPolicies(orgId),
     orgId,
     () => portalApi.guardrailPolicies(orgId!),
+    SHELL_QUERY,
   );
   const livePolicies = policiesQuery.data ?? [];
 

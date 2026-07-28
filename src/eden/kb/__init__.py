@@ -29,8 +29,11 @@ logger = logging.getLogger(__name__)
 # Cache /health Postgres+Qdrant probes so LB/monitor chatter doesn't
 # keep Neon warm with SELECT 1 every few seconds. /ready has its own
 # cache path; this mirrors that for the detailed health surface.
+# TTL must exceed typical probe cadence (Northflank /ready is 30s;
+# external /health monitors are often 30–60s) so idle fleets can
+# reach Neon's suspend_timeout (~300s).
 _HEALTH_CACHE: dict[str, object] = {"at": 0.0, "value": None}
-_HEALTH_CACHE_TTL_S = 30.0
+_HEALTH_CACHE_TTL_S = 90.0
 
 
 async def initialize_kb() -> None:
