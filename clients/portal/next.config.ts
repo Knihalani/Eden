@@ -121,6 +121,13 @@ const nextConfig: NextConfig = {
         permanent: false,
       },
       {
+        // portal-cross-links.ts generates /ledger and /drift for an agent;
+        // only /drift had a rule, so the ledger cross-link 404'd.
+        source: "/agents/:id/ledger",
+        destination: "/agents/:id",
+        permanent: false,
+      },
+      {
         source: "/agents/:id/drift",
         destination: "/agents/:id?tab=drift",
         permanent: false,
@@ -199,8 +206,11 @@ const nextConfig: NextConfig = {
       // Phase 4 Evaluate — IA redirects (before soft-land catch-alls)
       { source: "/datasets", destination: "/evals?tab=datasets", permanent: false },
       {
+        // Was /evals/datasets/:id, which has no page and 404'd. Dataset
+        // detail is a selection inside the evals page (it reads ?tab= and
+        // ?id=), so carry the id through instead of dropping it.
         source: "/datasets/:id",
-        destination: "/evals/datasets/:id",
+        destination: "/evals?tab=datasets&id=:id",
         permanent: false,
       },
       {
@@ -386,17 +396,24 @@ const nextConfig: NextConfig = {
       { source: "/finops", destination: "/settings?mode=workspace", permanent: false },
       { source: "/finops/:path*", destination: "/settings?mode=workspace", permanent: false },
 
-      // Later (post-P7) — Prompts + Analytics product hubs (not core leaves)
-      { source: "/users", destination: "/analytics?tab=users", permanent: false },
-      { source: "/users/:path*", destination: "/analytics?tab=users", permanent: false },
-      { source: "/tools", destination: "/analytics?tab=tools", permanent: false },
-      { source: "/tools/:path*", destination: "/analytics?tab=tools", permanent: false },
-      { source: "/insights/topics", destination: "/analytics?tab=topics", permanent: false },
-      { source: "/insights", destination: "/analytics?tab=insights", permanent: false },
-      { source: "/insights/:path*", destination: "/analytics?tab=insights", permanent: false },
+      // Former Analytics hub. The page was planned but never built, so these
+      // seven rules pointed at a route with no page.tsx and no rule of its
+      // own -- every one of them landed on the global catch-all 404, which
+      // is strictly worse than not redirecting at all. `/unavailable` is the
+      // soft landing for retired URLs and offers Home / Traces / API keys.
+      // Restore the `/analytics?tab=` destinations if that hub is ever built.
+      { source: "/analytics", destination: "/unavailable", permanent: false },
+      { source: "/analytics/:path*", destination: "/unavailable", permanent: false },
+      { source: "/users", destination: "/unavailable", permanent: false },
+      { source: "/users/:path*", destination: "/unavailable", permanent: false },
+      { source: "/tools", destination: "/unavailable", permanent: false },
+      { source: "/tools/:path*", destination: "/unavailable", permanent: false },
+      { source: "/insights/topics", destination: "/unavailable", permanent: false },
+      { source: "/insights", destination: "/unavailable", permanent: false },
+      { source: "/insights/:path*", destination: "/unavailable", permanent: false },
 
       // Teardown Mode A: remaining former product trees → stub dashboard
-      // Observe + Evaluate + Improve + Workspace live; Prompts + Analytics live above.
+      // Observe + Evaluate + Improve + Workspace live; Prompts lives above.
       // First-run: soft-landed routes stay unavailable; onboarding opens home tour.
       {
         source: "/onboarding",
