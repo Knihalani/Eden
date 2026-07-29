@@ -53,10 +53,22 @@ def test_require_scope_honors_limited_scopes() -> None:
         require_scope(ctx, "mcp:fix")
 
 
-def test_resolve_auth_key_defaults_to_full_mcp_scopes() -> None:
+def test_resolve_auth_key_does_not_grant_full_mcp_scopes() -> None:
+    """A key's mere presence must not confer scopes.
+
+    This test previously asserted the opposite — that any non-empty key gets
+    ``mcp:fix`` — which is exactly the vulnerability: over HTTP nothing
+    validated the key, so ``Authorization: Bearer x`` was full read+write
+    access to any org named in ``X-Org-Id``. Real scopes now come from the
+    verified ``org_api_keys`` row via ``verify.verify_mcp_bearer``;
+    ``resolve_auth`` serves only the stdio transport, where credentials are
+    operator-set env vars.
+    """
     ctx = resolve_auth(api_key="secret", org_id="org-1")
-    assert "mcp:fix" in ctx.scopes
-    assert "mcp:read" in ctx.scopes
+    assert ctx.scopes == ("mcp:read",)
+    assert "mcp:fix" not in ctx.scopes
+    assert "mcp:debug" not in ctx.scopes
+    assert ctx.transport == "stdio"
 
 
 # ── call_tool IDOR + error sanitization ─────────────────────────────
@@ -136,6 +148,19 @@ async def test_call_tool_sanitizes_unexpected_exception() -> None:
 
 
 def _http_app() -> TestClient:
+    """Mount the MCP HTTP router with its feature flag enabled.
+
+    ``/v1/mcp`` is gated behind ``mcp_http_transport_v1`` (default False) since
+    the 2026-07 remediation, so without this the router 404s and every
+    transport assertion below would be testing the gate rather than the
+    transport. The flag is set on the object ``eden.api.deps.get_settings()``
+    returns — ``deps`` binds ``get_settings`` at import, so patching
+    ``eden.config.get_settings`` does not reach the dependency.
+    """
+    import eden.api.deps as deps
+
+    deps.get_settings().mcp_http_transport_v1 = True
+
     app = FastAPI()
     app.include_router(mcp_http_router)
     return TestClient(app)
@@ -171,12 +196,20 @@ def test_http_tools_list_allowed_without_key() -> None:
     assert "tools" in resp.json()["result"]
 
 
-def test_http_tools_call_org_mismatch_is_error() -> None:
+def test_http_tools_call_unverified_key_is_rejected() -> None:
+    """An unverified bearer is rejected before any tool runs.
+
+    This replaces ``test_http_tools_call_org_mismatch_is_error``. That test
+    exercised a comparison between the ``X-Org-Id`` header and the tool's
+    ``org_id`` argument — both attacker-supplied, so agreeing or disagreeing
+    proved nothing. The check that matters is whether the *key* is real and
+    which org owns it, and an unknown key never reaches a tool at all.
+    """
     client = _http_app()
     resp = client.post(
         "/v1/mcp",
         headers={
-            "Authorization": "Bearer test-key",
+            "Authorization": "Bearer totally-bogus-not-a-real-key",
             "X-Org-Id": "org-a",
         },
         json={
@@ -189,10 +222,8 @@ def test_http_tools_call_org_mismatch_is_error() -> None:
             },
         },
     )
-    assert resp.status_code == 200
-    result = resp.json()["result"]
-    assert result["isError"] is True
-    assert "does not match" in result["structuredContent"]["error"]
+    assert resp.status_code in (401, 503), resp.text
+    assert resp.json()["error"]["code"] == -32001
 
 
 @pytest.mark.asyncio
