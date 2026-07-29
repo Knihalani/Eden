@@ -32,6 +32,35 @@ logger = logging.getLogger(__name__)
 _RESTART_BACKOFF_SECONDS = 5.0
 
 
+def _leader_loops_from_worker_main() -> list[tuple[str, Any]]:
+    """The leader-gated loops that previously ran only on eden-worker.
+
+    Imported lazily and defensively: ``eden.workers.main`` pulls in the
+    whole loop graph, and a failure here must degrade the API to "these
+    loops are missing", never to "the API will not boot".
+    """
+    try:
+        from eden.workers import main as _worker_main
+    except Exception as exc:  # pragma: no cover - import guard
+        logger.warning("background: worker loop import failed: %s", exc)
+        return []
+    pairs = [
+        ("webhook_drain", "_leader_webhook_drain_loop"),
+        ("eql_alert_watchdog", "_leader_eql_alert_watchdog"),
+        ("artifact_demotion", "_leader_artifact_demotion"),
+        ("maintenance", "_leader_maintenance"),
+        ("self_obs_probes", "_leader_self_obs_probes"),
+    ]
+    out: list[tuple[str, Any]] = []
+    for name, attr in pairs:
+        factory = getattr(_worker_main, attr, None)
+        if factory is None:
+            logger.warning("background: %s missing from workers.main", name)
+            continue
+        out.append((name, factory))
+    return out
+
+
 @dataclass
 class _BackgroundState:
   """Mutable state for the leader-supervised background worker bundle."""
@@ -41,6 +70,10 @@ class _BackgroundState:
   anomaly_loop: bool = False
   evolution_loop: bool = False
   judge_tailer: Any = None
+  #: Supervised tasks for the leader-gated loops adopted from
+  #: ``eden.workers.main`` (webhook drain, EQL watchdog, demotion,
+  #: maintenance, self-obs). Name → task, so shutdown can drain them.
+  leader_loops: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
@@ -235,9 +268,54 @@ class BackgroundWorkers:
                 "background: quality/closed-loop sidecar bundle skipped: %s", exc
             )
 
+        # Leader-gated loops that used to exist ONLY on the eden-worker
+        # job: webhook drain, EQL alert watchdog, artifact/nudge demotion,
+        # multi-tenant maintenance, self-observability probes.
+        #
+        # That job is a Northflank *Job*, and jobs are for finite work —
+        # its container was reaped and restarted every 96-270s, so none of
+        # these ever completed a tick. Webhooks were never delivered,
+        # scheduled EQL alerts never fired, retention/compaction never ran,
+        # and nothing wrote a self-obs heartbeat for 7.4 days.
+        #
+        # Hosting them here puts them in the always-on API service. Each is
+        # still individually leader-gated, so bringing the worker back does
+        # not double-run them — it just adds a second candidate.
+        for name, factory in _leader_loops_from_worker_main():
+            try:
+                task = asyncio.create_task(
+                    _supervise_with_backoff(
+                        name,
+                        factory,
+                        self._stop,
+                        backoff=_RESTART_BACKOFF_SECONDS,
+                        logger_=logger,
+                    ),
+                    name=f"background-{name}",
+                )
+                state.leader_loops[name] = task
+                logger.info("background: %s loop hosted in API process", name)
+            except Exception as exc:
+                logger.warning("background: %s loop not started: %s", name, exc)
+
     async def _stop_all(self, state: _BackgroundState) -> None:
         if not state.started:
             return
+
+        # Adopted leader loops observe the same stop event; give them a
+        # bounded drain so shutdown cannot hang on one wedged tick.
+        if state.leader_loops:
+            for task in state.leader_loops.values():
+                if not task.done():
+                    task.cancel()
+            with contextlib.suppress(Exception):
+                await asyncio.wait_for(
+                    asyncio.gather(
+                        *state.leader_loops.values(), return_exceptions=True
+                    ),
+                    timeout=10.0,
+                )
+            state.leader_loops.clear()
 
         if state.insights_loop:
             try:
