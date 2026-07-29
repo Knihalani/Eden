@@ -413,12 +413,33 @@ async def _worker_liveness_loop(stop: asyncio.Event) -> None:
             from eden.self_obs.heartbeats import record_heartbeat
 
             failures = leader_acquire_failure_count()
+            # Report each loop's *actual* task state, not just its name.
+            # Listing registered names was the first version of this and
+            # it was nearly useless: a loop whose task had already died
+            # still appeared in the list, so "all seven loops" looked
+            # identical whether they were running or long dead.
+            states: dict[str, str] = {}
+            dead: list[str] = []
+            for loop_name, task in sorted(_loop_tasks.items()):
+                if not task.done():
+                    states[loop_name] = "alive"
+                    continue
+                if task.cancelled():
+                    states[loop_name] = "cancelled"
+                else:
+                    exc = task.exception()
+                    states[loop_name] = (
+                        f"dead:{type(exc).__name__}" if exc else "returned"
+                    )
+                dead.append(loop_name)
+
+            healthy = failures == 0 and not dead
             await record_heartbeat(
                 "worker_process",
                 org_id=None,
-                status="healthy" if failures == 0 else "degraded",
+                status="healthy" if healthy else "degraded",
                 meta={
-                    "loops": sorted(_loop_tasks),
+                    "loops": states,
                     "leader_acquire_failures": failures,
                 },
             )
@@ -428,6 +449,11 @@ async def _worker_liveness_loop(stop: asyncio.Event) -> None:
                     "times — every leader-gated loop is idle. Check Redis "
                     "reachability and any provider command quota.",
                     failures,
+                )
+            if dead:
+                logger.error(
+                    "worker: loops no longer running: %s",
+                    {k: states[k] for k in dead},
                 )
         except Exception as exc:
             logger.warning("worker: liveness heartbeat failed: %s", exc)
