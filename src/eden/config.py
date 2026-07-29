@@ -1018,6 +1018,13 @@ def _build_settings_class():
         # erasure erases almost nothing. Set RTBF_FANOUT_V1=true only once
         # those are real. See services/governance_intel/rtbf_fanout.py.
         rtbf_fanout_v1: bool = False
+        # MCP Streamable-HTTP transport at /v1/mcp. OFF by default: until the
+        # 2026-07 remediation it accepted any non-empty bearer string as full
+        # mcp:read+debug+fix against any org named in X-Org-Id, and several
+        # tools fell through to local Postgres fallbacks that bypass the API's
+        # authorization entirely. Enable only after reviewing which API keys
+        # carry MCP scopes. Cursor/stdio is unaffected by this flag.
+        mcp_http_transport_v1: bool = False
         # Triage budget (F30) — optional max LLM spend per org per day.
         # Positive default enforces a daily cap; orgs may override via
         # ``code_change_policy.max_triage_cost_usd_per_day`` (incl. 0 = unlimited).

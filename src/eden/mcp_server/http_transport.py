@@ -13,17 +13,41 @@ import json
 import logging
 from typing import Any
 
-from fastapi import APIRouter, Header, Request, Response
+from fastapi import APIRouter, Depends, Header, Request, Response
 from fastapi.responses import JSONResponse, StreamingResponse
 
-from eden.mcp_server.auth import resolve_auth
+from eden.api.deps import require_feature_flag
+from eden.mcp_server.errors import McpError
 from eden.mcp_server.server import call_tool, list_tools
+from eden.mcp_server.verify import verify_mcp_bearer
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/v1/mcp", tags=["mcp-http"])
+# Gated OFF by default. Until the 2026-07 remediation this router accepted any
+# non-empty bearer string as full MCP credentials, so it stays behind a flag
+# that an operator must set deliberately after reviewing key scopes.
+router = APIRouter(
+    prefix="/v1/mcp",
+    tags=["mcp-http"],
+    dependencies=[Depends(require_feature_flag("mcp_http_transport_v1"))],
+)
 
 _HTTP_STATUS_KEY = "_eden_http_status"
+
+
+def _default_base_url() -> str:
+    """Base URL the tool layer uses for outbound Eden API calls.
+
+    Mirrors ``auth.resolve_auth``'s resolution order so the stdio and HTTP
+    transports agree on where the API lives.
+    """
+    import os
+
+    return (
+        os.environ.get("EDEN_BASE_URL")
+        or os.environ.get("EDEN_API_URL")
+        or "http://127.0.0.1:8000"
+    ).rstrip("/")
 
 
 def _rpc_error(
@@ -76,37 +100,31 @@ async def _handle_rpc(
         # Discovery is unauthenticated; tools/call requires a bearer key.
         result = {"tools": list_tools()}
     elif method == "tools/call":
-        if not api_key:
+        # Verify the bearer against org_api_keys. Previously this checked only
+        # that a key was *present* and then granted full MCP scopes to any
+        # string, so `Authorization: Bearer x` was full access to any org named
+        # in X-Org-Id. The old org-mismatch comparison below was no defence:
+        # both sides of it were attacker-supplied.
+        try:
+            auth = await verify_mcp_bearer(
+                api_key=api_key,
+                org_id_header=org_id,
+                base_url=_default_base_url(),
+            )
+        except McpError as exc:
             return _rpc_error(
                 mid,
                 code=-32001,
-                message="Unauthorized: API key required",
-                http_status=401,
+                message=exc.message,
+                http_status=exc.http_status,
             )
+
         name = params.get("name") or ""
         arguments = dict(params.get("arguments") or {})
-        arg_org = arguments.get("org_id")
-        if (
-            org_id
-            and arg_org is not None
-            and str(arg_org).strip()
-            and str(arg_org) != str(org_id)
-        ):
-            out = {
-                "status": "error",
-                "error": "org_id does not match authenticated org",
-            }
-            result = {
-                "content": [{"type": "text", "text": out["error"]}],
-                "structuredContent": out,
-                "isError": True,
-            }
-            if mid is None:
-                return {}
-            return {"jsonrpc": "2.0", "id": mid, "result": result}
-        if org_id:
-            arguments["org_id"] = org_id
-        auth = resolve_auth(api_key=api_key, org_id=org_id or arguments.get("org_id"))
+        # org_id now comes from the verified key row, so it overrides whatever
+        # the caller put in the arguments rather than merely being compared
+        # against it.
+        arguments["org_id"] = auth.org_id
         out = await call_tool(name, arguments, auth=auth)
         # Prefer structured content (avoid double-encoding JSON as text).
         # Keep a short text fallback for older MCP clients.

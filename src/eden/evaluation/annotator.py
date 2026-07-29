@@ -279,7 +279,26 @@ async def annotate_trace(
     tags, conf = parse_annotator_response(str(content))
     if layer_a_ids:
         tags = filter_covered_by_layer_a(tags, layer_a_ids)
-    cost = float(getattr(resp, "cost_usd", 0.0) or 0.0)
+    # Cost lives on ``resp.usage.cost`` (``UsageStats.cost``), NOT on the
+    # response itself — ``LLMResponse`` is
+    # ``(content, usage, model, finish_reason, raw_response)`` and has no
+    # ``cost_usd`` field. Reading it via getattr with a 0.0 default meant
+    # ``cost`` was ALWAYS 0.0, so the ``if cost > 0`` below never fired,
+    # ``record_spend`` was never called, and the daily maintenance budget
+    # that ``_budget_ok`` checks at the top of this function could never
+    # accumulate — the cap could not trip no matter how much was spent.
+    # This is the only LLM feature that is on by default
+    # (``trace_annotator_v1``), so it was the one gate that most needed to
+    # work. ``sibling judges/unified.py`` already reads ``.usage.cost``.
+    #
+    # ``cost_usd`` is still accepted as a fallback so a caller passing a
+    # duck-typed response object keeps working.
+    usage = getattr(resp, "usage", None)
+    cost = float(
+        getattr(usage, "cost", None)
+        or getattr(resp, "cost_usd", 0.0)
+        or 0.0
+    )
     model = str(getattr(resp, "model", "") or "")
     # Feed the spend back into the same ledger ``_budget_ok`` reads, or the
     # budget gate above can never trip.

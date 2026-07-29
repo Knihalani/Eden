@@ -164,3 +164,69 @@ async def test_annotator_records_spend_against_the_budget() -> None:
         await ann.annotate_trace(ORG, "trace-x", _EVENTS)
     record.assert_awaited_once()
     assert record.await_args.args[1] == 0.004
+
+
+async def test_records_spend_from_the_REAL_LLMResponse_shape() -> None:
+    """The regression this file missed.
+
+    ``test_annotator_records_spend_against_the_budget`` above passes a
+    duck-typed stub carrying ``cost_usd``, so it passed while production
+    was broken: the real ``LLMResponse`` is
+    ``(content, usage, model, finish_reason, raw_response)`` and has no
+    ``cost_usd`` field at all. Cost lives on ``UsageStats.cost``.
+
+    Reading ``getattr(resp, "cost_usd", 0.0)`` therefore always yielded
+    0.0, so ``record_spend`` was never called and the daily maintenance
+    budget checked by ``_budget_ok`` could never accumulate — the cap
+    could not trip no matter how much the annotator spent. This is the
+    only LLM feature enabled by default, so it was the gate that most
+    needed to work.
+
+    Build the response from the real classes so a future refactor of
+    either type breaks this test rather than production.
+    """
+    from eden.llm.client import LLMResponse, UsageStats
+
+    resp = LLMResponse(
+        content='{"tags": ["success"], "confidence": 0.9}',
+        usage=UsageStats(
+            prompt_tokens=100, completion_tokens=20, total_tokens=120,
+            cost=0.0042,
+        ),
+        model="tencent/hy3",
+        finish_reason="stop",
+    )
+    record = AsyncMock()
+    with (
+        patch.object(ann, "sampled_in", return_value=True),
+        patch.object(ann, "_budget_ok", new=AsyncMock(return_value=True)),
+        patch("eden.llm.internal_router.route_async", new=AsyncMock(return_value=resp)),
+        patch("eden.closed_loop.autonomy_policy.record_spend", new=record),
+    ):
+        result = await ann.annotate_trace(ORG, "trace-real", _EVENTS)
+
+    record.assert_awaited_once(), "spend from usage.cost must reach the ledger"
+    assert record.await_args.args[1] == 0.0042
+    assert result.cost_usd == 0.0042
+
+
+async def test_zero_cost_response_does_not_record_spend() -> None:
+    """A genuinely free call must not write a ledger row."""
+    from eden.llm.client import LLMResponse, UsageStats
+
+    resp = LLMResponse(
+        content='{"tags": [], "confidence": 0.1}',
+        usage=UsageStats(total_tokens=5, cost=None),
+        model="tencent/hy3",
+        finish_reason="stop",
+    )
+    record = AsyncMock()
+    with (
+        patch.object(ann, "sampled_in", return_value=True),
+        patch.object(ann, "_budget_ok", new=AsyncMock(return_value=True)),
+        patch("eden.llm.internal_router.route_async", new=AsyncMock(return_value=resp)),
+        patch("eden.closed_loop.autonomy_policy.record_spend", new=record),
+    ):
+        await ann.annotate_trace(ORG, "trace-free", _EVENTS)
+
+    record.assert_not_awaited()

@@ -172,6 +172,37 @@ class HttpEdenClient:
             return data
         return {"status": "ok", "data": data}
 
+    # ── Generic verbs ────────────────────────────────────────────────────
+    #
+    # ``tools.py`` probes ``hasattr(client, "get" / "post")`` and falls back to
+    # a *local* implementation — querying Postgres directly with the caller's
+    # org_id — when they are absent. They were absent, so over HTTP twelve
+    # tools took that path and bypassed the API's authorization entirely,
+    # including a write via ``label_tool_call``.
+    #
+    # Providing them is the structural fix: the fallbacks stay available for
+    # stdio smoke tests that pass a client without them, and are unreachable
+    # for anything talking to a real API.
+
+    async def get(
+        self, path: str, *, params: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
+        """GET an Eden API path through the authenticated pool."""
+        return await self._request("GET", path, params=params)
+
+    async def post(
+        self,
+        path: str,
+        *,
+        json: dict[str, Any] | None = None,
+        params: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """POST to an Eden API path through the authenticated pool.
+
+        The keyword is ``json`` to match how ``tools.py`` invokes it.
+        """
+        return await self._request("POST", path, json_body=json, params=params)
+
     async def search_traces(
         self,
         org_id: str,
