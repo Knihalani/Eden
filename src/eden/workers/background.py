@@ -210,9 +210,24 @@ class BackgroundWorkers:
                     extender.cancel()
                     with contextlib.suppress(asyncio.CancelledError):
                         await extender
-                    await self._stop_all(self._state)
+                    # Lock loss ends the non-gated loops, not the
+                    # individually-gated adopted ones.
+                    await self._stop_all(self._state, include_adopted=False)
                     await lock.release()
             else:
+                # The five loops adopted from workers.main are each
+                # individually leader-gated by run_if_leader, so the outer
+                # bundle lock buys them nothing — and gating them behind it
+                # makes that one lock a single point of total, silent
+                # failure. Observed in production: supervisor_alive true,
+                # started false, every loop idle, /health reporting the
+                # fleet as expected-and-running. Start them regardless; the
+                # per-loop locks still guarantee one runner cluster-wide.
+                #
+                # The loops that are NOT individually gated (insights,
+                # anomaly, evolution, and the sidecar bundle) stay behind
+                # the outer lock, since for them it is the only guard.
+                self._start_adopted_loops(self._state)
                 logger.debug("background: not leader; retrying in %.0fs", interval)
                 try:
                     await asyncio.wait_for(self._stop.wait(), timeout=interval)
@@ -307,9 +322,22 @@ class BackgroundWorkers:
         # Hosting them here puts them in the always-on API service. Each is
         # still individually leader-gated, so bringing the worker back does
         # not double-run them — it just adds a second candidate.
+        self._start_adopted_loops(state)
+
+    def _start_adopted_loops(self, state: _BackgroundState) -> None:
+        """Start the leader-gated loops adopted from ``workers.main``.
+
+        Idempotent, and deliberately callable whether or not this process
+        holds the outer bundle lock: every one of these loops elects its
+        own leader through ``run_if_leader``, so the outer lock adds no
+        safety and would only add a way for all of them to stay silent.
+        """
         for name, factory in _leader_loops_from_worker_main():
+            existing = state.leader_loops.get(name)
+            if existing is not None and not existing.done():
+                continue
             try:
-                task = asyncio.create_task(
+                state.leader_loops[name] = asyncio.create_task(
                     _supervise_with_backoff(
                         name,
                         factory,
@@ -319,18 +347,22 @@ class BackgroundWorkers:
                     ),
                     name=f"background-{name}",
                 )
-                state.leader_loops[name] = task
                 logger.info("background: %s loop hosted in API process", name)
             except Exception as exc:
                 logger.warning("background: %s loop not started: %s", name, exc)
 
-    async def _stop_all(self, state: _BackgroundState) -> None:
-        if not state.started:
+    async def _stop_all(
+        self, state: _BackgroundState, *, include_adopted: bool = True
+    ) -> None:
+        # The adopted loops do not depend on the outer bundle lock, so
+        # losing that lock must not tear them down — only real process
+        # shutdown does. ``include_adopted=False`` is the lock-loss path.
+        if not state.started and not state.leader_loops:
             return
 
         # Adopted leader loops observe the same stop event; give them a
         # bounded drain so shutdown cannot hang on one wedged tick.
-        if state.leader_loops:
+        if include_adopted and state.leader_loops:
             for task in state.leader_loops.values():
                 if not task.done():
                     task.cancel()
