@@ -1272,7 +1272,26 @@ async def health_check():
             redis_status = "not_configured"
         else:
             await _asyncio.wait_for(_client.ping(), timeout=2.0)
-            redis_status = "connected"
+            # PING only proves reads. A Redis over its plan limit serves
+            # reads and silently discards writes, which looks identical
+            # to healthy from here and takes down every leader-gated
+            # loop. Prove the write path with a short-lived key.
+            _probe = "eden:health:writeprobe"
+            _ok = await _asyncio.wait_for(
+                _client.set(_probe, "1", nx=True, ex=5), timeout=2.0
+            )
+            if _ok is None:
+                # NX can legitimately lose a race with a concurrent probe;
+                # only call it broken when the key is also absent.
+                _existing = await _asyncio.wait_for(
+                    _client.get(_probe), timeout=2.0
+                )
+                redis_status = (
+                    "connected" if _existing is not None
+                    else "read_only: writes silently dropped (plan limit?)"
+                )
+            else:
+                redis_status = "connected"
     except TimeoutError:
         redis_status = "timeout"
     except Exception as exc:

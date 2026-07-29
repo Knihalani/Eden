@@ -75,6 +75,45 @@ def test_unreachable_redis_degrades_health(
 def test_reachable_redis_is_reported_connected(api_client) -> None:
     fake = MagicMock()
     fake.ping = AsyncMock(return_value=True)
+    fake.set = AsyncMock(return_value=True)  # write path healthy
+    fake.get = AsyncMock(return_value=None)
+
+    with patch(
+        "eden.storage.redis.get_redis_client",
+        AsyncMock(return_value=fake),
+    ):
+        body = _health_payload(api_client)
+
+    assert body["redis"] == "connected"
+
+
+def test_redis_serving_reads_but_dropping_writes_is_reported(api_client) -> None:
+    """The failure that took the whole background fleet down: PING and
+    GET succeed, SET silently returns null. Every leader lock then looks
+    "refused" forever even though nothing holds it, so no loop can ever
+    start — and a PING-only health check calls that healthy."""
+    fake = MagicMock()
+    fake.ping = AsyncMock(return_value=True)
+    fake.set = AsyncMock(return_value=None)   # write discarded
+    fake.get = AsyncMock(return_value=None)   # and nothing is there
+
+    with patch(
+        "eden.storage.redis.get_redis_client",
+        AsyncMock(return_value=fake),
+    ):
+        body = _health_payload(api_client)
+
+    assert body["redis"].startswith("read_only"), body["redis"]
+    assert body["status"] == "degraded"
+
+
+def test_lost_nx_race_is_not_called_read_only(api_client) -> None:
+    """A concurrent probe legitimately loses the NX race; the key is then
+    present. That must not be reported as a broken write path."""
+    fake = MagicMock()
+    fake.ping = AsyncMock(return_value=True)
+    fake.set = AsyncMock(return_value=None)
+    fake.get = AsyncMock(return_value="1")  # someone else's probe
 
     with patch(
         "eden.storage.redis.get_redis_client",
