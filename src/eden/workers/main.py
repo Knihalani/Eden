@@ -405,6 +405,7 @@ async def _worker_liveness_loop(stop: asyncio.Event) -> None:
     """
     from eden.workers.leader import (
         leader_acquire_failure_count,
+        leader_tick_counts,
         leader_work_failures,
     )
 
@@ -494,6 +495,7 @@ async def _worker_liveness_loop(stop: asyncio.Event) -> None:
                     "loops": states,
                     "leader_acquire_failures": failures,
                     "work_failures": work_failures,
+                    "ticks": leader_tick_counts(),
                     "redis": redis_state,
                 },
             )
