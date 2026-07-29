@@ -134,12 +134,21 @@ async def test_failed_acquisition_is_counted_and_cleared() -> None:
     stop = asyncio.Event()
 
     class _NeverAcquires:
+        """Mirrors the real Lock surface: acquire(token=…) and holder().
+
+        ``holder`` reports a peer, so this is genuine contention rather
+        than the broken-write-path case that elects through Postgres.
+        """
+
         def __init__(self, *a, **kw):
             self.name = "t"
 
-        async def acquire(self):
+        async def acquire(self, token=None):
             stop.set()
             return False
+
+        async def holder(self):
+            return "another-replica:1"
 
     with patch.object(leader_mod, "Lock", _NeverAcquires):
         await asyncio.wait_for(
@@ -202,8 +211,11 @@ async def test_work_failure_is_recorded_and_surfaced() -> None:
         def __init__(self, *a, **kw):
             self.name = "t"
 
-        async def acquire(self):
+        async def acquire(self, token=None):
             return True
+
+        async def holder(self):
+            return None
 
         async def extend(self, *a, **kw):
             return True
@@ -245,11 +257,14 @@ async def test_hung_acquire_is_bounded_and_retried() -> None:
         def __init__(self, *a, **kw):
             self.name = "t"
 
-        async def acquire(self):
+        async def acquire(self, token=None):
             attempts["n"] += 1
             if attempts["n"] >= 2:
                 stop.set()
             await asyncio.Event().wait()  # never returns
+
+        async def holder(self):
+            return "another-replica:1"
 
         async def release(self):
             return True

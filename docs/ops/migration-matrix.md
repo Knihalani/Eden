@@ -155,6 +155,7 @@
 | 118_improvement_plans_closed_status | improvement_plans 'closed' status | yes | forever | none | low | Phase 2b PR-close sync (plan status CHECK widened) | Improve |
 | 119_repo_connections_agent_id | repo_connections.agent_id | yes | forever | none | low | One linked GitHub repo per agent | Improve |
 | 120_guardrail_policies_direction | guardrail_policies.direction | yes | forever | none | low | Cat 15 guardrail direction-scoped enforcement | Cat 15 |
+| 121_leader_leases | eden_leader_leases | yes | forever | none | low | Postgres leader-election fallback (Redis quota outage 2026-07-29) | Reliability |
 
 ### Migration chain repair (2026-07-17, GA hardening)
 
