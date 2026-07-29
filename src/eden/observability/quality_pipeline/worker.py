@@ -18,12 +18,17 @@ The 5 steps (spec §5, deliverable E):
 5. **Detection** — ``supplementaries.phase_7_detection.detectors.run_all_detectors``
    (~200ms CPU).
 
-Prometheus counters (best-effort; only updated when
-``prometheus_client`` is importable)::
+Metrics, recorded unconditionally via
+``eden.observability.simple_metrics`` and exposed on ``/metrics``::
 
     quality_pipeline_traces_total{status="ok|dlq|error"}
     quality_pipeline_step_duration_seconds{step="tas|loop|..."}
     quality_pipeline_watermark_age_seconds
+
+These were previously best-effort ``prometheus_client`` counters, which meant
+they were recorded either nowhere (the library is not a declared dependency,
+so the no-op shim is what ran) or into a registry the hand-rolled ``/metrics``
+endpoint never reads. The pipeline had no observable throughput either way.
 
 The worker is intentionally framework-light. No threads, no
 asyncio queues — a simple ``while not stop_event.is_set()``

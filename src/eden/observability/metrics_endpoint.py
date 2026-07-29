@@ -6,11 +6,19 @@ emits (latency histograms from ``api/middleware/latency.py``,
 LLM provider error counts from ``llm/client.py``, KB cache
 lookups from ``optimization/cache.py``, etc.).
 
-The format is Prometheus text exposition 0.0.4 — the standard
-``prometheus_client`` library is preferred but we don't want
-to add it as a hard dependency. The implementation here is
-deliberately small and only renders the metrics that already
-exist in the platform.
+The format is Prometheus text exposition 0.0.4, rendered by hand rather than
+via ``prometheus_client`` so the library stays an optional dependency.
+
+Everything goes through :func:`_render_family`, which emits ``# HELP`` and
+``# TYPE`` exactly once per family. That is not a style preference: the format
+permits only one of each per family, and ``expfmt.TextParser`` — what
+Pushgateway and ``promtool check metrics`` use — aborts the whole scrape on
+the second. Rendering per-sample inside a loop, as this module used to, made
+the output invalid the moment a second provider, route or SLO appeared. Adding
+a new metric means adding one ``_render_family`` call, never a loop of them.
+
+``tests/unit/observability/test_metrics_exposition.py`` enforces this, along
+with the rule that every sample of a family carries a distinct label set.
 
 Auth: ``metrics_bearer_token`` (env ``METRICS_BEARER_TOKEN``)
 must match the ``Authorization: Bearer <token>`` header. When
@@ -171,7 +179,18 @@ async def metrics() -> Response:
     # LLM provider error counts
     try:
         from eden.llm.client import get_provider_error_counts
+
+        # ``get_provider_error_counts`` returns a *nested* mapping —
+        # ``{provider: {"calls", "errors", "error_rate"}}`` — but the value was
+        # passed straight through as the sample, so the endpoint emitted a
+        # Python dict repr where a float belongs:
+        #   eden_llm_provider_errors_total{provider="openai"} {'calls': 5, ...}
+        # That one line makes the entire scrape unparseable, independently of
+        # the duplicate-HELP problem. Expose calls and errors as two counters
+        # and let PromQL derive the rate; a pre-computed ratio cannot be
+        # aggregated across instances, whereas rate(errors)/rate(calls) can.
         counts = get_provider_error_counts()
+        rows = sorted(counts.items())
         lines.append(
             _render_family(
                 "eden_llm_provider_errors_total",
@@ -180,7 +199,19 @@ async def metrics() -> Response:
                 # the per-sample renderer hard-coded.
                 metric_type="counter",
                 samples=[
-                    ("", {"provider": provider}, n) for provider, n in sorted(counts.items())
+                    ("", {"provider": p}, float(v.get("errors", 0) or 0))
+                    for p, v in rows
+                ],
+            )
+        )
+        lines.append(
+            _render_family(
+                "eden_llm_provider_calls_total",
+                help_text="Cumulative LLM provider calls by provider.",
+                metric_type="counter",
+                samples=[
+                    ("", {"provider": p}, float(v.get("calls", 0) or 0))
+                    for p, v in rows
                 ],
             )
         )
