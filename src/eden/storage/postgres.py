@@ -396,11 +396,19 @@ class PostgresClient:
         try:
             row = await self.fetchrow(
                 """
+                -- Column is ``id``, not ``event_id``. The table has been
+                -- ``id UUID PRIMARY KEY DEFAULT gen_random_uuid()`` since
+                -- migration 002 and no ``event_id`` column has ever
+                -- existed, so this statement raised UndefinedColumnError
+                -- on every call. It went unnoticed because the method has
+                -- no callers — ``data_platform/bronze_sink.py`` is the
+                -- writer that actually runs, and it names the columns
+                -- correctly. Verified against the live schema 2026-07-29.
                 INSERT INTO usage_events (
-                    event_id, org_id, event_type, resource, quantity, unit,
+                    id, org_id, event_type, resource, quantity, unit,
                     user_id, model, cost_usd, metadata, correlation_id, created_at
                 ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW())
-                RETURNING event_id
+                RETURNING id
                 """,
                 event_id,
                 org_id,
@@ -414,7 +422,7 @@ class PostgresClient:
                 _dump_jsonb(metadata),
                 correlation_id,
             )
-            return str(row["event_id"]) if row else None
+            return str(row["id"]) if row else None
         except Exception:
             # Surface the failure to the caller (the service layer
             # logs + swallows) so we don't hide DB outages.
