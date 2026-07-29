@@ -168,6 +168,19 @@ def test_full_real_app_execution_order_matches_documented_chain():
 
     expected_relevant_order = [
         "SecurityHeadersMiddleware",
+        # CORS must run OUTSIDE every middleware that can short-circuit
+        # a request, so that 401 (DefaultDenyAuth), 429 (TenantRateLimit,
+        # Quota), 403 (InternalOnly) and 400 (Idempotency) responses
+        # carry Access-Control-Allow-Origin and are therefore readable by
+        # the browser. It was previously registered first, making it the
+        # INNERMOST middleware, so only router-produced responses were
+        # readable and the portal saw a generic network error instead of
+        # the error envelope.
+        #
+        # It stays INSIDE SecurityHeaders: CORS answers preflight OPTIONS
+        # itself without calling downstream, so putting it outermost
+        # would strip the OWASP headers off every preflight response.
+        "CORSMiddleware",
         "APIVersionMiddleware",
         "CorrelationIdMiddleware",
         "LatencyMiddleware",
@@ -178,7 +191,6 @@ def test_full_real_app_execution_order_matches_documented_chain():
         "InternalOnlyMiddleware",
         "IdempotencyMiddleware",
         "QuotaEnforcementMiddleware",
-        "CORSMiddleware",
     ]
 
     # Filter the real order down to just the classes we have opinions

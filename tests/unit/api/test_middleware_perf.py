@@ -481,10 +481,112 @@ def test_latency_middleware_exception_path_still_records_500():
         asyncio.run(mw(scope, receive, send))
 
     snap = get_metrics_snapshot()
-    routes = {r["route"] for r in snap["rows"]}
-    assert "/v1/jobs" in routes, (
-        f"LatencyMiddleware must observe the failure even when inner "
-        f"raises; got routes {routes}"
+    rows = snap["rows"]
+    assert rows, "LatencyMiddleware must observe the failure even when inner raises"
+    assert sum(r["count"] for r in rows) == 1, (
+        f"exactly one observation must be recorded for the raise; got {rows}"
+    )
+    # The router never ran here (bare raising app, no ``scope['route']``),
+    # so the sample buckets under the sentinel rather than the literal
+    # path. Bucketing by literal path is what let an unauthenticated
+    # caller grow the histogram without bound — see _UNMATCHED_ROUTE.
+    routes = {r["route"] for r in rows}
+    assert routes == {"<unmatched>"}, (
+        f"an unmatched request must not create a per-URL histogram row; "
+        f"got routes {routes}"
+    )
+
+
+def test_latency_middleware_buckets_unmatched_paths_under_one_key():
+    """An unauthenticated caller hitting many distinct URLs that never
+    reach the router must not grow the histogram per-URL.
+
+    Regression: ``_route_template_from_scope`` fell back to the literal
+    ``scope['path']``. ``scope['route']`` is only set by FastAPI's
+    Router, which runs INSIDE every middleware, so anything
+    short-circuited above it (401/403/429, router 404s) was keyed by raw
+    URL against an uncapped defaultdict.
+    """
+    from eden.api.middleware.latency import (
+        LatencyMiddleware,
+        get_metrics_snapshot,
+        reset_metrics_snapshot,
+    )
+    reset_metrics_snapshot()
+
+    async def denying_app(scope, receive, send):
+        # Mimics DefaultDenyAuth: 401 without ever reaching the router.
+        await send({"type": "http.response.start", "status": 401, "headers": []})
+        await send({"type": "http.response.body", "body": b""})
+
+    mw = LatencyMiddleware(denying_app)
+
+    async def receive():
+        return {"type": "http.request", "body": b"", "more_body": False}
+
+    async def send(msg):
+        pass
+
+    for i in range(50):
+        scope = {
+            "type": "http", "asgi": {"version": "3.0", "spec_version": "2.0"},
+            "http_version": "1.1", "method": "GET", "scheme": "http",
+            "path": f"/x/{i}-aaaaaaaa-bbbb-cccc", "raw_path": b"/x",
+            "query_string": b"", "headers": [(b"host", b"test")],
+            "client": ("127.0.0.1", 12345), "server": ("testserver", 80),
+            "root_path": "",
+        }
+        asyncio.run(mw(scope, receive, send))
+
+    routes = {r["route"] for r in get_metrics_snapshot()["rows"]}
+    assert routes == {"<unmatched>"}, (
+        f"50 distinct unmatched URLs must collapse to one bucket; got {routes}"
+    )
+
+
+def test_latency_middleware_still_uses_route_template_when_matched():
+    """The sentinel must not cost us real attribution: once the router
+    has matched, the template is what gets recorded.
+    """
+    from eden.api.middleware.latency import (
+        LatencyMiddleware,
+        get_metrics_snapshot,
+        reset_metrics_snapshot,
+    )
+    reset_metrics_snapshot()
+
+    class _Route:
+        path = "/v1/jobs/{job_id}"
+
+    async def routed_app(scope, receive, send):
+        # FastAPI's Router sets this on the shared scope dict before
+        # dispatching to the endpoint.
+        scope["route"] = _Route()
+        await send({"type": "http.response.start", "status": 200, "headers": []})
+        await send({"type": "http.response.body", "body": b""})
+
+    mw = LatencyMiddleware(routed_app)
+
+    async def receive():
+        return {"type": "http.request", "body": b"", "more_body": False}
+
+    async def send(msg):
+        pass
+
+    for job_id in ("a1", "b2", "c3"):
+        scope = {
+            "type": "http", "asgi": {"version": "3.0", "spec_version": "2.0"},
+            "http_version": "1.1", "method": "GET", "scheme": "http",
+            "path": f"/v1/jobs/{job_id}", "raw_path": b"/v1/jobs",
+            "query_string": b"", "headers": [(b"host", b"test")],
+            "client": ("127.0.0.1", 12345), "server": ("testserver", 80),
+            "root_path": "",
+        }
+        asyncio.run(mw(scope, receive, send))
+
+    routes = {r["route"] for r in get_metrics_snapshot()["rows"]}
+    assert routes == {"/v1/jobs/{job_id}"}, (
+        f"matched requests must bucket by template; got {routes}"
     )
 
 

@@ -165,6 +165,17 @@ async def _once_per_window(key: str, *, ttl_seconds: int) -> bool:
     Prevents the 5-minute worker loop from re-firing the same hourly /
     15-minute / daily slot. If Redis is down, allow the run (same
     best-effort behavior as the old cron cold-start).
+
+    A falsy ``SET NX`` is ambiguous and must not be read as "someone
+    else claimed it". An Upstash instance past its plan limit serves
+    reads and silently discards writes, so ``SET NX`` returns null with
+    nobody holding the key. Treating that as a claim made every gated
+    job — retention_cron, the Typesense TTL sweep, auto_curator,
+    drift_baselines, mcp_rollup, classifier_retrain, shadow_outcome_join,
+    signal_backfill — skip forever while the tick still reported success
+    (the skips are filtered out of the caller's log line), which is
+    exactly the shape of the July 2026 silent outage. Read the key back
+    to disambiguate, the same way ``leader._acquire_with_fallback`` does.
     """
     try:
         from eden.storage.redis import get_redis_client
@@ -173,7 +184,19 @@ async def _once_per_window(key: str, *, ttl_seconds: int) -> bool:
         if r is None:
             return True
         ok = await r.set(f"eden:maint:{key}", "1", nx=True, ex=ttl_seconds)
-        return bool(ok)
+        if ok:
+            return True
+        holder = await r.get(f"eden:maint:{key}")
+        if holder is None:
+            # Refused with nothing holding it — the write was dropped,
+            # not contended. Fail OPEN, matching the docstring.
+            logger.warning(
+                "[cron_tick] once_per_window %s: SET NX refused with no "
+                "holder — Redis is not accepting writes; running anyway",
+                key,
+            )
+            return True
+        return False
     except Exception as exc:
         logger.warning("[cron_tick] once_per_window %s failed: %s", key, exc)
         return True

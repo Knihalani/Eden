@@ -190,8 +190,16 @@ async def investigate_trace(
     events: list[dict[str, Any]] | None = None,
     *,
     agent_id: str | None = None,
+    signal_id: str | None = None,
 ) -> list[dict[str, Any]]:
-    """Evaluate enabled signal definitions for one trace."""
+    """Evaluate enabled signal definitions for one trace.
+
+    ``signal_id`` restricts the evaluation to a single definition. The
+    backfill worker runs one job per signal, so without it a backfill of
+    signal X also re-evaluates every other enabled signal for the org —
+    up to 20x the intended ``signal_events`` writes and ``cluster_after_match``
+    calls, over a time window the operator never asked to re-process.
+    """
     if events is None:
         try:
             from eden.insights.rca._common import _fetch_trace_events
@@ -214,17 +222,31 @@ async def investigate_trace(
         return []
 
     try:
-        rows = await pg.fetch(
-            """
-            SELECT id, name, description, output_schema,
-                   template_id, statgate_rule, investigator_prompt
-            FROM signal_definitions
-            WHERE org_id = $1 AND enabled = TRUE
-            ORDER BY created_at ASC
-            LIMIT 20
-            """,
-            org_id,
-        )
+        if signal_id:
+            rows = await pg.fetch(
+                """
+                SELECT id, name, description, output_schema,
+                       template_id, statgate_rule, investigator_prompt
+                FROM signal_definitions
+                WHERE org_id = $1 AND enabled = TRUE AND id = $2
+                ORDER BY created_at ASC
+                LIMIT 20
+                """,
+                org_id,
+                signal_id,
+            )
+        else:
+            rows = await pg.fetch(
+                """
+                SELECT id, name, description, output_schema,
+                       template_id, statgate_rule, investigator_prompt
+                FROM signal_definitions
+                WHERE org_id = $1 AND enabled = TRUE
+                ORDER BY created_at ASC
+                LIMIT 20
+                """,
+                org_id,
+            )
     except Exception as exc:
         logger.debug("signal_investigator: list definitions failed: %s", exc)
         return []

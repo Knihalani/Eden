@@ -117,10 +117,25 @@ kind: Service
 metadata:
   name: eden-api
 spec:
-  # Free-tier preset: 0.2 vCPU, 512 MB RAM. Bump to nf-compute-50 or
-  # nf-compute-100-2 for production. Sandbox plan caps at nf-compute-20.
+  # ⚠️  DRIFT, verified against the live project 2026-07-29:
+  # this file said nf-compute-20 (0.2 vCPU / 512 MB, $5.40/mo) while the
+  # running service is on nf-compute-100-1 (1 vCPU / 1024 MB, $18/mo).
+  # Recorded here as the live value so the two stop contradicting each
+  # other. This manifest is NOT applied by anything (see the header note
+  # added 2026-07-29) — it is documentation, and it was wrong.
+  #
+  # nf-compute-20 is no longer a safe target regardless: it predates the
+  # 2026-07-29 change that moved the entire background fleet into this
+  # service. One 512 MB container now carries ~111 routers, 21 numpy
+  # deferred routers, six leader-gated loops, the quality-pipeline
+  # sidecar and an in-lifespan Alembic run.
+  #
+  # Right-sizing candidate (needs one week of observed peak RSS first):
+  #   nf-compute-50 = 0.5 vCPU / 1024 MB, $12/mo — keeps RAM identical
+  #   (the binding constraint) and halves CPU (the slack one), saving
+  #   $6/mo / 33%. Do not drop below 1024 MB RAM without measuring.
   compute:
-    name: nf-compute-20
+    name: nf-compute-100-1
   deployment:
     instances: 1
   build:
@@ -286,8 +301,17 @@ spec:
     # ── Typesense (full-text search) — W9: enable when TYPESENSE_HOST
     # secret is provisioned. Set TYPESENSE_ENABLED=true and wire host/key
     # from Northflank secrets (do not use localhost).
+    #
+    # 2026-07-29: set back to "false". Both TYPESENSE_HOST and
+    # TYPESENSE_API_KEY below are `optional: true` secret refs, i.e. they
+    # resolve to empty when the secret is absent — and no TYPESENSE_HOST
+    # key exists in the eden-required group. So this was "enabled"
+    # against an empty endpoint: every search path attempted a connection
+    # that could not succeed, and the maintenance tick's Typesense TTL
+    # sweep ran against nothing. Flip to "true" in the same commit that
+    # provisions the secret, not before.
     - name: TYPESENSE_ENABLED
-      value: "true"
+      value: "false"
     - name: TYPESENSE_HOST
       valueFrom: { secretKeyRef: { group: eden-required, key: TYPESENSE_HOST, optional: true } }
     - name: TYPESENSE_API_KEY
@@ -526,8 +550,23 @@ spec:
     # every few minutes, so it churns without ever completing a tick.
     # Leader locks + the sidecar guard make concurrent hosting safe, just
     # pointless.
+    # 2026-07-29: flipped 1 -> 0. The API service now hosts the whole
+    # background fleet (see its own EDEN_RUN_BACKGROUND_WORKERS note).
+    # Leaving this at "1" meant that any manual trigger of this job —
+    # and `runOnSourceChange: cd-promote` triggers one on every deploy —
+    # started a second copy of the fleet. The leader locks and the
+    # sidecar guard make that safe rather than correct: the duplicate
+    # process still opens its own Postgres pool (15 connections) against
+    # a Neon instance billed for staying awake, still runs the
+    # non-leader-gated anomaly and evolution loops, and still spends
+    # Upstash commands contending for locks it will never win. With the
+    # Redis budget already exhausted (see the API's bundle-lock note),
+    # that contention is not free.
+    #
+    # The job is kept, at 0, as a break-glass host: set to "1" and
+    # trigger a run if the API service is ever unable to carry the fleet.
     - name: EDEN_RUN_BACKGROUND_WORKERS
-      value: "1"
+      value: "0"
     - name: SENTRY_ENVIRONMENT
       value: northflank-staging-worker
     - name: POSTGRES_HOST

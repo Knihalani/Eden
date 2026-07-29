@@ -73,15 +73,22 @@ async def test_background_start_does_not_restart_after_stop() -> None:
 
 @pytest.mark.asyncio
 async def test_background_leader_lock_ttl_decoupled_from_interval() -> None:
-    """The api-background lock's TTL must be the fixed leader.py constant,
-    not scaled off the (possibly large) configured tick interval.
+    """The api-background lock's TTL must be a fixed constant, not
+    scaled off the (possibly large) configured tick interval.
 
     Regression: previously ``ttl=int(interval * 3)`` — with
     ``redis_leader_tick_seconds`` configured large, a hard-crashed
     leader blocked failover for a correspondingly long time.
+
+    The constant is ``background._BUNDLE_LOCK_TTL_SECONDS`` rather than
+    leader.py's shared default: the bundle lock is held continuously by
+    the leader, so it is sized for the Upstash command budget (see the
+    arithmetic on that constant) instead of for run_if_leader's
+    short-lived per-tick locks. The invariant under test is unchanged —
+    fixed, and far below any interval-derived value.
     """
     from eden.workers import background as background_module
-    from eden.workers.leader import _DEFAULT_LOCK_TTL_SECONDS
+    from eden.workers.background import _BUNDLE_LOCK_TTL_SECONDS
     from eden.storage.redis import Lock as RealLock
 
     captured_ttls: list[int] = []
@@ -113,8 +120,13 @@ async def test_background_leader_lock_ttl_decoupled_from_interval() -> None:
         await asyncio.wait_for(workers._supervise(settings), timeout=2.0)
 
     assert captured_ttls, "Lock should have been constructed"
-    assert captured_ttls[0] == _DEFAULT_LOCK_TTL_SECONDS
+    assert captured_ttls[0] == _BUNDLE_LOCK_TTL_SECONDS
     assert captured_ttls[0] < 3600 * 3
+    # The renewal cadence must stay strictly inside the TTL, and the
+    # supervise interval must too — at TTL=60/interval=120 the lock could
+    # expire between two consecutive liveness checks.
+    assert background_module._BUNDLE_LOCK_RENEW_SECONDS < _BUNDLE_LOCK_TTL_SECONDS
+    assert 120.0 < _BUNDLE_LOCK_TTL_SECONDS
 
 
 @pytest.mark.asyncio
