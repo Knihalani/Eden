@@ -710,6 +710,24 @@ class Lock:
         self._key = f"{prefix}:{name}"
         self._token: str | None = None
 
+    async def holder(self) -> str | None:
+        """Return the current holder's token, or None.
+
+        A lock that is refused indefinitely is otherwise a dead end: the
+        caller knows only that *someone* has it. Reading the token names
+        the holder, which is the difference between "a healthy peer is
+        leader" and "a process nothing can reach is holding this forever".
+        One GET, so callers should only reach for it when diagnosing.
+        """
+        client = await get_redis_client()
+        if client is None:
+            return None
+        try:
+            return await client.get(self._key)
+        except Exception as exc:
+            logger.debug("lock holder read failed for %s: %s", self._key, exc)
+            return None
+
     async def acquire(self, token: str | None = None) -> bool:
         """Try to acquire the lock.
 
