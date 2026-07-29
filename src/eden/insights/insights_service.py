@@ -98,7 +98,15 @@ class InsightsService:
             for tid in evicted:
                 self._traces.pop(tid, None)
 
-    def get_trace(self, trace_id: str) -> UnifiedTrace | None:
+    def get_trace(self, tenant_id: str, trace_id: str) -> UnifiedTrace | None:
+        """Look up one trace, scoped to ``tenant_id``.
+
+        ``_traces`` is keyed by trace id alone and shared across tenants;
+        ``_tenant_traces`` is the ownership index. Without the check any
+        caller could read any trace given its id.
+        """
+        if trace_id not in self._tenant_trace_ids(tenant_id):
+            return None
         return self._traces.get(trace_id)
 
     def list_traces(
@@ -151,6 +159,21 @@ class InsightsService:
 
         return insights
 
+    def _tenant_trace_ids(self, tenant_id: str) -> set[str]:
+        """Trace ids owned by ``tenant_id``, as a set.
+
+        ``_tenant_traces`` stores lists, so ``tid in list`` is O(n) per probe.
+        Callers scanning every insight against every affected trace id turned
+        that into O(insights x affected x traces) on a process-global store —
+        measurable as multi-second blocking on a busy pod. Build the set once
+        per call instead.
+        """
+        return set(self._tenant_traces.get(tenant_id, ()))
+
+    def _owned_by_tenant(self, insight: Insight, owned: set[str]) -> bool:
+        """True when any affected trace belongs to the tenant."""
+        return any(tid in owned for tid in insight.affected_trace_ids)
+
     def get_insights(
         self,
         tenant_id: str,
@@ -159,19 +182,31 @@ class InsightsService:
         limit: int = 100,
     ) -> list[Insight]:
         """Get stored insights for a tenant."""
-        insights = [
-            i for i in self._insights
-            if any(tid in self._tenant_traces.get(tenant_id, []) for tid in i.affected_trace_ids)
-        ]
+        owned = self._tenant_trace_ids(tenant_id)
+        insights = [i for i in self._insights if self._owned_by_tenant(i, owned)]
         if detector:
             insights = [i for i in insights if i.detector == detector]
         if severity:
             insights = [i for i in insights if i.severity == severity]
         return insights[:limit]
 
-    def get_insight_by_id(self, insight_id: str) -> Insight | None:
+    def get_insight_by_id(
+        self, tenant_id: str, insight_id: str
+    ) -> Insight | None:
+        """Look up one insight, scoped to ``tenant_id``.
+
+        ``tenant_id`` is required. ``_insights`` is a process-global list
+        shared by every tenant in the pod, so an id-only lookup returned
+        another organisation's insight to any caller who could reach the
+        route — the route validated access to the *path* org and then served
+        whatever matched the id.
+
+        ``Insight`` carries no tenant field of its own, so ownership is
+        derived from ``affected_trace_ids``, matching ``get_insights``.
+        """
+        owned = self._tenant_trace_ids(tenant_id)
         for i in self._insights:
-            if i.insight_id == insight_id:
+            if i.insight_id == insight_id and self._owned_by_tenant(i, owned):
                 return i
         return None
 
@@ -621,9 +656,16 @@ class InsightsService:
         reports.sort(key=lambda r: r.overall_score, reverse=True)
         return reports[:limit]
 
-    def get_disparity_report(self, report_id: str) -> DisparityReport | None:
+    def get_disparity_report(
+        self, tenant_id: str, report_id: str
+    ) -> DisparityReport | None:
+        """Look up one disparity report, scoped to ``tenant_id``.
+
+        Unlike ``Insight``, ``DisparityReport`` carries its own ``tenant_id``,
+        so the check is direct.
+        """
         for r in self._disparity_reports:
-            if r.report_id == report_id:
+            if r.report_id == report_id and r.tenant_id == tenant_id:
                 return r
         return None
 

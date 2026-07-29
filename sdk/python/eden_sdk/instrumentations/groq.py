@@ -159,11 +159,21 @@ def _wrap_async(original):  # type: ignore[no-untyped-def]
 
 
 def _build_request_payload(args: tuple, kwargs: dict) -> dict[str, Any]:
-    """Extract a serializable dict of the original request."""
+    """Extract a serializable dict of the original request.
+
+    ``messages`` is read from ``kwargs``: the Groq SDK, like OpenAI's, declares
+    ``create()`` with keyword-only parameters, so ``args`` is empty on every
+    real call. Before the 2026-07 remediation ``messages`` appeared only in the
+    positional branch below and was missing from this allow-list, so every
+    captured Groq span carried settings and no prompt. Same defect as
+    ``openai.py`` had; ``anthropic.py`` was always correct. Keep all three
+    in step.
+    """
     out: dict[str, Any] = {}
     if args:
         out["messages"] = _to_dict(args[0]) if len(args) == 1 else _to_dict(args)
-    for k in ("model", "temperature", "top_p", "max_tokens", "max_completion_tokens",
+    for k in ("messages", "model", "temperature", "top_p", "max_tokens",
+              "max_completion_tokens",
               "tools", "tool_choice", "stream", "user", "response_format",
               "seed", "stop", "presence_penalty", "frequency_penalty", "n",
               "parallel_tool_calls", "reasoning_format", "reasoning_effort",

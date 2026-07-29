@@ -101,7 +101,14 @@ async def run(dry_run: bool = False) -> dict:
     #    (failed archives, manual SQL, replays).
     try:
         from eden.observability.message_store import get_message_store
-        results["trace_messages_gc"] = await get_message_store().gc_orphans()
+
+        # Must honour dry_run: this deletes the only remaining copy of a
+        # trace's prompt/completion text. It previously ran unconditionally,
+        # so `python -m eden.data_platform.retention_cron` — whose CLI
+        # defaults to --dry-run — deleted rows anyway.
+        results["trace_messages_gc"] = await get_message_store().gc_orphans(
+            dry_run=dry_run
+        )
     except Exception as exc:
         logger.error(f"[trace_messages_gc] failed: {exc}")
         results["trace_messages_gc"] = {"errors": [str(exc)]}

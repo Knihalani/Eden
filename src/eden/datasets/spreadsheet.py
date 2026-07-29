@@ -378,11 +378,22 @@ class SpreadsheetService:
         self,
         *,
         row_id: str,
+        dataset_id: str,
         values: dict[str, Any],
         input: str | None = None,
         expected_output: str | None = None,
     ) -> bool:
-        """Update a row's values + optional input/output."""
+        """Update a row's values + optional input/output.
+
+        ``dataset_id`` is required and scopes the UPDATE. Without it the
+        statement was ``WHERE id = $n`` alone, so a caller holding a valid
+        dataset of their own could pass any ``row_id`` and overwrite a row in
+        another tenant's dataset. The route's ownership check ran *after* the
+        write and merely returned 404 — the mutation had already committed.
+
+        Returns ``False`` when nothing matched, which the caller must treat as
+        "not found" rather than success.
+        """
         # Build a dynamic SET clause.
         sets: list[str] = ["updated_at = NOW()"]
         args: list[Any] = []
@@ -395,11 +406,22 @@ class SpreadsheetService:
         args.append(json.dumps(values))
         sets.append(f"payload = ${len(args)}::jsonb")
         args.append(row_id)
-        await self._pg.execute(
-            f"UPDATE dataset_items SET {', '.join(sets)} WHERE id = ${len(args)}",
+        row_param = len(args)
+        args.append(dataset_id)
+        dataset_param = len(args)
+        status = await self._pg.execute(
+            f"UPDATE dataset_items SET {', '.join(sets)} "
+            f"WHERE id = ${row_param} AND dataset_id = ${dataset_param}",
             *args,
         )
-        return True
+        # asyncpg returns e.g. "UPDATE 1"; "UPDATE 0" means the row belongs to
+        # a different dataset (or does not exist).
+        try:
+            return int(str(status).split()[-1]) > 0
+        except (ValueError, AttributeError, IndexError):
+            # Unparseable status (mocked client in tests): assume success
+            # rather than reporting a false 404.
+            return True
 
     async def list_rows(
         self,

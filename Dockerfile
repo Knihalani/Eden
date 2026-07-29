@@ -144,4 +144,12 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
 # source is at /app/src/eden/__init__.py (src-layout) but is not on
 # sys.path by default.
 # --proxy-headers is required when behind a reverse proxy / load balancer.
-CMD ["/usr/local/bin/python3", "-m", "uvicorn", "eden.api.app:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers"]
+# --timeout-graceful-shutdown bounds the connection drain. Without it uvicorn
+# waits *indefinitely* for in-flight requests, and the SSE routes hold a
+# connection for up to 300s (observability_stream.py _STREAM_MAX_DURATION_S)
+# against a 60s pod grace period. The container was therefore SIGKILLed before
+# the lifespan shutdown block ran at all — so the ClickHouse buffer flush and
+# every other drain in api/app.py were dead code in production.
+#
+# Budget: 60s pod grace = 20s connection drain + <=30s shutdown block + slack.
+CMD ["/usr/local/bin/python3", "-m", "uvicorn", "eden.api.app:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers", "--timeout-graceful-shutdown", "20"]

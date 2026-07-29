@@ -218,7 +218,10 @@ async def get_trace(
 ) -> dict[str, Any]:
     """Get a single trace by ID."""
     service = _get_service()
-    trace = service.get_trace(trace_id)
+    # member.org_id, matching every other scoped call in this module — the
+    # in-memory store is keyed by it. Without the tenant argument this
+    # returned any tenant's trace to any caller holding the id.
+    trace = service.get_trace(member.org_id, trace_id)
     if not trace:
         raise HTTPException(status_code=404, detail="Trace not found")
     return trace.to_dict()
@@ -322,7 +325,7 @@ async def get_insight(
 ) -> InsightResponse:
     """Get a single insight by ID."""
     service = _get_service()
-    insight = service.get_insight_by_id(insight_id)
+    insight = service.get_insight_by_id(member.org_id, insight_id)
     if not insight:
         raise HTTPException(status_code=404, detail="Insight not found")
     return InsightResponse(**insight.to_dict())
@@ -471,7 +474,7 @@ async def get_disparity_report(
 ) -> DisparityReportResponse:
     """Get a single disparity report by ID."""
     service = _get_service()
-    report = service.get_disparity_report(report_id)
+    report = service.get_disparity_report(member.org_id, report_id)
     if not report:
         raise HTTPException(status_code=404, detail="Report not found")
     return DisparityReportResponse(**report.to_dict())

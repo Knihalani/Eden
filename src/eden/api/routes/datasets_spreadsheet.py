@@ -283,7 +283,9 @@ async def generate_column_route(
             if row.id in generated:
                 new_values = dict(row.values)
                 new_values[col_id] = generated[row.id]
-                await svc.update_row(row_id=row.id, values=new_values)
+                await svc.update_row(
+                    row_id=row.id, dataset_id=dataset_id, values=new_values
+                )
         # Re-fetch the rows.
         updated_rows = await svc.list_rows(dataset_id, limit=10_000)
     except HTTPException:
@@ -389,13 +391,21 @@ async def update_row_route(
     await _assert_dataset_org(org_id, dataset_id)
     svc = await _spreadsheet_svc()
     try:
-        await svc.update_row(
+        # dataset_id scopes the UPDATE itself. The ownership check used to
+        # happen only on the read-back below, which returned 404 *after* the
+        # write had already committed to another tenant's row.
+        updated = await svc.update_row(
             row_id=row_id,
+            dataset_id=dataset_id,
             values=body.values or {},
             input=body.input,
             expected_output=body.expected_output,
         )
+        if not updated:
+            raise HTTPException(status_code=404, detail="row not found")
         row = await svc.get_row(row_id)
+    except HTTPException:
+        raise
     except Exception as exc:
         logger.warning("update_row failed: %s", redact_all(str(exc)))
         raise_mapped_db_error(

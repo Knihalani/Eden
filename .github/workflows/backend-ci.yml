@@ -123,6 +123,22 @@ jobs:
         # mypy is informational only — flip to non-zero exit once the
         # cleanup pass tracked in eden-audit-phase8 lands.
 
+      # Settings read by the code but never defined on Settings.
+      # model_config sets extra="ignore", so `getattr(settings, "flag",
+      # False)` on a field that does not exist is permanently falsy —
+      # it reads like a live knob, cannot be enabled by any env var, and
+      # nothing fails. The 2026-07-29 audit found 37, including
+      # online_scoring_llm_fallback_v1 (gates the production-eval LLM
+      # fallback, so that path is unreachable) and
+      # quota_enforcement_enabled / rls_org_context_enabled, which means
+      # those two middlewares cannot be switched OFF by configuration.
+      #
+      # Informational until the 37 are triaged — each is either "add the
+      # field" or "delete the dead branch", and both are real work.
+      # Flip to blocking once the list is empty.
+      - name: settings drift (informational)
+        run: uv run python scripts/settings_drift_check.py || true
+
   test:
     name: pytest
     runs-on: ubuntu-latest
