@@ -133,11 +133,13 @@ jobs:
       # quota_enforcement_enabled / rls_org_context_enabled, which means
       # those two middlewares cannot be switched OFF by configuration.
       #
-      # Informational until the 37 are triaged — each is either "add the
-      # field" or "delete the dead branch", and both are real work.
-      # Flip to blocking once the list is empty.
-      - name: settings drift (informational)
-        run: uv run python scripts/settings_drift_check.py || true
+      # BLOCKING as of 2026-07-29: the backlog is cleared (0 findings).
+      # All 41 were declared on Settings with the exact default their
+      # call site was already using, so nothing changed behaviour — they
+      # simply became settable. Keeping this green is cheap; letting it
+      # rot reintroduces knobs that look live and are not.
+      - name: settings drift (blocking)
+        run: uv run python scripts/settings_drift_check.py
 
   test:
     name: pytest

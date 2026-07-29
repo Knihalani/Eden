@@ -1094,6 +1094,96 @@ def _build_settings_class():
         deep_search_to_signal_v1: bool = True
         f65_topics_v1: bool = True
 
+        # ── Settings the code reads but this class never declared ───────
+        #
+        # Every field below was already being read somewhere in src/eden
+        # and was NOT defined here. ``model_config`` sets
+        # ``extra="ignore"``, so each was permanently absent: the
+        # ``getattr(settings, "x", default)`` call sites silently took
+        # their fallback, and no environment variable could change it.
+        # They read like live knobs in review and were not.
+        #
+        # Each default below is the EXACT fallback its call site was
+        # already using, extracted mechanically by
+        # ``scripts/settings_drift_defaults.py`` rather than chosen — so
+        # declaring them changes no behaviour. The fix is that they
+        # become settable. Verified no name was read with two different
+        # defaults, which would have meant no single safe value existed.
+        #
+        # ``scripts/settings_drift_check.py`` guards against the class
+        # drifting from its readers again.
+
+        # Per-step timeouts for the quality pipeline, milliseconds.
+        # These five were read as bare attributes
+        # (``s.quality_step_timeout_tas_ms``), so the AttributeError was
+        # caught by ``_get_timeout``'s ``except Exception`` and every
+        # step silently fell back to a uniform 30s — the whole mapping
+        # was unreachable. 30000 preserves that effective behaviour.
+        quality_step_timeout_tas_ms: int = 30000
+        quality_step_timeout_loop_ms: int = 30000
+        quality_step_timeout_quality_ms: int = 30000
+        quality_step_timeout_reasoning_ms: int = 30000
+        quality_step_timeout_detection_ms: int = 30000
+
+        # Middleware kill switches. Both already defaulted to True via
+        # getattr, so the middleware ran — but neither could be turned
+        # OFF by configuration, which is what northflank.yml's
+        # QUOTA_ENFORCEMENT_ENABLED comment implies you can do.
+        quota_enforcement_enabled: bool = True
+        rls_org_context_enabled: bool = True
+
+        # Feature flags whose branches were unreachable.
+        # ``online_scoring_llm_fallback_v1`` gates the production-eval
+        # LLM fallback in evaluation/online/scorer_cascade.py.
+        online_scoring_llm_fallback_v1: bool = False
+        otel_dual_emit_enabled: bool = False
+        otel_dual_emit_include_content: bool = False
+        otel_exporter_otlp_endpoint: str = ""
+        patterns_clusterer_enabled: bool = True
+        patterns_clusterer_lookback_days: int = 7
+        patterns_clusterer_min_cluster_size: int = 20
+        nl_alerts_paging_enabled: bool = True
+        optimization_cache_emit_metrics: bool = True
+        gateway_enabled: bool = True
+
+        # Third-party integration credentials. Without these fields the
+        # corresponding integrations could never be configured at all —
+        # the status routes always saw an empty key.
+        wandb_api_key: str = ""
+        wandb_project: str = "eden"
+        helicone_api_key: str = ""
+        langfuse_public_key: str = ""
+        langfuse_secret_key: str = ""
+        langfuse_host: str = "https://cloud.langfuse.com"
+        langsmith_api_key: str = ""
+        langsmith_endpoint: str = "https://api.smith.langchain.com"
+        runloop_api_key: str = ""
+        runloop_sdk_module: str = "runloop"
+        kafka_bootstrap_servers: str = "localhost:9092"
+
+        # Outbound webhooks.
+        alert_webhook_url: str | None = None
+        support_webhook_url: str = ""
+        eden_support_webhook_url: str = ""
+
+        # Bronze-layer sink tuning. northflank.yml sets
+        # BRONZE_BATCH_SIZE / BRONZE_FLUSH_INTERVAL_SECONDS on the
+        # service, and until now neither reached the code.
+        bronze_batch_size: int = 100
+        bronze_flush_interval_seconds: float = 5.0
+        bronze_s3_prefix: str = "bronze/events"
+
+        # Media store.
+        media_backend: str = "local"
+        media_s3_bucket: str = "eden-media"
+        media_storage_path: str = "/var/lib/eden/media"
+
+        # Misc.
+        app_ingest_per_tenant_rpm: int = 5000
+        api_public_url: str | None = None
+        eden_api_url: str | None = None
+        eden_log_tenant: str | None = None
+
         # ── Kill-switch defaults (v2.7 hot-path) ────────────────────────
         # Mutating actions default OFF per audit/permission policy.
         # Read-only actions default ON. Override per-tenant via

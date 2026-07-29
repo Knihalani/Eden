@@ -97,31 +97,123 @@ _NOT_SETTINGS = {
 }
 
 
+# Receivers accepted for the ``getattr(x, "name", default)`` form. Short
+# aliases are safe here because the string literal disambiguates: nobody
+# writes getattr(s, "otel_dual_emit_enabled", ...) about a non-Settings
+# object.
+_GETATTR_RECEIVERS = {"settings", "s", "cfg", "_settings"}
+
+# Receivers accepted for bare ``x.name`` attribute access. Deliberately
+# NARROWER — ``s`` is one of the most common short variable names in this
+# codebase (``s.strip()``, ``s.payload``, ``s.id``), and accepting it
+# here produced 67 false positives on the first cut, swamping the real
+# findings. Only the unambiguous spellings count.
+_ATTR_RECEIVERS = {"settings", "_settings"}
+
+
+def _looks_like_settings(node: ast.expr, receivers: set[str]) -> bool:
+    """True when ``node`` evaluates to the Settings object."""
+    if isinstance(node, ast.Name) and node.id in receivers:
+        return True
+    # ``self.settings``
+    if isinstance(node, ast.Attribute) and node.attr == "settings":
+        return True
+    # ``get_settings()``
+    if isinstance(node, ast.Call):
+        fn = node.func
+        name = getattr(fn, "id", None) or getattr(fn, "attr", None)
+        return name == "get_settings"
+    return False
+
+
+def _is_get_settings_call(node: ast.expr) -> bool:
+    if not isinstance(node, ast.Call):
+        return False
+    fn = node.func
+    return (getattr(fn, "id", None) or getattr(fn, "attr", None)) == "get_settings"
+
+
+def _settings_bindings(scope: ast.AST) -> set[str]:
+    """Names bound to ``get_settings()`` in this scope.
+
+    A fixed alias list cannot work in both directions. Accepting ``s``
+    everywhere produced 67 false positives (``s.strip()``, ``s.payload``);
+    rejecting it missed five REAL findings in
+    quality_pipeline/worker.py, which does ``s = get_settings()`` and
+    then reads ``s.quality_step_timeout_tas_ms`` — a field that does not
+    exist, i.e. an AttributeError waiting to fire.
+
+    Tracking the actual binding gets both right. Nested functions are
+    not descended into: they get their own scope pass.
+    """
+    bound: set[str] = set()
+    for node in ast.walk(scope):
+        if isinstance(node, ast.Assign) and _is_get_settings_call(node.value):
+            for t in node.targets:
+                if isinstance(t, ast.Name):
+                    bound.add(t.id)
+        elif isinstance(node, ast.AnnAssign) and node.value is not None:
+            if _is_get_settings_call(node.value) and isinstance(node.target, ast.Name):
+                bound.add(node.target.id)
+    return bound
+
+
+def _scan_module(tree: ast.AST) -> list[tuple[str, int, str]]:
+    """Return (setting_name, lineno, kind) for one parsed module.
+
+    AST rather than regex: the first cut matched
+    ``settings.app_ingest_max_batch`` inside a *docstring* and reported
+    a crash that could not happen. A checker whose findings you have to
+    hand-verify is worth very little, so it reads real syntax now.
+    """
+    out: list[tuple[str, int, str]] = []
+    # Module-level bindings apply everywhere; per-function bindings are
+    # unioned in when scanning that function.
+    module_bound = _settings_bindings(tree) | _ATTR_RECEIVERS
+
+    for node in ast.walk(tree):
+        # getattr(settings, "name", default) -> silent
+        if isinstance(node, ast.Call):
+            fn = node.func
+            if (
+                (getattr(fn, "id", None) == "getattr")
+                and node.args
+                and _looks_like_settings(node.args[0], _GETATTR_RECEIVERS)
+                and len(node.args) >= 2
+                and isinstance(node.args[1], ast.Constant)
+                and isinstance(node.args[1].value, str)
+            ):
+                out.append((node.args[1].value, node.lineno, "silent"))
+        # settings.name -> would raise AttributeError
+        elif isinstance(node, ast.Attribute) and _looks_like_settings(
+            node.value, module_bound
+        ):
+            out.append((node.attr, node.lineno, "raises"))
+    return out
+
+
 def scan() -> list[dict[str, object]]:
     defined = _defined_fields()
     findings: dict[str, list[str]] = {}
-
     severity: dict[str, str] = {}
+
     for path in SRC.rglob("*.py"):
         if path == CONFIG:
             continue
         try:
-            text = path.read_text()
+            tree = ast.parse(path.read_text())
         except Exception:
             continue
-        for pattern, kind in ((_GETATTR, "silent"), (_ATTR, "raises")):
-            for m in pattern.finditer(text):
-                name = m.group(1)
-                if name in defined or name in _NOT_SETTINGS:
-                    continue
-                if name in IGNORE_EXACT or name.startswith(IGNORE_PREFIXES):
-                    continue
-                line = text[: m.start()].count("\n") + 1
-                rel = path.relative_to(REPO)
-                findings.setdefault(name, []).append(f"{rel}:{line}")
-                # "silent" is the worse diagnosis, so it wins.
-                if severity.get(name) != "silent":
-                    severity[name] = kind
+        rel = path.relative_to(REPO)
+        for name, lineno, kind in _scan_module(tree):
+            if name in defined or name in _NOT_SETTINGS:
+                continue
+            if name in IGNORE_EXACT or name.startswith(IGNORE_PREFIXES):
+                continue
+            findings.setdefault(name, []).append(f"{rel}:{lineno}")
+            # "silent" is the worse diagnosis, so it wins.
+            if severity.get(name) != "silent":
+                severity[name] = kind
 
     return [
         {"setting": k, "kind": severity.get(k, "silent"), "sites": sorted(set(v))}
