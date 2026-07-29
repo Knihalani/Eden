@@ -1436,17 +1436,20 @@ class TestGovernanceRoutes:
     ) -> None:
         """With the flag on, the handler still functions.
 
-        The flag is set on both candidate Settings instances. ``deps.py`` binds
-        ``get_settings`` at import, while the autouse ``patch_settings`` fixture
-        patches ``eden.config.get_settings`` — so which object the dependency
-        reads at request time depends on which binding won. Setting both is
-        deterministic; probing for the winner is not.
+        The flag must be set on the object ``eden.api.deps.get_settings()``
+        returns. ``deps.py`` binds ``get_settings`` at import time, so it keeps
+        a reference to the original ``lru_cache``d function — the autouse
+        ``patch_settings`` fixture only replaces ``eden.config.get_settings``.
+        Verified empirically: ``test_settings`` and ``eden.config.get_settings()``
+        are the *same* object, while ``deps.get_settings()`` is a *different*
+        one. Patching either of the first two has no effect on any dependency
+        resolved through ``deps``.
         """
-        from eden.config import get_settings
+        import eden.api.deps as deps
 
         monkeypatch.setattr(test_settings, "rtbf_fanout_v1", True, raising=False)
         monkeypatch.setattr(
-            get_settings(), "rtbf_fanout_v1", True, raising=False
+            deps.get_settings(), "rtbf_fanout_v1", True, raising=False
         )
 
         pg = _pg_router(rtbf_table_counts={})

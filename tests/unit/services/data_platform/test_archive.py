@@ -162,6 +162,13 @@ class TestArchiveOldRows:
                         "payload": '{"x":3}',
                     },
                 ],
+                # Second fetch: _fetch_trace_messages. The prompt/completion
+                # bodies live in trace_messages, not telemetry_events, so
+                # _archive_one_trace now pulls them into the same blob —
+                # archiving events alone and then deleting the messages
+                # produced a structurally body-less archive. Empty here: this
+                # test asserts the events path.
+                [],
             ]
         )
         client.execute = AsyncMock()
@@ -185,10 +192,56 @@ class TestArchiveOldRows:
         # The path includes org + trace_id.
         write_kwargs = svc._write_impossible_cloud.call_args.args
         assert "cold/telemetry_events/org=org_1/trace=trace_x/" in write_kwargs[0]
-        # Transaction-wrapped: 1 INSERT (index) + 1 DELETE (rows).
-        # Plus 1 DELETE outside the transaction for the dedup table
-        # (Phase B4 — see :meth:`ArchiveService._archive_one_trace`).
-        assert client.execute.await_count == 3
+        # Transaction-wrapped: 1 INSERT (index) + 1 DELETE (rows) = 2.
+        #
+        # The dedup cleanup is no longer a third client.execute: it goes
+        # through the message store, and it is now guarded by
+        # ``if message_rows``. Deleting a trace's messages without having
+        # archived them destroyed the prompt/completion text
+        # irrecoverably, because the archive blob held events only. This
+        # trace has no messages, so nothing is deleted.
+        assert client.execute.await_count == 2
+
+    @pytest.mark.asyncio
+    async def test_messages_are_archived_and_only_then_deleted(self):
+        """The dedup delete must be gated on the messages having been
+        written into the blob — that ordering is the whole point."""
+        svc = ArchiveService()
+        client = MagicMock()
+        client.fetch = AsyncMock(
+            side_effect=[
+                [{"event_id": "evt_1", "tenant_id": "org_1",
+                  "trace_id": "trace_x", "timestamp": datetime.now(UTC),
+                  "payload": '{"x":1}'}],
+                [{"trace_id": "trace_x", "msg_hash": "h1", "body": "hello"}],
+            ]
+        )
+        client.execute = AsyncMock()
+        client.transaction = MagicMock()
+        client.transaction.return_value.__aenter__ = AsyncMock(return_value=None)
+        client.transaction.return_value.__aexit__ = AsyncMock(return_value=None)
+
+        store = MagicMock()
+        store.delete_trace = AsyncMock()
+        with (
+            patch(
+                "eden.storage.postgres.get_postgres_client",
+                new=AsyncMock(return_value=client),
+            ),
+            patch(
+                "eden.observability.message_store.get_message_store",
+                return_value=store,
+            ),
+        ):
+            svc._write_impossible_cloud = AsyncMock()
+            await svc._archive_one_trace(client, "org_1", "trace_x", dry_run=False)
+
+        body = svc._write_impossible_cloud.call_args.args[1]
+        assert '"__kind": "trace_message"' in body, (
+            "the message body must be in the archive blob before it is deleted"
+        )
+        assert '"__kind": "telemetry_event"' in body
+        store.delete_trace.assert_awaited_once_with("trace_x")
 
 
 # ── ArchiveService.lookup + rehydrate ──────────────────────────────────
@@ -245,16 +298,19 @@ class TestArchiveRehydrateCache:
         """When the cache is empty and Postgres is unavailable, rehydrate
         returns [] without raising (the lookup path returns None)."""
         svc = ArchiveService()
-        from eden.services.data_platform.archive import _rehydrate_cache
+        # The read-through cache was an ``lru_cache`` (``_rehydrate_cache``
+        # with ``.cache_clear()``); it is now a bounded OrderedDict LRU
+        # behind ``_rehydrate_cache_{get,put,clear}``.
+        from eden.services.data_platform.archive import _rehydrate_cache_clear
 
-        _rehydrate_cache.cache_clear()
+        _rehydrate_cache_clear()
         with patch(
             "eden.storage.postgres.get_postgres_client",
             new=AsyncMock(return_value=None),
         ):
             rows = await svc.rehydrate("trace_unknown")
         assert rows == []
-        _rehydrate_cache.cache_clear()
+        _rehydrate_cache_clear()
 
 
 # ── Retention cron wires ArchiveService ───────────────────────────────
