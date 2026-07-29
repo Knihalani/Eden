@@ -370,3 +370,72 @@ def test_orphaned_watchdog_and_sweep_helpers_removed():
             f"{name} reappeared in cron_tick but is not called by _tick() "
             "or run_maintenance_due() — wire it up or keep it deleted."
         )
+
+
+# ── Redis write-discard fallback (2026-07-29) ────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_once_per_window_fails_open_when_redis_drops_writes():
+    """A refused SET NX with NOTHING holding the key means the write was
+    silently discarded (Upstash past its plan limit serves reads and
+    drops writes), not that another process claimed the window.
+
+    Reading that as "already claimed" made every gated maintenance job --
+    retention_cron, the Typesense TTL sweep, auto_curator, drift_baselines,
+    mcp_rollup, classifier_retrain, shadow_outcome_join, signal_backfill --
+    skip forever while the tick still reported success, which is the shape
+    of the July 2026 silent outage.
+    """
+    fake_redis = MagicMock()
+    fake_redis.set = AsyncMock(return_value=None)   # refused
+    fake_redis.get = AsyncMock(return_value=None)   # ...but nobody holds it
+
+    with patch(
+        "eden.storage.redis.get_redis_client",
+        AsyncMock(return_value=fake_redis),
+    ):
+        allowed = await cron_tick._once_per_window("retention_cron", ttl_seconds=3600)
+
+    assert allowed is True, (
+        "SET NX refused with no holder must fail OPEN -- the write was "
+        "dropped, not contended"
+    )
+    fake_redis.get.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_once_per_window_still_skips_on_genuine_contention():
+    """The fail-open path must not defeat the actual de-duplication:
+    when the key IS held, this process must stand down.
+    """
+    fake_redis = MagicMock()
+    fake_redis.set = AsyncMock(return_value=None)   # refused
+    fake_redis.get = AsyncMock(return_value="1")    # someone genuinely holds it
+
+    with patch(
+        "eden.storage.redis.get_redis_client",
+        AsyncMock(return_value=fake_redis),
+    ):
+        allowed = await cron_tick._once_per_window("retention_cron", ttl_seconds=3600)
+
+    assert allowed is False, (
+        "a genuinely held window must still suppress the duplicate run"
+    )
+
+
+@pytest.mark.asyncio
+async def test_once_per_window_claims_window_on_success():
+    """The happy path must not pay for the extra GET."""
+    fake_redis = MagicMock()
+    fake_redis.set = AsyncMock(return_value=True)
+    fake_redis.get = AsyncMock(return_value=None)
+
+    with patch(
+        "eden.storage.redis.get_redis_client",
+        AsyncMock(return_value=fake_redis),
+    ):
+        allowed = await cron_tick._once_per_window("retention_cron", ttl_seconds=3600)
+
+    assert allowed is True
+    fake_redis.get.assert_not_awaited()

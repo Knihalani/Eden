@@ -19,8 +19,6 @@ from typing import Any
 from eden.config import Settings, get_settings
 from eden.storage.redis import Lock
 from eden.workers.leader import (
-    _DEFAULT_LOCK_RENEW_SECONDS,
-    _DEFAULT_LOCK_TTL_SECONDS,
     _acquire_with_fallback,
     _extend_lock_periodically,
 )
@@ -43,6 +41,30 @@ _RESTART_BACKOFF_SECONDS = 5.0
 #: holder identity written into the token below is what makes the next
 #: occurrence diagnosable instead of a mystery.
 _BUNDLE_LOCK_NAME = "api-background-v2"
+
+# The bundle lock is held continuously by whichever replica is leader,
+# so its renewal cadence is a permanent, 24/7 draw on the Upstash
+# command budget — unlike run_if_leader's short-lived per-tick locks,
+# which the shared 60s/20s defaults are sized for.
+#
+# At TTL=60 / renew=20 the extender alone issued 86400/20 = 4,320 EVALs
+# a day, plus 720 more from the inner ``lock.extend`` at the 120s
+# supervise interval: ~5,040 commands/day against a 10,000/day free
+# tier. Half the daily budget, spent on one lock — and exhausting that
+# budget is what puts Redis into the write-discard mode that took the
+# whole fleet down for 7.4 days.
+#
+# ``sidecars.py`` already made exactly this correction for the guard
+# lock (TTL 600 / renew 200, see its module docstring); the same
+# arithmetic applies here and had not been carried across. 86400/200 =
+# 432 EVALs/day, a ~10x reduction.
+#
+# The longer TTL also fixes an inversion: the inner liveness check runs
+# on ``interval`` (120s), which was LONGER than the 60s TTL, so the lock
+# could expire and be taken by another replica between two consecutive
+# checks. 120s is comfortably inside a 600s TTL.
+_BUNDLE_LOCK_TTL_SECONDS = 600
+_BUNDLE_LOCK_RENEW_SECONDS = 200.0
 
 #: Last outcome + consecutive count per lock, for /health. Costs nothing:
 #: it records what the acquire call already returned rather than spending
@@ -192,7 +214,7 @@ class BackgroundWorkers:
             )
         except Exception:
             interval = 120.0
-        lock = Lock(_BUNDLE_LOCK_NAME, ttl=_DEFAULT_LOCK_TTL_SECONDS, prefix="eden:leader")
+        lock = Lock(_BUNDLE_LOCK_NAME, ttl=_BUNDLE_LOCK_TTL_SECONDS, prefix="eden:leader")
         # Identify the holder. A refused lock is otherwise a dead end —
         # you know someone has it and nothing more.
         identity = f"{socket.gethostname()}:{os.getpid()}"
@@ -206,7 +228,7 @@ class BackgroundWorkers:
             # silent, total outage of every background loop — the exact
             # failure this module is supposed to prevent.
             acquired, backend = await _acquire_with_fallback(
-                lock, _BUNDLE_LOCK_NAME, identity, _DEFAULT_LOCK_TTL_SECONDS
+                lock, _BUNDLE_LOCK_NAME, identity, _BUNDLE_LOCK_TTL_SECONDS
             )
             if backend == "postgres":
                 _note_acquire_outcome(_BUNDLE_LOCK_NAME, "acquired(via=postgres)")
@@ -224,7 +246,7 @@ class BackgroundWorkers:
                     await self._start_all(settings, self._state)
                     while not self._stop.is_set():
                         if not await pg_lease.renew(
-                            _BUNDLE_LOCK_NAME, identity, _DEFAULT_LOCK_TTL_SECONDS
+                            _BUNDLE_LOCK_NAME, identity, _BUNDLE_LOCK_TTL_SECONDS
                         ):
                             logger.warning(
                                 "background: lost postgres lease; stopping loops"
@@ -233,7 +255,7 @@ class BackgroundWorkers:
                         try:
                             await asyncio.wait_for(
                                 self._stop.wait(),
-                                timeout=min(interval, _DEFAULT_LOCK_TTL_SECONDS / 2),
+                                timeout=min(interval, _BUNDLE_LOCK_TTL_SECONDS / 2),
                             )
                             break
                         except TimeoutError:
@@ -247,7 +269,7 @@ class BackgroundWorkers:
                 extender_stop = asyncio.Event()
                 extender = asyncio.create_task(
                     _extend_lock_periodically(
-                        lock, _DEFAULT_LOCK_RENEW_SECONDS, extender_stop
+                        lock, _BUNDLE_LOCK_RENEW_SECONDS, extender_stop
                     ),
                     name="background-leader-extend",
                 )
