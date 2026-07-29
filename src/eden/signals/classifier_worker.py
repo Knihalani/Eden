@@ -10,6 +10,18 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 # Cost of running F06 investigator per trace (measured / budgeted).
+#: Notional cost of one investigator run, for the savings comparison.
+#:
+#: NOT a real price. The per-signal LLM investigator was removed —
+#: signals/investigator.py is heuristics only — so skipping it saves
+#: compute and database writes, not model spend. This figure is what an
+#: LLM investigator *would* have cost, kept so the shadow-mode
+#: comparison has a yardstick.
+#:
+#: It is deliberately only ever added to the local ``savings`` counter
+#: below. It must not be written to ``cost_usd`` on a CostEvent: the
+#: per-org budgets read that ledger, and fabricated spend there consumes
+#: real allowance. trace_finalized_consumer used to do exactly that.
 INVESTIGATOR_COST_USD = 0.03
 
 

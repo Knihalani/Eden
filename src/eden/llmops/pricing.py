@@ -844,6 +844,49 @@ def _build_default_seed_rows() -> dict[str, PricingRow]:
             latency_p95_ms=latency, reliability=reliability,
         )
 
+    # ── Models the internal router actually calls ────────────────────
+    #
+    # Every entry in ``eden.optimization.model_router.TIER_MODELS`` was
+    # absent from this seed. ``lookup`` is an exact-match dict get with
+    # no normalisation, so all six fell through to the
+    # ``Decimal("0")`` / ``source="unknown"`` branch in cost_resolver
+    # — silently, with no warning. The practical effect: 100% of
+    # internal LLM traffic booked $0, so spend dashboards, per-org
+    # budgets and the evolution cap all read zero no matter what was
+    # actually spent. The $0 fallback is deliberate; it catching every
+    # production call was not.
+    #
+    # Rates below are OpenRouter's published per-token prices fetched
+    # from https://openrouter.ai/api/v1/models on 2026-07-29, converted
+    # to this table's per-1K-token unit (x1000). They are refreshed at
+    # runtime by ``PricingCatalog.refresh_from_openrouter``; these seed
+    # values are what applies before the first refresh — which, for a
+    # short-lived process, is every call.
+    routed_models = [
+        # (model_id,               in/1k,     out/1k,    quality, p95ms)
+        ("tencent/hy3",            0.000132,  0.000528,  0.86,  700),
+        ("xiaomi/mimo-v2.5",       0.00014,   0.00028,   0.85,  650),
+        ("minimax/minimax-m3",     0.0003,    0.0012,    0.89,  900),
+        ("xiaomi/mimo-v2.5-pro",   0.000435,  0.00087,   0.90,  950),
+        ("x-ai/grok-4.5",          0.002,     0.006,     0.94, 1200),
+    ]
+    for model_id, cost_in, cost_out, quality, latency in routed_models:
+        add(
+            model_id, cost_in=cost_in, cost_out=cost_out, quality=quality,
+            latency_p95_ms=latency, reliability=0.99,
+        )
+
+    # T4's placeholder. Not an OpenRouter model and it has no public
+    # price — a fine-tuned deployment is billed per tenant. Seeded at
+    # 0.0 explicitly so it is a recorded decision rather than the
+    # silent unknown-model fallback, and so the routed-model coverage
+    # test below can assert on it. Tenants running T4 should set a
+    # per-tenant override; ``cost_resolver`` prefers that over the seed.
+    add(
+        "custom/fine-tuned", cost_in=0.0, cost_out=0.0, quality=0.92,
+        latency_p95_ms=1000, reliability=0.99,
+    )
+
     return rows
 
 

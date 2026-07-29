@@ -521,9 +521,13 @@ class ModelRouter:
 
             for model in models:
                 try:
-                    loop = asyncio.get_event_loop()
-                    response = await loop.run_in_executor(
-                        None,
+                    # ``to_thread``, not ``run_in_executor``: the latter
+                    # drops contextvars, so the cost-attribution context
+                    # was empty inside the thread and every routed call
+                    # was booked against no org — i.e. dropped before it
+                    # reached the ledger. See cost_ledger.bind_event_loop
+                    # for the other half of that bug.
+                    response = await asyncio.to_thread(
                         # S-21: ``m=model`` default-arg binds
                         # ``model`` at lambda-creation time so the
                         # late-binding-for-loop bug never recurs.

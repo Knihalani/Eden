@@ -255,6 +255,18 @@ async def _run_forever() -> None:
     loops: list[tuple[str, asyncio.Task]] = []
     stop = asyncio.Event()
 
+    # Bind this loop for cross-thread cost-ledger writes. The LLM client
+    # runs its synchronous call in a worker thread and books usage from
+    # inside it, where there is no loop to schedule the write onto — so
+    # without this every routed call's spend is dropped. Mirrors the
+    # binding in the API lifespan.
+    try:
+        from eden.llmops.cost_ledger import bind_event_loop
+
+        bind_event_loop()
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("cost ledger loop binding failed: %s", exc)
+
     # 1. Insights detector loop — leader-gated singleton.
     insights_task = asyncio.create_task(
         _supervise("insights_loop", _leader_insights_loop, stop),

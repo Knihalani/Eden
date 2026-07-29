@@ -393,6 +393,20 @@ async def lifespan(app: FastAPI):
 
     logger.info("Starting Eden API...")
 
+    # Bind the serving loop for cross-thread cost-ledger writes.
+    # ``LLMClient.acall`` / ``ModelRouter.aroute`` run the synchronous
+    # LLM call in a worker thread, and ``_log_usage`` fires from inside
+    # it — where there is no running loop to create a task on, so every
+    # routed call's spend was silently dropped. This gives those writes
+    # a loop to schedule onto. Must happen before any LLM call, hence
+    # first thing in the lifespan.
+    try:
+        from eden.llmops.cost_ledger import bind_event_loop
+
+        bind_event_loop()
+    except Exception as exc:  # noqa: BLE001 - never block startup on this
+        logger.warning("cost ledger loop binding failed: %s", exc)
+
     # B26 — mount deferred intelligence routers before accepting traffic
     # so OpenAPI and route tables are complete for the first request.
     try:

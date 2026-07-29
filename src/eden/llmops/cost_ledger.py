@@ -139,6 +139,51 @@ def current_cost_context() -> dict[str, Any]:
     }
 
 
+#: Loop that off-thread ledger writes are scheduled onto.
+#:
+#: ``_log_usage`` runs inside the worker thread that ``acall``/``aroute``
+#: dispatch the synchronous ``call()`` into, so it has no running loop of
+#: its own and cannot create a task. Binding the serving loop once at
+#: startup gives those writes somewhere to go.
+_ledger_loop: "asyncio.AbstractEventLoop | None" = None
+
+
+def bind_event_loop(loop: "asyncio.AbstractEventLoop | None" = None) -> None:
+    """Bind the loop that cross-thread ledger writes schedule onto.
+
+    Call once from a long-lived async entrypoint (the API lifespan, the
+    worker's ``_run_forever``). Idempotent, and re-binding after a loop
+    is closed is safe — that is what a test that builds a fresh loop per
+    case does.
+
+    Without this, ``schedule_record_from_usage`` has two independent
+    reasons to drop a write when called from a worker thread:
+
+    1. ``contextvars`` do not cross ``loop.run_in_executor``, so
+       ``current_cost_context()`` comes back empty and the ``if not oid``
+       guard returns. Fixed by dispatching with ``asyncio.to_thread``,
+       which *does* propagate context.
+    2. There is no running loop in the worker thread, so no task can be
+       created. ``to_thread`` does NOT fix this one — no worker thread
+       has a loop. This binding is what fixes it.
+
+    Both had to be addressed; fixing either alone still drops the write.
+    """
+    global _ledger_loop
+    if loop is None:
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            return
+    _ledger_loop = loop
+
+
+def reset_event_loop_binding() -> None:
+    """Drop the bound loop. Tests only."""
+    global _ledger_loop
+    _ledger_loop = None
+
+
 def schedule_record_from_usage(
     *,
     model: str,
@@ -170,10 +215,26 @@ def schedule_record_from_usage(
         user_id=ctx.get("user_id"),
     )
     try:
-        # Presence check only — bounded_create_task below needs a running
-        # loop, and there is nothing to schedule onto without one.
         asyncio.get_running_loop()
     except RuntimeError:
+        # Called from a worker thread. This is the COMMON case, not the
+        # edge case: ``LLMClient.acall`` and ``ModelRouter.aroute`` both
+        # dispatch the synchronous ``call()`` into a thread, and
+        # ``_log_usage`` runs inside it — so every async LLM call landed
+        # here with no loop and returned, recording nothing. Combined
+        # with the contextvar loss (see ``bind_event_loop``), that meant
+        # 100% of routed spend was dropped before it reached Postgres.
+        #
+        # Schedule onto the loop bound at startup instead. Returning here
+        # is only correct for a genuinely synchronous process (a CLI or a
+        # test), which is what ``_ledger_loop is None`` means.
+        loop = _ledger_loop
+        if loop is None or loop.is_closed():
+            return
+        try:
+            asyncio.run_coroutine_threadsafe(_safe_record(event), loop)
+        except Exception as exc:  # pragma: no cover - defensive
+            logger.debug("cost_ledger: cross-thread schedule failed: %s", exc)
         return
     from eden.async_tasks import bounded_create_task
 
