@@ -403,7 +403,10 @@ async def _worker_liveness_loop(stop: asyncio.Event) -> None:
     leading" from "worker is alive but Redis is refusing it" without
     shelling into the container.
     """
-    from eden.workers.leader import leader_acquire_failure_count
+    from eden.workers.leader import (
+        leader_acquire_failure_count,
+        leader_work_failures,
+    )
 
     interval = _grid_interval("self_obs_probe_interval_seconds", multiple=600.0)
     logger.info("worker: liveness loop registered (interval=%.0fs)", interval)
@@ -476,9 +479,11 @@ async def _worker_liveness_loop(stop: asyncio.Event) -> None:
             except Exception as exc:
                 redis_state = f"error:{type(exc).__name__}"
 
+            work_failures = leader_work_failures()
             healthy = (
                 failures == 0
                 and not dead
+                and not work_failures
                 and redis_state in ("connected", "not_configured")
             )
             await record_heartbeat(
@@ -488,9 +493,14 @@ async def _worker_liveness_loop(stop: asyncio.Event) -> None:
                 meta={
                     "loops": states,
                     "leader_acquire_failures": failures,
+                    "work_failures": work_failures,
                     "redis": redis_state,
                 },
             )
+            if work_failures:
+                logger.error(
+                    "worker: leader-gated work is failing: %s", work_failures
+                )
             if redis_state not in ("connected", "not_configured"):
                 logger.error(
                     "worker: Redis unreachable from this process (%s) — every "

@@ -187,3 +187,42 @@ async def test_alive_loops_report_where_they_are_suspended() -> None:
     assert "wedged" in state or ":" in state, (
         f"suspended frame not reported: {state}"
     )
+
+
+@pytest.mark.asyncio
+async def test_work_failure_is_recorded_and_surfaced() -> None:
+    """Acquisition succeeding and the work then throwing looks identical
+    from outside to never acquiring: no heartbeat, no progress, zero
+    acquire failures. Only the recorded exception separates them."""
+    from eden.workers.leader import run_if_leader
+
+    stop = asyncio.Event()
+
+    class _AlwaysAcquires:
+        def __init__(self, *a, **kw):
+            self.name = "t"
+
+        async def acquire(self):
+            return True
+
+        async def extend(self, *a, **kw):
+            return True
+
+        async def release(self):
+            return True
+
+    async def _boom():
+        stop.set()
+        raise RuntimeError("probe blew up")
+
+    with patch.object(leader_mod, "Lock", _AlwaysAcquires):
+        await asyncio.wait_for(
+            run_if_leader("self_obs_probes", _boom, interval=0.01, stop=stop),
+            timeout=5.0,
+        )
+
+    failures = leader_mod.leader_work_failures()
+    assert "self_obs_probes" in failures
+    assert "RuntimeError" in failures["self_obs_probes"]
+    # And it must not be mistaken for an acquisition problem.
+    assert leader_mod.leader_acquire_failure_count() == 0
