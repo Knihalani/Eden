@@ -260,20 +260,29 @@ spec:
     # ── CORS — set this to your Vercel portal URL after first deploy ──
     # Comma-separated, no wildcards. Examples:
     #   https://eden-portal.vercel.app,https://edenobservability.com
-    # Reconciled to the live value 2026-07-29. The manifest listed only
-    # the apex domain; the running service also allows www, and two
-    # localhost origins for local portal development. Recorded as-is
-    # rather than "corrected" — narrowing this to the apex would have
-    # broken the www subdomain and every local dev session.
+    # Reconciled 2026-07-29 against the live value, then tightened.
     #
-    # Worth a decision though: http://localhost:3000 and
-    # http://127.0.0.1:3000 are accepted by the PRODUCTION API with
-    # allow_credentials=True. Anything running on a developer's machine
-    # can therefore make credentialed cross-origin calls against prod.
-    # Consider dropping the two localhost entries and pointing local
-    # development at a staging API instead.
+    # This file listed only the apex domain while the running service
+    # also allowed www — so it was NOT safe to just push the manifest
+    # over live; that would have broken the www subdomain. www is kept.
+    #
+    # The two localhost origins live had (http://localhost:3000 and
+    # http://127.0.0.1:3000) are dropped. The PRODUCTION API was
+    # accepting credentialed cross-origin requests from them, so any
+    # page on any developer's machine — or anything else bound to
+    # localhost:3000 — could call prod with cookies attached.
+    #
+    # The portal does not need them: NEXT_PUBLIC_API_URL is /api/proxy,
+    # a same-origin Next route, and the server-side hop to
+    # API_INTERNAL_URL sends no Origin header, so it is not subject to
+    # CORS at all. Verified against the live API before changing:
+    # localhost:3000 was echoed back in access-control-allow-origin,
+    # while an unknown origin was correctly refused.
+    #
+    # Listed in build_nf_env_payload.py's MANIFEST_WINS so this value is
+    # pushed over live rather than preserved from it.
     - name: CORS_ORIGINS_RAW
-      value: https://edenobservability.com,https://www.edenobservability.com,http://localhost:3000,http://127.0.0.1:3000
+      value: https://edenobservability.com,https://www.edenobservability.com
     # ── Postgres (Neon cutover, Phase 7) ────────────────────────
     # All POSTGRES_* values are resolved from the eden-required secret
     # group. POSTGRES_SSLMODE must be "require" (or stricter) — Neon

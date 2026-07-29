@@ -42,6 +42,21 @@ SECRET_GROUP_ENV = {
     "CLERK_WEBHOOK_SIGNING_SECRET", "SENDKIT_API_KEY",
 }
 
+# Keys where the manifest value should be pushed over whatever is live.
+# Everything else keeps the live value, because the manifest was stale
+# about several of them and overwriting blindly would have narrowed
+# CORS_ORIGINS_RAW enough to break the www subdomain.
+#
+# CORS_ORIGINS_RAW: production currently allows http://localhost:3000
+# and http://127.0.0.1:3000 with allow_credentials=True, so any page on
+# any developer machine can make credentialed calls against prod. The
+# portal does not need it — NEXT_PUBLIC_API_URL is /api/proxy, a
+# same-origin Next route, and the server-side hop to API_INTERNAL_URL
+# sends no Origin header and is not subject to CORS at all. Verified
+# against the live API: localhost:3000 is echoed back in
+# access-control-allow-origin; an unknown origin is correctly refused.
+MANIFEST_WINS = ("CORS_ORIGINS_RAW",)
+
 # Variables whose absence changes production behaviour. Listed so the
 # operator sees them called out rather than buried in a count.
 NOTABLE = (
@@ -86,6 +101,17 @@ def main() -> int:
     }
     merged = {**env, **add}
 
+    # Live normally wins for keys already set — the manifest was stale
+    # about several of them, and blindly overwriting would have narrowed
+    # CORS_ORIGINS_RAW enough to break the www subdomain. MANIFEST_WINS
+    # is the explicit exception list: keys where the manifest value is a
+    # deliberate, reviewed decision that should be pushed over live.
+    overridden = []
+    for k in MANIFEST_WINS:
+        if k in manifest and merged.get(k) != manifest[k]:
+            overridden.append((k, merged.get(k), manifest[k]))
+            merged[k] = manifest[k]
+
     out_path.write_text(
         json.dumps({"runtimeEnvironment": merged}, indent=1, sort_keys=True)
     )
@@ -94,6 +120,10 @@ def main() -> int:
     print(f"added from manifest : {len(add)}")
     print(f"left to secret group: {len(shadowed)} {shadowed}")
     print(f"total in payload    : {len(merged)}")
+    if overridden:
+        print("\nmanifest overrides live (MANIFEST_WINS):")
+        for k, was, now in overridden:
+            print(f"   {k}\n     was: {was}\n     now: {now}")
     print("\nbehaviour-changing additions:")
     for k in NOTABLE:
         if k in add:
