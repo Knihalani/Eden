@@ -40,37 +40,19 @@ def test_patterns_generate_env_route_removed():
 
 
 # ---------------------------------------------------------------------------
-# region.py — put_region
+# region.py — put_region (retired)
 # ---------------------------------------------------------------------------
 
-def test_region_put_region_redacts_db_error():
-    from eden.api.routes import region as region_route
+def test_region_route_removed():
+    """Data-residency regions were removed with the portal live wire-up
+    (9a1452b4); ``eden.api.routes.region`` no longer exists. Same shape as
+    ``test_patterns_generate_env_route_removed`` above — assert the removal
+    rather than leave a guard pointed at a deleted module.
+    """
+    import importlib
 
-    exc = Exception(
-        'asyncpg.exceptions.UndefinedColumnError: '
-        'column "regions" of relation "organizations" does not exist'
-    )
-    fake_pg = AsyncMock()
-    fake_pg.execute = AsyncMock(side_effect=exc)
-
-    async def runner():
-        with (
-            patch.object(region_route, "require_org_permission", AsyncMock(return_value=None)),
-            patch.object(region_route, "get_postgres_client", AsyncMock(return_value=fake_pg)),
-        ):
-            with pytest.raises(HTTPException) as ei:
-                await region_route.put_region(
-                    body=region_route.RegionIn(region="us"),
-                    org_id="o",
-                    user={"user_id": "u"},
-                    payload={"sub": "u"},
-                )
-            assert ei.value.status_code == 503
-            detail = ei.value.detail
-            assert "organizations" not in detail
-            assert "regions" not in detail
-
-    asyncio.run(runner())
+    with pytest.raises(ModuleNotFoundError):
+        importlib.import_module("eden.api.routes.region")
 
 
 # ---------------------------------------------------------------------------

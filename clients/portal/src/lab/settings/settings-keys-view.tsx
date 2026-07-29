@@ -13,6 +13,15 @@ import { cn } from "@/lib/utils";
 
 type KeyFilter = "all" | "active" | "revoked";
 
+/**
+ * Scopes pre-selected in the create-key form. Mirrors
+ * ``_DEFAULT_CREATE_SCOPES`` on the backend (ingest + gateway families)
+ * and the quickstart, which sends traces *and* calls ``/gateway/v1``
+ * with the same key. ``gateway:write`` maps to ``GATEWAY_SCOPES`` in
+ * ``src/eden/api/deps.py``.
+ */
+const DEFAULT_SCOPES: KeyScope[] = ["ingest", "gateway:write"];
+
 export function SettingsKeysView({
   keys,
   selectedId,
@@ -30,7 +39,7 @@ export function SettingsKeysView({
 }) {
   const { pushToast } = useLabToast();
   const [draftName, setDraftName] = useState("");
-  const [scopes, setScopes] = useState<KeyScope[]>(["ingest"]);
+  const [scopes, setScopes] = useState<KeyScope[]>(DEFAULT_SCOPES);
   const [filter, setFilter] = useState<KeyFilter>("all");
   const [confirmRevoke, setConfirmRevoke] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -96,7 +105,7 @@ export function SettingsKeysView({
                 try {
                   const created = await onCreate(draftName.trim(), scopes);
                   setDraftName("");
-                  setScopes(["ingest"]);
+                  setScopes(DEFAULT_SCOPES);
                   setFilter("all");
                   onSelect(created.id);
                   pushToast({

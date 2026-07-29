@@ -23,6 +23,11 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
 
+from eden.observability.bounded_expiry_cache import (
+    BoundedExpiryCache,
+    resolve_max_entries,
+)
+
 logger = logging.getLogger(__name__)
 
 
@@ -287,7 +292,10 @@ class TelemetryCollector:
         self._ch_telemetry_buffer: list[dict[str, Any]] = []
         self._ch_buffer_lock = asyncio.Lock()
         self._ch_flush_task: asyncio.Task[None] | None = None
-        self._stream_expire_at: dict[str, float] = {}
+        # Bounded: stream keys are per-trace, so this map would otherwise
+        # grow one entry per trace for the process lifetime. Same shape as
+        # ``_step_expire_at`` in ingestion/checkpoint_hook.py.
+        self._stream_expire_at = BoundedExpiryCache(resolve_max_entries())
         self._bg_tasks: set[asyncio.Task[Any]] = set()
 
     # ── Sink accessors ────────────────────────────────────────────────────
@@ -705,10 +713,7 @@ class TelemetryCollector:
                 )
 
                 now = time.time()
-                need_expire = (
-                    stream_key not in self._stream_expire_at
-                    or now >= self._stream_expire_at[stream_key]
-                )
+                need_expire = self._stream_expire_at.is_due(stream_key, now)
                 pipe = redis.pipeline(transaction=False)
                 pipe.xadd(
                     stream_key,
@@ -722,8 +727,10 @@ class TelemetryCollector:
                 await pipe.execute()
                 record_ingest_redis_commands(cmds)
                 if need_expire:
-                    self._stream_expire_at[stream_key] = (
-                        now + self.STREAM_EXPIRE_REFRESH_S
+                    self._stream_expire_at.set(
+                        stream_key,
+                        now + self.STREAM_EXPIRE_REFRESH_S,
+                        now=now,
                     )
             except Exception as exc:
                 logger.warning(f"Redis telemetry xadd failed: {exc}")

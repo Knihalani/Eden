@@ -35,6 +35,26 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+
+@pytest.fixture(autouse=True)
+def _clear_insights_empty_cooldown():
+    """Reset the loop's empty-result cooldown between tests.
+
+    ``detector_loop`` holds module-level cooldown closures
+    (``make_empty_cooldown``): after a tick that finds nothing, it backs
+    off to the next shared 10-minute grid boundary and short-circuits
+    before touching Postgres. That is deliberate — it is what lets Neon
+    reach scale-to-zero — but the state is per-process, so the first test
+    here that ticks an empty queue used to silence every test after it in
+    the file. Each of them then saw an empty result and failed, while
+    passing in isolation.
+    """
+    from eden.insights import detector_loop
+
+    detector_loop._insights_clear_cooldown()
+    yield
+    detector_loop._insights_clear_cooldown()
+
 # Make sure the project root is importable when this test is
 # collected from a worktree / CI runner.  Pinned to the absolute
 # worktree root so the test can find ``eden.insights.detector_loop``

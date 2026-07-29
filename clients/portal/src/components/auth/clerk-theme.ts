@@ -3,6 +3,22 @@
  * Card chrome owned by `.auth-card`. Densely tuned for split layout.
  */
 
+/**
+ * Border for interactive form controls (inputs, OTP cells, social buttons).
+ *
+ * These sit on a pure-black fill, so the border is the ONLY thing that
+ * delimits the control — WCAG 2.1 SC 1.4.11 (non-text contrast) and the
+ * `.impeccable.md` checklist both require >= 3:1 there. The decorative
+ * hairline (`--line`, 0.12 alpha => 1.29:1) is fine for dividers and
+ * section rules but far too faint to bound a control: at 0.14 alpha it
+ * resolved to #232323, only 1.34:1 on black.
+ *
+ * 0.38 alpha resolves to #616161 => 3.39:1 on #000000, clearing the 3:1
+ * floor with headroom for 1px anti-aliasing. Scoped to the auth controls
+ * deliberately — the global `--line` ladder stays hairline by design.
+ */
+const CONTROL_BORDER = "rgba(255,255,255,0.38)";
+
 const clerkAppearance = {
   variables: {
     colorPrimary: "#E8B84A",
@@ -62,7 +78,7 @@ const clerkAppearance = {
     },
     formFieldInput: {
       backgroundColor: "#000000",
-      borderColor: "rgba(255,255,255,0.14)",
+      borderColor: CONTROL_BORDER,
       color: "#FFFFFF",
       borderRadius: "0.5rem",
       height: "2.375rem",
@@ -77,7 +93,7 @@ const clerkAppearance = {
     },
     socialButtonsBlockButton: {
       backgroundColor: "#000000",
-      borderColor: "rgba(255,255,255,0.14)",
+      borderColor: CONTROL_BORDER,
       color: "#FFFFFF",
       borderRadius: "0.5rem",
       height: "2.375rem",
@@ -107,7 +123,7 @@ const clerkAppearance = {
     formResendCodeLink: { color: "#E8B84A" },
     otpCodeFieldInput: {
       backgroundColor: "#000000",
-      borderColor: "rgba(255,255,255,0.14)",
+      borderColor: CONTROL_BORDER,
       color: "#FFFFFF",
       borderRadius: "0.5rem",
     },

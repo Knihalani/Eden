@@ -592,9 +592,26 @@ async def _extract_linker_inputs(
     }
 
 
+def _default_run_llm_budget() -> int:
+    """Per-run LLM call ceiling for patch paths outside a sweep."""
+    try:
+        from eden.config import get_settings
+
+        return int(getattr(get_settings(), "patch_max_llm_calls_per_run", 4) or 4)
+    except Exception:
+        return 4
+
+
 async def propose_patch_for_issue(org_id: str, issue_id: str) -> dict[str, Any]:
     """Alias for improve/autofix and F46."""
-    result = await propose_plan_for_issue(org_id, issue_id)
+    from eden.improvement.sweep_budget import llm_budget_scope
+
+    # COST: this entry path never armed an LLM budget, so every
+    # ``try_consume_llm_call`` inside PatchGenerator waved the call
+    # through. Arm a per-run ceiling; a sweep that already armed a
+    # (larger, shared) budget keeps its own — see ``llm_budget_scope``.
+    with llm_budget_scope(_default_run_llm_budget()):
+        result = await propose_plan_for_issue(org_id, issue_id)
     if result.get("plan_id"):
         result["patch_id"] = result["plan_id"]
     return result
@@ -604,6 +621,8 @@ async def propose_patch_for_action(
     org_id: str, action: dict[str, Any]
 ) -> dict[str, Any]:
     """Adapter for closed_loop_executor._dispatch_side_effect."""
+    from eden.improvement.sweep_budget import llm_budget_scope
+
     payload = action.get("payload") or {}
     issue_id = None
     if isinstance(payload, dict):
@@ -611,4 +630,7 @@ async def propose_patch_for_action(
     issue_id = issue_id or action.get("target")
     if not issue_id:
         return {"status": "no_target", "reason": "action has no issue_id/target"}
-    return await propose_plan_for_issue(org_id, str(issue_id))
+    # COST: closed-loop ``propose_patch`` actions are the unbudgeted path
+    # the audit flagged. Arm the per-run ceiling before any LLM work.
+    with llm_budget_scope(_default_run_llm_budget()):
+        return await propose_plan_for_issue(org_id, str(issue_id))

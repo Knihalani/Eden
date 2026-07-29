@@ -996,33 +996,20 @@ def _fire_drift_alert(
         logger.debug("predictive: get_promotion_hook failed: %s", exc)
         return
     try:
-        # ``on_drift_alert`` is an ``async def`` method.
-        # We can't ``await`` here (the helper is sync) and
-        # we don't want to block the response — fire-and-
-        # forget via ``asyncio.ensure_future`` when an
-        # event loop is running, otherwise log + drop.
-        import asyncio
+        # ``on_drift_alert`` is an ``async def`` method. We can't
+        # ``await`` here (the helper is sync) and we don't want to
+        # block the response — schedule on the running loop, or close
+        # the coroutine cleanly when there is none.
+        from eden.async_tasks import fire_and_forget
 
-        result = hook.on_drift_alert(
-            org_id,
-            drift_type=drift_type,
-            severity=severity,
+        fire_and_forget(
+            hook.on_drift_alert(
+                org_id,
+                drift_type=drift_type,
+                severity=severity,
+            ),
+            name="predictive-drift-alert",
         )
-        if asyncio.iscoroutine(result):
-            try:
-                asyncio.get_running_loop()
-                from eden.async_tasks import bounded_create_task
-
-                bounded_create_task(result, name="predictive-drift-alert")
-            except RuntimeError:
-                # No running loop (sync context). Drop the
-                # coroutine with a debug log so we don't
-                # emit the "coroutine was never awaited"
-                # warning at runtime.
-                logger.debug(
-                    "predictive: dropping on_drift_alert coroutine "
-                    "(no running event loop)"
-                )
     except Exception as exc:
         logger.debug("predictive: on_drift_alert failed: %s", exc)
 

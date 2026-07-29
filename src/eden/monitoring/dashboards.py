@@ -250,7 +250,13 @@ class MonitoringDashboardService:
         if key == "cost":
             row = await client.fetchrow(
                 """
-                SELECT coalesce(sum(cost_usd), 0) AS cost FROM telemetry_events
+                -- telemetry_events has no cost_usd column (alembic 009);
+                -- cost is carried in the metrics/payload/attributes JSONB.
+                SELECT coalesce(sum(COALESCE(
+                    NULLIF(metrics->>'cost_usd', '')::float,
+                    NULLIF(payload->>'cost_usd', '')::float,
+                    NULLIF(attributes->>'cost_usd', '')::float
+                )), 0) AS cost FROM telemetry_events
                 WHERE tenant_id = $1 AND timestamp > NOW() - interval '24 hours'
                 """,
                 org_id,

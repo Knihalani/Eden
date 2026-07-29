@@ -9,15 +9,21 @@ Four audit items:
 * **PT-7** — New ``lib/server/clerk-bearer.ts`` exports
   ``bearerHeader()`` returning ``{Authorization: 'Bearer …'}``
   when a Clerk session is present.
-* **PT-8** — 7 portal route handlers call ``bearerHeader()`` and
-  spread the result into ``extraHeaders`` (or fetch headers):
-  - ``/api/auth/me``
-  - ``/api/auth/refresh``
-  - ``/api/ai-insights/sessions``
-  - ``/api/ai-insights/sessions/[session_id]/messages``
-  - ``/api/ai-insights/sessions/[session_id]/archive``
-  - ``/api/orgs/[orgId]/observability/stream``
-  - ``/api/orgs/[orgId]/pr-suggestions`` (parent + id sub-route)
+* **PT-8** — every dedicated portal route handler that talks to
+  FastAPI calls ``bearerHeader()`` and puts the result into the
+  upstream headers (``extraHeaders`` for ``forwardToBackend``
+  callers, a spread for the direct-``fetch`` ones). See
+  ``_PT8_ROUTES`` for the current set.
+
+Audit 2026-07-28 (portal refactor triage): the
+``/api/orgs/[orgId]/pr-suggestions`` route + its ``[id]`` sub-route
+were deleted in 1def59c4 — PR-suggestion traffic now rides the
+catch-all ``/api/proxy/[...path]`` route, which resolves the Clerk
+JWT itself. Those two params were replaced with the dedicated
+backend-touching routes that exist today (``ai-insights/approve``,
+the five ``agents/[id]/{test-runs,sim-runs,upload}`` handlers and
+``orgs/[orgId]/stream/traces/[sessionId]/events``) so the invariant
+stays enforced on the surface that survived the refactor.
 """
 
 from __future__ import annotations
@@ -136,20 +142,30 @@ _PT8_ROUTES = [
     # ``auth/refresh``) that the test previously asserted must exist.
     # The portal uses Clerk for client-side auth (no BFF needed);
     # Clerk's session JWT is propagated via the catch-all proxy at
-    # ``/api/proxy/[...path]/route.ts``. The 7 backend-touching
+    # ``/api/proxy/[...path]/route.ts``. The backend-touching
     # routes that DO exist follow.
     ("src/app/api/ai-insights/sessions/route.ts", True),
     ("src/app/api/ai-insights/sessions/[session_id]/messages/route.ts", True),
     ("src/app/api/ai-insights/sessions/[session_id]/archive/route.ts", True),
+    ("src/app/api/ai-insights/approve/route.ts", True),
     ("src/app/api/orgs/[orgId]/observability/stream/route.ts", True),
-    ("src/app/api/orgs/[orgId]/pr-suggestions/route.ts", True),
-    # Sub-route counts too — covered by the audit's "(+ sub-routes)".
-    ("src/app/api/orgs/[orgId]/pr-suggestions/[id]/route.ts", False),
+    ("src/app/api/orgs/[orgId]/stream/traces/[sessionId]/events/route.ts", True),
+    # Audit 2026-07-28 — ``orgs/[orgId]/pr-suggestions`` (+ its
+    # ``[id]`` sub-route) were deleted in 1def59c4; that traffic now
+    # goes through the catch-all proxy. The dedicated agent-run
+    # routes below took their place as the "hand-written handler
+    # that fetches FastAPI directly" surface, so they inherit the
+    # PT-8 invariant.
+    ("src/app/api/agents/[id]/test-runs/route.ts", True),
+    ("src/app/api/agents/[id]/test-runs/[run_id]/route.ts", True),
+    ("src/app/api/agents/[id]/sim-runs/route.ts", True),
+    ("src/app/api/agents/[id]/sim-runs/[run_id]/route.ts", True),
+    ("src/app/api/agents/[id]/upload/route.ts", True),
 ]
 
 
 class TestPT8BearerInjection:
-    """All 7 PT-8 routes import ``bearerHeader`` and use the result
+    """All PT-8 routes import ``bearerHeader`` and use the result
     in the upstream fetch headers (either via ``extraHeaders`` for
     ``forwardToBackend`` callers or via spread-headers for the
     direct-fetch callers).
@@ -191,19 +207,26 @@ class TestPT8BearerInjection:
                 pytest.fail(f"PT-8: required route {rel} is missing")
             return
         source = path.read_text()
-        # Two valid patterns:
-        # 1. extraHeaders: await bearerHeader() — direct, the result
-        #    becomes the value passed to forwardToBackend.
-        # 2. const authHeaders = await bearerHeader(); ... authHeaders
-        #    — the const is bound then spread / passed to fetch().
+        # Valid patterns — all of them land the bearer in the
+        # upstream headers:
+        # 1. ``extraHeaders: await bearerHeader()`` — inlined into the
+        #    options object passed to forwardToBackend.
+        # 2. ``const authHeaders = await bearerHeader(); ...authHeaders``
+        #    — bound then spread into a direct ``fetch()`` (the SSE
+        #    proxies + ai-insights callers).
+        # 3. ``const extraHeaders = await bearerHeader()`` — or the
+        #    ``await Promise.all([bearerHeader(), …])`` destructure used
+        #    by the multipart upload route — then handed to
+        #    forwardToBackend as ``{ …, extraHeaders }``. The binding
+        #    must be *referenced* again, so a bare read doesn't count.
+        bound_and_used = "bearerHeader()" in source and any(
+            source.count(name) >= 2 for name in ("extraHeaders", "authHeaders")
+        )
         spread_ok = (
             "extraHeaders: await bearerHeader()" in source
             or "extraHeaders, authHeaders" in source
             or "extraHeaders: authHeaders" in source
-            # Bound const pattern (used by the observability SSE + the
-            # ai-insights direct-fetch callers).
-            or source.count("await bearerHeader()") >= 1
-            and "authHeaders" in source
+            or bound_and_used
         )
         assert spread_ok, (
             f"PT-8 regression: {rel} must use the bearerHeader() "

@@ -203,7 +203,9 @@ class TraceFinalizedConsumer:
                 last_exc: BaseException | None = None
                 for attempt in range(1, _MAX_HANDLE_ATTEMPTS + 1):
                     try:
-                        await self._process_trace(message_id, data, org_id, trace_id)
+                        await self._process_trace(
+                            message_id, data, org_id, trace_id, attempt=attempt
+                        )
                         _STATS["handled_ok"] += 1
                         last_exc = None
                         break
@@ -288,6 +290,8 @@ class TraceFinalizedConsumer:
         data: dict[str, str],
         org_id: str,
         trace_id: str,
+        *,
+        attempt: int = 1,
     ) -> None:
         """Run the full detection pipeline for one finalized trace.
 
@@ -303,7 +307,7 @@ class TraceFinalizedConsumer:
             session_id=data.get("session_id") or None,
             user_id=data.get("user_id") or None,
         )
-        await self._run_annotator(org_id, trace_id, layer_a_report)
+        await self._run_annotator(org_id, trace_id, layer_a_report, attempt=attempt)
         scan_results = await self._scanner.scan(
             org_id,
             trace_id,
@@ -434,8 +438,25 @@ class TraceFinalizedConsumer:
         org_id: str,
         trace_id: str,
         layer_a_report: Any | None,
+        *,
+        attempt: int = 1,
     ) -> None:
-        """T1 semantic tags after Layer A — observability only."""
+        """T1 semantic tags after Layer A — observability only.
+
+        COST: annotation is best-effort and costs one LLM call. It runs on
+        the FIRST attempt only — re-running it on the retry ladder would
+        multiply annotator spend by ``_MAX_HANDLE_ATTEMPTS`` every time an
+        unrelated downstream step blipped. For the same reason a failure
+        here is never re-raised: a transient LLM error must not drive a
+        retry of the whole (already-paid-for) pipeline.
+        """
+        if attempt > 1:
+            logger.debug(
+                "trace_finalized: annotator skipped on retry attempt=%d trace=%s",
+                attempt,
+                trace_id,
+            )
+            return
         try:
             from eden.evaluation.annotator import annotate_and_persist
             from eden.insights.rca._common import _fetch_trace_events
@@ -463,8 +484,7 @@ class TraceFinalizedConsumer:
                     result.cost_usd,
                 )
         except Exception as exc:
-            if _is_transient(exc):
-                raise
+            # Deliberately swallowed, including transients — see docstring.
             logger.debug("trace_finalized: annotator skipped: %s", exc)
 
     async def _maybe_prod_eval(

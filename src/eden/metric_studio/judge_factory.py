@@ -350,7 +350,10 @@ class JudgeFactory:
         try:
             from eden.llmops.promotion_hooks import get_metric_studio_hook
             hook = get_metric_studio_hook()
-            hook.on_metric_promotion(
+            # ``on_metric_promotion`` is ``async def``; the enclosing
+            # method is async, so await it rather than dropping the
+            # coroutine on the floor.
+            await hook.on_metric_promotion(
                 org_id=org_id,
                 metric_id=metric_id,
                 judge_name=judge_name,

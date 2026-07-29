@@ -62,6 +62,30 @@ class TestUserIdCache:
         assert len(cache) <= deps._ID_CACHE_MAX
 
 
+#: Rows the fake client hands back. Only ``trace_id`` varies per row.
+_BASE_ROW: dict[str, Any] = {
+    "trace_id": "t1",
+    "started_at": datetime(2020, 1, 1, tzinfo=UTC),
+    "realm": "production",
+    "agent_id": "a1",
+    "model": None,
+    "provider": None,
+    "session_id": None,
+    "agent_session_id": None,
+    "outcome": "ok",
+    "error": None,
+    "input_tokens": 1,
+    "output_tokens": 2,
+    "cost_usd": 0.01,
+    "span_count": 3,
+    "duration_ms": 10.0,
+    "tags": ["x"],
+}
+
+#: Page size used by both list_traces tests.
+PAGE_LIMIT = 50
+
+
 class TestListTracesQueryShape:
     def test_list_traces_uses_page_cte_not_lateral_main_from(self):
         from eden.api.routes import observability
@@ -87,28 +111,16 @@ class TestListTracesQueryShape:
 
         client = MagicMock()
 
+        # A full page (len(rows) == limit) is what forces list_traces to
+        # run the distinct-trace COUNT. Short pages deliberately skip it
+        # (offset + len(rows) is exact and the COUNT is expensive) —
+        # see test_list_traces_short_page_skips_count below.
+        def _row(i: int) -> dict[str, Any]:
+            return {**_BASE_ROW, "trace_id": f"t{i}"}
+
         async def _fetch(sql: str, *args: Any) -> list[dict[str, Any]]:
             fetch_sqls.append(sql)
-            return [
-                {
-                    "trace_id": "t1",
-                    "started_at": datetime(2020, 1, 1, tzinfo=UTC),
-                    "realm": "production",
-                    "agent_id": "a1",
-                    "model": None,
-                    "provider": None,
-                    "session_id": None,
-                    "agent_session_id": None,
-                    "outcome": "ok",
-                    "error": None,
-                    "input_tokens": 1,
-                    "output_tokens": 2,
-                    "cost_usd": 0.01,
-                    "span_count": 3,
-                    "duration_ms": 10.0,
-                    "tags": ["x"],
-                }
-            ]
+            return [_row(i) for i in range(PAGE_LIMIT)]
 
         async def _fetchval(sql: str, *args: Any) -> int:
             fetchval_sqls.append(sql)
@@ -130,16 +142,55 @@ class TestListTracesQueryShape:
             agent_id=None,
             trace_id=None,
             trace_ids=None,
-            limit=50,
+            limit=PAGE_LIMIT,
             offset=0,
             days=7,
             user={"sub": "u"},
         )
 
         assert result.total == 7
-        assert len(result.traces) == 1
+        assert len(result.traces) == PAGE_LIMIT
         assert any("AS _traces" in s for s in fetchval_sqls)
         assert any("WITH page AS" in s for s in fetch_sqls)
+
+    @pytest.mark.asyncio
+    async def test_list_traces_short_page_skips_count(
+        self, monkeypatch: pytest.MonkeyPatch,
+    ):
+        """A page shorter than the limit is the last page, so the total is
+        already known — running the distinct-trace COUNT would be a full
+        scan of the tenant's history for no new information."""
+        from eden.api.routes import observability
+
+        fetchval_calls: list[str] = []
+        client = MagicMock()
+
+        async def _fetch(sql: str, *args: Any) -> list[dict[str, Any]]:
+            return [{**_BASE_ROW, "trace_id": "t1"}]
+
+        async def _fetchval(sql: str, *args: Any) -> int:
+            fetchval_calls.append(sql)
+            return 999
+
+        client.fetch = _fetch
+        client.fetchval = _fetchval
+
+        import eden.storage.postgres as real_pg
+
+        monkeypatch.setattr(
+            real_pg, "get_postgres_client", AsyncMock(return_value=client)
+        )
+
+        result = await observability.list_traces(
+            org_id="org-1", realm=None, outcome=None, agent_id=None,
+            trace_id=None, trace_ids=None, limit=PAGE_LIMIT, offset=0,
+            days=7, user={"sub": "u"},
+        )
+
+        assert result.total == 1
+        assert fetchval_calls == [], (
+            "short page must not trigger the distinct-trace COUNT"
+        )
 
 
 class TestAgentsListParallel:

@@ -13,7 +13,11 @@ export type KeyScope =
   | "traces:write"
   | "traces:read"
   | "evals:run"
-  | "datasets:read";
+  | "datasets:read"
+  // Canonical member of GATEWAY_SCOPES in src/eden/api/deps.py — the only
+  // scope in this picker that unlocks the OpenAI-compatible /gateway/v1
+  // routes. Passed through verbatim, with no alias expansion.
+  | "gateway:write";
 
 export const KEY_SCOPE_OPTIONS: { id: KeyScope; label: string }[] = [
   { id: "ingest", label: "Ingest" },
@@ -21,6 +25,8 @@ export const KEY_SCOPE_OPTIONS: { id: KeyScope; label: string }[] = [
   { id: "traces:read", label: "Traces read" },
   { id: "evals:run", label: "Evals run" },
   { id: "datasets:read", label: "Datasets read" },
+  // Maps to GATEWAY_SCOPES in src/eden/api/deps.py (/gateway/v1).
+  { id: "gateway:write", label: "Gateway" },
 ];
 
 export const TIMEZONE_OPTIONS = [

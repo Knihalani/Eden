@@ -43,6 +43,7 @@ from eden.api.portal_contracts import (
     WorkspaceCard,
     WorkspacePrefs,
 )
+from eden.api.utils.redact import redact_all
 
 logger = logging.getLogger(__name__)
 
@@ -231,7 +232,7 @@ async def _pg() -> Any | None:
 
         return await get_postgres_client()
     except Exception as exc:  # noqa: BLE001
-        logger.debug("portal: postgres unavailable: %s", exc)
+        logger.warning("portal: postgres unavailable: %s", redact_all(str(exc)))
         return None
 
 
@@ -425,7 +426,7 @@ async def list_portal_agents(
                 )
             )
         except Exception as exc:  # noqa: BLE001
-            logger.debug("portal agents: registry query failed: %s", exc)
+            logger.warning("portal agents: registry query failed: %s", redact_all(str(exc)))
             try:
                 return list(
                     await client.fetch(
@@ -492,7 +493,7 @@ async def list_portal_agents(
             for r in mrows:
                 metrics_by_id[str(r["agent_id"])] = dict(r)
         except Exception as exc:  # noqa: BLE001
-            logger.debug("portal agents: telemetry metrics skipped: %s", exc)
+            logger.warning("portal agents: telemetry metrics skipped: %s", redact_all(str(exc)))
         return metrics_by_id
 
     async def _load_open_issues() -> dict[str, dict[str, int]]:
@@ -520,7 +521,7 @@ async def list_portal_agents(
                     "open_p0": int(r["open_p0"] or 0),
                 }
         except Exception as exc:  # noqa: BLE001
-            logger.debug("portal agents: open issues skipped: %s", exc)
+            logger.warning("portal agents: open issues skipped: %s", redact_all(str(exc)))
         return out
 
     rows, metrics_by_id, issues_by_id = await asyncio.gather(
@@ -666,7 +667,7 @@ async def list_portal_traces(
             limit,
         )
     except Exception as exc:  # noqa: BLE001
-        logger.debug("portal traces: query failed: %s", exc)
+        logger.warning("portal traces: query failed: %s", redact_all(str(exc)))
         return []
 
     items: list[TraceListItem] = []
@@ -754,7 +755,7 @@ async def get_portal_trace(
             return_exceptions=True,
         )
     except Exception as exc:  # noqa: BLE001
-        logger.warning("portal trace detail: parallel fetch failed: %s", exc)
+        logger.warning("portal trace detail: parallel fetch failed: %s", redact_all(str(exc)))
         raise HTTPException(status_code=503, detail="Trace temporarily unavailable") from exc
 
     if isinstance(row, BaseException):
@@ -778,7 +779,7 @@ async def get_portal_trace(
             logger.warning(
                 "portal trace detail: flatten tree failed for %s: %s",
                 trace_id,
-                exc,
+                redact_all(str(exc)),
             )
 
     status, severity = _map_trace_outcome(row.get("outcome"))
@@ -816,7 +817,7 @@ async def list_portal_sessions(
             org_id, limit=limit, preview_trace_limit=40
         )
     except Exception as exc:  # noqa: BLE001
-        logger.debug("portal sessions: service unavailable: %s", exc)
+        logger.warning("portal sessions: service unavailable: %s", redact_all(str(exc)))
         return []
 
     out: list[SessionRollup] = []
@@ -877,7 +878,7 @@ async def list_portal_issues(
 
         issues = await IssuesRepo().list_issues(org_id, limit=limit, offset=0)
     except Exception as exc:  # noqa: BLE001
-        logger.debug("portal issues: repo unavailable: %s", exc)
+        logger.warning("portal issues: repo unavailable: %s", redact_all(str(exc)))
         return []
 
     out: list[IssueCard] = []
@@ -942,7 +943,7 @@ async def list_portal_signals(
             org_id,
         )
     except Exception as exc:  # noqa: BLE001
-        logger.debug("portal signals: query failed: %s", exc)
+        logger.warning("portal signals: query failed: %s", redact_all(str(exc)))
         return []
 
     out: list[SignalCard] = []
@@ -1003,7 +1004,7 @@ async def list_portal_alert_rules(
 
         rules = await alerts_repo.list_nl_rules(org_id)
     except Exception as exc:  # noqa: BLE001
-        logger.debug("portal alert rules: unavailable: %s", exc)
+        logger.warning("portal alert rules: unavailable: %s", redact_all(str(exc)))
         return []
 
     out: list[AlertRuleCard] = []
@@ -1039,7 +1040,7 @@ async def list_portal_alert_events(
 
         events, _total = await alerts_repo.list_alert_events(org_id, limit=limit, offset=0)
     except Exception as exc:  # noqa: BLE001
-        logger.debug("portal alert events: unavailable: %s", exc)
+        logger.warning("portal alert events: unavailable: %s", redact_all(str(exc)))
         return []
 
     out: list[AlertEventCard] = []
@@ -1083,7 +1084,7 @@ async def list_portal_cost_drivers(
         raw = svc.get_insights(org_id, limit=limit)
         insights = list(raw or [])
     except Exception as exc:  # noqa: BLE001
-        logger.debug("portal cost drivers: insights unavailable: %s", exc)
+        logger.warning("portal cost drivers: insights unavailable: %s", redact_all(str(exc)))
         return []
 
     out: list[CostDriverCard] = []
@@ -1149,7 +1150,7 @@ async def get_portal_workspace(
             org_id,
         )
     except Exception as exc:  # noqa: BLE001
-        logger.debug("portal workspace: org query failed: %s", exc)
+        logger.warning("portal workspace: org query failed: %s", redact_all(str(exc)))
         # Older schemas may lack is_personal.
         try:
             row = await client.fetchrow(
@@ -1363,7 +1364,7 @@ async def list_portal_keys(
             limit,
         )
     except Exception as exc:  # noqa: BLE001
-        logger.debug("portal keys: query failed: %s", exc)
+        logger.warning("portal keys: query failed: %s", redact_all(str(exc)))
         return []
 
     out: list[ApiKeyCard] = []
@@ -1424,7 +1425,7 @@ async def list_portal_members(
                 limit,
             )
         except Exception as exc:  # noqa: BLE001
-            logger.debug("portal members: query failed: %s", exc)
+            logger.warning("portal members: query failed: %s", redact_all(str(exc)))
             return []
 
     async def _fetch_invites() -> list[dict]:
@@ -1433,7 +1434,7 @@ async def list_portal_members(
 
             return await get_pending_invitations(org_id) or []
         except Exception as exc:  # noqa: BLE001
-            logger.debug("portal members: invites skipped: %s", exc)
+            logger.warning("portal members: invites skipped: %s", redact_all(str(exc)))
             return []
 
     rows, invites = await asyncio.gather(_fetch_members(), _fetch_invites())
@@ -1497,7 +1498,7 @@ async def list_portal_audit_events(
             limit,
         )
     except Exception as exc:  # noqa: BLE001
-        logger.debug("portal audit events: query failed: %s", exc)
+        logger.warning("portal audit events: query failed: %s", redact_all(str(exc)))
         return []
 
     out: list[AuditEventCard] = []
@@ -1547,7 +1548,7 @@ async def list_portal_audit_packs(
 
         events = await AgentAuditLedgerWriter().query(org_id, limit=limit)
     except Exception as exc:  # noqa: BLE001
-        logger.debug("portal audit packs: ledger unavailable: %s", exc)
+        logger.warning("portal audit packs: ledger unavailable: %s", redact_all(str(exc)))
         return []
 
     out: list[AuditPackCard] = []
@@ -1596,7 +1597,7 @@ async def list_portal_datasets(
 
         records = await DatasetHub().list_datasets(org_id, limit=limit)
     except Exception as exc:  # noqa: BLE001
-        logger.debug("portal datasets: unavailable: %s", exc)
+        logger.warning("portal datasets: unavailable: %s", redact_all(str(exc)))
         return []
 
     out: list[DatasetCard] = []
@@ -1629,7 +1630,7 @@ async def list_portal_playgrounds(
 
         records = await PlaygroundService().list(org_id, limit=limit)
     except Exception as exc:  # noqa: BLE001
-        logger.debug("portal playgrounds: unavailable: %s", exc)
+        logger.warning("portal playgrounds: unavailable: %s", redact_all(str(exc)))
         return []
 
     out: list[PlaygroundCard] = []
@@ -1665,7 +1666,7 @@ async def list_portal_experiments(
 
         rows = await OfflineExperimentRunner().list_experiments(org_id, limit=limit)
     except Exception as exc:  # noqa: BLE001
-        logger.debug("portal experiments: unavailable: %s", exc)
+        logger.warning("portal experiments: unavailable: %s", redact_all(str(exc)))
         return []
 
     out: list[ExperimentSummary] = []
@@ -1704,7 +1705,7 @@ async def list_portal_improve_plans(
 
         plans = await plans_repo.list_plans(org_id, limit=limit)
     except Exception as exc:  # noqa: BLE001
-        logger.debug("portal improve plans: unavailable: %s", exc)
+        logger.warning("portal improve plans: unavailable: %s", redact_all(str(exc)))
         return []
 
     out: list[ImprovePlanCard] = []
@@ -1759,7 +1760,7 @@ async def list_portal_ab_experiments(
             ab = getattr(registry, "_ab_tests", None) or {}
             tests = list(ab.values())
     except Exception as exc:  # noqa: BLE001
-        logger.debug("portal ab-tests: registry unavailable: %s", exc)
+        logger.warning("portal ab-tests: registry unavailable: %s", redact_all(str(exc)))
 
     if not tests:
         try:
@@ -1771,7 +1772,7 @@ async def list_portal_ab_experiments(
                     data = exp.to_dict() if hasattr(exp, "to_dict") else dict(exp)
                     tests.append(data)
         except Exception as exc:  # noqa: BLE001
-            logger.debug("portal ab-tests: tracker unavailable: %s", exc)
+            logger.warning("portal ab-tests: tracker unavailable: %s", redact_all(str(exc)))
 
     out: list[AbExperimentCard] = []
     for t in tests:
@@ -1864,7 +1865,7 @@ async def list_portal_guardrail_policies(
                     d["spec"] = spec if isinstance(spec, dict) else {}
                     rows.append(d)
             except Exception as exc:  # noqa: BLE001
-                logger.debug("portal guardrails: direct query failed: %s", exc)
+                logger.warning("portal guardrails: direct query failed: %s", redact_all(str(exc)))
 
         if rows:
             return rows
@@ -1877,7 +1878,7 @@ async def list_portal_guardrail_policies(
             policies = (data or {}).get("policies") if isinstance(data, dict) else []
             return [p for p in (policies or []) if isinstance(p, dict)]
         except Exception as exc:  # noqa: BLE001
-            logger.debug("portal guardrails: service unavailable: %s", exc)
+            logger.warning("portal guardrails: service unavailable: %s", redact_all(str(exc)))
             return None
 
     async def _fetch_match_counts() -> dict[str, int]:
@@ -1898,7 +1899,7 @@ async def list_portal_guardrail_policies(
                     if m.get("policy_id"):
                         match_counts[str(m["policy_id"])] = int(m["hits"] or 0)
             except Exception as exc:  # noqa: BLE001
-                logger.debug("portal guardrails: match counts skipped: %s", exc)
+                logger.warning("portal guardrails: match counts skipped: %s", redact_all(str(exc)))
         return match_counts
 
     # These two queries are independent of each other (match counts only
@@ -1945,7 +1946,7 @@ async def list_portal_debugger_sessions(
 
         sessions = await DebugSessionService().list_sessions(org_id, limit=limit)
     except Exception as exc:  # noqa: BLE001
-        logger.debug("portal debugger sessions: unavailable: %s", exc)
+        logger.warning("portal debugger sessions: unavailable: %s", redact_all(str(exc)))
         return []
 
     out: list[DebuggerSessionCard] = []
@@ -2029,7 +2030,7 @@ async def list_portal_assistant_threads(
                 limit,
             )
     except Exception as exc:  # noqa: BLE001
-        logger.debug("portal assistant threads: query failed: %s", exc)
+        logger.warning("portal assistant threads: query failed: %s", redact_all(str(exc)))
         return []
 
     ids = [str(r["id"]) for r in rows]
@@ -2059,7 +2060,7 @@ async def list_portal_assistant_threads(
                 )
                 counts = {str(c["cid"]): int(c["cnt"] or 0) for c in crows}
             except Exception as exc:  # noqa: BLE001
-                logger.debug("portal assistant threads: message counts failed: %s", exc)
+                logger.warning("portal assistant threads: message counts failed: %s", redact_all(str(exc)))
 
     out: list[AssistantThreadCard] = []
     for r in rows:

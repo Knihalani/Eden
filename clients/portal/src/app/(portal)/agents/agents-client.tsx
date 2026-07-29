@@ -520,7 +520,6 @@ function LabAgentsInner() {
     const next = agents.find((a) => a.id === paramId)?.id ?? agents[0]?.id;
     if (next && next !== selectedId) setSelectedId(next);
     else if (!next && selectedId) setSelectedId("");
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [paramId, agents]);
 
   const selectAgent = useCallback(

@@ -171,7 +171,7 @@ export function brushToWindow(
   minSpanMs = 1,
 ): TimeWindow {
   const total = Math.max(totalMs, 1);
-  let startMs = Math.max(0, Math.min(aMs, bMs));
+  const startMs = Math.max(0, Math.min(aMs, bMs));
   let endMs = Math.min(total, Math.max(aMs, bMs));
   if (endMs - startMs < minSpanMs) {
     endMs = Math.min(total, startMs + minSpanMs);

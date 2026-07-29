@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from eden.evaluation.online.scorer_cascade import OnlineScorerCascade
+from eden.evaluation.online.slm_hook import budget_allows
 
 logger = logging.getLogger(__name__)
 
@@ -25,6 +26,15 @@ _FILTER_KEY_ALIASES = {
     "trace_id": "trace_id",
     "outcome": "outcome",
 }
+
+# COST: sample rate applied to NEWLY created rules. Rules used to default
+# to 1.0, so creating one rule meant an SLM judge call on every matching
+# trace forever. 0.1 keeps the score distribution meaningful at a tenth of
+# the spend; an operator who wants full coverage passes sample_rate=1.0
+# explicitly. Deliberately NOT applied to already-persisted rules -- see
+# ``_row_to_rule``, which still hydrates stored values as-is so this change
+# cannot silently retune a customer's existing rules.
+DEFAULT_NEW_RULE_SAMPLE_RATE = 0.1
 
 
 @dataclass
@@ -125,7 +135,7 @@ class OnlineScoringRulesEngine:
         filter_query: str = "",
         scorer_type: str = "slm",
         scorer_ref: str | None = None,
-        sample_rate: float = 1.0,
+        sample_rate: float = DEFAULT_NEW_RULE_SAMPLE_RATE,
         config: dict[str, Any] | None = None,
     ) -> ScoringRule | None:
         client = await self._client()
@@ -439,18 +449,32 @@ class OnlineScoringRulesEngine:
             limit,
         )
         processed = 0
+        stopped_early = False
         for row in rows:
+            # COST: this loop fans out limit x N-rules judge calls in one
+            # request. Re-check the org budget every trace so an exhausted
+            # org stops mid-rewind instead of blowing through the ceiling.
+            if not await budget_allows(org_id):
+                logger.warning(
+                    "rewind: budget exhausted after %d traces org=%s job=%s",
+                    processed,
+                    org_id,
+                    job_id,
+                )
+                stopped_early = True
+                break
             await self.apply_rules_for_trace(org_id, str(row["trace_id"]))
             processed += 1
         await client.execute(
             """
             UPDATE online_scoring_rewind_jobs
-            SET status = 'completed', traces_processed = $3, completed_at = NOW()
+            SET status = $4, traces_processed = $3, completed_at = NOW()
             WHERE id = $1::uuid AND org_id = $2
             """,
             job_id,
             org_id,
             processed,
+            "budget_exhausted" if stopped_early else "completed",
         )
         return job_id
 

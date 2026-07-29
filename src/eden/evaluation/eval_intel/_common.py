@@ -1182,8 +1182,15 @@ def _fire_eval_to_guardrail_promotion(
         logger.debug("eval_intel: get_guardrail_hook failed: %s", exc)
         return
     try:
-        hook.on_judge_threshold_breach(
-            org_id, judge_name=judge_name, threshold=float(threshold),
+        # ``on_judge_threshold_breach`` is ``async def`` and this helper
+        # is sync — a bare call dropped every eval-to-guardrail promotion.
+        from eden.async_tasks import fire_and_forget
+
+        fire_and_forget(
+            hook.on_judge_threshold_breach(
+                org_id, judge_name=judge_name, threshold=float(threshold),
+            ),
+            name="eval-intel-judge-threshold-breach-hook",
         )
     except Exception as exc:
         logger.debug(
@@ -1214,9 +1221,15 @@ def _fire_eval_version_regression(
         logger.debug("eval_intel: get_promotion_hook failed: %s", exc)
         return
     try:
-        hook.on_judge_regression(
-            org_id, judge_name=judge_name, trace_id=deployment_sha,
-            score=float(score),
+        # ``on_judge_regression`` is ``async def`` and this helper is sync.
+        from eden.async_tasks import fire_and_forget
+
+        fire_and_forget(
+            hook.on_judge_regression(
+                org_id, judge_name=judge_name, trace_id=deployment_sha,
+                score=float(score),
+            ),
+            name="eval-intel-judge-regression-hook",
         )
     except Exception as exc:
         logger.debug(

@@ -4,7 +4,6 @@ import {
   formatDuration,
   formatTokens,
   formatUsd,
-  traceById,
   type TraceFixture,
 } from "@/lab/fixtures/traces";
 import { ISSUE_LIST, type IssueFixture } from "@/lab/fixtures/issues";
@@ -42,47 +41,6 @@ export type SessionTurn = {
   inputPreview?: string;
   outputPreview?: string;
 };
-
-function metricsFromTraces(traces: TraceFixture[]) {
-  return {
-    turnCount: traces.length,
-    durationMs: traces.reduce((s, t) => s + t.durationMs, 0),
-    totalTokens: traces.reduce((s, t) => s + t.tokens, 0),
-    costUsd: traces.reduce((s, t) => s + t.costUsd, 0),
-  };
-}
-
-function outcomeFromTraces(traces: TraceFixture[]): SessionOutcome {
-  const hasError = traces.some((t) => t.severity === "error" || t.status === "error");
-  const hasWarn = traces.some((t) => t.severity === "warn");
-  const allOk = traces.every(
-    (t) => t.severity === "none" && t.status === "ok",
-  );
-  if (hasError && traces.some((t) => t.severity === "none" || t.status === "ok")) {
-    return "mixed";
-  }
-  if (hasError) return "error";
-  if (hasWarn) return "mixed";
-  if (allOk) return "ok";
-  return "mixed";
-}
-
-function buildSession(
-  partial: Omit<
-    SessionFixture,
-    "turnCount" | "durationMs" | "totalTokens" | "costUsd" | "outcome"
-  > & { outcome?: SessionOutcome },
-): SessionFixture {
-  const traces = partial.traceIds
-    .map((id) => traceById(id))
-    .filter((t): t is TraceFixture => Boolean(t));
-  const metrics = metricsFromTraces(traces);
-  return {
-    ...partial,
-    ...metrics,
-    outcome: partial.outcome ?? outcomeFromTraces(traces),
-  };
-}
 
 export const SESSION_LIST: SessionFixture[] = [];
 

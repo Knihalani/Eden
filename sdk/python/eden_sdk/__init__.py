@@ -130,7 +130,7 @@ __all__ = [
     "AgentSession",
 ]
 
-__version__ = "0.3.4"
+__version__ = "0.4.0"
 
 
 # Lazy instrumentation registry — the per-framework modules are

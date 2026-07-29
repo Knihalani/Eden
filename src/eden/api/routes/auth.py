@@ -1040,6 +1040,12 @@ async def get_me(
 
         if inserted is not None:
             db_user = inserted
+            # A miss for this clerk_id was cached microseconds ago by the
+            # lookup that sent us down the provisioning branch. Drop it so
+            # org resolution on the same signup does not read a stale None.
+            from eden.api.deps import invalidate_user_id_cache
+
+            invalidate_user_id_cache(clerk_id, str(inserted["id"]))
         else:
             # The INSERT either failed or hit the ON CONFLICT branch.
             # ``ON CONFLICT (email) DO UPDATE ... WHERE deleted_at IS

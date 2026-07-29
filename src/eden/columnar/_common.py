@@ -503,7 +503,10 @@ async def _fire_compaction_drift_hook(
         )
         return
     hook = get_columnar_hook()
-    hook.on_compaction_drift(
+    # ``on_compaction_drift`` is ``async def``; this helper is already
+    # async, so await it directly — calling it bare created a coroutine
+    # that was immediately garbage-collected and the alert never fired.
+    await hook.on_compaction_drift(
         org_id,
         partition_id=partition_id,
         reason=reason,

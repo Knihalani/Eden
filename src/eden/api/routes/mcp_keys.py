@@ -90,7 +90,7 @@ async def list_mcp_keys(
         rows = await client.fetch(
             """
             SELECT id::text, name, key_prefix, scopes, created_at, last_used_at
-            FROM organization_api_keys
+            FROM org_api_keys
             WHERE org_id = $1
               AND revoked_at IS NULL
             ORDER BY created_at DESC
@@ -105,12 +105,15 @@ async def list_mcp_keys(
                 status_code=400,
                 detail="Invalid organization id",
             ) from primary_exc
-        # Legacy table name fallback (pre-rename schema).
+        # Legacy table name fallback (pre-rename schema). The canonical
+        # table is ``org_api_keys`` (migrations/009_org_api_keys.sql); both
+        # this fallback and the primary above used to name tables that no
+        # migration ever creates, so this route returned 503 unconditionally.
         try:
             rows = await client.fetch(
                 """
                 SELECT id::text, name, key_prefix, scopes, created_at, last_used_at
-                FROM api_keys
+                FROM organization_api_keys
                 WHERE org_id = $1
                   AND revoked_at IS NULL
                 ORDER BY created_at DESC

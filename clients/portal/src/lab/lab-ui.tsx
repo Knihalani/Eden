@@ -387,7 +387,7 @@ export function RunTranscript({
         ?.scrollIntoView({ block: "nearest", behavior: "smooth" });
     }, 40);
     return () => window.clearTimeout(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- only react to focus changes
+    // Only react to focus changes.
   }, [focusStepId]);
 
   function toggle(id: string) {

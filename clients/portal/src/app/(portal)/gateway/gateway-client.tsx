@@ -39,15 +39,19 @@ const WINDOW_OPTIONS = [
   { label: "30d", hours: 720 },
 ] as const;
 
+// Categorical series palette. Uses the shared `--chart-pie-*` tokens
+// (styles/tokens.css) so the gateway cost breakdown reads as the same
+// product as every other chart. The previous literal sage/olive ramp
+// (#6b8f71 … #3a5a40) was off-brand on two counts: none of those values
+// exist in the token ladder, and .impeccable.md reserves green for
+// active/running/success — never decoration.
 const CHART_COLORS = [
-  "var(--text)",
+  "var(--chart-pie-1)",
+  "var(--chart-pie-2)",
+  "var(--chart-pie-3)",
+  "var(--chart-pie-4)",
+  "var(--chart-pie-5)",
   "var(--text-secondary)",
-  "var(--accent, #3d5a4c)",
-  "#6b8f71",
-  "#8a9a7b",
-  "#a3b18a",
-  "#588157",
-  "#3a5a40",
 ];
 
 function formatUsd(n: number | null | undefined): string {
@@ -354,10 +358,14 @@ export default function GatewayClient() {
     name: string,
   ) => {
     if (!ref.current) return;
+    // Fallback must match the product surface (Signal Black). It was
+    // "#f7f5f0" — an off-white left over from a light theme — so any
+    // failure to resolve --bg exported a PNG with white chart text on a
+    // near-white background.
     const bg =
       getComputedStyle(document.documentElement)
         .getPropertyValue("--bg")
-        .trim() || "#f7f5f0";
+        .trim() || "#000000";
     await downloadPng(`eden-gateway-${name}-${activeWindow.label}.png`, ref.current, {
       backgroundColor: bg,
     });

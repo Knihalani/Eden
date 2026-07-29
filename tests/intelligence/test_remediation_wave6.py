@@ -17,6 +17,23 @@ import pytest
 from eden.issues.models import Issue
 
 
+@pytest.fixture(autouse=True)
+def _clear_verify_empty_cooldown():
+    """Reset ``closed_loop.verify``'s empty-result cooldown between tests.
+
+    Same shape as the fixture in ``tests/integration/test_insights_wiring``:
+    the module holds process-level cooldown closures, so one tick over an
+    empty queue backs the loop off to the next 10-minute grid boundary and
+    silences every later test in the process. These two tests passed alone
+    and failed in a full-suite run purely because of that leak.
+    """
+    from eden.closed_loop import verify as _verify
+
+    _verify._verify_clear_cooldown()
+    yield
+    _verify._verify_clear_cooldown()
+
+
 def _issue(**kw: Any) -> Issue:
     base: dict[str, Any] = {
         "id": "iss-1",

@@ -6,11 +6,12 @@ Three audit items from Part G "Portal polish":
   ``process.env.X!`` non-null assertions (unsafe copy-paste). The
   old ``onboarding/install/page.tsx`` is gone; marketing SDK snippets
   are the remaining surface.
-* **PQ-8** — ``hooks/use-org.tsx`` picks the **current** Clerk
-  org's membership from ``userMemberships.data`` via
-  ``.find(...)``, not the ``[0]`` first membership (pre-fix
+* **PQ-8** — ``hooks/use-org.tsx`` reports the role of the
+  **current** Clerk org, not the ``[0]`` first membership (pre-fix
   multi-org users always saw the role of their alphabetically-
-  first org).
+  first org). The original fix filtered ``userMemberships.data``
+  with ``.find(...)``; the hook now reads ``membership`` straight
+  off ``useOrganization()``, which Clerk scopes to the active org.
 * **PQ-13** — ``hooks/use-auth.tsx`` loads the Eden profile via
   shared ``useMeQuery`` / ``fetchMeQuery`` (React Query), not an
   id-only effect — org refresh is driven by invalidate/refetch.
@@ -117,8 +118,8 @@ class TestInstallPageTypeScriptSnippet:
 
 
 class TestUseOrgPicksCurrentOrgRole:
-    """``hooks/use-org.tsx`` must filter ``userMemberships.data`` by
-    the active Clerk org id, not always pick the first item.
+    """``hooks/use-org.tsx`` must report the *active* Clerk org's
+    role, never the first entry of the membership list.
     """
 
     def test_no_first_element_access(self) -> None:
@@ -129,16 +130,30 @@ class TestUseOrgPicksCurrentOrgRole:
         )
 
     def test_filters_by_active_org_id(self) -> None:
-        """The fix uses ``.find(m => m.organization?.id === clerkOrg.id)``
-        so each org's role is honored."""
+        """Role must come from an active-org-scoped source.
+
+        The original fix hand-filtered ``userMemberships.data`` with
+        ``.find(m => m.organization?.id === clerkOrg.id)``. The hook
+        was since simplified to destructure ``membership`` from
+        ``useOrganization()`` — Clerk already scopes that to the
+        active organization, so it is the same invariant with the
+        filtering done upstream (and no list-pagination footgun).
+        Accept either shape; reject anything unscoped.
+        """
         source = _read("src/hooks/use-org.tsx")
-        assert "userMemberships.data?.find" in source, (
-            "PQ-8 regression: use-org must filter userMemberships by "
-            "the active Clerk org id"
+        filters_membership_list = (
+            "userMemberships.data?.find" in source
+            and "m.organization?.id === clerkOrg.id" in source
         )
-        assert "m.organization?.id === clerkOrg.id" in source, (
-            "PQ-8 regression: use-org's find predicate must compare "
-            "m.organization.id to clerkOrg.id"
+        uses_active_org_membership = (
+            "membership" in source
+            and "useOrganization()" in source
+            and "clerkOrgRole: membership?.role" in source
+        )
+        assert filters_membership_list or uses_active_org_membership, (
+            "PQ-8 regression: use-org must derive clerkOrgRole from the "
+            "ACTIVE org — either useOrganization()'s `membership` or a "
+            "userMemberships.data.find() keyed on clerkOrg.id"
         )
 
     def test_role_still_returned(self) -> None:

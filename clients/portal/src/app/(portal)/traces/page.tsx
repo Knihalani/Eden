@@ -1,4 +1,4 @@
-import { HydrationBoundary } from "@tanstack/react-query";
+import { HydrationBoundary, type DehydratedState } from "@tanstack/react-query";
 import { dehydrateTraces } from "@/lib/portal-dehydrate";
 import { resolvePortalPrefetchAuth } from "@/lib/portal-ssr";
 import TracesClient from "./traces-client";
@@ -9,17 +9,23 @@ import TracesClient from "./traces-client";
  */
 export default async function TracesPage() {
   const auth = await resolvePortalPrefetchAuth();
-  if (!auth?.orgId) {
+  // JSX must be constructed outside the try/catch (react-hooks/error-boundaries):
+  // rendering happens after this function returns, so a try/catch around the
+  // JSX would never catch a render error anyway. Only the await is guarded.
+  let dehydratedState: DehydratedState | null = null;
+  if (auth?.orgId) {
+    try {
+      dehydratedState = await dehydrateTraces(auth);
+    } catch {
+      dehydratedState = null; // prefetch is an optimisation — fall back to client fetch
+    }
+  }
+  if (!dehydratedState) {
     return <TracesClient />;
   }
-  try {
-    const dehydratedState = await dehydrateTraces(auth);
-    return (
-      <HydrationBoundary state={dehydratedState}>
-        <TracesClient />
-      </HydrationBoundary>
-    );
-  } catch {
-    return <TracesClient />;
-  }
+  return (
+    <HydrationBoundary state={dehydratedState}>
+      <TracesClient />
+    </HydrationBoundary>
+  );
 }

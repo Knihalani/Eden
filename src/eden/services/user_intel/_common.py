@@ -283,10 +283,17 @@ def _fire_low_satisfaction_alert(
         return
     severity = "high" if coverage_weighted < 0.2 else "medium"
     try:
-        hook.on_drift_alert(
-            org_id,
-            drift_type="low_user_satisfaction",
-            severity=severity,
+        # ``on_drift_alert`` is ``async def`` and this helper is sync —
+        # a bare call dropped every low-satisfaction alert on the floor.
+        from eden.async_tasks import fire_and_forget
+
+        fire_and_forget(
+            hook.on_drift_alert(
+                org_id,
+                drift_type="low_user_satisfaction",
+                severity=severity,
+            ),
+            name="user-intel-low-satisfaction-hook",
         )
     except Exception as exc:
         logger.debug("user_intel: on_drift_alert failed: %s", exc)

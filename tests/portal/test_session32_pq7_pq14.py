@@ -2,11 +2,15 @@
 
 Five audit items from Part G "Portal polish" final pass:
 
-* **PQ-7** — Replace bare ``Loader2`` spinners in the loading
-  states of ``TracesTab`` (``observability/_components``) with
-  shared ``Skeleton`` / ``SkeletonTableRow``. The old
-  ``observability/page.tsx`` HubTile landing is retired (redirect
-  to ``/traces``); hub loading polish lives on the traces shell.
+* **PQ-7** — Replace bare ``Loader2`` spinners in the traces hub's
+  loading state with the *shared* loading placeholder so the page
+  doesn't visually jump when the real rows arrive. Audit 2026-07-28:
+  the ``observability/`` route group is gone — ``TracesTab.tsx`` and
+  ``observability/page.tsx`` were deleted, ``/observability*`` now
+  redirects to ``/traces`` (next.config.ts), and the shared
+  ``components/ui/skeleton`` module was superseded by
+  ``QueryLoadingPanel`` in ``@/components/shell/query-error-panel``.
+  The guards were repointed onto those successors.
 * **PQ-9** — The previously orphan "Add / Update payment method"
   button in ``billing/page.tsx`` is wired through a handler with
   a ``try/catch`` + ``toast.error`` so backend failures surface
@@ -25,6 +29,7 @@ Five audit items from Part G "Portal polish" final pass:
 
 from __future__ import annotations
 
+from functools import lru_cache
 from pathlib import Path
 
 import pytest
@@ -34,6 +39,9 @@ from tests._portal_api_source import portal_api_source
 _PORTAL_ROOT = Path(__file__).parent.parent.parent / "clients/portal"
 
 
+# Cached: the repo-wide PQ-14 sweep below reads every portal client
+# source once per assertion, and the sources can't change mid-run.
+@lru_cache(maxsize=None)
 def _read(rel: str) -> str:
     if rel in ("src/lib/api.ts", "src/lib/api"):
         raw = portal_api_source()
@@ -50,85 +58,89 @@ def _read(rel: str) -> str:
 # ─── PQ-7 — Skeletons replace bare spinners ────────────────────
 
 
+# The traces hub's client component. Successor to the deleted
+# ``(portal)/observability/_components/TracesTab.tsx`` — the
+# ``observability`` route group was removed and its tabs were folded
+# into first-class routes, with the traces tab becoming ``/traces``.
+_TRACES_CLIENT = "src/app/(portal)/traces/traces-client.tsx"
+
+# Successor to the deleted ``@/components/ui/skeleton`` module: the
+# portal's one shared loading placeholder.
+_SHARED_LOADING_MODULE = "@/components/shell/query-error-panel"
+_SHARED_LOADING_COMPONENT = "QueryLoadingPanel"
+
+
 class TestTracesTabSkeletonRows:
-    """``TracesTab`` renders 8 ``SkeletonTableRow`` placeholders
-    when ``loading && traces.length === 0`` so the page doesn't
+    """The traces hub renders the *shared* loading placeholder while
+    the trace/session queries are in flight, so the page doesn't
     visually jump when the real rows arrive.
     """
 
     def test_uses_skeleton_table_row(self) -> None:
-        source = _read(
-            "src/app/(portal)/observability/_components/TracesTab.tsx"
-        )
-        assert "SkeletonTableRow" in source, (
-            "PQ-7 regression: TracesTab must render SkeletonTableRow "
-            "placeholders during initial load"
+        source = _read(_TRACES_CLIENT)
+        assert _SHARED_LOADING_COMPONENT in source, (
+            f"PQ-7 regression: {_TRACES_CLIENT} must render "
+            f"<{_SHARED_LOADING_COMPONENT}> placeholders during "
+            "initial load"
         )
 
     def test_imports_from_skeleton_module(self) -> None:
-        """The component imports ``SkeletonTableRow`` from the
-        shared skeleton module, not from a fresh local definition."""
-        source = _read(
-            "src/app/(portal)/observability/_components/TracesTab.tsx"
+        """The component imports the placeholder from the shared
+        module, not from a fresh local definition."""
+        source = _read(_TRACES_CLIENT)
+        assert f'from "{_SHARED_LOADING_MODULE}"' in source, (
+            f"PQ-7 regression: must import {_SHARED_LOADING_COMPONENT} "
+            f"from {_SHARED_LOADING_MODULE}"
         )
-        assert (
-            'import { SkeletonTableRow } from "@/components/ui/skeleton"'
-            in source
-        ), "PQ-7 regression: must import SkeletonTableRow from /components/ui/skeleton"
 
     def test_no_bare_loader2_spinner(self) -> None:
         """The bare ``<Loader2 ... animate-spin ... />`` in the
         initial-load branch is gone."""
-        source = _read(
-            "src/app/(portal)/observability/_components/TracesTab.tsx"
-        )
+        source = _read(_TRACES_CLIENT)
         # Loader2 should not appear — the import was removed.
         assert "Loader2" not in source, (
-            "PQ-7 regression: TracesTab still has Loader2 "
-            "(should be replaced by SkeletonTableRow)"
+            "PQ-7 regression: traces hub still has Loader2 "
+            f"(should be replaced by {_SHARED_LOADING_COMPONENT})"
         )
 
 
 class TestObservabilityHubTileSkeleton:
     """``/observability`` landing is retired (redirect → ``/traces``).
 
-    HubTile Skeleton polish no longer applies on that route; the
-    traces shell must still use shared skeleton loading.
+    The HubTile ``value === null`` Skeleton branch no longer exists —
+    the landing page file is gone and the redirect now lives in
+    ``next.config.ts``. What survives of the invariant: the redirect
+    must still be wired (so the retired hub can't 404), and the
+    successor shell must load through the shared placeholder rather
+    than a bare spinner.
     """
 
     def test_uses_skeleton_class(self) -> None:
-        obs = _read("src/app/(portal)/observability/page.tsx")
-        if "redirect(" in obs and "Skeleton" not in obs:
-            traces = _read("src/app/(portal)/traces/page.tsx")
-            assert "LoadingSkeleton" in traces or "Skeleton" in traces, (
-                "PQ-7 regression: traces hub (successor to "
-                "observability landing) must use Skeleton loading"
-            )
-            return
-        assert "Skeleton" in obs, (
-            "PQ-7 regression: observability page must import and "
-            "use Skeleton (HubTile's value === null branch)"
+        config = _read("next.config.ts")
+        assert '"/observability"' in config and '"/traces"' in config, (
+            "PQ-7 regression: the retired /observability landing must "
+            "still redirect to /traces in next.config.ts"
+        )
+        traces = _read(_TRACES_CLIENT)
+        assert _SHARED_LOADING_COMPONENT in traces, (
+            "PQ-7 regression: traces hub (successor to the "
+            "observability landing) must use the shared loading "
+            "placeholder"
         )
 
     def test_imports_skeleton(self) -> None:
-        """Landing redirect is N/A; traces imports shared skeleton."""
-        obs_path = (
-            _PORTAL_ROOT / "src/app/(portal)/observability/page.tsx"
+        """Landing redirect is N/A; the traces shell imports the
+        shared placeholder from the shared module."""
+        obs_path = _PORTAL_ROOT / "src/app/(portal)/observability/page.tsx"
+        assert not obs_path.is_file(), (
+            "The observability landing is back — restore the original "
+            "HubTile Skeleton assertions instead of the redirect guard"
         )
-        obs = _read("src/app/(portal)/observability/page.tsx")
-        if obs_path.is_file() and "redirect(" in obs and "Skeleton" not in obs:
-            traces = _read("src/app/(portal)/traces/page.tsx")
-            assert (
-                'from "@/components/ui/skeleton"' in traces
-            ), (
-                "PQ-7 regression: traces page must import skeleton "
-                "from /components/ui/skeleton"
-            )
-            return
-        assert (
-            'import { Skeleton } from "@/components/ui/skeleton"'
-            in obs
-        ), "PQ-7 regression: must import Skeleton from /components/ui/skeleton"
+        traces = _read(_TRACES_CLIENT)
+        assert f'from "{_SHARED_LOADING_MODULE}"' in traces, (
+            "PQ-7 regression: traces hub must import "
+            f"{_SHARED_LOADING_COMPONENT} from {_SHARED_LOADING_MODULE}"
+        )
 
 
 # ─── PQ-9 — Orphan button gets a handler + toast ────────────────
@@ -236,16 +248,39 @@ class TestApiErrorClass:
 
 
 # Files that previously re-defined API_BASE; each must now import
-# from @/lib/api. webhooks-dlq FS route is redirect-only — canonical
-# UI is the settings tab component.
+# from @/lib/api.
+#
+# Audit 2026-07-28 — the ``optimization/`` and ``observability/``
+# route groups were dissolved by the portal refactor, so the original
+# list pointed at six deleted files. Each entry was repointed at the
+# surface that inherited its API calls:
+#
+#   optimization/budget/page.tsx      → cost/page.tsx
+#                                       (/optimization/budget →
+#                                       /cost?tab=budget in
+#                                       next.config.ts; the budget
+#                                       reads now come from
+#                                       @/lib/api/budget)
+#   observability/cohorts/page.tsx    → traces/traces-client.tsx
+#   observability/time-travel/page.tsx  (both redirect to /traces)
+#   settings/_components/            → settings/page.tsx
+#     webhooks-dlq-tab.tsx             (the per-tab components were
+#                                       folded into one page; the DLQ
+#                                       calls live in @/lib/api
+#                                       resources)
+#   components/budget-ticker.tsx     → no successor component; the
+#   components/streaming-sparkline.tsx  live cost/stream widgets were
+#                                       removed in 9a1452b4. Their
+#                                       half of the invariant is held
+#                                       by TestNoLocalApiBaseAnywhere
+#                                       below, which sweeps every
+#                                       portal page + component
+#                                       instead of a hardcoded list.
 _PQ14_FILES = [
-    "src/app/(portal)/optimization/budget/page.tsx",
-    "src/app/(portal)/settings/_components/webhooks-dlq-tab.tsx",
-    "src/app/(portal)/observability/cohorts/page.tsx",
-    "src/app/(portal)/observability/time-travel/page.tsx",
+    "src/app/(portal)/cost/page.tsx",
+    "src/app/(portal)/settings/page.tsx",
+    "src/app/(portal)/traces/traces-client.tsx",
     "src/app/(portal)/prompts/page.tsx",
-    "src/components/budget-ticker.tsx",
-    "src/components/streaming-sparkline.tsx",
 ]
 
 
@@ -285,6 +320,74 @@ class TestPagesImportCanonicalApiBase:
             f"PQ-14 regression: {rel_path} still hardcodes "
             'the "http://localhost:8000" fallback (silently '
             "bypasses the proxy in production)"
+        )
+
+
+def _client_sources() -> list[str]:
+    """Every portal page / shared component source file.
+
+    These all run in the browser, so none of them may define its own
+    ``API_BASE`` or hardcode the dev FastAPI origin — the canonical
+    base lives in ``src/lib/api/core.ts`` and resolves to the
+    same-origin ``/api/proxy`` in production. Server-only code
+    (``src/app/api/**`` route handlers, ``src/lib/**``) is excluded:
+    those legitimately read ``API_INTERNAL_URL`` with a
+    ``http://localhost:8000`` dev fallback.
+    """
+    roots = (
+        _PORTAL_ROOT / "src/app/(portal)",
+        _PORTAL_ROOT / "src/components",
+    )
+    out: list[str] = []
+    for root in roots:
+        if not root.is_dir():
+            continue
+        for path in sorted(root.rglob("*.tsx")) + sorted(root.rglob("*.ts")):
+            name = path.name
+            if ".test." in name or ".spec." in name:
+                continue
+            if "__tests__" in path.parts:
+                continue
+            out.append(str(path.relative_to(_PORTAL_ROOT)))
+    return out
+
+
+class TestNoLocalApiBaseAnywhere:
+    """Repo-wide half of PQ-14.
+
+    The original guard listed the handful of files that were caught
+    re-defining ``API_BASE`` in the 2026 audit; several of those files
+    have since been deleted. Sweeping every client source keeps the
+    invariant enforced without a list that goes stale each refactor.
+    """
+
+    def test_sweep_is_not_empty(self) -> None:
+        """Guard the guard — a bad glob must not silently pass."""
+        files = _client_sources()
+        assert len(files) > 20, (
+            f"PQ-14 sweep found only {len(files)} client sources — "
+            "the glob is broken, not the portal"
+        )
+
+    def test_no_client_file_redefines_api_base(self) -> None:
+        offenders = [
+            rel for rel in _client_sources() if "API_BASE =" in _read(rel)
+        ]
+        assert not offenders, (
+            "PQ-14 regression: client sources re-defining API_BASE "
+            f"(must import it from @/lib/api): {offenders}"
+        )
+
+    def test_no_client_file_hardcodes_localhost(self) -> None:
+        offenders = [
+            rel
+            for rel in _client_sources()
+            if '"http://localhost:8000"' in _read(rel)
+        ]
+        assert not offenders, (
+            "PQ-14 regression: client sources hardcoding the "
+            '"http://localhost:8000" fallback (silently bypasses the '
+            f"proxy in production): {offenders}"
         )
 
 

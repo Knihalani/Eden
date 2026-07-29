@@ -413,39 +413,61 @@ function LabAgentInner() {
         const reader = res.body.getReader();
         const decoder = new TextDecoder();
         let buffer = "";
-        while (true) {
-          const { value, done } = await reader.read();
-          if (done) break;
-          buffer += decoder.decode(value, { stream: true });
-          let boundary: number;
-          while ((boundary = buffer.indexOf("\n\n")) >= 0) {
-            const frame = buffer.slice(0, boundary);
-            buffer = buffer.slice(boundary + 2);
-            const chunk = parseSseFrame(frame);
-            if (!chunk) continue;
-            if (chunk.type === "text_delta" && chunk.text) {
-              textSoFar += chunk.text;
-              gotContent = true;
-              upsert();
-            } else if (chunk.type === "citation" && chunk.citation) {
-              citations.push(mapCitation(chunk.citation));
-              gotContent = true;
-              upsert();
-            } else if (chunk.type === "chart" && chunk.chart) {
-              const artifact = mapChart(chunk.chart);
-              if (artifact) {
-                artifacts.push(artifact);
+        try {
+          while (true) {
+            // PQ-3: bail the moment the user hits stop / switches
+            // thread / unmounts. Without this the loop keeps decoding
+            // and flushing already-buffered frames into a thread the
+            // user has abandoned, and the half-drained body stays
+            // open until GC gets around to it.
+            if (controller.signal.aborted) break;
+            const { value, done } = await reader.read();
+            if (done) break;
+            buffer += decoder.decode(value, { stream: true });
+            let boundary: number;
+            while ((boundary = buffer.indexOf("\n\n")) >= 0) {
+              const frame = buffer.slice(0, boundary);
+              buffer = buffer.slice(boundary + 2);
+              const chunk = parseSseFrame(frame);
+              if (!chunk) continue;
+              if (chunk.type === "text_delta" && chunk.text) {
+                textSoFar += chunk.text;
                 gotContent = true;
                 upsert();
+              } else if (chunk.type === "citation" && chunk.citation) {
+                citations.push(mapCitation(chunk.citation));
+                gotContent = true;
+                upsert();
+              } else if (chunk.type === "chart" && chunk.chart) {
+                const artifact = mapChart(chunk.chart);
+                if (artifact) {
+                  artifacts.push(artifact);
+                  gotContent = true;
+                  upsert();
+                }
+              } else if (chunk.type === "summary" || chunk.type === "connected") {
+                if (chunk.conversation_id && chunk.conversation_id !== "new") {
+                  conversationIdsRef.current[threadId] = chunk.conversation_id;
+                }
+              } else if (chunk.type === "error") {
+                throw new Error(chunk.error || chunk.message || "Assistant error.");
               }
-            } else if (chunk.type === "summary" || chunk.type === "connected") {
-              if (chunk.conversation_id && chunk.conversation_id !== "new") {
-                conversationIdsRef.current[threadId] = chunk.conversation_id;
-              }
-            } else if (chunk.type === "error") {
-              throw new Error(chunk.error || chunk.message || "Assistant error.");
             }
           }
+        } finally {
+          // PQ-3: release the body on every exit path (abort, thrown
+          // SSE error frame, early break) so the upstream connection
+          // is torn down immediately rather than left billing.
+          // No-op when the stream already ran to completion.
+          await reader.cancel().catch(() => {});
+        }
+
+        // Breaking on the signal above means the loop can now finish
+        // normally on abort, where it used to reject out of read().
+        // Re-raise so the shared catch still renders the "Stopped."
+        // affordance instead of falling through to a success render.
+        if (controller.signal.aborted) {
+          throw new DOMException("Aborted", "AbortError");
         }
 
         if (!gotContent) {

@@ -20,7 +20,10 @@ from eden.automations.engine import AutomationsEngine
 from eden.evaluation.categorical_classifier import CategoricalClassifierService
 from eden.evaluation.code_evaluator import CodeEvaluatorRunner
 from eden.evaluation.ci_webhook import CIWebhookHandler
-from eden.evaluation.online.rules_engine import OnlineScoringRulesEngine
+from eden.evaluation.online.rules_engine import (
+    DEFAULT_NEW_RULE_SAMPLE_RATE,
+    OnlineScoringRulesEngine,
+)
 from eden.evaluation.online.span_scores import SpanScoreStore
 from eden.evaluation.sql_export import SqlExportService
 from eden.monitoring.dashboards import MonitoringDashboardService
@@ -69,7 +72,12 @@ class RuleCreate(BaseModel):
     filter_query: str = ""
     scorer_type: str = "slm"
     scorer_ref: str | None = None
-    sample_rate: float = Field(1.0, ge=0.0, le=1.0)
+    # Must track ``rules_engine.DEFAULT_NEW_RULE_SAMPLE_RATE``. The route
+    # hands the whole model to ``create_rule`` via ``**model_dump()``,
+    # which always emits this field — so a literal default here silently
+    # shadows the engine's and every new rule scores 100% of traffic with
+    # an LLM call. Existing persisted rules are untouched.
+    sample_rate: float = Field(DEFAULT_NEW_RULE_SAMPLE_RATE, ge=0.0, le=1.0)
     config: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -360,10 +368,25 @@ async def cost_kpi(
             args.extend([property_key, property_value])
             where += f" AND tags->>${len(args)-1} = ${len(args)}"
         try:
+            # ``telemetry_events`` has no ``cost_usd`` /
+            # ``prompt_cache_savings_usd`` column (alembic 009) — cost is
+            # carried in the ``metrics`` / ``payload`` / ``attributes``
+            # JSONB. Selecting the bare columns raised, the raise was
+            # swallowed by the ``except Exception: pass`` below, and the
+            # Postgres branch of the Home KPI tiles silently reported
+            # zero traces for every org without ClickHouse configured.
+            # Same COALESCE ladder as routes/observability.py:470.
             cur = await client.fetchrow(
-                f"SELECT coalesce(sum(cost_usd),0) AS cost, "
+                f"SELECT coalesce(sum(COALESCE("
+                f"  NULLIF(metrics->>'cost_usd', '')::float,"
+                f"  NULLIF(payload->>'cost_usd', '')::float,"
+                f"  NULLIF(attributes->>'cost_usd', '')::float"
+                f")),0) AS cost, "
                 f"count(DISTINCT trace_id) AS traces, "
-                f"coalesce(sum(prompt_cache_savings_usd),0) AS cache_savings "
+                f"coalesce(sum(COALESCE("
+                f"  NULLIF(metrics->>'prompt_cache_savings_usd', '')::float,"
+                f"  NULLIF(payload->>'prompt_cache_savings_usd', '')::float"
+                f")),0) AS cache_savings "
                 f"FROM telemetry_events WHERE {where}",
                 *args,
             )
@@ -383,8 +406,12 @@ async def cost_kpi(
                     ledger_cost = float(cur["cost"] or 0)
             if prev:
                 prev_traces = int(prev["traces"] or 0)
-        except Exception:
-            pass
+        except Exception as exc:
+            # Was a bare ``pass``, which is how a nonexistent-column query
+            # sat here undetected. Degrade to zeros, but say so.
+            logger.warning(
+                "f60 home KPI postgres query failed: %s", redact_all(str(exc))
+            )
 
     delta = ledger_cost - prev_cost
     delta_pct = round((delta / prev_cost) * 100, 2) if prev_cost else None

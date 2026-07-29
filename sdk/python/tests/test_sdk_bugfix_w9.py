@@ -27,7 +27,20 @@ def test_client_user_agent_version_matches_package() -> None:
     import eden_sdk
 
     assert client_version == eden_sdk.__version__
-    assert client_version == "0.3.4"
+    # Pin against pyproject rather than a literal: the version lives in
+    # three places (pyproject, __init__, client) and the risk worth
+    # guarding is drift between them, not the specific number. A literal
+    # here just means every release bump breaks a test for no signal.
+    import re
+    from pathlib import Path
+
+    pyproject = (
+        Path(__file__).resolve().parents[1] / "pyproject.toml"
+    ).read_text(encoding="utf-8")
+    declared = re.search(r'^version\s*=\s*"([^"]+)"', pyproject, re.MULTILINE)
+    assert declared, "version not found in sdk/python/pyproject.toml"
+    assert client_version == declared.group(1)
+
     from eden_sdk.client import _USER_AGENT
 
     assert _USER_AGENT == f"eden-sdk/{client_version} (python)"

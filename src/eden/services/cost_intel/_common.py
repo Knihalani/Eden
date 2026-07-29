@@ -600,10 +600,17 @@ def _fire_cost_anomaly_alert(
         return
     for a in high:
         try:
-            hook.on_drift_alert(
-                org_id,
-                drift_type="cost_anomaly",
-                severity=a["severity"],
+            # ``on_drift_alert`` is ``async def`` and this helper is sync —
+            # a bare call dropped every cost-anomaly alert on the floor.
+            from eden.async_tasks import fire_and_forget
+
+            fire_and_forget(
+                hook.on_drift_alert(
+                    org_id,
+                    drift_type="cost_anomaly",
+                    severity=a["severity"],
+                ),
+                name="cost-intel-anomaly-drift-hook",
             )
         except Exception as exc:
             logger.debug(

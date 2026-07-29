@@ -95,51 +95,15 @@ async def test_put_pii_policy_bad_uuid_is_400():
 
 
 @pytest.mark.asyncio
-async def test_put_region_fk_is_404_not_500():
-    from eden.api.routes import region as mod
+async def test_region_route_removed():
+    """Data-residency regions were removed with the portal live wire-up
+    (9a1452b4). The two ``put_region`` status-mapping guards that lived
+    here pointed at a module that no longer exists; assert the removal so
+    the intent survives without a permanently failing import."""
+    import importlib
 
-    client = MagicMock()
-    client.execute = AsyncMock(
-        side_effect=Exception(
-            'insert or update on table "organizations" violates foreign key constraint'
-        )
-    )
-
-    with (
-        patch.object(mod, "require_org_permission", AsyncMock(return_value=None)),
-        patch.object(mod, "get_postgres_client", AsyncMock(return_value=client)),
-    ):
-        with pytest.raises(HTTPException) as ei:
-            await mod.put_region(
-                body=mod.RegionIn(region="us"),
-                org_id=ORG,
-                user={"user_id": USER},
-                payload={"sub": USER},
-            )
-        assert ei.value.status_code == 404
-
-
-@pytest.mark.asyncio
-async def test_put_region_other_db_error_is_503():
-    from eden.api.routes import region as mod
-
-    client = MagicMock()
-    client.execute = AsyncMock(
-        side_effect=Exception("connection reset by peer")
-    )
-
-    with (
-        patch.object(mod, "require_org_permission", AsyncMock(return_value=None)),
-        patch.object(mod, "get_postgres_client", AsyncMock(return_value=client)),
-    ):
-        with pytest.raises(HTTPException) as ei:
-            await mod.put_region(
-                body=mod.RegionIn(region="us"),
-                org_id=ORG,
-                user={"user_id": USER},
-                payload={"sub": USER},
-            )
-        assert ei.value.status_code == 503
+    with pytest.raises(ModuleNotFoundError):
+        importlib.import_module("eden.api.routes.region")
 
 
 @pytest.mark.asyncio

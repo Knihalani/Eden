@@ -296,6 +296,13 @@ def _build_settings_class():
         patch_max_generates_per_sweep: int = 3
         # Hard stop on LLM calls inside one sweep (gen+critic+margin).
         patch_max_llm_calls_per_sweep: int = 8
+        # COST: the same hard stop for patch generation reached OUTSIDE a
+        # sweep (closed-loop ``propose_patch`` actions, promotion hooks).
+        # Those paths never armed the sweep budget, so ``try_consume_llm_call``
+        # was unlimited there -- one runaway action could fan out unbounded
+        # gen+critic pairs. Smaller than the sweep budget because a single
+        # action proposes a single patch (2 attempts x gen+critic = 4).
+        patch_max_llm_calls_per_run: int = 4
         # Triage confidence floor before PatchGenerator runs.
         patch_min_triage_confidence: float = 0.65
         # ``patch_similarity_threshold`` (0.0-1.0) — when a freshly-generated
@@ -338,6 +345,17 @@ def _build_settings_class():
         # suite asserts the default is 4096 (Phase C-7 rollback
         # preserves the original OpenRouter limit).
         gateway_max_tokens_cap: int = 4096
+
+        # Semantic prompt cache (eden.optimization.cache.SemanticCache).
+        # COST: every cache-miss used to embed the prompt TWICE -- once in
+        # ``.get`` to search, once again in ``.set`` to store the identical
+        # normalized text. The embedding is now computed once and reused,
+        # but this flag stays so the embedding spend can be killed without
+        # a redeploy.
+        semantic_cache_v1: bool = True
+        # Embedding model id was hardcoded at the call site, so the
+        # cheapest-model choice could not be changed without a code change.
+        semantic_cache_embed_model: str = "openai/text-embedding-3-small"
 
         # Phase R — stdlib ``logging`` shim (Logfire-style 5-min
         # time-to-first-log). When the user calls ``eden.install()`` (or
@@ -616,13 +634,18 @@ def _build_settings_class():
         # ``src/eden/insights/detector_loop.py`` does that, started
         # from the FastAPI lifespan.
         insights_loop_enabled: bool = True
-        insights_loop_interval_seconds: float = 180.0
+        # 1200s = 2x the 600s shared idle grid period, so this loop
+        # coalesces with the other leader loops instead of waking Neon on
+        # its own phase. Was 180.0 (off-grid, ~4x the Redis cost).
+        insights_loop_interval_seconds: float = 1200.0
         insights_loop_batch_size: int = 200
         insights_loop_max_runtime_seconds: float = 50.0
 
         # Anomaly detection background loop (data platform).
         anomaly_loop_enabled: bool = True
-        anomaly_loop_interval_seconds: float = 900.0
+        # 1200s = 2x the 600s shared idle grid. Was 900.0, which is not a
+        # grid multiple and so re-fragmented the DB-quiet window.
+        anomaly_loop_interval_seconds: float = 1200.0
 
         # Judge Redis tailer — off by default to limit LLM cost.
         judges_async_tailer_enabled: bool = False
@@ -630,9 +653,18 @@ def _build_settings_class():
         # UnifiedJudge LLM — OFF by default. Layer A owns production
         # float scores; flip on only for shadow calibration / HIL.
         judges_llm_v1: bool = False
-        # T1 ModelRouter annotator — 100% coverage after Layer A.
+        # T1 ModelRouter annotator — runs after Layer A.
         # Writes eval:llm:* search tags only (never Issues).
         trace_annotator_v1: bool = True
+        # COST: fraction of finalized traces that get an LLM annotation.
+        # This used to be 100% coverage with no sampling and no budget, so
+        # annotator spend scaled linearly with ingest volume and nothing
+        # capped it. The sample is taken deterministically off the trace id
+        # so the finalized-trace consumer's retry ladder cannot re-roll it.
+        # 0.1 keeps the eval:llm:* tag corpus statistically useful at ~1/10
+        # the cost. Set TRACE_ANNOTATOR_SAMPLE_RATE=1.0 to restore old
+        # behaviour, 0.0 to disable sampling-based annotation entirely.
+        trace_annotator_sample_rate: float = 0.1
 
         # Feature flags
         # Default OFF: legacy experiments / eval-harness routes (chain, experiments,
@@ -865,6 +897,71 @@ def _build_settings_class():
         verify_empty_cooldown_seconds: float = 600.0
         insights_empty_cooldown_seconds: float = 600.0
         eql_empty_cooldown_seconds: float = 600.0
+
+        # ── Idle-cost budget: Upstash Redis free tier = 10k commands/day ──
+        # Everything below exists to keep a *zero-traffic* deployment far
+        # under that ceiling, and to keep Neon's ~300s autosuspend window
+        # reachable. Intervals are deliberately multiples of
+        # ``idle_poll_period_seconds`` (600s) so every loop lands on the
+        # same shared wall-clock grid (see eden.storage.empty_cooldown) —
+        # raising one interval in isolation does not help.
+
+        # Sidecar guard lock. The holder renews forever, even uncontended,
+        # and each renew is one Lua EVAL = 1 Upstash command. At the old
+        # TTL=60s/renew=20s that was 4,320 commands/day on its own — 43% of
+        # the entire free tier, burned by a lock nobody contends. TTL 600s
+        # with a 200s renew costs 432/day. Renew must stay < TTL/2 so a
+        # slow tick cannot let the lock lapse; the cost is that a
+        # hard-crashed holder blocks sidecar failover for up to one TTL.
+        sidecar_guard_ttl_seconds: int = 600
+        sidecar_guard_renew_seconds: float = 200.0
+
+        # Leader-gated loop cadences. Each tick costs 2 Redis commands
+        # (SET NX acquire + Lua EVAL release) plus renews while work runs.
+        # All are grid multiples so they coalesce onto the same boundaries
+        # instead of each carving its own hole in the DB-quiet window.
+        # 1200s = 2 grid periods => 72 ticks/day => 144 commands/day each.
+        # (``insights_loop_interval_seconds`` itself is declared above with
+        # the other insights settings; its default is now 1200.0.)
+        eql_watchdog_interval_seconds: float = 1200.0
+        # Demotion is a 7-day nudge sweep; hourly was far more often than
+        # the semantics need. 6 grid periods = 3600s, now grid-aligned.
+        artifact_demotion_interval_seconds: float = 3600.0
+        # Webhook drain is the one loop with a real latency SLA. It stays
+        # on the grid but at a single period (600s) rather than 120s;
+        # enqueue paths publish a Redis signal that short-circuits the
+        # empty cooldown, so real deliveries do not wait for the tick.
+        webhook_drain_interval_seconds: float = 600.0
+        # Closed-loop verify: the file previously carried three different
+        # defaults for this one interval (180/60/180). One grid-aligned
+        # value, used everywhere.
+        verify_loop_interval_seconds: float = 600.0
+
+        # Anomaly detector: ran every 900s, which is not a multiple of the
+        # 600s grid, so it re-fragmented the quiet window every cycle, and
+        # it hit Postgres unconditionally (6 gathered queries + persist)
+        # with no empty-result cooldown. 1200s = 2 grid periods.
+        # (``anomaly_loop_interval_seconds`` is declared above with the
+        # other anomaly settings; its default is now 1200.0.)
+        anomaly_empty_cooldown_seconds: float = 600.0
+
+        # Self-obs probes: telemetry about ourselves, not user-facing. The
+        # tick used to walk up to 500 orgs *serially* at >=3 PG writes
+        # each — >=1,500 round trips per tick, long enough that Postgres
+        # never went idle no matter how the loop was phased. Probe a small
+        # rotating subset per tick instead, concurrently, with the
+        # heartbeats batched into one multi-row INSERT. At 25 orgs/tick and
+        # a 600s grid the full fleet is still covered every ~2h for 500
+        # orgs, which is ample for a liveness signal.
+        self_obs_probe_org_budget: int = 25
+        self_obs_probe_concurrency: int = 8
+
+        # Bounded in-memory caches. The gateway mints a unique trace_id per
+        # request, so these dicts previously grew by one entry per request
+        # and were never evicted — an unbounded leak in a long-lived API
+        # process. 4096 mirrors ``_numsub_cache`` in
+        # api/routes/observability_stream.py.
+        checkpoint_expire_cache_max: int = 4096
 
         # Per-action kill-switch defaults mirrored into
         # ``tenant_guardrail_action_config`` (read-only True, mutating

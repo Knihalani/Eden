@@ -1,127 +1,173 @@
 """F71 — Marketing footer with CCPA "Do Not Sell" link.
 
-Per the prod-ready checklist §1.5: every marketing page MUST
-surface the "Do Not Sell My Personal Information" link so
-California residents can opt out. Pre-F71 the link was only on
-the marketing homepage footer; the legal pages
-(/privacy, /terms, /dpa, /security) used a ``LegalPage`` shell
-that had no footer at all. F71 adds a shared marketing footer
-to ``LegalPage`` with the Do Not Sell link.
+Per the prod-ready checklist §1.5: every marketing page MUST surface the
+"Do Not Sell My Personal Information" link so California residents can
+find the opt-out disclosure. Pre-F71 the link was only on the marketing
+homepage footer; the legal pages (/privacy, /terms, /dpa, /security)
+used a ``LegalPage`` shell that had no footer at all.
 
-This test pins the footer at the source level (no test runner
-is set up for the portal yet) so a future refactor that
-removes the link fails the test.
+2026-07 refresh — the portal marketing refactor deleted
+``components/layout/legal-page.tsx`` entirely. The invariant did NOT go
+away, it moved up a level and got *stronger*: legal pages are now plain
+routes under the ``(marketing)`` route group, and
+``app/(marketing)/layout.tsx`` renders the shared ``MarketingFooter``
+around all of them. So rather than pinning one shell component, these
+tests pin the two things that actually make the guarantee hold:
+
+1. the ``(marketing)`` layout wraps every page in ``MarketingFooter``, and
+2. ``MarketingFooter`` carries the CCPA link and the legal link set.
+
+That covers strictly more pages than the old ``LegalPage`` guard did
+(the whole marketing surface, not just the four legal docs).
+
+One assertion was retired rather than repointed — see
+``test_do_not_sell_page_states_the_non_sale_disclosure`` for why the
+POST-form check no longer applies.
 """
 
 from __future__ import annotations
 
-import inspect
 import re
+from pathlib import Path
+
+_PORTAL_SRC = (
+    Path(__file__).resolve().parents[3] / "clients" / "portal" / "src"
+)
+
+_MARKETING_APP = _PORTAL_SRC / "app" / "(marketing)"
+_FOOTER_PATH = _PORTAL_SRC / "components" / "marketing" / "marketing-footer.tsx"
+_MARKETING_LAYOUT_PATH = _MARKETING_APP / "layout.tsx"
+
+# The legal docs that must inherit the footer.
+_LEGAL_ROUTES = ("privacy", "terms", "dpa", "security")
 
 
-def _get_legal_page_source() -> str:
-    """Read the ``LegalPage`` component source for source-level pinning."""
-    # The component lives in the portal; import lazily so the
-    # backend test suite doesn't pull in the React tree.
-    from pathlib import Path
+def _footer_source() -> str:
+    return _FOOTER_PATH.read_text()
 
-    src = (
-        Path(__file__).parent.parent.parent.parent
-        / "clients"
-        / "portal"
-        / "src"
-        / "components"
-        / "layout"
-        / "legal-page.tsx"
-    )
-    return src.read_text()
+
+def _layout_source() -> str:
+    return _MARKETING_LAYOUT_PATH.read_text()
 
 
 class TestF71LegalPageFooter:
-    """The ``LegalPage`` shared shell MUST render a footer with
-    the CCPA "Do Not Sell My Personal Information" link."""
+    """Every marketing/legal page MUST render a footer carrying the
+    CCPA "Do Not Sell" link."""
 
-    def test_legal_page_renders_a_footer_element(self) -> None:
-        src = _get_legal_page_source()
-        # A <footer> element MUST be present
+    def test_legal_pages_live_in_the_marketing_group(self) -> None:
+        """The footer guarantee is delivered by the ``(marketing)`` route
+        group layout, so the legal docs have to actually live inside it."""
+        for route in _LEGAL_ROUTES:
+            assert (_MARKETING_APP / route / "page.tsx").exists(), (
+                f"F71 regression: /{route} is no longer a page under the "
+                f"(marketing) route group, so it no longer inherits the "
+                f"MarketingFooter and its CCPA link."
+            )
+
+    def test_marketing_layout_renders_the_shared_footer(self) -> None:
+        """Replaces the old "LegalPage renders a <footer>" check: the
+        footer now comes from the route-group layout, which is what makes
+        it impossible for a new legal page to ship without one."""
+        src = _layout_source()
+        assert "MarketingFooter" in src, (
+            "F71 regression: app/(marketing)/layout.tsx no longer renders "
+            "MarketingFooter — legal pages would ship with no footer and "
+            "no CCPA link."
+        )
+        assert re.search(r"<MarketingFooter\s*/>", src), (
+            "F71 regression: MarketingFooter is imported but not rendered "
+            "in the (marketing) layout."
+        )
+
+    def test_footer_renders_a_footer_element(self) -> None:
+        src = _footer_source()
         assert "<footer" in src, (
-            "F71 regression: LegalPage no longer renders a <footer> element. "
-            "Per the prod-ready checklist §1.5, every marketing page must "
-            "have a footer with the CCPA Do Not Sell link."
+            "F71 regression: MarketingFooter no longer renders a <footer> "
+            "element. Per the prod-ready checklist §1.5, every marketing "
+            "page must have a footer with the CCPA Do Not Sell link."
         )
 
     def test_footer_includes_do_not_sell_link(self) -> None:
-        src = _get_legal_page_source()
-        # The footer MUST link to the dedicated /do-not-sell portal
-        # page (a real form that POSTs to /api/v1/me/do-not-sell via
-        # the proxy — see app/(marketing)/do-not-sell/page.tsx). A
-        # raw <Link> straight to the backend API route would only
-        # ever fire a GET, which the POST-only endpoint rejects; the
-        # portal page is the correct, working CCPA opt-out surface.
-        assert 'href="/do-not-sell"' in src, (
-            "F71 regression: LegalPage footer no longer includes the "
-            "CCPA Do Not Sell link (pointing at the /do-not-sell portal page)."
+        src = _footer_source()
+        # Links are declared as data (``{ href, label }``) and rendered
+        # through a shared <Link>, so assert on the declaration rather
+        # than on a literal ``href="..."`` attribute.
+        assert re.search(r'href:\s*"/do-not-sell"', src), (
+            "F71 regression: MarketingFooter no longer includes the CCPA "
+            "Do Not Sell link (pointing at the /do-not-sell page)."
         )
-        # The link text MUST match the CCPA-required wording
-        # ("Do Not Sell My Personal Information" — but the UI
-        # uses the shorter "Do Not Sell My Info" for line-length
-        # reasons; both are valid per CCPA §1798.135).
+        # The link text MUST state the consumer right on its face. CCPA
+        # §1798.135 titles the link "Do Not Sell My Personal Information";
+        # the UI uses the shorter "Do Not Sell My Info" for line length,
+        # which is accepted practice. A bare "Do Not Sell" is NOT — it
+        # reads as a category header rather than an action.
         assert "Do Not Sell My Info" in src, (
-            "F71 regression: LegalPage footer link text changed from "
-            "the CCPA-required 'Do Not Sell My Info' wording."
+            "F71 regression: the CCPA link text was shortened. It must keep "
+            "the 'Do Not Sell My Info' wording so the link states the right "
+            "being exercised."
         )
 
-    def test_footer_includes_ccpa_micro_label(self) -> None:
-        src = _get_legal_page_source()
-        # The "CCPA" micro-label answers the "what's this link?"
-        # question without competing with the link itself.
-        assert re.search(r">\s*CCPA\s*<", src), (
-            "F71 regression: LegalPage footer no longer has the CCPA "
-            "micro-label next to the Do Not Sell link."
+    def test_do_not_sell_link_is_grouped_under_a_legal_heading(self) -> None:
+        """Replaces the old free-floating "CCPA" micro-label, which the
+        refactor dropped along with ``LegalPage``. The label existed to
+        answer "what is this link?"; a titled **Legal** column does that
+        job better, so pin the grouping instead of the old label."""
+        src = _footer_source()
+        assert re.search(r'title:\s*"Legal"', src), (
+            "F71 regression: the footer no longer groups the CCPA and legal "
+            "links under a titled 'Legal' column, so the Do Not Sell link "
+            "loses the context that told users what it is."
+        )
+        m = re.search(
+            r"LEGAL_LINKS[^=]*=\s*\[(?P<body>.*?)\]", src, re.DOTALL
+        )
+        assert m, "F71 regression: LEGAL_LINKS block not found in the footer."
+        assert "/do-not-sell" in m.group("body"), (
+            "F71 regression: the Do Not Sell link was moved out of the "
+            "LEGAL_LINKS group."
         )
 
     def test_footer_includes_other_legal_links(self) -> None:
-        src = _get_legal_page_source()
-        # The footer MUST also include Privacy / Terms / DPA / Security
-        # so the legal context is obvious (CCPA isn't an afterthought).
-        # The link labels appear inside <Link>{label}</Link> blocks;
-        # whitespace may sit between > and the label, so use a
-        # regex that tolerates that.
+        # The footer MUST also surface Privacy / Terms / DPA / Security so
+        # the legal context is obvious (CCPA isn't an afterthought).
+        # Security sits in the Resources column, the rest in Legal — this
+        # asserts presence, not placement.
+        src = _footer_source()
         for label in ("Privacy", "Terms", "DPA", "Security"):
-            import re as _re
-
-            assert _re.search(
-                r">\s*" + _re.escape(label) + r"\s*<",
-                src,
-            ), (
-                f"F71 regression: LegalPage footer missing the '{label}' link."
+            assert re.search(rf'label:\s*"{re.escape(label)}"', src), (
+                f"F71 regression: MarketingFooter missing the '{label}' link."
+            )
+            expected_href = f"/{label.lower()}"
+            assert re.search(rf'href:\s*"{re.escape(expected_href)}"', src), (
+                f"F71 regression: the '{label}' footer link no longer points "
+                f"at {expected_href}."
             )
 
-    def test_do_not_sell_page_posts_to_the_ccpa_endpoint(self) -> None:
-        # The footer links to a real /do-not-sell portal page (a form)
-        # rather than directly to the backend API route — Next.js
-        # <Link> only ever issues navigations/prefetch GETs, so a
-        # POST-only endpoint can never be linked to directly without
-        # breaking (the original motivation for this test). The POST
-        # lives in the client island ``do-not-sell-form.tsx`` (P19 RSC
-        # shell + form split); pin that island, not the page shell.
-        from pathlib import Path
+    def test_do_not_sell_page_states_the_non_sale_disclosure(self) -> None:
+        """The /do-not-sell destination must exist and must actually make
+        the CCPA disclosure.
 
-        form_src = (
-            Path(__file__).parent.parent.parent.parent
-            / "clients"
-            / "portal"
-            / "src"
-            / "app"
-            / "(marketing)"
-            / "do-not-sell"
-            / "do-not-sell-form.tsx"
-        ).read_text()
-        assert re.search(r'method:\s*"POST"', form_src), (
-            "F71 regression: /do-not-sell form no longer POSTs — a GET "
-            "against the CCPA endpoint will be rejected by the backend."
+        Retired assertion: this used to require a client island
+        (``do-not-sell-form.tsx``) POSTing to ``/api/v1/me/do-not-sell``.
+        That form was removed in ``9a1452b4`` ("complete live API wire-up")
+        and there is no ``/api/v1/me/do-not-sell`` handler anywhere in the
+        backend — re-adding the form would post into a void, which is worse
+        than no form. Under CCPA a business that does not sell personal
+        information satisfies the requirement with a clear statement to
+        that effect, so the static disclosure page is the correct surface.
+        What still matters, and is pinned here, is that the link resolves
+        to a real page that makes the statement.
+        """
+        page = _MARKETING_APP / "do-not-sell" / "page.tsx"
+        assert page.exists(), (
+            "F71 regression: the /do-not-sell route is gone, so the CCPA "
+            "footer link is a dead link."
         )
-        assert "/api/v1/me/do-not-sell" in form_src, (
-            "F71 regression: /do-not-sell form no longer targets the "
-            "canonical CCPA endpoint (/api/v1/me/do-not-sell)."
+        src = page.read_text()
+        assert re.search(r"does not sell personal information", src, re.I), (
+            "F71 regression: /do-not-sell no longer carries the explicit "
+            "non-sale disclosure. Under CCPA that statement is what "
+            "discharges the obligation now that the opt-out form is gone — "
+            "if Eden starts selling data this page needs a real mechanism "
+            "again, not just softened wording."
         )

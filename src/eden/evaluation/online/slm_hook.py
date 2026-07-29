@@ -17,6 +17,13 @@ _SLM_SYSTEM = (
 
 _LOW_CONFIDENCE = 0.55
 
+# COST: ``_call_llm`` returns raw text only, so there is no real per-call
+# cost to read back. This is a flat estimate for a fast-slot / Haiku-class
+# call at ~180 max_tokens, booked against the daily budget so repeated
+# scoring eventually trips ``budget_allows``. It is an accounting floor,
+# not a measurement -- do not treat it as billed spend.
+_EST_COST_USD = 0.002
+
 
 def _parse_json_object(text: str) -> dict[str, Any] | None:
     candidate = text.strip()
@@ -32,6 +39,36 @@ def _parse_json_object(text: str) -> dict[str, Any] | None:
     except (TypeError, ValueError):
         return None
     return parsed if isinstance(parsed, dict) else None
+
+
+async def budget_allows(org_id: str) -> bool:
+    """Per-org kill switch + daily maintenance budget for the SLM judge.
+
+    Mirrors :mod:`eden.evaluation.online.scorer_cascade`. Fails CLOSED:
+    online scoring is best-effort, so an unreachable budget backend must
+    not become a licence to spend.
+    """
+    try:
+        from eden.llmops.feature_kills import is_feature_enabled
+
+        if not await is_feature_enabled(org_id, "online_slm"):
+            return False
+    except Exception as exc:
+        logger.debug("slm_hook: feature kill check failed: %s", exc)
+        return False
+
+    try:
+        from eden.closed_loop.autonomy_policy import check_budget
+
+        ok, _spent, _limit = await check_budget(org_id)
+        if not ok:
+            logger.info("slm_hook: budget exhausted org=%s", org_id)
+            return False
+    except Exception as exc:
+        logger.debug("slm_hook: budget check failed: %s", exc)
+        return False
+
+    return True
 
 
 async def score_with_slm(
@@ -53,6 +90,18 @@ async def score_with_slm(
     payload = payload or {}
     context = payload.get("text") or payload.get("output") or payload.get("completion")
     if not context and not payload:
+        return None
+
+    # COST: the flag above is a global on/off with no per-org ceiling. Add
+    # the same kill-switch + daily-budget pair the LLM cascade uses, and
+    # check it BEFORE spending rather than booking a hardcoded cost after.
+    if not await budget_allows(org_id):
+        return None
+
+    # COST: the flag above is a global on/off with no per-org ceiling. Add
+    # the same kill-switch + daily-budget pair the LLM cascade uses, and
+    # check it BEFORE spending rather than booking a hardcoded cost after.
+    if not await budget_allows(org_id):
         return None
 
     snippet = str(context or json.dumps(payload, default=str))[:4000]
@@ -87,7 +136,7 @@ async def score_with_slm(
             "passed": passed,
             "confidence": confidence,
             "judge_tier": "slm",
-            "cost_usd": 0.002,
+            "cost_usd": _EST_COST_USD,
             "rationale": str(parsed.get("rationale") or "")[:500],
             "trace_id": trace_id,
             "span_id": span_id,

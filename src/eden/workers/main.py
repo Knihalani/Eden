@@ -397,20 +397,27 @@ async def _leader_insights_loop(stop: asyncio.Event) -> None:
         _tick,
         interval=_insights_leader_interval(),
         stop=stop,
+        # Shares the fleet idle grid: the tick reaches Postgres whenever
+        # its empty cooldown has lapsed, so an unaligned phase would split
+        # the DB-quiet window below Neon's suspend timeout.
+        align=True,
     )
 
 
 def _insights_leader_interval() -> float:
+    default = _idle_poll_period() * 2.0
     try:
         from eden.config import get_settings
 
         configured = float(
-            getattr(get_settings(), "insights_loop_interval_seconds", 180.0)
-            or 180.0
+            getattr(get_settings(), "insights_loop_interval_seconds", default)
+            or default
         )
     except Exception:
-        configured = 180.0
-    return _leader_tick_seconds(max(180.0, configured))
+        configured = default
+    # Floor at one full grid period; anything shorter cannot land on the
+    # shared boundaries and just multiplies the leader-lock command cost.
+    return _leader_tick_seconds(max(_idle_poll_period(), configured))
 
 
 async def _leader_eql_alert_watchdog(stop: asyncio.Event) -> None:
@@ -441,12 +448,16 @@ async def _leader_eql_alert_watchdog(stop: asyncio.Event) -> None:
             )
             raise
 
-    logger.info("worker: eql_alert_watchdog loop registered (interval=300s)")
+    interval = _grid_interval("eql_watchdog_interval_seconds", multiple=2.0)
+    logger.info(
+        "worker: eql_alert_watchdog loop registered (interval=%.0fs)", interval
+    )
     await run_if_leader(
         "eql_alert_watchdog",
         _tick,
-        interval=300.0,
+        interval=interval,
         stop=stop,
+        align=True,
     )
 
 
@@ -469,12 +480,21 @@ async def _leader_artifact_demotion(stop: asyncio.Event) -> None:
             )
             raise
 
-    logger.info("worker: artifact_demotion loop registered (interval=3600s)")
+    interval = _grid_interval(
+        "artifact_demotion_interval_seconds", multiple=6.0
+    )
+    logger.info(
+        "worker: artifact_demotion loop registered (interval=%.0fs)", interval
+    )
     await run_if_leader(
         "artifact_demotion",
         _tick,
-        interval=3600.0,
+        interval=interval,
         stop=stop,
+        # ArtifactDemotionWorker.run_once() queries Postgres on every tick
+        # unconditionally — no empty cooldown — so alignment is what keeps
+        # it inside the shared quiet window rather than beside it.
+        align=True,
     )
 
 
@@ -544,6 +564,33 @@ def _idle_poll_period() -> float:
         )
     except Exception:
         return 600.0
+
+
+def _grid_interval(settings_attr: str, *, multiple: float) -> float:
+    """A leader-loop interval snapped to a multiple of the idle grid.
+
+    Every loop that shares ``eden.storage.empty_cooldown``'s wall-clock
+    grid has to use a period that is an exact multiple of it — otherwise
+    it drifts across the boundaries and carves its own hole in the
+    DB-quiet window, which is what defeats Neon's autosuspend even when
+    each individual interval looks long enough.
+
+    ``multiple`` is the intended number of grid periods; a configured
+    override is rounded to the nearest whole multiple (minimum one)
+    rather than used verbatim, so a well-meaning ops tweak to, say, 900s
+    cannot silently take the loop back off-grid.
+    """
+    period = _idle_poll_period()
+    default = period * max(1.0, float(multiple))
+    try:
+        from eden.config import get_settings
+
+        configured = float(
+            getattr(get_settings(), settings_attr, default) or default
+        )
+    except Exception:
+        configured = default
+    return period * max(1.0, round(configured / period))
 
 
 async def _leader_self_obs_probes(stop: asyncio.Event) -> None:
@@ -628,7 +675,18 @@ async def _leader_webhook_drain_loop(stop: asyncio.Event) -> None:
             )
             raise
 
-    await run_if_leader("webhook_drain", _tick, interval=_leader_tick_seconds(30.0), stop=stop)
+    # Webhook drain is the only one of these loops with a real latency
+    # requirement, and it is the reason this interval is a single grid
+    # period rather than the 2x used elsewhere. It does not rely on the
+    # tick for responsiveness: enqueue paths publish a Redis signal that
+    # short-circuits the empty cooldown on the draining process (see
+    # eden.services.webhook_delivery), so a newly queued delivery is
+    # picked up without waiting for the next boundary. The tick is only
+    # the backstop for a missed signal.
+    interval = _grid_interval("webhook_drain_interval_seconds", multiple=1.0)
+    await run_if_leader(
+        "webhook_drain", _tick, interval=interval, stop=stop, align=True
+    )
 
 
 async def _webhook_drain_loop() -> None:

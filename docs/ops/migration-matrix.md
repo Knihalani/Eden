@@ -152,6 +152,8 @@
 | 115_api_keys_prefix | org_api_keys prefix + created_by | yes | forever | none | low | API key prefix display + `created_by` | Auth |
 | 116_saved_searches_phase_n | saved_searches schema fix | yes | forever | soft | medium | Fix saved_searches collision (portal ViewsMenu) | Portal UX |
 | 117_portal_schema_drift | portal hub schema drift | yes | forever | none | medium | Invites / domains / annotate / prefs drift close | Portal UX |
+| 118_improvement_plans_closed_status | improvement_plans 'closed' status | yes | forever | none | low | Phase 2b PR-close sync (plan status CHECK widened) | Improve |
+| 119_repo_connections_agent_id | repo_connections.agent_id | yes | forever | none | low | One linked GitHub repo per agent | Improve |
 | 120_guardrail_policies_direction | guardrail_policies.direction | yes | forever | none | low | Cat 15 guardrail direction-scoped enforcement | Cat 15 |
 
 ### Migration chain repair (2026-07-17, GA hardening)

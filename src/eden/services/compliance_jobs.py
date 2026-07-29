@@ -173,8 +173,13 @@ async def _collect_user_export(user_id: str) -> dict[str, Any]:
     try:
         api_keys_rows = await client.fetch(
             """
-            SELECT id, name, prefix, created_at, last_used_at, revoked_at
-            FROM api_keys
+            -- Canonical table is ``org_api_keys`` with a ``key_prefix``
+            -- column (alembic 001 + 114/115). This read named a table and
+            -- a column that no migration creates, so the GDPR subject-data
+            -- export silently reported zero API keys for every user.
+            SELECT id, name, key_prefix AS prefix, created_at,
+                   last_used_at, revoked_at
+            FROM org_api_keys
             WHERE org_id IN (
                 SELECT org_id FROM org_members WHERE user_id = $1
             )

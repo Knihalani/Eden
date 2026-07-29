@@ -18,6 +18,7 @@ from eden.api.deps import (
     get_current_org,
     get_current_user,
     get_eden_user_row_from_auth,
+    invalidate_org_id_cache,
     log_audit_event,
     require_org_admin,
     require_org_member,
@@ -199,10 +200,29 @@ class CreateOrgResponse:
         self.role = role
 
 
+class CreateOrgBody(BaseModel):
+    """JSON body for ``POST /orgs``.
+
+    The portal's "Create workspace" recovery button
+    (``lib/api/auth-api.ts``) posts ``{"name": ..., "make_default": ...}``
+    as a JSON body with no query string. The handler previously declared
+    ``name``/``make_default`` as bare scalars, which FastAPI binds as
+    *query* params — so that button 422'd every time, and a user whose
+    Clerk signup produced no organization had no way to get one.
+
+    Both shapes are accepted now: body wins, query params are the
+    fallback (that is what the existing integration tests send).
+    """
+
+    name: str = Field(min_length=2, max_length=100)
+    make_default: bool = True
+
+
 @router.post("", response_model=dict)
 async def create_org(
-    name: str,
-    make_default: bool = True,
+    body: CreateOrgBody | None = None,
+    name: str | None = Query(default=None),
+    make_default: bool | None = Query(default=None),
     user: dict = Depends(get_current_user),
 ):
     """Create a new organization. Creator becomes owner.
@@ -231,6 +251,11 @@ async def create_org(
         create_organization as clerk_create_org,
     )
 
+    # Body wins over query; either shape is accepted (see CreateOrgBody).
+    name = (body.name if body is not None else None) or name
+    if make_default is None:
+        make_default = body.make_default if body is not None else True
+
     client = await get_postgres_client()
     user_id = await eden_user_id_from_auth(user)
     if not user_id:
@@ -240,7 +265,7 @@ async def create_org(
         )
 
     # Validate name
-    if len(name) < 2 or len(name) > 100:
+    if not name or len(name) < 2 or len(name) > 100:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Org name must be 2-100 characters",
@@ -312,6 +337,10 @@ async def create_org(
                 query, org_id, clerk_org_id, name, slug, user_id
             )
             is_personal = False
+        # The caller almost always resolves this org id on the very next
+        # request; a negative entry cached before this INSERT would 403
+        # them off their own brand-new workspace.
+        invalidate_org_id_cache(org_id, clerk_org_id)
     except Exception as exc:
         # If we created the Clerk org but failed to write the Eden
         # row, we have an orphan in Clerk. Log loudly so an operator

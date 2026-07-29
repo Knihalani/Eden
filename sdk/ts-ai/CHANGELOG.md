@@ -4,9 +4,25 @@ All notable changes to the Eden TypeScript SDK are documented here. The
 format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## 0.3.5 — 2026-07-27
+## 0.4.0 — 2026-07-28
+
+Released as a minor bump rather than the originally-drafted `0.3.5`:
+alongside the LlamaIndex/xAI work below, this release also ships native
+Cohere, Groq, and Mistral instrumentation and an offline queue — enough
+new surface that a patch number would have understated it. The Python
+SDK ships the same feature set under the same version so the two stay
+in lockstep.
 
 ### Added
+- `wrapCohere`, `wrapGroq`, `wrapMistral` — native auto-instrumentation
+  for the Cohere, Groq, and Mistral clients, including streaming and
+  usage/token extraction, on a par with the existing OpenAI and
+  Anthropic wrappers. All three are auto-detected by
+  `detectInstalledFrameworks()` and returned from `instrument()`.
+- Offline queue (`offline-queue.ts`). Events are buffered when the
+  ingest endpoint is unreachable and flushed on the next successful
+  call, so a transient network partition no longer silently drops
+  telemetry.
 - `wrapLlamaIndex` — native auto-instrumentation for LlamaIndex.TS query
   engines, chat engines, and retrievers (`query`/`chat`/`retrieve`).
   Emits `agent.run` events (`source_format: "llamaindex"`) with
