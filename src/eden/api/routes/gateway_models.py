@@ -28,7 +28,12 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Path
 from pydantic import BaseModel, Field
 
-from eden.api.deps import OrgMember, get_current_org_member, log_audit_event, require_path_org_access
+from eden.api.deps import (
+    OrgMember,
+    get_current_org_member,
+    log_audit_event,
+    require_path_org_access,
+)
 from eden.api.utils.redact import redact_all
 from eden.llmops import registry_store
 from eden.llmops.registry_store import (

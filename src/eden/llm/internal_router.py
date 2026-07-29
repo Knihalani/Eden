@@ -15,8 +15,7 @@ import logging
 from typing import Any
 
 from eden.llm.client import LLMResponse
-from eden.optimization.model_router import ModelRouter, ModelTier, PipelineTask
-from eden.optimization.model_router import TIER_MODELS
+from eden.optimization.model_router import TIER_MODELS, ModelRouter, ModelTier, PipelineTask
 
 logger = logging.getLogger(__name__)
 

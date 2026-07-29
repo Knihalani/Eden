@@ -71,7 +71,7 @@ class NudgeGatewayFilter:
         audit = getattr(request, "nudge_audit", None)
         if not isinstance(audit, list):
             audit = []
-            setattr(request, "nudge_audit", audit)
+            request.nudge_audit = audit
 
         inject_items: list[InjectItem] = []
         for nudge in matched:
@@ -129,9 +129,9 @@ class NudgeGatewayFilter:
             packed = InjectBudget().pack(all_items)
             if packed.text:
                 request.prompt = f"{packed.text}\n\n{request.prompt}"
-            setattr(request, "artifact_ids", packed.artifact_ids)
-            setattr(request, "inject_tokens", packed.tokens)
-            setattr(request, "inject_truncated", packed.truncated)
+            request.artifact_ids = packed.artifact_ids
+            request.inject_tokens = packed.tokens
+            request.inject_truncated = packed.truncated
             audit.append(packed.audit)
 
         if trace_id:

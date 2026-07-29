@@ -34,8 +34,8 @@ import logging
 import re
 from typing import Any
 
-from eden.patches._common import _delete_then_insert
 from eden.optimization.model_router import ModelRouter, PipelineTask
+from eden.patches._common import _delete_then_insert
 
 from ._common import _ok_envelope
 

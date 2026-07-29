@@ -139,7 +139,6 @@ from eden.llmops.gateway_optimizations import (  # noqa: E402
     resolve_optimization_flags,
     set_exact_cached_response,
 )
-from eden.llmops.response_repair import repair_chat_completion_response  # noqa: E402
 from eden.llmops.openai_adapter import (  # noqa: E402
     ChatCompletionRequest,
     CompletionRequest,
@@ -155,6 +154,7 @@ from eden.llmops.openai_adapter import (  # noqa: E402
     sse_done,
     sse_format,
 )
+from eden.llmops.response_repair import repair_chat_completion_response  # noqa: E402
 
 # Import the collector here (and not lazily) so tests can ``monkeypatch``
 # the module-level reference.

@@ -215,7 +215,7 @@ def _enrich_intervention_row(d: dict[str, Any]) -> dict[str, Any]:
     if "injection" in rl:
         d["action"] = f"injection_{verdict}"
     elif "pii" in rl or (d.get("edited_text") and verdict in ("redact", "warn", "block")):
-        d["action"] = f"pii_{verdict}" if "pii" in rl else f"pii_redact"
+        d["action"] = f"pii_{verdict}" if "pii" in rl else "pii_redact"
     else:
         d["action"] = verdict
     return d

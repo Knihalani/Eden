@@ -13,7 +13,7 @@ from typing import Any
 
 from eden.issues.repo import IssuesRepo
 from eden.issues.statgate_scorer import StatGateIncidentScorer
-from eden.issues.triage_agent import _statgate_actions, TriageAgent
+from eden.issues.triage_agent import TriageAgent, _statgate_actions
 
 logger = logging.getLogger(__name__)
 

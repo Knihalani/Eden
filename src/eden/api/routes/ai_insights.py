@@ -40,7 +40,6 @@ tells the model the exact format to emit.
 
 from __future__ import annotations
 
-import asyncio
 import json
 import logging
 import os
@@ -56,10 +55,8 @@ from sse_starlette.sse import EventSourceResponse
 from eden.api.deps import get_current_user, log_audit_event, require_path_org_access
 from eden.api.utils.rate_limit import RateLimitExceeded, SlidingWindowRateLimiter
 from eden.api.utils.redact import redact_all
-from eden.api.utils.safe_error import safe_detail
 from eden.config import get_settings
-from eden.llm.client import get_llm_client
-from eden.llmops.insights_tools import dispatch_tool_call, list_tools
+from eden.llmops.insights_tools import list_tools
 from eden.storage.postgres import get_postgres_client
 
 logger = logging.getLogger(__name__)

@@ -183,9 +183,7 @@ class PlaygroundService:
             content = str(m.get("content") or "")
             if role == "system" and not system_text:
                 system_text = content
-            elif role in ("user", "human") and not user_text:
-                user_text = content
-            elif not user_text and content:
+            elif role in ("user", "human") and not user_text or not user_text and content:
                 user_text = content
         if not user_text:
             user_text = f"Replay span {span_id or 'root'} from trace {trace_id}"

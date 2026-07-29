@@ -31,7 +31,6 @@ tier or by API-key. Returns 429 on cap exhaustion.
 
 from __future__ import annotations
 
-from eden.api.utils.redact import redact_all
 import logging
 import time
 from collections import OrderedDict, deque
@@ -41,6 +40,7 @@ from fastapi import APIRouter, Depends, HTTPException, Path, Request
 from pydantic import BaseModel, Field
 
 from eden.api.deps import get_ingest_auth
+from eden.api.utils.redact import redact_all
 from eden.config import get_settings
 from eden.observability.ingestion import (
     IngestError,

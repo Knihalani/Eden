@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from eden.llm.client import LLMResponse
 from eden.llm.internal_router import route_sync

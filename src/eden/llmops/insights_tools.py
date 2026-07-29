@@ -1199,8 +1199,8 @@ async def create_alert_rule(
     eql_override: str | None = None,
     triage_enabled: bool = True,
 ) -> dict[str, Any]:
-    from eden.alerts.compiler import AlertCompiler
     from eden.alerts import repo
+    from eden.alerts.compiler import AlertCompiler
     from eden.dsl import AlertAsCode
 
     compiled = await AlertCompiler().compile(

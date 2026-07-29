@@ -9,9 +9,9 @@ from fastapi import APIRouter, Body, Depends, Path
 from pydantic import BaseModel, Field
 
 from eden.api.deps import get_current_user, require_feature_flag, require_path_org_access
+from eden.api.utils.redact import redact_all
 from eden.learning.tool_call_calibrator import list_calibrators, train_and_persist
 from eden.learning.tool_call_labels import ToolCallLabelCreate, ToolCallLabelService
-from eden.api.utils.redact import redact_all
 
 logger = logging.getLogger(__name__)
 

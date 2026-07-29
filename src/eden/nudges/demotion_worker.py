@@ -41,9 +41,9 @@ class ArtifactDemotionWorker:
                 """,
                 limit,
             )
+            from eden.kb.ledger.generator import LedgerGenerator
             from eden.nudges.cost_estimator import CostEstimator
             from eden.promotion.evidence_gate import EvidenceGate
-            from eden.kb.ledger.generator import LedgerGenerator
 
             gate = EvidenceGate()
             ledger = LedgerGenerator()

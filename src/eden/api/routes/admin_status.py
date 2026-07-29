@@ -77,11 +77,11 @@ async def _worker_heartbeats(org_id: str) -> dict[str, Any]:
 
         await probe_and_record_workers(org_id)
         rows = await latest_heartbeats(org_id=org_id, limit=20)
+        from eden.observability.platform_activation import get_platform_activation_metrics
         from eden.workers.background import (
             background_evolution_loop_running,
             background_workers_running,
         )
-        from eden.observability.platform_activation import get_platform_activation_metrics
 
         pa = get_platform_activation_metrics()
         return {

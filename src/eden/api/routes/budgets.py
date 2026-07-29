@@ -22,7 +22,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from fastapi import APIRouter, Body, Depends, Path, Query
+from fastapi import APIRouter, Body, Depends, Query
 from pydantic import BaseModel, Field
 
 from eden.api.deps import get_current_user, require_org_owner, require_path_org_access

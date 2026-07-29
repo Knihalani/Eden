@@ -16,10 +16,11 @@ from eden.api.deps import (
     resolve_eden_org_id,
     resolve_path_org_access,
 )
+from eden.api.utils.redact import redact_all
 from eden.automations.engine import AutomationsEngine
 from eden.evaluation.categorical_classifier import CategoricalClassifierService
-from eden.evaluation.code_evaluator import CodeEvaluatorRunner
 from eden.evaluation.ci_webhook import CIWebhookHandler
+from eden.evaluation.code_evaluator import CodeEvaluatorRunner
 from eden.evaluation.online.rules_engine import (
     DEFAULT_NEW_RULE_SAMPLE_RATE,
     OnlineScoringRulesEngine,
@@ -30,7 +31,6 @@ from eden.monitoring.dashboards import MonitoringDashboardService
 from eden.observability.custom_properties.service import CustomPropertiesService
 from eden.prompts.deploy import PromptDeployService
 from eden.prompts.workspace import PromptWorkspaceService
-from eden.api.utils.redact import redact_all
 
 logger = logging.getLogger(__name__)
 

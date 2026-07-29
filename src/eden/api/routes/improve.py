@@ -17,14 +17,14 @@ from eden.api.deps import (
     resolve_path_org_access,
 )
 from eden.api.utils.redact import redact_all
+from eden.improvement import plans_repo, runs_repo
+from eden.improvement import settings as imp_settings
+from eden.improvement.agent import ImprovementAgent
 from eden.improvement.approve import ApproveBlocked, approve_plan, reject_plan_audited
 from eden.improvement.cockpit_aggregator import (
     ImprovementCockpitAggregator,
     snooze_item,
 )
-from eden.improvement import plans_repo, runs_repo
-from eden.improvement import settings as imp_settings
-from eden.improvement.agent import ImprovementAgent
 from eden.improvement.schedule import resolved_schedule
 
 logger = logging.getLogger(__name__)

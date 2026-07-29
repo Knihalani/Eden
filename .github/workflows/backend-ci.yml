@@ -89,10 +89,36 @@ jobs:
         with:
           version: "latest"
       - run: uv sync --frozen --all-extras
-      - run: uv run ruff check src/ || true
-        # Soft-launch: keep informational until unused-import sweep lands.
-        # Prefer ``ruff check src/ --select F401,F841`` as the first
-        # blocking gate once that sweep is green.
+
+      # BLOCKING. pyflakes (F) and bugbear (B) are the families that
+      # catch defects rather than style: unused/shadowed names, closures
+      # that don't bind the loop variable, mutable defaults, unused loop
+      # controls. The 2026-07-29 audit found four real bugs sitting in
+      # this output while the gate was `|| true` — a B023 closure bug in
+      # the quality pipeline, an F841 in signals/backfill that marked a
+      # dropped signal_id, an F811 shadowing `asyncio`, and a B007 loop
+      # in evaluation/regression_builder whose body had been refactored
+      # away entirely so it just spun. All are fixed and this is now
+      # green, so it stays green.
+      #
+      # B008 is excluded for now and only for now. It was globally
+      # ignored until 2026-07-29 because it fires on FastAPI's
+      # `= Depends(...)` idiom; naming the safe callables in
+      # ruff.toml's flake8-bugbear section cut it from "every route
+      # signature in the repo" to 54, and some of those look genuine
+      # (`body: SeedDefaultsRequest = SeedDefaultsRequest()` really is
+      # one instance shared across requests). Clear those 54, then drop
+      # this --ignore.
+      - name: ruff (bug-class rules — blocking)
+        run: uv run ruff check src/ --select F,B --ignore B008
+
+      # Informational. The remaining ~198 findings are style families
+      # (N815 mixed-case in class scope, SIM105/102, E402) that need a
+      # deliberate sweep. Flip to blocking per-family as each is cleared
+      # rather than in one big-bang change.
+      - name: ruff (style — informational)
+        run: uv run ruff check src/ || true
+
       - run: uv run mypy src/ || true
         # mypy is informational only — flip to non-zero exit once the
         # cleanup pass tracked in eden-audit-phase8 lands.

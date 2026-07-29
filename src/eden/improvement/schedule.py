@@ -6,7 +6,8 @@ import logging
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from eden.improvement import runs_repo, settings as imp_settings
+from eden.improvement import runs_repo
+from eden.improvement import settings as imp_settings
 from eden.improvement.agent import ImprovementAgent
 from eden.storage.postgres import get_postgres_client
 

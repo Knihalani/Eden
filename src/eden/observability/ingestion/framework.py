@@ -27,8 +27,8 @@ from __future__ import annotations
 
 import logging
 
-from eden.observability.ingestion.json_body import loads_body
 from eden.observability.ingestion.attribution import Attribution
+from eden.observability.ingestion.json_body import loads_body
 from eden.observability.telemetry_collector import TelemetryEvent
 
 logger = logging.getLogger(__name__)

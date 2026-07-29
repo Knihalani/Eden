@@ -12,9 +12,8 @@ import contextlib
 import logging
 import os
 import socket
-from collections.abc import Awaitable, Callable
+from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
-from typing import AsyncIterator
 
 from eden.storage.empty_cooldown import next_grid_delay
 from eden.storage.redis import Lock

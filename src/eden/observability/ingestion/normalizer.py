@@ -172,7 +172,7 @@ async def normalize_to_telemetry_event(
                     for _, value in to_mask
                 )
             )
-            raw = {**raw, **{k: m for (k, _), m in zip(to_mask, masked_vals)}}
+            raw = {**raw, **{k: m for (k, _), m in zip(to_mask, masked_vals, strict=False)}}
 
     return TelemetryEvent(
         event_id=event_id,

@@ -32,7 +32,7 @@ class ToolCallCalibrator:
         b = 0.0
         for _ in range(epochs):
             for x, y in rows:
-                z = b + sum(wi * xi for wi, xi in zip(w, x))
+                z = b + sum(wi * xi for wi, xi in zip(w, x, strict=False))
                 p = 1.0 / (1.0 + math.exp(-max(-20.0, min(20.0, z))))
                 err = p - float(y)
                 for i in range(dim):
@@ -53,7 +53,7 @@ class ToolCallCalibrator:
 
     def predict_proba(self, features: list[float]) -> float:
         z = self.bias + sum(
-            wi * xi for wi, xi in zip(self.weights, features)
+            wi * xi for wi, xi in zip(self.weights, features, strict=False)
         )
         return 1.0 / (1.0 + math.exp(-max(-20.0, min(20.0, z))))
 

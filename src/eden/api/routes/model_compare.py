@@ -37,7 +37,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from fastapi import APIRouter, Depends, Path
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
 
 from eden.api.deps import get_current_user, require_path_org_access

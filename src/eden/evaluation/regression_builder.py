@@ -212,9 +212,12 @@ class RegressionCaseBuilder:
         self, org_id: str, issue: Any, max_traces: int
     ) -> list[str]:
         ids: list[str] = []
-        for sid in issue.example_stumble_ids or []:
-            if len(ids) >= max_traces:
-                break
+        # A loop over ``issue.example_stumble_ids`` used to sit here whose
+        # body had been lost to a refactor — it iterated and broke without
+        # ever touching ``ids``, so it was pure spin. Deleted rather than
+        # "completed": those are stumble ids, not trace ids, and resolving
+        # stumbles to traces is exactly what the list_stumbles call below
+        # already does correctly.
         try:
             from eden.issues.repo import IssuesRepo
 

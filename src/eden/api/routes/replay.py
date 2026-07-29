@@ -24,9 +24,9 @@ from eden.api.deps import (
     get_current_user,
     require_path_org_access,
 )
+from eden.api.utils.redact import redact_all
 from eden.realtime.alert_stream import get_alert_processor
 from eden.storage.postgres import get_postgres_client
-from eden.api.utils.redact import redact_all
 
 logger = logging.getLogger(__name__)
 

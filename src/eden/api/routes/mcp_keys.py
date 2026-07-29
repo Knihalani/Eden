@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, Depends, Path
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
 
 from eden.api.deps import (
@@ -76,9 +76,9 @@ async def list_mcp_keys(
     """List keys that include at least one mcp:* scope."""
     await require_org_admin(org_id, payload)
     _ = user
-    from eden.storage.postgres import get_postgres_client
-
     from fastapi import HTTPException
+
+    from eden.storage.postgres import get_postgres_client
 
     client = await get_postgres_client()
     if client is None:

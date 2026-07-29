@@ -27,10 +27,10 @@ from contextlib import asynccontextmanager, suppress
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
-from eden.util.jsonx import dumps as _jsonx_dumps
 from eden.api.middleware.correlation_id import get_correlation_id
 from eden.config import get_settings
 from eden.storage.postgres import get_postgres_client
+from eden.util.jsonx import dumps as _jsonx_dumps
 
 logger = logging.getLogger(__name__)
 

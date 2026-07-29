@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import math
 import re
-from typing import Any
 
 # ── Lexicons ──────────────────────────────────────────────────────
 
@@ -194,17 +193,7 @@ def strong_anchors(tokens: set[str]) -> set[str]:
         # Bare years are not decisive factual anchors
         if re.fullmatch(r"20\d{2}|19\d{2}", t):
             continue
-        if re.fullmatch(r"\d{3,}(?:\.\d+)?", t):
-            out.add(t)
-        elif "@" in t:
-            out.add(t)
-        elif t.startswith(("acc_", "ord_", "txn_", "user_", "sess_", "trk_", "sku_")):
-            out.add(t)
-        elif re.fullmatch(r"[0-9a-f]{8}-[0-9a-f-]{27,}", t):
-            out.add(t)
-        elif re.fullmatch(r"\d{4}-\d{2}-\d{2}", t):
-            out.add(t)
-        elif re.fullmatch(r"[a-z0-9]{10,}", t) and any(c.isdigit() for c in t):
+        if re.fullmatch(r"\d{3,}(?:\.\d+)?", t) or "@" in t or t.startswith(("acc_", "ord_", "txn_", "user_", "sess_", "trk_", "sku_")) or re.fullmatch(r"[0-9a-f]{8}-[0-9a-f-]{27,}", t) or re.fullmatch(r"\d{4}-\d{2}-\d{2}", t) or re.fullmatch(r"[a-z0-9]{10,}", t) and any(c.isdigit() for c in t):
             out.add(t)
     return out
 

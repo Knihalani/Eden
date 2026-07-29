@@ -272,6 +272,7 @@ async def maybe_persist_checkpoint(
 
         # ── 1. Audit: CheckpointStore ─────────────────────────────
         import uuid
+
         from eden.debugger.checkpoints import Checkpoint, CheckpointStore
 
         store = CheckpointStore(pg)

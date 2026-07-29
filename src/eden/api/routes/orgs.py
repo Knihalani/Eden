@@ -25,7 +25,6 @@ from eden.api.deps import (
     require_org_owner,
     require_org_permission_dep,
     resolve_eden_org_id,
-    resolve_eden_user_id,
 )
 from eden.api.routes.billing import check_limit, sync_plan_usage
 from eden.api.utils.org_schema import organizations_have_is_personal
@@ -408,6 +407,8 @@ async def create_org(
         try:
             from eden.api.utils.clerk_client import (
                 ClerkAPIError,
+            )
+            from eden.api.utils.clerk_client import (
                 create_membership as clerk_create_membership,
             )
 

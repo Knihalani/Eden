@@ -29,8 +29,8 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Any
 
-from .base import Judge, JudgeContext, JudgeScore
 from ._sampling import production_sample_matches
+from .base import Judge, JudgeContext, JudgeScore
 
 if TYPE_CHECKING:
     from eden.observability.telemetry_collector import TelemetryEvent

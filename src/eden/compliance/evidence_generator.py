@@ -14,6 +14,10 @@ See ``docs/observability-gap/10-governance-intelligence.md``.
 
 from __future__ import annotations
 
+from eden.governance.compliance_pack import (
+    AgentAuditLedgerWriter,
+    CompliancePackGenerator,
+)
 from eden.services.governance_intel import (
     ApprovalWorkflowService,
     ComplianceDashboardService,
@@ -21,10 +25,6 @@ from eden.services.governance_intel import (
     DataLineageService,
     RightToBeForgottenService,
     SecurityScanner,
-)
-from eden.governance.compliance_pack import (
-    AgentAuditLedgerWriter,
-    CompliancePackGenerator,
 )
 
 __all__ = [

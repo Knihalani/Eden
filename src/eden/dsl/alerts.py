@@ -32,6 +32,8 @@ import uuid as _uuid
 from datetime import UTC, datetime
 from typing import Any
 
+from eden.storage.empty_cooldown import make_empty_cooldown
+
 from ._common import (
     _alert_id_for,
     _fire_dsl_alert_lint_warning_hook,
@@ -41,7 +43,6 @@ from ._common import (
     _upsert_alert_rule,
 )
 from .parser import EQLParser
-from eden.storage.empty_cooldown import make_empty_cooldown
 
 logger = logging.getLogger(__name__)
 

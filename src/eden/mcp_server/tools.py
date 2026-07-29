@@ -205,8 +205,8 @@ async def eden_health(
 
     # Local fallback for smoke tests without HTTP client methods.
     try:
-        from eden.self_obs.heartbeats import probe_and_record_workers
         from eden.observability.ingestion.shed import shed_snapshot
+        from eden.self_obs.heartbeats import probe_and_record_workers
 
         workers = await probe_and_record_workers(org_id)
         return {

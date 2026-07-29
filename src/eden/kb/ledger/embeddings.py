@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import struct
-from typing import Sequence
+from collections.abc import Sequence
 
 
 def embed_text(text: str, *, dims: int = 384) -> bytes:

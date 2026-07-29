@@ -7,7 +7,6 @@ import re
 from dataclasses import dataclass, field
 from typing import Any
 
-
 _FAILURE_OUTCOMES = frozenset(
     {"failure", "error", "timeout", "crash", "failed", "cancelled", "canceled"}
 )

@@ -15,9 +15,9 @@ from eden.api.deps import (
     get_postgres_client,
     require_org_admin,
 )
+from eden.api.utils.redact import redact_all
 from eden.config import get_settings
 from eden.storage.redis import get_redis_client
-from eden.api.utils.redact import redact_all
 
 logger = logging.getLogger(__name__)
 settings = get_settings()

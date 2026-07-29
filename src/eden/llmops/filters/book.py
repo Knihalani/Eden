@@ -44,9 +44,9 @@ class BookGatewayFilter:
                     org_s, agent_s, task_text=str(getattr(request, "prompt", "") or "")
                 )
             elif text:
-                setattr(request, "_ledger_inject_text", text)
-                setattr(request, "inject_tokens", audit.get("inject_tokens", 0))
-                setattr(request, "inject_truncated", audit.get("inject_truncated", False))
+                request._ledger_inject_text = text
+                request.inject_tokens = audit.get("inject_tokens", 0)
+                request.inject_truncated = audit.get("inject_truncated", False)
                 return request, [f"ledger_injected:{audit.get('inject_tokens', 0)}"]
 
         return self._legacy_book_apply(request, org_s, agent_s)
@@ -63,7 +63,7 @@ class BookGatewayFilter:
         request.prompt = (
             f"<!-- eden-book:v{book.get('version', 1)} -->\n{excerpt}\n\n{request.prompt}"
         )
-        setattr(request, "book_version", book.get("version"))
+        request.book_version = book.get("version")
         return request, [f"book_injected:v{book.get('version', 1)}"]
 
     @staticmethod

@@ -12,6 +12,7 @@ import time
 from collections.abc import Awaitable, Callable
 from typing import Any
 
+from eden.mcp_server import tools as tool_fns
 from eden.mcp_server.auth import (
     McpAuthContext,
     pin_org_id,
@@ -19,7 +20,6 @@ from eden.mcp_server.auth import (
     resolve_auth,
 )
 from eden.mcp_server.client import EdenApiClient, HttpEdenClient
-from eden.mcp_server import tools as tool_fns
 
 logger = logging.getLogger(__name__)
 

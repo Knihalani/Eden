@@ -23,8 +23,8 @@ from eden.api.deps import (
     require_org_permission,
     require_path_org_access,
 )
-from eden.storage.postgres import get_postgres_client
 from eden.api.utils.redact import redact_all
+from eden.storage.postgres import get_postgres_client
 
 logger = logging.getLogger(__name__)
 

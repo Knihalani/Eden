@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
+import json
 import logging
 from typing import Any
-
-import json
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query
 from pydantic import BaseModel, Field
