@@ -9,6 +9,10 @@ tier, spent on a lock with no contention.
 
 from __future__ import annotations
 
+import contextlib
+
+import pytest
+
 from eden.workers import sidecars
 
 _UPSTASH_FREE_DAILY_COMMANDS = 10_000
@@ -69,3 +73,70 @@ def test_settings_drive_the_guard_values():
         config_module.get_settings = original  # type: ignore[assignment]
 
     assert (ttl, renew) == (1200, 300.0)
+
+
+# ── Guard retry after a lost start-up race ──────────────────────────────
+
+@pytest.mark.asyncio
+async def test_lost_guard_race_schedules_a_retry(monkeypatch):
+    """Losing the guard at boot must not disable the bundle for the life
+    of the process. With a 600s TTL, a hard-killed previous holder leaves
+    a stale lock for ten minutes — which is what every crash and redeploy
+    does — and the old code gave up after three attempts and never tried
+    again, silently losing the quality pipeline, the trace_finalized
+    consumer and the closed-loop consumer."""
+    import asyncio as _asyncio
+
+    from eden.workers import sidecars as sc
+
+    monkeypatch.setattr(sc, "_guard_retry_task", None, raising=False)
+    monkeypatch.setattr(sc, "_started", False, raising=False)
+    monkeypatch.setattr(
+        sc, "_acquire_guard", _AsyncReturn(False), raising=False
+    )
+
+    started = await sc.start_quality_and_closed_loop_sidecars("test")
+    assert started is False
+    try:
+        assert sc._guard_retry_task is not None, (
+            "no background retry scheduled — a stale guard would disable "
+            "the sidecars permanently"
+        )
+        assert not sc._guard_retry_task.done()
+    finally:
+        sc._guard_retry_task.cancel()
+        with contextlib.suppress(_asyncio.CancelledError, Exception):
+            await sc._guard_retry_task
+        sc._guard_retry_task = None
+
+
+@pytest.mark.asyncio
+async def test_retry_is_not_duplicated_on_repeated_calls(monkeypatch):
+    import asyncio as _asyncio
+
+    from eden.workers import sidecars as sc
+
+    monkeypatch.setattr(sc, "_guard_retry_task", None, raising=False)
+    monkeypatch.setattr(sc, "_started", False, raising=False)
+    monkeypatch.setattr(
+        sc, "_acquire_guard", _AsyncReturn(False), raising=False
+    )
+
+    await sc.start_quality_and_closed_loop_sidecars("test")
+    first = sc._guard_retry_task
+    await sc.start_quality_and_closed_loop_sidecars("test")
+    try:
+        assert sc._guard_retry_task is first, "spawned a second retry task"
+    finally:
+        sc._guard_retry_task.cancel()
+        with contextlib.suppress(_asyncio.CancelledError, Exception):
+            await sc._guard_retry_task
+        sc._guard_retry_task = None
+
+
+class _AsyncReturn:
+    def __init__(self, value):
+        self.value = value
+
+    async def __call__(self, *a, **kw):
+        return self.value

@@ -151,6 +151,41 @@ async def _release_guard() -> None:
     _guard_extender_stop = None
 
 
+#: Gap between background guard-acquisition retries. Comfortably inside
+#: the guard TTL so a stale lock from a killed holder is picked up on the
+#: first attempt after it expires, and cheap enough at one Redis SET NX
+#: per interval (~288/day) not to matter against the free tier.
+_GUARD_RETRY_INTERVAL_SECONDS = 300.0
+
+#: Background task retrying acquisition after a cold start lost the race.
+_guard_retry_task: asyncio.Task[None] | None = None
+
+
+async def _retry_guard_until_held(label: str) -> None:
+    """Keep trying for the sidecar guard, then start the bundle.
+
+    Exists because the guard TTL (600s) is far longer than the startup
+    retry budget, so losing the race at boot used to disable these
+    sidecars until the process was restarted again.
+    """
+    while True:
+        try:
+            await asyncio.sleep(_GUARD_RETRY_INTERVAL_SECONDS)
+            if _started:
+                return
+            logger.info("sidecars: retrying guard acquisition (%s)", label)
+            if await start_quality_and_closed_loop_sidecars(label):
+                logger.info(
+                    "sidecars: guard acquired on retry — bundle started (%s)",
+                    label,
+                )
+                return
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            logger.warning("sidecars: guard retry failed: %s", exc)
+
+
 async def start_quality_and_closed_loop_sidecars(label: str) -> bool:
     """Start quality_pipeline + trace_finalized + closed_loop (consumer & verify).
 
@@ -162,8 +197,24 @@ async def start_quality_and_closed_loop_sidecars(label: str) -> bool:
     process already holds the guard, in which case nothing here is
     started.
     """
-    global _started
+    global _started, _guard_retry_task
     if not await _acquire_guard():
+        # Acquisition is attempted a handful of times and then abandoned
+        # for the life of the process. That was survivable when the guard
+        # TTL was 60s; at 600s (raised to cut Upstash renewal burn) it
+        # means any restart inside a ten-minute window permanently loses
+        # the quality pipeline, the trace_finalized consumer and the
+        # closed-loop consumer on this process — with only one WARNING to
+        # show for it. A hard-killed previous holder leaves exactly that
+        # stale lock behind, which is not an edge case: it is what every
+        # crash and redeploy does.
+        #
+        # Keep trying in the background instead, so a stale guard costs
+        # one retry interval rather than the process's whole lifetime.
+        if _guard_retry_task is None or _guard_retry_task.done():
+            _guard_retry_task = asyncio.create_task(
+                _retry_guard_until_held(label), name="sidecar-guard-retry"
+            )
         return False
     if _started:
         return True
@@ -206,7 +257,15 @@ async def start_quality_and_closed_loop_sidecars(label: str) -> bool:
 
 async def stop_quality_and_closed_loop_sidecars(label: str) -> None:
     """Drain the sidecar bundle and release the cross-process guard."""
-    global _started
+    global _started, _guard_retry_task
+
+    # Cancel the background guard retry first, or a shutdown that races a
+    # successful retry can start the bundle on the way out.
+    if _guard_retry_task is not None:
+        _guard_retry_task.cancel()
+        with contextlib.suppress(asyncio.CancelledError, Exception):
+            await _guard_retry_task
+        _guard_retry_task = None
 
     try:
         from eden.closed_loop.verify import stop_verify_worker
