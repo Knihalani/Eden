@@ -116,13 +116,44 @@ class TestMessageStoreGcOrphans:
             "eden.storage.postgres.get_postgres_client",
             new=AsyncMock(return_value=client),
         ):
-            n = await store.gc_orphans(batch_size=500)
+            # dry_run must be passed explicitly: it now DEFAULTS to True.
+            # retention_cron called this with no arguments while its own
+            # CLI defaulted to --dry-run, so running the module as
+            # documented permanently deleted rows.
+            n = await store.gc_orphans(batch_size=500, dry_run=False)
         assert n == 42
         client.execute.assert_awaited_once()
         # The ANY($1::text[]) param is positional (the second arg
         # to execute after the SQL string).
         args = client.execute.await_args.args
         assert args[1] == ["trace_orphan_1", "trace_orphan_2"]
+
+    @pytest.mark.asyncio
+    async def test_gc_defaults_to_dry_run_and_deletes_nothing(self):
+        """The safety default is the point: calling gc_orphans with no
+        dry_run argument must NOT delete. retention_cron did exactly that
+        while documenting itself as dry-run by default."""
+        from eden.observability.message_store import MessageStore
+
+        store = MessageStore()
+        client = MagicMock()
+        client.fetch = AsyncMock(side_effect=[
+            [{"trace_id": "trace_orphan_1"}, {"trace_id": "trace_orphan_2"}],
+            [],
+        ])
+        client.execute = AsyncMock(return_value="DELETE 42")
+
+        with patch(
+            "eden.storage.postgres.get_postgres_client",
+            new=AsyncMock(return_value=client),
+        ):
+            n = await store.gc_orphans(batch_size=500)
+
+        assert client.execute.await_count == 0, (
+            "the default call must not issue a DELETE"
+        )
+        # Reports what it *would* have removed.
+        assert n == 2
 
     @pytest.mark.asyncio
     async def test_gc_handles_execute_failure(self):
