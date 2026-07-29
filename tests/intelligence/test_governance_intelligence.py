@@ -1406,7 +1406,49 @@ class TestGovernanceRoutes:
             )
         assert r.status_code == 200, r.text
 
-    def test_post_rtbf(self, gov_client: TestClient) -> None:
+    def test_post_rtbf_is_gated_off_by_default(
+        self, gov_client: TestClient
+    ) -> None:
+        """RTBF is behind ``rtbf_fanout_v1``, which defaults to False.
+
+        The cross-store fanout cannot currently erase per-user data from
+        Typesense, Redis, Qdrant, ClickHouse or S3 — each either filters on a
+        field its schema does not have or has no delete-by-user path at all.
+        Serving the endpoint would hand back a compliance guarantee the system
+        cannot keep, so it 404s (``require_feature_flag`` deliberately hides
+        the route rather than 403-ing it).
+        """
+        pg = _pg_router(rtbf_table_counts={})
+        with patch(
+            "eden.storage.postgres.get_postgres_client", return_value=pg
+        ):
+            r = gov_client.post(
+                "/orgs/org_test/intelligence/governance/rtbf",
+                json={"user_id": "user_x", "dry_run": True},
+            )
+        assert r.status_code == 404, r.text
+
+    def test_post_rtbf_works_when_enabled(
+        self,
+        gov_client: TestClient,
+        test_settings: Any,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """With the flag on, the handler still functions.
+
+        The flag is set on both candidate Settings instances. ``deps.py`` binds
+        ``get_settings`` at import, while the autouse ``patch_settings`` fixture
+        patches ``eden.config.get_settings`` — so which object the dependency
+        reads at request time depends on which binding won. Setting both is
+        deterministic; probing for the winner is not.
+        """
+        from eden.config import get_settings
+
+        monkeypatch.setattr(test_settings, "rtbf_fanout_v1", True, raising=False)
+        monkeypatch.setattr(
+            get_settings(), "rtbf_fanout_v1", True, raising=False
+        )
+
         pg = _pg_router(rtbf_table_counts={})
         with patch(
             "eden.storage.postgres.get_postgres_client", return_value=pg

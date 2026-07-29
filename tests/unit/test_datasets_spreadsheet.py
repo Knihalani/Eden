@@ -106,19 +106,28 @@ class FakePg:
             })
             return "INSERT 0 1"
         if sql.startswith("update dataset_items"):
-            row_id = args[-1]
+            # Real statement is:
+            #   UPDATE dataset_items SET <sets> WHERE id = $n AND dataset_id = $n+1
+            # so the trailing args are (..., payload, row_id, dataset_id).
+            # The dataset_id predicate is the tenant-scoping fix — this double
+            # enforces it so a cross-dataset update reports 0 rows, exactly as
+            # Postgres would.
+            row_id = args[-2]
+            dataset_id = args[-1]
+            matched = 0
             for r in self._rows:
-                if r["id"] == row_id:
+                if r["id"] == row_id and r["dataset_id"] == dataset_id:
                     r["updated_at"] = "2026-06-17T12:00:00+00:00"
-                    if len(args) >= 2:
-                        payload = args[-2]
+                    if len(args) >= 3:
+                        payload = args[-3]
                         if isinstance(payload, str):
                             with contextlib.suppress(ValueError, TypeError):
                                 payload = json.loads(payload)
                         if isinstance(payload, dict):
                             r["payload"] = payload
+                    matched = 1
                     break
-            return "UPDATE 1"
+            return f"UPDATE {matched}"
         if sql.startswith("delete from dataset_items"):
             row_id = args[0]
             self._rows = [r for r in self._rows if r["id"] != row_id]
@@ -386,9 +395,47 @@ class TestSpreadsheetService:
         pg = FakePg()
         svc = SpreadsheetService(pg)
         row = await svc.add_row(dataset_id="d1", input="a")
-        await svc.update_row(row_id=row.id, values={"c1": "new"})
+        await svc.update_row(row_id=row.id, dataset_id="d1", values={"c1": "new"})
         fetched = await svc.get_row(row.id)
         assert fetched.values == {"c1": "new"}
+
+    @pytest.mark.asyncio
+    async def test_update_row_cannot_cross_datasets(self) -> None:
+        """Cross-tenant write guard.
+
+        The UPDATE used to be ``WHERE id = $n`` alone, so a caller holding a
+        valid dataset of their own could pass any row_id and overwrite a row
+        in another tenant's dataset. The route's ownership check ran on the
+        read-back, i.e. *after* the write had committed — the attacker saw a
+        404 and the victim's row was already gone.
+        """
+        pg = FakePg()
+        svc = SpreadsheetService(pg)
+        victim = await svc.add_row(dataset_id="victim-ds", input="original")
+
+        updated = await svc.update_row(
+            row_id=victim.id,
+            dataset_id="attacker-ds",
+            values={"c1": "overwritten"},
+        )
+
+        assert updated is False, "update crossed dataset boundaries"
+        fetched = await svc.get_row(victim.id)
+        assert fetched.values == {}, "victim row was mutated"
+
+    @pytest.mark.asyncio
+    async def test_update_row_emits_dataset_predicate(self) -> None:
+        """The scoping must be in the SQL, not only in the caller."""
+        pg = FakePg()
+        svc = SpreadsheetService(pg)
+        row = await svc.add_row(dataset_id="d1", input="a")
+        await svc.update_row(row_id=row.id, dataset_id="d1", values={"c1": "x"})
+
+        updates = [q for q, _ in pg.calls if q.startswith("update dataset_items")]
+        assert updates, "no UPDATE was issued"
+        assert "dataset_id = $" in updates[-1], (
+            "UPDATE dataset_items lost its dataset_id predicate"
+        )
 
     @pytest.mark.asyncio
     async def test_get_row_returns_by_id(self) -> None:

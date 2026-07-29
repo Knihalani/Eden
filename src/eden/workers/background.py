@@ -267,23 +267,53 @@ class BackgroundWorkers:
 
             if acquired:
                 extender_stop = asyncio.Event()
+                # ``lost`` lets the extender report leadership loss directly.
+                # The supervise loop used to call ``lock.extend`` itself once
+                # per ``interval`` purely to detect loss — a second renewal on
+                # top of the extender's own, costing ~720 redundant EVALs/day
+                # against a 10,000/day budget (see the module comment above).
+                # One renewer, one signal.
+                lock_lost = asyncio.Event()
                 extender = asyncio.create_task(
                     _extend_lock_periodically(
-                        lock, _BUNDLE_LOCK_RENEW_SECONDS, extender_stop
+                        lock,
+                        _BUNDLE_LOCK_RENEW_SECONDS,
+                        extender_stop,
+                        lost=lock_lost,
                     ),
                     name="background-leader-extend",
                 )
                 try:
                     await self._start_all(settings, self._state)
                     while not self._stop.is_set():
-                        if not await lock.extend(lock.ttl):
-                            logger.warning("background: lost leader lock; stopping loops")
+                        if lock_lost.is_set():
+                            logger.warning(
+                                "background: lost leader lock; stopping loops"
+                            )
                             break
+                        # Wake on whichever comes first: shutdown, lock loss,
+                        # or the tick interval. Waiting only on ``_stop`` would
+                        # delay loss handling by up to a full interval.
+                        stop_wait = asyncio.ensure_future(self._stop.wait())
+                        lost_wait = asyncio.ensure_future(lock_lost.wait())
                         try:
-                            await asyncio.wait_for(self._stop.wait(), timeout=interval)
+                            done, pending = await asyncio.wait(
+                                {stop_wait, lost_wait},
+                                timeout=interval,
+                                return_when=asyncio.FIRST_COMPLETED,
+                            )
+                        finally:
+                            for task in (stop_wait, lost_wait):
+                                if not task.done():
+                                    task.cancel()
+                        if stop_wait in done:
                             break
-                        except TimeoutError:
-                            continue
+                        if lost_wait in done:
+                            logger.warning(
+                                "background: lost leader lock; stopping loops"
+                            )
+                            break
+                        continue
                 finally:
                     extender_stop.set()
                     extender.cancel()

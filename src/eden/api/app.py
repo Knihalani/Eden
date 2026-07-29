@@ -738,8 +738,16 @@ if getattr(settings, "rate_limit_enabled", True):
 # proxy doesn't do it itself. Production deployments behind Vercel
 # or Northflank usually already gzip, in which case this middleware
 # sees the request with Content-Encoding set and skips; harmless.
-# minimum_size=500 skips compressing tiny JSON like {"ok": true}.
-app.add_middleware(GZipMiddleware, minimum_size=500)
+# minimum_size skips compressing tiny JSON like {"ok": true}.
+#
+# compresslevel=1, not Starlette's default of 9. Measured on a 167KB JSON
+# response: level 9 costs 3.08ms for 6200 bytes, level 1 costs 0.274ms for
+# 7499 bytes — 11.2x the CPU, on the event loop, to save 21% of an already
+# 23x-compressed body. Transit compression wants to be cheap, not maximal.
+#
+# minimum_size raised 500 -> 1500: a sub-MTU response fits in one packet
+# whether or not it is compressed, so below that the CPU buys nothing.
+app.add_middleware(GZipMiddleware, minimum_size=1500, compresslevel=1)
 
 # Audit 2026-07-06 — pre-existing bug fix. Both middlewares were
 # implemented and unit-tested but never registered on the app.

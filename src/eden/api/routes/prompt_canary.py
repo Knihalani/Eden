@@ -235,14 +235,18 @@ async def promote_canary(
             """,
             now, org_id, experiment_id,
         )
-        # Mark the experiment as promoted
+        # Mark the experiment as promoted. Already guarded by the
+        # tenant-scoped lookup above, so the predicate is defence in depth —
+        # but keeping every statement on this table uniformly scoped is what
+        # stops the next one being written without it, which is exactly how
+        # the rollback path ended up unscoped.
         await client.execute(
             """
             UPDATE prompt_canary_experiments
             SET status = 'promoted', promoted_at = $1, ended_at = $1
-            WHERE experiment_id = $2
+            WHERE experiment_id = $2 AND tenant_id = $3
             """,
-            now, experiment_id,
+            now, experiment_id, org_id,
         )
         await gate.promote_if_passed(org_id, cid)
         # Activate the prompt version (if not already)
@@ -323,13 +327,17 @@ async def rollback_canary(
             """,
             now, experiment_id, org_id,
         )
+        # tenant_id is required here, not optional hardening: without it any
+        # member of any org could roll back another tenant's experiment given
+        # only its id. The sibling UPDATE above and promote_canary's lookup
+        # both scope on it; this statement was the odd one out.
         await client.execute(
             """
             UPDATE prompt_canary_experiments
             SET status = 'rolled_back', ended_at = $1
-            WHERE experiment_id = $2
+            WHERE experiment_id = $2 AND tenant_id = $3
             """,
-            now, experiment_id,
+            now, experiment_id, org_id,
         )
     except Exception as exc:
         msg = str(exc).lower()

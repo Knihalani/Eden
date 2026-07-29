@@ -241,11 +241,17 @@ class ArchiveService:
         # DELETE on the trace_id index. Outside the transaction
         # because a failure here is non-fatal — orphaned messages
         # are cleaned up by the daily GC sweep.
-        try:
-            from eden.observability.message_store import get_message_store
-            await get_message_store().delete_trace(trace_id)
-        except Exception as exc:
-            logger.debug(f"archive dedup cleanup failed (non-fatal): {exc}")
+        #
+        # Only safe because the messages were written into the archive blob
+        # above. Deleting them without archiving them (the pre-remediation
+        # behaviour) destroyed the prompt/completion text irrecoverably —
+        # the archive held events only.
+        if message_rows:
+            try:
+                from eden.observability.message_store import get_message_store
+                await get_message_store().delete_trace(trace_id)
+            except Exception as exc:
+                logger.debug(f"archive dedup cleanup failed (non-fatal): {exc}")
 
         # Invalidate the read-through cache for this trace.
         _rehydrate_cache_clear()

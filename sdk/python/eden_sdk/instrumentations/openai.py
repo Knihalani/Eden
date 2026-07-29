@@ -149,11 +149,25 @@ def _wrap_async(original):  # type: ignore[no-untyped-def]
 
 
 def _build_request_payload(args: tuple, kwargs: dict) -> dict[str, Any]:
-    """Extract a serializable dict of the original request."""
+    """Extract a serializable dict of the original request.
+
+    ``messages`` must be read from ``kwargs``. The OpenAI SDK declares
+    ``Completions.create(self, *, messages, model, ...)`` — every parameter is
+    keyword-only — so ``args`` is empty on every real call and the positional
+    branch below never fires. Until the 2026-07 remediation ``messages``
+    appeared *only* in that dead branch and was absent from the keyword
+    allow-list, so every captured OpenAI span carried ``model`` and
+    ``temperature`` and no prompt at all.
+
+    The positional branch is kept for callers that pass a single dict
+    positionally (some wrappers and older shims do), but it is a fallback,
+    not the primary path. ``anthropic.py`` and ``groq.py`` already list
+    ``messages`` in their allow-lists — the three must stay in step.
+    """
     out: dict[str, Any] = {}
     if args:
         out["messages"] = _to_dict(args[0]) if len(args) == 1 else _to_dict(args)
-    for k in ("model", "temperature", "top_p", "max_tokens", "tools",
+    for k in ("messages", "model", "temperature", "top_p", "max_tokens", "tools",
               "tool_choice", "stream", "user", "response_format",
               "seed", "stop", "presence_penalty", "frequency_penalty",
               "logit_bias", "logprobs", "top_logprobs", "n",

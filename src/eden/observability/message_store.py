@@ -256,7 +256,13 @@ class MessageStore:
 
     # ── Stats ────────────────────────────────────────────────────────
 
-    async def gc_orphans(self, batch_size: int = 500) -> int:
+    async def gc_orphans(
+        self,
+        batch_size: int = 500,
+        *,
+        dry_run: bool = True,
+        min_age_days: int = 7,
+    ) -> int:
         """Delete ``trace_messages`` rows whose trace has no rows in
         ``telemetry_events`` (Phase B4).
 
@@ -265,7 +271,26 @@ class MessageStore:
         left over (failed archives, manual SQL deletes, replayed
         traces that were re-ingested from cold).
 
-        Returns the total number of orphan rows deleted.
+        Returns the number of orphan rows deleted, or — when ``dry_run`` is
+        set — the number that *would* be deleted.
+
+        Safety, all three added in the 2026-07 remediation:
+
+        ``dry_run`` defaults to **True**. ``retention_cron`` invoked this with
+        no arguments while its own CLI defaults to ``--dry-run``, so running
+        the module as documented permanently deleted rows.
+
+        ``min_age_days`` keeps a freshly-written trace whose events have not
+        landed yet from being swept. The anti-join alone cannot distinguish
+        "orphaned" from "in flight".
+
+        Rows referenced by ``trace_archive_index`` are excluded outright —
+        those messages are the archived copy, and the archive is the only
+        remaining source of the prompt/completion text.
+
+        There is deliberately **no ``org_id`` parameter**: ``trace_messages``
+        is keyed ``(trace_id, msg_hash)`` and carries no tenant column, so a
+        tenant predicate cannot be expressed here.
         """
         client = await self._get_client()
         if client is None:
@@ -274,7 +299,9 @@ class MessageStore:
             total = 0
             while True:
                 # Postgres-only anti-join: rows in trace_messages whose
-                # trace_id has no remaining telemetry_events row.
+                # trace_id has no remaining telemetry_events row, are older
+                # than the age floor, and are not the live copy of an
+                # archived trace.
                 rows = await client.fetch(
                     """
                     SELECT tm.trace_id
@@ -283,13 +310,31 @@ class MessageStore:
                                SELECT 1 FROM telemetry_events te
                                 WHERE te.trace_id = tm.trace_id
                            )
+                       AND NOT EXISTS (
+                               SELECT 1 FROM trace_archive_index tai
+                                WHERE tai.trace_id = tm.trace_id
+                           )
+                       AND tm.first_seen_at < NOW() - ($2 || ' days')::interval
                      LIMIT $1
                     """,
                     batch_size,
+                    str(max(0, min_age_days)),
                 )
                 if not rows:
                     break
                 trace_ids = [r["trace_id"] for r in rows]
+                if dry_run:
+                    total += len(trace_ids)
+                    logger.info(
+                        "trace_messages gc: dry-run, would delete messages for "
+                        "%s trace(s) (total=%s)",
+                        len(trace_ids),
+                        total,
+                    )
+                    # No DELETE means the predicate still matches these rows,
+                    # so a second pass would loop forever. One batch is a
+                    # sufficient estimate for a dry run.
+                    break
                 deleted = await client.execute(
                     "DELETE FROM trace_messages WHERE trace_id = ANY($1::text[])",
                     trace_ids,
