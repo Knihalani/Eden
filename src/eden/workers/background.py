@@ -413,3 +413,29 @@ def background_evolution_loop_running() -> bool:
 
 def background_workers_running() -> bool:
     return _workers.running
+
+
+def background_loops_snapshot() -> dict[str, Any]:
+    """What the bundle has *actually* started, not just that it exists.
+
+    ``background_workers_running`` reports only "the supervisor task is
+    alive", which stays True while the supervisor waits for the leader
+    lock. During the July 2026 outage that made the API report the fleet
+    as up when ``_start_all`` had never run once — the single most
+    misleading signal in the incident.
+
+    ``started`` is the fact that matters: the bundle won leadership and
+    brought its loops up. ``loops`` names the adopted leader-gated loops
+    and whether each task is still alive.
+    """
+    state = _workers._state
+    return {
+        "supervisor_alive": _workers.running,
+        "started": state.started,
+        "insights_loop": state.insights_loop,
+        "anomaly_loop": state.anomaly_loop,
+        "loops": {
+            name: ("alive" if not task.done() else "dead")
+            for name, task in state.leader_loops.items()
+        },
+    }

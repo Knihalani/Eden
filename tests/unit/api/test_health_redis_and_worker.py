@@ -119,3 +119,24 @@ def test_health_survives_a_broken_heartbeat_table(api_client, mock_postgres_clie
     r = api_client.get("/health")
     assert r.status_code in (200, 503), r.text
     assert r.json()["worker_heartbeat_age_seconds"] is None
+
+
+def test_health_reports_what_the_background_bundle_actually_started(api_client) -> None:
+    """``background_workers_expected`` is a config flag, and
+    ``background_workers_running`` only means "the supervisor task
+    exists" — which stays true while that supervisor waits forever on its
+    leader lock. In the July 2026 outage that combination reported the
+    fleet as up when ``_start_all`` had never run once, which is the
+    single most misleading signal in the whole incident.
+    ``background_loops.started`` is the fact that actually matters.
+    """
+    body = _health_payload(api_client)
+    assert "background_loops" in body, (
+        "health lost the only field that says whether the fleet started"
+    )
+    snap = body["background_loops"]
+    if snap is None:  # import guard tripped — acceptable, but not silent
+        return
+    assert "started" in snap
+    assert "supervisor_alive" in snap
+    assert isinstance(snap.get("loops"), dict)
