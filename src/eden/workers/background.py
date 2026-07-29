@@ -32,6 +32,30 @@ logger = logging.getLogger(__name__)
 # so tests can patch this module's value without reaching into main).
 _RESTART_BACKOFF_SECONDS = 5.0
 
+#: Last outcome + consecutive count per lock, for /health. Costs nothing:
+#: it records what the acquire call already returned rather than spending
+#: an extra Redis command to ask. Distinguishes "another process is
+#: leader" (refused) from "the call never came back" (timeout) from "the
+#: provider rejected it" (raised:ResponseError) — three states that look
+#: identical from outside and need completely different responses.
+_acquire_outcomes: dict[str, dict[str, Any]] = {}
+
+
+def _note_acquire_outcome(lock_name: str, outcome: str) -> None:
+    entry = _acquire_outcomes.setdefault(
+        lock_name, {"outcome": None, "consecutive": 0}
+    )
+    if entry["outcome"] == outcome:
+        entry["consecutive"] += 1
+    else:
+        entry["outcome"] = outcome
+        entry["consecutive"] = 1
+
+
+def leader_acquire_outcomes() -> dict[str, dict[str, Any]]:
+    """Per-lock ``{outcome, consecutive}`` for the health endpoint."""
+    return {k: dict(v) for k, v in _acquire_outcomes.items()}
+
 
 def _leader_loops_from_worker_main() -> list[tuple[str, Any]]:
     """The leader-gated loops that previously ran only on eden-worker.
@@ -179,12 +203,24 @@ class BackgroundWorkers:
                     _ACQUIRE_TIMEOUT_SECONDS,
                     interval,
                 )
+                _note_acquire_outcome("api-background", "timeout")
                 acquired = False
             except Exception as exc:
                 logger.error(
                     "background: leader acquire raised: %s", exc, exc_info=True
                 )
+                _note_acquire_outcome("api-background", f"raised:{type(exc).__name__}")
                 acquired = False
+            else:
+                # ``acquire`` returning False (rather than hanging or
+                # raising) means Redis answered and refused: either another
+                # holder, or the provider rejecting the write. Recording
+                # which of the three happened is what separates "someone
+                # else is leader" from "Redis is accepting reads and
+                # refusing writes" without spending a probe command.
+                _note_acquire_outcome(
+                    "api-background", "acquired" if acquired else "refused"
+                )
 
             if acquired:
                 extender_stop = asyncio.Event()
@@ -464,6 +500,7 @@ def background_loops_snapshot() -> dict[str, Any]:
     return {
         "supervisor_alive": _workers.running,
         "started": state.started,
+        "acquire": leader_acquire_outcomes(),
         "insights_loop": state.insights_loop,
         "anomaly_loop": state.anomaly_loop,
         "loops": {
