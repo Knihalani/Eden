@@ -104,3 +104,44 @@ async def test_stop_all_drains_adopted_loops() -> None:
 
     assert task.cancelled() or task.done(), "adopted loop was not drained"
     assert state.leader_loops == {}
+
+
+def test_acquire_outcome_distinguishes_the_three_failure_modes() -> None:
+    """"Refused", "timed out" and "provider rejected it" look identical
+    from outside — the supervisor simply never starts — but they need
+    completely different responses: wait for the other leader, chase a
+    hung socket, or go look at the Redis quota. Recording what the call
+    already returned costs no extra command."""
+    bg._acquire_outcomes.clear()
+    try:
+        bg._note_acquire_outcome("api-background", "refused")
+        bg._note_acquire_outcome("api-background", "refused")
+        assert bg.leader_acquire_outcomes()["api-background"] == {
+            "outcome": "refused",
+            "consecutive": 2,
+        }
+        bg._note_acquire_outcome("api-background", "raised:ResponseError")
+        assert bg.leader_acquire_outcomes()["api-background"] == {
+            "outcome": "raised:ResponseError",
+            "consecutive": 1,
+        }, "a changed outcome must reset the streak, not extend it"
+    finally:
+        bg._acquire_outcomes.clear()
+
+
+def test_snapshot_carries_acquire_outcomes() -> None:
+    """It has to reach /health or it is not observable."""
+    snap = bg.background_loops_snapshot()
+    assert "acquire" in snap
+    assert isinstance(snap["acquire"], dict)
+
+
+def test_acquire_outcomes_returns_a_copy() -> None:
+    bg._acquire_outcomes.clear()
+    try:
+        bg._note_acquire_outcome("l", "refused")
+        snapshot = bg.leader_acquire_outcomes()
+        snapshot["l"]["consecutive"] = 999
+        assert bg.leader_acquire_outcomes()["l"]["consecutive"] == 1
+    finally:
+        bg._acquire_outcomes.clear()
