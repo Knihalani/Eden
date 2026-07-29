@@ -260,8 +260,20 @@ spec:
     # ── CORS — set this to your Vercel portal URL after first deploy ──
     # Comma-separated, no wildcards. Examples:
     #   https://eden-portal.vercel.app,https://edenobservability.com
+    # Reconciled to the live value 2026-07-29. The manifest listed only
+    # the apex domain; the running service also allows www, and two
+    # localhost origins for local portal development. Recorded as-is
+    # rather than "corrected" — narrowing this to the apex would have
+    # broken the www subdomain and every local dev session.
+    #
+    # Worth a decision though: http://localhost:3000 and
+    # http://127.0.0.1:3000 are accepted by the PRODUCTION API with
+    # allow_credentials=True. Anything running on a developer's machine
+    # can therefore make credentialed cross-origin calls against prod.
+    # Consider dropping the two localhost entries and pointing local
+    # development at a staging API instead.
     - name: CORS_ORIGINS_RAW
-      value: https://edenobservability.com
+      value: https://edenobservability.com,https://www.edenobservability.com,http://localhost:3000,http://127.0.0.1:3000
     # ── Postgres (Neon cutover, Phase 7) ────────────────────────
     # All POSTGRES_* values are resolved from the eden-required secret
     # group. POSTGRES_SSLMODE must be "require" (or stricter) — Neon
@@ -286,8 +298,13 @@ spec:
       value: "10"            # 512 MB container — cap pool aggressively
     - name: POSTGRES_MIN_POOL_SIZE
       value: "0"            # empty pool → Neon can scale to zero
+    # Reconciled to the live value 2026-07-29 (was "30" here, 60 live).
+    # Still well under Neon's ~300s suspend window, so the scale-to-zero
+    # intent holds either way. Left at the live value rather than forced
+    # back to 30 — nothing measured says 30 is better, and this is not
+    # the knob to change while diagnosing an unrelated deploy.
     - name: POSTGRES_MAX_INACTIVE_CONNECTION_LIFETIME
-      value: "30"           # drop idle sockets well under Neon suspend (~300s)
+      value: "60"
     - name: POSTGRES_STATEMENT_TIMEOUT_MS
       value: "30000"
     # ── Qdrant (external — Qdrant Cloud free tier) ──────────────

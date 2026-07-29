@@ -89,6 +89,28 @@ def _manifest_env_names(block: str) -> set[str]:
     return set(re.findall(r"^\s*- name: ([A-Z0-9_]+)\s*$", block, re.M))
 
 
+def _manifest_plain_env(block: str) -> dict[str, str]:
+    """Only the variables the manifest gives a literal ``value:``.
+
+    Secret-backed variables (``valueFrom.secretKeyRef``) are delivered by
+    the project's secret groups, which do not appear in a service's
+    ``runtimeEnvironment``. Counting them as "missing" made this check
+    report 31 phantom drifts for credentials that were present and
+    working — a checker that cries wolf gets ignored, which defeats its
+    whole purpose.
+    """
+    out: dict[str, str] = {}
+    for name, body in re.findall(
+        r"- name: ([A-Z0-9_]+)\n(.*?)(?=\n    - name: |\Z)", block, re.S
+    ):
+        if "secretKeyRef" in body:
+            continue
+        m = re.search(r'value:\s*"?([^"\n]*)"?', body)
+        if m:
+            out[name] = m.group(1).strip()
+    return out
+
+
 def _manifest_compute(block: str) -> str | None:
     m = re.search(r"^\s*name:\s*(nf-compute-\S+)\s*$", block, re.M)
     return m.group(1) if m else None
@@ -148,33 +170,74 @@ def check() -> list[dict[str, str]]:
             "impact": "replica count differs; affects availability during deploys",
         })
 
-    # 4. environment variables actually set on the service
-    want_env = _manifest_env_names(block)
-    got_env = set((svc.get("runtimeEnvironment") or {}).keys())
-    missing = sorted(want_env - got_env)
+    # 4. environment variables actually set on the service.
+    #    Compared on plain values only — secret-backed vars come from the
+    #    secret groups and are checked separately below.
+    want_env = _manifest_plain_env(block)
+    live_env = svc.get("runtimeEnvironment") or {}
+    got_env = set(live_env)
+
+    # A variable the manifest declares as a plain value may ALSO be owned
+    # by a secret group (CLERK_JWKS_URL is, for one). The group supplies
+    # it, so it is correctly absent from runtimeEnvironment and must not
+    # be reported missing.
+    secrets_doc = _nf(["list", "secrets", "--project", project])
+    group_env_names: set[str] = set()
+    if secrets_doc is not None:
+        group_env_names = {
+            (g.get("name") or "").replace("-", "_").upper()
+            for g in (secrets_doc.get("secrets") or [])
+        }
+
+    missing = sorted(set(want_env) - got_env - group_env_names)
     if missing:
         drift.append({
             "resource": "eden-api",
             "field": "runtimeEnvironment",
-            "manifest": f"{len(want_env)} vars declared",
+            "manifest": f"{len(want_env)} plain-value vars declared",
             "live": f"{len(got_env)} set; {len(missing)} missing",
             "impact": "missing: " + ", ".join(missing[:12])
                       + (f" (+{len(missing) - 12} more)" if len(missing) > 12 else ""),
         })
 
+    # 4b. set, but to a different value than the manifest says. This is
+    #     the case that silently diverges without anything looking absent.
+    wrong = sorted(
+        (k, want_env[k], str(live_env[k]))
+        for k in set(want_env) & got_env
+        if str(live_env[k]).strip() != want_env[k]
+    )
+    if wrong:
+        drift.append({
+            "resource": "eden-api",
+            "field": "runtimeEnvironment values",
+            "manifest": "; ".join(f"{k}={v}" for k, v, _ in wrong[:6]),
+            "live": "; ".join(f"{k}={lv}" for k, _, lv in wrong[:6]),
+            "impact": f"{len(wrong)} variable(s) set to a value the manifest "
+                      "does not declare",
+        })
+
     # 5. secret groups
-    secrets = _nf(["list", "secrets", "--project", project])
+    secrets = secrets_doc
     if secrets is not None:
         live_groups = {g.get("name") for g in (secrets.get("secrets") or [])}
         declared = set(re.findall(r"group:\s*([a-zA-Z0-9_-]+)", text))
         absent = sorted(g for g in declared if g not in live_groups)
         if absent:
+            # The manifest models one group holding every key; the project
+            # actually has 31 single-key groups under hyphenated names
+            # (JWT-SECRET, not JWT_SECRET). The credentials ARE delivered —
+            # Postgres, Qdrant and Clerk all work — so this is a naming and
+            # structure mismatch, not a missing-secret outage. Reported as
+            # informational so it does not mask a real drift.
             drift.append({
                 "resource": "project",
-                "field": "secretGroups",
+                "field": "secretGroups (informational)",
                 "manifest": ", ".join(sorted(declared)),
-                "live": f"{len(live_groups)} groups, none named {absent}",
-                "impact": "secretKeyRef lookups in this manifest cannot resolve as written",
+                "live": f"{len(live_groups)} single-key groups under other names",
+                "impact": "credentials ARE delivered and working; the manifest's "
+                          "secretKeyRef group name simply does not exist, so this "
+                          "file could never be applied as written",
             })
 
     return drift
