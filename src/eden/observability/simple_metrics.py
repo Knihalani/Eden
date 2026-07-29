@@ -42,25 +42,73 @@ _OVERFLOW = "__overflow__"
 
 _lock = threading.Lock()
 _registry: list[_Family] = []
+_by_name: dict[str, _Family] = {}
 
 
 class _Family:
-    """Base: a named metric with a fixed label-name tuple."""
+    """Base: a named metric with a fixed label-name tuple.
+
+    Construction is idempotent by name. Constructing a family whose name is
+    already registered returns the *existing* instance rather than a second
+    one, because two families sharing a name render two ``# HELP`` lines and
+    an ``expfmt`` consumer rejects the entire scrape on the second. Module
+    reloads — routine in a test suite — would otherwise reintroduce exactly
+    the corruption this module was written to remove.
+    """
 
     metric_type = "untyped"
 
-    def __init__(self, name: str, help_text: str, labelnames: tuple[str, ...] = ()) -> None:
-        self.name = name
-        self.help_text = help_text
-        self.labelnames = labelnames
-        self._values: dict[tuple[str, ...], float] = {}
-        self._counts: dict[tuple[str, ...], float] = {}
+    # Declared here rather than assigned in ``__init__`` because construction
+    # happens in ``__new__`` (see above).
+    name: str
+    help_text: str
+    labelnames: tuple[str, ...]
+    _values: dict[tuple[str, ...], float]
+    _counts: dict[tuple[str, ...], float]
+
+    def __new__(
+        cls, name: str, help_text: str = "", labelnames: tuple[str, ...] = ()
+    ) -> _Family:
         with _lock:
-            _registry.append(self)
+            existing = _by_name.get(name)
+            if existing is not None:
+                if type(existing) is not cls:
+                    raise ValueError(
+                        f"metric {name!r} is already registered as "
+                        f"{type(existing).__name__}, not {cls.__name__}"
+                    )
+                if existing.labelnames != tuple(labelnames):
+                    raise ValueError(
+                        f"metric {name!r} is already registered with labels "
+                        f"{existing.labelnames}, not {tuple(labelnames)}"
+                    )
+                return existing
+            obj = super().__new__(cls)
+            obj.name = name
+            obj.help_text = help_text
+            obj.labelnames = tuple(labelnames)
+            obj._values = {}
+            obj._counts = {}
+            _by_name[name] = obj
+            _registry.append(obj)
+            return obj
+
+    def __init__(
+        self, name: str, help_text: str = "", labelnames: tuple[str, ...] = ()
+    ) -> None:
+        # Deliberately empty: state is established in ``__new__`` so that
+        # re-constructing an existing family hands back the original with its
+        # counters intact instead of silently zeroing them.
+        pass
 
     def _key(self, values: tuple[str, ...]) -> tuple[str, ...]:
-        """Map a label tuple to its slot, folding overflow into one series."""
-        if values in self._values or len(self._values) < _MAX_SERIES:
+        """Map a label tuple to its slot, folding overflow into one series.
+
+        One slot is reserved for the overflow series, so the family never
+        holds more than ``_MAX_SERIES`` entries in total — a cap that admitted
+        ``_MAX_SERIES + 1`` would be a quietly wrong bound.
+        """
+        if values in self._values or len(self._values) < _MAX_SERIES - 1:
             return values
         return (_OVERFLOW,) * len(self.labelnames)
 
@@ -136,10 +184,8 @@ class Counter(_Family):
         _Bound(self, ()).inc(n)
 
     def samples(self) -> list[tuple[str, dict[str, str], float]]:
-        return [
-            ("", dict(zip(self.labelnames, k, strict=False)), v)
-            for k, v in sorted(self._values.items())
-        ]
+        values, _ = self._snapshot()
+        return [("", dict(zip(self.labelnames, k, strict=False)), v) for k, v in values]
 
 
 class Summary(_Family):
@@ -154,11 +200,12 @@ class Summary(_Family):
         _Bound(self, ()).observe(value)
 
     def samples(self) -> list[tuple[str, dict[str, str], float]]:
+        values, counts = self._snapshot()
         out: list[tuple[str, dict[str, str], float]] = []
-        for k, total in sorted(self._values.items()):
+        for k, total in values:
             labels = dict(zip(self.labelnames, k, strict=False))
             out.append(("_sum", labels, total))
-            out.append(("_count", labels, self._counts.get(k, 0.0)))
+            out.append(("_count", labels, counts.get(k, 0.0)))
         return out
 
 
@@ -174,10 +221,8 @@ class Gauge(_Family):
         _Bound(self, ()).set(value)
 
     def samples(self) -> list[tuple[str, dict[str, str], float]]:
-        return [
-            ("", dict(zip(self.labelnames, k, strict=False)), v)
-            for k, v in sorted(self._values.items())
-        ]
+        values, _ = self._snapshot()
+        return [("", dict(zip(self.labelnames, k, strict=False)), v) for k, v in values]
 
 
 def iter_families() -> Iterator[_Family]:

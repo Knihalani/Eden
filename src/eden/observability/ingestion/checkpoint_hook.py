@@ -20,11 +20,11 @@ import logging
 import time
 from typing import Any
 
-from eden.observability.simple_metrics import Counter, Summary
 from eden.observability.bounded_expiry_cache import (
     BoundedExpiryCache,
     resolve_max_entries,
 )
+from eden.observability.simple_metrics import Counter, Summary
 
 logger = logging.getLogger(__name__)
 
