@@ -242,10 +242,32 @@ class BackgroundWorkers:
                         holder = await asyncio.wait_for(
                             lock.holder(), timeout=5.0
                         )
-                    _note_acquire_outcome(
-                        _BUNDLE_LOCK_NAME,
-                        f"refused(held_by={holder or 'unknown'})",
-                    )
+                    if holder:
+                        _note_acquire_outcome(
+                            _BUNDLE_LOCK_NAME, f"refused(held_by={holder})"
+                        )
+                    else:
+                        # SET NX cannot fail on a key that does not exist.
+                        # Refused + nobody holding it means the write was
+                        # accepted and discarded — a Redis serving reads
+                        # and silently dropping writes, which is what
+                        # Upstash does once a plan limit is exceeded.
+                        #
+                        # This is NOT contention, and treating it as such
+                        # is why it read as "someone else is leader"
+                        # forever. Every leader lock in the system fails
+                        # the same way, so the entire background fleet
+                        # cannot start and nothing anywhere says why.
+                        _note_acquire_outcome(
+                            _BUNDLE_LOCK_NAME, "write_dropped(redis_read_only)"
+                        )
+                        logger.error(
+                            "background: leader lock refused but unheld — "
+                            "Redis is accepting reads and dropping writes "
+                            "(provider plan limit exceeded?). Every "
+                            "leader-gated loop will stay down until this "
+                            "clears."
+                        )
 
             if acquired:
                 extender_stop = asyncio.Event()
