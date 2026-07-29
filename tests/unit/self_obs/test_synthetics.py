@@ -120,10 +120,12 @@ async def test_run_golden_probes_reuses_shared_results_without_recalling_probe(
     assert result["failed"] == 0
     # issues_list is genuinely org-specific — it must still run + persist.
     assert ("org-1", "issues_list") in persisted
-    # sign_in_home came from shared_results — the probe wasn't re-run,
-    # but its cached result must still be persisted for this org so the
-    # per-org dashboard sees it.
-    assert ("org-1", "sign_in_home") in persisted
+    # sign_in_home came from shared_results, so it is neither re-invoked
+    # NOR re-persisted here. run_org_independent_probes already wrote it
+    # once this tick under _SHARED_ORG_ID, and GET /synthetics/last
+    # unions that sentinel in. Writing it again per-org is what made
+    # eden_synthetic_runs scale with org count.
+    assert ("org-1", "sign_in_home") not in persisted
 
 
 @pytest.mark.asyncio
@@ -165,13 +167,20 @@ async def test_run_golden_probes_shares_issue_count_between_list_and_detect(
 async def test_shared_results_persisted_once_per_org_without_reinvoking_probe(
     monkeypatch,
 ):
-    """End-to-end regression for the scheduler's O(1)-invocation /
-    O(orgs)-persistence contract: ``run_org_independent_probes`` runs
-    each org-independent probe exactly once per tick regardless of org
-    count, and feeding that shared result into ``run_golden_probes`` for
-    every org writes a per-org ``eden_synthetic_runs`` row for it (so
-    ``GET /synthetics/last`` — scoped by ``org_id`` — stays fresh for
-    every org) without ever re-invoking the probe function.
+    """The scheduler's contract is now O(1) in BOTH invocation and
+    persistence for org-independent probes.
+
+    Persistence used to be O(orgs): the same cached result was written
+    once per org per tick so that ``GET /synthetics/last`` — scoped by
+    ``org_id`` — stayed fresh for everyone. Measured on production
+    2026-07-29 that was 4,860 ``eden_synthetic_runs`` rows/day at 9 orgs
+    with zero user telemetry, and the shape projects to ~2.9M identical
+    rows/day at 10,000 orgs.
+
+    The result is now written exactly once per tick under
+    ``_SHARED_ORG_ID``, and the read path unions that sentinel in, so
+    the dashboard is unchanged while the write cost stops scaling with
+    org count.
     """
     from eden.self_obs import synthetics as syn
 
@@ -204,9 +213,15 @@ async def test_shared_results_persisted_once_per_org_without_reinvoking_probe(
 
     # still invoked exactly once regardless of org count
     assert call_count == 1
-    # but persisted once per org, so each org's GET /synthetics/last sees it
-    assert sorted(p[0] for p in persisted) == sorted(orgs)
-    assert all(p[1] == "sign_in_home" and p[2] == "ok" for p in persisted)
+    # ...and now persisted exactly once too, under the shared sentinel,
+    # NOT once per org. This is the whole point: adding orgs must not
+    # add writes for a result that is identical across all of them.
+    assert persisted == [(syn._SHARED_ORG_ID, "sign_in_home", "ok")], (
+        f"expected one sentinel write, got {persisted}"
+    )
+    assert not any(p[0] in orgs for p in persisted), (
+        "org-independent probe results must not be written per-org"
+    )
 
 
 @pytest.mark.asyncio

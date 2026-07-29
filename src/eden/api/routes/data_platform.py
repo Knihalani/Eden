@@ -527,7 +527,7 @@ async def delete_tenant_data(
     Requires admin role. This is irreversible.
     """
     manager = DataRetentionManager(dry_run=False)
-    report = await manager.delete_user_data(org_id)
+    report = await manager.delete_tenant_data(org_id)
 
     return {
         "tenant_id": org_id,

@@ -357,12 +357,24 @@ async def list_security_scans(
 # ────────────────────────────────────────────────────────────────────
 
 
-@router.post("/rtbf")
+@router.post(
+    "/rtbf",
+    dependencies=[Depends(require_feature_flag("rtbf_fanout_v1"))],
+)
 async def process_rtbf(
     body: RTBFRequest,
     org_id: str = Depends(require_path_org_access),
     user: Any = Depends(get_current_user),
 ) -> dict[str, Any]:
+    """Right-to-be-forgotten request.
+
+    Gated OFF by default (``rtbf_fanout_v1``). The cross-store fanout cannot
+    currently erase per-user data from Typesense, Redis, Qdrant, ClickHouse or
+    S3 — each either filters on a field its schema does not have or has no
+    delete-by-user path at all. Serving this endpoint would return a
+    compliance guarantee the system cannot keep. Re-enable once the fanout is
+    genuinely per-user.
+    """
     return await _rtbf.process_request(
         org_id,
         user_id=body.user_id,

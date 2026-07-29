@@ -1011,6 +1011,13 @@ def _build_settings_class():
         agent_sessions_v1: bool = True
         debug_sessions_v1: bool = True
         browser_recording_v1: bool = True
+        # RTBF cross-store fanout. OFF until every store has a genuinely
+        # per-user erasure path. Today Typesense filters on a field absent
+        # from its schema, Redis scans a key pattern nothing matches, and
+        # Qdrant/ClickHouse have no delete-by-user at all — so a "completed"
+        # erasure erases almost nothing. Set RTBF_FANOUT_V1=true only once
+        # those are real. See services/governance_intel/rtbf_fanout.py.
+        rtbf_fanout_v1: bool = False
         # Triage budget (F30) — optional max LLM spend per org per day.
         # Positive default enforces a daily cap; orgs may override via
         # ``code_change_policy.max_triage_cost_usd_per_day`` (incl. 0 = unlimited).

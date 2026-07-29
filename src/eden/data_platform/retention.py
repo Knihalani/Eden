@@ -12,7 +12,7 @@ Usage:
     from eden.data_platform.retention import DataRetentionManager
     manager = DataRetentionManager()
     await manager.purge_pii_fields(before_date=datetime.now() - timedelta(days=30))
-    await manager.delete_user_data(tenant_id="...")
+    await manager.delete_tenant_data(tenant_id="...")
 """
 
 from __future__ import annotations
@@ -246,8 +246,18 @@ class DataRetentionManager:
             logger.error(f"S3 archive write failed: {exc}")
             return 0
 
-    async def delete_user_data(self, tenant_id: str) -> RetentionReport:
-        """GDPR right-to-be-forgotten: delete all data for a tenant.
+    async def delete_tenant_data(self, tenant_id: str) -> RetentionReport:
+        """Delete **all data for an entire tenant**. Not a per-user operation.
+
+        Renamed from ``delete_user_data`` in the 2026-07 remediation. The old
+        name caused ``rtbf_fanout._fanout_s3`` to call this with an ``org_id``
+        while discarding the ``user_id`` it had been given, so a single user's
+        right-to-be-forgotten request destroyed the whole organisation —
+        including ``usage_events`` (billing) — and reported success.
+
+        Deliberately **no backwards-compatible alias**: the old call site
+        guarded on ``hasattr(mgr, "delete_user_data")``, so the rename is what
+        makes that branch unreachable. Do not add one.
 
         Removes from:
         - bronze (usage_events)

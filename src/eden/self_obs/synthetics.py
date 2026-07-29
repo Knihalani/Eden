@@ -184,6 +184,27 @@ _PROBE_FNS = {
 # queries Postgres scoped by ``org_id`` and genuinely differs per org.
 _ORG_INDEPENDENT_PROBES: tuple[str, ...] = ("sign_in_home", "gateway_health")
 
+#: Sentinel org for results that are identical across every org.
+#:
+#: ``sign_in_home`` and ``gateway_health`` hit fixed URLs, so their
+#: result does not depend on org_id. Probe *invocation* was already
+#: de-duplicated; the *writes* were not — run_golden_probes persisted
+#: the same cached result once per org per tick, i.e.
+#: O(orgs x shared_probes x ticks). Measured 2026-07-29 on production:
+#: 4,860 eden_synthetic_runs rows/day at 9 orgs with zero user
+#: telemetry, and the same shape projects to ~2.9M identical rows/day
+#: at 10,000 orgs.
+#:
+#: These now persist exactly once per tick under this sentinel, so the
+#: shared portion is O(ticks) — constant in org count.
+#: ``GET /synthetics/last`` reads the sentinel alongside the caller's
+#: own org, so every org still sees current shared-probe status.
+#:
+#: The column is a bare ``UUID NOT NULL`` with no foreign key to
+#: organizations (migration 105), so the nil UUID is safe here and can
+#: never collide with a real org id.
+_SHARED_ORG_ID = "00000000-0000-0000-0000-000000000000"
+
 
 async def run_org_independent_probes(
     probes: Sequence[str] = _ORG_INDEPENDENT_PROBES,
@@ -218,6 +239,11 @@ async def run_org_independent_probes(
         # here is never read.
         detail = await fn("_scheduler_shared")
         results[name] = detail
+        # Persist ONCE, under the shared sentinel org, instead of once
+        # per org in run_golden_probes. See _SHARED_ORG_ID.
+        await _persist_run(
+            _SHARED_ORG_ID, name, detail.get("status", "fail"), detail
+        )
     return results
 
 
@@ -256,34 +282,14 @@ async def run_golden_probes(
             if status not in ("ok", "healthy"):
                 failed += 1
             results[name] = detail
-            # KNOWN WRITE AMPLIFICATION — bounded, not fixed.
-            #
-            # This persists a result that is identical for every org
-            # (sign_in_home and gateway_health hit fixed URLs) once per
-            # org per tick. Probe *invocation* was de-duplicated by
-            # run_org_independent_probes; the writes were not, on the
-            # reasoning that a write is cheap.
-            #
-            # It is O(orgs x shared_probes x ticks/day). Measured on
-            # production 2026-07-29 with 9 orgs and zero user telemetry,
-            # eden_synthetic_runs took 4,860 rows/day. The same shape at
-            # 10,000 orgs is ~2.9M identical rows/day from these two
-            # probes alone, against a Neon instance billed for staying
-            # awake — which at that point is the dominant write load on
-            # the database and none of it is user data.
-            #
-            # 2026-07-29 added 14-day retention in workers/cron_tick.py
-            # so the table can no longer grow without bound. That caps
-            # the storage, not the write rate.
-            #
-            # The real fix is a storage-model change: persist the shared
-            # result once per tick (sentinel org, or its own table) and
-            # have GET /synthetics/last fall back to it, or UPSERT one
-            # row per (org, probe) so the dashboard keeps a fresh
-            # timestamp without appending history that carries no
-            # org-specific information. Both change the read path, so
-            # neither was done blind.
-            await _persist_run(org_id, name, status, detail)
+            # Deliberately NOT persisted per-org. This result is
+            # identical for every org, and run_org_independent_probes
+            # already wrote it once under _SHARED_ORG_ID this tick.
+            # Writing it again here is what made eden_synthetic_runs
+            # O(orgs x shared_probes x ticks) — 4,860 rows/day at 9 orgs
+            # with zero user telemetry, ~2.9M/day at 10,000 orgs.
+            # GET /synthetics/last reads the sentinel alongside the
+            # caller's org, so the dashboard is unchanged.
             continue
         if name == "detect_to_issue":
             detail = await probe_detect_to_issue(
