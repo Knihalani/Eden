@@ -171,7 +171,27 @@ spec:
     failureThreshold: 3
   # Northflank forwards SIGTERM and gives 30s for graceful drain, which
   # matches what bin/serve.sh and the Dockerfile's STOPSIGNAL expect.
-  terminationGracePeriodSeconds: 30
+  # Raised 30 -> 60 on 2026-07-29, and applied live (it had never been
+  # set on the service at all, so the platform default applied).
+  #
+  # 30s could not work: ``BackgroundWorkers.stop`` alone budgets 35s
+  # ("must be >= the quality sidecar's 30s drain budget"), and the
+  # lifespan shutdown then still has to drain trace_quality, the otel
+  # exporter, Redis, the telemetry collector, two httpx clients and
+  # finally the Postgres pool. SIGKILL therefore always truncated the
+  # shutdown.
+  #
+  # That matters more since the bundle lock's TTL went 60s -> 600s (see
+  # _BUNDLE_LOCK_TTL_SECONDS in workers/background.py, raised to cut the
+  # Upstash burn ~10x). A truncated shutdown skips the lock release, and
+  # the next pod then waits out the TTL before it can host the fleet —
+  # 10 minutes on the new TTL where it used to be 1. Observed on the
+  # 2026-07-29 redeploy: ~2 minutes of started=false while the fleet
+  # waited for the previous holder's lease.
+  #
+  # 60s lets the graceful release actually finish, which is what makes
+  # the longer TTL safe.
+  terminationGracePeriodSeconds: 60
   env:
     # ── App defaults ──────────────────────────────────────────────
     - name: APP_NAME
