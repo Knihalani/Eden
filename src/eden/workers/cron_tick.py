@@ -73,6 +73,65 @@ async def _run_typesense_ttl_cleanup(*, dry_run: bool) -> dict[str, object]:
         return _err(exc)
 
 
+# Self-observability tables and how long to keep them. Both are written
+# by the platform about itself, on a fixed cadence, forever — and until
+# 2026-07-29 nothing ever deleted from either.
+#
+# Measured on production that day, with 9 orgs and ZERO user telemetry
+# in the previous 24h:
+#     eden_synthetic_runs      4,860 rows/day
+#     eden_component_heartbeats  2,933 rows/day
+#
+# The synthetic writer is the one that scales: run_golden_probes
+# persists one row per probe per org per tick, so it is
+# O(orgs x 5 probes x 144 ticks/day) — ~7.2M rows/day at 10,000 orgs,
+# none of it user data. Retention does not fix that amplification (see
+# the note on run_golden_probes), but it does stop the table growing
+# without bound while that is addressed.
+#
+# 14 days is well past the dashboards that read these (the admin status
+# page reads the most recent rows) and past any incident window where
+# the history is useful.
+_SELF_OBS_RETENTION = (
+    ("eden_synthetic_runs", "created_at", 14),
+    ("eden_component_heartbeats", "checked_at", 14),
+)
+
+
+async def _run_self_obs_retention(*, dry_run: bool) -> dict[str, object]:
+    """Delete self-observability rows older than their retention window."""
+    if dry_run:
+        return {"skipped": True, "reason": "dry_run"}
+    try:
+        from eden.storage.postgres import get_postgres_client
+
+        pg = await get_postgres_client()
+        if pg is None:
+            return {"skipped": True, "reason": "postgres_unavailable"}
+        deleted: dict[str, object] = {}
+        for table, ts_col, days in _SELF_OBS_RETENTION:
+            try:
+                # DELETE ... RETURNING would materialise every row; the
+                # command tag is enough and costs nothing extra.
+                tag = await pg.execute(
+                    f"DELETE FROM {table} "  # noqa: S608 - fixed identifiers above
+                    f"WHERE {ts_col} < now() - make_interval(days => $1)",
+                    days,
+                )
+                deleted[table] = tag
+            except Exception as exc:
+                # A table that has not been migrated yet must not abort
+                # the rest of the daily batch.
+                logger.warning(
+                    "[cron_tick] self_obs retention %s failed: %s", table, exc
+                )
+                deleted[table] = f"error: {str(exc)[:120]}"
+        return deleted
+    except Exception as exc:
+        logger.exception("[cron_tick] self_obs_retention failed: %s", exc)
+        return _err(exc)
+
+
 async def _run_daily(now: datetime, *, dry_run: bool) -> dict[str, object]:
     """Run the daily 03:00 UTC jobs: retention cron + Typesense TTL."""
     from eden.data_platform.retention_cron import run as retention_run
@@ -80,12 +139,16 @@ async def _run_daily(now: datetime, *, dry_run: bool) -> dict[str, object]:
     out: dict[str, object] = {
         "retention_cron": {},
         "typesense_ttl_cleanup": {},
+        "self_obs_retention": {},
     }
     out["retention_cron"] = await _safe_step(
         "retention_cron", retention_run(dry_run=dry_run)
     )
     out["typesense_ttl_cleanup"] = await _safe_step(
         "typesense_ttl_cleanup", _run_typesense_ttl_cleanup(dry_run=dry_run)
+    )
+    out["self_obs_retention"] = await _safe_step(
+        "self_obs_retention", _run_self_obs_retention(dry_run=dry_run)
     )
     return out
 
