@@ -148,3 +148,42 @@ async def test_failed_acquisition_is_counted_and_cleared() -> None:
 
     assert leader_mod.leader_acquire_failure_count("t") >= 1
     assert leader_mod.leader_acquire_failure_count() >= 1
+
+
+@pytest.mark.asyncio
+async def test_alive_loops_report_where_they_are_suspended() -> None:
+    """A loop wedged on an await that never returns is indistinguishable
+    from a healthy one unless the signal says *where* it is parked."""
+    recorded: list[tuple] = []
+
+    async def _fake_record(component, *, org_id=None, status=None, meta=None):
+        recorded.append((component, status, meta))
+
+    never = asyncio.Event()
+
+    async def _wedged():
+        await never.wait()
+
+    wedged_task = asyncio.create_task(_wedged())
+    await asyncio.sleep(0)
+
+    worker_main._loop_tasks.clear()
+    worker_main._loop_tasks["insights_loop"] = wedged_task
+    try:
+        stop = asyncio.Event()
+        with patch(
+            "eden.self_obs.heartbeats.record_heartbeat", _fake_record
+        ), patch.object(worker_main, "_grid_interval", return_value=0.05):
+            task = asyncio.create_task(worker_main._worker_liveness_loop(stop))
+            await asyncio.sleep(0.12)
+            stop.set()
+            await asyncio.wait_for(task, timeout=2.0)
+    finally:
+        wedged_task.cancel()
+        worker_main._loop_tasks.clear()
+
+    state = recorded[0][2]["loops"]["insights_loop"]
+    assert state.startswith("alive@"), state
+    assert "wedged" in state or ":" in state, (
+        f"suspended frame not reported: {state}"
+    )

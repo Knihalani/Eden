@@ -422,7 +422,24 @@ async def _worker_liveness_loop(stop: asyncio.Event) -> None:
             dead: list[str] = []
             for loop_name, task in sorted(_loop_tasks.items()):
                 if not task.done():
-                    states[loop_name] = "alive"
+                    # "alive" alone cannot distinguish a loop doing its job
+                    # from one suspended forever on an await that will never
+                    # return — and the second is what a wedged Redis call
+                    # looks like from outside. The suspended frame names the
+                    # exact line, which is otherwise only visible in logs we
+                    # may not be able to reach.
+                    where = ""
+                    try:
+                        stack = task.get_stack(limit=1)
+                        if stack:
+                            frame = stack[0]
+                            where = (
+                                f"@{frame.f_code.co_name}"
+                                f":{frame.f_lineno}"
+                            )
+                    except Exception:
+                        pass
+                    states[loop_name] = f"alive{where}"
                     continue
                 if task.cancelled():
                     states[loop_name] = "cancelled"
