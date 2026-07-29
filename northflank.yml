@@ -208,8 +208,27 @@ spec:
       value: INFO
     - name: LOG_JSON
       value: "true"
+    # ⚠️  MUST STAY "0" until ENCRYPTION_KEY is confirmed to reach the
+    # container. Set live to "1" on 2026-07-29 and the pod would not
+    # boot: ``get_settings()`` raises
+    #   RuntimeError: encryption_key is required when eden_production=True
+    # before the app constructs, so it crash-looped. Reproduced exactly
+    # against the shipped image:
+    #   docker run -e JWT_SECRET=... -e EDEN_PRODUCTION=1 eden-api \
+    #     -c "from eden.config import get_settings; get_settings()"
+    #
+    # The project HAS an ENCRYPTION-KEY secret group, so the group's
+    # inner key is evidently not named ENCRYPTION_KEY, or the group is
+    # not reaching this service. Fix that first, verify with a
+    # non-production boot, then flip this to "1".
+    #
+    # Worth noting what saved this: the deployment sat at IN_PROGRESS
+    # for ~10 minutes while /ready kept returning 200, because the
+    # readiness probe added earlier the same day stopped Northflank
+    # cutting traffic over to the dead pod. Before that probe existed
+    # this would have been a hard outage.
     - name: EDEN_PRODUCTION
-      value: "1"
+      value: "0"
     - name: EDEN_MIGRATIONS_DIR
       value: /app/migrations
     # 2026-07-29: flipped 0 → 1. The background fleet now runs in this
