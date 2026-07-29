@@ -11,13 +11,24 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "@clerk/nextjs";
 
-const DOCS_ORIGINS = new Set([
-  "https://docs.edenobservability.com",
-  "http://localhost:3000",
-  "http://localhost:3001",
-  "http://127.0.0.1:3000",
-  "http://127.0.0.1:3001",
-]);
+/** Localhost docs previews are a development affordance only. The
+ *  payload this page posts carries a real, freshly-minted org API key,
+ *  so a production build must never name a loopback origin as a target
+ *  — a dev docs site running in the same browser would otherwise be a
+ *  valid recipient of production credentials. */
+const IS_DEV = process.env.NODE_ENV !== "production";
+
+const DOCS_ORIGINS = new Set(
+  IS_DEV
+    ? [
+        "https://docs.edenobservability.com",
+        "http://localhost:3000",
+        "http://localhost:3001",
+        "http://127.0.0.1:3000",
+        "http://127.0.0.1:3001",
+      ]
+    : ["https://docs.edenobservability.com"],
+);
 
 type BridgePayload = Record<string, unknown> & { type: "eden-docs-fill" };
 
@@ -37,8 +48,11 @@ function postToOpener(payload: BridgePayload) {
     target !== "*" && DOCS_ORIGINS.has(target) ? target : "https://docs.edenobservability.com";
   try {
     opener.postMessage(payload, origin);
-    // Also try localhost during local docs preview
-    if (origin !== "http://localhost:3000") {
+    // Local docs preview only — see IS_DEV above. postMessage's
+    // targetOrigin is a delivery restriction, so this is a no-op unless
+    // the opener really is the local docs site, but a production bundle
+    // has no business naming a loopback origin as a key recipient.
+    if (IS_DEV && origin !== "http://localhost:3000") {
       try {
         opener.postMessage(payload, "http://localhost:3000");
       } catch {

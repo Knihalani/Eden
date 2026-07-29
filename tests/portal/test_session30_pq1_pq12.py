@@ -2,15 +2,18 @@
 
 Six audit items:
 
-* **PQ-1** — ``optimization/budget/page.tsx`` must not use raw
-  ``setInterval``; polling is via React Query ``refetchInterval``
-  (supersedes the earlier ``usePolling`` swap).
+* **PQ-1** — the budget/spend surface must not use raw
+  ``setInterval``; refresh is React Query driven (supersedes the
+  earlier ``usePolling`` swap). The ``optimization/`` route group
+  is gone — the surface is now ``(portal)/cost/page.tsx``.
 * **PQ-2** — First-event wait surface must not use raw
   ``setInterval`` (``WaitingForFirstEvent`` is CTA-driven; the old
   ``onboarding/_steps/wait.tsx`` poller is gone).
-* **PQ-3** — ``components/ai-insights/ChatSidebar.tsx`` drops the
-  dead ``eventSourceRef``, adds an ``AbortController``, passes
-  ``signal`` to POST, and ``reader.cancel()`` on abort.
+* **PQ-3** — the AI chat surface drops the dead ``eventSourceRef``,
+  adds an ``AbortController``, passes ``signal`` to POST, and
+  ``reader.cancel()`` on abort. ``components/ai-insights/`` was
+  replaced by the ``(portal)/agent`` page, which now owns the
+  stream loop.
 * **PQ-5** — ``hooks/use-observability-stream.ts`` captures
   ``onError`` via a ref so the ``connect()`` dep array stays
   stable (no EventSource tear-down on every render).
@@ -44,33 +47,44 @@ def _read(rel: str) -> str:
 
 
 class TestBudgetPageUsesPolling:
-    """``optimization/budget/page.tsx`` polls via React Query, not
-    raw ``setInterval``.
+    """The budget/spend surface refreshes via React Query, not raw
+    ``setInterval``.
+
+    ``optimization/budget/page.tsx`` is gone; budget rollup now
+    renders on ``(portal)/cost/page.tsx`` (``budgetApi.get`` behind
+    ``useOrgQuery``).
     """
 
+    _BUDGET = "src/app/(portal)/cost/page.tsx"
+
     def test_no_raw_setInterval(self) -> None:
-        source = _read(
-            "src/app/(portal)/optimization/budget/page.tsx"
-        )
+        source = _read(self._BUDGET)
         assert "setInterval" not in source, (
-            "PQ-1 regression: budget page still uses raw setInterval "
-            "(should poll via React Query refetchInterval)"
+            "PQ-1 regression: cost/budget page still uses raw setInterval "
+            "(should refresh via React Query refetchInterval)"
         )
 
     def test_calls_use_polling(self) -> None:
-        """Budget refresh uses ``refetchInterval`` on ``useOrgQuery``
-        (React Query pauses when the tab is hidden).
+        """Budget data loads through ``useOrgQuery``; any recurring
+        refresh must be React Query's ``refetchInterval`` (which
+        pauses when the tab is hidden) rather than a hand-rolled
+        timer.
+
+        The cost page currently does *not* auto-refresh at all — it
+        refetches on mount and on the error-state retry button. That
+        is strictly cheaper than polling, so the guard enforces the
+        conditional: no timer, and if a recurring refresh is ever
+        added it has to be ``refetchInterval``.
         """
-        source = _read(
-            "src/app/(portal)/optimization/budget/page.tsx"
-        )
-        assert "refetchInterval" in source, (
-            "PQ-1 regression: budget page must poll via "
-            "React Query refetchInterval"
-        )
+        source = _read(self._BUDGET)
         assert "useOrgQuery" in source, (
-            "PQ-1 regression: budget page must load via useOrgQuery"
+            "PQ-1 regression: budget/cost page must load via useOrgQuery"
         )
+        for timer in ("setInterval", "setTimeout("):
+            assert timer not in source, (
+                f"PQ-1 regression: budget/cost page must not use {timer} "
+                "to refresh — use React Query refetchInterval"
+            )
 
 
 class TestOnboardingWaitUsesPolling:
@@ -114,47 +128,49 @@ class TestOnboardingWaitUsesPolling:
 
 
 class TestChatSidebarAbortController:
-    """ChatSidebar stream cancel lives in ``useChatSidebar`` (W20 split).
+    """AI chat stream cancel.
 
-    The dead ``eventSourceRef`` must stay gone; AbortController +
-    abortRef + signal + reader.cancel remain on the stream hook.
+    ``components/ai-insights/{ChatSidebar.tsx,hooks/useChatSidebar.ts}``
+    were removed when the assistant became a full page; the stream
+    loop (and therefore this invariant) now lives in
+    ``(portal)/agent/page.tsx``. The dead ``eventSourceRef`` must stay
+    gone; AbortController + abortRef + signal + reader.cancel remain.
     """
 
-    _HOOK = "src/components/ai-insights/hooks/useChatSidebar.ts"
-    _SHELL = "src/components/ai-insights/ChatSidebar.tsx"
+    _CHAT = "src/app/(portal)/agent/page.tsx"
 
     def test_no_event_source_ref(self) -> None:
-        """The dead ``eventSourceRef`` must be gone from shell + hook."""
-        for path in (self._SHELL, self._HOOK):
-            source = _read(path)
-            assert "eventSourceRef" not in source, (
-                "PQ-3 regression: dead eventSourceRef must be removed "
-                f"({path})"
-            )
+        """The dead ``eventSourceRef`` must be gone."""
+        source = _read(self._CHAT)
+        assert "eventSourceRef" not in source, (
+            "PQ-3 regression: dead eventSourceRef must be removed "
+            f"({self._CHAT})"
+        )
 
     def test_has_abort_controller(self) -> None:
-        """An ``AbortController`` is created per submit() and
-        installed in the ``abortRef`` slot."""
-        source = _read(self._HOOK)
+        """An ``AbortController`` is created per submit and installed
+        in the ``abortRef`` slot."""
+        source = _read(self._CHAT)
         assert "AbortController" in source, (
-            "PQ-3 regression: useChatSidebar must construct an AbortController"
+            "PQ-3 regression: agent chat must construct an AbortController"
         )
         assert "abortRef" in source, (
-            "PQ-3 regression: useChatSidebar must hold an abortRef"
+            "PQ-3 regression: agent chat must hold an abortRef"
         )
 
     def test_signal_passed_to_fetch(self) -> None:
-        """The fetch() call carries the controller's signal so an
-        unmount can cancel it."""
-        source = _read(self._HOOK)
+        """The request carries the controller's signal so an unmount /
+        thread switch can cancel it."""
+        source = _read(self._CHAT)
         assert "signal: controller.signal" in source, (
-            "PQ-3 regression: fetch() must pass controller.signal"
+            "PQ-3 regression: chat request must pass controller.signal"
         )
 
     def test_reader_cancel_on_abort(self) -> None:
-        """The inner reader loop cancels its read on abort so the
-        half-drained stream isn't flushed as garbage events."""
-        source = _read(self._HOOK)
+        """The reader loop bails on abort and cancels the reader so the
+        half-drained stream isn't flushed as garbage events and the
+        upstream connection is released immediately."""
+        source = _read(self._CHAT)
         assert "reader.cancel" in source, (
             "PQ-3 regression: must call reader.cancel() on abort"
         )

@@ -117,8 +117,15 @@ class TestP2IngestBatchParallel:
     """The batch's routing step runs via ``asyncio.gather``."""
 
     def test_ingest_batch_routes_in_parallel(self) -> None:
-        """10 events × 50ms route latency → total wall-clock
-        ~50ms (gather) not 500ms (sequential)."""
+        """The routing step must fan out, not run one event at a time.
+
+        This used to assert an absolute wall-clock bound (10 × 50ms had
+        to finish under 250ms). That is load-sensitive: it passed alone
+        and failed inside the full suite purely from host contention,
+        which is a flaky gate, not a regression signal. Measuring peak
+        concurrency instead tests the actual invariant (``gather`` vs a
+        sequential loop) and is immune to how busy the machine is.
+        """
         from eden.observability.telemetry_collector import (
             TelemetryCollector,
             TelemetryEvent,
@@ -126,10 +133,17 @@ class TestP2IngestBatchParallel:
 
         c = TelemetryCollector()
 
-        # Stub _route to sleep 50ms; if gathered, 10 calls run
-        # in ~50ms. If sequential, 10 calls run in ~500ms.
+        in_flight = 0
+        peak_in_flight = 0
+
         async def _slow_route(event: TelemetryEvent) -> None:
-            await asyncio.sleep(0.05)
+            nonlocal in_flight, peak_in_flight
+            in_flight += 1
+            peak_in_flight = max(peak_in_flight, in_flight)
+            try:
+                await asyncio.sleep(0.05)
+            finally:
+                in_flight -= 1
 
         c._route = _slow_route  # type: ignore[method-assign]
 
@@ -158,11 +172,16 @@ class TestP2IngestBatchParallel:
         elapsed = time.monotonic() - t0
 
         assert result["accepted"] == 10
-        # Sequential would be 500ms; gather should be ~50ms.
-        assert elapsed < 0.25, (
-            f"P-2 regression: 10 events × 50ms route took "
-            f"{elapsed:.3f}s (gather should be ~0.05s; "
-            f"sequential ~0.5s)"
+        assert peak_in_flight == 10, (
+            f"P-2 regression: routing peaked at {peak_in_flight} concurrent "
+            f"events, expected all 10 in flight together (sequential loop?)"
+        )
+        # Generous wall-clock backstop: a sequential loop would need
+        # ~0.5s, so anything under half that proves fan-out even if the
+        # box is heavily loaded. Not a latency budget.
+        assert elapsed < 0.4, (
+            f"P-2 regression: 10 events × 50ms route took {elapsed:.3f}s; "
+            f"sequential would be ~0.5s"
         )
 
     def test_ingest_batch_validates_sequentially(self) -> None:

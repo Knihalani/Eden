@@ -5,12 +5,18 @@ Two audit items:
 * **PT-9** — ``uploadAvatar`` + ``exportOrgData`` in
   ``lib/api.ts`` route through ``fetchApi`` (not raw ``fetch``)
   so the 401-retry + in-flight dedup machinery applies.
-* **PT-11** — ``api-keys-tab.tsx`` reads ``data.raw_key``
-  (not ``data.key``) so the copy-one-time-key button works.
+* **PT-11** — the settings API-keys surface reads ``raw_key``
+  (not the legacy ``key``) so the copy-one-time-key button works.
+
+Refactor note: ``settings/_components/api-keys-tab.tsx`` was folded
+into ``src/app/(portal)/settings/page.tsx`` (the whole settings tab
+set now lives in that one client page). The PT-11 guard is repointed
+there — the invariant is unchanged, only its address moved.
 """
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import pytest
@@ -91,37 +97,42 @@ class TestExportOrgDataThroughFetchApi:
 
 
 class TestApiKeysTabRawKey:
-    """The tab must read ``data.raw_key`` (not ``data.key``) so
-    the copy-one-time-key button receives the new key.
+    """The API-keys surface must read ``raw_key`` (not the legacy
+    ``key``) so the copy-one-time-key button receives the new key.
+
+    Lives in ``settings/page.tsx`` since the tab extraction was
+    reversed (was ``settings/_components/api-keys-tab.tsx``).
     """
 
+    _SETTINGS = "src/app/(portal)/settings/page.tsx"
+
     def test_reads_raw_key(self) -> None:
-        source = _read(
-            "src/app/(portal)/settings/_components/api-keys-tab.tsx"
-        )
-        assert "data.raw_key" in source, (
-            "PT-11 regression: api-keys-tab.tsx must read data.raw_key"
+        source = _read(self._SETTINGS)
+        # ``createApiKey``'s result is bound as ``res`` now (was
+        # ``data``) — assert on the field, not the local name.
+        assert ".raw_key" in source, (
+            "PT-11 regression: settings API-keys surface must read "
+            ".raw_key off the create-key response"
         )
 
     def test_no_bare_data_key(self) -> None:
-        """Belt-and-braces: the legacy ``data.key`` access must be
+        """Belt-and-braces: the legacy bare ``.key`` access must be
         gone from the create-result handler."""
         # Strip line comments — the audit-fix comment mentions the
         # literal ``data.key`` in prose.
-        raw = _read(
-            "src/app/(portal)/settings/_components/api-keys-tab.tsx"
-        )
+        raw = _read(self._SETTINGS)
         source = "\n".join(
             line for line in raw.splitlines()
             if not line.lstrip().startswith("//")
         )
-        # The legacy access pattern from pre-fix code. The exact
-        # substring is ``data.key`` (no other suffix like ``.raw``).
-        # Match it as a discrete token to avoid false positives on
-        # ``data.key_raw`` or similar.
-        assert "data.key" not in source, (
-            "PT-11 regression: api-keys-tab.tsx must not access "
-            "data.key (should be data.raw_key)"
+        # The legacy access pattern from pre-fix code. Match it as a
+        # discrete token so ``res.key_prefix`` / ``data.key_raw``
+        # don't trip the guard.
+        legacy = re.search(r"\b(?:data|res|result)\.key\b", source)
+        assert legacy is None, (
+            "PT-11 regression: settings page must not access the "
+            f"legacy bare `.key` field ({legacy.group(0) if legacy else ''}) "
+            "— the create response only carries raw_key"
         )
 
 

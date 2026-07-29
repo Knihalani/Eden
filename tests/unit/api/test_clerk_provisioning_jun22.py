@@ -63,7 +63,8 @@ class TestAuthMeClerkProvisioning:
         )
 
         with patch(
-            "eden.api.deps.verify_clerk_token",
+            "eden.api.utils.clerk_auth.verify_clerk_token",
+            new_callable=AsyncMock,
             return_value={"sub": clerk_id, "email": "newuser@example.com"},
         ):
             response = api_client.get(
@@ -103,7 +104,8 @@ class TestAuthMeClerkProvisioning:
         )
 
         with patch(
-            "eden.api.deps.verify_clerk_token",
+            "eden.api.utils.clerk_auth.verify_clerk_token",
+            new_callable=AsyncMock,
             return_value={"sub": clerk_id, "email": "newuser@example.com"},
         ):
             response = api_client.get(
@@ -139,7 +141,8 @@ class TestAuthMeClerkProvisioning:
         )
 
         with patch(
-            "eden.api.deps.verify_clerk_token",
+            "eden.api.utils.clerk_auth.verify_clerk_token",
+            new_callable=AsyncMock,
             return_value={"sub": clerk_id, "email": "newuser@example.com"},
         ):
             response = api_client.get(
@@ -219,7 +222,8 @@ class TestAuthMeClerkProvisioning:
         )
 
         with patch(
-            "eden.api.deps.verify_clerk_token",
+            "eden.api.utils.clerk_auth.verify_clerk_token",
+            new_callable=AsyncMock,
             return_value={"sub": new_clerk, "email": email},
         ), patch(
             "eden.api.routes.auth.clerk_get_user",
@@ -454,7 +458,8 @@ class TestNotificationsHandlers:
         )
 
         with patch(
-            "eden.api.deps.verify_clerk_token",
+            "eden.api.utils.clerk_auth.verify_clerk_token",
+            new_callable=AsyncMock,
             return_value={"sub": clerk_id, "email": "fresh@example.com"},
         ):
             response = api_client.get(

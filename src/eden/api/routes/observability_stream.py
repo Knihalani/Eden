@@ -61,6 +61,27 @@ _SSE_EXPIRE_TTL_S = 24 * 3600
 _SSE_MAINT_REFRESH_S = 3600.0
 _sse_maint_at: dict[str, float] = {}
 
+#: One round trip for the whole SSE publish. The sequence number has to
+#: be known before the ZADD member can be built, so this builds the
+#: member inside Redis instead of paying a separate INCR round trip.
+#: KEYS: 1 = sequence counter, 2 = replay sorted-set.
+#: ARGV: 1 = payload body, 2 = subscriber count, 3 = pubsub channel,
+#:       4 = "1" when the sparse TTL/trim maintenance is due, 5 = TTL.
+_SSE_PUBLISH_LUA = """
+local seq = redis.call('INCR', KEYS[1])
+local member = seq .. '|' .. ARGV[1]
+if tonumber(ARGV[2]) > 0 then
+    redis.call('PUBLISH', ARGV[3], member)
+end
+redis.call('ZADD', KEYS[2], seq, member)
+if ARGV[4] == '1' then
+    redis.call('EXPIRE', KEYS[2], ARGV[5])
+    redis.call('EXPIRE', KEYS[1], ARGV[5])
+    redis.call('ZREMRANGEBYRANK', KEYS[2], 0, -1001)
+end
+return seq
+"""
+
 
 def _dump_payload(payload: dict[str, Any]) -> str:
     """Prefer A4 jsonx when present; fall back to compact stdlib JSON."""
@@ -421,28 +442,59 @@ async def publish_trace_event(org_id: str, payload: dict[str, Any]) -> None:
             return
 
         body = _dump_payload(payload)[:16 * 1024]
-        # INCR must resolve before ZADD member; then pipeline the rest.
-        seq = int(await redis.incr(seq_key))
-        member = f"{seq}|{body}"
+
         need_maint = (
             org_id not in _sse_maint_at or now >= _sse_maint_at[org_id]
         )
-        pipe = redis.pipeline(transaction=False)
-        cmds = 1  # incr
-        if sub_count > 0:
-            pipe.publish(channel, member)
-            cmds += 1
-        else:
+        if sub_count <= 0:
             record_sse_publish_skipped()
-        pipe.zadd(set_key, {member: float(seq)})
-        cmds += 1
-        if need_maint:
-            pipe.expire(set_key, _SSE_EXPIRE_TTL_S)
-            pipe.expire(seq_key, _SSE_EXPIRE_TTL_S)
-            pipe.zremrangebyrank(set_key, 0, -1001)
-            cmds += 3
-        await pipe.execute()
-        record_ingest_redis_commands(cmds)
+
+        # The ZADD member embeds the sequence number, so the INCR has to
+        # resolve before the rest of the batch can be built. That used to
+        # force a standalone ``await redis.incr(...)`` immediately before
+        # an otherwise-unrelated pipeline — two round trips per event.
+        # Doing the whole thing in one Lua script builds the member
+        # server-side, so it is a single round trip (and a single Upstash
+        # command) regardless of how many sub-operations run.
+        ok = False
+        try:
+            await redis.eval(
+                _SSE_PUBLISH_LUA,
+                2,
+                seq_key,
+                set_key,
+                body,
+                str(int(sub_count)),
+                channel,
+                "1" if need_maint else "0",
+                str(_SSE_EXPIRE_TTL_S),
+            )
+            ok = True
+            record_ingest_redis_commands(1)
+        except Exception as exc:
+            # Not every backend (or test double) implements EVAL; fall
+            # back to the original two-round-trip path rather than drop
+            # the event.
+            logger.debug(f"publish_trace_event: EVAL path unavailable: {exc}")
+
+        if not ok:
+            seq = int(await redis.incr(seq_key))
+            member = f"{seq}|{body}"
+            pipe = redis.pipeline(transaction=False)
+            cmds = 1  # incr
+            if sub_count > 0:
+                pipe.publish(channel, member)
+                cmds += 1
+            pipe.zadd(set_key, {member: float(seq)})
+            cmds += 1
+            if need_maint:
+                pipe.expire(set_key, _SSE_EXPIRE_TTL_S)
+                pipe.expire(seq_key, _SSE_EXPIRE_TTL_S)
+                pipe.zremrangebyrank(set_key, 0, -1001)
+                cmds += 3
+            await pipe.execute()
+            record_ingest_redis_commands(cmds)
+
         if need_maint:
             _sse_maint_at[org_id] = now + _SSE_MAINT_REFRESH_S
     except Exception as exc:

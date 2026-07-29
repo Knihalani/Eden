@@ -24,6 +24,8 @@ logger = logging.getLogger(__name__)
 
 # Default similarity threshold for semantic cache
 DEFAULT_SEMANTIC_THRESHOLD = 0.95
+# Fallback when ``settings.semantic_cache_embed_model`` is unavailable.
+_DEFAULT_EMBED_MODEL = "openai/text-embedding-3-small"
 
 
 class ExactMatchCache:
@@ -249,12 +251,54 @@ class SemanticCache:
 
     COLLECTION = "eden_semantic_cache"
     VECTOR_SIZE = 1536
+    # COST: bound on the normalized-prompt -> embedding memo. Small on
+    # purpose; its job is to collapse the get/set pair of a single
+    # request, not to be a second cache tier.
+    EMBED_MEMO_MAX = 256
 
     def __init__(self, similarity_threshold: float = DEFAULT_SEMANTIC_THRESHOLD):
         self.threshold = similarity_threshold
         self._hits = 0
         self._misses = 0
         self._embed_client: object | None = None
+        self._embed_memo: dict[str, list[float]] = {}
+        self._embed_calls = 0
+
+    @staticmethod
+    def _enabled() -> bool:
+        """Kill switch for all semantic-cache embedding spend."""
+        try:
+            from eden.config import get_settings
+
+            return bool(getattr(get_settings(), "semantic_cache_v1", True))
+        except Exception:
+            return True
+
+    @property
+    def embed_calls(self) -> int:
+        """Number of real upstream embed requests issued (ops + tests)."""
+        return self._embed_calls
+
+    def embedding_for(self, prompt: str) -> list[float] | None:
+        """Return the memoized embedding for ``prompt``, if one exists.
+
+        Lets a caller hand the vector computed during :meth:`get` straight
+        to the paired :meth:`set` without a second embed request.
+        """
+        return self._embed_memo.get(self._normalize(prompt))
+
+    @staticmethod
+    def _embed_model() -> str:
+        """Embedding model id (settings-driven, was hardcoded)."""
+        try:
+            from eden.config import get_settings
+
+            model = getattr(
+                get_settings(), "semantic_cache_embed_model", _DEFAULT_EMBED_MODEL
+            )
+            return str(model or _DEFAULT_EMBED_MODEL)
+        except Exception:
+            return _DEFAULT_EMBED_MODEL
 
     async def _get_embedding(self, text: str) -> list[float]:
         """Get embedding for text. Uses OpenAI-compatible API.
@@ -264,7 +308,17 @@ class SemanticCache:
         flight. The pre-fix code used the sync ``OpenAI`` client,
         which blocked the loop for the full request duration
         (~100-400ms per embed call).
+
+        COST: results are memoized on the normalized text. A gateway
+        cache-miss calls ``.get`` then ``.set`` with the identical
+        normalized prompt, which used to bill two embeddings for one
+        request. Only successful embeds are memoized — the pseudo-random
+        fallback vector below must never be cached as if it were real.
         """
+        memoized = self._embed_memo.get(text)
+        if memoized is not None:
+            return memoized
+
         if self._embed_client is None:
             from openai import AsyncOpenAI
 
@@ -284,11 +338,17 @@ class SemanticCache:
 
         # Try to get embedding — fall back to hashing if unavailable
         try:
+            self._embed_calls += 1
             resp = await self._embed_client.embeddings.create(
-                model="openai/text-embedding-3-small",
+                model=self._embed_model(),
                 input=text[:8000],
             )
-            return resp.data[0].embedding
+            vector = resp.data[0].embedding
+            if len(self._embed_memo) >= self.EMBED_MEMO_MAX:
+                # Cheap FIFO eviction; ordinary dicts preserve insertion order.
+                self._embed_memo.pop(next(iter(self._embed_memo)), None)
+            self._embed_memo[text] = vector
+            return vector
         except Exception as e:
             logger.warning(f"Embedding generation failed: {e}")
             # Return a pseudo-random vector as fallback (won't match anything)
@@ -306,9 +366,20 @@ class SemanticCache:
         prompt: str,
         model: str,
         similarity_threshold: float | None = None,
+        embedding: list[float] | None = None,
     ) -> LLMResponse | None:
-        """Try to get a semantically similar cached response."""
+        """Try to get a semantically similar cached response.
+
+        ``embedding`` lets a caller supply a pre-computed vector so the
+        embed is not billed again; when omitted it is computed here and
+        memoized, and can be read back with :meth:`embedding_for` to hand
+        to the paired :meth:`set`.
+        """
         import asyncio
+
+        if not self._enabled():
+            self._misses += 1
+            return None
         threshold = similarity_threshold or self.threshold
         qdrant = _get_qdrant_client()()
         loop = asyncio.get_event_loop()
@@ -341,7 +412,8 @@ class SemanticCache:
                 return None
 
         try:
-            embedding = await self._get_embedding(self._normalize(prompt))
+            if embedding is None:
+                embedding = await self._get_embedding(self._normalize(prompt))
             results = await loop.run_in_executor(
                 None,
                 lambda: qdrant.search(
@@ -383,15 +455,25 @@ class SemanticCache:
         prompt: str,
         model: str,
         response: LLMResponse,
+        embedding: list[float] | None = None,
     ) -> bool:
-        """Cache a response with its embedding."""
+        """Cache a response with its embedding.
+
+        ``embedding`` should be the vector already computed by the paired
+        :meth:`get` for this same prompt. When omitted the memo populated
+        by that call is consulted before falling back to a fresh embed, so
+        a get/set pair costs one embedding, not two.
+        """
         import asyncio
         from datetime import datetime
 
+        if not self._enabled():
+            return False
         qdrant = _get_qdrant_client()()
         loop = asyncio.get_event_loop()
         try:
-            embedding = await self._get_embedding(self._normalize(prompt))
+            if embedding is None:
+                embedding = await self._get_embedding(self._normalize(prompt))
             point = {
                 "id": hashlib.sha256(f"{self._normalize(prompt)}:{model}".encode()).hexdigest(),
                 "vector": embedding,

@@ -76,6 +76,68 @@ def _enabled() -> bool:
         return True
 
 
+def _sample_rate() -> float:
+    """Fraction of finalized traces that get an LLM annotation."""
+    try:
+        from eden.config import get_settings
+
+        raw = getattr(get_settings(), "trace_annotator_sample_rate", 0.1)
+        rate = float(0.1 if raw is None else raw)
+    except Exception:
+        rate = 0.1
+    return min(1.0, max(0.0, rate))
+
+
+def sampled_in(trace_id: str, rate: float | None = None) -> bool:
+    """Deterministic per-trace sample gate.
+
+    Keyed off the trace id (never a random draw) so the finalized-trace
+    consumer's retry ladder gets the same answer on every attempt -- a
+    random draw would let a 3x retry turn a 10% sample into ~27%.
+    """
+    r = _sample_rate() if rate is None else min(1.0, max(0.0, float(rate)))
+    if r >= 1.0:
+        return True
+    if r <= 0.0:
+        return False
+    try:
+        from eden.experiments._common import _hash_to_unit_interval
+    except Exception:  # pragma: no cover - defensive import guard
+        return False
+    return _hash_to_unit_interval("trace_annotator", trace_id) < r
+
+
+async def _budget_ok(org_id: str) -> bool:
+    """Org kill switch + daily maintenance budget.
+
+    Mirrors the gate in :mod:`eden.evaluation.online.scorer_cascade` so
+    annotator spend is subject to the same ceiling as the other
+    best-effort LLM lanes. Fails CLOSED -- this call is optional, so an
+    unreachable budget backend must not become a licence to spend.
+    """
+    try:
+        from eden.llmops.feature_kills import is_feature_enabled
+
+        if not await is_feature_enabled(org_id, "trace_annotator"):
+            return False
+    except Exception as exc:
+        logger.debug("annotator: feature kill check failed: %s", exc)
+        return False
+
+    try:
+        from eden.closed_loop.autonomy_policy import check_budget
+
+        ok, _spent, _limit = await check_budget(org_id)
+        if not ok:
+            logger.info("annotator: budget exhausted org=%s", org_id)
+            return False
+    except Exception as exc:
+        logger.debug("annotator: budget check failed: %s", exc)
+        return False
+
+    return True
+
+
 def compact_events(events: list[dict[str, Any]], *, max_chars: int = 3500) -> str:
     """Compress trajectory into a short prompt body."""
     lines: list[str] = []
@@ -177,6 +239,12 @@ async def annotate_trace(
         return AnnotatorResult(skipped_reason="disabled")
     if not events:
         return AnnotatorResult(skipped_reason="no_events")
+    # Cheap gates before the paid ones: sampling first (pure hash), then
+    # the org kill-switch + daily budget round trip.
+    if not sampled_in(trace_id):
+        return AnnotatorResult(skipped_reason="not_sampled")
+    if not await _budget_ok(org_id):
+        return AnnotatorResult(skipped_reason="budget_exhausted")
 
     body = compact_events(events)
     if not body.strip():
@@ -200,6 +268,8 @@ async def annotate_trace(
             expected_min_length=10,
             requires_quality_check=False,
             llm_client=llm_client,
+            org_id=org_id,
+            feature="trace_annotator",
         )
     except Exception as exc:
         logger.debug("annotator: route_async failed: %s", exc)
@@ -211,6 +281,15 @@ async def annotate_trace(
         tags = filter_covered_by_layer_a(tags, layer_a_ids)
     cost = float(getattr(resp, "cost_usd", 0.0) or 0.0)
     model = str(getattr(resp, "model", "") or "")
+    # Feed the spend back into the same ledger ``_budget_ok`` reads, or the
+    # budget gate above can never trip.
+    if cost > 0:
+        try:
+            from eden.closed_loop.autonomy_policy import record_spend
+
+            await record_spend(org_id, cost)
+        except Exception as exc:
+            logger.debug("annotator: record_spend failed: %s", exc)
     return AnnotatorResult(
         tags=tags,
         confidence=conf,

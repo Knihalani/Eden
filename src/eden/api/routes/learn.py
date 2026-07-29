@@ -655,7 +655,12 @@ async def improvement_loop_status(org_id: str = Depends(require_path_org_access)
         try:
             counts["api_keys"] = int(
                 await client.fetchval(
-                    "SELECT COUNT(*) FROM api_keys WHERE org_id = $1 AND revoked_at IS NULL",
+                    # ``org_api_keys`` is the canonical table
+                    # (migrations/009_org_api_keys.sql). This used to read
+                    # ``api_keys``, which no migration creates, so the
+                    # "SDK connected" onboarding predicate was always 0.
+                    "SELECT COUNT(*) FROM org_api_keys "
+                    "WHERE org_id = $1 AND revoked_at IS NULL",
                     org_id,
                 )
                 or 0

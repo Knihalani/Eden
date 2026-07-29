@@ -745,10 +745,17 @@ def _fire_winner_hook(
     except Exception:  # pragma: no cover - missing dep
         return
     try:
-        get_experiment_hook().on_winner(
-            org_id,
-            experiment_id=experiment_id_str,
-            winner_variant=winner_variant,
+        # ``on_winner`` is ``async def`` and this helper is sync; see
+        # _fire_dont_ship_hook.
+        from eden.async_tasks import fire_and_forget
+
+        fire_and_forget(
+            get_experiment_hook().on_winner(
+                org_id,
+                experiment_id=experiment_id_str,
+                winner_variant=winner_variant,
+            ),
+            name="experiments-winner-hook",
         )
     except Exception as exc:  # pragma: no cover - defensive
         logger.debug("Cat 12: winner hook fire failed: %s", exc)
@@ -768,11 +775,18 @@ def _fire_dont_ship_hook(
     except Exception:  # pragma: no cover
         return
     try:
-        get_promotion_hook().on_judge_regression(
-            org_id,
-            judge_name=judge,
-            trace_id=experiment_id_str,
-            score=delta,
+        # ``on_judge_regression`` is ``async def`` and this helper is sync —
+        # calling it bare dropped every don't-ship alert on the floor.
+        from eden.async_tasks import fire_and_forget
+
+        fire_and_forget(
+            get_promotion_hook().on_judge_regression(
+                org_id,
+                judge_name=judge,
+                trace_id=experiment_id_str,
+                score=delta,
+            ),
+            name="experiments-dont-ship-hook",
         )
     except Exception as exc:  # pragma: no cover
         logger.debug("Cat 12: dont-ship hook fire failed: %s", exc)
@@ -791,10 +805,16 @@ def _fire_simulation_drift_hook(
     except Exception:  # pragma: no cover
         return
     try:
-        get_promotion_hook().on_drift_alert(
-            org_id,
-            drift_type=f"simulation_regression:{scenario_id_str[:16]}",
-            severity=severity,
+        # ``on_drift_alert`` is ``async def``; see _fire_dont_ship_hook.
+        from eden.async_tasks import fire_and_forget
+
+        fire_and_forget(
+            get_promotion_hook().on_drift_alert(
+                org_id,
+                drift_type=f"simulation_regression:{scenario_id_str[:16]}",
+                severity=severity,
+            ),
+            name="experiments-simulation-drift-hook",
         )
     except Exception as exc:  # pragma: no cover
         logger.debug("Cat 12: drift hook fire failed: %s", exc)

@@ -45,6 +45,9 @@ import { QueryErrorPanel, QueryLoadingPanel } from "@/components/shell/query-err
 type SeverityFilter = "all" | "error" | "warn";
 type DetailTab = "overview" | "runs" | "fix";
 
+/** Deep-linkable via ``?tab=``; anything else falls back to overview. */
+const DETAIL_TABS: readonly DetailTab[] = ["overview", "runs", "fix"] as const;
+
 const COLUMNS: { id: IssueStatus; label: string }[] = [
   { id: "open", label: "Open" },
   { id: "acknowledged", label: "In progress" },
@@ -119,11 +122,19 @@ function IssueDetail({
 }) {
   const agent = agentForIssue(issue);
   const runs = occurrencesForIssue(issue);
-  const [tab, setTab] = useState<DetailTab>("overview");
+  // ``?tab=`` makes the detail tabs deep-linkable. The retired
+  // ``/issues/:id/fix`` page redirects here with ``tab=fix``; without
+  // this the redirect would land on Overview and silently drop intent.
+  const searchParams = useSearchParams();
+  const paramTab = searchParams.get("tab");
+  const initialTab: DetailTab = DETAIL_TABS.includes(paramTab as DetailTab)
+    ? (paramTab as DetailTab)
+    : "overview";
+  const [tab, setTab] = useState<DetailTab>(initialTab);
 
   useEffect(() => {
-    setTab("overview");
-  }, [issue.id]);
+    setTab(initialTab);
+  }, [issue.id, initialTab]);
 
   return (
     <aside

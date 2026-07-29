@@ -101,6 +101,11 @@ const nextConfig: NextConfig = {
       { source: "/dashboard/:path*", destination: "/home", permanent: false },
 
       // Auth cutover to Clerk — keep
+      // Unhyphenated spellings are what users type and what external
+      // links guess at; without these they hit the global 404.
+      { source: "/signin", destination: "/sign-in", permanent: false },
+      { source: "/log-in", destination: "/sign-in", permanent: false },
+      { source: "/register", destination: "/sign-up", permanent: false },
       { source: "/login", destination: "/sign-in", permanent: false },
       { source: "/login/:path*", destination: "/sign-in/:path*", permanent: false },
       { source: "/signup", destination: "/sign-up", permanent: false },
@@ -162,8 +167,21 @@ const nextConfig: NextConfig = {
       },
       { source: "/incidents", destination: "/issues?tab=incidents", permanent: false },
       {
+        // issues-client selects off ``?id=``; ``issueId`` was never read,
+        // so this rule used to drop the cluster id on the floor.
         source: "/incidents/:cluster_id",
-        destination: "/issues?tab=incidents&issueId=:cluster_id",
+        destination: "/issues?id=:cluster_id",
+        permanent: false,
+      },
+      // Issue detail is a selection inside /issues (it reads ?id= and
+      // ?tab=), not its own route — without these, every in-product link
+      // of the form /issues/<id> hit the global 404.
+      { source: "/issues/:id", destination: "/issues?id=:id", permanent: false },
+      {
+        // W29 retired the live /fix page; the fix/handoff surface is the
+        // Fix tab of the issue detail pane.
+        source: "/issues/:id/fix",
+        destination: "/issues?id=:id&tab=fix",
         permanent: false,
       },
       // Signals is the product leaf; /alerts opens the shell modal then home

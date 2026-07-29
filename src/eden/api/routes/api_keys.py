@@ -371,6 +371,21 @@ async def create_api_key_from_body(
             headers={"Retry-After": "5"},
         )
 
+    # Persist canonical scopes. The portal's Settings → API Keys UI
+    # offers a short vocabulary ("ingest", "traces:write", …) that
+    # VALID_SCOPES accepts but that INGEST_SCOPES / GATEWAY_SCOPES in
+    # deps.py do not contain — so keys minted there used to validate at
+    # create time and then 403 on every ingest and gateway call.
+    # Expanding here means newly-issued keys carry the canonical form;
+    # api_key_has_scope also expands at check time so keys already in
+    # the database keep working without a backfill.
+    from eden.api.deps import expand_scope_aliases
+
+    _expanded = expand_scope_aliases(scopes)
+    # Order-preserving: keep what the caller asked for first, then append
+    # the canonical scopes their aliases implied.
+    scopes = list(scopes) + sorted(_expanded - set(scopes))
+
     # Generate the raw key and its hash
     raw_key = generate_api_key()
     key_hash = hash_api_key(raw_key)
@@ -584,7 +599,7 @@ async def revoke_api_key(
     # Verify the key belongs to this org and is still active
     key = await client.fetchrow(
         """
-        SELECT id FROM org_api_keys
+        SELECT id, key_hash FROM org_api_keys
         WHERE id::text = $1 AND org_id::text = $2
           AND (active IS TRUE OR active IS NULL)
           AND revoked_at IS NULL
@@ -606,6 +621,12 @@ async def revoke_api_key(
         """,
         key["id"],
     )
+
+    # Auth caches the validated key context for up to 60s. Drop it here so
+    # revocation is immediate on this pod; other pods age out via the TTL.
+    from eden.api.deps import invalidate_api_key_cache
+
+    invalidate_api_key_cache(key.get("key_hash"))
 
     try:
         await log_audit_event(

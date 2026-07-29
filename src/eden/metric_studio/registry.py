@@ -317,7 +317,10 @@ class CustomMetricRegistry:
         try:
             from eden.llmops.promotion_hooks import get_metric_studio_hook
             hook = get_metric_studio_hook()
-            hook.on_metric_promotion(
+            # ``on_metric_promotion`` is ``async def``; ``approve`` is
+            # async, so await it — a bare call dropped every promotion
+            # notification.
+            await hook.on_metric_promotion(
                 org_id=org_id,
                 metric_id=metric_id,
                 judge_name=target.get("judge_id") or "",

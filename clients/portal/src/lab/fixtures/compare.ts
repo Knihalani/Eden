@@ -71,23 +71,6 @@ export type AbExperimentFixture = {
   sourceDebuggerSessionId?: string;
 };
 
-function daySeries(
-  controlBase: number,
-  treatmentBase: number,
-  days: number,
-  drift = 0.01,
-): AbMetricPoint[] {
-  return Array.from({ length: days }, (_, i) => ({
-    t: `Day ${i + 1}`,
-    control: +(controlBase + (Math.sin(i) * drift) / 2).toFixed(4),
-    treatment: +(
-      treatmentBase -
-      i * drift * 0.4 +
-      (Math.cos(i) * drift) / 3
-    ).toFixed(4),
-  }));
-}
-
 export const AB_SAMPLES: AbSample[] = [];
 
 export const AB_EXPERIMENTS: AbExperimentFixture[] = [];

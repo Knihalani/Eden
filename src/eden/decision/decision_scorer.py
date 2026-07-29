@@ -328,7 +328,14 @@ class DecisionScorer:
             return
         for jname in low_judges:
             try:
-                hook.on_judge_below_floor(org_id, judge_name=jname)
+                # ``on_judge_below_floor`` is ``async def`` and this
+                # method is sync — a bare call dropped every floor alert.
+                from eden.async_tasks import fire_and_forget
+
+                fire_and_forget(
+                    hook.on_judge_below_floor(org_id, judge_name=jname),
+                    name="decision-judge-below-floor-hook",
+                )
             except Exception as exc:
                 logger.debug(
                     "decision_scorer: on_judge_below_floor(%s) failed: %s",
@@ -363,11 +370,18 @@ class DecisionScorer:
             )
             return
         try:
-            hook.on_judge_regression(
-                org_id,
-                judge_name=self.OVERALL_JUDGE_NAME,
-                trace_id=trace_id,
-                score=overall,
+            # ``on_judge_regression`` is ``async def`` and this method is
+            # sync — a bare call dropped every overall-regression alert.
+            from eden.async_tasks import fire_and_forget
+
+            fire_and_forget(
+                hook.on_judge_regression(
+                    org_id,
+                    judge_name=self.OVERALL_JUDGE_NAME,
+                    trace_id=trace_id,
+                    score=overall,
+                ),
+                name="decision-judge-regression-hook",
             )
         except Exception as exc:
             logger.debug(

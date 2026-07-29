@@ -35,7 +35,12 @@ def test_sdk_versions_synced() -> None:
     ts = json.loads(TS_PKG.read_text(encoding="utf-8"))
     assert ts["version"] == pv
     assert ts["name"] == "@eden-ai/sdk"
-    assert "0.3." in pv  # W4–W6 exit line
+    # The real invariant is that the two SDKs ship the same version (the
+    # three assertions above). The old `"0.3." in pv` pinned a release
+    # train and had to be edited on every minor bump — signal-free churn.
+    # A well-formed semver with a non-zero component is enough here.
+    assert re.fullmatch(r"\d+\.\d+\.\d+(?:[-+].*)?", pv), pv
+    assert pv != "0.0.0"
 
 
 def test_python_package_metadata() -> None:
@@ -79,7 +84,11 @@ def test_no_live_fix_page_directory() -> None:
 def test_next_config_redirects_fix_to_handoff() -> None:
     cfg = (ROOT / "clients" / "portal" / "next.config.ts").read_text(encoding="utf-8")
     assert '/issues/:id/fix' in cfg
-    assert "tab=handoff" in cfg
+    # The handoff surface is the issue detail pane's "Fix" tab
+    # (issues-client.tsx DETAIL_TABS) — there is no separate `handoff`
+    # tab, so the rule carries the id through and selects that tab.
+    assert "tab=fix" in cfg
+    assert "id=:id" in cfg
 
 
 def test_sota_docs_present() -> None:

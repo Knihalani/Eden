@@ -39,9 +39,61 @@ _org_id_cache: dict[str, tuple[float, str | None]] = {}
 _USER_ID_CACHE_TTL_S = 60.0
 _user_id_cache: dict[str, tuple[float, str | None]] = {}
 
+# Negative lookups get a much shorter TTL than hits. A brand-new user is
+# resolved (miss) a few milliseconds before their org/user row is INSERTed
+# by the provisioning path — caching that miss for the full 60s left them
+# staring at 403 "No active organization" for a minute after signup. Two
+# seconds still absorbs a retry burst without outliving a provision.
+_NEGATIVE_ID_CACHE_TTL_S = 2.0
+
 # Bound in-process id caches so long-lived workers cannot grow without limit
 # under org/user churn (cache stampede memory, not correctness).
 _ID_CACHE_MAX = 4096
+
+
+# Hot-path cache for API-key auth. Every SDK span batch and every gateway
+# call paid an uncached Neon round trip (org_api_keys JOIN organizations)
+# before any work started — the single most-executed query in the product.
+# TenantRateLimitMiddleware already caches its own key resolution for 60s;
+# this gives the auth dependency the same treatment so the two agree.
+#
+# Cost of the cache is bounded staleness on revocation: a key revoked on
+# one pod stays usable on another for up to the TTL. Revocation through
+# ``routes/api_keys.py`` calls :func:`invalidate_api_key_cache`, so the lag
+# only applies to other pods, and the TTL is additionally clamped to the
+# key's own ``expires_at`` so an expiring key can never outlive its expiry.
+_API_KEY_AUTH_CACHE_TTL_S = 60.0
+_API_KEY_AUTH_CACHE_MAX = 2048
+_api_key_auth_cache: dict[tuple[str, str], tuple[float, dict]] = {}
+
+
+def invalidate_api_key_cache(key_hash: str | None = None) -> None:
+    """Drop cached API-key auth results.
+
+    Called on revoke/disable so the issuing pod stops honouring the key
+    immediately. With no argument, clears the whole cache (tests).
+    """
+    if key_hash is None:
+        _api_key_auth_cache.clear()
+        return
+    for cached_key in [k for k in _api_key_auth_cache if k[0] == key_hash]:
+        _api_key_auth_cache.pop(cached_key, None)
+
+
+def invalidate_org_id_cache(*keys: str | None) -> None:
+    """Drop cached org-id resolutions. Call right after an INSERT into
+    ``organizations`` so the newly-created row is visible immediately."""
+    for key in keys:
+        if key:
+            _org_id_cache.pop(key, None)
+
+
+def invalidate_user_id_cache(*keys: str | None) -> None:
+    """Drop cached user-id resolutions. Call right after an INSERT into
+    ``users`` (Clerk auto-provisioning) for the same reason."""
+    for key in keys:
+        if key:
+            _user_id_cache.pop(key, None)
 
 
 def _cache_put(
@@ -69,15 +121,46 @@ INGEST_SCOPES = frozenset({"ingest:write", "ingest:read", "ingest:*", "*"})
 GATEWAY_SCOPES = frozenset({"gateway:write", "gateway:read", "gateway:*", "*"})
 MCP_SCOPES = frozenset({"mcp:read", "mcp:debug", "mcp:fix", "mcp:*", "*"})
 
+# Portal scope aliases → canonical scopes.
+#
+# The Settings → API Keys UI has always offered a short vocabulary
+# (``ingest``, ``traces:write``, …) that ``VALID_SCOPES`` in
+# ``routes/api_keys.py`` accepts, but that none of the families above
+# contain. The result: every key a user minted from Settings was
+# accepted at create time and then 403'd on every ingest and gateway
+# call — the product's most common first action produced a dead key.
+#
+# These are *spelling* aliases for scopes the user explicitly chose,
+# not legacy grandfathering of unscoped keys: an empty scope list still
+# fails closed, and no alias grants a family the user did not pick.
+SCOPE_ALIASES: dict[str, frozenset[str]] = {
+    "ingest": frozenset({"ingest:write", "ingest:read"}),
+    "traces:write": frozenset({"ingest:write"}),
+    "traces:read": frozenset({"ingest:read"}),
+}
+
+
+def expand_scope_aliases(scopes: list[str] | None) -> set[str]:
+    """Return ``scopes`` with portal aliases expanded to canonical form."""
+    out: set[str] = set()
+    for raw in scopes or []:
+        scope = str(raw).strip()
+        if not scope:
+            continue
+        out.add(scope)
+        out |= SCOPE_ALIASES.get(scope, frozenset())
+    return out
+
 
 def api_key_has_scope(scopes: list[str] | None, allowed: frozenset[str]) -> bool:
     """Return True when the key grants at least one scope in ``allowed``.
 
-    Empty / missing scopes fail closed. No legacy grandfathering —
+    Empty / missing scopes fail closed. Portal spelling aliases
+    (:data:`SCOPE_ALIASES`) are expanded first; beyond those,
     ``ingest:write`` / ``gateway:write`` (or family ``*`` / bare ``*``)
     must be present explicitly.
     """
-    s = set(scopes or [])
+    s = expand_scope_aliases(scopes)
     if not s:
         return False
     if s & allowed:
@@ -656,10 +739,13 @@ async def resolve_eden_user_id(user_id: str | None) -> str | None:
         value = str(row["id"]) if row else None
         # Only cache definitive lookups. A DB exception must not poison
         # the cache with ``None`` for 60s (false "user not found").
+        # Misses get the short negative TTL — provisioning INSERTs the
+        # row moments later and must not be shadowed by this entry.
         _cache_put(
             _user_id_cache,
             user_id,
-            now_mono + _USER_ID_CACHE_TTL_S,
+            now_mono
+            + (_USER_ID_CACHE_TTL_S if value else _NEGATIVE_ID_CACHE_TTL_S),
             value,
         )
         return value
@@ -703,10 +789,13 @@ async def resolve_eden_org_id(org_id: str | None) -> str | None:
         value = str(row["id"]) if row else None
         # Only cache definitive lookups. A DB exception must not poison
         # the cache with ``None`` for 60s (false "Organization not found").
+        # Misses get the short negative TTL — ``ensure_clerk_org_from_session``
+        # resolves (miss) and then INSERTs within the same request, and a
+        # 60s negative entry left fresh signups 403ing for a full minute.
         _cache_put(
             _org_id_cache,
             org_id,
-            now_mono + _ORG_ID_CACHE_TTL_S,
+            now_mono + (_ORG_ID_CACHE_TTL_S if value else _NEGATIVE_ID_CACHE_TTL_S),
             value,
         )
         return value
@@ -957,6 +1046,10 @@ async def ensure_clerk_org_from_session(
         if not row:
             return None
         eden_org_id = str(row["id"])
+        # The resolve above cached a miss for this key moments ago. Drop it
+        # now that the row exists, or the very next request in this signup
+        # flow 403s "No active organization" off a stale negative entry.
+        invalidate_org_id_cache(clerk_org_id, eden_org_id)
         await ensure_clerk_membership(eden_user_id, eden_org_id, clerk_role)
         return eden_org_id
     except Exception as exc:
@@ -1684,6 +1777,20 @@ async def get_current_org_api_key(
             detail="Invalid API key",
         ) from exc
 
+    # Hot path: serve a recent, still-valid result without touching
+    # Postgres. Only fully-validated rows are ever cached (see below), so
+    # a hit needs no re-validation beyond its own TTL.
+    import time as _time
+
+    cache_key = (key_hash, x_org_id)
+    _now_mono = _time.monotonic()
+    _cached = _api_key_auth_cache.get(cache_key)
+    if _cached is not None:
+        _expires_at, _ctx = _cached
+        if _now_mono < _expires_at:
+            return dict(_ctx)
+        _api_key_auth_cache.pop(cache_key, None)
+
     # Compare org_id as text so a non-UUID ``X-Org-Id`` (Clerk-style
     # ``org_…``, typo, placeholder) cannot crash asyncpg with
     # ``invalid input syntax for type uuid`` → unhandled 500.
@@ -1795,7 +1902,7 @@ async def get_current_org_api_key(
             logger.debug("last_used_at UPDATE failed (non-fatal): %s", exc)
 
     key_id = str(row["key_id"])
-    return {
+    context = {
         "org_id": str(row["org_id"]),
         "name": row["name"],
         "slug": row["slug"],
@@ -1805,6 +1912,32 @@ async def get_current_org_api_key(
         "api_key_id": key_id,
         "auth_method": "api_key",
     }
+
+    # Cache the validated context. TTL is clamped to the key's remaining
+    # lifetime so an ``expires_at`` inside the window is still honoured.
+    ttl = _API_KEY_AUTH_CACHE_TTL_S
+    if expires_at is not None:
+        remaining = (cmp_expires - datetime.now(UTC)).total_seconds()
+        ttl = min(ttl, max(0.0, remaining))
+    if ttl > 0:
+        if (
+            len(_api_key_auth_cache) >= _API_KEY_AUTH_CACHE_MAX
+            and cache_key not in _api_key_auth_cache
+        ):
+            stale = [
+                k for k, (exp, _) in _api_key_auth_cache.items()
+                if exp <= _now_mono
+            ]
+            for k in stale:
+                _api_key_auth_cache.pop(k, None)
+            while len(_api_key_auth_cache) >= _API_KEY_AUTH_CACHE_MAX:
+                _api_key_auth_cache.pop(next(iter(_api_key_auth_cache)), None)
+        _api_key_auth_cache[cache_key] = (
+            _time.monotonic() + ttl,
+            dict(context),
+        )
+
+    return context
 
 
 async def get_optional_org(

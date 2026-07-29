@@ -108,6 +108,46 @@ def bounded_create_task(
     return loop.create_task(_runner(), name=name)
 
 
+def fire_and_forget(
+    result: Any,
+    *,
+    name: str,
+    limit: int | None = None,
+) -> bool:
+    """Schedule ``result`` if it is an un-awaited coroutine.
+
+    Several notification hooks (``PromotionHook.on_drift_alert``,
+    ``on_judge_regression``, …) are ``async def`` but are invoked from
+    synchronous helpers deep inside scoring / recommendation code. Calling
+    them without awaiting silently drops the alert *and* emits a
+    "coroutine was never awaited" RuntimeWarning. This centralises the
+    correct handling: schedule on the running loop under the bounded-task
+    semaphore, or close the coroutine cleanly when there is no loop.
+
+    Returns ``True`` when the coroutine was scheduled.
+    """
+    if not asyncio.iscoroutine(result):
+        return False
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        # Sync context (CLI, worker bootstrap, test helper). Close the
+        # coroutine so it does not surface as a RuntimeWarning.
+        result.close()
+        logger.debug("fire_and_forget: dropped %s (no running event loop)", name)
+        return False
+    try:
+        bounded_create_task(result, name=name, limit=limit)
+        return True
+    except Exception as exc:  # pragma: no cover - defensive
+        logger.debug("fire_and_forget: scheduling %s failed: %s", name, exc)
+        try:
+            result.close()
+        except Exception:
+            pass
+        return False
+
+
 async def bounded_gather(
     *aws: Awaitable[T],
     limit: int | None = None,
@@ -136,5 +176,6 @@ async def bounded_gather(
 __all__ = [
     "bounded_create_task",
     "bounded_gather",
+    "fire_and_forget",
     "reset_bounded_task_semaphores",
 ]

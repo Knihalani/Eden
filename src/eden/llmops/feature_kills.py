@@ -18,6 +18,9 @@ _DEFAULT_ENABLED: dict[str, bool] = {
     "gateway": True,
     "patches": True,
     "embeddings": True,
+    # T1 trace annotator (eden.evaluation.annotator). Sampled + budgeted;
+    # this key is the per-org kill switch for that LLM lane.
+    "trace_annotator": True,
     "nudge_author": True,
     "playground": True,
     # W24 — autonomy action classes (customer-visible FinOps kills).

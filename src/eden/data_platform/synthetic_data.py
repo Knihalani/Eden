@@ -237,15 +237,17 @@ class SyntheticDataEngine:
         count: int,
     ) -> list[str]:
         """Use LLM to generate paraphrases."""
+        # NOTE: this used to open a `try:` here and a second `try:` below
+        # with no `except` between them — a SyntaxError that made the whole
+        # module unimportable. One block, one handler.
         try:
-            llm = await self._get_llm()
             prompt = (
                 f"Generate {count} different ways to phrase this request for a "
                 f"{framework} {env_class} environment. Preserve all technical requirements "
                 f"but vary the wording, style, and structure:\n\n{text}\n\n"
                 f"Return exactly {count} paraphrases, one per line, prefixed with '- '."
             )
-        try:
+
             from eden.llm.internal_router import route_async
 
             response = await route_async(

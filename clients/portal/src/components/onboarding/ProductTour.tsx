@@ -236,7 +236,6 @@ export function ProductTour({
   useLayoutEffect(() => {
     if (!open) return;
     let cancelled = false;
-    let settleTimer: number | undefined;
     const started = performance.now();
     // Wall-clock budget (not frame count) — slow route/chunk loads
     // used to exceed ~40 frames and lose the spotlight silently.
@@ -283,10 +282,10 @@ export function ProductTour({
       setReady(true);
     };
 
-    settleTimer = window.setTimeout(tick, 40);
+    const settleTimer = window.setTimeout(tick, 40);
     return () => {
       cancelled = true;
-      if (settleTimer !== undefined) window.clearTimeout(settleTimer);
+      window.clearTimeout(settleTimer);
     };
   }, [open, step, pathname, stepIndex, searchKey]);
 

@@ -191,7 +191,10 @@ async def test_approve_plan_repo_not_connected_when_no_connection() -> None:
 
     assert result["status"] == "error"
     assert result["error"] == "repo_not_connected"
-    assert "Connect GitHub" in (result.get("message") or "")
+    # Copy is not pinned verbatim — the invariant is that the error tells
+    # the user, imperatively, to connect a GitHub repo.
+    _msg = result.get("message") or ""
+    assert "GitHub" in _msg and _msg.lower().startswith("connect"), _msg
 
 
 @pytest.mark.asyncio

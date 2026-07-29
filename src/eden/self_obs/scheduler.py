@@ -25,22 +25,102 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+from eden.async_tasks import bounded_gather
+
 logger = logging.getLogger(__name__)
 
 _HEALTHY_STATUSES = {"ok", "healthy"}
 
+#: Cursor for the rotating per-tick org subset. This is self-observability
+#: telemetry, not a user-facing guarantee, so it does not need to cover
+#: every org on every tick — and covering every org is precisely what made
+#: the tick long enough to hold Postgres awake indefinitely. Each tick
+#: takes the next ``self_obs_probe_org_budget`` orgs in id order and wraps
+#: around, so the whole fleet is still swept, just over several ticks.
+#: Process-local: a leader failover just resumes the rotation elsewhere,
+#: which is harmless for a liveness signal.
+_rotation_cursor: str | None = None
 
-async def _list_org_ids(limit: int = 500) -> list[str]:
+_DEFAULT_ORG_BUDGET = 25
+_DEFAULT_PROBE_CONCURRENCY = 8
+
+
+def _probe_budget() -> int:
+    try:
+        from eden.config import get_settings
+
+        return max(
+            1,
+            int(
+                getattr(
+                    get_settings(),
+                    "self_obs_probe_org_budget",
+                    _DEFAULT_ORG_BUDGET,
+                )
+                or _DEFAULT_ORG_BUDGET
+            ),
+        )
+    except Exception:
+        return _DEFAULT_ORG_BUDGET
+
+
+def _probe_concurrency() -> int:
+    try:
+        from eden.config import get_settings
+
+        return max(
+            1,
+            int(
+                getattr(
+                    get_settings(),
+                    "self_obs_probe_concurrency",
+                    _DEFAULT_PROBE_CONCURRENCY,
+                )
+                or _DEFAULT_PROBE_CONCURRENCY
+            ),
+        )
+    except Exception:
+        return _DEFAULT_PROBE_CONCURRENCY
+
+
+def _reset_rotation_for_tests() -> None:
+    """Test-only: rewind the rotating org cursor."""
+    global _rotation_cursor
+    _rotation_cursor = None
+
+
+async def _list_org_ids(limit: int | None = None) -> list[str]:
+    """Return the next ``limit`` org ids, rotating across ticks.
+
+    Ordered by ``id`` and resumed from the previous tick's last id, so
+    successive ticks walk disjoint windows and wrap back to the start
+    once the end is reached.
+    """
+    global _rotation_cursor
+    budget = int(limit) if limit is not None else _probe_budget()
     try:
         from eden.storage.postgres import get_postgres_client
 
         client = await get_postgres_client()
         if client is None:
             return []
-        rows = await client.fetch(
-            "SELECT id FROM organizations LIMIT $1", limit
-        )
-        return [str(r["id"]) for r in rows]
+        rows = []
+        if _rotation_cursor is not None:
+            rows = await client.fetch(
+                "SELECT id FROM organizations WHERE id > $1 "
+                "ORDER BY id LIMIT $2",
+                _rotation_cursor,
+                budget,
+            )
+        if not rows:
+            # First tick of the process, or the cursor ran off the end —
+            # wrap to the beginning.
+            rows = await client.fetch(
+                "SELECT id FROM organizations ORDER BY id LIMIT $1", budget
+            )
+        org_ids = [str(r["id"]) for r in rows]
+        _rotation_cursor = org_ids[-1] if org_ids else None
+        return org_ids
     except Exception as exc:
         logger.debug("self_obs.scheduler: list orgs failed: %s", exc)
         return []
@@ -152,6 +232,8 @@ async def probe_org(
     shared_probes: dict[str, Any] | None = None,
     workers_result: dict[str, Any] | None = None,
     previous_by_component: dict[str, str | None] | None = None,
+    heartbeat_sink: list[tuple[str, str | None, str, dict[str, Any] | None]]
+    | None = None,
 ) -> dict[str, Any]:
     """Run both probe sets for a single org; alert on new degradation.
 
@@ -164,6 +246,11 @@ async def probe_org(
     is process-scoped — when supplied, this org only persists heartbeats
     and checks transitions (no re-probe). ``previous_by_component`` is the
     batched prior-status map from the same tick.
+
+    ``heartbeat_sink``, when supplied, collects the heartbeat rows this
+    org would have written so the caller can flush the whole tick in one
+    multi-row INSERT. On-demand callers (admin route, MCP tool) leave it
+    ``None`` and get the original write-immediately behaviour.
     """
     from eden.self_obs.heartbeats import (
         probe_and_record_workers,
@@ -182,7 +269,9 @@ async def probe_org(
     if workers_result is None:
         workers_result = await probe_and_record_workers(org_id)
     else:
-        await record_worker_heartbeats(org_id, workers_result)
+        await record_worker_heartbeats(
+            org_id, workers_result, sink=heartbeat_sink
+        )
 
     workers_status = workers_result.get("status", "unknown")
     workers_bad = workers_status not in _HEALTHY_STATUSES
@@ -210,17 +299,28 @@ async def probe_org(
     # background_workers, which probe_and_record_workers persists) —
     # write one here so next tick's _previous_status lookup above has
     # something to compare against.
-    try:
-        await record_heartbeat(
-            "golden_probes",
-            org_id=org_id,
-            status=golden_status,
-            meta={"failed": golden_result.get("failed")},
+    if heartbeat_sink is not None:
+        heartbeat_sink.append(
+            (
+                "golden_probes",
+                org_id,
+                golden_status,
+                {"failed": golden_result.get("failed")},
+            )
         )
-    except Exception as exc:
-        logger.debug(
-            "self_obs.scheduler: golden_probes heartbeat persist failed: %s", exc
-        )
+    else:
+        try:
+            await record_heartbeat(
+                "golden_probes",
+                org_id=org_id,
+                status=golden_status,
+                meta={"failed": golden_result.get("failed")},
+            )
+        except Exception as exc:
+            logger.debug(
+                "self_obs.scheduler: golden_probes heartbeat persist failed: %s",
+                exc,
+            )
 
     return {
         "workers": workers_result,
@@ -266,17 +366,19 @@ async def run_scheduled_probes(*, org_ids: list[str] | None = None) -> dict[str,
 
         previous_map = await _previous_statuses_batch(orgs)
 
-    degraded_orgs: list[str] = []
-    for org_id in orgs:
+    # Heartbeat rows for the whole tick, flushed as one INSERT below.
+    heartbeat_sink: list[tuple[str, str | None, str, dict[str, Any] | None]] = []
+
+    async def _probe(org_id: str) -> tuple[str, bool]:
         try:
             result = await probe_org(
                 org_id,
                 shared_probes=shared_probes,
                 workers_result=workers_result,
                 previous_by_component=previous_map.get(org_id),
+                heartbeat_sink=heartbeat_sink,
             )
-            if result.get("degraded"):
-                degraded_orgs.append(org_id)
+            return org_id, bool(result.get("degraded"))
         except Exception as exc:
             logger.error(
                 "self_obs.scheduler: probe failed org=%s: %s",
@@ -284,4 +386,34 @@ async def run_scheduled_probes(*, org_ids: list[str] | None = None) -> dict[str,
                 exc,
                 exc_info=True,
             )
+            return org_id, False
+
+    # Probes were awaited one org at a time, so a tick took the sum of
+    # every org's latency. Bounded concurrency keeps the tick short (the
+    # point is to let Postgres go idle again quickly) without letting a
+    # large fleet open an unbounded number of connections at once.
+    outcomes = await bounded_gather(
+        *(_probe(org_id) for org_id in orgs),
+        limit=_probe_concurrency(),
+        return_exceptions=True,
+    )
+
+    degraded_orgs: list[str] = [
+        org_id
+        for outcome in outcomes
+        if isinstance(outcome, tuple)
+        for org_id, degraded in [outcome]
+        if degraded
+    ]
+
+    if heartbeat_sink:
+        from eden.self_obs.heartbeats import record_heartbeats_batch
+
+        try:
+            await record_heartbeats_batch(heartbeat_sink)
+        except Exception as exc:
+            logger.debug(
+                "self_obs.scheduler: heartbeat batch flush failed: %s", exc
+            )
+
     return {"orgs_scanned": len(orgs), "degraded_orgs": degraded_orgs}

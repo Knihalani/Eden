@@ -50,7 +50,11 @@ const LEGAL_LINKS: FooterLink[] = [
   { href: "/terms", label: "Terms" },
   { href: "/dpa", label: "DPA" },
   { href: "/subprocessors", label: "Subprocessors" },
-  { href: "/do-not-sell", label: "Do Not Sell" },
+  // CCPA Sec. 1798.135 wants the opt-out link titled for what it does, not
+  // abbreviated. "Do Not Sell" alone reads as a category header; keep the
+  // "My Info" so the link states the consumer right on its face.
+  // Guarded by tests/unit/portal/test_legal_page_footer_f71.py.
+  { href: "/do-not-sell", label: "Do Not Sell My Info" },
 ];
 
 export async function MarketingFooter() {

@@ -30,8 +30,46 @@ from eden.workers.leader import _extend_lock_periodically
 logger = logging.getLogger(__name__)
 
 _GUARD_NAME = "sidecars"
-_GUARD_TTL_SECONDS = 60
-_GUARD_RENEW_SECONDS = 20.0
+
+#: Fallbacks used only when settings are unreadable. The guard is
+#: acquired once at startup and held until shutdown, so the renewal task
+#: runs forever even though nothing ever contends the lock — and every
+#: renewal is a Lua ``EVAL``, i.e. one Upstash command. At the original
+#: TTL=60s/renew=20s that was 4,320 commands/day against a 10k/day free
+#: tier. See ``sidecar_guard_ttl_seconds`` in ``eden.config`` for the
+#: full rationale.
+_GUARD_TTL_SECONDS = 600
+_GUARD_RENEW_SECONDS = 200.0
+# A held lock must be renewed comfortably more often than it expires, or
+# one slow/descheduled tick silently drops the guard and a second process
+# can start a duplicate set of consumers. Half the TTL is the ceiling.
+_GUARD_RENEW_MAX_FRACTION_OF_TTL = 0.5
+
+
+def _guard_ttl_and_renew() -> tuple[int, float]:
+    """Return ``(ttl_seconds, renew_seconds)`` from settings.
+
+    ``renew`` is clamped below ``ttl/2`` regardless of configuration so a
+    mistuned setting cannot produce a guard that expires under its own
+    renewal cadence.
+    """
+    ttl = _GUARD_TTL_SECONDS
+    renew = _GUARD_RENEW_SECONDS
+    try:
+        from eden.config import get_settings
+
+        settings = get_settings()
+        ttl = int(
+            getattr(settings, "sidecar_guard_ttl_seconds", ttl) or ttl
+        )
+        renew = float(
+            getattr(settings, "sidecar_guard_renew_seconds", renew) or renew
+        )
+    except Exception:
+        pass
+    ttl = max(1, ttl)
+    renew = max(1.0, min(renew, ttl * _GUARD_RENEW_MAX_FRACTION_OF_TTL))
+    return ttl, renew
 # A handful of quick retries rides out a boot-time Redis blip without
 # meaningfully delaying startup; after that we fail closed (mirroring
 # eden.storage.redis.Lock's own fail-closed policy) rather than risk
@@ -57,8 +95,10 @@ async def _acquire_guard() -> bool:
     if _guard_lock is not None:
         return True  # already held by this process
 
+    guard_ttl, guard_renew = _guard_ttl_and_renew()
+
     for attempt in range(1, _GUARD_ACQUIRE_ATTEMPTS + 1):
-        lock = Lock(_GUARD_NAME, ttl=_GUARD_TTL_SECONDS, prefix="eden:leader")
+        lock = Lock(_GUARD_NAME, ttl=guard_ttl, prefix="eden:leader")
         try:
             acquired = await lock.acquire()
         except Exception as exc:
@@ -75,7 +115,7 @@ async def _acquire_guard() -> bool:
             _guard_extender_stop = asyncio.Event()
             _guard_extender = asyncio.create_task(
                 _extend_lock_periodically(
-                    lock, _GUARD_RENEW_SECONDS, _guard_extender_stop
+                    lock, guard_renew, _guard_extender_stop
                 ),
                 name="sidecar-guard-extend",
             )

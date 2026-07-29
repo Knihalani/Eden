@@ -827,3 +827,34 @@ def _reset_llm_internal_router() -> None:
     internal_router._default_router = None
     yield
     internal_router._default_router = None
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Auth id / API-key caches (autouse)
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# ``eden.api.deps`` memoizes three things process-wide for the hot auth
+# path: org-id resolution, user-id resolution, and the validated
+# API-key context. All three are correct in production (they are what
+# keeps ingest and gateway off a per-request Neon round trip) but they
+# outlive a test. A test that stubs ``fetchrow`` to return a *different*
+# row for the same key hash / org id would otherwise be served the
+# previous test's answer and fail for reasons that have nothing to do
+# with the code under test.
+@pytest.fixture(autouse=True)
+def _reset_auth_caches() -> None:
+    try:
+        from eden.api import deps
+    except Exception:
+        yield
+        return
+
+    def _clear() -> None:
+        deps.invalidate_api_key_cache()
+        deps._org_id_cache.clear()
+        deps._user_id_cache.clear()
+        deps._last_seen_bumped_at.clear()
+
+    _clear()
+    yield
+    _clear()

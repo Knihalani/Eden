@@ -367,7 +367,9 @@ select.ds-input {
 
 .auth-card .cl-socialButtonsBlockButton {
   background-color: #000000 !important;
-  border: 1px solid rgba(255, 255, 255, 0.14) !important;
+  /* 3.39:1 on black — SC 1.4.11 floor for a control boundary. Must stay in
+     sync with CONTROL_BORDER in components/auth/clerk-theme.ts. */
+  border: 1px solid rgba(255, 255, 255, 0.38) !important;
   color: #ffffff !important;
   box-shadow: none !important;
 }

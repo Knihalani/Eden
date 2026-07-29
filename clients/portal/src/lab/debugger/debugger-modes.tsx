@@ -83,7 +83,7 @@ export function DebuggerReplayView({
           <p className="type-meta mt-0.5">{checkpoints.length} steps</p>
         </div>
         <ul className="min-h-0 flex-1 overflow-y-auto">
-          {checkpoints.map((cp, i) => {
+          {checkpoints.map((cp) => {
             const active = selectedId === cp.id;
             return (
               <li key={cp.id}>
@@ -445,7 +445,6 @@ export function DebuggerInspectView({
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [index, checkpoints]);
 
   if (!trace || checkpoints.length === 0 || !snap) {

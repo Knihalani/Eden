@@ -334,7 +334,7 @@ export function OrgProvider({ children }: { children: ReactNode }) {
     if (typeof window !== "undefined") {
       window.sessionStorage.removeItem("eden:auth:error");
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- clerkOrg object identity is unstable
+    // clerkOrg object identity is unstable — key off its id only.
   }, [meQuery.data, clerkOrg?.id]);
 
   useEffect(() => {
@@ -345,7 +345,7 @@ export function OrgProvider({ children }: { children: ReactNode }) {
     // that function's doc comment for why this must stay the only
     // place that owns the wait.
     void recoverFromAuthPropagationRace(meQuery.error);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- only react to query error flips
+    // Only react to query error flips.
   }, [meQuery.error]);
 
   const refreshOrgs = useCallback(async () => {

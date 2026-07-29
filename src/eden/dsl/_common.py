@@ -1205,7 +1205,9 @@ async def _fire_dsl_alert_lint_warning_hook(
         )
         return
     hook = get_dsl_hook()
-    hook.on_alert_lint_warning(
+    # ``on_alert_lint_warning`` is ``async def`` and this helper is
+    # already async — await it so the warning actually reaches the hook.
+    await hook.on_alert_lint_warning(
         org_id,
         alert_id=alert_id,
         warning_codes=[w["code"] for w in warnings],

@@ -477,7 +477,6 @@ function LabTracesInner() {
     if (nextSession) setSelectedSessionId(nextSession);
     if (paramTab) setTab(parseTab(paramTab));
     if (paramSpan) setFocusStepId(paramSpan);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [paramId, paramTab, paramSpan, paramView, paramSession]);
 
   useEffect(() => {
@@ -486,7 +485,6 @@ function LabTracesInner() {
     if (!paramSpan) {
       setFocusStepId(null);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedId, paramSpan]);
 
   // Real steps arrive async (separate detail fetch) — once they land
@@ -500,7 +498,6 @@ function LabTracesInner() {
     if (!paramSpan) {
       setFocusStepId(defaults[0] ?? null);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [traceDetailQuery.data, selectedId, paramSpan]);
 
   // Default selections once live rows arrive (initial state above can't
@@ -544,7 +541,6 @@ function LabTracesInner() {
       const next = traces[0]?.id;
       if (next) setSelectedId(next);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [traces, paramId]);
   // Same fix, mirrored for sessions (`selectedSessionId` vs. `?session=`).
   useEffect(() => {
@@ -565,7 +561,6 @@ function LabTracesInner() {
       const next = sessions[0]?.id;
       if (next) setSelectedSessionId(next);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessions, paramSession]);
 
   const setHubView = useCallback(

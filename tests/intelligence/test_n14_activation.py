@@ -62,7 +62,19 @@ def test_app_lifespan_calls_install_all_and_workers() -> None:
     assert "start_background_workers" in app_src
     assert "run_background_workers" in app_src
     assert "install_all()" not in worker_src
-    assert "start_worker()" in worker_src
+    # The quality-pipeline worker moved behind the cross-process-locked
+    # sidecar bundle (eden.workers.sidecars) so the API pod and the
+    # dedicated worker pod can't both host it. background.py must still
+    # reach it, and the bundle must still be what calls start_worker().
+    sidecar_src = (
+        Path(__file__).resolve().parents[2]
+        / "src"
+        / "eden"
+        / "workers"
+        / "sidecars.py"
+    ).read_text(encoding="utf-8")
+    assert "start_quality_and_closed_loop_sidecars" in worker_src
+    assert "start_worker()" in sidecar_src
     assert "register_all_hooks()" in worker_src
     assert "start_judge_tailer" in worker_src
     assert "stop_judge_tailer" in worker_src

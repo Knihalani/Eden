@@ -40,6 +40,50 @@ async def record_heartbeat(
         return False
 
 
+async def record_heartbeats_batch(
+    rows: list[tuple[str, str | None, str, dict[str, Any] | None]],
+) -> bool:
+    """Persist many heartbeats in a single multi-row INSERT.
+
+    ``rows`` is ``(component, org_id, status, meta)``.
+
+    The scheduled probe tick writes three heartbeats per org. Doing that
+    with one :func:`record_heartbeat` call each meant 3*N serial round
+    trips per tick — at the old 500-org limit, >=1,500 sequential
+    statements, which by itself is long enough that Postgres never
+    reaches Neon's autosuspend window no matter how the loop is phased.
+    One statement per tick instead.
+    """
+    if not rows:
+        return True
+    try:
+        from eden.storage.postgres import get_postgres_client
+
+        client = await get_postgres_client()
+        if client is None:
+            return False
+        params: list[Any] = []
+        values: list[str] = []
+        for component, org_id, status, meta in rows:
+            base = len(params)
+            values.append(
+                f"(${base + 1}, ${base + 2}, ${base + 3}, ${base + 4}::jsonb, NOW())"
+            )
+            params.extend(
+                [component, org_id, status, json.dumps(meta or {})]
+            )
+        await client.execute(
+            "INSERT INTO eden_component_heartbeats "
+            "(component, org_id, status, meta, checked_at) VALUES "
+            + ", ".join(values),
+            *params,
+        )
+        return True
+    except Exception as exc:
+        logger.debug("heartbeat batch persist skipped: %s", exc)
+        return False
+
+
 async def latest_heartbeats(
     *,
     org_id: str | None = None,
@@ -115,11 +159,23 @@ async def snapshot_worker_liveness() -> dict[str, Any]:
 
 
 async def record_worker_heartbeats(
-    org_id: str | None, workers_result: dict[str, Any]
+    org_id: str | None,
+    workers_result: dict[str, Any],
+    *,
+    sink: list[tuple[str, str | None, str, dict[str, Any] | None]] | None = None,
 ) -> None:
-    """Persist the once-per-tick worker snapshot for ``org_id``."""
+    """Persist the once-per-tick worker snapshot for ``org_id``.
+
+    When ``sink`` is provided the rows are appended to it instead of
+    being written immediately, so a caller sweeping many orgs can flush
+    them all through :func:`record_heartbeats_batch` as one statement.
+    """
     status = workers_result.get("status", "unknown")
     meta = workers_result.get("meta") or {}
+    if sink is not None:
+        sink.append(("background_workers", org_id, status, meta))
+        sink.append(("api", org_id, "healthy", {"ts": time.time()}))
+        return
     await record_heartbeat(
         "background_workers", org_id=org_id, status=status, meta=meta
     )

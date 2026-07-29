@@ -20,6 +20,11 @@ import logging
 import time
 from typing import Any
 
+from eden.observability.bounded_expiry_cache import (
+    BoundedExpiryCache,
+    resolve_max_entries,
+)
+
 logger = logging.getLogger(__name__)
 
 try:
@@ -150,9 +155,14 @@ def extract_llm_payload(payload: dict[str, Any] | None) -> dict[str, Any]:
 
 
 # Sparse EXPIRE on step counters — INCR every miss, EXPIRE ~once/hour.
+#
+# Bounded: the gateway assigns a fresh trace_id per request, so this key
+# space is unbounded and an unevicted dict here leaked one entry per
+# request for the lifetime of the process. See
+# eden.observability.bounded_expiry_cache.
 _STEP_EXPIRE_TTL_S = 86400
 _STEP_EXPIRE_REFRESH_S = 3600.0
-_step_expire_at: dict[str, float] = {}
+_step_expire_at = BoundedExpiryCache(resolve_max_entries())
 
 
 async def _resolve_step_number(
@@ -179,15 +189,15 @@ async def _resolve_step_number(
         try:
             key = f"trace:{trace_id}:llm_step"
             now = time.monotonic()
-            need_expire = (
-                key not in _step_expire_at or now >= _step_expire_at[key]
-            )
+            need_expire = _step_expire_at.is_due(key, now)
             if need_expire:
                 pipe = redis.pipeline(transaction=False)
                 pipe.incr(key)
                 pipe.expire(key, _STEP_EXPIRE_TTL_S)
                 step, _ = await pipe.execute()
-                _step_expire_at[key] = now + _STEP_EXPIRE_REFRESH_S
+                _step_expire_at.set(
+                    key, now + _STEP_EXPIRE_REFRESH_S, now=now
+                )
             else:
                 step = await redis.incr(key)
             return int(step) - 1  # zero-based to match SDK convention

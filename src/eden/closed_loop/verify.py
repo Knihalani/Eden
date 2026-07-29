@@ -28,7 +28,7 @@ import uuid
 from typing import Any
 
 from eden.closed_loop.events import EventType, LoopEvent
-from eden.storage.empty_cooldown import make_empty_cooldown
+from eden.storage.empty_cooldown import make_empty_cooldown, next_grid_delay
 
 logger = logging.getLogger(__name__)
 
@@ -39,6 +39,37 @@ _verify_in_cooldown, _verify_mark_empty, _verify_clear_cooldown = make_empty_coo
     default_seconds=300.0,
     settings_attr="verify_empty_cooldown_seconds",
 )
+
+#: Fallback poll cadence. This used to be spelled three different ways in
+#: this one file — ``_cfg("verify_poll_interval_seconds", 180)`` in the
+#: claim path, ``60`` in the reschedule path, and ``180`` again in the
+#: worker loop — so the lease length, the retry backoff and the actual
+#: tick disagreed with each other whenever the setting was unset. One
+#: value, read through :func:`_poll_interval`, and it is a multiple of the
+#: shared idle grid so the loop lands on the same boundaries as the rest
+#: of the fleet.
+_DEFAULT_POLL_INTERVAL_SECONDS = 600.0
+
+
+def _poll_interval() -> float:
+    """The single verify poll cadence, in seconds."""
+    return float(
+        _cfg("verify_loop_interval_seconds", _DEFAULT_POLL_INTERVAL_SECONDS)
+    )
+
+
+def _reset_state_for_tests() -> None:
+    """Test-only: clear the module-level empty-poll cooldown.
+
+    The cooldown is process-global by design (it is what keeps the fleet's
+    pollers on one grid). That makes it leak across tests: anything that
+    starts the real verify worker runs one pass, finds an empty queue, and
+    backs off for up to two grid periods — after which every later test
+    calling :func:`run_due_verifications` gets the early cooldown return
+    and sees ``checked == 0``. Mirrors
+    ``eden.workers.sidecars._reset_state_for_tests``.
+    """
+    _verify_clear_cooldown()
 
 
 # ── Scheduling ──────────────────────────────────────────────────────
@@ -171,7 +202,7 @@ async def run_due_verifications(limit: int = 50) -> dict[str, int]:
 
     # Claim due rows atomically so concurrent workers cannot double-process.
     # Lease via scheduled_at bump (status CHECK has no 'running' value).
-    poll = _cfg("verify_poll_interval_seconds", 180)
+    poll = _poll_interval()
     lease_secs = max(int(poll) * 3, 180)
     try:
         rows = await client.fetch(
@@ -276,7 +307,7 @@ async def _complete(
 
 
 async def _reschedule(client: Any, row_id: Any, attempts: int) -> None:
-    poll = _cfg("verify_poll_interval_seconds", 60)
+    poll = _poll_interval()
     with contextlib.suppress(Exception):
         await client.execute(
             "UPDATE issue_verifications "
@@ -293,15 +324,20 @@ async def _reschedule(client: Any, row_id: Any, attempts: int) -> None:
 
 
 async def _run(stop: asyncio.Event) -> None:
-    poll = _cfg("verify_poll_interval_seconds", 180)
+    poll = _poll_interval()
     logger.info("verify worker: started (poll=%ss)", poll)
     while not stop.is_set():
         try:
             await run_due_verifications()
         except Exception as exc:
             logger.debug("verify worker: pass failed: %s", exc)
+        # Wait for the next shared grid boundary rather than a fixed
+        # offset from wherever this pass finished. The PG hit is already
+        # cooldown-gated in run_due_verifications, but an unaligned *phase*
+        # still lets this worker wake in the gaps between the other
+        # pollers, which is what fragments the DB-quiet window.
         with contextlib.suppress(TimeoutError):
-            await asyncio.wait_for(stop.wait(), timeout=poll)
+            await asyncio.wait_for(stop.wait(), timeout=next_grid_delay(poll))
     logger.info("verify worker: stopped")
 
 

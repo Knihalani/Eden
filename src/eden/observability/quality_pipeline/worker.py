@@ -887,6 +887,39 @@ async def dead_letter(
         logger.debug("dead_letter: %s", exc)
 
 
+# The watermark is a *cursor*, so exactly one row is meaningful. It used
+# to be append-only (one INSERT per batch) against a table read with
+# ``ORDER BY id DESC LIMIT 1``, so the table grew without bound and every
+# read had to sort a pile of dead rows. It is now a single upserted row
+# pinned at this id.
+_WATERMARK_ROW_ID = 1
+
+# ``CREATE TABLE IF NOT EXISTS`` used to run on *every* ``load_watermark``
+# call. The DDL is idempotent but not free — it takes a lock and keeps
+# Postgres awake, which is exactly what the Neon scale-to-zero work is
+# trying to avoid. Once per process is sufficient.
+_watermark_table_ready = False
+_watermark_legacy_pruned = False
+
+
+async def _ensure_watermark_table(client: Any) -> None:
+    """Create the watermark table at most once per process."""
+    global _watermark_table_ready
+    if _watermark_table_ready:
+        return
+    await client.execute(
+        """
+        CREATE TABLE IF NOT EXISTS quality_pipeline_watermark (
+            id SERIAL PRIMARY KEY,
+            tenant_id VARCHAR(128) NOT NULL,
+            event_id VARCHAR(128) NOT NULL,
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+        )
+        """
+    )
+    _watermark_table_ready = True
+
+
 async def load_watermark() -> tuple[str, str] | None:
     """Load the persisted watermark ``(tenant_id, event_id)``."""
     try:
@@ -900,19 +933,14 @@ async def load_watermark() -> tuple[str, str] | None:
     if client is None:
         return None
     try:
-        await client.execute(
-            """
-            CREATE TABLE IF NOT EXISTS quality_pipeline_watermark (
-                id SERIAL PRIMARY KEY,
-                tenant_id VARCHAR(128) NOT NULL,
-                event_id VARCHAR(128) NOT NULL,
-                updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
-            )
-            """
-        )
+        await _ensure_watermark_table(client)
+        # Order by ``updated_at`` rather than ``id`` so a deployment that
+        # still has legacy append-mode rows (ids far above
+        # ``_WATERMARK_ROW_ID``) resolves to the most recent write rather
+        # than to the highest surviving serial.
         row = await client.fetchrow(
             "SELECT tenant_id, event_id FROM quality_pipeline_watermark "
-            "ORDER BY id DESC LIMIT 1"
+            "ORDER BY updated_at DESC, id DESC LIMIT 1"
         )
     except Exception:
         return None
@@ -925,7 +953,11 @@ async def load_watermark() -> tuple[str, str] | None:
 
 
 async def save_watermark(tenant_id: str, event_id: str) -> None:
-    """Persist the watermark so a crashed worker resumes correctly."""
+    """Persist the watermark so a crashed worker resumes correctly.
+
+    Upserts a single row instead of appending one per batch.
+    """
+    global _watermark_legacy_pruned
     try:
         from eden.storage.postgres import get_postgres_client
     except Exception:
@@ -937,14 +969,38 @@ async def save_watermark(tenant_id: str, event_id: str) -> None:
     if client is None:
         return
     try:
+        await _ensure_watermark_table(client)
         await client.execute(
-            "INSERT INTO quality_pipeline_watermark (tenant_id, event_id) "
-            "VALUES ($1, $2)",
-            tenant_id, event_id,
+            "INSERT INTO quality_pipeline_watermark "
+            "(id, tenant_id, event_id, updated_at) "
+            "VALUES ($1, $2, $3, now()) "
+            "ON CONFLICT (id) DO UPDATE SET "
+            "tenant_id = EXCLUDED.tenant_id, "
+            "event_id = EXCLUDED.event_id, "
+            "updated_at = now()",
+            _WATERMARK_ROW_ID, tenant_id, event_id,
         )
         _STATE.last_watermark_at = datetime.now(UTC)
+        if not _watermark_legacy_pruned:
+            # One-time cleanup of rows left by the old append-only writer.
+            # Runs *after* the upsert above so the cursor is already safe.
+            _watermark_legacy_pruned = True
+            try:
+                await client.execute(
+                    "DELETE FROM quality_pipeline_watermark WHERE id <> $1",
+                    _WATERMARK_ROW_ID,
+                )
+            except Exception as exc:
+                logger.debug("watermark legacy prune: %s", exc)
     except Exception as exc:
         logger.debug("save_watermark: %s", exc)
+
+
+def _reset_watermark_caches_for_tests() -> None:
+    """Test-only: clear the once-per-process DDL/prune latches."""
+    global _watermark_table_ready, _watermark_legacy_pruned
+    _watermark_table_ready = False
+    _watermark_legacy_pruned = False
 
 
 # ── Main loop ────────────────────────────────────────────────────
@@ -977,29 +1033,42 @@ class SidecarWorker:
         try:
             if since_event_id is None:
                 rows = await client.fetch(
-                    "SELECT id, tenant_id, trace_id, event_type, "
+                    "SELECT event_id, tenant_id, trace_id, event_type, "
                     "payload, created_at "
                     "FROM telemetry_events "
-                    "ORDER BY created_at ASC "
+                    "ORDER BY created_at ASC, event_id ASC "
                     "LIMIT $1",
                     int(self.batch_size),
                 )
             else:
-                # ponytail: cursor-by-(created_at, id) pattern;
-                # the column id is the watermark tiebreaker.
+                # Cursor-by-(created_at, event_id). ``event_id`` is the
+                # table's own key (migration 009 declares it PRIMARY KEY,
+                # and 034 re-declares the PK as (event_id, timestamp));
+                # ``telemetry_events`` has no ``id`` column at all. This
+                # query previously selected/filtered on ``id``, which made
+                # every poll raise UndefinedColumn. The exception is
+                # swallowed below and reported as an empty batch, so the
+                # whole quality pipeline silently no-op'd.
                 rows = await client.fetch(
-                    "SELECT id, tenant_id, trace_id, event_type, "
+                    "SELECT event_id, tenant_id, trace_id, event_type, "
                     "payload, created_at "
                     "FROM telemetry_events "
-                    "WHERE (created_at, id) > "
-                    "  (SELECT created_at, id FROM telemetry_events "
-                    "   WHERE id::text = $1 LIMIT 1) "
-                    "ORDER BY created_at ASC, id ASC "
+                    "WHERE (created_at, event_id) > "
+                    "  (SELECT created_at, event_id FROM telemetry_events "
+                    "   WHERE event_id = $1 LIMIT 1) "
+                    "ORDER BY created_at ASC, event_id ASC "
                     "LIMIT $2",
                     since_event_id, int(self.batch_size),
                 )
         except Exception as exc:
-            logger.debug("worker poll: %s", exc)
+            # Deliberately louder than debug: a failing poll is
+            # indistinguishable from an empty queue to the caller, so a
+            # schema drift here silently disables the entire pipeline
+            # (which is exactly what happened with the ``id`` column).
+            logger.warning(
+                "quality_pipeline poll failed (treated as empty batch — "
+                "pipeline is not making progress): %s", exc,
+            )
             return []
         return [dict(r) for r in (rows or [])]
 
@@ -1120,7 +1189,7 @@ class SidecarWorker:
                                     "worker attempt %d: %s", attempt, exc,
                                 )
                                 await asyncio.sleep(0.05 * (2 ** attempt))
-                    return str(evs[-1].get("id") or "") or None
+                    return str(evs[-1].get("event_id") or "") or None
 
                 results = await asyncio.gather(
                     *(_process_ready(tid, tid_trace, evs) for tid, tid_trace, evs in ready)

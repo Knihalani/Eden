@@ -4,6 +4,25 @@ All notable changes to the Eden Python SDK are documented here. The
 format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## 0.4.0 — 2026-07-28
+
+Versioned in lockstep with `@eden-ai/sdk` 0.4.0 — same number, same
+feature set, so a polyglot codebase does not have to reason about two
+ladders. (Registry publish dates may differ by a day or two; the version
+number is the contract, not the upload timestamp.)
+
+### Added
+- Native auto-instrumentation for the Cohere, Groq, and Mistral clients
+  (`eden_sdk.instrumentations.{cohere,groq,mistral}`), including
+  streaming and usage/token extraction, on a par with the existing
+  OpenAI and Anthropic instrumentations. All three are registered for
+  lazy load in `eden_sdk.instrumentations.__all__`, so `eden.instrument()`
+  picks them up without adding import cost when they are not installed.
+- Offline queue (`eden_sdk.offline_queue`). Events are buffered when the
+  ingest endpoint is unreachable and flushed on the next successful
+  call, so a transient network partition no longer silently drops
+  telemetry.
+
 ## 0.3.4 — 2026-07-24
 
 ### Fixed
