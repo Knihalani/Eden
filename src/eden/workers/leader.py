@@ -10,6 +10,8 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
+import os
+import socket
 from collections.abc import Awaitable, Callable
 from contextlib import asynccontextmanager
 from typing import AsyncIterator
@@ -111,6 +113,69 @@ _acquire_failures: dict[str, int] = {}
 #: carry the distinction out of the container.
 _work_failures: dict[str, str] = {}
 
+#: Lock names currently held via the Postgres fallback, so the renew and
+#: release paths know which backend owns them.
+_pg_fallback_held: dict[str, str] = {}
+
+
+def leader_pg_fallback_locks() -> dict[str, str]:
+    """``{lock_name: holder}`` for locks held through Postgres."""
+    return dict(_pg_fallback_held)
+
+
+async def _acquire_with_fallback(
+    lock: Lock, lock_name: str, identity: str, ttl: int
+) -> tuple[bool, str]:
+    """Acquire via Redis, falling back to Postgres when Redis cannot write.
+
+    Returns ``(acquired, backend)``. ``backend`` is ``"redis"``,
+    ``"postgres"`` or ``"none"``.
+
+    Redis remains the primary — it is cheaper and the whole fleet has been
+    tuned around it. But a lock refused while *nobody holds it* is not
+    contention: it means the write was accepted and discarded, which is
+    what a provider does past a plan limit. Treating that as "someone else
+    is leader" is what kept every background loop down for 7.4 days. When
+    we see it, elect through Postgres instead, which has no such cap and
+    was healthy the entire time.
+    """
+    from eden.storage import pg_lease
+
+    try:
+        acquired = await asyncio.wait_for(
+            lock.acquire(token=identity), timeout=_ACQUIRE_TIMEOUT_SECONDS
+        )
+    except TimeoutError:
+        acquired = False
+    except Exception as exc:
+        logger.warning("leader: redis acquire %s raised: %s", lock_name, exc)
+        acquired = False
+
+    if acquired:
+        _pg_fallback_held.pop(lock_name, None)
+        return True, "redis"
+
+    # Refused. Is anyone actually holding it?
+    holder = None
+    try:
+        holder = await asyncio.wait_for(lock.holder(), timeout=5.0)
+    except Exception:
+        holder = None
+    if holder:
+        return False, "none"  # genuine contention; stay a follower
+
+    logger.warning(
+        "leader: %s refused with no holder — Redis is not accepting writes; "
+        "electing through Postgres instead",
+        lock_name,
+    )
+    if await pg_lease.acquire(lock_name, identity, ttl):
+        _pg_fallback_held[lock_name] = identity
+        logger.info("leader: %s acquired via Postgres fallback", lock_name)
+        return True, "postgres"
+    return False, "none"
+
+
 #: ``{lock_name: [loop_iterations, work_invocations]}``. Redis reachable,
 #: zero acquire failures, zero work failures and zero output is a
 #: contradiction unless the loops never reach the acquire call at all —
@@ -140,6 +205,7 @@ def reset_leader_failure_counts() -> None:
     _acquire_failures.clear()
     _work_failures.clear()
     _tick_counts.clear()
+    _pg_fallback_held.clear()
 
 
 async def run_if_leader(
@@ -175,40 +241,44 @@ async def run_if_leader(
     while not stop_event.is_set():
         _tick_counts.setdefault(lock_name, [0, 0])[0] += 1
         lock = Lock(lock_name, ttl=lock_ttl, prefix="eden:leader")
-        try:
-            # Bounded, because an unbounded acquire is a single point of
-            # permanent silence for the whole background fleet. Observed
-            # in production 2026-07-29: every loop entered this body once,
-            # called acquire, and never came back — not True, not False,
-            # no exception — while a plain PING from the same process
-            # succeeded. `Lock.acquire` handles Redis *errors* by failing
-            # closed, but it had no answer for a call that simply never
-            # returns, and one hung socket read took out maintenance,
-            # insights, the EQL watchdog, webhook drain, self-obs and the
-            # quality pipeline for seven days with nothing to show for it.
-            #
-            # A timeout converts that into a counted failure and a retry
-            # on the next interval, which is the behaviour every other
-            # Redis fault here already gets.
-            acquired = await asyncio.wait_for(
-                lock.acquire(), timeout=_ACQUIRE_TIMEOUT_SECONDS
-            )
-        except TimeoutError:
-            logger.error(
-                "leader: acquire %s timed out after %.0fs — treating as not "
-                "leader and retrying next interval",
-                lock_name,
-                _ACQUIRE_TIMEOUT_SECONDS,
-            )
-            acquired = False
-        except Exception as exc:
-            logger.error(
-                "leader: acquire %s raised: %s",
-                lock_name,
-                exc,
-                exc_info=True,
-            )
-            acquired = False
+        # Bounded, because an unbounded acquire is a single point of
+        # permanent silence for the whole background fleet (observed in
+        # production 2026-07-29), and fallback-aware because Redis being
+        # unable to accept writes must not mean "nobody may be leader".
+        identity = f"{socket.gethostname()}:{os.getpid()}"
+        acquired, backend = await _acquire_with_fallback(
+            lock, lock_name, identity, lock_ttl
+        )
+        if acquired and backend == "postgres":
+            # The Redis extender below would be renewing a lock we do not
+            # hold; the Postgres lease is renewed on its own cadence.
+            _acquire_failures.pop(lock_name, None)
+            _tick_counts.setdefault(lock_name, [0, 0])[1] += 1
+            try:
+                await work()
+            except Exception as exc:
+                _work_failures[lock_name] = (
+                    f"{type(exc).__name__}: {str(exc)[:180]}"
+                )
+                logger.error(
+                    "leader: work %s failed (pg fallback): %s",
+                    lock_name,
+                    exc,
+                    exc_info=True,
+                )
+            else:
+                _work_failures.pop(lock_name, None)
+            finally:
+                from eden.storage import pg_lease
+
+                await pg_lease.release(lock_name, identity)
+                _pg_fallback_held.pop(lock_name, None)
+            timeout = next_grid_delay(interval) if align else interval
+            try:
+                await asyncio.wait_for(stop_event.wait(), timeout=timeout)
+                break
+            except TimeoutError:
+                continue
 
         if acquired:
             _acquire_failures.pop(lock_name, None)

@@ -19,9 +19,9 @@ from typing import Any
 from eden.config import Settings, get_settings
 from eden.storage.redis import Lock
 from eden.workers.leader import (
-    _ACQUIRE_TIMEOUT_SECONDS,
     _DEFAULT_LOCK_RENEW_SECONDS,
     _DEFAULT_LOCK_TTL_SECONDS,
+    _acquire_with_fallback,
     _extend_lock_periodically,
 )
 from eden.workers.supervisor import supervise as _supervise_with_backoff
@@ -205,69 +205,43 @@ class BackgroundWorkers:
             # the fleet is up while `_start_all` has never run. That is a
             # silent, total outage of every background loop — the exact
             # failure this module is supposed to prevent.
-            try:
-                acquired = await asyncio.wait_for(
-                    lock.acquire(token=identity),
-                    timeout=_ACQUIRE_TIMEOUT_SECONDS,
-                )
-            except TimeoutError:
-                logger.error(
-                    "background: leader acquire timed out after %.0fs — "
-                    "retrying in %.0fs",
-                    _ACQUIRE_TIMEOUT_SECONDS,
-                    interval,
-                )
-                _note_acquire_outcome(_BUNDLE_LOCK_NAME, "timeout")
-                acquired = False
-            except Exception as exc:
-                logger.error(
-                    "background: leader acquire raised: %s", exc, exc_info=True
-                )
-                _note_acquire_outcome(_BUNDLE_LOCK_NAME, f"raised:{type(exc).__name__}")
-                acquired = False
+            acquired, backend = await _acquire_with_fallback(
+                lock, _BUNDLE_LOCK_NAME, identity, _DEFAULT_LOCK_TTL_SECONDS
+            )
+            if backend == "postgres":
+                _note_acquire_outcome(_BUNDLE_LOCK_NAME, "acquired(via=postgres)")
             else:
-                # ``acquire`` returning False (rather than hanging or
-                # raising) means Redis answered and refused: either another
-                # holder, or the provider rejecting the write. Recording
-                # which of the three happened is what separates "someone
-                # else is leader" from "Redis is accepting reads and
-                # refusing writes" without spending a probe command.
-                if acquired:
-                    _note_acquire_outcome(_BUNDLE_LOCK_NAME, "acquired")
-                else:
-                    # Name the holder. One GET, and only when refused, so
-                    # the healthy path spends nothing.
-                    holder = None
-                    with contextlib.suppress(Exception):
-                        holder = await asyncio.wait_for(
-                            lock.holder(), timeout=5.0
-                        )
-                    if holder:
-                        _note_acquire_outcome(
-                            _BUNDLE_LOCK_NAME, f"refused(held_by={holder})"
-                        )
-                    else:
-                        # SET NX cannot fail on a key that does not exist.
-                        # Refused + nobody holding it means the write was
-                        # accepted and discarded — a Redis serving reads
-                        # and silently dropping writes, which is what
-                        # Upstash does once a plan limit is exceeded.
-                        #
-                        # This is NOT contention, and treating it as such
-                        # is why it read as "someone else is leader"
-                        # forever. Every leader lock in the system fails
-                        # the same way, so the entire background fleet
-                        # cannot start and nothing anywhere says why.
-                        _note_acquire_outcome(
-                            _BUNDLE_LOCK_NAME, "write_dropped(redis_read_only)"
-                        )
-                        logger.error(
-                            "background: leader lock refused but unheld — "
-                            "Redis is accepting reads and dropping writes "
-                            "(provider plan limit exceeded?). Every "
-                            "leader-gated loop will stay down until this "
-                            "clears."
-                        )
+                _note_acquire_outcome(
+                    _BUNDLE_LOCK_NAME, "acquired" if acquired else "refused"
+                )
+            if acquired and backend == "postgres":
+                # Redis cannot accept writes; the lease lives in Postgres.
+                # Run the bundle and renew the lease on the tick cadence
+                # rather than through the Redis extender.
+                from eden.storage import pg_lease
+
+                try:
+                    await self._start_all(settings, self._state)
+                    while not self._stop.is_set():
+                        if not await pg_lease.renew(
+                            _BUNDLE_LOCK_NAME, identity, _DEFAULT_LOCK_TTL_SECONDS
+                        ):
+                            logger.warning(
+                                "background: lost postgres lease; stopping loops"
+                            )
+                            break
+                        try:
+                            await asyncio.wait_for(
+                                self._stop.wait(),
+                                timeout=min(interval, _DEFAULT_LOCK_TTL_SECONDS / 2),
+                            )
+                            break
+                        except TimeoutError:
+                            continue
+                finally:
+                    await self._stop_all(self._state, include_adopted=False)
+                    await pg_lease.release(_BUNDLE_LOCK_NAME, identity)
+                continue
 
             if acquired:
                 extender_stop = asyncio.Event()
