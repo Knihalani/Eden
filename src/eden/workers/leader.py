@@ -91,6 +91,11 @@ async def _extend_lock_periodically(
 _DEFAULT_LOCK_TTL_SECONDS = 60
 _DEFAULT_LOCK_RENEW_SECONDS = 20.0
 
+#: Hard ceiling on a single acquisition attempt. Generous next to the
+#: client's own 2s socket timeout — this is not a latency budget, it is
+#: the backstop for the case where that timeout does not fire at all.
+_ACQUIRE_TIMEOUT_SECONDS = 15.0
+
 #: Consecutive failed acquisitions, per lock name. ``Lock.acquire`` fails
 #: closed on any Redis error — it warns and returns False — so a broken or
 #: quota-exhausted Redis makes every leader-gated loop spin silently while
@@ -171,7 +176,31 @@ async def run_if_leader(
         _tick_counts.setdefault(lock_name, [0, 0])[0] += 1
         lock = Lock(lock_name, ttl=lock_ttl, prefix="eden:leader")
         try:
-            acquired = await lock.acquire()
+            # Bounded, because an unbounded acquire is a single point of
+            # permanent silence for the whole background fleet. Observed
+            # in production 2026-07-29: every loop entered this body once,
+            # called acquire, and never came back — not True, not False,
+            # no exception — while a plain PING from the same process
+            # succeeded. `Lock.acquire` handles Redis *errors* by failing
+            # closed, but it had no answer for a call that simply never
+            # returns, and one hung socket read took out maintenance,
+            # insights, the EQL watchdog, webhook drain, self-obs and the
+            # quality pipeline for seven days with nothing to show for it.
+            #
+            # A timeout converts that into a counted failure and a retry
+            # on the next interval, which is the behaviour every other
+            # Redis fault here already gets.
+            acquired = await asyncio.wait_for(
+                lock.acquire(), timeout=_ACQUIRE_TIMEOUT_SECONDS
+            )
+        except TimeoutError:
+            logger.error(
+                "leader: acquire %s timed out after %.0fs — treating as not "
+                "leader and retrying next interval",
+                lock_name,
+                _ACQUIRE_TIMEOUT_SECONDS,
+            )
+            acquired = False
         except Exception as exc:
             logger.error(
                 "leader: acquire %s raised: %s",

@@ -226,3 +226,43 @@ async def test_work_failure_is_recorded_and_surfaced() -> None:
     assert "RuntimeError" in failures["self_obs_probes"]
     # And it must not be mistaken for an acquisition problem.
     assert leader_mod.leader_acquire_failure_count() == 0
+
+
+@pytest.mark.asyncio
+async def test_hung_acquire_is_bounded_and_retried() -> None:
+    """A lock acquisition that never returns must not park the loop
+    forever. This is the exact production failure: every leader loop
+    entered run_if_leader once, called acquire, and never came back —
+    no True, no False, no exception — so the whole background fleet went
+    silent for seven days with a zero failure count."""
+    from eden.workers import leader as lm
+    from eden.workers.leader import run_if_leader
+
+    stop = asyncio.Event()
+    attempts = {"n": 0}
+
+    class _HangsForever:
+        def __init__(self, *a, **kw):
+            self.name = "t"
+
+        async def acquire(self):
+            attempts["n"] += 1
+            if attempts["n"] >= 2:
+                stop.set()
+            await asyncio.Event().wait()  # never returns
+
+        async def release(self):
+            return True
+
+    with patch.object(lm, "Lock", _HangsForever), patch.object(
+        lm, "_ACQUIRE_TIMEOUT_SECONDS", 0.05
+    ):
+        await asyncio.wait_for(
+            run_if_leader("t", AsyncMock(), interval=0.01, stop=stop),
+            timeout=5.0,
+        )
+
+    assert attempts["n"] >= 2, "loop did not retry after a hung acquire"
+    assert lm.leader_acquire_failure_count("t") >= 1, (
+        "a hung acquire must be counted as a failure, not silently ignored"
+    )
