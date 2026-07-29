@@ -370,6 +370,11 @@ class HealthResponse(BaseModel):
     # answering "healthy" off Postgres and Qdrant alone. In July 2026 the
     # worker went 7 days without a heartbeat and nothing surfaced it.
     redis: str = "unknown"
+    # What the in-process background bundle has actually started. Distinct
+    # from ``background_workers_expected`` (a config flag) and from the
+    # supervisor merely being alive — the bundle can sit waiting on its
+    # leader lock forever with neither of those saying so.
+    background_loops: dict | None = None
     # Age of the newest ``background_workers`` self-obs heartbeat. ``None``
     # when the table has no rows yet. A number climbing past a few multiples
     # of ``self_obs_probe_interval_seconds`` means the worker is gone even
@@ -1246,6 +1251,14 @@ async def health_check():
         except Exception:
             pass
 
+    def _background_loops_snapshot() -> dict | None:
+        try:
+            from eden.workers.background import background_loops_snapshot
+
+            return background_loops_snapshot()
+        except Exception:
+            return None
+
     # Redis reachability. Cheap PING, hard-bounded so a hung Redis cannot
     # stall the health probe itself.
     redis_status = "unknown"
@@ -1299,6 +1312,7 @@ async def health_check():
         qdrant=kb_health.get("qdrant", "unknown"),
         redis=redis_status,
         worker_heartbeat_age_seconds=heartbeat_age,
+        background_loops=_background_loops_snapshot(),
         quality_worker_running=worker_running,
         statgate_installed=statgate_installed,
         evolution_loop_running=evolution_loop_running,
