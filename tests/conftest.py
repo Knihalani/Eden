@@ -854,6 +854,16 @@ def _reset_auth_caches() -> None:
         deps._org_id_cache.clear()
         deps._user_id_cache.clear()
         deps._last_seen_bumped_at.clear()
+        # Leader-election diagnostics are process-globals too (acquire
+        # failures, work failures, tick counts). They feed the worker
+        # liveness heartbeat, so a test that exercises run_if_leader
+        # otherwise leaves counts behind for whatever runs next.
+        try:
+            from eden.workers.leader import reset_leader_failure_counts
+
+            reset_leader_failure_counts()
+        except Exception:
+            pass
 
     _clear()
     yield
