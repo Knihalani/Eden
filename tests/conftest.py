@@ -864,6 +864,21 @@ def _reset_auth_caches() -> None:
             reset_leader_failure_counts()
         except Exception:
             pass
+        # The sidecar bundle keeps process-globals too: whether it has
+        # started, the guard lock, and the background guard-retry task.
+        # A test that exercises the guard otherwise leaves `_started`
+        # True and every later test sees the bundle as already running.
+        try:
+            from eden.workers import sidecars as _sidecars
+
+            task = getattr(_sidecars, "_guard_retry_task", None)
+            if task is not None and not task.done():
+                task.cancel()
+            _sidecars._guard_retry_task = None
+            _sidecars._started = False
+            _sidecars._guard_lock = None
+        except Exception:
+            pass
 
     _clear()
     yield
