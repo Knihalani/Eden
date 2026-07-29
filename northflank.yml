@@ -476,13 +476,18 @@ spec:
   # SKIP_MIGRATIONS=1 — API runs Alembic on boot; worker must not race migrations.
   # Override the default CMD via the start command. We exec into the
   # same image with a different command that runs the worker loop.
+  # Was ``bash -lc "... exec python -m eden.workers.main"``. Two hazards,
+  # both removed:
+  #   * ``-l`` makes it a login shell, which sources /etc/profile; on
+  #     Debian that *overwrites* PATH with a default that does not
+  #     include /opt/venv/bin. Which interpreter ran was therefore
+  #     decided by profile scripts, not by this file.
+  #   * bare ``python`` compounded it. The API service's Dockerfile CMD
+  #     pins /usr/local/bin/python3; the worker now matches it.
   command:
-    - bash
-    - -lc
-    - |
-      cd /app
-      export SKIP_MIGRATIONS=1
-      exec python -m eden.workers.main
+    - sh
+    - -c
+    - cd /app && export SKIP_MIGRATIONS=1 && exec /usr/local/bin/python3 -m eden.workers.main
   env:
     - name: APP_NAME
       value: Eden
