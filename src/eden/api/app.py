@@ -363,6 +363,18 @@ class HealthResponse(BaseModel):
     # ``quality_worker_running`` / ``evolution_loop_running`` being
     # false is expected for this process, not a crash signal.
     background_workers_expected: bool = False
+    # Redis was absent from this payload entirely. Every background loop
+    # is leader-elected through a Redis lock, so an unreachable Redis
+    # silently kills maintenance, insights, the EQL watchdog, webhook
+    # drain, self-obs probes and the quality pipeline while /health keeps
+    # answering "healthy" off Postgres and Qdrant alone. In July 2026 the
+    # worker went 7 days without a heartbeat and nothing surfaced it.
+    redis: str = "unknown"
+    # Age of the newest ``background_workers`` self-obs heartbeat. ``None``
+    # when the table has no rows yet. A number climbing past a few multiples
+    # of ``self_obs_probe_interval_seconds`` means the worker is gone even
+    # though the API is fine.
+    worker_heartbeat_age_seconds: float | None = None
 
 
 # ============================================================================
@@ -1234,11 +1246,53 @@ async def health_check():
         except Exception:
             pass
 
+    # Redis reachability. Cheap PING, hard-bounded so a hung Redis cannot
+    # stall the health probe itself.
+    redis_status = "unknown"
+    try:
+        import asyncio as _asyncio
+
+        from eden.storage.redis import get_redis_client
+
+        _client = await get_redis_client()
+        if _client is None:
+            redis_status = "not_configured"
+        else:
+            await _asyncio.wait_for(_client.ping(), timeout=2.0)
+            redis_status = "connected"
+    except TimeoutError:
+        redis_status = "timeout"
+    except Exception as exc:
+        redis_status = f"error: {type(exc).__name__}"
+    if overall == "healthy" and redis_status not in ("connected", "not_configured"):
+        overall = "degraded"
+
+    # Worker liveness, read from the self-obs heartbeat table. The API
+    # process cannot see the worker process any other way.
+    heartbeat_age: float | None = None
+    try:
+        from eden.storage.postgres import get_postgres_client
+
+        _pg = await get_postgres_client()
+        if _pg is not None:
+            heartbeat_age = await _pg.fetchval(
+                """
+                SELECT EXTRACT(EPOCH FROM (NOW() - max(checked_at)))
+                FROM eden_component_heartbeats
+                WHERE component = 'background_workers'
+                """
+            )
+            heartbeat_age = float(heartbeat_age) if heartbeat_age is not None else None
+    except Exception as exc:
+        logger.debug("health: worker heartbeat lookup failed: %s", exc)
+
     body = HealthResponse(
         status=overall,
         version=settings.app_version,
         postgres=pg,
         qdrant=kb_health.get("qdrant", "unknown"),
+        redis=redis_status,
+        worker_heartbeat_age_seconds=heartbeat_age,
         quality_worker_running=worker_running,
         statgate_installed=statgate_installed,
         evolution_loop_running=evolution_loop_running,

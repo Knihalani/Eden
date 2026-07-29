@@ -439,6 +439,35 @@ spec:
     name: nf-compute-20
   deployment:
     instances: 1
+  # 2026-07-29 — the worker had not written a heartbeat in 7.4 days.
+  # Two failure modes, both structural rather than code:
+  #
+  #  1. ``backoffLimit: 0`` meant a crashed run was simply gone. Between
+  #     2026-07-21 and 07-24 forty-five consecutive runs failed and
+  #     nothing ever restarted them, so every background loop
+  #     (maintenance, insights, EQL watchdog, webhook drain, self-obs,
+  #     quality pipeline, trace-finalized consumer) was dead in prod
+  #     while the API happily served reads.
+  #  2. Nothing stopped runs stacking: each deploy started another and
+  #     left the previous one behind, so five were "RUNNING" at once —
+  #     five idle pollers all billing Upstash and Neon for one job's
+  #     worth of work.
+  #
+  # ``backoffLimit`` is the API's own field (GET .../jobs/eden-worker →
+  # ``settings.backoffLimit``, verified 2026-07-29) and makes a crashed
+  # run retry instead of vanishing.
+  #
+  # Run stacking is NOT fixed here. The job also carries
+  # ``settings.runOnSourceChange: cd-promote``, so every deploy starts a
+  # fresh run and leaves the previous one behind. Northflank exposes no
+  # concurrency policy for manual jobs, so the durable fix is to stop
+  # old runs on deploy (or move the worker to a service once off the
+  # Developer Sandbox, which caps this project at one service). Until
+  # then, check for stacked runs after each deploy:
+  #   GET /v1/projects/eden-staging-us-central/jobs/eden-worker/runs
+  # and abort any with status RUNNING older than the newest.
+  settings:
+    backoffLimit: 3
   build:
     type: dockerfile
     dockerfilePath: ./Dockerfile
