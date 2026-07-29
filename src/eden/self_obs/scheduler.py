@@ -331,7 +331,20 @@ async def probe_org(
 
 async def run_scheduled_probes(*, org_ids: list[str] | None = None) -> dict[str, Any]:
     """Tick body: probe every org. Caller (``eden.workers.main``) leader-gates this."""
-    orgs = org_ids if org_ids is not None else await _list_org_ids()
+    if org_ids is not None:
+        orgs = org_ids
+    else:
+        # An unguarded await here aborted the whole tick — including the
+        # heartbeat flush below — on any transient Postgres error, so the
+        # worker went silent in exactly the situation where you most want
+        # to know it is alive.
+        try:
+            orgs = await _list_org_ids()
+        except Exception as exc:
+            logger.error(
+                "self_obs.scheduler: org listing failed: %s", exc, exc_info=True
+            )
+            orgs = []
 
     shared_probes: dict[str, Any] = {}
     workers_result: dict[str, Any] | None = None
@@ -364,7 +377,19 @@ async def run_scheduled_probes(*, org_ids: list[str] | None = None) -> dict[str,
             )
             workers_result = {"status": "unknown", "meta": {"error": str(exc)}}
 
-        previous_map = await _previous_statuses_batch(orgs)
+        # Non-fatal: this is only used to decide whether a status change
+        # is a *new* degradation worth emailing about. Letting it abort
+        # the tick would suppress the heartbeats themselves — the one
+        # signal that says the worker is alive at all.
+        try:
+            previous_map = await _previous_statuses_batch(orgs)
+        except Exception as exc:
+            logger.error(
+                "self_obs.scheduler: previous-status batch failed: %s",
+                exc,
+                exc_info=True,
+            )
+            previous_map = {}
 
     # Heartbeat rows for the whole tick, flushed as one INSERT below.
     heartbeat_sink: list[tuple[str, str | None, str, dict[str, Any] | None]] = []
@@ -412,8 +437,15 @@ async def run_scheduled_probes(*, org_ids: list[str] | None = None) -> dict[str,
         try:
             await record_heartbeats_batch(heartbeat_sink)
         except Exception as exc:
-            logger.debug(
-                "self_obs.scheduler: heartbeat batch flush failed: %s", exc
+            # WARNING, not debug: this is the write that makes worker
+            # liveness observable. Losing it silently is how a dead
+            # background fleet stayed invisible for seven days.
+            logger.warning(
+                "self_obs.scheduler: heartbeat batch flush failed "
+                "(%d rows dropped): %s",
+                len(heartbeat_sink),
+                exc,
+                exc_info=True,
             )
 
     return {"orgs_scanned": len(orgs), "degraded_orgs": degraded_orgs}
