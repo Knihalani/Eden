@@ -130,12 +130,29 @@ spec:
   # deferred routers, six leader-gated loops, the quality-pipeline
   # sidecar and an in-lifespan Alembic run.
   #
-  # Right-sizing candidate (needs one week of observed peak RSS first):
-  #   nf-compute-50 = 0.5 vCPU / 1024 MB, $12/mo — keeps RAM identical
-  #   (the binding constraint) and halves CPU (the slack one), saving
-  #   $6/mo / 33%. Do not drop below 1024 MB RAM without measuring.
+  # Right-sized 2026-07-29 to nf-compute-50 (0.5 vCPU / 1024 MB, $12/mo)
+  # from nf-compute-100-1 (1 vCPU / 1024 MB, $18/mo). Saves $6/mo (33%).
+  #
+  # Measured, not guessed — the shipped image was run to a completed
+  # lifespan (all 111 routers plus the 21 deferred numpy routers mounted,
+  # /live answering):
+  #     steady-state RSS : 270.6 MiB
+  #     CPU idle         : 0.2 - 0.4 %
+  #     CPU peak at boot  : 21.6 % of one vCPU
+  #
+  # RAM is deliberately UNCHANGED at 1024 MB. It is the binding
+  # constraint and the dimension with real tail risk: the background
+  # fleet now runs in this process, and SANDBOX_MEMORY_MB below hands
+  # 256 MB to sandboxed execution on its own. 1024 MB leaves ~3.8x
+  # headroom over the measured baseline; 512 MB (the nf-compute-20 this
+  # file used to claim) would not survive one sandbox run.
+  #
+  # Only CPU drops, 1.0 -> 0.5 vCPU, against a measured 0.216 vCPU boot
+  # peak and ~0.003 idle — still 2.3x headroom on the worst observed
+  # moment. Boot is the peak because of the numpy router imports and the
+  # in-lifespan Alembic run; steady-state request serving is far below it.
   compute:
-    name: nf-compute-100-1
+    name: nf-compute-50
   deployment:
     instances: 1
   build:

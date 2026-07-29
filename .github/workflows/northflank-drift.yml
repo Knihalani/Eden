@@ -1,0 +1,79 @@
+name: northflank drift
+
+# northflank.yml describes an intended deployment. Nothing applies it,
+# and on 2026-07-29 an audit found the live project had diverged badly
+# from it: no health check at all, 11 of 92 declared env vars set,
+# nf-compute-100-1 instead of nf-compute-20, and 31 single-key secret
+# groups instead of the declared `eden-required`. Every tuning decision
+# argued for in that file's comments was therefore only partly in
+# effect, with no way to tell which parts.
+#
+# This job makes that condition visible. It does not mutate the project.
+
+on:
+  schedule:
+    # 06:12 UTC daily — off the hour so it doesn't pile onto the
+    # top-of-hour scheduler burst.
+    - cron: "12 6 * * *"
+  pull_request:
+    paths:
+      - "northflank.yml"
+      - "scripts/northflank_drift_check.py"
+      - ".github/workflows/northflank-drift.yml"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  drift:
+    name: northflank.yml vs live project
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Check for the API token
+        id: token
+        env:
+          NORTHFLANK_API_TOKEN: ${{ secrets.NORTHFLANK_API_TOKEN }}
+        run: |
+          if [ -z "$NORTHFLANK_API_TOKEN" ]; then
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::NORTHFLANK_API_TOKEN is not set — drift check skipped."
+            echo "::notice::Add it under Settings > Secrets > Actions to enable this gate."
+          else
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Install the Northflank CLI
+        if: steps.token.outputs.present == 'true'
+        run: npm install -g @northflank/cli
+
+      - name: Compare manifest against the live project
+        if: steps.token.outputs.present == 'true'
+        env:
+          NORTHFLANK_API_TOKEN: ${{ secrets.NORTHFLANK_API_TOKEN }}
+        # Non-blocking for now: the manifest is known to be behind the
+        # live project, so a hard failure here would red every PR until
+        # the backlog is cleared. Flip to a blocking gate (drop the
+        # `|| true`) once `scripts/northflank_drift_check.py` reports
+        # zero drifts — that is the point of the script.
+        run: python scripts/northflank_drift_check.py || true
+
+      - name: Report
+        if: steps.token.outputs.present == 'true'
+        env:
+          NORTHFLANK_API_TOKEN: ${{ secrets.NORTHFLANK_API_TOKEN }}
+        run: |
+          python scripts/northflank_drift_check.py --json > drift.json || true
+          {
+            echo '## Northflank drift'
+            echo
+            echo '```json'
+            cat drift.json
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
