@@ -95,13 +95,14 @@ def _build_corpus(n: int, seed: int) -> list[dict]:
     return out
 
 
-def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--n", type=int, default=5000, help="corpus size (default 5000)")
-    parser.add_argument("--seed", type=int, default=42)
-    parser.add_argument("--no-dict", action="store_true",
-                        help="force empty dictionary (baseline measurement)")
-    args = parser.parse_args()
+def run(n: int = 5000, seed: int = 42, no_dict: bool = False) -> dict:
+    """Measure real compression throughput and return the numbers.
+
+    Split out of ``main`` so ``bench.run_all`` can collect the result rather
+    than scrape stdout. This suite drives ``eden.storage.compression``
+    directly — no simulated latency anywhere in it.
+    """
+    args = argparse.Namespace(n=n, seed=seed, no_dict=no_dict)
 
     # Point the storage layer at the trained dict (if it ships).
     dict_path = Path(__file__).resolve().parents[1] / "var" / "zstd_dict.bin"
@@ -167,7 +168,17 @@ def main() -> int:
         "batch_decompress_ms": round(decomp_time * 1000, 1),
         "round_trip_errors": errors,
     }
-    print(json.dumps(out, indent=2))
+    return out
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--n", type=int, default=5000, help="corpus size (default 5000)")
+    parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--no-dict", action="store_true",
+                        help="force empty dictionary (baseline measurement)")
+    args = parser.parse_args()
+    print(json.dumps(run(n=args.n, seed=args.seed, no_dict=args.no_dict), indent=2))
     return 0
 
 

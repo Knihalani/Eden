@@ -1,0 +1,3805 @@
+{
+  "_comment": "Structural snapshot of Eden's public API surface. Regenerate deliberately with `python scripts/update_api_snapshot.py` and review the diff \u2014 this file is the record that a serialization change did not silently alter the contract.",
+  "operation_responses": {
+    "DELETE /api/v1/me": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "DELETE /api/v1/orgs/{org_id}/data": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "DELETE /auth/users/me": [
+      "204:empty",
+      "422:application/json"
+    ],
+    "DELETE /notifications/{notification_id}": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "DELETE /orgs/{org_id}": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "DELETE /orgs/{org_id}/ai/conversations/{conversation_id}": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "DELETE /orgs/{org_id}/allowed-domains/{domain_id}": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "DELETE /orgs/{org_id}/api-keys/{key_id}": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "DELETE /orgs/{org_id}/cost-overrides/{override_id}": [
+      "204:empty",
+      "422:application/json"
+    ],
+    "DELETE /orgs/{org_id}/data-platform/gdpr/tenant": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "DELETE /orgs/{org_id}/datasets/{dataset_id}/rows/{row_id}": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "DELETE /orgs/{org_id}/export/destinations/{destination_id}": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "DELETE /orgs/{org_id}/export/schedules/{schedule_id}": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "DELETE /orgs/{org_id}/gateway/models/{model_id}": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "DELETE /orgs/{org_id}/members/{user_id}": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "DELETE /orgs/{org_id}/nl-alert-rules/{rule_id}": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "DELETE /orgs/{org_id}/references/{ref_id}": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "DELETE /orgs/{org_id}/roles/{role_id}": [
+      "204:empty",
+      "422:application/json"
+    ],
+    "DELETE /orgs/{org_id}/roles/{role_id}/assignments/{assignment_id}": [
+      "204:empty",
+      "422:application/json"
+    ],
+    "DELETE /orgs/{org_id}/saved-searches/{search_id}": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "DELETE /orgs/{org_id}/scim/v2/Users/{scim_user_id}": [
+      "204:empty",
+      "422:application/json"
+    ],
+    "DELETE /orgs/{org_id}/shares/{share_id}": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "DELETE /orgs/{org_id}/tool-calls/{span_id}/label": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "DELETE /orgs/{org_id}/webhooks/{webhook_id}": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "DELETE /sso/providers/{provider_id}/scim/token": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /api/v1/me/data": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /api/v1/me/data/jobs/{job_id}": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /auth/2fa/enforcement-status": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /auth/2fa/status": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /auth/me": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /auth/me/pending-invites": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /auth/org-members-2fa-status": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /auth/verify-invite-token": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /feature-flags": [
+      "200:application/json"
+    ],
+    "GET /gateway/v1/models": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /gateway/v1/models/{model_id}": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /health": [
+      "200:application/json"
+    ],
+    "GET /integrations/github/authorize": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /integrations/github/callback": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /integrations/github/configured": [
+      "200:application/json"
+    ],
+    "GET /integrations/langfuse/status": [
+      "200:application/json"
+    ],
+    "GET /integrations/langsmith/status": [
+      "200:application/json"
+    ],
+    "GET /integrations/runloop/status": [
+      "200:application/json"
+    ],
+    "GET /integrations/wandb/status": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /kb/query": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /live": [
+      "200:application/json"
+    ],
+    "GET /metrics": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /notifications": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/2fa/enforcement-status": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/admin/eden-status": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/admin/flags": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/admin/slow-queries": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/admin/synthetics/last": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/agent-issues": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/agent-issues/{issue_id}": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/agent-issues/{issue_id}/experiments": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/agent-issues/{issue_id}/experiments/{link_id}/report": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/agent-issues/{issue_id}/regression-cases": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/agent-issues/{issue_id}/triage": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/agent-sessions": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/agent-sessions/contract": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/agent-sessions/{session_id}": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/agent/pr-suggestions": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/agent/pr-suggestions/{suggestion_id}": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/agent/pr-suggestions/{suggestion_id}/files/{file_path}": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/agentic-metrics/summary": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/agents": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/agents/{agent_id}": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/agents/{agent_id}/book": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/agents/{agent_id}/drift": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/agents/{agent_id}/drift/report/latest": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/agents/{agent_id}/ledger": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/agents/{agent_id}/ledger/diff": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/agents/{agent_id}/quality/trend": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/ai-insights/health": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/ai-insights/sessions": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/ai-insights/sessions/{session_id}/messages": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/ai/conversations": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/ai/conversations/{conversation_id}": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/ai/tools": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/alert-events": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/alerts": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/alerts/rules": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/allowed-domains": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/analytics": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/analytics/cohorts": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/analytics/funnel": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/analytics/latency": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/analytics/throughput": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/analytics/token-usage": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/analytics/top-agents": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/api-keys": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/artifacts": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/artifacts/export": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/audit-log": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/audit-log/export": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/audit-log/verify-chain": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/automations": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/billing/invoices": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/billing/payment-method": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/billing/plans": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/browser-sessions/{session_id}": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/budget": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/budget/actions": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/budget/ticker": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/categorical-classifiers": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/change-impact/{change_id}": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/code-evaluators": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/compliance/ledger": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/cost-analytics/kpi": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/cost-overrides": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/cost/comparison": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/dashboards": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/dashboards/home": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/data-platform/etl/report/latest": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/data-platform/gdpr/export": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/data-platform/lineage/dataset/{dataset_name}": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/data-platform/lineage/export": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/data-platform/lineage/job/{job_id}": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/data-platform/quality/reports/history": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/data-platform/quality/{table_name}": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/data-platform/quarantine": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/data-platform/storage/summary": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/datasets": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/datasets/{dataset_id}": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/datasets/{dataset_id}/columns": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/datasets/{dataset_id}/export": [
+      "200:text/plain",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/datasets/{dataset_id}/rows": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/debugger/checkpoints": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/debugger/checkpoints/{trace_id}": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/debugger/sessions": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/debugger/sessions/{session_id}": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/debugger/sessions/{session_id}/compare": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/domain-restriction": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/experiments/offline": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/experiments/offline/{experiment_id}/compare": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/export": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/export/destinations": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/export/schedules": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/finops/explorer": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/finops/export": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/finops/kill-switches": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/fleet/agents/{agent_id}": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/fleet/delegation": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/fleet/heatmap": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/fleet/sla-breaches": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/fleet/summary": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/gateway/models": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/gateway/models/{model_id}": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/gateway/overview": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/github/connection": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/github/installations": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/github/repos": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/improve/plans": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/improve/plans/{plan_id}": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/improve/queue": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/improve/runs": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/improve/runs/{run_id}": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/improve/schedule": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/improve/scorecard": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/insights": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/insights/correlation": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/insights/datasets": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/insights/datasets/stats": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/insights/datasets/{dataset_id}": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/insights/datasets/{dataset_id}/entries": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/insights/detectors": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/insights/disparity/reports": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/insights/disparity/reports/{report_id}": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/insights/overview": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/insights/traces": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/insights/traces/{trace_id}": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/insights/trends": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/insights/{insight_id}": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/integrations/status": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/intelligence/user/sessions/{session_id}": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/invites": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/issues/{issue_id}/kb-suggestions": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/kb/flywheel/status": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/labeling/export": [
+      "200:text/plain",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/labeling/iia": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/labeling/items": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/labeling/queue/{user_id}": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/labeling/queues": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/labeling/queues/{queue_id}": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/labeling/queues/{queue_id}/board": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/labeling/queues/{queue_id}/iaa": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/ledger": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/llmops/ab-tests": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/llmops/artifacts": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/llmops/artifacts/best": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/llmops/artifacts/{artifact_id}": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/llmops/cache/stats": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/llmops/experiments": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/llmops/experiments/{experiment_id}": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/llmops/experiments/{experiment_id}/regression": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/llmops/gateway/health": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/llmops/gateway/metrics": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/llmops/monitoring/alerts": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/llmops/monitoring/health": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/llmops/monitoring/models/{model_family}": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/llmops/prompts": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/llmops/prompts/{prompt_id}": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/mcp/keys": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/media/{blob_id}": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/media/{blob_id}/info": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/members": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/members-2fa-status": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/nl-alert-rules": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/nl-alert-rules/{rule_id}": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/nudges": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/observability/heatmaps/{metric_name}": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/observability/judges": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/observability/judges/{judge_run_id}": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/observability/mcp/auth-failures": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/observability/mcp/graph": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/observability/mcp/servers": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/observability/mcp/servers/{server_name}/tools": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/observability/mcp/sre": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/observability/mcp/trends": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/observability/patterns": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/observability/patterns/{pattern_id}": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/observability/spans/search": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/observability/spans/search/suggest": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/observability/sse/stream": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/observability/summary": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/observability/traces": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/observability/traces/{trace_id}/timeline": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/observability/traces/{trace_id}/tree": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/onboarding/improvement-loop": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/onboarding/pr-runs": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/onboarding/state": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/online-scoring/rules": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/optimization/budget": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/optimization/cache": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/optimization/cost-per-trace": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/optimization/costs": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/optimization/overview": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/optimization/routing": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/optimization/savings": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/permissions": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/pii-policy": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/playgrounds": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/playgrounds/{playground_id}": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/portal/agents": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/portal/alerts/events": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/portal/alerts/rules": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/portal/assistant/threads": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/portal/audit/events": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/portal/audit/packs": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/portal/compare/experiments": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/portal/cost/drivers": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/portal/debugger/sessions": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/portal/evals/datasets": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/portal/evals/experiments": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/portal/evals/playgrounds": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/portal/guardrails/policies": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/portal/improve/plans": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/portal/issues": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/portal/keys": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/portal/members": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/portal/sessions": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/portal/signals": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/portal/traces": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/portal/traces/{trace_id}": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/portal/workspace": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/production-datasets": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/production-datasets/{agent_id}": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/production-eval/policies": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/promotions": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/promotions/{candidate_id}": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/prompts": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/prompts/{agent}/canary": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/prompts/{name}": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/prompts/{name}/environments": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/prompts/{name}/pins": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/prompts/{name}/resolve": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/prompts/{name}/versions": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/prompts/{name}/versions/{version}": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/prompts/{name}/versions/{version}/eval-runs": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/prompts/{name}/workspace": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/redteam/findings": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/redteam/probes": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/references": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/references/purposes": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/references/search/by-text": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/references/{ref_id}": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/roles": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/roles/{role_id}": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/roles/{role_id}/assignments": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/saved-searches": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/scim/config": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/scim/v2/ResourceTypes": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/scim/v2/Schemas": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/scim/v2/ServiceProviderConfig": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/scim/v2/Users": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/scim/v2/Users/{scim_user_id}": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/settings/autonomy": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/settings/autonomy/audit": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/settings/detection": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/shares": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/sidebar-prefs": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/signal-clusters": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/signals": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/signals/library/backfill-estimate": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/signals/{signal_id}/backfill-estimate": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/signals/{signal_id}/backfill/{job_id}": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/signals/{signal_id}/classifier": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/signals/{signal_id}/events": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/spans/{span_id}/scores": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/sql/limits": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/sql/schema": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/stream/traces/{session_id}/events": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/stumbles": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/stumbles/{stumble_id}": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/synthetic/runs": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/synthetic/runs/{run_id}": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/tool-calls/agents/{agent_id}/labels": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/tool-calls/agents/{agent_id}/tool-calibrators": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/topics": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/traces/{trace_id}/browser-replay": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/traces/{trace_id}/shares": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/traces/{trace_id}/span-scores": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/traces/{trace_id}/tokens": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/webhooks": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/webhooks/dlq": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/webhooks/{webhook_id}": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /public/traces/{token}": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /ready": [
+      "200:application/json"
+    ],
+    "GET /sso/login/{provider_id}": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /sso/providers": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /subprocessors": [
+      "200:application/json"
+    ],
+    "GET /v1/a2a/{org_id}/invocations/{trace_id}": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /v1/computer_use/{org_id}/screenshots/tombstoned/{trace_id}": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /v1/fine_tuning_runs": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /v1/fine_tuning_runs/{run_id}": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /v1/fine_tuning_runs/{run_id}/lineage": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /v1/guardrails/actions/pending": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /v1/internal/health": [
+      "200:application/json"
+    ],
+    "GET /v1/internal/health/{component}": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /v1/internal/onboarding/{org_id}/state": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /v1/mcp": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /v1/mcp/": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /v1/mcp/{org_id}/auth_failures": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /v1/provider_routing/{org_id}/attempts": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /v1/provider_routing/{org_id}/failure_rate": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /v1/provider_routing/{org_id}/repeated_failures": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /v1/traces/{trace_id}/a2a": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /v1/traces/{trace_id}/computer_use": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /v1/traces/{trace_id}/efficiency": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /v1/traces/{trace_id}/guardrail_actions": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /v1/traces/{trace_id}/loops": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /v1/traces/{trace_id}/mcp": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /v1/traces/{trace_id}/provider_routing": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /v1/traces/{trace_id}/quality": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /v1/traces/{trace_id}/reasoning": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /v1/traces/{trace_id}/voice_sessions": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /v1/voice_sessions": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /v1/voice_sessions/barge_in_spike": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "PATCH /auth/users/me": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "PATCH /notifications/read-all": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "PATCH /notifications/{notification_id}/read": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "PATCH /orgs/{org_id}/agents/{agent_id}/book/config": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "PATCH /orgs/{org_id}/agents/{agent_id}/ledger/config": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "PATCH /orgs/{org_id}/datasets/{dataset_id}/rows/{row_id}": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "PATCH /orgs/{org_id}/domain-restriction": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "PATCH /orgs/{org_id}/fleet/agents/{agent_id}": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "PATCH /orgs/{org_id}/gateway/models/{model_id}": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "PATCH /orgs/{org_id}/improve/plans/{plan_id}": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "PATCH /orgs/{org_id}/members/{user_id}": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "PATCH /orgs/{org_id}/nl-alert-rules/{rule_id}": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "PATCH /orgs/{org_id}/online-scoring/rules/{rule_id}": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "PATCH /orgs/{org_id}/playgrounds/{playground_id}": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "PATCH /orgs/{org_id}/production-eval/policies": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "PATCH /orgs/{org_id}/prompts/{name}": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "PATCH /orgs/{org_id}/saved-searches/{search_id}": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "PATCH /orgs/{org_id}/scim/v2/Users/{scim_user_id}": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "PATCH /orgs/{org_id}/settings": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "PATCH /orgs/{org_id}/settings/autonomy": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "PATCH /orgs/{org_id}/settings/detection": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "PATCH /orgs/{org_id}/signals/library/{template_id}": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "PATCH /orgs/{org_id}/webhooks/{webhook_id}": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "PATCH /sso/providers/{provider_id}": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /api/v1/dsar": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /api/v1/feedback/tokens/{token_id}": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /api/v1/me/do-not-sell": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /auth/2fa/disable": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /auth/2fa/enforce": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /auth/2fa/recover": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /auth/2fa/setup": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /auth/2fa/verify": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /auth/forgot-password": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /auth/invitations/accept": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /auth/login": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /auth/logout": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /auth/logout-all": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /auth/reset-password": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /auth/signup": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /auth/signup-from-invite": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /auth/users/me/avatar": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /auth/users/me/password": [
+      "204:empty",
+      "422:application/json"
+    ],
+    "POST /gateway/v1/chat/completions": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /gateway/v1/completions": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /gateway/v1/embeddings": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /integrations/github/webhook": [
+      "200:application/json"
+    ],
+    "POST /integrations/langfuse/dataset-export": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /integrations/langfuse/trace-export": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /integrations/langsmith/dataset-export": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /integrations/langsmith/run-export": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /integrations/runloop/test-create": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /integrations/wandb/test-log": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /notifications": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/2fa/enforce": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/admin/synthetics/run": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/agent-issues/{issue_id}/experiments": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/agent-issues/{issue_id}/export-fixture": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/agent-issues/{issue_id}/regression-cases": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/agent-issues/{issue_id}/resolve": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/agent-issues/{issue_id}/triage": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/agent-sessions/start": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/agent-sessions/{session_id}/end": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/agent-sessions/{session_id}/identify": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/agent-sessions/{session_id}/traces": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/agent/pr-suggestions": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/agent/pr-suggestions/bulk/regenerate": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/agent/pr-suggestions/{suggestion_id}/open-pr": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/agent/pr-suggestions/{suggestion_id}/regenerate": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/agent/pr-suggestions/{suggestion_id}/status": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/agents/register": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/agents/{agent_id}/book/regenerate": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/agents/{agent_id}/drift/compute": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/agents/{agent_id}/ledger/preview": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/agents/{agent_id}/ledger/regenerate": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/ai-insights/approve": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/ai-insights/chat": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/ai-insights/sessions/{session_id}/archive": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/ai/chat": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/alerts/acknowledge-batch": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/alerts/compile": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/alerts/{alert_id}/acknowledge": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/alerts/{alert_id}/override": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/allowed-domains": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/api-keys": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/archive": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/artifacts": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/artifacts/author": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/artifacts/{artifact_id}/archive": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/artifacts/{artifact_id}/promote": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/automations": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/billing/cancel": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/billing/subscribe": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/billing/webhook": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/browser-sessions": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/browser-sessions/{session_id}/events": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/budget": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/categorical-classifiers": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/categorical-classifiers/{classifier_id}/classify/{trace_id}": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/change-impact/preview": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/ci-eval/run": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/code-evaluators": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/compliance/agents/{agent_id}/export": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/compliance/verify": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/cost-overrides": [
+      "201:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/cost-overrides/resolve": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/dashboards": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/dashboards/widgets/execute": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/dashboards/{dashboard_id}/widgets": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/data-platform/etl/run": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/data-platform/quarantine/reprocess": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/data-platform/retention/run": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/data-platform/storage/apply-lifecycle-rules": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/data-platform/storage/transition": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/datasets": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/datasets/promote-from-trace": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/datasets/{dataset_id}/columns": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/datasets/{dataset_id}/columns/{col_id}/generate": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/datasets/{dataset_id}/import": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/datasets/{dataset_id}/rows": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/datasets/{dataset_id}/snapshots": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/debugger/discover": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/debugger/rerun": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/debugger/sessions": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/eval/promote-to-shadow-guardrail": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/experiments/offline": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/experiments/offline/{experiment_id}/run": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/export/destinations": [
+      "201:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/export/run-now/{schedule_id}": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/export/schedules": [
+      "201:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/finops/kill-switches": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/gateway/models": [
+      "201:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/gateway/models/resolve": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/github/installations/claim": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/github/integrate": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/github/repos/connect": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/improve/autofix/{issue_id}": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/improve/items/{item_ref}/approve": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/improve/items/{item_ref}/snooze": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/improve/plans/{plan_id}/approve": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/improve/plans/{plan_id}/reject": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/improve/plans/{plan_id}/snooze": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/improve/runs": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/ingest/agent-sessions/start": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/ingest/agent-sessions/{session_id}/end": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/ingest/agent-sessions/{session_id}/identify": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/ingest/agent-sessions/{session_id}/traces": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/ingest/anthropic": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/ingest/app": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/ingest/bedrock": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/ingest/chunks": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/ingest/framework": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/ingest/gemini": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/ingest/helicone": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/ingest/langfuse": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/ingest/openai": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/ingest/otel": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/ingest/webhook": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/insights/datasets/generate": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/insights/datasets/{dataset_id}/export": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/insights/detectors/run": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/insights/disparity/batch-compare": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/insights/disparity/compare": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/insights/traces/ingest": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/intelligence/user/feedback/presigned-token": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/intelligence/user/identify": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/intelligence/user/sessions/start": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/intelligence/user/sessions/{session_id}/end": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/intelligence/user/sessions/{session_id}/identify": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/invites": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/invites/{invitation_id}/accept": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/invites/{invitation_id}/decline": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/labeling/annotate": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/labeling/items": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/labeling/queues": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/labeling/queues/{queue_id}/move": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/labeling/queues/{queue_id}/push-to-dataset": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/labeling/skip": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/labeling/traces/{trace_id}/annotate": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/llmops/ab-tests": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/llmops/ab-tests/{test_id}/promote": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/llmops/artifacts": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/llmops/artifacts/{artifact_id}/evaluations": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/llmops/cache/get": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/llmops/cache/invalidate": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/llmops/cache/set": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/llmops/experiments": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/llmops/experiments/{experiment_id}/complete": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/llmops/experiments/{experiment_id}/runs": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/llmops/gateway/complete": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/llmops/monitoring/alerts/{alert_id}/acknowledge": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/llmops/monitoring/snapshots": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/llmops/prompts": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/llmops/prompts/{prompt_id}/render": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/llmops/prompts/{prompt_name}/default": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/mcp/keys": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/models/compare": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/models/project": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/models/recommend": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/nl-alert-rules": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/nudges": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/nudges/{nudge_id}/archive": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/nudges/{nudge_id}/promote": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/observability/judges/run": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/observability/telemetry/ingest": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/observability/telemetry/ingest/batch": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/observability/traces/compare": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/observability/traces/{trace_id}/export": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/onboarding/state": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/online-scoring/apply/{trace_id}": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/online-scoring/rules": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/online-scoring/rules/{rule_id}/rewind": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/optimization/budget/check": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/optimization/cache/invalidate": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/optimization/costs/track": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/playgrounds": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/playgrounds/from-span": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/playgrounds/{playground_id}/promote-experiment": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/playgrounds/{playground_id}/run": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/playgrounds/{playground_id}/run/stream": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/production-datasets/refresh": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/production-eval/score/{trace_id}": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/promotions/{candidate_id}/approve": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/promotions/{candidate_id}/reject": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/prompts": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/prompts/{agent}/canary": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/prompts/{agent}/canary/{experiment_id}/promote": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/prompts/{agent}/canary/{experiment_id}/rollback": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/prompts/{name}/collaborators": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/prompts/{name}/compare": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/prompts/{name}/deploy": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/prompts/{name}/playground": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/prompts/{name}/rollback": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/prompts/{name}/rollback/{version}": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/prompts/{name}/versions": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/redteam/probe": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/redteam/scan": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/references": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/roles": [
+      "201:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/roles/assign": [
+      "201:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/roles/unassign": [
+      "204:empty",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/roles/{role_id}/assignments": [
+      "201:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/saved-searches": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/saved-searches/{search_id}/use": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/scim/config": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/scim/rotate-token": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/scim/v2/Users": [
+      "201:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/search/to-signal": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/search/to-signal/preview": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/signal-clusters/{cluster_id}/resolve": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/signals": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/signals/cluster": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/signals/seed-defaults": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/signals/{signal_id}/backfill": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/signals/{signal_id}/classifier/promote": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/signals/{signal_id}/classifier/shadow-report": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/signals/{signal_id}/classifier/train": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/signals/{signal_id}/match": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/sql/execute": [
+      "200:application/json",
+      "400:application/json",
+      "403:application/json",
+      "408:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/sql/export/dataset": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/sql/export/queue": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/stream/traces/{session_id}/finalize": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/stream/traces/{session_id}/publish": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/stumbles": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/synthetic/generate": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/tool-calls/agents/{agent_id}/tool-calibrators/retrain": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/tool-calls/{span_id}/label": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/topics/generate": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/topics/{topic_id}/act": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/traces/{trace_id}/metadata": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/traces/{trace_id}/share": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/transfer-ownership": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/webhooks": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/webhooks/dlq/{dlq_id}/replay": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/webhooks/{webhook_id}/test": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /sso/callback/{provider_id}": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /sso/providers": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /sso/providers/{provider_id}/disable": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /sso/providers/{provider_id}/enable": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /sso/providers/{provider_id}/enforce": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /sso/providers/{provider_id}/scim/token": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /support/tickets": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /v1/a2a/{org_id}/links": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /v1/a2a/{org_id}/links/{link_id}/fail": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /v1/admin/guardrails/{action_class}/disable": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /v1/admin/guardrails/{action_class}/enable": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /v1/computer_use/{org_id}/screenshots/tombstone": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /v1/computer_use/{org_id}/steps": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /v1/fine_tuning_runs": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /v1/fine_tuning_runs/{run_id}/dataset_traces": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /v1/fine_tuning_runs/{run_id}/drift_check": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /v1/fine_tuning_runs/{run_id}/trace_usage": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /v1/guardrails/actions/{action_id}/approve": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /v1/guardrails/trajectory/check": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /v1/internal/onboarding/{org_id}/advance": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /v1/internal/onboarding/{org_id}/enable_cat": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /v1/internal/onboarding/{org_id}/milestone": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /v1/llmops/stat_gate/evaluate": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /v1/mcp": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /v1/mcp/": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /v1/mcp/{org_id}/auth_failures": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /v1/provider_routing/{org_id}/attempts": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /v1/voice_sessions/{org_id}": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /v1/voice_sessions/{org_id}/barge_in": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /v1/webhooks/openai/fine_tuning": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /webhooks/clerk": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "PUT /orgs/{org_id}/improve/schedule": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "PUT /orgs/{org_id}/pii-policy": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "PUT /orgs/{org_id}/prompts/{name}/pins/{env}": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "PUT /orgs/{org_id}/roles/{role_id}": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "PUT /orgs/{org_id}/scim/v2/Users/{scim_user_id}": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "PUT /orgs/{org_id}/sidebar-prefs": [
+      "200:application/json",
+      "422:application/json"
+    ]
+  },
+  "response_media_types": [
+    "application/json",
+    "text/plain"
+  ],
+  "route_count": 688,
+  "routes": [
+    "DELETE /api/v1/me",
+    "DELETE /api/v1/orgs/{org_id}/data",
+    "DELETE /auth/users/me",
+    "DELETE /notifications/{notification_id}",
+    "DELETE /orgs/{org_id}",
+    "DELETE /orgs/{org_id}/ai/conversations/{conversation_id}",
+    "DELETE /orgs/{org_id}/allowed-domains/{domain_id}",
+    "DELETE /orgs/{org_id}/api-keys/{key_id}",
+    "DELETE /orgs/{org_id}/cost-overrides/{override_id}",
+    "DELETE /orgs/{org_id}/data-platform/gdpr/tenant",
+    "DELETE /orgs/{org_id}/datasets/{dataset_id}/rows/{row_id}",
+    "DELETE /orgs/{org_id}/export/destinations/{destination_id}",
+    "DELETE /orgs/{org_id}/export/schedules/{schedule_id}",
+    "DELETE /orgs/{org_id}/gateway/models/{model_id}",
+    "DELETE /orgs/{org_id}/intelligence/code-change",
+    "DELETE /orgs/{org_id}/intelligence/code-change/{path:path}",
+    "DELETE /orgs/{org_id}/members/{user_id}",
+    "DELETE /orgs/{org_id}/nl-alert-rules/{rule_id}",
+    "DELETE /orgs/{org_id}/references/{ref_id}",
+    "DELETE /orgs/{org_id}/roles/{role_id}",
+    "DELETE /orgs/{org_id}/roles/{role_id}/assignments/{assignment_id}",
+    "DELETE /orgs/{org_id}/saved-searches/{search_id}",
+    "DELETE /orgs/{org_id}/scim/v2/Users/{scim_user_id}",
+    "DELETE /orgs/{org_id}/shares/{share_id}",
+    "DELETE /orgs/{org_id}/tool-calls/{span_id}/label",
+    "DELETE /orgs/{org_id}/webhooks/{webhook_id}",
+    "DELETE /sso/providers/{provider_id}/scim/token",
+    "GET /api/v1/me/data",
+    "GET /api/v1/me/data/jobs/{job_id}",
+    "GET /auth/2fa/enforcement-status",
+    "GET /auth/2fa/status",
+    "GET /auth/me",
+    "GET /auth/me/pending-invites",
+    "GET /auth/org-members-2fa-status",
+    "GET /auth/verify-invite-token",
+    "GET /docs",
+    "GET /docs/oauth2-redirect",
+    "GET /feature-flags",
+    "GET /gateway/v1/models",
+    "GET /gateway/v1/models/{model_id:path}",
+    "GET /health",
+    "GET /integrations/github/authorize",
+    "GET /integrations/github/callback",
+    "GET /integrations/github/configured",
+    "GET /integrations/langfuse/status",
+    "GET /integrations/langsmith/status",
+    "GET /integrations/runloop/status",
+    "GET /integrations/wandb/status",
+    "GET /kb/query",
+    "GET /live",
+    "GET /metrics",
+    "GET /notifications",
+    "GET /openapi.json",
+    "GET /openapi/v1/public.json",
+    "GET /orgs",
+    "GET /orgs/{org_id}",
+    "GET /orgs/{org_id}/2fa/enforcement-status",
+    "GET /orgs/{org_id}/admin/eden-status",
+    "GET /orgs/{org_id}/admin/flags",
+    "GET /orgs/{org_id}/admin/slow-queries",
+    "GET /orgs/{org_id}/admin/synthetics/last",
+    "GET /orgs/{org_id}/agent-issues",
+    "GET /orgs/{org_id}/agent-issues/{issue_id}",
+    "GET /orgs/{org_id}/agent-issues/{issue_id}/experiments",
+    "GET /orgs/{org_id}/agent-issues/{issue_id}/experiments/{link_id}/report",
+    "GET /orgs/{org_id}/agent-issues/{issue_id}/regression-cases",
+    "GET /orgs/{org_id}/agent-issues/{issue_id}/triage",
+    "GET /orgs/{org_id}/agent-sessions",
+    "GET /orgs/{org_id}/agent-sessions/contract",
+    "GET /orgs/{org_id}/agent-sessions/{session_id}",
+    "GET /orgs/{org_id}/agent/pr-suggestions",
+    "GET /orgs/{org_id}/agent/pr-suggestions/{suggestion_id}",
+    "GET /orgs/{org_id}/agent/pr-suggestions/{suggestion_id}/files/{file_path:path}",
+    "GET /orgs/{org_id}/agentic-metrics/summary",
+    "GET /orgs/{org_id}/agents",
+    "GET /orgs/{org_id}/agents/{agent_id}",
+    "GET /orgs/{org_id}/agents/{agent_id}/book",
+    "GET /orgs/{org_id}/agents/{agent_id}/drift",
+    "GET /orgs/{org_id}/agents/{agent_id}/drift/report/latest",
+    "GET /orgs/{org_id}/agents/{agent_id}/ledger",
+    "GET /orgs/{org_id}/agents/{agent_id}/ledger/diff",
+    "GET /orgs/{org_id}/agents/{agent_id}/quality/trend",
+    "GET /orgs/{org_id}/ai-insights/health",
+    "GET /orgs/{org_id}/ai-insights/sessions",
+    "GET /orgs/{org_id}/ai-insights/sessions/{session_id}/messages",
+    "GET /orgs/{org_id}/ai/conversations",
+    "GET /orgs/{org_id}/ai/conversations/{conversation_id}",
+    "GET /orgs/{org_id}/ai/tools",
+    "GET /orgs/{org_id}/alert-events",
+    "GET /orgs/{org_id}/alerts",
+    "GET /orgs/{org_id}/alerts/rules",
+    "GET /orgs/{org_id}/allowed-domains",
+    "GET /orgs/{org_id}/analytics",
+    "GET /orgs/{org_id}/analytics/cohorts",
+    "GET /orgs/{org_id}/analytics/funnel",
+    "GET /orgs/{org_id}/analytics/latency",
+    "GET /orgs/{org_id}/analytics/throughput",
+    "GET /orgs/{org_id}/analytics/token-usage",
+    "GET /orgs/{org_id}/analytics/top-agents",
+    "GET /orgs/{org_id}/api-keys",
+    "GET /orgs/{org_id}/artifacts",
+    "GET /orgs/{org_id}/artifacts/export",
+    "GET /orgs/{org_id}/audit-log",
+    "GET /orgs/{org_id}/audit-log/export",
+    "GET /orgs/{org_id}/audit-log/verify-chain",
+    "GET /orgs/{org_id}/automations",
+    "GET /orgs/{org_id}/billing/invoices",
+    "GET /orgs/{org_id}/billing/payment-method",
+    "GET /orgs/{org_id}/billing/plans",
+    "GET /orgs/{org_id}/browser-sessions/{session_id}",
+    "GET /orgs/{org_id}/budget",
+    "GET /orgs/{org_id}/budget/actions",
+    "GET /orgs/{org_id}/budget/ticker",
+    "GET /orgs/{org_id}/categorical-classifiers",
+    "GET /orgs/{org_id}/change-impact/{change_id}",
+    "GET /orgs/{org_id}/code-evaluators",
+    "GET /orgs/{org_id}/compliance/ledger",
+    "GET /orgs/{org_id}/cost-analytics/kpi",
+    "GET /orgs/{org_id}/cost-overrides",
+    "GET /orgs/{org_id}/cost/comparison",
+    "GET /orgs/{org_id}/dashboards",
+    "GET /orgs/{org_id}/dashboards/home",
+    "GET /orgs/{org_id}/data-platform/etl/report/latest",
+    "GET /orgs/{org_id}/data-platform/gdpr/export",
+    "GET /orgs/{org_id}/data-platform/lineage/dataset/{dataset_name}",
+    "GET /orgs/{org_id}/data-platform/lineage/export",
+    "GET /orgs/{org_id}/data-platform/lineage/job/{job_id}",
+    "GET /orgs/{org_id}/data-platform/quality/reports/history",
+    "GET /orgs/{org_id}/data-platform/quality/{table_name}",
+    "GET /orgs/{org_id}/data-platform/quarantine",
+    "GET /orgs/{org_id}/data-platform/storage/summary",
+    "GET /orgs/{org_id}/datasets",
+    "GET /orgs/{org_id}/datasets/{dataset_id}",
+    "GET /orgs/{org_id}/datasets/{dataset_id}/columns",
+    "GET /orgs/{org_id}/datasets/{dataset_id}/export",
+    "GET /orgs/{org_id}/datasets/{dataset_id}/rows",
+    "GET /orgs/{org_id}/debugger/checkpoints",
+    "GET /orgs/{org_id}/debugger/checkpoints/{trace_id}",
+    "GET /orgs/{org_id}/debugger/sessions",
+    "GET /orgs/{org_id}/debugger/sessions/{session_id}",
+    "GET /orgs/{org_id}/debugger/sessions/{session_id}/compare",
+    "GET /orgs/{org_id}/domain-restriction",
+    "GET /orgs/{org_id}/experiments/offline",
+    "GET /orgs/{org_id}/experiments/offline/{experiment_id}/compare",
+    "GET /orgs/{org_id}/export",
+    "GET /orgs/{org_id}/export/destinations",
+    "GET /orgs/{org_id}/export/schedules",
+    "GET /orgs/{org_id}/finops/explorer",
+    "GET /orgs/{org_id}/finops/export",
+    "GET /orgs/{org_id}/finops/kill-switches",
+    "GET /orgs/{org_id}/fleet/agents/{agent_id}",
+    "GET /orgs/{org_id}/fleet/delegation",
+    "GET /orgs/{org_id}/fleet/heatmap",
+    "GET /orgs/{org_id}/fleet/sla-breaches",
+    "GET /orgs/{org_id}/fleet/summary",
+    "GET /orgs/{org_id}/gateway/models",
+    "GET /orgs/{org_id}/gateway/models/{model_id}",
+    "GET /orgs/{org_id}/gateway/overview",
+    "GET /orgs/{org_id}/github/connection",
+    "GET /orgs/{org_id}/github/installations",
+    "GET /orgs/{org_id}/github/repos",
+    "GET /orgs/{org_id}/improve/plans",
+    "GET /orgs/{org_id}/improve/plans/{plan_id}",
+    "GET /orgs/{org_id}/improve/queue",
+    "GET /orgs/{org_id}/improve/runs",
+    "GET /orgs/{org_id}/improve/runs/{run_id}",
+    "GET /orgs/{org_id}/improve/schedule",
+    "GET /orgs/{org_id}/improve/scorecard",
+    "GET /orgs/{org_id}/insights",
+    "GET /orgs/{org_id}/insights/correlation",
+    "GET /orgs/{org_id}/insights/datasets",
+    "GET /orgs/{org_id}/insights/datasets/stats",
+    "GET /orgs/{org_id}/insights/datasets/{dataset_id}",
+    "GET /orgs/{org_id}/insights/datasets/{dataset_id}/entries",
+    "GET /orgs/{org_id}/insights/detectors",
+    "GET /orgs/{org_id}/insights/disparity/reports",
+    "GET /orgs/{org_id}/insights/disparity/reports/{report_id}",
+    "GET /orgs/{org_id}/insights/overview",
+    "GET /orgs/{org_id}/insights/traces",
+    "GET /orgs/{org_id}/insights/traces/{trace_id}",
+    "GET /orgs/{org_id}/insights/trends",
+    "GET /orgs/{org_id}/insights/{insight_id}",
+    "GET /orgs/{org_id}/integrations/status",
+    "GET /orgs/{org_id}/intelligence/code-change",
+    "GET /orgs/{org_id}/intelligence/code-change/{path:path}",
+    "GET /orgs/{org_id}/intelligence/user/sessions/{session_id}",
+    "GET /orgs/{org_id}/invites",
+    "GET /orgs/{org_id}/issues/{issue_id}/kb-suggestions",
+    "GET /orgs/{org_id}/kb/flywheel/status",
+    "GET /orgs/{org_id}/labeling/export",
+    "GET /orgs/{org_id}/labeling/iia",
+    "GET /orgs/{org_id}/labeling/items",
+    "GET /orgs/{org_id}/labeling/queue/{user_id}",
+    "GET /orgs/{org_id}/labeling/queues",
+    "GET /orgs/{org_id}/labeling/queues/{queue_id}",
+    "GET /orgs/{org_id}/labeling/queues/{queue_id}/board",
+    "GET /orgs/{org_id}/labeling/queues/{queue_id}/iaa",
+    "GET /orgs/{org_id}/ledger",
+    "GET /orgs/{org_id}/llmops/ab-tests",
+    "GET /orgs/{org_id}/llmops/artifacts",
+    "GET /orgs/{org_id}/llmops/artifacts/best",
+    "GET /orgs/{org_id}/llmops/artifacts/{artifact_id}",
+    "GET /orgs/{org_id}/llmops/cache/stats",
+    "GET /orgs/{org_id}/llmops/experiments",
+    "GET /orgs/{org_id}/llmops/experiments/{experiment_id}",
+    "GET /orgs/{org_id}/llmops/experiments/{experiment_id}/regression",
+    "GET /orgs/{org_id}/llmops/gateway/health",
+    "GET /orgs/{org_id}/llmops/gateway/metrics",
+    "GET /orgs/{org_id}/llmops/monitoring/alerts",
+    "GET /orgs/{org_id}/llmops/monitoring/health",
+    "GET /orgs/{org_id}/llmops/monitoring/models/{model_family}",
+    "GET /orgs/{org_id}/llmops/prompts",
+    "GET /orgs/{org_id}/llmops/prompts/{prompt_id}",
+    "GET /orgs/{org_id}/mcp/keys",
+    "GET /orgs/{org_id}/media/{blob_id}",
+    "GET /orgs/{org_id}/media/{blob_id}/info",
+    "GET /orgs/{org_id}/members",
+    "GET /orgs/{org_id}/members-2fa-status",
+    "GET /orgs/{org_id}/nl-alert-rules",
+    "GET /orgs/{org_id}/nl-alert-rules/{rule_id}",
+    "GET /orgs/{org_id}/nudges",
+    "GET /orgs/{org_id}/observability/heatmaps/{metric_name}",
+    "GET /orgs/{org_id}/observability/judges",
+    "GET /orgs/{org_id}/observability/judges/{judge_run_id}",
+    "GET /orgs/{org_id}/observability/mcp/auth-failures",
+    "GET /orgs/{org_id}/observability/mcp/graph",
+    "GET /orgs/{org_id}/observability/mcp/servers",
+    "GET /orgs/{org_id}/observability/mcp/servers/{server_name}/tools",
+    "GET /orgs/{org_id}/observability/mcp/sre",
+    "GET /orgs/{org_id}/observability/mcp/trends",
+    "GET /orgs/{org_id}/observability/patterns",
+    "GET /orgs/{org_id}/observability/patterns/{pattern_id}",
+    "GET /orgs/{org_id}/observability/spans/search",
+    "GET /orgs/{org_id}/observability/spans/search/suggest",
+    "GET /orgs/{org_id}/observability/sse/stream",
+    "GET /orgs/{org_id}/observability/summary",
+    "GET /orgs/{org_id}/observability/traces",
+    "GET /orgs/{org_id}/observability/traces/{trace_id}/timeline",
+    "GET /orgs/{org_id}/observability/traces/{trace_id}/tree",
+    "GET /orgs/{org_id}/onboarding/improvement-loop",
+    "GET /orgs/{org_id}/onboarding/pr-runs",
+    "GET /orgs/{org_id}/onboarding/state",
+    "GET /orgs/{org_id}/online-scoring/rules",
+    "GET /orgs/{org_id}/optimization/budget",
+    "GET /orgs/{org_id}/optimization/cache",
+    "GET /orgs/{org_id}/optimization/cost-per-trace",
+    "GET /orgs/{org_id}/optimization/costs",
+    "GET /orgs/{org_id}/optimization/overview",
+    "GET /orgs/{org_id}/optimization/routing",
+    "GET /orgs/{org_id}/optimization/savings",
+    "GET /orgs/{org_id}/permissions",
+    "GET /orgs/{org_id}/pii-policy",
+    "GET /orgs/{org_id}/playgrounds",
+    "GET /orgs/{org_id}/playgrounds/{playground_id}",
+    "GET /orgs/{org_id}/portal/agents",
+    "GET /orgs/{org_id}/portal/alerts/events",
+    "GET /orgs/{org_id}/portal/alerts/rules",
+    "GET /orgs/{org_id}/portal/assistant/threads",
+    "GET /orgs/{org_id}/portal/audit/events",
+    "GET /orgs/{org_id}/portal/audit/packs",
+    "GET /orgs/{org_id}/portal/compare/experiments",
+    "GET /orgs/{org_id}/portal/cost/drivers",
+    "GET /orgs/{org_id}/portal/debugger/sessions",
+    "GET /orgs/{org_id}/portal/evals/datasets",
+    "GET /orgs/{org_id}/portal/evals/experiments",
+    "GET /orgs/{org_id}/portal/evals/playgrounds",
+    "GET /orgs/{org_id}/portal/guardrails/policies",
+    "GET /orgs/{org_id}/portal/improve/plans",
+    "GET /orgs/{org_id}/portal/issues",
+    "GET /orgs/{org_id}/portal/keys",
+    "GET /orgs/{org_id}/portal/members",
+    "GET /orgs/{org_id}/portal/sessions",
+    "GET /orgs/{org_id}/portal/signals",
+    "GET /orgs/{org_id}/portal/traces",
+    "GET /orgs/{org_id}/portal/traces/{trace_id}",
+    "GET /orgs/{org_id}/portal/workspace",
+    "GET /orgs/{org_id}/production-datasets",
+    "GET /orgs/{org_id}/production-datasets/{agent_id}",
+    "GET /orgs/{org_id}/production-eval/policies",
+    "GET /orgs/{org_id}/promotions",
+    "GET /orgs/{org_id}/promotions/{candidate_id}",
+    "GET /orgs/{org_id}/prompts",
+    "GET /orgs/{org_id}/prompts/{agent}/canary",
+    "GET /orgs/{org_id}/prompts/{name}",
+    "GET /orgs/{org_id}/prompts/{name}/environments",
+    "GET /orgs/{org_id}/prompts/{name}/pins",
+    "GET /orgs/{org_id}/prompts/{name}/resolve",
+    "GET /orgs/{org_id}/prompts/{name}/versions",
+    "GET /orgs/{org_id}/prompts/{name}/versions/{version}",
+    "GET /orgs/{org_id}/prompts/{name}/versions/{version}/eval-runs",
+    "GET /orgs/{org_id}/prompts/{name}/workspace",
+    "GET /orgs/{org_id}/redteam/findings",
+    "GET /orgs/{org_id}/redteam/probes",
+    "GET /orgs/{org_id}/references",
+    "GET /orgs/{org_id}/references/purposes",
+    "GET /orgs/{org_id}/references/search/by-text",
+    "GET /orgs/{org_id}/references/{ref_id}",
+    "GET /orgs/{org_id}/roles",
+    "GET /orgs/{org_id}/roles/{role_id}",
+    "GET /orgs/{org_id}/roles/{role_id}/assignments",
+    "GET /orgs/{org_id}/saved-searches",
+    "GET /orgs/{org_id}/scim/config",
+    "GET /orgs/{org_id}/scim/v2/ResourceTypes",
+    "GET /orgs/{org_id}/scim/v2/Schemas",
+    "GET /orgs/{org_id}/scim/v2/ServiceProviderConfig",
+    "GET /orgs/{org_id}/scim/v2/Users",
+    "GET /orgs/{org_id}/scim/v2/Users/{scim_user_id}",
+    "GET /orgs/{org_id}/settings/autonomy",
+    "GET /orgs/{org_id}/settings/autonomy/audit",
+    "GET /orgs/{org_id}/settings/detection",
+    "GET /orgs/{org_id}/shares",
+    "GET /orgs/{org_id}/sidebar-prefs",
+    "GET /orgs/{org_id}/signal-clusters",
+    "GET /orgs/{org_id}/signals",
+    "GET /orgs/{org_id}/signals/library/backfill-estimate",
+    "GET /orgs/{org_id}/signals/{signal_id}/backfill-estimate",
+    "GET /orgs/{org_id}/signals/{signal_id}/backfill/{job_id}",
+    "GET /orgs/{org_id}/signals/{signal_id}/classifier",
+    "GET /orgs/{org_id}/signals/{signal_id}/events",
+    "GET /orgs/{org_id}/spans/{span_id}/scores",
+    "GET /orgs/{org_id}/sql/limits",
+    "GET /orgs/{org_id}/sql/schema",
+    "GET /orgs/{org_id}/stream/traces/{session_id}/events",
+    "GET /orgs/{org_id}/stumbles",
+    "GET /orgs/{org_id}/stumbles/{stumble_id}",
+    "GET /orgs/{org_id}/synthetic/runs",
+    "GET /orgs/{org_id}/synthetic/runs/{run_id}",
+    "GET /orgs/{org_id}/tool-calls/agents/{agent_id}/labels",
+    "GET /orgs/{org_id}/tool-calls/agents/{agent_id}/tool-calibrators",
+    "GET /orgs/{org_id}/topics",
+    "GET /orgs/{org_id}/traces/{trace_id}/browser-replay",
+    "GET /orgs/{org_id}/traces/{trace_id}/shares",
+    "GET /orgs/{org_id}/traces/{trace_id}/span-scores",
+    "GET /orgs/{org_id}/traces/{trace_id}/tokens",
+    "GET /orgs/{org_id}/webhooks",
+    "GET /orgs/{org_id}/webhooks/dlq",
+    "GET /orgs/{org_id}/webhooks/{webhook_id}",
+    "GET /public/traces/{token}",
+    "GET /ready",
+    "GET /redoc",
+    "GET /sso/login/{provider_id}",
+    "GET /sso/providers",
+    "GET /subprocessors",
+    "GET /v1/a2a/{org_id}/invocations/{trace_id}",
+    "GET /v1/computer_use/{org_id}/screenshots/tombstoned/{trace_id}",
+    "GET /v1/fine_tuning_runs",
+    "GET /v1/fine_tuning_runs/{run_id}",
+    "GET /v1/fine_tuning_runs/{run_id}/lineage",
+    "GET /v1/guardrails/actions/pending",
+    "GET /v1/internal/health",
+    "GET /v1/internal/health/{component}",
+    "GET /v1/internal/onboarding/{org_id}/state",
+    "GET /v1/mcp",
+    "GET /v1/mcp/",
+    "GET /v1/mcp/{org_id}/auth_failures",
+    "GET /v1/provider_routing/{org_id}/attempts",
+    "GET /v1/provider_routing/{org_id}/failure_rate",
+    "GET /v1/provider_routing/{org_id}/repeated_failures",
+    "GET /v1/traces/{trace_id}/a2a",
+    "GET /v1/traces/{trace_id}/computer_use",
+    "GET /v1/traces/{trace_id}/efficiency",
+    "GET /v1/traces/{trace_id}/guardrail_actions",
+    "GET /v1/traces/{trace_id}/loops",
+    "GET /v1/traces/{trace_id}/mcp",
+    "GET /v1/traces/{trace_id}/provider_routing",
+    "GET /v1/traces/{trace_id}/quality",
+    "GET /v1/traces/{trace_id}/reasoning",
+    "GET /v1/traces/{trace_id}/voice_sessions",
+    "GET /v1/voice_sessions",
+    "GET /v1/voice_sessions/barge_in_spike",
+    "PATCH /auth/users/me",
+    "PATCH /notifications/read-all",
+    "PATCH /notifications/{notification_id}/read",
+    "PATCH /orgs/{org_id}/agents/{agent_id}/book/config",
+    "PATCH /orgs/{org_id}/agents/{agent_id}/ledger/config",
+    "PATCH /orgs/{org_id}/datasets/{dataset_id}/rows/{row_id}",
+    "PATCH /orgs/{org_id}/domain-restriction",
+    "PATCH /orgs/{org_id}/fleet/agents/{agent_id}",
+    "PATCH /orgs/{org_id}/gateway/models/{model_id}",
+    "PATCH /orgs/{org_id}/improve/plans/{plan_id}",
+    "PATCH /orgs/{org_id}/intelligence/code-change",
+    "PATCH /orgs/{org_id}/intelligence/code-change/{path:path}",
+    "PATCH /orgs/{org_id}/members/{user_id}",
+    "PATCH /orgs/{org_id}/nl-alert-rules/{rule_id}",
+    "PATCH /orgs/{org_id}/online-scoring/rules/{rule_id}",
+    "PATCH /orgs/{org_id}/playgrounds/{playground_id}",
+    "PATCH /orgs/{org_id}/production-eval/policies",
+    "PATCH /orgs/{org_id}/prompts/{name}",
+    "PATCH /orgs/{org_id}/saved-searches/{search_id}",
+    "PATCH /orgs/{org_id}/scim/v2/Users/{scim_user_id}",
+    "PATCH /orgs/{org_id}/settings",
+    "PATCH /orgs/{org_id}/settings/autonomy",
+    "PATCH /orgs/{org_id}/settings/detection",
+    "PATCH /orgs/{org_id}/signals/library/{template_id}",
+    "PATCH /orgs/{org_id}/webhooks/{webhook_id}",
+    "PATCH /sso/providers/{provider_id}",
+    "POST /api/v1/dsar",
+    "POST /api/v1/feedback/tokens/{token_id}",
+    "POST /api/v1/me/do-not-sell",
+    "POST /auth/2fa/disable",
+    "POST /auth/2fa/enforce",
+    "POST /auth/2fa/recover",
+    "POST /auth/2fa/setup",
+    "POST /auth/2fa/verify",
+    "POST /auth/forgot-password",
+    "POST /auth/invitations/accept",
+    "POST /auth/login",
+    "POST /auth/logout",
+    "POST /auth/logout-all",
+    "POST /auth/reset-password",
+    "POST /auth/signup",
+    "POST /auth/signup-from-invite",
+    "POST /auth/users/me/avatar",
+    "POST /auth/users/me/password",
+    "POST /gateway/v1/chat/completions",
+    "POST /gateway/v1/completions",
+    "POST /gateway/v1/embeddings",
+    "POST /integrations/github/webhook",
+    "POST /integrations/langfuse/dataset-export",
+    "POST /integrations/langfuse/trace-export",
+    "POST /integrations/langsmith/dataset-export",
+    "POST /integrations/langsmith/run-export",
+    "POST /integrations/runloop/test-create",
+    "POST /integrations/wandb/test-log",
+    "POST /notifications",
+    "POST /orgs",
+    "POST /orgs/{org_id}/2fa/enforce",
+    "POST /orgs/{org_id}/admin/synthetics/run",
+    "POST /orgs/{org_id}/agent-issues/{issue_id}/experiments",
+    "POST /orgs/{org_id}/agent-issues/{issue_id}/export-fixture",
+    "POST /orgs/{org_id}/agent-issues/{issue_id}/regression-cases",
+    "POST /orgs/{org_id}/agent-issues/{issue_id}/resolve",
+    "POST /orgs/{org_id}/agent-issues/{issue_id}/triage",
+    "POST /orgs/{org_id}/agent-sessions/start",
+    "POST /orgs/{org_id}/agent-sessions/{session_id}/end",
+    "POST /orgs/{org_id}/agent-sessions/{session_id}/identify",
+    "POST /orgs/{org_id}/agent-sessions/{session_id}/traces",
+    "POST /orgs/{org_id}/agent/pr-suggestions",
+    "POST /orgs/{org_id}/agent/pr-suggestions/bulk/regenerate",
+    "POST /orgs/{org_id}/agent/pr-suggestions/{suggestion_id}/open-pr",
+    "POST /orgs/{org_id}/agent/pr-suggestions/{suggestion_id}/regenerate",
+    "POST /orgs/{org_id}/agent/pr-suggestions/{suggestion_id}/status",
+    "POST /orgs/{org_id}/agents/register",
+    "POST /orgs/{org_id}/agents/{agent_id}/book/regenerate",
+    "POST /orgs/{org_id}/agents/{agent_id}/drift/compute",
+    "POST /orgs/{org_id}/agents/{agent_id}/ledger/preview",
+    "POST /orgs/{org_id}/agents/{agent_id}/ledger/regenerate",
+    "POST /orgs/{org_id}/ai-insights/approve",
+    "POST /orgs/{org_id}/ai-insights/chat",
+    "POST /orgs/{org_id}/ai-insights/sessions/{session_id}/archive",
+    "POST /orgs/{org_id}/ai/chat",
+    "POST /orgs/{org_id}/alerts/acknowledge-batch",
+    "POST /orgs/{org_id}/alerts/compile",
+    "POST /orgs/{org_id}/alerts/{alert_id}/acknowledge",
+    "POST /orgs/{org_id}/alerts/{alert_id}/override",
+    "POST /orgs/{org_id}/allowed-domains",
+    "POST /orgs/{org_id}/api-keys",
+    "POST /orgs/{org_id}/archive",
+    "POST /orgs/{org_id}/artifacts",
+    "POST /orgs/{org_id}/artifacts/author",
+    "POST /orgs/{org_id}/artifacts/{artifact_id}/archive",
+    "POST /orgs/{org_id}/artifacts/{artifact_id}/promote",
+    "POST /orgs/{org_id}/automations",
+    "POST /orgs/{org_id}/billing/cancel",
+    "POST /orgs/{org_id}/billing/subscribe",
+    "POST /orgs/{org_id}/billing/webhook",
+    "POST /orgs/{org_id}/browser-sessions",
+    "POST /orgs/{org_id}/browser-sessions/{session_id}/events",
+    "POST /orgs/{org_id}/budget",
+    "POST /orgs/{org_id}/categorical-classifiers",
+    "POST /orgs/{org_id}/categorical-classifiers/{classifier_id}/classify/{trace_id}",
+    "POST /orgs/{org_id}/change-impact/preview",
+    "POST /orgs/{org_id}/ci-eval/run",
+    "POST /orgs/{org_id}/code-evaluators",
+    "POST /orgs/{org_id}/compliance/agents/{agent_id}/export",
+    "POST /orgs/{org_id}/compliance/verify",
+    "POST /orgs/{org_id}/cost-overrides",
+    "POST /orgs/{org_id}/cost-overrides/resolve",
+    "POST /orgs/{org_id}/dashboards",
+    "POST /orgs/{org_id}/dashboards/widgets/execute",
+    "POST /orgs/{org_id}/dashboards/{dashboard_id}/widgets",
+    "POST /orgs/{org_id}/data-platform/etl/run",
+    "POST /orgs/{org_id}/data-platform/quarantine/reprocess",
+    "POST /orgs/{org_id}/data-platform/retention/run",
+    "POST /orgs/{org_id}/data-platform/storage/apply-lifecycle-rules",
+    "POST /orgs/{org_id}/data-platform/storage/transition",
+    "POST /orgs/{org_id}/datasets",
+    "POST /orgs/{org_id}/datasets/promote-from-trace",
+    "POST /orgs/{org_id}/datasets/{dataset_id}/columns",
+    "POST /orgs/{org_id}/datasets/{dataset_id}/columns/{col_id}/generate",
+    "POST /orgs/{org_id}/datasets/{dataset_id}/import",
+    "POST /orgs/{org_id}/datasets/{dataset_id}/rows",
+    "POST /orgs/{org_id}/datasets/{dataset_id}/snapshots",
+    "POST /orgs/{org_id}/debugger/discover",
+    "POST /orgs/{org_id}/debugger/rerun",
+    "POST /orgs/{org_id}/debugger/sessions",
+    "POST /orgs/{org_id}/eval/promote-to-shadow-guardrail",
+    "POST /orgs/{org_id}/experiments/offline",
+    "POST /orgs/{org_id}/experiments/offline/{experiment_id}/run",
+    "POST /orgs/{org_id}/export/destinations",
+    "POST /orgs/{org_id}/export/run-now/{schedule_id}",
+    "POST /orgs/{org_id}/export/schedules",
+    "POST /orgs/{org_id}/finops/kill-switches",
+    "POST /orgs/{org_id}/gateway/models",
+    "POST /orgs/{org_id}/gateway/models/resolve",
+    "POST /orgs/{org_id}/github/installations/claim",
+    "POST /orgs/{org_id}/github/integrate",
+    "POST /orgs/{org_id}/github/repos/connect",
+    "POST /orgs/{org_id}/improve/autofix/{issue_id}",
+    "POST /orgs/{org_id}/improve/items/{item_ref:path}/approve",
+    "POST /orgs/{org_id}/improve/items/{item_ref:path}/snooze",
+    "POST /orgs/{org_id}/improve/plans/{plan_id}/approve",
+    "POST /orgs/{org_id}/improve/plans/{plan_id}/reject",
+    "POST /orgs/{org_id}/improve/plans/{plan_id}/snooze",
+    "POST /orgs/{org_id}/improve/runs",
+    "POST /orgs/{org_id}/ingest/agent-sessions/start",
+    "POST /orgs/{org_id}/ingest/agent-sessions/{session_id}/end",
+    "POST /orgs/{org_id}/ingest/agent-sessions/{session_id}/identify",
+    "POST /orgs/{org_id}/ingest/agent-sessions/{session_id}/traces",
+    "POST /orgs/{org_id}/ingest/anthropic",
+    "POST /orgs/{org_id}/ingest/app",
+    "POST /orgs/{org_id}/ingest/bedrock",
+    "POST /orgs/{org_id}/ingest/chunks",
+    "POST /orgs/{org_id}/ingest/framework",
+    "POST /orgs/{org_id}/ingest/gemini",
+    "POST /orgs/{org_id}/ingest/helicone",
+    "POST /orgs/{org_id}/ingest/langfuse",
+    "POST /orgs/{org_id}/ingest/openai",
+    "POST /orgs/{org_id}/ingest/otel",
+    "POST /orgs/{org_id}/ingest/webhook",
+    "POST /orgs/{org_id}/insights/datasets/generate",
+    "POST /orgs/{org_id}/insights/datasets/{dataset_id}/export",
+    "POST /orgs/{org_id}/insights/detectors/run",
+    "POST /orgs/{org_id}/insights/disparity/batch-compare",
+    "POST /orgs/{org_id}/insights/disparity/compare",
+    "POST /orgs/{org_id}/insights/traces/ingest",
+    "POST /orgs/{org_id}/intelligence/code-change",
+    "POST /orgs/{org_id}/intelligence/code-change/{path:path}",
+    "POST /orgs/{org_id}/intelligence/user/feedback/presigned-token",
+    "POST /orgs/{org_id}/intelligence/user/identify",
+    "POST /orgs/{org_id}/intelligence/user/sessions/start",
+    "POST /orgs/{org_id}/intelligence/user/sessions/{session_id}/end",
+    "POST /orgs/{org_id}/intelligence/user/sessions/{session_id}/identify",
+    "POST /orgs/{org_id}/invites",
+    "POST /orgs/{org_id}/invites/{invitation_id}/accept",
+    "POST /orgs/{org_id}/invites/{invitation_id}/decline",
+    "POST /orgs/{org_id}/labeling/annotate",
+    "POST /orgs/{org_id}/labeling/items",
+    "POST /orgs/{org_id}/labeling/queues",
+    "POST /orgs/{org_id}/labeling/queues/{queue_id}/move",
+    "POST /orgs/{org_id}/labeling/queues/{queue_id}/push-to-dataset",
+    "POST /orgs/{org_id}/labeling/skip",
+    "POST /orgs/{org_id}/labeling/traces/{trace_id}/annotate",
+    "POST /orgs/{org_id}/llmops/ab-tests",
+    "POST /orgs/{org_id}/llmops/ab-tests/{test_id}/promote",
+    "POST /orgs/{org_id}/llmops/artifacts",
+    "POST /orgs/{org_id}/llmops/artifacts/{artifact_id}/evaluations",
+    "POST /orgs/{org_id}/llmops/cache/get",
+    "POST /orgs/{org_id}/llmops/cache/invalidate",
+    "POST /orgs/{org_id}/llmops/cache/set",
+    "POST /orgs/{org_id}/llmops/experiments",
+    "POST /orgs/{org_id}/llmops/experiments/{experiment_id}/complete",
+    "POST /orgs/{org_id}/llmops/experiments/{experiment_id}/runs",
+    "POST /orgs/{org_id}/llmops/gateway/complete",
+    "POST /orgs/{org_id}/llmops/monitoring/alerts/{alert_id}/acknowledge",
+    "POST /orgs/{org_id}/llmops/monitoring/snapshots",
+    "POST /orgs/{org_id}/llmops/prompts",
+    "POST /orgs/{org_id}/llmops/prompts/{prompt_id}/render",
+    "POST /orgs/{org_id}/llmops/prompts/{prompt_name}/default",
+    "POST /orgs/{org_id}/mcp/keys",
+    "POST /orgs/{org_id}/models/compare",
+    "POST /orgs/{org_id}/models/project",
+    "POST /orgs/{org_id}/models/recommend",
+    "POST /orgs/{org_id}/nl-alert-rules",
+    "POST /orgs/{org_id}/nudges",
+    "POST /orgs/{org_id}/nudges/{nudge_id}/archive",
+    "POST /orgs/{org_id}/nudges/{nudge_id}/promote",
+    "POST /orgs/{org_id}/observability/judges/run",
+    "POST /orgs/{org_id}/observability/telemetry/ingest",
+    "POST /orgs/{org_id}/observability/telemetry/ingest/batch",
+    "POST /orgs/{org_id}/observability/traces/compare",
+    "POST /orgs/{org_id}/observability/traces/{trace_id}/export",
+    "POST /orgs/{org_id}/onboarding/state",
+    "POST /orgs/{org_id}/online-scoring/apply/{trace_id}",
+    "POST /orgs/{org_id}/online-scoring/rules",
+    "POST /orgs/{org_id}/online-scoring/rules/{rule_id}/rewind",
+    "POST /orgs/{org_id}/optimization/budget/check",
+    "POST /orgs/{org_id}/optimization/cache/invalidate",
+    "POST /orgs/{org_id}/optimization/costs/track",
+    "POST /orgs/{org_id}/playgrounds",
+    "POST /orgs/{org_id}/playgrounds/from-span",
+    "POST /orgs/{org_id}/playgrounds/{playground_id}/promote-experiment",
+    "POST /orgs/{org_id}/playgrounds/{playground_id}/run",
+    "POST /orgs/{org_id}/playgrounds/{playground_id}/run/stream",
+    "POST /orgs/{org_id}/production-datasets/refresh",
+    "POST /orgs/{org_id}/production-eval/score/{trace_id}",
+    "POST /orgs/{org_id}/promotions/{candidate_id}/approve",
+    "POST /orgs/{org_id}/promotions/{candidate_id}/reject",
+    "POST /orgs/{org_id}/prompts",
+    "POST /orgs/{org_id}/prompts/{agent}/canary",
+    "POST /orgs/{org_id}/prompts/{agent}/canary/{experiment_id}/promote",
+    "POST /orgs/{org_id}/prompts/{agent}/canary/{experiment_id}/rollback",
+    "POST /orgs/{org_id}/prompts/{name}/collaborators",
+    "POST /orgs/{org_id}/prompts/{name}/compare",
+    "POST /orgs/{org_id}/prompts/{name}/deploy",
+    "POST /orgs/{org_id}/prompts/{name}/playground",
+    "POST /orgs/{org_id}/prompts/{name}/rollback",
+    "POST /orgs/{org_id}/prompts/{name}/rollback/{version}",
+    "POST /orgs/{org_id}/prompts/{name}/versions",
+    "POST /orgs/{org_id}/redteam/probe",
+    "POST /orgs/{org_id}/redteam/scan",
+    "POST /orgs/{org_id}/references",
+    "POST /orgs/{org_id}/roles",
+    "POST /orgs/{org_id}/roles/assign",
+    "POST /orgs/{org_id}/roles/unassign",
+    "POST /orgs/{org_id}/roles/{role_id}/assignments",
+    "POST /orgs/{org_id}/saved-searches",
+    "POST /orgs/{org_id}/saved-searches/{search_id}/use",
+    "POST /orgs/{org_id}/scim/config",
+    "POST /orgs/{org_id}/scim/rotate-token",
+    "POST /orgs/{org_id}/scim/v2/Users",
+    "POST /orgs/{org_id}/search/to-signal",
+    "POST /orgs/{org_id}/search/to-signal/preview",
+    "POST /orgs/{org_id}/signal-clusters/{cluster_id}/resolve",
+    "POST /orgs/{org_id}/signals",
+    "POST /orgs/{org_id}/signals/cluster",
+    "POST /orgs/{org_id}/signals/seed-defaults",
+    "POST /orgs/{org_id}/signals/{signal_id}/backfill",
+    "POST /orgs/{org_id}/signals/{signal_id}/classifier/promote",
+    "POST /orgs/{org_id}/signals/{signal_id}/classifier/shadow-report",
+    "POST /orgs/{org_id}/signals/{signal_id}/classifier/train",
+    "POST /orgs/{org_id}/signals/{signal_id}/match",
+    "POST /orgs/{org_id}/sql/execute",
+    "POST /orgs/{org_id}/sql/export/dataset",
+    "POST /orgs/{org_id}/sql/export/queue",
+    "POST /orgs/{org_id}/stream/traces/{session_id}/finalize",
+    "POST /orgs/{org_id}/stream/traces/{session_id}/publish",
+    "POST /orgs/{org_id}/stumbles",
+    "POST /orgs/{org_id}/synthetic/generate",
+    "POST /orgs/{org_id}/tool-calls/agents/{agent_id}/tool-calibrators/retrain",
+    "POST /orgs/{org_id}/tool-calls/{span_id}/label",
+    "POST /orgs/{org_id}/topics/generate",
+    "POST /orgs/{org_id}/topics/{topic_id}/act",
+    "POST /orgs/{org_id}/traces/{trace_id}/metadata",
+    "POST /orgs/{org_id}/traces/{trace_id}/share",
+    "POST /orgs/{org_id}/transfer-ownership",
+    "POST /orgs/{org_id}/webhooks",
+    "POST /orgs/{org_id}/webhooks/dlq/{dlq_id}/replay",
+    "POST /orgs/{org_id}/webhooks/{webhook_id}/test",
+    "POST /sso/callback/{provider_id}",
+    "POST /sso/providers",
+    "POST /sso/providers/{provider_id}/disable",
+    "POST /sso/providers/{provider_id}/enable",
+    "POST /sso/providers/{provider_id}/enforce",
+    "POST /sso/providers/{provider_id}/scim/token",
+    "POST /support/tickets",
+    "POST /v1/a2a/{org_id}/links",
+    "POST /v1/a2a/{org_id}/links/{link_id}/fail",
+    "POST /v1/admin/guardrails/{action_class}/disable",
+    "POST /v1/admin/guardrails/{action_class}/enable",
+    "POST /v1/computer_use/{org_id}/screenshots/tombstone",
+    "POST /v1/computer_use/{org_id}/steps",
+    "POST /v1/fine_tuning_runs",
+    "POST /v1/fine_tuning_runs/{run_id}/dataset_traces",
+    "POST /v1/fine_tuning_runs/{run_id}/drift_check",
+    "POST /v1/fine_tuning_runs/{run_id}/trace_usage",
+    "POST /v1/guardrails/actions/{action_id}/approve",
+    "POST /v1/guardrails/trajectory/check",
+    "POST /v1/internal/onboarding/{org_id}/advance",
+    "POST /v1/internal/onboarding/{org_id}/enable_cat",
+    "POST /v1/internal/onboarding/{org_id}/milestone",
+    "POST /v1/llmops/stat_gate/evaluate",
+    "POST /v1/mcp",
+    "POST /v1/mcp/",
+    "POST /v1/mcp/{org_id}/auth_failures",
+    "POST /v1/provider_routing/{org_id}/attempts",
+    "POST /v1/voice_sessions/{org_id}",
+    "POST /v1/voice_sessions/{org_id}/barge_in",
+    "POST /v1/webhooks/openai/fine_tuning",
+    "POST /webhooks/clerk",
+    "PUT /orgs/{org_id}/improve/schedule",
+    "PUT /orgs/{org_id}/intelligence/code-change",
+    "PUT /orgs/{org_id}/intelligence/code-change/{path:path}",
+    "PUT /orgs/{org_id}/pii-policy",
+    "PUT /orgs/{org_id}/prompts/{name}/pins/{env}",
+    "PUT /orgs/{org_id}/roles/{role_id}",
+    "PUT /orgs/{org_id}/scim/v2/Users/{scim_user_id}",
+    "PUT /orgs/{org_id}/sidebar-prefs"
+  ],
+  "schema_count": 418,
+  "schemas": [
+    "APIEnvelope",
+    "APIMeta",
+    "AbExperimentCard",
+    "AddAllowedDomainRequest",
+    "AddColumnRequest",
+    "AddRowRequest",
+    "AdvanceRequest",
+    "AgentCard",
+    "AgentListResponse",
+    "AgentPatch",
+    "AgentRegisterRequest",
+    "AgentRegisterResponse",
+    "AgentRegistration",
+    "AlertAcknowledgeRequest",
+    "AlertEventCard",
+    "AlertRuleCard",
+    "AnnotateRequest",
+    "AnnotationResponse",
+    "ApiKeyCard",
+    "AppEvent",
+    "AppEventsBatch",
+    "AppendEventsRequest",
+    "ApproveActionResponse",
+    "ApproveRequest",
+    "ArtifactEvaluationCreate",
+    "ArtifactNLRequest",
+    "AssignmentCreateRequest",
+    "AssignmentResponse",
+    "AssistantThreadCard",
+    "AttachTraceRequest",
+    "AuditEventCard",
+    "AuditLogEntry",
+    "AuditLogResponse",
+    "AuditPackCard",
+    "AuthFailureRequest",
+    "AuthorizeResponse",
+    "AutofixRequest",
+    "AutomationCreate",
+    "AutonomyPatch",
+    "BackfillEstimateResponse",
+    "BackfillRequest",
+    "BargeInRequest",
+    "BatchCompareRequest",
+    "Body_execute_widget_query_orgs__org_id__dashboards_widgets_execute_post",
+    "Body_upload_my_avatar_auth_users_me_avatar_post",
+    "Body_upload_reference_orgs__org_id__references_post",
+    "BookConfigRequest",
+    "BudgetStatusResponse",
+    "BulkRegenerateRequest",
+    "CIEvalRequest",
+    "CacheInvalidateRequest",
+    "CacheInvalidateResponse",
+    "CacheSetRequest",
+    "CacheStatsResponse",
+    "CanaryCreateRequest",
+    "ChainVerifyEntry",
+    "ChainVerifyResponse",
+    "CheckpointListResponse",
+    "CheckpointResponse",
+    "ChunksIngestResponse",
+    "ClaimInstallationRequest",
+    "ClassifierCreate",
+    "ClusterRequest",
+    "ClusterResponse",
+    "CodeEvaluatorCreate",
+    "CollaboratorAdd",
+    "ColumnListResponse",
+    "ColumnResponse",
+    "ComparativeDimension",
+    "ComparativeRequest",
+    "ComparativeResponse",
+    "CompileRequest",
+    "CompileResponse",
+    "CompiledRuleResponse",
+    "ComputerUseStepCreate",
+    "ConfiguredResponse",
+    "ConnectRepoRequest",
+    "ConversationDetail",
+    "ConversationSummary",
+    "CorrelationReportResponse",
+    "CorrelationWeekBucket",
+    "CostBreakdownResponse",
+    "CostDriverCard",
+    "CostEventPayload",
+    "CostOverrideIn",
+    "CostOverrideOut",
+    "CostResolveIn",
+    "CostResolveOut",
+    "CreateBrowserSessionRequest",
+    "CreateDatasetRequest",
+    "CreateDebugSessionRequest",
+    "CreateMcpKeyBody",
+    "CreateNotificationRequest",
+    "CreateOrgBody",
+    "CreatePlaygroundRequest",
+    "CreatePromptRequest",
+    "CreateQueueRequest",
+    "CreateSavedSearchRequest",
+    "CreateShareRequest",
+    "CreateSignalRequest",
+    "CreateVersionRequest",
+    "DNSAccepted",
+    "DNSRequest",
+    "DSARAccepted",
+    "DSARRequest",
+    "DashboardCreate",
+    "DatasetCard",
+    "DatasetDetailResponse",
+    "DatasetEntryResponse",
+    "DatasetExportRequest",
+    "DatasetListResponse",
+    "DatasetTracesRequest",
+    "DebuggerSessionCard",
+    "DeleteAccepted",
+    "DestinationIn",
+    "DestinationOut",
+    "DetectionSettingsRequest",
+    "DetectorsResponse",
+    "DiscoverRequest",
+    "DiscoverResponse",
+    "DisparityDimensionResponse",
+    "DisparityReportResponse",
+    "DomainRestrictionSettings",
+    "ETLLaunchRequest",
+    "ETLRunResponse",
+    "EnableCatRequest",
+    "EnforceTwoFAResponse",
+    "ExperimentCreate",
+    "ExperimentRunCreate",
+    "ExperimentSummary",
+    "ExportDatasetRequest",
+    "ExportFormatRequest",
+    "ExportJobAccepted",
+    "ExportPackRequest",
+    "FeatureFlagsResponse",
+    "FinalizeBody",
+    "FindingResponse",
+    "FindingsListResponse",
+    "FineTuneRunCreate",
+    "FromSpanRequest",
+    "GDPRExportResponse",
+    "GatewayModelCreate",
+    "GatewayModelOut",
+    "GatewayModelResolveIn",
+    "GatewayModelResolveOut",
+    "GatewayModelUpdate",
+    "GatewayRequest",
+    "GenerateResponse",
+    "GenerateTopicsRequest",
+    "GuardrailActionLog",
+    "GuardrailPolicyCard",
+    "HTTPValidationError",
+    "HealthResponse",
+    "HealthSnapshotCreate",
+    "HeatmapResponse",
+    "IIAResponse",
+    "IdentifyRequest",
+    "ImportRowsRequest",
+    "ImprovePlanCard",
+    "InsightResponse",
+    "InstallationOut",
+    "IntegrationStatusItem",
+    "IntegrationsStatusResponse",
+    "InviteMemberRequest",
+    "InvoiceResponse",
+    "IssueCard",
+    "IssueTokenRequest",
+    "IssueTokenResponse",
+    "ItemResponse",
+    "JudgeListResponse",
+    "JudgeRunRequest",
+    "JudgeRunResponse",
+    "JudgeScoreResponse",
+    "KBQueryResponse",
+    "KillSwitchBody",
+    "KillSwitchResponse",
+    "LabelToolCallRequest",
+    "LabelingItemListEntry",
+    "LabelingItemsListResponse",
+    "LateMetadataBody",
+    "LedgerPreviewRequest",
+    "LibraryToggleRequest",
+    "LibraryToggleResponse",
+    "LineageQueryResponse",
+    "LiveEventBody",
+    "LoginRequest",
+    "ManualRunRequest",
+    "MarkFailedRequest",
+    "MatchRequest",
+    "MatchResponse",
+    "MemberCard",
+    "MessageOut",
+    "MilestoneRequest",
+    "ModelArtifactCreate",
+    "ModelInfo",
+    "ModelRef",
+    "ModelsListResponse",
+    "MoveItemRequest",
+    "NLRuleCreate",
+    "NLRuleUpdate",
+    "Notification",
+    "NotificationListResponse",
+    "NotificationResponse",
+    "NudgeCreateRequest",
+    "OnboardingStateOut",
+    "OnboardingStatePatch",
+    "OpenPRRequest",
+    "OptimizationOverviewResponse",
+    "OrgDeleteAccepted",
+    "OverrideRequest",
+    "OverviewResponse",
+    "PIIPolicyIn",
+    "PIIPolicyOut",
+    "PRRunOut",
+    "PageContext",
+    "PaginatedAPIEnvelope",
+    "PaginatedMeta",
+    "PatchPlaygroundRequest",
+    "PatternOut",
+    "PendingActionsResponse",
+    "PinEnvRequest",
+    "PlanLimits",
+    "PlanPatchRequest",
+    "PlaygroundCard",
+    "PlaygroundRequest",
+    "PlaygroundResponse",
+    "PolicyPatch",
+    "PreviewRequest",
+    "PreviewSignalRequest",
+    "ProbeListResponse",
+    "ProbeResponse",
+    "ProbeRunResponse",
+    "ProjectRequest",
+    "ProjectResponse",
+    "PromoteBody",
+    "PromoteExperimentRequest",
+    "PromoteTraceRequest",
+    "PromptABTestCreate",
+    "PromptDeployBody",
+    "PromptListResponse",
+    "PromptTemplateCreate",
+    "PromptTemplateRequest",
+    "PromptTemplateResponse",
+    "ProviderRoutingAttemptCreate",
+    "PublicTraceResponse",
+    "PushDatasetRequest",
+    "QAResponse",
+    "QualityReportResponse",
+    "QuarantineListResponse",
+    "QuarantineReviewRequest",
+    "QueueResponse",
+    "RecommendRequest",
+    "RecommendResponse",
+    "RegisterLinkRequest",
+    "RegressionCaseRequest",
+    "RejectRequest",
+    "RepoConnectionOut",
+    "RepoOut",
+    "RerunRequest",
+    "ResolveClusterRequest",
+    "ResolveRequest",
+    "RetentionRunRequest",
+    "RetentionRunResponse",
+    "RoleCreateRequest",
+    "RoleResponse",
+    "RoleUpdateRequest",
+    "RollbackRequest",
+    "RoutingStatsResponse",
+    "RowListResponse",
+    "RowResponse",
+    "RuleCreate",
+    "RulePatch",
+    "RunDetectorsRequest",
+    "RunExportRequest",
+    "RunNowResult",
+    "RunPlaygroundRequest",
+    "RunProbeRequest",
+    "RunnerUp",
+    "SCIMEmail",
+    "SCIMListResponse",
+    "SCIMName",
+    "SCIMPatchOp",
+    "SCIMPatchOperation",
+    "SCIMUser",
+    "SSOProviderConfig",
+    "SSOProviderResponse",
+    "SaveAsSignalRequest",
+    "SavedSearchListResponse",
+    "SavedSearchResponse",
+    "ScanRequest",
+    "ScanResponse",
+    "ScheduleIn",
+    "ScheduleOut",
+    "ScheduleUpdateRequest",
+    "SeedDefaultsRequest",
+    "SeedDefaultsResponse",
+    "SeedItemRequest",
+    "SeedItemResponse",
+    "SessionRollup",
+    "SessionStartResponse",
+    "ShadowPromoteBody",
+    "ShareListResponse",
+    "ShareResponse",
+    "SidebarPrefs",
+    "SignalCard",
+    "SignalListResponse",
+    "SignalResponse",
+    "SignupFromInviteRequest",
+    "SignupFromInviteResponse",
+    "SignupRequest",
+    "SkipRequest",
+    "SnoozePlanRequest",
+    "SnoozeRequest",
+    "SpanSearchHit",
+    "SpanSearchResponse",
+    "SpanSuggestResponse",
+    "SqlErrorResponse",
+    "SqlExecuteRequest",
+    "SqlExecuteResponse",
+    "SqlExportDataset",
+    "SqlExportQueue",
+    "SqlLimitsResponse",
+    "SqlSchemaResponse",
+    "StatGateEvaluateRequest",
+    "StatGateEvaluateResponse",
+    "StatusUpdateRequest",
+    "StorageSummaryResponse",
+    "StumbleCreateRequest",
+    "SubmitFeedbackRequest",
+    "SubmitFeedbackResponse",
+    "SubscribeRequest",
+    "SuggestRequest",
+    "TelemetryBatchIngest",
+    "TelemetryEventIngest",
+    "TelemetryIngestResponse",
+    "TestCreateRequest",
+    "TestLogRequest",
+    "TicketRequest",
+    "TimelineResponse",
+    "TokenSavingsResponse",
+    "TombstoneRequest",
+    "ToolCatalogEntry",
+    "TopicActRequest",
+    "TraceAnnotateRequest",
+    "TraceEfficiencyReport",
+    "TraceExportRequest",
+    "TraceExportResponse",
+    "TraceIngestRequest",
+    "TraceListResponse",
+    "TraceLoopReport",
+    "TraceQualityReport",
+    "TraceReasoningReport",
+    "TraceSignalSummary",
+    "TraceTreeResponse",
+    "TraceUsageCreate",
+    "TrainBody",
+    "TrajectoryCheckRequest",
+    "TrajectoryCheckResponse",
+    "TranscriptStep",
+    "TrendsResponse",
+    "TriageRequest",
+    "TwoFAEnableResponse",
+    "TwoFARecoverRequest",
+    "TwoFASetupResponse",
+    "TwoFAVerifyRequest",
+    "UpdateMemberRoleRequest",
+    "UpdateRowRequest",
+    "UpdateSavedSearchRequest",
+    "UpdateTemplateRequest",
+    "UpsertBudgetRequest",
+    "UserResponse",
+    "ValidationError",
+    "VerifyInviteTokenResponse",
+    "VersionListResponse",
+    "VoiceSessionCreate",
+    "WebhookCreateRequest",
+    "WebhookUpdateRequest",
+    "WidgetUpsert",
+    "WorkspaceCard",
+    "_AccountDeleteRequest",
+    "_ForgotPasswordRequest",
+    "_PasswordChangeRequest",
+    "_PaymentMethodResponse",
+    "_PermissionAssignRequest",
+    "_PermissionAssignmentResponse",
+    "_ProfileUpdate",
+    "_ResetPasswordRequest",
+    "eden__api__portal_contracts__TraceListItem",
+    "eden__api__routes__agent_issues__CreateExperimentRequest",
+    "eden__api__routes__agent_sessions__SessionEndRequest",
+    "eden__api__routes__agent_sessions__SessionIdentifyRequest",
+    "eden__api__routes__agent_sessions__SessionStartRequest",
+    "eden__api__routes__ai_agent__ChatRequest",
+    "eden__api__routes__ai_insights__ChatRequest",
+    "eden__api__routes__app_events__IngestResponse",
+    "eden__api__routes__auth__EnforceTwoFARequest",
+    "eden__api__routes__datasets_hub__DatasetResponse",
+    "eden__api__routes__datasets_spreadsheet__GenerateRequest",
+    "eden__api__routes__experiments_offline__CreateExperimentRequest",
+    "eden__api__routes__ingest_agent_sessions__SessionEndRequest",
+    "eden__api__routes__ingest_agent_sessions__SessionIdentifyRequest",
+    "eden__api__routes__ingest_agent_sessions__SessionStartRequest",
+    "eden__api__routes__ingestion__IngestResponse",
+    "eden__api__routes__insights__CompareRequest",
+    "eden__api__routes__insights__DatasetResponse",
+    "eden__api__routes__integrations_langfuse__StatusResponse",
+    "eden__api__routes__integrations_langsmith__StatusResponse",
+    "eden__api__routes__integrations_runloop__StatusResponse",
+    "eden__api__routes__integrations_wandb__StatusResponse",
+    "eden__api__routes__model_compare__CompareRequest",
+    "eden__api__routes__model_compare__CompareResponse",
+    "eden__api__routes__observability__TraceListItem",
+    "eden__api__routes__orgs__EnforceTwoFARequest",
+    "eden__api__routes__prompts__CompareRequest",
+    "eden__api__routes__prompts__CompareResponse",
+    "eden__api__routes__qa_generator__GenerateRequest",
+    "eden__api__routes__sessions__SessionIdentifyRequest",
+    "eden__api__routes__sessions__SessionStartRequest"
+  ]
+}

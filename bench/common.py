@@ -1,10 +1,19 @@
 """Shared helpers for the ``bench/`` suite.
 
-The benches don't talk to a real Eden backend. They synthesize fake
-workloads (mock LLM responses, mock KB lookups)
-so the harness runs in CI without any external dependencies. To
-benchmark a real deployment, set the env vars documented in each
-module.
+The suites fall into two groups, and the difference matters:
+
+**Real** — ``middleware``, ``compression_bench``, ``request_path`` and
+``startup`` drive actual Eden code (middleware ``dispatch``, the zstd storage
+layer, the ASGI app, import cost). ``bench.run_all`` runs these by default and
+``bench.compare`` gates on them.
+
+**Simulated** — ``latency``, ``llm_provider`` and ``kb_retrieval`` call
+``asyncio.sleep`` against a hard-coded latency table. They describe an intended
+budget, not behaviour, and measure nothing about Eden. They run only under
+``--simulated``, every result is tagged ``"simulated": true``, and
+``bench.compare`` refuses to gate on them.
+
+Nothing here requires an external service, so the whole harness runs in CI.
 """
 
 from __future__ import annotations
@@ -12,8 +21,8 @@ from __future__ import annotations
 import asyncio
 import statistics
 import time
+from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass
-from typing import Awaitable, Callable, Iterable, Sequence
 
 
 @dataclass
@@ -31,14 +40,20 @@ class BenchResult:
     extras: dict
 
     def to_dict(self) -> dict:
+        # Six decimals, not three. The middleware suite measures dispatch in
+        # single-digit microseconds — 0.002 ms at three decimals — where one
+        # rounding step is a 50% swing. ``bench/compare.py`` would then flag
+        # pure quantisation noise as a regression, and a gate that cries wolf
+        # gets switched off. Six decimals put the quantisation ~1000x below
+        # the smallest value measured here.
         return {
             "name": self.name,
             "n": self.n,
-            "p50_ms": round(self.p50_ms, 3),
-            "p95_ms": round(self.p95_ms, 3),
-            "p99_ms": round(self.p99_ms, 3),
-            "mean_ms": round(self.mean_ms, 3),
-            "max_ms": round(self.max_ms, 3),
+            "p50_ms": round(self.p50_ms, 6),
+            "p95_ms": round(self.p95_ms, 6),
+            "p99_ms": round(self.p99_ms, 6),
+            "mean_ms": round(self.mean_ms, 6),
+            "max_ms": round(self.max_ms, 6),
             "extras": self.extras,
         }
 

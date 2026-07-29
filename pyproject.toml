@@ -190,6 +190,14 @@ addopts = [
 filterwarnings = [
     "ignore::DeprecationWarning",
 ]
+# Registered so `-m perf` / `-m "not realdb"` select rather than silently match
+# nothing, and so an unregistered marker (a typo) is a visible warning instead
+# of a test that quietly never runs.
+markers = [
+    "perf: timing-sensitive; may be flaky under load or in CI containers",
+    "bench: drives bench/ suites; slow, not part of the default run",
+    "realdb: requires a live Postgres/ClickHouse rather than the mocked default",
+]
 
 [tool.bandit]
 targets = ["src/"]

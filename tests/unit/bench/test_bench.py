@@ -122,20 +122,78 @@ async def test_bench_kb_retrieval_l1_faster_than_l2_faster_than_db():
 # ────────────────────────────────────────────────────────────────────────
 
 
-@pytest.mark.asyncio
-async def test_run_all_produces_results(tmp_path, monkeypatch):
-    """Smoke test for the full orchestrator: write to a temp dir, then
-    read the JSON back and check the shape."""
+@pytest.fixture
+def _stub_suites(monkeypatch):
+    """Replace the real suites with stubs.
+
+    The real suites import the whole app and shell out to subprocesses, which
+    is right for a weekly cron and wrong for a unit test. What is under test
+    here is the orchestrator's contract — which suites run by default, and how
+    results are written — not the measurements themselves.
+    """
     from bench import run_all
-    # Patch the results directory to a temp dir so the test doesn't
-    # pollute the working tree.
-    monkeypatch.setattr(run_all, "RESULTS_DIR", tmp_path)
-    rc = await run_all.main()
-    assert rc == 0
+
+    async def _fake_real():
+        return {"middleware": [{"name": "x", "n": 1, "p50_ms": 0.1}]}
+
+    monkeypatch.setattr(run_all, "_run_real_suites", _fake_real)
+    return run_all
+
+
+@pytest.mark.asyncio
+async def test_run_all_writes_results_json(tmp_path, monkeypatch, _stub_suites):
+    """Smoke test: write to a temp dir, read the JSON back, check the shape."""
+    import json
+
+    monkeypatch.setattr(_stub_suites, "RESULTS_DIR", tmp_path)
+    assert await _stub_suites.main([]) == 0
+
     files = list(tmp_path.glob("*.json"))
     assert len(files) == 1
-    import json
     data = json.loads(files[0].read_text())
-    assert "suites" in data
-    for suite in ("api_latency", "llm_provider", "kb_retrieval"):
-        assert suite in data["suites"], f"missing suite {suite}"
+    assert "suites" in data and "started_at" in data and "duration_s" in data
+
+
+@pytest.mark.asyncio
+async def test_simulated_suites_are_off_by_default(tmp_path, monkeypatch, _stub_suites):
+    """The default run must contain only suites that measure real code.
+
+    Every historical file in ``bench/results/`` came from the three
+    ``asyncio.sleep`` suites, so the recorded numbers described sleep
+    resolution rather than Eden. They are opt-in now.
+    """
+    import json
+
+    monkeypatch.setattr(_stub_suites, "RESULTS_DIR", tmp_path)
+    await _stub_suites.main([])
+    data = json.loads(next(tmp_path.glob("*.json")).read_text())
+
+    assert "middleware" in data["suites"]
+    for simulated in ("api_latency", "llm_provider", "kb_retrieval"):
+        assert simulated not in data["suites"], (
+            f"{simulated} sleeps for a constant; it must not appear in a "
+            "default run where it can be mistaken for a measurement"
+        )
+
+
+@pytest.mark.asyncio
+async def test_simulated_suites_are_tagged_when_requested(
+    tmp_path, monkeypatch, _stub_suites
+):
+    """Opt in, and every simulated result must carry the tag."""
+    import json
+
+    monkeypatch.setattr(_stub_suites, "RESULTS_DIR", tmp_path)
+    await _stub_suites.main(["--simulated"])
+    data = json.loads(next(tmp_path.glob("*.json")).read_text())
+
+    for simulated in ("api_latency", "llm_provider", "kb_retrieval"):
+        assert data["suites"][simulated]["simulated"] is True
+        assert data["suites"][simulated]["reason"]
+
+
+@pytest.mark.asyncio
+async def test_no_write_skips_the_file(tmp_path, monkeypatch, _stub_suites):
+    monkeypatch.setattr(_stub_suites, "RESULTS_DIR", tmp_path)
+    assert await _stub_suites.main(["--no-write"]) == 0
+    assert list(tmp_path.glob("*.json")) == []
