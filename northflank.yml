@@ -160,8 +160,28 @@ spec:
       value: "1"
     - name: EDEN_MIGRATIONS_DIR
       value: /app/migrations
+    # 2026-07-29: flipped 0 → 1. The background fleet now runs in this
+    # service, not on the eden-worker job.
+    #
+    # ``eden.workers.main`` is a daemon — it starts six supervised loops
+    # and waits on SIGTERM. It was deployed as a Northflank *Job*, and
+    # jobs are for finite work: the container was reaped and restarted
+    # every 96–270s (measured from heartbeat gaps, and from
+    # leader-acquire counters resetting to zero between writes). No loop
+    # ever survived long enough to complete a single tick, which is why
+    # maintenance, insights, the EQL watchdog, webhook drain, self-obs
+    # and the quality pipeline produced nothing for 7.4 days while the
+    # job dutifully reported RUNNING.
+    #
+    # ``eden.workers.background`` exists precisely to host these loops
+    # in the API process and is already wired into the lifespan. This
+    # service is always-on, single-instance, and stable, so it is the
+    # right host until the worker can be a Service rather than a Job.
+    # Every loop is still leader-gated, and the quality/closed-loop
+    # sidecars take a cross-process guard lock, so nothing double-runs
+    # if a worker is ever brought back.
     - name: EDEN_RUN_BACKGROUND_WORKERS
-      value: "0"
+      value: "1"
     - name: SENTRY_ENVIRONMENT
       value: production
     - name: SENTRY_TRACES_SAMPLE_RATE
@@ -499,7 +519,13 @@ spec:
       value: INFO
     - name: LOG_JSON
       value: "true"
-    # Dedicated worker hosts background loops; API keeps this at "0".
+    # Kept at "1" so this job still works if it is ever run manually for
+    # a one-off drain, but the fleet's real home is now eden-api (see the
+    # long note on that service's copy of this variable). Do NOT run this
+    # job continuously alongside the API: a Job container gets reaped
+    # every few minutes, so it churns without ever completing a tick.
+    # Leader locks + the sidecar guard make concurrent hosting safe, just
+    # pointless.
     - name: EDEN_RUN_BACKGROUND_WORKERS
       value: "1"
     - name: SENTRY_ENVIRONMENT
