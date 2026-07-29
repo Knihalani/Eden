@@ -17,7 +17,7 @@ Workflow
 
 3. ``rehydrate(trace_id)`` — fetches the NDJSON from Impossible
    Cloud and returns the parsed rows. Read-through cache (in-process
-   ``lru_cache``) absorbs hot lookups.
+   bounded LRU) absorbs hot lookups.
 
 Why per-trace NDJSON
 --------------------
@@ -41,11 +41,16 @@ import asyncio
 import json
 import logging
 import os
+from collections import OrderedDict
 from datetime import UTC, datetime
-from functools import lru_cache
 from typing import Any
 
 from eden.config import get_settings
+
+# NDJSON record-kind discriminator. Archives predating this field hold only
+# telemetry events, so a missing value reads back as ``_KIND_EVENT``.
+_KIND_EVENT = "telemetry_event"
+_KIND_MESSAGE = "trace_message"
 
 logger = logging.getLogger(__name__)
 
@@ -132,6 +137,25 @@ class ArchiveService:
             "s3_objects": s3_objects,
         }
 
+    async def _fetch_trace_messages(
+        self, client: Any, trace_id: str
+    ) -> list[Any]:
+        """Fetch this trace's deduped message bodies.
+
+        Best-effort: an unreadable ``trace_messages`` must not abort the
+        archive of the events themselves. It *must*, however, prevent the
+        message delete downstream — the caller relies on an empty list here
+        meaning "nothing to preserve", so a read failure raises instead.
+        """
+        return await client.fetch(
+            """
+            SELECT * FROM trace_messages
+             WHERE trace_id = $1
+             ORDER BY msg_hash ASC
+            """,
+            trace_id,
+        )
+
     async def _archive_one_trace(
         self,
         client: Any,
@@ -158,15 +182,34 @@ class ArchiveService:
             f"{datetime.now(UTC).isoformat()}.ndjson"
         )
 
+        # The prompt/completion text lives in ``trace_messages`` (Phase A),
+        # not in ``telemetry_events``. Archiving only the events and then
+        # deleting the messages below would have made the archive
+        # structurally body-less — a restored trace with no conversation.
+        # Fetch them here so both land in the same blob.
+        message_rows = await self._fetch_trace_messages(client, trace_id)
+
         if dry_run:
             logger.info(
                 f"[{org_id}] dry-run: would archive {trace_id} "
-                f"({len(rows)} rows) to {archive_path}"
+                f"({len(rows)} events, {len(message_rows)} messages) "
+                f"to {archive_path}"
             )
             return len(rows)
 
-        # Serialise to NDJSON.
-        body = "\n".join(json.dumps(dict(r), default=str) for r in rows)
+        # Serialise to NDJSON. Each line carries a ``__kind`` discriminator so
+        # ``rehydrate`` can split the two record types back apart. Archives
+        # written before this field existed contain only events, and the
+        # reader treats a missing ``__kind`` as ``telemetry_event``.
+        lines = [
+            json.dumps({**dict(r), "__kind": _KIND_EVENT}, default=str)
+            for r in rows
+        ]
+        lines.extend(
+            json.dumps({**dict(r), "__kind": _KIND_MESSAGE}, default=str)
+            for r in message_rows
+        )
+        body = "\n".join(lines)
         await self._write_impossible_cloud(archive_path, body)
 
         # Insert the index row + delete Postgres rows in one transaction.
@@ -205,7 +248,7 @@ class ArchiveService:
             logger.debug(f"archive dedup cleanup failed (non-fatal): {exc}")
 
         # Invalidate the read-through cache for this trace.
-        _rehydrate_cache.cache_clear()
+        _rehydrate_cache_clear()
         logger.info(
             f"[{org_id}] archived trace_id={trace_id} ({len(rows)} rows) "
             f"to {archive_path}"
@@ -245,7 +288,7 @@ class ArchiveService:
         """Fetch the NDJSON from Impossible Cloud and return parsed rows.
 
         Read-through cache: identical ``trace_id`` lookups within
-        the process lifetime are served from an ``lru_cache``. The
+        the process lifetime are served from a bounded LRU. The
         cache is invalidated whenever ``_archive_one_trace`` writes
         (so a re-archive reflects in subsequent reads).
 
@@ -256,14 +299,47 @@ class ArchiveService:
         if meta is None:
             return []
 
-        cached = _rehydrate_cache(trace_id)
+        cached = _rehydrate_cache_get(trace_id)
         if cached is not None:
             return cached
 
-        body = await self._read_impossible_cloud(meta["archive_path"])
-        rows = [json.loads(line) for line in body.splitlines() if line.strip()]
-        _rehydrate_cache(trace_id, rows)
+        rows = await self._rehydrate_kind(meta["archive_path"], _KIND_EVENT)
+        _rehydrate_cache_put(trace_id, rows)
         return rows
+
+    async def rehydrate_messages(
+        self, trace_id: str, *, org_id: str
+    ) -> list[dict[str, Any]]:
+        """Return the archived ``trace_messages`` rows for ``trace_id``.
+
+        Separate from :meth:`rehydrate` so that method keeps its existing
+        contract of returning telemetry-event rows only. Returns ``[]`` for
+        archives written before messages were included.
+        """
+        meta = await self.lookup(trace_id, org_id=org_id)
+        if meta is None:
+            return []
+        return await self._rehydrate_kind(meta["archive_path"], _KIND_MESSAGE)
+
+    async def _rehydrate_kind(
+        self, archive_path: str, kind: str
+    ) -> list[dict[str, Any]]:
+        """Read the NDJSON blob and return rows of one ``__kind``.
+
+        The discriminator is stripped from each row so callers see the same
+        shape they would have read from Postgres.
+        """
+        body = await self._read_impossible_cloud(archive_path)
+        out: list[dict[str, Any]] = []
+        for line in body.splitlines():
+            if not line.strip():
+                continue
+            row = json.loads(line)
+            # Pre-discriminator archives contain only telemetry events.
+            if row.pop("__kind", _KIND_EVENT) != kind:
+                continue
+            out.append(row)
+        return out
 
     async def _write_impossible_cloud(self, key: str, body: str) -> None:
         """Write ``body`` to Impossible Cloud. S3-compatible; boto3.
@@ -330,13 +406,36 @@ class ArchiveService:
 
 # ── Read-through cache ────────────────────────────────────────────────
 
+# Bounded LRU. Previously this was an ``@lru_cache``-decorated function that
+# unconditionally returned ``None`` and was *called with a second argument* to
+# "store" a value — which raises ``TypeError: unhashable type: 'list'`` on
+# every successful archive fetch. The exception was swallowed upstream, so an
+# archived trace always rehydrated as ``[]`` and the route 404'd. An
+# ``lru_cache`` memoises a function; it can never be a write-through store.
+#
+# Same OrderedDict + ``popitem(last=False)`` idiom as
+# ``TelemetryCollector._dedup_cache``.
+_REHYDRATE_CACHE_MAX = 256
+_rehydrate_entries: OrderedDict[str, list[dict[str, Any]]] = OrderedDict()
 
-@lru_cache(maxsize=256)
-def _rehydrate_cache(trace_id: str) -> list[dict[str, Any]] | None:
-    """Process-local cache for ``rehydrate``. Returns ``None`` until
-    a trace is fetched; the wrapper in :meth:`ArchiveService.rehydrate`
-    reads the cache and stores the result on first fetch.
 
-    Cache key is the ``trace_id``; the value is the parsed rows list.
-    """
-    return None
+def _rehydrate_cache_get(trace_id: str) -> list[dict[str, Any]] | None:
+    """Return cached rows for ``trace_id``, refreshing LRU position."""
+    rows = _rehydrate_entries.get(trace_id)
+    if rows is None:
+        return None
+    _rehydrate_entries.move_to_end(trace_id)
+    return rows
+
+
+def _rehydrate_cache_put(trace_id: str, rows: list[dict[str, Any]]) -> None:
+    """Cache ``rows`` for ``trace_id``, evicting the oldest entry when full."""
+    _rehydrate_entries[trace_id] = rows
+    _rehydrate_entries.move_to_end(trace_id)
+    while len(_rehydrate_entries) > _REHYDRATE_CACHE_MAX:
+        _rehydrate_entries.popitem(last=False)
+
+
+def _rehydrate_cache_clear() -> None:
+    """Drop every cached trace. Used on re-archive and by tests."""
+    _rehydrate_entries.clear()

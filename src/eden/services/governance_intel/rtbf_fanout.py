@@ -150,53 +150,35 @@ async def _fanout_qdrant(
 async def _fanout_s3(
     org_id: str, *, user_id: str, dry_run: bool
 ) -> dict[str, Any]:
-    store = "s3"
-    try:
-        from eden.data_platform.retention import DataRetentionManager
-    except Exception as exc:
-        return {"store": store, "status": "unavailable", "error": str(exc)}
-    if dry_run:
-        return {"store": store, "status": "dry_run", "detail": "would tombstone S3 user prefixes"}
-    try:
-        mgr = DataRetentionManager()
-        if hasattr(mgr, "delete_user_data"):
-            # DataRetentionManager sweeps tenant-scoped tables;
-            # user_id is recorded for audit honesty.
-            report = await mgr.delete_user_data(org_id)
-            errors = getattr(report, "errors", None) or (
-                report.get("errors") if isinstance(report, dict) else None
-            )
-            if errors:
-                # Keep detail JSON-serializable for the RTBF audit log.
-                if hasattr(report, "__dataclass_fields__"):
-                    from dataclasses import asdict
+    """Per-user S3 erasure — not implemented, and honest about it.
 
-                    detail: Any = asdict(report)
-                elif isinstance(report, dict):
-                    detail = report
-                else:
-                    detail = str(report)
-                return {
-                    "store": store,
-                    "status": "failed",
-                    "error": str(errors),
-                    "detail": detail,
-                    "user_id": user_id,
-                }
-            return {
-                "store": store,
-                "status": "ok",
-                "detail": "tenant tombstone via DataRetentionManager",
-                "user_id": user_id,
-            }
+    This handler previously called ``DataRetentionManager.delete_user_data``
+    (now ``delete_tenant_data``) with ``org_id`` while discarding ``user_id``.
+    That method issues ``DELETE FROM {table} WHERE org_id = $1`` across
+    ``usage_events``, ``jobs``, ``specs``, ``silver_events``,
+    ``quarantine_events`` and ``trace_archive_index`` — so a single user's
+    right-to-be-forgotten request destroyed the entire organisation's data,
+    including billing records, and reported ``status: "ok"``.
+
+    There is no per-user object index for the S3/Impossible Cloud archive, so
+    scoped erasure is genuinely unimplemented. Report that rather than doing
+    something destructive and calling it success. ``fanout_rtbf`` treats
+    ``unsupported`` as incomplete, so the caller cannot mistake this for done.
+    """
+    _ = org_id  # no tenant-wide action is correct here; see docstring
+    if dry_run:
         return {
-            "store": store,
-            "status": "failed",
-            "error": "DataRetentionManager.delete_user_data missing",
+            "store": "s3",
+            "status": "dry_run",
+            "detail": "per-user S3 erasure is not implemented",
+            "user_id": user_id,
         }
-    except Exception as exc:
-        logger.warning("rtbf s3 fanout failed: %s", exc)
-        return {"store": store, "status": "failed", "error": str(exc)}
+    return {
+        "store": "s3",
+        "status": "unsupported",
+        "error": "per-user S3 erasure not implemented (no per-user object index)",
+        "user_id": user_id,
+    }
 
 
 async def _fanout_clickhouse(

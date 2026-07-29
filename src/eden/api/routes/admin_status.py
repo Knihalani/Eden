@@ -240,15 +240,25 @@ async def last_synthetics(
         client = await get_postgres_client()
         if client is None:
             return {"runs": []}
+        # Read this org's rows plus the shared sentinel's. The two
+        # org-independent probes (sign_in_home, gateway_health) hit
+        # fixed URLs, so their result is identical for every org and is
+        # now written once per tick under _SHARED_ORG_ID rather than
+        # once per org — see eden.self_obs.synthetics._SHARED_ORG_ID.
+        # Without the sentinel in this query those two probes would
+        # silently vanish from every org's dashboard.
+        from eden.self_obs.synthetics import _SHARED_ORG_ID
+
         rows = await client.fetch(
             """
             SELECT probe, status, detail, created_at
               FROM eden_synthetic_runs
-             WHERE org_id = $1
+             WHERE org_id = $1 OR org_id = $2::uuid
              ORDER BY created_at DESC
              LIMIT 20
             """,
             org_id,
+            _SHARED_ORG_ID,
         )
         return {
             "runs": [

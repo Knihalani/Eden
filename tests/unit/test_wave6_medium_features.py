@@ -3,7 +3,7 @@
 Covers the 4 items implemented:
   1. Time-travel _re_execute_step calls real AIGateway
   2. SemanticCache.set() uses configured embedder for L2 writes
-  3. GDPR delete_user_data includes telemetry_events / trace_archive_index
+  3. GDPR delete_tenant_data includes telemetry_events / trace_archive_index
      / telemetry_stream_chunks; _delete_from_clickhouse also purges
      telemetry_events_ch
   4. RepoConnector.connect() Gate 1 verifies GitHub install
@@ -168,10 +168,10 @@ class TestSemanticCacheEmbedWrites:
 
 
 class TestGDPRTelemetryDelete:
-    """delete_user_data should include the three new telemetry tables."""
+    """delete_tenant_data should include the three new telemetry tables."""
 
     @pytest.mark.asyncio
-    async def test_telemetry_tables_in_delete_user_data(self) -> None:
+    async def test_telemetry_tables_in_delete_tenant_data(self) -> None:
         from eden.data_platform.retention import DataRetentionManager
 
         mgr = DataRetentionManager()
@@ -193,7 +193,7 @@ class TestGDPRTelemetryDelete:
             patch.object(mgr, "_delete_from_clickhouse", AsyncMock(return_value=0)),
             patch.object(mgr, "_mark_s3_for_deletion", AsyncMock(return_value=0)),
         ):
-            await mgr.delete_user_data("tenant1")
+            await mgr.delete_tenant_data("tenant1")
 
         tables_hit = [s for s in deleted_from if "DELETE FROM" in s]
         assert any("telemetry_events" in t for t in tables_hit)

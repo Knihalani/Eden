@@ -149,8 +149,14 @@ class RightToBeForgottenService:
                     {"store": "*", "status": "failed", "error": str(exc)}
                 ]
 
+        # "unsupported" means the store has no scoped-erasure implementation at
+        # all. It must count as incomplete: reporting an erasure as complete
+        # when a store was never touched is the failure mode this list exists
+        # to prevent.
         fanout_incomplete = [
-            r for r in fanout_results if r.get("status") in ("failed", "unavailable")
+            r
+            for r in fanout_results
+            if r.get("status") in ("failed", "unavailable", "unsupported")
         ]
 
         # Audit log
