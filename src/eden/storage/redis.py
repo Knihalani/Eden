@@ -44,6 +44,12 @@ _redis_client: Redis | None = None
 _redis_stream_client: Redis | None = None
 _redis_init_lock: asyncio.Lock | None = None
 
+#: Ceiling on building the client, which happens while ``_redis_lock()``
+#: is held. Comfortably above ``socket_connect_timeout`` (5s) — this
+#: bounds the coroutine, not the socket, and exists because the socket
+#: timeout demonstrably did not fire in production.
+_CLIENT_INIT_TIMEOUT_SECONDS = 10.0
+
 
 def _redis_lock() -> asyncio.Lock:
     """Lazy Lock so importing this module never needs a running loop."""
@@ -101,15 +107,26 @@ async def get_redis_client() -> Redis | None:
             max_connections = int(
                 getattr(settings, "redis_max_connections", 32) or 32
             )
-            _redis_client = await redis.from_url(
-                redis_url,
-                encoding="utf-8",
-                decode_responses=True,
-                socket_connect_timeout=5,
-                socket_timeout=socket_timeout,
-                socket_keepalive=True,
-                health_check_interval=health_interval,
-                max_connections=max_connections,
+            # NOTE: this await is inside ``_redis_lock()``. redis-py's
+            # asyncio client connects when awaited, so a connect that
+            # hangs holds the init lock — and every other caller queues
+            # behind it indefinitely. That is how six leader loops in the
+            # worker ended up parked in ``Lock.acquire`` for seven days
+            # while a later PING on the same client reported "connected".
+            # ``socket_connect_timeout`` governs the socket, not this
+            # coroutine; the wait_for below is what actually bounds it.
+            _redis_client = await asyncio.wait_for(
+                redis.from_url(
+                    redis_url,
+                    encoding="utf-8",
+                    decode_responses=True,
+                    socket_connect_timeout=5,
+                    socket_timeout=socket_timeout,
+                    socket_keepalive=True,
+                    health_check_interval=health_interval,
+                    max_connections=max_connections,
+                ),
+                timeout=_CLIENT_INIT_TIMEOUT_SECONDS,
             )
             logger.info(
                 "Redis client connected (health_check_interval=%ss, "
