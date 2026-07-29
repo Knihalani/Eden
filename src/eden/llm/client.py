@@ -53,6 +53,18 @@ from eden.config import get_settings  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
+#: Per-request ceiling for a single upstream LLM HTTP request, seconds.
+#:
+#: The openai SDK's default is 600s. Eden wraps every call in its own
+#: retry + tier-fallback loops, so a 600s ceiling on each leg meant a
+#: single logical call could occupy a worker for the better part of an
+#: hour. 60s is generous for the T1/T2 models actually routed to (p95
+#: latencies in the seed table are 650-1200ms) while still bounding the
+#: pathological case. Override with ``EDEN_LLM_REQUEST_TIMEOUT_S``.
+_LLM_REQUEST_TIMEOUT_S: float = float(
+    os.getenv("EDEN_LLM_REQUEST_TIMEOUT_S", "60") or 60
+)
+
 
 class CircuitState(Enum):
     CLOSED = "closed"
@@ -182,17 +194,36 @@ class OpenRouterClient:
         AsyncOpenAI = getattr(_this_mod, "AsyncOpenAI")  # noqa: B009, N806
 
         self.settings = get_settings()
-        self.client = OpenAI(
-            api_key=api_key or self.settings.openrouter_api_key,
-            base_url=base_url,
-        )
+
+        # Bound every upstream request, and let Eden own retries.
+        #
+        # Neither client passed ``timeout`` or ``max_retries``, so the
+        # openai SDK defaults applied: 600s per request and 2 internal
+        # retries, i.e. 3 HTTP requests per Eden attempt. That multiplies
+        # against Eden's own nested loops —
+        # ``for tier`` x ``for model`` x ``for attempt in max_retries``
+        # in model_router — so one logical call could reach 9 model slots
+        # x 3 Eden attempts x 3 SDK attempts = 81 upstream requests, each
+        # able to hang for ten minutes. It also meant the circuit breaker
+        # counted logical calls, not requests: at threshold 5 it took
+        # ~405 upstream requests to open.
+        #
+        # ``max_retries=0`` because Eden already retries and escalates
+        # tiers; the SDK's copy is pure multiplication with no added
+        # signal. ``_LLM_REQUEST_TIMEOUT_S`` is the per-request ceiling,
+        # well inside the 300s PIPELINE_TIMEOUT_SECONDS the API allows a
+        # whole pipeline.
+        _client_kwargs = {
+            "api_key": api_key or self.settings.openrouter_api_key,
+            "base_url": base_url,
+            "timeout": _LLM_REQUEST_TIMEOUT_S,
+            "max_retries": 0,
+        }
+        self.client = OpenAI(**_client_kwargs)
         # Async client for the ``acall`` path. Kept as a separate
         # attribute so tests can mock sync + async independently
         # (the async mock needs ``create`` to be an ``AsyncMock``).
-        self.async_client = AsyncOpenAI(
-            api_key=api_key or self.settings.openrouter_api_key,
-            base_url=base_url,
-        )
+        self.async_client = AsyncOpenAI(**_client_kwargs)
         self.circuit_breaker = CircuitBreaker(
             failure_threshold=circuit_breaker_threshold,
             recovery_timeout=circuit_breaker_timeout,
@@ -321,9 +352,20 @@ class OpenRouterClient:
         if self.circuit_breaker.is_open(agent):
             raise CircuitOpenError(f"Circuit breaker open for agent: {agent}")
         import asyncio
-        loop = asyncio.get_event_loop()
-        return await loop.run_in_executor(
-            None,
+
+        # ``asyncio.to_thread``, NOT ``loop.run_in_executor``.
+        #
+        # run_in_executor does not propagate contextvars, so the
+        # cost-attribution context set by ``cost_ledger.cost_context``
+        # was empty inside the thread. ``_log_usage`` runs in there, and
+        # ``schedule_record_from_usage`` returns early on
+        # ``if not oid`` — so every async LLM call was booked against no
+        # org, i.e. dropped. to_thread copies the context across.
+        #
+        # This alone is not sufficient: no worker thread has a running
+        # loop, so the write still had nowhere to be scheduled. See
+        # ``cost_ledger.bind_event_loop`` for that half.
+        return await asyncio.to_thread(
             lambda: self.call(
                 agent=agent, prompt=prompt, slot=slot,
                 system_prompt=system_prompt, **kwargs,

@@ -667,15 +667,36 @@ async def _run_signal_investigator(org_id: str, trace_id: str) -> None:
         from eden.signals.investigator import investigate_trace
 
         await investigate_trace(org_id, trace_id)
-        # Meter investigator path for FinOps vs classifier savings.
+        # Meter that the investigator path ran, for the FinOps
+        # comparison against classifier savings — but at cost_usd=0.0,
+        # because this path spends nothing.
+        #
+        # It used to book a hardcoded $0.03. There is no model behind it:
+        # the per-signal LLM investigator was removed and
+        # signals/investigator.py is heuristics only (its `_one_completion`
+        # raises). So every investigated trace wrote $0.03 of spend that
+        # never happened into the same ledger the per-org budgets read.
+        #
+        # That is worse than a wrong dashboard now that the budget gates
+        # actually function: at 1,000 traces/day this alone fabricates
+        # $30/day and would trip the $25/day maintenance cap, blocking
+        # real work on the strength of imaginary spend.
+        #
+        # The estimate is kept in metadata so the "what would the
+        # investigator have cost" comparison in classifier_worker still
+        # has its number, without it being money.
         await record_cost_event(
             CostEvent(
                 org_id=org_id,
                 feature="signal_investigator",
                 model="f06_statgate",
-                cost_usd=0.03,
+                cost_usd=0.0,
                 trace_id=trace_id,
-                metadata={"path": "investigator"},
+                metadata={
+                    "path": "investigator",
+                    "notional_cost_usd": 0.03,
+                    "note": "heuristics only; no model call",
+                },
             )
         )
     except Exception as exc:
