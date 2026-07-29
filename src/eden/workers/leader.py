@@ -106,6 +106,17 @@ _acquire_failures: dict[str, int] = {}
 #: carry the distinction out of the container.
 _work_failures: dict[str, str] = {}
 
+#: ``{lock_name: [loop_iterations, work_invocations]}``. Redis reachable,
+#: zero acquire failures, zero work failures and zero output is a
+#: contradiction unless the loops never reach the acquire call at all —
+#: these two counters are what tell those apart, and nothing else can.
+_tick_counts: dict[str, list[int]] = {}
+
+
+def leader_tick_counts() -> dict[str, list[int]]:
+    """``{lock_name: [iterations, work_runs]}`` for the liveness heartbeat."""
+    return {k: list(v) for k, v in _tick_counts.items()}
+
 
 def leader_acquire_failure_count(lock_name: str | None = None) -> int:
     """Consecutive failed acquisitions for ``lock_name`` (or all locks)."""
@@ -123,6 +134,7 @@ def reset_leader_failure_counts() -> None:
     """Test-only: clear the failure counters."""
     _acquire_failures.clear()
     _work_failures.clear()
+    _tick_counts.clear()
 
 
 async def run_if_leader(
@@ -156,6 +168,7 @@ async def run_if_leader(
     stop_event = stop or asyncio.Event()
 
     while not stop_event.is_set():
+        _tick_counts.setdefault(lock_name, [0, 0])[0] += 1
         lock = Lock(lock_name, ttl=lock_ttl, prefix="eden:leader")
         try:
             acquired = await lock.acquire()
@@ -189,6 +202,7 @@ async def run_if_leader(
                 ),
                 name=f"leader-extend-{lock_name}",
             )
+            _tick_counts.setdefault(lock_name, [0, 0])[1] += 1
             work_task = asyncio.create_task(
                 work(), name=f"leader-work-{lock_name}"
             )
