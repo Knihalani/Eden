@@ -91,6 +91,25 @@ async def _extend_lock_periodically(
 _DEFAULT_LOCK_TTL_SECONDS = 60
 _DEFAULT_LOCK_RENEW_SECONDS = 20.0
 
+#: Consecutive failed acquisitions, per lock name. ``Lock.acquire`` fails
+#: closed on any Redis error — it warns and returns False — so a broken or
+#: quota-exhausted Redis makes every leader-gated loop spin silently while
+#: the process looks perfectly healthy. Counting the failures gives the
+#: unconditional liveness heartbeat something concrete to report.
+_acquire_failures: dict[str, int] = {}
+
+
+def leader_acquire_failure_count(lock_name: str | None = None) -> int:
+    """Consecutive failed acquisitions for ``lock_name`` (or all locks)."""
+    if lock_name is not None:
+        return _acquire_failures.get(lock_name, 0)
+    return sum(_acquire_failures.values())
+
+
+def reset_leader_failure_counts() -> None:
+    """Test-only: clear the failure counters."""
+    _acquire_failures.clear()
+
 
 async def run_if_leader(
     lock_name: str,
@@ -134,6 +153,15 @@ async def run_if_leader(
                 exc_info=True,
             )
             acquired = False
+
+        if acquired:
+            _acquire_failures.pop(lock_name, None)
+        else:
+            # Not being leader is normal for a follower replica, but Eden
+            # runs a single worker — so a persistent inability to acquire
+            # means Redis is refusing, not that someone else is leading.
+            # Either way the count is what the liveness heartbeat reports.
+            _acquire_failures[lock_name] = _acquire_failures.get(lock_name, 0) + 1
 
         if acquired:
             extender_stop = asyncio.Event()
