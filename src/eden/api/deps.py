@@ -27,6 +27,11 @@ logger = logging.getLogger(__name__)
 security = HTTPBearer(auto_error=False)
 # B1 — debounce last_seen_at UPDATEs (≥60s) so auth does not write on every request.
 _LAST_SEEN_DEBOUNCE_S = 60.0
+# Cap on the debounce map. Sized like the id caches below
+# (``_ID_CACHE_MAX``) — big enough that an active pod never evicts a
+# still-useful entry, small enough that the map cannot grow without
+# bound across the pod's lifetime.
+_LAST_SEEN_CACHE_MAX = 4096
 _last_seen_bumped_at: dict[str, float] = {}
 
 # B2 — TTL cache for resolve_eden_org_id (Clerk id / Eden UUID → Eden UUID).
@@ -673,6 +678,25 @@ async def get_current_user(
                     "UPDATE users SET last_seen_at = NOW() WHERE id = $1",
                     user_id,
                 )
+                # Bound the debounce map before inserting. Every sibling
+                # cache in this module is capped (``_ID_CACHE_MAX`` for the
+                # id caches, ``_API_KEY_AUTH_CACHE_MAX`` for the auth
+                # cache); this one was not, so it grew by one permanent
+                # entry per distinct user the pod ever authenticated and
+                # was never swept — even though an entry is dead weight
+                # ``_LAST_SEEN_DEBOUNCE_S`` after it is written.
+                if len(_last_seen_bumped_at) >= _LAST_SEEN_CACHE_MAX:
+                    cutoff = now_mono - _LAST_SEEN_DEBOUNCE_S
+                    for stale in [
+                        k for k, ts in _last_seen_bumped_at.items() if ts <= cutoff
+                    ]:
+                        _last_seen_bumped_at.pop(stale, None)
+                    # Still full after the sweep (a burst of distinct users
+                    # inside one debounce window): drop oldest-inserted.
+                    while len(_last_seen_bumped_at) >= _LAST_SEEN_CACHE_MAX:
+                        _last_seen_bumped_at.pop(
+                            next(iter(_last_seen_bumped_at)), None
+                        )
                 _last_seen_bumped_at[user_id] = now_mono
             except Exception:
                 pass  # noqa: BLE001 — best-effort, never block auth

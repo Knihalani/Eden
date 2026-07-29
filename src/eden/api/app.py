@@ -627,38 +627,17 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-app.add_middleware(
-    CORSMiddleware,
-    # Explicit origin list. ``allow_origins=["*"]`` + ``allow_credentials=True``
-    # is forbidden by the CORS spec (browsers reject it), and was the
-    # original state — so any credentialed request from the portal
-    # would silently fail. Allowed origins are read from the
-    # ``CORS_ORIGINS_RAW`` env var (comma-separated) and default to a
-    # localhost dev set.
-    allow_origins=_cors_origins_list(),
-    allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allow_headers=[
-        "Accept",
-        "Accept-Language",
-        "Authorization",
-        "Content-Type",
-        "If-Match",
-        "If-None-Match",
-        "X-CSRF-Token",
-        "X-Requested-With",
-        "X-Org-Id",
-        "X-Org-Api-Key",
-        "Idempotency-Key",
-    ],
-    # The session cookie is set with ``samesite="lax"`` by the auth
-    # routes, so we don't need to expose it here. We do expose ETag
-    # so the portal's optimistic-update flow works.
-    expose_headers=["ETag", "X-Request-ID"],
-    # Browser cache preflight results for 10 minutes — the auth +
-    # org headers rarely change.
-    max_age=600,
-)
+# NOTE: CORSMiddleware is NOT registered here. It is registered near
+# the bottom of this file, immediately before SecurityHeadersMiddleware,
+# so that it ends up second-outermost. Registering it first (as this
+# file used to) made it the INNERMOST middleware, which meant only
+# router-produced responses carried ``Access-Control-Allow-Origin`` —
+# every short-circuited error (401 DefaultDenyAuth, 429 TenantRateLimit
+# / Quota, 403 InternalOnly, 400 Idempotency, and both global exception
+# handlers) reached the browser without CORS headers and was therefore
+# discarded by the browser before the portal's JS could read it. The
+# portal showed a generic network error instead of "re-authenticate",
+# and the ``request_id`` in the error envelope never reached the client.
 
 # Per-org resource budget enforcement (§6.3 cost guardrails).
 # NOTE: ``add_middleware`` reverses source order into execution
@@ -804,10 +783,14 @@ app.add_middleware(APIVersionMiddleware)
 #
 # Full REAL execution order (request-in, first-to-run — the
 # reverse of the ``add_middleware`` call order in this file),
-# current as of the 2026-07-27 auth/RLS-ordering fix:
-#   SecurityHeaders -> APIVersion -> CorrelationId -> Latency ->
+# current as of the 2026-07-29 CORS-ordering fix:
+#   SecurityHeaders -> CORS -> APIVersion -> CorrelationId -> Latency ->
 #   GZip -> TenantRateLimit -> DefaultDenyAuth -> RLSOrgContext ->
-#   InternalOnly -> Idempotency -> Quota -> CORS -> router.
+#   InternalOnly -> Idempotency -> Quota -> router.
+# CORS sits directly inside SecurityHeaders: outside every middleware
+# that can short-circuit, so error responses carry CORS headers, but
+# still inside SecurityHeaders so preflight responses — which CORS
+# answers itself without calling downstream — keep their OWASP headers.
 # DefaultDenyAuth now genuinely runs BEFORE RLSOrgContext, so an
 # unauthenticated request is rejected with 401 before RLS ever
 # trusts its (unauthenticated) X-Org-Id header/cookie or opens a
@@ -818,6 +801,39 @@ app.add_middleware(APIVersionMiddleware)
 # ``@app.exception_handler(Exception)`` applies the same
 # headers via ``apply_security_headers()`` (helper in
 # ``eden.api.middleware.security_headers``).
+app.add_middleware(
+    CORSMiddleware,
+    # Explicit origin list. ``allow_origins=["*"]`` + ``allow_credentials=True``
+    # is forbidden by the CORS spec (browsers reject it), and was the
+    # original state — so any credentialed request from the portal
+    # would silently fail. Allowed origins are read from the
+    # ``CORS_ORIGINS_RAW`` env var (comma-separated) and default to a
+    # localhost dev set.
+    allow_origins=_cors_origins_list(),
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=[
+        "Accept",
+        "Accept-Language",
+        "Authorization",
+        "Content-Type",
+        "If-Match",
+        "If-None-Match",
+        "X-CSRF-Token",
+        "X-Requested-With",
+        "X-Org-Id",
+        "X-Org-Api-Key",
+        "Idempotency-Key",
+    ],
+    # The session cookie is set with ``samesite="lax"`` by the auth
+    # routes, so we don't need to expose it here. We do expose ETag
+    # so the portal's optimistic-update flow works.
+    expose_headers=["ETag", "X-Request-ID"],
+    # Browser cache preflight results for 10 minutes — the auth +
+    # org headers rarely change.
+    max_age=600,
+)
+
 app.add_middleware(SecurityHeadersMiddleware)
 
 

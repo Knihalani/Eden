@@ -125,14 +125,31 @@ def reset_metrics_snapshot() -> None:
 # Middleware
 # ─────────────────────────────────────────────────────────────────────────────
 
+# Sentinel bucket for requests that never reached the router, so no
+# ``scope["route"]`` was ever set. Returning the LITERAL path in that
+# case defeats the whole point of this function: ``scope["route"]`` is
+# populated by FastAPI's Router, which sits inside every middleware, so
+# anything short-circuited above it (401 DefaultDenyAuth, 429
+# TenantRateLimit/Quota, 403 InternalOnly, router 404s) reported its raw
+# URL as the histogram key. ``_histogram._data`` is an uncapped
+# defaultdict, so an unauthenticated attacker looping
+# ``GET /x/<random-uuid>`` — 401 on every one, no credentials needed —
+# added a permanent row per request until the pod OOMed.
+_UNMATCHED_ROUTE = "<unmatched>"
+
+
 def _route_template_from_scope(scope: Scope) -> str:
     """Return the route template (``/v1/jobs/{job_id}``) rather than
     the literal path, so the histogram doesn't blow up with one row
-    per job-id."""
+    per job-id.
+
+    Falls back to a single sentinel bucket — never the literal path —
+    when the router has not matched.
+    """
     route = scope.get("route")
     if route is not None and getattr(route, "path", None):
         return route.path
-    return scope.get("path", "")
+    return _UNMATCHED_ROUTE
 
 
 # Pre-compute the response header key + literal columns so the
@@ -171,13 +188,11 @@ class LatencyMiddleware:
 
         t0 = time.perf_counter()
         method = scope.get("method", "GET")
-        # Pre-dispatch route path. Used by the exception branch
-        # below (where scope["route"] may NOT yet be set — the
-        # router hadn't matched yet). The success branch re-reads
-        # it inside the send-wrapper at the moment scope["route"]
-        # is populated by FastAPI, so success samples still bucket
-        # by template rather than literal path.
-        pre_route_path = _route_template_from_scope(scope)
+        # The route template is resolved lazily, at observation time,
+        # in both the send-wrapper and the exception branch below —
+        # ``scope["route"]`` is set by FastAPI's router, which runs
+        # inside this middleware, so reading it here (pre-dispatch)
+        # would always miss.
         # ``captured`` lets the exception path below know whether
         # we already observed (success path) or still need to
         # observe (failure before send).
@@ -213,5 +228,11 @@ class LatencyMiddleware:
         except Exception:
             if captured["status"] is None:
                 latency_ms = (time.perf_counter() - t0) * 1000
-                _histogram.observe(method, pre_route_path, 500, latency_ms)
+                # Re-resolve rather than reuse ``pre_route_path``: the
+                # router may well have matched before the handler raised,
+                # in which case we can still attribute the 500 to a real
+                # template instead of the sentinel.
+                _histogram.observe(
+                    method, _route_template_from_scope(scope), 500, latency_ms
+                )
             raise

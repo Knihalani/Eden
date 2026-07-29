@@ -31,11 +31,25 @@ COPY --from=ghcr.io/astral-sh/uv:0.5 /uv /usr/local/bin/uv
 
 # Copy dependency files first (better layer caching)
 COPY pyproject.toml uv.lock README.md ./
-COPY src/eden ./src/eden
 
-# Sync dependencies into a virtual environment using the lockfile
-RUN uv venv /opt/venv \
-    && VIRTUAL_ENV=/opt/venv uv sync --locked --no-dev \
+# Resolve the locked runtime dependency set into a fully-pinned
+# requirements file. The runtime stage installs exactly this, so the
+# tree that ships is the tree ``uv.lock`` describes — the same one
+# ``uv lock --check`` and the ``pip-audit`` CI gate verify.
+#
+# This replaced a ``uv sync`` into /opt/venv that was then copied into
+# the runtime stage *alongside* a second, independent ``pip install``
+# of the [project] dependencies. That arrangement had two defects:
+#   1. Every wheel shipped twice (venv + system site-packages).
+#   2. The second install read the *ranges* in pyproject.toml, not
+#      uv.lock, so it re-resolved at build time. Since the CMD runs
+#      /usr/local/bin/python3 (system site-packages), production ran
+#      the unpinned tree while CI audited the locked one.
+# Building only the requirements file here also drops the builder's
+# ``uv sync`` entirely, so the builder no longer needs the app source
+# and its layer cache survives every source-only change.
+RUN uv export --frozen --no-dev --no-hashes --no-emit-project \
+    --format requirements-txt -o /tmp/requirements.txt \
     && rm -rf /root/.cache
 
 # -----------------------------------------------------------------------------
@@ -55,33 +69,21 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-# Install runtime Python deps DIRECTLY into the system site-packages
-# via pip. This is a belt-and-braces measure — the builder's venv at
-# /opt/venv should already have everything, but Northflank's image
-# cache has shipped broken builds where uvicorn was missing from the
-# venv layer (so ``/opt/venv/bin/uvicorn`` was absent even with PATH
-# set + chown applied). ``--break-system-packages`` lets us coexist
-# with the system pip on the slim base image.
+# Install the runtime deps ONCE, into system site-packages, from the
+# lockfile-derived pin list built in the builder stage.
 #
-# Pulls the full list of runtime deps from pyproject.toml at build
-# time via awk (the [project] dependencies block). Replaces a
-# hand-written list that kept missing transitive deps (bcrypt via
-# passlib[bcrypt], then qrcode, …). The pgbouncer entry is a comment
-# in the file, not a real package — awk filters that out by quoting.
-COPY pyproject.toml ./
-# Extract every dep from pyproject.toml's [project] dependencies and
-# hand them to pip. Uses python -c + tomllib (stdlib in 3.11+) so we
-# don't depend on awk/grep/sed — python:3.12-slim ships without those
-# coreutils. Filters out the pgbouncer entry (comment-marker for the
-# infra team, not a real package).
-RUN pip install --no-cache-dir --break-system-packages \
-    $(python -c "import tomllib; d=tomllib.loads(open('/app/pyproject.toml').read()); print(' '.join(p for p in d['project']['dependencies'] if not p.startswith('pgbouncer')))")
+# There is deliberately no venv in this image. The previous layout
+# copied /opt/venv in as a "belt and braces" backup because Northflank's
+# image cache twice shipped that venv empty — but the backup was a
+# second, differently-resolved copy of every dependency, and the CMD
+# ran the backup rather than the venv. Installing the pinned set into
+# the interpreter the CMD actually uses removes the failure mode the
+# venv was insuring against, and the duplicate copy with it.
+COPY --from=builder /tmp/requirements.txt /tmp/requirements.txt
+RUN pip install --no-cache-dir --break-system-packages -r /tmp/requirements.txt \
+    && rm -f /tmp/requirements.txt
 
-# Copy virtual environment from builder (full app deps) — kept for
-# any binary wheels the app imports at runtime. ``eden`` user owns it
-# so they can traverse it.
-COPY --from=builder --chown=eden:eden /opt/venv /opt/venv
-ENV PATH="/opt/venv/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
+ENV PATH="/usr/local/bin:/usr/bin:/bin:$PATH"
 
 # Copy application code
 COPY --chown=eden:eden src ./src
@@ -90,15 +92,12 @@ COPY --chown=eden:eden alembic.ini ./alembic.ini
 
 # StatGate + closed-loop gating (EvidenceGate / Cat 17 wiring).
 # Minimal subset only — research packages stay out of the image.
+# One COPY per directory rather than one per file: the previous nine
+# single-file COPYs produced nine image layers for ~9 small modules.
 COPY --chown=eden:eden supplementaries/__init__.py ./supplementaries/__init__.py
-COPY --chown=eden:eden supplementaries/phase_6_stat_gate/__init__.py ./supplementaries/phase_6_stat_gate/__init__.py
-COPY --chown=eden:eden supplementaries/phase_6_stat_gate/gate.py ./supplementaries/phase_6_stat_gate/gate.py
-COPY --chown=eden:eden supplementaries/phase_7_detection/__init__.py ./supplementaries/phase_7_detection/__init__.py
-COPY --chown=eden:eden supplementaries/phase_7_detection/stat_gated_executor.py ./supplementaries/phase_7_detection/stat_gated_executor.py
-COPY --chown=eden:eden supplementaries/phase_7_detection/detectors.py ./supplementaries/phase_7_detection/detectors.py
-COPY --chown=eden:eden supplementaries/phase_7_detection/closed_loop.py ./supplementaries/phase_7_detection/closed_loop.py
-COPY --chown=eden:eden supplementaries/phase_10_memory/__init__.py ./supplementaries/phase_10_memory/__init__.py
-COPY --chown=eden:eden supplementaries/phase_10_memory/a2a.py ./supplementaries/phase_10_memory/a2a.py
+COPY --chown=eden:eden supplementaries/phase_6_stat_gate/__init__.py supplementaries/phase_6_stat_gate/gate.py ./supplementaries/phase_6_stat_gate/
+COPY --chown=eden:eden supplementaries/phase_7_detection/__init__.py supplementaries/phase_7_detection/stat_gated_executor.py supplementaries/phase_7_detection/detectors.py supplementaries/phase_7_detection/closed_loop.py ./supplementaries/phase_7_detection/
+COPY --chown=eden:eden supplementaries/phase_10_memory/__init__.py supplementaries/phase_10_memory/a2a.py ./supplementaries/phase_10_memory/
 
 # Make the `eden` package importable when uvicorn runs from the
 # system Python (which is what `python -m uvicorn` uses). The package
@@ -122,18 +121,24 @@ USER eden
 # Expose the API port
 EXPOSE 8000
 
+# northflank.yml's terminationGracePeriodSeconds comment asserts this
+# matches "what bin/serve.sh and the Dockerfile's STOPSIGNAL expect",
+# but no STOPSIGNAL was ever declared, so the daemon default (SIGTERM)
+# applied by accident. Declared explicitly: uvicorn treats SIGTERM as
+# a graceful shutdown, which is what the 30s grace period is for.
+STOPSIGNAL SIGTERM
+
 # Health check — liveness via /live; use /ready for dependency probes
 HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
     CMD curl -fsS http://localhost:8000/live | grep -q '"status"' || exit 1
 
 # Run uvicorn with a single worker per container (scale via replicas).
 # Use the system Python (python:3.12-slim puts it at
-# /usr/local/bin/python3) — the venv at /opt/venv cannot be trusted
-# (Northflank's image cache has shipped it empty twice now). The
-# safety-net pip install above puts every dep into system
-# site-packages, so ``python -m uvicorn`` finds uvicorn. Absolute
-# path + module form so we never depend on PATH or the venv being
-# activated.
+# /usr/local/bin/python3) — this image has no venv, and the pinned
+# install above puts every dep into system site-packages, so
+# ``python -m uvicorn`` resolves uvicorn from the interpreter that is
+# actually executing. Absolute path + module form so we never depend
+# on PATH.
 #
 # PYTHONPATH=/app/src is required so ``import eden`` resolves — the
 # source is at /app/src/eden/__init__.py (src-layout) but is not on

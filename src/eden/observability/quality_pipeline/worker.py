@@ -1131,6 +1131,13 @@ class SidecarWorker:
         try:
             watermark = await load_watermark()
             last_event_id = watermark[1] if watermark else None
+            # One semaphore for the worker's lifetime. Rebuilding it per
+            # batch let each batch start a fresh set of permits, so the
+            # cap never applied across overlapping work. The floor is 1,
+            # not 8: ``concurrency`` is the operator's knob for throttling
+            # fan-out against Neon, and a floor of 8 silently ignored every
+            # value below it.
+            sem = asyncio.Semaphore(max(1, int(self.concurrency)))
             while not stop_event.is_set():
                 events = await self._poll_events(last_event_id)
                 if not events:
@@ -1157,7 +1164,12 @@ class SidecarWorker:
                         max(self.poll_interval_s, empty_backoff_s * 1.5),
                     )
                     continue
-                empty_backoff_s = float(self.poll_interval_s)
+                # NB: the backoff is reset below only when the cursor
+                # actually advances, not merely because the poll returned
+                # rows. A batch of traces that are all still missing their
+                # span.end returns the same rows forever; resetting here
+                # pinned the worker at ``poll_interval_s`` (1s) against
+                # Neon indefinitely, so the database could never suspend.
                 # Group by (tenant_id, trace_id); a trace is ready
                 # when its span.end event has been observed.
                 groups: dict[tuple[str, str], list[dict[str, Any]]] = {}
@@ -1172,32 +1184,105 @@ class SidecarWorker:
                         continue
                     ready.append((tid, trace_id, evs))
 
-                sem = asyncio.Semaphore(max(8, int(self.concurrency)))
-
                 async def _process_ready(
                     tid: str,
                     trace_id: str,
                     evs: list[dict[str, Any]],
                 ) -> str | None:
                     async with sem:
+                        last_exc: Exception | None = None
                         for attempt in range(self.max_retries):
                             try:
                                 await self._process_one(tid, trace_id, evs)
+                                last_exc = None
                                 break
                             except Exception as exc:
+                                last_exc = exc
                                 logger.debug(
                                     "worker attempt %d: %s", attempt, exc,
                                 )
                                 await asyncio.sleep(0.05 * (2 ** attempt))
+                        if last_exc is not None:
+                            # Every attempt raised. Advancing the watermark
+                            # here would drop the trace silently and it would
+                            # never be retried, so route it to the dead-letter
+                            # table on the same path ``_process_one`` uses for
+                            # an all-steps-failed trace. Best-effort, like
+                            # ``dead_letter`` itself: this runs inside the
+                            # gather below, and the Postgres failure that
+                            # exhausted the retries is exactly the one that
+                            # would make this write raise too.
+                            logger.warning(
+                                "quality pipeline: trace %s/%s failed all %d "
+                                "attempts, dead-lettering: %s",
+                                tid, trace_id, self.max_retries, last_exc,
+                            )
+                            try:
+                                await dead_letter(
+                                    tid, trace_id,
+                                    f"exhausted_retries: {last_exc}",
+                                    evs,
+                                )
+                                _STATE.failed_total += 1
+                                _Metrics.get().traces_total.labels(status="dlq").inc()
+                            except Exception as dlq_exc:
+                                logger.error(
+                                    "quality pipeline: dead-letter failed for "
+                                    "%s/%s: %s", tid, trace_id, dlq_exc,
+                                )
                     return str(evs[-1].get("event_id") or "") or None
 
-                results = await asyncio.gather(
-                    *(_process_ready(tid, tid_trace, evs) for tid, tid_trace, evs in ready)
+                # ``return_exceptions=True``: this gather has no supervisor
+                # above it (the sidecar is a bare create_task), so a single
+                # escaping exception ends the worker for the process lifetime.
+                await asyncio.gather(
+                    *(_process_ready(tid, tid_trace, evs) for tid, tid_trace, evs in ready),
+                    return_exceptions=True,
                 )
-                for (tid, _trace_id, _evs), event_id in zip(ready, results, strict=False):
-                    if event_id:
-                        await save_watermark(tid, event_id)
-                        last_event_id = event_id
+
+                # Advance the cursor to just before the first event of the
+                # earliest trace we skipped as incomplete.
+                #
+                # ``_poll_events`` is a strictly forward cursor ordered by
+                # (created_at, event_id). The previous code advanced to the
+                # last *ready* group's final event, which in a batch that
+                # mixes ready and incomplete traces jumps over the spans of
+                # the incomplete ones — when their span.end arrived in a
+                # later batch they were scored against a partial span set,
+                # silently. Stopping at the first incomplete event means
+                # those spans are re-read next poll, which is what the
+                # "will pick up next iteration" comment above promised.
+                ready_keys = {(t, tr) for t, tr, _ in ready}
+                incomplete_keys = set(groups) - ready_keys
+                safe_cursor: str | None = None
+                cursor_tenant = ""
+                for ev in events:
+                    key = (str(ev.get("tenant_id")), str(ev.get("trace_id")))
+                    if key in incomplete_keys:
+                        break
+                    ev_id = str(ev.get("event_id") or "")
+                    if ev_id:
+                        safe_cursor = ev_id
+                        cursor_tenant = str(ev.get("tenant_id"))
+                if safe_cursor and safe_cursor != last_event_id:
+                    # One write per batch. The watermark is a single global
+                    # row, so the previous per-group loop issued N upserts
+                    # and kept only the last — N-1 wasted round-trips against
+                    # a database billed for staying awake.
+                    await save_watermark(cursor_tenant, safe_cursor)
+                    last_event_id = safe_cursor
+                    empty_backoff_s = float(self.poll_interval_s)
+                else:
+                    # Rows came back but none were actionable. Back off on
+                    # the same curve as an empty poll.
+                    empty_backoff_s = min(
+                        empty_backoff_max_s,
+                        max(self.poll_interval_s, empty_backoff_s * 1.5),
+                    )
+                    with contextlib.suppress(TimeoutError):
+                        await asyncio.wait_for(
+                            stop_event.wait(), timeout=empty_backoff_s
+                        )
         finally:
             _STATE.running = False
             _STATE.stopped_at = datetime.now(UTC)
