@@ -430,9 +430,14 @@ async def _worker_liveness_loop(stop: asyncio.Event) -> None:
                     # may not be able to reach.
                     where = ""
                     try:
-                        stack = task.get_stack(limit=1)
+                        # get_stack orders frames oldest → newest, so the
+                        # LAST one is where the coroutine is actually
+                        # suspended. Taking limit=1 gave the outermost
+                        # frame instead and reported every loop as parked
+                        # in _supervise — true, and useless.
+                        stack = task.get_stack()
                         if stack:
-                            frame = stack[0]
+                            frame = stack[-1]
                             where = (
                                 f"@{frame.f_code.co_name}"
                                 f":{frame.f_lineno}"
@@ -450,7 +455,32 @@ async def _worker_liveness_loop(stop: asyncio.Event) -> None:
                     )
                 dead.append(loop_name)
 
-            healthy = failures == 0 and not dead
+            # Can this process reach Redis at all? Every leader-gated loop
+            # depends on it, and the worker is the one place we could not
+            # answer that from outside — /health only speaks for the API
+            # process. One PING per interval, hard-bounded so a wedged
+            # Redis cannot take the liveness signal down with it (which is
+            # precisely the failure this exists to report).
+            redis_state = "unknown"
+            try:
+                from eden.storage.redis import get_redis_client
+
+                client = await asyncio.wait_for(get_redis_client(), timeout=5.0)
+                if client is None:
+                    redis_state = "not_configured"
+                else:
+                    await asyncio.wait_for(client.ping(), timeout=5.0)
+                    redis_state = "connected"
+            except TimeoutError:
+                redis_state = "timeout"
+            except Exception as exc:
+                redis_state = f"error:{type(exc).__name__}"
+
+            healthy = (
+                failures == 0
+                and not dead
+                and redis_state in ("connected", "not_configured")
+            )
             await record_heartbeat(
                 "worker_process",
                 org_id=None,
@@ -458,8 +488,15 @@ async def _worker_liveness_loop(stop: asyncio.Event) -> None:
                 meta={
                     "loops": states,
                     "leader_acquire_failures": failures,
+                    "redis": redis_state,
                 },
             )
+            if redis_state not in ("connected", "not_configured"):
+                logger.error(
+                    "worker: Redis unreachable from this process (%s) — every "
+                    "leader-gated loop will sit idle without failing.",
+                    redis_state,
+                )
             if failures:
                 logger.error(
                     "worker: alive but leader-lock acquisition has failed %d "
