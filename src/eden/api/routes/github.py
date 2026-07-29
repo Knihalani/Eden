@@ -42,6 +42,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import uuid
 from datetime import datetime
 from typing import Any
@@ -70,6 +71,14 @@ from eden.integrations.github import (
 from eden.storage.postgres import get_postgres_client
 
 logger = logging.getLogger(__name__)
+
+#: Shape of a legitimate oauth ``state`` token.
+#:
+#: These are minted with ``secrets.token_urlsafe``, whose alphabet is
+#: ``[A-Za-z0-9_-]``. Anything else on the unauthenticated GitHub
+#: callback is not a token we issued, so it is refused before it reaches
+#: a query at all — defence in depth behind the wildcard fix below.
+_SAFE_STATE_RE = re.compile(r"[A-Za-z0-9_\-]{16,128}")
 settings = get_settings()
 
 # Two routers — one for the public integration surface, one for the
@@ -711,16 +720,47 @@ async def github_callback(
     pg = await get_postgres_client()
     org_id: str | None = None
     if state:
+        # SECURITY: this endpoint is deliberately UNAUTHENTICATED (GitHub
+        # redirects the user here), so ``state`` is fully attacker
+        # controlled and is the only thing identifying the org.
+        #
+        # It was matched with
+        #     WHERE completed_by_users::text LIKE $1
+        # against f'%"oauth_state": "{state}"%'. In a LIKE pattern ``%``
+        # and ``_`` are wildcards, so ``?state=%`` matched EVERY org with
+        # a pending oauth_state; with no ORDER BY / LIMIT, ``rows[0]``
+        # was an arbitrary victim org, and the installation was then
+        # bound to it with no ownership re-check. An attacker could
+        # attach their own GitHub App installation to someone else's
+        # organisation.
+        #
+        # Even benign tokens matched loosely: secrets.token_urlsafe
+        # emits ``_``, which is a single-character LIKE wildcard.
+        #
+        # Two changes: ``strpos`` does a literal substring search with no
+        # wildcard semantics at all, and an ambiguous match (more than
+        # one org) is refused rather than silently resolved to the first.
+        if not _SAFE_STATE_RE.fullmatch(state):
+            return RedirectResponse(
+                url="/onboarding/connect?error=state_not_found",
+                status_code=302,
+            )
         rows = await pg.fetch(
             """
             SELECT org_id, completed_by_users
             FROM onboarding_state
-            WHERE completed_by_users::text LIKE $1
+            WHERE strpos(completed_by_users::text, $1) > 0
+            LIMIT 2
             """,
-            f'%"oauth_state": "{state}"%',
+            f'"oauth_state": "{state}"',
         )
-        if rows:
+        if len(rows) == 1:
             org_id = str(rows[0]["org_id"])
+        elif len(rows) > 1:
+            logger.warning(
+                "github callback: state matched %d orgs; refusing to guess",
+                len(rows),
+            )
     if not org_id:
         # Couldn't identify org — bounce to the wizard with an error.
         return RedirectResponse(

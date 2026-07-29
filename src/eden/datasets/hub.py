@@ -195,7 +195,7 @@ class DatasetHub:
             if owned is None:
                 raise ValueError("dataset not found")
 
-        payload = await self._trace_payload(trace_id)
+        payload = await self._trace_payload(org_id, trace_id)
         input_text = json.dumps(payload.get("messages", payload), default=str)[:100_000]
         client = await self._client()
         row_id = str(uuid.uuid4())
@@ -292,7 +292,22 @@ class DatasetHub:
             for r in rows
         ]
 
-    async def _trace_payload(self, trace_id: str) -> dict[str, Any]:
+    async def _trace_payload(self, org_id: str, trace_id: str) -> dict[str, Any]:
+        """Load a trace's first event payload, scoped to ``org_id``.
+
+        SECURITY: the ``tenant_id`` predicate is load-bearing.
+
+        Without it this was a cross-tenant read. ``promote_trace`` is
+        reached from ``POST /orgs/{org_id}/datasets/promote-from-trace``,
+        which authorises the caller against the org in the PATH and then
+        passes ``body.trace_id`` straight through unvalidated. Since the
+        query matched on ``trace_id`` alone, org A could name org B's
+        trace and have up to 100 KB of B's prompt/completion text copied
+        into A's own dataset and read back — HTTP 200, no error.
+
+        ``org_id`` was already a parameter of the caller; it simply was
+        not threaded down to here.
+        """
         client = await self._client()
         if client is None:
             return {"trace_id": trace_id, "messages": []}
@@ -300,9 +315,11 @@ class DatasetHub:
             row = await client.fetchrow(
                 """
                 SELECT payload FROM telemetry_events
-                WHERE trace_id = $1 ORDER BY timestamp ASC LIMIT 1
+                WHERE trace_id = $1 AND tenant_id = $2
+                ORDER BY timestamp ASC LIMIT 1
                 """,
                 trace_id,
+                org_id,
             )
             if row and row.get("payload"):
                 payload = row["payload"]

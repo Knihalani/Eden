@@ -340,20 +340,29 @@ class ApprovalWorkflowService:
 
         client = await _get_client()
         if client is None:
-            # No DB — best-effort envelope reflecting the requested
-            # transition. Tests that exercise the no-DB path can
-            # still assert shape.
-            return _ok_envelope(
+            # SECURITY: fail CLOSED. This used to return an ok envelope
+            # with state="approved" so "tests that exercise the no-DB
+            # path can still assert shape" — but ``_get_client`` returns
+            # None on ANY swallowed connection failure, not just in
+            # tests, so during a database incident this path answered
+            #     POST /approvals/{id}/resolve {"decision": "approve"}
+            # with 200 {"state": "approved"} while skipping every
+            # invariant the gate exists to enforce: that the request
+            # exists, that it is still pending, that the approver is not
+            # the requester, and that quorum is met. One unauthenticated
+            # -in-effect call could self-approve a request id that need
+            # not exist.
+            #
+            # An approval gate that cannot verify must refuse, not
+            # assume. Callers get a distinguishable status and can retry.
+            logger.error(
+                "approval resolve refused: no database connection "
+                "(request_id=%s decision=%s)", request_id, decision,
+            )
+            return _bad_request_envelope(
                 self.name,
-                {
-                    "request_id": request_id,
-                    "state": (
-                        "approved" if decision == "approve" else "denied"
-                    ),
-                    "approver": approver,
-                    "approvers_received": 1 if decision == "approve" else 0,
-                    "no_persist": True,
-                },
+                "approval store unavailable; refusing to resolve without "
+                "verifying request state, approver identity and quorum",
             )
 
         try:

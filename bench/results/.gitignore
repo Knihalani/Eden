@@ -1,0 +1,9 @@
+# Bench results are machine- and load-specific measurements, not source.
+# The files that used to live here were produced by the sleep-based suites
+# (see bench/run_all.py) and measured asyncio.sleep resolution rather than
+# Eden, so they were deleted rather than kept as a baseline.
+#
+# Generate locally with `python -m bench.run_all`, and gate with
+# `python -m bench.compare <baseline.json> <candidate.json>`.
+*.json
+!baseline.json

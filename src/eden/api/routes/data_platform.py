@@ -171,7 +171,12 @@ async def run_etl(
 
     etl = SilverETLPipeline()
     try:
-        report = await etl.run_from_bronze(since=since_dt, limit=request.limit)
+        # org_id MUST be passed: without it this endpoint ran the ETL
+        # over every tenant's usage_events, despite being authorised
+        # against a single org in the path.
+        report = await etl.run_from_bronze(
+            since=since_dt, limit=request.limit, org_id=org_id
+        )
     except Exception as exc:
         _reraise_dp(exc, fallback="ETL run failed")
 

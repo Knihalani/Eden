@@ -230,21 +230,31 @@ async def _bench_correlation_id_middleware(n: int = 1000) -> BenchResult:
     return await bench_async("correlation_id_dispatch", one, n=n)
 
 
+async def run(n: int = 1000) -> list[BenchResult]:
+    """Dispatch every middleware for real and return the measurements.
+
+    Split out of ``_main`` so ``bench.run_all`` can collect results instead of
+    scraping stdout. Every entry here drives an actual middleware's
+    ``dispatch``; there is no simulated latency in this suite.
+    """
+    return [
+        await _bench_default_deny(n),
+        await _bench_latency_observe(n),
+        await _bench_latency_middleware(n),
+        await _bench_correlation_id_middleware(n),
+        await _bench_tenant_rate_limit_health(n),
+        await _bench_api_version_dispatch(n),
+        await _bench_internal_only_health(n),
+    ]
+
+
 async def _main():
     parser = argparse.ArgumentParser(description="Middleware hot-path bench")
     parser.add_argument("--n", type=int, default=1000)
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args()
 
-    results = [
-        await _bench_default_deny(args.n),
-        await _bench_latency_observe(args.n),
-        await _bench_latency_middleware(args.n),
-        await _bench_correlation_id_middleware(args.n),
-        await _bench_tenant_rate_limit_health(args.n),
-        await _bench_api_version_dispatch(args.n),
-        await _bench_internal_only_health(args.n),
-    ]
+    results = await run(args.n)
     if args.json:
         print(json.dumps([r.to_dict() for r in results], indent=2))
         return

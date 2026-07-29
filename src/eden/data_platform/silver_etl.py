@@ -167,6 +167,8 @@ class SilverETLPipeline:
         since: datetime | None = None,
         limit: int = 10_000,
         push_to_clickhouse: bool = True,
+        *,
+        org_id: str | None = None,
     ) -> ETLReport:
         """Read unprocessed Bronze events from PostgreSQL and run ETL.
 
@@ -175,19 +177,33 @@ class SilverETLPipeline:
         """
         client = await self._get_postgres()
 
-        since_clause = ""
+        # SECURITY: ``org_id`` scopes the Bronze read.
+        #
+        # POST /orgs/{org_id}/data-platform/etl/run resolves org_id via
+        # require_path_org_access + require_org_admin and then did not
+        # pass it here, and this query had no org predicate — so any
+        # org admin triggered an ETL pass over EVERY tenant's
+        # usage_events, mixing other tenants' metering into the silver
+        # layer. usage_events is empty today, so nothing has leaked; the
+        # isolation break is real the moment metering produces rows.
+        #
+        # ``None`` preserves the cross-org sweep for the internal cron
+        # caller, which legitimately runs over all tenants.
         params: list[Any] = [limit]
+        where = ["(silver_processed = FALSE OR silver_processed IS NULL)"]
         if since:
-            since_clause = "AND created_at >= $2"
-            params = [since.isoformat(), limit]
+            params.append(since.isoformat())
+            where.append(f"created_at >= ${len(params)}")
+        if org_id:
+            params.append(org_id)
+            where.append(f"org_id = ${len(params)}::uuid")
 
         query = f"""
             SELECT id, org_id, user_id, event_type, resource, quantity, unit,
                    model, cost_usd, metadata, correlation_id, created_at,
                    silver_processed
             FROM usage_events
-            WHERE silver_processed = FALSE OR silver_processed IS NULL
-            {since_clause}
+            WHERE {" AND ".join(where)}
             ORDER BY created_at ASC
             LIMIT $1
         """

@@ -76,12 +76,14 @@ def _hit_docs(client: TestClient) -> tuple[int, float]:
     return r.status_code, elapsed
 
 
-def main():
-    parser = argparse.ArgumentParser(description="End-to-end request bench")
-    parser.add_argument("--n", type=int, default=200)
-    parser.add_argument("--json", action="store_true")
-    args = parser.parse_args()
+def run(n: int = 200) -> dict:
+    """Drive the real ASGI app end to end and return the measurements.
 
+    Split out of ``main`` so ``bench.run_all`` can collect the result rather
+    than scrape stdout. Requests go through the actual FastAPI app and its
+    full middleware stack — nothing here is simulated.
+    """
+    args = argparse.Namespace(n=n)
     client, _ = _build_client()
 
     # Warm up: 20 requests to populate the import cache and any
@@ -118,6 +120,16 @@ def main():
         "health": {**percentiles(health_times), "statuses": sorted(statuses["health"])},
         "docs": {**percentiles(docs_times), "statuses": sorted(statuses["docs"])},
     }
+    return results
+
+
+def main():
+    parser = argparse.ArgumentParser(description="End-to-end request bench")
+    parser.add_argument("--n", type=int, default=200)
+    parser.add_argument("--json", action="store_true")
+    args = parser.parse_args()
+
+    results = run(n=args.n)
     if args.json:
         print(json.dumps(results, indent=2))
         return
