@@ -98,6 +98,14 @@ _DEFAULT_LOCK_RENEW_SECONDS = 20.0
 #: unconditional liveness heartbeat something concrete to report.
 _acquire_failures: dict[str, int] = {}
 
+#: Last exception seen from a leader-gated ``work()`` call, per lock name.
+#: Acquisition succeeding and the work then throwing produces the same
+#: outward evidence as never acquiring at all — no heartbeat, no progress,
+#: acquire-failure count still zero — and only an ERROR line in container
+#: logs distinguishes them. Recording it here lets the liveness heartbeat
+#: carry the distinction out of the container.
+_work_failures: dict[str, str] = {}
+
 
 def leader_acquire_failure_count(lock_name: str | None = None) -> int:
     """Consecutive failed acquisitions for ``lock_name`` (or all locks)."""
@@ -106,9 +114,15 @@ def leader_acquire_failure_count(lock_name: str | None = None) -> int:
     return sum(_acquire_failures.values())
 
 
+def leader_work_failures() -> dict[str, str]:
+    """Last work exception per lock name (``{}`` when all is well)."""
+    return dict(_work_failures)
+
+
 def reset_leader_failure_counts() -> None:
     """Test-only: clear the failure counters."""
     _acquire_failures.clear()
+    _work_failures.clear()
 
 
 async def run_if_leader(
@@ -205,12 +219,17 @@ async def run_if_leader(
                     except asyncio.CancelledError:
                         exc = None
                     if exc is not None:
+                        _work_failures[lock_name] = (
+                            f"{type(exc).__name__}: {str(exc)[:180]}"
+                        )
                         logger.error(
                             "leader: work %s failed: %s",
                             lock_name,
                             exc,
                             exc_info=exc,
                         )
+                    else:
+                        _work_failures.pop(lock_name, None)
             except asyncio.CancelledError:
                 work_task.cancel()
                 with contextlib.suppress(asyncio.CancelledError, Exception):
