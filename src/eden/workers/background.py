@@ -17,6 +17,7 @@ from typing import Any
 from eden.config import Settings, get_settings
 from eden.storage.redis import Lock
 from eden.workers.leader import (
+    _ACQUIRE_TIMEOUT_SECONDS,
     _DEFAULT_LOCK_RENEW_SECONDS,
     _DEFAULT_LOCK_TTL_SECONDS,
     _extend_lock_periodically,
@@ -160,7 +161,32 @@ class BackgroundWorkers:
         )
 
         while not self._stop.is_set():
-            if await lock.acquire():
+            # Bounded for the same reason as run_if_leader's acquire: an
+            # acquisition that never returns parks this supervisor
+            # forever, and because ``running`` only reports "the
+            # supervisor task exists", the API keeps answering as though
+            # the fleet is up while `_start_all` has never run. That is a
+            # silent, total outage of every background loop — the exact
+            # failure this module is supposed to prevent.
+            try:
+                acquired = await asyncio.wait_for(
+                    lock.acquire(), timeout=_ACQUIRE_TIMEOUT_SECONDS
+                )
+            except TimeoutError:
+                logger.error(
+                    "background: leader acquire timed out after %.0fs — "
+                    "retrying in %.0fs",
+                    _ACQUIRE_TIMEOUT_SECONDS,
+                    interval,
+                )
+                acquired = False
+            except Exception as exc:
+                logger.error(
+                    "background: leader acquire raised: %s", exc, exc_info=True
+                )
+                acquired = False
+
+            if acquired:
                 extender_stop = asyncio.Event()
                 extender = asyncio.create_task(
                     _extend_lock_periodically(
