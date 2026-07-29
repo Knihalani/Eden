@@ -188,26 +188,47 @@ async def test_quality_pipeline_processes_with_semaphore_ge_8():
     assert peak <= max(8, worker.concurrency)
 
 
-def test_northflank_api_workers_off_worker_job_on():
-    """API env disables in-process workers; eden-worker enables them."""
+def test_northflank_background_fleet_is_hosted_by_the_api_service():
+    """The API service hosts the background fleet.
+
+    This is inverted from what it used to pin ("API off, worker job on"),
+    and the reason matters. ``eden.workers.main`` is a daemon deployed as
+    a Northflank *Job*, and jobs are for finite work: the container was
+    reaped and restarted every 96-270s, so no loop ever completed a tick.
+    Webhooks went undelivered, scheduled EQL alerts never fired, retention
+    never ran, and nothing wrote a self-obs heartbeat for 7.4 days — while
+    the job reported RUNNING and /health reported healthy.
+
+    Flipping this back without first moving the worker to a Service (not a
+    Job) silently restores that outage, so it is guarded.
+    """
     text = NORTHFLANK.read_text(encoding="utf-8")
-    # Split on Job document for eden-worker
-    api_part, _, rest = text.partition("kind: Job")
-    assert 'name: EDEN_RUN_BACKGROUND_WORKERS' in api_part
+    api_part, _, _rest = text.partition("kind: Job")
+
+    assert "name: EDEN_RUN_BACKGROUND_WORKERS" in api_part
     api_match = re.search(
         r"name:\s*EDEN_RUN_BACKGROUND_WORKERS\s*\n\s*value:\s*\"([^\"]+)\"",
         api_part,
     )
     assert api_match is not None
-    assert api_match.group(1) in {"0", "false", "False"}
-
-    assert "name: eden-worker" in rest or "eden-worker" in text
-    worker_match = re.search(
-        r"name:\s*eden-worker[\s\S]*?name:\s*EDEN_RUN_BACKGROUND_WORKERS\s*\n\s*value:\s*\"([^\"]+)\"",
-        text,
+    assert api_match.group(1) in {"1", "true", "True"}, (
+        "the API service must host the background fleet — a Job container "
+        "is reaped every few minutes and never finishes a tick"
     )
-    assert worker_match is not None, "eden-worker must set EDEN_RUN_BACKGROUND_WORKERS"
-    assert worker_match.group(1) in {"1", "true", "True"}
+
+
+def test_background_bundle_adopts_the_worker_only_loops():
+    """Five loops had no home except the job. Losing them is invisible."""
+    from eden.workers.background import _leader_loops_from_worker_main
+
+    names = {name for name, _ in _leader_loops_from_worker_main()}
+    assert names == {
+        "webhook_drain",
+        "eql_alert_watchdog",
+        "artifact_demotion",
+        "maintenance",
+        "self_obs_probes",
+    }, f"background bundle stopped hosting: {names}"
 
 
 def test_config_defaults_workers_off_quality_ge_8():
