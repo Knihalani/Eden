@@ -23,6 +23,8 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
+import os
+import socket
 
 from eden.storage.redis import Lock
 from eden.workers.leader import _extend_lock_periodically
@@ -77,6 +79,10 @@ def _guard_ttl_and_renew() -> tuple[int, float]:
 _GUARD_ACQUIRE_ATTEMPTS = 3
 _GUARD_RETRY_DELAY_SECONDS = 1.0
 
+#: Set when the guard is held through Postgres because Redis could not
+#: accept the write — see _acquire_guard.
+_guard_pg_holder: str | None = None
+
 _guard_lock: Lock | None = None
 _guard_extender: asyncio.Task | None = None
 _guard_extender_stop: asyncio.Event | None = None
@@ -91,8 +97,8 @@ async def _acquire_guard() -> bool:
     holds it, or Redis stays unavailable across all retry attempts —
     in either case the caller must not start the sidecars.
     """
-    global _guard_lock, _guard_extender, _guard_extender_stop
-    if _guard_lock is not None:
+    global _guard_lock, _guard_extender, _guard_extender_stop, _guard_pg_holder
+    if _guard_lock is not None or _guard_pg_holder is not None:
         return True  # already held by this process
 
     guard_ttl, guard_renew = _guard_ttl_and_renew()
@@ -124,6 +130,36 @@ async def _acquire_guard() -> bool:
         if attempt < _GUARD_ACQUIRE_ATTEMPTS:
             await asyncio.sleep(_GUARD_RETRY_DELAY_SECONDS)
 
+    # Redis could not give us the guard. Before giving up, check whether
+    # anyone actually holds it: SET NX cannot fail on a key that does not
+    # exist, so refused-and-unheld means the write was discarded, not that
+    # a peer is hosting the sidecars. That is what a provider does past a
+    # plan limit, and treating it as contention is what kept the quality
+    # pipeline and the trace_finalized consumer (annotation) down.
+    holder = None
+    try:
+        probe = Lock(_GUARD_NAME, ttl=guard_ttl, prefix="eden:leader")
+        holder = await asyncio.wait_for(probe.holder(), timeout=5.0)
+    except Exception:
+        holder = None
+
+    if holder is None:
+        from eden.storage import pg_lease
+
+        identity = f"{socket.gethostname()}:{os.getpid()}"
+        if await pg_lease.acquire(_GUARD_NAME, identity, guard_ttl):
+            _guard_pg_holder = identity
+            _guard_extender_stop = asyncio.Event()
+            _guard_extender = asyncio.create_task(
+                _renew_pg_guard(identity, guard_ttl, guard_renew, _guard_extender_stop),
+                name="sidecar-guard-pg-renew",
+            )
+            logger.warning(
+                "sidecars: guard acquired via Postgres — Redis is not "
+                "accepting writes; quality/closed-loop sidecars start here"
+            )
+            return True
+
     logger.warning(
         "sidecars: guard not acquired after %d attempts (another process "
         "already hosts quality/closed-loop sidecars, or Redis is down) — "
@@ -133,8 +169,25 @@ async def _acquire_guard() -> bool:
     return False
 
 
+async def _renew_pg_guard(
+    identity: str, ttl: int, renew_every: float, stop: asyncio.Event
+) -> None:
+    """Keep the Postgres-held guard alive while the sidecars run."""
+    from eden.storage import pg_lease
+
+    while not stop.is_set():
+        try:
+            await asyncio.wait_for(stop.wait(), timeout=renew_every)
+            return
+        except TimeoutError:
+            pass
+        if not await pg_lease.renew(_GUARD_NAME, identity, ttl):
+            logger.warning("sidecars: lost the Postgres guard lease")
+            return
+
+
 async def _release_guard() -> None:
-    global _guard_lock, _guard_extender, _guard_extender_stop
+    global _guard_lock, _guard_extender, _guard_extender_stop, _guard_pg_holder
     if _guard_extender_stop is not None:
         _guard_extender_stop.set()
     if _guard_extender is not None:
@@ -146,6 +199,12 @@ async def _release_guard() -> None:
             await _guard_lock.release()
         except Exception as exc:
             logger.warning("sidecars: guard release failed: %s", exc)
+    if _guard_pg_holder is not None:
+        from eden.storage import pg_lease
+
+        with contextlib.suppress(Exception):
+            await pg_lease.release(_GUARD_NAME, _guard_pg_holder)
+        _guard_pg_holder = None
     _guard_lock = None
     _guard_extender = None
     _guard_extender_stop = None
