@@ -1,0 +1,95 @@
+{
+  "_comment": "Known SQL-vs-DDL violations. Burn this list down to []; do not add to it. Regenerate with `python scripts/sql_schema_guard.py --write-baseline`.",
+  "violations": [
+    {
+      "file": "src/eden/agents/evolution/components.py",
+      "line": 79,
+      "table": "telemetry_events",
+      "column": "id"
+    },
+    {
+      "file": "src/eden/api/routes/optimization.py",
+      "line": 699,
+      "table": "telemetry_events",
+      "column": "correlation_id"
+    },
+    {
+      "file": "src/eden/data_platform/gold_layer.py",
+      "line": 148,
+      "table": "jobs",
+      "column": "description"
+    },
+    {
+      "file": "src/eden/data_platform/gold_layer.py",
+      "line": 148,
+      "table": "jobs",
+      "column": "duration_ms"
+    },
+    {
+      "file": "src/eden/data_platform/gold_layer.py",
+      "line": 148,
+      "table": "jobs",
+      "column": "framework"
+    },
+    {
+      "file": "src/eden/data_platform/gold_layer.py",
+      "line": 148,
+      "table": "jobs",
+      "column": "generated_code"
+    },
+    {
+      "file": "src/eden/data_platform/gold_layer.py",
+      "line": 148,
+      "table": "jobs",
+      "column": "pii_detected"
+    },
+    {
+      "file": "src/eden/data_platform/gold_layer.py",
+      "line": 148,
+      "table": "jobs",
+      "column": "quality_score"
+    },
+    {
+      "file": "src/eden/data_platform/gold_layer.py",
+      "line": 296,
+      "table": "jobs",
+      "column": "description"
+    },
+    {
+      "file": "src/eden/data_platform/gold_layer.py",
+      "line": 296,
+      "table": "jobs",
+      "column": "framework"
+    },
+    {
+      "file": "src/eden/data_platform/gold_layer.py",
+      "line": 296,
+      "table": "jobs",
+      "column": "generated_code"
+    },
+    {
+      "file": "src/eden/data_platform/gold_layer.py",
+      "line": 296,
+      "table": "jobs",
+      "column": "quality_score"
+    },
+    {
+      "file": "src/eden/dsl/_common.py",
+      "line": 414,
+      "table": "telemetry_events",
+      "column": "org_id"
+    },
+    {
+      "file": "src/eden/dsl/_common.py",
+      "line": 430,
+      "table": "telemetry_events",
+      "column": "org_id"
+    },
+    {
+      "file": "src/eden/improvement/settings.py",
+      "line": 21,
+      "table": "organizations",
+      "column": "features"
+    }
+  ]
+}

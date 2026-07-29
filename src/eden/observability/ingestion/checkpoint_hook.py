@@ -20,6 +20,7 @@ import logging
 import time
 from typing import Any
 
+from eden.observability.simple_metrics import Counter, Summary
 from eden.observability.bounded_expiry_cache import (
     BoundedExpiryCache,
     resolve_max_entries,
@@ -46,60 +47,41 @@ _LLM_EVENT_TYPES = frozenset({
 })
 
 
-# ── Prometheus (lazy; no-op when library absent) ───────────────────
-
-
-def _prom():
-    try:
-        from prometheus_client import Counter, Histogram
-        return Counter, Histogram
-    except Exception:
-        return None
+# ── Metrics ───────────────────────────────────────────────────────
+#
+# These used to be ``prometheus_client`` objects behind a no-op shim. Both
+# paths were dark: the library is not a declared dependency, so the shim was
+# usually what ran, and where the library *was* present the counters landed in
+# its default registry, which Eden's hand-rolled ``/metrics`` never reads.
+# ``simple_metrics`` records unconditionally and is exposed by the endpoint.
 
 
 class _Metrics:
-    _instance: _Metrics | None = None
+    """Checkpoint-ingest metrics.
 
-    def __init__(self) -> None:
-        prom = _prom()
-        if prom is None:
-            self.total = _NoopCounter()
-            self.errors = _NoopCounter()
-            self.duration = _NoopHistogram()
-            return
-        Counter, Histogram = prom
-        self.total = Counter(
-            "eden_checkpoint_ingest_total",
-            "Total checkpoint ingest attempts",
-            labelnames=("status",),
-        )
-        self.errors = Counter(
-            "eden_checkpoint_ingest_errors",
-            "Total checkpoint ingest errors",
-        )
-        self.duration = Histogram(
-            "eden_checkpoint_ingest_duration_seconds",
-            "Wall-clock time for checkpoint ingest (hook only)",
-        )
+    Defined as class attributes so the families are constructed exactly once,
+    at import. Re-constructing them would register duplicates and put two
+    ``# HELP`` lines for one family into the exposition, which is precisely
+    the corruption this wave exists to remove.
+    """
+
+    total = Counter(
+        "eden_checkpoint_ingest_total",
+        "Total checkpoint ingest attempts",
+        labelnames=("status",),
+    )
+    errors = Counter(
+        "eden_checkpoint_ingest_errors",
+        "Total checkpoint ingest errors",
+    )
+    duration = Summary(
+        "eden_checkpoint_ingest_duration_seconds",
+        "Wall-clock time for checkpoint ingest (hook only)",
+    )
 
     @classmethod
-    def get(cls) -> _Metrics:
-        if cls._instance is None:
-            cls._instance = _Metrics()
-        return cls._instance
-
-
-class _NoopCounter:
-    def labels(self, **_: Any) -> _NoopCounter:
-        return self
-
-    def inc(self, *_a: Any, **_k: Any) -> None:
-        return None
-
-
-class _NoopHistogram:
-    def observe(self, *_a: Any, **_k: Any) -> None:
-        return None
+    def get(cls) -> type[_Metrics]:
+        return cls
 
 
 # ── Helpers ───────────────────────────────────────────────────────
