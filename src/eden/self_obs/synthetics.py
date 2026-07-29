@@ -256,6 +256,33 @@ async def run_golden_probes(
             if status not in ("ok", "healthy"):
                 failed += 1
             results[name] = detail
+            # KNOWN WRITE AMPLIFICATION — bounded, not fixed.
+            #
+            # This persists a result that is identical for every org
+            # (sign_in_home and gateway_health hit fixed URLs) once per
+            # org per tick. Probe *invocation* was de-duplicated by
+            # run_org_independent_probes; the writes were not, on the
+            # reasoning that a write is cheap.
+            #
+            # It is O(orgs x shared_probes x ticks/day). Measured on
+            # production 2026-07-29 with 9 orgs and zero user telemetry,
+            # eden_synthetic_runs took 4,860 rows/day. The same shape at
+            # 10,000 orgs is ~2.9M identical rows/day from these two
+            # probes alone, against a Neon instance billed for staying
+            # awake — which at that point is the dominant write load on
+            # the database and none of it is user data.
+            #
+            # 2026-07-29 added 14-day retention in workers/cron_tick.py
+            # so the table can no longer grow without bound. That caps
+            # the storage, not the write rate.
+            #
+            # The real fix is a storage-model change: persist the shared
+            # result once per tick (sentinel org, or its own table) and
+            # have GET /synthetics/last fall back to it, or UPSERT one
+            # row per (org, probe) so the dashboard keeps a fresh
+            # timestamp without appending history that carries no
+            # org-specific information. Both change the read path, so
+            # neither was done blind.
             await _persist_run(org_id, name, status, detail)
             continue
         if name == "detect_to_issue":
