@@ -306,6 +306,28 @@ async def _run_forever() -> None:
     # API-only ``background_workers_running()`` flag was wrong here).
     _loop_tasks.update(dict(loops))
 
+    # 0. Process liveness — deliberately NOT leader-gated.
+    #
+    # Every loop above elects through a Redis lock, and Lock.acquire()
+    # fails closed on any Redis error: it logs a warning and returns
+    # False. So when Redis is unreachable — or an Upstash daily command
+    # quota is exhausted — all six loops spin quietly forever while the
+    # container reports RUNNING and nothing anywhere records a problem.
+    # The self-obs heartbeat could not surface it either, because that
+    # heartbeat is itself written by a leader-gated loop.
+    #
+    # In July 2026 that combination hid a 7.4-day total outage of every
+    # background loop. This tick writes one row per interval straight to
+    # Postgres with no lock involved, so "worker process is gone" and
+    # "worker is alive but cannot get leadership" are finally distinct.
+    # One row per 10 minutes is negligible next to what it makes visible.
+    liveness_task = asyncio.create_task(
+        _supervise("worker_liveness", _worker_liveness_loop, stop),
+        name="worker-liveness",
+    )
+    loops.append(("worker_liveness", liveness_task))
+    _loop_tasks["worker_liveness"] = liveness_task
+
     # 7. Quality + closed-loop + anomaly — API disables in-process workers.
     await _start_sidecar_workers()
 
@@ -367,6 +389,53 @@ async def _run_forever() -> None:
         # reporting a stale ``False`` ("hosted then died") after a
         # clean, intentional drain.
         _loop_tasks.clear()
+
+
+async def _worker_liveness_loop(stop: asyncio.Event) -> None:
+    """Write an unconditional ``worker_process`` heartbeat.
+
+    No leader lock, no Redis. This is the one signal that stays true when
+    leader election is broken, which is exactly the case the rest of the
+    self-observability stack cannot report on.
+
+    ``meta.leader_acquire_failures`` carries the running count of failed
+    leader-lock acquisitions, so a reader can tell "worker is alive and
+    leading" from "worker is alive but Redis is refusing it" without
+    shelling into the container.
+    """
+    from eden.workers.leader import leader_acquire_failure_count
+
+    interval = _grid_interval("self_obs_probe_interval_seconds", multiple=600.0)
+    logger.info("worker: liveness loop registered (interval=%.0fs)", interval)
+
+    while not stop.is_set():
+        try:
+            from eden.self_obs.heartbeats import record_heartbeat
+
+            failures = leader_acquire_failure_count()
+            await record_heartbeat(
+                "worker_process",
+                org_id=None,
+                status="healthy" if failures == 0 else "degraded",
+                meta={
+                    "loops": sorted(_loop_tasks),
+                    "leader_acquire_failures": failures,
+                },
+            )
+            if failures:
+                logger.error(
+                    "worker: alive but leader-lock acquisition has failed %d "
+                    "times — every leader-gated loop is idle. Check Redis "
+                    "reachability and any provider command quota.",
+                    failures,
+                )
+        except Exception as exc:
+            logger.warning("worker: liveness heartbeat failed: %s", exc)
+
+        try:
+            await asyncio.wait_for(stop.wait(), timeout=interval)
+        except TimeoutError:
+            continue
 
 
 async def _leader_insights_loop(stop: asyncio.Event) -> None:

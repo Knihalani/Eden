@@ -1275,11 +1275,17 @@ async def health_check():
 
         _pg = await get_postgres_client()
         if _pg is not None:
+            # ``worker_process`` is the unconditional liveness tick (not
+            # leader-gated); ``background_workers`` is the older
+            # leader-gated one. Take the freshest of the two — the
+            # question is "when did we last hear from the worker at all",
+            # and the leader-gated row goes silent when Redis refuses
+            # even though the process is fine.
             heartbeat_age = await _pg.fetchval(
                 """
                 SELECT EXTRACT(EPOCH FROM (NOW() - max(checked_at)))
                 FROM eden_component_heartbeats
-                WHERE component = 'background_workers'
+                WHERE component IN ('worker_process', 'background_workers')
                 """
             )
             heartbeat_age = float(heartbeat_age) if heartbeat_age is not None else None
