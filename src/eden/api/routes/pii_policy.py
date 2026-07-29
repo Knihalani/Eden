@@ -15,7 +15,7 @@ import uuid
 from datetime import UTC, datetime
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Path
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from eden.api.deps import (
@@ -24,11 +24,11 @@ from eden.api.deps import (
     require_org_permission,
     require_path_org_access,
 )
+from eden.api.utils.redact import redact_all
 from eden.api.utils.safe_error import safe_detail
 from eden.data_platform.pii import _DEFAULT_CATEGORIES
 from eden.observability.ingestion.pii_policy import invalidate_policy
 from eden.storage.postgres import get_postgres_client
-from eden.api.utils.redact import redact_all
 
 logger = logging.getLogger(__name__)
 

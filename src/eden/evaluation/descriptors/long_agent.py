@@ -16,7 +16,7 @@ from eden.evaluation.descriptors.signals import (
     normalize_text,
     tokenize,
 )
-from eden.evaluation.descriptors.taxonomy import DescriptorId, DISPLAY_NAMES
+from eden.evaluation.descriptors.taxonomy import DISPLAY_NAMES, DescriptorId
 
 _DEFAULT_WINDOW = 8
 _RETRY_FAIL_THRESHOLD = 3

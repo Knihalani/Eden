@@ -28,12 +28,12 @@ from __future__ import annotations
 import logging
 
 from eden.config import get_settings
-from eden.observability.ingestion.json_body import loads_body
 from eden.observability.ingestion.attribution import Attribution
 from eden.observability.ingestion.errors import (
     BodyTooLargeError,
     SchemaInvalidError,
 )
+from eden.observability.ingestion.json_body import loads_body
 from eden.observability.ingestion.normalizer import normalize_to_telemetry_event
 from eden.observability.telemetry_collector import TelemetryEvent
 

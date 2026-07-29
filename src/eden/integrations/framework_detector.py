@@ -427,7 +427,6 @@ def detect_framework_from_files(files: dict[str, str]) -> FrameworkDetection:
     )
 
 
-from eden.integrations.framework_registry import FRAMEWORK_MARKERS  # noqa: F401 — re-export
 
 __all__ = [
     "FRAMEWORK_MARKERS",

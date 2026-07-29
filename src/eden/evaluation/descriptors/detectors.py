@@ -8,7 +8,8 @@ from __future__ import annotations
 
 import json
 import re
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 from eden.evaluation.descriptors.parse import TrajectoryView, is_failure_outcome
 from eden.evaluation.descriptors.signals import (
@@ -37,7 +38,7 @@ from eden.evaluation.descriptors.signals import (
     tokenize,
     tool_matches_intent,
 )
-from eden.evaluation.descriptors.taxonomy import DescriptorId, DISPLAY_NAMES
+from eden.evaluation.descriptors.taxonomy import DISPLAY_NAMES, DescriptorId
 
 _DEFAULT_LOOP_REPEAT = 3
 _DEFAULT_MAX_TOOL_CALLS = 12

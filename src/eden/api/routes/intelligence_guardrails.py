@@ -274,14 +274,10 @@ async def scan_history(
                 filtered.append(r)
                 continue
             # Legacy rows: action was not persisted — match reason/verdict.
-            if prefix == "injection" and "injection" in reason:
-                filtered.append(r)
-            elif prefix == "pii" and (
+            if prefix == "injection" and "injection" in reason or prefix == "pii" and (
                 "pii" in reason
                 or (r.get("edited_text") and verdict in ("redact", "warn", "block"))
-            ):
-                filtered.append(r)
-            elif reason.startswith(f"action={prefix}"):
+            ) or reason.startswith(f"action={prefix}"):
                 filtered.append(r)
         rows = filtered
     return {"scans": rows, "count": len(rows)}

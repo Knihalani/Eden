@@ -6,12 +6,12 @@ from eden.observability.sampling.apply import (
     should_route_event,
 )
 from eden.observability.sampling.policy import (
+    IntelligenceAwareSamplingPolicy,
     KeepSignals,
     SamplingDecision,
     SamplingProfile,
-    IntelligenceAwareSamplingPolicy,
-    profile_keep_rate,
     get_sampling_policy,
+    profile_keep_rate,
 )
 
 __all__ = [

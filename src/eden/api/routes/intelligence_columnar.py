@@ -28,7 +28,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from fastapi import APIRouter, Body, Depends, Path
+from fastapi import APIRouter, Body, Depends
 from pydantic import BaseModel, Field
 
 from eden.api.deps import get_current_user, require_feature_flag, require_path_org_access

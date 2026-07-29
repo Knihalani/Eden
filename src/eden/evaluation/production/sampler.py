@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import logging
 import uuid
-from datetime import UTC, date, datetime
+from datetime import date
 from typing import Any
 
 logger = logging.getLogger(__name__)

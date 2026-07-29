@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import logging
 import uuid
-import yaml
 from datetime import UTC, datetime
 from typing import Any
 
+import yaml
 from fastapi import APIRouter, Body, Depends, HTTPException, Path, Query
 from pydantic import BaseModel, Field
 
@@ -84,7 +84,6 @@ async def list_nudges(
 
 
 async def _list_org_artifacts(org_id: str):
-    from eden.nudges.engine import NudgeEngine
     from eden.nudges.models import Nudge
     from eden.storage.postgres import get_postgres_client
 

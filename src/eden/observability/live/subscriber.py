@@ -9,7 +9,7 @@ import time
 from collections.abc import AsyncIterator
 from typing import Any
 
-from eden.observability.live.publisher import LiveTracePublisher, _LOCAL_BUFFERS, _local_key
+from eden.observability.live.publisher import _LOCAL_BUFFERS, LiveTracePublisher, _local_key
 from eden.observability.live.stream import (
     LIVE_FINALIZE_GRACE_S,
     channel_name,

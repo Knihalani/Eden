@@ -31,7 +31,7 @@ from __future__ import annotations
 
 import math
 import time
-from typing import Callable
+from collections.abc import Callable
 
 # Floor for any cooldown period. Also the floor for the alignment grid,
 # so a misconfigured near-zero setting cannot produce a busy loop.

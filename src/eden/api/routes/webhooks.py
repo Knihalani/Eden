@@ -17,7 +17,12 @@ from uuid import uuid4
 from fastapi import APIRouter, Body, Depends, HTTPException, Path, status
 from pydantic import BaseModel, Field
 
-from eden.api.deps import get_current_org, get_current_user, require_org_admin, require_path_org_access
+from eden.api.deps import (
+    get_current_org,
+    get_current_user,
+    require_org_admin,
+    require_path_org_access,
+)
 from eden.api.middleware.api_version import CURRENT_VERSION
 from eden.api.middleware.correlation_id import get_correlation_id
 from eden.api.schemas.envelope import APIEnvelope, PaginatedAPIEnvelope

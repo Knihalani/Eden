@@ -11,7 +11,6 @@ and would 401 Clerk-less SDK callers before ingest auth runs.
 
 from __future__ import annotations
 
-from eden.api.utils.redact import redact_all
 import logging
 import uuid
 from datetime import UTC, datetime
@@ -21,6 +20,7 @@ from fastapi import APIRouter, Body, Depends, HTTPException, Path
 from pydantic import BaseModel, Field
 
 from eden.api.deps import get_ingest_auth
+from eden.api.utils.redact import redact_all
 from eden.api.utils.safe_error import safe_detail
 from eden.services.agent_sessions import AgentSessionService
 

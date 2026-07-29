@@ -8,7 +8,12 @@ from typing import Any
 from fastapi import APIRouter, Body, Depends, HTTPException, Path, Query, status
 from pydantic import BaseModel, Field
 
-from eden.api.deps import get_current_user, require_feature_flag, require_org_admin, require_path_org_access
+from eden.api.deps import (
+    get_current_user,
+    require_feature_flag,
+    require_org_admin,
+    require_path_org_access,
+)
 from eden.insights.incidents.clusterer import IncidentClusterer, IncidentStore
 from eden.insights.rca._common import _resolve_incident_cluster
 from eden.insights.rca.analyzer import RootCauseAnalyzer

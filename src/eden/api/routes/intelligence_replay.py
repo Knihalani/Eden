@@ -23,7 +23,6 @@ See ``docs/observability-gap/01-trace-replay.md``.
 
 from __future__ import annotations
 
-from eden.api.utils.redact import redact_all
 import logging
 from typing import Any
 
@@ -37,6 +36,7 @@ from eden.api.deps import (
     require_feature_flag,
     resolve_path_org_access,
 )
+from eden.api.utils.redact import redact_all
 from eden.observability.checkpoint.rewind import CheckpointService
 from eden.observability.custom_properties.service import CustomPropertiesService
 from eden.observability.live_tail.service import LiveTailService
@@ -140,7 +140,6 @@ async def create_replay_session(
     args returns the existing session_id. Sessions with a NULL name are
     always treated as new (the "scratch session" path).
     """
-    import uuid as _uuid
 
     from eden.storage.postgres import get_postgres_client
 

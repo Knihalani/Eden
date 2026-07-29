@@ -17,9 +17,9 @@ from fastapi import APIRouter, Depends, HTTPException, Path
 from pydantic import BaseModel, Field
 
 from eden.api.deps import get_current_user, require_path_org_access
+from eden.api.utils.redact import redact_all
 from eden.api.utils.safe_error import safe_detail
 from eden.storage.postgres import get_postgres_client
-from eden.api.utils.redact import redact_all
 
 logger = logging.getLogger(__name__)
 

@@ -19,7 +19,7 @@ import uuid
 from datetime import UTC, datetime
 from typing import Any
 
-from fastapi import APIRouter, Body, Depends, Path, Query
+from fastapi import APIRouter, Body, Depends, Query
 from pydantic import BaseModel
 
 from eden.api.deps import get_current_user, require_feature_flag, require_path_org_access

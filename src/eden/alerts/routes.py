@@ -8,9 +8,8 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Path, Query
 from pydantic import BaseModel, Field
 
-from eden.alerts.compiler import AlertCompiler
 from eden.alerts import repo
-from eden.alerts.triage_judge import AlertTriageJudge
+from eden.alerts.compiler import AlertCompiler
 from eden.api.deps import (
     _try_resolve_token_payload,
     eden_user_id_from_auth,

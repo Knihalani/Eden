@@ -4,10 +4,8 @@ import base64
 import hashlib
 import io
 import logging
-import os
 import secrets
 from datetime import UTC
-from pathlib import Path
 
 import pyotp
 from fastapi import APIRouter, Depends, File, HTTPException, Request, Response, UploadFile, status
@@ -16,7 +14,6 @@ from qrcode import QRCode
 
 from eden.api.deps import (
     _resolve_token_payload,
-    ensure_clerk_membership,
     ensure_clerk_org_from_session,
     get_current_org,
     get_current_user,
@@ -24,18 +21,13 @@ from eden.api.deps import (
     get_user_by_id,
     log_audit_event,
     require_org_admin,
-    resolve_eden_org_id,
 )
 from eden.api.middleware.security_headers import apply_security_headers
-from eden.api.utils.org_schema import organizations_have_is_personal
 from eden.api.utils.auth import (
     create_access_token,
     hash_password,
     needs_rehash,
     verify_password,
-)
-from eden.api.utils.clerk_client import (
-    extract_user_profile,
 )
 from eden.api.utils.clerk_auth import (
     extract_org_id,
@@ -43,8 +35,12 @@ from eden.api.utils.clerk_auth import (
     is_clerk_payload,
 )
 from eden.api.utils.clerk_client import (
+    extract_user_profile,
+)
+from eden.api.utils.clerk_client import (
     get_user as clerk_get_user,
 )
+from eden.api.utils.org_schema import organizations_have_is_personal
 from eden.api.utils.rate_limit import (
     RateLimitExceeded,
     login_email_limiter,

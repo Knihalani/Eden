@@ -32,8 +32,8 @@ class TrajectoryInterventionGatewayFilter:
 
     def apply(self, request: Any) -> tuple[Any, list[str]]:
         from eden.observability.trace_quality.hooks import (
-            ACTION_CLASS_DEFAULTS,
             _ENHANCED_HOT_PATH_CHECKS,
+            ACTION_CLASS_DEFAULTS,
             _reduce_recommended,
         )
 

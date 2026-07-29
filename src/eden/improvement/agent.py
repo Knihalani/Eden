@@ -8,7 +8,8 @@ import re
 from datetime import datetime
 from typing import Any
 
-from eden.improvement import plans_repo, runs_repo, settings as imp_settings
+from eden.improvement import plans_repo, runs_repo
+from eden.improvement import settings as imp_settings
 from eden.improvement.planner import PlanCandidate, persist_candidates, rank_candidates
 from eden.improvement.sweep_budget import (
     begin_sweep_llm_budget,

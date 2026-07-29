@@ -26,9 +26,10 @@ import logging
 import os
 import shutil
 import tempfile
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Sequence
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -293,7 +294,7 @@ async def run_in_sandbox(
             stdout_b, stderr_b = await asyncio.wait_for(
                 proc.communicate(), timeout=float(timeout_sec),
             )
-        except asyncio.TimeoutError:
+        except TimeoutError:
             timed_out = True
             try:
                 proc.kill()

@@ -85,7 +85,7 @@ _RESTART_BACKOFF_SECONDS = 5.0
 # each hosted loop as it's created, and cleared once ``_run_forever``
 # fully drains on shutdown. Empty in any other process (e.g. the API,
 # which never calls ``_run_forever``) — see ``worker_loops_running``.
-_loop_tasks: dict[str, "asyncio.Task[None]"] = {}
+_loop_tasks: dict[str, asyncio.Task[None]] = {}
 
 
 def worker_loops_running() -> bool | None:

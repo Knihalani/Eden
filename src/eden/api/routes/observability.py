@@ -885,7 +885,6 @@ async def observability_summary(
     subquery is a single GROUP BY / aggregate over ``telemetry_events``
     scoped to the org + window.
     """
-    import asyncio  # Audit 2026-07-02 P-1: parallel subqueries via gather
     from datetime import UTC, datetime, timedelta
 
     from eden.storage import postgres as _pg_module

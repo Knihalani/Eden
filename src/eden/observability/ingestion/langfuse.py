@@ -50,9 +50,9 @@ import contextlib
 import logging
 from typing import Any
 
-from eden.observability.ingestion.json_body import loads_body
 from eden.observability.ingestion.attribution import Attribution
 from eden.observability.ingestion.errors import SchemaInvalidError
+from eden.observability.ingestion.json_body import loads_body
 from eden.observability.ingestion.normalizer import normalize_to_telemetry_event
 from eden.observability.telemetry_collector import TelemetryEvent
 

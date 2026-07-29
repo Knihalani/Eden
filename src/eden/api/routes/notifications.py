@@ -6,8 +6,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
 from eden.api.deps import eden_user_id_from_auth, get_current_user
-from eden.storage.postgres import get_postgres_client
 from eden.api.utils.redact import redact_all
+from eden.storage.postgres import get_postgres_client
 
 logger = logging.getLogger(__name__)
 

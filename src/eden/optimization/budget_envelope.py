@@ -70,7 +70,7 @@ class BudgetEnvelope:
         cls,
         cfg: dict,
         consumption: dict,
-    ) -> "BudgetEnvelope":
+    ) -> BudgetEnvelope:
         """Construct from ``budget_service.get_budget`` + ``get_consumption`` dicts."""
         soft = float(cfg.get("cost_soft_limit_usd", float("inf")))
         hard = float(cfg.get("cost_hard_limit_usd", float("inf")))
@@ -109,7 +109,7 @@ class BudgetEnvelope:
         window: str = "session",
         soft_limit_cents: float = float("inf"),
         hard_limit_cents: float = float("inf"),
-    ) -> "BudgetEnvelope":
+    ) -> BudgetEnvelope:
         """Construct from ``CostTracker.get_stats()`` output.
 
         ``CostTracker`` accumulates in cents; this method converts to USD

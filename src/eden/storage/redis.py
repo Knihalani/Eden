@@ -10,8 +10,6 @@ import functools
 import hashlib
 import json
 import logging
-
-from eden.util.jsonx import dumps as _jsonx_dumps, loads as _jsonx_loads
 import pickle
 import time
 from collections import OrderedDict
@@ -22,6 +20,8 @@ import redis.asyncio as redis
 from redis.asyncio import Redis
 
 from eden.config import get_settings  # noqa: F401  # used by _get_settings()
+from eden.util.jsonx import dumps as _jsonx_dumps
+from eden.util.jsonx import loads as _jsonx_loads
 
 logger = logging.getLogger(__name__)
 settings = None

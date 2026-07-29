@@ -14,10 +14,11 @@ import contextvars
 import json
 import logging
 import uuid
+from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
-from typing import Any, Iterator
+from typing import Any
 
 from eden.util.jsonx import dumps as json_dumps
 
@@ -169,7 +170,9 @@ def schedule_record_from_usage(
         user_id=ctx.get("user_id"),
     )
     try:
-        loop = asyncio.get_running_loop()
+        # Presence check only — bounded_create_task below needs a running
+        # loop, and there is nothing to schedule onto without one.
+        asyncio.get_running_loop()
     except RuntimeError:
         return
     from eden.async_tasks import bounded_create_task

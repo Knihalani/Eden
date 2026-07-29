@@ -7,7 +7,6 @@ GET  /orgs/{org_id}/observability/patterns/{pattern_id} — pattern detail
 from __future__ import annotations
 
 import logging
-from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query
 from pydantic import BaseModel

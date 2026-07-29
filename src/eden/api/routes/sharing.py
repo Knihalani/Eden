@@ -15,7 +15,6 @@ require a valid user (org_member).
 
 from __future__ import annotations
 
-from eden.api.utils.redact import redact_all
 import logging
 from typing import Any
 
@@ -27,6 +26,7 @@ from eden.api.deps import (
     get_current_user,
     resolve_path_org_access,
 )
+from eden.api.utils.redact import redact_all
 from eden.observability.sharing import (
     DEFAULT_EXPIRY_DAYS,
     MAX_EXPIRY_DAYS,

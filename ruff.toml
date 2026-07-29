@@ -5,11 +5,25 @@ target-version = "py312"
 select = ["E", "F", "W", "I", "N", "UP", "B", "C4", "SIM"]
 ignore = [
     "E501",
-    # B008 fires on FastAPI's `x: T = Depends(...)` idiom in route
-    # handlers and on Pydantic `Field(default_factory=...)`. Both are
-    # canonical and safe — the default is evaluated per-request, not
-    # once at import time. We only flag it in non-API code paths.
-    "B008",
+]
+
+[lint.flake8-bugbear]
+# B008 used to be ignored wholesale because it fires on FastAPI's
+# `x: T = Depends(...)` idiom and on Pydantic `Field(...)`. Both are
+# canonical and safe — the default is resolved per-request, not once at
+# import. But a blanket ignore also threw away the real cases B008
+# exists for (a genuinely mutable default shared across calls), and the
+# `--select F,B` CI gate cannot see an `ignore` entry anyway.
+#
+# Naming the safe callables instead keeps the rule switched on and
+# accurate.
+extend-immutable-calls = [
+    "fastapi.Depends", "fastapi.Query", "fastapi.Path", "fastapi.Body",
+    "fastapi.Header", "fastapi.Cookie", "fastapi.File", "fastapi.Form",
+    "fastapi.Security",
+    "Depends", "Query", "Path", "Body", "Header", "Cookie", "File",
+    "Form", "Security",
+    "pydantic.Field", "Field",
 ]
 
 [lint.per-file-ignores]

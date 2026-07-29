@@ -158,7 +158,7 @@ async def _previous_statuses_batch(
     ``None`` (same as ``_previous_status`` when no prior heartbeat).
     """
     out: dict[str, dict[str, str | None]] = {
-        oid: {c: None for c in components} for oid in org_ids
+        oid: dict.fromkeys(components) for oid in org_ids
     }
     if not org_ids or not components:
         return out

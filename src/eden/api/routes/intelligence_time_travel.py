@@ -231,8 +231,8 @@ async def list_forks(
     The "forks of this trace" panel. Sorted by
     ``created_at DESC`` (newest first).
     """
-    from eden.time_travel._common import _list_forks_for_trace
     from eden.storage.postgres import get_postgres_client
+    from eden.time_travel._common import _list_forks_for_trace
 
     if await get_postgres_client() is None:
         raise HTTPException(status_code=503, detail="Postgres unavailable")

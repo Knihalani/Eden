@@ -34,8 +34,8 @@ from eden.api.deps import (
     require_feature_flag,
     require_org_admin,
     require_org_member,
-    resolve_eden_org_id,
     require_path_org_access,
+    resolve_eden_org_id,
 )
 from eden.api.utils.redact import redact_all
 from eden.services.observability import get_mcp_service

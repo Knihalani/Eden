@@ -29,7 +29,7 @@ def grade_datapoint(
 
 
 def aggregate_grades(grades: list[str]) -> dict[str, int]:
-    out = {g: 0 for g in _GRADES}
+    out = dict.fromkeys(_GRADES, 0)
     for g in grades:
         if g in out:
             out[g] += 1

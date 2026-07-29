@@ -595,7 +595,7 @@ async def list_portal_agents(
         )
 
     # SDK-only agents: telemetry has agent_id but no registry row yet.
-    for agent_id, metrics in metrics_by_id.items():
+    for agent_id in metrics_by_id:
         if not agent_id or agent_id in seen:
             continue
         seen.add(agent_id)

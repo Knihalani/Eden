@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import logging
 from typing import Any
-from uuid import UUID, uuid4
+from uuid import uuid4
 
 from eden.nudges.models import Nudge
 from eden.nudges.trigger_eval import evaluate_trigger
@@ -203,14 +203,14 @@ def apply_nudge_to_request(nudge: Nudge, request: Any) -> tuple[Any, str, bool]:
         blocked = list(getattr(request, "blocked_tools", None) or [])
         if tool and tool not in blocked:
             blocked.append(tool)
-        setattr(request, "blocked_tools", blocked)
+        request.blocked_tools = blocked
         return request, f"nudge_tool_block:{nudge.id}", True
     if nudge.action_type == "tool_rewrite":
         rewrites = dict(getattr(request, "tool_rewrites", None) or {})
         tool = str((nudge.evidence or {}).get("tool") or "")
         if tool:
             rewrites[tool] = nudge.content
-        setattr(request, "tool_rewrites", rewrites)
+        request.tool_rewrites = rewrites
         return request, f"nudge_tool_rewrite:{nudge.id}", True
     return request, f"nudge_matched:{nudge.id}", False
 

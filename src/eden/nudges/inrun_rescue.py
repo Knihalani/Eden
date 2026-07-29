@@ -6,7 +6,6 @@ import logging
 from typing import Any
 
 from eden.nudges.engine import NudgeEngine, apply_nudge_to_prompt
-from eden.nudges.models import Nudge
 from eden.preview.gates import artifacts_inrun_enabled
 
 logger = logging.getLogger(__name__)

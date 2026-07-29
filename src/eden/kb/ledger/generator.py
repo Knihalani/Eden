@@ -7,8 +7,6 @@ import logging
 from typing import Any
 from uuid import uuid4
 
-from eden.kb.ledger.models import LedgerEntry
-
 logger = logging.getLogger(__name__)
 
 
