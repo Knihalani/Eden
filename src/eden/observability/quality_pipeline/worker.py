@@ -47,6 +47,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
 
+from eden.observability.simple_metrics import Counter, Gauge, Summary
 from eden.storage.empty_cooldown import aligned_deadline
 
 logger = logging.getLogger(__name__)
@@ -67,75 +68,42 @@ except Exception:  # pragma: no cover - supplementaries not on path
 STEP_NAMES: tuple[str, ...] = ("tas", "loop", "quality", "reasoning", "detection")
 
 
-# ── Prometheus (lazy import; tests skip when missing) ──────────────
-
-
-def _prom():
-    try:
-        from prometheus_client import Counter, Gauge, Histogram
-        return Counter, Gauge, Histogram
-    except Exception:
-        return None
+# ── Metrics ───────────────────────────────────────────────────────
+#
+# Formerly ``prometheus_client`` behind a no-op shim, which meant these
+# numbers were either not recorded at all (library absent — it is not a
+# declared dependency) or recorded into a registry that Eden's hand-rolled
+# ``/metrics`` endpoint never reads. Either way the quality pipeline had no
+# observable throughput.
 
 
 class _Metrics:
-    """Lazy Prometheus counter wrappers.
+    """Quality-pipeline worker metrics.
 
-    Each metric is created once per process. On environments
-    without ``prometheus_client`` the wrappers fall back to a
-    no-op shim so the worker still runs.
+    Class attributes, so the families are constructed exactly once at import.
+    The previous lazy singleton would re-register on any reset, and duplicate
+    families produce duplicate ``# HELP`` lines — an exposition that
+    ``expfmt``-based consumers reject outright.
     """
-    _instance: _Metrics | None = None
 
-    def __init__(self) -> None:
-        prom = _prom()
-        if prom is None:
-            self.traces_total = _NoopCounter()
-            self.step_duration = _NoopHistogram()
-            self.watermark_age = _NoopGauge()
-            return
-        Counter, Gauge, Histogram = prom
-        self.traces_total = Counter(
-            "quality_pipeline_traces_total",
-            "Total traces processed by the sidecar worker",
-            labelnames=("status",),
-        )
-        self.step_duration = Histogram(
-            "quality_pipeline_step_duration_seconds",
-            "Per-step wall-clock latency",
-            labelnames=("step",),
-        )
-        self.watermark_age = Gauge(
-            "quality_pipeline_watermark_age_seconds",
-            "Seconds since the last persisted watermark",
-        )
+    traces_total = Counter(
+        "quality_pipeline_traces_total",
+        "Total traces processed by the sidecar worker",
+        labelnames=("status",),
+    )
+    step_duration = Summary(
+        "quality_pipeline_step_duration_seconds",
+        "Per-step wall-clock latency",
+        labelnames=("step",),
+    )
+    watermark_age = Gauge(
+        "quality_pipeline_watermark_age_seconds",
+        "Seconds since the last persisted watermark",
+    )
 
     @classmethod
-    def get(cls) -> _Metrics:
-        if cls._instance is None:
-            cls._instance = _Metrics()
-        return cls._instance
-
-
-class _NoopCounter:
-    def labels(self, **_: Any) -> _NoopCounter:
-        return self
-
-    def inc(self, *_a: Any, **_k: Any) -> None:
-        return None
-
-
-class _NoopHistogram:
-    def labels(self, **_: Any) -> _NoopHistogram:
-        return self
-
-    def observe(self, *_a: Any, **_k: Any) -> None:
-        return None
-
-
-class _NoopGauge:
-    def set(self, *_a: Any, **_k: Any) -> None:
-        return None
+    def get(cls) -> type[_Metrics]:
+        return cls
 
 
 # ── Worker state ──────────────────────────────────────────────────

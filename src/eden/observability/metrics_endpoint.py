@@ -21,6 +21,8 @@ from __future__ import annotations
 
 import hmac
 import logging
+from collections.abc import Iterable, Mapping, Sequence
+from typing import Any
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Response, status
 
@@ -31,28 +33,109 @@ logger = logging.getLogger(__name__)
 router = APIRouter(tags=["observability"])
 
 
-def _render(name: str, *, help_text: str, value: float, labels: dict[str, str] | None = None) -> str:
-    label_str = ""
-    if labels:
-        kv = ",".join(f'{k}="{v}"' for k, v in sorted(labels.items()))
-        label_str = f"{{{kv}}}"
-    return f"# HELP {name} {help_text}\n# TYPE {name} gauge\n{name}{label_str} {value}\n"
+#: One sample within a family: ``(name_suffix, labels, value)``. The suffix is
+#: ``""`` for simple families and ``_bucket``/``_sum``/``_count`` for the
+#: composite types.
+Sample = tuple[str, Mapping[str, str] | None, float]
 
 
-def _render_histogram(name: str, *, help_text: str, buckets_ms: list, row: dict) -> str:
-    """Render a single histogram row as Prometheus text format.
+def _escape_help(text: str) -> str:
+    """Escape a HELP string: backslash and newline only, per the format."""
+    return text.replace("\\", r"\\").replace("\n", r"\n")
 
-    ``row`` must contain keys for each bucket boundary in ``buckets_ms``
-    plus ``+Inf``, ``_sum``, and ``_count``.
+
+def _escape_label(value: str) -> str:
+    """Escape a label *value*: backslash, double-quote and newline."""
+    return value.replace("\\", r"\\").replace('"', r"\"").replace("\n", r"\n")
+
+
+def _labels_to_str(labels: Mapping[str, str] | None) -> str:
+    if not labels:
+        return ""
+    kv = ",".join(f'{k}="{_escape_label(str(v))}"' for k, v in sorted(labels.items()))
+    return f"{{{kv}}}"
+
+
+def _render_family(
+    name: str,
+    *,
+    help_text: str,
+    metric_type: str,
+    samples: Iterable[Sample],
+) -> str:
+    """Render one metric family with ``# HELP``/``# TYPE`` emitted exactly once.
+
+    The text exposition format allows only a single HELP and TYPE line per
+    metric family. Emitting them per sample — which is what the previous
+    per-sample renderer did inside a loop — makes the output invalid:
+    ``expfmt.TextParser`` (used by Pushgateway and ``promtool check metrics``)
+    aborts with *"second HELP line for metric name"*, so a whole scrape is
+    rejected on account of one repeated family.
+
+    Every sample of a family must also carry a *distinct* label set. Emitting
+    the same series twice is not merely untidy — one of the two values is
+    silently discarded, which is how the per-route latency histogram came to
+    report a single arbitrary route's numbers as the whole service's.
     """
-    lines = [f"# HELP {name} {help_text}", f"# TYPE {name} histogram"]
-    for b in buckets_ms:
-        key = f"{b}"
-        lines.append(f'{name}_bucket{{le="{b}"}} {row.get(key, 0)}')
-    lines.append(f'{name}_bucket{{le="+Inf"}} {row.get("+Inf", 0)}')
-    lines.append(f"{name}_sum {row.get('_sum', 0)}")
-    lines.append(f"{name}_count {int(row.get('_count', 0))}")
+    lines = [
+        f"# HELP {name} {_escape_help(help_text)}",
+        f"# TYPE {name} {metric_type}",
+    ]
+    for suffix, labels, value in samples:
+        lines.append(f"{name}{suffix}{_labels_to_str(labels)} {value}")
     return "\n".join(lines) + "\n"
+
+
+def _render(name: str, *, help_text: str, value: float, labels: dict[str, str] | None = None) -> str:
+    """Render a single-sample gauge family."""
+    return _render_family(
+        name,
+        help_text=help_text,
+        metric_type="gauge",
+        samples=[("", labels, value)],
+    )
+
+
+def _render_summary(name: str, *, help_text: str, sum_value: float, count: int) -> str:
+    """Render an unlabelled summary (sum + count) as one family."""
+    return _render_family(
+        name,
+        help_text=help_text,
+        metric_type="summary",
+        samples=[("_sum", None, sum_value), ("_count", None, count)],
+    )
+
+
+def _render_histogram(
+    name: str, *, help_text: str, buckets_ms: Sequence[float], rows: Iterable[Mapping[str, Any]]
+) -> str:
+    """Render every histogram row as a single family.
+
+    Each row is one ``(method, route)`` series. Those two labels used to be
+    dropped, which collapsed every route onto the identical series — with N
+    routes the same bucket line was emitted N times and only one survived
+    parsing. They are now carried through, so ``histogram_quantile`` computes
+    a real per-route p95/p99.
+
+    Rows must hold cumulative counts keyed by bucket boundary, plus ``+Inf``,
+    ``_sum`` and ``_count``.
+    """
+    samples: list[Sample] = []
+    for row in rows:
+        base = {}
+        if row.get("method"):
+            base["method"] = str(row["method"])
+        if row.get("route"):
+            base["route"] = str(row["route"])
+        buckets = row.get("buckets") or {}
+        for b in buckets_ms:
+            samples.append(("_bucket", {**base, "le": str(b)}, buckets.get(f"{b}", 0)))
+        samples.append(("_bucket", {**base, "le": "+Inf"}, buckets.get("+Inf", 0)))
+        samples.append(("_sum", base or None, row.get("sum_ms", 0)))
+        samples.append(("_count", base or None, int(row.get("count", 0))))
+    return _render_family(
+        name, help_text=help_text, metric_type="histogram", samples=samples
+    )
 
 
 async def _check_metrics_auth(authorization: str | None = Header(default=None)) -> None:
@@ -89,28 +172,33 @@ async def metrics() -> Response:
     try:
         from eden.llm.client import get_provider_error_counts
         counts = get_provider_error_counts()
-        for provider, n in counts.items():
-            lines.append(
-                _render(
-                    "eden_llm_provider_errors_total",
-                    help_text="Cumulative LLM provider errors by provider.",
-                    value=n,
-                    labels={"provider": provider},
-                )
+        lines.append(
+            _render_family(
+                "eden_llm_provider_errors_total",
+                help_text="Cumulative LLM provider errors by provider.",
+                # Cumulative and ``_total``-suffixed: a counter, not the gauge
+                # the per-sample renderer hard-coded.
+                metric_type="counter",
+                samples=[
+                    ("", {"provider": provider}, n) for provider, n in sorted(counts.items())
+                ],
             )
+        )
     except Exception as exc:  # noqa: BLE001
         logger.debug("metrics: failed to read provider error counts: %s", exc)
 
     # SLO targets (so Grafana panels can reference the published target)
-    for slo in published_slos():
-        lines.append(
-            _render(
-                "eden_slo_target",
-                help_text="Published SLO target as a fraction (0.0 - 1.0).",
-                value=slo["target"],
-                labels={"slo": slo["name"], "category": slo["category"]},
-            )
+    lines.append(
+        _render_family(
+            "eden_slo_target",
+            help_text="Published SLO target as a fraction (0.0 - 1.0).",
+            metric_type="gauge",
+            samples=[
+                ("", {"slo": slo["name"], "category": slo["category"]}, slo["target"])
+                for slo in published_slos()
+            ],
         )
+    )
 
     # Audit (June 21 2026) — expose the request latency histogram from
     # ``api/middleware/latency.py`` so Prometheus can compute p95/p99
@@ -121,18 +209,14 @@ async def metrics() -> Response:
         from eden.api.middleware.latency import get_metrics_snapshot
 
         snap = get_metrics_snapshot()
-        buckets_ms = snap.get("buckets_ms") or []
-        for r in snap.get("rows") or []:
-            raw = r.get("buckets") or {}
-            row = {**raw, "_sum": r.get("sum_ms", 0), "_count": r.get("count", 0)}
-            lines.append(
-                _render_histogram(
-                    "eden_request_duration_ms",
-                    help_text="Per-route request duration in milliseconds.",
-                    buckets_ms=buckets_ms,
-                    row=row,
-                )
+        lines.append(
+            _render_histogram(
+                "eden_request_duration_ms",
+                help_text="Per-route request duration in milliseconds.",
+                buckets_ms=snap.get("buckets_ms") or [],
+                rows=snap.get("rows") or [],
             )
+        )
     except Exception as exc:  # noqa: BLE001
         logger.debug("metrics: failed to render latency histogram: %s", exc)
 
@@ -318,6 +402,43 @@ async def metrics() -> Response:
         )
     except Exception as exc:  # noqa: BLE001
         logger.debug("metrics: failed to read ingest hot-path stats: %s", exc)
+
+    # Events Eden discarded, by stage and reason. Seeded at zero so "no drops"
+    # is an assertion rather than an absent series.
+    try:
+        from eden.observability.drop_metrics import get_drop_metrics
+
+        lines.append(
+            _render_family(
+                "eden_events_dropped_total",
+                help_text="Events discarded by Eden, by pipeline stage and reason.",
+                metric_type="counter",
+                samples=[
+                    ("", {"stage": stage, "reason": reason}, value)
+                    for (stage, reason), value in sorted(get_drop_metrics().items())
+                ],
+            )
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("metrics: failed to read drop counters: %s", exc)
+
+    # Families registered through ``simple_metrics`` (checkpoint ingest hook,
+    # quality-pipeline worker). These were previously written into
+    # prometheus_client's default registry, which this endpoint never read.
+    try:
+        from eden.observability.simple_metrics import iter_families
+
+        for family in iter_families():
+            lines.append(
+                _render_family(
+                    family.name,
+                    help_text=family.help_text,
+                    metric_type=family.metric_type,
+                    samples=family.samples(),
+                )
+            )
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("metrics: failed to render simple_metrics families: %s", exc)
 
     body = "".join(lines)
     return Response(content=body, media_type="text/plain; version=0.0.4; charset=utf-8")

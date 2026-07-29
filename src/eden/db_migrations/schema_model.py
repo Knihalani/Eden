@@ -190,9 +190,9 @@ def sql_statements(path: Path) -> Iterator[str]:
         return
 
     upgrade: ast.FunctionDef | ast.AsyncFunctionDef | None = None
-    for node in tree.body:
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == "upgrade":
-            upgrade = node
+    for top in tree.body:
+        if isinstance(top, (ast.FunctionDef, ast.AsyncFunctionDef)) and top.name == "upgrade":
+            upgrade = top
             break
     if upgrade is None:
         return
@@ -262,9 +262,9 @@ def _from_op_api(name: str, node: ast.Call) -> str | None:
         if len(node.args) > 1 and isinstance(node.args[1], ast.Call):
             inner = node.args[1]
             if inner.args and isinstance(inner.args[0], ast.Constant):
-                col = inner.args[0].value
-                if isinstance(col, str):
-                    return f"ALTER TABLE {table} ADD COLUMN {col} TEXT"
+                col_value = inner.args[0].value
+                if isinstance(col_value, str):
+                    return f"ALTER TABLE {table} ADD COLUMN {col_value} TEXT"
         return None
 
     if name == "create_table":
