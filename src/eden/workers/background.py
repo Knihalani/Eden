@@ -11,6 +11,8 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
+import os
+import socket
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -31,6 +33,16 @@ logger = logging.getLogger(__name__)
 # here, not imported, so each module can be tuned independently and
 # so tests can patch this module's value without reaching into main).
 _RESTART_BACKOFF_SECONDS = 5.0
+
+#: Bundle leader lock name. Rotated 2026-07-29: the previous key
+#: (``api-background``) was held indefinitely by a process nothing could
+#: reach — every acquire came back "refused" with a live renewer keeping
+#: the 60s TTL alive, across a full service restart and several fresh
+#: pods, so `_start_all` never ran and the whole in-process fleet stayed
+#: down. Rotating the key is the standard remedy for a poisoned lock; the
+#: holder identity written into the token below is what makes the next
+#: occurrence diagnosable instead of a mystery.
+_BUNDLE_LOCK_NAME = "api-background-v2"
 
 #: Last outcome + consecutive count per lock, for /health. Costs nothing:
 #: it records what the acquire call already returned rather than spending
@@ -180,9 +192,10 @@ class BackgroundWorkers:
             )
         except Exception:
             interval = 120.0
-        lock = Lock(
-            "api-background", ttl=_DEFAULT_LOCK_TTL_SECONDS, prefix="eden:leader"
-        )
+        lock = Lock(_BUNDLE_LOCK_NAME, ttl=_DEFAULT_LOCK_TTL_SECONDS, prefix="eden:leader")
+        # Identify the holder. A refused lock is otherwise a dead end —
+        # you know someone has it and nothing more.
+        identity = f"{socket.gethostname()}:{os.getpid()}"
 
         while not self._stop.is_set():
             # Bounded for the same reason as run_if_leader's acquire: an
@@ -194,7 +207,8 @@ class BackgroundWorkers:
             # failure this module is supposed to prevent.
             try:
                 acquired = await asyncio.wait_for(
-                    lock.acquire(), timeout=_ACQUIRE_TIMEOUT_SECONDS
+                    lock.acquire(token=identity),
+                    timeout=_ACQUIRE_TIMEOUT_SECONDS,
                 )
             except TimeoutError:
                 logger.error(
@@ -203,13 +217,13 @@ class BackgroundWorkers:
                     _ACQUIRE_TIMEOUT_SECONDS,
                     interval,
                 )
-                _note_acquire_outcome("api-background", "timeout")
+                _note_acquire_outcome(_BUNDLE_LOCK_NAME, "timeout")
                 acquired = False
             except Exception as exc:
                 logger.error(
                     "background: leader acquire raised: %s", exc, exc_info=True
                 )
-                _note_acquire_outcome("api-background", f"raised:{type(exc).__name__}")
+                _note_acquire_outcome(_BUNDLE_LOCK_NAME, f"raised:{type(exc).__name__}")
                 acquired = False
             else:
                 # ``acquire`` returning False (rather than hanging or
@@ -218,9 +232,20 @@ class BackgroundWorkers:
                 # which of the three happened is what separates "someone
                 # else is leader" from "Redis is accepting reads and
                 # refusing writes" without spending a probe command.
-                _note_acquire_outcome(
-                    "api-background", "acquired" if acquired else "refused"
-                )
+                if acquired:
+                    _note_acquire_outcome(_BUNDLE_LOCK_NAME, "acquired")
+                else:
+                    # Name the holder. One GET, and only when refused, so
+                    # the healthy path spends nothing.
+                    holder = None
+                    with contextlib.suppress(Exception):
+                        holder = await asyncio.wait_for(
+                            lock.holder(), timeout=5.0
+                        )
+                    _note_acquire_outcome(
+                        _BUNDLE_LOCK_NAME,
+                        f"refused(held_by={holder or 'unknown'})",
+                    )
 
             if acquired:
                 extender_stop = asyncio.Event()
