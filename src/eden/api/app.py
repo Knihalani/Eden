@@ -1276,7 +1276,15 @@ async def health_check():
     except TimeoutError:
         redis_status = "timeout"
     except Exception as exc:
-        redis_status = f"error: {type(exc).__name__}"
+        # Include the message, not just the type. A bare "ResponseError"
+        # is indistinguishable between an auth failure and a provider
+        # quota rejection ("max daily request limit exceeded"), and those
+        # need completely different responses. Truncated and passed
+        # through redact_all — the text comes from the provider, not us.
+        from eden.api.utils.redact import redact_all as _redact
+
+        detail = _redact(str(exc))[:160]
+        redis_status = f"error: {type(exc).__name__}: {detail}".rstrip(": ")
     if overall == "healthy" and redis_status not in ("connected", "not_configured"):
         overall = "degraded"
 
