@@ -93,7 +93,42 @@ northflank scale service \
   --project "$PROJECT" --service "$SERVICE" \
   -i '{"instances":1,"deploymentPlan":"nf-compute-50"}'
 
-# 3 ─ verify ----------------------------------------------------------
+# 3 ─ runtime environment ---------------------------------------------
+# 51 of the 62 plain-value variables northflank.yml declares were never
+# set on the service, so production ran the code default instead. Most
+# are harmless (30 have a code default equal to the manifest value —
+# every Redis command-conservation knob is in that group, which is why
+# the drift never showed up in Redis behaviour). Ten are not:
+#
+#   EDEN_PRODUCTION           1        -> was false. Gates
+#                                        strict_startup_checks, so
+#                                        startup failures were warnings.
+#   USE_MINIMAX               false    -> was true, with no MiniMax
+#                                        credential in any secret group.
+#   TYPESENSE_ENABLED         false    -> was true, with no Typesense
+#                                        host or key in any secret group.
+#   CLICKHOUSE_URL            tinybird -> was http://localhost:8123
+#   TINYBIRD_API_HOST         tinybird -> was empty
+#   SENTRY_ENVIRONMENT        production -> was development
+#   SENTRY_TRACES_SAMPLE_RATE 0.1      -> was 0.0 (no perf traces)
+#   CLERK_JWKS_URL            set      -> was empty
+#   GITHUB_APP_SLUG           set      -> was empty
+#   MINIMAX_MODEL             M3       -> was the stale M2.7 default
+#
+# This route SETS rather than merges, so the payload must contain every
+# variable. build_nf_env_payload.py unions the live set with the
+# manifest's plain values and refuses to run if it reads the live set as
+# empty. Secret-backed variables are excluded — the 31 secret groups
+# already wired to the service deliver those.
+say "3/3  Setting the runtime environment (62 vars: 11 live + 51 from manifest)"
+northflank get service --project "$PROJECT" --service "$SERVICE" -o json \
+  > /tmp/nf-live-for-env.json
+python3 "$HERE/scripts/build_nf_env_payload.py" \
+  /tmp/nf-live-for-env.json /tmp/nf-env-payload.json
+northflank update service runtime-environment \
+  --project "$PROJECT" --service "$SERVICE" -f /tmp/nf-env-payload.json
+
+# 4 ─ verify ----------------------------------------------------------
 say "Verifying"
 sleep 5
 northflank get service --project "$PROJECT" --service "$SERVICE" -o json \
@@ -102,10 +137,14 @@ import json,sys
 s=json.load(sys.stdin); s=s.get("service",s)
 plan=(s.get("billing") or {}).get("deploymentPlan")
 hc=s.get("healthChecks")
+env=s.get("runtimeEnvironment") or {}
+grace=(s.get("deployment") or {}).get("gracePeriodSeconds")
 print("  plan        :", plan, "OK" if plan=="nf-compute-50" else "<-- UNEXPECTED")
-print("  healthChecks:", json.dumps(hc)[:200] if hc else "still null  <-- FAILED")
-ok = plan=="nf-compute-50" and bool(hc)
-print("\n  result:", "both applied" if ok else "at least one did not take - check above")
+print("  gracePeriod :", grace, "OK" if grace==60 else "<-- UNEXPECTED")
+print("  healthChecks:", len(hc or []), "configured" if hc else "still null  <-- FAILED")
+print("  env vars    :", len(env), "OK" if len(env)>=62 else "<-- fewer than expected")
+ok = plan=="nf-compute-50" and bool(hc) and len(env)>=62
+print("\n  result:", "all applied" if ok else "something did not take - check above")
 sys.exit(0 if ok else 1)
 '
 
