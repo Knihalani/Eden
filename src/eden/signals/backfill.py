@@ -246,7 +246,9 @@ class SignalBackfillWorker:
         new_done = traces_done
         for row in rows:
             tid = str(row["trace_id"])
-            await investigate_trace(org_id, tid)
+            # Scope to this job's signal. Without it the backfill fans out
+            # across every enabled signal for the org.
+            await investigate_trace(org_id, tid, signal_id=signal_id)
             new_done += 1
 
         total = int(job["traces_total"] or 0)
