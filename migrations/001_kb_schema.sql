@@ -3,13 +3,18 @@
 
 -- Enable extensions
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
-CREATE EXTENSION IF NOT EXISTS "pgvector";
+-- The extension is named "vector"; "pgvector" is the name of the
+-- project, not of the extension, and no such extension exists. The
+-- wrong name made this statement fail even with IF NOT EXISTS, which
+-- is what crash-looped the API under EDEN_PRODUCTION=1: initialize_kb
+-- raises there instead of warning. Alembic 001 already had it right.
+CREATE EXTENSION IF NOT EXISTS "vector";
 
 -- ============================================================================
 -- LAYER 1: EPISODIC MEMORY
 -- ============================================================================
 
-CREATE TABLE jobs (
+CREATE TABLE IF NOT EXISTS jobs (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     job_id VARCHAR(255) UNIQUE NOT NULL,
 
@@ -52,23 +57,23 @@ CREATE TABLE jobs (
 );
 
 -- Indexes for episodic memory
-CREATE INDEX idx_jobs_job_id ON jobs (job_id);
-CREATE INDEX idx_jobs_status ON jobs (status);
-CREATE INDEX idx_jobs_outcome ON jobs (outcome_tier);
-CREATE INDEX idx_jobs_env_class ON jobs (environment_class);
-CREATE INDEX idx_jobs_created ON jobs (created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_jobs_job_id ON jobs (job_id);
+CREATE INDEX IF NOT EXISTS idx_jobs_status ON jobs (status);
+CREATE INDEX IF NOT EXISTS idx_jobs_outcome ON jobs (outcome_tier);
+CREATE INDEX IF NOT EXISTS idx_jobs_env_class ON jobs (environment_class);
+CREATE INDEX IF NOT EXISTS idx_jobs_created ON jobs (created_at DESC);
 
 -- Full-text search on request
-CREATE INDEX idx_jobs_fts ON jobs USING GIN (to_tsvector('english', request::text));
+CREATE INDEX IF NOT EXISTS idx_jobs_fts ON jobs USING GIN (to_tsvector('english', request::text));
 
 -- Time-series optimization
-CREATE INDEX idx_jobs_created_desc ON jobs (created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_jobs_created_desc ON jobs (created_at DESC);
 
 -- ============================================================================
 -- LAYER 2: SEMANTIC MEMORY — TEMPORAL KNOWLEDGE GRAPH
 -- ============================================================================
 
-CREATE TABLE graph_entities (
+CREATE TABLE IF NOT EXISTS graph_entities (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 
     -- Entity identification
@@ -90,7 +95,7 @@ CREATE TABLE graph_entities (
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE TABLE entity_links (
+CREATE TABLE IF NOT EXISTS entity_links (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 
     -- Link identification
@@ -111,25 +116,25 @@ CREATE TABLE entity_links (
 );
 
 -- Graph indexes
-CREATE INDEX idx_ge_type ON graph_entities (entity_type);
-CREATE INDEX idx_ge_name ON graph_entities (name);
-CREATE INDEX idx_ge_valid_at ON graph_entities (valid_at);
-CREATE INDEX idx_ge_recorded_at ON graph_entities (recorded_at);
-CREATE INDEX idx_ge_embedding ON graph_entities USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100);
+CREATE INDEX IF NOT EXISTS idx_ge_type ON graph_entities (entity_type);
+CREATE INDEX IF NOT EXISTS idx_ge_name ON graph_entities (name);
+CREATE INDEX IF NOT EXISTS idx_ge_valid_at ON graph_entities (valid_at);
+CREATE INDEX IF NOT EXISTS idx_ge_recorded_at ON graph_entities (recorded_at);
+CREATE INDEX IF NOT EXISTS idx_ge_embedding ON graph_entities USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100);
 
-CREATE INDEX idx_el_source ON entity_links (source_id);
-CREATE INDEX idx_el_target ON entity_links (target_id);
-CREATE INDEX idx_el_type ON entity_links (edge_type);
-CREATE INDEX idx_el_valid_at ON entity_links (valid_at);
+CREATE INDEX IF NOT EXISTS idx_el_source ON entity_links (source_id);
+CREATE INDEX IF NOT EXISTS idx_el_target ON entity_links (target_id);
+CREATE INDEX IF NOT EXISTS idx_el_type ON entity_links (edge_type);
+CREATE INDEX IF NOT EXISTS idx_el_valid_at ON entity_links (valid_at);
 
 -- Full-text search on entity properties
-CREATE INDEX idx_ge_props_fts ON graph_entities USING GIN (to_tsvector('english', properties::text));
+CREATE INDEX IF NOT EXISTS idx_ge_props_fts ON graph_entities USING GIN (to_tsvector('english', properties::text));
 
 -- ============================================================================
 -- LAYER 3: PROCEDURAL MEMORY — SKILL LIBRARY
 -- ============================================================================
 
-CREATE TABLE skills (
+CREATE TABLE IF NOT EXISTS skills (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 
     -- Identification
@@ -160,16 +165,16 @@ CREATE TABLE skills (
 );
 
 -- Skill indexes
-CREATE INDEX idx_skills_embedding ON skills USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100);
-CREATE INDEX idx_skills_env_class ON skills USING GIN (applicable_env_classes);
-CREATE INDEX idx_skills_framework ON skills USING GIN (applicable_frameworks);
-CREATE INDEX idx_skills_archivist ON skills (archivist_reviewed);
+CREATE INDEX IF NOT EXISTS idx_skills_embedding ON skills USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100);
+CREATE INDEX IF NOT EXISTS idx_skills_env_class ON skills USING GIN (applicable_env_classes);
+CREATE INDEX IF NOT EXISTS idx_skills_framework ON skills USING GIN (applicable_frameworks);
+CREATE INDEX IF NOT EXISTS idx_skills_archivist ON skills (archivist_reviewed);
 
 -- ============================================================================
 -- LAYER 4: EXPLOIT LIBRARY
 -- ============================================================================
 
-CREATE TABLE exploits (
+CREATE TABLE IF NOT EXISTS exploits (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 
     -- Identification
@@ -196,14 +201,14 @@ CREATE TABLE exploits (
 );
 
 -- Exploit indexes
-CREATE INDEX idx_exploits_category ON exploits (category);
-CREATE INDEX idx_exploits_embedding ON exploits USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100);
+CREATE INDEX IF NOT EXISTS idx_exploits_category ON exploits (category);
+CREATE INDEX IF NOT EXISTS idx_exploits_embedding ON exploits USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100);
 
 -- ============================================================================
 -- LANGGRAPH CHECKPOINT BLOB STORAGE (for pointer offloading)
 -- ============================================================================
 
-CREATE TABLE checkpoint_blobs (
+CREATE TABLE IF NOT EXISTS checkpoint_blobs (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     job_id VARCHAR(255) NOT NULL,
     field VARCHAR(100) NOT NULL,
@@ -213,13 +218,13 @@ CREATE TABLE checkpoint_blobs (
     UNIQUE(job_id, field)
 );
 
-CREATE INDEX idx_cb_job_id ON checkpoint_blobs (job_id);
+CREATE INDEX IF NOT EXISTS idx_cb_job_id ON checkpoint_blobs (job_id);
 
 -- ============================================================================
 -- PROMPT VERSIONING
 -- ============================================================================
 
-CREATE TABLE prompt_versions (
+CREATE TABLE IF NOT EXISTS prompt_versions (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 
     agent VARCHAR(50) NOT NULL,
@@ -240,8 +245,8 @@ CREATE TABLE prompt_versions (
     UNIQUE(agent, version)
 );
 
-CREATE INDEX idx_pv_agent ON prompt_versions (agent);
-CREATE INDEX idx_pv_active ON prompt_versions (agent, active);
+CREATE INDEX IF NOT EXISTS idx_pv_agent ON prompt_versions (agent);
+CREATE INDEX IF NOT EXISTS idx_pv_active ON prompt_versions (agent, active);
 
 -- ============================================================================
 -- TRIGGER: Auto-update updated_at
@@ -255,12 +260,12 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE TRIGGER jobs_updated_at
+CREATE OR REPLACE TRIGGER jobs_updated_at
     BEFORE UPDATE ON jobs
     FOR EACH ROW
     EXECUTE FUNCTION update_updated_at();
 
-CREATE TRIGGER skills_updated_at
+CREATE OR REPLACE TRIGGER skills_updated_at
     BEFORE UPDATE ON skills
     FOR EACH ROW
     EXECUTE FUNCTION update_updated_at();
