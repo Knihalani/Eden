@@ -664,3 +664,37 @@ select.ds-input {
   }
 }
 
+/* ------------------------------------------------------------------ */
+/* Skeleton placeholders                                              */
+/* ------------------------------------------------------------------ */
+/* `eden-skeleton-pulse` was applied in 25 places across four files --
+   both route-level loading.tsx shells, the auth loading shell and the
+   invite panel -- with no rule defining it anywhere in the tree. Every
+   one of those skeletons rendered as a flat, motionless block, which
+   reads as "this page is broken" rather than "this page is loading".
+   Nothing failed: an undefined class is not an error in CSS, in
+   Tailwind, or in the type system.
+
+   Animating `opacity` rather than `background` is deliberate. Every
+   call site already sets its own background utility
+   (`bg-[var(--line)]`, `bg-[var(--bg-inset)]`, `bg-[var(--accent-muted)]`),
+   so a shimmer built from a gradient background would have to override
+   them and would flatten three distinct placeholder tones into one.
+
+   No `prefers-reduced-motion` block is needed here: globals.css already
+   clamps every animation to a single 0.01ms iteration under that query,
+   which settles this one on its 100% keyframe -- fully opaque. */
+@keyframes eden-skeleton-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}
+
+.eden-skeleton-pulse {
+  animation: eden-skeleton-pulse 1.6s ease-in-out infinite;
+}
+

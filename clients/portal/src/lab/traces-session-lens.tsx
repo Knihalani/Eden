@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { memo, useCallback } from "react";
 import {
   agentForSession,
   formatDuration,
@@ -64,20 +65,25 @@ export function HubViewToggle({
   );
 }
 
-export function SessionListButton({
+/** Memoised sibling of `RunListButton` — same stable-callback contract. */
+export const SessionListButton = memo(function SessionListButton({
   session,
   active,
   onSelect,
 }: {
   session: SessionFixture;
   active: boolean;
-  onSelect: () => void;
+  onSelect: (id: string) => void;
 }) {
   const agent = agentForSession(session);
+  const handleClick = useCallback(
+    () => onSelect(session.id),
+    [onSelect, session.id],
+  );
   return (
     <button
       type="button"
-      onClick={onSelect}
+      onClick={handleClick}
       data-session-id={session.id}
       data-active={active ? "true" : "false"}
       data-severity={
@@ -106,7 +112,7 @@ export function SessionListButton({
       </div>
     </button>
   );
-}
+});
 
 export function SessionReader({
   session,

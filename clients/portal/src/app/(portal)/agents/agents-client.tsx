@@ -468,7 +468,7 @@ function AgentDetailBody({ agent }: { agent: AgentFixture }) {
                   <RunListButton
                     trace={trace}
                     active={selected?.id === trace.id}
-                    onSelect={() => setSelectedRunId(trace.id)}
+                    onSelect={setSelectedRunId}
                   />
                 </li>
               ))

@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { routing } from "@/i18n/routing";
 import { KNOWN_PORTAL_PREFIXES, isKnownPortalPath } from "@/lib/portal-routes";
-import { buildHubRedirectUrl } from "@/lib/portal-hub-redirect";
+import { resolveHubTarget } from "@/lib/portal-hub-redirect";
 
 // Protected-first: block everything, allow the routes that must stay
 // reachable without a session (marketing pages, auth flows, the
@@ -154,32 +154,56 @@ export default clerkMiddleware(async (auth, request: NextRequest) => {
     return intlResponse;
   }
 
-  const hubTarget = buildHubRedirectUrl(path, url.search);
-  if (hubTarget) {
-    return NextResponse.redirect(new URL(hubTarget, url.origin), 307);
-  }
-
   // Auth gate — only known portal prefixes require a session.
   //
   // Explicit redirect (not bare auth.protect()): with Next 16 + empty
   // NEXT_PUBLIC_CLERK_SIGN_IN_URL at edge, protect() can rewrite to
   // [...notFound] (404) instead of /sign-in. Manual redirect is reliable.
-  const isKnownProtected = KNOWN_PORTAL_PREFIXES.some(
-    (p) => path === p || path.startsWith(p + "/"),
-  );
-  if (isKnownProtected && !isPublicRoute(request)) {
+  //
+  // Returns the sign-in bounce, or null when the request may proceed.
+  // This bounce must always be a *redirect*: the browser has to end up
+  // on Clerk's sign-in page with `redirect_url` visible in the address
+  // bar, and Clerk reads it from there to send the user back. Rewriting
+  // would render sign-in under the protected URL and lose the return
+  // trip entirely.
+  const enforcePortalAuth = async () => {
+    const isKnownProtected = KNOWN_PORTAL_PREFIXES.some(
+      (p) => path === p || path.startsWith(p + "/"),
+    );
+    if (!isKnownProtected || isPublicRoute(request)) return null;
     const { userId } = await auth();
-    if (!userId) {
-      const dest = new URL("/sign-in", url.origin);
-      dest.searchParams.set("redirect_url", `${path}${url.search}`);
-      return NextResponse.redirect(dest);
-    }
-  }
+    if (userId) return null;
+    const dest = new URL("/sign-in", url.origin);
+    dest.searchParams.set("redirect_url", `${path}${url.search}`);
+    return NextResponse.redirect(dest);
+  };
 
   // Forward pathname so root layout can skip next-intl message
   // bundles on portal routes (P25) without splitting the matcher.
   const requestHeaders = new Headers(request.headers);
   requestHeaders.set("x-eden-pathname", path);
+
+  const hubTarget = resolveHubTarget(path, url.search);
+  if (hubTarget) {
+    if (hubTarget.mode === "rewrite") {
+      // A rewrite is served in this same pass, so it never re-enters
+      // this middleware — the auth gate the redirect branch got for
+      // free from the follow-up request has to run explicitly here, or
+      // the rewritten route would be reachable without a session.
+      const bounce = await enforcePortalAuth();
+      if (bounce) return bounce;
+      return NextResponse.rewrite(new URL(hubTarget.destination, url.origin), {
+        request: { headers: requestHeaders },
+      });
+    }
+    return NextResponse.redirect(
+      new URL(hubTarget.destination, url.origin),
+      307,
+    );
+  }
+
+  const bounce = await enforcePortalAuth();
+  if (bounce) return bounce;
 
   const response = NextResponse.next({
     request: { headers: requestHeaders },

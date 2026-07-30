@@ -1,12 +1,47 @@
 /**
- * Hub redirects after lab→product cutover.
+ * Hub routing after the lab→product cutover.
  *
- * Live product paths pass through. Stale /lab/* URLs rewrite to canonical
- * routes. Remaining legacy stubs soft-land on /unavailable (not /rebuild).
+ * Live product paths pass through. Everything else is either a
+ * *redirect* (the URL changes, the browser navigates) or a *rewrite*
+ * (the URL stays, a different route renders) — `resolveHubTarget`
+ * returns which. The split is deliberate, per mapping:
+ *
+ * - `/lab/*` → canonical leaf: **redirect**. `/lab` is a retired
+ *   namespace, and the portal shell derives state from
+ *   `usePathname()` — the sidebar's active item (`isNavActive`),
+ *   `PortalCatalogSync`'s route-scoped prefetch, and `useQueryPatch`'s
+ *   URL rebuilding all compare against `/traces`, `/home`, … A rewrite
+ *   would leave `/lab/traces` in the address bar forever, so none of
+ *   those would ever match. One 307 to the canonical URL is cheap and
+ *   self-healing: the user's bookmark ends up correct.
+ *   (The pre-July-2026 version of this docstring claimed "rewrite"
+ *   here while the code always redirected. The code was right.)
+ *
+ * - `/dashboard*` → `/home`: **redirect**, same reason, plus a rewrite
+ *   would leave two live URLs serving the same page indefinitely.
+ *
+ * - `/onboarding*` → `/home?onboarding=1`: **redirect**. It changes
+ *   visible state. `OnboardingOverlay` opens the tour off
+ *   `useSearchParams().get("onboarding")`, which reads the *browser*
+ *   URL — under a rewrite the client would never see the param and the
+ *   tour would silently never open.
+ *
+ * - stub / removed prefixes → `/unavailable`: **rewrite**. This is the
+ *   one genuinely correct rewrite. The resource is gone, so the
+ *   "Page moved" body belongs at the URL the user actually asked for
+ *   (same shape as Next's `notFound()` rendering `not-found.tsx` in
+ *   place) rather than teleporting them to a different address that
+ *   no longer says which URL was dead. Nothing on that page reads the
+ *   pathname, and "no active sidebar item" is the correct rendering
+ *   for a surface that has no nav entry.
+ *
+ * NOTE for callers: a rewrite gets no second pass through this
+ * middleware, so the auth gate the redirect version inherited for free
+ * has to be applied *before* rewriting. See `src/proxy.ts`.
  *
  * The live/stub prefix lists are the single source of truth in
  * portal-routes.ts (the auth-gate file) — imported here rather than
- * hand-duplicated, so this module's redirect logic and the auth gate
+ * hand-duplicated, so this module's routing logic and the auth gate
  * can never silently drift apart again.
  */
 
@@ -55,17 +90,32 @@ export function labToProductPath(pathname: string): string | null {
   return rest;
 }
 
-export function buildHubRedirectUrl(
+/** How the middleware should serve a hub target. */
+export type HubTargetMode = "redirect" | "rewrite";
+
+export interface HubTarget {
+  destination: string;
+  /** `redirect` changes the visible URL; `rewrite` keeps it. */
+  mode: HubTargetMode;
+}
+
+/**
+ * Resolve a request path to its hub target, or `null` to pass through.
+ * See the module docstring for why each mapping picks its mode.
+ */
+export function resolveHubTarget(
   pathname: string,
   search: string,
-): string | null {
+): HubTarget | null {
   const p = pathname.split("?")[0].split("#")[0];
 
   const fromLab = labToProductPath(p);
-  if (fromLab) return withSearch(fromLab, search);
+  if (fromLab) {
+    return { destination: withSearch(fromLab, search), mode: "redirect" };
+  }
 
   if (p === "/dashboard" || p.startsWith("/dashboard/")) {
-    return withSearch("/home", search);
+    return { destination: withSearch("/home", search), mode: "redirect" };
   }
 
   // First-run entry — product home with soft-open tour. Merge the
@@ -75,7 +125,12 @@ export function buildHubRedirectUrl(
   // URL — see portal-hub-redirect.test history for the bug this fixes).
   if (p === "/onboarding" || p.startsWith("/onboarding/")) {
     const extra = search.replace(/^\?/, "");
-    return extra ? `/home?onboarding=1&${extra}` : "/home?onboarding=1";
+    return {
+      destination: extra
+        ? `/home?onboarding=1&${extra}`
+        : "/home?onboarding=1",
+      mode: "redirect",
+    };
   }
 
   if (p === "/rebuild" || p.startsWith("/rebuild/")) return null;
@@ -84,11 +139,24 @@ export function buildHubRedirectUrl(
 
   for (const prefix of STUB_PREFIXES) {
     if (p === prefix || p.startsWith(`${prefix}/`)) {
-      return STUB_LAND;
+      // Keep the requested URL — see module docstring.
+      return { destination: STUB_LAND, mode: "rewrite" };
     }
   }
 
   const exact = HUB_REDIRECT_RULES[p];
-  if (exact) return exact.destination;
+  if (exact) return { destination: exact.destination, mode: "redirect" };
   return null;
+}
+
+/**
+ * Destination-only view of {@link resolveHubTarget}. Kept because the
+ * route-contract tests and older callers assert on the string; new
+ * callers that have to serve the response need the mode too.
+ */
+export function buildHubRedirectUrl(
+  pathname: string,
+  search: string,
+): string | null {
+  return resolveHubTarget(pathname, search)?.destination ?? null;
 }

@@ -1,7 +1,16 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
+import {
+  memo,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import Link from "next/link";
+import { useVirtualizer } from "@tanstack/react-virtual";
+import { measureVirtualRow, VIRTUAL_SCROLL_ATTR } from "@/lab/virtual-list";
 import { ChevronDown, ChevronRight, PanelLeft, PanelLeftClose } from "lucide-react";
 import {
   formatDuration,
@@ -148,7 +157,15 @@ export function RunMeta({ trace }: { trace: TraceFixture }) {
   );
 }
 
-export function RunListButton({
+/**
+ * Feed row. Memoised — the run lists render thousands of these and the
+ * parent re-renders on every selection / filter keystroke. `onSelect`
+ * takes the id rather than being a pre-bound closure so the parent can
+ * hand down one stable callback for the whole list; a per-row
+ * `() => select(t.id)` arrow would change identity every render and
+ * defeat the memo entirely.
+ */
+export const RunListButton = memo(function RunListButton({
   trace,
   active,
   onSelect,
@@ -156,14 +173,18 @@ export function RunListButton({
 }: {
   trace: TraceFixture;
   active: boolean;
-  onSelect: () => void;
+  onSelect: (id: string) => void;
   showAgent?: boolean;
 }) {
   const agent = showAgent ? agentForTrace(trace) : undefined;
+  const handleClick = useCallback(
+    () => onSelect(trace.id),
+    [onSelect, trace.id],
+  );
   return (
     <button
       type="button"
-      onClick={onSelect}
+      onClick={handleClick}
       data-run-id={trace.id}
       data-active={active ? "true" : "false"}
       data-severity={trace.severity}
@@ -185,7 +206,7 @@ export function RunListButton({
       </div>
     </button>
   );
-}
+});
 
 const KIND_LABEL: Record<TranscriptStep["kind"], string> = {
   task: "Task",
@@ -344,6 +365,81 @@ function StepDetail({ step }: { step: TranscriptStep }) {
   );
 }
 
+/**
+ * One transcript span. Memoised so scrolling the virtualiser (which
+ * re-renders the owning list on every frame) only re-renders rows whose
+ * own open/focus state actually changed — an open row drags a whole
+ * `StepDetail` (two `<dl>`s + attribute tables) behind it.
+ */
+const TranscriptRow = memo(function TranscriptRow({
+  step,
+  index,
+  open,
+  compact,
+  onToggle,
+}: {
+  step: TranscriptStep;
+  index: number;
+  open: boolean;
+  compact?: boolean;
+  onToggle: (id: string) => void;
+}) {
+  const bad = isBadStep(step);
+  const handleClick = useCallback(() => onToggle(step.id), [onToggle, step.id]);
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={handleClick}
+        className={cn(
+          "flex w-full min-w-0 cursor-pointer items-center gap-2.5 text-left transition-colors hover:bg-[var(--bg-hover)]",
+          compact ? "px-3 py-2" : "px-4 py-2.5",
+          open && "bg-[var(--bg-hover)]",
+        )}
+        aria-expanded={open}
+      >
+        <span className="type-mono w-5 shrink-0 tabular-nums !text-[var(--text-faint)]">
+          {index + 1}
+        </span>
+        <span className="ds-chip shrink-0 border border-[var(--line)] text-[var(--text-muted)]">
+          {KIND_LABEL[step.kind]}
+        </span>
+        <span
+          className={cn(
+            "type-ui min-w-0 flex-1 truncate !font-normal",
+            bad ? "text-[var(--error)]" : "text-[var(--text)]",
+          )}
+        >
+          {step.title}
+        </span>
+        {!compact && step.tokensIn != null ? (
+          <span className="type-mono hidden shrink-0 tabular-nums !text-[0.6875rem] !text-[var(--text-faint)] md:inline">
+            {formatTokens(step.tokensIn)}
+            {step.tokensOut != null ? ` / ${formatTokens(step.tokensOut)}` : ""}
+          </span>
+        ) : null}
+        <span className="type-value shrink-0 whitespace-nowrap !text-[0.6875rem]">
+          {step.costUsd != null ? `${formatUsd(step.costUsd, 3)} · ` : ""}
+          {formatDuration(step.durationMs)}
+        </span>
+        <span className="flex w-3 shrink-0 items-center justify-center text-[var(--text-faint)]">
+          {open ? (
+            <ChevronDown className="h-3 w-3" aria-hidden />
+          ) : (
+            <ChevronRight className="h-3 w-3" aria-hidden />
+          )}
+        </span>
+      </button>
+      {open ? <StepDetail step={step} /> : null}
+    </>
+  );
+});
+
+/** Collapsed-row estimate; real heights come from `measureElement`. */
+const TRANSCRIPT_ROW_ESTIMATE = 44;
+const TRANSCRIPT_ROW_ESTIMATE_COMPACT = 37;
+
 /** Shared expandable transcript — every span opens to full detail. */
 export function RunTranscript({
   steps,
@@ -369,36 +465,69 @@ export function RunTranscript({
   const controlled = openIdsProp !== undefined;
   const openIds = controlled ? openIdsProp : uncontrolledOpenIds;
 
-  function setOpenIds(next: Set<string>) {
-    if (!controlled) setUncontrolledOpenIds(next);
-    onOpenIdsChange?.(next);
-  }
+  // Latest-value refs so `toggle` can stay referentially stable across
+  // renders — an unstable toggle would blow through `TranscriptRow`'s
+  // memo on every scroll frame.
+  const controlledRef = useRef(controlled);
+  controlledRef.current = controlled;
+  const onOpenIdsChangeRef = useRef(onOpenIdsChange);
+  onOpenIdsChangeRef.current = onOpenIdsChange;
+  const openIdsRef = useRef(openIds);
+  openIdsRef.current = openIds;
+
+  const setOpenIds = useCallback((next: Set<string>) => {
+    if (!controlledRef.current) setUncontrolledOpenIds(next);
+    onOpenIdsChangeRef.current?.(next);
+  }, []);
+
+  const toggle = useCallback(
+    (id: string) => {
+      const next = new Set(openIdsRef.current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      setOpenIds(next);
+    },
+    [setOpenIds],
+  );
+
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+  const virtualizer = useVirtualizer({
+    count: steps.length,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: () =>
+      compact ? TRANSCRIPT_ROW_ESTIMATE_COMPACT : TRANSCRIPT_ROW_ESTIMATE,
+    overscan: 6,
+    getItemKey: (index) => steps[index]?.id ?? index,
+    measureElement: measureVirtualRow,
+  });
+  const virtualizerRef = useRef(virtualizer);
+  virtualizerRef.current = virtualizer;
 
   useEffect(() => {
     if (!focusStepId) return;
-    if (!openIds.has(focusStepId)) {
-      const next = new Set(openIds);
+    const current = openIdsRef.current;
+    if (!current.has(focusStepId)) {
+      const next = new Set(current);
       next.add(focusStepId);
       setOpenIds(next);
     }
+    // Virtualised: the focused row may not be mounted yet, so ask the
+    // virtualiser to bring the index into view rather than querying the
+    // DOM for an element that isn't there.
+    const index = steps.findIndex((s) => s.id === focusStepId);
     const t = window.setTimeout(() => {
-      document
-        .querySelector(`[data-step-id="${focusStepId}"]`)
-        ?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+      if (index >= 0) {
+        virtualizerRef.current.scrollToIndex(index, { align: "center" });
+      }
     }, 40);
     return () => window.clearTimeout(t);
     // Only react to focus changes.
   }, [focusStepId]);
 
-  function toggle(id: string) {
-    const next = new Set(openIds);
-    if (next.has(id)) next.delete(id);
-    else next.add(id);
-    setOpenIds(next);
-  }
+  const virtualItems = virtualizer.getVirtualItems();
 
   return (
-    <div className="flex min-h-0 min-w-0 flex-col">
+    <div className="flex h-full min-h-0 min-w-0 flex-col">
       {!hideToolbar ? (
         <div className="flex shrink-0 items-center justify-between gap-2 border-b border-[var(--line)] px-4 py-2">
           <p className="type-label">{steps.length} spans</p>
@@ -420,69 +549,49 @@ export function RunTranscript({
           </div>
         </div>
       ) : null}
-      <ol className="min-h-0 min-w-0 overflow-y-auto">
-        {steps.map((step, i) => {
-          const bad = isBadStep(step);
-          const open = openIds.has(step.id);
-          const focused = focusStepId === step.id;
+      <div
+        ref={scrollRef}
+        className="min-h-0 min-w-0 flex-1 overflow-y-auto"
+        {...{ [VIRTUAL_SCROLL_ATTR]: "transcript" }}
+      >
+        <ol
+          className="relative min-w-0"
+          style={{ height: `${virtualizer.getTotalSize()}px` }}
+        >
+          {virtualItems.map((item) => {
+            const step = steps[item.index];
+            if (!step) return null;
+            const bad = isBadStep(step);
+            const open = openIds.has(step.id);
+            const focused = focusStepId === step.id;
 
-          return (
-            <li
-              key={step.id}
-              data-step-id={step.id}
-              className={cn(
-                "min-w-0 border-b border-[var(--line)]",
-                bad && "bg-[var(--error-muted)]",
-                focused && "shadow-[inset_2px_0_0_var(--accent)]",
-              )}
-            >
-              <button
-                type="button"
-                onClick={() => toggle(step.id)}
+            return (
+              <li
+                key={item.key}
+                ref={virtualizer.measureElement}
+                data-index={item.index}
+                data-step-id={step.id}
+                aria-posinset={item.index + 1}
+                aria-setsize={steps.length}
                 className={cn(
-                  "flex w-full min-w-0 cursor-pointer items-center gap-2.5 text-left transition-colors hover:bg-[var(--bg-hover)]",
-                  compact ? "px-3 py-2" : "px-4 py-2.5",
-                  open && "bg-[var(--bg-hover)]",
+                  "absolute top-0 left-0 w-full min-w-0 border-b border-[var(--line)]",
+                  bad && "bg-[var(--error-muted)]",
+                  focused && "shadow-[inset_2px_0_0_var(--accent)]",
                 )}
-                aria-expanded={open}
+                style={{ transform: `translateY(${item.start}px)` }}
               >
-                <span className="type-mono w-5 shrink-0 tabular-nums !text-[var(--text-faint)]">
-                  {i + 1}
-                </span>
-                <span className="ds-chip shrink-0 border border-[var(--line)] text-[var(--text-muted)]">
-                  {KIND_LABEL[step.kind]}
-                </span>
-                <span
-                  className={cn(
-                    "type-ui min-w-0 flex-1 truncate !font-normal",
-                    bad ? "text-[var(--error)]" : "text-[var(--text)]",
-                  )}
-                >
-                  {step.title}
-                </span>
-                {!compact && step.tokensIn != null ? (
-                  <span className="type-mono hidden shrink-0 tabular-nums !text-[0.6875rem] !text-[var(--text-faint)] md:inline">
-                    {formatTokens(step.tokensIn)}
-                    {step.tokensOut != null ? ` / ${formatTokens(step.tokensOut)}` : ""}
-                  </span>
-                ) : null}
-                <span className="type-value shrink-0 whitespace-nowrap !text-[0.6875rem]">
-                  {step.costUsd != null ? `${formatUsd(step.costUsd, 3)} · ` : ""}
-                  {formatDuration(step.durationMs)}
-                </span>
-                <span className="flex w-3 shrink-0 items-center justify-center text-[var(--text-faint)]">
-                  {open ? (
-                    <ChevronDown className="h-3 w-3" aria-hidden />
-                  ) : (
-                    <ChevronRight className="h-3 w-3" aria-hidden />
-                  )}
-                </span>
-              </button>
-              {open ? <StepDetail step={step} /> : null}
-            </li>
-          );
-        })}
-      </ol>
+                <TranscriptRow
+                  step={step}
+                  index={item.index}
+                  open={open}
+                  compact={compact}
+                  onToggle={toggle}
+                />
+              </li>
+            );
+          })}
+        </ol>
+      </div>
     </div>
   );
 }

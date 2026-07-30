@@ -56,6 +56,33 @@ if (typeof window !== "undefined" && typeof window.matchMedia === "undefined") {
   });
 }
 
+// @tanstack/react-virtual sizes its window from the scroll element's
+// `offsetWidth` / `offsetHeight`. jsdom has no layout engine, so both
+// are always 0 and virtual-core's `calculateRange()` returns null —
+// every virtualised list would render as an empty box and the
+// components using one would be untestable. Give containers that opt
+// in (see `VIRTUAL_SCROLL_ATTR` in src/lab/virtual-list.ts) a synthetic
+// viewport; every other element keeps jsdom's real answer of 0.
+const VIRTUAL_TEST_VIEWPORT = { width: 320, height: 600 };
+if (typeof HTMLElement !== "undefined") {
+  for (const [prop, value] of [
+    ["offsetWidth", VIRTUAL_TEST_VIEWPORT.width],
+    ["offsetHeight", VIRTUAL_TEST_VIEWPORT.height],
+  ] as const) {
+    const native = Object.getOwnPropertyDescriptor(
+      HTMLElement.prototype,
+      prop,
+    );
+    Object.defineProperty(HTMLElement.prototype, prop, {
+      configurable: true,
+      get(this: HTMLElement) {
+        if (this.hasAttribute("data-virtual-scroll")) return value;
+        return native?.get ? native.get.call(this) : 0;
+      },
+    });
+  }
+}
+
 // `cmdk` (and some Radix primitives) call `Element.scrollIntoView`
 // from a layout effect. jsdom doesn't implement it; stub on the
 // Element prototype so the call is a no-op.
