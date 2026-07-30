@@ -141,6 +141,69 @@ class TestMembershipSelfHealWritesWithoutARoleClaim:
         assert captured, "no INSERT was issued"
         assert "owner" in captured[0], f"expected owner role, got {captured[0]}"
 
+    def test_every_call_site_is_gated_on_the_clerk_session_org(self):
+        """Security property, pinned deliberately.
+
+        ensure_clerk_membership now WRITES a row where it previously
+        wrote none, so it matters that it can only ever be reached for
+        an org Clerk's own JWT already asserts this user belongs to.
+
+        Every call site must sit behind either `session_matches` (the
+        Clerk session org equals the org in question) or an explicit
+        IDOR check that 403s on mismatch. If someone adds an ungated
+        call site, this fails — because at that point the function
+        would be inventing membership for a foreign tenant.
+        """
+        import ast
+        import inspect
+
+        from eden.api import deps
+
+        src = inspect.getsource(deps)
+        tree = ast.parse(src)
+
+        #: Functions whose org argument is, by construction, the Clerk
+        #: session's own org — the whole function is the guard.
+        SESSION_SCOPED_FUNCS = {
+            "ensure_clerk_org_from_session",
+            "resolve_clerk_org_for_session",
+        }
+
+        offenders = []
+        examined = []
+        for func in ast.walk(tree):
+            if not isinstance(func, ast.FunctionDef | ast.AsyncFunctionDef):
+                continue
+            if func.name == "ensure_clerk_membership":
+                continue
+            body_src = ast.get_source_segment(src, func) or ""
+            if "ensure_clerk_membership(" not in body_src:
+                continue
+            examined.append(func.name)
+            if func.name in SESSION_SCOPED_FUNCS:
+                continue
+            # Otherwise the enclosing function must contain an explicit
+            # session/IDOR guard.
+            gated = (
+                "session_matches" in body_src
+                or "does not match session organization" in body_src
+            )
+            if not gated:
+                offenders.append(f"{func.name}()")
+
+        # A structural test that inspected nothing would pass silently,
+        # which is the same class of bug this whole file is about.
+        assert len(examined) >= 3, (
+            f"expected to find several ensure_clerk_membership call "
+            f"sites in deps.py; found {examined}. Either the calls moved "
+            f"or this check has stopped checking anything."
+        )
+        assert not offenders, (
+            "ungated ensure_clerk_membership call site(s) — membership "
+            "must only be self-healed for the Clerk session's own org:\n"
+            + "\n".join(offenders)
+        )
+
     @pytest.mark.asyncio
     async def test_non_owner_gets_member_not_viewer(self, monkeypatch):
         from eden.api import deps
