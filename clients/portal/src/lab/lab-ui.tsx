@@ -152,7 +152,7 @@ export function RunMeta({ trace }: { trace: TraceFixture }) {
       <span className="mx-1.5 text-[var(--text-faint)]">·</span>
       {formatTokens(trace.tokens)}
       <span className="mx-1.5 text-[var(--text-faint)]">·</span>
-      {formatUsd(trace.costUsd, 3)}
+      {formatUsd(trace.costUsd, 4)}
     </span>
   );
 }
@@ -256,10 +256,83 @@ function DetailBlock({
   );
 }
 
+/** Best-effort readable IO when an older API still shipped raw JSON previews. */
+function humanizeIoPreview(raw: string | undefined | null): string | null {
+  if (!raw) return null;
+  const text = raw.trim();
+  if (!text) return null;
+  if (text[0] !== "{" && text[0] !== "[") {
+    return text.replace(/<think\b[^>]*>[\s\S]*?<\/think>/gi, "").trim() || text;
+  }
+  try {
+    const parsed: unknown = JSON.parse(text);
+    const contentText = (content: unknown): string => {
+      if (typeof content === "string") return content;
+      if (Array.isArray(content)) {
+        return content
+          .map((part) => {
+            if (typeof part === "string") return part;
+            if (part && typeof part === "object" && "text" in part) {
+              return String((part as { text?: unknown }).text ?? "");
+            }
+            return "";
+          })
+          .filter(Boolean)
+          .join("\n");
+      }
+      return "";
+    };
+    if (Array.isArray(parsed)) {
+      const lines = parsed
+        .filter((m): m is Record<string, unknown> => !!m && typeof m === "object")
+        .map((m) => {
+          const role = String(m.role ?? "message");
+          const body = contentText(m.content).replace(
+            /<think\b[^>]*>[\s\S]*?<\/think>/gi,
+            "",
+          ).trim();
+          return body ? `${role}: ${body}` : "";
+        })
+        .filter(Boolean);
+      if (lines.length) return lines.join("\n\n");
+    } else if (parsed && typeof parsed === "object") {
+      const obj = parsed as Record<string, unknown>;
+      const choices = obj.choices;
+      if (Array.isArray(choices) && choices[0] && typeof choices[0] === "object") {
+        const first = choices[0] as Record<string, unknown>;
+        const msg =
+          first.message && typeof first.message === "object"
+            ? (first.message as Record<string, unknown>)
+            : null;
+        const out = contentText(msg?.content ?? first.text)
+          .replace(/<think\b[^>]*>[\s\S]*?<\/think>/gi, "")
+          .trim();
+        if (out) return out;
+      }
+      const messages = obj.messages;
+      if (Array.isArray(messages)) {
+        const nested = humanizeIoPreview(JSON.stringify(messages));
+        if (nested) return nested;
+      }
+      for (const key of ["content", "output", "completion", "response", "text", "prompt", "input"]) {
+        const v = obj[key];
+        if (typeof v === "string" && v.trim()) {
+          return v.replace(/<think\b[^>]*>[\s\S]*?<\/think>/gi, "").trim();
+        }
+      }
+    }
+  } catch {
+    /* keep raw */
+  }
+  return text;
+}
+
 function StepDetail({ step }: { step: TranscriptStep }) {
   const bad = isBadStep(step);
   const attrs = Object.entries(step.attributes ?? {});
   const meta = Object.entries(step.metadata ?? {});
+  const inputText = humanizeIoPreview(step.inputPreview);
+  const outputText = humanizeIoPreview(step.outputPreview);
 
   return (
     <div className="space-y-4 border-t border-[var(--line)] bg-[var(--bg-well)] px-4 py-4">
@@ -312,17 +385,17 @@ function StepDetail({ step }: { step: TranscriptStep }) {
         </DetailBlock>
       ) : null}
 
-      {step.inputPreview ? (
-        <DetailBlock label="Input">{step.inputPreview}</DetailBlock>
+      {inputText ? (
+        <DetailBlock label="Input">{inputText}</DetailBlock>
       ) : (
         <DetailBlock label="Input">
           <span className="text-[var(--text-faint)]">No input payload captured</span>
         </DetailBlock>
       )}
 
-      {step.outputPreview ? (
+      {outputText ? (
         <DetailBlock label="Output" tone={bad ? "error" : "default"}>
-          {step.outputPreview}
+          {outputText}
         </DetailBlock>
       ) : (
         <DetailBlock label="Output">
@@ -420,7 +493,7 @@ const TranscriptRow = memo(function TranscriptRow({
           </span>
         ) : null}
         <span className="type-value shrink-0 whitespace-nowrap !text-[0.6875rem]">
-          {step.costUsd != null ? `${formatUsd(step.costUsd, 3)} · ` : ""}
+          {step.costUsd != null ? `${formatUsd(step.costUsd, 4)} · ` : ""}
           {formatDuration(step.durationMs)}
         </span>
         <span className="flex w-3 shrink-0 items-center justify-center text-[var(--text-faint)]">

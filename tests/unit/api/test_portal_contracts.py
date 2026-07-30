@@ -190,7 +190,35 @@ def test_tree_node_to_step_parses_json_string_metrics() -> None:
     assert step.model == "MiniMax-M3"
     assert step.costUsd is not None and step.costUsd > 0
     assert step.inputPreview is not None
-    assert step.outputPreview is not None
+    assert "user: hi" in step.inputPreview
+    assert "{" not in step.inputPreview
+    assert step.outputPreview == "hello"
+
+
+def test_humanize_io_preview_chat_completion() -> None:
+    from eden.api.routes.portal import _humanize_io_preview
+
+    req = {
+        "model": "MiniMax-M3",
+        "messages": [
+            {"role": "system", "content": "Be brief."},
+            {"role": "user", "content": "What is observability?"},
+        ],
+    }
+    resp = {
+        "choices": [
+            {
+                "message": {
+                    "role": "assistant",
+                    "content": "<think>plan</think>LLM observability watches agent runs.",
+                }
+            }
+        ]
+    }
+    assert _humanize_io_preview(req) == (
+        "system: Be brief.\n\nuser: What is observability?"
+    )
+    assert _humanize_io_preview(resp) == "LLM observability watches agent runs."
 
 
 def test_tree_node_to_step_maps_llm_span() -> None:

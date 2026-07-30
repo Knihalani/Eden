@@ -352,11 +352,15 @@ function AgentDetailBody({ agent }: { agent: AgentFixture }) {
     const detail = traceDetailQuery.data;
     if (detail && detail.id === selectedRunIdForDetail) {
       const base = selectedListItem ?? detail;
+      const stepCost = Array.isArray(detail.steps)
+        ? detail.steps.reduce((sum, s) => sum + (s.costUsd ?? 0), 0)
+        : 0;
+      const costUsd = Math.max(detail.costUsd ?? 0, base.costUsd ?? 0, stepCost);
       return {
         ...base,
         ...detail,
         steps: Array.isArray(detail.steps) ? detail.steps : [],
-        costUsd: detail.costUsd ?? base.costUsd,
+        costUsd,
         tokens: detail.tokens || base.tokens,
         signals: detail.signals?.title ? detail.signals : base.signals,
       };

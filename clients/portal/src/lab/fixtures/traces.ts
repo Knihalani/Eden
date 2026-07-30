@@ -63,11 +63,11 @@ export function formatTokens(n: number): string {
 
 export function formatUsd(n: number, digits = 2): string {
   if (!Number.isFinite(n)) return "$0.00";
-  // Sub-cent LLM costs (MiniMax etc.) used to render as "$0.000" and
-  // looked like billing was broken even when estimate_cost_usd worked.
-  if (n > 0 && digits >= 3 && n < 10 ** -digits) {
-    const needed = Math.min(6, Math.ceil(-Math.log10(n)));
-    return `$${n.toFixed(Math.max(digits, needed))}`;
+  // Sub-cent LLM costs (MiniMax etc.) used to render as "$0.000" /
+  // "$0.00" and looked like billing was broken.
+  if (n > 0 && n < 10 ** -digits) {
+    const needed = Math.min(6, Math.max(digits, Math.ceil(-Math.log10(n))));
+    return `$${n.toFixed(needed)}`;
   }
   return `$${n.toFixed(digits)}`;
 }
