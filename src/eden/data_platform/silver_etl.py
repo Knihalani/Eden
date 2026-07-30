@@ -38,6 +38,37 @@ from eden.data_platform.quality import (
 logger = logging.getLogger(__name__)
 settings = get_settings()
 
+#: Namespace for deriving Silver/quarantine ids from a Bronze event id.
+#:
+#: Both ``silver_events.silver_event_id`` and
+#: ``quarantine_events.quarantine_id`` are primary keys, and both INSERTs carry
+#: an ``ON CONFLICT`` clause — which could never fire, because the id was a
+#: fresh ``uuid.uuid4()`` on every run. Re-processing the same Bronze event
+#: therefore inserted a *new* row rather than updating the existing one, so the
+#: ETL was not idempotent despite looking like it was. Deriving the id from the
+#: Bronze id with uuid5 makes the existing ON CONFLICT clauses do their job.
+_ID_NAMESPACE = uuid.UUID("6f9f6a3e-6d2e-5f4a-9c1b-2a7e4d8f0b31")
+
+
+def _derive_id(kind: str, bronze_event_id: Any) -> str:
+    """Return a stable UUID for ``kind`` derived from the Bronze event id.
+
+    Falls back to a random id when the Bronze id is missing: without it there
+    is nothing to be idempotent *about*, and a NULL primary key would fail the
+    insert outright.
+    """
+    if not bronze_event_id:
+        return str(uuid.uuid4())
+    return str(uuid.uuid5(_ID_NAMESPACE, f"{kind}:{bronze_event_id}"))
+
+
+def _silver_event_id(bronze_event_id: Any) -> str:
+    return _derive_id("silver", bronze_event_id)
+
+
+def _quarantine_id(bronze_event_id: Any) -> str:
+    return _derive_id("quarantine", bronze_event_id)
+
 
 @dataclass
 class ETLReport:
@@ -52,6 +83,9 @@ class ETLReport:
     silver_inserted: int = 0
     duration_ms: float = 0.0
     errors: list[str] = field(default_factory=list)
+    #: True when the Silver write raised. ``run_from_bronze`` uses this to
+    #: decide whether the Bronze rows may be marked processed — see there.
+    silver_write_failed: bool = False
 
 
 class SilverETLPipeline:
@@ -85,6 +119,7 @@ class SilverETLPipeline:
     async def _get_postgres(self) -> Any:
         if self._postgres_client is None:
             from eden.storage.postgres import get_postgres_client
+
             self._postgres_client = await get_postgres_client()
         return self._postgres_client
 
@@ -140,20 +175,30 @@ class SilverETLPipeline:
                 inserted = await self._write_silver(normalized)
                 report.silver_inserted = inserted
             except Exception as exc:
-                logger.error(f"Silver write failed: {exc}")
+                report.silver_write_failed = True
+                logger.error(
+                    "Silver write failed for %d event(s); Bronze rows will NOT "
+                    "be marked processed so the batch is retried: %s",
+                    len(normalized),
+                    exc,
+                )
                 report.errors.append(f"Silver write: {exc}")
 
         # ── Step 8: Push to ClickHouse (analytics) ──────────────────────
         if push_to_clickhouse and normalized:
             try:
-                await self._push_clickhouse(normalized)
-                logger.info(f"Pushed {len(normalized)} events to ClickHouse")
+                if await self._push_clickhouse(normalized):
+                    logger.info(f"Pushed {len(normalized)} events to ClickHouse")
+                else:
+                    logger.info(
+                        "ClickHouse sink not configured; %d events not "
+                        "mirrored for analytics",
+                        len(normalized),
+                    )
             except Exception as exc:
                 logger.warning(f"ClickHouse push failed (non-critical): {exc}")
 
-        report.duration_ms = (
-            datetime.now(UTC) - start
-        ).total_seconds() * 1000
+        report.duration_ms = (datetime.now(UTC) - start).total_seconds() * 1000
 
         logger.info(
             f"Silver ETL complete: processed={report.processed}, "
@@ -215,7 +260,29 @@ class SilverETLPipeline:
         events = [dict(r) for r in rows]
         report = await self.run_batch(events, push_to_clickhouse=push_to_clickhouse)
 
-        # Mark processed events
+        # Mark the Bronze rows processed — but *only* if the Silver write did not
+        # fail.
+        #
+        # This used to be unconditional. ``run_batch`` catches a failed
+        # ``_write_silver``, logs it, and returns a report; the caller then marked
+        # every fetched id processed anyway. So a single Postgres blip made up to
+        # ``limit`` (10,000) Bronze events permanently unreachable: never written
+        # to Silver, and never re-fetched because the watermark had moved past
+        # them. The only trace was one ERROR line that did not mention the rows
+        # were now unrecoverable.
+        #
+        # Retrying the whole batch is safe: silver_event_id is a uuid5 derived
+        # from the Bronze id, so re-running produces the same keys and the insert
+        # is idempotent. Deduped and quarantined events are re-fetched too and
+        # simply reach the same terminal outcome again.
+        if report.silver_write_failed:
+            logger.error(
+                "Silver ETL: leaving %d Bronze event(s) unprocessed for retry "
+                "because the Silver write failed",
+                len(events),
+            )
+            return report
+
         event_ids = [e["id"] for e in events]
         if event_ids:
             await self._mark_bronze_processed(event_ids)
@@ -316,7 +383,16 @@ class SilverETLPipeline:
                 except json.JSONDecodeError:
                     metadata = {}
 
-            # Derive total_tokens from input + output
+            # Derive total_tokens from input + output.
+            #
+            # ``total`` must be reset per event. It used to be assigned *only*
+            # inside the branch below, so a tokenless event (storage, sandbox,
+            # api_request — none of which carry token counts) either raised
+            # UnboundLocalError on the first event, killing the whole batch
+            # from outside ``run_batch``'s try block, or silently reused the
+            # previous event's ``total`` and stamped it with a bogus
+            # estimated_cost_usd.
+            total: int | None = None
             input_tokens = metadata.get("input_tokens") or event.get("input_tokens")
             output_tokens = metadata.get("output_tokens") or event.get("output_tokens")
             if input_tokens is not None or output_tokens is not None:
@@ -351,7 +427,7 @@ class SilverETLPipeline:
 
             # Add processing timestamp
             event["silver_processed_at"] = datetime.now(UTC).isoformat()
-            event["silver_event_id"] = str(uuid.uuid4())
+            event["silver_event_id"] = _silver_event_id(event.get("id"))
 
             enriched.append(event)
         return enriched
@@ -366,7 +442,7 @@ class SilverETLPipeline:
                 metadata = {}
 
         return {
-            "silver_event_id": event.get("silver_event_id") or str(uuid.uuid4()),
+            "silver_event_id": (event.get("silver_event_id") or _silver_event_id(event.get("id"))),
             "bronze_event_id": event.get("id"),
             "org_id": event.get("org_id"),
             "user_id": event.get("user_id"),
@@ -376,7 +452,9 @@ class SilverETLPipeline:
             "unit": event.get("unit"),
             "model": event.get("model"),
             "model_family": event.get("model_family"),
-            "cost_usd": event.get("cost_usd") if event.get("cost_usd") is not None else event.get("estimated_cost_usd"),
+            "cost_usd": event.get("cost_usd")
+            if event.get("cost_usd") is not None
+            else event.get("estimated_cost_usd"),
             "total_tokens": event.get("total_tokens"),
             "input_tokens": metadata.get("input_tokens"),
             "output_tokens": metadata.get("output_tokens"),
@@ -390,8 +468,11 @@ class SilverETLPipeline:
             "quarantined": False,
             "metadata": metadata,
             "correlation_id": event.get("correlation_id"),
-            "timestamp": event.get("created_at") or event.get("timestamp") or datetime.now(UTC).isoformat(),
-            "silver_processed_at": event.get("silver_processed_at") or datetime.now(UTC).isoformat(),
+            "timestamp": event.get("created_at")
+            or event.get("timestamp")
+            or datetime.now(UTC).isoformat(),
+            "silver_processed_at": event.get("silver_processed_at")
+            or datetime.now(UTC).isoformat(),
         }
 
     async def _validate_quality(
@@ -429,53 +510,74 @@ class SilverETLPipeline:
                 silver_event_id UUID PRIMARY KEY
             )
         """)
+        # One executemany, not "insert the first row then executemany all of
+        # them". The previous version inserted ``rows[0]`` and then re-inserted
+        # it as part of the batch, violating the temp table's primary key. The
+        # resulting exception was caught by the broad handler in
+        # ``_validate_quality``, which logged "Quality validation failed" and
+        # returned zero violations — so quality validation never actually ran
+        # for any batch of more than one event.
         rows = [(e["silver_event_id"],) for e in events]
-        await client.execute(
-            f"INSERT INTO {table_name} (silver_event_id) VALUES ($1)",
-            *rows[0] if rows else (None,),
-        )
-        # For bulk insert, use executemany
-        if len(rows) > 1:
-            query = f"INSERT INTO {table_name} (silver_event_id) VALUES ($1)"
-            async with client.acquire() as conn:
-                await conn.executemany(query, rows)
+        if not rows:
+            return
+        query = f"INSERT INTO {table_name} (silver_event_id) VALUES ($1)"
+        async with client.acquire() as conn:
+            await conn.executemany(query, rows)
 
-    async def _push_clickhouse(self, events: list[dict[str, Any]]) -> None:
-        """Push normalized Silver events to ClickHouse for OLAP analytics."""
+    async def _push_clickhouse(self, events: list[dict[str, Any]]) -> bool:
+        """Push normalized Silver events to ClickHouse for OLAP analytics.
+
+        Returns True when a push was actually attempted. The caller used
+        to log "Pushed N events to ClickHouse" unconditionally, so a
+        missing sink produced an actively false success line.
+        """
         sink = await get_clickhouse_sink()
         if sink is None:
-            return
+            logger.debug(
+                "ClickHouse sink not configured; skipping push of %d events",
+                len(events),
+            )
+            return False
 
         # Flatten events into ClickHouse-compatible records
         rows = []
         for e in events:
-            rows.append({
-                "silver_event_id": e.get("silver_event_id"),
-                "org_id": e.get("org_id") or "00000000-0000-0000-0000-000000000000",
-                "user_id": e.get("user_id") or "00000000-0000-0000-0000-000000000000",
-                "event_type": e.get("event_type") or "unknown",
-                "resource": e.get("resource") or "",
-                "quantity": e.get("quantity") or 0,
-                "unit": e.get("unit") or "",
-                "model": e.get("model") or "",
-                "model_family": e.get("model_family") or "",
-                "cost_usd": e.get("cost_usd") if e.get("cost_usd") is not None else 0.0,
-                "total_tokens": e.get("total_tokens") or 0,
-                "input_tokens": e.get("input_tokens") or 0,
-                "output_tokens": e.get("output_tokens") or 0,
-                "duration_ms": e.get("duration_ms") or 0,
-                "pipeline_stage": e.get("pipeline_stage") or "",
-                "agent_name": e.get("agent_name") or "",
-                "job_id": e.get("job_id") or "00000000-0000-0000-0000-000000000000",
-                "trace_id": e.get("trace_id") or "",
-                "benchmark_id": e.get("benchmark_id") or "",
-                "pii_detected": bool(e.get("pii_detected", False)),
-                "quarantined": bool(e.get("quarantined", False)),
-                "correlation_id": e.get("correlation_id") or "",
-                "timestamp": e.get("timestamp") or datetime.now(UTC).isoformat(),
-                "silver_processed_at": e.get("silver_processed_at") or datetime.now(UTC).isoformat(),
-            })
-        await sink.insert_silver_events(rows)
+            rows.append(
+                {
+                    "silver_event_id": e.get("silver_event_id"),
+                    "org_id": e.get("org_id") or "00000000-0000-0000-0000-000000000000",
+                    "user_id": e.get("user_id") or "00000000-0000-0000-0000-000000000000",
+                    "event_type": e.get("event_type") or "unknown",
+                    "resource": e.get("resource") or "",
+                    "quantity": e.get("quantity") or 0,
+                    "unit": e.get("unit") or "",
+                    "model": e.get("model") or "",
+                    "model_family": e.get("model_family") or "",
+                    "cost_usd": e.get("cost_usd") if e.get("cost_usd") is not None else 0.0,
+                    "total_tokens": e.get("total_tokens") or 0,
+                    "input_tokens": e.get("input_tokens") or 0,
+                    "output_tokens": e.get("output_tokens") or 0,
+                    "duration_ms": e.get("duration_ms") or 0,
+                    "pipeline_stage": e.get("pipeline_stage") or "",
+                    "agent_name": e.get("agent_name") or "",
+                    "job_id": e.get("job_id") or "00000000-0000-0000-0000-000000000000",
+                    "trace_id": e.get("trace_id") or "",
+                    "benchmark_id": e.get("benchmark_id") or "",
+                    "pii_detected": bool(e.get("pii_detected", False)),
+                    "quarantined": bool(e.get("quarantined", False)),
+                    "correlation_id": e.get("correlation_id") or "",
+                    "timestamp": e.get("timestamp") or datetime.now(UTC).isoformat(),
+                    "silver_processed_at": e.get("silver_processed_at")
+                    or datetime.now(UTC).isoformat(),
+                }
+            )
+        # ``insert_silver_events`` does not exist on the sink — the only public
+        # entry point is ``insert(table, rows)``. Every ClickHouse push raised
+        # AttributeError. ``clickhouse_sink.insert``'s own docstring records the
+        # identical bug being fixed for the telemetry collector; this call site
+        # was missed.
+        await sink.insert("silver_events", rows)
+        return True
 
     async def _write_silver(self, events: list[dict[str, Any]]) -> int:
         """Write normalized events to the silver_events table."""
@@ -504,34 +606,36 @@ class SilverETLPipeline:
         """
         rows = []
         for e in events:
-            rows.append((
-                e.get("silver_event_id"),
-                e.get("bronze_event_id"),
-                e.get("org_id"),
-                e.get("user_id"),
-                e.get("event_type"),
-                e.get("resource"),
-                e.get("quantity"),
-                e.get("unit"),
-                e.get("model"),
-                e.get("model_family"),
-                e.get("cost_usd"),
-                e.get("total_tokens"),
-                e.get("input_tokens"),
-                e.get("output_tokens"),
-                e.get("duration_ms"),
-                e.get("pipeline_stage"),
-                e.get("agent_name"),
-                e.get("job_id"),
-                e.get("trace_id"),
-                e.get("benchmark_id"),
-                e.get("pii_detected", False),
-                e.get("quarantined", False),
-                json.dumps(e.get("metadata", {}), default=str),
-                e.get("correlation_id"),
-                e.get("timestamp"),
-                e.get("silver_processed_at"),
-            ))
+            rows.append(
+                (
+                    e.get("silver_event_id"),
+                    e.get("bronze_event_id"),
+                    e.get("org_id"),
+                    e.get("user_id"),
+                    e.get("event_type"),
+                    e.get("resource"),
+                    e.get("quantity"),
+                    e.get("unit"),
+                    e.get("model"),
+                    e.get("model_family"),
+                    e.get("cost_usd"),
+                    e.get("total_tokens"),
+                    e.get("input_tokens"),
+                    e.get("output_tokens"),
+                    e.get("duration_ms"),
+                    e.get("pipeline_stage"),
+                    e.get("agent_name"),
+                    e.get("job_id"),
+                    e.get("trace_id"),
+                    e.get("benchmark_id"),
+                    e.get("pii_detected", False),
+                    e.get("quarantined", False),
+                    json.dumps(e.get("metadata", {}), default=str),
+                    e.get("correlation_id"),
+                    e.get("timestamp"),
+                    e.get("silver_processed_at"),
+                )
+            )
 
         async with client.acquire() as conn:
             await conn.executemany(query, rows)
@@ -551,15 +655,17 @@ class SilverETLPipeline:
         rows = []
         for e in events:
             reason = e.get("_quarantine_reason", ["contract violation"])
-            rows.append((
-                str(uuid.uuid4()),
-                e.get("id"),
-                e.get("org_id"),
-                e.get("event_type"),
-                json.dumps(reason),
-                json.dumps(e, default=str),
-                datetime.now(UTC).isoformat(),
-            ))
+            rows.append(
+                (
+                    _quarantine_id(e.get("id")),
+                    e.get("id"),
+                    e.get("org_id"),
+                    e.get("event_type"),
+                    json.dumps(reason),
+                    json.dumps(e, default=str),
+                    datetime.now(UTC).isoformat(),
+                )
+            )
         if rows:
             async with client.acquire() as conn:
                 await conn.executemany(query, rows)
@@ -572,14 +678,23 @@ class SilverETLPipeline:
         # Batch update in chunks to avoid oversized queries
         chunk_size = 1000
         for i in range(0, len(event_ids), chunk_size):
-            chunk = event_ids[i:i + chunk_size]
-            placeholders = ", ".join(f"${j + 2}" for j in range(len(chunk)))
+            chunk = event_ids[i : i + chunk_size]
+            # Placeholders start at $1, and no extra leading argument is
+            # passed. They used to start at $2 with a stray ``True`` bound to
+            # a ``$1`` the query never contained ("silver_processed = TRUE" is
+            # a literal), so asyncpg rejected every call for having more
+            # arguments than placeholders. Bronze events were therefore never
+            # marked processed and the ETL re-read the same rows on every run —
+            # which, together with the random silver_event_id above, meant each
+            # run appended a fresh duplicate of every event it had already
+            # processed.
+            placeholders = ", ".join(f"${j + 1}" for j in range(len(chunk)))
             query = f"""
                 UPDATE usage_events
                 SET silver_processed = TRUE, silver_processed_at = NOW()
                 WHERE id IN ({placeholders})
             """
-            await client.execute(query, True, *chunk)
+            await client.execute(query, *chunk)
 
     async def get_quarantine_summary(
         self, org_id: str | None = None, limit: int = 100
@@ -603,33 +718,63 @@ class SilverETLPipeline:
         """
         return await client.fetch(query, limit)
 
-    async def reprocess_quarantine(
-        self, quarantine_ids: list[str]
-    ) -> ETLReport:
+    async def reprocess_quarantine(self, quarantine_ids: list[str]) -> ETLReport:
         """Reprocess specific quarantined events (after fixing upstream issues)."""
         client = await self._get_postgres()
         placeholders = ", ".join(f"${i + 1}" for i in range(len(quarantine_ids)))
         query = f"""
-            SELECT raw_payload FROM quarantine_events
+            SELECT quarantine_id, raw_payload FROM quarantine_events
             WHERE quarantine_id IN ({placeholders})
         """
         rows = await client.fetch(query, *quarantine_ids)
         events = []
+        parsed_ids: list[str] = []
+        unparseable: list[str] = []
         for row in rows:
             try:
                 payload = json.loads(row["raw_payload"])
-                events.append(payload)
             except json.JSONDecodeError:
+                # Previously a bare `continue`, and the delete below then
+                # removed this id anyway — destroying the only copy of an
+                # event that was never reprocessed.
+                unparseable.append(str(row["quarantine_id"]))
                 continue
+            events.append(payload)
+            parsed_ids.append(str(row["quarantine_id"]))
+
+        if unparseable:
+            logger.error(
+                "reprocess_quarantine: %d row(s) have unparseable "
+                "raw_payload and were NOT reprocessed; keeping them "
+                "quarantined: %s",
+                len(unparseable),
+                unparseable,
+            )
 
         report = await self.run_batch(events)
 
-        # Remove from quarantine on success
-        if report.silver_inserted > 0:
-            del_placeholders = ", ".join(f"${i + 1}" for i in range(len(quarantine_ids)))
+        # Remove from quarantine ONLY on full success, and only the ids
+        # we actually reprocessed.
+        #
+        # This used to delete every id in the request whenever
+        # silver_inserted > 0. A batch of 10 where 3 failed to parse and
+        # 7 inserted deleted all 10 — silent, permanent loss of the 3.
+        # Partial inserts had the same shape.
+        fully_inserted = bool(parsed_ids) and report.silver_inserted >= len(events)
+        if fully_inserted:
+            del_placeholders = ", ".join(f"${i + 1}" for i in range(len(parsed_ids)))
             await client.execute(
                 f"DELETE FROM quarantine_events WHERE quarantine_id IN ({del_placeholders})",
-                *quarantine_ids,
+                *parsed_ids,
+            )
+        elif parsed_ids:
+            logger.warning(
+                "reprocess_quarantine: %d/%d event(s) inserted; keeping "
+                "all %d reprocessed row(s) quarantined rather than "
+                "deleting rows whose data may not have landed",
+                report.silver_inserted,
+                len(events),
+                len(parsed_ids),
             )
 
         return report

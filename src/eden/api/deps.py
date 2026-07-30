@@ -1038,6 +1038,35 @@ async def ensure_clerk_org_from_session(
 
     try:
         client = await get_postgres_client()
+
+        # organizations.slug is UNIQUE (organizations_slug_key). This
+        # path inserted Clerk's slug verbatim with no collision handling,
+        # while create_org (routes/orgs.py) dedupes by appending 8 hex
+        # chars — an asymmetry that only shows up when two customers
+        # pick the same organization name.
+        #
+        # The failure mode was silent and permanent: the INSERT raised,
+        # the except below logged a warning and returned None, and
+        # /auth/me then answered 200 with no org, leaving the customer
+        # stuck on "Syncing organization with Eden…" forever.
+        #
+        # Zero duplicate slugs in production today, which is precisely
+        # why this has never fired — and precisely why it would fire on
+        # the day two real customers sign up.
+        slug_taken = await client.fetchrow(
+            """
+            SELECT 1 FROM organizations
+            WHERE slug = $1
+              AND NOT (clerk_org_id = $2 OR id::text = $2)
+            """,
+            slug,
+            clerk_org_id,
+        )
+        if slug_taken:
+            import uuid as _uuid
+
+            slug = f"{slug}-{_uuid.uuid4().hex[:8]}"
+
         await client.execute(
             """
             INSERT INTO organizations (id, clerk_org_id, name, slug, owner_id, updated_at)
