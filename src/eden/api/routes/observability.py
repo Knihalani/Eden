@@ -61,6 +61,7 @@ ingest_router = APIRouter(
 
 # ── Pydantic Schemas ─────────────────────────────────────────────────────────
 
+
 class TelemetryEventIngest(BaseModel):
     event_id: str
     project_id: str
@@ -91,6 +92,12 @@ class TelemetryIngestResponse(BaseModel):
     deduplicated: int
     rejected: int
     total: int
+    #: Events dropped by the N16 tail-sampling gate. Not stored, not
+    #: billed, and not an error — so they belong in neither ``accepted``
+    #: nor ``rejected``. Defaulted to 0 so clients built against the old
+    #: four-field body keep parsing this one unchanged; sampling is off by
+    #: default, so for those clients the value is 0 anyway.
+    sampled_out: int = 0
 
 
 class TraceTreeResponse(BaseModel):
@@ -229,6 +236,7 @@ def _assert_ingest_org(auth_ctx: dict, org_id: str) -> str:
 
 # ── Telemetry ingest (API-key / session cookie via get_ingest_auth) ───────────
 
+
 @ingest_router.post("/telemetry/ingest", response_model=TelemetryIngestResponse)
 async def ingest_telemetry_event(
     org_id: str = Path(..., description="Organization ID"),
@@ -240,13 +248,13 @@ async def ingest_telemetry_event(
     try:
         collector = await _get_collector()
         event = _to_telemetry_event(body, org_id)
-        accepted = await collector.ingest(event)
-        return TelemetryIngestResponse(
-            accepted=1 if accepted else 0,
-            deduplicated=0 if accepted else 1,
-            rejected=0 if accepted else 1,
-            total=1,
-        )
+        # ``ingest_one`` rather than ``ingest``: a bool cannot distinguish
+        # "sampled out" from "rejected", and it also cannot distinguish
+        # "deduplicated" from "rejected" — which is why the old body
+        # reported a single failed event as *both* deduplicated=1 and
+        # rejected=1.
+        result = await collector.ingest_one(event)
+        return TelemetryIngestResponse(**result)
     except HTTPException:
         raise
     except IngestionUnavailable as exc:
@@ -294,10 +302,10 @@ async def ingest_telemetry_batch(
             headers={"Retry-After": "5"},
         ) from exc
     except (ValueError, TypeError, KeyError) as exc:
-        logger.warning("Telemetry batch ingest client error for org %s: %s", org_id, redact_all(str(exc)))
-        raise HTTPException(
-            status_code=400, detail=str(exc) or "Invalid telemetry batch"
-        ) from exc
+        logger.warning(
+            "Telemetry batch ingest client error for org %s: %s", org_id, redact_all(str(exc))
+        )
+        raise HTTPException(status_code=400, detail=str(exc) or "Invalid telemetry batch") from exc
     except Exception as exc:
         from eden.api.utils.safe_error import safe_detail
 
@@ -352,8 +360,10 @@ async def list_traces(
     correctness for traces hub.
     """
     from datetime import UTC, datetime, timedelta
+
     try:
         from eden.storage import postgres as _pg_module
+
         client = await _pg_module.get_postgres_client()
     except Exception as exc:
         logger.warning("list_traces: postgres unavailable: %s", redact_all(str(exc)))
@@ -528,7 +538,9 @@ async def list_traces(
             FROM page p
             ORDER BY p.started_at DESC
             """,
-            *args, limit, offset,
+            *args,
+            limit,
+            offset,
         )
         # Skip the expensive distinct-trace COUNT when this page is
         # clearly the last (or only) page — common for small tenants
@@ -563,17 +575,13 @@ async def list_traces(
             started_at=r["started_at"].isoformat() if r["started_at"] else None,
             outcome=r["outcome"],
             span_count=int(r["span_count"] or 0),
-            duration_ms=(
-                float(r["duration_ms"]) if r["duration_ms"] is not None else None
-            ),
+            duration_ms=(float(r["duration_ms"]) if r["duration_ms"] is not None else None),
             model=r["model"],
             provider=r["provider"],
             input_tokens=int(r["input_tokens"] or 0) if r["input_tokens"] else None,
             output_tokens=int(r["output_tokens"] or 0) if r["output_tokens"] else None,
             cost_cents=(
-                int(round(float(r["cost_usd"]) * 100))
-                if r["cost_usd"] is not None
-                else None
+                int(round(float(r["cost_usd"]) * 100)) if r["cost_usd"] is not None else None
             ),
             error=(
                 {"type": r["error_type"]}
@@ -662,9 +670,7 @@ async def compare_traces_route(
 ) -> ComparativeResponse:
     """Compare an environment trace with a production trace."""
     collector = await _get_collector()
-    summary = await collector.get_comparative_summary(
-        org_id, body.env_trace_id, body.prod_trace_id
-    )
+    summary = await collector.get_comparative_summary(org_id, body.env_trace_id, body.prod_trace_id)
     if summary is None:
         raise HTTPException(status_code=404, detail="One or both traces not found")
 
@@ -711,18 +717,23 @@ async def export_trace_route(
     elif fmt == "csv":
         import csv
         import io
+
         buf = io.StringIO()
         writer = csv.writer(buf)
-        writer.writerow(["span_id", "parent_span_id", "name", "event_type", "duration_ms", "outcome"])
+        writer.writerow(
+            ["span_id", "parent_span_id", "name", "event_type", "duration_ms", "outcome"]
+        )
         for _span_id, span in tree.span_map.items():
-            writer.writerow([
-                span.get("span_id", ""),
-                span.get("parent_span_id", ""),
-                span.get("name", ""),
-                span.get("event_type", ""),
-                span.get("duration_ms", 0),
-                span.get("outcome", ""),
-            ])
+            writer.writerow(
+                [
+                    span.get("span_id", ""),
+                    span.get("parent_span_id", ""),
+                    span.get("name", ""),
+                    span.get("event_type", ""),
+                    span.get("duration_ms", 0),
+                    span.get("outcome", ""),
+                ]
+            )
         data = buf.getvalue()
     else:
         # Pretty JSON for human download — keep indent=2 for format contract.
@@ -785,10 +796,14 @@ class SpanSuggestResponse(BaseModel):
 @router.get("/spans/search", response_model=SpanSearchResponse)
 async def search_spans_route(
     org_id: str = Depends(require_path_org_access),
-    q: str = Query("", description="Full-text query (matches input/output text + tool names + agent id)"),
+    q: str = Query(
+        "", description="Full-text query (matches input/output text + tool names + agent id)"
+    ),
     agent: str | None = Query(None, description="Filter to one agent_id"),
     tool: str | None = Query(None, description="Filter to one tool name"),
-    outcome: str | None = Query(None, description="Filter to one outcome (success/failure/partial/timeout/crash)"),
+    outcome: str | None = Query(
+        None, description="Filter to one outcome (success/failure/partial/timeout/crash)"
+    ),
     event_type: str | None = Query(None, description="Filter to one event_type"),
     from_ts: int | None = Query(None, description="Lower bound on created_at (epoch seconds)"),
     to_ts: int | None = Query(None, description="Upper bound on created_at (epoch seconds)"),
@@ -843,6 +858,7 @@ async def suggest_spans_route(
 
     service = get_search_service()
     import time as _time
+
     start = _time.perf_counter()
     hits = await service.suggest(tenant_id=org_id, query=q, limit=limit)
     elapsed = (_time.perf_counter() - start) * 1000
@@ -859,6 +875,7 @@ async def suggest_spans_route(
 # tenant's call/error mix, latency percentiles, top failure modes,
 # top tools, hot paths, and per-model cost breakdown — the same
 # fields the portal's "Observability" summary card renders.
+
 
 @router.get("/summary", response_model=dict)
 async def observability_summary(
@@ -880,7 +897,10 @@ async def observability_summary(
 ):
     """Top-of-dashboard summary for an org.
 
-    Issues one query per shape (totals, percentiles, failure modes,
+    Issues one query per shape, all of them concurrently (see the
+    ``asyncio.gather`` below): seven in the base case, nine with
+    ``compare_previous``, across two sequential round trips rather
+    than seven-to-nine. This wording used to read as a sequential loop (totals, percentiles, failure modes,
     tools, hot paths, models) and assembles the response. Each
     subquery is a single GROUP BY / aggregate over ``telemetry_events``
     scoped to the org + window.
@@ -888,6 +908,7 @@ async def observability_summary(
     from datetime import UTC, datetime, timedelta
 
     from eden.storage import postgres as _pg_module
+
     client = await _pg_module.get_postgres_client()
     since = datetime.now(UTC) - timedelta(hours=window_hours)
     common_where = "tenant_id = $1 AND timestamp >= $2"
@@ -896,96 +917,90 @@ async def observability_summary(
         common_args.append(agent_id)
         common_where += f" AND attributes->>'agent_id' = ${len(common_args)}"
 
-    empty: dict[str, Any] = {
-        "window_hours": window_hours,
-        "agent_id": agent_id,
-        "total_events": 0,
-        "total_traces": 0,
-        "error_rate": 0.0,
-        "p50_ms": None,
-        "p95_ms": None,
-        "p99_ms": None,
-        "total_cost_usd": 0.0,
-        "eval_coverage_pct": 0.0,
-        "top_failure_modes": [],
-        "top_tools": [],
-        "hot_paths": [],
-        "model_breakdown": [],
-    }
+    # The all-zeros `empty` payload that used to live here is gone: it
+    # existed only to be returned when the database was unreachable,
+    # which is the fabrication this endpoint no longer commits.
     if client is None:
-        if compare_previous:
-            empty["previous"] = {
-                "total_traces": 0,
-                "error_rate": 0.0,
-                "p95_ms": None,
-                "total_cost_usd": 0.0,
-            }
-        return empty
+        # This returned `empty` at HTTP 200 — total_traces 0, error_rate
+        # 0.0 — so the observability product's own summary reported a
+        # clean, healthy, zero-error dashboard when what it actually
+        # meant was "we could not reach the database".
+        #
+        # list_traces in this same module already raises 503 for exactly
+        # this condition, so the two disagreed about what an unreachable
+        # Postgres means. "Zero errors" and "we don't know" must never
+        # render identically on a monitoring dashboard — that is the one
+        # product where a confident wrong answer does the most damage.
+        raise HTTPException(
+            status_code=503,
+            detail="Metrics are temporarily unavailable; please retry",
+            headers={"Retry-After": "5"},
+        )
 
     # 1-7 fire in parallel via asyncio.gather — six 50ms queries
     # collapse into a single round-trip latency instead of 6×.
     # return_exceptions so a missing judge_scores table (etc.) cannot
     # 500 the whole dashboard summary.
     gathered = await asyncio.gather(
-            client.fetchrow(
-                f"SELECT count(*) AS total_events, "
-                f"count(DISTINCT trace_id) AS total_traces, "
-                f"sum(CASE WHEN error_type IS NOT NULL "
-                f"OR (attributes ? 'error') THEN 1 ELSE 0 END) AS errors "
-                f"FROM telemetry_events WHERE {common_where}",
-                *common_args,
-            ),
-            client.fetchrow(
-                f"SELECT percentile_cont(0.50) WITHIN GROUP (ORDER BY duration_ms) AS p50, "
-                f"percentile_cont(0.95) WITHIN GROUP (ORDER BY duration_ms) AS p95, "
-                f"percentile_cont(0.99) WITHIN GROUP (ORDER BY duration_ms) AS p99, "
-                f"coalesce(sum(coalesce("
-                f"  NULLIF(metrics->>'cost_usd','')::float,"
-                f"  NULLIF(payload->>'cost_usd','')::float,"
-                f"  NULLIF(attributes->>'cost_usd','')::float,"
-                f"  0)), 0) AS cost "
-                f"FROM telemetry_events WHERE {common_where}",
-                *common_args,
-            ),
-            client.fetch(
-                f"SELECT coalesce(error_type, attributes->>'error', event_type) AS name, "
-                f"count(*) AS count, "
-                f"array_agg(distinct trace_id) FILTER (WHERE trace_id IS NOT NULL) AS sample_trace_ids "
-                f"FROM telemetry_events WHERE {common_where} "
-                f"  AND (error_type IS NOT NULL OR (attributes ? 'error')) "
-                f"GROUP BY 1 ORDER BY count DESC LIMIT 10",
-                *common_args,
-            ),
-            client.fetch(
-                f"SELECT coalesce(payload->>'tool_name', attributes->>'tool_name', name, event_type) AS name, "
-                f"count(*) AS count "
-                f"FROM telemetry_events WHERE {common_where} "
-                f"  AND event_type IN ('tool_call', 'tool_result') "
-                f"GROUP BY 1 ORDER BY count DESC LIMIT 10",
-                *common_args,
-            ),
-            client.fetch(
-                f"SELECT event_type AS name, count(*) AS count, "
-                f"avg(duration_ms) AS avg_duration_ms "
-                f"FROM telemetry_events WHERE {common_where} "
-                f"GROUP BY 1 ORDER BY count DESC LIMIT 10",
-                *common_args,
-            ),
-            client.fetch(
-                f"SELECT coalesce(model, model_name, attributes->>'model', attributes->>'openai.model', attributes->>'anthropic.model') AS model, "
-                f"count(*) AS calls, "
-                f"coalesce(sum(coalesce("
-                f"  NULLIF(metrics->>'cost_usd','')::float,"
-                f"  NULLIF(payload->>'cost_usd','')::float,"
-                f"  NULLIF(attributes->>'cost_usd','')::float,"
-                f"  0)), 0) AS cost_usd "
-                f"FROM telemetry_events WHERE {common_where} "
-                f"  AND event_type = 'llm_call' "
-                f"GROUP BY 1",
-                *common_args,
-            ),
-            client.fetchrow(
-                f"""
+        client.fetchrow(
+            f"SELECT count(*) AS total_events, "
+            f"count(DISTINCT trace_id) AS total_traces, "
+            f"sum(CASE WHEN error_type IS NOT NULL "
+            f"OR (attributes ? 'error') THEN 1 ELSE 0 END) AS errors "
+            f"FROM telemetry_events WHERE {common_where}",
+            *common_args,
+        ),
+        client.fetchrow(
+            f"SELECT percentile_cont(0.50) WITHIN GROUP (ORDER BY duration_ms) AS p50, "
+            f"percentile_cont(0.95) WITHIN GROUP (ORDER BY duration_ms) AS p95, "
+            f"percentile_cont(0.99) WITHIN GROUP (ORDER BY duration_ms) AS p99, "
+            f"coalesce(sum(coalesce("
+            f"  NULLIF(metrics->>'cost_usd','')::float,"
+            f"  NULLIF(payload->>'cost_usd','')::float,"
+            f"  NULLIF(attributes->>'cost_usd','')::float,"
+            f"  0)), 0) AS cost "
+            f"FROM telemetry_events WHERE {common_where}",
+            *common_args,
+        ),
+        client.fetch(
+            f"SELECT coalesce(error_type, attributes->>'error', event_type) AS name, "
+            f"count(*) AS count, "
+            f"array_agg(distinct trace_id) FILTER (WHERE trace_id IS NOT NULL) AS sample_trace_ids "
+            f"FROM telemetry_events WHERE {common_where} "
+            f"  AND (error_type IS NOT NULL OR (attributes ? 'error')) "
+            f"GROUP BY 1 ORDER BY count DESC LIMIT 10",
+            *common_args,
+        ),
+        client.fetch(
+            f"SELECT coalesce(payload->>'tool_name', attributes->>'tool_name', name, event_type) AS name, "
+            f"count(*) AS count "
+            f"FROM telemetry_events WHERE {common_where} "
+            f"  AND event_type IN ('tool_call', 'tool_result') "
+            f"GROUP BY 1 ORDER BY count DESC LIMIT 10",
+            *common_args,
+        ),
+        client.fetch(
+            f"SELECT event_type AS name, count(*) AS count, "
+            f"avg(duration_ms) AS avg_duration_ms "
+            f"FROM telemetry_events WHERE {common_where} "
+            f"GROUP BY 1 ORDER BY count DESC LIMIT 10",
+            *common_args,
+        ),
+        client.fetch(
+            f"SELECT coalesce(model, model_name, attributes->>'model', attributes->>'openai.model', attributes->>'anthropic.model') AS model, "
+            f"count(*) AS calls, "
+            f"coalesce(sum(coalesce("
+            f"  NULLIF(metrics->>'cost_usd','')::float,"
+            f"  NULLIF(payload->>'cost_usd','')::float,"
+            f"  NULLIF(attributes->>'cost_usd','')::float,"
+            f"  0)), 0) AS cost_usd "
+            f"FROM telemetry_events WHERE {common_where} "
+            f"  AND event_type = 'llm_call' "
+            f"GROUP BY 1",
+            *common_args,
+        ),
+        client.fetchrow(
+            f"""
                 WITH traces AS (
                     SELECT DISTINCT trace_id
                       FROM telemetry_events
@@ -1002,10 +1017,10 @@ async def observability_summary(
                   (SELECT count(*) FROM traces) AS total_traces,
                   (SELECT count(*) FROM judged) AS judged_traces
                 """,
-                *common_args,
-            ),
-            return_exceptions=True,
-        )
+            *common_args,
+        ),
+        return_exceptions=True,
+    )
 
     def _ok_row(value: Any) -> Any:
         return None if isinstance(value, BaseException) else value
@@ -1020,14 +1035,36 @@ async def observability_summary(
     hot_paths = _ok_rows(gathered[4])
     model_breakdown = _ok_rows(gathered[5])
     eval_coverage_row = _ok_row(gathered[6])
+    degraded_panels: list[int] = []
     for idx, part in enumerate(gathered):
         if isinstance(part, BaseException):
+            degraded_panels.append(idx)
             logger.warning(
                 "observability_summary subquery[%s] failed org=%s: %s",
                 idx,
                 org_id,
                 part,
             )
+
+    # gathered[0] carries total_events / total_traces / errors — every
+    # headline number on the dashboard. When it raises, the arithmetic
+    # below silently yields total_traces 0 and error_rate 0.0, i.e. a
+    # confident "zero errors" that actually means "the query failed".
+    #
+    # The other six degrade a single panel and are reported via
+    # `degraded_panels` rather than faked; only the headline is fatal.
+    if isinstance(gathered[0], BaseException):
+        logger.error(
+            "observability_summary: headline totals query failed for "
+            "org=%s; refusing to report a zero-error dashboard: %s",
+            org_id,
+            gathered[0],
+        )
+        raise HTTPException(
+            status_code=503,
+            detail="Metrics are temporarily unavailable; please retry",
+            headers={"Retry-After": "5"},
+        )
     total_events = int((totals or {}).get("total_events") or 0)
     total_traces = int((totals or {}).get("total_traces") or 0)
     errors = int((totals or {}).get("errors") or 0)
@@ -1108,8 +1145,12 @@ async def observability_summary(
             result["previous"] = {
                 "total_traces": prev_total_traces,
                 "error_rate": (prev_errors / prev_total_events) if prev_total_events else 0.0,
-                "p95_ms": float(prev_pct["p95"]) if prev_pct and prev_pct["p95"] is not None else None,
-                "total_cost_usd": float(prev_pct["cost"]) if prev_pct and prev_pct["cost"] is not None else 0.0,
+                "p95_ms": float(prev_pct["p95"])
+                if prev_pct and prev_pct["p95"] is not None
+                else None,
+                "total_cost_usd": float(prev_pct["cost"])
+                if prev_pct and prev_pct["cost"] is not None
+                else 0.0,
             }
         except Exception as exc:
             logger.warning(
@@ -1117,11 +1158,17 @@ async def observability_summary(
                 org_id,
                 redact_all(str(exc)),
             )
-            result["previous"] = {
-                "total_traces": 0,
-                "error_rate": 0.0,
-                "p95_ms": None,
-                "total_cost_usd": 0.0,
-            }
+            # None, not zeros. A zeroed previous window is not a neutral
+            # default — the UI divides by it to render delta badges, so
+            # a failed comparison query became a confident "+100%
+            # growth" on a dashboard. Null means "unknown" and the
+            # caller can render a dash.
+            result["previous"] = None
+            result["previous_unavailable"] = True
+
+    # Panels whose source query raised. Present so the UI can mark them
+    # as unknown instead of drawing an empty chart that reads as zero.
+    if degraded_panels:
+        result["degraded_panels"] = degraded_panels
 
     return result
