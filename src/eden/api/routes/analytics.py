@@ -152,8 +152,10 @@ async def token_usage(
         rows = await client.fetch(
             """
             SELECT DATE(created_at) AS day,
-                   SUM(COALESCE((metadata->>'input_tokens')::int, 0))  AS input_tokens,
-                   SUM(COALESCE((metadata->>'output_tokens')::int, 0)) AS output_tokens
+                   SUM(COALESCE((NULLIF(metadata->>'input_tokens', ''))::numeric, 0))
+                     AS input_tokens,
+                   SUM(COALESCE((NULLIF(metadata->>'output_tokens', ''))::numeric, 0))
+                     AS output_tokens
             FROM usage_events
             WHERE org_id = $1
               AND event_type = 'llm_call'

@@ -227,7 +227,7 @@ class ImpactPreviewOrchestrator:
                     SELECT trace_id,
                            (CASE
                               WHEN outcome IS DISTINCT FROM 'success' THEN 0
-                              WHEN COALESCE((attributes->>'cost_usd')::float, 0) > 0.05 THEN 1
+                              WHEN COALESCE((NULLIF(attributes->>'cost_usd', ''))::float, 0) > 0.05 THEN 1
                               ELSE 2
                             END) AS bucket,
                            timestamp

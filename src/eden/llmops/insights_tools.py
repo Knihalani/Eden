@@ -340,9 +340,9 @@ async def get_trace(org_id: str, trace_id: str) -> dict[str, Any]:
                  )), 0
                ) AS cost_usd,
                sum(COALESCE(usage_prompt_tokens,
-                            NULLIF(payload->>'input_tokens', '')::int, 0)) AS input_tokens,
+                            (NULLIF(payload->>'input_tokens', ''))::numeric, 0)) AS input_tokens,
                sum(COALESCE(usage_completion_tokens,
-                            NULLIF(payload->>'output_tokens', '')::int, 0)) AS output_tokens
+                            (NULLIF(payload->>'output_tokens', ''))::numeric, 0)) AS output_tokens
         FROM telemetry_events
         WHERE tenant_id = $1 AND trace_id = $2
         GROUP BY trace_id

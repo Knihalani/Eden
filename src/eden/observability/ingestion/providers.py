@@ -112,7 +112,16 @@ async def maybe_gunzip_body_async(
 # ── OpenAI ───────────────────────────────────────────────────────────
 
 
+def _as_token_count(value: Any) -> int | None:
+    """Coerce a usage value to an int token count (never float)."""
+    try:
+        return int(float(value))
+    except (TypeError, ValueError):
+        return None
+
+
 def _openai_extract_usage(usage: dict[str, Any]) -> dict[str, float]:
+    """Extract token metrics; store ints so jsonb never holds 198.0."""
     metrics: dict[str, float] = {}
     for src, dst in (
         ("prompt_tokens", "input_tokens"),
@@ -120,8 +129,9 @@ def _openai_extract_usage(usage: dict[str, Any]) -> dict[str, float]:
         ("total_tokens", "total_tokens"),
     ):
         if src in usage:
-            with contextlib.suppress(TypeError, ValueError):
-                metrics[dst] = float(usage[src])
+            n = _as_token_count(usage[src])
+            if n is not None:
+                metrics[dst] = n  # type: ignore[assignment]
     return metrics
 
 
@@ -390,8 +400,9 @@ def _anthropic_to_raw(item: dict[str, Any]) -> dict[str, Any]:
         ("cache_read_input_tokens", "cache_read_tokens"),
     ):
         if src in usage:
-            with contextlib.suppress(TypeError, ValueError):
-                metrics[dst] = float(usage[src])
+            n = _as_token_count(usage[src])
+                if n is not None:
+                    metrics[dst] = n  # type: ignore[assignment]
     if (
         "input_tokens" in metrics
         and "output_tokens" in metrics
@@ -655,8 +666,9 @@ def _bedrock_to_raw(item: dict[str, Any]) -> dict[str, Any]:
         ("cacheReadInputTokenCount", "cache_read_tokens"),
     ):
         if src in usage:
-            with contextlib.suppress(TypeError, ValueError):
-                metrics[dst] = float(usage[src])
+            n = _as_token_count(usage[src])
+                if n is not None:
+                    metrics[dst] = n  # type: ignore[assignment]
 
     # Pull request and response bodies verbatim. Bedrock's wire shape
     # varies; the most common keys are `input` (Converse), `body`
@@ -832,8 +844,9 @@ def _gemini_to_raw(item: dict[str, Any]) -> dict[str, Any]:
         ("total_token_count", "total_tokens"),
     ):
         if src in usage_metadata:
-            with contextlib.suppress(TypeError, ValueError):
-                metrics[dst] = float(usage_metadata[src])
+            n = _as_token_count(usage_metadata[src])
+                if n is not None:
+                    metrics[dst] = n  # type: ignore[assignment]
 
     # Extract first text from candidates for backward-compat detectors
     candidates = item.get("candidates") or []

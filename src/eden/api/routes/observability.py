@@ -463,14 +463,14 @@ async def list_traces(
                        max(attributes->>'error') AS attr_error,
                        sum(
                            coalesce(
-                               NULLIF(payload->>'input_tokens', '')::int,
+                               (NULLIF(payload->>'input_tokens', ''))::numeric,
                                usage_prompt_tokens,
                                0
                            )
                        ) AS input_tokens,
                        sum(
                            coalesce(
-                               NULLIF(payload->>'output_tokens', '')::int,
+                               (NULLIF(payload->>'output_tokens', ''))::numeric,
                                usage_completion_tokens,
                                0
                            )

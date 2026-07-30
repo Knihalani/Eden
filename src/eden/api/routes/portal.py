@@ -44,6 +44,7 @@ from eden.api.portal_contracts import (
     WorkspacePrefs,
 )
 from eden.api.utils.redact import redact_all
+from eden.storage.sql_safe import safe_cost_sum_sql, safe_token_sum_sql
 
 logger = logging.getLogger(__name__)
 
@@ -398,6 +399,20 @@ COALESCE(
 )
 """
 
+# Template form kept for unit tests that assert ``::numeric`` + format(alias=).
+# Runtime SQL uses :func:`eden.storage.sql_safe.safe_token_sum_sql`.
+_SAFE_TOKEN_SUM_SQL = (
+    "COALESCE(SUM(\n"
+    "  COALESCE((NULLIF({alias}metrics->>'input_tokens', ''))::numeric, 0)\n"
+    "  + COALESCE((NULLIF({alias}metrics->>'output_tokens', ''))::numeric, 0)\n"
+    "), 0)::int"
+)
+_SAFE_COST_SUM_SQL = (
+    "COALESCE(SUM(\n"
+    "  COALESCE((NULLIF({alias}metrics->>'cost_usd', ''))::float, 0)\n"
+    "), 0)::float"
+)
+
 
 # ── GET /agents ───────────────────────────────────────────────────
 
@@ -466,7 +481,7 @@ async def list_portal_agents(
         metrics_by_id: dict[str, dict[str, Any]] = {}
         try:
             mrows = await client.fetch(
-                """
+                f"""
                 WITH recent AS (
                     SELECT agent_id, trace_id, outcome, duration_ms, metrics
                     FROM telemetry_events
@@ -481,13 +496,8 @@ async def list_portal_agents(
                 )
                 SELECT agent_id,
                        COUNT(DISTINCT trace_id)::int AS runs,
-                       COALESCE(SUM(
-                           COALESCE((metrics->>'cost_usd')::float, 0)
-                       ), 0)::float AS cost_usd,
-                       COALESCE(SUM(
-                           COALESCE((metrics->>'input_tokens')::int, 0)
-                           + COALESCE((metrics->>'output_tokens')::int, 0)
-                       ), 0)::int AS tokens,
+                       {safe_cost_sum_sql()} AS cost_usd,
+                       {safe_token_sum_sql()} AS tokens,
                        AVG(
                            CASE
                                WHEN lower(coalesce(outcome, '')) IN
@@ -509,6 +519,40 @@ async def list_portal_agents(
                 metrics_by_id[str(r["agent_id"])] = dict(r)
         except Exception as exc:  # noqa: BLE001
             logger.warning("portal agents: telemetry metrics skipped: %s", redact_all(str(exc)))
+            # Cast failures must not erase SDK-only agents when the
+            # registry is empty. Discover agent_ids with a cast-free
+            # query so cards still appear (runs/tokens stay zero).
+            try:
+                id_rows = await client.fetch(
+                    """
+                    SELECT agent_id, COUNT(DISTINCT trace_id)::int AS runs,
+                           MAX(timestamp) AS last_seen
+                    FROM telemetry_events
+                    WHERE tenant_id = $1
+                      AND agent_id IS NOT NULL
+                      AND timestamp > NOW() - ($2::int * INTERVAL '1 second')
+                    GROUP BY agent_id
+                    ORDER BY runs DESC
+                    LIMIT 200
+                    """,
+                    org_id,
+                    window_secs,
+                )
+                for r in id_rows:
+                    metrics_by_id[str(r["agent_id"])] = {
+                        "runs": int(r["runs"] or 0),
+                        "success_rate": 1.0,
+                        "cost_usd": 0.0,
+                        "tokens": 0,
+                        "p50": 0.0,
+                        "p95": 0.0,
+                        "last_seen": r.get("last_seen"),
+                    }
+            except Exception as exc2:  # noqa: BLE001
+                logger.warning(
+                    "portal agents: telemetry id discovery skipped: %s",
+                    redact_all(str(exc2)),
+                )
         return metrics_by_id
 
     async def _load_open_issues() -> dict[str, dict[str, int]]:
@@ -608,11 +652,18 @@ async def list_portal_agents(
         )
 
     # SDK-only agents: telemetry has agent_id but no registry row yet.
-    for agent_id in metrics_by_id:
+    for agent_id, metrics in metrics_by_id.items():
         if not agent_id or agent_id in seen:
             continue
         seen.add(agent_id)
-        out.append(_build(agent_id, agent_id, "from telemetry", None))
+        out.append(
+            _build(
+                agent_id,
+                agent_id,
+                "from telemetry",
+                metrics.get("last_seen"),
+            )
+        )
 
     return out
 
@@ -673,9 +724,8 @@ async def list_portal_traces(
                    (ARRAY_AGG(e.outcome ORDER BY e.timestamp DESC)
                       FILTER (WHERE e.outcome IS NOT NULL))[1] AS outcome,
                    MAX(e.duration_ms) AS duration_ms,
-                   COALESCE(SUM(COALESCE((e.metrics->>'input_tokens')::int, 0)
-                       + COALESCE((e.metrics->>'output_tokens')::int, 0)), 0)::int AS tokens,
-                   COALESCE(SUM(COALESCE((e.metrics->>'cost_usd')::float, 0)), 0)::float AS cost_usd,
+                   {safe_token_sum_sql(alias="e.")} AS tokens,
+                   {safe_cost_sum_sql(alias="e.")} AS cost_usd,
                    MAX(e.attributes->>'session_id') AS session_id
             FROM telemetry_events e
             INNER JOIN ids ON ids.trace_id = e.trace_id
@@ -754,9 +804,8 @@ async def get_portal_trace(
                    (ARRAY_AGG(outcome ORDER BY timestamp DESC)
                       FILTER (WHERE outcome IS NOT NULL))[1] AS outcome,
                    MAX(duration_ms) AS duration_ms,
-                   COALESCE(SUM(COALESCE((metrics->>'input_tokens')::int, 0)
-                       + COALESCE((metrics->>'output_tokens')::int, 0)), 0)::int AS tokens,
-                   COALESCE(SUM(COALESCE((metrics->>'cost_usd')::float, 0)), 0)::float AS cost_usd,
+                   {safe_token_sum_sql()} AS tokens,
+                   {safe_cost_sum_sql()} AS cost_usd,
                    MAX(attributes->>'session_id') AS session_id
             FROM telemetry_events
             WHERE tenant_id = $1 AND trace_id = $2

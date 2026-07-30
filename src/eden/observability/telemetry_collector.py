@@ -241,10 +241,43 @@ def _dump_jsonb(value):
     else is serialised with ``default=str, separators=(",", ":")`` —
     the compact form saves ~10% vs the stdlib default and matches
     what the compression layer writes for the ``*_zstd`` columns.
+
+    Token metric keys are coerced to ints before serialise so jsonb
+    never stores ``198.0`` (which becomes ``'198.0'`` under ``->>``
+    and breaks bare ``::int`` SQL casts).
     """
     if value is None or value == {} or value == []:
         return None
+    if isinstance(value, dict):
+        value = _normalize_token_metrics_dict(value)
     return _json_dumps(value)
+
+
+_TOKEN_METRIC_KEYS = frozenset(
+    {
+        "input_tokens",
+        "output_tokens",
+        "total_tokens",
+        "prompt_tokens",
+        "completion_tokens",
+        "cache_read_tokens",
+        "cache_creation_tokens",
+        "cached_tokens",
+        "thoughts_tokens",
+    }
+)
+
+
+def _normalize_token_metrics_dict(metrics: dict) -> dict:
+    out = dict(metrics)
+    for key in _TOKEN_METRIC_KEYS:
+        if key not in out or out[key] is None:
+            continue
+        try:
+            out[key] = int(float(out[key]))
+        except (TypeError, ValueError):
+            continue
+    return out
 
 
 # The one statement every telemetry write goes through, single or batched.
@@ -734,10 +767,10 @@ class TelemetryCollector:
                     model=str(model),
                     cost_usd=None,  # computed server-side from model_pricing
                     metadata={
-                        "input_tokens": input_tokens,
-                        "output_tokens": output_tokens,
-                        "cache_read_tokens": cache_read,
-                        "cache_creation_tokens": cache_write,
+                        "input_tokens": int(input_tokens),
+                        "output_tokens": int(output_tokens),
+                        "cache_read_tokens": int(cache_read),
+                        "cache_creation_tokens": int(cache_write),
                         "source_format": event.source_format,
                         "event_id": event.event_id,
                         "trace_id": event.trace_id,
