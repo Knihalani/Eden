@@ -1371,7 +1371,15 @@ async def list_portal_keys(
     """API key cards from ``org_api_keys`` (revoked_at → status)."""
     client = await _pg()
     if client is None:
-        return []
+        # "You have no API keys" and "we could not read your API keys"
+        # must not be the same screen. This is the same defect class as
+        # GET /orgs returning [] mid-provisioning: the customer sees an
+        # empty list and mints a duplicate key they did not need.
+        raise HTTPException(
+            status_code=503,
+            detail="Could not load API keys; please retry",
+            headers={"Retry-After": "5"},
+        )
     try:
         rows = await client.fetch(
             """
@@ -1387,7 +1395,13 @@ async def list_portal_keys(
         )
     except Exception as exc:  # noqa: BLE001
         logger.warning("portal keys: query failed: %s", redact_all(str(exc)))
-        return []
+        # A genuinely empty result is still [] below — that is the
+        # honest answer for an org with no keys yet.
+        raise HTTPException(
+            status_code=503,
+            detail="Could not load API keys; please retry",
+            headers={"Retry-After": "5"},
+        ) from exc
 
     out: list[ApiKeyCard] = []
     for r in rows:

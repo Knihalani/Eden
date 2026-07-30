@@ -42,16 +42,15 @@ class TestF66AuthHoneypotRedaction:
         # ``request.email`` so the operator sees the IP
         # but not the address.
         assert "redact_email(request.email)" in src, (
-            "F66 regression: signup honeypot log no longer "
-            "redacts the requester's email"
+            "F66 regression: signup honeypot log no longer " "redacts the requester's email"
         )
         # Negative pin: the unredacted form MUST NOT be
         # in the source. We use a small substring to
         # match the original line.
-        assert '"signup honeypot triggered from ip=%s email=%s",\n            _client_ip(req),\n            request.email,' not in src, (
-            "F66 regression: signup honeypot is logging "
-            "the plaintext email again"
-        )
+        assert (
+            '"signup honeypot triggered from ip=%s email=%s",\n            _client_ip(req),\n            request.email,'
+            not in src
+        ), "F66 regression: signup honeypot is logging " "the plaintext email again"
 
 
 class TestF66AuthDispatchExcRedaction:
@@ -63,7 +62,11 @@ class TestF66AuthDispatchExcRedaction:
         "log_text",
         [
             "verification email dispatch failed",
-            "password reset email dispatch failed",
+            # Reworded when this was raised WARNING -> ERROR: the
+            # plaintext reset token exists only in that email, so a
+            # failed dispatch locks the user out with no recourse. The
+            # redaction requirement this test guards is unchanged.
+            "password reset email dispatch FAILED",
             "forgot-password dispatch failed",
         ],
     )
@@ -77,14 +80,13 @@ class TestF66AuthDispatchExcRedaction:
         # human-readable prefix.
         prefix_idx = src.find(log_text)
         assert prefix_idx != -1, (
-            f"F66 test setup error: '{log_text}' not "
-            "found in auth.py source"
+            f"F66 test setup error: '{log_text}' not " "found in auth.py source"
         )
         # Look at the surrounding line — it should
         # contain ``redact_email(`` (or ``redact_all(``).
         # We pick a 200-char window centered on the
         # prefix.
-        window = src[max(0, prefix_idx - 50): prefix_idx + 250]
+        window = src[max(0, prefix_idx - 50) : prefix_idx + 250]
         assert "redact_email(str(exc))" in window or "redact_all(" in window, (
             f"F66 regression: '{log_text}' log line no "
             "longer runs the upstream exc through the "
@@ -95,7 +97,7 @@ class TestF66AuthDispatchExcRedaction:
         # appear in the source. We check for the
         # f-string interpolation pattern that doesn't
         # include the redact helper.
-        bad_marker = f"f\"{log_text}: {{exc}}\""
+        bad_marker = f'f"{log_text}: {{exc}}"'
         assert bad_marker not in src, (
             f"F66 regression: '{log_text}' is logging "
             "the upstream exc as-is — request email may "
@@ -114,14 +116,10 @@ class TestF66AuthImportsRedact:
 
         src = inspect.getsource(auth)
         assert "from eden.api.utils.redact import" in src, (
-            "F66 regression: auth.py no longer imports "
-            "the redact helper"
+            "F66 regression: auth.py no longer imports " "the redact helper"
         )
         # The specific helper we use MUST be imported.
-        assert "redact_email" in src, (
-            "F66 regression: auth.py no longer imports "
-            "redact_email"
-        )
+        assert "redact_email" in src, "F66 regression: auth.py no longer imports " "redact_email"
 
 
 class TestF66AuthRedactionIsIdempotent:

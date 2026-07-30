@@ -160,3 +160,49 @@ class EmailService:
 def get_email_service() -> EmailService:
     """Get an email service instance."""
     return EmailService()
+
+
+async def send_password_reset_email(*, to_email: str, token: str) -> EmailResult:
+    """Send the password-reset link.
+
+    This function did not exist. ``/auth/forgot-password`` imported it
+    inside a ``try/except Exception``, so the ImportError was caught,
+    logged at WARNING, and the endpoint still returned 200 with "If an
+    account exists for that email, a password reset link has been sent."
+
+    A reset row was written and the plaintext token only ever lived in
+    the email that was never sent — so any password-auth customer who
+    forgot their password was permanently locked out, with nothing
+    visible to them or to us saying why.
+    """
+    from eden.config import get_settings
+
+    settings = get_settings()
+    base = (getattr(settings, "portal_base_url", "") or "").rstrip("/")
+    link = f"{base}/reset-password?token={token}"
+
+    subject = "Reset your Eden password"
+    text = (
+        "You asked to reset your Eden password.\n\n"
+        f"Open this link to choose a new one:\n{link}\n\n"
+        "The link expires in one hour and can be used once.\n"
+        "If you did not request this, you can ignore this email — "
+        "your password has not changed.\n"
+    )
+    html = (
+        "<p>You asked to reset your Eden password.</p>"
+        f'<p><a href="{link}">Choose a new password</a></p>'
+        "<p>The link expires in one hour and can be used once.</p>"
+        "<p>If you did not request this, you can ignore this email — "
+        "your password has not changed.</p>"
+        f'<p style="color:#666;font-size:12px">If the button does not '
+        f"work, paste this into your browser:<br>{link}</p>"
+    )
+
+    return await get_email_service().send_email(
+        to_email=to_email,
+        subject=subject,
+        html_content=html,
+        text_content=text,
+        purpose="transactional",
+    )
