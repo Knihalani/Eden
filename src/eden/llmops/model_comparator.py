@@ -806,22 +806,22 @@ class ModelComparator:
                     count(*) AS requests,
                     coalesce(sum(
                         CASE WHEN metadata ? 'input_tokens'
-                             THEN (metadata->>'input_tokens')::numeric
+                             THEN COALESCE((NULLIF(metadata->>'input_tokens', ''))::numeric, 0)
                              ELSE 0 END
                     ), 0)::bigint AS total_input_tokens,
                     coalesce(sum(
                         CASE WHEN metadata ? 'output_tokens'
-                             THEN (metadata->>'output_tokens')::numeric
+                             THEN COALESCE((NULLIF(metadata->>'output_tokens', ''))::numeric, 0)
                              ELSE 0 END
                     ), 0)::bigint AS total_output_tokens,
                     coalesce(sum(
                         CASE WHEN metadata ? 'cache_read_tokens'
-                             THEN (metadata->>'cache_read_tokens')::numeric
+                             THEN COALESCE((NULLIF(metadata->>'cache_read_tokens', ''))::numeric, 0)
                              ELSE 0 END
                     ), 0)::bigint AS total_cache_read_tokens,
                     coalesce(sum(
                         CASE WHEN metadata ? 'cache_write_tokens'
-                             THEN (metadata->>'cache_write_tokens')::numeric
+                             THEN COALESCE((NULLIF(metadata->>'cache_write_tokens', ''))::numeric, 0)
                              ELSE 0 END
                     ), 0)::bigint AS total_cache_write_tokens,
                     coalesce(sum(cost_usd), 0)::float8 AS total_cost_usd

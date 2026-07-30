@@ -21,6 +21,15 @@ def test_portal_traces_sql_uses_bounded_id_discovery_not_8k_cte():
     assert "INNER JOIN ids" in src
 
 
+def test_portal_traces_token_casts_accept_float_strings():
+    """SDK token metrics land as ``\"183.0\"``; bare ``::int`` 503s the list."""
+    assert "::numeric" in portal_mod._SAFE_TOKEN_SUM_SQL
+    assert "->>'input_tokens'" in portal_mod._SAFE_TOKEN_SUM_SQL
+    src = inspect.getsource(portal_mod.list_portal_traces)
+    assert "safe_token_sum_sql" in src
+    assert "(e.metrics->>'input_tokens')::int" not in src
+
+
 def test_portal_agents_metrics_sample_bound_reduced():
     src = inspect.getsource(portal_mod.list_portal_agents)
     assert "LIMIT 4000" in src
