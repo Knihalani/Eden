@@ -44,9 +44,54 @@ from eden.api.portal_contracts import (
     WorkspacePrefs,
 )
 from eden.api.utils.redact import redact_all
-from eden.storage.sql_safe import safe_cost_sum_sql, safe_token_sum_sql
+from eden.storage.sql_safe import (
+    safe_cost_sum_sql,
+    safe_input_token_sum_sql,
+    safe_output_token_sum_sql,
+    safe_token_sum_sql,
+)
 
 logger = logging.getLogger(__name__)
+
+# Prefer a concrete model id for cost estimates (dated suffixes ok —
+# estimate_cost_usd fuzzy-matches the seed catalog).
+_PREFERRED_MODEL_SQL = """(ARRAY_AGG(
+    COALESCE(
+        NULLIF(e.model, ''),
+        NULLIF(e.model_name, ''),
+        NULLIF(e.model_version, ''),
+        NULLIF(e.payload->>'model_normalized', ''),
+        NULLIF(e.payload->>'model', ''),
+        NULLIF(e.attributes->>'model', '')
+    )
+    ORDER BY e.timestamp DESC
+) FILTER (WHERE COALESCE(
+    NULLIF(e.model, ''),
+    NULLIF(e.model_name, ''),
+    NULLIF(e.model_version, ''),
+    NULLIF(e.payload->>'model_normalized', ''),
+    NULLIF(e.payload->>'model', ''),
+    NULLIF(e.attributes->>'model', '')
+) IS NOT NULL))[1]"""
+
+_PREFERRED_MODEL_SQL_UNALIASED = """(ARRAY_AGG(
+    COALESCE(
+        NULLIF(model, ''),
+        NULLIF(model_name, ''),
+        NULLIF(model_version, ''),
+        NULLIF(payload->>'model_normalized', ''),
+        NULLIF(payload->>'model', ''),
+        NULLIF(attributes->>'model', '')
+    )
+    ORDER BY timestamp DESC
+) FILTER (WHERE COALESCE(
+    NULLIF(model, ''),
+    NULLIF(model_name, ''),
+    NULLIF(model_version, ''),
+    NULLIF(payload->>'model_normalized', ''),
+    NULLIF(payload->>'model', ''),
+    NULLIF(attributes->>'model', '')
+) IS NOT NULL))[1]"""
 
 router = APIRouter(
     prefix="/orgs/{org_id}/portal",
@@ -133,6 +178,59 @@ def _map_trace_outcome(outcome: str | None) -> tuple[str, str]:
     if o in ("warn", "warning", "partial", "degraded"):
         return "ok", "warn"
     return "ok", "none"
+
+
+def _trace_signal_summary(
+    *,
+    name: str,
+    severity: str,
+    status: str,
+) -> TraceSignalSummary:
+    """Human summary for the Signals pane (never leave title blank)."""
+    label = name or "Run"
+    if severity == "error" or status == "error":
+        return TraceSignalSummary(
+            title="Run failed",
+            body=f"{label} ended with an error outcome.",
+            count=1,
+        )
+    if severity == "warn":
+        return TraceSignalSummary(
+            title="Degraded run",
+            body=f"{label} completed with warnings.",
+            count=1,
+        )
+    return TraceSignalSummary(
+        title="Clean run",
+        body="No detectors matched this successful run.",
+        count=0,
+    )
+
+
+def _resolved_trace_cost_usd(
+    *,
+    cost_usd: float,
+    input_tokens: int,
+    output_tokens: int,
+    model: str | None,
+) -> float:
+    """Prefer stamped cost; else estimate from tokens + seed pricing."""
+    if cost_usd > 0:
+        return round(cost_usd, 6)
+    try:
+        from eden.llmops.pricing import estimate_cost_usd
+
+        return round(
+            estimate_cost_usd(
+                model=model,
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+                existing=cost_usd,
+            ),
+            6,
+        )
+    except Exception:  # noqa: BLE001
+        return round(cost_usd, 6)
 
 
 def _normalize_notify_channel(raw: object | None) -> str:
@@ -328,9 +426,33 @@ def _tree_node_to_step(node: dict[str, Any]) -> TranscriptStep:
         attrs.get("model")
         or attrs.get("openai.model")
         or attrs.get("anthropic.model")
+        or payload.get("model_normalized")
+        or payload.get("model")
         or node.get("model_version")
     )
     provider = attrs.get("provider")
+
+    # Estimate per-span cost when ingest never stamped cost_usd but
+    # tokens are present — otherwise the header and step chips stay $0.
+    cost_f: float | None
+    try:
+        cost_f = float(cost) if cost is not None else None
+    except (TypeError, ValueError):
+        cost_f = None
+    if (cost_f is None or cost_f <= 0) and (tokens_in is not None or tokens_out is not None):
+        try:
+            from eden.llmops.pricing import estimate_cost_usd
+
+            estimated = estimate_cost_usd(
+                model=str(model) if model else None,
+                input_tokens=int(float(tokens_in or 0)),
+                output_tokens=int(float(tokens_out or 0)),
+                existing=cost_f,
+            )
+            if estimated > 0:
+                cost_f = estimated
+        except Exception:  # noqa: BLE001
+            pass
 
     safe_attrs = {k: v for k, v in attrs.items() if isinstance(v, (str, int, float, bool))} or None
 
@@ -347,7 +469,7 @@ def _tree_node_to_step(node: dict[str, Any]) -> TranscriptStep:
         provider=str(provider) if provider else None,
         tokensIn=int(tokens_in) if tokens_in is not None else None,
         tokensOut=int(tokens_out) if tokens_out is not None else None,
-        costUsd=float(cost) if cost is not None else None,
+        costUsd=cost_f,
         attributes=safe_attrs,
         # Prefer dedicated bodies; fall back to payload fields when the
         # portal path skips message_store / body-zstd hydrate.
@@ -725,7 +847,10 @@ async def list_portal_traces(
                       FILTER (WHERE e.outcome IS NOT NULL))[1] AS outcome,
                    MAX(e.duration_ms) AS duration_ms,
                    {safe_token_sum_sql(alias="e.")} AS tokens,
+                   {safe_input_token_sum_sql(alias="e.")} AS input_tokens,
+                   {safe_output_token_sum_sql(alias="e.")} AS output_tokens,
                    {safe_cost_sum_sql(alias="e.")} AS cost_usd,
+                   {_PREFERRED_MODEL_SQL} AS model,
                    MAX(e.attributes->>'session_id') AS session_id
             FROM telemetry_events e
             INNER JOIN ids ON ids.trace_id = e.trace_id
@@ -752,20 +877,26 @@ async def list_portal_traces(
     items: list[TraceListItem] = []
     for r in rows:
         status, severity = _map_trace_outcome(r.get("outcome"))
-        cost_usd = float(r["cost_usd"] or 0)
+        name = str(r["name"] or r["trace_id"])
+        cost_usd = _resolved_trace_cost_usd(
+            cost_usd=float(r["cost_usd"] or 0),
+            input_tokens=int(r["input_tokens"] or 0),
+            output_tokens=int(r["output_tokens"] or 0),
+            model=str(r["model"]) if r.get("model") else None,
+        )
         items.append(
             TraceListItem(
                 id=str(r["trace_id"]),
                 agentId=str(r["agent_id"] or ""),
-                name=str(r["name"] or r["trace_id"]),
+                name=name,
                 status=status,  # type: ignore[arg-type]
                 startedAt=_iso(r.get("started_at")),
                 durationMs=int(round(float(r["duration_ms"] or 0))),
                 tokens=int(r["tokens"] or 0),
-                costUsd=round(cost_usd, 6),
+                costUsd=cost_usd,
                 severity=severity,  # type: ignore[arg-type]
                 sessionId=str(r["session_id"]) if r.get("session_id") else None,
-                signals=TraceSignalSummary(),
+                signals=_trace_signal_summary(name=name, severity=severity, status=status),
                 steps=[],
             )
         )
@@ -805,7 +936,10 @@ async def get_portal_trace(
                       FILTER (WHERE outcome IS NOT NULL))[1] AS outcome,
                    MAX(duration_ms) AS duration_ms,
                    {safe_token_sum_sql()} AS tokens,
+                   {safe_input_token_sum_sql()} AS input_tokens,
+                   {safe_output_token_sum_sql()} AS output_tokens,
                    {safe_cost_sum_sql()} AS cost_usd,
+                   {_PREFERRED_MODEL_SQL_UNALIASED} AS model,
                    MAX(attributes->>'session_id') AS session_id
             FROM telemetry_events
             WHERE tenant_id = $1 AND trace_id = $2
@@ -859,19 +993,30 @@ async def get_portal_trace(
             )
 
     status, severity = _map_trace_outcome(row.get("outcome"))
-    cost_usd = float(row["cost_usd"] or 0)
+    name = str(row["name"] or row["trace_id"])
+    cost_usd = _resolved_trace_cost_usd(
+        cost_usd=float(row["cost_usd"] or 0),
+        input_tokens=int(row["input_tokens"] or 0),
+        output_tokens=int(row["output_tokens"] or 0),
+        model=str(row["model"]) if row.get("model") else None,
+    )
+    # Prefer per-step cost rollup when the tree hydrated and stamped
+    # costs on spans (ingest or estimate_cost_usd on read).
+    step_cost = sum(float(s.costUsd or 0) for s in steps)
+    if step_cost > cost_usd:
+        cost_usd = round(step_cost, 6)
     return TraceListItem(
         id=str(row["trace_id"]),
         agentId=str(row["agent_id"] or ""),
-        name=str(row["name"] or row["trace_id"]),
+        name=name,
         status=status,  # type: ignore[arg-type]
         startedAt=_iso(row.get("started_at")),
         durationMs=int(round(float(row["duration_ms"] or 0))),
         tokens=int(row["tokens"] or 0),
-        costUsd=round(cost_usd, 6),
+        costUsd=cost_usd,
         severity=severity,  # type: ignore[arg-type]
         sessionId=str(row["session_id"]) if row.get("session_id") else None,
-        signals=TraceSignalSummary(),
+        signals=_trace_signal_summary(name=name, severity=severity, status=status),
         steps=steps,
     )
 
@@ -918,9 +1063,18 @@ async def list_portal_sessions(
             duration_ms = 0
         trace_ids = list(data.get("trace_ids") or [])
         turn_count = int(data.get("turn_count") or len(trace_ids))
+        failure_reason = data.get("failure_reason")
+        diagnosis = None
+        if failure_reason:
+            diagnosis = str(failure_reason)
+        elif outcome == "error":
+            diagnosis = "Session ended unsuccessfully"
+        elif outcome == "ok" and turn_count > 0:
+            diagnosis = f"{turn_count} turn{'s' if turn_count != 1 else ''} completed"
+        session_id = str(data.get("id") or "")
         out.append(
             SessionRollup(
-                id=str(data.get("id") or ""),
+                id=session_id,
                 agentId=str(data.get("agent_id") or ""),
                 userId=str(data["user_id"]) if data.get("user_id") else None,
                 startedAt=_iso(data.get("started_at")),
@@ -930,12 +1084,18 @@ async def list_portal_sessions(
                 durationMs=duration_ms,
                 totalTokens=int(data.get("total_tokens") or 0),
                 costUsd=float(data.get("cost_usd") or 0),
-                lastErrorSummary=data.get("failure_reason"),
-                diagnosis=None,
-                relatedIssueIds=[],
+                lastErrorSummary=str(failure_reason) if failure_reason else None,
+                diagnosis=diagnosis,
+                relatedIssueIds=[],  # filled below
                 traceIds=[str(t) for t in trace_ids],
             )
         )
+
+    related = await _related_issue_ids_by_session(
+        org_id, [s.id for s in out if s.id]
+    )
+    for s in out:
+        s.relatedIssueIds = related.get(s.id, [])[:10]
     return out
 
 
@@ -957,12 +1117,26 @@ async def list_portal_issues(
         logger.warning("portal issues: repo unavailable: %s", redact_all(str(exc)))
         return []
 
+    # ``example_stumble_ids`` are stumble UUIDs — portal FE matches
+    # ``occurrenceTraceIds`` against run ids. Resolve to real trace_ids.
+    stumble_to_trace, _stumble_to_session = await _resolve_stumble_refs(
+        org_id,
+        [sid for i in issues for sid in (getattr(i, "example_stumble_ids", None) or [])],
+    )
+
     out: list[IssueCard] = []
     for i in issues:
         triage = getattr(i, "triage_result", None) or {}
         if not isinstance(triage, dict):
             triage = {}
-        occurrence = list(getattr(i, "example_stumble_ids", None) or [])
+        example_ids = [str(x) for x in (getattr(i, "example_stumble_ids", None) or [])]
+        occurrence: list[str] = []
+        seen: set[str] = set()
+        for sid in example_ids:
+            tid = stumble_to_trace.get(sid)
+            if tid and tid not in seen:
+                seen.add(tid)
+                occurrence.append(tid)
         out.append(
             IssueCard(
                 id=str(i.id),
@@ -975,7 +1149,7 @@ async def list_portal_issues(
                 fingerprint=str(getattr(i, "fingerprint", None) or ""),
                 detector=str(getattr(i, "kind", None) or ""),
                 environment=str(triage.get("environment") or ""),
-                occurrenceTraceIds=[str(x) for x in occurrence][:20],
+                occurrenceTraceIds=occurrence[:20],
                 firstSeen=_iso(getattr(i, "first_seen", None)),
                 lastSeen=_iso(getattr(i, "last_seen", None)),
                 signalCount=int(getattr(i, "stumble_count", 0) or 0),
@@ -990,6 +1164,88 @@ async def list_portal_issues(
                 tags=[],
             )
         )
+    return out
+
+
+async def _resolve_stumble_refs(
+    org_id: str,
+    stumble_ids: list[Any],
+) -> tuple[dict[str, str], dict[str, str]]:
+    """Map stumble UUID → ``(trace_id, session_id)``."""
+    ids = sorted({str(x) for x in stumble_ids if x})
+    if not ids:
+        return {}, {}
+    client = await _pg()
+    if client is None:
+        return {}, {}
+    try:
+        rows = await client.fetch(
+            """
+            SELECT id::text AS id, trace_id, session_id
+            FROM agent_stumbles
+            WHERE org_id = $1 AND id = ANY($2::uuid[])
+            """,
+            org_id,
+            ids,
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("portal issues: stumble resolve failed: %s", redact_all(str(exc)))
+        return {}, {}
+    to_trace: dict[str, str] = {}
+    to_session: dict[str, str] = {}
+    for r in rows:
+        sid = str(r["id"])
+        if r.get("trace_id"):
+            to_trace[sid] = str(r["trace_id"])
+        if r.get("session_id"):
+            to_session[sid] = str(r["session_id"])
+    return to_trace, to_session
+
+
+async def _related_issue_ids_by_session(
+    org_id: str,
+    session_ids: list[str],
+) -> dict[str, list[str]]:
+    """Map session_id → open/active issue ids via agent_stumbles."""
+    ids = sorted({s for s in session_ids if s})
+    if not ids:
+        return {}
+    client = await _pg()
+    if client is None:
+        return {}
+    try:
+        rows = await client.fetch(
+            """
+            SELECT DISTINCT s.session_id::text AS session_id,
+                            i.id::text AS issue_id
+            FROM agent_stumbles s
+            INNER JOIN agent_issues i
+              ON i.org_id = s.org_id
+             AND i.fingerprint = s.fingerprint
+            WHERE s.org_id = $1
+              AND s.session_id = ANY($2::text[])
+              AND COALESCE(i.status, 'open') NOT IN ('resolved', 'ignored')
+            ORDER BY s.session_id, i.id
+            LIMIT 500
+            """,
+            org_id,
+            ids,
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.debug(
+            "portal sessions: related issues lookup failed: %s",
+            redact_all(str(exc)),
+        )
+        return {}
+    out: dict[str, list[str]] = {}
+    for r in rows:
+        sid = str(r["session_id"] or "")
+        iid = str(r["issue_id"] or "")
+        if not sid or not iid:
+            continue
+        bucket = out.setdefault(sid, [])
+        if iid not in bucket:
+            bucket.append(iid)
     return out
 
 

@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import {
+  Fragment,
   memo,
   Suspense,
   useCallback,
@@ -31,6 +32,7 @@ import { issueForTrace } from "@/lab/fixtures/issues";
 import { signalsForTrace } from "@/lab/fixtures/signals";
 import {
   agentForSession,
+  resolveSessionForTrace,
   sessionById as sessionByIdFixture,
   sessionForTrace,
   turnsForSession,
@@ -124,6 +126,10 @@ export function flattenSpanTree(steps: TranscriptStep[]): TreeRow[] {
     }
   };
   walk(roots, 0);
+  // Parents truncated by max_spans (or missing) used to drop orphans
+  // entirely — Tree undercounted vs Transcript with no warning.
+  const orphans = steps.filter((s) => !seen.has(s.id));
+  if (orphans.length > 0) walk(orphans, 0);
   return out;
 }
 
@@ -272,10 +278,21 @@ function SignalsPanel({
 }) {
   const detectors = signalsForTrace(trace.id);
   const badSteps = trace.steps.filter(isBadStep);
-  const empty = trace.severity === "none";
+  // severity==="none" used to short-circuit to EmptyState even when
+  // the API shipped a "Clean run" summary — so every successful trace
+  // looked broken ("No signals").
+  const empty =
+    !trace.signals.title &&
+    detectors.length === 0 &&
+    badSteps.length === 0;
 
   if (empty) {
-    return <EmptyState title="No signals" />;
+    return (
+      <EmptyState
+        title="No signals"
+        body="No detectors matched and no failing spans on this run."
+      />
+    );
   }
 
   if (dismissed) {
@@ -301,10 +318,16 @@ function SignalsPanel({
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <SeverityBadge severity={trace.severity} />
-            <p className="type-ui text-[var(--text)]">{trace.signals.title}</p>
+            <p className="type-ui text-[var(--text)]">
+              {trace.signals.title ||
+                (trace.severity === "none" ? "Clean run" : "Signals")}
+            </p>
           </div>
           <p className="type-body mt-2 text-[var(--text-secondary)]">
-            {trace.signals.body}
+            {trace.signals.body ||
+              (badSteps.length > 0
+                ? `${badSteps.length} failing span${badSteps.length === 1 ? "" : "s"}.`
+                : "No detectors matched this run.")}
           </p>
         </div>
         <button
@@ -370,7 +393,6 @@ function SignalsPanel({
 
 function ChatPanel({ trace }: { trace: TraceFixture }) {
   const issue = issueForTrace(trace.id);
-  const bad = trace.steps.find(isBadStep);
   const agentHref = (() => {
     const q = new URLSearchParams();
     q.set("thread", "thr_empty");
@@ -379,40 +401,7 @@ function ChatPanel({ trace }: { trace: TraceFixture }) {
     if (issue) q.set("issueId", issue.id);
     return `/agent?${q.toString()}`;
   })();
-  const [messages, setMessages] = useState<
-    { role: "user" | "assistant"; text: string }[]
-  >([
-    {
-      role: "assistant",
-      text:
-        trace.severity === "none"
-          ? `${trace.name} — clean run.`
-          : `${trace.signals.title}`,
-    },
-  ]);
   const [draft, setDraft] = useState("");
-
-  function send() {
-    const text = draft.trim();
-    if (!text) return;
-    const lower = text.toLowerCase();
-    let reply = trace.signals.body;
-    if (lower.includes("fix") && issue) {
-      reply = issue.suggestedFix;
-    } else if (lower.includes("fail") || lower.includes("error")) {
-      reply = bad
-        ? `${bad.title}: ${bad.errorMessage ?? bad.outputPreview ?? "failed"}`
-        : trace.signals.body;
-    } else if (lower.includes("cost") || lower.includes("token")) {
-      reply = `${trace.tokens.toLocaleString()} tokens · $${trace.costUsd.toFixed(3)} · ${trace.durationMs}ms`;
-    }
-    setMessages((m) => [
-      ...m,
-      { role: "user", text },
-      { role: "assistant", text: reply },
-    ]);
-    setDraft("");
-  }
 
   function openInAgent() {
     const text = draft.trim();
@@ -428,51 +417,35 @@ function ChatPanel({ trace }: { trace: TraceFixture }) {
   return (
     <div className="flex h-full min-h-0 flex-col">
       <div className="flex shrink-0 items-center justify-between gap-2 border-b border-[var(--line)] px-4 py-2 sm:px-5">
-        <p className="type-meta">Quick ask on this run</p>
+        <p className="type-meta">Ask the assistant about this run</p>
         <Link href={agentHref} className="ds-btn ds-btn-ghost ds-btn-sm">
           Open Assistant
         </Link>
       </div>
-      <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-4 sm:px-5">
-        {messages.map((m, i) => (
-          <div
-            key={`${m.role}-${i}`}
-            className={cn(
-              "type-body max-w-[92%] px-3.5 py-2.5",
-              m.role === "user"
-                ? "ml-auto bg-[var(--accent-muted)] !text-[var(--text)]"
-                : "border border-[var(--line)]",
-            )}
-          >
-            {m.text}
-          </div>
-        ))}
+      <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-5 sm:px-5">
+        <p className="type-body text-[var(--text-secondary)]">
+          {trace.signals.title
+            ? `${trace.signals.title} — ${trace.signals.body || "Open the assistant to investigate."}`
+            : `${trace.name} · ${trace.tokens.toLocaleString()} tokens · $${trace.costUsd.toFixed(4)}. Open the assistant for a real answer.`}
+        </p>
       </div>
-      <div className="flex gap-2 border-t border-[var(--line)] p-3">
+      <div className="flex shrink-0 gap-2 border-t border-[var(--line)] px-4 py-3 sm:px-5">
         <input
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           onKeyDown={(e) => {
-            if (e.key === "Enter") send();
+            if (e.key === "Enter") openInAgent();
           }}
-          placeholder="Ask…"
+          placeholder="Ask about this run…"
           className="ds-input min-w-0 flex-1"
           aria-label="Ask about this run"
         />
         <button
           type="button"
-          onClick={send}
-          className="ds-btn ds-btn-primary ds-btn-sm"
-        >
-          Send
-        </button>
-        <button
-          type="button"
+          className="ds-btn ds-btn-primary ds-btn-sm shrink-0"
           onClick={openInAgent}
-          className="ds-btn ds-btn-outline ds-btn-sm"
-          title="Continue in Assistant with this trace pinned"
         >
-          Assistant
+          Ask
         </button>
       </div>
     </div>
@@ -594,9 +567,15 @@ function LabTracesInner() {
     if (nextId) setSelectedId(nextId);
     const nextSession = sessions.find((s) => s.id === paramSession)?.id;
     if (nextSession) setSelectedSessionId(nextSession);
-    if (paramTab) setTab(parseTab(paramTab));
     if (paramSpan) setFocusStepId(paramSpan);
-  }, [paramId, paramTab, paramSpan, paramView, paramSession]);
+  }, [paramId, paramSpan, paramView, paramSession]);
+
+  // Keep tab state in sync with the URL even when `?tab=` is cleared
+  // (Transcript) — otherwise Tree stays selected after navigating
+  // back to a run whose URL has no tab param.
+  useEffect(() => {
+    setTab(parseTab(paramTab));
+  }, [paramTab]);
 
   useEffect(() => {
     setSignalsDismissed(false);
@@ -720,7 +699,10 @@ function LabTracesInner() {
       setSelectedId(id);
       const resolvedTab = nextTab ?? tab;
       setTab(resolvedTab);
-      const sess = sessionForTrace(id);
+      const sess =
+        resolveSessionForTrace(
+          scopedTraces.find((t) => t.id === id) ?? { id },
+        ) ?? sessionForTrace(id);
       if (hubView === "sessions" && sess) {
         setSelectedSessionId(sess.id);
         patchQuery({
@@ -862,12 +844,21 @@ function LabTracesInner() {
   // Merge in the real transcript once the detail fetch for this
   // trace resolves; falls back to the list row's `steps: []` while
   // loading (or if the detail fetch fails) so the rest of the page
-  // never has to special-case a missing trace.
+  // never has to special-case a missing trace. Also prefer detail
+  // cost/signals — list rows may still show $0 until estimate lands.
   const selected = useMemo(() => {
     if (!selectedListItem) return selectedListItem;
     const detail = traceDetailQuery.data;
     if (detail && detail.id === selectedListItem.id) {
-      return { ...selectedListItem, steps: detail.steps };
+      return {
+        ...selectedListItem,
+        steps: detail.steps,
+        costUsd: detail.costUsd ?? selectedListItem.costUsd,
+        tokens: detail.tokens || selectedListItem.tokens,
+        signals: detail.signals?.title
+          ? detail.signals
+          : selectedListItem.signals,
+      };
     }
     return selectedListItem;
   }, [selectedListItem, traceDetailQuery.data]);
@@ -954,7 +945,14 @@ function LabTracesInner() {
     onTab:
       hubView === "runs" || inspectingTurn
         ? (t) => {
-            if (t === "trace" || t === "signals" || t === "chat") setDetailTab(t);
+            if (
+              t === "trace" ||
+              t === "tree" ||
+              t === "signals" ||
+              t === "chat"
+            ) {
+              setDetailTab(t);
+            }
           }
         : undefined,
   });
@@ -1075,7 +1073,7 @@ function LabTracesInner() {
 
   const agent = selected ? agentForTrace(selected) : undefined;
   const issue = selected ? issueForTrace(selected.id) : undefined;
-  const session = selected ? sessionForTrace(selected.id) : undefined;
+  const session = selected ? resolveSessionForTrace(selected) : undefined;
   const sessionTurns = session ? turnsForSession(session) : [];
   const badStepIds = selected ? errorStepIds(selected.steps) : [];
   const signalCount =
@@ -1374,7 +1372,7 @@ function LabTracesInner() {
                     ) : (
                       <>
                         {(() => {
-                          const sess = sessionForTrace(selected.id);
+                          const sess = resolveSessionForTrace(selected);
                           return sess ? (
                             <Link
                               href={`/traces?view=sessions&session=${sess.id}&id=${selected.id}&agent=${selected.agentId}`}
@@ -1518,7 +1516,7 @@ function LabTracesInner() {
                     ["chat", "Ask"],
                   ] as const
                 ).map(([id, label], i) => (
-                  <span key={id} className="contents">
+                  <Fragment key={id}>
                     {i === 2 ? (
                       <span
                         className="mx-0.5 h-4 w-px shrink-0 bg-[var(--line)]"
@@ -1541,7 +1539,7 @@ function LabTracesInner() {
                     >
                       {label}
                     </button>
-                  </span>
+                  </Fragment>
                 ))}
                 {tab === "trace" ? (
                   <div className="ml-auto flex items-center gap-1">
@@ -1584,6 +1582,30 @@ function LabTracesInner() {
                           onRetry={() => void traceDetailQuery.refetch()}
                         />
                       </div>
+                    ) : traceDetailQuery.isLoading &&
+                      selected.steps.length === 0 ? (
+                      <EmptyState
+                        title="Loading transcript"
+                        body="Fetching spans for this run…"
+                        compact
+                      />
+                    ) : !traceDetailQuery.isLoading &&
+                      !traceDetailQuery.isFetching &&
+                      selected.steps.length === 0 ? (
+                      <EmptyState
+                        title="No spans"
+                        body="This run has no span events yet, or the transcript could not be reconstructed."
+                        compact
+                        action={
+                          <button
+                            type="button"
+                            className="ds-btn ds-btn-ghost ds-btn-sm"
+                            onClick={() => void traceDetailQuery.refetch()}
+                          >
+                            Retry
+                          </button>
+                        }
+                      />
                     ) : (
                       <RunTranscript
                         key={selected.id}

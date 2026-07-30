@@ -30,6 +30,16 @@ def safe_token_sum_sql(*, alias: str = "", col: str = "metrics") -> str:
     return f"COALESCE(SUM({inp} + {out}), 0)::int"
 
 
+def safe_input_token_sum_sql(*, alias: str = "", col: str = "metrics") -> str:
+    """SUM(input_tokens) as int."""
+    return f"COALESCE(SUM({safe_token_field('input_tokens', alias=alias, col=col)}), 0)::int"
+
+
+def safe_output_token_sum_sql(*, alias: str = "", col: str = "metrics") -> str:
+    """SUM(output_tokens) as int."""
+    return f"COALESCE(SUM({safe_token_field('output_tokens', alias=alias, col=col)}), 0)::int"
+
+
 def safe_cost_sum_sql(*, alias: str = "", col: str = "metrics") -> str:
     """SUM(cost_usd) as float from one jsonb column."""
     return (

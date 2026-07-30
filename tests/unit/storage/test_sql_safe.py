@@ -5,6 +5,8 @@ from __future__ import annotations
 from eden.storage.sql_safe import (
     safe_cost_coalesce_sql,
     safe_cost_sum_sql,
+    safe_input_token_sum_sql,
+    safe_output_token_sum_sql,
     safe_token_coalesce_sql,
     safe_token_field,
     safe_token_sum_sql,
@@ -45,3 +47,9 @@ def test_safe_token_coalesce_ladder():
 def test_safe_cost_coalesce_ladder():
     frag = safe_cost_coalesce_sql("metrics", "payload", "attributes")
     assert frag.count("cost_usd") == 3
+
+
+def test_safe_input_output_token_sums():
+    assert "input_tokens" in safe_input_token_sum_sql(alias="e.")
+    assert "output_tokens" in safe_output_token_sum_sql(alias="e.")
+    assert safe_input_token_sum_sql().endswith("::int")
