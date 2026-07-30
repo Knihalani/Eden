@@ -31,9 +31,11 @@ import atexit
 import gzip
 import json
 import logging
+import os
 import queue as _queue
 import threading
 import time
+import weakref
 from collections import deque
 from email.utils import parsedate_to_datetime
 from typing import Any
@@ -59,6 +61,28 @@ _USER_AGENT = f"eden-sdk/{__version__} (python)"
 _INGEST_CHUNKS_MAX_PER_REQUEST = 1000
 
 logger = logging.getLogger("eden_sdk.client")
+
+
+#: Every live client, weakly held, so ``_reset_all_after_fork`` can reach them.
+_LIVE_CLIENTS: weakref.WeakSet[EdenClient] = weakref.WeakSet()
+
+
+def _reset_all_after_fork() -> None:
+    """``os.register_at_fork`` hook: rebuild every client's state in the child.
+
+    Runs in the child immediately after ``fork()``, on the one surviving thread.
+    Each client's reset is isolated so one failure cannot leave the others in a
+    half-forked state.
+    """
+    for client in list(_LIVE_CLIENTS):
+        try:
+            client._reset_after_fork()
+        except Exception:  # noqa: BLE001 — a fork hook must never raise
+            pass
+
+
+if hasattr(os, "register_at_fork"):  # POSIX only; absent on Windows
+    os.register_at_fork(after_in_child=_reset_all_after_fork)
 
 
 class _ChunkBuffer(deque):
@@ -115,6 +139,32 @@ class TraceEvent:
         return json.dumps(
             self.payload, default=str, separators=_JSON_SEPARATORS
         ).encode("utf-8")
+
+
+def _parse_ingest_counts(resp: Any, sent_count: int) -> tuple[int, int]:
+    """Return ``(accepted, rejected)`` from an ingest response body.
+
+    A 2xx only means the request was understood; the body carries the
+    per-row outcome as ``{accepted, rejected, deduplicated, total}``.
+
+    Falls back to "all accepted" whenever the body is not that shape, so
+    an older or differently-shaped gateway can never make the SDK
+    under-report what it sent.
+    """
+    try:
+        body = resp.json()
+    except Exception:
+        return sent_count, 0
+    if not isinstance(body, dict):
+        return sent_count, 0
+    if "accepted" not in body and "rejected" not in body:
+        return sent_count, 0
+    try:
+        accepted = int(body.get("accepted", sent_count) or 0)
+        rejected = int(body.get("rejected", 0) or 0)
+    except (TypeError, ValueError):
+        return sent_count, 0
+    return accepted, rejected
 
 
 # ── Sender ────────────────────────────────────────────────────────────
@@ -208,6 +258,7 @@ class EdenClient:
         self._dropped_total = 0
         self._sampled_out_total = 0
         self._sent_total = 0
+        self._rejected_total = 0
         self._failed_total = 0
         self._latency_window: deque[float] = deque(maxlen=1024)
         from eden_sdk.sampling import ClientSampler, SampleSignals
@@ -291,9 +342,90 @@ class EdenClient:
         # ``_lifecycle_lock`` convention used elsewhere in this class
         # for state shared between the worker thread and callers.
         self._unresolved_lock = threading.Lock()
+        # Offline rows re-enqueued by the *automatic* drain but not yet acked.
+        # Held across worker ticks: see ``_auto_drain_offline`` for why the
+        # automatic path cannot simply call ``flush_offline``.
+        self._offline_inflight: list[int] = []
+        self._offline_next_drain_at = 0.0
+        # Only one replay may be in flight at a time.
+        #
+        # ``OfflineQueue.drain`` is a plain ``SELECT ... LIMIT`` — it does not
+        # claim rows, which stay in SQLite until acked. So two concurrent
+        # replays return the *same* rows and send them twice. That is a real
+        # duplicate-send, and it appeared the moment the automatic drain was
+        # added alongside the existing manual ``flush_offline()``: five tests
+        # caught it by seeing one row delivered twice.
+        self._offline_replay_lock = threading.Lock()
+        # Tracked weakly so the at-fork handler can rebuild this client's
+        # per-process state in a child without keeping it alive.
+        _LIVE_CLIENTS.add(self)
         self._unresolved_offline_rows: set[int] = set()
 
     # ── Lifecycle ────────────────────────────────────────────────────
+
+    def _reset_after_fork(self) -> None:
+        """Rebuild per-process state in a forked child.
+
+        ``os.fork()`` copies the whole address space but only the calling
+        thread survives, so a child inherits:
+
+        * **Queued events the parent still owns.** Measured directly: a parent
+          with three buffered events forks, the parent's worker drains and sends
+          them, and the child's copy of the queue still holds all three. The
+          child's own worker then sends them again — silent duplicate telemetry,
+          multiplied by the number of workers. This is the concrete bug; it hits
+          every ``gunicorn --preload``, Celery prefork and ``multiprocessing``
+          deployment that constructs the client before forking.
+        * **Counters.** ``sent``/``dropped``/``failed`` start non-zero in the
+          child, so per-process stats are wrong from the first tick.
+        * **The offline SQLite handle.** A sqlite3 connection must not be used
+          across a fork; sharing one invites corruption of the durable queue.
+        * **A stale thread handle.** Harmless in practice — CPython's
+          ``threading._after_fork`` marks it not-alive, so ``start()`` does
+          create a fresh worker — but it is reset here for clarity.
+
+        Everything is *rebuilt* rather than reused. A ``queue.Queue`` or
+        ``Lock`` inherited from a process where another thread held its mutex at
+        fork time can deadlock the first acquirer in the child, so draining the
+        old queue here would be a hazard in exactly the situation this handler
+        exists for.
+        """
+        max_queue = getattr(self.config, "max_queue", 10_000)
+        self._queue = _queue.Queue(maxsize=max_queue)
+        self._chunk_buffer = _ChunkBuffer()
+        self._thread = None
+        self._http = None
+        self._stop = threading.Event()
+        self._wake = threading.Event()
+        self._chunk_wake = threading.Event()
+        self._chunk_idle = threading.Event()
+        self._loop_started = threading.Event()
+        self._loop_failed = False
+        self._loop_failed_event = threading.Event()
+        self._generation_idle = threading.Event()
+        self._lifecycle_lock = threading.Lock()
+        self._unresolved_lock = threading.Lock()
+        self._unresolved_offline_rows = set()
+        self._generation = 0
+        self._processed_generation = 0
+        self._chunk_generation = 0
+        self._chunk_processed_generation = 0
+        self._dropped_total = 0
+        self._sampled_out_total = 0
+        self._sent_total = 0
+        self._rejected_total = 0
+        self._failed_total = 0
+        self._latency_window = deque(maxlen=1024)
+        # Reopen the durable queue on this process's own connection.
+        self._offline = None
+        offline_path = getattr(self.config, "offline_queue_path", None)
+        if offline_path:
+            try:
+                from eden_sdk.offline_queue import OfflineQueue
+
+                self._offline = OfflineQueue(offline_path)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("eden offline queue disabled after fork: %s", exc)
 
     def start(self) -> None:
         """Start the background sender thread (idempotent).
@@ -417,8 +549,13 @@ class EdenClient:
                 evicted = self._queue.get_nowait()
             except _queue.Empty:
                 pass
-            if evicted is not None and evicted.offline_row_id is not None:
-                self._mark_rows_unresolved([evicted.offline_row_id])
+            if evicted is not None:
+                # Counted here, not only on the rarer double-full path below.
+                # Without this, ``dropped_total()`` silently omitted every
+                # ordinary back-pressure eviction.
+                self._dropped_total += 1
+                if evicted.offline_row_id is not None:
+                    self._mark_rows_unresolved([evicted.offline_row_id])
             try:
                 self._queue.put_nowait(event)
             except _queue.Full:
@@ -477,6 +614,103 @@ class EdenClient:
             self._chunk_idle.wait(timeout=0.01)
             self._chunk_idle.clear()
 
+    # ── Offline auto-drain ───────────────────────────────────────────
+
+    #: Minimum gap between automatic drain attempts, seconds. Without a gate the
+    #: worker would hit SQLite on every idle tick to find nothing.
+    _OFFLINE_DRAIN_INTERVAL_S = 5.0
+
+    #: Rows pulled per automatic attempt. Deliberately smaller than
+    #: ``flush_offline``'s default 100 so a large backlog is replayed in slices
+    #: that interleave with live traffic instead of starving it.
+    _OFFLINE_DRAIN_BATCH = 25
+
+    def _auto_drain_offline(self) -> None:
+        """Replay durable offline rows without blocking the worker.
+
+        ``flush_offline()`` exists and is correct, but nothing ever called it —
+        so events spilled to SQLite while the collector was unreachable stayed
+        there indefinitely unless the application happened to call it by hand.
+        For a durability feature whose whole purpose is "do not lose events when
+        the network is down", never draining is the same as never having it.
+
+        It cannot simply be invoked from here: ``flush_offline`` calls
+        ``self.flush()``, which waits for the queue to drain — and the thing that
+        drains the queue is this very worker. Calling it from inside the loop
+        deadlocks until the 5s timeout, every tick.
+
+        So the same work is split across ticks instead:
+
+        * **ack first** — rows re-enqueued on an earlier tick whose sends have
+          now completed are acked (deleted) unless they were marked unresolved.
+        * **then pull** — only while the in-memory queue is empty, so replay
+          never competes with live traffic, and only every
+          ``_OFFLINE_DRAIN_INTERVAL_S``.
+
+        The ack rule is identical to ``flush_offline``'s and rests on the same
+        two facts: SQLite ``INTEGER PRIMARY KEY AUTOINCREMENT`` never reuses a
+        row id, so absence from ``_unresolved_offline_rows`` is unambiguous
+        evidence *this* row resolved; and a permanently rejected row is marked
+        resolved rather than unresolved, so it is acked away instead of being
+        resent to a doomed endpoint forever.
+        """
+        if self._offline is None:
+            return
+        # Non-blocking: if a manual ``flush_offline()`` holds the lock, skip this
+        # tick entirely rather than queue up behind it.
+        if not self._offline_replay_lock.acquire(blocking=False):
+            return
+        try:
+            self._auto_drain_offline_locked()
+        finally:
+            self._offline_replay_lock.release()
+
+    def _auto_drain_offline_locked(self) -> None:
+        """Body of :meth:`_auto_drain_offline`, run under the replay lock."""
+        if self._offline is None:
+            return
+
+        # ── ack what has resolved since the last tick ──
+        if self._offline_inflight and (
+            self._queue.empty()
+            and self._processed_generation >= self._generation
+        ):
+            with self._unresolved_lock:
+                unresolved = set(self._unresolved_offline_rows)
+            ackable = [r for r in self._offline_inflight if r not in unresolved]
+            if ackable:
+                try:
+                    self._offline.ack(ackable)
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning("eden sdk: offline ack failed: %s", exc)
+            # Rows left unresolved stay in SQLite for a later attempt; drop the
+            # in-flight tracking either way so the next slice can start.
+            self._offline_inflight = []
+
+        # ── pull the next slice, only when idle and not too often ──
+        if self._offline_inflight or not self._queue.empty():
+            return
+        now = time.monotonic()
+        if now < self._offline_next_drain_at:
+            return
+        self._offline_next_drain_at = now + self._OFFLINE_DRAIN_INTERVAL_S
+        try:
+            rows = self._offline.drain(limit=self._OFFLINE_DRAIN_BATCH)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("eden sdk: offline drain failed: %s", exc)
+            return
+        if not rows:
+            return
+        logger.debug("eden sdk: auto-replaying %d offline event(s)", len(rows))
+        for rid, fmt, payload in rows:
+            # ``skip_sampling`` so ClientSampler cannot discard a durable row
+            # that would then be acked away as if delivered.
+            self.enqueue(
+                TraceEvent(payload=payload, source_format=fmt, offline_row_id=rid),
+                skip_sampling=True,
+            )
+            self._offline_inflight.append(rid)
+
     # ── Internal loop ────────────────────────────────────────────────
 
     def _run_loop(self) -> None:
@@ -519,7 +753,16 @@ class EdenClient:
                 # runs sender work, and the wait sits *between* batches
                 # (never across in-flight asyncio.gather POSTs). Parking
                 # via run_in_executor on every tick crushed throughput.
-                self._wake.wait(timeout=flush_interval)
+                #
+                # Conditional on the queue being empty. Waiting
+                # unconditionally meant that whenever ``_drain`` left a
+                # backlog (queue deeper than one batch), the loop parked for a
+                # full ``flush_interval`` with work already in hand — capping
+                # throughput at about batch_size / flush_interval however fast
+                # the transport was. Idle behaviour is unchanged: an empty queue
+                # still parks on the event and wakes on the next enqueue.
+                if self._queue.empty():
+                    self._wake.wait(timeout=flush_interval)
                 self._wake.clear()
                 if self._stop.is_set() and self._queue.empty():
                     break
@@ -534,6 +777,11 @@ class EdenClient:
                 else:
                     # Queue is empty: tell flush() it can return.
                     self._generation_idle.set()
+                # Replay durable offline rows. Non-blocking and idle-gated —
+                # see ``_auto_drain_offline`` for why ``flush_offline`` itself
+                # cannot be called from this thread. Placed after the send so a
+                # replay slice is pulled only once the live batch is away.
+                self._auto_drain_offline()
                 # Drain streaming chunks on the same loop tick.
                 if self._chunk_buffer:
                     self._chunk_generation += 1
@@ -949,9 +1197,59 @@ class EdenClient:
 
                     status = resp.status_code
                     if 200 <= status < 300:
-                        self._sent_total += count
+                        # A 2xx does NOT mean every event was stored. The
+                        # server answers {accepted, rejected, deduplicated,
+                        # total} and rejects malformed rows individually.
+                        # Crediting `count` regardless made a 100%-rejected
+                        # batch indistinguishable from a clean flush — the
+                        # exact shape that let a broken ingest endpoint sit
+                        # unnoticed while SDKs reported success.
+                        #
+                        # Rejected rows are NOT retried: they are rejected
+                        # for being malformed, so resending loops forever.
+                        # They are surfaced instead, which is what the
+                        # customer actually needs.
+                        accepted, rejected = _parse_ingest_counts(resp, count)
+                        self._sent_total += accepted
+                        if rejected:
+                            self._rejected_total += rejected
+                            logger.warning(
+                                "eden ingest %s: server rejected %d/%d event(s) "
+                                "as malformed; they will NOT be retried",
+                                source_format, rejected, count,
+                            )
                         self._mark_rows_resolved(row_ids)
                         return True
+                    if status == 413 and self._BATCH_AS_ARRAY and len(events) > 1:
+                        # 413 is not permanent — it is a statement about *this
+                        # batch's size*, and the same events split in two will
+                        # succeed. Without this branch the classification below
+                        # treated it as a non-retryable 4xx: the batch was
+                        # counted as failed, deliberately not spilled ("would
+                        # poison the offline queue with payloads that can never
+                        # succeed"), and its offline rows were marked *resolved*
+                        # — acked away as though delivered. So one oversized
+                        # batch silently destroyed every event in it, including
+                        # durable replay rows.
+                        #
+                        # The chunk path has had this bisect since it was
+                        # written (``_post_chunk_batch``); the main event path
+                        # never got it. Each half recurses through this same
+                        # function, so per-row bookkeeping stays exact and a
+                        # single pathological event ends up alone in a batch of
+                        # one, where the genuine "too large to ever send"
+                        # verdict is correct.
+                        mid = len(events) // 2
+                        logger.warning(
+                            "eden ingest %s returned 413; splitting %d -> %d+%d",
+                            source_format,
+                            len(events),
+                            mid,
+                            len(events) - mid,
+                        )
+                        first = await _send_format(source_format, events[:mid])
+                        second = await _send_format(source_format, events[mid:])
+                        return first and second
                     retryable = status == 408 or status == 429 or status >= 500
                     if not retryable or attempt >= max_attempts:
                         self._failed_total += count
@@ -1131,6 +1429,16 @@ class EdenClient:
         """
         if self._offline is None:
             return 0
+        # Serialised against the worker's automatic drain and against another
+        # thread calling this method: ``drain`` does not claim rows, so two
+        # overlapping replays would send the same rows twice.
+        with self._offline_replay_lock:
+            return self._flush_offline_locked(limit=limit, timeout=timeout)
+
+    def _flush_offline_locked(self, *, limit: int, timeout: float) -> int:
+        """Body of :meth:`flush_offline`, run under the replay lock."""
+        if self._offline is None:
+            return 0
         drained = self._offline.drain(limit=limit)
         if not drained:
             return 0
@@ -1176,6 +1484,19 @@ class EdenClient:
     @property
     def failed(self) -> int:
         return self._failed_total
+
+    @property
+    def rejected(self) -> int:
+        """Events the server accepted the request for but refused to store.
+
+        Distinct from :attr:`failed` (the request itself did not
+        succeed). A 2xx carries per-row outcomes in its body — a fully
+        rejected batch still returns 200 — so without this counter a
+        100%-rejected stream is indistinguishable from a healthy one.
+        These are NOT retried: they are rejected as malformed, so
+        resending would loop forever.
+        """
+        return self._rejected_total
 
     @property
     def offline_dropped(self) -> int:

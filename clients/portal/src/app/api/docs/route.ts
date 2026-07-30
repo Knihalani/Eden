@@ -110,14 +110,27 @@ function roleCanCreateKeys(role: string | undefined | null): boolean {
 async function loadOrgs(
   authorization: string,
   cookieHeader: string | null,
-): Promise<{ ok: true; orgs: OrgRow[] } | { ok: false; status: number }> {
+): Promise<
+  | { ok: true; orgs: OrgRow[] }
+  | { ok: false; status: number; detail?: string }
+> {
   const upstream = await forwardToBackend("/orgs", {
     method: "GET",
     authorization,
     cookieHeader: cookieHeader ?? undefined,
   });
   if (!upstream.ok) {
-    return { ok: false, status: upstream.status };
+    // Keep the detail: GET /orgs now answers 401 for a user whose Eden
+    // row has not been provisioned yet, which is NOT the same as being
+    // signed out. Without the body the caller cannot tell them apart.
+    let detail: string | undefined;
+    try {
+      const body = await upstream.json();
+      detail = typeof body?.detail === "string" ? body.detail : undefined;
+    } catch {
+      /* non-JSON error body — leave detail undefined */
+    }
+    return { ok: false, status: upstream.status, detail };
   }
   try {
     const data = await upstream.json();
@@ -149,6 +162,24 @@ export async function GET(request: NextRequest) {
   const loaded = await loadOrgs(authorization, request.headers.get("cookie"));
   if (!loaded.ok) {
     // Still signed in — orgs endpoint may be down; don't claim loggedOut.
+    //
+    // GET /orgs answers 401 when the caller's Eden user row has not been
+    // provisioned yet. Clerk's session was already validated above, so
+    // that 401 cannot mean "signed out" — mapping it to loggedIn:false
+    // showed a brand-new customer "Sign in to mint a Quickstart key"
+    // while they were demonstrably signed in. /auth/me auto-provisions;
+    // GET /orgs does not, so this is exactly the first-run window.
+    const provisioning =
+      loaded.status === 401 &&
+      (loaded.detail ?? "").toLowerCase().includes("provision");
+    if (provisioning) {
+      return json(request, {
+        loggedIn: true,
+        orgId: null,
+        canCreateKeys: false,
+        error: "Your account is still being set up. Refresh in a moment.",
+      });
+    }
     if (loaded.status === 401 || loaded.status === 403) {
       return json(request, { loggedIn: false });
     }
