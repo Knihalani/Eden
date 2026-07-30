@@ -2071,8 +2071,17 @@ async def forgot_password(
 
                 await send_password_reset_email(to_email=request.email, token=token)
             except Exception as exc:
+                # ERROR, not WARNING: the plaintext token exists ONLY in
+                # this email. If it does not go out, the user is locked
+                # out with no recourse and no visible signal — which is
+                # exactly what happened while send_password_reset_email
+                # did not exist and the ImportError was swallowed here.
                 # F66 — defensive PII redaction.
-                logger.warning(f"password reset email dispatch failed: {redact_email(str(exc))}")
+                logger.error(
+                    "password reset email dispatch FAILED — the user cannot "
+                    "complete a reset: %s",
+                    redact_email(str(exc)),
+                )
     except Exception as exc:
         # Don't leak DB errors to the caller.
         # F66 — defensive PII redaction.

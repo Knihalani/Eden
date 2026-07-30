@@ -61,6 +61,18 @@ const OFFLINE_CHUNKS_FORMAT = "chunks";
  * ``level: 1`` matches the Python SDK's ``compresslevel=1`` —
  * fastest deflate for telemetry payloads where wire size is already
  * dominated by JSON structure, not archive ratio.
+ *
+ * Deliberately still ``gzipSync``, not the threadpool-backed
+ * ``zlib.gzip``. Measured on this payload shape at level 1: 0.4ms per
+ * call for a 621KB body, scaling at roughly 0.5ms/MB. Switching to the
+ * async form cost ~40% more wall-clock per call (11ms vs 8ms over 20
+ * calls) for the threadpool round-trip, to hand back a fraction of a
+ * millisecond of event loop. Since ``flush()`` now caps a batch at
+ * ``maxBatchSize`` (default 50) rather than shipping the whole queue,
+ * the realistic body is a few hundred KB and the sync call is the
+ * cheaper choice. Revisit only if a caller raises ``maxBatchSize`` into
+ * the thousands *and* carries large prompts — at ~20MB the stall
+ * reaches ~10ms, which is where the trade flips.
  */
 type GzipSync = typeof import("node:zlib").gzipSync;
 let _gzipSync: GzipSync | null = null;
@@ -425,7 +437,23 @@ export class EdenSDK {
   // still in flight and its subsequent ``flush()`` call
   // grabbed the same slot and started a second concurrent
   // POST — racing the first one for the same batch.
-  private inflightPromise: Promise<void> | null = null;
+  /**
+   * The in-flight batch POST, resolving to whether that batch fully
+   * succeeded (every group 2xx).
+   *
+   * This used to be a ``Promise<void>``, which quietly broke
+   * ``flush()``'s contract. ``flush()`` accumulates into a *local*
+   * ``allOk``, so when one caller merely waited on a batch started by
+   * someone else — the common case, since ``emit()`` fires
+   * ``void this.flush()`` on its own once the queue reaches
+   * ``maxBatchSize`` — it awaited the promise, learned nothing, found
+   * the queue empty and returned its untouched ``true``. Verified: 8
+   * events against a gateway returning a permanent 400 reported
+   * ``flush() === true`` while every event was discarded, so a caller
+   * doing ``if (!(await sdk.flush())) alert()`` could never fire.
+   * Carrying the outcome on the promise lets every waiter inherit it.
+   */
+  private inflightPromise: Promise<boolean> | null = null;
   // Separate inflight flag for the chunk flush path.
   // Concurrent `flushChunks()` calls would otherwise both grab
   // the same buffer and double-POST chunks.
@@ -439,11 +467,41 @@ export class EdenSDK {
   private sampler: ClientSampler;
   sampledOut = 0;
   /**
+   * Events evicted from the front of the queue because it hit
+   * ``maxQueueSize`` before a flush could drain it.
+   *
+   * The eviction itself is the right call — the alternative is
+   * unbounded memory growth in a long-lived process — but it was
+   * completely unobservable: unlike ``bufferChunk``'s overflow it did
+   * not even emit a debug log, so a process losing telemetry to
+   * back-pressure looked identical to one emitting nothing. Mirrors the
+   * Python SDK's ``_dropped_total``.
+   */
+  droppedTotal = 0;
+  /**
    * Last HTTP status from an ingest POST. ``null`` until the first
    * attempt, or after a network failure with no response. Used by
    * ``runDoctor`` to surface bad-key (401/403) without throwing.
    */
   lastIngestHttpStatus: number | null = null;
+  /**
+   * Events the server accepted the REQUEST for but refused to store.
+   *
+   * A 2xx only means the batch was understood. The body carries the
+   * per-row outcome as ``{accepted, rejected, deduplicated, total}``,
+   * and a fully-rejected batch still returns 200 — so without this a
+   * 100%-rejected stream is indistinguishable from a healthy one. That
+   * is exactly how a broken ingest endpoint stayed invisible while
+   * every SDK reported success.
+   *
+   * These are NOT retried: rows are rejected for being malformed, so
+   * resending would loop forever. Visibility is the fix, not retry.
+   *
+   * Mirrors the Python SDK's ``rejected`` property.
+   */
+  rejectedTotal = 0;
+  /** Events the server confirmed it stored. */
+  acceptedTotal = 0;
   private offline: OfflineQueue | null = null;
 
   constructor(opts: EdenSDKOptions = {}) {
@@ -582,6 +640,15 @@ export class EdenSDK {
     // memory growth in long-lived processes.
     if (this.queue.length >= this.config.maxQueueSize) {
       this.queue.shift();
+      this.droppedTotal += 1;
+      if (this.config.debug) {
+        // eslint-disable-next-line no-console
+        console.debug(
+          "[eden-ai] queue overflow, dropped oldest event (total:",
+          this.droppedTotal,
+          ")",
+        );
+      }
     }
     this.queue.push(event);
     if (this.queue.length >= this.config.maxBatchSize) {
@@ -659,7 +726,9 @@ export class EdenSDK {
     let allOk = true;
     while (true) {
       if (this.inflight) {
-        await this.inflightPromise;
+        // Inherit the outcome of the batch we are waiting on, rather
+        // than discarding it and reporting our own untouched ``true``.
+        if ((await this.inflightPromise) === false) allOk = false;
         continue;
       }
       if (this.queue.length === 0) return allOk;
@@ -672,22 +741,38 @@ export class EdenSDK {
         clearTimeout(this.flushTimer);
         this.flushTimer = null;
       }
-      const batch = this.queue;
-      this.queue = [];
+      // Cap the batch at ``maxBatchSize``. This used to take the whole
+      // queue (``const batch = this.queue; this.queue = []``), which made
+      // ``maxBatchSize`` a flush *trigger* rather than a size limit: it
+      // only bounds the depth at which ``emit`` decides to flush, and
+      // events keep accumulating while a POST is in flight. Measured with
+      // maxBatchSize=50 and one hung POST, the queue reached 910 events
+      // that would then have gone out as a single request — up to
+      // ``maxQueueSize`` (4096) in the limit.
+      //
+      // That matters beyond request size: one oversized POST is
+      // all-or-nothing, so a single 413 or permanent 4xx took out
+      // thousands of events at once instead of 50. The Python SDK has
+      // always capped here (``self._drain(self.config.batch_size)``);
+      // this is the parity fix. The loop below re-drains until empty, so
+      // capping costs an extra iteration, not throughput.
+      const batch = this.queue.splice(0, this.config.maxBatchSize);
       // Track the in-flight POST so ``dispose()`` can await it
       // before releasing ``this.inflight``. Without this the
       // ``dispose() → flush()`` chain could start a second
       // concurrent POST while the first was still in flight.
-      this.inflightPromise = (async () => {
+      // Held in a local as well as on the instance: the ``finally``
+      // below nulls the field, so awaiting the field rather than the
+      // local would be a race against our own cleanup.
+      const inflight = (async (): Promise<boolean> => {
         try {
-          const batchOk = await this.postBatch(batch);
-          if (!batchOk) allOk = false;
+          return await this.postBatch(batch);
         } catch (err) {
-          allOk = false;
           if (this.config.debug) {
             // eslint-disable-next-line no-console
             console.debug("[eden-ai] flush failed (swallowed)", err);
           }
+          return false;
         } finally {
           this.inflight = false;
           this.inflightPromise = null;
@@ -697,7 +782,8 @@ export class EdenSDK {
           this.scheduleFlush();
         }
       })();
-      await this.inflightPromise;
+      this.inflightPromise = inflight;
+      if (!(await inflight)) allOk = false;
     }
   }
 
@@ -1019,56 +1105,105 @@ export class EdenSDK {
     let allOk = true;
     const tasks: Promise<void>[] = [];
     for (const [format, items] of byFormat) {
+      // Apply the client-side safety-net PII redactor to every nested
+      // payload before it leaves the process. Mirrors the Python SDK's
+      // ``redact_on_client`` path; the gateway remains the source of
+      // truth for tenant redaction policy.
+      //
+      // Note on Python "parity": Python ``TraceEvent.payload`` *is* the
+      // wire body (often already containing ``event_type``). The TS SDK
+      // keeps a camelCase ``TelemetryEvent`` with a nested ``payload``,
+      // so the wire body must be produced by ``eventToWire`` — posting
+      // ``e.payload`` alone drops ``event_type`` / ``trace_id`` and
+      // breaks gateway SQL filters.
+      //
+      // Redaction happens here rather than inside ``postFormat`` so a
+      // 413 bisect does not re-redact each half.
+      const redacted = this.config.redactOnClient
+        ? items.map((e) => ({
+            ...e,
+            payload: redactPayload(e.payload ?? {}) as never,
+          }))
+        : items;
       tasks.push(
-        (async () => {
-          const url = this.buildIngestUrl(format);
-          if (!url) {
-            if (this.config.debug) {
-              // eslint-disable-next-line no-console
-              console.debug("[eden-ai] no orgId; dropping", items.length, "events");
-            }
-            allOk = false;
-            return;
-          }
-          // Apply the client-side safety-net PII redactor to every
-          // nested payload before it leaves the process. Mirrors the
-          // Python SDK's ``redact_on_client`` path; the gateway remains
-          // the source of truth for tenant redaction policy.
-          //
-          // Note on Python "parity": Python ``TraceEvent.payload`` *is*
-          // the wire body (often already containing ``event_type``).
-          // The TS SDK keeps a camelCase ``TelemetryEvent`` with a
-          // nested ``payload``, so the wire body must be produced by
-          // ``eventToWire`` — posting ``e.payload`` alone drops
-          // ``event_type`` / ``trace_id`` and breaks gateway SQL filters.
-          const redacted = this.config.redactOnClient
-            ? items.map((e) => ({
-                ...e,
-                payload: redactPayload(e.payload ?? {}) as never,
-              }))
-            : items;
-          const wired = redacted.map(eventToWire);
-          const outcome = await this.postJson(url, wired);
-          if (outcome !== "ok") allOk = false;
-          // Only spill transient failures. Permanent 4xx would poison
-          // the offline queue with payloads that can never succeed.
-          if (outcome === "spill" && this.offline) {
-            for (const item of redacted) {
-              try {
-                this.offline.enqueue(
-                  format,
-                  (item.payload ?? {}) as Record<string, unknown>,
-                );
-              } catch {
-                // ignore spill errors
-              }
-            }
-          }
-        })(),
+        this.postFormat(format, redacted).then((ok) => {
+          if (!ok) allOk = false;
+        }),
       );
     }
     await Promise.all(tasks);
     return allOk;
+  }
+
+  /**
+   * POST one already-redacted, single-format group, bisecting on 413.
+   *
+   * ``postJson`` reports 413 as ``"too_large"``, but this path only ever
+   * spilled on ``"spill"`` — so a 413 set ``allOk = false`` and then
+   * dropped the batch on the floor: not retried, not split, not written
+   * to the offline queue. Verified before the fix: 8 events into a
+   * gateway that 413s anything over 2 produced 0 delivered and 0
+   * spilled. They simply vanished.
+   *
+   * 413 says nothing about the events themselves — it is a statement
+   * about *this batch's size*, and the same events split in two
+   * succeed. ``postChunkBatch`` has bisected on it since it was
+   * written; the main event path never got the same treatment (the
+   * identical gap existed in the Python SDK's ``_send_format``).
+   *
+   * Recursing keeps per-group bookkeeping exact and drives a genuinely
+   * oversized single event down to a batch of one, where the permanent
+   * -failure verdict is finally the correct one.
+   */
+  private async postFormat(
+    format: string,
+    redacted: TelemetryEvent[],
+  ): Promise<boolean> {
+    if (redacted.length === 0) return true;
+    const url = this.buildIngestUrl(format);
+    if (!url) {
+      if (this.config.debug) {
+        // eslint-disable-next-line no-console
+        console.debug("[eden-ai] no orgId; dropping", redacted.length, "events");
+      }
+      return false;
+    }
+    const wired = redacted.map(eventToWire);
+    const outcome = await this.postJson(url, wired);
+    if (outcome === "ok") return true;
+    if (outcome === "too_large" && redacted.length > 1) {
+      const mid = Math.floor(redacted.length / 2);
+      if (this.config.debug) {
+        // eslint-disable-next-line no-console
+        console.debug(
+          "[eden-ai] 413 from gateway; splitting",
+          redacted.length,
+          "->",
+          mid,
+          "+",
+          redacted.length - mid,
+        );
+      }
+      const first = await this.postFormat(format, redacted.slice(0, mid));
+      const second = await this.postFormat(format, redacted.slice(mid));
+      return first && second;
+    }
+    // Only spill transient failures. Permanent 4xx would poison the
+    // offline queue with payloads that can never succeed. A lone event
+    // that still 413s is genuinely unsendable, so it lands here too.
+    if (outcome === "spill" && this.offline) {
+      for (const item of redacted) {
+        try {
+          this.offline.enqueue(
+            format,
+            (item.payload ?? {}) as Record<string, unknown>,
+          );
+        } catch {
+          // ignore spill errors
+        }
+      }
+    }
+    return false;
   }
 
   private async postChunks(chunks: StreamChunk[]): Promise<void> {
@@ -1162,6 +1297,44 @@ export class EdenSDK {
    * permanent 4xx (auth/validation) — do not spill; ``"too_large"``
    * on 413 so chunk ingest can bisect and retry.
    */
+  /**
+   * Record the per-row outcome carried by a 2xx ingest response.
+   *
+   * The gateway answers ``{accepted, rejected, deduplicated, total}``.
+   * Reading only ``res.ok`` treated a fully-rejected batch as a clean
+   * flush, which is precisely how a broken ingest endpoint went
+   * unnoticed. Counters are left untouched when the body is not that
+   * shape, so an older or differently-shaped gateway can never make
+   * the SDK report something it did not observe.
+   */
+  private async recordIngestOutcome(res: Response): Promise<void> {
+    let parsed: unknown;
+    try {
+      parsed = await res.clone().json();
+    } catch {
+      return; // Not JSON — nothing reliable to record.
+    }
+    if (typeof parsed !== "object" || parsed === null) return;
+    const body = parsed as Record<string, unknown>;
+    if (!("accepted" in body) && !("rejected" in body)) return;
+
+    const accepted = Number(body.accepted ?? 0);
+    const rejected = Number(body.rejected ?? 0);
+    if (Number.isFinite(accepted) && accepted > 0) {
+      this.acceptedTotal += accepted;
+    }
+    if (Number.isFinite(rejected) && rejected > 0) {
+      this.rejectedTotal += rejected;
+      const total = Number(body.total ?? accepted + rejected);
+      // Always warn — not gated on `debug`. A customer whose events are
+      // being silently discarded needs to hear about it by default.
+      console.warn(
+        `[eden-ai] server rejected ${rejected}/${total} event(s) as ` +
+          `malformed; they will NOT be retried`,
+      );
+    }
+  }
+
   private async postJson(
     url: string,
     body: unknown,
@@ -1200,7 +1373,10 @@ export class EdenSDK {
           signal: controller.signal,
         });
         this.lastIngestHttpStatus = res.status;
-        if (res.ok) return "ok";
+        if (res.ok) {
+          await this.recordIngestOutcome(res);
+          return "ok";
+        }
         const status = res.status;
         if (status === 413) return "too_large";
         const retryable = status === 429 || status === 408 || status >= 500;
