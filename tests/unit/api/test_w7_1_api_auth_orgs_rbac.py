@@ -12,7 +12,6 @@ import pytest
 from fastapi import HTTPException
 from fastapi.responses import JSONResponse
 
-
 ORG = "00000000-0000-0000-0000-000000000001"
 USER = "00000000-0000-0000-0000-000000000002"
 ROLE = "00000000-0000-0000-0000-000000000003"
@@ -26,6 +25,7 @@ async def test_create_org_unique_is_409():
     client.fetchval = AsyncMock(return_value=0)
     client.fetchrow = AsyncMock(
         side_effect=[
+            None,  # recent-duplicate idempotency check
             None,  # slug uniqueness check
             Exception("duplicate key value violates unique constraint"),
         ]
@@ -56,7 +56,8 @@ async def test_create_org_other_db_error_is_503_not_500():
     client.fetchval = AsyncMock(return_value=0)
     client.fetchrow = AsyncMock(
         side_effect=[
-            None,
+            None,  # recent-duplicate idempotency check
+            None,  # slug uniqueness check
             Exception("connection refused"),
         ]
     )
@@ -222,9 +223,7 @@ async def test_clerk_webhook_handler_infra_is_503_no_leak():
     body = b'{"type":"user.created","data":{"id":"user_1"}}'
     request = MagicMock()
     request.body = AsyncMock(return_value=body)
-    request.json = AsyncMock(
-        return_value={"type": "user.created", "data": {"id": "user_1"}}
-    )
+    request.json = AsyncMock(return_value={"type": "user.created", "data": {"id": "user_1"}})
 
     with (
         patch.object(mod, "_settings") as settings_mock,
@@ -309,9 +308,7 @@ async def test_list_mcp_keys_bad_uuid_is_400():
     from eden.api.routes import mcp_keys as mod
 
     client = MagicMock()
-    client.fetch = AsyncMock(
-        side_effect=Exception('invalid input syntax for type uuid: "org_bad"')
-    )
+    client.fetch = AsyncMock(side_effect=Exception('invalid input syntax for type uuid: "org_bad"'))
 
     with (
         patch.object(mod, "require_org_admin", AsyncMock(return_value=None)),

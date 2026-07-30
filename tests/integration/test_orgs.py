@@ -21,11 +21,14 @@ codebase:
 
 from __future__ import annotations
 
+import contextlib
 from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
+
+from eden.api.routes.clerk_webhooks import WebhookNotReadyError
 
 # ── Shared fixtures ───────────────────────────────────────────────────
 
@@ -52,9 +55,7 @@ CLERK_OK_MEMBERSHIP = {
 
 
 class TestCreateOrgClerkSync:
-    def test_create_org_calls_clerk_and_stores_id(
-        self, api_client: TestClient, auth_headers: dict
-    ):
+    def test_create_org_calls_clerk_and_stores_id(self, api_client: TestClient, auth_headers: dict):
         """POST /orgs must hit Clerk FIRST and write clerk_org_id."""
         with patch(
             "eden.api.utils.clerk_client._post",
@@ -79,9 +80,7 @@ class TestCreateOrgClerkSync:
         # route may append ``-{8 hex}`` for uniqueness — accept either.
         call_body = mock_post.call_args.args[1]
         assert call_body["name"] == "Acme Labs"
-        assert call_body["slug"] == "acme-labs" or call_body["slug"].startswith(
-            "acme-labs-"
-        )
+        assert call_body["slug"] == "acme-labs" or call_body["slug"].startswith("acme-labs-")
 
     def test_create_org_degraded_when_clerk_unreachable(
         self, api_client: TestClient, auth_headers: dict
@@ -141,30 +140,38 @@ class TestAcceptInviteClerkSync:
         # ``org_invitations`` to validate the invite; prime it so it
         # sees the same fake invite the route already validated.
         mock_postgres_client._fetchrow_overrides.append(
-            ("FROM org_invitations", {
-                "id": "inv-1",
-                "org_id": ORG_EDEN_1,
-                "email": "test@example.com",
-                "role": "member",
-                "status": "pending",
-                "expires_at": datetime.utcnow() + timedelta(days=7),
-                "invited_by": "user-0",
-            }),
+            (
+                "FROM org_invitations",
+                {
+                    "id": "inv-1",
+                    "org_id": ORG_EDEN_1,
+                    "email": "test@example.com",
+                    "role": "member",
+                    "status": "pending",
+                    "expires_at": datetime.utcnow() + timedelta(days=7),
+                    "invited_by": "user-0",
+                },
+            ),
         )
         # Clerk membership side-effect needs users.clerk_id.
         mock_postgres_client._fetchrow_overrides.append(
             ("SELECT clerk_id FROM users", {"clerk_id": "user_2xclerk"}),
         )
-        with patch.object(
-            auth_routes, "verify_invite_token", return_value=fake_invite,
-        ), patch(
-            # ``create_membership`` is imported locally inside the
-            # service (``from eden.api.utils.clerk_client import …``);
-            # patch the source module so the bound name inside the
-            # service picks up the mock.
-            "eden.api.utils.clerk_client.create_membership",
-            AsyncMock(return_value=CLERK_OK_MEMBERSHIP),
-        ) as mock_create:
+        with (
+            patch.object(
+                auth_routes,
+                "verify_invite_token",
+                return_value=fake_invite,
+            ),
+            patch(
+                # ``create_membership`` is imported locally inside the
+                # service (``from eden.api.utils.clerk_client import …``);
+                # patch the source module so the bound name inside the
+                # service picks up the mock.
+                "eden.api.utils.clerk_client.create_membership",
+                AsyncMock(return_value=CLERK_OK_MEMBERSHIP),
+            ) as mock_create,
+        ):
             response = api_client.post(
                 "/auth/invitations/accept?token=any-plaintext-token",
                 headers=auth_headers,
@@ -199,21 +206,29 @@ class TestAcceptInviteClerkSync:
             ("COALESCE(clerk_org_id", {"clerk_org_id": "org_2xdef456"}),
         )
         mock_postgres_client._fetchrow_overrides.append(
-            ("FROM org_invitations", {
-                "id": "inv-2",
-                "org_id": ORG_EDEN_2,
-                "email": "test@example.com",
-                "role": "viewer",
-                "status": "pending",
-                "expires_at": datetime.utcnow() + timedelta(days=7),
-                "invited_by": "user-0",
-            }),
+            (
+                "FROM org_invitations",
+                {
+                    "id": "inv-2",
+                    "org_id": ORG_EDEN_2,
+                    "email": "test@example.com",
+                    "role": "viewer",
+                    "status": "pending",
+                    "expires_at": datetime.utcnow() + timedelta(days=7),
+                    "invited_by": "user-0",
+                },
+            ),
         )
-        with patch.object(
-            auth_routes, "verify_invite_token", return_value=fake_invite,
-        ), patch(
-            "eden.api.utils.clerk_client.create_membership",
-            AsyncMock(side_effect=ClerkAPIError("Clerk 503: /memberships")),
+        with (
+            patch.object(
+                auth_routes,
+                "verify_invite_token",
+                return_value=fake_invite,
+            ),
+            patch(
+                "eden.api.utils.clerk_client.create_membership",
+                AsyncMock(side_effect=ClerkAPIError("Clerk 503: /memberships")),
+            ),
         ):
             response = api_client.post(
                 "/auth/invitations/accept?token=any-plaintext-token",
@@ -232,20 +247,25 @@ class TestAcceptInviteClerkSync:
         """The per-org accept route mirrors the token route's shape."""
         # Path-org gate loads the invite before accept_invitation runs.
         mock_postgres_client._fetchrow_overrides.append(
-            ("FROM org_invitations", {
-                "id": "inv-3",
-                "org_id": ORG_EDEN_3,
-                "email": "test@example.com",
-                "status": "pending",
-            }),
+            (
+                "FROM org_invitations",
+                {
+                    "id": "inv-3",
+                    "org_id": ORG_EDEN_3,
+                    "email": "test@example.com",
+                    "status": "pending",
+                },
+            ),
         )
         with patch(
             "eden.api.routes.orgs.accept_invitation",
-            AsyncMock(return_value={
-                "org_id": ORG_EDEN_3,
-                "role": "admin",
-                "clerk_org_id": "org_2xadmin",
-            }),
+            AsyncMock(
+                return_value={
+                    "org_id": ORG_EDEN_3,
+                    "role": "admin",
+                    "clerk_org_id": "org_2xadmin",
+                }
+            ),
         ):
             response = api_client.post(
                 f"/orgs/{ORG_EDEN_3}/invites/inv-3/accept",
@@ -271,9 +291,7 @@ class TestUpsertOrgRace:
     syntax for type uuid`` and fail the webhook delivery.
     """
 
-    def test_webhook_skips_insert_for_backend_created_row(
-        self, mock_postgres_client
-    ):
+    def test_webhook_skips_insert_for_backend_created_row(self, mock_postgres_client):
         """Case 2 (backend first): the handler must NOT issue a
         non-UUID INSERT. We assert that the INSERT statement is
         guarded by a ``NOT EXISTS`` check AND only inserts UUID
@@ -281,15 +299,28 @@ class TestUpsertOrgRace:
         import asyncio
 
         from eden.api.routes.clerk_webhooks import _upsert_org
-        asyncio.run(_upsert_org({
-            "id": "org_2xabc",
-            "name": "Acme",
-            "slug": "acme",
-        }))
+
+        # This payload has no ``created_by`` and the mock has no matching
+        # org row, so the handler now asks Clerk to redeliver rather than
+        # returning and letting the route answer 200 (Svix treats 2xx as
+        # a permanent ack, so the old behaviour dropped the event). The
+        # SQL below is still issued first, which is what this test is
+        # actually about.
+        with contextlib.suppress(WebhookNotReadyError):
+            asyncio.run(
+                _upsert_org(
+                    {
+                        "id": "org_2xabc",
+                        "name": "Acme",
+                        "slug": "acme",
+                    }
+                )
+            )
 
         # Collect every INSERT statement issued.
         inserts = [
-            c for c in mock_postgres_client.execute.call_args_list
+            c
+            for c in mock_postgres_client.execute.call_args_list
             if "INSERT INTO organizations" in (c.args[0] if c.args else "")
         ]
         # An INSERT may or may not be issued depending on the mock
@@ -306,24 +337,30 @@ class TestUpsertOrgRace:
                 "duplicate rows when both the UPDATE and INSERT match"
             )
 
-    def test_webhook_updates_existing_row_idempotently(
-        self, mock_postgres_client
-    ):
+    def test_webhook_updates_existing_row_idempotently(self, mock_postgres_client):
         """The UPDATE branch must run on every webhook delivery
         (idempotent for case 2; backfills case 3)."""
         import asyncio
 
         from eden.api.routes.clerk_webhooks import _upsert_org
-        asyncio.run(_upsert_org({
-            "id": "org_2xabc",
-            "name": "Acme",
-            "slug": "acme",
-        }))
+
+        # See the sibling test: no created_by + no matching row now
+        # raises for redelivery. The UPDATE is still issued first.
+        with contextlib.suppress(WebhookNotReadyError):
+            asyncio.run(
+                _upsert_org(
+                    {
+                        "id": "org_2xabc",
+                        "name": "Acme",
+                        "slug": "acme",
+                    }
+                )
+            )
 
         updates = [
-            c for c in mock_postgres_client.execute.call_args_list
-            if c.args and "UPDATE organizations" in c.args[0]
-            and "INSERT" not in c.args[0]
+            c
+            for c in mock_postgres_client.execute.call_args_list
+            if c.args and "UPDATE organizations" in c.args[0] and "INSERT" not in c.args[0]
         ]
         assert updates, "Webhook handler did not issue an UPDATE"
         update_sql = updates[0].args[0]
@@ -346,9 +383,7 @@ class TestLastWriterRaceResolution:
     ``last_writer_source``.
     """
 
-    def test_local_insert_sets_last_writer_source(
-        self, mock_postgres_client
-    ):
+    def test_local_insert_sets_last_writer_source(self, mock_postgres_client):
         """The local INSERT in ``accept_invitation`` must mark the
         row as locally-written so the webhook knows to skip the
         initial role overwrite."""
@@ -373,13 +408,15 @@ class TestLastWriterRaceResolution:
         # the resolve returns None so ``create_membership`` is
         # skipped.
         import asyncio
+
         asyncio.run(accept_invitation("inv-lw-1", "user-123"))
 
         # The local INSERT statement must include
         # ``last_writer_source = 'local'``. The mock's ``execute``
         # records every call; find the one that inserts the row.
         inserts = [
-            c for c in mock_postgres_client.execute.call_args_list
+            c
+            for c in mock_postgres_client.execute.call_args_list
             if "INSERT INTO org_members" in (c.args[0] if c.args else "")
         ]
         assert inserts, "accept_invitation did not insert into org_members"
@@ -387,9 +424,7 @@ class TestLastWriterRaceResolution:
         assert "last_writer_source" in insert_sql
         assert "'local'" in insert_sql
 
-    def test_webhook_skips_role_overwrite_when_local(
-        self, mock_postgres_client
-    ):
+    def test_webhook_skips_role_overwrite_when_local(self, mock_postgres_client):
         """The webhook's ``DO UPDATE`` must not overwrite the role
         when ``last_writer_source = 'local'`` (Eden wrote first)."""
         from eden.api.routes.clerk_webhooks import _upsert_membership
@@ -404,18 +439,22 @@ class TestLastWriterRaceResolution:
         mock_postgres_client._fetchrow_overrides.append(
             ("users WHERE clerk_id", {"id": "user-123"})
         )
-        mock_postgres_client._fetchrow_overrides.append(
-            ("organizations", {"id": "org-abc-uuid"})
-        )
+        mock_postgres_client._fetchrow_overrides.append(("organizations", {"id": "org-abc-uuid"}))
         import asyncio
-        asyncio.run(_upsert_membership({
-            "organization": {"id": "org_2xabc"},
-            "public_user_data": {"user_id": "user-123"},
-            "role": "org:member",
-        }))
+
+        asyncio.run(
+            _upsert_membership(
+                {
+                    "organization": {"id": "org_2xabc"},
+                    "public_user_data": {"user_id": "user-123"},
+                    "role": "org:member",
+                }
+            )
+        )
 
         upserts = [
-            c for c in mock_postgres_client.execute.call_args_list
+            c
+            for c in mock_postgres_client.execute.call_args_list
             if "ON CONFLICT" in (c.args[0] if c.args else "")
         ]
         assert upserts, "_upsert_membership did not issue an UPSERT"

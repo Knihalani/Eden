@@ -576,7 +576,7 @@ async def run_export_now(
         # was delivered, and the previous behaviour of recording a
         # successful "export.run" for an undelivered payload is exactly
         # the bug this replaces.
-        logger.error("export destination unavailable: %s", exc)
+        logger.error("export destination unavailable: %s", redact_all(str(exc)))
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     finished_at = datetime.now(UTC)
