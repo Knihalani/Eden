@@ -330,9 +330,15 @@ if (nestedHits.length) {
 
 // --- 6. Wave 12 V2: Badge grammar + hub CTA smell ---
 // DESIGN.md freezes one Badge API in ui/badge.tsx; domain wrappers live in
-// status-badge.tsx. Fail if a second `function Badge` appears, or if
+// SEVERITY_BADGE_HOME. Fail if a second `function Badge` appears, or if
 // SeverityBadge / IssuePriorityBadge / IssueSeverityBadge are redefined outside
 // the kit (mirrors polish-check; kept here so lint:portal-clutter alone gates freeze).
+//
+// This was components/ui/status-badge.tsx until 9a1452b4 deleted that file and
+// moved SeverityBadge into lab-ui.tsx. The rule kept naming the old path, so it
+// reported the single canonical definition as an escapee on every run. Keep in
+// step with the matching BADGE_HOME in scripts/polish-check.sh.
+const SEVERITY_BADGE_HOME = "lab/lab-ui.tsx";
 const badgeHits = [];
 const severityHits = [];
 const BADGE_FN_RE = /\bfunction\s+Badge\b/g;
@@ -352,7 +358,7 @@ for (const file of srcFiles) {
   }
   const sevRe = new RegExp(SEVERITY_FN_RE.source, "g");
   while ((m = sevRe.exec(text)) !== null) {
-    if (!relPath.endsWith("components/ui/status-badge.tsx")) {
+    if (!relPath.endsWith(SEVERITY_BADGE_HOME)) {
       const line = text.slice(0, m.index).split("\n").length;
       severityHits.push(`${relPath}:${line}`);
     }
@@ -365,7 +371,7 @@ if (badgeHits.length || severityHits.length) {
         ? `  function Badge outside ui/badge.tsx:\n    ${badgeHits.join("\n    ")}\n`
         : "") +
       (severityHits.length
-        ? `  Severity/Issue badge outside ui/status-badge.tsx:\n    ${severityHits.join("\n    ")}\n`
+        ? `  Severity/Issue badge outside ${SEVERITY_BADGE_HOME}:\n    ${severityHits.join("\n    ")}\n`
         : "")
   );
   process.exitCode = 1;

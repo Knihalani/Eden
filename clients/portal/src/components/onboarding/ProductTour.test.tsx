@@ -176,3 +176,52 @@ describe("ProductTour navigation resets", () => {
     expect(onStepChange).toHaveBeenCalledWith(1);
   }, SETTLE_WAITFOR_TIMEOUT_MS + 5000);
 });
+
+/**
+ * The window where `ready` is false is not an edge case: every navigating step
+ * passes through it, and on a slow route/chunk load it can last up to the
+ * settle effect's 2500ms budget. The card — and with it #eden-tour-title and
+ * #eden-tour-body — is unmounted for that whole window, so the overlay must
+ * still be a named dialog and must still look like a tour rather than a hung
+ * black screen.
+ */
+describe("ProductTour settle window", () => {
+  afterEach(() => {
+    mountedTargets.splice(0).forEach((el) => el.remove());
+  });
+
+  it("stays a named dialog and shows a loading affordance while settling", async () => {
+    mountTourTarget("home");
+
+    render(
+      <ProductTour
+        open
+        stepIndex={1}
+        onStepChange={vi.fn()}
+        onSkip={vi.fn()}
+        onFinish={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => expect(hasSpotlightMask()).toBe(true), {
+      timeout: SETTLE_WAITFOR_TIMEOUT_MS,
+    });
+
+    // Settled: the real heading labels the dialog.
+    const settled = screen.getByRole("dialog");
+    expect(settled).toHaveAttribute("aria-labelledby", "eden-tour-title");
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+
+    // Navigating to a different-href step drops `ready` synchronously.
+    fireEvent.click(screen.getByRole("button", { name: /^Next$/ }));
+
+    const settling = screen.getByRole("dialog");
+    // Regression: this pointed at #eden-tour-title even while that node was
+    // unmounted, leaving an aria-modal dialog with no accessible name.
+    expect(settling).not.toHaveAttribute("aria-labelledby");
+    expect(settling).toHaveAttribute("aria-label", "Product tour");
+    // Regression: the scrim rendered alone, with nothing to distinguish a
+    // loading tour from a frozen page.
+    expect(screen.getByRole("status")).toHaveTextContent("Loading tour step…");
+  }, SETTLE_WAITFOR_TIMEOUT_MS + 5000);
+});

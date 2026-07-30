@@ -12,6 +12,15 @@
 
 html {
   min-height: 100%;
+  /* Explicit rather than relying on the initial `visible`, which the spec
+     already propagates to the viewport as `auto`. Declaring it pins the
+     document-scroll model the layout depends on: the sticky sidebar, page
+     headers and the tour's chrome banner all resolve against the viewport,
+     which only holds while `body` never becomes the scroll container (see
+     the `overflow-x: hidden` ban in scripts/polish-check.sh). Behaviourally
+     identical to the default — verified in-browser — but a later conflicting
+     declaration now has something to conflict with. */
+  overflow-y: auto;
 }
 
 body {

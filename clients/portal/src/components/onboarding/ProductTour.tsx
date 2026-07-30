@@ -17,7 +17,6 @@ import {
   type MouseEvent as ReactMouseEvent,
 } from "react";
 import { createPortal } from "react-dom";
-import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import { ArrowLeft, ArrowRight, X } from "lucide-react";
@@ -452,8 +451,16 @@ export function ProductTour({
           className="fixed inset-0 z-[100]"
           role="dialog"
           aria-modal="true"
-          aria-labelledby="eden-tour-title"
-          aria-describedby="eden-tour-body"
+          // The card — and with it #eden-tour-title / #eden-tour-body — only
+          // mounts once `ready` is true. Pointing at absent ids leaves an
+          // open modal with no accessible name for the whole settle window,
+          // so fall back to a literal label until the real one exists.
+          {...(ready
+            ? {
+                "aria-labelledby": "eden-tour-title",
+                "aria-describedby": "eden-tour-body",
+              }
+            : { "aria-label": "Product tour" })}
         >
           <motion.div
             initial={{ opacity: 0 }}
@@ -481,7 +488,7 @@ export function ProductTour({
                 <rect
                   width="100%"
                   height="100%"
-                  fill="rgba(4, 6, 10, 0.78)"
+                  fill="var(--tour-scrim)"
                   mask={`url(#${maskId})`}
                 />
                 <rect
@@ -497,7 +504,7 @@ export function ProductTour({
                 />
               </svg>
             ) : (
-              <div className="absolute inset-0 bg-[rgba(4,6,10,0.78)]" />
+              <div className="absolute inset-0 bg-[var(--tour-scrim)]" />
             )}
           </motion.div>
 
@@ -605,49 +612,21 @@ export function ProductTour({
                   {isFinish ? (
                     <Button
                       type="button"
+                      // Matches goNext/keyboard, which both bail while a
+                      // status write is in flight. Without it the one exit
+                      // that actually persists "done" was the only control
+                      // that could be fired twice.
+                      disabled={busy}
                       onClick={onFinish}
                       data-tour-primary
                       className="min-h-11"
                     >
                       Done
                     </Button>
-                  ) : step.ctaHref ? (
-                    <>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        onClick={goNext}
-                        className="min-h-11"
-                      >
-                        {isWelcome ? "Start tour" : "Next"}
-                        <ArrowRight className="ml-1.5 h-4 w-4" />
-                      </Button>
-                      {step.ctaExternal ? (
-                        <a
-                          href={step.ctaHref}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          data-tour-primary
-                          data-tour-cta
-                          className="ds-btn ds-btn-primary min-h-11"
-                        >
-                          {step.ctaLabel ?? "Open"}
-                        </a>
-                      ) : (
-                        <Link
-                          href={step.ctaHref}
-                          data-tour-primary
-                          data-tour-cta
-                          className="ds-btn ds-btn-primary min-h-11"
-                        >
-                          {step.ctaLabel ?? "Open"}
-                          <ArrowRight className="ml-1.5 h-4 w-4" />
-                        </Link>
-                      )}
-                    </>
                   ) : (
                     <Button
                       type="button"
+                      disabled={busy}
                       onClick={goNext}
                       data-tour-primary
                       className="min-h-11"
@@ -659,7 +638,23 @@ export function ProductTour({
                 </div>
               </div>
             </motion.div>
-          ) : null}
+          ) : (
+            // Settling the spotlight waits on a route push plus a chunk load
+            // and is budgeted at 2500ms. Rendering nothing meant a slow step
+            // showed a full-screen black scrim with no card, no text and no
+            // way to tell the tour from a hung page. Deliberately carries no
+            // step title: the sibling assertions in ProductTour.test.tsx use
+            // the absence of the title to prove `ready` and `hole` were both
+            // cleared on navigation, and a title here would mask that.
+            <div
+              role="status"
+              className="pointer-events-none absolute inset-0 flex items-center justify-center"
+            >
+              <p className="type-meta rounded-full bg-[var(--bg-elevated)] px-3 py-1.5 text-[var(--text-faint)] shadow-[0_8px_24px_rgba(0,0,0,0.45)]">
+                Loading tour step…
+              </p>
+            </div>
+          )}
         </div>
       )}
     </AnimatePresence>,
