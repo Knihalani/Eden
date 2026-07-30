@@ -107,6 +107,21 @@ COPY --chown=eden:eden supplementaries/phase_10_memory/__init__.py supplementari
 # Include /app so ``supplementaries.phase_*`` resolves.
 ENV PYTHONPATH=/app/src:/app
 
+# Which commit is actually serving traffic.
+#
+# On 2026-07-30 a deploy reported build=SUCCESS while the previous image
+# kept serving, and there was no way to tell from the outside which code
+# was live — the Northflank status fields said COMPLETED/DEPLOYING and
+# SUCCESS/IN_PROGRESS in combinations that did not mean what they sound
+# like. The only reliable check was probing for a route that a specific
+# commit removed, which only works by luck.
+#
+# Northflank passes the commit as a build argument; anything setting
+# EDEN_GIT_SHA works. Unset degrades to "unknown", never to a wrong
+# answer.
+ARG EDEN_GIT_SHA=unknown
+ENV EDEN_GIT_SHA=${EDEN_GIT_SHA}
+
 # Copy the pre-trained zstd dictionary (Phase 3 of the Postgres +
 # Compression plan). ``eden.storage.compression`` looks for the file at
 # ``$EDEN_ZSTD_DICT_PATH`` (default ``/app/var/zstd_dict.bin``). If the

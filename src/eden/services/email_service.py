@@ -179,6 +179,23 @@ async def send_password_reset_email(*, to_email: str, token: str) -> EmailResult
 
     settings = get_settings()
     base = (getattr(settings, "portal_base_url", "") or "").rstrip("/")
+
+    # portal_base_url defaults to the placeholder "portal.example.com"
+    # and PORTAL_BASE_URL was NOT set in production — caught by Eden's
+    # own sign_in_home golden probe, which had been failing against that
+    # hostname on every tick for as long as the data goes back.
+    #
+    # Sending a reset link to a domain that does not resolve is worse
+    # than sending nothing: the user burns their one-time token on a
+    # dead URL and has no way to tell why. Refuse instead, so the ERROR
+    # in forgot-password names a fixable cause.
+    if not base or "example.com" in base:
+        raise RuntimeError(
+            "portal_base_url is unset or still the placeholder "
+            f"({base or 'empty'!r}); a reset link built on it would not "
+            "resolve. Set PORTAL_BASE_URL to the portal origin."
+        )
+
     link = f"{base}/reset-password?token={token}"
 
     subject = "Reset your Eden password"

@@ -1367,8 +1367,22 @@ async def public_openapi_spec() -> dict:
 
 @app.get("/live")
 async def liveness_probe():
-    """Kubernetes liveness probe — process is up."""
-    return {"status": "alive", "version": settings.app_version}
+    """Kubernetes liveness probe — process is up.
+
+    Also reports the commit actually serving traffic. ``app_version`` is
+    a hand-maintained string ("0.1.0") that has not changed in months,
+    so it answers "which release" and never "which code". On 2026-07-30
+    a deploy reported build=SUCCESS while the previous image kept
+    serving, and the only way to tell from outside was to probe for a
+    route that one specific commit happened to remove.
+    """
+    import os
+
+    return {
+        "status": "alive",
+        "version": settings.app_version,
+        "commit": os.environ.get("EDEN_GIT_SHA", "unknown"),
+    }
 
 
 @app.get("/ready")
