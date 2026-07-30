@@ -153,9 +153,7 @@ class TestTraceForker:
         assert result["status"] == "not_implemented"
         assert "name" in result["message"]
 
-    async def test_fork_happy_path_no_parent_steps(
-        self, mock_postgres_client: MagicMock
-    ) -> None:
+    async def test_fork_happy_path_no_parent_steps(self, mock_postgres_client: MagicMock) -> None:
         from eden.time_travel import TraceForker
 
         # The parent has no agent.step events — the
@@ -177,9 +175,7 @@ class TestTraceForker:
         assert result["data"]["n_parent_steps"] == 0
         assert result["data"]["has_cacheable_steps"] is False
 
-    async def test_fork_happy_path_with_parent_steps(
-        self, mock_postgres_client: MagicMock
-    ) -> None:
+    async def test_fork_happy_path_with_parent_steps(self, mock_postgres_client: MagicMock) -> None:
         from eden.time_travel import TraceForker
 
         mock_postgres_client.fetch = AsyncMock(
@@ -193,9 +189,7 @@ class TestTraceForker:
                     "attributes": {"cacheable": True},
                     "response_hash": "h1",
                     "duration_ms": 100.0,
-                    "timestamp": datetime(
-                        2026, 6, 11, 10, 0, 0, tzinfo=UTC
-                    ),
+                    "timestamp": datetime(2026, 6, 11, 10, 0, 0, tzinfo=UTC),
                 },
                 {
                     "event_id": "ev_2",
@@ -206,9 +200,7 @@ class TestTraceForker:
                     "attributes": {"cacheable": True},
                     "response_hash": "h2",
                     "duration_ms": 150.0,
-                    "timestamp": datetime(
-                        2026, 6, 11, 10, 0, 1, tzinfo=UTC
-                    ),
+                    "timestamp": datetime(2026, 6, 11, 10, 0, 1, tzinfo=UTC),
                 },
             ]
         )
@@ -233,9 +225,7 @@ class TestTraceReplayer:
     async def test_empty_fork_id(self) -> None:
         from eden.time_travel import TraceReplayer
 
-        result = await TraceReplayer().replay_from(
-            "org_test", fork_id="", edits={}
-        )
+        result = await TraceReplayer().replay_from("org_test", fork_id="", edits={})
         assert result["status"] == "not_implemented"
         assert "fork_id" in result["message"]
 
@@ -261,21 +251,15 @@ class TestTraceReplayer:
         assert result["status"] == "not_implemented"
         assert "invalid edit key" in result["message"]
 
-    async def test_fork_not_found(
-        self, mock_postgres_client: MagicMock
-    ) -> None:
+    async def test_fork_not_found(self, mock_postgres_client: MagicMock) -> None:
         from eden.time_travel import TraceReplayer
 
         mock_postgres_client.fetchrow = AsyncMock(return_value=None)
-        result = await TraceReplayer().replay_from(
-            "org_test", fork_id="frk_missing", edits={}
-        )
+        result = await TraceReplayer().replay_from("org_test", fork_id="frk_missing", edits={})
         assert result["status"] == "not_implemented"
         assert "not found" in result["message"]
 
-    async def test_replay_with_cache_hit(
-        self, mock_postgres_client: MagicMock
-    ) -> None:
+    async def test_replay_with_cache_hit(self, mock_postgres_client: MagicMock) -> None:
         from eden.time_travel import TraceReplayer
 
         # _try_cache_lookup uses fetchrow. The first
@@ -297,9 +281,7 @@ class TestTraceReplayer:
                     "edits_json": "{}",
                     "n_replays": 0,
                     "last_replay_outcome": None,
-                    "created_at": datetime(
-                        2026, 6, 11, 10, 0, 0, tzinfo=UTC
-                    ),
+                    "created_at": datetime(2026, 6, 11, 10, 0, 0, tzinfo=UTC),
                 },
                 # Then: cache hits for steps 0 and 1.
                 cache_hit,
@@ -317,20 +299,14 @@ class TestTraceReplayer:
                 "attributes": {"cacheable": True},
                 "response_hash": f"hash_{i}",
                 "duration_ms": 100.0,
-                "timestamp": datetime(
-                    2026, 6, 11, 10, 0, i, tzinfo=UTC
-                ),
+                "timestamp": datetime(2026, 6, 11, 10, 0, i, tzinfo=UTC),
             }
             for i in range(3)
         ]
-        mock_postgres_client.fetch = AsyncMock(
-            return_value=parent_rows
-        )
+        mock_postgres_client.fetch = AsyncMock(return_value=parent_rows)
         mock_postgres_client.execute = AsyncMock(return_value=None)
 
-        result = await TraceReplayer().replay_from(
-            "org_test", fork_id="frk_abc", edits={}
-        )
+        result = await TraceReplayer().replay_from("org_test", fork_id="frk_abc", edits={})
         assert result["status"] == "ok"
         assert result["data"]["replay_id"].startswith("rpl_")
         # Steps 0 and 1 should be served from cache
@@ -343,9 +319,7 @@ class TestTraceReplayer:
         # side-effect returned a row every time).
         assert result["data"]["cache_miss_warnings"] == []
 
-    async def test_replay_with_cache_miss_warning(
-        self, mock_postgres_client: MagicMock
-    ) -> None:
+    async def test_replay_with_cache_miss_warning(self, mock_postgres_client: MagicMock) -> None:
         from eden.time_travel import TraceReplayer
 
         # First fetchrow: fork row. Subsequent:
@@ -361,9 +335,7 @@ class TestTraceReplayer:
                     "edits_json": "{}",
                     "n_replays": 0,
                     "last_replay_outcome": None,
-                    "created_at": datetime(
-                        2026, 6, 11, 10, 0, 0, tzinfo=UTC
-                    ),
+                    "created_at": datetime(2026, 6, 11, 10, 0, 0, tzinfo=UTC),
                 },
                 None,  # cache miss for step 0
                 None,  # cache miss for step 1
@@ -379,20 +351,14 @@ class TestTraceReplayer:
                 "attributes": {"cacheable": True},
                 "response_hash": f"hash_{i}",
                 "duration_ms": 100.0,
-                "timestamp": datetime(
-                    2026, 6, 11, 10, 0, i, tzinfo=UTC
-                ),
+                "timestamp": datetime(2026, 6, 11, 10, 0, i, tzinfo=UTC),
             }
             for i in range(3)
         ]
-        mock_postgres_client.fetch = AsyncMock(
-            return_value=parent_rows
-        )
+        mock_postgres_client.fetch = AsyncMock(return_value=parent_rows)
         mock_postgres_client.execute = AsyncMock(return_value=None)
 
-        result = await TraceReplayer().replay_from(
-            "org_test", fork_id="frk_abc", edits={}
-        )
+        result = await TraceReplayer().replay_from("org_test", fork_id="frk_abc", edits={})
         assert result["status"] == "ok"
         # Every cache-served step had a miss → all are
         # in cache_miss_warnings and re_executed.
@@ -401,9 +367,7 @@ class TestTraceReplayer:
         # The top-level message is the "cache miss" hint.
         assert "cache miss" in result["message"].lower()
 
-    async def test_replay_no_parent_steps(
-        self, mock_postgres_client: MagicMock
-    ) -> None:
+    async def test_replay_no_parent_steps(self, mock_postgres_client: MagicMock) -> None:
         from eden.time_travel import TraceReplayer
 
         mock_postgres_client.fetchrow = AsyncMock(
@@ -416,25 +380,19 @@ class TestTraceReplayer:
                 "edits_json": "{}",
                 "n_replays": 0,
                 "last_replay_outcome": None,
-                "created_at": datetime(
-                    2026, 6, 11, 10, 0, 0, tzinfo=UTC
-                ),
+                "created_at": datetime(2026, 6, 11, 10, 0, 0, tzinfo=UTC),
             }
         )
         mock_postgres_client.fetch = AsyncMock(return_value=[])
         mock_postgres_client.execute = AsyncMock(return_value=None)
 
-        result = await TraceReplayer().replay_from(
-            "org_test", fork_id="frk_abc", edits={}
-        )
+        result = await TraceReplayer().replay_from("org_test", fork_id="frk_abc", edits={})
         assert result["status"] == "ok"
         assert result["data"]["n_served_from_cache"] == 0
         assert result["data"]["n_re_executed"] == 0
         assert "no agent.step" in result["message"].lower()
 
-    async def test_replay_with_edits(
-        self, mock_postgres_client: MagicMock
-    ) -> None:
+    async def test_replay_with_edits(self, mock_postgres_client: MagicMock) -> None:
         from eden.time_travel import TraceReplayer
 
         mock_postgres_client.fetchrow = AsyncMock(
@@ -447,9 +405,7 @@ class TestTraceReplayer:
                 "edits_json": "{}",
                 "n_replays": 0,
                 "last_replay_outcome": None,
-                "created_at": datetime(
-                    2026, 6, 11, 10, 0, 0, tzinfo=UTC
-                ),
+                "created_at": datetime(2026, 6, 11, 10, 0, 0, tzinfo=UTC),
             }
         )
         mock_postgres_client.fetch = AsyncMock(return_value=[])
@@ -476,33 +432,23 @@ class TestReplayDiff:
     async def test_empty_fork_id(self) -> None:
         from eden.time_travel import ReplayDiff
 
-        result = await ReplayDiff().diff(
-            "org_test", fork_id="", replay_id="rpl_abc"
-        )
+        result = await ReplayDiff().diff("org_test", fork_id="", replay_id="rpl_abc")
         assert result["status"] == "not_implemented"
 
     async def test_empty_replay_id(self) -> None:
         from eden.time_travel import ReplayDiff
 
-        result = await ReplayDiff().diff(
-            "org_test", fork_id="frk_abc", replay_id=""
-        )
+        result = await ReplayDiff().diff("org_test", fork_id="frk_abc", replay_id="")
         assert result["status"] == "not_implemented"
 
-    async def test_fork_not_found(
-        self, mock_postgres_client: MagicMock
-    ) -> None:
+    async def test_fork_not_found(self, mock_postgres_client: MagicMock) -> None:
         from eden.time_travel import ReplayDiff
 
         mock_postgres_client.fetchrow = AsyncMock(return_value=None)
-        result = await ReplayDiff().diff(
-            "org_test", fork_id="frk_missing", replay_id="rpl_abc"
-        )
+        result = await ReplayDiff().diff("org_test", fork_id="frk_missing", replay_id="rpl_abc")
         assert result["status"] == "not_implemented"
 
-    async def test_diff_happy_path(
-        self, mock_postgres_client: MagicMock
-    ) -> None:
+    async def test_diff_happy_path(self, mock_postgres_client: MagicMock) -> None:
         from eden.time_travel import ReplayDiff
 
         # fork row.
@@ -516,9 +462,7 @@ class TestReplayDiff:
                 "edits_json": "{}",
                 "n_replays": 1,
                 "last_replay_outcome": "success",
-                "created_at": datetime(
-                    2026, 6, 11, 10, 0, 0, tzinfo=UTC
-                ),
+                "created_at": datetime(2026, 6, 11, 10, 0, 0, tzinfo=UTC),
             }
         )
         # parent_steps + replay_steps via fetch.
@@ -532,9 +476,7 @@ class TestReplayDiff:
                 "attributes": {"cacheable": True},
                 "response_hash": "hash_orig",
                 "duration_ms": 100.0,
-                "timestamp": datetime(
-                    2026, 6, 11, 10, 0, 0, tzinfo=UTC
-                ),
+                "timestamp": datetime(2026, 6, 11, 10, 0, 0, tzinfo=UTC),
             }
         ]
         replay_rows = [
@@ -555,13 +497,9 @@ class TestReplayDiff:
                 return parent_rows
             return replay_rows
 
-        mock_postgres_client.fetch = AsyncMock(
-            side_effect=fetch_side_effect
-        )
+        mock_postgres_client.fetch = AsyncMock(side_effect=fetch_side_effect)
 
-        result = await ReplayDiff().diff(
-            "org_test", fork_id="frk_abc", replay_id="rpl_abc"
-        )
+        result = await ReplayDiff().diff("org_test", fork_id="frk_abc", replay_id="rpl_abc")
         assert result["status"] == "ok"
         assert result["data"]["fork_id"] == "frk_abc"
         assert result["data"]["replay_id"] == "rpl_abc"
@@ -611,9 +549,7 @@ def _pg_router(mock_postgres_client: MagicMock) -> Any:
 
     app = FastAPI()
     app.include_router(intelligence_time_travel.router)
-    app.dependency_overrides[get_current_user] = lambda: {
-        "user_id": "user_test"
-    }
+    app.dependency_overrides[get_current_user] = lambda: {"user_id": "user_test"}
     app.dependency_overrides[require_path_org_access] = lambda: "org_test"
     return app
 
@@ -631,9 +567,7 @@ def tt_client() -> TestClient:
 class TestTimeTravelRoutes:
     """Route-level smoke tests for the 4 Cat 20 routes."""
 
-    def test_fork_route(
-        self, tt_client: TestClient, mock_postgres_client: MagicMock
-    ) -> None:
+    def test_fork_route(self, tt_client: TestClient, mock_postgres_client: MagicMock) -> None:
         mock_postgres_client.fetch = AsyncMock(return_value=[])
         mock_postgres_client.execute = AsyncMock(return_value=None)
         resp = tt_client.post(
@@ -650,9 +584,7 @@ class TestTimeTravelRoutes:
         assert body["data"]["fork_id"].startswith("frk_")
         assert body["data"]["fork_at_step"] == 30
 
-    def test_replay_route(
-        self, tt_client: TestClient, mock_postgres_client: MagicMock
-    ) -> None:
+    def test_replay_route(self, tt_client: TestClient, mock_postgres_client: MagicMock) -> None:
         mock_postgres_client.fetchrow = AsyncMock(
             return_value={
                 "fork_id": "frk_abc",
@@ -663,9 +595,7 @@ class TestTimeTravelRoutes:
                 "edits_json": "{}",
                 "n_replays": 0,
                 "last_replay_outcome": None,
-                "created_at": datetime(
-                    2026, 6, 11, 10, 0, 0, tzinfo=UTC
-                ),
+                "created_at": datetime(2026, 6, 11, 10, 0, 0, tzinfo=UTC),
             }
         )
         mock_postgres_client.fetch = AsyncMock(return_value=[])
@@ -677,14 +607,54 @@ class TestTimeTravelRoutes:
                 "edits": {},
             },
         )
+        # Replay is disabled (config.time_travel_replay_enabled=False,
+        # 2026-07-30). It never re-executed anything: the recorder
+        # stores no prompt content, so the replayer short-circuits and
+        # returns the ORIGINAL response hash while reporting
+        # re_executed=True. 503 beats a confidently wrong 200.
+        # See docs/ops/disabled-features.md.
+        assert resp.status_code == 503
+        assert "disabled" in resp.json()["detail"].lower()
+
+    def test_replay_route_when_enabled(
+        self, tt_client: TestClient, mock_postgres_client: MagicMock, monkeypatch
+    ) -> None:
+        """The route still works when the flag is turned back on.
+
+        Guards the kill switch itself: if re-enabling did not restore
+        the endpoint, the flag would be a one-way door.
+        """
+        from eden.config import get_settings
+
+        settings = get_settings()
+        monkeypatch.setattr(
+            settings, "time_travel_replay_enabled", True, raising=False
+        )
+        mock_postgres_client.fetchrow = AsyncMock(
+            return_value={
+                "fork_id": "frk_abc",
+                "parent_trace_id": "trc_abc",
+                "parent_fork_id": None,
+                "fork_at_step": 0,
+                "name": "Test",
+                "edits_json": "{}",
+                "n_replays": 0,
+                "last_replay_outcome": None,
+                "created_at": datetime(2026, 6, 11, 10, 0, 0, tzinfo=UTC),
+            }
+        )
+        mock_postgres_client.fetch = AsyncMock(return_value=[])
+        mock_postgres_client.execute = AsyncMock(return_value=None)
+        resp = tt_client.post(
+            "/orgs/org_test/intelligence/time-travel/replay",
+            json={"fork_id": "frk_abc", "edits": {}},
+        )
         assert resp.status_code == 200
         body = resp.json()
         assert body["feature"] == "TraceReplayer"
         assert body["data"]["replay_id"].startswith("rpl_")
 
-    def test_diff_route(
-        self, tt_client: TestClient, mock_postgres_client: MagicMock
-    ) -> None:
+    def test_diff_route(self, tt_client: TestClient, mock_postgres_client: MagicMock) -> None:
         mock_postgres_client.fetchrow = AsyncMock(
             return_value={
                 "fork_id": "frk_abc",
@@ -695,23 +665,17 @@ class TestTimeTravelRoutes:
                 "edits_json": "{}",
                 "n_replays": 1,
                 "last_replay_outcome": "success",
-                "created_at": datetime(
-                    2026, 6, 11, 10, 0, 0, tzinfo=UTC
-                ),
+                "created_at": datetime(2026, 6, 11, 10, 0, 0, tzinfo=UTC),
             }
         )
         mock_postgres_client.fetch = AsyncMock(return_value=[])
-        resp = tt_client.get(
-            "/orgs/org_test/intelligence/time-travel/diff/frk_abc/rpl_abc"
-        )
+        resp = tt_client.get("/orgs/org_test/intelligence/time-travel/diff/frk_abc/rpl_abc")
         assert resp.status_code == 200
         body = resp.json()
         assert body["feature"] == "ReplayDiff"
         assert body["data"]["fork_id"] == "frk_abc"
 
-    def test_list_forks_route(
-        self, tt_client: TestClient, mock_postgres_client: MagicMock
-    ) -> None:
+    def test_list_forks_route(self, tt_client: TestClient, mock_postgres_client: MagicMock) -> None:
         mock_postgres_client.fetch = AsyncMock(
             return_value=[
                 {
@@ -722,9 +686,7 @@ class TestTimeTravelRoutes:
                     "name": "Try new system prompt",
                     "n_replays": 3,
                     "last_replay_outcome": "success",
-                    "created_at": datetime(
-                        2026, 6, 11, 10, 0, 0, tzinfo=UTC
-                    ),
+                    "created_at": datetime(2026, 6, 11, 10, 0, 0, tzinfo=UTC),
                 }
             ]
         )

@@ -65,6 +65,7 @@ CLI
 from __future__ import annotations
 
 import argparse
+import os
 import asyncio
 import contextlib
 import logging
@@ -128,9 +129,7 @@ def _leader_tick_seconds(floor: float = 30.0) -> float:
     try:
         from eden.config import get_settings
 
-        configured = float(
-            getattr(get_settings(), "redis_leader_tick_seconds", 120) or 120
-        )
+        configured = float(getattr(get_settings(), "redis_leader_tick_seconds", 120) or 120)
     except Exception:
         configured = 120.0
     return max(float(floor), configured)
@@ -374,9 +373,7 @@ async def _run_forever() -> None:
                 if not task.done():
                     task.cancel()
             with contextlib.suppress(asyncio.CancelledError, Exception):
-                await asyncio.gather(
-                    *(t for _, t in loops), return_exceptions=True
-                )
+                await asyncio.gather(*(t for _, t in loops), return_exceptions=True)
 
         await _stop_sidecar_workers()
 
@@ -389,9 +386,7 @@ async def _run_forever() -> None:
             svc = get_webhook_delivery_service()
             remaining = await svc.drain(timeout=5.0)
             if remaining:
-                logger.warning(
-                    "worker: webhook drain left %d in-flight", remaining
-                )
+                logger.warning("worker: webhook drain left %d in-flight", remaining)
             await svc.aclose()
         except Exception as exc:
             logger.warning("worker: webhook shutdown failed: %s", exc)
@@ -454,10 +449,7 @@ async def _worker_liveness_loop(stop: asyncio.Event) -> None:
                         stack = task.get_stack()
                         if stack:
                             frame = stack[-1]
-                            where = (
-                                f"@{frame.f_code.co_name}"
-                                f":{frame.f_lineno}"
-                            )
+                            where = f"@{frame.f_code.co_name}" f":{frame.f_lineno}"
                     except Exception:
                         pass
                     states[loop_name] = f"alive{where}"
@@ -466,9 +458,7 @@ async def _worker_liveness_loop(stop: asyncio.Event) -> None:
                     states[loop_name] = "cancelled"
                 else:
                     exc = task.exception()
-                    states[loop_name] = (
-                        f"dead:{type(exc).__name__}" if exc else "returned"
-                    )
+                    states[loop_name] = f"dead:{type(exc).__name__}" if exc else "returned"
                 dead.append(loop_name)
 
             # Can this process reach Redis at all? Every leader-gated loop
@@ -512,9 +502,7 @@ async def _worker_liveness_loop(stop: asyncio.Event) -> None:
                 },
             )
             if work_failures:
-                logger.error(
-                    "worker: leader-gated work is failing: %s", work_failures
-                )
+                logger.error("worker: leader-gated work is failing: %s", work_failures)
             if redis_state not in ("connected", "not_configured"):
                 logger.error(
                     "worker: Redis unreachable from this process (%s) — every "
@@ -583,8 +571,7 @@ def _insights_leader_interval() -> float:
         from eden.config import get_settings
 
         configured = float(
-            getattr(get_settings(), "insights_loop_interval_seconds", default)
-            or default
+            getattr(get_settings(), "insights_loop_interval_seconds", default) or default
         )
     except Exception:
         configured = default
@@ -622,9 +609,7 @@ async def _leader_eql_alert_watchdog(stop: asyncio.Event) -> None:
             raise
 
     interval = _grid_interval("eql_watchdog_interval_seconds", multiple=2.0)
-    logger.info(
-        "worker: eql_alert_watchdog loop registered (interval=%.0fs)", interval
-    )
+    logger.info("worker: eql_alert_watchdog loop registered (interval=%.0fs)", interval)
     await run_if_leader(
         "eql_alert_watchdog",
         _tick,
@@ -653,12 +638,8 @@ async def _leader_artifact_demotion(stop: asyncio.Event) -> None:
             )
             raise
 
-    interval = _grid_interval(
-        "artifact_demotion_interval_seconds", multiple=6.0
-    )
-    logger.info(
-        "worker: artifact_demotion loop registered (interval=%.0fs)", interval
-    )
+    interval = _grid_interval("artifact_demotion_interval_seconds", multiple=6.0)
+    logger.info("worker: artifact_demotion loop registered (interval=%.0fs)", interval)
     await run_if_leader(
         "artifact_demotion",
         _tick,
@@ -689,16 +670,9 @@ async def _leader_maintenance(stop: asyncio.Event) -> None:
                 k: v
                 for k, v in result.items()
                 if k not in ("maintenance_at", "dry_run", "improvement_sweeps")
-                and not (
-                    isinstance(v, dict)
-                    and v.get("skipped")
-                )
+                and not (isinstance(v, dict) and v.get("skipped"))
             }
-            errors = [
-                k
-                for k, v in ran.items()
-                if isinstance(v, dict) and v.get("errors")
-            ]
+            errors = [k for k, v in ran.items() if isinstance(v, dict) and v.get("errors")]
             if errors:
                 logger.warning("worker: maintenance errors in %s", errors)
             if ran:
@@ -713,9 +687,7 @@ async def _leader_maintenance(stop: asyncio.Event) -> None:
             )
             raise
 
-    logger.info(
-        "worker: maintenance loop registered (interval=%.0fs)", _idle_poll_period()
-    )
+    logger.info("worker: maintenance loop registered (interval=%.0fs)", _idle_poll_period())
     await run_if_leader(
         "maintenance",
         _tick,
@@ -732,9 +704,7 @@ def _idle_poll_period() -> float:
     try:
         from eden.config import get_settings
 
-        return float(
-            getattr(get_settings(), "idle_poll_period_seconds", 600.0) or 600.0
-        )
+        return float(getattr(get_settings(), "idle_poll_period_seconds", 600.0) or 600.0)
     except Exception:
         return 600.0
 
@@ -758,9 +728,7 @@ def _grid_interval(settings_attr: str, *, multiple: float) -> float:
     try:
         from eden.config import get_settings
 
-        configured = float(
-            getattr(get_settings(), settings_attr, default) or default
-        )
+        configured = float(getattr(get_settings(), settings_attr, default) or default)
     except Exception:
         configured = default
     return period * max(1.0, round(configured / period))
@@ -819,9 +787,7 @@ def _self_obs_interval() -> float:
     try:
         from eden.config import get_settings
 
-        return float(
-            getattr(get_settings(), "self_obs_probe_interval_seconds", 600.0) or 600.0
-        )
+        return float(getattr(get_settings(), "self_obs_probe_interval_seconds", 600.0) or 600.0)
     except Exception:
         return 600.0
 
@@ -857,9 +823,7 @@ async def _leader_webhook_drain_loop(stop: asyncio.Event) -> None:
     # picked up without waiting for the next boundary. The tick is only
     # the backstop for a missed signal.
     interval = _grid_interval("webhook_drain_interval_seconds", multiple=1.0)
-    await run_if_leader(
-        "webhook_drain", _tick, interval=interval, stop=stop, align=True
-    )
+    await run_if_leader("webhook_drain", _tick, interval=interval, stop=stop, align=True)
 
 
 async def _webhook_drain_loop() -> None:
@@ -929,6 +893,29 @@ def main(argv: list[str] | None = None) -> int:
         format="%(asctime)s %(levelname)s %(name)s %(message)s",
     )
 
+    # EDEN_RUN_BACKGROUND_WORKERS is how northflank.yml disables this
+    # job — and until now nothing in this module ever read it, so the
+    # setting was inert and the fleet started regardless. Combined with
+    # `runOnSourceChange: cd-promote`, that meant EVERY deploy triggered
+    # this job and started a SECOND copy of the whole fleet alongside
+    # the one the API already hosts.
+    #
+    # Leader locks and the sidecar guard make that safe rather than
+    # correct: the duplicate process still opens its own 15-connection
+    # Postgres pool against a Neon instance billed for staying awake,
+    # still runs the anomaly and evolution loops that are NOT
+    # leader-gated, and still burns Upstash commands contending for
+    # locks it can never win.
+    #
+    # --once is exempt: it is the local-dev and test path.
+    if not args.once and not _background_workers_enabled():
+        logger.info(
+            "worker: EDEN_RUN_BACKGROUND_WORKERS is disabled; exiting "
+            "without starting the fleet. The API service hosts it. Set "
+            "the variable to 1 to use this job as a break-glass host."
+        )
+        return 0
+
     if args.once:
         # Local-dev / test path: run the loops for one tick then exit.
         asyncio.run(_run_once())
@@ -937,6 +924,19 @@ def main(argv: list[str] | None = None) -> int:
     with contextlib.suppress(KeyboardInterrupt):
         asyncio.run(_run_forever())
     return 0
+
+
+def _background_workers_enabled() -> bool:
+    """Read EDEN_RUN_BACKGROUND_WORKERS, defaulting to enabled.
+
+    Absent means enabled so that local dev and any deployment that has
+    not set the variable keep their current behaviour; only an explicit
+    off value disables the fleet.
+    """
+    raw = os.environ.get("EDEN_RUN_BACKGROUND_WORKERS")
+    if raw is None or raw.strip() == "":
+        return True
+    return raw.strip().lower() not in {"0", "false", "no", "off"}
 
 
 async def _run_once() -> None:

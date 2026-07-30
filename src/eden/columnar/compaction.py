@@ -118,14 +118,10 @@ class ColumnarCompactor:
 
         if await _check_ch_available():
             try:
-                rows_in, bytes_in = await self._ch_size(
-                    partition_id=partition_id
-                )
+                rows_in, bytes_in = await self._ch_size(partition_id=partition_id)
                 t0 = time.monotonic()
                 await self._ch_optimize(partition_id=partition_id)
-                rows_out, bytes_out = await self._ch_size(
-                    partition_id=partition_id
-                )
+                rows_out, bytes_out = await self._ch_size(partition_id=partition_id)
                 duration_seconds = time.monotonic() - t0
                 # Cap the duration at 24h so a hung query
                 # doesn't produce a 1000-year number in the
@@ -158,9 +154,7 @@ class ColumnarCompactor:
                 # ``duration_seconds`` from ``_ch_optimize``)
                 # because the latter doesn't include the
                 # size-measurement overhead.
-                wall_seconds = (
-                    datetime.now(UTC) - started_at
-                ).total_seconds()
+                wall_seconds = (datetime.now(UTC) - started_at).total_seconds()
                 if wall_seconds > SLA_SECONDS:
                     await _fire_compaction_drift_hook(
                         org_id,
@@ -179,9 +173,7 @@ class ColumnarCompactor:
                         "bytes_in": bytes_in,
                         "bytes_out": bytes_out,
                         "duration_seconds": duration_seconds,
-                        "compression_ratio": (
-                            (rows_in / rows_out) if rows_out else 0
-                        ),
+                        "compression_ratio": ((rows_in / rows_out) if rows_out else 0),
                         "status": status,
                         "data_source": "clickhouse",
                         "sla_seconds": SLA_SECONDS,
@@ -293,9 +285,7 @@ class ColumnarCompactor:
                 "bytes_in": bytes_in,
                 "bytes_out": bytes_out,
                 "duration_seconds": duration_seconds,
-                "compression_ratio": (
-                    (rows_in / rows_out) if rows_out else 0
-                ),
+                "compression_ratio": ((rows_in / rows_out) if rows_out else 0),
                 "status": status,
                 "data_source": "postgres_fallback",
                 "sla_seconds": SLA_SECONDS,
@@ -304,9 +294,7 @@ class ColumnarCompactor:
             "ClickHouse unavailable; using Postgres size estimate",
         )
 
-    async def compact_due(
-        self, *, max_age_hours: int = 24, limit: int = 50
-    ) -> dict[str, Any]:
+    async def compact_due(self, *, max_age_hours: int = 24, limit: int = 50) -> dict[str, Any]:
         """Cron hook: compact partitions past the max-age window.
 
         Selects ``columnar_partitions`` where
@@ -337,25 +325,28 @@ class ColumnarCompactor:
             org_id = r["org_id"]
             # Prefer the ClickHouse partition name when present;
             # fall back to the internal partition_id.
-            partition_id = (
-                r.get("clickhouse_partition") or r["partition_id"]
-            )
+            partition_id = r.get("clickhouse_partition") or r["partition_id"]
             try:
-                out = await self.compact_segments(
-                    org_id, partition_id=partition_id
-                )
+                out = await self.compact_segments(org_id, partition_id=partition_id)
+                effective = (out.get("data") or {}).get("status") or out.get("status")
                 results.append(
                     {
                         "org_id": org_id,
                         "partition_id": partition_id,
-                        "status": (out.get("data") or {}).get("status")
-                        or out.get("status"),
-                        "data_source": (out.get("data") or {}).get(
-                            "data_source"
-                        ),
+                        "status": effective,
+                        "data_source": (out.get("data") or {}).get("data_source"),
                     }
                 )
-                if out.get("status") == "ok":
+                # Count the SAME status the results list reports, not the
+                # envelope's. _ok_fallback_envelope hardcodes a top-level
+                # "status": "ok" regardless of outcome, so reading
+                # out["status"] here made a batch where all 50 partitions
+                # failed report n_ok=50, n_failed=0. The per-partition
+                # truth was already being recorded correctly two lines
+                # up, and in columnar_compaction_log — the cron summary
+                # was the only thing disagreeing, which is precisely why
+                # nobody noticed compaction has never once succeeded.
+                if effective == "ok":
                     n_ok += 1
                 else:
                     n_failed += 1
@@ -386,9 +377,7 @@ class ColumnarCompactor:
             },
         )
 
-    async def _ch_size(
-        self, *, partition_id: str
-    ) -> tuple[int, int]:
+    async def _ch_size(self, *, partition_id: str) -> tuple[int, int]:
         """Return (rows, bytes) for the given partition from ClickHouse.
 
         Reads from ``system.parts`` which ClickHouse keeps
@@ -421,8 +410,13 @@ class ColumnarCompactor:
             b = 0
         return (n, b)
 
+    #: The table compaction targets. ``_ch_size`` reads system.parts
+    #: filtered by partition + database only, so the table has to be
+    #: named explicitly here.
+    _COMPACTION_TABLE = "telemetry_events_ch"
+
     async def _ch_optimize(self, *, partition_id: str) -> None:
-        """Issue ``OPTIMIZE TABLE ... FINAL`` on the given partition.
+        """Issue ``OPTIMIZE TABLE ... PARTITION ID ... FINAL``.
 
         ``FINAL`` forces a full compaction (rather than
         the default scheduled background merge). We
@@ -430,12 +424,22 @@ class ColumnarCompactor:
         an explicit operator action, not a background
         scheduled job, so a partial compaction would leave
         the audit log out of sync with the actual state.
+
+        This used to emit ``OPTIMIZE TABLE {partition_id} FINAL``,
+        interpolating the *partition* where the table name belongs.
+        partition_id looks like ``eden.org_abc.2026_06`` (see
+        compact_segments' docstring), and ``_ch_size`` correctly treats
+        it as ``WHERE partition = '...'``. ClickHouse answered
+        "Code: 60 ... Table does not exist" every time, so compaction
+        has never once run — hidden because the failure path returned a
+        hardcoded top-level ``"status": "ok"``.
         """
         from eden.data_platform.clickhouse_sink import get_clickhouse_sink
 
         sink = await get_clickhouse_sink()
-        sanitised = partition_id.replace("'", "''")
-        query = f"OPTIMIZE TABLE {sanitised} FINAL"
+        partition = partition_id.replace("'", "''")
+        table = f"{sink.config.database}.{self._COMPACTION_TABLE}"
+        query = f"OPTIMIZE TABLE {table} PARTITION ID '{partition}' FINAL"
         await sink._execute(query)  # noqa: SLF001 - intentional
 
     async def _pg_size(self, *, org_id: str) -> tuple[int, int]:
