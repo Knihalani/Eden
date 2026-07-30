@@ -23,7 +23,6 @@ describe("product tour SoT", () => {
     expect(PRODUCT_TOUR_TOTAL).toBe(5);
     expect(PRODUCT_TOUR_STEPS[4]?.kind).toBe("finish");
     expect(PRODUCT_TOUR_STEPS[3]?.href).toBe("/settings?mode=keys");
-    expect(PRODUCT_TOUR_STEPS[3]?.ctaHref).toBeUndefined();
     expect(PRODUCT_TOUR_STEPS[1]?.targetId).toBe("home");
     expect(PRODUCT_TOUR_STEPS[2]?.targetId).toBe("traces");
     expect(PRODUCT_TOUR_STEPS[3]?.targetId).toBe("api-keys");

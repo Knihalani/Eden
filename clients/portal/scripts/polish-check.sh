@@ -11,26 +11,52 @@ cd "$ROOT"
 echo "→ checking for hardcoded hex outside globals.css / clerk-theme.ts…"
 # The analytics-tab holds a known SSR fallback const (CHART_COLORS_FALLBACK)
 # for when window is undefined. BrowserReplayPanel embeds a sandboxed HTML
-# shell for the replay iframe (not product chrome). Every other hex should
-# be a design token.
-if grep -rE '#[0-9a-fA-F]{6}' src/app src/components 2>/dev/null \
+# shell for the replay iframe (not product chrome). global-error.tsx renders
+# its own <html>/<body> to replace a root layout that itself threw, so
+# globals.css is not guaranteed to be loaded and inline hex is the only thing
+# that can be relied on there. Every other hex should be a design token.
+#
+# Two classes of match are filtered out rather than excluded by filename,
+# because excluding whole files would blind the check to real regressions in
+# them:
+#   - comment lines, which document *why* a colour was removed and would
+#     otherwise make writing that rationale down a lint failure;
+#   - `|| "#rrggbb"` / `?? "#rrggbb"` fallback literals, which are by
+#     definition only reached when a token lookup returned nothing (see
+#     gateway-client.tsx reading getPropertyValue("--bg")) — a token cannot
+#     be its own fallback.
+HEX_MATCHES=$(grep -rEn '#[0-9a-fA-F]{6}' src/app src/components 2>/dev/null \
   | grep -v 'globals.css' | grep -v 'clerk-theme.ts' \
   | grep -v 'analytics-tab.tsx' \
-  | grep -v 'BrowserReplayPanel.tsx'; then
+  | grep -v 'BrowserReplayPanel.tsx' \
+  | grep -v 'global-error.tsx' \
+  | grep -vE '^[^:]+:[0-9]+:[[:space:]]*(//|\*|/\*)' \
+  | grep -vE '(\|\||\?\?)[[:space:]]*"#[0-9a-fA-F]{6}"' \
+  || true)
+if [ -n "$HEX_MATCHES" ]; then
+  echo "$HEX_MATCHES"
   echo "✗ hardcoded hex found (see above)"
   exit 1
 fi
 
-echo "→ checking for local SeverityBadge defs (should only live in status-badge.tsx)…"
+# Canonical home for shared status/severity chips. This was
+# src/components/ui/status-badge.tsx until 9a1452b4 ("complete live API
+# wire-up") deleted that file and moved SeverityBadge into lab-ui.tsx; the
+# two rules below kept pointing at the old path, so they flagged the one
+# canonical definition as a duplicate and this script has failed on every
+# run since. Keep this in step with wherever the chips actually live.
+BADGE_HOME='src/lab/lab-ui.tsx'
+
+echo "→ checking for local SeverityBadge defs (should only live in ${BADGE_HOME})…"
 if grep -rn 'function SeverityBadge' src 2>/dev/null \
-  | grep -v 'ui/status-badge.tsx'; then
+  | grep -v "$BADGE_HOME"; then
   echo "✗ duplicate SeverityBadge def found"
   exit 1
 fi
 
 echo "→ checking for local IssuePriorityBadge / IssueSeverityBadge defs…"
 if grep -rn 'function IssuePriorityBadge\|function IssueSeverityBadge' src 2>/dev/null \
-  | grep -v 'ui/status-badge.tsx' \
+  | grep -v "$BADGE_HOME" \
   | grep -v '__tests__'; then
   echo "✗ duplicate issue priority badge def found"
   exit 1

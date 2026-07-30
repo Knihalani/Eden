@@ -189,6 +189,30 @@ function OnboardingOverlayInner() {
     }
   }, [open]);
 
+  /**
+   * Terminal status writes get one retry; per-step write-behind does not.
+   *
+   * A lost step write self-heals on the next Next/Back. A lost terminal write
+   * does not: the user has already been told the tour closed, and the overlay
+   * will not reopen on its own, so a transient Clerk blip leaves someone who
+   * finished the tour being nagged to "Continue tour" indefinitely. One retry
+   * covers the blip without turning every step tick into two writes.
+   *
+   * Deliberately not rolled back on failure: reopening a tour the user just
+   * dismissed is a worse outcome than a stale banner, and the state is
+   * recoverable — the banner is exactly the affordance for redoing it.
+   */
+  async function persistTerminalStatus(
+    status: "done" | "skipped",
+    step: number,
+  ) {
+    try {
+      return await setStatus(status, step);
+    } catch {
+      return await setStatus(status, step);
+    }
+  }
+
   async function handleSkip() {
     userClosedRef.current = true;
     sessionOpenRef.current = false;
@@ -197,7 +221,7 @@ function OnboardingOverlayInner() {
     clearTourQuery();
     setBusy(true);
     try {
-      await setStatus("skipped", stepIndex);
+      await persistTerminalStatus("skipped", stepIndex);
       pushToast({
         title: "Tour paused — resume from the banner anytime",
         tone: "accent",
@@ -220,7 +244,7 @@ function OnboardingOverlayInner() {
     clearTourQuery();
     setBusy(true);
     try {
-      await setStatus("done", PRODUCT_TOUR_TOTAL - 1);
+      await persistTerminalStatus("done", PRODUCT_TOUR_TOTAL - 1);
       pushToast({
         title: "Tour complete — paste a snippet and open Traces",
         tone: "ok",

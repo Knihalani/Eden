@@ -65,6 +65,21 @@
   --bg-inset: var(--eden-black);
   --bg-well: var(--eden-black);
 
+  /* Modal scrim. Not a surface — it is the dimming layer *over* one, which is
+     why it carries alpha and is not one of the --bg-* tokens. Two modals
+     spelled this as a literal `bg-black/75`; centralised so the dimming level
+     is decided once. Same value as before, so nothing changes visually. */
+  --scrim: rgb(0 0 0 / 0.75);
+
+  /* Product-tour scrim. Deliberately distinct from --scrim: the tour dims the
+     whole app to make a single spotlit element read as the only live thing on
+     screen, so it sits denser and carries the same blue-black cast as the app
+     background instead of neutral black. ProductTour needs it twice — once as
+     an SVG `fill` (the masked spotlight layer) and once as a Tailwind class
+     (the no-spotlight fallback) — and an SVG fill cannot take a utility class,
+     so the shared value has to live here rather than in a JS constant. */
+  --tour-scrim: rgb(4 6 10 / 0.78);
+
   /* Live / running / success */
   --terminal: var(--eden-live-400);
   --terminal-hover: var(--eden-live-300);

@@ -18,11 +18,6 @@ export interface TourStep {
   href?: string;
   title: string;
   body: string;
-  /** Optional primary CTA (API keys, install, finish). */
-  ctaLabel?: string;
-  ctaHref?: string;
-  /** When true, open ctaHref in a new tab. */
-  ctaExternal?: boolean;
 }
 
 /**
