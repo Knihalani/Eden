@@ -177,6 +177,28 @@ should not recur.
 
 ---
 
+### 11. `northflank.yml` secret groups do not match reality
+
+`scripts/northflank_drift_check.py` reports exactly one remaining
+drift, and it is informational:
+
+```
+manifest: eden-required (one group, 30 keys)
+live    : 31 single-key groups under other names (JWT-SECRET, not JWT_SECRET)
+```
+
+Credentials **are** delivered and working — this is purely that the
+manifest's `secretKeyRef` group name does not exist, so the file could
+never be applied as written. Every other declaration (compute plan,
+health checks, 61 environment variables) now matches the live project.
+
+Not fixed today: rewriting 31 secret references in the deployment
+manifest is not a change worth making on launch day for zero runtime
+effect. Fix by updating the manifest to name the real groups — not by
+restructuring the live secrets, which are working.
+
+---
+
 ## Checked and found healthy
 
 Recorded so the same ground is not re-covered:
