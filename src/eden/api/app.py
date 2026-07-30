@@ -1,8 +1,10 @@
 """FastAPI application for Eden job submission and retrieval."""
 
+import asyncio
 import logging
 import os
 import uuid
+from collections.abc import Awaitable, Callable
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
@@ -20,6 +22,7 @@ from eden.api.middleware.security_headers import (
 )
 from eden.api.middleware.tenant_rate_limit import TenantRateLimitMiddleware
 from eden.api.openapi_public import build_public_openapi_spec
+from eden.api.responses import EdenJSONResponse
 
 
 def _init_sentry() -> None:
@@ -79,9 +82,7 @@ def _init_sentry() -> None:
         sentry_sdk.init(
             dsn=dsn,
             environment=os.environ.get("SENTRY_ENVIRONMENT", "development"),
-            traces_sample_rate=float(
-                os.environ.get("SENTRY_TRACES_SAMPLE_RATE", "0") or 0
-            ),
+            traces_sample_rate=float(os.environ.get("SENTRY_TRACES_SAMPLE_RATE", "0") or 0),
             integrations=[
                 StarletteIntegration(transaction_style="endpoint"),
                 FastApiIntegration(transaction_style="endpoint"),
@@ -96,7 +97,6 @@ def _init_sentry() -> None:
         )
     except Exception as exc:  # noqa: BLE001
         log.error("Sentry init failed (%s) — continuing without Sentry", exc)
-
 
 
 _init_sentry()
@@ -298,6 +298,7 @@ def _cors_origins_list() -> list[str]:
 # Pydantic Schemas (kept for backwards compatibility and imports)
 # ============================================================================
 
+
 class JobRequest(BaseModel):
     """Request schema for job submission.
 
@@ -309,7 +310,7 @@ class JobRequest(BaseModel):
     description: str = Field(..., description="Natural language description of the environment")
     tags: list[str] = Field(
         default_factory=list,
-        description="Optional tags to guide the Planner (e.g., rl, continuous, gymnasium, multi-agent). The Planner may infer additional tags from the description."
+        description="Optional tags to guide the Planner (e.g., rl, continuous, gymnasium, multi-agent). The Planner may infer additional tags from the description.",
     )
     framework: str = Field(default="gymnasium", description="Target framework")
     framework_version: str = Field(default="0.29", description="Framework version")
@@ -386,10 +387,191 @@ class HealthResponse(BaseModel):
 # Lifespan
 # ============================================================================
 
+#: Per-step timeouts for the shutdown sequence.
+#:
+#: Two problems this addresses. First, none of the eight original steps was
+#: bounded: each was a bare ``await`` in its own ``try``, so a single hung close
+#: (an aiohttp connector waiting on a dead socket, a Postgres pool with an
+#: in-flight query) blocked the whole sequence until uvicorn's
+#: ``--timeout-graceful-shutdown`` expired and SIGKILLed the process — losing
+#: every step that had not yet run, including the Postgres close and the
+#: background drain that owns live billing rows. A timeout per step turns "one
+#: hang loses everything after it" into "one hang loses only itself".
+#:
+#: Second, eight ``close_*`` functions existed with no caller anywhere
+#: (typesense, trace_store, kafka consumer + producer, ksql, edge_fanout, hilt,
+#: alert_processor). Each leaked its transports on every pod restart while that
+#: subsystem was in use. All of them guard on their singleton being ``None``, so
+#: registering them costs nothing when the subsystem never started.
+_SHUTDOWN_TIMEOUT_DRAIN = 15.0
+_SHUTDOWN_TIMEOUT_CLIENT = 5.0
+
+
+async def _shutdown_step(
+    name: str,
+    factory: Callable[[], Awaitable[None]],
+    timeout: float,
+) -> None:
+    """Run one shutdown step, bounded and never fatal.
+
+    ``factory`` is a zero-argument async callable rather than a coroutine so a
+    failing import inside it is caught here, and so nothing is left as an
+    un-awaited coroutine when a step is abandoned.
+    """
+    try:
+        await asyncio.wait_for(factory(), timeout=timeout)
+    except TimeoutError:
+        logger.warning(
+            "shutdown step %r exceeded %.1fs — abandoning it so the remaining " "steps still run",
+            name,
+            timeout,
+        )
+    except Exception as exc:  # noqa: BLE001 — shutdown must not raise
+        logger.warning("shutdown step %r failed: %s", name, exc)
+
+
+def _shutdown_steps(
+    *, background_workers: bool
+) -> list[tuple[str, Callable[[], Awaitable[None]], float]]:
+    """The ordered shutdown registry.
+
+    Order matters and is asserted in ``tests/unit/api/test_shutdown_registry.py``:
+    drainers that write through Postgres first, then sink clients and streaming
+    transports, then HTTP pools, then the Postgres pool itself, last.
+    """
+
+    async def _stop_background_workers() -> None:
+        from eden.workers.background import stop_background_workers
+
+        await stop_background_workers()
+
+    async def _trace_quality() -> None:
+        from eden.observability.trace_quality.hooks import shutdown_trace_quality
+
+        await shutdown_trace_quality()
+
+    async def _telemetry_collector() -> None:
+        from eden.observability.telemetry_collector import close_telemetry_collector
+
+        await close_telemetry_collector()
+
+    async def _bronze() -> None:
+        from eden.data_platform.bronze_sink import close_bronze_sink
+
+        await close_bronze_sink()
+
+    async def _background_tasks() -> None:
+        from eden.async_tasks import drain_background_tasks
+
+        await drain_background_tasks(timeout=_SHUTDOWN_TIMEOUT_DRAIN - 1.0)
+
+    async def _otel() -> None:
+        from eden.observability.otel_exporter import close_otel_dual_exporter
+
+        await close_otel_dual_exporter()
+
+    async def _clickhouse() -> None:
+        from eden.data_platform.clickhouse_sink import close_clickhouse_sink
+
+        await close_clickhouse_sink()
+
+    async def _typesense() -> None:
+        from eden.observability.typesense_client import close_typesense_client
+
+        await close_typesense_client()
+
+    async def _kafka_consumer() -> None:
+        from eden.realtime.kafka_consumer import close_kafka_consumer
+
+        await close_kafka_consumer()
+
+    async def _kafka_producer() -> None:
+        from eden.realtime.kafka_consumer import close_kafka_producer
+
+        await close_kafka_producer()
+
+    async def _ksql() -> None:
+        from eden.realtime.ksql_cep import close_ksql_client
+
+        await close_ksql_client()
+
+    async def _edge_fanout() -> None:
+        from eden.realtime.edge_fanout import close_edge_fanout
+
+        await close_edge_fanout()
+
+    async def _hilt() -> None:
+        from eden.realtime.human_in_the_loop import close_hilt_controller
+
+        await close_hilt_controller()
+
+    async def _alert_processor() -> None:
+        from eden.realtime.alert_stream import close_alert_processor
+
+        await close_alert_processor()
+
+    async def _trace_store() -> None:
+        from eden.realtime.trace_store import close_trace_store
+
+        await close_trace_store()
+
+    async def _clerk() -> None:
+        from eden.api.utils.clerk_auth import shutdown_clerk_auth
+
+        await shutdown_clerk_auth()
+
+    async def _webhooks() -> None:
+        from eden.services.webhook_delivery import get_webhook_delivery_service
+
+        await get_webhook_delivery_service().aclose()
+
+    async def _redis() -> None:
+        from eden.storage.redis import close_redis_client
+
+        await close_redis_client()
+
+    async def _postgres() -> None:
+        from eden.storage.postgres import close_postgres_client
+
+        await close_postgres_client()
+
+    steps: list[tuple[str, Callable[[], Awaitable[None]], float]] = []
+
+    # ── 1. drainers that write through Postgres ──
+    if background_workers:
+        steps.append(("background_workers", _stop_background_workers, _SHUTDOWN_TIMEOUT_DRAIN))
+    steps += [
+        ("trace_quality", _trace_quality, _SHUTDOWN_TIMEOUT_DRAIN),
+        ("telemetry_collector", _telemetry_collector, _SHUTDOWN_TIMEOUT_DRAIN),
+        ("bronze_sink", _bronze, _SHUTDOWN_TIMEOUT_DRAIN),
+        # Fire-and-forget tasks still writing (billing emits, telemetry
+        # fan-out, checkpoints). Drained before the Postgres pool closes, since
+        # that is what they are writing through.
+        ("background_tasks", _background_tasks, _SHUTDOWN_TIMEOUT_DRAIN),
+        # ── 2. sink clients and streaming transports ──
+        ("otel_exporter", _otel, _SHUTDOWN_TIMEOUT_CLIENT),
+        ("clickhouse_sink", _clickhouse, _SHUTDOWN_TIMEOUT_CLIENT),
+        ("typesense_client", _typesense, _SHUTDOWN_TIMEOUT_CLIENT),
+        ("kafka_consumer", _kafka_consumer, _SHUTDOWN_TIMEOUT_CLIENT),
+        ("kafka_producer", _kafka_producer, _SHUTDOWN_TIMEOUT_CLIENT),
+        ("ksql_client", _ksql, _SHUTDOWN_TIMEOUT_CLIENT),
+        ("edge_fanout", _edge_fanout, _SHUTDOWN_TIMEOUT_CLIENT),
+        ("hilt_controller", _hilt, _SHUTDOWN_TIMEOUT_CLIENT),
+        ("alert_processor", _alert_processor, _SHUTDOWN_TIMEOUT_CLIENT),
+        ("trace_store", _trace_store, _SHUTDOWN_TIMEOUT_CLIENT),
+        # ── 3. HTTP pools ──
+        ("clerk_auth", _clerk, _SHUTDOWN_TIMEOUT_CLIENT),
+        ("webhook_delivery", _webhooks, _SHUTDOWN_TIMEOUT_CLIENT),
+        ("redis", _redis, _SHUTDOWN_TIMEOUT_CLIENT),
+        # ── 4. Postgres pool, last ──
+        ("postgres", _postgres, _SHUTDOWN_TIMEOUT_CLIENT),
+    ]
+    return steps
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan handler."""
-    import asyncio
 
     logger.info("Starting Eden API...")
 
@@ -551,81 +733,8 @@ async def lifespan(app: FastAPI):
     # every pod restart (F57 already closed the httpx
     # pool; this closes the rest).
 
-    # ── 1. background-task drainers (use Postgres) ──
-    if background_workers:
-        try:
-            from eden.workers.background import stop_background_workers
-
-            await stop_background_workers()
-        except Exception as e:  # pragma: no cover - defensive
-            logger.warning(f"Background workers stop failed: {e}")
-
-    try:
-        from eden.observability.trace_quality.hooks import (
-            shutdown_trace_quality,
-        )
-
-        await shutdown_trace_quality()
-    except Exception as e:  # pragma: no cover - defensive
-        logger.warning(f"trace_quality shutdown failed: {e}")
-
-    # ── 2. sink clients (independent of Postgres) ──
-    try:
-        from eden.observability.otel_exporter import (
-            close_otel_dual_exporter,
-        )
-
-        await close_otel_dual_exporter()
-    except Exception as e:  # pragma: no cover - defensive
-        logger.warning(f"otel_exporter shutdown failed: {e}")
-
-    try:
-        from eden.storage.redis import close_redis_client
-
-        await close_redis_client()
-    except Exception as e:  # pragma: no cover - defensive
-        logger.warning(f"redis shutdown failed: {e}")
-
-    try:
-        from eden.observability.telemetry_collector import (
-            close_telemetry_collector,
-        )
-
-        await close_telemetry_collector()
-    except Exception as e:  # pragma: no cover - defensive
-        logger.warning(f"telemetry_collector shutdown failed: {e}")
-
-    # ── 3. httpx pools ──
-    # B-6 follow-up — release the shared ``httpx.AsyncClient``
-    # used by ``clerk_auth._fetch_jwks`` so the underlying SSL
-    # transport pool is closed cleanly.
-    try:
-        from eden.api.utils.clerk_auth import shutdown_clerk_auth
-
-        await shutdown_clerk_auth()
-    except Exception as e:
-        logger.warning(f"clerk_auth shutdown failed: {e}")
-
-    # F57 — release the ``WebhookDeliveryService`` singleton's
-    # keep-alive HTTP pool.
-    try:
-        from eden.services.webhook_delivery import (
-            get_webhook_delivery_service,
-        )
-
-        await get_webhook_delivery_service().aclose()
-    except Exception as e:
-        logger.warning(
-            f"webhook_delivery shutdown failed: {e}"
-        )
-
-    # ── 4. Postgres pool, last ──
-    try:
-        from eden.storage.postgres import close_postgres_client
-
-        await close_postgres_client()
-    except Exception as e:
-        logger.warning(f"postgres shutdown failed: {e}")
+    for name, factory, timeout in _shutdown_steps(background_workers=background_workers):
+        await _shutdown_step(name, factory, timeout)
 
     logger.info("Shutting down Eden API...")
 
@@ -639,6 +748,18 @@ app = FastAPI(
     description="AI-native environment generation system",
     version="0.1.0",
     lifespan=lifespan,
+    # No response class was configured, so every response was rendered by
+    # stdlib ``json``. ``EdenJSONResponse`` renders through ``jsonx`` (orjson
+    # with OPT_NON_STR_KEYS).
+    #
+    # Measured, honestly: this is worth ~1.1x end to end, not the ~4x the
+    # render step alone suggests — ``serialize_response`` runs
+    # ``jsonable_encoder`` unconditionally and that costs ~7x the render it
+    # feeds. It is still worth taking (free, and OPT_NON_STR_KEYS fixes int/UUID
+    # -keyed dicts that the stock ORJSONResponse rejects outright), but the
+    # 24.9x measured for bypassing the encoder is a per-endpoint decision, not
+    # this line. See ``eden.api.responses``.
+    default_response_class=EdenJSONResponse,
 )
 
 # NOTE: CORSMiddleware is NOT registered here. It is registered near
@@ -886,7 +1007,9 @@ async def _unhandled_exception(request: Request, exc: Exception):
     # captures the traceback in the log without re-raising.
     logger.exception(
         "unhandled exception [request_id=%s] %s %s",
-        rid, request.method, request.url.path,
+        rid,
+        request.method,
+        request.url.path,
     )
     # F67 — apply OWASP security headers to the 500 envelope.
     # ``ServerErrorMiddleware`` is the outermost wrapper, so our
@@ -936,7 +1059,10 @@ async def _http_exception(request: Request, exc: StarletteHTTPException):
         # per-route 503 handlers still set their own HTTPException
         # detail — we only see them here when the exception bubbles
         # through unhandled.
-        err, detail = "service_unavailable", exc.detail if isinstance(exc.detail, str) else "service temporarily unavailable"
+        err, detail = (
+            "service_unavailable",
+            exc.detail if isinstance(exc.detail, str) else "service temporarily unavailable",
+        )
     else:
         err = "http_error"
         detail = exc.detail if isinstance(exc.detail, (str, dict)) else "Request failed"
@@ -950,6 +1076,7 @@ async def _http_exception(request: Request, exc: StarletteHTTPException):
         headers=apply_security_headers(exc.headers or {}),
     )
 
+
 # Include route modules
 app.include_router(admin_status.router)  # F84 /orgs/{org_id}/admin/eden-status
 app.include_router(kb.router)
@@ -960,51 +1087,111 @@ app.include_router(orgs.router)
 app.include_router(references.router)
 app.include_router(api_keys.router)
 app.include_router(billing.router)  # /orgs/{org_id}/billing
-app.include_router(budgets.router)  # /orgs/{org_id}/budget + /budget/ticker + /budget/actions (D.10 cost guardrails)
+app.include_router(
+    budgets.router
+)  # /orgs/{org_id}/budget + /budget/ticker + /budget/actions (D.10 cost guardrails)
 app.include_router(finops.router)  # /orgs/{org_id}/finops/{explorer,export,kill-switches} (SOTA W8)
 app.include_router(cost.router)  # /orgs/{org_id}/cost/comparison (Cat 23 audit)
 app.include_router(analytics.router)  # /orgs/{org_id}/analytics
 app.include_router(export.router)  # /orgs/{org_id}/export
-app.include_router(export_destinations.router)  # /orgs/{org_id}/export/{destinations,schedules,run-now}
+app.include_router(
+    export_destinations.router
+)  # /orgs/{org_id}/export/{destinations,schedules,run-now}
 app.include_router(ingestion.router)  # /orgs/{org_id}/ingest (multi-format observability ingestion)
-app.include_router(ingest_agent_sessions.router)  # /orgs/{org_id}/ingest/agent-sessions (F23 SDK, X-Org-Api-Key)
-app.include_router(observability.ingest_router)  # /orgs/{org_id}/observability/telemetry/ingest* (API key)
-app.include_router(observability.router)  # /orgs/{org_id}/observability/{traces,summary,spans/search,...}
+app.include_router(
+    ingest_agent_sessions.router
+)  # /orgs/{org_id}/ingest/agent-sessions (F23 SDK, X-Org-Api-Key)
+app.include_router(
+    observability.ingest_router
+)  # /orgs/{org_id}/observability/telemetry/ingest* (API key)
+app.include_router(
+    observability.router
+)  # /orgs/{org_id}/observability/{traces,summary,spans/search,...}
 app.include_router(agents.router)  # /orgs/{org_id}/agents (Phase 2 surface — list + register + get)
 app.include_router(portal.router)  # /orgs/{org_id}/portal/* (greenfield FE read-model contracts)
-app.include_router(llmops.router)  # /orgs/{org_id}/llmops/{artifacts,prompts,ab-tests,experiments,gateway,monitoring,cache}
-app.include_router(trace_quality.router)  # /v1/traces/{trace_id}/{loops,quality,intervention,...} (Cat 22 trace quality)
-app.include_router(observability_mcp.router)  # /v1/traces/{id}/mcp + /v1/mcp/{org}/auth_failures (D.12.1)
+app.include_router(
+    llmops.router
+)  # /orgs/{org_id}/llmops/{artifacts,prompts,ab-tests,experiments,gateway,monitoring,cache}
+app.include_router(
+    trace_quality.router
+)  # /v1/traces/{trace_id}/{loops,quality,intervention,...} (Cat 22 trace quality)
+app.include_router(
+    observability_mcp.router
+)  # /v1/traces/{id}/mcp + /v1/mcp/{org}/auth_failures (D.12.1)
 from eden.mcp_server.http_transport import router as mcp_http_router
 
 app.include_router(mcp_http_router)  # W28 Streamable HTTP MCP at /v1/mcp
-app.include_router(observability_a2a.router)  # /v1/traces/{id}/a2a + /v1/a2a/{org}/links + invocation graph (D.12.2)
-app.include_router(observability_computer_use.router)  # /v1/traces/{id}/computer_use + /v1/computer_use/{org}/steps (D.12.3)
-app.include_router(observability_voice.router)  # /v1/voice_sessions + /v1/traces/{id}/voice_sessions (D.12.4)
+app.include_router(
+    observability_a2a.router
+)  # /v1/traces/{id}/a2a + /v1/a2a/{org}/links + invocation graph (D.12.2)
+app.include_router(
+    observability_computer_use.router
+)  # /v1/traces/{id}/computer_use + /v1/computer_use/{org}/steps (D.12.3)
+app.include_router(
+    observability_voice.router
+)  # /v1/voice_sessions + /v1/traces/{id}/voice_sessions (D.12.4)
 app.include_router(observability_fine_tune.router)  # /v1/fine_tuning_runs + lineage (D.12.5)
-app.include_router(observability_fine_tune.webhook_router)  # /v1/webhooks/openai/fine_tuning (D.12.5, R-12)
-app.include_router(observability_provider_routing.router)  # /v1/provider_routing/{org}/{attempts,failure_rate} (D.12.6)
-app.include_router(internal_health.router)  # /v1/internal/health/* — ops dashboard (Phase 4 B3 §9.6)
-app.include_router(optimization.router)  # /orgs/{org_id}/optimization/{overview,costs,savings,cache,budget,}
+app.include_router(
+    observability_fine_tune.webhook_router
+)  # /v1/webhooks/openai/fine_tuning (D.12.5, R-12)
+app.include_router(
+    observability_provider_routing.router
+)  # /v1/provider_routing/{org}/{attempts,failure_rate} (D.12.6)
+app.include_router(
+    internal_health.router
+)  # /v1/internal/health/* — ops dashboard (Phase 4 B3 §9.6)
+app.include_router(
+    optimization.router
+)  # /orgs/{org_id}/optimization/{overview,costs,savings,cache,budget,}
 app.include_router(app_events.router)  # /orgs/{org_id}/ingest/app (Phase A1 app/site events)
 app.include_router(scim.router)  # /orgs/{org_id}/scim/v2
-app.include_router(sso.router)  # /sso
+# SSO is OFF by default (2026-07-30). All 11 handlers in sso.py query
+# ``org_sso_providers``, which does not exist in the database — the live
+# schema has ``org_sso_settings`` and ``sso_configurations``. PostgresClient
+# .fetch does not swallow, so GET /sso/providers was an unhandled 500 and
+# POST was a 503. Mounting endpoints that can only fail is worse than not
+# mounting them: they appear in the OpenAPI surface and in the portal as
+# though they work.
+#
+# Knock-on, and the reason this is not a quick repoint: the SCIM token is
+# WRITTEN to org_sso_providers.scim_token_hash but READ from
+# org_scim_config.scim_token_hash, and nothing ever writes the latter — so
+# SCIM could never be enabled either, even with the table in place.
+#
+# Turned off rather than deleted. See docs/ops/disabled-features.md for
+# what re-enabling requires.
+if getattr(settings, "sso_enabled", False):
+    app.include_router(sso.router)  # /sso
+else:
+    logger.info(
+        "SSO routes not mounted (sso_enabled=False): sso.py targets the "
+        "non-existent org_sso_providers table. See "
+        "docs/ops/disabled-features.md"
+    )
 app.include_router(ai_insights.router)  # /orgs/{org_id}/ai-insights
 app.include_router(sidebar_prefs.router)  # /orgs/{org_id}/sidebar-prefs (per-user UI prefs)
 # W20: Phase-C ``/ai`` chat restored for the portal assistant panel
 # (``clients/portal/.../agent/page.tsx``). Sidebar insights stay on
 # ``/ai-insights``; both surfaces share conversation storage helpers.
 app.include_router(ai_agent.router)  # /orgs/{org_id}/ai/{chat,conversations,tools}
-app.include_router(sharing.sharing_router)  # /orgs/{org_id}/traces/{trace_id}/share + saved-searches (Phase N)
+app.include_router(
+    sharing.sharing_router
+)  # /orgs/{org_id}/traces/{trace_id}/share + saved-searches (Phase N)
 app.include_router(sharing.public_router)  # /public/traces/{token} (no auth, token-gated)
 # Phase A1: session lifecycle + presigned feedback tokens
 app.include_router(sessions.router)  # /orgs/{org_id}/intelligence/user/sessions/...
-app.include_router(presigned_feedback.auth_router)  # /orgs/{org_id}/intelligence/user/feedback/presigned-token
-app.include_router(presigned_feedback.public_router)  # /api/v1/feedback/tokens/{token_id} (no auth, token-gated)
+app.include_router(
+    presigned_feedback.auth_router
+)  # /orgs/{org_id}/intelligence/user/feedback/presigned-token
+app.include_router(
+    presigned_feedback.public_router
+)  # /api/v1/feedback/tokens/{token_id} (no auth, token-gated)
 app.include_router(onboarding.router)  # /v1/internal/onboarding/{org_id}/* (D.14 cold-start UX)
 app.include_router(sql_query.router)  # /orgs/{org_id}/sql (Phase M read-only SQL executor)
 app.include_router(compliance.router)  # /api/v1/me/* + /api/v1/dsar + /subprocessors (GDPR + CCPA)
-app.include_router(qa_generator.router)  # /orgs/{org_id}/synthetic (Phase J synthetic Q/A generator)
+app.include_router(
+    qa_generator.router
+)  # /orgs/{org_id}/synthetic (Phase J synthetic Q/A generator)
 app.include_router(redteam.router)  # /orgs/{org_id}/redteam (Phase L red-team probes)
 app.include_router(labeling.router)  # /orgs/{org_id}/labeling (Phase D labeling queue)
 app.include_router(signals.router)  # /orgs/{org_id}/signals (Phase Q plain-English signals)
@@ -1012,23 +1199,37 @@ app.include_router(nl_alerts_routes.router)  # F81 NL alerts compile + rules
 app.include_router(debugger.router)  # /orgs/{org_id}/debugger (Phase P agent debugger)
 app.include_router(browser_sessions.router)  # F09 browser recording
 app.include_router(datasets_hub.router)  # /orgs/{org_id}/datasets (F53 hub list/create)
-app.include_router(datasets_spreadsheet.router)  # /orgs/{org_id}/datasets/{dataset_id} (Phase S spreadsheet)
+app.include_router(
+    datasets_spreadsheet.router
+)  # /orgs/{org_id}/datasets/{dataset_id} (Phase S spreadsheet)
 app.include_router(experiments_offline.router)  # /orgs/{org_id}/experiments/offline (F51)
 app.include_router(playgrounds.router)  # /orgs/{org_id}/playgrounds (W18 U03/F49)
 # prompts_v2 first: FastAPI first-match wins. D.9 owns GET/POST "" and
 # GET /{name}; Phase I keeps PATCH, playground, rollback, etc.
 app.include_router(prompts_v2.router)  # /orgs/{org_id}/prompts (D.9 list/create/get + versions)
-app.include_router(prompts.router)  # /orgs/{org_id}/prompts (Phase I playground/rollback; shadowed list/create/get)
+app.include_router(
+    prompts.router
+)  # /orgs/{org_id}/prompts (Phase I playground/rollback; shadowed list/create/get)
 app.include_router(pii_policy.router)  # /orgs/{org_id}/pii-policy
-app.include_router(cost_overrides.router)  # /orgs/{org_id}/cost-overrides (per-tenant contract rates)  # /orgs/{org_id}/retention-policy
-app.include_router(notifications.router)  # /notifications (user-scoped feed; June 2026 Cat 5 mount fix)
-app.include_router(model_compare.router)  # /orgs/{org_id}/models/{compare,recommend,project} (Phase 7.6)
+app.include_router(
+    cost_overrides.router
+)  # /orgs/{org_id}/cost-overrides (per-tenant contract rates)  # /orgs/{org_id}/retention-policy
+app.include_router(
+    notifications.router
+)  # /notifications (user-scoped feed; June 2026 Cat 5 mount fix)
+app.include_router(
+    model_compare.router
+)  # /orgs/{org_id}/models/{compare,recommend,project} (Phase 7.6)
 # Intelligence gap surface — Cat 4/5/6/8/9/10/11/12/13/14/18/19/20/22
 # All self-gate on `intelligence_gap_v0` via the per-router `dependencies=`
 # list; this just makes them reachable when the flag is on.
-app.include_router(agent_issues.router)  # /orgs/{org_id}/agent-issues (F28/F29, gated by agent_issues_v0)
+app.include_router(
+    agent_issues.router
+)  # /orgs/{org_id}/agent-issues (F28/F29, gated by agent_issues_v0)
 app.include_router(fleet.router)  # /orgs/{org_id}/fleet (N05/D9, gated by fleet_health_v1)
-app.include_router(agent_sessions.router)  # /orgs/{org_id}/agent-sessions (F23, gated by agent_sessions_v1)
+app.include_router(
+    agent_sessions.router
+)  # /orgs/{org_id}/agent-sessions (F23, gated by agent_sessions_v1)
 app.include_router(change_impact.router)  # /orgs/{org_id}/change-impact (N04)
 app.include_router(improve.router)  # /orgs/{org_id}/improve (N17 cockpit + F04 autofix)
 app.include_router(learn.router)  # /orgs/{org_id}/{nudges,promotions,book,drift,...} (WS2)
@@ -1043,7 +1244,9 @@ app.include_router(tool_call_labels.router)  # /orgs/{org_id}/tool-calls/{span_i
 app.include_router(observability_live.router)  # /orgs/{org_id}/stream/traces/* (N11 live)
 app.include_router(mcp_keys.router)  # /orgs/{org_id}/mcp/keys (W28)
 app.include_router(agentic_metrics.router)  # F64 agentic metrics pack
-app.include_router(autonomy.router)  # /orgs/{org_id}/settings/autonomy (N22, gated by closed_loop_orchestrator_v1)
+app.include_router(
+    autonomy.router
+)  # /orgs/{org_id}/settings/autonomy (N22, gated by closed_loop_orchestrator_v1)
 # B26: intelligence_* routers mounted via mount_deferred_routers() in lifespan
 app.include_router(metrics_endpoint_router)  # /metrics (Prometheus, bearer-token auth)
 app.include_router(feature_flags.router)  # /feature-flags (public)
@@ -1161,6 +1364,7 @@ async def public_openapi_spec() -> dict:
 # Health Check
 # ============================================================================
 
+
 @app.get("/live")
 async def liveness_probe():
     """Kubernetes liveness probe — process is up."""
@@ -1217,10 +1421,11 @@ async def health_check():
 
     kb_health = await kb_health_check()
 
-    overall = "healthy" if (
-        kb_health.get("postgres") == "connected" and
-        kb_health.get("qdrant") == "connected"
-    ) else "degraded"
+    overall = (
+        "healthy"
+        if (kb_health.get("postgres") == "connected" and kb_health.get("qdrant") == "connected")
+        else "degraded"
+    )
 
     # Surface the DB target the runtime is actually using so deploy
     # misconfigurations are diagnosable from the public endpoint alone
@@ -1280,6 +1485,7 @@ async def health_check():
     if overall == "healthy":
         try:
             from eden.workers.background import background_workers_running
+
             if (
                 getattr(settings, "trace_quality_worker_enabled", True)
                 and background_workers_running()
@@ -1315,17 +1521,14 @@ async def health_check():
             # to healthy from here and takes down every leader-gated
             # loop. Prove the write path with a short-lived key.
             _probe = "eden:health:writeprobe"
-            _ok = await _asyncio.wait_for(
-                _client.set(_probe, "1", nx=True, ex=5), timeout=2.0
-            )
+            _ok = await _asyncio.wait_for(_client.set(_probe, "1", nx=True, ex=5), timeout=2.0)
             if _ok is None:
                 # NX can legitimately lose a race with a concurrent probe;
                 # only call it broken when the key is also absent.
-                _existing = await _asyncio.wait_for(
-                    _client.get(_probe), timeout=2.0
-                )
+                _existing = await _asyncio.wait_for(_client.get(_probe), timeout=2.0)
                 redis_status = (
-                    "connected" if _existing is not None
+                    "connected"
+                    if _existing is not None
                     else "read_only: writes silently dropped (plan limit?)"
                 )
             else:
@@ -1381,9 +1584,7 @@ async def health_check():
         quality_worker_running=worker_running,
         statgate_installed=statgate_installed,
         evolution_loop_running=evolution_loop_running,
-        background_workers_expected=bool(
-            getattr(settings, "run_background_workers", False)
-        ),
+        background_workers_expected=bool(getattr(settings, "run_background_workers", False)),
     )
 
     mode = getattr(settings, "health_probe_mode", "auto")

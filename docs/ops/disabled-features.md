@@ -47,6 +47,35 @@ fix needs.
 
 ---
 
+## 1b. SSO routes — `sso_enabled = False`
+
+**Routes:** everything under `/sso` (11 handlers). Not mounted at all,
+so they no longer appear in the OpenAPI surface.
+
+**Why.** Every handler in `api/routes/sso.py` queries
+`org_sso_providers`, which does not exist. The live schema has
+`org_sso_settings` and `sso_configurations` — verified directly against
+the database.
+
+`PostgresClient.fetch` does not swallow, so `GET /sso/providers` was an
+unhandled 500 and `POST /sso/providers` a 503. Endpoints that can only
+fail should not be advertised.
+
+**Re-enabling needs more than creating the table.** The SCIM token is
+*written* to `org_sso_providers.scim_token_hash` but *read* from
+`org_scim_config.scim_token_hash` (`scim.py:166`), and nothing in the
+codebase ever writes the latter — so SCIM could never be enabled
+either, and every SCIM request 401s "SCIM not configured".
+
+**Re-enable when:** the queries are repointed at `org_sso_settings` /
+`sso_configurations`, the SCIM token is written where it is read, and a
+test exercises one full provider round-trip. Then set `SSO_ENABLED=1`.
+
+No customer-facing loss today: SSO was never functional, so nothing
+that used to work has stopped.
+
+---
+
 ## 2. Right-to-be-forgotten fanout — `rtbf_fanout_v1 = False` (unchanged)
 
 Already off; left off, but the reason on record was misleading and has
