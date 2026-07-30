@@ -222,3 +222,38 @@ Recorded so the same ground is not re-covered:
   `production_eval_daily_spend` are all empty.
 - **No dangling `create_task` / un-awaited coroutines** anywhere.
 - **Settings-flag drift is zero** repo-wide.
+
+---
+
+## Fixed later on 2026-07-30 (recorded so they are not re-investigated)
+
+- **Quota middleware blocked at two thirds of the cap.** `_evaluate_hard_limits`
+  blocked on `soft_exceeded` and on any utilisation >= 80%, against the
+  contract at `plan_tiers.py:71`. `cost_usd` is a global mutating resource,
+  so this ran on every POST/PUT/PATCH/DELETE. Now blocks only on a hard
+  breach. This was the single biggest launch risk found.
+- **`/ingest/chunks` had never stored a row** — `chunk_id` built as
+  `f"{event_id}:{chunk_index}"` for a `uuid NOT NULL` column. Same defect
+  class as the app-events bug. Now `uuid5`, preserving idempotency.
+- **13 tables the code queries did not exist.** Alembic reported head, so
+  `upgrade` was a permanent no-op. Created from the project's own DDL.
+- **`onboarding_state` missing 6 columns** — the D.14 state machine reported
+  `{"status":"ok"}` and persisted nothing. Columns added; its real SELECT
+  now prepares.
+- **Login ignored `deleted_at`** — account deletion did not stick.
+- **`get_org_resource_limits` omitted `plan_name` / `requests_per_minute`**,
+  so every org was rate-limited at the default and evaluated as `org_free`.
+- **WebSocket `receive_task` UnboundLocalError** in a `finally`, leaking a
+  connection-registry entry per aborted handshake.
+- **`send_password_reset_email` did not exist** — the ImportError was
+  swallowed and the endpoint returned 200. Every password-auth user who
+  forgot their password was permanently locked out. Implemented; dispatch
+  failure now logs at ERROR.
+- **SDKs ignored `rejected`** — a fully-rejected batch looked like a clean
+  flush, and `doctor` reported `ok: true` off a 2xx alone. Both SDKs now
+  parse the body; `doctor` requires acceptance.
+- **`/portal/keys` returned `[]` on failure** — same class as `/orgs`; a
+  customer would mint a duplicate key. Now 503.
+- **`/health` could not see a read-only database.** Witnessed live: the Neon
+  endpoint went read-only for ~2 minutes, all writes failed, and `/health`
+  reported `postgres: connected` throughout.
