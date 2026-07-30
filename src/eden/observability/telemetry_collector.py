@@ -1749,6 +1749,27 @@ class TelemetryCollector:
                 # previews, skip message_store reconstruct + body zstd.
                 request_body = row.get("request_body")
                 response_body = row.get("response_body")
+            def _json_obj(value: Any, *, default: Any = None) -> Any:
+                """Normalize JSONB that asyncpg sometimes returns as ``str``."""
+                if value is None:
+                    return default
+                if isinstance(value, (dict, list)):
+                    return value
+                if isinstance(value, (bytes, bytearray)):
+                    try:
+                        value = value.decode("utf-8")
+                    except Exception:
+                        return default
+                if isinstance(value, str):
+                    text = value.strip()
+                    if not text:
+                        return default
+                    try:
+                        return json.loads(text)
+                    except Exception:
+                        return default
+                return value
+
             node = {
                 "span_id": span_id,
                 "parent_span_id": parent,
@@ -1758,16 +1779,16 @@ class TelemetryCollector:
                 "duration_ms": duration,
                 "metrics": decoded_cols.get("metrics_zstd")
                 if decoded_cols.get("metrics_zstd") is not None
-                else (row.get("metrics") or {}),
+                else _json_obj(row.get("metrics"), default={}) or {},
                 "attributes": decoded_cols.get("attributes_zstd")
                 if decoded_cols.get("attributes_zstd") is not None
-                else (row.get("attributes") or {}),
+                else _json_obj(row.get("attributes"), default={}) or {},
                 "payload": decoded_cols.get("payload_zstd")
                 if decoded_cols.get("payload_zstd") is not None
-                else (row.get("payload") or {}),
+                else _json_obj(row.get("payload"), default={}) or {},
                 "outcome": row.get("outcome"),
-                "request_body": request_body,
-                "response_body": response_body,
+                "request_body": _json_obj(request_body, default=request_body),
+                "response_body": _json_obj(response_body, default=response_body),
                 "reasoning": decoded_cols.get("reasoning_zstd")
                 if decoded_cols.get("reasoning_zstd") is not None
                 else row.get("reasoning"),

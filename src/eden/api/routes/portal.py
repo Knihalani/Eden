@@ -388,11 +388,23 @@ def _preview(value: Any, limit: int = 400) -> str | None:
     return text[:limit]
 
 
+def _coerce_token_count(value: Any) -> int | None:
+    """Token metrics often land as ``198.0`` / ``\"198.0\"`` — never bare ``int``."""
+    if value is None:
+        return None
+    try:
+        return int(float(value))
+    except (TypeError, ValueError):
+        return None
+
+
 def _tree_node_to_step(node: dict[str, Any]) -> TranscriptStep:
     """Map one ``TraceTree`` span node to a portal ``TranscriptStep``."""
-    attrs = node.get("attributes") if isinstance(node.get("attributes"), dict) else {}
-    metrics = node.get("metrics") if isinstance(node.get("metrics"), dict) else {}
-    payload = node.get("payload") if isinstance(node.get("payload"), dict) else {}
+    # asyncpg / some poolers return JSONB as a JSON *string* — isinstance
+    # dict checks used to drop metrics/payload and leave tokens/cost blank.
+    attrs = _as_dict(node.get("attributes"))
+    metrics = _as_dict(node.get("metrics"))
+    payload = _as_dict(node.get("payload"))
     span_id = str(node.get("span_id") or "")
     name = str(node.get("name") or node.get("event_type") or "span")
     outcome = node.get("outcome")
@@ -422,15 +434,22 @@ def _tree_node_to_step(node: dict[str, Any]) -> TranscriptStep:
             else attrs.get("cost_usd")
         )
     )
+    # Nested provider payloads (OpenAI-compatible) often stash the model
+    # under payload.openai.model when top-level model fields are empty.
+    nested_openai = payload.get("openai") if isinstance(payload.get("openai"), dict) else {}
     model = (
         attrs.get("model")
         or attrs.get("openai.model")
         or attrs.get("anthropic.model")
         or payload.get("model_normalized")
         or payload.get("model")
+        or nested_openai.get("model")
         or node.get("model_version")
     )
     provider = attrs.get("provider")
+
+    tokens_in_i = _coerce_token_count(tokens_in)
+    tokens_out_i = _coerce_token_count(tokens_out)
 
     # Estimate per-span cost when ingest never stamped cost_usd but
     # tokens are present — otherwise the header and step chips stay $0.
@@ -439,14 +458,14 @@ def _tree_node_to_step(node: dict[str, Any]) -> TranscriptStep:
         cost_f = float(cost) if cost is not None else None
     except (TypeError, ValueError):
         cost_f = None
-    if (cost_f is None or cost_f <= 0) and (tokens_in is not None or tokens_out is not None):
+    if (cost_f is None or cost_f <= 0) and (tokens_in_i is not None or tokens_out_i is not None):
         try:
             from eden.llmops.pricing import estimate_cost_usd
 
             estimated = estimate_cost_usd(
                 model=str(model) if model else None,
-                input_tokens=int(float(tokens_in or 0)),
-                output_tokens=int(float(tokens_out or 0)),
+                input_tokens=int(tokens_in_i or 0),
+                output_tokens=int(tokens_out_i or 0),
                 existing=cost_f,
             )
             if estimated > 0:
@@ -455,6 +474,15 @@ def _tree_node_to_step(node: dict[str, Any]) -> TranscriptStep:
             pass
 
     safe_attrs = {k: v for k, v in attrs.items() if isinstance(v, (str, int, float, bool))} or None
+
+    # Bodies may also arrive as JSON strings — parse when possible so
+    # nested message/content previews still resolve.
+    request_body = node.get("request_body")
+    response_body = node.get("response_body")
+    if isinstance(request_body, str):
+        request_body = _as_dict(request_body) or request_body
+    if isinstance(response_body, str):
+        response_body = _as_dict(response_body) or response_body
 
     return TranscriptStep(
         id=span_id or str(node.get("timestamp") or name),
@@ -467,15 +495,15 @@ def _tree_node_to_step(node: dict[str, Any]) -> TranscriptStep:
         parentId=str(node["parent_span_id"]) if node.get("parent_span_id") else None,
         model=str(model) if model else None,
         provider=str(provider) if provider else None,
-        tokensIn=int(tokens_in) if tokens_in is not None else None,
-        tokensOut=int(tokens_out) if tokens_out is not None else None,
+        tokensIn=tokens_in_i,
+        tokensOut=tokens_out_i,
         costUsd=cost_f,
         attributes=safe_attrs,
         # Prefer dedicated bodies; fall back to payload fields when the
         # portal path skips message_store / body-zstd hydrate.
-        inputPreview=_preview(node.get("request_body"))
+        inputPreview=_preview(request_body)
         or _preview(payload.get("messages") or payload.get("input") or payload.get("prompt")),
-        outputPreview=_preview(node.get("response_body"))
+        outputPreview=_preview(response_body)
         or _preview(
             payload.get("output")
             or payload.get("content")
@@ -975,21 +1003,54 @@ async def get_portal_trace(
     if row is None:
         raise HTTPException(status_code=404, detail="Trace not found")
 
-    steps: list[TranscriptStep] = []
+    def _steps_from_tree(tree_val: Any) -> list[TranscriptStep]:
+        if tree_val is None or isinstance(tree_val, BaseException):
+            return []
+        try:
+            return _flatten_tree(tree_val.root_spans)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "portal trace detail: flatten tree failed for %s: %s",
+                trace_id,
+                redact_all(str(exc)),
+            )
+            return []
+
+    steps = _steps_from_tree(tree)
     if isinstance(tree, BaseException):
         logger.warning(
             "portal trace detail: get_trace_tree failed for %s: %s",
             trace_id,
             tree,
         )
-    elif tree is not None:
+    # Summary found the run but the transcript is empty — retry the tree
+    # sequentially (avoids rare pinned-conn races) before failing hard.
+    # Returning 200 + steps=[] painted "No spans" forever and hid the
+    # real failure from the FE error panel.
+    if not steps:
         try:
-            steps = _flatten_tree(tree.root_spans)
+            tree_retry = await _trace_tree()
+            steps = _steps_from_tree(tree_retry)
+            if isinstance(tree_retry, BaseException):
+                raise tree_retry
         except Exception as exc:  # noqa: BLE001
             logger.warning(
-                "portal trace detail: flatten tree failed for %s: %s",
+                "portal trace detail: tree retry failed for %s: %s",
                 trace_id,
                 redact_all(str(exc)),
+            )
+            raise HTTPException(
+                status_code=503,
+                detail="Trace transcript temporarily unavailable",
+            ) from exc
+        if not steps:
+            logger.warning(
+                "portal trace detail: empty transcript for %s despite summary row",
+                trace_id,
+            )
+            raise HTTPException(
+                status_code=503,
+                detail="Trace transcript temporarily unavailable",
             )
 
     status, severity = _map_trace_outcome(row.get("outcome"))

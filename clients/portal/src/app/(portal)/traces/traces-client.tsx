@@ -574,6 +574,10 @@ function LabTracesInner() {
     {
       ...SHELL_QUERY,
       staleTime: 30_000,
+      // Always revalidate the selected transcript on mount — soft-nav
+      // with refetchOnMount:false kept a prior empty success cached
+      // across deploys that fixed the empty-steps bug.
+      refetchOnMount: "always",
       enabled: Boolean(orgId) && Boolean(selectedId),
     },
   );
@@ -887,30 +891,33 @@ function LabTracesInner() {
   const selectedListItem =
     filtered.find((t) => t.id === selectedId) ??
     scopedTraces.find((t) => t.id === selectedId) ??
-    filtered[0] ??
-    scopedTraces[0];
+    traces.find((t) => t.id === selectedId);
 
   // Merge in the real transcript once the detail fetch for this
   // trace resolves; falls back to the list row's `steps: []` while
   // loading (or if the detail fetch fails) so the rest of the page
   // never has to special-case a missing trace. Also prefer detail
   // cost/signals — list rows may still show $0 until estimate lands.
+  //
+  // Merge on `selectedId` (not `selectedListItem.id`) so an agent /
+  // severity filter that temporarily drops the row from `filtered`
+  // cannot leave detail steps stranded while the header still names
+  // the URL-selected run.
   const selected = useMemo(() => {
-    if (!selectedListItem) return selectedListItem;
     const detail = traceDetailQuery.data;
-    if (detail && detail.id === selectedListItem.id) {
+    if (detail && detail.id === selectedId) {
+      const base = selectedListItem ?? detail;
       return {
-        ...selectedListItem,
-        steps: detail.steps,
-        costUsd: detail.costUsd ?? selectedListItem.costUsd,
-        tokens: detail.tokens || selectedListItem.tokens,
-        signals: detail.signals?.title
-          ? detail.signals
-          : selectedListItem.signals,
+        ...base,
+        ...detail,
+        steps: Array.isArray(detail.steps) ? detail.steps : [],
+        costUsd: detail.costUsd ?? base.costUsd,
+        tokens: detail.tokens || base.tokens,
+        signals: detail.signals?.title ? detail.signals : base.signals,
       };
     }
     return selectedListItem;
-  }, [selectedListItem, traceDetailQuery.data]);
+  }, [selectedListItem, traceDetailQuery.data, selectedId]);
 
   const selectedSession: SessionFixture | undefined =
     filteredSessions.find((s) => s.id === selectedSessionId) ??
@@ -933,11 +940,11 @@ function LabTracesInner() {
 
   useEffect(() => {
     if (hubView !== "runs") return;
-    if (!selected) return;
-    if (!filtered.some((t) => t.id === selected.id) && filtered[0]) {
+    if (!selectedId) return;
+    if (!filtered.some((t) => t.id === selectedId) && filtered[0]) {
       selectTrace(filtered[0].id, "trace");
     }
-  }, [hubView, filtered, selected, selectTrace]);
+  }, [hubView, filtered, selectedId, selectTrace]);
 
   // Neighbor prefetch intentionally omitted — each detail hit is a
   // get_trace_tree call; Newer/Older pay one fetch on demand.

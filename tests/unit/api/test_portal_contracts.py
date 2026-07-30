@@ -32,7 +32,7 @@ def test_portal_contracts_import_smoke() -> None:
     assert pc.DebuggerSessionCard is not None
     assert pc.AssistantMessagePart is not None
     assert pc.AssistantThreadCard is not None
-    assert "dev" in getattr(pc, "PromptPinEnv").__args__
+    assert "dev" in pc.PromptPinEnv.__args__
     assert "staging" in pc.PromptPinEnv.__args__
     assert "prod" in pc.PromptPinEnv.__args__
 
@@ -163,6 +163,34 @@ def test_portal_router_included_in_app() -> None:
 
 
 # ── Phase 2a — trace transcript step mapping ───────────────────────
+
+
+def test_tree_node_to_step_parses_json_string_metrics() -> None:
+    """Neon/asyncpg can hand back JSONB as a JSON string — must not drop tokens."""
+    from eden.api.routes.portal import _tree_node_to_step
+
+    node = {
+        "span_id": "span_json_str",
+        "parent_span_id": None,
+        "name": "MiniMax-M3",
+        "event_type": "llm_call",
+        "timestamp": None,
+        "duration_ms": 12,
+        "metrics": '{"input_tokens": 198.0, "output_tokens": 50.0, "total_tokens": 248.0}',
+        "attributes": "{}",
+        "payload": '{"openai": {"model": "MiniMax-M3"}}',
+        "outcome": "success",
+        "request_body": '{"messages": [{"role": "user", "content": "hi"}]}',
+        "response_body": '{"content": "hello"}',
+        "model_version": "standard",
+    }
+    step = _tree_node_to_step(node)
+    assert step.tokensIn == 198
+    assert step.tokensOut == 50
+    assert step.model == "MiniMax-M3"
+    assert step.costUsd is not None and step.costUsd > 0
+    assert step.inputPreview is not None
+    assert step.outputPreview is not None
 
 
 def test_tree_node_to_step_maps_llm_span() -> None:

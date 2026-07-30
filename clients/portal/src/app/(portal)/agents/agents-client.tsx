@@ -332,11 +332,9 @@ function AgentDetailBody({ agent }: { agent: AgentFixture }) {
 
   const selectedListItem =
     filtered.find((t) => t.id === selectedRunId) ??
-    runs.find((t) => t.id === selectedRunId) ??
-    filtered[0] ??
-    runs[0];
+    runs.find((t) => t.id === selectedRunId);
 
-  const selectedRunIdForDetail = selectedListItem?.id ?? "";
+  const selectedRunIdForDetail = selectedRunId || selectedListItem?.id || "";
   const traceDetailQuery = useOrgQuery(
     queryKeys.portal.traceDetail(orgId, selectedRunIdForDetail || null),
     orgId,
@@ -344,27 +342,27 @@ function AgentDetailBody({ agent }: { agent: AgentFixture }) {
     {
       ...SHELL_QUERY,
       staleTime: 30_000,
+      refetchOnMount: "always",
       enabled: Boolean(orgId) && Boolean(selectedRunIdForDetail),
     },
   );
 
   // List rows ship steps: [] — hydrate the selected run like traces-client.
   const selected = useMemo(() => {
-    if (!selectedListItem) return selectedListItem;
     const detail = traceDetailQuery.data;
-    if (detail && detail.id === selectedListItem.id) {
+    if (detail && detail.id === selectedRunIdForDetail) {
+      const base = selectedListItem ?? detail;
       return {
-        ...selectedListItem,
-        steps: detail.steps,
-        costUsd: detail.costUsd ?? selectedListItem.costUsd,
-        tokens: detail.tokens || selectedListItem.tokens,
-        signals: detail.signals?.title
-          ? detail.signals
-          : selectedListItem.signals,
+        ...base,
+        ...detail,
+        steps: Array.isArray(detail.steps) ? detail.steps : [],
+        costUsd: detail.costUsd ?? base.costUsd,
+        tokens: detail.tokens || base.tokens,
+        signals: detail.signals?.title ? detail.signals : base.signals,
       };
     }
     return selectedListItem;
-  }, [selectedListItem, traceDetailQuery.data]);
+  }, [selectedListItem, traceDetailQuery.data, selectedRunIdForDetail]);
 
   useEffect(() => {
     if (!selected) return;
