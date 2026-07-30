@@ -916,7 +916,20 @@ class EdenClient:
             )
         url = self.ingest_chunks_url()
         if url is None:
-            # No org id — drop silently.
+            # No org id, so there is nowhere to send. This used to drop
+            # the buffer with no log AND without incrementing
+            # _dropped_total, so `client.dropped` read 0 while every
+            # streaming chunk was discarded — a misconfigured client
+            # looked identical to a healthy idle one. The event path
+            # already logs this; only chunks swallowed it.
+            n = len(self._chunk_buffer)
+            self._dropped_total += n
+            if n:
+                logger.warning(
+                    "eden sdk: no org id configured — discarding %d "
+                    "streaming chunk(s); set EDEN_ORG_ID",
+                    n,
+                )
             self._chunk_buffer.clear()
             return
         # Ownership swap: avoid copying the chunk dicts.
