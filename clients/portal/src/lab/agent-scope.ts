@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   agentById,
@@ -40,18 +40,25 @@ export function useQueryPatch() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const pathname = usePathname() ?? "";
+  // Optimistic qs so rapid tab clicks (Tree → Ask) don't race on a
+  // stale `searchParams` snapshot from the previous replace.
+  const qsRef = useRef(searchParams.toString());
+  useEffect(() => {
+    qsRef.current = searchParams.toString();
+  }, [searchParams]);
 
   return useCallback(
     (patch: Record<string, string | null | undefined>) => {
-      const params = new URLSearchParams(searchParams.toString());
+      const params = new URLSearchParams(qsRef.current);
       for (const [key, value] of Object.entries(patch)) {
         if (value == null || value === "") params.delete(key);
         else params.set(key, value);
       }
       const qs = params.toString();
+      qsRef.current = qs;
       router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
     },
-    [pathname, router, searchParams],
+    [pathname, router],
   );
 }
 

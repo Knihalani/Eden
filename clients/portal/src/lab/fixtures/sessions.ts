@@ -69,7 +69,25 @@ export function agentForSession(session: SessionFixture): AgentFixture | undefin
 
 export function tracesForSession(session: SessionFixture): TraceFixture[] {
   return session.traceIds
-    .map((id) => liveTraces().find((t) => t.id === id))
+    .map((id) => {
+      const live = liveTraces().find((t) => t.id === id);
+      if (live) return live;
+      // Catalog list window may omit older turns — keep the turn visible.
+      return {
+        id,
+        agentId: session.agentId,
+        name: id,
+        status: "ok" as const,
+        startedAt: "",
+        durationMs: 0,
+        tokens: 0,
+        costUsd: 0,
+        severity: "none" as const,
+        sessionId: session.id,
+        signals: { title: "", body: "" },
+        steps: [],
+      };
+    })
     .filter((t): t is TraceFixture => Boolean(t));
 }
 
@@ -94,6 +112,17 @@ export function sessionForTrace(traceId: string): SessionFixture | undefined {
   return liveSessions().find((s) => s.traceIds.includes(traceId));
 }
 
+/** Prefer API `sessionId` on the trace row, then catalog reverse-lookup. */
+export function resolveSessionForTrace(
+  trace: { id: string; sessionId?: string | null },
+): SessionFixture | undefined {
+  if (trace.sessionId) {
+    const byId = sessionById(trace.sessionId);
+    if (byId) return byId;
+  }
+  return sessionForTrace(trace.id);
+}
+
 export function sessionForTraceId(
   sessionId: string | undefined,
 ): SessionFixture | undefined {
@@ -102,9 +131,15 @@ export function sessionForTraceId(
 }
 
 export function issuesForSession(session: SessionFixture): IssueFixture[] {
-  return session.relatedIssueIds
+  const fromIds = session.relatedIssueIds
     .map((id) => liveIssues().find((i) => i.id === id))
     .filter((i): i is IssueFixture => Boolean(i));
+  if (fromIds.length > 0) return fromIds;
+  // Fallback: issues whose occurrence traces intersect this session.
+  const turnIds = new Set(session.traceIds);
+  return liveIssues().filter((i) =>
+    i.occurrenceTraceIds.some((tid) => turnIds.has(tid)),
+  );
 }
 
 export function sessionsForAgent(agentId: string): SessionFixture[] {

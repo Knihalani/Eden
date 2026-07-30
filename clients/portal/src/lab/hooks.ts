@@ -160,7 +160,7 @@ function isTypingTarget(t: EventTarget | null) {
 /** j/k and arrow keys for list navigation. Optional tab shortcuts. */
 export function useListKeyboard(options: {
   move: (delta: number) => void;
-  onTab?: (tab: "trace" | "signals" | "chat") => void;
+  onTab?: (tab: "trace" | "tree" | "signals" | "chat") => void;
   enabled?: boolean;
 }) {
   const { move, onTab, enabled = true } = options;
@@ -189,6 +189,10 @@ export function useListKeyboard(options: {
         } else if (e.key === "t") {
           e.preventDefault();
           onTab("trace");
+        } else if (e.key === "r") {
+          // Tree — `t` is already Transcript.
+          e.preventDefault();
+          onTab("tree");
         } else if (e.key === "c") {
           e.preventDefault();
           onTab("chat");

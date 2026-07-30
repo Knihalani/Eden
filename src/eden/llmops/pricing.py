@@ -72,6 +72,7 @@ def _shared_httpx(timeout: float) -> httpx.AsyncClient:
         _HTTPX = httpx.AsyncClient(timeout=timeout)
     return _HTTPX
 
+
 # OpenRouter exposes ``pricing`` as USD **per token** strings (e.g.
 # "0.000003"). We convert to USD per 1K tokens inside the parser.
 _PER_TOKEN_TO_PER_1K = 1000.0
@@ -372,9 +373,7 @@ class PricingCatalog:
         """
         resolved_key = api_key or os.environ.get("OPENROUTER_API_KEY", "")
         resolved_base = (
-            base_url
-            or os.environ.get("OPENROUTER_BASE_URL")
-            or "https://openrouter.ai/api/v1"
+            base_url or os.environ.get("OPENROUTER_BASE_URL") or "https://openrouter.ai/api/v1"
         ).rstrip("/")
 
         headers: dict[str, str] = {"User-Agent": "eden-gateway/1.0"}
@@ -401,9 +400,7 @@ class PricingCatalog:
 
         data = payload.get("data") if isinstance(payload, dict) else None
         if not isinstance(data, list):
-            raise ValueError(
-                f"unexpected OpenRouter /models payload shape: {type(data).__name__}"
-            )
+            raise ValueError(f"unexpected OpenRouter /models payload shape: {type(data).__name__}")
 
         return self._merge_openrouter_rows(data)
 
@@ -498,7 +495,6 @@ class PricingCatalog:
             self.last_refresh = time.time()
         return updated
 
-
     async def refresh_from_models_dev(
         self,
         *,
@@ -557,9 +553,7 @@ class PricingCatalog:
                     await aclose()
 
         if not isinstance(payload, dict):
-            raise ValueError(
-                f"unexpected models.dev payload shape: {type(payload).__name__}"
-            )
+            raise ValueError(f"unexpected models.dev payload shape: {type(payload).__name__}")
 
         return self._merge_models_dev_rows(payload)
 
@@ -696,6 +690,74 @@ def lookup_seed_row(model_id: str) -> PricingRow | None:
     return _LOOKUP_CATALOG.lookup(model_id)
 
 
+def resolve_seed_row(model_id: str | None) -> PricingRow | None:
+    """Exact then fuzzy seed lookup for a model id.
+
+    SDKs ship vendor-prefixed or dated ids (``openrouter/minimax/…``,
+    ``gpt-4o-2024-08-06``). Exact miss falls back to substring match
+    against seed keys so portal cost estimates still light up.
+    """
+    if not model_id:
+        return None
+    mid = str(model_id).strip()
+    if not mid:
+        return None
+    hit = lookup_seed_row(mid)
+    if hit is not None:
+        return hit
+    lowered = mid.lower()
+    # Prefer longest key containment so ``claude-sonnet-4`` beats
+    # a shorter ``claude`` seed if both somehow match.
+    best: PricingRow | None = None
+    best_len = -1
+    for key, row in default_seed_rows().items():
+        k = key.lower()
+        if lowered == k or lowered in k or k in lowered:
+            if len(k) > best_len:
+                best = row
+                best_len = len(k)
+    return best
+
+
+def estimate_cost_usd(
+    *,
+    model: str | None,
+    input_tokens: int = 0,
+    output_tokens: int = 0,
+    cache_read_tokens: int = 0,
+    cache_write_tokens: int = 0,
+    existing: float | None = None,
+) -> float:
+    """USD cost from an existing stamp or seed pricing.
+
+    Used at ingest (stamp metrics) and on portal read (backfill rows
+    that predate cost stamping). Returns ``0.0`` when pricing is
+    unknown or token totals are empty.
+    """
+    try:
+        if existing is not None and float(existing) > 0:
+            return float(existing)
+    except (TypeError, ValueError):
+        pass
+    inp = max(0, int(input_tokens or 0))
+    out = max(0, int(output_tokens or 0))
+    cread = max(0, int(cache_read_tokens or 0))
+    cwrite = max(0, int(cache_write_tokens or 0))
+    if inp + out + cread + cwrite <= 0:
+        return 0.0
+    row = resolve_seed_row(model)
+    if row is None:
+        return 0.0
+    return float(
+        row.cost_for_request(
+            input_tokens=inp,
+            output_tokens=out,
+            cache_read_tokens=cread,
+            cache_write_tokens=cwrite,
+        )
+    )
+
+
 def default_seed_rows() -> dict[str, PricingRow]:
     """Return the in-tree pricing seed.
 
@@ -751,55 +813,178 @@ def _build_default_seed_rows() -> dict[str, PricingRow]:
     # Prompt-cache read discount is 50% of input price on every model.
     # GPT-5+ added a write surcharge equal to the base input rate;
     # GPT-4o / o-series caches have no separate write fee.
-    add("gpt-5", cost_in=0.00125, cost_out=0.010, quality=0.95, latency_p95_ms=800,
-        cost_cache_read=0.000625, cost_cache_write=0.00125)
-    add("gpt-5-mini", cost_in=0.00025, cost_out=0.002, quality=0.90, latency_p95_ms=400,
-        cost_cache_read=0.000125, cost_cache_write=0.00025)
-    add("gpt-5-nano", cost_in=0.00005, cost_out=0.0004, quality=0.85, latency_p95_ms=250,
-        cost_cache_read=0.000025, cost_cache_write=0.00005)
-    add("gpt-4o", cost_in=0.0025, cost_out=0.010, quality=0.93, latency_p95_ms=700,
-        cost_cache_read=0.00125)
-    add("gpt-4o-mini", cost_in=0.00015, cost_out=0.0006, quality=0.85, latency_p95_ms=350,
-        cost_cache_read=0.000075)
-    add("o1", cost_in=0.015, cost_out=0.060, quality=0.95, latency_p95_ms=5000,
-        cost_cache_read=0.0075)
-    add("o1-mini", cost_in=0.003, cost_out=0.012, quality=0.88, latency_p95_ms=2000,
-        cost_cache_read=0.0015)
-    add("o3", cost_in=0.010, cost_out=0.040, quality=0.96, latency_p95_ms=8000,
-        cost_cache_read=0.005)
-    add("o3-mini", cost_in=0.0011, cost_out=0.0044, quality=0.90, latency_p95_ms=3000,
-        cost_cache_read=0.00055)
+    add(
+        "gpt-5",
+        cost_in=0.00125,
+        cost_out=0.010,
+        quality=0.95,
+        latency_p95_ms=800,
+        cost_cache_read=0.000625,
+        cost_cache_write=0.00125,
+    )
+    add(
+        "gpt-5-mini",
+        cost_in=0.00025,
+        cost_out=0.002,
+        quality=0.90,
+        latency_p95_ms=400,
+        cost_cache_read=0.000125,
+        cost_cache_write=0.00025,
+    )
+    add(
+        "gpt-5-nano",
+        cost_in=0.00005,
+        cost_out=0.0004,
+        quality=0.85,
+        latency_p95_ms=250,
+        cost_cache_read=0.000025,
+        cost_cache_write=0.00005,
+    )
+    add(
+        "gpt-4o",
+        cost_in=0.0025,
+        cost_out=0.010,
+        quality=0.93,
+        latency_p95_ms=700,
+        cost_cache_read=0.00125,
+    )
+    add(
+        "gpt-4o-mini",
+        cost_in=0.00015,
+        cost_out=0.0006,
+        quality=0.85,
+        latency_p95_ms=350,
+        cost_cache_read=0.000075,
+    )
+    add(
+        "o1",
+        cost_in=0.015,
+        cost_out=0.060,
+        quality=0.95,
+        latency_p95_ms=5000,
+        cost_cache_read=0.0075,
+    )
+    add(
+        "o1-mini",
+        cost_in=0.003,
+        cost_out=0.012,
+        quality=0.88,
+        latency_p95_ms=2000,
+        cost_cache_read=0.0015,
+    )
+    add(
+        "o3",
+        cost_in=0.010,
+        cost_out=0.040,
+        quality=0.96,
+        latency_p95_ms=8000,
+        cost_cache_read=0.005,
+    )
+    add(
+        "o3-mini",
+        cost_in=0.0011,
+        cost_out=0.0044,
+        quality=0.90,
+        latency_p95_ms=3000,
+        cost_cache_read=0.00055,
+    )
 
     # ── Anthropic (per api.anthropic.com pricing page) ──────────────
     # Anthropic prompt cache: cache_read is 10% of input, cache_write
     # is base input * 1.25 (5-min cache). The 1-hour cache is the same
     # write rate but 2x more expensive to read (still 10% of base input
     # actually, just a longer TTL window).
-    add("claude-sonnet-4-6", cost_in=0.003, cost_out=0.015, quality=0.94, latency_p95_ms=900,
-        cost_cache_read=0.0003, cost_cache_write=0.00375)
-    add("claude-sonnet-4", cost_in=0.003, cost_out=0.015, quality=0.94, latency_p95_ms=900,
-        cost_cache_read=0.0003, cost_cache_write=0.00375)
-    add("claude-haiku-4-5", cost_in=0.001, cost_out=0.005, quality=0.88, latency_p95_ms=350,
-        cost_cache_read=0.0001, cost_cache_write=0.00125)
-    add("claude-haiku", cost_in=0.001, cost_out=0.005, quality=0.87, latency_p95_ms=250,
-        cost_cache_read=0.0001, cost_cache_write=0.00125)
-    add("claude-opus-4-5", cost_in=0.015, cost_out=0.075, quality=0.97, latency_p95_ms=1500,
-        cost_cache_read=0.0015, cost_cache_write=0.01875)
-    add("claude-opus-4", cost_in=0.015, cost_out=0.075, quality=0.96, latency_p95_ms=1500,
-        cost_cache_read=0.0015, cost_cache_write=0.01875)
+    add(
+        "claude-sonnet-4-6",
+        cost_in=0.003,
+        cost_out=0.015,
+        quality=0.94,
+        latency_p95_ms=900,
+        cost_cache_read=0.0003,
+        cost_cache_write=0.00375,
+    )
+    add(
+        "claude-sonnet-4",
+        cost_in=0.003,
+        cost_out=0.015,
+        quality=0.94,
+        latency_p95_ms=900,
+        cost_cache_read=0.0003,
+        cost_cache_write=0.00375,
+    )
+    add(
+        "claude-haiku-4-5",
+        cost_in=0.001,
+        cost_out=0.005,
+        quality=0.88,
+        latency_p95_ms=350,
+        cost_cache_read=0.0001,
+        cost_cache_write=0.00125,
+    )
+    add(
+        "claude-haiku",
+        cost_in=0.001,
+        cost_out=0.005,
+        quality=0.87,
+        latency_p95_ms=250,
+        cost_cache_read=0.0001,
+        cost_cache_write=0.00125,
+    )
+    add(
+        "claude-opus-4-5",
+        cost_in=0.015,
+        cost_out=0.075,
+        quality=0.97,
+        latency_p95_ms=1500,
+        cost_cache_read=0.0015,
+        cost_cache_write=0.01875,
+    )
+    add(
+        "claude-opus-4",
+        cost_in=0.015,
+        cost_out=0.075,
+        quality=0.96,
+        latency_p95_ms=1500,
+        cost_cache_read=0.0015,
+        cost_cache_write=0.01875,
+    )
 
     # ── Google Gemini (per ai.google.dev pricing page) ──────────────
     # Gemini implicit cache: hits are FREE for prompts under the
     # implicit-cache threshold (~12k tokens for 2.5, ~32k for 3.x).
     # Above that the cache hit is billed at base input rate.
-    add("gemini-3-pro", cost_in=0.00125, cost_out=0.010, quality=0.95, latency_p95_ms=1100,
-        cost_cache_read=0.0)
-    add("gemini-3-flash", cost_in=0.0001, cost_out=0.0004, quality=0.88, latency_p95_ms=450,
-        cost_cache_read=0.0)
-    add("gemini-2.5-pro", cost_in=0.00125, cost_out=0.010, quality=0.93, latency_p95_ms=1200,
-        cost_cache_read=0.0)
-    add("gemini-2.5-flash", cost_in=0.000075, cost_out=0.0003, quality=0.86, latency_p95_ms=500,
-        cost_cache_read=0.0)
+    add(
+        "gemini-3-pro",
+        cost_in=0.00125,
+        cost_out=0.010,
+        quality=0.95,
+        latency_p95_ms=1100,
+        cost_cache_read=0.0,
+    )
+    add(
+        "gemini-3-flash",
+        cost_in=0.0001,
+        cost_out=0.0004,
+        quality=0.88,
+        latency_p95_ms=450,
+        cost_cache_read=0.0,
+    )
+    add(
+        "gemini-2.5-pro",
+        cost_in=0.00125,
+        cost_out=0.010,
+        quality=0.93,
+        latency_p95_ms=1200,
+        cost_cache_read=0.0,
+    )
+    add(
+        "gemini-2.5-flash",
+        cost_in=0.000075,
+        cost_out=0.0003,
+        quality=0.86,
+        latency_p95_ms=500,
+        cost_cache_read=0.0,
+    )
 
     # ── OpenRouter placeholders (live refresh overwrites these) ─────
     # OpenRouter re-labels native models with vendor prefixes - the
@@ -810,11 +995,18 @@ def _build_default_seed_rows() -> dict[str, PricingRow]:
     # pre-refresh window.
     add(
         "anthropic/claude-sonnet-4.6",
-        cost_in=0.00315, cost_out=0.01575, quality=0.94, latency_p95_ms=1000,
+        cost_in=0.00315,
+        cost_out=0.01575,
+        quality=0.94,
+        latency_p95_ms=1000,
     )
     add("openai/gpt-5", cost_in=0.0013, cost_out=0.0105, quality=0.95, latency_p95_ms=850)
     add(
-        "google/gemini-3-pro", cost_in=0.0013, cost_out=0.0105, quality=0.95, latency_p95_ms=1150,
+        "google/gemini-3-pro",
+        cost_in=0.0013,
+        cost_out=0.0105,
+        quality=0.95,
+        latency_p95_ms=1150,
     )
 
     # ── MiniMax (Eden primary when use_minimax=True) ────────────────
@@ -840,8 +1032,12 @@ def _build_default_seed_rows() -> dict[str, PricingRow]:
     ]
     for model_id, quality, latency, reliability in local_models:
         add(
-            model_id, cost_in=0.0, cost_out=0.0, quality=quality,
-            latency_p95_ms=latency, reliability=reliability,
+            model_id,
+            cost_in=0.0,
+            cost_out=0.0,
+            quality=quality,
+            latency_p95_ms=latency,
+            reliability=reliability,
         )
 
     # ── Models the internal router actually calls ────────────────────
@@ -864,16 +1060,20 @@ def _build_default_seed_rows() -> dict[str, PricingRow]:
     # short-lived process, is every call.
     routed_models = [
         # (model_id,               in/1k,     out/1k,    quality, p95ms)
-        ("tencent/hy3",            0.000132,  0.000528,  0.86,  700),
-        ("xiaomi/mimo-v2.5",       0.00014,   0.00028,   0.85,  650),
-        ("minimax/minimax-m3",     0.0003,    0.0012,    0.89,  900),
-        ("xiaomi/mimo-v2.5-pro",   0.000435,  0.00087,   0.90,  950),
-        ("x-ai/grok-4.5",          0.002,     0.006,     0.94, 1200),
+        ("tencent/hy3", 0.000132, 0.000528, 0.86, 700),
+        ("xiaomi/mimo-v2.5", 0.00014, 0.00028, 0.85, 650),
+        ("minimax/minimax-m3", 0.0003, 0.0012, 0.89, 900),
+        ("xiaomi/mimo-v2.5-pro", 0.000435, 0.00087, 0.90, 950),
+        ("x-ai/grok-4.5", 0.002, 0.006, 0.94, 1200),
     ]
     for model_id, cost_in, cost_out, quality, latency in routed_models:
         add(
-            model_id, cost_in=cost_in, cost_out=cost_out, quality=quality,
-            latency_p95_ms=latency, reliability=0.99,
+            model_id,
+            cost_in=cost_in,
+            cost_out=cost_out,
+            quality=quality,
+            latency_p95_ms=latency,
+            reliability=0.99,
         )
 
     # T4's placeholder. Not an OpenRouter model and it has no public
@@ -883,8 +1083,12 @@ def _build_default_seed_rows() -> dict[str, PricingRow]:
     # test below can assert on it. Tenants running T4 should set a
     # per-tenant override; ``cost_resolver`` prefers that over the seed.
     add(
-        "custom/fine-tuned", cost_in=0.0, cost_out=0.0, quality=0.92,
-        latency_p95_ms=1000, reliability=0.99,
+        "custom/fine-tuned",
+        cost_in=0.0,
+        cost_out=0.0,
+        quality=0.92,
+        latency_p95_ms=1000,
+        reliability=0.99,
     )
 
     return rows

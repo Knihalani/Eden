@@ -66,7 +66,7 @@ export function PortalCatalogSync() {
   const needTraces = onHome || onTraces || onAgents || onDebugger || onSessions;
   // Sessions are traces-hub only (agents inspector uses traces, not sessions).
   const needSessions = onTraces || onSessions;
-  const needIssues = onHome || onIssues;
+  const needIssues = onHome || onIssues || onTraces;
   const needSignals = onSignals;
   // Alert rules: alerts modal / alerts route only (signals page does not read them).
   const needAlertRules = onAlerts;

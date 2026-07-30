@@ -63,6 +63,7 @@ The dictionary is loaded from ``$EDEN_ZSTD_DICT_PATH`` (default
 absent, ``get_dict()`` returns an empty ``ZstdCompressionDict`` — the
 round-trip still works (no speedup, but correct).
 """
+
 from __future__ import annotations
 
 import json
@@ -77,13 +78,13 @@ from typing import Any
 
 import zstandard as zstd
 
+from eden.util.jsonx import dumps_bytes as _jsonx_dumps_bytes
+
 logger = logging.getLogger(__name__)
 
 # Default location of the trained dictionary. Overridable via env var so
 # operators can A/B test a new dict by pointing to a versioned filename.
-DICT_PATH: Path = Path(
-    os.environ.get("EDEN_ZSTD_DICT_PATH", "/app/var/zstd_dict.bin")
-)
+DICT_PATH: Path = Path(os.environ.get("EDEN_ZSTD_DICT_PATH", "/app/var/zstd_dict.bin"))
 
 # Compression level. zstd level 7 is the sweet-spot: ~9× compression on
 # the LoPace LLM benchmark at ~250 MB/s encode / ~60 MB/s decode. Going
@@ -161,19 +162,33 @@ _cached_compressor_dict_id: int | None = None
 _cached_decompressor: zstd.ZstdDecompressor | None = None
 _cached_decompressor_dict_id: int | None = None
 
+# Monotonic counter bumped by ``invalidate_caches()``. ``id(d)`` alone is not a
+# sound version key: ``get_dict`` is ``lru_cache``d, so after
+# ``cache_clear()`` the old ``ZstdCompressionDict`` can be freed and CPython
+# may hand its address to the replacement — at which point a stale cache
+# compares equal to the current dict and is reused. Pairing the id with a
+# counter that only ever increases removes that coincidence.
+_dict_generation = 0
+
+
+def _dict_version(d: Any) -> tuple[int, int]:
+    return (_dict_generation, id(d))
+
 
 def _compressor() -> zstd.ZstdCompressor:
     """Return the process-wide cached compressor, rebuilding if the dict changed."""
     global _cached_compressor, _cached_compressor_dict_id
     d = get_dict()
-    # ``ZstdCompressionDict`` is hashable; the cached ``id()`` lets us
-    # detect a dict swap without paying for ``as_bytes()`` on every call.
-    did = id(d)
+    # The (generation, id) pair lets us detect a dict swap without paying for
+    # ``as_bytes()`` on every call, and without trusting ``id()`` not to be
+    # recycled onto a replacement dict.
+    did = _dict_version(d)
     if _cached_compressor is None or _cached_compressor_dict_id != did:
         with _lock:
             if _cached_compressor is None or _cached_compressor_dict_id != did:
                 _cached_compressor = zstd.ZstdCompressor(
-                    dict_data=d, level=DEFAULT_LEVEL,
+                    dict_data=d,
+                    level=DEFAULT_LEVEL,
                 )
                 _cached_compressor_dict_id = did
     return _cached_compressor
@@ -183,7 +198,7 @@ def _decompressor() -> zstd.ZstdDecompressor:
     """Return the process-wide cached decompressor, rebuilding if the dict changed."""
     global _cached_decompressor, _cached_decompressor_dict_id
     d = get_dict()
-    did = id(d)
+    did = _dict_version(d)
     if _cached_decompressor is None or _cached_decompressor_dict_id != did:
         with _lock:
             if _cached_decompressor is None or _cached_decompressor_dict_id != did:
@@ -198,14 +213,35 @@ def invalidate_caches() -> None:
     Useful for tests that swap ``DICT_PATH`` between cases, and for the
     operator workflow that swaps the dict file on disk and wants the
     new dict to take effect on the next call.
+
+    BUG FIX — this reaches the batch pool's per-thread caches too. It used to
+    clear only the two process-wide caches, while ``_worker_compressor`` /
+    ``_worker_decompressor`` returned any already-built thread-local object
+    unconditionally. So after a dictionary retrain the eight ``zstd-batch``
+    worker threads kept the OLD dictionary for the life of the process, and
+    since ``compress_many`` is the production write path in
+    ``_route_postgres`` that meant: the batch path writing frames against the
+    old dict while ``compress_jsonb`` wrote against the new one, and
+    ``decompress_many`` raising ``ZstdError: Dictionary mismatch`` whenever a
+    new-dict frame landed on an old-dict thread. Whether a given call broke
+    depended on which worker thread picked it up.
+
+    The comment above ``_cached_compressor`` records this exact failure being
+    diagnosed and fixed for the process-wide caches. It was never applied to
+    the thread-local tier below them. Bumping a generation counter here is
+    what makes it apply to both, since all four accessors compare against it.
     """
     global _cached_compressor, _cached_compressor_dict_id
     global _cached_decompressor, _cached_decompressor_dict_id
+    global _dict_generation
     with _lock:
         _cached_compressor = None
         _cached_compressor_dict_id = None
         _cached_decompressor = None
         _cached_decompressor_dict_id = None
+        # Invalidates every thread-local worker cache at the same time: they
+        # each hold the generation they were built at and rebuild on mismatch.
+        _dict_generation += 1
     get_dict.cache_clear()
 
 
@@ -213,19 +249,62 @@ def invalidate_caches() -> None:
 # JSON helpers
 # ---------------------------------------------------------------------------
 
+
 def _to_json_bytes(data: Any) -> bytes:
     """Serialise ``data`` to compact UTF-8 JSON bytes.
 
     The ``default=str`` coerces datetimes, UUIDs, Decimals, etc. to
     strings, matching the existing ``json.dumps(..., default=str)``
-    convention in ``telemetry_collector._route_postgres``. Compact
-    separators (``(",", ":")``) save ~10% vs the default.
+    convention in ``telemetry_collector._route_postgres``.
+
+    ``jsonx.dumps_bytes`` (orjson) goes straight to bytes; the stdlib route
+    built a ``str`` and then encoded it. Measured on the payload shapes this
+    actually sees: **3.42x** on a span-metadata dict (5.669 -> 1.657 us) and
+    **5.09x** on three chat messages (4.271 -> 0.839 us).
+
+    Two encoding differences, both benign but neither cosmetic:
+
+    * ``json.dumps`` defaults to ``ensure_ascii=True`` and escapes every
+      non-ASCII character as ``\\uXXXX``; orjson emits raw UTF-8. Same decoded
+      value, but **1.65x-2.69x fewer bytes** before zstd even sees it
+      (accented 910->550 B, Japanese 874->442 B, emoji 1210->450 B). Output is
+      byte-identical for ASCII-only payloads, which is most of them.
+    * Non-finite floats become ``null`` instead of bare
+      ``NaN``/``Infinity`` — a Python-ism that no strict parser accepts and
+      that was being written into ``*_zstd`` columns as invalid JSON.
+
+    Neither affects anything downstream that keys on bytes: the only hash near
+    this path (``_enrich``'s ``_content_hash``) covers ids, type and timestamp,
+    not the payload encoding.
+
+    The stdlib fallback is not belt-and-braces: orjson raises
+    ``TypeError: Integer exceeds 64-bit range`` on integers >= 2**64, where
+    stdlib serialises them fine (JSON itself allows arbitrary-precision
+    numbers). This is a persistence path fed by user-supplied ``metadata``
+    dicts, so letting that raise would turn a storable event into a dropped
+    one. See ``tests/unit/util/test_jsonx_divergence.py``, which pins the
+    divergence as a deliberate decision.
     """
-    return json.dumps(data, default=str, separators=(",", ":")).encode("utf-8")
+    try:
+        return _jsonx_dumps_bytes(data, default=str)
+    except TypeError:
+        # Out of orjson's range (integers >= 2**64). Fall back rather than
+        # lose the row; our own reader below handles either encoding.
+        return json.dumps(data, default=str, separators=(",", ":")).encode("utf-8")
 
 
 def _from_json_bytes(data: bytes) -> Any:
-    """Deserialise UTF-8 JSON bytes back into a Python object."""
+    """Deserialise UTF-8 JSON bytes back into a Python object.
+
+    Deliberately stdlib, not orjson, and this asymmetry with
+    :func:`_to_json_bytes` is load-bearing: frames already stored in
+    ``*_zstd`` columns were written by ``json.dumps``, which emits bare
+    ``NaN``/``Infinity`` for non-finite floats. ``orjson.loads`` rejects
+    those outright (``JSONDecodeError: unexpected character``), so switching
+    the reader would make historical rows undecodable. ``json.loads`` accepts
+    both its own legacy output and orjson's stricter output, so it is the only
+    reader that can read the whole table.
+    """
     return json.loads(data.decode("utf-8"))
 
 
@@ -245,6 +324,7 @@ def _is_empty(value: Any) -> bool:
 # ---------------------------------------------------------------------------
 # Single-value API (the hot path)
 # ---------------------------------------------------------------------------
+
 
 def compress_jsonb(data: Any) -> bytes:
     """Compress a Python value to zstd bytes for storage as ``BYTEA``.
@@ -341,26 +421,34 @@ def _get_batch_pool() -> ThreadPoolExecutor:
 def _worker_compressor() -> zstd.ZstdCompressor:
     """Return the calling thread's cached compressor, building one if needed.
 
-    Falls back to the process-wide compressor when called from the
-    main thread (so a unit test that runs ``compress_many`` on the
-    main thread still gets a fast cached object).
+    Rebuilds when the dictionary generation has moved on. It used to return
+    any already-built thread-local object unconditionally, which meant
+    ``invalidate_caches()`` did not reach these threads at all — see the
+    BUG FIX note on that function for what that cost.
     """
+    dict_obj = get_dict()
+    want = _dict_version(dict_obj)
     c = getattr(_thread_local, "compressor", None)
-    if c is not None:
+    if c is not None and getattr(_thread_local, "compressor_dict_id", None) == want:
         return c
-    # Bind to the current dict; on a future dict swap the cache is
-    # invalidated by ``invalidate_caches()``.
-    c = zstd.ZstdCompressor(dict_data=get_dict(), level=DEFAULT_LEVEL)
+    c = zstd.ZstdCompressor(dict_data=dict_obj, level=DEFAULT_LEVEL)
     _thread_local.compressor = c
+    _thread_local.compressor_dict_id = want
     return c
 
 
 def _worker_decompressor() -> zstd.ZstdDecompressor:
+    """As :func:`_worker_compressor`, and for the same reason: a stale
+    thread-local here raises ``ZstdError: Dictionary mismatch`` on any frame
+    written against the current dictionary."""
+    dict_obj = get_dict()
+    want = _dict_version(dict_obj)
     d = getattr(_thread_local, "decompressor", None)
-    if d is not None:
+    if d is not None and getattr(_thread_local, "decompressor_dict_id", None) == want:
         return d
-    d = zstd.ZstdDecompressor(dict_data=get_dict())
+    d = zstd.ZstdDecompressor(dict_data=dict_obj)
     _thread_local.decompressor = d
+    _thread_local.decompressor_dict_id = want
     return d
 
 
@@ -382,7 +470,12 @@ def _compress_one(value: Any) -> bytes | None:
 
 
 def _decompress_one(value: bytes | None) -> Any:
-    """Worker-side decompress."""
+    """Worker-side decompress.
+
+    Soft-fails on ``ZstdError`` (dict mismatch / corrupt frame) so a
+    single bad column cannot abort ``decompress_many`` and wipe an
+    entire trace tree. Callers fall back to the inline JSONB column.
+    """
     if not value:
         return None
     if len(value) < SMALL_PAYLOAD_BYTES:
@@ -390,8 +483,18 @@ def _decompress_one(value: bytes | None) -> Any:
             return _from_json_bytes(value)
         except (ValueError, UnicodeDecodeError):
             pass
-    raw = _worker_decompressor().decompress(value)
-    return _from_json_bytes(raw)
+    try:
+        raw = _worker_decompressor().decompress(value)
+        return _from_json_bytes(raw)
+    except zstd.ZstdError as exc:
+        # Frames written under a previous dictionary (or corrupt bytes)
+        # used to raise here and take down the whole batch — portal
+        # then returned HTTP 200 with ``steps=[]``.
+        logger.warning("zstd decompress failed (%s); returning None for fallback", exc)
+        return None
+    except (ValueError, UnicodeDecodeError) as exc:
+        logger.warning("zstd payload JSON parse failed (%s); returning None", exc)
+        return None
 
 
 def compress_many(values: Iterable[Any]) -> list[bytes | None]:
@@ -409,30 +512,71 @@ def compress_many(values: Iterable[Any]) -> list[bytes | None]:
     Thread-safety note: each worker thread owns its own
     ``ZstdCompressor`` (built lazily on first call) so concurrent
     compressions never share C-level state.
+
+    Only the inputs with work to do are dispatched. ``_compress_one`` returns
+    ``None`` immediately for ``None`` / ``{}`` / ``[]``, but handing one to the
+    pool still costs a future, a queue hop and a GIL handoff — measured at
+    ~6.4 us per no-op item. The ``_route_postgres`` call site compresses eight
+    fields per event and a typical event leaves most of them empty, so on a
+    batch of eight empties this is **98.6x** (51.5 -> 0.52 us). The gain
+    shrinks as the batch fills with real work (2.44x at 7 empty / 1 real,
+    1.19x at 4/4) and bottoms out at **1.02x** when every field is populated —
+    i.e. the filter never costs anything, it just stops mattering.
     """
     seq: Sequence[Any] = list(values)
     if not seq:
         return []
+    out: list[bytes | None] = [None] * len(seq)
+    todo = [(i, v) for i, v in enumerate(seq) if not _is_trivial(v)]
+    if not todo:
+        return out
     pool = _get_batch_pool()
-    return list(pool.map(_compress_one, seq))
+    results = pool.map(_compress_one, [v for _, v in todo])
+    for (idx, _), result in zip(todo, results, strict=True):
+        out[idx] = result
+    return out
+
+
+def _is_trivial(value: Any) -> bool:
+    """True for inputs ``_compress_one`` maps to ``None`` without any work.
+
+    Kept in lockstep with the guard at the top of ``_compress_one`` — if the
+    two disagree, the filter changes results rather than just skipping
+    dispatch, which is why
+    ``tests/unit/storage/test_compression_batch_dispatch.py`` asserts the two
+    agree over a shared corpus rather than trusting them to stay aligned.
+    """
+    return value is None or value == {} or value == []
 
 
 def decompress_many(values: Iterable[bytes | None]) -> list[Any]:
     """Decompress a batch of byte strings in parallel.
 
-    Mirror of :func:`compress_many`. ``None`` / empty inputs map to
-    ``None`` outputs.
+    Mirror of :func:`compress_many`, including the dispatch filter: a falsy
+    input is what ``_decompress_one`` returns ``None`` for without touching
+    zstd, so there is no reason to pay a thread-pool round trip for it. This
+    matters more on the read path than the write path — a trace fetch
+    decompresses eight columns per event across a page of events, and archived
+    or never-populated columns are NULL.
     """
     seq: Sequence[bytes | None] = list(values)
     if not seq:
         return []
+    out: list[Any] = [None] * len(seq)
+    todo = [(i, v) for i, v in enumerate(seq) if v]
+    if not todo:
+        return out
     pool = _get_batch_pool()
-    return list(pool.map(_decompress_one, seq))
+    results = pool.map(_decompress_one, [v for _, v in todo])
+    for (idx, _), result in zip(todo, results, strict=True):
+        out[idx] = result
+    return out
 
 
 # ---------------------------------------------------------------------------
 # Dictionary training
 # ---------------------------------------------------------------------------
+
 
 def train_dictionary(
     samples: list[bytes],

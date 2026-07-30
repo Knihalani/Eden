@@ -756,6 +756,23 @@ class TelemetryCollector:
                 or (event.payload or {}).get("model")
                 or "unknown"
             )
+            cost_usd = None
+            try:
+                from eden.llmops.pricing import estimate_cost_usd
+
+                stamped = (event.metrics or {}).get("cost_usd")
+                if stamped is not None:
+                    cost_usd = float(stamped)
+                else:
+                    cost_usd = estimate_cost_usd(
+                        model=str(model),
+                        input_tokens=int(input_tokens),
+                        output_tokens=int(output_tokens),
+                        cache_read_tokens=int(cache_read),
+                        cache_write_tokens=int(cache_write),
+                    )
+            except Exception:  # noqa: BLE001
+                cost_usd = None
             pending.append(
                 service.track_event(
                     org_id=event.tenant_id,
@@ -765,7 +782,7 @@ class TelemetryCollector:
                     unit="tokens",
                     user_id=None,
                     model=str(model),
-                    cost_usd=None,  # computed server-side from model_pricing
+                    cost_usd=cost_usd,
                     metadata={
                         "input_tokens": int(input_tokens),
                         "output_tokens": int(output_tokens),
@@ -828,6 +845,11 @@ class TelemetryCollector:
         )
         event.attributes["_content_hash"] = hashlib.sha256(content.encode()).hexdigest()[:16]
 
+        # Stamp cost_usd from the seed pricing catalog when the SDK
+        # omitted it. Portal list/detail sum metrics->>'cost_usd';
+        # without this the UI shows $0 even when tokens are present.
+        self._stamp_cost_usd(event)
+
         # Ingestion latency
         try:
             event_ts = datetime.fromisoformat(event.timestamp.replace("Z", "+00:00"))
@@ -845,6 +867,64 @@ class TelemetryCollector:
                 getattr(event, "event_id", None),
                 exc,
             )
+
+    @staticmethod
+    def _stamp_cost_usd(event: TelemetryEvent) -> None:
+        """Fill ``metrics.cost_usd`` from seed pricing when missing/zero."""
+        metrics = event.metrics if isinstance(event.metrics, dict) else {}
+        existing = metrics.get("cost_usd")
+        try:
+            if existing is not None and float(existing) > 0:
+                return
+        except (TypeError, ValueError):
+            pass
+
+        def _tok(key: str) -> int:
+            raw = metrics.get(key)
+            if raw is None:
+                return 0
+            try:
+                return int(float(raw))
+            except (TypeError, ValueError):
+                return 0
+
+        input_tokens = _tok("input_tokens") or _tok("prompt_tokens")
+        output_tokens = _tok("output_tokens") or _tok("completion_tokens")
+        cache_read = _tok("cache_read_tokens") or _tok("cached_tokens")
+        cache_write = _tok("cache_creation_tokens") or _tok("cache_creation_input_tokens")
+        if input_tokens + output_tokens + cache_read + cache_write <= 0:
+            return
+
+        payload = event.payload if isinstance(event.payload, dict) else {}
+        model = (
+            payload.get("model_normalized")
+            or event.model_version
+            or event.model
+            or event.model_name
+            or payload.get("model")
+        )
+        try:
+            from eden.llmops.pricing import estimate_cost_usd
+
+            cost = estimate_cost_usd(
+                model=str(model) if model else None,
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+                cache_read_tokens=cache_read,
+                cache_write_tokens=cache_write,
+            )
+        except Exception as exc:  # noqa: BLE001 — never fail ingest for pricing
+            logger.warning(
+                "telemetry_collector: cost stamp failed for event %s (%s)",
+                getattr(event, "event_id", None),
+                exc,
+            )
+            return
+        if cost <= 0:
+            return
+        if not isinstance(event.metrics, dict):
+            event.metrics = {}
+        event.metrics["cost_usd"] = cost
 
     # ── Deduplication ─────────────────────────────────────────────────────
 
@@ -1555,28 +1635,10 @@ class TelemetryCollector:
                 return None
             if len(rows) > max_spans:
                 rows = rows[:max_spans]
-        # Phase 3: read the zstd-compressed BYTEA columns first, fall
-        # back to the original JSONB columns for any pre-backfill row
-        # (the columns are kept in sync during the 30-day burn-in;
-        # migration 033 drops the originals).
-        from eden.storage.compression import decompress_jsonb
-
-        def _read_payload(row, zstd_col: str, jsonb_col: str) -> Any:
-            """Return the decompressed payload, preferring ``*_zstd``."""
-            zstd_val = row.get(zstd_col)
-            if zstd_val:
-                try:
-                    return decompress_jsonb(zstd_val)
-                except Exception as exc:  # noqa: BLE001
-                    logger.warning(
-                        "Failed to decompress %s for event %s (%s); "
-                        "falling back to JSONB column",
-                        zstd_col,
-                        row.get("event_id"),
-                        exc,
-                    )
-            return row.get(jsonb_col)
-
+        # Phase 3: read path prefers batch-decompressed ``*_zstd``
+        # columns (below), falling back to inline JSONB when zstd is
+        # missing or soft-fails. Legacy per-column helper removed —
+        # decompress_many + coalesce in the node builder cover it.
         # Phase A — content-addressed dedup reconstruction. If the row
         # has request_message_hashes, the original request_body was
         # already moved into trace_messages (with the JSONB kept as a
@@ -1603,8 +1665,14 @@ class TelemetryCollector:
         # path makes a single dispatch to :func:`decompress_many`
         # which fans out across the storage layer's worker pool.
         # Measured: ~3-5x faster on traces with 50+ spans.
+        #
+        # Portal structure path (hydrate_bodies=False) skips zstd
+        # entirely — inline JSONB already has previews, and a single
+        # dict-mismatched *_zstd column used to abort the whole tree
+        # (portal then served steps=[]).
         from eden.storage.compression import decompress_many
 
+        per_row: list[dict[str, Any]] = []
         if hydrate_bodies:
             _zstd_cols = (
                 "request_body_zstd",
@@ -1616,20 +1684,18 @@ class TelemetryCollector:
                 "metrics_zstd",
                 "attributes_zstd",
             )
+            # Collect every (row, col) value to feed the batch API.
+            flat: list[bytes | None] = []
+            for row in rows:
+                for col in _zstd_cols:
+                    flat.append(row.get(col))
+            decoded = await asyncio.to_thread(decompress_many, flat) if flat else []
+            # Re-shape into a {row_index: {col: value}} lookup.
+            cols_n = len(_zstd_cols)
+            for i in range(0, len(decoded), cols_n):
+                per_row.append({col: decoded[i + j] for j, col in enumerate(_zstd_cols)})
         else:
-            # Portal structure path — skip body columns.
-            _zstd_cols = ("payload_zstd", "metrics_zstd", "attributes_zstd")
-        # Collect every (row, col) value to feed the batch API.
-        flat: list[bytes | None] = []
-        for row in rows:
-            for col in _zstd_cols:
-                flat.append(row.get(col))
-        decoded = await asyncio.to_thread(decompress_many, flat) if flat else []
-        # Re-shape into a {row_index: {col: value}} lookup.
-        cols_n = len(_zstd_cols)
-        per_row: list[dict[str, Any]] = []
-        for i in range(0, len(decoded), cols_n):
-            per_row.append({col: decoded[i + j] for j, col in enumerate(_zstd_cols)})
+            _zstd_cols = ()
 
         async def _resolve_request_for(row: dict, decoded_cols: dict) -> Any:
             if message_store is not None:
@@ -1641,17 +1707,11 @@ class TelemetryCollector:
                     )
                     if reconstructed is not None:
                         return reconstructed
+            # decompress_many already returned parsed JSON (or None on
+            # soft-fail) — do not feed it back into decompress_jsonb.
             zstd_val = decoded_cols.get("request_body_zstd")
-            if zstd_val:
-                try:
-                    return decompress_jsonb(zstd_val)
-                except Exception as exc:  # noqa: BLE001
-                    logger.warning(
-                        "Failed to decompress request_body_zstd for event %s (%s); "
-                        "falling back to JSONB column",
-                        row.get("event_id"),
-                        exc,
-                    )
+            if zstd_val is not None:
+                return zstd_val
             return row.get("request_body")
 
         async def _resolve_response_for(row: dict, decoded_cols: dict) -> Any:
@@ -1665,16 +1725,8 @@ class TelemetryCollector:
                     if reconstructed is not None:
                         return reconstructed
             zstd_val = decoded_cols.get("response_body_zstd")
-            if zstd_val:
-                try:
-                    return decompress_jsonb(zstd_val)
-                except Exception as exc:  # noqa: BLE001
-                    logger.warning(
-                        "Failed to decompress response_body_zstd for event %s (%s); "
-                        "falling back to JSONB column",
-                        row.get("event_id"),
-                        exc,
-                    )
+            if zstd_val is not None:
+                return zstd_val
             return row.get("response_body")
 
         for idx, row in enumerate(rows):

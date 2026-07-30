@@ -63,6 +63,9 @@ function RunInspector({
   onNext,
   hasPrev,
   hasNext,
+  stepsLoading,
+  stepsError,
+  onRetrySteps,
 }: {
   trace: TraceFixture;
   agent: AgentFixture;
@@ -70,8 +73,11 @@ function RunInspector({
   onNext?: () => void;
   hasPrev?: boolean;
   hasNext?: boolean;
+  stepsLoading?: boolean;
+  stepsError?: Error | null;
+  onRetrySteps?: () => void;
 }) {
-  const hasSignals = trace.severity !== "none";
+  const hasSignals = trace.severity !== "none" || Boolean(trace.signals?.title);
   const [signalDismissed, setSignalDismissed] = useState(false);
 
   useEffect(() => {
@@ -177,11 +183,26 @@ function RunInspector({
       ) : null}
 
       <div className="min-h-0 min-w-0 flex-1 overflow-y-auto">
-        <RunTranscript
-          key={trace.id}
-          steps={trace.steps}
-          defaultOpenIds={errorStepIds(trace.steps)}
-        />
+        {stepsError ? (
+          <div className="p-6">
+            <QueryErrorPanel
+              error={stepsError}
+              onRetry={onRetrySteps}
+            />
+          </div>
+        ) : stepsLoading && trace.steps.length === 0 ? (
+          <EmptyState
+            title="Loading transcript"
+            body="Fetching spans for this run…"
+            compact
+          />
+        ) : (
+          <RunTranscript
+            key={trace.id}
+            steps={trace.steps}
+            defaultOpenIds={errorStepIds(trace.steps)}
+          />
+        )}
       </div>
     </div>
   );
@@ -272,11 +293,41 @@ function AgentDetailBody({ agent }: { agent: AgentFixture }) {
     });
   }, [runs, runFilter, query]);
 
-  const selected =
+  const selectedListItem =
     filtered.find((t) => t.id === selectedRunId) ??
     runs.find((t) => t.id === selectedRunId) ??
     filtered[0] ??
     runs[0];
+
+  const selectedRunIdForDetail = selectedListItem?.id ?? "";
+  const traceDetailQuery = useOrgQuery(
+    queryKeys.portal.traceDetail(orgId, selectedRunIdForDetail || null),
+    orgId,
+    () => portalApi.traceDetail(orgId!, selectedRunIdForDetail),
+    {
+      ...SHELL_QUERY,
+      staleTime: 30_000,
+      enabled: Boolean(orgId) && Boolean(selectedRunIdForDetail),
+    },
+  );
+
+  // List rows ship steps: [] — hydrate the selected run like traces-client.
+  const selected = useMemo(() => {
+    if (!selectedListItem) return selectedListItem;
+    const detail = traceDetailQuery.data;
+    if (detail && detail.id === selectedListItem.id) {
+      return {
+        ...selectedListItem,
+        steps: detail.steps,
+        costUsd: detail.costUsd ?? selectedListItem.costUsd,
+        tokens: detail.tokens || selectedListItem.tokens,
+        signals: detail.signals?.title
+          ? detail.signals
+          : selectedListItem.signals,
+      };
+    }
+    return selectedListItem;
+  }, [selectedListItem, traceDetailQuery.data]);
 
   useEffect(() => {
     if (!selected) return;
@@ -485,6 +536,13 @@ function AgentDetailBody({ agent }: { agent: AgentFixture }) {
               hasNext={selectedIndex >= 0 && selectedIndex < filtered.length - 1}
               onPrev={() => selectRelative(-1)}
               onNext={() => selectRelative(1)}
+              stepsLoading={traceDetailQuery.isLoading}
+              stepsError={
+                traceDetailQuery.isError
+                  ? (traceDetailQuery.error as Error)
+                  : undefined
+              }
+              onRetrySteps={() => void traceDetailQuery.refetch()}
             />
           ) : (
             <EmptyState title="Select a run" />
