@@ -12,15 +12,46 @@ from typing import Optional
 # range so KB unit tests don't pay the Qdrant import cost.
 
 
+def classify_postgres_health(select_result: object, read_only_guc: object) -> str:
+    """Map a liveness probe + the read-only GUC to a health string.
+
+    ``SELECT 1`` alone is not a sufficient health signal. On 2026-07-30
+    the Neon endpoint went read-only for roughly two minutes: every
+    INSERT failed with ReadOnlySQLTransactionError, so ingest, signup
+    and onboarding were all down — while ``/health`` reported
+    ``postgres: connected`` the entire time, because a read-only
+    database answers ``SELECT 1`` perfectly.
+
+    For a product whose job is accepting writes, "reachable" and
+    "usable" are different claims and the health endpoint has to be able
+    to distinguish them.
+
+    ``read_only_guc`` of ``None`` means the GUC could not be read; that
+    is reported as connected rather than inventing an outage from a
+    failed probe.
+    """
+    if select_result != 1:
+        return "error"
+    if read_only_guc is None:
+        return "connected"
+    return (
+        "read_only"
+        if str(read_only_guc).strip().lower() in ("on", "true", "yes", "1")
+        else "connected"
+    )
+
+
 def _get_postgres_client():
     """Lazy import + return the Postgres client factory."""
     from eden.storage.postgres import get_postgres_client
+
     return get_postgres_client
 
 
 def _get_qdrant_client():
     """Lazy import + return the Qdrant client factory."""
     from eden.storage.qdrant import get_qdrant_client
+
     return get_qdrant_client
 
 
@@ -66,6 +97,7 @@ async def _seed_initial_prompts() -> None:
     """Seed initial prompts for all agents if not already present."""
     try:
         from eden.kb.prompt_versions.seed import seed_initial_prompts
+
         results = await seed_initial_prompts()
         seeded = sum(1 for r in results.values() if r.get("status") == "success")
         if seeded > 0:
@@ -158,11 +190,25 @@ async def health_check() -> dict:
     get_postgres_client = _get_postgres_client()
     get_qdrant_client = _get_qdrant_client()
 
-    # Check PostgreSQL
+    # Check PostgreSQL.
+    #
+    # SELECT 1 alone is not enough. On 2026-07-30 the Neon endpoint went
+    # read-only for roughly two minutes — every INSERT failed with
+    # ReadOnlySQLTransactionError, so ingest, signup and onboarding were
+    # all down — while this check happily reported "connected" the whole
+    # time, because a read-only database answers SELECT 1 perfectly.
+    #
+    # A database you cannot write to is an outage for this product, and
+    # the health endpoint has to be able to say so. transaction_read_only
+    # is a cheap session GUC read; no write is attempted.
     try:
         client = await get_postgres_client()
         result = await client.fetchval("SELECT 1")
-        health["postgres"] = "connected" if result == 1 else "error"
+        try:
+            read_only_guc = await client.fetchval("SHOW transaction_read_only")
+        except Exception:  # noqa: BLE001 — GUC unavailable; treat as writable
+            read_only_guc = None
+        health["postgres"] = classify_postgres_health(result, read_only_guc)
     except Exception as e:
         health["postgres"] = f"error: {str(e)[:100]}"
 
