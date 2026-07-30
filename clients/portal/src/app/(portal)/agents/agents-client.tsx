@@ -196,6 +196,23 @@ function RunInspector({
             body="Fetching spans for this run…"
             compact
           />
+        ) : !stepsLoading && trace.steps.length === 0 ? (
+          <EmptyState
+            title="No spans"
+            body="This run has no span events yet, or the transcript could not be reconstructed."
+            compact
+            action={
+              onRetrySteps ? (
+                <button
+                  type="button"
+                  className="ds-btn ds-btn-ghost ds-btn-sm"
+                  onClick={onRetrySteps}
+                >
+                  Retry
+                </button>
+              ) : undefined
+            }
+          />
         ) : (
           <RunTranscript
             key={trace.id}
@@ -276,7 +293,27 @@ function AgentDetailBody({ agent }: { agent: AgentFixture }) {
     setSelectedRunId(prefer);
     setRunFilter("all");
     setQuery("");
-  }, [agent.id, runs]);
+    // Only reset when switching agents — `runs` identity changes on
+    // every traces refetch and used to yank selection back to the
+    // newest error mid-inspection.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional
+  }, [agent.id]);
+
+  // If the preferred run disappeared after a refetch, fall back once.
+  useEffect(() => {
+    if (runs.length === 0) {
+      setSelectedRunId("");
+      return;
+    }
+    if (!runs.some((t) => t.id === selectedRunId)) {
+      setSelectedRunId(
+        runs.find((t) => t.severity === "error")?.id ??
+          runs.find((t) => t.severity === "warn")?.id ??
+          runs[0]?.id ??
+          "",
+      );
+    }
+  }, [runs, selectedRunId]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();

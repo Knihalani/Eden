@@ -115,10 +115,17 @@ export function sessionForTrace(traceId: string): SessionFixture | undefined {
 /** Prefer API `sessionId` on the trace row, then catalog reverse-lookup. */
 export function resolveSessionForTrace(
   trace: { id: string; sessionId?: string | null },
+  sessions?: SessionFixture[],
 ): SessionFixture | undefined {
   if (trace.sessionId) {
+    const fromLive = sessions?.find((s) => s.id === trace.sessionId);
+    if (fromLive) return fromLive;
     const byId = sessionById(trace.sessionId);
     if (byId) return byId;
+  }
+  if (sessions?.length) {
+    const hit = sessions.find((s) => s.traceIds.includes(trace.id));
+    if (hit) return hit;
   }
   return sessionForTrace(trace.id);
 }
