@@ -31,25 +31,367 @@ logger = logging.getLogger(__name__)
 # Without this, pool round-trips hit a different connection with a NULL GUC
 # and every telemetry_* / FORCE-RLS table returns empty — portal shows
 # 0 agents / 0 traces even when rows exist.
-_request_pg_conn: contextvars.ContextVar[Connection | None] = contextvars.ContextVar(
+#
+# The var holds EITHER a materialized ``Connection`` (the historical
+# behaviour, still used by tests and by any caller that already has a
+# connection in hand) OR a :class:`RequestConnLease` — an unredeemed
+# promise of one. See that class for why the lazy form exists.
+_BoundPgConn = "Connection | RequestConnLease | None"
+_request_pg_conn: contextvars.ContextVar[Any] = contextvars.ContextVar(
     "eden_request_pg_conn",
     default=None,
 )
 
 
-def bind_request_pg_conn(conn: Connection | None) -> contextvars.Token[Connection | None]:
-    """Pin ``conn`` for the current asyncio task (middleware entry)."""
+class RequestConnLease:
+    """An RLS-scoped connection that is acquired on first use, not up front.
+
+    ``RLSOrgContextMiddleware`` used to acquire a pooled connection, open a
+    transaction and issue ``SET LOCAL app.current_org_id`` at middleware
+    entry, for **every** request that resolved an org — then release it at
+    ``http.response.start``. Two costs, both measured against a local
+    Postgres 18 over a unix socket (i.e. the best case; the production DSN is
+    Neon over TLS, where each round trip is orders of magnitude worse):
+
+    * **221.5 us per request** (p50 209.4, p99 342.0) of pure setup —
+      pool checkout, ``BEGIN``, ``set_config``, ``COMMIT``, release. A
+      request that never touches Postgres paid all of it: 31x more than the
+      ~7 us it costs to construct this object and discover at finalize that
+      it was never redeemed.
+    * **A pool slot held from middleware entry to response start.** The
+      middleware sits above the idempotency and quota middlewares and the
+      whole router, so the slot spans every bit of pre-query work the
+      request does — including non-Postgres latency like an upstream LLM
+      call in the AI gateway. With ``max_size=20``, 40 concurrent requests
+      doing 200 ms of non-Postgres work took 407 ms (2.03x the 200 ms floor,
+      serialised into two pool-sized waves) versus 204 ms (1.02x) when the
+      slot is not held. Postgres pool capacity became a concurrency ceiling
+      on requests that barely use Postgres.
+
+    The lease removes both by deferring the work to the first query.
+    :meth:`PostgresClient.acquire` — which every query in this module funnels
+    through — calls :meth:`ensure`, so materialization happens exactly when a
+    connection is genuinely needed and never otherwise.
+
+    Deliberately **not** a route skip-list: an allowlist of "routes that do
+    not need RLS" goes stale silently, and the failure mode is a route
+    quietly losing its tenant scoping. First-use materialization cannot go
+    stale — it is driven by what the request actually does.
+
+    Failure is fail-soft in the same direction as the eager path it replaces:
+    if acquisition fails, :meth:`ensure` returns ``None`` and ``acquire``
+    falls through to an ordinary pool checkout with no GUC set, which is what
+    already happened when the eager acquire raised. The RLS policies read
+    ``current_setting('app.current_org_id', true)``, so an unset GUC compares
+    ``NULL`` and filters rows out rather than in.
+
+    Concurrency: :meth:`ensure` is guarded by an ``asyncio.Lock`` so two
+    coroutines racing on the first query of a request cannot each check out a
+    connection (which would leak one and set the GUC on the wrong one). The
+    already-materialized fast path is a plain attribute read taken before the
+    lock, so steady-state queries pay no lock at all.
+
+    NOT thread-safe, and not meant to be: a lease belongs to one request's
+    context. ``copy_context_without_request_pg_conn`` strips it for the same
+    reason it strips a bare connection — a detached task must never redeem a
+    lease belonging to a request that has already finalized.
+    """
+
+    __slots__ = (
+        "_client",
+        "_closed",
+        "_conn",
+        "_conn_ctx",
+        "_failed",
+        "_lock",
+        "_on_materialize",
+        "_raw_conn",
+        "_tx",
+        "_tx_entered",
+        "_use_lock",
+        "_user",
+        "org_id",
+    )
+
+    def __init__(
+        self,
+        org_id: str,
+        client: Any,
+        *,
+        on_materialize: Any = None,
+    ) -> None:
+        self.org_id = org_id
+        self._client = client
+        self._conn: Connection | None = None
+        # The handle returned by the pool's context manager, recorded the
+        # instant it is available. ``_conn`` is only published once setup has
+        # fully succeeded, so without this a failure between checkout and
+        # publication would leave nothing to close. Do NOT try to recover it
+        # from the context manager instead: asyncpg's ``PoolAcquireContext``
+        # declares ``__slots__ = ('timeout', 'connection', 'done', 'pool')``,
+        # so any guess at a private attribute name silently yields ``None``
+        # and the connection is handed back to the pool unclosed.
+        self._raw_conn: Connection | None = None
+        self._conn_ctx: Any = None
+        self._tx: Any = None
+        self._tx_entered = False
+        self._failed = False
+        self._closed = False
+        self._lock: asyncio.Lock | None = None
+        # Serialises *use* of the connection (see ``use``), separate from the
+        # lock that serialises acquiring it.
+        self._use_lock: asyncio.Lock | None = None
+        self._user: Any = None
+        # Called with (conn, conn_ctx, tx, tx_entered) the moment the lease is
+        # redeemed, so the middleware can record the resources on
+        # ``request.state`` and its existing ``_finalize_pg_context`` — which
+        # is what the regression tests drive — releases them unchanged.
+        self._on_materialize = on_materialize
+
+    @property
+    def conn(self) -> Connection | None:
+        """The redeemed connection, or ``None`` if never redeemed."""
+        return self._conn
+
+    @property
+    def materialized(self) -> bool:
+        return self._conn is not None
+
+    async def ensure(self) -> Connection | None:
+        """Redeem the lease, or return the already-redeemed connection.
+
+        Returns ``None`` if acquisition failed — callers must fall back to an
+        ordinary pool checkout rather than treating that as fatal.
+        """
+        # Fast path, no lock: the overwhelmingly common case once a request
+        # has issued its first query.
+        if self._conn is not None:
+            return self._conn
+        if self._failed or self._closed:
+            return None
+
+        if self._lock is None:
+            # No await between the check and the assignment, so this cannot
+            # interleave on asyncio's single thread.
+            self._lock = asyncio.Lock()
+
+        async with self._lock:
+            # Re-check under the lock: a racing coroutine may have redeemed
+            # (or failed) the lease while we waited — or the request may have
+            # finalized, in which case redeeming now would check out a
+            # connection that nothing is left to release.
+            if self._conn is not None:
+                return self._conn
+            if self._failed or self._closed:
+                return None
+            try:
+                await self._materialize()
+            except Exception as exc:
+                self._failed = True
+                logger.warning(
+                    "RequestConnLease: failed to acquire an RLS-scoped "
+                    "connection for org %s (%s) — falling back to an "
+                    "unpinned pool connection with no app.current_org_id",
+                    self.org_id,
+                    exc,
+                )
+                await self._abandon_partial()
+                return None
+        return self._conn
+
+    @asynccontextmanager
+    async def use(self) -> AsyncIterator[None]:
+        """Hold exclusive use of the leased connection for this block.
+
+        BUG FIX (data loss on the primary ingest path). asyncpg permits exactly
+        one operation in flight per connection — verified directly: 8
+        concurrent statements on one connection, 7 raise ``InterfaceError:
+        cannot perform operation: another operation is in progress``. But a
+        pinned connection is shared by everything running in the request's
+        context, and several call sites fan work out with ``asyncio.gather``:
+
+        * ``TelemetryCollector.ingest_batch`` gathers one ``_route`` per event;
+        * ``_route`` gathers all six sinks per event.
+
+        So a 10-event batch issued 10 concurrent INSERTs against one
+        connection. Nine collided. ``_route_postgres`` wraps any exception in
+        ``IngestionUnavailable``, which ``ingest_batch`` re-raises, so the
+        *whole* batch 503'd — and the SDK's retry hit exactly the same wall.
+        Reachable through the documented setup: ``X-Org-Api-Key`` +
+        ``X-Org-Id`` is a verified identity, so ``_resolve_org_id`` returns the
+        header org and a connection is pinned. The TS SDK sends ``X-Org-Id``
+        whenever ``orgId`` is configured.
+
+        Serialising rather than falling through to an unpinned pool connection
+        is deliberate. Falling through looks attractive — full parallelism, and
+        a missing GUC only makes RLS *read* policies filter rows out — but
+        migration 124 adds ``WITH CHECK`` to all 20 policies, and a ``WITH
+        CHECK`` against an unset GUC compares ``NULL`` and **rejects the
+        INSERT**. So fall-through would trade today's failure for a worse one
+        the moment that migration lands.
+
+        Reentrant per task: a task that already holds the connection passes
+        straight through, so the nested ``acquire`` in
+        ``transaction()``/``fetchiter`` (which hold the connection while the
+        caller runs more queries on it) does not deadlock against itself.
+
+        Serialising a wide fan-out does cost wall-clock — N statements in
+        series rather than in parallel. For the ingest path that is addressed
+        at the source by writing the batch in one statement
+        (``insert_telemetry_events``), which leaves nothing to contend over.
+        """
+        task = asyncio.current_task()
+        if self._user is not None and self._user is task:
+            # Already ours — nested acquire in the same task.
+            yield
+            return
+        if self._use_lock is None:
+            self._use_lock = asyncio.Lock()
+        async with self._use_lock:
+            self._user = task
+            try:
+                yield
+            finally:
+                self._user = None
+
+    async def close(self) -> None:
+        """Refuse any further redemption, and wait out one in flight.
+
+        Closes a window that lazy acquisition opens and eager acquisition did
+        not: the request finalizes at ``http.response.start``, but a
+        fire-and-forget task sharing the request's context could reach
+        ``acquire`` at the same moment. Without this, that task could redeem
+        the lease *after* the finalizer had already looked for resources to
+        release and found none — checking out a pooled connection, inside an
+        open transaction, that nothing would ever give back. One leak per
+        occurrence, and the pool is 20 slots wide.
+
+        Taking the same lock :meth:`ensure` uses makes the two mutually
+        exclusive: either materialization completed before this call (so
+        ``on_materialize`` has already published the resources and the
+        finalizer will find them) or it never happens. Callers must therefore
+        await this *before* reading those resources.
+        """
+        if self._lock is None:
+            self._lock = asyncio.Lock()
+        async with self._lock:
+            self._closed = True
+
+    async def _materialize(self) -> None:
+        """Check out a connection, open a transaction, set the GUC.
+
+        Uses the pool directly rather than ``PostgresClient.acquire`` — going
+        through ``acquire`` would re-enter this lease and recurse.
+        """
+        client = self._client
+        if getattr(client, "_pool", None) is None:
+            await client.initialize()
+        pool = getattr(client, "_pool", None)
+        if pool is None:
+            raise RuntimeError("Postgres pool unavailable")
+
+        conn_ctx = pool.acquire()
+        conn = await conn_ctx.__aenter__()
+        self._conn_ctx = conn_ctx
+        # Record the handle before anything that can raise, so a failure
+        # between here and publication still has a connection to close.
+        self._raw_conn = conn
+        tx = conn.transaction()
+        self._tx = tx
+        await tx.__aenter__()
+        # BEGIN completed — only now is ``tx.__aexit__`` (which attempts
+        # COMMIT) a meaningful thing to call.
+        self._tx_entered = True
+        # SET LOCAL inside the open transaction: committing reverts the GUC,
+        # which is the scoping we want.
+        await conn.execute(
+            "SELECT set_config('app.current_org_id', $1::text, true)",
+            str(self.org_id),
+        )
+        # Publish last. Until this assignment the fast path above still sees
+        # an unredeemed lease, so a partially-built lease is never handed out.
+        self._conn = conn
+        if self._on_materialize is not None:
+            self._on_materialize(conn, conn_ctx, tx, self._tx_entered)
+
+    async def _abandon_partial(self) -> None:
+        """Give back whatever a failed :meth:`_materialize` had taken.
+
+        Mirrors ``RLSOrgContextMiddleware._release_pg_resources``: a
+        transaction whose BEGIN never completed, or whose commit fails, means
+        the connection is suspect, so close it explicitly instead of handing
+        it back to the pool. asyncpg detaches the pool's holder on
+        ``close()``, so the slot is still freed and the later
+        ``__aexit__`` is a safe no-op.
+
+        Uses ``_raw_conn`` rather than ``_conn`` because ``_conn`` is only
+        published after setup fully succeeds — and every path that reaches
+        here is a path where it did not.
+        """
+        conn_broken = False
+        if self._tx is not None:
+            if self._tx_entered:
+                try:
+                    await self._tx.__aexit__(None, None, None)
+                except Exception as exc:
+                    logger.debug("lease tx commit failed (non-fatal): %s", exc)
+                    conn_broken = True
+            else:
+                conn_broken = True
+        raw = self._conn or self._raw_conn
+        if conn_broken and raw is not None:
+            with contextlib.suppress(Exception):
+                await raw.close()
+        if self._conn_ctx is not None:
+            with contextlib.suppress(Exception):
+                await self._conn_ctx.__aexit__(None, None, None)
+        self._conn = None
+        self._raw_conn = None
+        self._conn_ctx = None
+        self._tx = None
+        self._tx_entered = False
+
+
+def bind_request_pg_conn(conn: Any) -> contextvars.Token[Any]:
+    """Pin ``conn`` (a ``Connection`` or a :class:`RequestConnLease`) for the
+    current asyncio task (middleware entry)."""
     return _request_pg_conn.set(conn)
 
 
-def reset_request_pg_conn(token: contextvars.Token[Connection | None]) -> None:
+def bind_request_pg_lease(lease: RequestConnLease) -> contextvars.Token[Any]:
+    """Pin an unredeemed :class:`RequestConnLease` for the current task.
+
+    Same var, same strip/reset machinery as :func:`bind_request_pg_conn` — so
+    ``copy_context_without_request_pg_conn`` protects detached tasks from an
+    inherited lease exactly as it already protects them from an inherited
+    connection, with no second leak surface to keep in sync.
+    """
+    return _request_pg_conn.set(lease)
+
+
+def reset_request_pg_conn(token: contextvars.Token[Any]) -> None:
     """Restore the previous request-conn binding (middleware exit)."""
     _request_pg_conn.reset(token)
 
 
 def get_bound_request_pg_conn() -> Connection | None:
-    """Return the middleware-pinned connection, if any."""
-    return _request_pg_conn.get()
+    """Return the connection currently pinned for this request, if any.
+
+    Returns ``None`` when the binding is a lease that has not been redeemed —
+    there is genuinely no connection pinned yet, and reporting one would be a
+    lie that callers would act on.
+    """
+    value = _request_pg_conn.get()
+    if isinstance(value, RequestConnLease):
+        return value.conn
+    return cast("Connection | None", value)
+
+
+def get_bound_request_pg_lease() -> RequestConnLease | None:
+    """Return the pinned lease, redeemed or not (``None`` if the binding is a
+    bare connection or absent)."""
+    value = _request_pg_conn.get()
+    return value if isinstance(value, RequestConnLease) else None
 
 
 def copy_context_without_request_pg_conn() -> contextvars.Context:
@@ -86,6 +428,13 @@ def copy_context_without_request_pg_conn() -> contextvars.Context:
     # context variables that callable makes will be contained in the
     # context object". Resetting to ``None`` is equivalent to
     # "unset" here because ``None`` is this var's declared default.
+    #
+    # This strips an unredeemed ``RequestConnLease`` as well as a bare
+    # connection, because the var holds either — deliberately one var rather
+    # than two, so there is exactly one place that has to be kept in sync with
+    # this strip. A detached task that inherited a lease would otherwise be
+    # able to *redeem* it after the request finalized, checking out a
+    # connection that the request's own cleanup will never release.
     ctx.run(_request_pg_conn.set, None)
     return ctx
 
@@ -101,6 +450,8 @@ def _dump_jsonb(value):
     if value is None:
         return None
     return _jsonx_dumps(value, default=str)
+
+
 # Note: ``settings`` is intentionally NOT bound to a module-level
 # reference — every method that needs a setting calls ``get_settings()``
 # (lru_cache'd, so the cost is one dict lookup) so that tests can
@@ -163,9 +514,7 @@ class PostgresClient:
             # ``scheme_db`` for the allow-list check below.
             scheme_db = parts.scheme.split("+", 1)[0]
             if scheme_db not in {"postgres", "postgresql"}:
-                raise ValueError(
-                    f"Unsupported scheme in DATABASE_URL: {parts.scheme!r}"
-                )
+                raise ValueError(f"Unsupported scheme in DATABASE_URL: {parts.scheme!r}")
             host = host or parts.hostname or s.postgres_host
             port = port or parts.port or s.postgres_port
             # Strip leading "/" from path so we don't end up with "/eden"
@@ -193,12 +542,8 @@ class PostgresClient:
             # env vars and silently kept the hardcoded 5/20 baseline.
             # ``min_size`` MUST stay 0 in Neon deploys so scale-to-zero
             # can fire — warm sockets alone keep compute active.
-            min_size=min_pool_size
-            if min_pool_size is not None
-            else s.postgres_min_pool_size,
-            max_size=max_pool_size
-            if max_pool_size is not None
-            else s.postgres_pool_size,
+            min_size=min_pool_size if min_pool_size is not None else s.postgres_min_pool_size,
+            max_size=max_pool_size if max_pool_size is not None else s.postgres_pool_size,
         )
         # Persist the explicit ``ssl`` arg (caller override) but prefer
         # the parsed URL value when ``database_url`` was the source.
@@ -224,9 +569,7 @@ class PostgresClient:
             getattr(_settings_init, "postgres_statement_timeout_ms", 30_000)
         )
         _idle_in_tx_timeout_ms = int(
-            getattr(
-                _settings_init, "postgres_idle_in_transaction_timeout_ms", 60_000
-            )
+            getattr(_settings_init, "postgres_idle_in_transaction_timeout_ms", 60_000)
         )
 
         async def _init_connection(conn: asyncpg.Connection) -> None:
@@ -278,9 +621,7 @@ class PostgresClient:
         # ``settings.postgres_statement_cache_size``; only override via
         # ``POSTGRES_STATEMENT_CACHE_SIZE`` for a deployment known to run
         # session-mode pooling or no pooler at all.
-        _statement_cache_size = int(
-            getattr(_settings_init, "postgres_statement_cache_size", 0)
-        )
+        _statement_cache_size = int(getattr(_settings_init, "postgres_statement_cache_size", 0))
 
         self._pool = await asyncpg.create_pool(
             host=self.config.host,
@@ -305,7 +646,9 @@ class PostgresClient:
             max_inactive_connection_lifetime=_idle_lifetime,
             statement_cache_size=_statement_cache_size,
         )
-        logger.info(f"PostgreSQL pool initialized: {self.config.host}:{self.config.port}/{self.config.database}")
+        logger.info(
+            f"PostgreSQL pool initialized: {self.config.host}:{self.config.port}/{self.config.database}"
+        )
 
     async def close(self) -> None:
         """Close the connection pool."""
@@ -316,9 +659,31 @@ class PostgresClient:
 
     @asynccontextmanager
     async def acquire(self) -> AsyncIterator[Connection]:
-        """Acquire a connection from the pool (or the RLS-pinned request conn)."""
+        """Acquire a connection from the pool (or the RLS-pinned request conn).
+
+        This is the single consumption point for the request-pinned binding —
+        every query in this module reaches a connection through here — which
+        is why it is also where a :class:`RequestConnLease` is redeemed. The
+        RLS middleware binds an unredeemed lease and does no Postgres work at
+        all; the first query to arrive here pays the acquire + ``BEGIN`` +
+        ``set_config``, and a request that never queries pays nothing.
+        """
         bound = _request_pg_conn.get()
-        if bound is not None:
+        if isinstance(bound, RequestConnLease):
+            # Redeem on first use. ``ensure`` returns None if acquisition
+            # failed, in which case we fall through to an ordinary pool
+            # checkout — the same fail-soft behaviour as when the middleware's
+            # eager acquire used to raise.
+            leased = await bound.ensure()
+            if leased is not None:
+                # Exclusive for the duration of the caller's block: asyncpg
+                # allows one operation per connection, and this one is shared
+                # by everything in the request's context. See ``use``.
+                # Middleware owns the lifetime; do not release here.
+                async with bound.use():
+                    yield leased
+                return
+        elif bound is not None:
             # Same connection that holds SET LOCAL app.current_org_id.
             # Do not release — middleware owns the lifetime.
             yield bound
@@ -446,9 +811,26 @@ class PostgresClient:
                 SELECT jobs_soft_limit, jobs_hard_limit,
                        tokens_soft_limit, tokens_hard_limit,
                        storage_mb_soft_limit, storage_mb_hard_limit,
-                       sandbox_seconds_soft_limit, sandbox_seconds_hard_limit
+                       sandbox_seconds_soft_limit, sandbox_seconds_hard_limit,
+                       -- Consumers read these and they were not selected.
+                       -- fetchrow returns a plain dict, so .get() silently
+                       -- returned the DEFAULT instead of raising:
+                       --   tenant_rate_limit.py  -> every org capped at the
+                       --     hard-coded 60 rpm, per-org overrides inert
+                       --   usage_service.py      -> every org evaluated as
+                       --     "org_free" regardless of its actual plan
+                       -- Masked today because all orgs sit on the defaults;
+                       -- it surfaces on the first paying customer.
+                       plan_name,
+                       requests_per_minute, requests_per_hour,
+                       concurrent_jobs
                 FROM org_resource_limits
                 WHERE org_id = $1
+                -- The writer stores multiple windows keyed
+                -- (org_id, effective_from); without an order this is
+                -- arbitrary the moment a second window exists.
+                ORDER BY effective_from DESC NULLS LAST
+                LIMIT 1
                 """,
                 org_id,
             )
@@ -456,7 +838,9 @@ class PostgresClient:
         except Exception as exc:
             logger.warning(
                 "org_resource_limits lookup failed (org_id=%s): %s",
-                org_id, exc, exc_info=True,
+                org_id,
+                exc,
+                exc_info=True,
             )
             return None
 
@@ -574,6 +958,7 @@ class PostgresClient:
         """Insert or update a job record."""
         if created_at is None:
             from datetime import datetime
+
             created_at = datetime.now(UTC).isoformat()
 
         query = """
@@ -585,7 +970,9 @@ class PostgresClient:
                 updated_at = EXCLUDED.updated_at
             RETURNING job_id
         """
-        result = await self.fetchval(query, job_id, _dump_jsonb(request), status, current_stage, created_at, user_id)
+        result = await self.fetchval(
+            query, job_id, _dump_jsonb(request), status, current_stage, created_at, user_id
+        )
         return result is not None
 
     async def get_job(self, job_id: str, user_id: str | None = None) -> dict | None:
@@ -615,6 +1002,7 @@ class PostgresClient:
         """Update job status and stage."""
         if updated_at is None:
             from datetime import datetime
+
             updated_at = datetime.now(UTC).isoformat()
 
         query = """
@@ -675,9 +1063,7 @@ class PostgresClient:
         if q:
             # Prefer expression-index-friendly predicates (migration 113
             # adds gin_trgm on job_id and request::text).
-            conditions.append(
-                f"(job_id ILIKE ${param_idx} OR request::text ILIKE ${param_idx})"
-            )
+            conditions.append(f"(job_id ILIKE ${param_idx} OR request::text ILIKE ${param_idx})")
             params.append(f"%{q}%")
             param_idx += 1
 
@@ -793,7 +1179,10 @@ class PostgresClient:
             ORDER BY created_at ASC
         """
         rows = await self.fetch(query, job_id)
-        return [{"field": r["field"], "value": json.loads(r["value"]), "created_at": r["created_at"]} for r in rows]
+        return [
+            {"field": r["field"], "value": json.loads(r["value"]), "created_at": r["created_at"]}
+            for r in rows
+        ]
 
     async def delete_checkpoint_blobs(self, job_id: str) -> bool:
         """Delete all checkpoint blobs for a job."""
@@ -836,8 +1225,14 @@ class PostgresClient:
                       total_bytes, eval_yaml, uploaded_by, uploaded_at,
                       is_active
             """,
-            org_id, agent_id, code_path, entry_point, framework, language,
-            file_count, total_bytes,
+            org_id,
+            agent_id,
+            code_path,
+            entry_point,
+            framework,
+            language,
+            file_count,
+            total_bytes,
             _dump_jsonb(eval_yaml),
             uploaded_by,
         )
@@ -873,7 +1268,9 @@ class PostgresClient:
             ORDER BY uploaded_at DESC
             LIMIT $3
             """,
-            org_id, agent_id, limit,
+            org_id,
+            agent_id,
+            limit,
         )
         for r in rows:
             if isinstance(r.get("eval_yaml"), str):
@@ -917,7 +1314,8 @@ class PostgresClient:
             WHERE org_id = $1 AND agent_id = $2 AND is_active = TRUE
             LIMIT 1
             """,
-            org_id, agent_id,
+            org_id,
+            agent_id,
         )
         if row and isinstance(row.get("eval_yaml"), str):
             row["eval_yaml"] = json.loads(row["eval_yaml"])
@@ -949,7 +1347,12 @@ class PostgresClient:
             RETURNING id, org_id, agent_id, upload_id, kind, status,
                       user_id, started_at, runner_kind
             """,
-            org_id, agent_id, upload_id, kind, user_id, runner_kind,
+            org_id,
+            agent_id,
+            upload_id,
+            kind,
+            user_id,
+            runner_kind,
         )
         return row
 
@@ -966,6 +1369,7 @@ class PostgresClient:
         when ``status`` is terminal (passed/failed/error).
         """
         import datetime as _dt
+
         if finished_at is None and status in ("passed", "failed", "error"):
             finished_at = _dt.datetime.now(_dt.UTC).isoformat()
         result = await self.fetchval(
@@ -978,7 +1382,11 @@ class PostgresClient:
             WHERE id = $1
             RETURNING id
             """,
-            run_id, status, finished_at, duration_ms, error,
+            run_id,
+            status,
+            finished_at,
+            duration_ms,
+            error,
         )
         return result is not None
 
@@ -996,7 +1404,8 @@ class PostgresClient:
             WHERE id = $1
             RETURNING id
             """,
-            run_id, _dump_jsonb(results),
+            run_id,
+            _dump_jsonb(results),
         )
         return result is not None
 
@@ -1042,7 +1451,8 @@ class PostgresClient:
             ORDER BY started_at DESC
             LIMIT ${len(params) + 1}
             """,
-            *params, limit,
+            *params,
+            limit,
         )
         for r in rows:
             if isinstance(r.get("results"), str):

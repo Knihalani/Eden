@@ -181,9 +181,7 @@ class TestDl12GatewayMetricsBounded:
         g = AIGateway()
         from collections import deque
 
-        assert isinstance(g._metrics, deque), (
-            "DL-12 regression: _metrics is not a deque"
-        )
+        assert isinstance(g._metrics, deque), "DL-12 regression: _metrics is not a deque"
         assert g._metrics.maxlen == 10_000
 
     def test_metrics_overflow_evicts_oldest(self) -> None:
@@ -380,13 +378,17 @@ class TestDl14QuotaFailClosed:
             "org-1",
             {
                 "cost_usd": {
-                    "used": 5.0, "soft_limit": 10.0,
-                    "hard_limit": 20.0, "status": "ok",
+                    "used": 5.0,
+                    "soft_limit": 10.0,
+                    "hard_limit": 20.0,
+                    "status": "ok",
                     "percentage": 25.0,
                 },
                 "seats": {
-                    "used": 2, "soft_limit": 5,
-                    "hard_limit": 10, "status": "ok",
+                    "used": 2,
+                    "soft_limit": 5,
+                    "hard_limit": 10,
+                    "status": "ok",
                 },
             },
         )
@@ -414,7 +416,8 @@ class TestDl14QuotaFailClosed:
 
         mw = QuotaEnforcementMiddleware(MagicMock())
         blocked, detail = mw._cached_block_check(
-            "org-fresh", ["cost_usd"],
+            "org-fresh",
+            ["cost_usd"],
         )
         assert blocked is False
         assert detail == ""
@@ -432,17 +435,18 @@ class TestDl14QuotaFailClosed:
         )
         old_ts, cached = mw._last_known_hard_limits["org-stale"]
         mw._last_known_hard_limits["org-stale"] = (
-            time.monotonic() - 120.0, cached,
+            time.monotonic() - 120.0,
+            cached,
         )
         blocked, detail = mw._cached_block_check(
-            "org-stale", ["cost_usd"],
+            "org-stale",
+            ["cost_usd"],
         )
         assert blocked is False
         assert detail == ""
 
-    def test_cached_block_check_uses_cached_cost(self) -> None:
-        """When the cache has cost_usd and the live check
-        fails, the cached limit is surfaced."""
+    def test_cached_block_check_blocks_on_hard_breach(self) -> None:
+        """A cached HARD breach still blocks, with the cap surfaced."""
         from eden.api.middleware.quota_enforcement import (
             QuotaEnforcementMiddleware,
         )
@@ -452,19 +456,71 @@ class TestDl14QuotaFailClosed:
             "org-cached",
             {
                 "cost_usd": {
-                    "used": 15.0, "hard_limit": 20.0,
-                    "status": "soft_exceeded",
+                    "used": 20.0,
+                    "hard_limit": 20.0,
+                    "status": "hard_exceeded",
                 },
             },
         )
         blocked, detail = mw._cached_block_check(
-            "org-cached", ["cost_usd"],
+            "org-cached",
+            ["cost_usd"],
         )
         assert blocked is True
         assert "$20" in detail
         assert "fail-closed" in detail.lower()
 
+    def test_soft_exceeded_does_not_block(self) -> None:
+        """plan_tiers.py:71 — "Soft caps fire a warning header + UI
+        banner but don't block; hard caps 429."
+
+        These two tests previously asserted the opposite, encoding a
+        real bug. cost_usd is in GLOBAL_MUTATING_RESOURCES, so this ran
+        on EVERY POST/PUT/PATCH/DELETE on every path: the first customer
+        to reach $2.00 against a $3.00 cap lost all write operations
+        across the whole product — and the 429 told them the $3.00 cap
+        had been reached while they were at two thirds of it.
+        """
+        from eden.api.middleware.quota_enforcement import (
+            QuotaEnforcementMiddleware,
+        )
+
+        mw = QuotaEnforcementMiddleware(MagicMock())
+        mw._record_hard_limits(
+            "org-soft",
+            {
+                "cost_usd": {
+                    "used": 15.0,
+                    "hard_limit": 20.0,
+                    "status": "soft_exceeded",
+                },
+            },
+        )
+        blocked, _ = mw._cached_block_check("org-soft", ["cost_usd"])
+        assert blocked is False, (
+            "a soft cap must warn, not 429 every mutating request"
+        )
+
+    def test_high_utilisation_does_not_block(self) -> None:
+        """80% of a cap is not a breach.
+
+        The removed branch blocked whenever used/hard >= 0.8 even when
+        the live status was "ok".
+        """
+        from eden.api.middleware.quota_enforcement import (
+            QuotaEnforcementMiddleware,
+        )
+
+        mw = QuotaEnforcementMiddleware(MagicMock())
+        mw._record_hard_limits(
+            "org-high",
+            {"cost_usd": {"used": 16.0, "hard_limit": 20.0, "status": "ok"}},
+        )
+        blocked, _ = mw._cached_block_check("org-high", ["cost_usd"])
+        assert blocked is False, "80% of the cap must not 429"
+
     def test_cached_block_check_uses_cached_seats(self) -> None:
+        """Seats at or over the hard limit still block."""
         from eden.api.middleware.quota_enforcement import (
             QuotaEnforcementMiddleware,
         )
@@ -473,11 +529,12 @@ class TestDl14QuotaFailClosed:
         mw._record_hard_limits(
             "org-seats",
             {
-                "seats": {"used": 8, "hard_limit": 10},
+                "seats": {"used": 10, "hard_limit": 10},
             },
         )
         blocked, detail = mw._cached_block_check(
-            "org-seats", ["seats"],
+            "org-seats",
+            ["seats"],
         )
         assert blocked is True
         assert "seats" in detail.lower()
@@ -520,7 +577,8 @@ class TestDl14QuotaFailClosed:
                 "org-x",
                 {
                     "cost_usd": {
-                        "used": 100.0, "hard_limit": 50.0,
+                        "used": 100.0,
+                        "hard_limit": 50.0,
                         "status": "hard_exceeded",
                     },
                 },
@@ -588,7 +646,8 @@ class TestDl14QuotaFailClosed:
             )
             old_ts, cached = mw._last_known_hard_limits["org-stale"]
             mw._last_known_hard_limits["org-stale"] = (
-                time.monotonic() - 120.0, cached,
+                time.monotonic() - 120.0,
+                cached,
             )
 
             scope = {

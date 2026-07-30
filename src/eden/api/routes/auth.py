@@ -116,6 +116,7 @@ def _client_ip(request: Request) -> str:
     per-IP rate limits on signup, login, and TOTP setup.
     """
     from eden.api.utils.client_ip import get_client_ip
+
     return get_client_ip(request)
 
 
@@ -239,6 +240,7 @@ async def signup(request: SignupRequest, response: Response, req: Request):
             redact_email(request.email),
         )
         from fastapi.responses import JSONResponse
+
         return JSONResponse(
             status_code=status.HTTP_202_ACCEPTED,
             content={
@@ -280,6 +282,7 @@ async def signup(request: SignupRequest, response: Response, req: Request):
         # matches a fresh signup. Return the same 202 response.
         hash_password(request.password)
         from fastapi.responses import JSONResponse
+
         return JSONResponse(
             status_code=status.HTTP_202_ACCEPTED,
             content={
@@ -309,6 +312,7 @@ async def signup(request: SignupRequest, response: Response, req: Request):
         # Race with the pre-check above — same enumeration-safe 202.
         if "unique" in msg or "duplicate" in msg:
             from fastapi.responses import JSONResponse
+
             return JSONResponse(
                 status_code=status.HTTP_202_ACCEPTED,
                 content={
@@ -338,6 +342,7 @@ async def signup(request: SignupRequest, response: Response, req: Request):
     try:
         import secrets
         from datetime import datetime, timedelta
+
         verify_token = secrets.token_urlsafe(32)
         expires = datetime.now(UTC) + timedelta(hours=24)
         await client.execute(
@@ -345,9 +350,12 @@ async def signup(request: SignupRequest, response: Response, req: Request):
             INSERT INTO email_verification_tokens (user_id, token, expires_at, used_at, created_at)
             VALUES ($1, $2, $3, NULL, $3)
             """,
-            user_id, verify_token, expires,
+            user_id,
+            verify_token,
+            expires,
         )
         from eden.services.email_service import send_verification_email
+
         await send_verification_email(to_email=request.email, token=verify_token)
     except Exception as exc:
         # F66 — defensive PII redaction. The upstream
@@ -359,6 +367,7 @@ async def signup(request: SignupRequest, response: Response, req: Request):
     # Security audit (enumeration): use the same generic message as the
     # "email already exists" path above so the two are indistinguishable.
     from fastapi.responses import JSONResponse
+
     return JSONResponse(
         status_code=status.HTTP_202_ACCEPTED,
         content={
@@ -385,7 +394,16 @@ async def login(request: LoginRequest, response: Response, req: Request):
 
     client = await get_postgres_client()
 
-    query = "SELECT id, email, password_hash, name, failed_login_count, locked_until, last_failed_login_at FROM users WHERE email = $1"
+    # deleted_at IS NULL: DELETE /auth/users/me soft-deletes and bumps
+    # token_version, which kills live sessions — but without this
+    # predicate login simply re-authenticated the deleted account and
+    # minted a fresh token, so account deletion did not stick.
+    # forgot-password already filters this way; login did not.
+    query = (
+        "SELECT id, email, password_hash, name, failed_login_count, "
+        "locked_until, last_failed_login_at FROM users "
+        "WHERE email = $1 AND deleted_at IS NULL"
+    )
     row = await client.fetchrow(query, request.email)
     # Pre-compute a known-invalid bcrypt hash so the "no row" and
     # "wrong password" branches take the same time. Generated lazily
@@ -464,9 +482,7 @@ async def login(request: LoginRequest, response: Response, req: Request):
             # since we don't track that, cap at 24h and let the
             # backoff grow by powers of two until the cap.
             backoff_minutes = min(5 * (2 ** (new_count - 5)), 60 * 24)
-            new_locked_until = datetime.now(UTC) + timedelta(
-                minutes=backoff_minutes
-            )
+            new_locked_until = datetime.now(UTC) + timedelta(minutes=backoff_minutes)
 
         await client.execute(
             """
@@ -572,12 +588,15 @@ async def login(request: LoginRequest, response: Response, req: Request):
         name=row["name"],
         two_factor_enabled=bool(user_full.get("two_factor_enabled", False)) if user_full else False,
         organizations=organizations,
-        current_org_id=str(user_full["preferred_org_id"]) if user_full and user_full.get("preferred_org_id") else None,
+        current_org_id=str(user_full["preferred_org_id"])
+        if user_full and user_full.get("preferred_org_id")
+        else None,
     )
 
 
 class VerifyInviteTokenResponse(BaseModel):
     """Response for invite token verification."""
+
     valid: bool
     org_name: str
     role: str
@@ -588,6 +607,7 @@ class VerifyInviteTokenResponse(BaseModel):
 
 class SignupFromInviteRequest(BaseModel):
     """Request for signup via invitation."""
+
     token: str
     password: str = Field(min_length=8)
     name: str = Field(min_length=1, max_length=100)
@@ -595,6 +615,7 @@ class SignupFromInviteRequest(BaseModel):
 
 class SignupFromInviteResponse(BaseModel):
     """Response for signup via invitation."""
+
     user_id: str
     email: str
     org_id: str
@@ -690,9 +711,7 @@ async def signup_from_invite(request: SignupFromInviteRequest, response: Respons
                 status_code=status.HTTP_409_CONFLICT,
                 detail="An account with this email already exists",
             ) from exc
-        logger.warning(
-            "signup_from_invite INSERT failed: %s", redact_email(str(exc))
-        )
+        logger.warning("signup_from_invite INSERT failed: %s", redact_email(str(exc)))
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Failed to create user",
@@ -922,7 +941,8 @@ async def get_me(
     if db_user:
         logger.debug(
             "/auth/me HIT user_id=%s clerk_id=%s",
-            user["user_id"], db_user.get("clerk_id"),
+            user["user_id"],
+            db_user.get("clerk_id"),
         )  # Audit 2026-06-22 B1.7 — drop email from log (PII)
     else:
         logger.warning(
@@ -937,9 +957,8 @@ async def get_me(
         # Prefer the JWT ``sub`` (real Clerk id). After remapping,
         # ``user["user_id"]`` is an Eden UUID — never pass that to
         # Clerk's Backend API or store it as ``clerk_id``.
-        clerk_id = (
-            (payload.get("sub") if isinstance(payload, dict) else None)
-            or user.get("user_id")
+        clerk_id = (payload.get("sub") if isinstance(payload, dict) else None) or user.get(
+            "user_id"
         )
         if not str(clerk_id).startswith("user_"):
             # Remapped UUID with no usable Clerk sub — cannot
@@ -968,7 +987,8 @@ async def get_me(
                 # failure, but never let a Clerk client blip 500 /auth/me.
                 logger.warning(
                     "auto-provision clerk_get_user failed for %s: %s",
-                    clerk_id, redact_all(str(exc)),
+                    clerk_id,
+                    redact_all(str(exc)),
                 )
                 clerk_profile = None
             if clerk_profile:
@@ -1025,10 +1045,13 @@ async def get_me(
             except Exception as exc:
                 logger.warning(
                     "auto-provision /auth/me attempt %d failed for clerk_id=%s: %s",
-                    attempt + 1, clerk_id, redact_all(str(exc)),
+                    attempt + 1,
+                    clerk_id,
+                    redact_all(str(exc)),
                 )
                 if attempt < 2:
                     import asyncio
+
                     await asyncio.sleep(0.1 * (attempt + 1))
                     continue
                 # Last attempt failed — fall through to the re-read
@@ -1082,7 +1105,10 @@ async def get_me(
                         RETURNING id, email, name, avatar_url, created_at,
                                   preferred_org_id, clerk_id
                         """,
-                        clerk_id, avatar_url, name, db_user["id"],
+                        clerk_id,
+                        avatar_url,
+                        name,
+                        db_user["id"],
                     )
                     logger.info(
                         "auto-provision re-linked clerk_id on row %s "
@@ -1128,9 +1154,9 @@ async def get_me(
                         )
                 except Exception as exc:
                     logger.error(
-                        "auto-provision /auth/me bare-minimum INSERT "
-                        "FAILED for clerk_id=%s: %s",
-                        clerk_id, redact_all(str(exc)),
+                        "auto-provision /auth/me bare-minimum INSERT " "FAILED for clerk_id=%s: %s",
+                        clerk_id,
+                        redact_all(str(exc)),
                     )
 
         if not db_user:
@@ -1139,7 +1165,8 @@ async def get_me(
                 "attempts; returning 404. The Clerk session sub claim is "
                 "user_id=%s. The auto-provision INSERT failed and the "
                 "post-failure re-read also returned no row.",
-                clerk_id, user["user_id"],
+                clerk_id,
+                user["user_id"],
             )
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -1152,11 +1179,7 @@ async def get_me(
     # get_eden_user_row_from_auth hit on the first try with an Eden UUID).
     session_clerk_id = (
         (payload.get("sub") if isinstance(payload, dict) else None)
-        or (
-            user.get("user_id")
-            if str(user.get("user_id") or "").startswith("user_")
-            else None
-        )
+        or (user.get("user_id") if str(user.get("user_id") or "").startswith("user_") else None)
         or db_user.get("clerk_id")
     )
 
@@ -1228,9 +1251,7 @@ async def get_me(
     # then first membership — never advertise a preferred id the user
     # cannot load on org-scoped routes.
     org_ids = {o["id"] for o in organizations}
-    preferred = (
-        str(db_user["preferred_org_id"]) if db_user.get("preferred_org_id") else None
-    )
+    preferred = str(db_user["preferred_org_id"]) if db_user.get("preferred_org_id") else None
     current_org_id = None
     if healed_org_id and healed_org_id in org_ids:
         current_org_id = healed_org_id
@@ -1355,6 +1376,7 @@ async def setup_2fa(user: dict = Depends(get_current_user), req: Request = None)
     # Store the secret temporarily (not yet enabled) — encrypted at rest
     # Audit 2026-06-22 B1.15 — production systems must encrypt TOTP seeds.
     from eden.api.utils.encryption import encrypt_value
+
     await client.execute(
         "UPDATE users SET two_factor_secret = $1 WHERE id = $2",
         encrypt_value(secret),
@@ -1369,7 +1391,9 @@ async def setup_2fa(user: dict = Depends(get_current_user), req: Request = None)
 
 
 @router.post("/2fa/verify", response_model=TwoFAEnableResponse)
-async def verify_2fa(request: TwoFAVerifyRequest, user: dict = Depends(get_current_user), req: Request = None):
+async def verify_2fa(
+    request: TwoFAVerifyRequest, user: dict = Depends(get_current_user), req: Request = None
+):
     """Verify 2FA setup with a TOTP code and enable 2FA.
 
     The user must have initiated setup first via POST /auth/2fa/setup.
@@ -1399,6 +1423,7 @@ async def verify_2fa(request: TwoFAVerifyRequest, user: dict = Depends(get_curre
     secret = row["two_factor_secret"]
     # Audit 2026-06-22 B1.15 — decrypt the TOTP seed before verification.
     from eden.api.utils.encryption import decrypt_value
+
     secret = decrypt_value(secret)
 
     # Verify the TOTP code
@@ -1414,15 +1439,14 @@ async def verify_2fa(request: TwoFAVerifyRequest, user: dict = Depends(get_curre
     recovery_codes = []
     recovery_rows = []
     from datetime import datetime
+
     now = datetime.now(UTC)
     for _ in range(10):
         # 10 random bytes → 20 hex chars; group as 4×5 for readability.
         raw = secrets.token_hex(5).upper()
         pretty = f"{raw[:5]}-{raw[5:]}"
         recovery_codes.append(pretty)
-        recovery_rows.append(
-            (user["user_id"], hashlib.sha256(pretty.encode()).hexdigest(), now)
-        )
+        recovery_rows.append((user["user_id"], hashlib.sha256(pretty.encode()).hexdigest(), now))
 
     async with client.transaction():
         await client.execute(
@@ -1553,6 +1577,7 @@ async def recover_with_recovery_code(
         )
 
     from datetime import datetime
+
     now = datetime.now(UTC)
     async with client.transaction():
         await client.execute(
@@ -1742,6 +1767,7 @@ def _detect_avatar_type(blob: bytes) -> str | None:
 
 # ── PATCH /users/me ────────────────────────────────────────────────
 
+
 class _ProfileUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=100)
     avatar_url: str | None = Field(default=None, max_length=2048)
@@ -1772,17 +1798,21 @@ async def update_my_profile(
     if payload.name is not None and payload.avatar_url is not None:
         await client.execute(
             "UPDATE users SET name = $1, avatar_url = $2 WHERE id = $3",
-            payload.name, payload.avatar_url, user_id,
+            payload.name,
+            payload.avatar_url,
+            user_id,
         )
     elif payload.name is not None:
         await client.execute(
             "UPDATE users SET name = $1 WHERE id = $2",
-            payload.name, user_id,
+            payload.name,
+            user_id,
         )
     else:
         await client.execute(
             "UPDATE users SET avatar_url = $1 WHERE id = $2",
-            payload.avatar_url, user_id,
+            payload.avatar_url,
+            user_id,
         )
 
     await log_audit_event(
@@ -1792,8 +1822,10 @@ async def update_my_profile(
         action="user.profile.updated",
         target_type="user",
         target_id=user_id,
-        metadata={"name_changed": payload.name is not None,
-                  "avatar_changed": payload.avatar_url is not None},
+        metadata={
+            "name_changed": payload.name is not None,
+            "avatar_changed": payload.avatar_url is not None,
+        },
     )
 
     updated = await get_user_by_id(user_id)
@@ -1806,6 +1838,7 @@ async def update_my_profile(
 
 
 # ── POST /users/me/password ───────────────────────────────────────
+
 
 class _PasswordChangeRequest(BaseModel):
     old_password: str = Field(min_length=1)
@@ -1870,6 +1903,7 @@ async def change_my_password(
 
 # ── POST /users/me/avatar ────────────────────────────────────────
 
+
 @router.post("/users/me/avatar")
 async def upload_my_avatar(
     file: UploadFile = File(...),
@@ -1922,6 +1956,7 @@ async def upload_my_avatar(
 
 # ── DELETE /users/me ────────────────────────────────────────────
 
+
 class _AccountDeleteRequest(BaseModel):
     confirm: str = Field(min_length=1)
 
@@ -1969,6 +2004,7 @@ async def delete_my_account(
 # that, so the handler is a no-op stub.
 # ───────────────────────────────────────────────────────────────────
 
+
 class _ForgotPasswordRequest(BaseModel):
     email: EmailStr
 
@@ -2001,6 +2037,7 @@ async def forgot_password(
     """
     import secrets
     from datetime import datetime, timedelta
+
     # Throttle per-IP AND per-email. Per-email prevents one victim
     # from being spammed; per-IP prevents enumerating many emails.
     await _check_rate_limit(password_reset_limiter, _client_ip(req))
@@ -2024,11 +2061,14 @@ async def forgot_password(
                     (user_id, token_hash, expires_at, used_at, created_at)
                 VALUES ($1, $2, $3, NULL, $3)
                 """,
-                user["id"], token_hash, expires,
+                user["id"],
+                token_hash,
+                expires,
             )
             # Dispatch email (best-effort; don't fail the request on email error).
             try:
                 from eden.services.email_service import send_password_reset_email
+
                 await send_password_reset_email(to_email=request.email, token=token)
             except Exception as exc:
                 # F66 — defensive PII redaction.
@@ -2038,10 +2078,7 @@ async def forgot_password(
         # F66 — defensive PII redaction.
         logger.warning(f"forgot-password dispatch failed: {redact_email(str(exc))}")
     return {
-        "message": (
-            "If an account exists for that email, a password reset "
-            "link has been sent."
-        )
+        "message": ("If an account exists for that email, a password reset " "link has been sent.")
     }
 
 

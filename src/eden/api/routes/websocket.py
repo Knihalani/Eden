@@ -140,9 +140,7 @@ async def _wait_for_job_wake(
                     # Older redis-py: no timeout kw — fall back to wait_for.
                     try:
                         msg = await asyncio.wait_for(
-                            pubsub.get_message(
-                                ignore_subscribe_messages=True
-                            ),
+                            pubsub.get_message(ignore_subscribe_messages=True),
                             timeout=min(remaining, 1.0),
                         )
                     except TimeoutError:
@@ -237,6 +235,7 @@ async def _fetch_blobs_after(
         )
     return out
 
+
 # Audit 2026-07-03 — bounded TTL role cache. Pre-fix the cache was
 # a plain ``dict[(user_id, job_id), bool]`` with no eviction: a
 # revoked admin stayed privileged for any future HILT call on the
@@ -252,9 +251,7 @@ async def _fetch_blobs_after(
 _USER_ROLE_TTL_SECONDS = 30.0
 _USER_ROLE_CACHE_CAP = 4_096
 _USER_ROLE_REDIS_PREFIX = "hilt-role:"
-_user_role_cache: OrderedDict[tuple[str, str], tuple[float, bool]] = (
-    OrderedDict()
-)
+_user_role_cache: OrderedDict[tuple[str, str], tuple[float, bool]] = OrderedDict()
 
 
 def _role_cache_get_local(key: tuple[str, str]) -> bool | None:
@@ -311,9 +308,7 @@ async def _role_cache_get_async(key: tuple[str, str]) -> bool | None:
         redis = None
     if redis is not None:
         try:
-            raw = await redis.get(
-                f"{_USER_ROLE_REDIS_PREFIX}{key[0]}:{key[1]}"
-            )
+            raw = await redis.get(f"{_USER_ROLE_REDIS_PREFIX}{key[0]}:{key[1]}")
             if raw is None:
                 return None
             value = raw == "1"
@@ -321,7 +316,8 @@ async def _role_cache_get_async(key: tuple[str, str]) -> bool | None:
             return value
         except Exception as exc:
             logger.debug(
-                "hilt role cache Redis GET failed; using local: %s", redact_all(str(exc)),
+                "hilt role cache Redis GET failed; using local: %s",
+                redact_all(str(exc)),
             )
     return None
 
@@ -354,7 +350,8 @@ async def _role_cache_set_async(key: tuple[str, str], value: bool) -> None:
             )
         except Exception as exc:
             logger.debug(
-                "hilt role cache Redis SET failed (local-only): %s", redact_all(str(exc)),
+                "hilt role cache Redis SET failed (local-only): %s",
+                redact_all(str(exc)),
             )
 
 
@@ -363,9 +360,7 @@ def reset_hilt_role_cache() -> None:
     _user_role_cache.clear()
 
 
-async def _hilt_privileged_for_job(
-    user: dict | None, job_id: str
-) -> bool:
+async def _hilt_privileged_for_job(user: dict | None, job_id: str) -> bool:
     """True iff ``user`` is admin/owner for ``job_id``'s org.
 
     Audit 2026-07-02 S-9 — approve / reject on the WebSocket require
@@ -459,6 +454,7 @@ async def _authenticate_ws(websocket: WebSocket) -> dict | None:
 
     try:
         from eden.api.utils.auth import decode_access_token
+
         payload = decode_access_token(token)
         if payload:
             return {
@@ -489,13 +485,13 @@ def _extract_token_from_subprotocol(headers: Any) -> str | None:
     malformed headers are silently ignored so a buggy client doesn't
     poison the upgrade.
     """
-    raw = (headers.get("sec-websocket-protocol") if headers else None)
+    raw = headers.get("sec-websocket-protocol") if headers else None
     if not raw:
         return None
     for proto in [p.strip() for p in raw.split(",")]:
         if not proto.startswith(_WS_AUTH_SUBPROTOCOL_PREFIX):
             continue
-        b64 = proto[len(_WS_AUTH_SUBPROTOCOL_PREFIX):]
+        b64 = proto[len(_WS_AUTH_SUBPROTOCOL_PREFIX) :]
         if not b64:
             return None
         # urlsafe_b64decode needs padding; add it.
@@ -577,6 +573,14 @@ async def job_trace_websocket(
         await websocket.close(code=4004, reason="Job not found")
         return
 
+    # Bound BEFORE the try: the finally below reads it unconditionally,
+    # and anything raising between here and its assignment left it
+    # unbound. _accept_with_subprotocol ends in websocket.accept(),
+    # which raises if the client aborts the handshake — an ordinary page
+    # reload. The UnboundLocalError then fired inside finally, masking
+    # the real error AND skipping both the _job_connections cleanup and
+    # the close() below, leaking a registry entry per aborted connect.
+    receive_task: asyncio.Task | None = None
     try:
         await _accept_with_subprotocol(websocket)
 
@@ -598,15 +602,17 @@ async def job_trace_websocket(
         )
 
         # Send initial state
-        await websocket.send_json({
-            "type": "status",
-            "job_id": job_id,
-            "status": job["status"],
-            "current_stage": job["current_stage"],
-            "outcome_tier": job.get("outcome_tier"),
-            "stage_history": job.get("stage_history", []),
-            "timestamp": datetime.now(UTC).isoformat(),
-        })
+        await websocket.send_json(
+            {
+                "type": "status",
+                "job_id": job_id,
+                "status": job["status"],
+                "current_stage": job["current_stage"],
+                "outcome_tier": job.get("outcome_tier"),
+                "stage_history": job.get("stage_history", []),
+                "timestamp": datetime.now(UTC).isoformat(),
+            }
+        )
         last_stage = job["current_stage"]
         last_status = job["status"]
         # Cursor for incremental blob fetch — skip historical blobs on connect.
@@ -623,10 +629,12 @@ async def job_trace_websocket(
             # Fetch latest job state (at most once per wake/timeout).
             job = await client.get_job(job_id, user_id=user["user_id"])
             if not job:
-                await websocket.send_json({
-                    "type": "error",
-                    "message": "Job no longer accessible",
-                })
+                await websocket.send_json(
+                    {
+                        "type": "error",
+                        "message": "Job no longer accessible",
+                    }
+                )
                 break
 
             current_stage = job["current_stage"]
@@ -634,25 +642,29 @@ async def job_trace_websocket(
 
             # Emit stage change before updating last_stage
             if current_stage != last_stage and last_stage is not None:
-                await websocket.send_json({
-                    "type": "stage_change",
-                    "job_id": job_id,
-                    "from": last_stage,
-                    "to": current_stage,
-                    "at": job.get("updated_at", datetime.now(UTC).isoformat()),
-                })
+                await websocket.send_json(
+                    {
+                        "type": "stage_change",
+                        "job_id": job_id,
+                        "from": last_stage,
+                        "to": current_stage,
+                        "at": job.get("updated_at", datetime.now(UTC).isoformat()),
+                    }
+                )
 
             # Emit status update if changed
             if current_stage != last_stage or current_status != last_status:
-                await websocket.send_json({
-                    "type": "status",
-                    "job_id": job_id,
-                    "status": current_status,
-                    "current_stage": current_stage,
-                    "outcome_tier": job.get("outcome_tier"),
-                    "stage_history": job.get("stage_history", []),
-                    "timestamp": datetime.now(UTC).isoformat(),
-                })
+                await websocket.send_json(
+                    {
+                        "type": "status",
+                        "job_id": job_id,
+                        "status": current_status,
+                        "current_stage": current_stage,
+                        "outcome_tier": job.get("outcome_tier"),
+                        "stage_history": job.get("stage_history", []),
+                        "timestamp": datetime.now(UTC).isoformat(),
+                    }
+                )
                 last_stage = current_stage
                 last_status = current_status
 
@@ -664,29 +676,28 @@ async def job_trace_websocket(
                     ts = blob.get("created_at", "")
                     value = blob.get("value")
                     if ts:
-                        last_blob_at = (
-                            ts if isinstance(ts, str) else str(ts)
-                        )
+                        last_blob_at = ts if isinstance(ts, str) else str(ts)
 
                     if field.startswith("code:"):
                         if isinstance(value, dict):
                             code = value.get("code") or value.get("text") or ""
                         else:
                             code = value if isinstance(value, str) else ""
-                        await websocket.send_json({
-                            "type": "code_fragment",
-                            "job_id": job_id,
-                            "field": field,
-                            "code": _truncate_code_fragment(
-                                code if isinstance(code, str) else ""
-                            ),
-                            "truncated": bool(
-                                isinstance(code, str)
-                                and len(code.encode("utf-8"))
-                                > _CODE_FRAGMENT_MAX_BYTES
-                            ),
-                            "timestamp": ts,
-                        })
+                        await websocket.send_json(
+                            {
+                                "type": "code_fragment",
+                                "job_id": job_id,
+                                "field": field,
+                                "code": _truncate_code_fragment(
+                                    code if isinstance(code, str) else ""
+                                ),
+                                "truncated": bool(
+                                    isinstance(code, str)
+                                    and len(code.encode("utf-8")) > _CODE_FRAGMENT_MAX_BYTES
+                                ),
+                                "timestamp": ts,
+                            }
+                        )
                     elif field in (
                         "edp",
                         "edp_history",
@@ -695,25 +706,29 @@ async def job_trace_websocket(
                         "quality_report",
                         "tester_results",
                     ):
-                        await websocket.send_json({
-                            "type": "message",
-                            "job_id": job_id,
-                            "text": f"New data available: {field}",
-                            "field": field,
-                            "timestamp": ts,
-                        })
+                        await websocket.send_json(
+                            {
+                                "type": "message",
+                                "job_id": job_id,
+                                "text": f"New data available: {field}",
+                                "field": field,
+                                "timestamp": ts,
+                            }
+                        )
             except Exception:
                 pass  # Non-fatal during streaming
 
             # Check terminal state
             if current_status in {"completed", "failed", "cancelled", "human_review"}:
-                await websocket.send_json({
-                    "type": "complete",
-                    "job_id": job_id,
-                    "status": current_status,
-                    "outcome_tier": job.get("outcome_tier"),
-                    "timestamp": datetime.now(UTC).isoformat(),
-                })
+                await websocket.send_json(
+                    {
+                        "type": "complete",
+                        "job_id": job_id,
+                        "status": current_status,
+                        "outcome_tier": job.get("outcome_tier"),
+                        "timestamp": datetime.now(UTC).isoformat(),
+                    }
+                )
                 break
 
     except WebSocketDisconnect:
@@ -723,7 +738,7 @@ async def job_trace_websocket(
         with contextlib.suppress(Exception):
             await websocket.send_json({"type": "error", "message": str(exc)})
     finally:
-        if not receive_task.done():
+        if receive_task is not None and not receive_task.done():
             receive_task.cancel()
             with contextlib.suppress(asyncio.CancelledError, Exception):
                 await receive_task
@@ -782,36 +797,42 @@ async def job_logs_websocket(
 
             # Emit log entry for status changes
             if current_status != last_status:
-                await websocket.send_json({
-                    "type": "log",
-                    "level": "info",
-                    "job_id": job_id,
-                    "message": f"Status changed: {last_status} → {current_status}",
-                    "timestamp": datetime.now(UTC).isoformat(),
-                })
+                await websocket.send_json(
+                    {
+                        "type": "log",
+                        "level": "info",
+                        "job_id": job_id,
+                        "message": f"Status changed: {last_status} → {current_status}",
+                        "timestamp": datetime.now(UTC).isoformat(),
+                    }
+                )
                 last_status = current_status
 
             # Emit log entry for stage changes
             if current_stage != last_stage:
-                await websocket.send_json({
-                    "type": "log",
-                    "level": "info",
-                    "job_id": job_id,
-                    "message": f"Stage transition: {last_stage} → {current_stage}",
-                    "timestamp": datetime.now(UTC).isoformat(),
-                })
+                await websocket.send_json(
+                    {
+                        "type": "log",
+                        "level": "info",
+                        "job_id": job_id,
+                        "message": f"Stage transition: {last_stage} → {current_stage}",
+                        "timestamp": datetime.now(UTC).isoformat(),
+                    }
+                )
                 last_stage = current_stage
 
             # Check terminal state
             if current_status in {"completed", "failed", "cancelled", "human_review"}:
                 level = "info" if current_status == "completed" else "error"
-                await websocket.send_json({
-                    "type": "log",
-                    "level": level,
-                    "job_id": job_id,
-                    "message": f"Job {current_status}",
-                    "timestamp": datetime.now(UTC).isoformat(),
-                })
+                await websocket.send_json(
+                    {
+                        "type": "log",
+                        "level": level,
+                        "job_id": job_id,
+                        "message": f"Job {current_status}",
+                        "timestamp": datetime.now(UTC).isoformat(),
+                    }
+                )
                 break
 
     except WebSocketDisconnect:
@@ -830,6 +851,7 @@ async def job_logs_websocket(
 # ─────────────────────────────────────────────────────────────────────────────
 # Phase 5.4.1: bidirectional command receiver
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 async def _ws_receive_commands(
     websocket: WebSocket,
@@ -870,103 +892,151 @@ async def _ws_receive_commands(
         try:
             cmd = json.loads(raw)
         except json.JSONDecodeError:
-            await _safe_send(websocket, {
-                "type": "command_ack",
-                "command": "<unparseable>",
-                "status": "error",
-                "detail": "invalid JSON",
-            })
+            await _safe_send(
+                websocket,
+                {
+                    "type": "command_ack",
+                    "command": "<unparseable>",
+                    "status": "error",
+                    "detail": "invalid JSON",
+                },
+            )
             continue
 
         cmd_type = cmd.get("type")
         try:
             if cmd_type == "ping":
-                await _safe_send(websocket, {
-                    "type": "command_ack",
-                    "command": "ping",
-                    "status": "ok",
-                    "detail": "pong",
-                })
+                await _safe_send(
+                    websocket,
+                    {
+                        "type": "command_ack",
+                        "command": "ping",
+                        "status": "ok",
+                        "detail": "pong",
+                    },
+                )
             elif cmd_type == "pause":
                 await hilt.handle_command("PAUSE", payload=cmd)
-                await _safe_send(websocket, {
-                    "type": "command_ack", "command": "pause", "status": "ok",
-                })
+                await _safe_send(
+                    websocket,
+                    {
+                        "type": "command_ack",
+                        "command": "pause",
+                        "status": "ok",
+                    },
+                )
             elif cmd_type == "resume":
                 await hilt.handle_command("RESUME", payload=cmd)
-                await _safe_send(websocket, {
-                    "type": "command_ack", "command": "resume", "status": "ok",
-                })
+                await _safe_send(
+                    websocket,
+                    {
+                        "type": "command_ack",
+                        "command": "resume",
+                        "status": "ok",
+                    },
+                )
             elif cmd_type == "step":
                 await hilt.handle_command("STEP", payload=cmd)
-                await _safe_send(websocket, {
-                    "type": "command_ack", "command": "step", "status": "ok",
-                })
+                await _safe_send(
+                    websocket,
+                    {
+                        "type": "command_ack",
+                        "command": "step",
+                        "status": "ok",
+                    },
+                )
             elif cmd_type == "inject":
                 message = cmd.get("message", "")
                 await hilt.handle_command("INJECT", payload={"message": message})
-                await _safe_send(websocket, {
-                    "type": "command_ack", "command": "inject", "status": "ok",
-                })
+                await _safe_send(
+                    websocket,
+                    {
+                        "type": "command_ack",
+                        "command": "inject",
+                        "status": "ok",
+                    },
+                )
             elif cmd_type == "approve":
                 proposal_id = cmd.get("id", "")
                 # Audit 2026-07-02 S-9 — admin/owner only.
                 if not await _hilt_privileged_for_job(user, job_id):
-                    await _safe_send(websocket, {
+                    await _safe_send(
+                        websocket,
+                        {
+                            "type": "command_ack",
+                            "command": "approve",
+                            "status": "forbidden",
+                            "detail": "approve requires admin/owner of the job's org",
+                            "id": proposal_id,
+                        },
+                    )
+                    continue
+                await hilt.handle_command("APPROVE", payload={"proposal_id": proposal_id})
+                await _safe_send(
+                    websocket,
+                    {
                         "type": "command_ack",
                         "command": "approve",
-                        "status": "forbidden",
-                        "detail": "approve requires admin/owner of the job's org",
+                        "status": "ok",
                         "id": proposal_id,
-                    })
-                    continue
-                await hilt.handle_command(
-                    "APPROVE", payload={"proposal_id": proposal_id}
+                    },
                 )
-                await _safe_send(websocket, {
-                    "type": "command_ack", "command": "approve",
-                    "status": "ok", "id": proposal_id,
-                })
             elif cmd_type == "reject":
                 proposal_id = cmd.get("id", "")
                 # Audit 2026-07-02 S-9 — admin/owner only.
                 if not await _hilt_privileged_for_job(user, job_id):
-                    await _safe_send(websocket, {
+                    await _safe_send(
+                        websocket,
+                        {
+                            "type": "command_ack",
+                            "command": "reject",
+                            "status": "forbidden",
+                            "detail": "reject requires admin/owner of the job's org",
+                            "id": proposal_id,
+                        },
+                    )
+                    continue
+                await hilt.handle_command("REJECT", payload={"proposal_id": proposal_id})
+                await _safe_send(
+                    websocket,
+                    {
                         "type": "command_ack",
                         "command": "reject",
-                        "status": "forbidden",
-                        "detail": "reject requires admin/owner of the job's org",
+                        "status": "ok",
                         "id": proposal_id,
-                    })
-                    continue
-                await hilt.handle_command(
-                    "REJECT", payload={"proposal_id": proposal_id}
+                    },
                 )
-                await _safe_send(websocket, {
-                    "type": "command_ack", "command": "reject",
-                    "status": "ok", "id": proposal_id,
-                })
             elif cmd_type == "subscribe":
-                await _safe_send(websocket, {
-                    "type": "command_ack", "command": "subscribe",
-                    "status": "ok",
-                    "fields": cmd.get("fields", []),
-                })
+                await _safe_send(
+                    websocket,
+                    {
+                        "type": "command_ack",
+                        "command": "subscribe",
+                        "status": "ok",
+                        "fields": cmd.get("fields", []),
+                    },
+                )
             else:
-                await _safe_send(websocket, {
-                    "type": "command_ack",
-                    "command": str(cmd_type),
-                    "status": "unknown",
-                    "detail": "unrecognised command type",
-                })
+                await _safe_send(
+                    websocket,
+                    {
+                        "type": "command_ack",
+                        "command": str(cmd_type),
+                        "status": "unknown",
+                        "detail": "unrecognised command type",
+                    },
+                )
         except Exception as exc:
             logger.warning(f"WS command '{cmd_type}' failed for {job_id}: {exc}")
-            await _safe_send(websocket, {
-                "type": "command_ack",
-                "command": str(cmd_type),
-                "status": "error",
-                "detail": str(exc),
-            })
+            await _safe_send(
+                websocket,
+                {
+                    "type": "command_ack",
+                    "command": str(cmd_type),
+                    "status": "error",
+                    "detail": str(exc),
+                },
+            )
 
 
 async def _safe_send(websocket: WebSocket, payload: dict[str, Any]) -> None:

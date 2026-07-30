@@ -2106,7 +2106,20 @@ class TelemetryCollector:
             ttft_ms = chunk.get("ttft_ms")
             itl_ms = chunk.get("itl_ms")
             tpot_ms = chunk.get("tpot_ms")
-            chunk_id = f"{event_id}:{chunk_index}"
+            # telemetry_stream_chunks.chunk_id is uuid NOT NULL, and
+            # f"{event_id}:{chunk_index}" can never be a valid UUID — a
+            # 36-char uuid plus ":N" is too long, and a 32-char hex id
+            # plus ":N" still fails on the colon. asyncpg rejected it
+            # client-side, the handler below counted the DataError as
+            # `rejected` rather than a server fault, and the route
+            # answered 200. The table has 0 rows, lifetime: the whole
+            # streaming TTFT/ITL/TPOT feature has never stored anything.
+            #
+            # uuid5 keeps it deterministic, so the ON CONFLICT
+            # (chunk_id) DO NOTHING idempotency still holds.
+            chunk_id = str(
+                uuid.uuid5(uuid.NAMESPACE_URL, f"{event_id}:{chunk_index}")
+            )
             if chunk_id in seen:
                 deduplicated += 1
                 continue

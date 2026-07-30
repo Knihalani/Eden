@@ -70,14 +70,16 @@ GLOBAL_MUTATING_RESOURCES: list[str] = [
 MUTATING_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
 
 # B32 — paths that skip quota entirely (no org resolve, no DB).
-_SKIP_EXACT_PATHS = frozenset({
-    "/health",
-    "/docs",
-    "/openapi.json",
-    "/redoc",
-    "/metrics",
-    "/ready",
-})
+_SKIP_EXACT_PATHS = frozenset(
+    {
+        "/health",
+        "/docs",
+        "/openapi.json",
+        "/redoc",
+        "/metrics",
+        "/ready",
+    }
+)
 _SKIP_PATH_PREFIXES = (
     "/docs/",
     "/redoc/",
@@ -228,9 +230,7 @@ class QuotaEnforcementMiddleware:
 
                 org_row = await get_current_org_api_key(org_id_header, api_key)
                 if org_row:
-                    return await QuotaEnforcementMiddleware._to_eden_org_id(
-                        org_id_header
-                    )
+                    return await QuotaEnforcementMiddleware._to_eden_org_id(org_id_header)
             except Exception:
                 logger.debug(
                     "quota_enforcement: X-Org-Api-Key verification "
@@ -253,9 +253,7 @@ class QuotaEnforcementMiddleware:
                 if clerk_payload:
                     clerk_org = extract_org_id(clerk_payload)
                     if clerk_org:
-                        return await QuotaEnforcementMiddleware._to_eden_org_id(
-                            clerk_org
-                        )
+                        return await QuotaEnforcementMiddleware._to_eden_org_id(clerk_org)
             except Exception:
                 pass
 
@@ -299,9 +297,7 @@ class QuotaEnforcementMiddleware:
             resolved = await resolve_eden_org_id(org_id)
             return resolved or org_id
         except Exception as exc:
-            logger.debug(
-                "quota_enforcement: org id resolve skipped: %s", exc
-            )
+            logger.debug("quota_enforcement: org id resolve skipped: %s", exc)
             return org_id
 
     @staticmethod
@@ -315,9 +311,7 @@ class QuotaEnforcementMiddleware:
                 return resources
         return []  # ponytail: no match → no resource check on this path
 
-    async def __call__(
-        self, scope: Scope, receive: Receive, send: Send
-    ) -> None:
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         if scope["type"] != "http":
             await self.app(scope, receive, send)
             return
@@ -386,9 +380,7 @@ class QuotaEnforcementMiddleware:
                 # cache is stale (>60s), fail closed — the cap may
                 # have changed while we weren't looking. The live
                 # check only confirms what the cache already knows.
-                cached_blocked, cached_detail = self._cached_block_check(
-                    org_id, resources
-                )
+                cached_blocked, cached_detail = self._cached_block_check(org_id, resources)
                 if cached_blocked:
                     response = JSONResponse(
                         status_code=429,
@@ -409,16 +401,11 @@ class QuotaEnforcementMiddleware:
                 # the cache is missing/stale (header build failed).
                 need_live = True
                 staleness = self._budget_staleness(org_id)
-                if (
-                    staleness is not None
-                    and staleness <= self._BUDGET_STALENESS_LIMIT_S
-                ):
+                if staleness is not None and staleness <= self._BUDGET_STALENESS_LIMIT_S:
                     need_live = False
                 if need_live:
                     try:
-                        blocked, detail = await self._check_hard_limits(
-                            org_id, resources
-                        )
+                        blocked, detail = await self._check_hard_limits(org_id, resources)
                         if blocked:
                             response = JSONResponse(
                                 status_code=429,
@@ -442,8 +429,7 @@ class QuotaEnforcementMiddleware:
 
         # ── Proceed to handler; inject quota headers via send-wrapper ──
         header_pairs = [
-            (k.lower().encode("latin1"), str(v).encode("latin1"))
-            for k, v in quota_headers.items()
+            (k.lower().encode("latin1"), str(v).encode("latin1")) for k, v in quota_headers.items()
         ]
 
         async def send_wrapper(message: dict) -> None:
@@ -657,13 +643,23 @@ class QuotaEnforcementMiddleware:
             used = res_data.get("used", 0)
             hard = res_data.get("hard_limit", 0)
             over_cap = used >= hard > 0
-            high_util = (
-                hard > 0
-                and used / hard >= 0.8
-            )
-            if status not in ("hard_exceeded", "soft_exceeded") and not over_cap and not high_util:
+            # Only a HARD breach may block.
+            #
+            # This used to also block on "soft_exceeded" and on any
+            # utilisation >= 80% — contradicting the documented contract
+            # in plan_tiers.py ("Soft caps fire a warning header + UI
+            # banner but don't block"). Because cost_usd is in
+            # GLOBAL_MUTATING_RESOURCES, that ran on EVERY POST / PUT /
+            # PATCH / DELETE on every path: the first customer to accrue
+            # $2.00 against a $3.00 cap lost all write operations across
+            # the entire product, and the 429 told them the $3.00 cap had
+            # been reached when they were at two thirds of it.
+            #
+            # Not firing today only because usage_events is empty; it
+            # arms the moment real telemetry starts being priced.
+            if status != "hard_exceeded" and not over_cap:
                 continue
-            if status in ("hard_exceeded", "soft_exceeded"):
+            if status == "hard_exceeded" or over_cap:
                 used = res_data.get("used", 0)
                 hard = res_data.get("hard_limit", 0)
                 if resource == "cost_usd":
@@ -691,18 +687,10 @@ class QuotaEnforcementMiddleware:
                     f"{resource} hard limit exceeded ({int(used)} / {hard}). "
                     "Reach out to support to raise your cap. (Fail-closed: cached snapshot enforced)",
                 )
-            # high_util path: status is "ok" (live check passed) but
-            # the cached snapshot has us at ≥80% of the cap. Block
-            # conservatively so the cached snapshot stays trustworthy.
-            if high_util:
-                used = res_data.get("used", 0)
-                hard = res_data.get("hard_limit", 0)
-                pct = int((used / hard) * 100) if hard else 0
-                return (
-                    True,
-                    f"{resource} near hard cap ({pct}% of limit). "
-                    "Reach out to support to raise the cap. "
-                    "(Fail-closed: cached snapshot enforced)",
-                )
+            # The former "high_util" branch lived here: it blocked at
+            # >=80% of the cap even when the live status was "ok". That
+            # is a warning condition, not a blocking one — soft caps are
+            # documented to surface a header and a UI banner, never a
+            # 429 — and it is removed rather than reordered.
 
         return False, ""
