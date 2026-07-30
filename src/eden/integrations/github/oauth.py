@@ -40,6 +40,8 @@ import hmac
 import logging
 import secrets
 import time
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from typing import Any
 from urllib.parse import urlencode
@@ -53,14 +55,39 @@ from eden.config import get_settings
 # opens a fresh client and discards keep-alive sockets at scope exit;
 # the singleton keeps the TCP pool warm across the 4 GitHub App API
 # calls per OAuth round-trip.
+#
+# The subtlety that broke this: every call site does
+# ``async with _shared_httpx() as client:``, and AsyncClient.__aexit__
+# calls aclose(). So returning the raw client meant the *first* block
+# to exit permanently closed the shared instance, and every later call
+# died in __aenter__ with "Cannot reopen a client instance, once it
+# has been closed" — before a request was even built. Since _HTTPX was
+# never reset, the whole GitHub App integration stayed dead for the
+# life of the process. Per the docstring above there are 4 API calls
+# per OAuth round-trip, so the very first round-trip broke on its
+# second call.
+#
+# Yielding through an async context manager keeps the call sites
+# unchanged while making scope exit a no-op for the shared client.
 _HTTPX: httpx.AsyncClient | None = None
 
 
-def _shared_httpx() -> httpx.AsyncClient:
+@asynccontextmanager
+async def _shared_httpx() -> AsyncIterator[httpx.AsyncClient]:
+    """Yield the shared client, deliberately NOT closing it on exit."""
     global _HTTPX
-    if _HTTPX is None:
+    if _HTTPX is None or _HTTPX.is_closed:
         _HTTPX = httpx.AsyncClient(timeout=30.0)
-    return _HTTPX
+    yield _HTTPX
+
+
+async def _close_shared_httpx() -> None:
+    """Close the shared client. For shutdown hooks and tests."""
+    global _HTTPX
+    if _HTTPX is not None and not _HTTPX.is_closed:
+        await _HTTPX.aclose()
+    _HTTPX = None
+
 
 logger = logging.getLogger(__name__)
 
@@ -91,14 +118,14 @@ class InstallationToken:
 class InstallationRepo:
     """One repo a user has granted the Eden App access to."""
 
-    full_name: str           # e.g. "acme/agent-runner"
-    name: str                # e.g. "agent-runner"
-    owner: str               # e.g. "acme"
+    full_name: str  # e.g. "acme/agent-runner"
+    name: str  # e.g. "agent-runner"
+    owner: str  # e.g. "acme"
     default_branch: str
     private: bool
-    description: str         # may be empty
+    description: str  # may be empty
     html_url: str
-    pushed_at: str           # ISO-8601, may be empty
+    pushed_at: str  # ISO-8601, may be empty
 
 
 def is_configured() -> bool:
@@ -109,12 +136,14 @@ def is_configured() -> bool:
     integration snippet.
     """
     s = get_settings()
-    return all([
-        getattr(s, "github_app_id", "").strip(),
-        getattr(s, "github_app_client_id", "").strip(),
-        getattr(s, "github_app_client_secret", "").strip(),
-        getattr(s, "github_app_private_key", "").strip(),
-    ])
+    return all(
+        [
+            getattr(s, "github_app_id", "").strip(),
+            getattr(s, "github_app_client_id", "").strip(),
+            getattr(s, "github_app_client_secret", "").strip(),
+            getattr(s, "github_app_private_key", "").strip(),
+        ]
+    )
 
 
 class GitHubConfigError(RuntimeError):
@@ -166,8 +195,12 @@ class GitHubOAuthClient:
         self.client_id = client_id or getattr(s, "github_app_client_id", "")
         self.client_secret = client_secret or getattr(s, "github_app_client_secret", "")
         self.private_key = private_key or getattr(s, "github_app_private_key", "")
-        self.app_slug = (app_slug if app_slug is not None else getattr(s, "github_app_slug", "")) or ""
-        raw_callback = callback_url if callback_url is not None else getattr(s, "github_app_callback_url", "")
+        self.app_slug = (
+            app_slug if app_slug is not None else getattr(s, "github_app_slug", "")
+        ) or ""
+        raw_callback = (
+            callback_url if callback_url is not None else getattr(s, "github_app_callback_url", "")
+        )
         self.callback_url = self._resolve_callback_url(raw_callback or "", s)
 
         if not is_configured():
@@ -191,9 +224,7 @@ class GitHubOAuthClient:
         if url:
             return url
         base = (
-            getattr(settings, "app_url", "")
-            or getattr(settings, "portal_base_url", "")
-            or ""
+            getattr(settings, "app_url", "") or getattr(settings, "portal_base_url", "") or ""
         ).rstrip("/")
         if base and "example.com" not in base:
             return f"{base}/onboarding/connect"
@@ -301,6 +332,7 @@ class GitHubOAuthClient:
             "iss": self.app_id,
         }
         import json as _json
+
         payload = _b64url(_json.dumps(payload_dict, separators=(",", ":")).encode())
         signing_input = f"{header}.{payload}".encode()
 
@@ -337,6 +369,7 @@ class GitHubOAuthClient:
             body = r.json()
             # Returned `expires_at` is ISO-8601; convert to epoch.
             import datetime as _dt
+
             exp_iso = body["expires_at"].replace("Z", "+00:00")
             expires_at = int(_dt.datetime.fromisoformat(exp_iso).timestamp())
             return InstallationToken(
@@ -394,20 +427,21 @@ class GitHubOAuthClient:
                 if not page_repos:
                     break
                 for item in page_repos:
-                    repos.append(InstallationRepo(
-                        full_name=item["full_name"],
-                        name=item["name"],
-                        owner=item["owner"]["login"],
-                        default_branch=item.get("default_branch", "main"),
-                        private=item.get("private", True),
-                        description=item.get("description") or "",
-                        html_url=item.get("html_url", ""),
-                        pushed_at=item.get("pushed_at") or "",
-                    ))
+                    repos.append(
+                        InstallationRepo(
+                            full_name=item["full_name"],
+                            name=item["name"],
+                            owner=item["owner"]["login"],
+                            default_branch=item.get("default_branch", "main"),
+                            private=item.get("private", True),
+                            description=item.get("description") or "",
+                            html_url=item.get("html_url", ""),
+                            pushed_at=item.get("pushed_at") or "",
+                        )
+                    )
                 if len(page_repos) < 100:
                     break
         return repos
-
 
     async def list_pull_request_files(
         self,
@@ -431,9 +465,7 @@ class GitHubOAuthClient:
                     params={"per_page": 100, "page": page},
                 )
                 if r.status_code != 200:
-                    raise GitHubAPIError(
-                        r.status_code, "list_pull_request_files", r.text
-                    )
+                    raise GitHubAPIError(r.status_code, "list_pull_request_files", r.text)
                 page_files = r.json()
                 if not isinstance(page_files, list) or not page_files:
                     break
@@ -474,9 +506,7 @@ class GitHubOAuthClient:
             if not isinstance(encoded, str) or not encoded:
                 return None
             try:
-                return base64.b64decode(encoded).decode(
-                    "utf-8", errors="replace"
-                )
+                return base64.b64decode(encoded).decode("utf-8", errors="replace")
             except Exception:
                 return None
 
@@ -538,11 +568,14 @@ def verify_webhook_signature(*, body: bytes, signature_header: str, secret: str)
     """
     if not secret or not signature_header or not signature_header.startswith("sha256="):
         return False
-    expected = "sha256=" + hmac.new(
-        secret.encode("utf-8"),
-        body,
-        hashlib.sha256,
-    ).hexdigest()
+    expected = (
+        "sha256="
+        + hmac.new(
+            secret.encode("utf-8"),
+            body,
+            hashlib.sha256,
+        ).hexdigest()
+    )
     return hmac.compare_digest(expected, signature_header)
 
 

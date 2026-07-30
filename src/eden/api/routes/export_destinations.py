@@ -56,9 +56,14 @@ async def _require_export_admin(
     """
     return await require_org_permission("settings:edit", org_id, payload)
 
+
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/orgs/{org_id}/export", tags=["export-destinations"], dependencies=[Depends(require_path_org_access)])
+router = APIRouter(
+    prefix="/orgs/{org_id}/export",
+    tags=["export-destinations"],
+    dependencies=[Depends(require_path_org_access)],
+)
 
 
 # ────────────────────────────────────────────────────────────────────
@@ -80,6 +85,7 @@ DESTINATION_TYPES = ("s3", "gcs")
 # ────────────────────────────────────────────────────────────────────
 # Schemas
 # ────────────────────────────────────────────────────────────────────
+
 
 class DestinationIn(BaseModel):
     name: str = Field(..., min_length=1, max_length=128)
@@ -182,6 +188,7 @@ class RunNowResult(BaseModel):
 # Helpers
 # ────────────────────────────────────────────────────────────────────
 
+
 def _row_to_destination(row: Any) -> DestinationOut:
     config_blob = json.loads(decrypt_value(row["config_encrypted"]))
     # Strip the secret material before returning to the client.
@@ -214,6 +221,7 @@ def _row_to_schedule(row: Any) -> ScheduleOut:
 # ────────────────────────────────────────────────────────────────────
 # Destinations CRUD
 # ────────────────────────────────────────────────────────────────────
+
 
 @router.get("/destinations", response_model=list[DestinationOut])
 async def list_destinations(
@@ -270,7 +278,12 @@ async def create_destination(
             RETURNING destination_id, org_id, name, type, config_encrypted,
                       created_by, created_at
             """,
-            dest_id, org_id, body.name, body.type, encrypted, member.get("user_id"),
+            dest_id,
+            org_id,
+            body.name,
+            body.type,
+            encrypted,
+            member.get("user_id"),
         )
     except Exception as exc:  # unique-violation, etc.
         # asyncpg raises UniqueViolationError — match by message
@@ -329,7 +342,8 @@ async def delete_destination(
 
     row = await client.fetchrow(
         "SELECT name FROM export_destinations WHERE destination_id = $1 AND org_id = $2",
-        destination_id, org_id,
+        destination_id,
+        org_id,
     )
     if not row:
         raise HTTPException(status_code=404, detail="Destination not found")
@@ -346,7 +360,8 @@ async def delete_destination(
 
     await client.execute(
         "DELETE FROM export_destinations WHERE destination_id = $1 AND org_id = $2",
-        destination_id, org_id,
+        destination_id,
+        org_id,
     )
 
     await log_audit_event(
@@ -365,6 +380,7 @@ async def delete_destination(
 # ────────────────────────────────────────────────────────────────────
 # Schedules CRUD
 # ────────────────────────────────────────────────────────────────────
+
 
 @router.get("/schedules", response_model=list[ScheduleOut])
 async def list_schedules(
@@ -432,8 +448,13 @@ async def create_schedule(
         RETURNING schedule_id, org_id, destination_id, data_type, format,
                   cron_expression, last_run_at, created_by, created_at
         """,
-        schedule_id, org_id, body.destination_id, body.data_type,
-        body.format, body.cron_expression, member.get("user_id"),
+        schedule_id,
+        org_id,
+        body.destination_id,
+        body.data_type,
+        body.format,
+        body.cron_expression,
+        member.get("user_id"),
     )
 
     await log_audit_event(
@@ -468,7 +489,8 @@ async def delete_schedule(
         raise HTTPException(status_code=503, detail="Database unavailable")
     deleted = await client.fetchval(
         "DELETE FROM export_schedules WHERE schedule_id = $1 AND org_id = $2 RETURNING schedule_id",
-        schedule_id, org_id,
+        schedule_id,
+        org_id,
     )
     if not deleted:
         raise HTTPException(status_code=404, detail="Schedule not found")
@@ -487,6 +509,7 @@ async def delete_schedule(
 # ────────────────────────────────────────────────────────────────────
 # Run-now trigger
 # ────────────────────────────────────────────────────────────────────
+
 
 @router.post("/run-now/{schedule_id}", response_model=RunNowResult)
 async def run_export_now(
@@ -517,7 +540,8 @@ async def run_export_now(
         LEFT JOIN export_destinations d ON d.destination_id = s.destination_id
         WHERE s.schedule_id = $1 AND s.org_id = $2
         """,
-        schedule_id, org_id,
+        schedule_id,
+        org_id,
     )
     if not row:
         raise HTTPException(status_code=404, detail="Schedule not found")
@@ -534,20 +558,33 @@ async def run_export_now(
     if row["config_encrypted"]:
         decrypted_config = json.loads(decrypt_value(row["config_encrypted"]))
 
-    bytes_written = await run_export(
-        org_id=str(row["org_id"]),
-        data_type=row["data_type"],
-        format=row["format"],
-        destination_type=row["destination_type"],
-        destination_name=destination_name,
-        destination_config=decrypted_config,
-    )
+    from eden.exports.runner import ExportDependencyMissingError
+
+    try:
+        bytes_written = await run_export(
+            org_id=str(row["org_id"]),
+            data_type=row["data_type"],
+            format=row["format"],
+            destination_type=row["destination_type"],
+            destination_name=destination_name,
+            destination_config=decrypted_config,
+        )
+    except ExportDependencyMissingError as exc:
+        # A misconfigured destination, not a transient fault — retrying
+        # will not help, so say what is wrong instead of a bare 500.
+        # Deliberately no audit row and no last_run_at update: nothing
+        # was delivered, and the previous behaviour of recording a
+        # successful "export.run" for an undelivered payload is exactly
+        # the bug this replaces.
+        logger.error("export destination unavailable: %s", exc)
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     finished_at = datetime.now(UTC)
 
     await client.execute(
         "UPDATE export_schedules SET last_run_at = $1 WHERE schedule_id = $2",
-        started_at, schedule_id,
+        started_at,
+        schedule_id,
     )
 
     await log_audit_event(
