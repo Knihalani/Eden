@@ -10,7 +10,30 @@ from eden.preview.gates import artifacts_inrun_enabled
 
 logger = logging.getLogger(__name__)
 
+#: Rescues already issued, keyed by trace_id.
+#:
+#: There IS a pop() on the completion path below, but it only runs when
+#: a rescued trace reaches that path — a trace that errors, times out or
+#: is abandoned never removes its entry. Keyed by trace_id, that is one
+#: permanent entry per rescued-and-lost trace, growing without bound
+#: until the process is OOM-killed. Every sibling cache in this codebase
+#: is capped; this one was not.
+#:
+#: Latent today: gated on artifacts_inrun_v1, which defaults False.
+_TRACE_RESCUE_MAX = 10_000
 _TRACE_RESCUE_COUNT: dict[str, int] = {}
+
+
+def _remember_rescue(trace_id: str) -> None:
+    """Record a rescue, evicting oldest-first at the cap.
+
+    dicts preserve insertion order, so popping the front is FIFO. The
+    only cost of evicting a live trace is that it could be rescued a
+    second time — bounded memory is worth strictly more than that.
+    """
+    while len(_TRACE_RESCUE_COUNT) >= _TRACE_RESCUE_MAX:
+        _TRACE_RESCUE_COUNT.pop(next(iter(_TRACE_RESCUE_COUNT)), None)
+    _TRACE_RESCUE_COUNT[trace_id] = _TRACE_RESCUE_COUNT.get(trace_id, 0) + 1
 
 
 class InRunRescue:
@@ -52,7 +75,7 @@ class InRunRescue:
         else:
             findings.append(f"inrun_rescue_shadow:{nudge.id}")
 
-        _TRACE_RESCUE_COUNT[trace_id] = _TRACE_RESCUE_COUNT.get(trace_id, 0) + 1
+        _remember_rescue(trace_id)
         await self._engine.log_shadow(
             nudge,
             trace_id=trace_id,

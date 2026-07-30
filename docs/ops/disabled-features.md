@@ -76,6 +76,39 @@ that used to work has stopped.
 
 ---
 
+## 1c. Signup email verification — `email_verification_enabled = False`
+
+**What changed for users:** the signup response no longer says "Check
+your email to verify before signing in." It now says the account was
+created and they can sign in — which is what actually happens.
+
+**Why.** None of the verification flow exists, in three independent
+ways:
+
+- `email_verification_tokens` is not a table, so the INSERT raised
+  `UndefinedTable` on **every** signup;
+- `send_verification_email` is not defined in `email_service.py`;
+- there is no `/auth/verify-email` route anywhere in `src/eden/` — only
+  a string in `default_deny.py`'s allowlist.
+
+All three were swallowed by one `except Exception`, so each signup
+issued a doomed database write and then told the user to check an inbox
+that would never receive anything.
+
+Accounts were never actually blocked: `login` does not check
+`email_verified`. So the only damage was the false instruction and a
+failing write per signup — but "go check your email" with no email is a
+dead end on a customer's first minute with the product.
+
+The enumeration-safe "If that email is not already registered…" prefix
+is unchanged; only the verification sentence is conditional.
+
+**Re-enable when:** the table, the sender and the `/auth/verify-email`
+route ship together, and a test walks one signup through to a verified
+login.
+
+---
+
 ## 2. Right-to-be-forgotten fanout — `rtbf_fanout_v1 = False` (unchanged)
 
 Already off; left off, but the reason on record was misleading and has

@@ -223,6 +223,24 @@ export function resolveConfig(opts: EdenSDKOptions = {}): ResolvedConfig {
     );
   }
 
+  if (!disabled && !orgId) {
+    // Without an orgId, buildIngestUrl returns "" and EVERY event is
+    // dropped — silently, with no warning at all, because the apiKey
+    // warning below is itself gated on `orgId` being set. A developer
+    // integrating for the first time saw a completely quiet SDK and no
+    // data in the portal, with nothing to go on.
+    //
+    // Not thrown, because `strict` above owns that decision and
+    // throwing here would break anyone relying on the no-op. The
+    // Python SDK raises a clear ValueError in the same situation
+    // (config.py), so this at least brings the two into earshot.
+    console.warn(
+      "[eden-ai] orgId is not set — every event will be discarded and " +
+        "nothing will reach the portal. Set orgId (or EDEN_ORG_ID), or " +
+        "pass disabled: true if that is intended.",
+    );
+  }
+
   if (!disabled && !debug && orgId && !apiKey) {
     // The gateway may accept other auth schemes (mTLS, signed URLs,
     // bearer tokens via ``gatewayUrl``), but the absence of an
