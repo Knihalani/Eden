@@ -47,30 +47,38 @@ this: *"we trust all events if the batch-level report passes."*
 processes nothing, and a behaviour change to ETL error handling on
 launch day is worse than the bug. Fix before metering goes live.
 
-### 3. `_push_clickhouse` logs a success it did not perform
+### 3. ~~`_push_clickhouse` logs a success it did not perform~~ — FIXED 2026-07-30
 
-`silver_etl.py:515` — `if sink is None: return` silently no-ops, and
-`run_batch:191` then logs `Pushed {n} events to ClickHouse`. An actively
-false log line whenever no sink is configured.
+`if sink is None: return` no-op'd while `run_batch` logged
+`Pushed {n} events to ClickHouse` regardless. `_push_clickhouse` now
+returns a bool and the caller logs what actually happened.
 
-### 4. `reprocess_quarantine` can delete events it never reprocessed
+### 4. ~~`reprocess_quarantine` deletes events it never reprocessed~~ — FIXED 2026-07-30
 
-`silver_etl.py:706-721` — events failing `json.loads` are silently
-`continue`d, then `if report.silver_inserted > 0` deletes **all**
-`quarantine_ids`, including the ones that were dropped. Partial success
-causes silent data loss.
+Events failing `json.loads` were silently `continue`d, then
+`if report.silver_inserted > 0` deleted **all** `quarantine_ids`
+including the dropped ones. A batch of 10 with 3 corrupt payloads and 7
+successful inserts deleted all 10 — and the quarantine table is the
+only copy, so this was permanent silent loss in the one place built
+specifically to avoid losing data. Partial inserts had the same shape.
 
-### 5. Clerk slug collision in the self-heal path fails silently
+Now deletes only the ids actually reprocessed, and only on full
+success; unparseable rows are logged at ERROR and kept.
 
-`api/deps.py:1043` inserts Clerk's `slug` with no uniqueness check while
-`organizations.slug` is UNIQUE. `create_org` *does* dedupe
-(`orgs.py:282`) — the two paths are asymmetric. On violation `deps.py:1072`
-logs a warning and returns None, and `/auth/me` then proceeds org-less
-with HTTP 200, leaving the customer in "Syncing organization with
-Eden…" forever.
+### 5. ~~Clerk slug collision in the self-heal path fails silently~~ — FIXED 2026-07-30
 
-Zero duplicate slugs in production today. The risk appears the moment
-two customers hand-type the same organization name.
+`api/deps.py` inserted Clerk's `slug` verbatim while
+`organizations.slug` is UNIQUE (`organizations_slug_key`, confirmed
+against the live schema). `create_org` dedupes by appending 8 hex
+chars; this path did not. On violation the INSERT raised, the handler
+logged a warning and returned None, and `/auth/me` then answered 200
+with no org — leaving the customer on "Syncing organization with Eden…"
+permanently.
+
+Zero duplicate slugs in production, which is exactly why it never fired
+— and exactly why it would have fired on the day two real customers
+picked the same organization name. Now dedupes the same way `create_org`
+does.
 
 ### 6. Duplicate organizations are minted by Clerk, not by Eden
 
