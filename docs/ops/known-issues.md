@@ -257,3 +257,71 @@ Recorded so the same ground is not re-covered:
 - **`/health` could not see a read-only database.** Witnessed live: the Neon
   endpoint went read-only for ~2 minutes, all writes failed, and `/health`
   reported `postgres: connected` throughout.
+
+---
+
+## ROOT CAUSE, found 2026-07-30 20:19Z — Northflank is not draining old replicasets
+
+The service is configured `instances: 1`. It was running **10 containers
+across 6 replicasets**, the oldest up more than two hours and surviving
+many deploys:
+
+```
+eden-api-67478966c   x2  since 20:16:54Z   <- newest build
+eden-api-75d5fd5d85  x2  since 19:54:34Z
+eden-api-7c8b4d9c47  x2  since 19:52:14Z
+eden-api-577dd78fcb  x2  since 19:48:56Z
+eden-api-66f6d66d7b  x1  since 19:45:11Z
+eden-api-6b659fb59d  x1  since 18:15:08Z   <- held BOTH leader locks
+```
+
+Found via the Northflank REST API (`/services/eden-api/containers`);
+the CLI has no logs or instances command, and the service status fields
+report `COMPLETED/DEPLOYING` and `SUCCESS/IN_PROGRESS` in combinations
+that do not mean what they sound like.
+
+### This is one bug, not four
+
+Several separately-investigated symptoms collapse into this:
+
+* **Deploys never complete.** New pods come up healthy, old pods are
+  never drained, traffic keeps going to an old one. Confirmed: a build
+  succeeded at 19:54 and 21 minutes later — with no interfering pushes —
+  the old image was still serving.
+* **Upstash hit its 500,000 hard limit.** The cost audit attributed this
+  to the pre-2026-07-29 lock-renewal cadence, and the arithmetic landed
+  suspiciously exactly on 500k. Ten fleets each attempting lock
+  acquisition on their tick is a better explanation. **Treat that part
+  of the cost audit as unreliable** — it assumed one fleet.
+* **Neon never reached its suspend timeout.** Same correction: ten
+  fleets polling keeps it awake regardless of any one interval.
+* **The background fleet was running stale code.** `eden_leader_leases`
+  showed both locks held by `eden-api-6b659fb59d-xhcxs`, the container
+  from 18:15 — so every worker-side fix landed today was inert, and that
+  container predates the `EDEN_PRODUCTION=1` env change applied at
+  ~19:05, leaving the fleet in a different config from the rest.
+
+### Not an outage
+
+`/ready` 200 throughout. Postgres at 15 of 901 connections with
+pgbouncer pooling correctly. Leader election worked exactly as designed
+— one holder, both locks, no split brain. This is waste and a stuck
+pipeline, not data loss.
+
+### Fix
+
+Scale the service to 0 and back to 1. That drops every replicaset and
+brings up one container on the current image, so the pending commits
+land and the fleet restarts on current code with production mode
+actually applied. Seconds of downtime at zero users.
+
+Do it in the same pass as setting `PORTAL_BASE_URL` (see below), since
+both need one restart.
+
+### Prevention
+
+`/live` now reports `commit` from the `EDEN_GIT_SHA` build arg. Twice
+today "is it deployed?" was unanswerable — `app_version` is a
+hand-maintained `0.1.0` that names the release, never the code, and the
+only reliable check was probing for a route one commit happened to
+remove.
