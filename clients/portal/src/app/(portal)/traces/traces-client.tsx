@@ -28,13 +28,12 @@ import {
   type TranscriptStep,
 } from "@/lab/fixtures/traces";
 import { agentForTrace } from "@/lab/fixtures/agents";
-import { issueForTrace } from "@/lab/fixtures/issues";
+import { issueForTrace, type IssueFixture } from "@/lab/fixtures/issues";
 import { signalsForTrace } from "@/lab/fixtures/signals";
 import {
   agentForSession,
   resolveSessionForTrace,
   sessionById as sessionByIdFixture,
-  sessionForTrace,
   turnsForSession,
   type SessionFixture,
 } from "@/lab/fixtures/sessions";
@@ -391,8 +390,13 @@ function SignalsPanel({
   );
 }
 
-function ChatPanel({ trace }: { trace: TraceFixture }) {
-  const issue = issueForTrace(trace.id);
+function ChatPanel({
+  trace,
+  issue,
+}: {
+  trace: TraceFixture;
+  issue?: IssueFixture;
+}) {
   const agentHref = (() => {
     const q = new URLSearchParams();
     q.set("thread", "thr_empty");
@@ -508,6 +512,35 @@ function LabTracesInner() {
   const sessions = sessionsQuery.data ?? [];
   void agentsQuery.data;
 
+  // Subscribe to issues so Open issue / Ask issueId re-render when the
+  // catalog sibling finishes — reading catalogIssues() alone does not.
+  const issuesQuery = useOrgQuery(
+    queryKeys.portal.issues(orgId),
+    orgId,
+    () => portalApi.issues(orgId!),
+    SHELL_QUERY,
+  );
+  const issueByTraceId = useMemo(() => {
+    const map = new Map<string, IssueFixture>();
+    for (const issue of issuesQuery.data ?? []) {
+      for (const traceId of issue.occurrenceTraceIds) {
+        const existing = map.get(traceId);
+        if (
+          !existing ||
+          (existing.status === "resolved" && issue.status !== "resolved")
+        ) {
+          map.set(traceId, issue);
+        }
+      }
+    }
+    return map;
+  }, [issuesQuery.data]);
+  const resolveIssueForTrace = useCallback(
+    (traceId: string): IssueFixture | undefined =>
+      issueByTraceId.get(traceId) ?? issueForTrace(traceId),
+    [issueByTraceId],
+  );
+
   const [listOpen, setListOpen, , listAnimate] = usePersistentBool(
     "eden.traces.listOpen",
     true,
@@ -563,12 +596,25 @@ function LabTracesInner() {
 
   useEffect(() => {
     setHubViewState(parseHubView(paramView));
-    const nextId = traces.find((t) => t.id === paramId)?.id;
-    if (nextId) setSelectedId(nextId);
-    const nextSession = sessions.find((s) => s.id === paramSession)?.id;
-    if (nextSession) setSelectedSessionId(nextSession);
+    // Don't stomp a click still in flight — same guard as the
+    // reconcile effects below. Intermediate `?id=` values from a
+    // lagged patchQuery must not overwrite the freshest selection.
+    if (
+      justSelectedTraceIdRef.current === null ||
+      paramId === justSelectedTraceIdRef.current
+    ) {
+      const nextId = traces.find((t) => t.id === paramId)?.id;
+      if (nextId) setSelectedId(nextId);
+    }
+    if (
+      justSelectedSessionIdRef.current === null ||
+      paramSession === justSelectedSessionIdRef.current
+    ) {
+      const nextSession = sessions.find((s) => s.id === paramSession)?.id;
+      if (nextSession) setSelectedSessionId(nextSession);
+    }
     if (paramSpan) setFocusStepId(paramSpan);
-  }, [paramId, paramSpan, paramView, paramSession]);
+  }, [paramId, paramSpan, paramView, paramSession, traces, sessions]);
 
   // Keep tab state in sync with the URL even when `?tab=` is cleared
   // (Transcript) — otherwise Tree stays selected after navigating
@@ -677,7 +723,10 @@ function LabTracesInner() {
       } else {
         const sessionId =
           selectedSessionId ||
-          sessionForTrace(selectedId)?.id ||
+          resolveSessionForTrace(
+            traces.find((t) => t.id === selectedId) ?? { id: selectedId },
+            sessions,
+          )?.id ||
           sessions[0]?.id ||
           null;
         if (sessionId) setSelectedSessionId(sessionId);
@@ -690,7 +739,7 @@ function LabTracesInner() {
         });
       }
     },
-    [patchQuery, selectedId, selectedSessionId],
+    [patchQuery, selectedId, selectedSessionId, sessions, traces],
   );
 
   const selectTrace = useCallback(
@@ -699,10 +748,10 @@ function LabTracesInner() {
       setSelectedId(id);
       const resolvedTab = nextTab ?? tab;
       setTab(resolvedTab);
-      const sess =
-        resolveSessionForTrace(
-          scopedTraces.find((t) => t.id === id) ?? { id },
-        ) ?? sessionForTrace(id);
+      const sess = resolveSessionForTrace(
+        traces.find((t) => t.id === id) ?? { id },
+        sessions,
+      );
       if (hubView === "sessions" && sess) {
         setSelectedSessionId(sess.id);
         patchQuery({
@@ -720,7 +769,7 @@ function LabTracesInner() {
         });
       }
     },
-    [patchQuery, tab, hubView],
+    [patchQuery, tab, hubView, sessions, traces],
   );
 
   const selectSession = useCallback(
@@ -1072,8 +1121,10 @@ function LabTracesInner() {
   }, [selectedFeedIndex]);
 
   const agent = selected ? agentForTrace(selected) : undefined;
-  const issue = selected ? issueForTrace(selected.id) : undefined;
-  const session = selected ? resolveSessionForTrace(selected) : undefined;
+  const issue = selected ? resolveIssueForTrace(selected.id) : undefined;
+  const session = selected
+    ? resolveSessionForTrace(selected, sessions)
+    : undefined;
   const sessionTurns = session ? turnsForSession(session) : [];
   const badStepIds = selected ? errorStepIds(selected.steps) : [];
   const signalCount =
@@ -1372,7 +1423,7 @@ function LabTracesInner() {
                     ) : (
                       <>
                         {(() => {
-                          const sess = resolveSessionForTrace(selected);
+                          const sess = resolveSessionForTrace(selected, sessions);
                           return sess ? (
                             <Link
                               href={`/traces?view=sessions&session=${sess.id}&id=${selected.id}&agent=${selected.agentId}`}
@@ -1620,11 +1671,46 @@ function LabTracesInner() {
                   </div>
                 ) : null}
                 {tab === "tree" ? (
-                  <TreePanel
-                    steps={selected.steps}
-                    focusStepId={focusStepId}
-                    onFocus={focusStepInPlace}
-                  />
+                  <div className="min-h-0 h-full overflow-hidden">
+                    {traceDetailQuery.isError ? (
+                      <div className="p-6">
+                        <QueryErrorPanel
+                          error={traceDetailQuery.error}
+                          onRetry={() => void traceDetailQuery.refetch()}
+                        />
+                      </div>
+                    ) : traceDetailQuery.isLoading &&
+                      selected.steps.length === 0 ? (
+                      <EmptyState
+                        title="Loading tree"
+                        body="Fetching spans for this run…"
+                        compact
+                      />
+                    ) : !traceDetailQuery.isLoading &&
+                      !traceDetailQuery.isFetching &&
+                      selected.steps.length === 0 ? (
+                      <EmptyState
+                        title="No spans"
+                        body="This run has no span events yet, or the transcript could not be reconstructed."
+                        compact
+                        action={
+                          <button
+                            type="button"
+                            className="ds-btn ds-btn-ghost ds-btn-sm"
+                            onClick={() => void traceDetailQuery.refetch()}
+                          >
+                            Retry
+                          </button>
+                        }
+                      />
+                    ) : (
+                      <TreePanel
+                        steps={selected.steps}
+                        focusStepId={focusStepId}
+                        onFocus={focusStepInPlace}
+                      />
+                    )}
+                  </div>
                 ) : null}
                 {tab === "signals" ? (
                   <SignalsPanel
@@ -1636,7 +1722,7 @@ function LabTracesInner() {
                   />
                 ) : null}
                 {tab === "chat" ? (
-                  <ChatPanel key={selected.id} trace={selected} />
+                  <ChatPanel key={selected.id} trace={selected} issue={issue} />
                 ) : null}
               </div>
             </>
