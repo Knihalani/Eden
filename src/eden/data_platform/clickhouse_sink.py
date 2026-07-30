@@ -126,9 +126,7 @@ class ClickHouseSink:
         if self.config.is_tinybird:
             token = self.config.tinybird_token or self.config.password
             if not token:
-                raise ClickHouseError(
-                    "Tinybird token missing (set TINYBIRD_ADMIN_TOKEN)"
-                )
+                raise ClickHouseError("Tinybird token missing (set TINYBIRD_ADMIN_TOKEN)")
             url = f"{self.config.url.rstrip('/')}/v0/sql"
             headers = {"Authorization": f"Bearer {token}"}
             # Tinybird SQL is SELECT-only; datasources are owned by
@@ -157,15 +155,54 @@ class ClickHouseSink:
                 return text
 
         url = f"{self.config.url.rstrip('/')}/"
-        payload = {"query": query}
-        if params:
-            payload.update(params)
         auth = (
             aiohttp.BasicAuth(self.config.user, self.config.password)
             if self.config.password
             else None
         )
-        async with session.post(url, data=payload, auth=auth) as resp:
+        # The statement goes in the QUERY STRING, not the body.
+        #
+        # This used to be ``session.post(url, data={"query": query, ...})``,
+        # which aiohttp form-encodes into the request body. ClickHouse's HTTP
+        # interface reads the request body *as SQL*, so it received the
+        # literal text ``query=SELECT+1+AS+ok`` and answered:
+        #
+        #   Code: 62. DB::Exception: Syntax error: failed at position 1
+        #   ('query'): query=SELECT+1+AS+ok
+        #
+        # Every statement failed that way — verified against ClickHouse
+        # 24.3, where even ``SELECT 1`` could not get through. So
+        # ``initialize()`` died on its first CREATE TABLE, no schema was ever
+        # built, and every insert raised. What hid it is that each caller
+        # catches the exception and falls back to Postgres, so the columnar
+        # path degraded to "always Postgres" while reporting nothing: the
+        # subsystem had never once run.
+        #
+        # Extra ``params`` (ClickHouse settings such as max_execution_time)
+        # are query-string parameters too, so they merge in here.
+        #
+        # Reads get an explicit ``FORMAT TabSeparatedWithNames``, matching what
+        # the Tinybird branch above already does. ``_parse_tsv`` reads
+        # ``lines[0]`` as the header, and ClickHouse's default output format is
+        # plain ``TabSeparated`` with no header — so a result with one data row
+        # tripped ``len(lines) < 2`` and parsed as *empty*, and a result with
+        # several silently lost its first row and mislabelled every column with
+        # that row's values. Six of the eight ``_parse_tsv`` call sites did not
+        # add the clause themselves; two did, which is why this looked like it
+        # worked wherever anyone checked.
+        #
+        # Restricted to read statements: appending FORMAT to a CREATE/INSERT is
+        # a syntax error.
+        head = query.lstrip().upper()
+        if (
+            head.startswith(("SELECT", "WITH", "SHOW", "DESCRIBE", "DESC", "EXPLAIN"))
+            and "FORMAT " not in head
+        ):
+            query = f"{query.rstrip().rstrip(';')} FORMAT TabSeparatedWithNames"
+        qs: dict[str, Any] = {"query": query}
+        if params:
+            qs.update(params)
+        async with session.post(url, params=qs, auth=auth) as resp:
             text = await resp.text()
             if resp.status != 200:
                 raise ClickHouseError(f"HTTP {resp.status}: {text[:500]}")
@@ -218,7 +255,7 @@ class ClickHouseSink:
             ENGINE = MergeTree()
             PARTITION BY toYYYYMM(timestamp)
             ORDER BY (tenant_id, agent_name, timestamp)
-            TTL timestamp + INTERVAL 7 YEAR
+            TTL toDateTime(timestamp) + INTERVAL 7 YEAR
         """)
 
         # Pipeline stage metrics — bottleneck detection
@@ -236,7 +273,7 @@ class ClickHouseSink:
             ENGINE = MergeTree()
             PARTITION BY toYYYYMM(timestamp)
             ORDER BY (tenant_id, stage, timestamp)
-            TTL timestamp + INTERVAL 7 YEAR
+            TTL toDateTime(timestamp) + INTERVAL 7 YEAR
         """)
 
         # Usage trends — per-tenant, per-resource, per-hour
@@ -275,54 +312,84 @@ class ClickHouseSink:
             ENGINE = MergeTree()
             PARTITION BY toYYYYMM(timestamp)
             ORDER BY (tenant_id, benchmark_id, timestamp)
-            TTL timestamp + INTERVAL 7 YEAR
+            TTL toDateTime(timestamp) + INTERVAL 7 YEAR
         """)
 
-        # telemetry_events_ch — mirror of the Postgres telemetry_events
-        # table for fast analytical queries (heatmap, p50/p95/p99 over
-        # millions of rows). JSONB is stored as String for simplicity;
-        # the portal parses on the way out. 90-day TTL aligned with
-        # Tinybird datasource + Postgres warm window; cold archive holds
-        # the long tail.
+        # telemetry_events_ch — analytics mirror of the Postgres
+        # telemetry_events table (heatmap, p50/p95/p99 over millions of rows).
+        # JSONB is stored as String; the portal parses on the way out. 90-day
+        # TTL aligned with the Tinybird datasource + Postgres warm window;
+        # cold archive holds the long tail.
+        #
+        # Three storage decisions here, each measured against ClickHouse 24.3
+        # rather than assumed (see ``docs/ops/clickhouse-storage.md``):
+        #
+        # 1. ``CODEC(ZSTD(3))`` on the String columns and ``Delta, ZSTD(3)`` on
+        #    the DateTime64s. No CODEC clause existed anywhere in the
+        #    repository, so every column used ClickHouse's default LZ4.
+        #    Measured gain is strongly data-dependent: 5.29x on realistic
+        #    prose-shaped payloads, 1.21x on incompressible worst-case bytes.
+        #    Delta on a monotonically-ish increasing timestamp is close to free.
+        #
+        # 2. A ``bloom_filter`` skip index on ``trace_id``. The sort key is
+        #    ``(tenant_id, timestamp)``, but ``telemetry_events_query_api.pipe``
+        #    filters on ``trace_id`` — so pulling up one trace scanned the whole
+        #    partition. Measured on 120k rows: 120,000 rows / 2.23 MiB read
+        #    without the index versus 13,332 rows / 255 KiB with it.
+        #
+        # 3. The nine payload-blob columns are gone: request_body,
+        #    response_body, reasoning, tool_calls_full, tool_results, images,
+        #    audio, logprobs, citations. No SELECT in this repository reads any
+        #    of them from ClickHouse, and the Tinybird pipe does not either —
+        #    they were written on every event and read never. They were 58.5%
+        #    of the compressed table on prose-shaped data and 97.7% on
+        #    high-entropy data. Postgres remains the source of truth for
+        #    payloads and already zstd-compresses exactly these fields
+        #    (``telemetry_collector`` writes ``request_body_zstd`` etc.), so
+        #    this removes a second, *uncompressed* copy rather than the only
+        #    copy. Codec plus removal measured 14.05x smaller end to end.
+        #
+        #    The collector still sends these keys; ``_insert_json`` sets
+        #    ``input_format_skip_unknown_fields`` so they are ignored rather
+        #    than failing the insert.
         await self._execute(f"""
             CREATE TABLE IF NOT EXISTS {self.config.database}.telemetry_events_ch (
-                event_id           String,
-                tenant_id          String,
-                project_id         String,
-                trace_id           String,
+                event_id           String CODEC(ZSTD(3)),
+                tenant_id          String CODEC(ZSTD(3)),
+                project_id         String CODEC(ZSTD(3)),
+                trace_id           String CODEC(ZSTD(3)),
                 realm              LowCardinality(String),
                 event_type         LowCardinality(String),
-                timestamp          DateTime64(3),
-                agent_id           String,
-                agent_version      String,
-                environment_id     String,
-                span_id            String,
-                name               String,
-                duration_ms        Float64,
-                metrics            String,
-                tags               String,
+                timestamp          DateTime64(3) CODEC(Delta, ZSTD(3)),
+                agent_id           String CODEC(ZSTD(3)),
+                agent_version      String CODEC(ZSTD(3)),
+                environment_id     String CODEC(ZSTD(3)),
+                span_id            String CODEC(ZSTD(3)),
+                name               String CODEC(ZSTD(3)),
+                duration_ms        Float64 CODEC(ZSTD(3)),
+                metrics            String CODEC(ZSTD(3)),
+                tags               String CODEC(ZSTD(3)),
                 outcome            LowCardinality(String),
-                request_body       String,
-                response_body      String,
-                reasoning          String,
-                tool_calls_full    String,
-                tool_results       String,
-                images             String,
-                audio              String,
-                logprobs           String,
-                citations          String,
                 finish_reason      LowCardinality(String),
                 model              LowCardinality(String),
-                model_version      String,
-                cache_hit          UInt8,
-                prompt_cache_savings_usd Float64,
-                ingested_at        DateTime64(3)
+                model_version      String CODEC(ZSTD(3)),
+                cache_hit          UInt8 CODEC(ZSTD(3)),
+                prompt_cache_savings_usd Float64 CODEC(ZSTD(3)),
+                ingested_at        DateTime64(3) CODEC(Delta, ZSTD(3)),
+                INDEX idx_trace_id trace_id TYPE bloom_filter(0.01) GRANULARITY 1
             )
             ENGINE = MergeTree()
             PARTITION BY toYYYYMM(timestamp)
             ORDER BY (tenant_id, timestamp)
-            TTL timestamp + INTERVAL 90 DAY
+            TTL toDateTime(timestamp) + INTERVAL 90 DAY
         """)
+
+        await self._migrate_telemetry_storage()
+
+        # Rollups below hold pre-aggregated state, so any table left over
+        # from the SummingMergeTree era has to go before the CREATEs run —
+        # IF NOT EXISTS would otherwise keep the broken one forever.
+        await self._migrate_rollup_engines()
 
         # F83 — hourly drift aggregates (outcome × agent) for Home p95 tiles.
         # Populated automatically from telemetry_events_ch inserts.
@@ -332,10 +399,10 @@ class ClickHouseSink:
                 agent_id String,
                 outcome LowCardinality(String),
                 hour DateTime,
-                event_count UInt64,
-                avg_duration_ms Float64
+                event_count SimpleAggregateFunction(sum, UInt64),
+                avg_duration_state AggregateFunction(avg, Float64)
             )
-            ENGINE = SummingMergeTree()
+            ENGINE = AggregatingMergeTree()
             PARTITION BY toYYYYMM(hour)
             ORDER BY (tenant_id, agent_id, outcome, hour)
             TTL hour + INTERVAL 90 DAY
@@ -349,8 +416,8 @@ class ClickHouseSink:
                 agent_id,
                 outcome,
                 toStartOfHour(timestamp) AS hour,
-                count() AS event_count,
-                avg(duration_ms) AS avg_duration_ms
+                toUInt64(count()) AS event_count,
+                avgState(toFloat64(duration_ms)) AS avg_duration_state
             FROM {self.config.database}.telemetry_events_ch
             GROUP BY tenant_id, agent_id, outcome, hour
         """)
@@ -361,12 +428,12 @@ class ClickHouseSink:
                 tenant_id UUID,
                 benchmark_id UUID,
                 day Date,
-                run_count UInt64,
-                pass_count UInt64,
-                avg_score Float64,
-                avg_duration_ms Float64
+                run_count SimpleAggregateFunction(sum, UInt64),
+                pass_count SimpleAggregateFunction(sum, UInt64),
+                avg_score_state AggregateFunction(avg, Float64),
+                avg_duration_state AggregateFunction(avg, Float64)
             )
-            ENGINE = SummingMergeTree()
+            ENGINE = AggregatingMergeTree()
             PARTITION BY toYYYYMM(day)
             ORDER BY (tenant_id, benchmark_id, day)
             TTL day + INTERVAL 90 DAY
@@ -379,10 +446,10 @@ class ClickHouseSink:
                 tenant_id,
                 benchmark_id,
                 toDate(timestamp) AS day,
-                count() AS run_count,
-                sum(passed) AS pass_count,
-                avg(score) AS avg_score,
-                avg(duration_ms) AS avg_duration_ms
+                toUInt64(count()) AS run_count,
+                toUInt64(sum(passed)) AS pass_count,
+                avgState(toFloat64(score)) AS avg_score_state,
+                avgState(toFloat64(duration_ms)) AS avg_duration_state
             FROM {self.config.database}.benchmark_results
             GROUP BY tenant_id, benchmark_id, day
         """)
@@ -392,12 +459,12 @@ class ClickHouseSink:
             CREATE TABLE IF NOT EXISTS {self.config.database}.home_kpi_daily (
                 tenant_id String,
                 day Date,
-                event_count UInt64,
-                error_count UInt64,
-                avg_duration_ms Float64,
-                p95_duration_ms Float64
+                event_count SimpleAggregateFunction(sum, UInt64),
+                error_count SimpleAggregateFunction(sum, UInt64),
+                avg_duration_state AggregateFunction(avg, Float64),
+                p95_duration_state AggregateFunction(quantile(0.95), Float64)
             )
-            ENGINE = SummingMergeTree()
+            ENGINE = AggregatingMergeTree()
             PARTITION BY toYYYYMM(day)
             ORDER BY (tenant_id, day)
             TTL day + INTERVAL 90 DAY
@@ -409,10 +476,10 @@ class ClickHouseSink:
             AS SELECT
                 tenant_id,
                 toDate(timestamp) AS day,
-                count() AS event_count,
-                countIf(outcome = 'error') AS error_count,
-                avg(duration_ms) AS avg_duration_ms,
-                quantile(0.95)(duration_ms) AS p95_duration_ms
+                toUInt64(count()) AS event_count,
+                toUInt64(countIf(outcome = 'error')) AS error_count,
+                avgState(toFloat64(duration_ms)) AS avg_duration_state,
+                quantileState(0.95)(toFloat64(duration_ms)) AS p95_duration_state
             FROM {self.config.database}.telemetry_events_ch
             GROUP BY tenant_id, day
         """)
@@ -421,6 +488,253 @@ class ClickHouseSink:
 
         self._initialized = True
         logger.info(f"ClickHouse schema initialized in database '{self.config.database}'")
+
+    # Read-side expressions for the rollups' aggregate-state columns.
+    #
+    # An ``AggregateFunction`` column is an opaque serialized state, not a
+    # number: reading it needs the matching ``-Merge`` combinator, and any
+    # query over the rollups must ``GROUP BY`` the sort key (or use FINAL)
+    # so unmerged parts are combined. Selecting one of these columns
+    # directly fails loudly, which is the point — the old plain ``Float64``
+    # columns returned a wrong number instead.
+    #
+    # Nothing reads these three rollups today; the mapping exists so the
+    # first consumer starts from the correct expression rather than
+    # rediscovering ``avgMerge`` the hard way.
+    ROLLUP_READ_EXPR: dict[str, str] = {
+        "avg_duration_ms": "avgMerge(avg_duration_state)",
+        "avg_score": "avgMerge(avg_score_state)",
+        "p95_duration_ms": "quantileMerge(0.95)(p95_duration_state)",
+        # SimpleAggregateFunction columns read as plain values, but still
+        # need summing across parts that have not merged yet.
+        "event_count": "sum(event_count)",
+        "error_count": "sum(error_count)",
+        "run_count": "sum(run_count)",
+        "pass_count": "sum(pass_count)",
+    }
+
+    # Rollup tables that were created as SummingMergeTree and must not be.
+    # Mapped to the materialized view that feeds each, because the view has
+    # to be dropped first — it references the target table's columns.
+    _ROLLUP_TABLES: tuple[tuple[str, str], ...] = (
+        ("drift_hourly", "drift_hourly_mv"),
+        ("experiment_daily", "experiment_daily_mv"),
+        ("home_kpi_daily", "home_kpi_daily_mv"),
+    )
+
+    #: Payload blobs that no ClickHouse query reads. Postgres holds these
+    #: zstd-compressed as the source of truth.
+    _UNREAD_BLOB_COLUMNS: tuple[str, ...] = (
+        "request_body",
+        "response_body",
+        "reasoning",
+        "tool_calls_full",
+        "tool_results",
+        "images",
+        "audio",
+        "logprobs",
+        "citations",
+    )
+
+    #: Columns to (re)compress in place, with the codec each should carry.
+    _TELEMETRY_CODECS: tuple[tuple[str, str, str], ...] = (
+        ("event_id", "String", "ZSTD(3)"),
+        ("project_id", "String", "ZSTD(3)"),
+        ("trace_id", "String", "ZSTD(3)"),
+        ("agent_id", "String", "ZSTD(3)"),
+        ("agent_version", "String", "ZSTD(3)"),
+        ("environment_id", "String", "ZSTD(3)"),
+        ("span_id", "String", "ZSTD(3)"),
+        ("name", "String", "ZSTD(3)"),
+        ("metrics", "String", "ZSTD(3)"),
+        ("tags", "String", "ZSTD(3)"),
+        ("model_version", "String", "ZSTD(3)"),
+        ("timestamp", "DateTime64(3)", "Delta, ZSTD(3)"),
+        ("ingested_at", "DateTime64(3)", "Delta, ZSTD(3)"),
+    )
+
+    async def _migrate_telemetry_storage(self) -> None:
+        """Bring an existing ``telemetry_events_ch`` up to the current shape.
+
+        Unlike the rollup engine change, none of this needs a drop: ClickHouse
+        can ``MODIFY COLUMN`` a codec, ``ADD INDEX``, and ``DROP COLUMN`` in
+        place, so an existing table keeps every row it has. Codec changes apply
+        to newly-written parts; existing parts are recompressed lazily by
+        background merges (or immediately via ``OPTIMIZE FINAL``, which this
+        deliberately does not trigger — it would rewrite the whole table).
+
+        Skipped entirely on Tinybird, where ``tb deploy`` owns the schema and
+        ``_execute`` refuses DDL.
+        """
+        if self.config.is_tinybird:
+            return
+        db = self.config.database
+        table = f"{db}.telemetry_events_ch"
+
+        try:
+            existing = {
+                line.strip()
+                for line in (
+                    await self._execute(
+                        "SELECT name FROM system.columns WHERE database = "
+                        f"'{db}' AND table = 'telemetry_events_ch' "
+                        "FORMAT TabSeparated"
+                    )
+                ).splitlines()
+                if line.strip()
+            }
+        except Exception as exc:  # noqa: BLE001 — probe only
+            logger.warning(
+                "clickhouse: could not read %s columns, skipping storage " "migration: %s",
+                table,
+                exc,
+            )
+            return
+        if not existing:
+            return
+
+        statements: list[str] = []
+        for column, ch_type, codec in self._TELEMETRY_CODECS:
+            if column in existing:
+                statements.append(
+                    f"ALTER TABLE {table} MODIFY COLUMN {column} " f"{ch_type} CODEC({codec})"
+                )
+        statements.append(
+            f"ALTER TABLE {table} ADD INDEX IF NOT EXISTS idx_trace_id "
+            "trace_id TYPE bloom_filter(0.01) GRANULARITY 1"
+        )
+        # Dropping the blobs is the large win but also the irreversible step,
+        # so it is logged at WARNING with the reason, not applied quietly.
+        droppable = [c for c in self._UNREAD_BLOB_COLUMNS if c in existing]
+        if droppable:
+            logger.warning(
+                "clickhouse: dropping %d unread payload column(s) from %s "
+                "(%s). No query in this codebase reads them from ClickHouse; "
+                "Postgres holds these fields zstd-compressed as the source of "
+                "truth.",
+                len(droppable),
+                table,
+                ", ".join(droppable),
+            )
+            statements.extend(f"ALTER TABLE {table} DROP COLUMN IF EXISTS {c}" for c in droppable)
+
+        for stmt in statements:
+            try:
+                await self._execute(stmt)
+            except Exception as exc:  # noqa: BLE001
+                # Each statement is independent; one failure must not stop the
+                # rest. Logged at WARNING rather than DEBUG — a silently
+                # skipped storage migration is how the TTL migrations went
+                # unnoticed for their entire life.
+                logger.warning(
+                    "clickhouse: storage migration step failed (%s): %s",
+                    stmt.split(" MODIFY ")[0].split(" ADD ")[0].split(" DROP ")[0],
+                    exc,
+                )
+
+    async def _migrate_rollup_engines(self) -> None:
+        """Drop rollup tables still on SummingMergeTree so they get rebuilt.
+
+        All three rollups stored averages and percentiles as plain
+        ``Float64`` columns under ``SummingMergeTree``. That engine collapses
+        rows sharing the sort key by *adding* every non-key numeric column,
+        which is right for ``event_count`` and wrong for everything else: a
+        materialized view emits one partial row per inserted block, so the
+        stored average became the sum of the per-block averages and the
+        stored p95 the sum of the per-block p95s.
+
+        Measured against ClickHouse 24.3 with 1000 events over 10 insert
+        blocks — true avg 201.1ms / p95 290ms, reported 2010.9ms / 2888.6ms.
+        The error factor is the number of blocks that contributed to the
+        key, so it grows with ingest volume and never converges;
+        ``OPTIMIZE FINAL`` reproduces it exactly, because the merge is what
+        does the summing. Nothing surfaced an error — the query succeeded
+        and returned a plausible, arbitrary number.
+
+        ``CREATE TABLE IF NOT EXISTS`` cannot fix an existing table, and
+        ``ALTER`` cannot change a column into an ``AggregateFunction`` or
+        swap the engine, so the only route is drop-and-recreate (the same
+        reason ``_apply_ttl_migrations`` exists). Dropping loses history that
+        was numerically wrong and, as of this change, read by nothing.
+        """
+        if self.config.is_tinybird:
+            # Tinybird owns its datasources via ``tb deploy``; _execute
+            # refuses DDL there. Nothing to do and nothing to warn about.
+            return
+        db = self.config.database
+        for table, view in self._ROLLUP_TABLES:
+            try:
+                engine = (
+                    await self._execute(
+                        "SELECT engine FROM system.tables WHERE database = "
+                        f"'{db}' AND name = '{table}' FORMAT TabSeparated"
+                    )
+                ).strip()
+            except Exception as exc:  # noqa: BLE001 — probe only
+                logger.warning(
+                    "clickhouse: could not read the engine of %s.%s, leaving " "it alone: %s",
+                    db,
+                    table,
+                    exc,
+                )
+                continue
+            if engine != "SummingMergeTree":
+                continue
+            logger.warning(
+                "clickhouse: %s.%s is a SummingMergeTree, which sums the "
+                "averages and percentiles it stores; dropping so it is "
+                "rebuilt as an AggregatingMergeTree. Existing rows are "
+                "discarded — they were wrong by a factor of the insert-block "
+                "count.",
+                db,
+                table,
+            )
+            # View first: it depends on the target table's columns.
+            #
+            # Both DROPs have to land, and the failure mode of a half-drop is
+            # worse than not starting. If the view goes and the table stays,
+            # ``CREATE TABLE IF NOT EXISTS`` below no-ops on the surviving
+            # SummingMergeTree, then ``CREATE MATERIALIZED VIEW`` tries to write
+            # ``avgState(...)`` into a ``Float64`` column and raises — aborting
+            # ``init_schema`` before ``_apply_ttl_migrations`` runs, with the MV
+            # now gone. The rollup stops being populated at all, which is
+            # strictly worse than the wrong-but-populated state it replaced.
+            #
+            # So: attempt both, then verify the table is actually gone. If it
+            # is not, fail loudly here rather than let init_schema wander into
+            # that state.
+            for stmt in (
+                f"DROP VIEW IF EXISTS {db}.{view}",
+                f"DROP TABLE IF EXISTS {db}.{table}",
+            ):
+                try:
+                    await self._execute(stmt)
+                except Exception as exc:  # noqa: BLE001
+                    logger.error(
+                        "clickhouse: %s failed; %s.%s may still hold summed " "aggregates: %s",
+                        stmt,
+                        db,
+                        table,
+                        exc,
+                    )
+            try:
+                still_there = (
+                    await self._execute(
+                        "SELECT engine FROM system.tables WHERE database = "
+                        f"'{db}' AND name = '{table}' FORMAT TabSeparated"
+                    )
+                ).strip()
+            except Exception:  # noqa: BLE001 — treat an unreadable probe as gone
+                still_there = ""
+            if still_there:
+                raise ClickHouseError(
+                    f"{db}.{table} is still a {still_there} after the rollup "
+                    "migration attempted to drop it. Its materialized view has "
+                    "been removed, so the table is no longer being populated. "
+                    "Drop the table by hand and re-run init_schema; continuing "
+                    "would create an MV whose aggregate state cannot be written "
+                    "to the surviving Float64 columns."
+                )
 
     async def _apply_ttl_migrations(self) -> None:
         """Apply TTL changes to existing tables.
@@ -436,15 +750,15 @@ class ClickHouseSink:
         ttl_statements = [
             (
                 "telemetry_events_ch",
-                "timestamp + INTERVAL 90 DAY",
+                "toDateTime(timestamp) + INTERVAL 90 DAY",
             ),
             (
                 "agent_performance",
-                "timestamp + INTERVAL 7 YEAR",
+                "toDateTime(timestamp) + INTERVAL 7 YEAR",
             ),
             (
                 "pipeline_stages",
-                "timestamp + INTERVAL 7 YEAR",
+                "toDateTime(timestamp) + INTERVAL 7 YEAR",
             ),
             (
                 "usage_trends",
@@ -452,7 +766,7 @@ class ClickHouseSink:
             ),
             (
                 "benchmark_results",
-                "timestamp + INTERVAL 7 YEAR",
+                "toDateTime(timestamp) + INTERVAL 7 YEAR",
             ),
             (
                 "drift_hourly",
@@ -480,7 +794,9 @@ class ClickHouseSink:
                 # the old TTL is kept until the next schema rebuild.
                 logger.debug(
                     "TTL migration skipped for %s.%s: %s",
-                    self.config.database, table, exc,
+                    self.config.database,
+                    table,
+                    exc,
                 )
 
     async def ingest_agent_traces(
@@ -668,9 +984,7 @@ class ClickHouseSink:
         if self.config.is_tinybird:
             token = self.config.tinybird_token or self.config.password
             if not token:
-                raise ClickHouseError(
-                    "Tinybird token missing (set TINYBIRD_ADMIN_TOKEN)"
-                )
+                raise ClickHouseError("Tinybird token missing (set TINYBIRD_ADMIN_TOKEN)")
             # Datasource names match tinybird/datasources/*.datasource
             # (no database prefix). Strip accidental ``eden.`` prefix.
             ds = table.split(".")[-1]
@@ -698,9 +1012,33 @@ class ClickHouseSink:
             else None
         )
 
+        # Same fix as ``_execute``: the INSERT statement is a query-string
+        # parameter and the body carries only the NDJSON rows. The previous
+        # ``data={"query": query, "": body}`` form-encoded both into the body,
+        # so ClickHouse parsed ``query=INSERT+INTO...`` as SQL and rejected
+        # every insert with a syntax error — the rows never left the process
+        # and each caller quietly fell back to Postgres.
         async with session.post(
             url,
-            data={"query": query, "": body},
+            params={
+                "query": query,
+                # The collector serialises its whole event dict, including the
+                # payload blobs that ``telemetry_events_ch`` no longer stores,
+                # so JSONEachRow has to tolerate unknown fields.
+                #
+                # Stated explicitly rather than relied upon: ClickHouse 24.3
+                # already defaults this to 1 (verified against
+                # ``system.settings``), so inserts would survive without it —
+                # but the default has changed across versions and a server
+                # profile or ``users.xml`` can set it to 0, at which point every
+                # batch would fail with UNKNOWN_FIELD. Sending it makes the
+                # requirement part of the request instead of an assumption
+                # about the server. It also decouples the two schemas going
+                # forward: the collector can add a field without the mirror
+                # having to learn about it first.
+                "input_format_skip_unknown_fields": "1",
+            },
+            data=body,
             auth=auth,
         ) as resp:
             text = await resp.text()
@@ -733,7 +1071,7 @@ class ClickHouseSink:
                 logger.debug(f"ClickHouse schema init deferred: {exc}")
                 report.errors.append(str(exc))
                 report.rows_failed = len(rows)
-                await self._fallback_to_postgres(table, rows)
+                await self._fallback_to_postgres(table, rows, error=exc)
                 report.duration_ms = (datetime.now(UTC) - start).total_seconds() * 1000
                 return report
         try:
@@ -743,26 +1081,41 @@ class ClickHouseSink:
             logger.error(f"ClickHouse {table} insert failed: {exc}")
             report.rows_failed = len(rows)
             report.errors.append(str(exc))
-            await self._fallback_to_postgres(table, rows)
+            await self._fallback_to_postgres(table, rows, error=exc)
         report.duration_ms = (datetime.now(UTC) - start).total_seconds() * 1000
         return report
 
     async def _fallback_to_postgres(
-        self, table: str, rows: list[dict[str, Any]]
+        self,
+        table: str,
+        rows: list[dict[str, Any]],
+        error: Exception | str | None = None,
     ) -> None:
-        """Write failed ClickHouse rows to PostgreSQL for later retry."""
+        """Park failed ClickHouse rows in Postgres for the drain to replay.
+
+        The retry lives in ``data_platform/clickhouse_fallback_drain.py``,
+        scheduled from ``workers/cron_tick.py``. This docstring promised
+        "later retry" for a long time while no retry existed anywhere in
+        ``src/`` — the rows were written, never read, never deleted.
+        """
         try:
             from eden.storage.postgres import get_postgres_client
+
             client = await get_postgres_client()
+            # error_message was never populated, so every parked row
+            # carried a NULL reason. 82 rows accumulated between Jul 6
+            # and Jul 24 with no diagnostic whatsoever — you could see
+            # that the mirror was failing but not why. The column has
+            # existed the whole time.
             query = """
                 INSERT INTO clickhouse_fallback (
-                    target_table, payload, failed_at, retry_count
+                    target_table, payload, failed_at, retry_count, error_message
                 )
-                VALUES ($1, $2, NOW(), 0)
+                VALUES ($1, $2, NOW(), 0, $3)
             """
+            reason = (str(error)[:2000] if error else None)
             args = [
-                (table, _jsonx_dumps(row, default=str))
-                for row in rows
+                (table, _jsonx_dumps(row, default=str), reason) for row in rows
             ]
             await client.executemany(query, args)
             logger.info(f"Fallback: wrote {len(rows)} rows to PostgreSQL clickhouse_fallback")
@@ -920,12 +1273,14 @@ class ClickHouseSink:
             # Some CH/Tinybird paths omit header line — parse as single value row.
             parts = [p for p in (result or "").strip().split("\t") if p != ""]
             if len(parts) >= 4:
-                rows = [{
-                    "event_count": parts[0],
-                    "error_count": parts[1],
-                    "avg_duration_ms": parts[2],
-                    "p95_duration_ms": parts[3],
-                }]
+                rows = [
+                    {
+                        "event_count": parts[0],
+                        "error_count": parts[1],
+                        "avg_duration_ms": parts[2],
+                        "p95_duration_ms": parts[3],
+                    }
+                ]
         cur = rows[0] if rows else {}
         prev_query = f"""
             SELECT count() AS event_count
@@ -991,9 +1346,7 @@ class ClickHouseSink:
         try:
             payload = json.loads(body)
         except json.JSONDecodeError as exc:
-            raise ClickHouseError(
-                f"unparseable JSON query response: {exc}"
-            ) from exc
+            raise ClickHouseError(f"unparseable JSON query response: {exc}") from exc
         if isinstance(payload, dict) and payload.get("error"):
             raise ClickHouseError(f"query error: {payload.get('error')}")
         if isinstance(payload, dict) and "data" in payload:
