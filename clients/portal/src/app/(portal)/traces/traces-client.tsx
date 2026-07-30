@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import {
+  memo,
   Suspense,
   useCallback,
   useEffect,
@@ -10,6 +11,8 @@ import {
   useState,
 } from "react";
 import { useSearchParams } from "next/navigation";
+import { defaultRangeExtractor, useVirtualizer } from "@tanstack/react-virtual";
+import { measureVirtualRow, VIRTUAL_SCROLL_ATTR } from "@/lab/virtual-list";
 import {
   ChevronLeft,
   ChevronRight,
@@ -87,6 +90,101 @@ function parseTab(value: string | null): DetailTab {
   return "trace";
 }
 
+type TreeRow = {
+  step: TranscriptStep;
+  depth: number;
+  hasChildren: boolean;
+};
+
+/**
+ * Depth-first flatten of the span tree. Virtualising needs a flat,
+ * index-addressable list — a recursive JSX walk can only render the
+ * whole tree at once. `seen` guards against a malformed payload whose
+ * parent pointers form a cycle (the old recursion would hang).
+ */
+export function flattenSpanTree(steps: TranscriptStep[]): TreeRow[] {
+  const byParent = new Map<string | undefined, TranscriptStep[]>();
+  for (const step of steps) {
+    const key = step.parentId;
+    const list = byParent.get(key) ?? [];
+    list.push(step);
+    byParent.set(key, list);
+  }
+  const roots = byParent.get(undefined) ?? steps.filter((s) => !s.parentId);
+
+  const out: TreeRow[] = [];
+  const seen = new Set<string>();
+  const walk = (nodes: TranscriptStep[], depth: number) => {
+    for (const step of nodes) {
+      if (seen.has(step.id)) continue;
+      seen.add(step.id);
+      const kids = byParent.get(step.spanId ?? step.id) ?? [];
+      out.push({ step, depth, hasChildren: kids.length > 0 });
+      if (kids.length > 0) walk(kids, depth + 1);
+    }
+  };
+  walk(roots, 0);
+  return out;
+}
+
+/** ~40px at the current density; real heights come from measureElement. */
+const TREE_ROW_ESTIMATE = 40;
+
+const TreeRowButton = memo(function TreeRowButton({
+  step,
+  depth,
+  active,
+  hasChildren,
+  posInSet,
+  setSize,
+  onFocus,
+}: {
+  step: TranscriptStep;
+  depth: number;
+  active: boolean;
+  hasChildren: boolean;
+  posInSet: number;
+  setSize: number;
+  onFocus: (id: string) => void;
+}) {
+  const bad = isBadStep(step);
+  const handleClick = useCallback(() => onFocus(step.id), [onFocus, step.id]);
+  return (
+    <button
+      type="button"
+      onClick={handleClick}
+      role="treeitem"
+      aria-level={depth + 1}
+      aria-posinset={posInSet}
+      aria-setsize={setSize}
+      aria-selected={active}
+      aria-expanded={hasChildren ? true : undefined}
+      className={cn(
+        "flex w-full items-center gap-2 py-2.5 pr-4 text-left transition-colors hover:bg-[var(--bg-hover)]",
+        active && "bg-[var(--accent-muted)] shadow-[inset_2px_0_0_var(--accent)]",
+        bad && !active && "bg-[var(--error-muted)]",
+        bad && active && "shadow-[inset_2px_0_0_var(--error)]",
+      )}
+      style={{ paddingLeft: `${0.75 + depth * 1.1}rem` }}
+    >
+      <span className="ds-chip shrink-0 border border-[var(--line)] text-[var(--text-muted)]">
+        {stepKindLabel(step.kind)}
+      </span>
+      <span
+        className={cn(
+          "type-ui min-w-0 flex-1 truncate !font-normal",
+          bad ? "text-[var(--error)]" : "text-[var(--text)]",
+        )}
+      >
+        {step.title}
+      </span>
+      <span className="type-value shrink-0 tabular-nums !text-[0.6875rem]">
+        {formatDuration(step.durationMs)}
+      </span>
+    </button>
+  );
+});
+
 function TreePanel({
   steps,
   focusStepId,
@@ -96,66 +194,66 @@ function TreePanel({
   focusStepId: string | null;
   onFocus: (id: string) => void;
 }) {
-  const byParent = useMemo(() => {
-    const map = new Map<string | undefined, TranscriptStep[]>();
-    for (const step of steps) {
-      const key = step.parentId;
-      const list = map.get(key) ?? [];
-      list.push(step);
-      map.set(key, list);
-    }
-    return map;
-  }, [steps]);
+  const rows = useMemo(() => flattenSpanTree(steps), [steps]);
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+  const virtualizer = useVirtualizer({
+    count: rows.length,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: () => TREE_ROW_ESTIMATE,
+    overscan: 8,
+    getItemKey: (index) => rows[index]?.step.id ?? index,
+    measureElement: measureVirtualRow,
+  });
 
-  const roots = byParent.get(undefined) ?? steps.filter((s) => !s.parentId);
+  // Bring the focused span into view even when its row is not mounted.
+  useEffect(() => {
+    if (!focusStepId) return;
+    const index = rows.findIndex((r) => r.step.id === focusStepId);
+    if (index >= 0) virtualizer.scrollToIndex(index, { align: "center" });
+  }, [focusStepId, rows, virtualizer]);
 
-  function renderNode(step: TranscriptStep, depth: number) {
-    const kids = byParent.get(step.spanId ?? step.id) ?? [];
-    const bad = isBadStep(step);
-    const active = focusStepId === step.id;
-    return (
-      <li key={step.id}>
-        <button
-          type="button"
-          onClick={() => onFocus(step.id)}
-          className={cn(
-            "flex w-full items-center gap-2 py-2.5 pr-4 text-left transition-colors hover:bg-[var(--bg-hover)]",
-            active && "bg-[var(--accent-muted)] shadow-[inset_2px_0_0_var(--accent)]",
-            bad && !active && "bg-[var(--error-muted)]",
-            bad && active && "shadow-[inset_2px_0_0_var(--error)]",
-          )}
-          style={{ paddingLeft: `${0.75 + depth * 1.1}rem` }}
-        >
-          <span className="ds-chip shrink-0 border border-[var(--line)] text-[var(--text-muted)]">
-            {stepKindLabel(step.kind)}
-          </span>
-          <span
-            className={cn(
-              "type-ui min-w-0 flex-1 truncate !font-normal",
-              bad ? "text-[var(--error)]" : "text-[var(--text)]",
-            )}
-          >
-            {step.title}
-          </span>
-          <span className="type-value shrink-0 tabular-nums !text-[0.6875rem]">
-            {formatDuration(step.durationMs)}
-          </span>
-        </button>
-        {kids.length > 0 ? (
-          <ul>{kids.map((child) => renderNode(child, depth + 1))}</ul>
-        ) : null}
-      </li>
-    );
-  }
-
-  if (roots.length === 0) {
+  if (rows.length === 0) {
     return <EmptyState title="No spans" />;
   }
 
   return (
-    <ul className="min-h-0 flex-1 overflow-y-auto py-1">
-      {roots.map((step) => renderNode(step, 0))}
-    </ul>
+    <div
+      ref={scrollRef}
+      className="min-h-0 h-full overflow-y-auto py-1"
+      {...{ [VIRTUAL_SCROLL_ATTR]: "tree" }}
+    >
+      <ul
+        role="tree"
+        aria-label="Span tree"
+        className="relative"
+        style={{ height: `${virtualizer.getTotalSize()}px` }}
+      >
+        {virtualizer.getVirtualItems().map((item) => {
+          const row = rows[item.index];
+          if (!row) return null;
+          return (
+            <li
+              key={item.key}
+              ref={virtualizer.measureElement}
+              data-index={item.index}
+              role="none"
+              className="absolute top-0 left-0 w-full"
+              style={{ transform: `translateY(${item.start}px)` }}
+            >
+              <TreeRowButton
+                step={row.step}
+                depth={row.depth}
+                active={focusStepId === row.step.id}
+                hasChildren={row.hasChildren}
+                posInSet={item.index + 1}
+                setSize={rows.length}
+                onFocus={onFocus}
+              />
+            </li>
+          );
+        })}
+      </ul>
+    </div>
   );
 }
 
@@ -380,6 +478,27 @@ function ChatPanel({ trace }: { trace: TraceFixture }) {
     </div>
   );
 }
+
+/** Flat row model for the virtualised feed (sessions / grouped / flat runs). */
+type FeedRow =
+  | {
+      kind: "group";
+      key: string;
+      agent: { id: string; name: string };
+      count: number;
+    }
+  | {
+      kind: "run";
+      key: string;
+      trace: TraceFixture;
+      showAgent: boolean;
+      pos: number;
+    }
+  | { kind: "session"; key: string; session: SessionFixture; pos: number };
+
+/** `.lab-run-row` at current density; corrected by `measureElement`. */
+const FEED_ROW_ESTIMATE = 65;
+const FEED_GROUP_ESTIMATE = 55;
 
 function LabTracesInner() {
   const searchParams = useSearchParams();
@@ -840,18 +959,119 @@ function LabTracesInner() {
         : undefined,
   });
 
-  useEffect(() => {
-    if (hubView === "sessions" && !inspectingTurn && selectedSession) {
-      document
-        .querySelector(`[data-session-id="${selectedSession.id}"]`)
-        ?.scrollIntoView({ block: "nearest" });
-      return;
+  // ---- Virtualised feed -------------------------------------------
+  // One flat row model for all three list shapes (sessions, agent-
+  // grouped runs, flat runs) so a single virtualiser covers them.
+  const feedRows = useMemo<FeedRow[]>(() => {
+    if (hubView === "sessions") {
+      return filteredSessions.map((s, i) => ({
+        kind: "session" as const,
+        key: s.id,
+        session: s,
+        pos: i + 1,
+      }));
     }
-    if (!selected) return;
-    document
-      .querySelector(`[data-run-id="${selected.id}"]`)
-      ?.scrollIntoView({ block: "nearest" });
-  }, [hubView, inspectingTurn, selected?.id, selectedSession?.id]);
+    if (agentId === "all" && groups.length > 0) {
+      const out: FeedRow[] = [];
+      let pos = 0;
+      for (const group of groups) {
+        out.push({
+          kind: "group" as const,
+          key: `group:${group.agent.id}`,
+          agent: group.agent,
+          count: group.items.length,
+        });
+        for (const t of group.items) {
+          pos += 1;
+          out.push({
+            kind: "run" as const,
+            key: t.id,
+            trace: t,
+            showAgent: false,
+            pos,
+          });
+        }
+      }
+      return out;
+    }
+    return filtered.map((t, i) => ({
+      kind: "run" as const,
+      key: t.id,
+      trace: t,
+      showAgent: agentId === "all",
+      pos: i + 1,
+    }));
+  }, [hubView, filteredSessions, agentId, groups, filtered]);
+
+  const feedSetSize = hubView === "sessions" ? filteredSessions.length : filtered.length;
+
+  // Agent group headers keep their sticky behaviour: the range
+  // extractor pins whichever header precedes the visible window so it
+  // is always mounted, and that one row renders `position: sticky`
+  // instead of absolute (every other row is out of flow, so the sticky
+  // one is free to travel the whole scrollport).
+  const stickyIndexes = useMemo(() => {
+    const out: number[] = [];
+    feedRows.forEach((row, i) => {
+      if (row.kind === "group") out.push(i);
+    });
+    return out;
+  }, [feedRows]);
+  const activeStickyIndexRef = useRef(-1);
+
+  const feedScrollRef = useRef<HTMLDivElement | null>(null);
+  const feedRangeExtractor = useCallback(
+    (range: { startIndex: number; endIndex: number; overscan: number; count: number }) => {
+      let sticky = -1;
+      for (const i of stickyIndexes) {
+        if (i <= range.startIndex) sticky = i;
+        else break;
+      }
+      activeStickyIndexRef.current = sticky;
+      const next = new Set(defaultRangeExtractor(range));
+      if (sticky >= 0) next.add(sticky);
+      return [...next].sort((a, b) => a - b);
+    },
+    [stickyIndexes],
+  );
+
+  const feedVirtualizer = useVirtualizer({
+    count: feedRows.length,
+    getScrollElement: () => feedScrollRef.current,
+    estimateSize: (index) =>
+      feedRows[index]?.kind === "group"
+        ? FEED_GROUP_ESTIMATE
+        : FEED_ROW_ESTIMATE,
+    overscan: 8,
+    getItemKey: (index) => feedRows[index]?.key ?? index,
+    rangeExtractor: feedRangeExtractor,
+    measureElement: measureVirtualRow,
+  });
+
+  const selectedFeedIndex = useMemo(() => {
+    if (hubView === "sessions" && !inspectingTurn && selectedSession) {
+      return feedRows.findIndex(
+        (r) => r.kind === "session" && r.session.id === selectedSession.id,
+      );
+    }
+    if (!selected) return -1;
+    return feedRows.findIndex(
+      (r) => r.kind === "run" && r.trace.id === selected.id,
+    );
+  }, [feedRows, hubView, inspectingTurn, selected, selectedSession]);
+
+  const feedVirtualizerRef = useRef(feedVirtualizer);
+  feedVirtualizerRef.current = feedVirtualizer;
+
+  // Replaces the old `document.querySelector(...).scrollIntoView()` —
+  // with virtualisation the selected row is frequently not mounted, so
+  // keyboard j/k navigation has to drive the virtualiser by index.
+  useEffect(() => {
+    if (selectedFeedIndex < 0) return;
+    feedVirtualizerRef.current.scrollToIndex(selectedFeedIndex, {
+      align: "auto",
+    });
+  }, [selectedFeedIndex]);
 
   const agent = selected ? agentForTrace(selected) : undefined;
   const issue = selected ? issueForTrace(selected.id) : undefined;
@@ -1015,91 +1235,88 @@ function LabTracesInner() {
               ]}
             />
           </div>
-          <ul className="min-h-0 flex-1 overflow-y-auto">
-            {hubView === "sessions" ? (
-              filteredSessions.length === 0 ? (
-                <li>
-                  <EmptyState
-                    title={
-                      query
-                        ? `No matches for “${query}”`
-                        : scopeAgent
-                          ? `No sessions for ${scopeAgent.name}`
-                          : "No matching sessions"
-                    }
-                  />
-                </li>
-              ) : (
-                filteredSessions.map((s) => (
-                  <li key={s.id}>
-                    <SessionListButton
-                      session={s}
-                      active={s.id === selectedSession?.id}
-                      onSelect={() => selectSession(s.id)}
-                    />
-                  </li>
-                ))
-              )
-            ) : filtered.length === 0 ? (
-              <li>
-                <EmptyState
-                  title={
-                    query
+          <div
+            ref={feedScrollRef}
+            className="min-h-0 flex-1 overflow-y-auto"
+            {...{ [VIRTUAL_SCROLL_ATTR]: "feed" }}
+          >
+            {feedRows.length === 0 ? (
+              <EmptyState
+                title={
+                  hubView === "sessions"
+                    ? query
+                      ? `No matches for “${query}”`
+                      : scopeAgent
+                        ? `No sessions for ${scopeAgent.name}`
+                        : "No matching sessions"
+                    : query
                       ? `No matches for “${query}”`
                       : scopeAgent
                         ? `No runs for ${scopeAgent.name}`
                         : "No matching runs"
-                  }
-                />
-              </li>
-            ) : agentId === "all" ? (
-              groups.length > 0 ? (
-              groups.map((group) => (
-                <li key={group.agent.id}>
-                  <AgentGroupHeader
-                    agent={group.agent}
-                    count={group.items.length}
-                    href={`/agents?id=${group.agent.id}`}
-                  />
-                  <ul>
-                    {group.items.map((t) => (
-                      <li key={t.id}>
-                        <RunListButton
-                          trace={t}
-                          active={t.id === selected?.id}
-                          showAgent={false}
-                          onSelect={() => selectTrace(t.id)}
-                        />
-                      </li>
-                    ))}
-                  </ul>
-                </li>
-              ))
-              ) : (
-                filtered.map((t) => (
-                  <li key={t.id}>
-                    <RunListButton
-                      trace={t}
-                      active={t.id === selected?.id}
-                      showAgent
-                      onSelect={() => selectTrace(t.id)}
-                    />
-                  </li>
-                ))
-              )
+                }
+              />
             ) : (
-              filtered.map((t) => (
-                <li key={t.id}>
-                  <RunListButton
-                    trace={t}
-                    active={t.id === selected?.id}
-                    showAgent={false}
-                    onSelect={() => selectTrace(t.id)}
-                  />
-                </li>
-              ))
+              <ul
+                role="list"
+                aria-label={hubView === "sessions" ? "Sessions" : "Runs"}
+                className="relative"
+                style={{ height: `${feedVirtualizer.getTotalSize()}px` }}
+              >
+                {feedVirtualizer.getVirtualItems().map((item) => {
+                  const row = feedRows[item.index];
+                  if (!row) return null;
+                  const isStuck =
+                    row.kind === "group" &&
+                    activeStickyIndexRef.current === item.index;
+                  return (
+                    <li
+                      key={item.key}
+                      ref={feedVirtualizer.measureElement}
+                      data-index={item.index}
+                      role={row.kind === "group" ? "presentation" : undefined}
+                      aria-posinset={row.kind === "group" ? undefined : row.pos}
+                      aria-setsize={
+                        row.kind === "group" ? undefined : feedSetSize
+                      }
+                      className={cn(
+                        "w-full min-w-0",
+                        isStuck
+                          ? "sticky top-0 z-[2]"
+                          : "absolute top-0 left-0",
+                      )}
+                      style={
+                        isStuck
+                          ? undefined
+                          : { transform: `translateY(${item.start}px)` }
+                      }
+                    >
+                      {row.kind === "group" ? (
+                        <AgentGroupHeader
+                          agent={row.agent}
+                          count={row.count}
+                          href={`/agents?id=${row.agent.id}`}
+                        />
+                      ) : row.kind === "session" ? (
+                        <SessionListButton
+                          session={row.session}
+                          active={row.session.id === selectedSession?.id}
+                          onSelect={selectSession}
+                        />
+                      ) : (
+                        <RunListButton
+                          trace={row.trace}
+                          active={row.trace.id === selected?.id}
+                          showAgent={row.showAgent}
+                          onSelect={selectTrace}
+                        />
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
             )}
-          </ul>
+          </div>
         </aside>
 
         <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-[var(--bg)]">
@@ -1354,15 +1571,30 @@ function LabTracesInner() {
               <div className="min-h-0 min-w-0 flex-1 overflow-hidden">
                 {tab === "trace" ? (
                   <div className="min-h-0 h-full overflow-y-auto">
-                    <RunTranscript
-                      key={selected.id}
-                      steps={selected.steps}
-                      defaultOpenIds={badStepIds}
-                      focusStepId={focusStepId}
-                      hideToolbar
-                      openIds={openIds}
-                      onOpenIdsChange={setOpenIds}
-                    />
+                    {/* The detail fetch answers 503 when trace storage is
+                        unreachable. Nothing read traceDetailQuery.isError,
+                        so the list row's `steps: []` fell through and the
+                        pane rendered "0 spans" over a blank transcript —
+                        a customer during a database blip saw an empty
+                        trace, not an error, with no way to retry. */}
+                    {traceDetailQuery.isError ? (
+                      <div className="p-6">
+                        <QueryErrorPanel
+                          error={traceDetailQuery.error}
+                          onRetry={() => void traceDetailQuery.refetch()}
+                        />
+                      </div>
+                    ) : (
+                      <RunTranscript
+                        key={selected.id}
+                        steps={selected.steps}
+                        defaultOpenIds={badStepIds}
+                        focusStepId={focusStepId}
+                        hideToolbar
+                        openIds={openIds}
+                        onOpenIdsChange={setOpenIds}
+                      />
+                    )}
                   </div>
                 ) : null}
                 {tab === "tree" ? (
