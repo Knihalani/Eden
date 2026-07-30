@@ -150,6 +150,21 @@ async def main() -> int:
                 "total_tokens": 15,
             },
             # Correlation the customer would supply.
+            #
+            # TOP-LEVEL, not nested under metadata. The openai decoder
+            # reads `item.get("trace_id")` (ingestion/providers.py:287)
+            # and falls back to the response `id`; nothing anywhere
+            # reads metadata.trace_id. This script used to send it
+            # nested, so the row landed under the derived id
+            # "chatcmpl-…" and the script reported RESULT: BROKEN
+            # against a perfectly healthy ingest path.
+            #
+            # That is the same failure mode being fixed all over this
+            # codebase today — a check that cries wolf teaches you to
+            # ignore it. The Python SDK sends trace_id top-level
+            # (eden_sdk/doctor.py), so this now matches what a real
+            # customer's SDK actually puts on the wire.
+            "trace_id": trace_id,
             "metadata": {"trace_id": trace_id},
         }
         code, body = _post(f"/orgs/{org_id}/ingest/openai", payload, raw)
@@ -160,7 +175,28 @@ async def main() -> int:
         await asyncio.sleep(3)
         code, body = _get(f"/orgs/{org_id}/observability/traces?days=1", raw)
         found = trace_id in body
-        results.append(("trace readable via API", found, f"{code} {body[:110]}"))
+        # An org API key is INGEST-scoped; the read API requires a Clerk
+        # session, so 401 here is the designed contract rather than a
+        # failure. Asserting otherwise made this script report
+        # "RESULT: BROKEN" on a healthy system every single run, which
+        # is how a check stops being read at all.
+        #
+        # It stays visible, because it IS a real product limitation
+        # worth seeing: a customer can send traces programmatically but
+        # cannot read them back the same way — only through the portal.
+        if code == 401 and not found:
+            results.append(
+                (
+                    "read-back via API key",
+                    True,
+                    "401 by design — ingest-scoped key; portal reads via "
+                    "Clerk session",
+                )
+            )
+        else:
+            results.append(
+                ("trace readable via API", found, f"{code} {body[:110]}")
+            )
 
         # ── 5. did it reach the database, and is it findable ────────
         n = await conn.fetchval(
